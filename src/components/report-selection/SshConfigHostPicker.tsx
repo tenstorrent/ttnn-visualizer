@@ -9,6 +9,7 @@ import {
     SSH_CONFIG_HOST_CUSTOM,
     SSH_CONFIG_HOST_GROUP_LABEL,
     SSH_CONFIG_HOST_INPUT_ID,
+    SSH_CONFIG_HOST_PLACEHOLDER_CLASS,
     SSH_CONFIG_HOST_SUBLABEL,
     SSH_CONFIG_HOST_SUBLABEL_ID,
     SSH_CONFIG_HOST_UNSELECTED,
@@ -86,7 +87,7 @@ const SshConfigHostPicker = ({
                 // Named by the sublabel rather than a heading of its own, which would only
                 // repeat it. A select with no accessible name is announced as just "combo box".
                 aria-labelledby={SSH_CONFIG_HOST_SUBLABEL_ID}
-                className={classNames({ 'ssh-config-host-placeholder': isUnselected })}
+                className={classNames({ [SSH_CONFIG_HOST_PLACEHOLDER_CLASS]: isUnselected })}
                 value={selectedValue}
                 onChange={(event) => handleChange(event.currentTarget.value)}
                 fill

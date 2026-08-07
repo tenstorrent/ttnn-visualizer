@@ -26,6 +26,7 @@ from ttnn_visualizer.exceptions import (
 )
 from ttnn_visualizer.models import RemoteConnection
 from ttnn_visualizer.sftp_operations import (
+    _MISSING_ROOT_EXIT_CODE,
     _get_remote_file_list_without_sizes,
     _remote_directory_mtimes,
     _remote_transfer_key,
@@ -50,9 +51,9 @@ def connection() -> RemoteConnection:
     )
 
 
-def _completed(stdout: str) -> subprocess.CompletedProcess:
+def _completed(stdout: str, returncode: int = 0) -> subprocess.CompletedProcess:
     return subprocess.CompletedProcess(
-        args=["ssh"], returncode=0, stdout=stdout, stderr=""
+        args=["ssh"], returncode=returncode, stdout=stdout, stderr=""
     )
 
 
@@ -198,12 +199,31 @@ class TestFindFoldersByFiles:
 
     def test_no_matches_returns_empty(self, connection):
         with patch("subprocess.run", return_value=_completed("")):
-            assert (
-                find_folders_by_files(
-                    connection, "/remote/reports", ["config.json"]
-                ).folders
-                == []
+            matched = find_folders_by_files(
+                connection, "/remote/reports", ["config.json"]
             )
+
+        assert matched.folders == []
+        # A root that was there and matched nothing is the case the connection
+        # test reports as a warning, so it must not read as an absent path.
+        assert matched.is_root_missing is False
+
+    def test_the_sentinel_exit_code_is_reported_as_a_missing_root(self, connection):
+        """`find` cannot tell an absent root from one holding nothing.
+
+        The remote command exits with the sentinel from its own `test -e`, and
+        that return code is the only thing carrying the distinction back.
+        """
+        with patch(
+            "subprocess.run",
+            return_value=_completed("", returncode=_MISSING_ROOT_EXIT_CODE),
+        ):
+            matched = find_folders_by_files(
+                connection, "/remote/missing", ["config.json"]
+            )
+
+        assert matched.is_root_missing is True
+        assert matched.folders == []
 
 
 class TestGetRemoteFileList:

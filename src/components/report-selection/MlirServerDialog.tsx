@@ -10,7 +10,6 @@ import { ConnectionStatus, ConnectionTestStates } from '../../definitions/Connec
 import { MlirServerConnection } from '../../definitions/MlirServer';
 import { SSH_CONFIG_HOST_ADD_SERVER_LABEL } from '../../definitions/SshConfigHostPicker';
 import {
-    MAX_PORT,
     MLIR_SSH_HOST_SUBLABEL,
     SSH_IDENTITY_FILE_LABEL,
     SSH_IDENTITY_FILE_PLACEHOLDER,
@@ -20,8 +19,10 @@ import {
 import { SshConfigHost } from '../../model/SshConfigHost';
 import { getConnectionNameStatus, isConnectionNameTaken } from '../../functions/connectionName';
 import { isSameMlirServer } from '../../functions/mlirServer';
+import getPortFromInput from '../../functions/getPortFromInput';
 import getServerConfig from '../../functions/getServerConfig';
 import getSshConfigHostPrefill from '../../functions/getSshConfigHostPrefill';
+import isConnectionSaveable from '../../functions/isConnectionSaveable';
 import useMlirRemote from '../../hooks/useMlirRemote';
 import useSshConfigHostChoice from '../../hooks/useSshConfigHostChoice';
 import ConnectionTestResults from './ConnectionTestResults';
@@ -53,6 +54,10 @@ const getDefaultServer = (): MlirServerConnection => {
         port: 8080,
     };
 };
+
+// Both ports are required numbers here, so a cleared field holds zero rather than nothing —
+// which is what `hasTestableTarget` already reads as a target the test cannot reach.
+const EMPTY_PORT = 0;
 
 const TEST_PROGRESS: ConnectionStatus = {
     status: ConnectionTestStates.PROGRESS,
@@ -99,13 +104,7 @@ const MlirServerDialog = ({
         connection.sshPort > 0 &&
         connection.port > 0;
 
-    const isValidConnection =
-        nameStatus.status === ConnectionTestStates.OK &&
-        !hasStaleTestResults &&
-        connectionTests.length > 0 &&
-        connectionTests.every(
-            ({ status }) => status === ConnectionTestStates.OK || status === ConnectionTestStates.WARNING,
-        );
+    const isValidConnection = isConnectionSaveable(nameStatus, connectionTests, hasStaleTestResults);
 
     // Everything the test actually exercises — the SSH target, the credentials, and the port it
     // probes — invalidates a previous result. The name isn't part of the target, so it goes through
@@ -235,12 +234,10 @@ const MlirServerDialog = ({
                                 id='mlir-server-ssh-port'
                                 value={connection.sshPort?.toString() ?? ''}
                                 onChange={(e) => {
-                                    const number = Number.parseInt(e.target.value, 10);
+                                    const sshPort = getPortFromInput(e.target.value, EMPTY_PORT);
 
-                                    if (e.target.value === '') {
-                                        updateTarget({ sshPort: 0 });
-                                    } else if (number > 0 && number < MAX_PORT) {
-                                        updateTarget({ sshPort: number });
+                                    if (sshPort !== null) {
+                                        updateTarget({ sshPort });
                                     }
                                 }}
                             />
@@ -255,12 +252,10 @@ const MlirServerDialog = ({
                                 id='mlir-server-port'
                                 value={connection.port?.toString() ?? ''}
                                 onChange={(e) => {
-                                    const number = Number.parseInt(e.target.value, 10);
+                                    const port = getPortFromInput(e.target.value, EMPTY_PORT);
 
-                                    if (e.target.value === '') {
-                                        updateTarget({ port: 0 });
-                                    } else if (number > 0 && number < MAX_PORT) {
-                                        updateTarget({ port: number });
+                                    if (port !== null) {
+                                        updateTarget({ port });
                                     }
                                 }}
                             />

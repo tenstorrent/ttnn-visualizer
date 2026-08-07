@@ -11,6 +11,7 @@ import {
     SSH_CONFIG_HOST_ADD_SERVER_LABEL,
     SSH_CONFIG_HOST_CUSTOM,
     SSH_CONFIG_HOST_GROUP_LABEL,
+    SSH_CONFIG_HOST_PLACEHOLDER_CLASS,
     SSH_CONFIG_HOST_SUBLABEL,
     SSH_CONFIG_HOST_UNSELECTED,
     SSH_CONFIG_HOST_UNSELECTED_LABEL,
@@ -217,7 +218,7 @@ describe('SshConfigHostPicker', () => {
         expect(getPicker().value).toBe(SSH_CONFIG_HOST_UNSELECTED);
         expect(screen.getByRole('option', { name: SSH_CONFIG_HOST_UNSELECTED_LABEL })).toBeDisabled();
         // Muted, so an unanswered picker doesn't read as a value the user settled on.
-        expect(getPicker().parentElement).toHaveClass('ssh-config-host-placeholder');
+        expect(getPicker().parentElement).toHaveClass(SSH_CONFIG_HOST_PLACEHOLDER_CLASS);
     });
 
     it('drops the placeholder once a choice is made', () => {
@@ -227,7 +228,7 @@ describe('SshConfigHostPicker', () => {
         renderPicker(SSH_CONFIG_HOST_CUSTOM);
 
         expect(screen.queryByRole('option', { name: SSH_CONFIG_HOST_UNSELECTED_LABEL })).not.toBeInTheDocument();
-        expect(getPicker().parentElement).not.toHaveClass('ssh-config-host-placeholder');
+        expect(getPicker().parentElement).not.toHaveClass(SSH_CONFIG_HOST_PLACEHOLDER_CLASS);
     });
 
     it('shows the selected alias when it matches a config host', () => {

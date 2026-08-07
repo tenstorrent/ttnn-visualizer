@@ -19,12 +19,7 @@ import { MlirServerConnection } from '../src/definitions/MlirServer';
 import { SSH_CONFIG_HOST_CUSTOM, SSH_CONFIG_HOST_SUBLABEL } from '../src/definitions/SshConfigHostPicker';
 import { TEST_IDS } from '../src/definitions/TestIds';
 import getButtonWithText from './helpers/getButtonWithText';
-import {
-    SshConfigHostsQueryResult,
-    noSshConfigResult,
-    pendingSshConfigResult,
-    sshConfigHostsResult,
-} from './helpers/sshConfigFixtures';
+import { SshConfigHostsQueryResult, noSshConfigResult, sshConfigHostsResult } from './helpers/sshConfigFixtures';
 import { ExistingTarget, describeSshConfigPrefillContract } from './helpers/sshConfigPrefillContract';
 
 // Declared inside the hoisted factory: it runs before module-scope consts initialise.
@@ -178,65 +173,6 @@ describe('MlirServerDialog connection test block', () => {
         );
         expect(screen.getByText(MLIR_SERVER_REACHABLE)).toBeInTheDocument();
         expect(getButtonWithText('Add server')).toBeDisabled();
-    });
-});
-
-describe('MlirServerDialog host choice gate', () => {
-    const CONFIG_HOSTS = [{ host: 'work-gpu', user: 'alice', port: 2222 }];
-
-    const getPicker = () => screen.getByLabelText(SSH_CONFIG_HOST_SUBLABEL) as HTMLSelectElement;
-    const queryNameField = () => screen.queryByLabelText('Name');
-
-    it('shows nothing but the picker, and no actions, until a choice is made', () => {
-        useSshConfigHostsMock.mockReturnValue(sshConfigHostsResult(CONFIG_HOSTS));
-
-        renderMlirServerDialog();
-
-        expect(getPicker()).toBeInTheDocument();
-        expect(queryNameField()).not.toBeInTheDocument();
-        expect(screen.queryByRole('button', { name: 'Run test' })).not.toBeInTheDocument();
-        expect(screen.queryByRole('button', { name: 'Add server' })).not.toBeInTheDocument();
-    });
-
-    it('reveals the form when the add-new option is chosen', () => {
-        useSshConfigHostsMock.mockReturnValue(sshConfigHostsResult(CONFIG_HOSTS));
-
-        renderMlirServerDialog();
-        fireEvent.change(getPicker(), { target: { value: SSH_CONFIG_HOST_CUSTOM } });
-
-        expect(screen.getByLabelText('SSH host')).toHaveValue('');
-        expect(getButtonWithText('Run test')).toBeInTheDocument();
-    });
-
-    it('waits for ~/.ssh/config before deciding, rather than showing a form it takes away', () => {
-        useSshConfigHostsMock.mockReturnValue(pendingSshConfigResult());
-
-        renderMlirServerDialog();
-
-        expect(queryNameField()).not.toBeInTheDocument();
-    });
-
-    it.each([
-        ['there is no ~/.ssh/config to choose from', noSshConfigResult],
-        ['the config holds no concrete hosts', () => sshConfigHostsResult([])],
-    ])('shows the form straight away when %s', (_, result) => {
-        useSshConfigHostsMock.mockReturnValue(result());
-
-        renderMlirServerDialog();
-
-        expect(queryNameField()).toBeInTheDocument();
-    });
-
-    it('offers no picker at all when editing, and leaves ~/.ssh/config unread', () => {
-        useSshConfigHostsMock.mockReturnValue(sshConfigHostsResult(CONFIG_HOSTS));
-
-        // The prefill replaces host, name, username, port and identity file together, so on a
-        // server that already has them it is an offer to undo the edit.
-        renderMlirServerDialog({ existing: { name: 'saved', host: 'work-gpu', username: 'carol' } });
-
-        expect(screen.queryByLabelText(SSH_CONFIG_HOST_SUBLABEL)).not.toBeInTheDocument();
-        expect(screen.getByLabelText('SSH host')).toHaveValue('work-gpu');
-        expect(useSshConfigHostsMock).not.toHaveBeenCalledWith(true);
     });
 });
 

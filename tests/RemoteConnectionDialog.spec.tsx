@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import '@testing-library/jest-dom/vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { ComponentProps } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import RemoteConnectionDialog from '../src/components/report-selection/RemoteConnectionDialog';
@@ -21,12 +21,7 @@ import { SSH_IDENTITY_FILE_LABEL } from '../src/definitions/SshConnectionFields'
 import { TEST_IDS } from '../src/definitions/TestIds';
 import getButtonWithText from './helpers/getButtonWithText';
 import { MULTIHOST_CHECKBOX_NAME } from './helpers/multihostCheckbox';
-import {
-    SshConfigHostsQueryResult,
-    noSshConfigResult,
-    pendingSshConfigResult,
-    sshConfigHostsResult,
-} from './helpers/sshConfigFixtures';
+import { SshConfigHostsQueryResult, noSshConfigResult, sshConfigHostsResult } from './helpers/sshConfigFixtures';
 import { ExistingTarget, describeSshConfigPrefillContract } from './helpers/sshConfigPrefillContract';
 
 // Declared inside the hoisted factory: it runs before module-scope consts initialise.
@@ -200,94 +195,6 @@ describe('RemoteConnectionDialog SSH config prefill specifics', () => {
     });
 });
 
-describe('RemoteConnectionDialog host choice gate', () => {
-    const CONFIG_HOSTS = [{ host: 'work-gpu', user: 'alice', port: 2222 }];
-
-    const getPicker = () => screen.getByLabelText(SSH_CONFIG_HOST_SUBLABEL) as HTMLSelectElement;
-    const queryNameField = () => screen.queryByLabelText('Name');
-
-    it('shows nothing but the picker, and no actions, until a choice is made', () => {
-        useSshConfigHostsMock.mockReturnValue(sshConfigHostsResult(CONFIG_HOSTS));
-
-        renderRemoteConnectionDialog();
-
-        expect(getPicker()).toBeInTheDocument();
-        expect(queryNameField()).not.toBeInTheDocument();
-        expect(screen.queryByLabelText('SSH Host')).not.toBeInTheDocument();
-        // A form that isn't on screen has nothing to test or save.
-        expect(screen.queryByRole('button', { name: 'Run tests' })).not.toBeInTheDocument();
-        expect(screen.queryByRole('button', { name: 'Add connection' })).not.toBeInTheDocument();
-    });
-
-    it('reveals the form when the add-new option is chosen', () => {
-        useSshConfigHostsMock.mockReturnValue(sshConfigHostsResult(CONFIG_HOSTS));
-
-        renderRemoteConnectionDialog();
-        fireEvent.change(getPicker(), { target: { value: SSH_CONFIG_HOST_CUSTOM } });
-
-        expect(screen.getByLabelText('SSH Host')).toHaveValue('');
-        expect(getButtonWithText('Run tests')).toBeInTheDocument();
-    });
-
-    it('reveals the form prefilled when a config host is chosen', () => {
-        useSshConfigHostsMock.mockReturnValue(sshConfigHostsResult(CONFIG_HOSTS));
-
-        renderRemoteConnectionDialog();
-        fireEvent.change(getPicker(), { target: { value: 'work-gpu' } });
-
-        expect(screen.getByLabelText('SSH Host')).toHaveValue('work-gpu');
-    });
-
-    it('waits for ~/.ssh/config before deciding, rather than showing a form it takes away', () => {
-        useSshConfigHostsMock.mockReturnValue(pendingSshConfigResult());
-
-        renderRemoteConnectionDialog();
-
-        expect(queryNameField()).not.toBeInTheDocument();
-    });
-
-    it.each([
-        ['there is no ~/.ssh/config to choose from', noSshConfigResult],
-        ['the config holds no concrete hosts', () => sshConfigHostsResult([])],
-    ])('shows the form straight away when %s', (_, result) => {
-        useSshConfigHostsMock.mockReturnValue(result());
-
-        renderRemoteConnectionDialog();
-
-        expect(queryNameField()).toBeInTheDocument();
-    });
-
-    it('shows the form straight away under SERVER_MODE, where the picker never renders', () => {
-        // The query is disabled here, and a disabled query never settles — waiting on
-        // the config to load would leave a hosted user with an empty dialog for good.
-        getServerConfigMock.mockReturnValue({ ...SERVER_CONFIG, SERVER_MODE: true });
-        useSshConfigHostsMock.mockReturnValue(pendingSshConfigResult());
-
-        renderRemoteConnectionDialog();
-
-        expect(queryNameField()).toBeInTheDocument();
-    });
-
-    it('shows the form straight away when an existing connection is being edited', () => {
-        useSshConfigHostsMock.mockReturnValue(sshConfigHostsResult(CONFIG_HOSTS));
-
-        renderRemoteConnectionDialog({ existing: { name: 'saved', host: 'not-an-alias', username: 'carol' } });
-
-        expect(screen.getByLabelText('SSH Host')).toHaveValue('not-an-alias');
-    });
-
-    it('offers no picker at all when editing, and leaves ~/.ssh/config unread', () => {
-        useSshConfigHostsMock.mockReturnValue(sshConfigHostsResult(CONFIG_HOSTS));
-
-        // The prefill replaces host, name, username, port and identity file together, so on a
-        // connection that already has them it is an offer to undo the edit.
-        renderRemoteConnectionDialog({ existing: { name: 'saved', host: 'work-gpu', username: 'carol' } });
-
-        expect(screen.queryByLabelText(SSH_CONFIG_HOST_SUBLABEL)).not.toBeInTheDocument();
-        expect(useSshConfigHostsMock).not.toHaveBeenCalledWith(true);
-    });
-});
-
 describe('RemoteConnectionDialog connection test block', () => {
     it('stays hidden until a test is run, then survives an edit as a stale result', async () => {
         testConnectionMock.mockResolvedValue(PASSING_TESTS);
@@ -312,6 +219,31 @@ describe('RemoteConnectionDialog connection test block', () => {
         // as long as it can't be read as approving the target now in the form.
         expect(screen.getByText('SSH connection established')).toBeInTheDocument();
         expect(getServerTestResults()).toHaveClass(STALE_CONNECTION_TESTS_CLASS);
+    });
+
+    it('leaves the name check outside the stale marking, since it is recomputed', async () => {
+        testConnectionMock.mockResolvedValue(PASSING_TESTS);
+
+        render(
+            <RemoteConnectionDialog
+                open
+                onClose={vi.fn()}
+                onAddConnection={vi.fn()}
+            />,
+        );
+
+        fillName();
+        fireEvent.click(getButtonWithText('Run tests'));
+        await waitFor(() => expect(getButtonWithText('Add connection')).toBeEnabled());
+
+        fireEvent.change(screen.getByLabelText('SSH Host'), { target: { value: 'other-host' } });
+
+        // The name check is recomputed against the form as it stands, so greying it out
+        // alongside the run's results would recede a verdict that is still current.
+        const nameMessage = getNameAvailableMessage(ConnectionNameSubject.CONNECTION);
+        expect(screen.getByText(nameMessage)).toBeInTheDocument();
+        expect(getServerTestResults()).toHaveClass(STALE_CONNECTION_TESTS_CLASS);
+        expect(within(getServerTestResults()).queryByText(nameMessage)).not.toBeInTheDocument();
     });
 
     it('lets a warning be saved, since an empty report folder is not a broken connection', async () => {

@@ -41,6 +41,13 @@ export const SSH_CONFIG_HOST_GROUP_LABEL = '~/.ssh/config';
  */
 export const SSH_CONFIG_HOST_SUBLABEL = 'Define new connection or prefill from ~/.ssh/config';
 
+/**
+ * Mutes the control while {@link SSH_CONFIG_HOST_UNSELECTED} is showing, so an unanswered picker
+ * doesn't read as a value the user settled on. Paired with the selector of the same name in
+ * `src/scss/components/SshConfigHostPicker.scss`.
+ */
+export const SSH_CONFIG_HOST_PLACEHOLDER_CLASS = 'ssh-config-host-placeholder';
+
 /** Points the control at {@link SSH_CONFIG_HOST_SUBLABEL}; both dialogs render one picker. */
 export const SSH_CONFIG_HOST_SUBLABEL_ID = 'ssh-config-host-picker-sublabel';
 

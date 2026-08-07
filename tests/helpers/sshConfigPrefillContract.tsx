@@ -6,16 +6,13 @@
  * The SSH config prefill behaviour both connection dialogs share.
  *
  * Remote connections and MLIR servers render the same SshConfigHostPicker through the same
- * useSshConfigHostSelection hook and getSshConfigHostPrefill helper, so this is one contract with
+ * useSshConfigHostChoice hook and getSshConfigHostPrefill helper, so this is one contract with
  * two consumers. Asserting it separately per dialog let the two copies drift: whichever spec was
  * updated alongside a change to the shared code left the other passing against the old behaviour.
  *
  * Only what the dialogs genuinely have in common lives here. Field labels, prop shapes and copy
  * differ, so they arrive as options — and anything one dialog does alone (the MLIR port staying
  * untouched, the remote dialog keeping a name the user chose) stays in that dialog's own spec.
- *
- * Neither dialog offers the picker for a target it already has values for, so everything here
- * that involves the picker is an add; each spec asserts its own absence-on-edit separately.
  */
 
 import { RenderResult, fireEvent, screen, waitFor } from '@testing-library/react';
@@ -27,7 +24,12 @@ import {
 } from '../../src/definitions/SshConfigHostPicker';
 import { SSH_IDENTITY_FILE_LABEL } from '../../src/definitions/SshConnectionFields';
 import getButtonWithText from './getButtonWithText';
-import { SshConfigHostsQueryResult, noSshConfigResult, sshConfigHostsResult } from './sshConfigFixtures';
+import {
+    SshConfigHostsQueryResult,
+    noSshConfigResult,
+    pendingSshConfigResult,
+    sshConfigHostsResult,
+} from './sshConfigFixtures';
 
 /** An existing entity being edited, mapped by each spec onto its own dialog prop. */
 export interface ExistingTarget {
@@ -214,9 +216,8 @@ export const describeSshConfigPrefillContract = (
 
             selectConfigHost(ALIAS);
 
-            // What each dialog does with the now-untested result is its own concern:
-            // the remote dialog keeps it on screen marked stale, the MLIR one drops
-            // it for a prompt. Both must stop it gating the save.
+            // Both dialogs keep the now-untested result on screen, marked as no longer
+            // describing the target; what neither may do is let it go on gating the save.
             expect(getButtonWithText(saveLabel)).toBeDisabled();
         });
 
@@ -239,6 +240,86 @@ export const describeSshConfigPrefillContract = (
             expect(screen.getByText(passingTestMessage)).toBeInTheDocument();
             expect(getButtonWithText(saveLabel)).toBeEnabled();
             expect(screen.getByLabelText('Name')).toHaveValue('renamed box');
+        });
+    });
+
+    describe(`${dialogName} host choice gate`, () => {
+        const queryNameField = () => screen.queryByLabelText('Name');
+        const seedConfigHost = () =>
+            useSshConfigHostsMock.mockReturnValue(sshConfigHostsResult([{ host: ALIAS, user: ALIAS_USER }]));
+
+        it('shows nothing but the picker, and no actions, until a choice is made', () => {
+            seedConfigHost();
+
+            renderDialog();
+
+            expect(getPicker()).toBeInTheDocument();
+            expect(queryNameField()).not.toBeInTheDocument();
+            expect(screen.queryByLabelText(hostLabel)).not.toBeInTheDocument();
+            // A form that isn't on screen has nothing to test or save.
+            expect(screen.queryByRole('button', { name: runTestsLabel })).not.toBeInTheDocument();
+            expect(screen.queryByRole('button', { name: saveLabel })).not.toBeInTheDocument();
+        });
+
+        it('reveals the form when the add-new option is chosen', () => {
+            seedConfigHost();
+
+            renderDialog();
+            chooseAddNewTarget();
+
+            expect(screen.getByLabelText(hostLabel)).toHaveValue('');
+            expect(getButtonWithText(runTestsLabel)).toBeInTheDocument();
+        });
+
+        it('reveals the form prefilled when a config host is chosen', () => {
+            seedConfigHost();
+
+            renderDialog();
+            selectConfigHost(ALIAS);
+
+            expect(screen.getByLabelText(hostLabel)).toHaveValue(ALIAS);
+        });
+
+        it('waits for ~/.ssh/config before deciding, rather than showing a form it takes away', () => {
+            useSshConfigHostsMock.mockReturnValue(pendingSshConfigResult());
+
+            renderDialog();
+
+            expect(queryNameField()).not.toBeInTheDocument();
+        });
+
+        it.each([
+            ['there is no ~/.ssh/config to choose from', noSshConfigResult],
+            ['the config holds no concrete hosts', () => sshConfigHostsResult([])],
+        ])('shows the form straight away when %s', (_situation, result) => {
+            useSshConfigHostsMock.mockReturnValue(result());
+
+            renderDialog();
+
+            expect(queryNameField()).toBeInTheDocument();
+        });
+
+        it('shows the form straight away under SERVER_MODE, where the picker never renders', () => {
+            // The query is disabled here, and a disabled query never settles — waiting on
+            // the config to load would leave a hosted user with an empty dialog for good.
+            setServerMode(true);
+            useSshConfigHostsMock.mockReturnValue(pendingSshConfigResult());
+
+            renderDialog();
+
+            expect(queryNameField()).toBeInTheDocument();
+        });
+
+        it('offers no picker at all when editing, and leaves ~/.ssh/config unread', () => {
+            seedConfigHost();
+
+            // The prefill replaces host, name, username, port and identity file together, so on a
+            // target that already has them it is an offer to undo the edit.
+            renderDialog({ existing: { name: 'saved', host: ALIAS, username: 'carol' } });
+
+            expect(screen.queryByLabelText(SSH_CONFIG_HOST_SUBLABEL)).not.toBeInTheDocument();
+            expect(screen.getByLabelText(hostLabel)).toHaveValue(ALIAS);
+            expect(useSshConfigHostsMock).not.toHaveBeenCalledWith(true);
         });
     });
 };

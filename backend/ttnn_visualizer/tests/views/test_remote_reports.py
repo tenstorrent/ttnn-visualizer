@@ -43,6 +43,11 @@ def _found(folders: list) -> RemoteFolderSearch:
     return RemoteFolderSearch(folders=folders, is_root_missing=False)
 
 
+def _missing() -> RemoteFolderSearch:
+    """A search whose root was not there, so it says nothing about reports."""
+    return RemoteFolderSearch(folders=[], is_root_missing=True)
+
+
 def _remote_connection_payload():
     return {
         "name": "test-remote",
@@ -1103,17 +1108,24 @@ class TestConnectionTestReportStatuses:
     def _messages(response) -> list[str]:
         return [status["message"] for status in response.get_json()]
 
-    def _run_connection_test(self, client, payload, *, folders_per_path):
-        # No separate path check to stub: the search settles whether its root
-        # exists, so a stubbed search is a root that was there.
+    def _run_connection_test_with_searches(self, client, payload, *, searches):
         with (
             patch("ttnn_visualizer.views.test_ssh_connection", return_value=True),
             patch(
                 "ttnn_visualizer.sftp_operations.find_folders_by_files",
-                side_effect=[_found(folders) for folders in folders_per_path],
+                side_effect=searches,
             ),
         ):
             return client.post("/api/remote/test", json=payload)
+
+    def _run_connection_test(self, client, payload, *, folders_per_path):
+        # No separate path check to stub: the search settles whether its root
+        # exists, so a stubbed search is a root that was there.
+        return self._run_connection_test_with_searches(
+            client,
+            payload,
+            searches=[_found(folders) for folders in folders_per_path],
+        )
 
     def test_a_path_that_is_not_there_fails_rather_than_counting_zero(
         self, app, client
@@ -1121,21 +1133,35 @@ class TestConnectionTestReportStatuses:
         """A search that never reached its root has nothing to say about reports."""
         app.config["SERVER_MODE"] = False
 
-        with (
-            patch("ttnn_visualizer.views.test_ssh_connection", return_value=True),
-            patch(
-                "ttnn_visualizer.sftp_operations.find_folders_by_files",
-                return_value=RemoteFolderSearch(folders=[], is_root_missing=True),
-            ),
-        ):
-            response = client.post(
-                "/api/remote/test", json=_remote_connection_payload()
-            )
+        response = self._run_connection_test_with_searches(
+            client, _remote_connection_payload(), searches=[_missing()]
+        )
 
         statuses = response.get_json()
         assert self._messages(response) == [
             "SSH connection established",
             "Profiler directory does not exist or cannot be accessed",
+        ]
+        assert statuses[-1]["status"] == ConnectionTestStates.FAILED.value
+
+    def test_a_missing_performance_path_names_performance_not_the_profiler(
+        self, app, client
+    ):
+        """Each path fails under its own name, so the user knows which to fix."""
+        app.config["SERVER_MODE"] = False
+
+        response = self._run_connection_test_with_searches(
+            client,
+            _remote_connection_payload(),
+            searches=[_found(["/a"]), _missing()],
+        )
+
+        statuses = response.get_json()
+        # The profiler count is dropped with it: a test that failed part way
+        # through has not judged the connection, only the path it got to.
+        assert self._messages(response) == [
+            "SSH connection established",
+            "Performance directory does not exist or cannot be accessed",
         ]
         assert statuses[-1]["status"] == ConnectionTestStates.FAILED.value
 
@@ -1206,6 +1232,28 @@ class TestConnectionTestReportStatuses:
 
         messages = self._messages(response)
         assert "Found 2 performance reports in per-rank subdirectories" in messages
+
+    def test_multihost_empty_path_warns_with_the_expected_layout(self, app, client):
+        """The layout hint has to survive the zero-count path, not just the found one.
+
+        Pointing at the parent of the per-rank folders is the misconfiguration
+        that produces this warning, so it is the case that most needs the hint.
+        """
+        app.config["SERVER_MODE"] = False
+
+        response = self._run_connection_test(
+            client,
+            {
+                **_remote_connection_payload(),
+                "performancePath": "/remote/generated/profiler/ttrun",
+                "multihostPerformance": True,
+            },
+            folders_per_path=[["/a"], []],
+        )
+
+        performance = response.get_json()[-1]
+        assert performance["status"] == ConnectionTestStates.WARNING.value
+        assert f"{MULTIHOST_REPORT_LAYOUT_HINT}/<report>" in performance["message"]
 
     def test_unconfigured_performance_path_is_not_reported(self, app, client):
         app.config["SERVER_MODE"] = False

@@ -21,7 +21,6 @@ import { ConnectionStatus, ConnectionTestStates } from '../../definitions/Connec
 import { MULTIHOST_CHECKBOX_LABEL, RemoteConnection } from '../../definitions/RemoteConnection';
 import { SSH_CONFIG_HOST_ADD_CONNECTION_LABEL } from '../../definitions/SshConfigHostPicker';
 import {
-    MAX_PORT,
     SSH_HOST_SUBLABEL,
     SSH_IDENTITY_FILE_LABEL,
     SSH_IDENTITY_FILE_PLACEHOLDER,
@@ -31,8 +30,10 @@ import {
 import { SshConfigHost } from '../../model/SshConfigHost';
 import { getConnectionNameStatus, isConnectionNameTaken } from '../../functions/connectionName';
 import { isSameConnection } from '../../functions/remoteConnection';
+import getPortFromInput from '../../functions/getPortFromInput';
 import getServerConfig from '../../functions/getServerConfig';
 import getSshConfigHostPrefill from '../../functions/getSshConfigHostPrefill';
+import isConnectionSaveable from '../../functions/isConnectionSaveable';
 import useRemoteConnection from '../../hooks/useRemote';
 import useSshConfigHostChoice from '../../hooks/useSshConfigHostChoice';
 import ConnectionTestResults from './ConnectionTestResults';
@@ -112,13 +113,8 @@ const RemoteConnectionDialog = ({
     const isNameTaken = isConnectionNameTaken(connectionName, existingConnections, isSameConnection, remoteConnection);
     const nameStatus = getConnectionNameStatus(connectionName, isNameTaken, ConnectionNameSubject.CONNECTION);
 
-    const isValidConnection =
-        nameStatus.status === ConnectionTestStates.OK &&
-        !hasStaleTestResults &&
-        connectionTests.length > 0 &&
-        connectionTests.every(
-            ({ status }) => status === ConnectionTestStates.OK || status === ConnectionTestStates.WARNING,
-        );
+    const isValidConnection = isConnectionSaveable(nameStatus, connectionTests, hasStaleTestResults);
+
     // Everything the test actually exercises — the SSH target, the credentials, and the paths it
     // stats — invalidates a previous result. The name isn't part of the target, so it goes through
     // updateName instead: saving is gated on a passing test, and renaming shouldn't cost a fresh
@@ -265,12 +261,10 @@ const RemoteConnectionDialog = ({
                                 id='remote-ssh-port'
                                 value={connection.port?.toString() ?? ''}
                                 onChange={(e) => {
-                                    const number = Number.parseInt(e.target.value, 10);
+                                    const port = getPortFromInput(e.target.value, undefined);
 
-                                    if (e.target.value === '') {
-                                        updateTarget({ port: undefined });
-                                    } else if (number > 0 && number < MAX_PORT) {
-                                        updateTarget({ port: number });
+                                    if (port !== null) {
+                                        updateTarget({ port });
                                     }
                                 }}
                             />
