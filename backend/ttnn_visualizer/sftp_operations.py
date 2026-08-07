@@ -6,7 +6,6 @@ import json
 import logging
 import os
 import re
-import shlex
 import subprocess
 import time
 from http import HTTPStatus
@@ -32,6 +31,12 @@ from ttnn_visualizer.models import (
     RemoteReportFolder,
     folder_segment_from_remote_path,
     rank_from_remote_path,
+)
+from ttnn_visualizer.remote_command import (
+    RemoteCommand,
+    remote_arg,
+    remote_glob_arg,
+    remote_scp_target,
 )
 from ttnn_visualizer.sockets import FileProgress, FileStatus, emit_file_status
 from ttnn_visualizer.ssh_client import SSHClient, raise_for_ssh_subprocess_error
@@ -63,17 +68,6 @@ def _remote_transfer_key(remote_connection: RemoteConnection) -> tuple[str, str,
 
 def _is_sftp_subsystem_unavailable(stderr: str) -> bool:
     return "subsystem request failed" in (stderr or "").lower()
-
-
-def _quote_keeping_globs(pattern: str) -> str:
-    """Shell-quote a remote path while leaving ``*`` free to expand on the host.
-
-    ``shlex.quote`` on the whole pattern would quote the wildcard too, turning a
-    glob the caller depends on into a literal filename. Quoting each side of the
-    wildcards instead keeps the expansion while closing the quote-escape that a
-    hand-rolled ``'{path}'`` leaves open.
-    """
-    return "*".join(shlex.quote(segment) for segment in pattern.split("*"))
 
 
 def get_active_sync_method(remote_connection: RemoteConnection) -> SyncMethod:
@@ -137,6 +131,18 @@ def _ssh_cmd_prefix(remote_connection: RemoteConnection) -> List[str]:
         cmd.extend(["-p", str(remote_connection.port)])
     cmd.append(f"{remote_connection.username}@{remote_connection.host}")
     return cmd
+
+
+def _ssh_argv(remote_connection: RemoteConnection, command: RemoteCommand) -> List[str]:
+    """Full ``ssh`` argv for one remote command.
+
+    The only intended caller of ``_ssh_cmd_prefix``. Everything after ``user@host``
+    is a single element because OpenSSH joins multiple remote arguments with spaces
+    and hands the result to the remote login shell — passing a path as its own argv
+    element looks safe locally but is not quoted remotely. Taking a ``RemoteCommand``
+    rather than a ``str`` is what makes a naive f-string a type error here.
+    """
+    return _ssh_cmd_prefix(remote_connection) + [str(command)]
 
 
 def _sftp_cmd_prefix(remote_connection: RemoteConnection) -> List[str]:
@@ -215,9 +221,10 @@ def resolve_file_path(remote_connection, file_path: str) -> str:
     """
     if "*" in file_path:
         # Build SSH command to list files matching the pattern (never prompts for password)
-        ssh_cmd = _ssh_cmd_prefix(remote_connection) + [
-            f"ls -1 {_quote_keeping_globs(file_path)}"
-        ]
+        ssh_cmd = _ssh_argv(
+            remote_connection,
+            RemoteCommand.from_shell_fragment(f"ls -1 {remote_glob_arg(file_path)}"),
+        )
 
         try:
             result = subprocess.run(
@@ -564,10 +571,13 @@ def get_remote_file_list(
     # POSIX paths, so paths containing tabs/newlines round-trip safely; the
     # first '\t' in each record is the unambiguous separator between the
     # decimal size and the path. Falls back below if -printf is unsupported.
-    quoted_folder = shlex.quote(remote_folder)
-    ssh_cmd = _ssh_cmd_prefix(remote_connection) + [
-        f"find {quoted_folder} -type f -printf '%s\\t%p\\0'",
-    ]
+    quoted_folder = remote_arg(remote_folder)
+    ssh_cmd = _ssh_argv(
+        remote_connection,
+        RemoteCommand.from_shell_fragment(
+            f"find {quoted_folder} -type f -printf '%s\\t%p\\0'"
+        ),
+    )
 
     try:
         result = subprocess.run(
@@ -630,10 +640,10 @@ def _get_remote_file_list_without_sizes(
     exclude_patterns: List[str],
 ) -> List[tuple[str, int]]:
     """Fallback when GNU find -printf is unavailable. Sizes default to 0."""
-    quoted_folder = shlex.quote(remote_folder)
-    ssh_cmd = _ssh_cmd_prefix(remote_connection) + [
-        f"find {quoted_folder} -type f",
-    ]
+    ssh_cmd = _ssh_argv(
+        remote_connection,
+        RemoteCommand.of("find", remote_folder, "-type", "f"),
+    )
     try:
         result = subprocess.run(
             ssh_cmd,
@@ -666,10 +676,10 @@ def get_remote_directory_list(
     exclude_patterns = exclude_patterns or []
 
     # Build SSH command to find all directories recursively (never prompts for password)
-    quoted_folder = shlex.quote(remote_folder)
-    ssh_cmd = _ssh_cmd_prefix(remote_connection) + [
-        f"find {quoted_folder} -type d",
-    ]
+    ssh_cmd = _ssh_argv(
+        remote_connection,
+        RemoteCommand.of("find", remote_folder, "-type", "d"),
+    )
 
     try:
         result = subprocess.run(
@@ -703,17 +713,12 @@ def get_remote_directory_list(
         return []
 
 
-def _scp_remote_target(remote_connection: RemoteConnection, remote_file: str) -> str:
-    """Build scp remote target for argv (no shell quoting — subprocess passes it verbatim)."""
-    return f"{remote_connection.username}@{remote_connection.host}:{remote_file}"
-
-
 def download_single_file_scp(
     remote_connection: RemoteConnection, remote_file: str, local_file: Path
 ) -> SyncMethod:
     """Download a single file using scp (when the remote SFTP subsystem is disabled)."""
     local_file.parent.mkdir(parents=True, exist_ok=True)
-    remote_spec = _scp_remote_target(remote_connection, remote_file)
+    remote_spec = remote_scp_target(remote_connection, remote_file)
     scp_cmd = _scp_cmd_prefix(remote_connection) + [remote_spec, str(local_file)]
     try:
         subprocess.run(
@@ -755,9 +760,7 @@ def download_single_file_sftp(
     local_file.parent.mkdir(parents=True, exist_ok=True)
     sftp_cmd = _sftp_cmd_prefix(remote_connection)
     # Batch script is parsed by sftp, not the shell — quote paths for spaces/special chars.
-    sftp_commands = (
-        f"get {shlex.quote(remote_file)} {shlex.quote(str(local_file))}\nquit\n"
-    )
+    sftp_commands = f"get {remote_arg(remote_file)} {remote_arg(local_file)}\nquit\n"
 
     try:
         subprocess.run(
@@ -825,22 +828,19 @@ def get_remote_profiler_folder_from_config_path(
         )
 
     def ssh_stat_mtime(path: str) -> int:
-        stat_cmd = _ssh_cmd_prefix(remote_connection) + [
-            "stat",
-            "-c",
-            "%Y",
-            path,
-        ]
+        stat_cmd = _ssh_argv(
+            remote_connection, RemoteCommand.of("stat", "-c", "%Y", path)
+        )
         stat_result = ssh_run_checked(stat_cmd)
         return int(float(stat_result.stdout.strip()))
 
     def ssh_cat(path: str) -> str:
-        cat_cmd = _ssh_cmd_prefix(remote_connection) + ["cat", path]
+        cat_cmd = _ssh_argv(remote_connection, RemoteCommand.of("cat", path))
         cat_result = ssh_run_checked(cat_cmd)
         return cat_result.stdout
 
     def ssh_test_file(path: str) -> bool:
-        test_cmd = _ssh_cmd_prefix(remote_connection) + ["test", "-f", path]
+        test_cmd = _ssh_argv(remote_connection, RemoteCommand.of("test", "-f", path))
         result = subprocess.run(
             test_cmd,
             capture_output=True,
@@ -855,11 +855,13 @@ def get_remote_profiler_folder_from_config_path(
         # `bash -lc '<script>'` string instead. Use find so the script has no
         # shell loop syntax.
         inner = (
-            f"find {shlex.quote(folder_str)} -maxdepth 1 "
+            f"find {remote_arg(folder_str)} -maxdepth 1 "
             "-name 'config_*_of_*.json' -print"
         )
-        remote_cmd = "bash -lc " + shlex.quote(inner)
-        list_cmd = _ssh_cmd_prefix(remote_connection) + [remote_cmd]
+        list_cmd = _ssh_argv(
+            remote_connection,
+            RemoteCommand.of("bash", "-lc", inner),
+        )
         result = subprocess.run(
             list_cmd,
             capture_output=True,
@@ -1124,19 +1126,22 @@ def _report_search_find_expression(
         # the same value is what stops the glob spanning segments and matching a
         # deeper accidental layout.
         depth = 1 + len(subdirectory_glob.split("/"))
-        path_filter = f" -path {shlex.quote(f'{root}/{subdirectory_glob}/*')}"
+        # Fully quoted, not `remote_glob_arg`: this `*` is part of a `-path` pattern
+        # that `find` itself matches, so the shell must not expand it.
+        path_filter = f" -path {remote_arg(f'{root}/{subdirectory_glob}/*')}"
 
     # The report-file test runs inside `find` rather than as a follow-up command
     # per candidate: the multihost layout multiplies candidates by the rank
     # count, and `_ssh_cmd_prefix` sets up no connection sharing, so a round trip
     # each meant a full TCP and auth handshake per rank per report.
+    # `{}` is find's own placeholder for the candidate directory, so this quotes a
+    # pattern find expands rather than a path the shell should resolve.
     tests = " -o ".join(
-        f"-exec test -f {shlex.quote('{}/' + file_name)} ';'"
-        for file_name in file_names
+        f"-exec test -f {remote_arg('{}/' + file_name)} ';'" for file_name in file_names
     )
 
     return (
-        f"find {shlex.quote(search_root)} "
+        f"find {remote_arg(search_root)} "
         f"-mindepth {depth} -maxdepth {depth} -type d{path_filter} "
         f"'(' {tests} ')' -print"
     )
@@ -1160,10 +1165,13 @@ def _remote_directory_mtimes(
 
     for index in range(0, len(directories), _MTIME_BATCH_SIZE):
         batch = directories[index : index + _MTIME_BATCH_SIZE]
-        quoted = " ".join(shlex.quote(directory) for directory in batch)
-        ssh_cmd = _ssh_cmd_prefix(remote_connection) + [
-            f'for p in {quoted}; do stat -c %Y "$p" 2>/dev/null || echo; done',
-        ]
+        quoted = " ".join(remote_arg(directory) for directory in batch)
+        ssh_cmd = _ssh_argv(
+            remote_connection,
+            RemoteCommand.from_shell_fragment(
+                f'for p in {quoted}; do stat -c %Y "$p" 2>/dev/null || echo; done'
+            ),
+        )
 
         try:
             result = subprocess.run(
@@ -1215,9 +1223,12 @@ def find_folders_by_files(
     if not root_folder or not file_names:
         return []
 
-    ssh_cmd = _ssh_cmd_prefix(remote_connection) + [
-        _report_search_find_expression(root_folder, subdirectory_glob, file_names),
-    ]
+    ssh_cmd = _ssh_argv(
+        remote_connection,
+        RemoteCommand.from_shell_fragment(
+            _report_search_find_expression(root_folder, subdirectory_glob, file_names)
+        ),
+    )
 
     try:
         result = subprocess.run(

@@ -10,7 +10,8 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import RemoteConnectionSelector from '../src/components/report-selection/RemoteConnectionSelector';
 import { ConnectionStatus, ConnectionTestStates } from '../src/definitions/ConnectionStatus';
 import { CANCEL_DELETE_LABEL, CONFIRM_DELETE_LABEL } from '../src/definitions/ManagedEntity';
-import { RemoteConnection } from '../src/definitions/RemoteConnection';
+import { FETCH_REMOTE_FOLDERS_LABEL, RemoteConnection } from '../src/definitions/RemoteConnection';
+import { REMOTE_PATH_NOT_ABSOLUTE_ERROR } from '../src/definitions/SshConnectionFields';
 import { TEST_IDS } from '../src/definitions/TestIds';
 import {
     getConnectionTrigger,
@@ -243,6 +244,61 @@ it('fetches folder lists when the edited connection is the selected one', async 
 
     expect(onSyncRemoteFolderList).toHaveBeenCalledTimes(1);
     expect(onSyncRemoteFolderList).toHaveBeenCalledWith(expect.objectContaining({ name: EDITED_NAME }));
+});
+
+// A connection saved before report paths had to be absolute stays in the list — dropping it
+// on read would erase it from storage on the next write. So the list has to say what is
+// wrong and refuse the fetch, leaving editing as the way out.
+const LEGACY_CONNECTION: RemoteConnection = {
+    name: 'Legacy',
+    username: 'tt',
+    host: 'worker-03',
+    port: 2222,
+    profilerPath: 'tt-metal/generated/ttnn/reports',
+};
+
+it('flags only the row whose report path the server would refuse', async () => {
+    renderSelector({ connectionList: [FIRST_CONNECTION, LEGACY_CONNECTION] });
+    await openConnectionDropdown();
+
+    const warnings = screen.getAllByTestId(TEST_IDS.REMOTE_CONNECTION_PATH_WARNING);
+
+    expect(warnings).toHaveLength(1);
+    expect(screen.getByLabelText(`${LEGACY_CONNECTION.name} has an unusable report path`)).toBeInTheDocument();
+});
+
+it('keeps the flagged connection editable so the path can be fixed', async () => {
+    renderSelector({ connectionList: [FIRST_CONNECTION, LEGACY_CONNECTION] });
+    await openConnectionDropdown();
+
+    fireEvent.click(screen.getByLabelText(getEditConnectionLabel(LEGACY_CONNECTION)));
+
+    const pathInput = screen.getByLabelText('Memory report folder path');
+
+    expect(pathInput).toHaveValue(LEGACY_CONNECTION.profilerPath);
+    expect(pathInput).toHaveAccessibleDescription(REMOTE_PATH_NOT_ABSOLUTE_ERROR);
+});
+
+it('refuses the folder fetch while the selected connection has an unusable path', () => {
+    const { onSyncRemoteFolderList } = renderSelector({
+        connectionList: [LEGACY_CONNECTION],
+        connection: LEGACY_CONNECTION,
+    });
+
+    const fetchButton = screen.getByRole('button', { name: FETCH_REMOTE_FOLDERS_LABEL });
+
+    expect(fetchButton).toBeDisabled();
+
+    fireEvent.click(fetchButton);
+
+    expect(onSyncRemoteFolderList).not.toHaveBeenCalled();
+});
+
+it('allows the folder fetch for a connection whose paths are accepted', () => {
+    renderSelector();
+
+    expect(screen.getByRole('button', { name: FETCH_REMOTE_FOLDERS_LABEL })).toBeEnabled();
+    expect(screen.queryByTestId(TEST_IDS.REMOTE_CONNECTION_PATH_WARNING)).not.toBeInTheDocument();
 });
 
 it('leaves no reachable row action once the selector is disabled', async () => {

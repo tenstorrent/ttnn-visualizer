@@ -9,13 +9,13 @@ from __future__ import annotations
 import logging
 import os
 import re
-import shlex
 from http import HTTPStatus
 from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING, Optional, Tuple
 
 from flask import Response, jsonify
 from ttnn_visualizer.exceptions import RemoteFileReadException
+from ttnn_visualizer.remote_command import RemoteCommand, remote_arg
 from ttnn_visualizer.ssh_client import SSHException
 
 if TYPE_CHECKING:
@@ -287,7 +287,7 @@ def read_stack_source_local(raw_path: str) -> Tuple[str, str, bool]:
 
 def _discover_tt_metal_roots_remote(ssh_client: "SSHClient") -> list[str]:
     """All existing remote tt-metal roots, same priority as local (deduped)."""
-    cmd = f"bash -lc {shlex.quote(_REMOTE_LIST_ROOTS_SCRIPT)}"
+    cmd = RemoteCommand.of("bash", "-lc", _REMOTE_LIST_ROOTS_SCRIPT)
     try:
         out = ssh_client.execute_command(cmd, timeout=30)
     except Exception as e:
@@ -392,10 +392,13 @@ def read_stack_source_remote(
 def _remote_regular_file_exists(ssh_client: "SSHClient", posix_path: str) -> bool:
     """True if remote path exists, is a regular file, and is readable (SSH test -f/-r)."""
 
-    quoted_path = shlex.quote(posix_path)
+    quoted_path = remote_arg(posix_path)
     try:
         ssh_client.execute_command(
-            f"test -f {quoted_path} && test -r {quoted_path}", timeout=15
+            RemoteCommand.from_shell_fragment(
+                f"test -f {quoted_path} && test -r {quoted_path}"
+            ),
+            timeout=15,
         )
         return True
     except SSHException:

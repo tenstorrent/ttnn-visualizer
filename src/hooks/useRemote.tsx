@@ -416,18 +416,18 @@ const safeJsonStringify = <T,>(value: T, fallback: string = 'null'): string => {
     }
 };
 
-const isValidConnection = (connection?: Partial<RemoteConnection>) => {
-    if (
-        !connection?.name ||
-        !connection?.username ||
-        !connection?.host ||
-        !connection?.port ||
-        (!connection?.profilerPath && !connection?.performancePath)
-    ) {
-        return false;
-    }
-
-    return true;
-};
+// Deliberately does not check the report paths. A relative path was storable before the
+// backend required absolute ones, and filtering such a connection out here would erase it:
+// the list is read filtered but written whole, so the next add or edit would drop it from
+// storage silently. It stays listed and is flagged for repair instead — see
+// getRemoteConnectionPathError and RemoteConnectionSelector.
+const isValidConnection = (connection?: Partial<RemoteConnection>) =>
+    Boolean(
+        connection?.name &&
+        connection?.username &&
+        connection?.host &&
+        connection?.port &&
+        (connection?.profilerPath || connection?.performancePath),
+    );
 
 export default useRemoteConnection;

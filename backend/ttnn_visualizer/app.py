@@ -29,6 +29,7 @@ from ttnn_visualizer.exceptions import (
     DatabaseFileNotFoundException,
     InvalidProfilerPath,
     InvalidReportPath,
+    InvalidRequestPayload,
     ReportNotLoadedException,
 )
 from ttnn_visualizer.instances import create_instance_from_local_paths
@@ -226,6 +227,10 @@ def middleware(app: flask.Flask):
         response = jsonify({"error": str(error)})
         response.status_code = HTTPStatus.NOT_FOUND
         return response
+
+    @app.errorhandler(InvalidRequestPayload)
+    def handle_invalid_request_payload(error: InvalidRequestPayload):
+        return jsonify({"error": str(error)}), HTTPStatus.BAD_REQUEST
 
     @app.errorhandler(HTTPException)
     def handle_http_error(error: HTTPException):
