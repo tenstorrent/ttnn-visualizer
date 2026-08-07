@@ -30,8 +30,8 @@ export const SSH_IDENTITY_FILE_SUBLABEL =
 export const SSH_IDENTITY_FILE_PLACEHOLDER = 'Leave empty for default / SSH config';
 
 /**
- * Upper bound the port inputs reject beyond, shared so the two dialogs can't disagree about what
- * a typed port may be. Deliberately looser than the 65535 a TCP port can reach: the field is
- * digit-by-digit, so a tighter bound would refuse the keystrokes leading up to a legal port.
+ * Highest port a TCP connection can reach, shared so the dialogs and the server config validation
+ * can't disagree about what a port may be. A digit-by-digit field stays typable under this bound
+ * because every prefix of a legal port is itself a legal port.
  */
-export const MAX_PORT = 99999;
+export const MAX_PORT = 65535;

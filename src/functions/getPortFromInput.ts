@@ -23,7 +23,7 @@ const getPortFromInput = <TEmpty extends number | undefined>(
 
     const port = Number.parseInt(value, 10);
 
-    return port > 0 && port < MAX_PORT ? port : null;
+    return port > 0 && port <= MAX_PORT ? port : null;
 };
 
 export default getPortFromInput;
