@@ -313,7 +313,7 @@ const RemoteConnectionDialog = ({
 
                         <FormGroup
                             label='Multihost Performance Reports'
-                            subLabel='Reports are found at "ttrun/rank0/reports/<REPORT>", so the path above must be the folder that directly contains the rank folders (e.g. "/<PATH TO TT METAL>/generated/profiler/ttrun/"). Single-host reports sitting directly under that path are not listed while this is on.'
+                            subLabel='Reports are found at "ttrun/rank0/reports/<REPORT>", so the path above must be the folder that directly contains the rank folders (e.g. "/<PATH TO TT METAL>/generated/profiler/ttrun/"). Single-host reports will be ignored.'
                             labelFor='remote-performance-multihost'
                         >
                             <Checkbox

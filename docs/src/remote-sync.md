@@ -122,8 +122,8 @@ stored there yourself, or you can point it at the generated directory in `tt-met
 
 `tt-run --tracy` writes one report per rank, each under its own `rank<N>` directory, so the
 reports are one level deeper than a single-host run puts them. To pick these up, tick
-_Multihost performance reports_ and point the _Performance report folder path_ at the folder
-that directly contains the rank directories, for example
+_Search per-rank subdirectories_ under _Remote Performance Report Folder Path_, and point that
+path at the folder that directly contains the rank directories, for example
 `/home/username/tt-metal/generated/profiler/ttrun/`. Reports are then discovered at
 `ttrun/rank<N>/reports/<report>`, and the dropdown lists them by rank.
 
