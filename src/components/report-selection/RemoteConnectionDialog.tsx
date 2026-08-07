@@ -2,13 +2,25 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { Button, Checkbox, Dialog, DialogBody, DialogFooter, FormGroup, InputGroup, Tooltip } from '@blueprintjs/core';
+import {
+    Button,
+    Checkbox,
+    Dialog,
+    DialogBody,
+    DialogFooter,
+    FormGroup,
+    InputGroup,
+    Intent,
+    Tooltip,
+} from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { AxiosError } from 'axios';
 import { useState } from 'react';
 import { ConnectionStatus, ConnectionTestStates } from '../../definitions/ConnectionStatus';
 import { MULTIHOST_CHECKBOX_LABEL, RemoteConnection } from '../../definitions/RemoteConnection';
 import {
+    REMOTE_MEMORY_PATH_ERROR_ID,
+    REMOTE_PERFORMANCE_PATH_ERROR_ID,
     SSH_HOST_SUBLABEL,
     SSH_IDENTITY_FILE_LABEL,
     SSH_IDENTITY_FILE_PLACEHOLDER,
@@ -16,8 +28,10 @@ import {
     SSH_USERNAME_SUBLABEL,
 } from '../../definitions/SshConnectionFields';
 import { SshConfigHost } from '../../model/SshConfigHost';
+import getResponseError from '../../functions/getResponseError';
 import getServerConfig from '../../functions/getServerConfig';
 import getSshConfigHostPrefill from '../../functions/getSshConfigHostPrefill';
+import { getRemotePathError } from '../../functions/remotePath';
 import useRemoteConnection from '../../hooks/useRemote';
 import useSshConfigHostSelection from '../../hooks/useSshConfigHostSelection';
 import ConnectionTestMessage from './ConnectionTestMessage';
@@ -93,8 +107,13 @@ const RemoteConnectionDialog = ({
     const { testConnection } = useRemoteConnection();
     const [isTestingConnection, setIsTestingconnection] = useState(false);
 
+    const profilerPathError = getRemotePathError(connection.profilerPath);
+    const performancePathError = getRemotePathError(connection.performancePath);
+    const hasPathError = profilerPathError !== null || performancePathError !== null;
+
     const isValidConnection =
         connectionTests.length > 0 &&
+        !hasPathError &&
         connectionTests.every(
             ({ status }) => status === ConnectionTestStates.OK || status === ConnectionTestStates.WARNING,
         );
@@ -102,6 +121,7 @@ const RemoteConnectionDialog = ({
         connection.username?.trim() &&
         connection.host?.trim() &&
         connection.port &&
+        !hasPathError &&
         (connection.profilerPath?.trim() || connection.performancePath?.trim());
 
     // Everything the test actually exercises — the SSH target, the credentials, and the paths it
@@ -136,12 +156,14 @@ const RemoteConnectionDialog = ({
         } catch (err) {
             // Check if this is an axios error with response data (e.g., HTTP 422 for auth failures)
             const axiosError = err as AxiosError;
-            if (axiosError.response && axiosError.response.data) {
+            // Only a status list can be rendered as one. A rejected field gives
+            // `{ error: … }` instead, which would otherwise reach `.map` as a non-array.
+            if (Array.isArray(axiosError.response?.data)) {
                 // Use the actual API response data which contains proper messages and details
                 setConnectionTests(axiosError.response.data as ConnectionStatus[]);
             } else {
-                // Fallback for other types of errors
-                setConnectionTests([FAILED_CONNECTION, FAILED_MEMORY_REPORT_PATH]);
+                const detail = getResponseError(err);
+                setConnectionTests([{ ...FAILED_CONNECTION, detail }, FAILED_MEMORY_REPORT_PATH]);
             }
         } finally {
             setIsTestingconnection(false);
@@ -269,9 +291,16 @@ const RemoteConnectionDialog = ({
                     label='Memory report folder path'
                     subLabel='Path to a remote folder containing memory reports (e.g., "/<PATH TO TT METAL>/generated/ttnn/reports/")'
                     labelFor='remote-memory-path'
+                    intent={profilerPathError ? Intent.DANGER : undefined}
+                    helperText={profilerPathError && <span id={REMOTE_MEMORY_PATH_ERROR_ID}>{profilerPathError}</span>}
                 >
                     <InputGroup
                         id='remote-memory-path'
+                        intent={profilerPathError ? Intent.DANGER : undefined}
+                        // Blueprint colours the field but tells assistive tech nothing, so the
+                        // error is announced only if the input points at it itself.
+                        aria-invalid={profilerPathError !== null}
+                        aria-describedby={profilerPathError ? REMOTE_MEMORY_PATH_ERROR_ID : undefined}
                         value={connection.profilerPath}
                         onChange={(e) => updateTarget({ profilerPath: e.target.value })}
                     />
@@ -281,9 +310,18 @@ const RemoteConnectionDialog = ({
                     label='Performance report folder path'
                     subLabel='Path to a remote folder containing performance reports (e.g., "/<PATH TO TT METAL>/generated/profiler/reports/")'
                     labelFor='remote-performance-path'
+                    intent={performancePathError ? Intent.DANGER : undefined}
+                    helperText={
+                        performancePathError && (
+                            <span id={REMOTE_PERFORMANCE_PATH_ERROR_ID}>{performancePathError}</span>
+                        )
+                    }
                 >
                     <InputGroup
                         id='remote-performance-path'
+                        intent={performancePathError ? Intent.DANGER : undefined}
+                        aria-invalid={performancePathError !== null}
+                        aria-describedby={performancePathError ? REMOTE_PERFORMANCE_PATH_ERROR_ID : undefined}
                         value={connection.performancePath ?? ''}
                         onChange={(e) => updateTarget({ performancePath: e.target.value })}
                     />
@@ -329,7 +367,7 @@ const RemoteConnectionDialog = ({
 
                     <Button
                         text='Run tests'
-                        disabled={isTestingConnection}
+                        disabled={isTestingConnection || hasPathError}
                         loading={isTestingConnection}
                         onClick={testConnectionStatus}
                     />

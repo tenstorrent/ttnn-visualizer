@@ -1112,6 +1112,31 @@ class TestConnectionTestReportStatuses:
     def _messages(response) -> list[str]:
         return [status["message"] for status in response.get_json()]
 
+    # The dialog calls this endpoint before saving, so a value the validators reject has
+    # to come back as a message the form can render rather than as a 500.
+    @pytest.mark.parametrize(
+        "payload_override",
+        [
+            {"profilerPath": "tt-metal/generated/ttnn/reports"},
+            {"performancePath": "reports"},
+            {"profilerPath": "/reports\nrm -rf /"},
+            {"host": ".."},
+        ],
+        ids=["relative-profiler", "relative-performance", "newline", "bad-host"],
+    )
+    def test_invalid_connection_data_is_a_bad_request(
+        self, app, client, payload_override
+    ):
+        app.config["SERVER_MODE"] = False
+
+        response = client.post(
+            "/api/remote/test",
+            json={**_remote_connection_payload(), **payload_override},
+        )
+
+        assert response.status_code == HTTPStatus.BAD_REQUEST
+        assert response.get_json()["error"] == "Invalid connection data"
+
     def _run_connection_test(self, client, payload, *, folders_per_path):
         with (
             patch("ttnn_visualizer.views.test_ssh_connection", return_value=True),
@@ -1170,6 +1195,69 @@ class TestConnectionTestReportStatuses:
             _found_reports_message("performance", 1, in_rank_subdirectories=True)
             == "Found 1 performance report in per-rank subdirectories"
         )
+
+
+class TestRejectedPayloadsAreBadRequests:
+    """Every ``/api/remote`` route answers a rejected payload the same way.
+
+    The validators tightened after these values were storable, so the offending
+    connection can arrive from the client's own saved list rather than from a
+    hand-crafted request. A 500 gives the user nothing to act on.
+    """
+
+    _PROFILER_FOLDER = {
+        "reportName": "resnet50",
+        "remotePath": "/remote/profiler/reports/resnet50",
+        "lastModified": 1,
+    }
+
+    def _post(self, client, endpoint: str, *, connection: dict, profiler: dict):
+        if endpoint == "/api/remote/test":
+            return client.post(endpoint, json=connection)
+        return client.post(
+            endpoint, json={"connection": connection, "profiler": profiler}
+        )
+
+    @pytest.mark.parametrize(
+        "endpoint",
+        ["/api/remote/test", "/api/remote/sync", "/api/remote/use"],
+        ids=["test", "sync", "use"],
+    )
+    def test_a_rejected_connection_path_is_a_bad_request(self, app, client, endpoint):
+        app.config["SERVER_MODE"] = False
+
+        response = self._post(
+            client,
+            endpoint,
+            connection={**_remote_connection_payload(), "profilerPath": "reports"},
+            profiler=self._PROFILER_FOLDER,
+        )
+
+        assert response.status_code == HTTPStatus.BAD_REQUEST
+        assert response.get_json()["error"] == "Invalid connection data"
+
+    @pytest.mark.parametrize(
+        "remote_path",
+        ["/remote/reports\nrm -rf /", "relative/reports"],
+        ids=["newline", "relative"],
+    )
+    @pytest.mark.parametrize(
+        "endpoint", ["/api/remote/sync", "/api/remote/use"], ids=["sync", "use"]
+    )
+    def test_a_rejected_report_path_is_a_bad_request(
+        self, app, client, endpoint, remote_path
+    ):
+        app.config["SERVER_MODE"] = False
+
+        response = self._post(
+            client,
+            endpoint,
+            connection=_remote_connection_payload(),
+            profiler={**self._PROFILER_FOLDER, "remotePath": remote_path},
+        )
+
+        assert response.status_code == HTTPStatus.BAD_REQUEST
+        assert response.get_json()["error"] == "Invalid report data"
 
 
 class TestReportSearchAgainstRealFind:

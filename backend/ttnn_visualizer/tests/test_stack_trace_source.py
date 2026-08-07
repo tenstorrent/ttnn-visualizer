@@ -2,6 +2,7 @@
 #
 # SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
+import shlex
 from pathlib import Path
 from unittest.mock import MagicMock
 
@@ -12,6 +13,7 @@ from ttnn_visualizer.stack_trace_source import (
     _discover_tt_metal_roots_local,
     _extract_suffix_after_tt_metal,
     _preferred_remote_user_root_for_raw_path,
+    _remote_regular_file_exists,
     _remote_roots_for_raw_path,
     _resolve_local_stack_path,
     _safe_join_under_tt_metal_root,
@@ -120,6 +122,21 @@ def test_candidate_dirs_include_sudo_user_home_tt_metal(monkeypatch):
     """When sudo leaves HOME as root, /home/$SUDO_USER/tt-metal must still be tried."""
     monkeypatch.setenv("SUDO_USER", "someuser")
     assert Path("/home/someuser/tt-metal") in _candidate_tt_metal_dirs()
+
+
+# The existence probe interpolates a caller-supplied path into a `&&` fragment twice,
+# and every other test monkeypatches it out — so this is the only place its command
+# construction is checked. A stack-trace path arrives from report data, not a form.
+def test_remote_regular_file_exists_passes_the_path_as_one_argument():
+    raw_path = "/src/o'brien; touch /tmp/pwned/a.py"
+    ssh_client = MagicMock()
+
+    _remote_regular_file_exists(ssh_client, raw_path)
+
+    fragment = str(ssh_client.execute_command.call_args[0][0])
+    left, right = fragment.split("&&")
+    assert shlex.split(left) == ["test", "-f", raw_path]
+    assert shlex.split(right) == ["test", "-r", raw_path]
 
 
 def test_remote_root_script_matches_local_priority_order():

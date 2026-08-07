@@ -23,6 +23,7 @@ export const TEST_IDS = Object.freeze({
     // Report-selection dropdown rows, each carrying its own edit/delete actions
     FOLDER_PICKER_ROW: 'folder-picker-row',
     REMOTE_CONNECTION_ROW: 'remote-connection-row',
+    REMOTE_CONNECTION_PATH_WARNING: 'remote-connection-path-warning',
     MLIR_SERVER_ROW: 'mlir-server-row',
 
     // Comparison components

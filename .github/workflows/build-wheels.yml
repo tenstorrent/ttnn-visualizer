@@ -17,19 +17,15 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v6
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
         name: Install pnpm
         with:
           run_install: false
 
-      - name: Read .nvmrc
-        id: nvm
-        run: echo "NODE_VERSION=$(cat .nvmrc)" >> $GITHUB_OUTPUT
-
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
-          node-version: ${{ steps.nvm.outputs.NODE_VERSION }}
+          node-version-file: '.nvmrc'
           cache: 'pnpm'
 
       - run: pnpm install
@@ -85,7 +81,7 @@ jobs:
               echo "wheel_file_name=$WHEEL_FILE_NAME" >> $GITHUB_ENV
 
       - name: Upload Wheel to Release
-        uses: AButler/upload-release-assets@v3.0
+        uses: AButler/upload-release-assets@v4.0.0
         with:
             repo-token: ${{ secrets.GITHUB_TOKEN }}
             files: ${{ env.wheel_name }}
