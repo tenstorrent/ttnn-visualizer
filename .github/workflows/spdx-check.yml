@@ -13,20 +13,12 @@ jobs:
             -   name: Checkout code
                 uses: actions/checkout@v6
 
-            -   uses: pnpm/action-setup@v6
-                name: Install pnpm
-                with:
-                    run_install: false
-
             -   name: Setup Node.js
                 uses: actions/setup-node@v7
                 with:
                     node-version-file: '.nvmrc'
-                    cache: 'pnpm'
 
-            -   name: Install dependencies
-                run: pnpm install
-
+            # Run the script directly rather than through `pnpm lint:spdx`: it imports only
+            # `fs` and `path` and skips node_modules, so pnpm and the dependency tree buy nothing.
             -   name: Running check license identifiers
-                run: |
-                    pnpm lint:spdx
+                run: node scripts/check-spdx.mjs
