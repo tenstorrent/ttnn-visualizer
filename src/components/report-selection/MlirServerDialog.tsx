@@ -10,11 +10,10 @@ import { ConnectionStatus, ConnectionTestStates } from '../../definitions/Connec
 import { MlirServerConnection } from '../../definitions/MlirServer';
 import { SSH_CONFIG_HOST_ADD_SERVER_LABEL } from '../../definitions/SshConfigHostPicker';
 import {
-    MLIR_SSH_HOST_SUBLABEL,
+    SSH_HOST_SUBLABEL,
     SSH_IDENTITY_FILE_LABEL,
     SSH_IDENTITY_FILE_PLACEHOLDER,
     SSH_IDENTITY_FILE_SUBLABEL,
-    SSH_USERNAME_SUBLABEL,
 } from '../../definitions/SshConnectionFields';
 import { SshConfigHost } from '../../model/SshConfigHost';
 import { getConnectionNameStatus, isConnectionNameTaken } from '../../functions/connectionName';
@@ -179,8 +178,7 @@ const MlirServerDialog = ({
                 {!isAwaitingHostChoice && (
                     <>
                         <FormGroup
-                            label='Name'
-                            subLabel='Server name'
+                            label='Server Name'
                             labelFor='mlir-server-name'
                         >
                             <InputGroup
@@ -191,8 +189,7 @@ const MlirServerDialog = ({
                         </FormGroup>
 
                         <FormGroup
-                            label='Username'
-                            subLabel={SSH_USERNAME_SUBLABEL}
+                            label='SSH Username'
                             labelFor='mlir-server-username'
                         >
                             <InputGroup
@@ -203,8 +200,8 @@ const MlirServerDialog = ({
                         </FormGroup>
 
                         <FormGroup
-                            label='SSH host'
-                            subLabel={MLIR_SSH_HOST_SUBLABEL}
+                            label='SSH Host'
+                            subLabel={SSH_HOST_SUBLABEL}
                             labelFor='mlir-server-host'
                         >
                             <InputGroup
@@ -226,8 +223,7 @@ const MlirServerDialog = ({
                         </FormGroup>
 
                         <FormGroup
-                            label='SSH port'
-                            subLabel='SSH daemon port on the remote host (e.g. 45985)'
+                            label='SSH Port'
                             labelFor='mlir-server-ssh-port'
                         >
                             <InputGroup

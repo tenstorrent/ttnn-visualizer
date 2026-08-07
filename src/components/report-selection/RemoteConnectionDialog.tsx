@@ -25,7 +25,6 @@ import {
     SSH_IDENTITY_FILE_LABEL,
     SSH_IDENTITY_FILE_PLACEHOLDER,
     SSH_IDENTITY_FILE_SUBLABEL,
-    SSH_USERNAME_SUBLABEL,
 } from '../../definitions/SshConnectionFields';
 import { SshConfigHost } from '../../model/SshConfigHost';
 import { getConnectionNameStatus, isConnectionNameTaken } from '../../functions/connectionName';
@@ -211,8 +210,7 @@ const RemoteConnectionDialog = ({
                 {!isAwaitingHostChoice && (
                     <>
                         <FormGroup
-                            label='Name'
-                            subLabel='Connection name'
+                            label='Connection Name'
                             labelFor='remote-connection-name'
                         >
                             <InputGroup
@@ -239,8 +237,7 @@ const RemoteConnectionDialog = ({
                         </FormGroup>
 
                         <FormGroup
-                            label='Username'
-                            subLabel={SSH_USERNAME_SUBLABEL}
+                            label='SSH Username'
                             labelFor='remote-ssh-username'
                         >
                             <InputGroup
@@ -254,7 +251,6 @@ const RemoteConnectionDialog = ({
 
                         <FormGroup
                             label='SSH Port'
-                            subLabel='Port to use for the SSH connection (e.g., port 22)'
                             labelFor='remote-ssh-port'
                         >
                             <InputGroup
@@ -284,7 +280,7 @@ const RemoteConnectionDialog = ({
                         </FormGroup>
 
                         <FormGroup
-                            label='Remote memory report folder path'
+                            label='Remote Memory Report Folder Path'
                             subLabel='e.g., "/<PATH TO TT METAL>/generated/ttnn/reports/"'
                             labelFor='remote-memory-path'
                         >
@@ -296,7 +292,7 @@ const RemoteConnectionDialog = ({
                         </FormGroup>
 
                         <FormGroup
-                            label='Remote performance report folder path'
+                            label='Remote Performance Report Folder Path'
                             subLabel='e.g., "/<PATH TO TT METAL>/generated/profiler/reports/"'
                             labelFor='remote-performance-path'
                         >
@@ -308,7 +304,7 @@ const RemoteConnectionDialog = ({
                         </FormGroup>
 
                         <FormGroup
-                            label='Multihost performance reports'
+                            label='Multihost Performance Reports'
                             subLabel='Reports are found at "ttrun/rank0/reports/<REPORT>", so the path above must be the folder that directly contains the rank folders (e.g. "/<PATH TO TT METAL>/generated/profiler/ttrun/"). Single-host reports sitting directly under that path are not listed while this is on.'
                             labelFor='remote-performance-multihost'
                         >
