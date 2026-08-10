@@ -5,7 +5,8 @@
 import React, { CSSProperties, useCallback, useEffect, useMemo, useRef } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import classNames from 'classnames';
-import { Tooltip } from '@blueprintjs/core';
+import { Icon, Tooltip } from '@blueprintjs/core';
+import { IconNames } from '@blueprintjs/icons';
 import { PlotConfiguration, PlotMarker } from '../../definitions/PlotConfigurations';
 import MemoryPlotRenderer from '../operation-details/MemoryPlotRenderer';
 import BufferSummaryRow from './BufferSummaryRow';
@@ -20,6 +21,9 @@ import { TensorDeallocationReport, TensorsByOperationByAddress } from '../../mod
 import { CHART_DATA, OPERATION_EL_HEIGHT, TOTAL_SHADE_HEIGHT } from '../../definitions/BufferSummary';
 import { RankedAnnotation, TOP_N_MODE_LABEL, TopNAnnotationMode } from '../../definitions/TopNAnnotations';
 import { perfColorScale } from '../../functions/perfOverlay';
+import { LATE_DEALLOC_RAIL_LABEL, LateDeallocationRunStart } from '../../definitions/LateDeallocation';
+import { getLateDeallocationRunStartSummary } from '../../functions/lateDeallocation';
+import { TEST_IDS } from '../../definitions/TestIds';
 
 interface BufferSummaryVirtualizedListProps {
     operations: BuffersByOperation[];
@@ -43,6 +47,16 @@ interface BufferSummaryVirtualizedListProps {
     topNAnnotationsByOpId?: Map<number, RankedAnnotation>;
     /** Mode the annotations were computed for. Drives tooltip wording. */
     topNAnnotationMode?: TopNAnnotationMode;
+    /**
+     * Rows where a tensor goes stale (#963), plotted as a second navigation
+     * rail inboard of the top-N one. Empty while the overlay toggle is off.
+     */
+    lateDeallocationRunStarts?: readonly LateDeallocationRunStart[];
+    /**
+     * How many rows qualify, passed regardless of the toggle so the control can
+     * advertise the feature before it is switched on.
+     */
+    lateDeallocationRunCount?: number;
     getTensorDeallocationReport?: (operationId: number) => TensorDeallocationReport[];
     getOperationTooltipContent: (operation: BuffersByOperation) => string;
     renderOperationLink: (operation: BuffersByOperation) => React.ReactNode;
@@ -51,6 +65,7 @@ interface BufferSummaryVirtualizedListProps {
 const EMPTY_TENSOR_DEALLOCATION_REPORT: TensorDeallocationReport[] = [];
 const DEFAULT_GET_TENSOR_DEALLOCATION_REPORT = () => EMPTY_TENSOR_DEALLOCATION_REPORT;
 const EMPTY_ANNOTATIONS = new Map<number, RankedAnnotation>();
+const EMPTY_RUN_STARTS: readonly LateDeallocationRunStart[] = [];
 
 interface TopNCssProperties extends CSSProperties {
     '--top-n-color': string;
@@ -73,6 +88,8 @@ function BufferSummaryVirtualizedList({
     markers,
     topNAnnotationsByOpId = EMPTY_ANNOTATIONS,
     topNAnnotationMode = TopNAnnotationMode.PERF_TIME,
+    lateDeallocationRunStarts = EMPTY_RUN_STARTS,
+    lateDeallocationRunCount = 0,
     getTensorDeallocationReport = DEFAULT_GET_TENSOR_DEALLOCATION_REPORT,
     getOperationTooltipContent,
     renderOperationLink,
@@ -179,7 +196,7 @@ function BufferSummaryVirtualizedList({
 
     return (
         <div className='buffer-summary-chart'>
-            <BufferSummaryPlotControls />
+            <BufferSummaryPlotControls lateDeallocationRunCount={lateDeallocationRunCount} />
 
             <p className='x-axis-label'>Memory Address</p>
 
@@ -321,6 +338,48 @@ function BufferSummaryVirtualizedList({
                                             data-testid={`top-n-rail-dot-${annotation.opId}`}
                                         >
                                             {annotation.rank}
+                                        </button>
+                                    </Tooltip>
+                                </li>
+                            );
+                        })}
+                    </ul>
+                ) : null}
+
+                {lateDeallocationRunStarts.length > 0 && operations.length > 0 ? (
+                    // Sits inboard of the top-N rail in its own gutter column so
+                    // the two never overlap when a perf report is also loaded.
+                    <ul
+                        className='late-dealloc-rail'
+                        aria-label={LATE_DEALLOC_RAIL_LABEL}
+                        data-testid={TEST_IDS.LATE_DEALLOC_RAIL}
+                    >
+                        {lateDeallocationRunStarts.map((runStart) => {
+                            const summary = getLateDeallocationRunStartSummary(runStart);
+                            const itemStyle: CSSProperties = {
+                                top: `${(runStart.rowIndex / operations.length) * 100}%`,
+                            };
+                            return (
+                                <li
+                                    key={runStart.opId}
+                                    className='late-dealloc-rail-item'
+                                    style={itemStyle}
+                                >
+                                    <Tooltip
+                                        content={summary}
+                                        placement='left'
+                                    >
+                                        <button
+                                            type='button'
+                                            className='late-dealloc-rail-dot'
+                                            onClick={() => handleRailDotClick(runStart.rowIndex)}
+                                            aria-label={`Jump to ${summary}`}
+                                            data-testid={`${TEST_IDS.LATE_DEALLOC_RAIL_DOT}-${runStart.opId}`}
+                                        >
+                                            <Icon
+                                                icon={IconNames.WARNING_SIGN}
+                                                size={10}
+                                            />
                                         </button>
                                     </Tooltip>
                                 </li>

@@ -15,6 +15,7 @@ import {
 } from '../src/store/app';
 import { TAB_IDS } from '../src/definitions/BufferSummary';
 import { TopNAnnotationMode, TopNAnnotationStatus } from '../src/definitions/TopNAnnotations';
+import { TEST_IDS } from '../src/definitions/TestIds';
 import { AtomProvider, AtomProviderInitialValues } from './helpers/atomProvider';
 
 const availabilityMock = vi.fn();
@@ -40,7 +41,7 @@ vi.mock('@blueprintjs/core', async () => {
     };
 });
 
-const renderControls = (overrides: AtomProviderInitialValues = []) =>
+const renderControls = (overrides: AtomProviderInitialValues = [], lateDeallocationRunCount?: number) =>
     render(
         <AtomProvider
             initialValues={[
@@ -51,7 +52,7 @@ const renderControls = (overrides: AtomProviderInitialValues = []) =>
                 ...overrides,
             ]}
         >
-            <BufferSummaryPlotControls />
+            <BufferSummaryPlotControls lateDeallocationRunCount={lateDeallocationRunCount} />
         </AtomProvider>,
     );
 
@@ -297,5 +298,42 @@ describe('BufferSummaryPlotControls top-N (#1517)', () => {
         const cluster = screen.getByTestId('top-n-controls');
         const tooltipHost = cluster.querySelector('[data-testid="tooltip-host"]');
         expect(tooltipHost?.getAttribute('data-content')).toMatch(/doesn't include op-to-op gap/i);
+    });
+});
+
+describe('BufferSummaryPlotControls late deallocation count (#963)', () => {
+    beforeEach(() => {
+        availabilityMock.mockReturnValue({
+            statusByMode: buildStatusByMode(TopNAnnotationStatus.READY, TopNAnnotationStatus.READY),
+            perfAggregatesByOpId: new Map(),
+            l1PressureByOpId: new Map(),
+        });
+    });
+
+    it('shows the count beside the toggle when operations hold stale tensors', () => {
+        renderControls([], 4);
+
+        const count = screen.getByTestId(TEST_IDS.LATE_DEALLOC_COUNT);
+        expect(count).toHaveTextContent('4');
+    });
+
+    it('explains the count in a tooltip', () => {
+        renderControls([], 1);
+
+        const count = screen.getByTestId(TEST_IDS.LATE_DEALLOC_COUNT);
+        const tooltipHost = count.closest('[data-testid="tooltip-host"]');
+        expect(tooltipHost?.getAttribute('data-content')).toMatch(/1 operation holds a tensor that is no longer used/i);
+    });
+
+    it('hides the count when nothing is flagged, so the toggle does not promise a finding', () => {
+        renderControls([], 0);
+
+        expect(screen.queryByTestId(TEST_IDS.LATE_DEALLOC_COUNT)).toBeNull();
+    });
+
+    it('hides the count on the DRAM tab, where the overlay toggle is not offered', () => {
+        renderControls([[selectedBufferSummaryTabAtom, TAB_IDS.DRAM]], 4);
+
+        expect(screen.queryByTestId(TEST_IDS.LATE_DEALLOC_COUNT)).toBeNull();
     });
 });

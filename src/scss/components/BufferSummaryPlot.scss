@@ -11,6 +11,13 @@ $width-offset: $label-width;
 $height-offset: 15px;
 $rail-gutter: 26px;
 
+// One column per rail (top-N, late deallocation). Reserved statically rather
+// than per-rail: both rails come and go with their own data, and sizing the
+// track to whichever happen to be present would reflow the plot and every row
+// canvas as the user toggles them.
+$rail-columns: 2;
+$rail-track: $rail-gutter * $rail-columns;
+
 // Right-edge clearance for the fixed Feedback button (`.feedback-button`
 // sits at `right: -3px` with a rotated label extending ~35px into the
 // viewport). Pad the whole chart away from it so the rail dots and op
@@ -43,13 +50,13 @@ $footer-clearance: 44px;
 
     .buffer-summary-plot {
         // Width matches the row canvases beneath. Each row sits inside
-        // `.scrollable-with-rail` (padding-right: $rail-gutter) and is
+        // `.scrollable-with-rail` (padding-right: $rail-track) and is
         // sized via the grid's 1fr column, so it shrinks by both the
-        // label column AND the rail gutter. The plot has to subtract the
-        // same — otherwise it extends 26px past the rows on the right
+        // label column AND the rail track. The plot has to subtract the
+        // same — otherwise it extends past the rows on the right
         // (overlapping the left edge of the label column and visually
         // eating the leading op-id digit).
-        width: calc(100% - $width-offset - $rail-gutter);
+        width: calc(100% - $width-offset - $rail-track);
         position: absolute;
         top: 0;
         left: 0;
@@ -138,7 +145,7 @@ $footer-clearance: 44px;
 
     .scrollable-with-rail {
         position: relative;
-        padding-right: $rail-gutter;
+        padding-right: $rail-track;
     }
 
     .scrollable-element {
@@ -190,6 +197,52 @@ $footer-clearance: 44px;
         font-size: 10px;
         font-weight: 600;
         color: $tt-white;
+        line-height: 1;
+        pointer-events: auto;
+        cursor: pointer;
+        transition: transform 80ms ease;
+
+        &:hover,
+        &:focus-visible {
+            transform: scale(1.3);
+            outline: none;
+        }
+    }
+
+    .late-dealloc-rail {
+        position: absolute;
+        // Inboard of the top-N rail, which owns the outermost column.
+        right: $rail-gutter;
+        top: $height-offset;
+        bottom: 0;
+        width: $rail-gutter;
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        pointer-events: none;
+        z-index: 2;
+    }
+
+    // Positioned anchor for the same reason as `.top-n-rail-item`: Blueprint's
+    // Tooltip target span needs non-zero geometry at the dot's location.
+    .late-dealloc-rail-item {
+        position: absolute;
+        right: 2px;
+        transform: translateY(-50%);
+    }
+
+    .late-dealloc-rail-dot {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 18px;
+        height: 18px;
+        margin: 0;
+        padding: 0;
+        border: 1px solid rgb(0 0 0 / 30%);
+        border-radius: 50%;
+        background-color: $tt-yellow;
+        color: $tt-black;
         line-height: 1;
         pointer-events: auto;
         cursor: pointer;

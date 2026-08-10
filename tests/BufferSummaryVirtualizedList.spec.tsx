@@ -11,6 +11,8 @@ import BufferSummaryVirtualizedList from '../src/components/buffer-summary/Buffe
 import { ScrollLocations } from '../src/definitions/VirtualLists';
 import { BufferSummaryAxisConfiguration } from '../src/definitions/PlotConfigurations';
 import { RankedAnnotation, TopNAnnotationMode } from '../src/definitions/TopNAnnotations';
+import { LATE_DEALLOC_RAIL_LABEL, LateDeallocationRunStart } from '../src/definitions/LateDeallocation';
+import { TEST_IDS } from '../src/definitions/TestIds';
 
 const memoryPlotRendererMock = vi.fn();
 const bufferSummaryRowMock = vi.fn();
@@ -49,8 +51,13 @@ vi.mock('../src/components/buffer-summary/BufferSummaryRow', () => ({
     },
 }));
 
+const plotControlsMock = vi.fn();
+
 vi.mock('../src/components/buffer-summary/BufferSummaryPlotControls', () => ({
-    default: () => <div data-testid='buffer-summary-controls' />,
+    default: (props: unknown) => {
+        plotControlsMock(props);
+        return <div data-testid='buffer-summary-controls' />;
+    },
 }));
 
 vi.mock('@blueprintjs/core', async () => {
@@ -81,7 +88,12 @@ const tensorListByOperation = new Map<number, Map<number, never>>();
 
 function renderVirtualizedList(
     isZoomedIn: boolean,
-    extraProps: { topNAnnotationsByOpId?: Map<number, RankedAnnotation>; topNAnnotationMode?: TopNAnnotationMode } = {},
+    extraProps: {
+        topNAnnotationsByOpId?: Map<number, RankedAnnotation>;
+        topNAnnotationMode?: TopNAnnotationMode;
+        lateDeallocationRunStarts?: readonly LateDeallocationRunStart[];
+        lateDeallocationRunCount?: number;
+    } = {},
 ) {
     return render(
         <BufferSummaryVirtualizedList
@@ -101,6 +113,20 @@ function renderVirtualizedList(
         />,
     );
 }
+
+const buildRunStart = (overrides: Partial<LateDeallocationRunStart>): LateDeallocationRunStart => ({
+    opId: overrides.opId ?? 1,
+    rowIndex: overrides.rowIndex ?? 0,
+    tensors: overrides.tensors ?? [
+        {
+            id: 7,
+            address: 1024,
+            lastOperationId: overrides.opId ?? 1,
+            lastConsumerOperationId: 0,
+            consumerName: 'ttnn.add',
+        },
+    ],
+});
 
 const buildAnnotation = (overrides: Partial<RankedAnnotation>): RankedAnnotation => ({
     opId: overrides.opId ?? 1,
@@ -279,6 +305,76 @@ describe('BufferSummaryVirtualizedList', () => {
             renderVirtualizedList(false, { topNAnnotationsByOpId: annotations });
 
             fireEvent.click(screen.getByTestId('top-n-rail-dot-2'));
+            expect(scrollToIndexMock).toHaveBeenCalledWith(1, { align: 'center' });
+        });
+    });
+
+    describe('late deallocation rail (#963)', () => {
+        it('forwards the run count to the controls so the toggle can advertise it', () => {
+            renderVirtualizedList(false, { lateDeallocationRunCount: 4 });
+
+            expect(plotControlsMock).toHaveBeenCalledWith(expect.objectContaining({ lateDeallocationRunCount: 4 }));
+        });
+
+        it('renders no rail when nothing is late-deallocated', () => {
+            renderVirtualizedList(false);
+
+            expect(screen.queryByTestId(TEST_IDS.LATE_DEALLOC_RAIL)).toBeNull();
+        });
+
+        it('renders one dot per run start in a labelled list', () => {
+            renderVirtualizedList(false, {
+                lateDeallocationRunStarts: [
+                    buildRunStart({ opId: 1, rowIndex: 0 }),
+                    buildRunStart({ opId: 2, rowIndex: 1 }),
+                ],
+            });
+
+            const rail = screen.getByRole('list', { name: LATE_DEALLOC_RAIL_LABEL });
+            expect(rail).toHaveAttribute('data-testid', TEST_IDS.LATE_DEALLOC_RAIL);
+            expect(within(rail).getAllByRole('listitem')).toHaveLength(2);
+        });
+
+        it('sits in its own gutter column so it cannot overlap the top-N rail', () => {
+            const annotations = new Map<number, RankedAnnotation>([
+                [1, buildAnnotation({ opId: 1, rowIndex: 0, rank: 1 })],
+            ]);
+            renderVirtualizedList(false, {
+                topNAnnotationsByOpId: annotations,
+                lateDeallocationRunStarts: [buildRunStart({ opId: 1, rowIndex: 0 })],
+            });
+
+            expect(screen.getByTestId('top-n-rail')).not.toBeNull();
+            expect(screen.getByTestId(TEST_IDS.LATE_DEALLOC_RAIL)).not.toBeNull();
+        });
+
+        it('positions rail dots by rowIndex / operations.length', () => {
+            renderVirtualizedList(false, { lateDeallocationRunStarts: [buildRunStart({ opId: 2, rowIndex: 1 })] });
+
+            const dot = screen.getByTestId(`${TEST_IDS.LATE_DEALLOC_RAIL_DOT}-2`);
+            expect(dot.closest('li')?.style.top).toBe('50%');
+        });
+
+        it('names the tensor and its last use on each dot for screen readers', () => {
+            renderVirtualizedList(false, { lateDeallocationRunStarts: [buildRunStart({ opId: 1, rowIndex: 0 })] });
+
+            const dot = screen.getByTestId(`${TEST_IDS.LATE_DEALLOC_RAIL_DOT}-1`);
+            expect(dot.getAttribute('aria-label')).toMatch(/Opportunity to deallocate earlier: tensor 7/i);
+            expect(dot.getAttribute('aria-label')).toMatch(/last used by 0 ttnn\.add/i);
+        });
+
+        it('scrolls the virtualizer to the row when a rail dot is clicked', () => {
+            const scrollToIndexMock = vi.fn();
+            virtualizerFactoryMock.mockReturnValue({
+                getVirtualItems: () => [{ index: 0, key: 'row-0', start: 0 }],
+                getTotalSize: () => 140,
+                scrollOffset: 0,
+                measurementsCache: [],
+                scrollToIndex: scrollToIndexMock,
+            });
+            renderVirtualizedList(false, { lateDeallocationRunStarts: [buildRunStart({ opId: 2, rowIndex: 1 })] });
+
+            fireEvent.click(screen.getByTestId(`${TEST_IDS.LATE_DEALLOC_RAIL_DOT}-2`));
             expect(scrollToIndexMock).toHaveBeenCalledWith(1, { align: 'center' });
         });
     });

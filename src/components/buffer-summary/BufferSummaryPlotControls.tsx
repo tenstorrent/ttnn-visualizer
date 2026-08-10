@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { HTMLSelect, NumericInput, PopoverPosition, Switch, Tooltip } from '@blueprintjs/core';
+import { HTMLSelect, Intent, NumericInput, PopoverPosition, Switch, Tag, Tooltip } from '@blueprintjs/core';
 import { useAtom, useAtomValue } from 'jotai';
 import GlobalSwitch from '../GlobalSwitch';
 import {
@@ -25,6 +25,8 @@ import {
     TopNAnnotationStatus,
 } from '../../definitions/TopNAnnotations';
 import { useTopNAnnotationAvailability } from '../../hooks/useTopNAnnotations';
+import { getLateDeallocationCountSummary } from '../../functions/lateDeallocation';
+import { TEST_IDS } from '../../definitions/TestIds';
 import 'styles/components/BufferSummaryControls.scss';
 
 // Static copy for the disabled-toggle tooltip, keyed by (mode, availability
@@ -81,7 +83,17 @@ const TOP_N_MODE_ORDER: TopNAnnotationMode[] = [
     TopNAnnotationMode.L1_FULLNESS,
 ];
 
-const BufferSummaryPlotControls = () => {
+interface BufferSummaryPlotControlsProps {
+    /**
+     * Rows where a tensor goes stale (#963). Shown as a count beside the
+     * overlay toggle, and counted whether or not the overlay is on — a switch
+     * that reads "0" tells the user not to bother, which the switch alone
+     * can't.
+     */
+    lateDeallocationRunCount?: number;
+}
+
+const BufferSummaryPlotControls = ({ lateDeallocationRunCount = 0 }: BufferSummaryPlotControlsProps) => {
     const [showDeallocationReport, setShowDeallocationReport] = useAtom(showDeallocationReportAtom);
     const [renderMemoryLayout, setRenderMemoryLayout] = useAtom(renderMemoryLayoutAtom);
     const [showHex, setShowHex] = useAtom(showHexAtom);
@@ -116,13 +128,30 @@ const BufferSummaryPlotControls = () => {
             />
 
             {selectedTabId === TAB_IDS.L1 ? (
-                <GlobalSwitch
-                    label='Mark late tensor deallocations'
-                    checked={showDeallocationReport}
-                    onChange={() => {
-                        setShowDeallocationReport(!showDeallocationReport);
-                    }}
-                />
+                <div className='late-dealloc-control'>
+                    <GlobalSwitch
+                        label='Mark late tensor deallocations'
+                        checked={showDeallocationReport}
+                        onChange={() => {
+                            setShowDeallocationReport(!showDeallocationReport);
+                        }}
+                    />
+                    {lateDeallocationRunCount > 0 ? (
+                        <Tooltip
+                            content={getLateDeallocationCountSummary(lateDeallocationRunCount)}
+                            placement={PopoverPosition.BOTTOM}
+                        >
+                            <Tag
+                                intent={Intent.WARNING}
+                                minimal
+                                round
+                                data-testid={TEST_IDS.LATE_DEALLOC_COUNT}
+                            >
+                                {lateDeallocationRunCount}
+                            </Tag>
+                        </Tooltip>
+                    ) : null}
+                </div>
             ) : null}
 
             <GlobalSwitch
