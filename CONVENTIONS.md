@@ -1172,7 +1172,7 @@ Upload, sync, and connection-test endpoints return a Pydantic `StatusMessage` th
 ### Env-var booleans go through `_parse_env_bool` / `str_to_bool`
 
 ```python
-SERVER_MODE = _parse_env_bool("SERVER_MODE", False)
+SERVER_MODE = _parse_env_bool("SERVER_MODE", False, strict=True)
 ```
 
 `bool(os.getenv("SERVER_MODE", "false"))` is **truthy** for the string `"false"` — a common foot-gun.
@@ -1183,13 +1183,19 @@ SERVER_MODE = _parse_env_bool("SERVER_MODE", False)
 
 A second copy of the token list drifts, and **both drift directions fail silently**: add a spelling to one and the other rejects a value the rest of the app honours; remove one and it starts meaning `False`. If a caller needs to know that a value was a typo, take `None` from `parse_bool` — don't re-implement the membership test.
 
+This holds outside `settings.py` too: `create_app`'s root-log-level check, the gunicorn `--reload` check, and `devtools/npe_render_probe.py`'s `SERVER_MODE` refusal all call `str_to_bool`. A dev tool that refuses on a *wider* set than the app looks harmless and isn't — it means the two disagree about what the deployment is.
+
 #### The vocabulary is deliberately narrow, and matched across the boundary
 
 Only `true` / `1` / `false` / `0`, case-insensitive and whitespace-trimmed. That is what `.env.sample` documents and what the SPA's `isServerModeEnabled` (`src/functions/getServerConfig.ts`) accepts, so `SERVER_MODE` and `VITE_SERVER_MODE` can't select opposite postures from the same spelling. **Widening one side means widening the other in the same change.**
 
-#### Config reports a typo rather than obeying it
+#### Config reports a typo rather than obeying it, and `SERVER_MODE` refuses to start
 
 `str_to_bool` maps anything unrecognised to `False`, which for `SERVER_MODE` is the *local* posture — the one whose endpoints publish SSH host, username, and path metadata. So `settings.py` reads booleans through `_parse_env_bool`, which logs the value and keeps the coded default instead. This lives in the **class body**, because that is the code that actually decides `SERVER_MODE`; a check placed only in the override loop would be protection in name only (see the reach caveat below).
+
+`SERVER_MODE` additionally passes **`strict=True`**, which raises instead of warning. It is the one boolean whose fallback is itself a security posture, so a value we can't read has to stop the app rather than quietly pick the permissive answer — and the warning that would otherwise cover it is emitted at import, before `create_app` configures logging, so it lands on `stderr` and not in the deployment's logs. Everything else is a feature flag and doesn't warrant refusing to boot.
+
+Because a narrow vocabulary makes previously-accepted spellings fatal, **treat widening or narrowing it as a deployment-affecting change**: a hosted install running `SERVER_MODE=yes` now fails to start rather than silently serving in local posture, which is the intended outcome but still an outage if nobody was told.
 
 #### `override_with_env_variables` coerces rather than assigns
 
@@ -1197,7 +1203,7 @@ Only `true` / `1` / `false` / `0`, case-insensitive and whitespace-trimmed. That
 
 Settings that parse more richly than their type register a named parser in `_ENV_PARSERS`: `SSH_DEFAULT_PORT` (range check) and `MAX_CONTENT_LENGTH` (empty means no limit) would both be broken by plain `int` dispatch. Two rules for that registry:
 
-- **One named function, called from both places.** Where the class body and the registry parse the same setting, they call the same function (`_parse_max_content_length`) so the import-time and override-time parses can't disagree. Where the two genuinely differ, say why in the docstring — `_parse_ssh_port` falls back to the default because the class body has nothing else to keep, while `_parse_ssh_port_override` raises so an override is reported like every other setting.
+- **One named function, called from both places.** Where the class body and the registry parse the same setting, they call the same function (`_parse_max_content_length`) so the import-time and override-time parses can't disagree. Where the two genuinely differ, say why in the docstring, and keep the shared half in one place: `_parse_ssh_port` falls back to the default because the class body has nothing else to keep, while the registry uses `require_tcp_port` so a bad override is reported — but the range itself is written once, in `require_tcp_port`, which `parse_tcp_port` wraps.
 - **Keys are strings, so nothing binds them to the attribute.** A rename leaves a dead entry that silently falls back to type dispatch; `test_every_env_parser_names_a_real_setting` is what catches it.
 
 #### The loop only reaches the concrete config class
@@ -1230,5 +1236,6 @@ These exist in the codebase today and don't yet have a single canonical answer. 
 - **`flake8 max-line-length = 79` vs `black line-length = 88`.** `.flake8` and `pyproject.toml` disagree. Black wins in practice because `pnpm flask:format` runs it; the flake8 setting only matters if `pre-commit` runs flake8 in isolation, which CI does not. Don't expand or contract files to satisfy 79 — 88 is the source of truth.
 - **`Config.__new__` lacks a return annotation.** `backend/ttnn_visualizer/settings.py` returns the singleton without typing the return, surfacing a mypy `attr-defined` error in `database_migrations.py` against `cast(DefaultConfig, Config()).SQLALCHEMY_DATABASE_URI`. Fix is `def __new__(cls) -> "DefaultConfig":`; tracked as a follow-up.
 - **`useQuery<Data, AxiosError>` not universal.** Four hooks in `useAPI.tsx` (`useGetClusterDescription`, `usePerfMeta`, `useReportFolderList`, `useInstance`) leave the error generic implicit (`unknown`). Call sites currently don't read `error.status` on these specific queries, but the rule is "spell out both generics" — tighten when you touch them.
+- **`DEBUG` and `FLASK_DEBUG` are different knobs with confusable names.** `FLASK_DEBUG` feeds the `DEBUG` *config* value (Flask's debug mode, which suppresses the catch-all error handler); the `DEBUG` *environment variable* raises the root log level and is what `pnpm flask:start-debug` sets. Both are in `.env.sample` with that distinction spelled out. Collapsing them would be a behaviour change for anyone setting either; until someone does, read the name at the call site rather than assuming.
 - **Underscore prefixes on test-module helpers.** Backend helpers are meant to carry a leading underscore, and newer test modules follow it (`_documented_boolean_defaults`), but plenty of existing ones don't (`wsgi_environ` in the same file). Prefix new helpers; rename existing ones only when you're already editing them.
 - **`dataclasses.asdict(...)` vs `to_dict()` for serialisation.** Models that inherit `SerializeableDataclass` get a `to_dict()` that handles `enum.Enum` conversion; using `dataclasses.asdict` instead (e.g. `views.py`) skips that handling. Safe when the dataclass has no enum fields; otherwise use `.to_dict()`. Reviewers should flag `asdict` on any dataclass with enum-typed fields.

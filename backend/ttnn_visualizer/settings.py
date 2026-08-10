@@ -11,13 +11,14 @@ from typing import Any, Callable, List, Mapping, Optional, Set
 from dotenv import load_dotenv
 from sqlalchemy.pool import NullPool
 from ttnn_visualizer.utils import (
-    MAX_TCP_PORT,
-    MIN_TCP_PORT,
+    FALSE_VALUES,
+    TRUE_VALUES,
     get_app_data_directory,
     get_report_data_directory,
     is_running_in_container,
     parse_bool,
     parse_tcp_port,
+    require_tcp_port,
 )
 
 load_dotenv()
@@ -192,30 +193,21 @@ def _parse_max_content_length(env_value: str) -> Optional[int]:
 
 
 def _parse_ssh_port(env_value: Optional[str]) -> int:
-    """Range-check an SSH port, falling back to the default for anything unusable."""
-    return parse_tcp_port(env_value, default=_DEFAULT_SSH_PORT)
+    """Range-check an SSH port, falling back to the default for anything unusable.
 
-
-def _parse_ssh_port_override(env_value: str) -> int:
-    """Range-check as :func:`_parse_ssh_port` does, but reject instead of falling back.
-
-    Substituting the default is the only option in the class body, where there is
-    nothing else to keep. In the override loop there is a declared value, so raising
-    keeps this the only setting that doesn't change silently — an out-of-range port is
+    The class body has nothing else to keep, so substituting the default is the only
+    option here. The override loop uses :func:`require_tcp_port` instead, which reports
+    a bad value rather than changing the port silently — an out-of-range one is
     published to the browser through ``_build_spa_client_config``.
     """
-    port = int(env_value)
-    if not MIN_TCP_PORT <= port <= MAX_TCP_PORT:
-        raise ValueError(f"port {port} is outside {MIN_TCP_PORT}-{MAX_TCP_PORT}")
-
-    return port
+    return parse_tcp_port(env_value, default=_DEFAULT_SSH_PORT)
 
 
 # Settings whose class body parses more richly than their type. Keyed by name because
 # the rule belongs to the setting: dispatching on ``int`` alone would drop the SSH port
 # range check, and ``MAX_CONTENT_LENGTH`` is an ``int`` whose empty value is not one.
 _ENV_PARSERS: Mapping[str, Callable[[str], Any]] = {
-    "SSH_DEFAULT_PORT": _parse_ssh_port_override,
+    "SSH_DEFAULT_PORT": require_tcp_port,
     "MAX_CONTENT_LENGTH": _parse_max_content_length,
 }
 
@@ -235,16 +227,29 @@ def _coerce_bool(key: str, declared: bool, env_value: str) -> bool:
     return parsed
 
 
-def _parse_env_bool(key: str, default: bool) -> bool:
+def _parse_env_bool(key: str, default: bool, *, strict: bool = False) -> bool:
     """Read a boolean setting in the class body, reporting a value we don't recognise.
 
     The class body — not :meth:`~DefaultConfig.override_with_env_variables`, whose reach
     stops at ``DEBUG`` and ``TESTING`` until #1857 — is what decides ``SERVER_MODE``, so
     this is where the vocabulary check has to live to mean anything.
+
+    ``strict`` refuses to start rather than guess, and is reserved for ``SERVER_MODE``.
+    Falling back to the default there means the *local* posture, so a value we can't
+    read would silently un-gate every ``@local_only`` endpoint — and the warning that
+    said so would be emitted before ``create_app`` configures logging, so an operator
+    would never see it. Every other boolean keeps its default with a warning, which is
+    proportionate for a feature flag.
     """
     env_value = os.getenv(key)
     if env_value is None:
         return default
+
+    if strict and parse_bool(env_value) is None:
+        recognised = ", ".join(sorted(TRUE_VALUES | FALSE_VALUES))
+        raise ValueError(
+            f"{key}={env_value!r} is not a recognised boolean. Use one of: {recognised}."
+        )
 
     return _coerce_bool(key, default, env_value)
 
@@ -297,7 +302,7 @@ class DefaultConfig(object):
     DEBUG = _parse_env_bool("FLASK_DEBUG", False)
     TESTING = False
     PRINT_ENV = True
-    SERVER_MODE = _parse_env_bool("SERVER_MODE", False)
+    SERVER_MODE = _parse_env_bool("SERVER_MODE", False, strict=True)
     MALWARE_SCANNER = os.getenv("MALWARE_SCANNER")
     BASE_PATH = os.getenv("BASE_PATH", "/")
     MAX_CONTENT_LENGTH = _parse_max_content_length(os.getenv("MAX_CONTENT_LENGTH", ""))

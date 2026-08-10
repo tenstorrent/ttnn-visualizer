@@ -792,6 +792,19 @@ MIN_TCP_PORT = 1
 MAX_TCP_PORT = 65535
 
 
+def require_tcp_port(value: str) -> int:
+    """Parse a TCP port, raising ``ValueError`` for anything unusable.
+
+    The strict half of :func:`parse_tcp_port`, for callers that have a declared value
+    to keep and would rather report a bad one than silently substitute a default.
+    """
+    port = int(value, 10)
+    if not MIN_TCP_PORT <= port <= MAX_TCP_PORT:
+        raise ValueError(f"port {port} is outside {MIN_TCP_PORT}-{MAX_TCP_PORT}")
+
+    return port
+
+
 def parse_tcp_port(value: Optional[str], default: int = 22) -> int:
     """Parse a TCP port from an env string; return ``default`` if invalid.
 
@@ -802,14 +815,9 @@ def parse_tcp_port(value: Optional[str], default: int = 22) -> int:
         return default
 
     try:
-        port = int(value, 10)
+        return require_tcp_port(value)
     except ValueError:
         return default
-
-    if MIN_TCP_PORT <= port <= MAX_TCP_PORT:
-        return port
-
-    return default
 
 
 def is_running_in_container():

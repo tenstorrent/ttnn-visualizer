@@ -44,6 +44,12 @@ describe('isServerModeEnabled', () => {
     it.each(['true', 'TRUE', 'True', '1'])('is true for %p', (value) => {
         expect(isServerModeEnabled(value)).toBe(true);
     });
+
+    // A trailing space in an .env line is invisible and reaches us intact, and the
+    // backend's parse_bool trims — the two must not disagree about the same spelling.
+    it.each([' true', 'true ', '  1  ', '\ttrue\n'])('trims surrounding whitespace in %p', (value) => {
+        expect(isServerModeEnabled(value)).toBe(true);
+    });
 });
 
 describe('getServerConfig (dev / Vite env)', () => {

@@ -42,7 +42,7 @@ export function isServerModeEnabled(value: unknown): boolean {
         return false;
     }
 
-    return SERVER_MODE_ENABLED_VALUES.has(value.toLowerCase());
+    return SERVER_MODE_ENABLED_VALUES.has(value.trim().toLowerCase());
 }
 
 function getSshDefaults(port: unknown, profilerPath: unknown, performancePath: unknown) {

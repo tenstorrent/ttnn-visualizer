@@ -25,7 +25,7 @@ from ttnn_visualizer.settings import (
     _parse_env_bool,
     build_socketio_origin_check,
 )
-from ttnn_visualizer.utils import TRUE_VALUES, parse_bool
+from ttnn_visualizer.utils import FALSE_VALUES, TRUE_VALUES, parse_bool
 
 DEV_ARGS = {
     "app_port": "8000",
@@ -157,20 +157,17 @@ def test_env_override_still_applies_to_plain_values(monkeypatch):
 
 
 # ``is`` rather than truthiness throughout: the defect produced the string "false".
-# The whole vocabulary, so a token added to one half of ``parse_bool`` and not the other
-# fails here rather than at whichever setting first receives it.
-@pytest.mark.parametrize(
-    "env_value, expected",
-    [
-        ("false", False),
-        ("true", True),
-        ("0", False),
-        ("1", True),
-        ("FALSE", False),
-        ("TRUE", True),
-        (" true ", True),
-    ],
+# Derived from the frozensets rather than written out, so a token added to ``parse_bool``
+# is exercised here rather than at whichever setting first receives it. The trailing
+# literals cover the normalisation, which isn't part of either set.
+BOOLEAN_VOCABULARY_CASES = (
+    [(token, True) for token in sorted(TRUE_VALUES)]
+    + [(token, False) for token in sorted(FALSE_VALUES)]
+    + [("TRUE", True), ("FALSE", False), (" true ", True), (" false ", False)]
 )
+
+
+@pytest.mark.parametrize("env_value, expected", BOOLEAN_VOCABULARY_CASES)
 @pytest.mark.parametrize(
     "key", ["SERVER_MODE", "LAUNCH_BROWSER_ON_START", "USE_WEBSOCKETS", "DEBUG"]
 )
@@ -392,9 +389,9 @@ def test_a_setting_with_no_coercible_type_is_reported_and_discarded(
 
 
 def test_an_unrecognised_boolean_keeps_the_declared_default(monkeypatch, caplog):
-    # ``str_to_bool`` maps anything outside its vocabulary to ``False``, and for
-    # ``SERVER_MODE`` that is the local posture — the one whose endpoints publish SSH
-    # host, username and path metadata. A typo should be reported, not obeyed.
+    # The override path warns rather than raising even for ``SERVER_MODE``, because the
+    # value it keeps came from the strict class-body parse and is therefore already one
+    # we recognise — unlike the class body, there is no unvalidated default to fall to.
     monkeypatch.setattr(DefaultConfig, "SERVER_MODE", True)
     monkeypatch.setenv("SERVER_MODE", "Ture")
 
@@ -406,22 +403,56 @@ def test_an_unrecognised_boolean_keeps_the_declared_default(monkeypatch, caplog)
     assert "SERVER_MODE" in caplog.text
 
 
-@pytest.mark.parametrize("env_value", ["Ture", "on", "yes", "t", "enabled"])
-def test_the_class_body_reports_an_unrecognised_boolean(env_value, monkeypatch, caplog):
-    # The path that actually decides ``SERVER_MODE``: the override loop never reaches
-    # it, so a vocabulary check living only there would be protection in name only.
+@pytest.mark.parametrize("env_value, expected", BOOLEAN_VOCABULARY_CASES)
+def test_the_class_body_parses_a_recognised_boolean(env_value, expected, monkeypatch):
+    # The path that actually decides ``SERVER_MODE``, since the override loop never
+    # reaches it — so it needs its own cover rather than inheriting the loop's.
     monkeypatch.setenv("SERVER_MODE", env_value)
 
-    with caplog.at_level(logging.WARNING):
-        assert _parse_env_bool("SERVER_MODE", False) is False
+    assert _parse_env_bool("SERVER_MODE", False, strict=True) is expected
 
-    assert "SERVER_MODE" in caplog.text
+
+@pytest.mark.parametrize("default", [True, False])
+def test_an_unset_boolean_keeps_the_coded_default(default, monkeypatch):
+    monkeypatch.delenv("SERVER_MODE", raising=False)
+
+    assert _parse_env_bool("SERVER_MODE", default, strict=True) is default
+
+
+@pytest.mark.parametrize("env_value", ["Ture", "on", "yes", "t", "enabled", ""])
+def test_a_strict_boolean_refuses_to_start_on_an_unrecognised_value(
+    env_value, monkeypatch
+):
+    # ``SERVER_MODE`` is the one setting whose fallback is itself a posture: keeping the
+    # default means *local*, which un-gates every ``@local_only`` endpoint. Failing to
+    # start is the safe outcome, and unlike a warning it can't be missed — the warning
+    # would be emitted before ``create_app`` configures logging.
+    monkeypatch.setenv("SERVER_MODE", env_value)
+
+    with pytest.raises(ValueError, match="SERVER_MODE"):
+        _parse_env_bool("SERVER_MODE", False, strict=True)
+
+
+@pytest.mark.parametrize("env_value", ["Ture", "on", "yes", "t", "enabled"])
+def test_a_non_strict_boolean_warns_and_keeps_its_default(
+    env_value, monkeypatch, caplog
+):
+    # A feature flag doesn't warrant refusing to boot, so everything but ``SERVER_MODE``
+    # reports and carries on.
+    monkeypatch.setenv("LAUNCH_BROWSER_ON_START", env_value)
+
+    with caplog.at_level(logging.WARNING):
+        assert _parse_env_bool("LAUNCH_BROWSER_ON_START", True) is True
+
+    assert "LAUNCH_BROWSER_ON_START" in caplog.text
 
 
 def test_the_boolean_vocabulary_has_one_source():
-    # ``parse_bool`` owns both halves, so a token can't be recognised as true by one
-    # caller and rejected as a typo by another.
+    # A token in both halves would make ``parse_bool`` order-dependent, and the true
+    # half silently wins — so the sets being disjoint is the property worth pinning.
+    assert TRUE_VALUES.isdisjoint(FALSE_VALUES)
     assert all(parse_bool(token) is True for token in TRUE_VALUES)
+    assert all(parse_bool(token) is False for token in FALSE_VALUES)
 
 
 @pytest.mark.parametrize("key", ["MALWARE_SCANNER", "TT_METAL_HOME"])

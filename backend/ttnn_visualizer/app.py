@@ -43,6 +43,7 @@ from ttnn_visualizer.utils import (
     get_app_data_directory,
     get_report_data_directory,
     migrate_old_data_directory,
+    str_to_bool,
 )
 from werkzeug.debug import DebuggedApplication
 from werkzeug.exceptions import HTTPException
@@ -107,7 +108,7 @@ def create_app(settings_override=None):
     if dotenv_path.exists():
         load_dotenv(str(dotenv_path))
 
-    debug_logging = os.environ.get("DEBUG", "false").lower() in ("true", "1", "yes")
+    debug_logging = str_to_bool(os.environ.get("DEBUG", "false"))
     log_level = logging.DEBUG if debug_logging else logging.INFO
     root_logger = logging.getLogger()
     root_logger.setLevel(log_level)
@@ -504,8 +505,7 @@ def main():
         # Clean up this temporary app - workers will create their own
         del app
 
-    # Check if DEBUG environment variable is set
-    debug_mode = os.environ.get("DEBUG", "false").lower() == "true"
+    debug_mode = str_to_bool(os.environ.get("DEBUG", "false"))
     if config.PRINT_ENV:
         print("\nENVIRONMENT:")
         for key, value in config.to_dict().items():
