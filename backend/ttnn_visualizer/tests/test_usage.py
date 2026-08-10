@@ -321,6 +321,28 @@ def test_compaction_keeps_lines_it_cannot_parse(usage_directory, monkeypatch):
     assert "garbled" in read_lines(usage_directory)
 
 
+def test_compaction_survives_a_log_that_is_not_valid_utf_8(
+    usage_directory, monkeypatch
+):
+    # Compaction runs from `main()` before gunicorn is spawned, so a decode error
+    # here would stop the server starting rather than cost us a line.
+    monkeypatch.setattr(usage, "MAX_LOG_BYTES", 0)
+    usage_directory.mkdir(mode=0o700, parents=True, exist_ok=True)
+    (usage_directory / usage.USAGE_LOG_NAME).write_bytes(
+        b"ts=2026-08-01T10:00:00Z event=app_start schema_version=1 run_id=aaaaaaaa\n"
+        b"\xff\xfe corrupted\n"
+        b"ts=2026-08-01T10:00:02Z event=app_start schema_version=1 run_id=cccccccc\n"
+        b"ts=2026-08-01T10:00:03Z event=app_start schema_version=1 run_id=dddddddd\n"
+    )
+
+    usage.compact_if_needed()
+
+    lines = read_lines(usage_directory)
+
+    assert total_events([line for line in lines if line.startswith("ts=")]) == 3
+    assert any("corrupted" in line for line in lines)
+
+
 def test_a_log_under_the_cap_is_left_alone(usage_directory):
     lines = ["ts=2026-08-01T10:00:00Z event=app_start schema_version=1"]
     write_log(usage_directory, lines)

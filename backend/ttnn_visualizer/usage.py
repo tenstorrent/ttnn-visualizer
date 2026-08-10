@@ -446,7 +446,11 @@ def compact_if_needed() -> None:
 
 
 def _compact(log_path: Path) -> None:
-    lines = log_path.read_text(encoding="utf-8").splitlines()
+    # `errors="replace"` rather than a strict read: a `UnicodeDecodeError` is a
+    # `ValueError`, so the `OSError` handler around this would not catch one, and
+    # compaction runs from `main()` before gunicorn is spawned — a corrupted log
+    # would stop the server starting rather than cost us a line.
+    lines = log_path.read_text(encoding="utf-8", errors="replace").splitlines()
     split_at = len(lines) // 2
     if not split_at:
         return
