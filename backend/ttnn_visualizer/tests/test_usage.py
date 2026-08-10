@@ -321,6 +321,32 @@ def test_compaction_keeps_lines_it_cannot_parse(usage_directory, monkeypatch):
     assert "garbled" in read_lines(usage_directory)
 
 
+def test_compaction_does_not_dress_up_a_fragment_as_a_summary(
+    usage_directory, monkeypatch
+):
+    # An interleave that severs a line on a key boundary still parses, so the only
+    # thing marking it as junk is its missing fields. Summarising it would give it a
+    # timestamp and an event name it never had.
+    monkeypatch.setattr(usage, "MAX_LOG_BYTES", 0)
+    fragment = "schema_version=1 run_id=aaaaaaaa deployment_mode=local_upload"
+    lines = [
+        fragment,
+        "ts=2026-08-01T10:00:01Z event=app_start schema_version=1 run_id=bbbbbbbb",
+        "ts=2026-08-01T10:00:02Z event=app_start schema_version=1 run_id=cccccccc",
+        "ts=2026-08-01T10:00:03Z event=app_start schema_version=1 run_id=dddddddd",
+    ]
+    write_log(usage_directory, lines)
+
+    usage.compact_if_needed()
+
+    compacted = read_lines(usage_directory)
+
+    assert fragment in compacted
+    assert not any(line.startswith("ts= ") for line in compacted)
+    assert not any(usage.UNKNOWN_VALUE in line for line in compacted)
+    assert total_events(compacted) == total_events(lines)
+
+
 def test_compaction_survives_a_log_that_is_not_valid_utf_8(
     usage_directory, monkeypatch
 ):

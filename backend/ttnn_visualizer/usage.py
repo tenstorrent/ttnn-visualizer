@@ -94,6 +94,10 @@ _SAFE_VALUE_PATTERN = re.compile(r"^[A-Za-z0-9._:+-]+$")
 # survive being summarised into a count.
 _UNSUMMARISABLE_FIELDS = (TIMESTAMP_FIELD, RUN_ID_FIELD, COUNT_FIELD)
 
+# Every line this module writes carries these, and so does every summary line, so a
+# line without them is an interleaved fragment rather than an event.
+_REQUIRED_FIELDS = (TIMESTAMP_FIELD, EVENT_FIELD, SCHEMA_VERSION_FIELD)
+
 _run_id: Optional[str] = None
 
 
@@ -368,7 +372,11 @@ def _summarise(lines: List[str]) -> List[str]:
 
     for line in lines:
         fields = _parse_line(line)
-        if fields is None:
+        # An NFS-interleaved fragment that happens to start on a key boundary parses
+        # cleanly but has no timestamp or event, and summarising it would render an
+        # empty `ts=` and a fabricated `event=unknown` — a garbled line dressed up as
+        # a well-formed one, which the collector can no longer tell to skip.
+        if fields is None or any(name not in fields for name in _REQUIRED_FIELDS):
             unparsed.append(line)
             continue
 
