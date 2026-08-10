@@ -1175,6 +1175,10 @@ SERVER_MODE = str_to_bool(os.getenv("SERVER_MODE", "false"))
 
 `bool(os.getenv("SERVER_MODE", "false"))` is **truthy** for the string `"false"` — a common foot-gun. The `str_to_bool` helper accepts the usual `"true"/"false"/"1"/"0"/"yes"/"no"` set.
 
+`override_with_env_variables` coerces each value back to what the class body would have produced (`_coerce_env_value`), so setting the variable explicitly no longer undoes that parse. Settings that parse more richly than their type — `SSH_DEFAULT_PORT`'s range check, `MAX_CONTENT_LENGTH`'s empty-means-no-limit — register a parser in `_ENV_PARSERS` rather than relying on type dispatch, and a value the setting can't represent is logged and discarded rather than applied.
+
+The loop only reaches attributes declared on the *concrete* config class, so in practice it visits `DEBUG` and `TESTING` and nothing else; the class body is what parses everything else. Widening that reach is tracked as [#1857](https://github.com/tenstorrent/ttnn-visualizer/issues/1857) — until it lands, don't assume an environment variable changed after import takes effect.
+
 ### Domain exceptions live in `exceptions.py`
 
 When raising or catching application errors, use the dedicated classes:

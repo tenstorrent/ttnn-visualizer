@@ -3,6 +3,7 @@
 # SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import ipaddress
+import logging
 import os
 from pathlib import Path
 from typing import Any, Callable, List, Mapping, Optional, Set
@@ -18,6 +19,8 @@ from ttnn_visualizer.utils import (
 )
 
 load_dotenv()
+
+logger = logging.getLogger(__name__)
 
 
 def _build_allowed_origins(
@@ -178,6 +181,72 @@ class _AllowedOrigins:
         )
 
 
+_DEFAULT_SSH_PORT = 22
+
+# The first four are ``str_to_bool``'s vocabulary; it maps everything else to ``False``
+# by omission, which would let a typo pick a posture rather than be reported as one.
+_RECOGNISED_BOOLEANS = frozenset({"yes", "true", "t", "1", "no", "false", "f", "0"})
+
+
+def _parse_max_content_length(env_value: str) -> Optional[int]:
+    """Empty means no limit — the bare form ``.env.sample`` documents."""
+    return int(env_value) if env_value else None
+
+
+# Settings whose class body parses more richly than their type. Keyed by name because
+# the rule belongs to the setting: dispatching on ``int`` alone would drop
+# :func:`parse_tcp_port`'s range check, and ``MAX_CONTENT_LENGTH`` is an ``int`` whose
+# empty value is not one.
+_ENV_PARSERS: Mapping[str, Callable[[str], Any]] = {
+    "SSH_DEFAULT_PORT": lambda value: parse_tcp_port(value, default=_DEFAULT_SSH_PORT),
+    "MAX_CONTENT_LENGTH": _parse_max_content_length,
+}
+
+
+def _keep_declared(key: str, declared: Any, env_value: str, expected: str) -> Any:
+    logger.warning(
+        "Ignoring %s=%r: expected %s. Keeping %r.", key, env_value, expected, declared
+    )
+    return declared
+
+
+def _coerce_env_value(key: str, declared: Any, env_value: str) -> Any:
+    """Parse an environment string into the value the class body would have produced.
+
+    Assigning the raw string would discard that parse, and ``"false"`` is truthy — so
+    an explicitly disabled boolean setting would come back enabled.
+
+    Settings with an entry in :data:`_ENV_PARSERS` reuse it; the rest dispatch on the
+    declared type, not on how the value looks, since ``PORT`` and the ``GUNICORN_*``
+    settings are strings because ``main()`` passes them to gunicorn as arguments. A
+    value the declared type can't represent is reported and discarded rather than
+    applied, so a typo can't quietly reconfigure the app.
+    """
+    parser = _ENV_PARSERS.get(key)
+    if parser is not None:
+        try:
+            return parser(env_value)
+        except ValueError:
+            return _keep_declared(key, declared, env_value, "a parseable value")
+
+    # bool before int: ``isinstance(True, int)`` is True.
+    if isinstance(declared, bool):
+        if env_value.lower() not in _RECOGNISED_BOOLEANS:
+            return _keep_declared(key, declared, env_value, "a boolean")
+
+        return str_to_bool(env_value)
+
+    if isinstance(declared, int):
+        try:
+            return int(env_value)
+        except ValueError:
+            return _keep_declared(key, declared, env_value, "an integer")
+
+    # A setting declared ``None`` (``MALWARE_SCANNER``, ``TT_METAL_HOME``) is an
+    # optional string, so the raw value is already what the class body would hold.
+    return env_value
+
+
 class DefaultConfig(object):
     # General Settings
     SECRET_KEY = os.getenv("SECRET_KEY", "90909")
@@ -187,8 +256,7 @@ class DefaultConfig(object):
     SERVER_MODE = str_to_bool(os.getenv("SERVER_MODE", "false"))
     MALWARE_SCANNER = os.getenv("MALWARE_SCANNER")
     BASE_PATH = os.getenv("BASE_PATH", "/")
-    _raw_max_content = os.getenv("MAX_CONTENT_LENGTH")
-    MAX_CONTENT_LENGTH = None if not _raw_max_content else int(_raw_max_content)
+    MAX_CONTENT_LENGTH = _parse_max_content_length(os.getenv("MAX_CONTENT_LENGTH", ""))
 
     # Path Settings
     DB_VERSION = "0.29.0"  # App version when DB schema last changed
@@ -215,7 +283,9 @@ class DefaultConfig(object):
     LAUNCH_BROWSER_ON_START = str_to_bool(os.getenv("LAUNCH_BROWSER_ON_START", "true"))
 
     # Remote SSH connection dialog defaults (local install only — suppressed under SERVER_MODE).
-    SSH_DEFAULT_PORT = parse_tcp_port(os.getenv("SSH_DEFAULT_PORT"), default=22)
+    SSH_DEFAULT_PORT = parse_tcp_port(
+        os.getenv("SSH_DEFAULT_PORT"), default=_DEFAULT_SSH_PORT
+    )
     SSH_DEFAULT_PROFILER_PATH = os.getenv("SSH_DEFAULT_PROFILER_PATH", "")
     SSH_DEFAULT_PERFORMANCE_PATH = os.getenv("SSH_DEFAULT_PERFORMANCE_PATH", "")
     # Remote SSH subprocess timeouts (seconds).
@@ -267,7 +337,15 @@ class DefaultConfig(object):
     SESSION_MAX_UPLOADED_REPORTS = int(os.getenv("SESSION_MAX_UPLOADED_REPORTS", "10"))
 
     def override_with_env_variables(self):
-        """Override config values with environment variables."""
+        """Override config values with environment variables.
+
+        Values are coerced to what the class body would have produced; see
+        :func:`_coerce_env_value`.
+
+        Only reaches attributes declared on the *concrete* config class, since it reads
+        that class's own ``__dict__``: ``DevelopmentConfig`` declares none, the others
+        only ``DEBUG`` and ``TESTING``. Tracked as #1857.
+        """
         for key, value in self.__class__.__dict__.items():
             # Descriptors (and methods) resolve their own value on read; assigning the
             # raw environment string over one would shadow it with an unparsed value.
@@ -275,8 +353,10 @@ class DefaultConfig(object):
                 continue
 
             env_value = os.getenv(key)
-            if env_value is not None:
-                setattr(self, key, env_value)
+            if env_value is None:
+                continue
+
+            setattr(self, key, _coerce_env_value(key, value, env_value))
 
     def to_dict(self):
         """Return all config values as a dictionary, including inherited attributes."""

@@ -4,7 +4,7 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DEFAULT_SSH_PORT } from '../src/definitions/RemoteConnection';
-import { getOptionalPathDefault, getValidSshDefaultPort } from '../src/functions/getServerConfig';
+import { getOptionalPathDefault, getValidSshDefaultPort, isServerModeEnabled } from '../src/functions/getServerConfig';
 
 describe('getValidSshDefaultPort', () => {
     it.each([0, 65536, -1, 'abc', '22.5', undefined, null, Number.NaN])(
@@ -30,6 +30,22 @@ describe('getOptionalPathDefault', () => {
     });
 });
 
+describe('isServerModeEnabled', () => {
+    // A Vite env var is always a string, so the pre-`!!` reading of 'false' was `true`,
+    // which hides the local-only UI that a dev install is meant to expose.
+    it.each(['false', 'FALSE', '0', '', 'no', 'yes', 't', 'maybe'])('is false for %p', (value) => {
+        expect(isServerModeEnabled(value)).toBe(false);
+    });
+
+    it.each([undefined, null, 1, true, {}, []])('is false for non-string %p', (value) => {
+        expect(isServerModeEnabled(value)).toBe(false);
+    });
+
+    it.each(['true', 'TRUE', 'True', '1'])('is true for %p', (value) => {
+        expect(isServerModeEnabled(value)).toBe(true);
+    });
+});
+
 describe('getServerConfig (dev / Vite env)', () => {
     afterEach(() => {
         vi.unstubAllEnvs();
@@ -49,6 +65,17 @@ describe('getServerConfig (dev / Vite env)', () => {
         expect(config.SSH_DEFAULT_PROFILER_PATH).toBe('/mem/');
         expect(config.SSH_DEFAULT_PERFORMANCE_PATH).toBe('/perf');
         expect(config.USERNAME).toBe('dev-user');
+    });
+
+    it.each([
+        ['false', false],
+        ['1', true],
+    ])('reads VITE_SERVER_MODE=%s as %s', async (value, expected) => {
+        vi.stubEnv('VITE_SERVER_MODE', value);
+
+        const { default: getServerConfig } = await import('../src/functions/getServerConfig');
+
+        expect(getServerConfig().SERVER_MODE).toBe(expected);
     });
 
     it('falls back when VITE_SSH_DEFAULT_PORT is invalid', async () => {

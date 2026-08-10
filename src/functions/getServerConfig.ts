@@ -32,6 +32,19 @@ export function getOptionalPathDefault(value: unknown): string {
     return value.trim();
 }
 
+// A Vite env var is always a string, so `!!value` makes the `VITE_SERVER_MODE=false` that
+// `.env.sample` documents truthy. Narrower than the backend's `str_to_bool`, which also
+// accepts `yes` and `t`.
+const SERVER_MODE_ENABLED_VALUES = new Set(['true', '1']);
+
+export function isServerModeEnabled(value: unknown): boolean {
+    if (typeof value !== 'string') {
+        return false;
+    }
+
+    return SERVER_MODE_ENABLED_VALUES.has(value.toLowerCase());
+}
+
 function getSshDefaults(port: unknown, profilerPath: unknown, performancePath: unknown) {
     return {
         SSH_DEFAULT_PORT: getValidSshDefaultPort(port),
@@ -45,7 +58,7 @@ const getServerConfig = (): ServerConfig => {
     if (import.meta.env.DEV) {
         return {
             BASE_PATH: '/',
-            SERVER_MODE: !!import.meta.env.VITE_SERVER_MODE || false,
+            SERVER_MODE: isServerModeEnabled(import.meta.env.VITE_SERVER_MODE),
             TT_METAL_HOME: import.meta.env.VITE_TT_METAL_HOME,
             REPORT_DATA_DIRECTORY: import.meta.env.VITE_REPORT_DATA_DIRECTORY || '/path/to/data/directory', // Default value for development
             REPORT_LINKING_ENABLED: true,
