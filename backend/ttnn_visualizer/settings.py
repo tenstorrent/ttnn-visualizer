@@ -188,8 +188,24 @@ _DEFAULT_SSH_PORT = 22
 
 
 def _parse_max_content_length(env_value: str) -> Optional[int]:
-    """Empty means no limit — the bare form ``.env.sample`` documents."""
-    return int(env_value) if env_value else None
+    """Empty means no limit — the bare form ``.env.sample`` documents.
+
+    Anything else unreadable raises, for the reason ``SERVER_MODE`` is strict: the
+    value to fall back on is *no limit*, so guessing would drop an upload cap the
+    operator asked for. The class-body call is unguarded, so this message is what
+    they get in place of a bare ``int()`` traceback; the override loop catches it
+    and keeps the declared limit instead.
+    """
+    if not env_value:
+        return None
+
+    try:
+        return int(env_value)
+    except ValueError:
+        raise ValueError(
+            f"MAX_CONTENT_LENGTH={env_value!r} is not a byte count. "
+            "Set a whole number of bytes, or leave it empty for no limit."
+        ) from None
 
 
 def _parse_ssh_port(env_value: Optional[str]) -> int:

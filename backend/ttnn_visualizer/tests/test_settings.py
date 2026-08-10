@@ -23,6 +23,7 @@ from ttnn_visualizer.settings import (
     ProductionConfig,
     _build_allowed_origins,
     _parse_env_bool,
+    _parse_max_content_length,
     build_socketio_origin_check,
 )
 from ttnn_visualizer.utils import FALSE_VALUES, TRUE_VALUES, parse_bool
@@ -318,6 +319,15 @@ def test_a_max_content_length_is_parsed_as_an_integer(monkeypatch):
     config.override_with_env_variables()
 
     assert config.MAX_CONTENT_LENGTH == 1048576
+
+
+@pytest.mark.parametrize("env_value", ["abc", "  ", "1.5", "10MB"])
+def test_an_unreadable_max_content_length_names_itself(env_value):
+    # The class body calls this unguarded, so a typo aborts startup — right, since the
+    # value it would otherwise fall back to is *no limit*, but only useful if the
+    # operator can tell which variable to fix from the traceback.
+    with pytest.raises(ValueError, match="MAX_CONTENT_LENGTH"):
+        _parse_max_content_length(env_value)
 
 
 def test_an_overridden_ssh_port_is_applied(monkeypatch):
