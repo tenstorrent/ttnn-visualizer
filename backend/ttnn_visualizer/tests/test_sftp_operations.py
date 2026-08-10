@@ -26,6 +26,8 @@ from ttnn_visualizer.exceptions import (
 )
 from ttnn_visualizer.models import RemoteConnection
 from ttnn_visualizer.sftp_operations import (
+    _MISSING_ROOT_EXIT_CODE,
+    RemoteSearchRootState,
     _get_remote_file_list_without_sizes,
     _remote_directory_mtimes,
     _remote_transfer_key,
@@ -51,9 +53,9 @@ def connection() -> RemoteConnection:
     )
 
 
-def _completed(stdout: str) -> subprocess.CompletedProcess:
+def _completed(stdout: str, returncode: int = 0) -> subprocess.CompletedProcess:
     return subprocess.CompletedProcess(
-        args=["ssh"], returncode=0, stdout=stdout, stderr=""
+        args=["ssh"], returncode=returncode, stdout=stdout, stderr=""
     )
 
 
@@ -229,7 +231,7 @@ class TestFindFoldersByFiles:
 
         # A connection per candidate directory is a full SSH handshake each, serially.
         assert run.call_count == 1
-        assert matched == ["/remote/reports/a", "/remote/reports/b"]
+        assert matched.folders == ["/remote/reports/a", "/remote/reports/b"]
 
         remote_cmd = _remote_shell_command_from_run(run)
         # Either file qualifies a directory, and -print is explicit because find only
@@ -248,22 +250,60 @@ class TestFindFoldersByFiles:
                 connection, "/remote/reports", ["config.json"]
             )
 
-        assert matched == ["/remote/reports/a", "/remote/reports/b"]
+        assert matched.folders == ["/remote/reports/a", "/remote/reports/b"]
 
     def test_no_file_names_makes_no_connection(self, connection):
         # Without a probe the find would match every directory, which is the opposite
         # of "folders containing one of these files".
         with patch("subprocess.run") as run:
-            assert find_folders_by_files(connection, "/remote/reports", []) == []
+            assert (
+                find_folders_by_files(connection, "/remote/reports", []).folders == []
+            )
 
         assert run.call_count == 0
 
     def test_no_matches_returns_empty(self, connection):
         with patch("subprocess.run", return_value=_completed("")):
-            assert (
-                find_folders_by_files(connection, "/remote/reports", ["config.json"])
-                == []
+            matched = find_folders_by_files(
+                connection, "/remote/reports", ["config.json"]
             )
+
+        assert matched.folders == []
+        # A root that was there and matched nothing is the case the connection
+        # test reports as a warning, so it must not read as an absent path.
+        assert matched.root_state is RemoteSearchRootState.PRESENT
+
+    def test_the_sentinel_exit_code_is_reported_as_a_missing_root(self, connection):
+        """`find` cannot tell an absent root from one holding nothing.
+
+        The remote command exits with the sentinel from its own `test -e`, and
+        that return code is the only thing carrying the distinction back.
+        """
+        with patch(
+            "subprocess.run",
+            return_value=_completed("", returncode=_MISSING_ROOT_EXIT_CODE),
+        ):
+            matched = find_folders_by_files(
+                connection, "/remote/missing", ["config.json"]
+            )
+
+        assert matched.root_state is RemoteSearchRootState.MISSING
+        assert matched.folders == []
+
+    def test_a_timed_out_search_settles_nothing_about_its_root(self, connection):
+        """No reply is a third answer, distinct from "there" and "not there".
+
+        Returning `PRESENT` here would have the connection test warn that the
+        path exists but holds no reports, asserting a reachable root the search
+        never got to.
+        """
+        with patch("subprocess.run", side_effect=subprocess.TimeoutExpired("ssh", 1)):
+            matched = find_folders_by_files(
+                connection, "/remote/reports", ["config.json"]
+            )
+
+        assert matched.root_state is RemoteSearchRootState.UNKNOWN
+        assert matched.folders == []
 
 
 class TestGetRemoteFileList:

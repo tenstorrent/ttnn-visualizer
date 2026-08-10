@@ -4,6 +4,7 @@
 
 import { DEFAULT_SSH_PORT } from '../definitions/RemoteConnection';
 import { ServerConfig } from '../definitions/ServerConfig';
+import { MAX_PORT } from '../definitions/SshConnectionFields';
 
 declare global {
     interface Window {
@@ -12,12 +13,11 @@ declare global {
 }
 
 const MIN_SSH_PORT = 1;
-const MAX_SSH_PORT = 65535;
 
 export function getValidSshDefaultPort(value: unknown): number {
     const parsedPort = Number(value);
 
-    if (Number.isInteger(parsedPort) && parsedPort >= MIN_SSH_PORT && parsedPort <= MAX_SSH_PORT) {
+    if (Number.isInteger(parsedPort) && parsedPort >= MIN_SSH_PORT && parsedPort <= MAX_PORT) {
         return parsedPort;
     }
 
