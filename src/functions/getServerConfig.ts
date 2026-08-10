@@ -33,8 +33,8 @@ export function getOptionalPathDefault(value: unknown): string {
 }
 
 // A Vite env var is always a string, so `!!value` makes the `VITE_SERVER_MODE=false` that
-// `.env.sample` documents truthy. Narrower than the backend's `str_to_bool`, which also
-// accepts `yes` and `t`.
+// `.env.sample` documents truthy. The same vocabulary the backend's `parse_bool` accepts,
+// so one spelling can't select opposite postures either side of the boundary.
 const SERVER_MODE_ENABLED_VALUES = new Set(['true', '1']);
 
 export function isServerModeEnabled(value: unknown): boolean {

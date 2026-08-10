@@ -754,8 +754,42 @@ class PathResolver:
         return True, "TT-Metal setup is valid"
 
 
+TRUE_VALUES = frozenset({"true", "1"})
+FALSE_VALUES = frozenset({"false", "0"})
+
+
+def parse_bool(value: str) -> Optional[bool]:
+    """Parse a boolean setting, returning ``None`` for a value outside the vocabulary.
+
+    Deliberately narrow: the two spellings ``.env.sample`` documents, and the two the
+    SPA's own parsing accepts, so a value can't mean one thing to the API and another
+    to the page reading it.
+
+    Distinguishing "means false" from "we don't recognise this" is what lets a caller
+    report a typo instead of obeying it: ``str_to_bool`` alone maps ``"yes"`` and
+    ``"Ture"`` to ``False``, which for ``SERVER_MODE`` is the local posture.
+    """
+    normalised = value.strip().lower()
+    if normalised in TRUE_VALUES:
+        return True
+
+    if normalised in FALSE_VALUES:
+        return False
+
+    return None
+
+
 def str_to_bool(string_value):
-    return string_value.lower() in ("yes", "true", "t", "1")
+    """Whether a value names truth, treating anything unrecognised as false.
+
+    Callers that need to tell an unrecognised value apart from a false one — config,
+    where the distinction is a security posture — use :func:`parse_bool` instead.
+    """
+    return parse_bool(string_value) is True
+
+
+MIN_TCP_PORT = 1
+MAX_TCP_PORT = 65535
 
 
 def parse_tcp_port(value: Optional[str], default: int = 22) -> int:
@@ -772,7 +806,7 @@ def parse_tcp_port(value: Optional[str], default: int = 22) -> int:
     except ValueError:
         return default
 
-    if 1 <= port <= 65535:
+    if MIN_TCP_PORT <= port <= MAX_TCP_PORT:
         return port
 
     return default

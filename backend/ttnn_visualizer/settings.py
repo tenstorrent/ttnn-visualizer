@@ -11,11 +11,13 @@ from typing import Any, Callable, List, Mapping, Optional, Set
 from dotenv import load_dotenv
 from sqlalchemy.pool import NullPool
 from ttnn_visualizer.utils import (
+    MAX_TCP_PORT,
+    MIN_TCP_PORT,
     get_app_data_directory,
     get_report_data_directory,
     is_running_in_container,
+    parse_bool,
     parse_tcp_port,
-    str_to_bool,
 )
 
 load_dotenv()
@@ -183,22 +185,37 @@ class _AllowedOrigins:
 
 _DEFAULT_SSH_PORT = 22
 
-# The first four are ``str_to_bool``'s vocabulary; it maps everything else to ``False``
-# by omission, which would let a typo pick a posture rather than be reported as one.
-_RECOGNISED_BOOLEANS = frozenset({"yes", "true", "t", "1", "no", "false", "f", "0"})
-
 
 def _parse_max_content_length(env_value: str) -> Optional[int]:
     """Empty means no limit — the bare form ``.env.sample`` documents."""
     return int(env_value) if env_value else None
 
 
+def _parse_ssh_port(env_value: Optional[str]) -> int:
+    """Range-check an SSH port, falling back to the default for anything unusable."""
+    return parse_tcp_port(env_value, default=_DEFAULT_SSH_PORT)
+
+
+def _parse_ssh_port_override(env_value: str) -> int:
+    """Range-check as :func:`_parse_ssh_port` does, but reject instead of falling back.
+
+    Substituting the default is the only option in the class body, where there is
+    nothing else to keep. In the override loop there is a declared value, so raising
+    keeps this the only setting that doesn't change silently — an out-of-range port is
+    published to the browser through ``_build_spa_client_config``.
+    """
+    port = int(env_value)
+    if not MIN_TCP_PORT <= port <= MAX_TCP_PORT:
+        raise ValueError(f"port {port} is outside {MIN_TCP_PORT}-{MAX_TCP_PORT}")
+
+    return port
+
+
 # Settings whose class body parses more richly than their type. Keyed by name because
-# the rule belongs to the setting: dispatching on ``int`` alone would drop
-# :func:`parse_tcp_port`'s range check, and ``MAX_CONTENT_LENGTH`` is an ``int`` whose
-# empty value is not one.
+# the rule belongs to the setting: dispatching on ``int`` alone would drop the SSH port
+# range check, and ``MAX_CONTENT_LENGTH`` is an ``int`` whose empty value is not one.
 _ENV_PARSERS: Mapping[str, Callable[[str], Any]] = {
-    "SSH_DEFAULT_PORT": lambda value: parse_tcp_port(value, default=_DEFAULT_SSH_PORT),
+    "SSH_DEFAULT_PORT": _parse_ssh_port_override,
     "MAX_CONTENT_LENGTH": _parse_max_content_length,
 }
 
@@ -208,6 +225,28 @@ def _keep_declared(key: str, declared: Any, env_value: str, expected: str) -> An
         "Ignoring %s=%r: expected %s. Keeping %r.", key, env_value, expected, declared
     )
     return declared
+
+
+def _coerce_bool(key: str, declared: bool, env_value: str) -> bool:
+    parsed = parse_bool(env_value)
+    if parsed is None:
+        return bool(_keep_declared(key, declared, env_value, "a boolean"))
+
+    return parsed
+
+
+def _parse_env_bool(key: str, default: bool) -> bool:
+    """Read a boolean setting in the class body, reporting a value we don't recognise.
+
+    The class body — not :meth:`~DefaultConfig.override_with_env_variables`, whose reach
+    stops at ``DEBUG`` and ``TESTING`` until #1857 — is what decides ``SERVER_MODE``, so
+    this is where the vocabulary check has to live to mean anything.
+    """
+    env_value = os.getenv(key)
+    if env_value is None:
+        return default
+
+    return _coerce_bool(key, default, env_value)
 
 
 def _coerce_env_value(key: str, declared: Any, env_value: str) -> Any:
@@ -231,10 +270,7 @@ def _coerce_env_value(key: str, declared: Any, env_value: str) -> Any:
 
     # bool before int: ``isinstance(True, int)`` is True.
     if isinstance(declared, bool):
-        if env_value.lower() not in _RECOGNISED_BOOLEANS:
-            return _keep_declared(key, declared, env_value, "a boolean")
-
-        return str_to_bool(env_value)
+        return _coerce_bool(key, declared, env_value)
 
     if isinstance(declared, int):
         try:
@@ -244,16 +280,24 @@ def _coerce_env_value(key: str, declared: Any, env_value: str) -> Any:
 
     # A setting declared ``None`` (``MALWARE_SCANNER``, ``TT_METAL_HOME``) is an
     # optional string, so the raw value is already what the class body would hold.
-    return env_value
+    if declared is None or isinstance(declared, str):
+        return env_value
+
+    # Everything else is derived rather than configured — the ``Path`` directories, the
+    # engine options dict — and handing the app a raw string where it expects a parsed
+    # value is worse than declining. Unreachable until #1857 widens the loop's reach.
+    return _keep_declared(
+        key, declared, env_value, f"a coercible type, not {type(declared).__name__}"
+    )
 
 
 class DefaultConfig(object):
     # General Settings
     SECRET_KEY = os.getenv("SECRET_KEY", "90909")
-    DEBUG = bool(str_to_bool(os.getenv("FLASK_DEBUG", "false")))
+    DEBUG = _parse_env_bool("FLASK_DEBUG", False)
     TESTING = False
     PRINT_ENV = True
-    SERVER_MODE = str_to_bool(os.getenv("SERVER_MODE", "false"))
+    SERVER_MODE = _parse_env_bool("SERVER_MODE", False)
     MALWARE_SCANNER = os.getenv("MALWARE_SCANNER")
     BASE_PATH = os.getenv("BASE_PATH", "/")
     MAX_CONTENT_LENGTH = _parse_max_content_length(os.getenv("MAX_CONTENT_LENGTH", ""))
@@ -280,12 +324,10 @@ class DefaultConfig(object):
     STATIC_ASSETS_DIR = Path(APPLICATION_DIR).joinpath("ttnn_visualizer", "static")
     SEND_FILE_MAX_AGE_DEFAULT = 0
 
-    LAUNCH_BROWSER_ON_START = str_to_bool(os.getenv("LAUNCH_BROWSER_ON_START", "true"))
+    LAUNCH_BROWSER_ON_START = _parse_env_bool("LAUNCH_BROWSER_ON_START", True)
 
     # Remote SSH connection dialog defaults (local install only — suppressed under SERVER_MODE).
-    SSH_DEFAULT_PORT = parse_tcp_port(
-        os.getenv("SSH_DEFAULT_PORT"), default=_DEFAULT_SSH_PORT
-    )
+    SSH_DEFAULT_PORT = _parse_ssh_port(os.getenv("SSH_DEFAULT_PORT"))
     SSH_DEFAULT_PROFILER_PATH = os.getenv("SSH_DEFAULT_PROFILER_PATH", "")
     SSH_DEFAULT_PERFORMANCE_PATH = os.getenv("SSH_DEFAULT_PERFORMANCE_PATH", "")
     # Remote SSH subprocess timeouts (seconds).
@@ -297,7 +339,7 @@ class DefaultConfig(object):
     SQLITE_DB_PATH = "db.sqlite"
 
     # For development you may want to disable sockets
-    USE_WEBSOCKETS = str_to_bool(os.getenv("USE_WEBSOCKETS", "true"))
+    USE_WEBSOCKETS = _parse_env_bool("USE_WEBSOCKETS", True)
 
     # SQL Alchemy Settings
     # Build database path - use absolute path to avoid any ambiguity
@@ -372,7 +414,7 @@ class DevelopmentConfig(DefaultConfig):
 
 
 class TestingConfig(DefaultConfig):
-    DEBUG = bool(str_to_bool(os.getenv("FLASK_DEBUG", "True")))
+    DEBUG = _parse_env_bool("FLASK_DEBUG", True)
     TESTING = True
 
 

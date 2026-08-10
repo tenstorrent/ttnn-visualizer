@@ -709,6 +709,8 @@ def _file_path_from_stack_source_request(stack_trace: str) -> Path:
 
 The underscore signals "not part of this module's public API" and excludes the function from `from foo import *` semantics.
 
+This covers helpers in **test modules** too — `_documented_boolean_defaults` in `test_settings.py` — where the prefix also reads as "not a test case". Older test helpers written without it (`wsgi_environ`) are on-touch cleanup; see [Known inconsistencies](#known-inconsistencies).
+
 ---
 
 ## Lint discipline
@@ -1167,17 +1169,40 @@ All five funnel through `error_response(...)` which produces a consistent `{"err
 
 Upload, sync, and connection-test endpoints return a Pydantic `StatusMessage` that carries a `ConnectionTestStates` status alongside the message. The frontend reads `response.data.status` to drive UI state machines (`PROGRESS` → `OK`/`FAILED`/`WARNING`). Use it whenever the response is consumed by a `ConnectionTestStates`-aware UI; use `response_*` helpers for everything else.
 
-### Env-var booleans go through `str_to_bool`
+### Env-var booleans go through `_parse_env_bool` / `str_to_bool`
 
 ```python
-SERVER_MODE = str_to_bool(os.getenv("SERVER_MODE", "false"))
+SERVER_MODE = _parse_env_bool("SERVER_MODE", False)
 ```
 
-`bool(os.getenv("SERVER_MODE", "false"))` is **truthy** for the string `"false"` — a common foot-gun. The `str_to_bool` helper accepts the usual `"true"/"false"/"1"/"0"/"yes"/"no"` set.
+`bool(os.getenv("SERVER_MODE", "false"))` is **truthy** for the string `"false"` — a common foot-gun.
 
-`override_with_env_variables` coerces each value back to what the class body would have produced (`_coerce_env_value`), so setting the variable explicitly no longer undoes that parse. Settings that parse more richly than their type — `SSH_DEFAULT_PORT`'s range check, `MAX_CONTENT_LENGTH`'s empty-means-no-limit — register a parser in `_ENV_PARSERS` rather than relying on type dispatch, and a value the setting can't represent is logged and discarded rather than applied.
+#### `parse_bool` owns the vocabulary; never re-declare the tokens
 
-The loop only reaches attributes declared on the *concrete* config class, so in practice it visits `DEBUG` and `TESTING` and nothing else; the class body is what parses everything else. Widening that reach is tracked as [#1857](https://github.com/tenstorrent/ttnn-visualizer/issues/1857) — until it lands, don't assume an environment variable changed after import takes effect.
+`parse_bool` (`utils.py`) is the only place the accepted spellings are written down. It returns `True`, `False`, or `None` for a value it doesn't recognise, and `str_to_bool` is a thin wrapper over it (`parse_bool(value) is True`) for query params and other callers where "unrecognised" and "false" are the same answer.
+
+A second copy of the token list drifts, and **both drift directions fail silently**: add a spelling to one and the other rejects a value the rest of the app honours; remove one and it starts meaning `False`. If a caller needs to know that a value was a typo, take `None` from `parse_bool` — don't re-implement the membership test.
+
+#### The vocabulary is deliberately narrow, and matched across the boundary
+
+Only `true` / `1` / `false` / `0`, case-insensitive and whitespace-trimmed. That is what `.env.sample` documents and what the SPA's `isServerModeEnabled` (`src/functions/getServerConfig.ts`) accepts, so `SERVER_MODE` and `VITE_SERVER_MODE` can't select opposite postures from the same spelling. **Widening one side means widening the other in the same change.**
+
+#### Config reports a typo rather than obeying it
+
+`str_to_bool` maps anything unrecognised to `False`, which for `SERVER_MODE` is the *local* posture — the one whose endpoints publish SSH host, username, and path metadata. So `settings.py` reads booleans through `_parse_env_bool`, which logs the value and keeps the coded default instead. This lives in the **class body**, because that is the code that actually decides `SERVER_MODE`; a check placed only in the override loop would be protection in name only (see the reach caveat below).
+
+#### `override_with_env_variables` coerces rather than assigns
+
+`_coerce_env_value` parses each environment string back to the declared attribute's type, so setting a variable explicitly no longer undoes the class body's parse. It **declines** what it can't represent — an uncoercible `int`, an unrecognised boolean, and any declared type it has no rule for (the `Path` directories, the engine-options dict) — logging and keeping the declared value rather than handing the app a raw string.
+
+Settings that parse more richly than their type register a named parser in `_ENV_PARSERS`: `SSH_DEFAULT_PORT` (range check) and `MAX_CONTENT_LENGTH` (empty means no limit) would both be broken by plain `int` dispatch. Two rules for that registry:
+
+- **One named function, called from both places.** Where the class body and the registry parse the same setting, they call the same function (`_parse_max_content_length`) so the import-time and override-time parses can't disagree. Where the two genuinely differ, say why in the docstring — `_parse_ssh_port` falls back to the default because the class body has nothing else to keep, while `_parse_ssh_port_override` raises so an override is reported like every other setting.
+- **Keys are strings, so nothing binds them to the attribute.** A rename leaves a dead entry that silently falls back to type dispatch; `test_every_env_parser_names_a_real_setting` is what catches it.
+
+#### The loop only reaches the concrete config class
+
+It reads the concrete class's own `__dict__`, so in practice it visits `DEBUG` and `TESTING` and nothing else; the class body is what parses everything else. Widening that reach is tracked as [#1857](https://github.com/tenstorrent/ttnn-visualizer/issues/1857) — until it lands, don't assume an environment variable changed after import takes effect, and don't put a guard in the loop expecting it to cover a setting.
 
 ### Domain exceptions live in `exceptions.py`
 
@@ -1199,10 +1224,11 @@ These exist in the codebase today and don't yet have a single canonical answer. 
 - **Direct imports from `store/fileTransferRegistry.ts`.** Atoms and mutators are re-exported from `app.ts`; new call sites should import from there. Older hooks/components that still import the co-located module are on-touch cleanup.
 - **`extract_npe_name` is a misnomer.** It's used by both NPE and MLIR upload handlers. Rename to `extract_uploaded_name` is tracked as a follow-up; don't perpetuate the NPE-specific name in new helpers.
 - **`errorMessage` vs `statusMessage` in file loaders.** `MlirJsonFileLoader.tsx` and `NPEFileLoader.tsx` overload a state field called `errorMessage` with both success and failure text. A rename to `statusMessage` is pending.
-- **Upload size cap.** No `MAX_CONTENT_LENGTH` is set on the Flask app; large uploads succeed until they exhaust memory. Tracked as a separate hardening task.
+- **Upload size cap.** `MAX_CONTENT_LENGTH` is a real setting — Flask honours it via `app.config.from_object`, `.env.sample` documents it, and an empty value means "no limit" — but it is **unset by default**, so out of the box large uploads succeed until they exhaust memory. Choosing a shipped default is tracked as a separate hardening task.
 - **Default-export vs named-export of components.** The codebase mixes `export default function Foo()` and `export function Foo()`. Components are predominantly default-exported; hooks and utility functions are predominantly named-exported. Mirror the file you're editing.
 - **Raw `toast()` in `useBufferFocus`.** `src/hooks/useBufferFocus.tsx` calls `toast()` from `react-toastify` directly because it needs `autoClose: false` and persists the returned `Id` into `activeToastAtom` — capabilities `createToastNotification` doesn't expose. Intentional exception, not a precedent. New code still goes through `createToastNotification`; if you need richer options, extend the wrapper.
 - **`flake8 max-line-length = 79` vs `black line-length = 88`.** `.flake8` and `pyproject.toml` disagree. Black wins in practice because `pnpm flask:format` runs it; the flake8 setting only matters if `pre-commit` runs flake8 in isolation, which CI does not. Don't expand or contract files to satisfy 79 — 88 is the source of truth.
 - **`Config.__new__` lacks a return annotation.** `backend/ttnn_visualizer/settings.py` returns the singleton without typing the return, surfacing a mypy `attr-defined` error in `database_migrations.py` against `cast(DefaultConfig, Config()).SQLALCHEMY_DATABASE_URI`. Fix is `def __new__(cls) -> "DefaultConfig":`; tracked as a follow-up.
 - **`useQuery<Data, AxiosError>` not universal.** Four hooks in `useAPI.tsx` (`useGetClusterDescription`, `usePerfMeta`, `useReportFolderList`, `useInstance`) leave the error generic implicit (`unknown`). Call sites currently don't read `error.status` on these specific queries, but the rule is "spell out both generics" — tighten when you touch them.
+- **Underscore prefixes on test-module helpers.** Backend helpers are meant to carry a leading underscore, and newer test modules follow it (`_documented_boolean_defaults`), but plenty of existing ones don't (`wsgi_environ` in the same file). Prefix new helpers; rename existing ones only when you're already editing them.
 - **`dataclasses.asdict(...)` vs `to_dict()` for serialisation.** Models that inherit `SerializeableDataclass` get a `to_dict()` that handles `enum.Enum` conversion; using `dataclasses.asdict` instead (e.g. `views.py`) skips that handling. Safe when the dataclass has no enum fields; otherwise use `.to_dict()`. Reviewers should flag `asdict` on any dataclass with enum-typed fields.

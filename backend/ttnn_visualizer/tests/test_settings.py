@@ -12,17 +12,20 @@ truthy string ``"false"`` inverts a security setting.
 """
 
 import logging
+import os
 import re
 from pathlib import Path
 
 import pytest
 from ttnn_visualizer.settings import (
+    _ENV_PARSERS,
     DefaultConfig,
     ProductionConfig,
     _build_allowed_origins,
+    _parse_env_bool,
     build_socketio_origin_check,
 )
-from ttnn_visualizer.utils import str_to_bool
+from ttnn_visualizer.utils import TRUE_VALUES, parse_bool
 
 DEV_ARGS = {
     "app_port": "8000",
@@ -154,9 +157,19 @@ def test_env_override_still_applies_to_plain_values(monkeypatch):
 
 
 # ``is`` rather than truthiness throughout: the defect produced the string "false".
+# The whole vocabulary, so a token added to one half of ``parse_bool`` and not the other
+# fails here rather than at whichever setting first receives it.
 @pytest.mark.parametrize(
     "env_value, expected",
-    [("false", False), ("true", True), ("0", False), ("1", True)],
+    [
+        ("false", False),
+        ("true", True),
+        ("0", False),
+        ("1", True),
+        ("FALSE", False),
+        ("TRUE", True),
+        (" true ", True),
+    ],
 )
 @pytest.mark.parametrize(
     "key", ["SERVER_MODE", "LAUNCH_BROWSER_ON_START", "USE_WEBSOCKETS", "DEBUG"]
@@ -189,12 +202,15 @@ ENV_SAMPLE_PATH = Path(__file__).parents[3] / ".env.sample"
 COMMENTED_SETTING_PATTERN = re.compile(r"^#\s*([A-Z][A-Z0-9_]*)=(.*)$")
 
 
-def documented_boolean_defaults():
+def _documented_boolean_defaults():
     """``# KEY=value`` lines in ``.env.sample`` naming a boolean config attribute.
 
     Matching against the config class is what excludes ``FLASK_DEBUG``: the file
     documents it, but the attribute it feeds is ``DEBUG``.
     """
+    if not ENV_SAMPLE_PATH.exists():
+        pytest.skip(f"{ENV_SAMPLE_PATH.name} is not part of the installed package")
+
     documented = []
 
     for line in ENV_SAMPLE_PATH.read_text(encoding="utf-8").splitlines():
@@ -206,18 +222,31 @@ def documented_boolean_defaults():
         if isinstance(getattr(DefaultConfig, key, None), bool):
             documented.append((key, documented_value))
 
+    # Guards against the parser silently matching nothing if the file's format changes.
+    assert documented
+
     return documented
 
 
-def test_the_documented_defaults_do_not_invert_their_settings(monkeypatch):
+def test_the_documented_defaults_match_the_code_defaults():
     # Each setting is listed commented out at its default, so uncommenting a line
-    # should be a no-op. Uncommenting ``SERVER_MODE=false`` used to enable server mode.
-    if not ENV_SAMPLE_PATH.exists():
-        pytest.skip(f"{ENV_SAMPLE_PATH.name} is not part of the installed package")
+    # should be a no-op — which only holds while the documented value still names the
+    # coded default. Keys the environment already sets are skipped: ``load_dotenv()``
+    # folds a developer ``.env`` into the class body at import, so asserting on them
+    # would pass in CI and fail on a checkout that configures them.
+    for key, documented_value in _documented_boolean_defaults():
+        if key in os.environ:
+            continue
 
-    documented = documented_boolean_defaults()
-    # Guards against the parser silently matching nothing if the file's format changes.
-    assert documented
+        assert getattr(DefaultConfig, key) is parse_bool(documented_value), key
+
+
+def test_the_documented_defaults_survive_being_set_explicitly(monkeypatch):
+    # The other half: uncommenting the line must not invert the setting on the way
+    # through the override. Uncommenting ``SERVER_MODE=false`` used to enable server
+    # mode. Expected values come from the documented string rather than the class
+    # attribute, which the test above is what pins to the sample file.
+    documented = _documented_boolean_defaults()
 
     for key, documented_value in documented:
         monkeypatch.setenv(key, documented_value)
@@ -225,10 +254,8 @@ def test_the_documented_defaults_do_not_invert_their_settings(monkeypatch):
     config = DefaultConfig()
     config.override_with_env_variables()
 
-    # Expected values come from the documented string, not the class attribute, which
-    # ``load_dotenv()`` freezes at import against a developer ``.env`` CI won't have.
     for key, documented_value in documented:
-        assert getattr(config, key) is str_to_bool(documented_value), key
+        assert getattr(config, key) is parse_bool(documented_value), key
 
 
 def test_env_override_parses_integers(monkeypatch):
@@ -296,16 +323,72 @@ def test_a_max_content_length_is_parsed_as_an_integer(monkeypatch):
     assert config.MAX_CONTENT_LENGTH == 1048576
 
 
-@pytest.mark.parametrize("env_value, expected", [("2222", 2222), ("99999", 22)])
-def test_an_overridden_ssh_port_keeps_its_range_check(env_value, expected, monkeypatch):
-    # The override reuses ``parse_tcp_port``. Dispatching on ``int`` alone would accept
-    # 99999 and publish it to the browser through ``_build_spa_client_config``.
-    monkeypatch.setenv("SSH_DEFAULT_PORT", env_value)
+def test_an_overridden_ssh_port_is_applied(monkeypatch):
+    monkeypatch.setenv("SSH_DEFAULT_PORT", "2222")
 
     config = DefaultConfig()
     config.override_with_env_variables()
 
-    assert config.SSH_DEFAULT_PORT == expected
+    assert config.SSH_DEFAULT_PORT == 2222
+
+
+@pytest.mark.parametrize("env_value", ["99999", "0", "-1", "not-a-port", ""])
+def test_an_unusable_ssh_port_is_reported_and_discarded(env_value, monkeypatch, caplog):
+    # Dispatching on ``int`` alone would accept 99999 and publish it to the browser
+    # through ``_build_spa_client_config``. ``parse_tcp_port`` substitutes its default
+    # instead, which is right in the class body but would make this the one setting an
+    # override changes without saying so. The declared value is set here so the
+    # assertion doesn't depend on a developer ``.env`` CI won't have.
+    monkeypatch.setattr(DefaultConfig, "SSH_DEFAULT_PORT", 2222)
+    monkeypatch.setenv("SSH_DEFAULT_PORT", env_value)
+
+    config = DefaultConfig()
+    with caplog.at_level(logging.WARNING):
+        config.override_with_env_variables()
+
+    assert config.SSH_DEFAULT_PORT == 2222
+    assert "SSH_DEFAULT_PORT" in caplog.text
+
+
+def test_an_uncoercible_max_content_length_keeps_the_declared_limit(
+    monkeypatch, caplog
+):
+    # The upload size cap, and the only setting whose parser can raise — so this is the
+    # sole cover for the ``_ENV_PARSERS`` failure branch. Silently reverting to a
+    # declared ``None`` would mean no limit at all.
+    monkeypatch.setattr(DefaultConfig, "MAX_CONTENT_LENGTH", 1048576)
+    monkeypatch.setenv("MAX_CONTENT_LENGTH", "abc")
+
+    config = DefaultConfig()
+    with caplog.at_level(logging.WARNING):
+        config.override_with_env_variables()
+
+    assert config.MAX_CONTENT_LENGTH == 1048576
+    assert "MAX_CONTENT_LENGTH" in caplog.text
+
+
+def test_every_env_parser_names_a_real_setting():
+    # Keyed by string, so a renamed or mistyped setting leaves a dead entry and falls
+    # back to type dispatch — dropping the SSH range check, or inverting
+    # ``MAX_CONTENT_LENGTH``'s empty-means-no-limit — with nothing else failing.
+    assert set(_ENV_PARSERS) <= set(vars(DefaultConfig))
+
+
+def test_a_setting_with_no_coercible_type_is_reported_and_discarded(
+    monkeypatch, caplog
+):
+    # ``LOCAL_DATA_DIRECTORY`` is a ``Path`` that handlers join onto; handing them a
+    # string is worse than declining the override. Unreachable until #1857 widens the
+    # loop, which is the point of pinning it before then.
+    monkeypatch.setattr(DefaultConfig, "LOCAL_DATA_DIRECTORY", Path("/declared"))
+    monkeypatch.setenv("LOCAL_DATA_DIRECTORY", "/from/env")
+
+    config = DefaultConfig()
+    with caplog.at_level(logging.WARNING):
+        config.override_with_env_variables()
+
+    assert config.LOCAL_DATA_DIRECTORY == Path("/declared")
+    assert "LOCAL_DATA_DIRECTORY" in caplog.text
 
 
 def test_an_unrecognised_boolean_keeps_the_declared_default(monkeypatch, caplog):
@@ -321,6 +404,24 @@ def test_an_unrecognised_boolean_keeps_the_declared_default(monkeypatch, caplog)
 
     assert config.SERVER_MODE is True
     assert "SERVER_MODE" in caplog.text
+
+
+@pytest.mark.parametrize("env_value", ["Ture", "on", "yes", "t", "enabled"])
+def test_the_class_body_reports_an_unrecognised_boolean(env_value, monkeypatch, caplog):
+    # The path that actually decides ``SERVER_MODE``: the override loop never reaches
+    # it, so a vocabulary check living only there would be protection in name only.
+    monkeypatch.setenv("SERVER_MODE", env_value)
+
+    with caplog.at_level(logging.WARNING):
+        assert _parse_env_bool("SERVER_MODE", False) is False
+
+    assert "SERVER_MODE" in caplog.text
+
+
+def test_the_boolean_vocabulary_has_one_source():
+    # ``parse_bool`` owns both halves, so a token can't be recognised as true by one
+    # caller and rejected as a typo by another.
+    assert all(parse_bool(token) is True for token in TRUE_VALUES)
 
 
 @pytest.mark.parametrize("key", ["MALWARE_SCANNER", "TT_METAL_HOME"])
