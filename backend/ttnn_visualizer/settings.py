@@ -227,6 +227,12 @@ _ENV_PARSERS: Mapping[str, Callable[[str], Any]] = {
     "MAX_CONTENT_LENGTH": _parse_max_content_length,
 }
 
+# Config attributes whose environment variable is spelled differently. ``DEBUG`` is the
+# only one: a bare ``DEBUG`` variable is the log-level knob ``pnpm flask:start-debug``
+# sets, so reading the attribute name would let it turn on Flask's debug mode — and
+# suppress the catch-all error handler — for anyone who only wanted verbose logs.
+_ENV_ALIASES: Mapping[str, str] = {"DEBUG": "FLASK_DEBUG"}
+
 
 def _keep_declared(key: str, declared: Any, env_value: str, expected: str) -> Any:
     logger.warning(
@@ -270,11 +276,14 @@ def _parse_env_bool(key: str, default: bool, *, strict: bool = False) -> bool:
     return _coerce_bool(key, default, env_value)
 
 
-def _coerce_env_value(key: str, declared: Any, env_value: str) -> Any:
+def _coerce_env_value(env_name: str, declared: Any, env_value: str) -> Any:
     """Parse an environment string into the value the class body would have produced.
 
     Assigning the raw string would discard that parse, and ``"false"`` is truthy — so
     an explicitly disabled boolean setting would come back enabled.
+
+    Named by the *variable* rather than the attribute, so a warning names what the
+    operator actually set; :data:`_ENV_PARSERS` is keyed the same way.
 
     Settings with an entry in :data:`_ENV_PARSERS` reuse it; the rest dispatch on the
     declared type, not on how the value looks, since ``PORT`` and the ``GUNICORN_*``
@@ -282,22 +291,22 @@ def _coerce_env_value(key: str, declared: Any, env_value: str) -> Any:
     value the declared type can't represent is reported and discarded rather than
     applied, so a typo can't quietly reconfigure the app.
     """
-    parser = _ENV_PARSERS.get(key)
+    parser = _ENV_PARSERS.get(env_name)
     if parser is not None:
         try:
             return parser(env_value)
         except ValueError:
-            return _keep_declared(key, declared, env_value, "a parseable value")
+            return _keep_declared(env_name, declared, env_value, "a parseable value")
 
     # bool before int: ``isinstance(True, int)`` is True.
     if isinstance(declared, bool):
-        return _coerce_bool(key, declared, env_value)
+        return _coerce_bool(env_name, declared, env_value)
 
     if isinstance(declared, int):
         try:
             return int(env_value)
         except ValueError:
-            return _keep_declared(key, declared, env_value, "an integer")
+            return _keep_declared(env_name, declared, env_value, "an integer")
 
     # A setting declared ``None`` (``MALWARE_SCANNER``, ``TT_METAL_HOME``) is an
     # optional string, so the raw value is already what the class body would hold.
@@ -308,7 +317,10 @@ def _coerce_env_value(key: str, declared: Any, env_value: str) -> Any:
     # engine options dict — and handing the app a raw string where it expects a parsed
     # value is worse than declining. Unreachable until #1857 widens the loop's reach.
     return _keep_declared(
-        key, declared, env_value, f"a coercible type, not {type(declared).__name__}"
+        env_name,
+        declared,
+        env_value,
+        f"a coercible type, not {type(declared).__name__}",
     )
 
 
@@ -403,7 +415,9 @@ class DefaultConfig(object):
         """Override config values with environment variables.
 
         Values are coerced to what the class body would have produced; see
-        :func:`_coerce_env_value`.
+        :func:`_coerce_env_value`. Attributes read a differently named variable where
+        :data:`_ENV_ALIASES` says so, so the loop and the class body agree on which
+        variable owns a setting.
 
         Only reaches attributes declared on the *concrete* config class, since it reads
         that class's own ``__dict__``: ``DevelopmentConfig`` declares none, the others
@@ -415,11 +429,12 @@ class DefaultConfig(object):
             if key.startswith("_") or hasattr(value, "__get__"):
                 continue
 
-            env_value = os.getenv(key)
+            env_name = _ENV_ALIASES.get(key, key)
+            env_value = os.getenv(env_name)
             if env_value is None:
                 continue
 
-            setattr(self, key, _coerce_env_value(key, value, env_value))
+            setattr(self, key, _coerce_env_value(env_name, value, env_value))
 
     def to_dict(self):
         """Return all config values as a dictionary, including inherited attributes."""

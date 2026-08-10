@@ -18,6 +18,7 @@ from pathlib import Path
 
 import pytest
 from ttnn_visualizer.settings import (
+    _ENV_ALIASES,
     _ENV_PARSERS,
     DefaultConfig,
     ProductionConfig,
@@ -170,10 +171,17 @@ BOOLEAN_VOCABULARY_CASES = (
 
 @pytest.mark.parametrize("env_value, expected", BOOLEAN_VOCABULARY_CASES)
 @pytest.mark.parametrize(
-    "key", ["SERVER_MODE", "LAUNCH_BROWSER_ON_START", "USE_WEBSOCKETS", "DEBUG"]
+    "env_name, key",
+    [
+        ("SERVER_MODE", "SERVER_MODE"),
+        ("LAUNCH_BROWSER_ON_START", "LAUNCH_BROWSER_ON_START"),
+        ("USE_WEBSOCKETS", "USE_WEBSOCKETS"),
+        # Aliased, so the pair differs — see ``_ENV_ALIASES``.
+        ("FLASK_DEBUG", "DEBUG"),
+    ],
 )
-def test_env_override_parses_booleans(key, env_value, expected, monkeypatch):
-    monkeypatch.setenv(key, env_value)
+def test_env_override_parses_booleans(env_name, key, env_value, expected, monkeypatch):
+    monkeypatch.setenv(env_name, env_value)
 
     config = DefaultConfig()
     config.override_with_env_variables()
@@ -181,30 +189,56 @@ def test_env_override_parses_booleans(key, env_value, expected, monkeypatch):
     assert getattr(config, key) is expected
 
 
-def test_production_debug_is_not_enabled_by_the_string_false(monkeypatch):
-    # The only manifestation on the shipped path, since these are the sole settings a
-    # concrete config class declares. ``Flask.debug`` returns ``config["DEBUG"]``
-    # verbatim, and a truthy value suppresses the catch-all error handler.
+def test_production_testing_is_not_enabled_by_the_string_false(monkeypatch):
+    # ``TESTING`` and ``DEBUG`` are the sole settings a concrete config class declares,
+    # so this is where the truthy-``"false"`` defect manifested on the shipped path.
     # ``ProductionConfig`` directly, as ``Config()``'s singleton leaks between tests.
-    monkeypatch.setenv("DEBUG", "false")
     monkeypatch.setenv("TESTING", "false")
 
     config = ProductionConfig()
     config.override_with_env_variables()
 
-    assert config.DEBUG is False
     assert config.TESTING is False
+
+
+def test_the_logging_debug_variable_does_not_enable_flask_debug(monkeypatch):
+    # ``DEBUG=true`` is what ``pnpm flask:start-debug`` sets to raise the log level.
+    # Matching it to the ``DEBUG`` *attribute* would hand Flask debug mode to anyone
+    # who wanted verbose logs, and ``Flask.debug`` returning truthy suppresses the
+    # catch-all error handler — tracebacks in responses, under SERVER_MODE too.
+    monkeypatch.setenv("DEBUG", "true")
+
+    config = ProductionConfig()
+    config.override_with_env_variables()
+
+    assert config.DEBUG is False
+
+
+def test_flask_debug_applies_after_the_class_body_has_been_evaluated(monkeypatch):
+    # The other half of the alias: the class body reads ``FLASK_DEBUG`` at import, so
+    # the override loop is the only chance for a value that arrives later — a ``.env``
+    # ``create_app()`` loads, say — to reach the attribute it feeds.
+    monkeypatch.setenv("FLASK_DEBUG", "true")
+
+    config = ProductionConfig()
+    config.override_with_env_variables()
+
+    assert config.DEBUG is True
 
 
 ENV_SAMPLE_PATH = Path(__file__).parents[3] / ".env.sample"
 COMMENTED_SETTING_PATTERN = re.compile(r"^#\s*([A-Z][A-Z0-9_]*)=(.*)$")
 
 
-def _documented_boolean_defaults():
-    """``# KEY=value`` lines in ``.env.sample`` naming a boolean config attribute.
+_ATTRIBUTE_BY_ENV_NAME = {env_name: key for key, env_name in _ENV_ALIASES.items()}
 
-    Matching against the config class is what excludes ``FLASK_DEBUG``: the file
-    documents it, but the attribute it feeds is ``DEBUG``.
+
+def _documented_boolean_defaults():
+    """``# KEY=value`` lines in ``.env.sample`` feeding a boolean config attribute.
+
+    Yields ``(env_name, attribute, value)`` triples, since the two names need not
+    match: ``FLASK_DEBUG`` is what feeds ``DEBUG``, so the file's bare ``DEBUG`` line
+    is the log-level knob and no config attribute's variable at all.
     """
     if not ENV_SAMPLE_PATH.exists():
         pytest.skip(f"{ENV_SAMPLE_PATH.name} is not part of the installed package")
@@ -216,9 +250,13 @@ def _documented_boolean_defaults():
         if not match:
             continue
 
-        key, documented_value = match.group(1), match.group(2).strip()
-        if isinstance(getattr(DefaultConfig, key, None), bool):
-            documented.append((key, documented_value))
+        env_name, documented_value = match.group(1), match.group(2).strip()
+        if env_name in _ENV_ALIASES:
+            continue
+
+        attribute = _ATTRIBUTE_BY_ENV_NAME.get(env_name, env_name)
+        if isinstance(getattr(DefaultConfig, attribute, None), bool):
+            documented.append((env_name, attribute, documented_value))
 
     # Guards against the parser silently matching nothing if the file's format changes.
     assert documented
@@ -232,11 +270,13 @@ def test_the_documented_defaults_match_the_code_defaults():
     # coded default. Keys the environment already sets are skipped: ``load_dotenv()``
     # folds a developer ``.env`` into the class body at import, so asserting on them
     # would pass in CI and fail on a checkout that configures them.
-    for key, documented_value in _documented_boolean_defaults():
-        if key in os.environ:
+    for env_name, attribute, documented_value in _documented_boolean_defaults():
+        if env_name in os.environ:
             continue
 
-        assert getattr(DefaultConfig, key) is parse_bool(documented_value), key
+        assert getattr(DefaultConfig, attribute) is parse_bool(
+            documented_value
+        ), env_name
 
 
 def test_the_documented_defaults_survive_being_set_explicitly(monkeypatch):
@@ -246,14 +286,14 @@ def test_the_documented_defaults_survive_being_set_explicitly(monkeypatch):
     # attribute, which the test above is what pins to the sample file.
     documented = _documented_boolean_defaults()
 
-    for key, documented_value in documented:
-        monkeypatch.setenv(key, documented_value)
+    for env_name, _, documented_value in documented:
+        monkeypatch.setenv(env_name, documented_value)
 
     config = DefaultConfig()
     config.override_with_env_variables()
 
-    for key, documented_value in documented:
-        assert getattr(config, key) is parse_bool(documented_value), key
+    for env_name, attribute, documented_value in documented:
+        assert getattr(config, attribute) is parse_bool(documented_value), env_name
 
 
 def test_env_override_parses_integers(monkeypatch):
@@ -379,6 +419,16 @@ def test_every_env_parser_names_a_real_setting():
     # back to type dispatch — dropping the SSH range check, or inverting
     # ``MAX_CONTENT_LENGTH``'s empty-means-no-limit — with nothing else failing.
     assert set(_ENV_PARSERS) <= set(vars(DefaultConfig))
+
+
+def test_every_env_alias_names_a_real_setting():
+    # Same string-keyed hazard, with a worse failure: a dead alias sends the loop back
+    # to the attribute name, which for ``DEBUG`` is the log-level variable.
+    assert set(_ENV_ALIASES) <= set(vars(DefaultConfig))
+
+    # An alias pointing at a name that is also an attribute would have the loop write
+    # one setting from another's variable.
+    assert not set(_ENV_ALIASES.values()) & set(vars(DefaultConfig))
 
 
 def test_a_setting_with_no_coercible_type_is_reported_and_discarded(
