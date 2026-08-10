@@ -20,6 +20,18 @@
         color: $tt-grey-7;
     }
 
+    // The body, its last field and the footer each contribute a 16px gap, so
+    // the space above the footer was three times what anything else gets.
+    .bp6-dialog-body {
+        > :last-child {
+            margin-bottom: 0;
+        }
+    }
+
+    .bp6-dialog-footer {
+        margin-top: 0;
+    }
+
     fieldset {
         display: flex;
         flex-direction: column;
@@ -27,6 +39,29 @@
         border: solid 1px $tt-grey-5;
         border-radius: 5px;
     }
+
+    // The messages are inline-flex, so the wrapper that carries the stale marking has to
+    // go on stacking them the way the fieldset did when they were its own children.
+    .connection-test-results {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    // Results that no longer describe the current form recede, so their ticks
+    // can't be read as approving a target they were never run against. Set on the
+    // wrapper rather than each message: opacity applies to the subtree as a group,
+    // so the effect is the same without reaching into another component's class.
+    .stale-connection-tests {
+        opacity: 0.5;
+    }
+}
+
+// A minimal footer stacks rather than flexes, so the results sit above the
+// buttons at full width. Blueprint always renders the main section, so the gap
+// is conditional on it holding something.
+.connection-dialog-footer .bp6-dialog-footer-main-section:not(:empty) {
+    margin-bottom: 10px;
 }
 
 .remote-querying-fieldset {

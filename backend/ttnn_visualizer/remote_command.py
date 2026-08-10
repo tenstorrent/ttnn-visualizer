@@ -36,7 +36,7 @@ def remote_arg(value: PathLike) -> str:
     """Quote one value for use as a single argument in a remote shell command.
 
     Deliberately does not route through ``Path``: that would normalise ``/a/`` to
-    ``/a`` and ``//a`` to ``/a``, and ``_report_search_find_expression`` manages
+    ``/a`` and ``//a`` to ``/a``, and ``_report_search_command`` manages
     trailing slashes itself because GNU and BSD ``find`` disagree on whether the
     root they echo keeps one.
     """

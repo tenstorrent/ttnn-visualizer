@@ -1181,7 +1181,7 @@ When raising or catching application errors, use the dedicated classes:
 
 - `RemoteConnectionException` and `AuthenticationFailedException` for SSH-flavoured failures (they carry HTTP status as a property).
 - `DataFormatError`, `InvalidReportPath`, `InvalidProfilerPath` for content/structure problems.
-- `NoReportsException`, `DatabaseFileNotFoundException`, `RemoteFileReadException` for specific not-found cases.
+- `DatabaseFileNotFoundException`, `RemoteFileReadException` for specific not-found cases.
 
 Don't `raise Exception("...")` — there's an existing class for almost every case.
 

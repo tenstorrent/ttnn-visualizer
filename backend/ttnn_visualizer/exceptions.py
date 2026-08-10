@@ -115,10 +115,6 @@ class HostKeyVerificationFailedException(RemoteConnectionException):
         )
 
 
-class NoReportsException(RemoteConnectionException):
-    pass
-
-
 class InvalidRequestPayload(Exception):
     """A request body failed model validation.
 
