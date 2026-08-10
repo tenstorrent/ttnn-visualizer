@@ -37,8 +37,16 @@ describe('isServerModeEnabled', () => {
         expect(isServerModeEnabled(value)).toBe(false);
     });
 
-    it.each([undefined, null, 1, true, {}, []])('is false for non-string %p', (value) => {
+    it.each([undefined, null, 1, {}, []])('is false for %p, which names no posture', (value) => {
         expect(isServerModeEnabled(value)).toBe(false);
+    });
+
+    // The shipped branch reads JSON the backend inlined, where the value is a real boolean.
+    it.each([
+        [true, true],
+        [false, false],
+    ])('passes the boolean %p through as %p', (value, expected) => {
+        expect(isServerModeEnabled(value)).toBe(expected);
     });
 
     it.each(['true', 'TRUE', 'True', '1'])('is true for %p', (value) => {
@@ -90,5 +98,67 @@ describe('getServerConfig (dev / Vite env)', () => {
         const { default: getServerConfig } = await import('../src/functions/getServerConfig');
 
         expect(getServerConfig().SSH_DEFAULT_PORT).toBe(DEFAULT_SSH_PORT);
+    });
+
+    // The backend refuses to start on a spelling it can't read; the SPA can only fall back
+    // to the local posture, so the typo has to be visible or the wrong posture gets tested.
+    it.each(['yes', 't', 'Ture', ''])('warns that VITE_SERVER_MODE=%p is unrecognised', async (value) => {
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        vi.stubEnv('VITE_SERVER_MODE', value);
+
+        const { default: getServerConfig } = await import('../src/functions/getServerConfig');
+
+        expect(getServerConfig().SERVER_MODE).toBe(false);
+        expect(warn).toHaveBeenCalledWith(expect.stringContaining('VITE_SERVER_MODE'));
+
+        warn.mockRestore();
+    });
+
+    it.each(['true', 'false', '1', '0'])('stays quiet for the documented value %p', async (value) => {
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        vi.stubEnv('VITE_SERVER_MODE', value);
+
+        const { default: getServerConfig } = await import('../src/functions/getServerConfig');
+        getServerConfig();
+
+        expect(warn).not.toHaveBeenCalled();
+
+        warn.mockRestore();
+    });
+});
+
+describe('getServerConfig (shipped / inlined window config)', () => {
+    afterEach(() => {
+        vi.unstubAllEnvs();
+        vi.resetModules();
+        delete window.TTNN_VISUALIZER_CONFIG;
+    });
+
+    // The branch the hosted deployment takes, and the one that still read `|| false`.
+    it.each([
+        [{ SERVER_MODE: true }, true],
+        [{ SERVER_MODE: false }, false],
+        [{}, false],
+        // Not the shape the backend emits — this is the regression that would silently
+        // invert the posture if serialisation ever stringified a boolean again.
+        [{ SERVER_MODE: 'false' as unknown as boolean }, false],
+    ])('reads %o as SERVER_MODE=%s', async (windowConfig, expected) => {
+        vi.stubEnv('DEV', false);
+        window.TTNN_VISUALIZER_CONFIG = windowConfig;
+
+        const { default: getServerConfig } = await import('../src/functions/getServerConfig');
+
+        expect(getServerConfig().SERVER_MODE).toBe(expected);
+    });
+
+    it('defaults the rest of the config when nothing was inlined', async () => {
+        vi.stubEnv('DEV', false);
+
+        const { default: getServerConfig } = await import('../src/functions/getServerConfig');
+        const config = getServerConfig();
+
+        expect(config.SERVER_MODE).toBe(false);
+        expect(config.BASE_PATH).toBe('/');
+        expect(config.SSH_DEFAULT_PORT).toBe(DEFAULT_SSH_PORT);
     });
 });

@@ -1172,7 +1172,7 @@ Upload, sync, and connection-test endpoints return a Pydantic `StatusMessage` th
 ### Env-var booleans go through `_parse_env_bool` / `str_to_bool`
 
 ```python
-SERVER_MODE = _parse_env_bool("SERVER_MODE", False, strict=True)
+SERVER_MODE = _parse_env_bool("SERVER_MODE", False)
 ```
 
 `bool(os.getenv("SERVER_MODE", "false"))` is **truthy** for the string `"false"` — a common foot-gun.
@@ -1185,30 +1185,43 @@ A second copy of the token list drifts, and **both drift directions fail silentl
 
 This holds outside `settings.py` too: `create_app`'s root-log-level check, the gunicorn `--reload` check, and `devtools/npe_render_probe.py`'s `SERVER_MODE` refusal all call `str_to_bool`. A dev tool that refuses on a *wider* set than the app looks harmless and isn't — it means the two disagree about what the deployment is.
 
-#### The vocabulary is deliberately narrow, and matched across the boundary
+#### The vocabulary is deliberately narrow, and matched across three consumers
 
-Only `true` / `1` / `false` / `0`, case-insensitive and whitespace-trimmed. That is what `.env.sample` documents and what the SPA's `isServerModeEnabled` (`src/functions/getServerConfig.ts`) accepts, so `SERVER_MODE` and `VITE_SERVER_MODE` can't select opposite postures from the same spelling. **Widening one side means widening the other in the same change.**
+Only `true` / `1` / `false` / `0`, case-insensitive and whitespace-trimmed. That is what `.env.sample` documents, what the SPA's `isServerModeEnabled` (`src/functions/getServerConfig.ts`) accepts, and — because `str_to_bool` backs them — what the `print_signposts` / `hide_host_ops` / `merge_devices` / `tracing_mode` query params on `GET /api/performance/perf-results/report` accept. So `SERVER_MODE` and `VITE_SERVER_MODE` can't select opposite postures from the same spelling. **Widening one side means widening the others in the same change.**
 
-#### Config reports a typo rather than obeying it, and `SERVER_MODE` refuses to start
+The query params are the easiest consumer to forget and the least noisy when broken: a spelling that stops being recognised doesn't error, it silently means `False`, so `?hide_host_ops=t` returns a different report rather than a 4xx. The SPA sends real axios booleans, so only scripted callers notice. `backend/ttnn_visualizer/tests/test_perf_report_params.py` pins the contract.
 
-`str_to_bool` maps anything unrecognised to `False`, which for `SERVER_MODE` is the *local* posture — the one whose endpoints publish SSH host, username, and path metadata. So `settings.py` reads booleans through `_parse_env_bool`, which logs the value and keeps the coded default instead. This lives in the **class body**, because that is the code that actually decides `SERVER_MODE`; a check placed only in the override loop would be protection in name only (see the reach caveat below).
+#### Config reports a typo rather than obeying it, and `_STRICT_BOOLEANS` refuses to start
 
-`SERVER_MODE` additionally passes **`strict=True`**, which raises instead of warning. It is the one boolean whose fallback is itself a security posture, so a value we can't read has to stop the app rather than quietly pick the permissive answer — and the warning that would otherwise cover it is emitted at import, before `create_app` configures logging, so it lands on `stderr` and not in the deployment's logs. Everything else is a feature flag and doesn't warrant refusing to boot.
+`str_to_bool` maps anything unrecognised to `False`, which for `SERVER_MODE` is the *local* posture — the one whose endpoints publish SSH host, username, and path metadata. So `settings.py` reads booleans through `_parse_env_bool`, which logs the value and keeps the coded default instead.
+
+A setting listed in **`_STRICT_BOOLEANS`** raises instead of warning. `SERVER_MODE` is the only member: it is the one boolean whose fallback is itself a security posture, so a value we can't read has to stop the app rather than quietly pick the permissive answer — and the warning that would otherwise cover it is emitted at import, before `create_app` configures logging, so it lands on `stderr` and not in the deployment's logs. Everything else is a feature flag and doesn't warrant refusing to boot.
+
+Strictness is registered **per setting, not passed at the call site**, because both parse paths have to agree: the override loop has no call site to pass a flag at, and `create_app` runs `load_dotenv` long after import, so a `.env` can introduce a spelling the class body never vetted. A flag the loop couldn't honour would become a real hole the moment [#1857](https://github.com/tenstorrent/ttnn-visualizer/issues/1857) widens its reach.
+
+`MAX_CONTENT_LENGTH` is the second setting that can abort startup, for the same reason by a different route: its class-body call to `_parse_max_content_length` is unguarded, and the value it would fall back to is *no limit at all*, so an unreadable upload cap stops the app rather than silently removing it. Both refusals name the variable and the accepted values, because they are what an operator sees instead of a traceback.
+
+The strict path is import-time, so nothing in-process can exercise it — pytest has already imported the module. `test_importing_settings_refuses_an_unreadable_server_mode` re-imports `settings` in a subprocess; without it, deleting `SERVER_MODE` from `_STRICT_BOOLEANS` leaves the whole suite green.
 
 Because a narrow vocabulary makes previously-accepted spellings fatal, **treat widening or narrowing it as a deployment-affecting change**: a hosted install running `SERVER_MODE=yes` now fails to start rather than silently serving in local posture, which is the intended outcome but still an outage if nobody was told.
+
+#### The hosted posture wins over debug mode
+
+`SERVER_MODE` and a truthy `DEBUG` are mutually exclusive, and `override_with_env_variables` forces `DEBUG` off when both are set. `Flask.debug` is not merely verbosity: it suppresses the catch-all error handler, so an unhandled exception answers an untrusted caller with a traceback, and with `USE_WEBSOCKETS=false` it mounts Werkzeug's interactive console (`DebuggedApplication(evalex=True)`), which evaluates arbitrary Python for whoever reaches it. `middleware()` gates that console on the posture as well, since `settings_override` reaches it without passing through the config layer.
 
 #### `override_with_env_variables` coerces rather than assigns
 
 `_coerce_env_value` parses each environment string back to the declared attribute's type, so setting a variable explicitly no longer undoes the class body's parse. It **declines** what it can't represent — an uncoercible `int`, an unrecognised boolean, and any declared type it has no rule for (the `Path` directories, the engine-options dict) — logging and keeping the declared value rather than handing the app a raw string.
 
-Settings that parse more richly than their type register a named parser in `_ENV_PARSERS`: `SSH_DEFAULT_PORT` (range check) and `MAX_CONTENT_LENGTH` (empty means no limit) would both be broken by plain `int` dispatch. Two rules for that registry:
+Settings that parse more richly than their type register a named parser in `_ENV_PARSERS`: `SSH_DEFAULT_PORT` (range check) and `MAX_CONTENT_LENGTH` (empty means no limit) would both be broken by plain `int` dispatch. Three rules for that registry, and for `_STRICT_BOOLEANS` alongside it:
 
-- **One named function, called from both places.** Where the class body and the registry parse the same setting, they call the same function (`_parse_max_content_length`) so the import-time and override-time parses can't disagree. Where the two genuinely differ, say why in the docstring, and keep the shared half in one place: `_parse_ssh_port` falls back to the default because the class body has nothing else to keep, while the registry uses `require_tcp_port` so a bad override is reported — but the range itself is written once, in `require_tcp_port`, which `parse_tcp_port` wraps.
-- **Keys are strings, so nothing binds them to the attribute.** A rename leaves a dead entry that silently falls back to type dispatch; `test_every_env_parser_names_a_real_setting` is what catches it.
+- **One named function where both paths parse the same setting.** The class body and the registry call the same function (`_parse_max_content_length`) so the import-time and override-time parses can't disagree. Where the two genuinely differ, say why in the docstring: `_parse_ssh_port` falls back to the default because the class body has nothing else to keep, while the registry uses `require_tcp_port` so a bad override is reported rather than silently changing the port. The range itself is still written once, in `require_tcp_port`, which `parse_tcp_port` wraps. Don't "fix" that asymmetry — it is the difference between having a declared value to keep and not.
+- **Key every registry by the attribute name.** `_ENV_PARSERS`, `_STRICT_BOOLEANS` and `_ENV_ALIASES` are all keyed by attribute; the variable is resolved through `_env_name_for` at lookup time and used only in messages. Keying one by the *variable* would pass the guard tests and never fire for the one setting that has an alias.
+- **Keys are strings, so nothing binds them to the attribute.** A rename leaves a dead entry that silently falls back to type dispatch — or, in `_STRICT_BOOLEANS`, downgrades a refusal to a warning. `test_every_env_parser_names_a_real_setting`, `test_every_strict_boolean_names_a_real_boolean_setting` and `test_every_registry_is_keyed_the_way_it_is_looked_up` are what catch it.
 
 #### `_ENV_ALIASES` where the variable isn't named after the attribute
 
-The loop reads a variable per attribute name, which is right for every setting but `DEBUG`: the class body reads `FLASK_DEBUG`, because a bare `DEBUG` is the log-level knob (see the entry under [Known inconsistencies](#known-inconsistencies)). `_ENV_ALIASES` maps the attribute to the variable that owns it, so the two halves of `settings.py` agree. Without it, `DEBUG=true` — what `pnpm flask:start-debug` sets — turned on Flask's debug mode under `FLASK_ENV=production`, which suppresses the catch-all error handler and returns tracebacks. Add an entry here rather than a special case in the loop if another setting ever grows a differently-named variable.
+Every setting reads a variable named after its attribute, which is right for all of them but `DEBUG`: it is fed by `FLASK_DEBUG`, because a bare `DEBUG` is the log-level knob (see the entry under [Known inconsistencies](#known-inconsistencies)). `_ENV_ALIASES` maps the attribute to the variable that owns it and `_env_name_for` is the single reader, so the class body and the override loop can't disagree and the aliased spelling is written once. Without it, `DEBUG=true` — what `pnpm flask:start-debug` sets — turned on Flask's debug mode under `FLASK_ENV=production`, which suppresses the catch-all error handler and returns tracebacks. Add an entry here rather than a special case in the loop if another setting ever grows a differently-named variable.
 
 #### The loop only reaches the concrete config class
 

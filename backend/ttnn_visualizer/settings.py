@@ -227,6 +227,14 @@ _ENV_PARSERS: Mapping[str, Callable[[str], Any]] = {
     "MAX_CONTENT_LENGTH": _parse_max_content_length,
 }
 
+# Booleans an unreadable value must stop the app over rather than warn about. Registered
+# per setting rather than passed at the call site, so the class body and the override
+# loop can't disagree about which spellings are fatal: the loop has no call site to pass
+# it at, and ``create_app``'s ``load_dotenv`` can introduce a value the class body never
+# saw. ``SERVER_MODE`` is the one whose fallback is itself a posture — keeping the
+# default means *local*, which un-gates every ``@local_only`` endpoint.
+_STRICT_BOOLEANS = frozenset({"SERVER_MODE"})
+
 # Config attributes whose environment variable is spelled differently. ``DEBUG`` is the
 # only one: a bare ``DEBUG`` variable is the log-level knob ``pnpm flask:start-debug``
 # sets, so reading the attribute name would let it turn on Flask's debug mode — and
@@ -234,56 +242,72 @@ _ENV_PARSERS: Mapping[str, Callable[[str], Any]] = {
 _ENV_ALIASES: Mapping[str, str] = {"DEBUG": "FLASK_DEBUG"}
 
 
+def _env_name_for(key: str) -> str:
+    """The variable a setting reads, so every registry can be keyed by attribute name.
+
+    Both parse paths take the attribute and resolve the variable here, which keeps the
+    aliased spelling written once and lets warnings still name what the operator set.
+    """
+    return _ENV_ALIASES.get(key, key)
+
+
 def _keep_declared(key: str, declared: Any, env_value: str, expected: str) -> Any:
     logger.warning(
-        "Ignoring %s=%r: expected %s. Keeping %r.", key, env_value, expected, declared
+        "Ignoring %s=%r: expected %s. Keeping %r.",
+        _env_name_for(key),
+        env_value,
+        expected,
+        declared,
     )
     return declared
 
 
 def _coerce_bool(key: str, declared: bool, env_value: str) -> bool:
+    """Parse a boolean setting, refusing a value we don't recognise where it matters.
+
+    Shared by the class body and the override loop so a spelling can't be fatal at
+    import and tolerated afterwards. Everything outside :data:`_STRICT_BOOLEANS` is a
+    feature flag and keeps its default with a warning, which doesn't warrant refusing
+    to boot.
+    """
     parsed = parse_bool(env_value)
-    if parsed is None:
-        return bool(_keep_declared(key, declared, env_value, "a boolean"))
+    if parsed is not None:
+        return parsed
 
-    return parsed
+    if key in _STRICT_BOOLEANS:
+        recognised = ", ".join(sorted(TRUE_VALUES | FALSE_VALUES))
+        raise ValueError(
+            f"{_env_name_for(key)}={env_value!r} is not a recognised boolean. "
+            f"Use one of: {recognised}."
+        )
+
+    return bool(_keep_declared(key, declared, env_value, "a boolean"))
 
 
-def _parse_env_bool(key: str, default: bool, *, strict: bool = False) -> bool:
+def _parse_env_bool(key: str, default: bool) -> bool:
     """Read a boolean setting in the class body, reporting a value we don't recognise.
 
     The class body — not :meth:`~DefaultConfig.override_with_env_variables`, whose reach
     stops at ``DEBUG`` and ``TESTING`` until #1857 — is what decides ``SERVER_MODE``, so
-    this is where the vocabulary check has to live to mean anything.
-
-    ``strict`` refuses to start rather than guess, and is reserved for ``SERVER_MODE``.
-    Falling back to the default there means the *local* posture, so a value we can't
-    read would silently un-gate every ``@local_only`` endpoint — and the warning that
-    said so would be emitted before ``create_app`` configures logging, so an operator
-    would never see it. Every other boolean keeps its default with a warning, which is
-    proportionate for a feature flag.
+    this is where the vocabulary check has to run to mean anything. A strict setting
+    raises from here, which lands on ``stderr`` before ``create_app`` configures
+    logging; that is the point, since a warning at this stage goes nowhere.
     """
-    env_value = os.getenv(key)
+    env_value = os.getenv(_env_name_for(key))
     if env_value is None:
         return default
-
-    if strict and parse_bool(env_value) is None:
-        recognised = ", ".join(sorted(TRUE_VALUES | FALSE_VALUES))
-        raise ValueError(
-            f"{key}={env_value!r} is not a recognised boolean. Use one of: {recognised}."
-        )
 
     return _coerce_bool(key, default, env_value)
 
 
-def _coerce_env_value(env_name: str, declared: Any, env_value: str) -> Any:
+def _coerce_env_value(key: str, declared: Any, env_value: str) -> Any:
     """Parse an environment string into the value the class body would have produced.
 
     Assigning the raw string would discard that parse, and ``"false"`` is truthy — so
     an explicitly disabled boolean setting would come back enabled.
 
-    Named by the *variable* rather than the attribute, so a warning names what the
-    operator actually set; :data:`_ENV_PARSERS` is keyed the same way.
+    Keyed by *attribute*, like every registry here, so an aliased setting reaches its
+    parser; warnings name the variable through :func:`_env_name_for`.
 
     Settings with an entry in :data:`_ENV_PARSERS` reuse it; the rest dispatch on the
     declared type, not on how the value looks, since ``PORT`` and the ``GUNICORN_*``
@@ -291,22 +315,22 @@ def _coerce_env_value(env_name: str, declared: Any, env_value: str) -> Any:
     value the declared type can't represent is reported and discarded rather than
     applied, so a typo can't quietly reconfigure the app.
     """
-    parser = _ENV_PARSERS.get(env_name)
+    parser = _ENV_PARSERS.get(key)
     if parser is not None:
         try:
             return parser(env_value)
         except ValueError:
-            return _keep_declared(env_name, declared, env_value, "a parseable value")
+            return _keep_declared(key, declared, env_value, "a parseable value")
 
     # bool before int: ``isinstance(True, int)`` is True.
     if isinstance(declared, bool):
-        return _coerce_bool(env_name, declared, env_value)
+        return _coerce_bool(key, declared, env_value)
 
     if isinstance(declared, int):
         try:
             return int(env_value)
         except ValueError:
-            return _keep_declared(env_name, declared, env_value, "an integer")
+            return _keep_declared(key, declared, env_value, "an integer")
 
     # A setting declared ``None`` (``MALWARE_SCANNER``, ``TT_METAL_HOME``) is an
     # optional string, so the raw value is already what the class body would hold.
@@ -317,7 +341,7 @@ def _coerce_env_value(env_name: str, declared: Any, env_value: str) -> Any:
     # engine options dict — and handing the app a raw string where it expects a parsed
     # value is worse than declining. Unreachable until #1857 widens the loop's reach.
     return _keep_declared(
-        env_name,
+        key,
         declared,
         env_value,
         f"a coercible type, not {type(declared).__name__}",
@@ -327,10 +351,10 @@ def _coerce_env_value(env_name: str, declared: Any, env_value: str) -> Any:
 class DefaultConfig(object):
     # General Settings
     SECRET_KEY = os.getenv("SECRET_KEY", "90909")
-    DEBUG = _parse_env_bool("FLASK_DEBUG", False)
+    DEBUG = _parse_env_bool("DEBUG", False)
     TESTING = False
     PRINT_ENV = True
-    SERVER_MODE = _parse_env_bool("SERVER_MODE", False, strict=True)
+    SERVER_MODE = _parse_env_bool("SERVER_MODE", False)
     MALWARE_SCANNER = os.getenv("MALWARE_SCANNER")
     BASE_PATH = os.getenv("BASE_PATH", "/")
     MAX_CONTENT_LENGTH = _parse_max_content_length(os.getenv("MAX_CONTENT_LENGTH", ""))
@@ -429,12 +453,32 @@ class DefaultConfig(object):
             if key.startswith("_") or hasattr(value, "__get__"):
                 continue
 
-            env_name = _ENV_ALIASES.get(key, key)
-            env_value = os.getenv(env_name)
+            env_value = os.getenv(_env_name_for(key))
             if env_value is None:
                 continue
 
-            setattr(self, key, _coerce_env_value(env_name, value, env_value))
+            setattr(self, key, _coerce_env_value(key, value, env_value))
+
+        self._refuse_debug_under_server_mode()
+
+    def _refuse_debug_under_server_mode(self) -> None:
+        """Hosted mode wins over debug mode, because ``DEBUG`` is not just verbosity.
+
+        A truthy ``Flask.debug`` suppresses the catch-all error handler, so an unhandled
+        exception answers an untrusted caller with a traceback, and without websockets
+        it mounts Werkzeug's interactive console. Neither survives a multi-user
+        deployment, so the two settings can't both be honoured and the restrictive one
+        has to win. Applied after the loop so it covers the class body and the override
+        alike.
+        """
+        if not (self.SERVER_MODE and self.DEBUG):
+            return
+
+        logger.warning(
+            "Ignoring FLASK_DEBUG under SERVER_MODE: debug mode would return tracebacks "
+            "to untrusted callers. Keeping debug mode off."
+        )
+        self.DEBUG = False
 
     def to_dict(self):
         """Return all config values as a dictionary, including inherited attributes."""
@@ -450,7 +494,7 @@ class DevelopmentConfig(DefaultConfig):
 
 
 class TestingConfig(DefaultConfig):
-    DEBUG = _parse_env_bool("FLASK_DEBUG", True)
+    DEBUG = _parse_env_bool("DEBUG", True)
     TESTING = True
 
 

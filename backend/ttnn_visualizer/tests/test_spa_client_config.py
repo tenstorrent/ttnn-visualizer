@@ -27,7 +27,7 @@ def test_a_configured_server_mode_reaches_the_browser_as_a_boolean(
     monkeypatch.setenv("SERVER_MODE", env_value)
     # Re-run the class-body parse: it happened at import, long before this test.
     monkeypatch.setattr(
-        DefaultConfig, "SERVER_MODE", _parse_env_bool("SERVER_MODE", False, strict=True)
+        DefaultConfig, "SERVER_MODE", _parse_env_bool("SERVER_MODE", False)
     )
 
     config = DefaultConfig()

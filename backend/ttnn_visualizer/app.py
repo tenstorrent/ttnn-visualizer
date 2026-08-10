@@ -254,8 +254,12 @@ def middleware(app: flask.Flask):
 
     # Only use the middleware if running in pure WSGI (HTTP requests)
     if not app.config.get("USE_WEBSOCKETS"):
-        # Enable the Flask interactive debugger in the browser for development.
-        if app.debug:
+        # Enable the Flask interactive debugger in the browser for development. The
+        # console evaluates arbitrary Python for whoever reaches it, so it is gated on
+        # the posture as well as on debug mode: the config layer already refuses that
+        # combination, but ``settings_override`` reaches this point without passing
+        # through it.
+        if app.debug and not app.config.get("SERVER_MODE"):
             app.wsgi_app = DebuggedApplication(app.wsgi_app, evalex=True)
 
         # Set the real IP address into request.remote_addr when behind a proxy.

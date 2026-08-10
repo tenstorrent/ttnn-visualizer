@@ -14,12 +14,15 @@ truthy string ``"false"`` inverts a security setting.
 import logging
 import os
 import re
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
 from ttnn_visualizer.settings import (
     _ENV_ALIASES,
     _ENV_PARSERS,
+    _STRICT_BOOLEANS,
     DefaultConfig,
     ProductionConfig,
     _build_allowed_origins,
@@ -38,6 +41,25 @@ DEV_ARGS = {
 
 def wsgi_environ(host: str, scheme: str = "http", **headers: str) -> dict:
     return {"wsgi.url_scheme": scheme, "HTTP_HOST": host, **headers}
+
+
+def _import_settings_with(**env: str) -> subprocess.CompletedProcess:
+    """Import ``settings`` in a fresh interpreter under the given environment.
+
+    The class body runs once per process and this one imported the module before the
+    first test, so an import-time decision can only be exercised from outside it.
+    ``load_dotenv`` reads the repo's ``.env`` on import, so the variables under test are
+    also cleared from what the child inherits — otherwise a developer checkout that
+    configures one would decide the result.
+    """
+    child_env = {key: value for key, value in os.environ.items() if key not in env}
+
+    return subprocess.run(
+        [sys.executable, "-c", "import ttnn_visualizer.settings"],
+        env={**child_env, **env},
+        capture_output=True,
+        text=True,
+    )
 
 
 def test_defaults_add_the_vite_dev_server_outside_production():
@@ -217,7 +239,10 @@ def test_the_logging_debug_variable_does_not_enable_flask_debug(monkeypatch):
 def test_flask_debug_applies_after_the_class_body_has_been_evaluated(monkeypatch):
     # The other half of the alias: the class body reads ``FLASK_DEBUG`` at import, so
     # the override loop is the only chance for a value that arrives later — a ``.env``
-    # ``create_app()`` loads, say — to reach the attribute it feeds.
+    # ``create_app()`` loads, say — to reach the attribute it feeds. The posture is
+    # pinned because the hosted one refuses debug mode outright; this is the local case
+    # debug mode exists for, and a developer ``.env`` must not decide which is tested.
+    monkeypatch.setattr(DefaultConfig, "SERVER_MODE", False)
     monkeypatch.setenv("FLASK_DEBUG", "true")
 
     config = ProductionConfig()
@@ -421,6 +446,23 @@ def test_every_env_parser_names_a_real_setting():
     assert set(_ENV_PARSERS) <= set(vars(DefaultConfig))
 
 
+def test_every_registry_is_keyed_the_way_it_is_looked_up():
+    # Attribute names, not variable names. An alias is the only case where the two
+    # differ, so a registry keyed by the variable would pass the checks above while
+    # never firing for the one setting that has one.
+    aliased = set(_ENV_ALIASES.values())
+
+    assert not set(_ENV_PARSERS) & aliased
+    assert not _STRICT_BOOLEANS & aliased
+
+
+def test_every_strict_boolean_names_a_real_boolean_setting():
+    # A dead entry here downgrades a refusal to a warning, which for ``SERVER_MODE``
+    # means booting into the local posture on a value nobody could read.
+    for key in _STRICT_BOOLEANS:
+        assert isinstance(getattr(DefaultConfig, key, None), bool), key
+
+
 def test_every_env_alias_names_a_real_setting():
     # Same string-keyed hazard, with a worse failure: a dead alias sends the loop back
     # to the attribute name, which for ``DEBUG`` is the log-level variable.
@@ -449,18 +491,31 @@ def test_a_setting_with_no_coercible_type_is_reported_and_discarded(
 
 
 def test_an_unrecognised_boolean_keeps_the_declared_default(monkeypatch, caplog):
-    # The override path warns rather than raising even for ``SERVER_MODE``, because the
-    # value it keeps came from the strict class-body parse and is therefore already one
-    # we recognise — unlike the class body, there is no unvalidated default to fall to.
-    monkeypatch.setattr(DefaultConfig, "SERVER_MODE", True)
-    monkeypatch.setenv("SERVER_MODE", "Ture")
+    # A feature flag doesn't warrant refusing to boot, so the override path reports the
+    # value and carries on — the counterpart to the strict path below.
+    monkeypatch.setattr(DefaultConfig, "LAUNCH_BROWSER_ON_START", True)
+    monkeypatch.setenv("LAUNCH_BROWSER_ON_START", "Ture")
 
     config = DefaultConfig()
     with caplog.at_level(logging.WARNING):
         config.override_with_env_variables()
 
-    assert config.SERVER_MODE is True
-    assert "SERVER_MODE" in caplog.text
+    assert config.LAUNCH_BROWSER_ON_START is True
+    assert "LAUNCH_BROWSER_ON_START" in caplog.text
+
+
+def test_the_override_path_refuses_a_strict_boolean_it_cannot_read(monkeypatch):
+    # Strictness belongs to the setting, not to the call site, so the loop has to refuse
+    # what the class body would have. The value it would otherwise keep is not
+    # necessarily one the strict parse already vetted: ``create_app`` calls
+    # ``load_dotenv`` long after import, so a ``.env`` can introduce a spelling the
+    # class body never saw — and falling back there means the local posture.
+    monkeypatch.setattr(DefaultConfig, "SERVER_MODE", True)
+    monkeypatch.setenv("SERVER_MODE", "Ture")
+
+    config = DefaultConfig()
+    with pytest.raises(ValueError, match="SERVER_MODE"):
+        config.override_with_env_variables()
 
 
 @pytest.mark.parametrize("env_value, expected", BOOLEAN_VOCABULARY_CASES)
@@ -469,14 +524,14 @@ def test_the_class_body_parses_a_recognised_boolean(env_value, expected, monkeyp
     # reaches it — so it needs its own cover rather than inheriting the loop's.
     monkeypatch.setenv("SERVER_MODE", env_value)
 
-    assert _parse_env_bool("SERVER_MODE", False, strict=True) is expected
+    assert _parse_env_bool("SERVER_MODE", False) is expected
 
 
 @pytest.mark.parametrize("default", [True, False])
 def test_an_unset_boolean_keeps_the_coded_default(default, monkeypatch):
     monkeypatch.delenv("SERVER_MODE", raising=False)
 
-    assert _parse_env_bool("SERVER_MODE", default, strict=True) is default
+    assert _parse_env_bool("SERVER_MODE", default) is default
 
 
 @pytest.mark.parametrize("env_value", ["Ture", "on", "yes", "t", "enabled", ""])
@@ -490,7 +545,42 @@ def test_a_strict_boolean_refuses_to_start_on_an_unrecognised_value(
     monkeypatch.setenv("SERVER_MODE", env_value)
 
     with pytest.raises(ValueError, match="SERVER_MODE"):
-        _parse_env_bool("SERVER_MODE", False, strict=True)
+        _parse_env_bool("SERVER_MODE", False)
+
+
+@pytest.mark.parametrize("env_value", ["Ture", "yes", ""])
+def test_importing_settings_refuses_an_unreadable_server_mode(env_value):
+    # Out of process because the class body is what applies strictness, and pytest has
+    # already imported the module — so nothing in-process can exercise the line that
+    # decides the posture. Without this, deleting ``SERVER_MODE`` from
+    # ``_STRICT_BOOLEANS`` leaves the whole suite green.
+    result = _import_settings_with(SERVER_MODE=env_value)
+
+    assert result.returncode != 0
+    assert "SERVER_MODE" in result.stderr
+
+
+@pytest.mark.parametrize("env_value", sorted(TRUE_VALUES | FALSE_VALUES))
+def test_importing_settings_accepts_the_documented_vocabulary(env_value):
+    # The other half: strictness must refuse a typo without refusing a spelling
+    # ``.env.sample`` tells operators to use.
+    assert _import_settings_with(SERVER_MODE=env_value).returncode == 0
+
+
+def test_server_mode_wins_over_flask_debug(monkeypatch, caplog):
+    # ``Flask.debug`` is not merely verbosity: it suppresses the catch-all error handler
+    # (tracebacks to untrusted callers) and, without websockets, mounts Werkzeug's
+    # interactive console. ``DEBUG`` is one of the two attributes the loop does reach,
+    # so the hosted posture has to override it rather than merely being documented.
+    monkeypatch.setattr(DefaultConfig, "SERVER_MODE", True)
+    monkeypatch.setenv("FLASK_DEBUG", "true")
+
+    config = ProductionConfig()
+    with caplog.at_level(logging.WARNING):
+        config.override_with_env_variables()
+
+    assert config.DEBUG is False
+    assert "SERVER_MODE" in caplog.text
 
 
 @pytest.mark.parametrize("env_value", ["Ture", "on", "yes", "t", "enabled"])
