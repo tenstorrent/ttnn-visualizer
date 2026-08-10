@@ -33,6 +33,11 @@
         background-color: $tt-grey-2;
         border-radius: 4px;
         padding: 8px;
+
+        // Stops large errors overflowing the container
+        max-width: 415px;
+        max-height: 240px;
+        overflow: scroll;
     }
 
     &.status-idle .connection-status-icon {
