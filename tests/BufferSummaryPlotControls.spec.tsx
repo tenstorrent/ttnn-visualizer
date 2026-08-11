@@ -2,7 +2,6 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-import { Classes } from '@blueprintjs/core';
 import { cleanup, render, screen } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
 import React from 'react';
@@ -16,7 +15,6 @@ import {
 } from '../src/store/app';
 import { TAB_IDS } from '../src/definitions/BufferSummary';
 import { TopNAnnotationMode, TopNAnnotationStatus } from '../src/definitions/TopNAnnotations';
-import { TEST_IDS } from '../src/definitions/TestIds';
 import { AtomProvider, AtomProviderInitialValues } from './helpers/atomProvider';
 
 const availabilityMock = vi.fn();
@@ -42,7 +40,7 @@ vi.mock('@blueprintjs/core', async () => {
     };
 });
 
-const renderControls = (overrides: AtomProviderInitialValues = [], lateDeallocationRunCount?: number) =>
+const renderControls = (overrides: AtomProviderInitialValues = []) =>
     render(
         <AtomProvider
             initialValues={[
@@ -53,17 +51,12 @@ const renderControls = (overrides: AtomProviderInitialValues = [], lateDeallocat
                 ...overrides,
             ]}
         >
-            <BufferSummaryPlotControls lateDeallocationRunCount={lateDeallocationRunCount} />
+            <BufferSummaryPlotControls />
         </AtomProvider>,
     );
 
 const getTopNSwitch = (): HTMLInputElement =>
     screen.getByLabelText(/highlight top/i, { selector: 'input[type="checkbox"]' }) as HTMLInputElement;
-
-const getLateDeallocationSwitch = (): HTMLInputElement =>
-    screen.getByLabelText(/mark late tensor deallocations/i, {
-        selector: 'input[type="checkbox"]',
-    }) as HTMLInputElement;
 
 /**
  * Convenience builder for the `statusByMode` map returned by
@@ -304,62 +297,5 @@ describe('BufferSummaryPlotControls top-N (#1517)', () => {
         const cluster = screen.getByTestId('top-n-controls');
         const tooltipHost = cluster.querySelector('[data-testid="tooltip-host"]');
         expect(tooltipHost?.getAttribute('data-content')).toMatch(/doesn't include op-to-op gap/i);
-    });
-});
-
-describe('BufferSummaryPlotControls late deallocation count (#963)', () => {
-    beforeEach(() => {
-        availabilityMock.mockReturnValue({
-            statusByMode: buildStatusByMode(TopNAnnotationStatus.READY, TopNAnnotationStatus.READY),
-            perfAggregatesByOpId: new Map(),
-            l1PressureByOpId: new Map(),
-        });
-    });
-
-    it('shows the count beside the toggle when operations hold stale tensors', () => {
-        renderControls([], 4);
-
-        const count = screen.getByTestId(TEST_IDS.LATE_DEALLOC_COUNT);
-        expect(count).toHaveTextContent('4');
-        expect(count).toHaveClass(Classes.INTENT_WARNING);
-        expect(getLateDeallocationSwitch()).not.toBeDisabled();
-    });
-
-    it('explains the count in a tooltip', () => {
-        renderControls([], 1);
-
-        const count = screen.getByTestId(TEST_IDS.LATE_DEALLOC_COUNT);
-        const tooltipHost = count.closest('[data-testid="tooltip-host"]');
-        expect(tooltipHost?.getAttribute('data-content')).toMatch(
-            /1 operation where a tensor starts being held past its last use/i,
-        );
-    });
-
-    // Following the Tensor List's late-deallocation filter: the count is always
-    // there to be read, and emptiness is signalled by disabling the control
-    // rather than by removing the only thing that could say "nothing here".
-    it('shows a zero count and disables the toggle when nothing is flagged', () => {
-        renderControls([], 0);
-
-        const count = screen.getByTestId(TEST_IDS.LATE_DEALLOC_COUNT);
-        expect(count).toHaveTextContent('0');
-        expect(count).not.toHaveClass(Classes.INTENT_WARNING);
-        expect(getLateDeallocationSwitch()).toBeDisabled();
-    });
-
-    it('explains the zero in the same tooltip, so the disabled switch is not unexplained', () => {
-        renderControls([], 0);
-
-        const count = screen.getByTestId(TEST_IDS.LATE_DEALLOC_COUNT);
-        const tooltipHost = count.closest('[data-testid="tooltip-host"]');
-        expect(tooltipHost?.getAttribute('data-content')).toMatch(
-            /0 operations where a tensor starts being held past its last use/i,
-        );
-    });
-
-    it('hides the count on the DRAM tab, where the overlay toggle is not offered', () => {
-        renderControls([[selectedBufferSummaryTabAtom, TAB_IDS.DRAM]], 4);
-
-        expect(screen.queryByTestId(TEST_IDS.LATE_DEALLOC_COUNT)).toBeNull();
     });
 });
