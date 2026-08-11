@@ -1438,7 +1438,24 @@ def create_performance_files():
     except DataFormatError:
         return response_unprocessable_entity()
 
-    performance_path = str(paths[0].parent)
+    # Anchor the report root on the required device log rather than on upload
+    # order. `save_uploaded_files` returns paths in multipart order and
+    # `construct_dest_path` preserves sub-paths for folder uploads, so a report
+    # carrying a subdirectory (e.g. `npe_viz/`) would otherwise bind the
+    # instance to that subdirectory whenever one of its files happens to arrive
+    # first — after which every performance endpoint 404s or 500s. Browser
+    # `FileList` ordering is not specified, so upload order cannot be trusted.
+    # `validate_files` has already established the device log is in the payload;
+    # the fallback is defensive only.
+    report_root = next(
+        (
+            path.parent
+            for path in paths
+            if path.name in PERFORMANCE_REPORT_REQUIRED_FILES
+        ),
+        paths[0].parent,
+    )
+    performance_path = str(report_root)
 
     instance_id = request.args.get("instanceId")
     update_instance(

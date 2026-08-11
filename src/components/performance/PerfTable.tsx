@@ -223,6 +223,7 @@ const PerformanceTable = ({
                                 onClick={() => navigate(`${ROUTES.NPE}/${manifestRecord.file}`)}
                                 variant={ButtonVariant.MINIMAL}
                                 className='graph-button'
+                                data-testid={TEST_IDS.PERF_NPE_LINK}
                             />
                         </Tooltip>
                     )

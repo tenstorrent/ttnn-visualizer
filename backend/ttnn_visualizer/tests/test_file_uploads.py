@@ -26,6 +26,7 @@ from ttnn_visualizer.file_uploads import (
     resolve_parent_folder_name,
     validate_files,
 )
+from ttnn_visualizer.models import InstanceTable
 
 
 def _faux_file(filename):
@@ -525,6 +526,50 @@ def test_performance_upload_without_tracy_succeeds(app, client, make_report):
     assert (report_dir / "profile_log_device.csv").is_file()
     assert any(p.name.startswith("ops_perf_results") for p in report_dir.iterdir())
     assert not (report_dir / "tracy_profile_log_host.tracy").exists()
+
+
+def test_performance_upload_binds_report_root_when_subdirectory_arrives_first(
+    app, client, make_report
+):
+    """`performance_path` anchors on the device log, not on upload order (#1859).
+
+    A performance report legitimately carries an `npe_viz/` subdirectory, and
+    browser `FileList` ordering is unspecified, so one of its files can lead the
+    multipart body. Deriving the report root from `paths[0].parent` would bind
+    the instance to `npe_viz/`, after which every performance endpoint 404s or
+    500s.
+    """
+    instance_id = make_report()
+    app.config["LOCAL_DATA_DIRECTORY"] = Path(app.config["LOCAL_DATA_DIRECTORY"])
+    app.config["SERVER_MODE"] = False
+
+    perf_root = (
+        Path(app.config["LOCAL_DATA_DIRECTORY"])
+        / app.config["PERFORMANCE_DIRECTORY_NAME"]
+    ).resolve()
+
+    response = client.post(
+        "/api/local/upload/performance",
+        query_string={"instanceId": instance_id},
+        data={
+            "files": [
+                (BytesIO(b"[]"), "perf_run/npe_viz/manifest.json"),
+                (BytesIO(b"csv,bytes\n"), "perf_run/profile_log_device.csv"),
+                (BytesIO(b"op,perf\n"), "perf_run/ops_perf_results_2026.csv"),
+            ],
+        },
+        content_type="multipart/form-data",
+    )
+
+    assert response.status_code == HTTPStatus.OK, response.get_data(as_text=True)
+
+    report_dir = perf_root / "perf_run"
+    assert (report_dir / "npe_viz" / "manifest.json").is_file()
+    assert (report_dir / "profile_log_device.csv").is_file()
+
+    with app.app_context():
+        instance = InstanceTable.query.filter_by(instance_id=instance_id).first()
+        assert Path(instance.performance_path).resolve() == report_dir
 
 
 def test_profiler_upload_rejects_traversal_within_folder(app, client, make_report):

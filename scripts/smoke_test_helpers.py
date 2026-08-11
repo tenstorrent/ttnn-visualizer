@@ -29,6 +29,13 @@ DEMO_REPORT_ZIPS = (
 
 MAIN_TAB_NAMES = ("Operations", "Tensors", "Buffers")
 
+# Purpose-built performance report, small enough to upload on every matrix leg.
+# The demo archives above carry performance reports too, but they are user-facing
+# artifacts with 3.5-36 MB device logs. See the fixture's README.
+PERFORMANCE_FIXTURE_DIR = (
+    REPO_ROOT / "scripts" / "fixtures" / "smoke-performance-report"
+)
+
 SERVER_SETUP_HINT = """\
 Smoke tests require the production server with a built frontend at {base_url}.
 
