@@ -374,10 +374,24 @@ describe('getLateDeallocationSummary', () => {
         );
     });
 
-    it('omits the last-use clause when the consumer is unnamed', () => {
+    // The name comes from the operations list, which can still be loading, but
+    // the id is always resolved and is the half the user acts on. Dropping the
+    // whole clause left the marker saying nothing about the last use.
+    it('names the last consumer by id alone when its name is unknown', () => {
         const summary = getLateDeallocationSummary([buildReport({ id: 7, consumerName: '' })]);
 
-        expect(summary).toBe('Opportunity to deallocate earlier: tensor 7');
+        expect(summary).toBe('Opportunity to deallocate earlier: tensor 7 — last used by 5');
+    });
+
+    it('names each unnamed consumer by id when the tensors disagree on their last use', () => {
+        const summary = getLateDeallocationSummary([
+            buildReport({ id: 7, lastConsumerOperationId: 3, consumerName: '' }),
+            buildReport({ id: 9, lastConsumerOperationId: 11, consumerName: 'ttnn.multiply' }),
+        ]);
+
+        expect(summary).toBe(
+            'Opportunity to deallocate earlier: tensors 7 (last used by 3), 9 (last used by 11 ttnn.multiply)',
+        );
     });
 
     // A coalesced rail dot can stand for every run start in its bucket, so the

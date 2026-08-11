@@ -121,6 +121,7 @@ const BufferSummaryPlotControls = ({ lateDeallocationRunCount = 0 }: BufferSumma
     const isModeSelectDisabled = TOP_N_MODE_ORDER.every((mode) => statusByMode[mode] !== TopNAnnotationStatus.READY);
 
     const hasLateDeallocations = lateDeallocationRunCount > 0;
+    const lateDeallocationCountSummary = getLateDeallocationCountSummary(lateDeallocationRunCount);
 
     return (
         <div className='buffer-summary-controls'>
@@ -141,7 +142,7 @@ const BufferSummaryPlotControls = ({ lateDeallocationRunCount = 0 }: BufferSumma
                         disabled={!hasLateDeallocations}
                     />
                     <Tooltip
-                        content={getLateDeallocationCountSummary(lateDeallocationRunCount)}
+                        content={lateDeallocationCountSummary}
                         placement={PopoverPosition.BOTTOM}
                     >
                         <Tag
@@ -151,6 +152,11 @@ const BufferSummaryPlotControls = ({ lateDeallocationRunCount = 0 }: BufferSumma
                             intent={hasLateDeallocations ? Intent.WARNING : Intent.NONE}
                             minimal
                             round
+                            // The tag renders a bare numeral, and the tooltip
+                            // that explains it only wires `aria-describedby`
+                            // while its popover is open — so without a name of
+                            // its own the count is announced as just a number.
+                            aria-label={lateDeallocationCountSummary}
                             data-testid={TEST_IDS.LATE_DEALLOC_COUNT}
                         >
                             {lateDeallocationRunCount}

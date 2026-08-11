@@ -249,6 +249,17 @@ const getTensorNameList = (names: readonly string[]): string => {
     return `${names.slice(0, MAX_NAMED_TENSORS).join(', ')} and ${names.length - MAX_NAMED_TENSORS} more`;
 };
 
+/**
+ * Identify the operation a tensor was last used by.
+ *
+ * The id always resolves; the name comes from the operations list, which can
+ * still be loading. The id alone is the actionable half — it is what the user
+ * navigates to — so a missing name shortens the clause rather than dropping the
+ * last use from the marker altogether.
+ */
+const getConsumerLabel = ({ lastConsumerOperationId, consumerName }: TensorDeallocationReport): string =>
+    consumerName ? `${lastConsumerOperationId} ${consumerName}` : `${lastConsumerOperationId}`;
+
 /** Tooltip and accessible name for the tensors a marker stands for. */
 export const getLateDeallocationSummary = (tensors: readonly TensorDeallocationReport[]): string => {
     if (tensors.length === 0) {
@@ -262,23 +273,16 @@ export const getLateDeallocationSummary = (tensors: readonly TensorDeallocationR
     );
 
     if (hasSharedLastUse) {
-        const lastUse = firstTensor.consumerName
-            ? ` — last used by ${firstTensor.lastConsumerOperationId} ${firstTensor.consumerName}`
-            : '';
         const tensorIds = getTensorNameList(tensors.map((tensor) => `${tensor.id}`));
 
-        return `${LATE_DEALLOC_OPPORTUNITY_TEXT}: ${noun} ${tensorIds}${lastUse}`;
+        return `${LATE_DEALLOC_OPPORTUNITY_TEXT}: ${noun} ${tensorIds} — last used by ${getConsumerLabel(firstTensor)}`;
     }
 
     // Rows are the unique-buffer slice and a run can re-open after a gap, so
     // tensors reported together needn't share a last use — naming one of them
     // for all would attribute the wrong operation to the rest.
     const namedTensors = getTensorNameList(
-        tensors.map((tensor) =>
-            tensor.consumerName
-                ? `${tensor.id} (last used by ${tensor.lastConsumerOperationId} ${tensor.consumerName})`
-                : `${tensor.id}`,
-        ),
+        tensors.map((tensor) => `${tensor.id} (last used by ${getConsumerLabel(tensor)})`),
     );
 
     return `${LATE_DEALLOC_OPPORTUNITY_TEXT}: ${noun} ${namedTensors}`;

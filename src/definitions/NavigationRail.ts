@@ -19,7 +19,8 @@ const RAIL_DOT_SIZE = 20;
  * Past this the dots overlap, and the ones underneath can't be clicked at all —
  * worse than being merged into a neighbour, which at least keeps their tensors
  * in a tooltip. Rails whose findings are bounded only by the report coalesce
- * down to this; top-N is already bounded by `TOP_N_COUNT_MAX`.
+ * down to this; the top-N rail instead caps its own input at it, because a
+ * merged dot would have to drop ranks rather than pool them (`TOP_N_COUNT_MAX`).
  */
 export const RAIL_MAX_DOTS = Math.floor(RAIL_HEIGHT / RAIL_DOT_SIZE);
 

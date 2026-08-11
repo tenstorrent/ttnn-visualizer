@@ -20,7 +20,9 @@
         // count tag out of line with the label.
         margin-bottom: 10px;
 
-        > .bp6-control {
+        // `GlobalSwitch` stamps this on the Blueprint Switch root, so the
+        // margin is reset without reaching for Blueprint's own classname.
+        > .global-switch {
             margin-bottom: 0;
         }
     }
@@ -48,7 +50,7 @@
             align-items: center;
         }
 
-        // Two-digit ceiling (TOP_N_COUNT_MAX = 50). Width tuned so the
+        // Two-digit ceiling (`TOP_N_COUNT_MAX`). Width tuned so the
         // stepper arrows on the right of the input have enough margin
         // away from the adjacent "ops by" label — previously the arrows
         // ran flush against the label at the wrap boundary.

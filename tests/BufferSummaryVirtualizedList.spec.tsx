@@ -427,6 +427,55 @@ describe('BufferSummaryVirtualizedList', () => {
         });
     });
 
+    // The glyphs lining up in one scannable column is the point of a marker that
+    // repeats down dozens of rows, and the stylesheet delivers it by reserving
+    // the rank slot on rows that lack a rank. That rule needs all three of these
+    // classes at once, and none of them shows up in any other assertion.
+    describe('gutter column alignment', () => {
+        const getChart = (container: HTMLElement) => container.querySelector<HTMLElement>('.buffer-summary-chart');
+        const getRow = (container: HTMLElement) =>
+            container.querySelector<HTMLElement>('.buffer-summary-plot-container');
+
+        it('marks a hatched row that has no rank, so the stylesheet can reserve the rank slot', () => {
+            // Row 0 (op 1) is hatched but unranked; op 2 carries the annotation,
+            // so the rank column is in play without this row occupying it.
+            const annotations = new Map<number, RankedAnnotation>([
+                [2, buildAnnotation({ opId: 2, rowIndex: 1, rank: 1 })],
+            ]);
+            const { container } = renderVirtualizedList(false, {
+                topNAnnotationsByOpId: annotations,
+                getTensorDeallocationReport: () => [buildTensorReport({ id: 7 })],
+            });
+
+            expect(getChart(container)).toHaveClass('has-rank-column');
+            expect(getRow(container)).toHaveClass('has-late-dealloc');
+            expect(getRow(container)).not.toHaveClass('has-top-n');
+        });
+
+        it('marks a row carrying both markers, which needs no reserved slot', () => {
+            const annotations = new Map<number, RankedAnnotation>([
+                [1, buildAnnotation({ opId: 1, rowIndex: 0, rank: 1 })],
+            ]);
+            const { container } = renderVirtualizedList(false, {
+                topNAnnotationsByOpId: annotations,
+                getTensorDeallocationReport: () => [buildTensorReport({ id: 7 })],
+            });
+
+            expect(getRow(container)).toHaveClass('has-late-dealloc', 'has-top-n');
+        });
+
+        // Without a rank column there is no column to line up with, and every row
+        // would be giving up label width to a slot nothing can occupy.
+        it('claims no rank column when the top-N rail is absent', () => {
+            const { container } = renderVirtualizedList(false, {
+                getTensorDeallocationReport: () => [buildTensorReport({ id: 7 })],
+            });
+
+            expect(getChart(container)).not.toHaveClass('has-rank-column');
+            expect(getRow(container)).toHaveClass('has-late-dealloc');
+        });
+    });
+
     describe('late deallocation rail (#963)', () => {
         it('forwards the run count to the controls so the toggle can advertise it', () => {
             renderVirtualizedList(false, { lateDeallocationRunCount: 4 });

@@ -3,7 +3,13 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import { describe, expect, it } from 'vitest';
-import { RankedAnnotation, TOP_N_MODE_LABEL, TopNAnnotationMode } from '../src/definitions/TopNAnnotations';
+import {
+    RankedAnnotation,
+    TOP_N_COUNT_MAX,
+    TOP_N_MODE_LABEL,
+    TopNAnnotationMode,
+} from '../src/definitions/TopNAnnotations';
+import { RAIL_MAX_DOTS } from '../src/definitions/NavigationRail';
 import { selectTopNAnnotations } from '../src/functions/topNAnnotations';
 import { OpPerfAggregate } from '../src/functions/perfOverlay';
 import { L1PressureMetrics } from '../src/model/L1Pressure';
@@ -399,6 +405,31 @@ describe('selectTopNAnnotations', () => {
                 perfAggregatesByOpId: aggregates,
             });
             expect(result.size).toBe(2);
+        });
+
+        // The count is persisted, so a value stored before the ceiling was tied
+        // to the rail's capacity outlives the change to it — and the rail plots
+        // ranks, which can't be merged into a neighbouring dot the way the
+        // late-deallocation rail pools tensors.
+        it('draws no more dots than the rail can hold, whatever count arrives', () => {
+            const candidateCount = RAIL_MAX_DOTS + 5;
+            const operations = Array.from({ length: candidateCount }, (_unused, index) => op(index + 1));
+            const aggregates = new Map<number, OpPerfAggregate>(
+                operations.map((operation) => [operation.id, perfAggregate(operation.id, operation.id * 100)]),
+            );
+
+            const result = selectTopNAnnotations({
+                mode: TopNAnnotationMode.PERF_TIME,
+                n: candidateCount,
+                operations,
+                perfAggregatesByOpId: aggregates,
+            });
+
+            expect(result.size).toBe(RAIL_MAX_DOTS);
+        });
+
+        it('offers no count the rail cannot draw', () => {
+            expect(TOP_N_COUNT_MAX).toBeLessThanOrEqual(RAIL_MAX_DOTS);
         });
     });
 

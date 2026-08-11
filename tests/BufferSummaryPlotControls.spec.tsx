@@ -325,6 +325,18 @@ describe('BufferSummaryPlotControls late deallocation count (#963)', () => {
         expect(getLateDeallocationSwitch()).not.toBeDisabled();
     });
 
+    // The tooltip only wires `aria-describedby` while its popover is open, so
+    // the tag needs a name of its own or a screen reader announces a bare
+    // numeral — the two markers this count belongs with both name themselves.
+    it('names the count for a screen reader, not only on hover', () => {
+        renderControls([], 4);
+
+        expect(screen.getByTestId(TEST_IDS.LATE_DEALLOC_COUNT)).toHaveAttribute(
+            'aria-label',
+            '4 operations where a tensor starts being held past its last use',
+        );
+    });
+
     it('explains the count in a tooltip', () => {
         renderControls([], 1);
 
