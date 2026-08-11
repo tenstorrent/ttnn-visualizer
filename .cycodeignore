@@ -3,3 +3,13 @@
 # web-facing input — and self-aborts under SERVER_MODE. Excluded from Cycode
 # SAST to avoid a false-positive "unsanitized user input in file path" finding.
 devtools/npe_render_probe.py
+
+# Local-only developer tool that rebuilds the smoke test's performance fixture
+# from a demo report. Same false-positive class as above: `--source` and
+# `--output` are argparse arguments an engineer types on their own machine, not
+# web-facing input. The real risks were fixed rather than suppressed —
+# `--output` is resolved and confined to `scripts/fixtures/` before anything is
+# deleted, and npeviz filenames read out of the source `manifest.json` are
+# collapsed to basenames — but the taint analysis still flags argparse reaching
+# a path join.
+scripts/generate_smoke_perf_fixture.py

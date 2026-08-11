@@ -19,7 +19,21 @@ uv run python scripts/generate_smoke_perf_fixture.py \
     --output scripts/fixtures/smoke-performance-report
 ```
 
-Re-running that command against the same source reproduces this directory.
+Re-running that command against the same source reproduces this directory
+byte-for-byte. To check that without overwriting the fixture, generate a sibling
+and diff it:
+
+```
+uv run python scripts/generate_smoke_perf_fixture.py \
+    --source demo-reports/n300-llama.zip \
+    --output scripts/fixtures/regen-check
+diff -r --exclude=README.md \
+    scripts/fixtures/smoke-performance-report scripts/fixtures/regen-check
+rm -rf scripts/fixtures/regen-check
+```
+
+`--output` is deleted and rewritten, so the script only accepts a directory
+inside `scripts/fixtures/` — a typo can't take a real tree with it.
 
 ## What matters if you regenerate it
 

@@ -45,6 +45,12 @@ from typing import Optional
 
 logger = logging.getLogger(__name__)
 
+REPO_ROOT = Path(__file__).resolve().parent.parent
+# The script rewrites its output directory from scratch, so `--output` is
+# confined to the fixtures tree: it names which fixture to build, not an
+# arbitrary location to delete.
+FIXTURE_ROOT = REPO_ROOT / "scripts" / "fixtures"
+
 DEVICE_LOG_NAME = "profile_log_device.csv"
 OPS_PERF_PREFIX = "ops_perf_results"
 OPS_PERF_OUTPUT_NAME = "ops_perf_results.csv"
@@ -63,6 +69,25 @@ DEFAULT_NPE_ENTRIES = 1
 # the NPE view renders an empty chip. Above it, keep the smallest available.
 MIN_USEFUL_NPE_BYTES = 512
 MAX_NPE_BYTES = 8_192
+
+
+def _resolve_output_dir(output: Path) -> Path:
+    """Resolve `--output` and require it to name a directory under the fixtures tree.
+
+    `build_fixture` deletes and recreates whatever it is handed, so an
+    unconstrained path turns a typo into data loss. Resolving first collapses
+    `..` segments and symlinks, and the containment check keeps the destination
+    inside `scripts/fixtures/`. The fixtures root itself is rejected so a bare
+    `--output scripts/fixtures` cannot wipe every fixture at once.
+    """
+    resolved = output.expanduser().resolve()
+
+    if resolved == FIXTURE_ROOT or not resolved.is_relative_to(FIXTURE_ROOT):
+        raise ValueError(
+            f"--output must name a directory inside {FIXTURE_ROOT}, got {resolved}"
+        )
+
+    return resolved
 
 
 def _find_source_report(source: Path, work_dir: Path) -> Path:
@@ -141,6 +166,12 @@ def _read_source_manifest(source_report: Path) -> dict[int, str]:
     The real manifests are hand-adjacent artifacts and have carried typo'd keys
     (`_global_call_count`), so entries that don't parse are skipped rather than
     failing the build — the rebuilt manifest is schema-clean regardless.
+
+    `file` is data read out of the source report rather than a value this script
+    chose, so it is collapsed to a bare basename before it ever reaches a path
+    join. Without that, a report carrying `"file": "../../../etc/passwd"` would
+    steer the copy below out of the report directory. Same reasoning as
+    `extract_npe_name` in `backend/ttnn_visualizer/file_uploads.py`.
     """
     manifest_path = source_report / NPE_FOLDER / NPE_MANIFEST_NAME
     if not manifest_path.is_file():
@@ -152,8 +183,17 @@ def _read_source_manifest(source_report: Path) -> dict[int, str]:
     for entry in entries:
         call_count = entry.get("global_call_count")
         file_name = entry.get("file")
-        if isinstance(call_count, int) and isinstance(file_name, str):
-            call_counts_by_file[call_count] = file_name
+        if not isinstance(call_count, int) or not isinstance(file_name, str):
+            continue
+
+        safe_name = Path(file_name).name
+        if not safe_name or safe_name != file_name:
+            logger.warning(
+                "Skipping manifest entry with a non-basename file: %r", file_name
+            )
+            continue
+
+        call_counts_by_file[call_count] = safe_name
 
     return call_counts_by_file
 
@@ -227,6 +267,8 @@ def build_fixture(
     npe_call_counts: list[int],
     npe_entries: int,
 ) -> None:
+    output = _resolve_output_dir(output)
+
     with tempfile.TemporaryDirectory(prefix="smoke-perf-fixture-") as temp_dir:
         source_report = _find_source_report(source, Path(temp_dir))
 
@@ -307,7 +349,10 @@ def main(argv: Optional[list[str]] = None) -> int:
         "--output",
         type=Path,
         required=True,
-        help="Fixture directory to (re)create",
+        help=(
+            "Fixture directory to (re)create. Must be inside scripts/fixtures/ — "
+            "it is deleted and rewritten"
+        ),
     )
     parser.add_argument("--device-log-rows", type=int, default=DEFAULT_DEVICE_LOG_ROWS)
     parser.add_argument("--ops-rows", type=int, default=DEFAULT_OPS_ROWS)
