@@ -995,13 +995,31 @@ def get_profiler_data_list(instance: Instance):
     return Response(orjson.dumps(valid_dirs), mimetype="application/json")
 
 
+_DIRECT_REPORT_MODE_DELETE_REFUSAL = (
+    "Reports read from TT_METAL_HOME are not managed by TT-NN Visualizer "
+    "and cannot be deleted."
+)
+
+
+def _direct_report_mode_refusal():
+    """Refuse a delete when the paired listing reads the TT-Metal tree.
+
+    In direct-report mode ``GET /profiler`` and ``GET /performance`` list
+    ``$TT_METAL_HOME/generated/...``, which the app neither created nor manages. Saying so
+    is more honest than a 404 against a local data directory the client never saw listed.
+    """
+    if create_path_resolver(current_app).is_direct_report_mode:
+        return response_forbidden(_DIRECT_REPORT_MODE_DELETE_REFUSAL)
+    return None
+
+
 def _report_directory_to_delete(directory_name_key: str, report_name: str) -> Path:
     """Resolve a delete request to one report directory under the local data directory.
 
-    The listings these deletes are paired with (``GET /profiler``, ``GET /performance``)
-    only ever read the local data directory, so that is the only tree a delete may
-    reach, and only one report inside it — anything wider removes reports the client
-    never listed.
+    Direct-report mode is refused before this runs, so the listings these deletes are
+    paired with (``GET /profiler``, ``GET /performance``) only ever read the local data
+    directory, making that the only tree a delete may reach — and only one report inside
+    it, since anything wider removes reports the client never listed.
     """
     return (
         Path(current_app.config["LOCAL_DATA_DIRECTORY"])
@@ -1014,6 +1032,10 @@ def _report_directory_to_delete(directory_name_key: str, report_name: str) -> Pa
 @with_instance
 @local_only
 def delete_profiler_report(profiler_name, instance: Instance):
+    refusal = _direct_report_mode_refusal()
+    if refusal is not None:
+        return refusal
+
     if not profiler_name:
         return response_bad_request("Report name is required.")
 
@@ -1126,6 +1148,10 @@ def get_profiler_performance_data(instance: Instance):
 @with_instance
 @local_only
 def delete_performance_report(performance_name, instance: Instance):
+    refusal = _direct_report_mode_refusal()
+    if refusal is not None:
+        return refusal
+
     if not performance_name:
         return response_bad_request("Report name is required.")
 

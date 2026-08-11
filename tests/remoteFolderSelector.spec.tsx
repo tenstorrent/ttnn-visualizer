@@ -863,7 +863,9 @@ it('does not activate remote report when a local report is chosen mid-sync', asy
     // Activate a local performance report while the remote sync is still in flight.
     getAllButtonsWithText(SELECT_LOCAL_REPORT_TEXT)[1].click();
     await waitFor(testForPortal, WAIT_FOR_OPTIONS);
-    screen.getByText(new RegExp(localPerfFolder.path, 'i')).click();
+    // Both selectors are mounted here with a sync in flight, so testForPortal can be satisfied by
+    // a portal other than this menu — wait for the row itself rather than querying it synchronously.
+    (await screen.findByText(new RegExp(localPerfFolder.path, 'i'), undefined, WAIT_FOR_OPTIONS)).click();
 
     await waitFor(
         () => expect(screen.getByTestId(TEST_IDS.TOAST_FILENAME).textContent).to.contain(localPerfFolder.reportName),

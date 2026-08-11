@@ -83,6 +83,9 @@ const directoryErrorStatus: ConnectionStatus = {
     message: 'Selected directory does not contain a valid report',
 };
 
+const MEMORY_REPORT_DELETE_FAILED_TITLE = 'Unable to delete memory report';
+const PERFORMANCE_REPORT_DELETE_FAILED_TITLE = 'Unable to delete performance report';
+
 const LocalFolderOptions = () => {
     const queryClient = useQueryClient();
     const [profilerReportLocation, setProfilerReportLocation] = useAtom(profilerReportLocationAtom);
@@ -249,7 +252,13 @@ const LocalFolderOptions = () => {
     };
 
     const handleDeleteProfiler = async (folder: ReportFolder) => {
-        await deleteProfiler(folder.path);
+        try {
+            await deleteProfiler(folder.path);
+        } catch (err: unknown) {
+            createToastNotification(MEMORY_REPORT_DELETE_FAILED_TITLE, getResponseError(err), ToastType.ERROR);
+            return;
+        }
+
         await queryClient.invalidateQueries({ queryKey: [PROFILER_FOLDER_QUERY_KEY] });
 
         createToastNotification('Memory report deleted', folder.reportName, ToastType.INFO);
@@ -275,7 +284,13 @@ const LocalFolderOptions = () => {
     };
 
     const handleDeletePerformance = async (folder: ReportFolder) => {
-        await deletePerformance(folder.path);
+        try {
+            await deletePerformance(folder.path);
+        } catch (err: unknown) {
+            createToastNotification(PERFORMANCE_REPORT_DELETE_FAILED_TITLE, getResponseError(err), ToastType.ERROR);
+            return;
+        }
+
         await queryClient.invalidateQueries({ queryKey: [PERFORMANCE_FOLDER_QUERY_KEY] });
 
         createToastNotification(`Performance report deleted`, folder.reportName, ToastType.INFO);

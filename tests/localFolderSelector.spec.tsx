@@ -28,9 +28,10 @@ const mockPerfFolderList = [...mockPerformanceReportFolders];
 
 // The folder list is the mocked query's only source of truth, so deleting has to remove from it
 // for anything downstream of the delete to be observable.
-const { mockUpdateInstance, mockDeleteProfiler, mockProfilerFolders } = vi.hoisted(() => ({
+const { mockUpdateInstance, mockDeleteProfiler, mockDeletePerformance, mockProfilerFolders } = vi.hoisted(() => ({
     mockUpdateInstance: vi.fn(),
     mockDeleteProfiler: vi.fn(),
+    mockDeletePerformance: vi.fn(),
     mockProfilerFolders: [] as { path: string; reportName: string }[],
 }));
 
@@ -71,7 +72,7 @@ vi.mock('../src/hooks/useAPI', async () => {
         useReportFolderList: () => ({ data: mockProfilerFolders }),
         updateInstance: (...args: unknown[]) => mockUpdateInstance(...args),
         deleteProfiler: (...args: unknown[]) => mockDeleteProfiler(...args),
-        deletePerformance: vi.fn().mockResolvedValue({ success: true }),
+        deletePerformance: (...args: unknown[]) => mockDeletePerformance(...args),
     };
 });
 
@@ -107,6 +108,8 @@ afterEach(() => {
 beforeEach(() => {
     // Restore the list in place: the mock factory closed over this array reference.
     mockProfilerFolders.splice(0, mockProfilerFolders.length, ...mockProfilerFolderList);
+    mockDeletePerformance.mockReset();
+    mockDeletePerformance.mockResolvedValue({ success: true });
     mockDeleteProfiler.mockReset();
     mockDeleteProfiler.mockImplementation((path: string) => {
         const folderIndex = mockProfilerFolders.findIndex((folder) => folder.path === path);
@@ -438,4 +441,78 @@ it('deletes memory report and updates state', async () => {
     mockProfilerFolders.forEach((folder) => {
         expect(menuRows.some((row) => row?.includes(`/${folder.path}`) && row?.includes(folder.reportName))).toBe(true);
     });
+});
+
+// What the backend returns when the report belongs to the TT-Metal tree, which is the failure
+// that motivated surfacing these at all.
+const DELETE_REFUSAL_MESSAGE =
+    'Reports read from TT_METAL_HOME are not managed by TT-NN Visualizer and cannot be deleted.';
+
+/** Opens the picker, deletes the named report through the confirmation, and waits for the toast. */
+async function confirmDeleteOf(select: HTMLElement, folder: ReportFolder) {
+    select.click();
+    await waitFor(testForPortal, WAIT_FOR_OPTIONS);
+
+    fireEvent.click(screen.getByLabelText(getDeleteActionLabel(ManagedEntity.REPORT, folder.reportName)));
+
+    await waitFor(() => expect(document.querySelector('[role="alertdialog"]')).not.toBe(null), WAIT_FOR_OPTIONS);
+
+    fireEvent.click(screen.getByRole('button', { name: CONFIRM_DELETE_LABEL }));
+
+    // The failure is what the user sees — without this the delete is silent.
+    await waitFor(
+        () => expect(screen.getByTestId(TEST_IDS.TOAST_FILENAME).textContent).to.contain(DELETE_REFUSAL_MESSAGE),
+        WAIT_FOR_OPTIONS,
+    );
+}
+
+it('surfaces an error toast and keeps the report when the memory delete fails', async () => {
+    mockDeleteProfiler.mockRejectedValueOnce(new Error(DELETE_REFUSAL_MESSAGE));
+
+    render(
+        <TestProviders>
+            <LocalFolderSelector />
+        </TestProviders>,
+    );
+    const deletedFolder = mockProfilerFolderList[0];
+    const profilerSelect = getAllButtonsWithText(SELECT_REPORT_TEXT)[0];
+
+    await confirmDeleteOf(profilerSelect, deletedFolder);
+
+    expect(screen.getByText('Unable to delete memory report')).not.toBeNull();
+
+    profilerSelect.click();
+    await waitFor(testForPortal, WAIT_FOR_OPTIONS);
+
+    const menuRows = screen.getAllByTestId(TEST_IDS.FOLDER_PICKER_ROW).map((row) => row.textContent);
+
+    expect(menuRows).toHaveLength(mockProfilerFolderList.length);
+    expect(menuRows.some((row) => row?.includes(`/${deletedFolder.path}`))).toBe(true);
+});
+
+it('surfaces an error toast and keeps the report when the performance delete fails', async () => {
+    mockDeletePerformance.mockRejectedValueOnce(new Error(DELETE_REFUSAL_MESSAGE));
+
+    render(
+        <TestProviders>
+            <LocalFolderSelector />
+        </TestProviders>,
+    );
+    const deletedFolder = mockPerfFolderList[0];
+    // An earlier test uploads into this list, so read its length rather than assuming the fixture's.
+    const listedCount = mockPerfFolderList.length;
+    const performanceSelect = getAllButtonsWithText(SELECT_REPORT_TEXT)[1];
+
+    await confirmDeleteOf(performanceSelect, deletedFolder);
+
+    expect(screen.getByText('Unable to delete performance report')).not.toBeNull();
+    expect(mockDeletePerformance).toHaveBeenCalledWith(deletedFolder.path);
+
+    performanceSelect.click();
+    await waitFor(testForPortal, WAIT_FOR_OPTIONS);
+
+    const menuRows = screen.getAllByTestId(TEST_IDS.FOLDER_PICKER_ROW).map((row) => row.textContent);
+
+    expect(menuRows).toHaveLength(listedCount);
+    expect(menuRows.some((row) => row?.includes(`/${deletedFolder.path}`))).toBe(true);
 });
