@@ -302,7 +302,7 @@ function BufferSummaryVirtualizedList({
                                             data-testid={`${TEST_IDS.LATE_DEALLOC_BADGE}-${operation.id}`}
                                         >
                                             <Icon
-                                                icon={IconNames.WARNING_SIGN}
+                                                icon={IconNames.OUTDATED}
                                                 size={10}
                                             />
                                         </span>
@@ -389,7 +389,7 @@ function BufferSummaryVirtualizedList({
                                                 data-testid={`${TEST_IDS.LATE_DEALLOC_RAIL_DOT}-${runStart.opId}`}
                                             >
                                                 <Icon
-                                                    icon={IconNames.WARNING_SIGN}
+                                                    icon={IconNames.OUTDATED}
                                                     size={10}
                                                 />
                                             </button>
