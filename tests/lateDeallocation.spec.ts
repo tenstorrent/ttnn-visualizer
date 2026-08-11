@@ -4,21 +4,16 @@
 
 import { describe, expect, it } from 'vitest';
 import {
+    LastValidConsumer,
     NO_CONSUMER_OPERATION_ID,
+    coalesceLateDeallocationRunStarts,
     getLastValidConsumer,
     getLateDeallocationCountSummary,
-    getLateDeallocationRunStartSummary,
+    getLateDeallocationReport,
+    getLateDeallocationSummary,
     selectLateDeallocationRunStarts,
 } from '../src/functions/lateDeallocation';
-import { TensorDeallocationReport } from '../src/model/BufferSummary';
-
-const buildReport = (overrides: Partial<TensorDeallocationReport> = {}): TensorDeallocationReport => ({
-    id: overrides.id ?? 1,
-    address: overrides.address ?? 1024,
-    lastOperationId: overrides.lastOperationId ?? 10,
-    lastConsumerOperationId: overrides.lastConsumerOperationId ?? 5,
-    consumerName: overrides.consumerName ?? 'ttnn.add',
-});
+import { buildTensorDeallocationReport as buildReport } from './helpers/lateDeallocationFixtures';
 
 const buildOperation = (id: number) => ({ id });
 
@@ -82,6 +77,100 @@ describe('getLastValidConsumer', () => {
         getLastValidConsumer(consumers, new Map([[10, 'ttnn.add']]));
 
         expect(consumers).toEqual([10, 2, 7]);
+    });
+});
+
+describe('getLateDeallocationReport', () => {
+    const operationNamesById = new Map([
+        [3, 'ttnn.add'],
+        [8, 'ttnn.deallocate'],
+    ]);
+
+    it('reports a tensor still allocated after its last real use', () => {
+        expect(
+            getLateDeallocationReport(
+                { tensorId: 7, address: 2048, operationId: 6, consumers: [3] },
+                operationNamesById,
+            ),
+        ).toEqual({
+            id: 7,
+            address: 2048,
+            lastOperationId: 6,
+            lastConsumerOperationId: 3,
+            consumerName: 'ttnn.add',
+        });
+    });
+
+    // Regression: a tensor consumed only by deallocates has no last *use* to be
+    // late relative to. Without the sentinel guard it was reported as
+    // late-deallocated with its last consumer rendered as `-1`.
+    it('reports nothing for a tensor whose only consumers are deallocates', () => {
+        expect(
+            getLateDeallocationReport(
+                { tensorId: 7, address: 2048, operationId: 20, consumers: [8] },
+                operationNamesById,
+            ),
+        ).toBeNull();
+    });
+
+    it('reports nothing while the tensor is still in use', () => {
+        expect(
+            getLateDeallocationReport(
+                { tensorId: 7, address: 2048, operationId: 3, consumers: [3] },
+                operationNamesById,
+            ),
+        ).toBeNull();
+        expect(
+            getLateDeallocationReport(
+                { tensorId: 7, address: 2048, operationId: 2, consumers: [3] },
+                operationNamesById,
+            ),
+        ).toBeNull();
+    });
+
+    it('reports nothing for a tensor with no id or no consumers', () => {
+        expect(
+            getLateDeallocationReport(
+                { tensorId: null, address: 2048, operationId: 6, consumers: [3] },
+                operationNamesById,
+            ),
+        ).toBeNull();
+        expect(
+            getLateDeallocationReport(
+                { tensorId: 7, address: 2048, operationId: 6, consumers: [] },
+                operationNamesById,
+            ),
+        ).toBeNull();
+        expect(
+            getLateDeallocationReport(
+                { tensorId: 7, address: 2048, operationId: 6, consumers: null },
+                operationNamesById,
+            ),
+        ).toBeNull();
+    });
+
+    it('names an unknown consumer operation with an empty string rather than dropping the report', () => {
+        expect(
+            getLateDeallocationReport({ tensorId: 7, address: 2048, operationId: 6, consumers: [4] }, new Map()),
+        ).toMatchObject({ lastConsumerOperationId: 4, consumerName: '' });
+    });
+
+    it('resolves each tensor once, reusing the cache across the operations it spans', () => {
+        const lastConsumerByTensorId = new Map<number, LastValidConsumer>();
+        const candidate = { tensorId: 7, address: 2048, operationId: 6, consumers: [3] };
+
+        getLateDeallocationReport(candidate, operationNamesById, lastConsumerByTensorId);
+
+        expect(lastConsumerByTensorId.get(7)).toEqual({ lastConsumerOperationId: 3, lastConsumerName: 'ttnn.add' });
+
+        // A seeded entry proves the cache is consulted rather than recomputed:
+        // the same consumers now resolve to the cached answer.
+        lastConsumerByTensorId.set(7, { lastConsumerOperationId: 2, lastConsumerName: 'ttnn.cached' });
+
+        expect(getLateDeallocationReport(candidate, operationNamesById, lastConsumerByTensorId)).toMatchObject({
+            lastConsumerOperationId: 2,
+            consumerName: 'ttnn.cached',
+        });
     });
 });
 
@@ -181,46 +270,100 @@ describe('selectLateDeallocationRunStarts', () => {
     });
 });
 
-describe('getLateDeallocationRunStartSummary', () => {
+describe('getLateDeallocationSummary', () => {
     it('names the tensor and its last consumer', () => {
-        const summary = getLateDeallocationRunStartSummary({
-            opId: 5,
-            rowIndex: 4,
-            tensors: [buildReport({ id: 7, lastConsumerOperationId: 3, consumerName: 'ttnn.add' })],
-        });
+        const summary = getLateDeallocationSummary([
+            buildReport({ id: 7, lastConsumerOperationId: 3, consumerName: 'ttnn.add' }),
+        ]);
 
         expect(summary).toContain('Opportunity to deallocate earlier');
         expect(summary).toContain('tensor 7');
         expect(summary).toContain('3 ttnn.add');
     });
 
-    it('lists every tensor when several runs start on one row', () => {
-        const summary = getLateDeallocationRunStartSummary({
-            opId: 5,
-            rowIndex: 4,
-            tensors: [buildReport({ id: 7 }), buildReport({ id: 9 })],
-        });
+    it('names the shared last consumer once when the tensors agree on it', () => {
+        const summary = getLateDeallocationSummary([buildReport({ id: 7 }), buildReport({ id: 9 })]);
 
-        expect(summary).toContain('tensors 7, 9');
+        expect(summary).toBe('Opportunity to deallocate earlier: tensors 7, 9 — last used by 5 ttnn.add');
+    });
+
+    // Rows are the unique-buffer slice and a run can re-open after a gap, so
+    // tensors reported on one row needn't share a last use. Naming the first
+    // one's consumer for all of them attributed the wrong operation.
+    it('names each tensor separately when their last consumers differ', () => {
+        const summary = getLateDeallocationSummary([
+            buildReport({ id: 7, lastConsumerOperationId: 3, consumerName: 'ttnn.add' }),
+            buildReport({ id: 9, lastConsumerOperationId: 11, consumerName: 'ttnn.multiply' }),
+        ]);
+
+        expect(summary).toBe(
+            'Opportunity to deallocate earlier: tensors 7 (last used by 3 ttnn.add), 9 (last used by 11 ttnn.multiply)',
+        );
     });
 
     it('omits the last-use clause when the consumer is unnamed', () => {
-        const summary = getLateDeallocationRunStartSummary({
-            opId: 5,
-            rowIndex: 4,
-            tensors: [buildReport({ id: 7, consumerName: '' })],
-        });
+        const summary = getLateDeallocationSummary([buildReport({ id: 7, consumerName: '' })]);
 
         expect(summary).toBe('Opportunity to deallocate earlier: tensor 7');
     });
 });
 
 describe('getLateDeallocationCountSummary', () => {
-    it('uses the singular verb for one operation', () => {
-        expect(getLateDeallocationCountSummary(1)).toBe('1 operation holds a tensor that is no longer used');
+    // The count counts rows where a tensor *becomes* stale, while the overlay
+    // hatches every row that keeps holding it — copy about operations
+    // "holding" a tensor read as a contradiction beside dozens of hatched rows.
+    it('uses the singular noun for one operation', () => {
+        expect(getLateDeallocationCountSummary(1)).toBe(
+            '1 operation where a tensor starts being held past its last use',
+        );
     });
 
-    it('uses the plural verb for several operations', () => {
-        expect(getLateDeallocationCountSummary(4)).toBe('4 operations hold a tensor that is no longer used');
+    it('uses the plural noun for several operations', () => {
+        expect(getLateDeallocationCountSummary(4)).toBe(
+            '4 operations where a tensor starts being held past its last use',
+        );
+    });
+});
+
+describe('coalesceLateDeallocationRunStarts', () => {
+    const buildRunStart = (opId: number, rowIndex: number, tensorId: number) => ({
+        opId,
+        rowIndex,
+        tensors: [buildReport({ id: tensorId })],
+    });
+
+    it('leaves run starts alone when every row has a dot of its own', () => {
+        const runStarts = [buildRunStart(1, 0, 1), buildRunStart(3, 2, 2)];
+
+        expect(
+            coalesceLateDeallocationRunStarts({ runStarts, rowCount: 4, maxDots: 300 }).map(
+                (runStart) => runStart.opId,
+            ),
+        ).toEqual([1, 3]);
+    });
+
+    it('merges run starts that would share a sliver of the rail, keeping every tensor', () => {
+        const runStarts = [buildRunStart(1, 0, 1), buildRunStart(2, 1, 2), buildRunStart(50, 49, 3)];
+
+        const coalesced = coalesceLateDeallocationRunStarts({ runStarts, rowCount: 100, maxDots: 2 });
+
+        // Two buckets: rows 0–49 and rows 50–99.
+        expect(coalesced).toHaveLength(1);
+        expect(coalesced[0]).toMatchObject({ opId: 1, rowIndex: 0 });
+        expect(coalesced[0].tensors.map((tensor) => tensor.id)).toEqual([1, 2, 3]);
+    });
+
+    it('does not mutate the run starts it was given', () => {
+        const runStarts = [buildRunStart(1, 0, 1), buildRunStart(2, 1, 2)];
+
+        coalesceLateDeallocationRunStarts({ runStarts, rowCount: 100, maxDots: 2 });
+
+        expect(runStarts[0].tensors.map((tensor) => tensor.id)).toEqual([1]);
+    });
+
+    it('returns nothing when there are no rows to place dots against', () => {
+        expect(
+            coalesceLateDeallocationRunStarts({ runStarts: [buildRunStart(1, 0, 1)], rowCount: 0, maxDots: 300 }),
+        ).toEqual([]);
     });
 });

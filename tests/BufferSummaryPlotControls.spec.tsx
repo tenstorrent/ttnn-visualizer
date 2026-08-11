@@ -322,7 +322,9 @@ describe('BufferSummaryPlotControls late deallocation count (#963)', () => {
 
         const count = screen.getByTestId(TEST_IDS.LATE_DEALLOC_COUNT);
         const tooltipHost = count.closest('[data-testid="tooltip-host"]');
-        expect(tooltipHost?.getAttribute('data-content')).toMatch(/1 operation holds a tensor that is no longer used/i);
+        expect(tooltipHost?.getAttribute('data-content')).toMatch(
+            /1 operation where a tensor starts being held past its last use/i,
+        );
     });
 
     it('hides the count when nothing is flagged, so the toggle does not promise a finding', () => {

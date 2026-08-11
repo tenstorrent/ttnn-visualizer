@@ -15,6 +15,7 @@ import { LATE_DEALLOC_RAIL_LABEL, LateDeallocationRunStart } from '../src/defini
 import { BuffersByOperation } from '../src/model/APIData';
 import { TensorDeallocationReport } from '../src/model/BufferSummary';
 import { TEST_IDS } from '../src/definitions/TestIds';
+import { buildLateDeallocationRunStart, buildTensorDeallocationReport } from './helpers/lateDeallocationFixtures';
 
 const memoryPlotRendererMock = vi.fn();
 const bufferSummaryRowMock = vi.fn();
@@ -103,6 +104,7 @@ function renderVirtualizedList(
         topNAnnotationMode?: TopNAnnotationMode;
         lateDeallocationRunStarts?: readonly LateDeallocationRunStart[];
         lateDeallocationRunCount?: number;
+        getTensorDeallocationReport?: (operationId: number) => TensorDeallocationReport[];
     } = {},
 ) {
     return render(
@@ -124,19 +126,14 @@ function renderVirtualizedList(
     );
 }
 
-const buildTensorReport = (overrides: Partial<TensorDeallocationReport> = {}): TensorDeallocationReport => ({
-    id: overrides.id ?? 7,
-    address: overrides.address ?? 1024,
-    lastOperationId: overrides.lastOperationId ?? 1,
-    lastConsumerOperationId: overrides.lastConsumerOperationId ?? 0,
-    consumerName: overrides.consumerName ?? 'ttnn.add',
-});
+const buildTensorReport = (overrides: Partial<TensorDeallocationReport> = {}): TensorDeallocationReport =>
+    buildTensorDeallocationReport({ id: 7, lastOperationId: 1, lastConsumerOperationId: 0, ...overrides });
 
-const buildRunStart = (overrides: Partial<LateDeallocationRunStart>): LateDeallocationRunStart => ({
-    opId: overrides.opId ?? 1,
-    rowIndex: overrides.rowIndex ?? 0,
-    tensors: overrides.tensors ?? [buildTensorReport({ lastOperationId: overrides.opId ?? 1 })],
-});
+const buildRunStart = (overrides: Partial<LateDeallocationRunStart>): LateDeallocationRunStart =>
+    buildLateDeallocationRunStart({
+        tensors: [buildTensorReport({ lastOperationId: overrides.opId ?? 1 })],
+        ...overrides,
+    });
 
 const buildAnnotation = (overrides: Partial<RankedAnnotation>): RankedAnnotation => ({
     opId: overrides.opId ?? 1,
@@ -398,16 +395,10 @@ describe('BufferSummaryVirtualizedList', () => {
         // The badge is a bare glyph, so every tensor it stands for has to be named
         // in its accessible name — that text is the only way to tell one stale
         // tensor from several without opening the row.
-        it('badges the row where a tensor goes stale, naming the tensors freed there', () => {
-            // Virtualizer mock only emits row 0 — give it the run start for op 1.
+        it('badges a row holding stale tensors, naming them', () => {
+            // Virtualizer mock only emits row 0 — give it the report for op 1.
             renderVirtualizedList(false, {
-                lateDeallocationRunStarts: [
-                    buildRunStart({
-                        opId: 1,
-                        rowIndex: 0,
-                        tensors: [buildTensorReport({ id: 7 }), buildTensorReport({ id: 9 })],
-                    }),
-                ],
+                getTensorDeallocationReport: () => [buildTensorReport({ id: 7 }), buildTensorReport({ id: 9 })],
             });
 
             const badge = screen.getByTestId(`${TEST_IDS.LATE_DEALLOC_BADGE}-1`);
@@ -420,14 +411,27 @@ describe('BufferSummaryVirtualizedList', () => {
             expect(container.querySelector('.late-dealloc-badge')).toBeNull();
         });
 
-        // Continuation rows are absent from the run starts, so they get no badge —
-        // otherwise one missing deallocate would badge every row until it is freed.
-        it('badges only the run start, not the rows that keep holding the tensor', () => {
+        // The badge follows the hatching, which the row draws from the same
+        // report: a hatched row with an empty gutter reads as a marker that went
+        // missing rather than as one finding continuing.
+        it('badges a row that keeps holding a tensor, even though the rail plots only run starts', () => {
             renderVirtualizedList(false, {
+                // Row 0 (op 1) holds a tensor whose run opened earlier, so it is
+                // absent from the run starts the rail is given.
+                getTensorDeallocationReport: () => [buildTensorReport({ id: 7 })],
                 lateDeallocationRunStarts: [buildRunStart({ opId: 2, rowIndex: 1 })],
             });
 
-            expect(screen.queryByTestId(`${TEST_IDS.LATE_DEALLOC_BADGE}-1`)).toBeNull();
+            expect(screen.getByTestId(`${TEST_IDS.LATE_DEALLOC_BADGE}-1`)).toBeInTheDocument();
+        });
+
+        it('gives the row the same report the badge was built from', () => {
+            const report = [buildTensorReport({ id: 7 })];
+            renderVirtualizedList(false, { getTensorDeallocationReport: () => report });
+
+            expect(bufferSummaryRowMock).toHaveBeenCalledWith(
+                expect.objectContaining({ tensorDeallocationReport: report }),
+            );
         });
 
         it('orders the badges to match the rails, late deallocation before top-N', () => {
@@ -436,7 +440,7 @@ describe('BufferSummaryVirtualizedList', () => {
             ]);
             const { container } = renderVirtualizedList(false, {
                 topNAnnotationsByOpId: annotations,
-                lateDeallocationRunStarts: [buildRunStart({ opId: 1, rowIndex: 0 })],
+                getTensorDeallocationReport: () => [buildTensorReport({ id: 7 })],
             });
 
             const badges = container.querySelectorAll('.y-axis-tick .late-dealloc-badge, .y-axis-tick .top-n-badge');

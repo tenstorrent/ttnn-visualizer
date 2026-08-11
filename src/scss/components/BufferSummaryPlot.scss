@@ -55,34 +55,6 @@ $badge-min-width: 22px;
     font-weight: 600;
 }
 
-// Shared appearance and interaction for the navigation rail dots. They sit in
-// adjacent gutter columns, so anything but identical geometry reads as an
-// accident; only their colours and glyph differ.
-%rail-dot {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: $rail-dot-size;
-    height: $rail-dot-size;
-    margin: 0;
-    padding: 0;
-    border: 1px solid rgb(0 0 0 / 30%);
-    border-radius: 50%;
-    line-height: 1;
-
-    // The rails themselves are `pointer-events: none` so they don't blanket the
-    // rows behind them; the dots opt back in to stay clickable.
-    pointer-events: auto;
-    cursor: pointer;
-    transition: transform 80ms ease;
-
-    &:hover,
-    &:focus-visible {
-        transform: scale(1.3);
-        outline: none;
-    }
-}
-
 // Shared geometry for the badges in the op-label gutter, so the two readings
 // stay the same size and shape and only their colours carry meaning.
 %y-axis-badge {
@@ -251,8 +223,7 @@ $badge-min-width: 22px;
         z-index: 2;
     }
 
-    .top-n-rail,
-    .late-dealloc-rail {
+    .navigation-rail {
         // Containing block for the absolutely positioned `<li>` dots, which are
         // placed by row fraction down the rail.
         position: relative;
@@ -269,16 +240,38 @@ $badge-min-width: 22px;
     // bounding box ends up at the dot's location and the popover anchors
     // there. Previously the span had zero geometry and every tooltip
     // parked at the rail origin.
-    .top-n-rail-item,
-    .late-dealloc-rail-item {
+    .rail-item {
         position: absolute;
         right: 2px;
         transform: translateY(-50%);
     }
 
-    .top-n-rail-dot,
-    .late-dealloc-rail-dot {
-        @extend %rail-dot;
+    // Appearance and interaction shared by every rail dot. Rails sit in
+    // adjacent gutter columns, so anything but identical geometry reads as an
+    // accident; only their colours and glyph differ, below.
+    .rail-dot {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: $rail-dot-size;
+        height: $rail-dot-size;
+        margin: 0;
+        padding: 0;
+        border: 1px solid rgb(0 0 0 / 30%);
+        border-radius: 50%;
+        line-height: 1;
+
+        // The rails themselves are `pointer-events: none` so they don't blanket
+        // the rows behind them; the dots opt back in to stay clickable.
+        pointer-events: auto;
+        cursor: pointer;
+        transition: transform 80ms ease;
+
+        &:hover,
+        &:focus-visible {
+            transform: scale(1.3);
+            outline: none;
+        }
     }
 
     // A marker's colour identifies the finding, not the widget: the badge in the

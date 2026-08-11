@@ -79,7 +79,7 @@ import { ReportFolder, SINGLE_HOST_WORLD_SIZE } from '../definitions/Reports';
 import { RemoteFolder } from '../definitions/RemoteConnection';
 import createToastNotification from '../functions/createToastNotification';
 import { ToastType } from '../definitions/ToastType';
-import { NO_CONSUMER_OPERATION_ID, getLastValidConsumer } from '../functions/lateDeallocation';
+import { LastValidConsumer, getLateDeallocationReport } from '../functions/lateDeallocation';
 import { processInputsOutputs } from '../functions/processMemoryAllocations';
 import { SemVer, semverParse } from '../functions/semverParse';
 import { parseNpeAxiosResponseData } from '../functions/parseNpeAxiosResponseData';
@@ -1493,34 +1493,32 @@ export const useGetTensorDeallocationReportByOperation = () => {
     return useMemo(() => {
         const lateDeallocationsByOperation = new Map<number, TensorDeallocationReport[]>();
         const nonDeallocatedTensorListById = new Map<number, TensorDeallocationReport>();
+        // Lives for this pass only: a tensor alive across many operations is
+        // asked about once per operation, and resolving its last consumer costs
+        // the same every time.
+        const lastConsumerByTensorId = new Map<number, LastValidConsumer>();
+
         tensorListByOperation.forEach((tensorsMap, operationId) => {
             tensorsMap.forEach((tensor, address) => {
-                if (tensor.id && tensor.consumers && tensor.consumers.length > 0) {
-                    const { lastConsumerOperationId, lastConsumerName } = getLastValidConsumer(
-                        tensor.consumers,
-                        operationNamesById,
-                    );
-                    // A tensor whose only consumers are deallocate calls has no
-                    // last *use* to be late relative to. Without the sentinel
-                    // guard it flagged as late-deallocated and reported its
-                    // last consumer as `-1`.
-                    if (lastConsumerOperationId > NO_CONSUMER_OPERATION_ID && lastConsumerOperationId < operationId) {
-                        if (!lateDeallocationsByOperation.has(operationId)) {
-                            lateDeallocationsByOperation.set(operationId, []);
-                        }
-                        const list: TensorDeallocationReport[] = lateDeallocationsByOperation.get(operationId)!;
-                        const tensorInfo: TensorDeallocationReport = {
-                            id: tensor.id,
-                            address,
-                            consumerName: lastConsumerName,
-                            lastConsumerOperationId,
-                            lastOperationId: operationId,
-                        };
-                        list.push(tensorInfo);
-                        lateDeallocationsByOperation.set(operationId, list);
-                        nonDeallocatedTensorListById.set(tensor.id, tensorInfo);
-                    }
+                const report = getLateDeallocationReport(
+                    { tensorId: tensor.id, address, operationId, consumers: tensor.consumers },
+                    operationNamesById,
+                    lastConsumerByTensorId,
+                );
+
+                if (!report) {
+                    return;
                 }
+
+                const reportsForOperation = lateDeallocationsByOperation.get(operationId);
+
+                if (reportsForOperation) {
+                    reportsForOperation.push(report);
+                } else {
+                    lateDeallocationsByOperation.set(operationId, [report]);
+                }
+
+                nonDeallocatedTensorListById.set(report.id, report);
             });
         });
 
