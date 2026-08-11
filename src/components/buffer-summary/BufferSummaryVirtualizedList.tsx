@@ -71,6 +71,10 @@ interface TopNCssProperties extends CSSProperties {
     '--top-n-color': string;
 }
 
+interface RailCssProperties extends CSSProperties {
+    '--rail-columns': number;
+}
+
 const getRankTooltipText = (annotation: RankedAnnotation, mode: TopNAnnotationMode): string =>
     `#${annotation.rank} by ${TOP_N_MODE_LABEL[mode]} — ${annotation.valueLabel}`;
 
@@ -194,8 +198,26 @@ function BufferSummaryVirtualizedList({
         [topNAnnotationsByOpId],
     );
 
+    // The rail needs run starts in row order; the per-row badge needs them by op.
+    const lateDeallocationRunStartsByOpId = useMemo(
+        () => new Map(lateDeallocationRunStarts.map((runStart) => [runStart.opId, runStart])),
+        [lateDeallocationRunStarts],
+    );
+
+    const hasRows = operations.length > 0;
+    const hasTopNRail = hasRows && sortedTopNAnnotations.length > 0;
+    const hasLateDeallocationRail = hasRows && lateDeallocationRunStarts.length > 0;
+    // Drives the gutter the rows and the plot give up, so an absent rail costs
+    // no width. The column size itself stays in SCSS — this is only the count.
+    const railStyle: RailCssProperties = {
+        '--rail-columns': Number(hasTopNRail) + Number(hasLateDeallocationRail),
+    };
+
     return (
-        <div className='buffer-summary-chart'>
+        <div
+            className='buffer-summary-chart'
+            style={railStyle}
+        >
             <BufferSummaryPlotControls lateDeallocationRunCount={lateDeallocationRunCount} />
 
             <p className='x-axis-label'>Memory Address</p>
@@ -246,6 +268,7 @@ function BufferSummaryVirtualizedList({
                                     : undefined;
                                 const badge = annotation ? (
                                     <Tooltip
+                                        className='y-axis-tick-badge'
                                         content={getRankTooltipText(annotation, topNAnnotationMode)}
                                         placement='left'
                                     >
@@ -256,6 +279,32 @@ function BufferSummaryVirtualizedList({
                                             data-testid={`top-n-badge-${operation.id}`}
                                         >
                                             #{annotation.rank}
+                                        </span>
+                                    </Tooltip>
+                                ) : null;
+
+                                const runStart = lateDeallocationRunStartsByOpId.get(operation.id);
+                                const lateDeallocationBadge = runStart ? (
+                                    <Tooltip
+                                        className='y-axis-tick-badge'
+                                        content={getLateDeallocationRunStartSummary(runStart)}
+                                        placement='left'
+                                    >
+                                        {/* A glyph rather than a number, so it can't be
+                                            misread as a rank sitting next to the top-N
+                                            badge. The accessible name goes on the wrapper
+                                            because the Blueprint Icon is decorative, and it
+                                            names the tensors the glyph can't. */}
+                                        <span
+                                            className='late-dealloc-badge'
+                                            role='img'
+                                            aria-label={getLateDeallocationRunStartSummary(runStart)}
+                                            data-testid={`${TEST_IDS.LATE_DEALLOC_BADGE}-${operation.id}`}
+                                        >
+                                            <Icon
+                                                icon={IconNames.WARNING_SIGN}
+                                                size={10}
+                                            />
                                         </span>
                                     </Tooltip>
                                 ) : null;
@@ -287,11 +336,15 @@ function BufferSummaryVirtualizedList({
                                             the `<a>`. */}
                                         <div className='y-axis-tick'>
                                             <Tooltip
+                                                className='y-axis-tick-label'
                                                 content={getOperationTooltipContent(operation)}
                                                 disabled={isVirtualizerScrolling}
                                             >
                                                 {renderOperationLink(operation)}
                                             </Tooltip>
+                                            {/* Ordered to match the rails in the gutter:
+                                                late deallocation inboard, top-N outermost. */}
+                                            {lateDeallocationBadge}
                                             {badge}
                                         </div>
                                     </div>
@@ -301,92 +354,97 @@ function BufferSummaryVirtualizedList({
                     </div>
                 </div>
 
-                {sortedTopNAnnotations.length > 0 && operations.length > 0 ? (
-                    // `<li>` carries the absolute positioning so Blueprint's
-                    // Tooltip target span has non-zero geometry to anchor
-                    // against — earlier the dot was the positioned element
-                    // and the wrapper span collapsed to 0×0 at the rail's
-                    // origin, parking every tooltip at the top.
-                    <ul
-                        className='top-n-rail'
-                        aria-label='Top-ranked operations'
-                        data-testid='top-n-rail'
-                    >
-                        {sortedTopNAnnotations.map((annotation) => {
-                            const dotStyle: TopNCssProperties = {
-                                '--top-n-color': perfColorScale(annotation.t),
-                            };
-                            const itemStyle: CSSProperties = {
-                                top: `${(annotation.rowIndex / operations.length) * 100}%`,
-                            };
-                            return (
-                                <li
-                                    key={annotation.opId}
-                                    className='top-n-rail-item'
-                                    style={itemStyle}
-                                >
-                                    <Tooltip
-                                        content={getRankTooltipText(annotation, topNAnnotationMode)}
-                                        placement='left'
+                {/* Rails are laid out in flow order inside the track rather than
+                    offset from the right edge individually, so whichever ones are
+                    present pack against the scroll area and none has to know what
+                    else is showing. Top-N renders last to keep the outermost
+                    column when both are up. */}
+                <div className='rail-track'>
+                    {hasLateDeallocationRail ? (
+                        <ul
+                            className='late-dealloc-rail'
+                            aria-label={LATE_DEALLOC_RAIL_LABEL}
+                            data-testid={TEST_IDS.LATE_DEALLOC_RAIL}
+                        >
+                            {lateDeallocationRunStarts.map((runStart) => {
+                                const summary = getLateDeallocationRunStartSummary(runStart);
+                                const itemStyle: CSSProperties = {
+                                    top: `${(runStart.rowIndex / operations.length) * 100}%`,
+                                };
+                                return (
+                                    <li
+                                        key={runStart.opId}
+                                        className='late-dealloc-rail-item'
+                                        style={itemStyle}
                                     >
-                                        <button
-                                            type='button'
-                                            className='top-n-rail-dot'
-                                            style={dotStyle}
-                                            onClick={() => handleRailDotClick(annotation.rowIndex)}
-                                            aria-label={`Jump to ${getRankTooltipText(annotation, topNAnnotationMode)}`}
-                                            data-testid={`top-n-rail-dot-${annotation.opId}`}
+                                        <Tooltip
+                                            content={summary}
+                                            placement='left'
                                         >
-                                            {annotation.rank}
-                                        </button>
-                                    </Tooltip>
-                                </li>
-                            );
-                        })}
-                    </ul>
-                ) : null}
+                                            <button
+                                                type='button'
+                                                className='late-dealloc-rail-dot'
+                                                onClick={() => handleRailDotClick(runStart.rowIndex)}
+                                                aria-label={`Jump to ${summary}`}
+                                                data-testid={`${TEST_IDS.LATE_DEALLOC_RAIL_DOT}-${runStart.opId}`}
+                                            >
+                                                <Icon
+                                                    icon={IconNames.WARNING_SIGN}
+                                                    size={10}
+                                                />
+                                            </button>
+                                        </Tooltip>
+                                    </li>
+                                );
+                            })}
+                        </ul>
+                    ) : null}
 
-                {lateDeallocationRunStarts.length > 0 && operations.length > 0 ? (
-                    // Sits inboard of the top-N rail in its own gutter column so
-                    // the two never overlap when a perf report is also loaded.
-                    <ul
-                        className='late-dealloc-rail'
-                        aria-label={LATE_DEALLOC_RAIL_LABEL}
-                        data-testid={TEST_IDS.LATE_DEALLOC_RAIL}
-                    >
-                        {lateDeallocationRunStarts.map((runStart) => {
-                            const summary = getLateDeallocationRunStartSummary(runStart);
-                            const itemStyle: CSSProperties = {
-                                top: `${(runStart.rowIndex / operations.length) * 100}%`,
-                            };
-                            return (
-                                <li
-                                    key={runStart.opId}
-                                    className='late-dealloc-rail-item'
-                                    style={itemStyle}
-                                >
-                                    <Tooltip
-                                        content={summary}
-                                        placement='left'
+                    {hasTopNRail ? (
+                        // `<li>` carries the absolute positioning so Blueprint's
+                        // Tooltip target span has non-zero geometry to anchor
+                        // against — earlier the dot was the positioned element
+                        // and the wrapper span collapsed to 0×0 at the rail's
+                        // origin, parking every tooltip at the top.
+                        <ul
+                            className='top-n-rail'
+                            aria-label='Top-ranked operations'
+                            data-testid='top-n-rail'
+                        >
+                            {sortedTopNAnnotations.map((annotation) => {
+                                const dotStyle: TopNCssProperties = {
+                                    '--top-n-color': perfColorScale(annotation.t),
+                                };
+                                const itemStyle: CSSProperties = {
+                                    top: `${(annotation.rowIndex / operations.length) * 100}%`,
+                                };
+                                return (
+                                    <li
+                                        key={annotation.opId}
+                                        className='top-n-rail-item'
+                                        style={itemStyle}
                                     >
-                                        <button
-                                            type='button'
-                                            className='late-dealloc-rail-dot'
-                                            onClick={() => handleRailDotClick(runStart.rowIndex)}
-                                            aria-label={`Jump to ${summary}`}
-                                            data-testid={`${TEST_IDS.LATE_DEALLOC_RAIL_DOT}-${runStart.opId}`}
+                                        <Tooltip
+                                            content={getRankTooltipText(annotation, topNAnnotationMode)}
+                                            placement='left'
                                         >
-                                            <Icon
-                                                icon={IconNames.WARNING_SIGN}
-                                                size={10}
-                                            />
-                                        </button>
-                                    </Tooltip>
-                                </li>
-                            );
-                        })}
-                    </ul>
-                ) : null}
+                                            <button
+                                                type='button'
+                                                className='top-n-rail-dot'
+                                                style={dotStyle}
+                                                onClick={() => handleRailDotClick(annotation.rowIndex)}
+                                                aria-label={`Jump to ${getRankTooltipText(annotation, topNAnnotationMode)}`}
+                                                data-testid={`top-n-rail-dot-${annotation.opId}`}
+                                            >
+                                                {annotation.rank}
+                                            </button>
+                                        </Tooltip>
+                                    </li>
+                                );
+                            })}
+                        </ul>
+                    ) : null}
+                </div>
             </div>
         </div>
     );

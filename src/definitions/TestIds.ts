@@ -53,9 +53,10 @@ export const TEST_IDS = Object.freeze({
     PERF_HEURISTIC_FLAG: 'perf-heuristic-flag',
     PERF_CHART_TABLE_FILTER_HINT: 'perf-chart-table-filter-hint',
 
-    // Buffer summary late deallocation. The rail dot id is suffixed with the
-    // operation id at the call site.
+    // Buffer summary late deallocation. The badge and rail dot ids are suffixed
+    // with the operation id at the call site.
     LATE_DEALLOC_COUNT: 'late-dealloc-count',
+    LATE_DEALLOC_BADGE: 'late-dealloc-badge',
     LATE_DEALLOC_RAIL: 'late-dealloc-rail',
     LATE_DEALLOC_RAIL_DOT: 'late-dealloc-rail-dot',
 

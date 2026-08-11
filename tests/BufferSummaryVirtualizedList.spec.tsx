@@ -12,6 +12,8 @@ import { ScrollLocations } from '../src/definitions/VirtualLists';
 import { BufferSummaryAxisConfiguration } from '../src/definitions/PlotConfigurations';
 import { RankedAnnotation, TopNAnnotationMode } from '../src/definitions/TopNAnnotations';
 import { LATE_DEALLOC_RAIL_LABEL, LateDeallocationRunStart } from '../src/definitions/LateDeallocation';
+import { BuffersByOperation } from '../src/model/APIData';
+import { TensorDeallocationReport } from '../src/model/BufferSummary';
 import { TEST_IDS } from '../src/definitions/TestIds';
 
 const memoryPlotRendererMock = vi.fn();
@@ -64,7 +66,13 @@ vi.mock('@blueprintjs/core', async () => {
     const original = await vi.importActual('@blueprintjs/core');
     return {
         ...original,
-        Tooltip: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+        // Mirrors Blueprint in the one respect the stylesheet depends on: the
+        // child is wrapped in an element, and `className` lands on that wrapper
+        // rather than the child. Dropping the class here would hide layout bugs
+        // in the tick's flex children, which are these wrappers.
+        Tooltip: ({ children, className }: { children: React.ReactNode; className?: string }) => (
+            <div className={className}>{children}</div>
+        ),
     };
 });
 
@@ -89,6 +97,8 @@ const tensorListByOperation = new Map<number, Map<number, never>>();
 function renderVirtualizedList(
     isZoomedIn: boolean,
     extraProps: {
+        // Spread last, so anything here overrides the shared defaults.
+        operations?: BuffersByOperation[];
         topNAnnotationsByOpId?: Map<number, RankedAnnotation>;
         topNAnnotationMode?: TopNAnnotationMode;
         lateDeallocationRunStarts?: readonly LateDeallocationRunStart[];
@@ -114,18 +124,18 @@ function renderVirtualizedList(
     );
 }
 
+const buildTensorReport = (overrides: Partial<TensorDeallocationReport> = {}): TensorDeallocationReport => ({
+    id: overrides.id ?? 7,
+    address: overrides.address ?? 1024,
+    lastOperationId: overrides.lastOperationId ?? 1,
+    lastConsumerOperationId: overrides.lastConsumerOperationId ?? 0,
+    consumerName: overrides.consumerName ?? 'ttnn.add',
+});
+
 const buildRunStart = (overrides: Partial<LateDeallocationRunStart>): LateDeallocationRunStart => ({
     opId: overrides.opId ?? 1,
     rowIndex: overrides.rowIndex ?? 0,
-    tensors: overrides.tensors ?? [
-        {
-            id: 7,
-            address: 1024,
-            lastOperationId: overrides.opId ?? 1,
-            lastConsumerOperationId: 0,
-            consumerName: 'ttnn.add',
-        },
-    ],
+    tensors: overrides.tensors ?? [buildTensorReport({ lastOperationId: overrides.opId ?? 1 })],
 });
 
 const buildAnnotation = (overrides: Partial<RankedAnnotation>): RankedAnnotation => ({
@@ -229,6 +239,27 @@ describe('BufferSummaryVirtualizedList', () => {
             expect(badge).toHaveAttribute('data-rank', '3');
         });
 
+        // The tick's flex children are Blueprint's tooltip target spans, not the
+        // link and badge themselves. The stylesheet lets the label span shrink so
+        // long op names ellipsise, and pins the badge span — which only works
+        // while the two spans are distinguishable. When one rule covered both,
+        // a long op name shrank the badge until it was clipped.
+        it('gives the op-label and badge tooltip wrappers distinct classes', () => {
+            const annotations = new Map<number, RankedAnnotation>([
+                [1, buildAnnotation({ opId: 1, rowIndex: 0, rank: 3 })],
+            ]);
+            const { container } = renderVirtualizedList(false, { topNAnnotationsByOpId: annotations });
+
+            const tick = container.querySelector('.y-axis-tick');
+            const label = tick?.querySelector(':scope > .y-axis-tick-label');
+            const badgeWrapper = tick?.querySelector(':scope > .y-axis-tick-badge');
+
+            expect(label).not.toBeNull();
+            expect(badgeWrapper).not.toBeNull();
+            expect(label).not.toBe(badgeWrapper);
+            expect(badgeWrapper?.querySelector('.top-n-badge')).not.toBeNull();
+        });
+
         it('renders one rail dot per annotation, sorted by rank ascending', () => {
             const annotations = new Map<number, RankedAnnotation>([
                 [1, buildAnnotation({ opId: 1, rowIndex: 0, rank: 2 })],
@@ -309,11 +340,107 @@ describe('BufferSummaryVirtualizedList', () => {
         });
     });
 
+    describe('rail gutter', () => {
+        const getRailColumns = (container: HTMLElement) =>
+            container.querySelector<HTMLElement>('.buffer-summary-chart')?.style.getPropertyValue('--rail-columns');
+
+        it('reserves no gutter when neither rail has data', () => {
+            const { container } = renderVirtualizedList(false);
+
+            expect(getRailColumns(container)).toBe('0');
+        });
+
+        it('reserves one column for a single rail', () => {
+            const { container } = renderVirtualizedList(false, {
+                lateDeallocationRunStarts: [buildRunStart({ opId: 1, rowIndex: 0 })],
+            });
+
+            expect(getRailColumns(container)).toBe('1');
+        });
+
+        it('reserves a column per rail when both are showing', () => {
+            const annotations = new Map<number, RankedAnnotation>([
+                [1, buildAnnotation({ opId: 1, rowIndex: 0, rank: 1 })],
+            ]);
+            const { container } = renderVirtualizedList(false, {
+                topNAnnotationsByOpId: annotations,
+                lateDeallocationRunStarts: [buildRunStart({ opId: 1, rowIndex: 0 })],
+            });
+
+            expect(getRailColumns(container)).toBe('2');
+        });
+
+        // Rails are hidden when there are no rows to point at, so the gutter
+        // they would have claimed has to go with them.
+        it('reserves no gutter when there are no rows, even with rail data', () => {
+            const annotations = new Map<number, RankedAnnotation>([
+                [1, buildAnnotation({ opId: 1, rowIndex: 0, rank: 1 })],
+            ]);
+            const { container } = renderVirtualizedList(false, {
+                operations: [],
+                topNAnnotationsByOpId: annotations,
+                lateDeallocationRunStarts: [buildRunStart({ opId: 1, rowIndex: 0 })],
+            });
+
+            expect(getRailColumns(container)).toBe('0');
+            expect(screen.queryByTestId('top-n-rail')).toBeNull();
+            expect(screen.queryByTestId(TEST_IDS.LATE_DEALLOC_RAIL)).toBeNull();
+        });
+    });
+
     describe('late deallocation rail (#963)', () => {
         it('forwards the run count to the controls so the toggle can advertise it', () => {
             renderVirtualizedList(false, { lateDeallocationRunCount: 4 });
 
             expect(plotControlsMock).toHaveBeenCalledWith(expect.objectContaining({ lateDeallocationRunCount: 4 }));
+        });
+
+        // The badge is a bare glyph, so every tensor it stands for has to be named
+        // in its accessible name — that text is the only way to tell one stale
+        // tensor from several without opening the row.
+        it('badges the row where a tensor goes stale, naming the tensors freed there', () => {
+            // Virtualizer mock only emits row 0 — give it the run start for op 1.
+            renderVirtualizedList(false, {
+                lateDeallocationRunStarts: [
+                    buildRunStart({
+                        opId: 1,
+                        rowIndex: 0,
+                        tensors: [buildTensorReport({ id: 7 }), buildTensorReport({ id: 9 })],
+                    }),
+                ],
+            });
+
+            const badge = screen.getByTestId(`${TEST_IDS.LATE_DEALLOC_BADGE}-1`);
+            expect(badge.getAttribute('aria-label')).toMatch(/Opportunity to deallocate earlier: tensors 7, 9/i);
+        });
+
+        it('badges no row when nothing is late-deallocated', () => {
+            const { container } = renderVirtualizedList(false);
+
+            expect(container.querySelector('.late-dealloc-badge')).toBeNull();
+        });
+
+        // Continuation rows are absent from the run starts, so they get no badge —
+        // otherwise one missing deallocate would badge every row until it is freed.
+        it('badges only the run start, not the rows that keep holding the tensor', () => {
+            renderVirtualizedList(false, {
+                lateDeallocationRunStarts: [buildRunStart({ opId: 2, rowIndex: 1 })],
+            });
+
+            expect(screen.queryByTestId(`${TEST_IDS.LATE_DEALLOC_BADGE}-1`)).toBeNull();
+        });
+
+        it('orders the badges to match the rails, late deallocation before top-N', () => {
+            const annotations = new Map<number, RankedAnnotation>([
+                [1, buildAnnotation({ opId: 1, rowIndex: 0, rank: 1 })],
+            ]);
+            const { container } = renderVirtualizedList(false, {
+                topNAnnotationsByOpId: annotations,
+                lateDeallocationRunStarts: [buildRunStart({ opId: 1, rowIndex: 0 })],
+            });
+
+            const badges = container.querySelectorAll('.y-axis-tick .late-dealloc-badge, .y-axis-tick .top-n-badge');
+            expect([...badges].map((badge) => badge.className)).toEqual(['late-dealloc-badge', 'top-n-badge']);
         });
 
         it('renders no rail when nothing is late-deallocated', () => {
@@ -339,13 +466,18 @@ describe('BufferSummaryVirtualizedList', () => {
             const annotations = new Map<number, RankedAnnotation>([
                 [1, buildAnnotation({ opId: 1, rowIndex: 0, rank: 1 })],
             ]);
-            renderVirtualizedList(false, {
+            const { container } = renderVirtualizedList(false, {
                 topNAnnotationsByOpId: annotations,
                 lateDeallocationRunStarts: [buildRunStart({ opId: 1, rowIndex: 0 })],
             });
 
-            expect(screen.getByTestId('top-n-rail')).not.toBeNull();
-            expect(screen.getByTestId(TEST_IDS.LATE_DEALLOC_RAIL)).not.toBeNull();
+            // Flow order in the track decides the column, so the late-dealloc
+            // rail must precede top-N to leave it the outermost strip.
+            const rails = container.querySelectorAll('.rail-track > ul');
+            expect([...rails].map((rail) => rail.getAttribute('data-testid'))).toEqual([
+                TEST_IDS.LATE_DEALLOC_RAIL,
+                'top-n-rail',
+            ]);
         });
 
         it('positions rail dots by rowIndex / operations.length', () => {
