@@ -18,7 +18,14 @@ import sys
 import tempfile
 from pathlib import Path
 
-from playwright.async_api import Browser, Page, TimeoutError, async_playwright, expect
+from playwright.async_api import (
+    Browser,
+    Locator,
+    Page,
+    TimeoutError,
+    async_playwright,
+    expect,
+)
 
 _SCRIPTS_DIR = Path(__file__).resolve().parent
 if str(_SCRIPTS_DIR) not in sys.path:
@@ -123,6 +130,20 @@ async def exercise_main_tabs(page: Page) -> None:
         print(f"✅ {tab_name} tab loaded without errors")
 
 
+def _performance_nav_button(page: Page) -> Locator:
+    """Locate the Performance nav button by its exact accessible name.
+
+    `get_by_role(name=...)` matches a case-insensitive *substring* by default,
+    and the report picker relabels itself to the active report once the upload
+    lands — so a fixture directory named `smoke-performance-report` also matches
+    a loose "Performance" lookup. Two matches is a strict-mode violation, which
+    surfaces as an immediate assertion failure rather than a timeout, and only
+    once the picker has re-rendered. Matching exactly keeps this pinned to the
+    nav button regardless of what the fixture directory is called.
+    """
+    return page.get_by_role("button", name="Performance", exact=True)
+
+
 async def upload_performance_report(page: Page, report_dir: Path) -> None:
     """Upload a local performance report directory via the Reports page."""
     await page.get_by_role("button", name="Reports").click()
@@ -131,7 +152,7 @@ async def upload_performance_report(page: Page, report_dir: Path) -> None:
     upload_input = page.get_by_test_id("local-performance-upload")
     await upload_input.set_input_files(str(report_dir))
 
-    performance_button = page.get_by_role("button", name="Performance")
+    performance_button = _performance_nav_button(page)
     try:
         await expect(performance_button).to_be_enabled(timeout=UPLOAD_TIMEOUT_MS)
     except AssertionError as exc:
@@ -156,7 +177,7 @@ async def exercise_performance_tab(page: Page) -> None:
     navigating to the timeline URL directly — is what proves that join survived
     ingestion, on top of covering `/api/performance/npe/timeline`.
     """
-    performance_button = page.get_by_role("button", name="Performance")
+    performance_button = _performance_nav_button(page)
     await expect(performance_button).to_be_enabled(timeout=TAB_ENABLED_TIMEOUT_MS)
 
     await performance_button.click()
