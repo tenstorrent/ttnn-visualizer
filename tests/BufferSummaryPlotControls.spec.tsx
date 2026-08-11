@@ -2,6 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
+import { Classes } from '@blueprintjs/core';
 import { cleanup, render, screen } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
 import React from 'react';
@@ -58,6 +59,11 @@ const renderControls = (overrides: AtomProviderInitialValues = [], lateDeallocat
 
 const getTopNSwitch = (): HTMLInputElement =>
     screen.getByLabelText(/highlight top/i, { selector: 'input[type="checkbox"]' }) as HTMLInputElement;
+
+const getLateDeallocationSwitch = (): HTMLInputElement =>
+    screen.getByLabelText(/mark late tensor deallocations/i, {
+        selector: 'input[type="checkbox"]',
+    }) as HTMLInputElement;
 
 /**
  * Convenience builder for the `statusByMode` map returned by
@@ -315,6 +321,8 @@ describe('BufferSummaryPlotControls late deallocation count (#963)', () => {
 
         const count = screen.getByTestId(TEST_IDS.LATE_DEALLOC_COUNT);
         expect(count).toHaveTextContent('4');
+        expect(count).toHaveClass(Classes.INTENT_WARNING);
+        expect(getLateDeallocationSwitch()).not.toBeDisabled();
     });
 
     it('explains the count in a tooltip', () => {
@@ -327,10 +335,26 @@ describe('BufferSummaryPlotControls late deallocation count (#963)', () => {
         );
     });
 
-    it('hides the count when nothing is flagged, so the toggle does not promise a finding', () => {
+    // Following the Tensor List's late-deallocation filter: the count is always
+    // there to be read, and emptiness is signalled by disabling the control
+    // rather than by removing the only thing that could say "nothing here".
+    it('shows a zero count and disables the toggle when nothing is flagged', () => {
         renderControls([], 0);
 
-        expect(screen.queryByTestId(TEST_IDS.LATE_DEALLOC_COUNT)).toBeNull();
+        const count = screen.getByTestId(TEST_IDS.LATE_DEALLOC_COUNT);
+        expect(count).toHaveTextContent('0');
+        expect(count).not.toHaveClass(Classes.INTENT_WARNING);
+        expect(getLateDeallocationSwitch()).toBeDisabled();
+    });
+
+    it('explains the zero in the same tooltip, so the disabled switch is not unexplained', () => {
+        renderControls([], 0);
+
+        const count = screen.getByTestId(TEST_IDS.LATE_DEALLOC_COUNT);
+        const tooltipHost = count.closest('[data-testid="tooltip-host"]');
+        expect(tooltipHost?.getAttribute('data-content')).toMatch(
+            /0 operations where a tensor starts being held past its last use/i,
+        );
     });
 
     it('hides the count on the DRAM tab, where the overlay toggle is not offered', () => {

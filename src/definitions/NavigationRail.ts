@@ -4,17 +4,24 @@
 
 import { CSSProperties, ReactNode } from 'react';
 
+// Rail geometry, mirrored from `$scrollable-height` and `$rail-dot-size` in
+// `BufferSummaryPlot.scss`. The cap below is arithmetic on those numbers and has
+// to be known before anything is laid out, so it can't be read back off the
+// element; the stylesheet stays the source of truth for what is drawn, which
+// means these two move with it.
+const RAIL_HEIGHT = 600;
+const RAIL_DOT_SIZE = 20;
+
 /**
- * Upper bound on the dots one rail draws.
+ * Upper bound on the dots one rail draws: as many as fit down the rail without
+ * covering each other.
  *
- * A rail spans the scrolling list, which is 600px tall (`.scrollable-element`
- * in `BufferSummaryPlot.scss`), so past roughly one dot per two pixels the dots
- * overlap into a bar nobody can click and every extra one is a popover the
- * virtualized list reconciles on each scroll tick. Rails whose findings are
- * bounded by the report coalesce down to this; top-N is already bounded by
- * `TOP_N_COUNT_MAX`.
+ * Past this the dots overlap, and the ones underneath can't be clicked at all —
+ * worse than being merged into a neighbour, which at least keeps their tensors
+ * in a tooltip. Rails whose findings are bounded only by the report coalesce
+ * down to this; top-N is already bounded by `TOP_N_COUNT_MAX`.
  */
-export const RAIL_MAX_DOTS = 300;
+export const RAIL_MAX_DOTS = Math.floor(RAIL_HEIGHT / RAIL_DOT_SIZE);
 
 export interface NavigationRailItem {
     key: string | number;

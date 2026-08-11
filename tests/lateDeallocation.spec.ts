@@ -5,7 +5,9 @@
 import { describe, expect, it } from 'vitest';
 import {
     LastValidConsumer,
+    MAX_NAMED_TENSORS,
     NO_CONSUMER_OPERATION_ID,
+    buildLateDeallocationReports,
     coalesceLateDeallocationRunStarts,
     getLastValidConsumer,
     getLateDeallocationCountSummary,
@@ -13,6 +15,7 @@ import {
     getLateDeallocationSummary,
     selectLateDeallocationRunStarts,
 } from '../src/functions/lateDeallocation';
+import { Tensor } from '../src/model/APIData';
 import { buildTensorDeallocationReport as buildReport } from './helpers/lateDeallocationFixtures';
 
 const buildOperation = (id: number) => ({ id });
@@ -77,6 +80,76 @@ describe('getLastValidConsumer', () => {
         getLastValidConsumer(consumers, new Map([[10, 'ttnn.add']]));
 
         expect(consumers).toEqual([10, 2, 7]);
+    });
+
+    // Order-independence is the property that replaced the sort, and it is the
+    // one a single-pass "highest so far" loop is easiest to lose: skipping a
+    // deallocate must not stop the walk, or the ids after it are never seen.
+    it('finds the last real use when the consumers arrive highest-first', () => {
+        const operationNamesById = new Map([
+            [4, 'ttnn.add'],
+            [9, 'ttnn::deallocate'],
+            [12, 'ttnn.deallocate'],
+        ]);
+
+        expect(getLastValidConsumer([12, 9, 4], operationNamesById)).toEqual({
+            lastConsumerOperationId: 4,
+            lastConsumerName: 'ttnn.add',
+        });
+    });
+});
+
+describe('buildLateDeallocationReports', () => {
+    // Only `id` and `consumers` take part in the derivation; the rest of `Tensor`
+    // would be fixture noise.
+    const buildTensor = (id: number, consumers: number[]) => ({ id, consumers }) as unknown as Tensor;
+
+    const operationNamesById = new Map([
+        [1, 'ttnn.from_torch'],
+        [2, 'ttnn.add'],
+        [5, 'ttnn.multiply'],
+        [8, 'ttnn.deallocate'],
+    ]);
+
+    // Tensor 7 is last used by op 2 and still alive at 5 and 8; tensor 9 is
+    // still in use, so only the first should be reported.
+    const tensorsByOperation = new Map([
+        [2, new Map([[1024, buildTensor(7, [2])]])],
+        [5, new Map([[1024, buildTensor(7, [2])]])],
+        [
+            8,
+            new Map([
+                [1024, buildTensor(7, [2])],
+                [2048, buildTensor(9, [8])],
+            ]),
+        ],
+    ]);
+
+    it('indexes the reports by operation, skipping operations with nothing stale', () => {
+        const { reportsByOpId } = buildLateDeallocationReports({ tensorsByOperation, operationNamesById });
+
+        expect([...reportsByOpId.keys()]).toEqual([5, 8]);
+        expect(reportsByOpId.get(5)?.map((report) => report.id)).toEqual([7]);
+        expect(reportsByOpId.get(8)?.map((report) => report.id)).toEqual([7]);
+    });
+
+    // The Tensor List's filter and count read this index, so one entry per
+    // tensor — not per (tensor, operation) — is the contract.
+    it('indexes one report per tensor, the last operation holding it winning', () => {
+        const { reportsByTensorId } = buildLateDeallocationReports({ tensorsByOperation, operationNamesById });
+
+        expect([...reportsByTensorId.keys()]).toEqual([7]);
+        expect(reportsByTensorId.get(7)).toMatchObject({ lastOperationId: 8, lastConsumerOperationId: 2 });
+    });
+
+    it('reports nothing for a report with no late deallocations', () => {
+        const { reportsByOpId, reportsByTensorId } = buildLateDeallocationReports({
+            tensorsByOperation: new Map([[2, new Map([[1024, buildTensor(7, [2])]])]]),
+            operationNamesById,
+        });
+
+        expect(reportsByOpId.size).toBe(0);
+        expect(reportsByTensorId.size).toBe(0);
     });
 });
 
@@ -306,6 +379,40 @@ describe('getLateDeallocationSummary', () => {
 
         expect(summary).toBe('Opportunity to deallocate earlier: tensor 7');
     });
+
+    // A coalesced rail dot can stand for every run start in its bucket, so the
+    // tensor list has to stop somewhere: an uncapped one grows with the report
+    // and is retained for as long as the rail is mounted, since the same string
+    // is the dot's accessible name.
+    it('names only the first few tensors and counts the rest', () => {
+        const tensors = Array.from({ length: MAX_NAMED_TENSORS + 3 }, (_unused, index) =>
+            buildReport({ id: index + 1 }),
+        );
+
+        const summary = getLateDeallocationSummary(tensors);
+
+        expect(summary).toBe(
+            'Opportunity to deallocate earlier: tensors 1, 2, 3, 4, 5 and 3 more — last used by 5 ttnn.add',
+        );
+    });
+
+    it('names them all when they fit under the cap', () => {
+        const tensors = Array.from({ length: MAX_NAMED_TENSORS }, (_unused, index) => buildReport({ id: index + 1 }));
+
+        expect(getLateDeallocationSummary(tensors)).toContain('tensors 1, 2, 3, 4, 5 —');
+    });
+
+    it('caps the per-tensor naming too, where each one carries its own last use', () => {
+        const tensors = Array.from({ length: MAX_NAMED_TENSORS + 1 }, (_unused, index) =>
+            buildReport({ id: index + 1, lastConsumerOperationId: index + 1 }),
+        );
+
+        const summary = getLateDeallocationSummary(tensors);
+
+        expect(summary).toContain('1 (last used by 1 ttnn.add)');
+        expect(summary).toContain('and 1 more');
+        expect(summary).not.toContain('6 (last used by 6 ttnn.add)');
+    });
 });
 
 describe('getLateDeallocationCountSummary', () => {
@@ -343,14 +450,33 @@ describe('coalesceLateDeallocationRunStarts', () => {
     });
 
     it('merges run starts that would share a sliver of the rail, keeping every tensor', () => {
+        // Two buckets at `maxDots: 2`: rows 0–49 and rows 50–99. The first three
+        // run starts land in the first, the last one in the second.
         const runStarts = [buildRunStart(1, 0, 1), buildRunStart(2, 1, 2), buildRunStart(50, 49, 3)];
 
-        const coalesced = coalesceLateDeallocationRunStarts({ runStarts, rowCount: 100, maxDots: 2 });
+        const coalesced = coalesceLateDeallocationRunStarts({
+            runStarts: [...runStarts, buildRunStart(51, 50, 4)],
+            rowCount: 100,
+            maxDots: 2,
+        });
 
-        // Two buckets: rows 0–49 and rows 50–99.
-        expect(coalesced).toHaveLength(1);
+        expect(coalesced).toHaveLength(2);
         expect(coalesced[0]).toMatchObject({ opId: 1, rowIndex: 0 });
         expect(coalesced[0].tensors.map((tensor) => tensor.id)).toEqual([1, 2, 3]);
+        // The second bucket keeps its own findings rather than being folded in.
+        expect(coalesced[1]).toMatchObject({ opId: 51, rowIndex: 50 });
+        expect(coalesced[1].tensors.map((tensor) => tensor.id)).toEqual([4]);
+    });
+
+    // The count beside the toggle counts run starts, so a merged dot dropping
+    // one would leave the count advertising a finding no marker stands for.
+    it('accounts for every tensor across the dots it keeps', () => {
+        const runStarts = Array.from({ length: 40 }, (_unused, index) => buildRunStart(index + 1, index, index + 1));
+
+        const coalesced = coalesceLateDeallocationRunStarts({ runStarts, rowCount: 40, maxDots: 4 });
+
+        expect(coalesced).toHaveLength(4);
+        expect(coalesced.flatMap((runStart) => runStart.tensors.map((tensor) => tensor.id))).toHaveLength(40);
     });
 
     it('does not mutate the run starts it was given', () => {

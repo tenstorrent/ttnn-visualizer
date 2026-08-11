@@ -4,7 +4,7 @@
 
 import { DEALLOCATE_OP_NAME_LIST } from '../definitions/Deallocate';
 import { LATE_DEALLOC_OPPORTUNITY_TEXT, LateDeallocationRunStart } from '../definitions/LateDeallocation';
-import { TensorDeallocationReport } from '../model/BufferSummary';
+import { TensorDeallocationReport, TensorsByOperationByAddress } from '../model/BufferSummary';
 
 /** Sentinel for "this tensor has no consumer we can attribute a last use to". */
 export const NO_CONSUMER_OPERATION_ID = -1;
@@ -102,6 +102,70 @@ export const getLateDeallocationReport = (
     };
 };
 
+export interface BuildLateDeallocationReportsParams {
+    /** Tensors alive at each operation, keyed by operation id then buffer address. */
+    tensorsByOperation: TensorsByOperationByAddress;
+    operationNamesById: Map<number, string>;
+}
+
+export interface LateDeallocationReports {
+    /** Per operation: the rows to hatch, and the tensors their gutter badge names. */
+    reportsByOpId: Map<number, TensorDeallocationReport[]>;
+    /**
+     * One entry per tensor, the last operation to report it winning — so the
+     * report describes the tensor's final holder as long as the caller's map is
+     * in operation order. Feeds the Tensor List's late-deallocated filter and
+     * count.
+     */
+    reportsByTensorId: Map<number, TensorDeallocationReport>;
+}
+
+/**
+ * Collect the late-deallocation reports for a whole profiler report, indexed the
+ * two ways the app consumes them.
+ *
+ * One pass fills both indexes: they answer different questions about the same
+ * finding — which rows to mark, and which tensors to offer in the Tensor List —
+ * and deriving either from the other afterwards would walk the report again.
+ */
+export const buildLateDeallocationReports = ({
+    tensorsByOperation,
+    operationNamesById,
+}: BuildLateDeallocationReportsParams): LateDeallocationReports => {
+    const reportsByOpId = new Map<number, TensorDeallocationReport[]>();
+    const reportsByTensorId = new Map<number, TensorDeallocationReport>();
+    // Lives for this pass only: a tensor alive across many operations is asked
+    // about once per operation, and resolving its last consumer costs the same
+    // every time.
+    const lastConsumerByTensorId = new Map<number, LastValidConsumer>();
+
+    tensorsByOperation.forEach((tensorsByAddress, operationId) => {
+        tensorsByAddress.forEach((tensor, address) => {
+            const report = getLateDeallocationReport(
+                { tensorId: tensor.id, address, operationId, consumers: tensor.consumers },
+                operationNamesById,
+                lastConsumerByTensorId,
+            );
+
+            if (!report) {
+                return;
+            }
+
+            const reportsForOperation = reportsByOpId.get(operationId);
+
+            if (reportsForOperation) {
+                reportsForOperation.push(report);
+            } else {
+                reportsByOpId.set(operationId, [report]);
+            }
+
+            reportsByTensorId.set(report.id, report);
+        });
+    });
+
+    return { reportsByOpId, reportsByTensorId };
+};
+
 export interface SelectLateDeallocationRunStartsParams {
     /** Rows as rendered, in display order. */
     operations: readonly { id: number }[];
@@ -167,6 +231,24 @@ export const selectLateDeallocationRunStarts = ({
     return runStarts;
 };
 
+/** How many tensors a marker names before it just counts the rest. */
+export const MAX_NAMED_TENSORS = 5;
+
+/**
+ * Name at most `MAX_NAMED_TENSORS` of them and count the remainder.
+ *
+ * A coalesced rail dot stands for every run start in its bucket, so an uncapped
+ * list grows with the report: unreadable as a tooltip, and retained as long as
+ * the rail is mounted because it doubles as the dot's accessible name.
+ */
+const getTensorNameList = (names: readonly string[]): string => {
+    if (names.length <= MAX_NAMED_TENSORS) {
+        return names.join(', ');
+    }
+
+    return `${names.slice(0, MAX_NAMED_TENSORS).join(', ')} and ${names.length - MAX_NAMED_TENSORS} more`;
+};
+
 /** Tooltip and accessible name for the tensors a marker stands for. */
 export const getLateDeallocationSummary = (tensors: readonly TensorDeallocationReport[]): string => {
     if (tensors.length === 0) {
@@ -183,20 +265,21 @@ export const getLateDeallocationSummary = (tensors: readonly TensorDeallocationR
         const lastUse = firstTensor.consumerName
             ? ` — last used by ${firstTensor.lastConsumerOperationId} ${firstTensor.consumerName}`
             : '';
+        const tensorIds = getTensorNameList(tensors.map((tensor) => `${tensor.id}`));
 
-        return `${LATE_DEALLOC_OPPORTUNITY_TEXT}: ${noun} ${tensors.map((tensor) => tensor.id).join(', ')}${lastUse}`;
+        return `${LATE_DEALLOC_OPPORTUNITY_TEXT}: ${noun} ${tensorIds}${lastUse}`;
     }
 
     // Rows are the unique-buffer slice and a run can re-open after a gap, so
     // tensors reported together needn't share a last use — naming one of them
     // for all would attribute the wrong operation to the rest.
-    const namedTensors = tensors
-        .map((tensor) =>
+    const namedTensors = getTensorNameList(
+        tensors.map((tensor) =>
             tensor.consumerName
                 ? `${tensor.id} (last used by ${tensor.lastConsumerOperationId} ${tensor.consumerName})`
                 : `${tensor.id}`,
-        )
-        .join(', ');
+        ),
+    );
 
     return `${LATE_DEALLOC_OPPORTUNITY_TEXT}: ${noun} ${namedTensors}`;
 };
@@ -225,11 +308,11 @@ export interface CoalesceLateDeallocationRunStartsParams {
  * Merge run starts that would land on the same sliver of the rail.
  *
  * Run starts are bounded only by the report, so a large one asks for thousands
- * of dots in a gutter a few hundred pixels tall: they overlap into a bar
- * nobody can click, and each one is a popover the virtualized list reconciles
- * on every scroll tick. A merged dot keeps every tensor it swallowed, so the
- * count beside the toggle still matches what the tooltips name, and it lands
- * on the first row of its group so a click still goes somewhere useful.
+ * of dots in a gutter a few hundred pixels tall: they cover each other, and the
+ * ones underneath can't be clicked at all. A merged dot carries every tensor it
+ * swallowed, so no finding the count advertises is dropped on the way to a
+ * tooltip, and it lands on the first row of its group so a click still goes
+ * somewhere useful.
  *
  * Reports small enough to draw honestly get one bucket per row and are
  * returned untouched.
@@ -253,8 +336,9 @@ export const coalesceLateDeallocationRunStarts = ({
         if (merged) {
             merged.tensors.push(...runStart.tensors);
         } else {
-            // Copy the tensor list: the selector's arrays are memoised and
-            // shared with the per-row badges.
+            // Copy the tensor list: the run starts are memoised across renders,
+            // so pushing into their arrays would append the same tensors again
+            // on every re-render.
             runStartsByBucket.set(bucket, { ...runStart, tensors: [...runStart.tensors] });
         }
     });

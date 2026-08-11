@@ -82,4 +82,26 @@ describe('useLateDeallocationOverlay', () => {
         expect(result.current.getTensorDeallocationReport(2)).toBe(initialReport);
         expect(result.current.getTensorDeallocationReport(1)).toBe(initialEmptyReport);
     });
+
+    // The rail items memo, and the memoised `NavigationRail` behind it, are keyed
+    // on this array: a fresh one per render puts every dot's popover back in the
+    // scroll-render path.
+    it('keeps the run starts referentially stable across renders', () => {
+        const { result, rerender } = renderOverlay(true);
+        const initialRunStarts = result.current.runStarts;
+
+        rerender();
+
+        expect(result.current.runStarts).toBe(initialRunStarts);
+    });
+
+    // Same contract with the overlay off: the shared empty array, not a new one.
+    it('returns one shared empty array while the overlay is off', () => {
+        const { result, rerender } = renderOverlay(false);
+        const initialRunStarts = result.current.runStarts;
+
+        rerender();
+
+        expect(result.current.runStarts).toBe(initialRunStarts);
+    });
 });

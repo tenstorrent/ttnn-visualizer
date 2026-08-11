@@ -43,6 +43,11 @@ $feedback-button-clearance: 20px;
 // Range pill at the viewport bottom. Add a few extra px of breathing room.
 $footer-clearance: 44px;
 
+// Height of the scrolling list, and therefore of the rails beside it.
+// `RAIL_MAX_DOTS` in `definitions/NavigationRail.ts` divides this by
+// `$rail-dot-size` to decide how many dots fit without covering each other, so
+// changing either number here is a change to the coalescing there.
+$scrollable-height: 600px;
 $rail-dot-size: 20px;
 $badge-height: 16px;
 $badge-min-width: 22px;
@@ -187,6 +192,22 @@ $badge-min-width: 22px;
         }
     }
 
+    // The late-deallocation glyph sits inboard of the rank badge, so on a row
+    // that has no rank it slides a badge-width outward and the glyphs stop
+    // lining up — the column is the whole point of a marker that repeats down
+    // dozens of rows. Rows lacking a rank reserve its slot instead.
+    //
+    // Scoped twice on purpose: only while the rank column is in play (otherwise
+    // every row would give up label width to a slot nothing can occupy), and
+    // only on rows actually showing a glyph (nothing else has a column to join).
+    // Reserves the badge's minimum width, so a two-digit rank still runs a few
+    // px wider.
+    &.has-rank-column .buffer-summary-plot-container.has-late-dealloc:not(.has-top-n) .y-axis-tick::after {
+        content: '';
+        flex: 0 0 auto;
+        width: $badge-min-width;
+    }
+
     // Shape comes from the widget the marker is (gutter badge or rail dot);
     // colour comes from the finding it reports, below. Splitting the two axes
     // keeps a marker's identity in one place instead of once per widget.
@@ -201,7 +222,7 @@ $badge-min-width: 22px;
     }
 
     .scrollable-element {
-        height: 600px;
+        height: $scrollable-height;
         width: 100%;
         overflow-y: auto;
         position: relative;
@@ -243,6 +264,16 @@ $badge-min-width: 22px;
     .rail-item {
         position: absolute;
         right: 2px;
+
+        // Flex, not the default block, because `translateY(-50%)` resolves
+        // against this element's own height and the dot is centred on its row by
+        // that half. Left as a block the li holds an inline tooltip span
+        // wrapping a block-level dot — a block-in-inline split, where the height
+        // picks up the font's strut and how much of it survives differs by
+        // engine, so the whole rail sat at a different offset in Firefox than in
+        // Chrome. Flex has no inline formatting context, so the height is the
+        // dot's box in both.
+        display: flex;
         transform: translateY(-50%);
     }
 

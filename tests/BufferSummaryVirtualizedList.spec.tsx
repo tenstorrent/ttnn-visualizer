@@ -12,6 +12,7 @@ import { ScrollLocations } from '../src/definitions/VirtualLists';
 import { BufferSummaryAxisConfiguration } from '../src/definitions/PlotConfigurations';
 import { RankedAnnotation, TopNAnnotationMode } from '../src/definitions/TopNAnnotations';
 import { LATE_DEALLOC_RAIL_LABEL, LateDeallocationRunStart } from '../src/definitions/LateDeallocation';
+import { RAIL_MAX_DOTS } from '../src/definitions/NavigationRail';
 import { BuffersByOperation } from '../src/model/APIData';
 import { TensorDeallocationReport } from '../src/model/BufferSummary';
 import { TEST_IDS } from '../src/definitions/TestIds';
@@ -217,7 +218,7 @@ describe('BufferSummaryVirtualizedList', () => {
         it('does not render the rail or any rank badges when annotations are empty', () => {
             const { container } = renderVirtualizedList(false);
 
-            expect(container.querySelector('[data-testid="top-n-rail"]')).toBeNull();
+            expect(screen.queryByTestId(TEST_IDS.TOP_N_RAIL)).toBeNull();
             expect(container.querySelector('.top-n-badge')).toBeNull();
         });
 
@@ -231,7 +232,7 @@ describe('BufferSummaryVirtualizedList', () => {
                 topNAnnotationMode: TopNAnnotationMode.PERF_TIME,
             });
 
-            const badge = screen.getByTestId('top-n-badge-1');
+            const badge = screen.getByTestId(`${TEST_IDS.TOP_N_BADGE}-1`);
             expect(badge).toHaveTextContent('#3');
             expect(badge).toHaveAttribute('data-rank', '3');
         });
@@ -264,12 +265,12 @@ describe('BufferSummaryVirtualizedList', () => {
             ]);
             renderVirtualizedList(false, { topNAnnotationsByOpId: annotations });
 
-            const rail = screen.getByTestId('top-n-rail');
+            const rail = screen.getByTestId(TEST_IDS.TOP_N_RAIL);
             const dots = rail.querySelectorAll('.top-n-rail-dot');
             expect(dots).toHaveLength(2);
             // Both dots should be addressable by their op id for downstream wiring.
-            expect(screen.getByTestId('top-n-rail-dot-1')).toBeInTheDocument();
-            expect(screen.getByTestId('top-n-rail-dot-2')).toBeInTheDocument();
+            expect(screen.getByTestId(`${TEST_IDS.TOP_N_RAIL_DOT}-1`)).toBeInTheDocument();
+            expect(screen.getByTestId(`${TEST_IDS.TOP_N_RAIL_DOT}-2`)).toBeInTheDocument();
         });
 
         it('uses semantic <ul>/<li> markup so screen readers announce the rail as a list with item count', () => {
@@ -284,7 +285,7 @@ describe('BufferSummaryVirtualizedList', () => {
             // screen-reader output.
             const rail = screen.getByRole('list', { name: 'Top-ranked operations' });
             expect(rail.tagName).toBe('UL');
-            expect(rail).toHaveAttribute('data-testid', 'top-n-rail');
+            expect(rail).toHaveAttribute('data-testid', TEST_IDS.TOP_N_RAIL);
             // One `<li>` per annotation; each contains the dot button.
             const items = within(rail).getAllByRole('listitem');
             expect(items).toHaveLength(2);
@@ -302,9 +303,28 @@ describe('BufferSummaryVirtualizedList', () => {
             // Row 1 of 2 → 50% down the rail. `top` lives on the `<li>` so
             // the Tooltip wrapper span inside has real geometry (otherwise
             // Blueprint anchors the popover at the rail origin).
-            const dot = screen.getByTestId('top-n-rail-dot-2') as HTMLButtonElement;
+            const dot = screen.getByTestId(`${TEST_IDS.TOP_N_RAIL_DOT}-2`) as HTMLButtonElement;
             const item = dot.closest('li');
             expect(item?.style.top).toBe('50%');
+        });
+
+        // The rank's position on the perf scale is the dot's only quantitative
+        // reading, and it travels through `NavigationRail`'s optional `dotStyle`
+        // prop — a boundary that can be dropped on either side without any
+        // class- or text-based assertion noticing.
+        it('colours each rail dot from the perf scale', () => {
+            const annotations = new Map<number, RankedAnnotation>([
+                [1, buildAnnotation({ opId: 1, rowIndex: 0, rank: 1, t: 1 })],
+                [2, buildAnnotation({ opId: 2, rowIndex: 1, rank: 2, t: 0 })],
+            ]);
+            renderVirtualizedList(false, { topNAnnotationsByOpId: annotations });
+
+            const slowest = screen.getByTestId(`${TEST_IDS.TOP_N_RAIL_DOT}-1`);
+            const fastest = screen.getByTestId(`${TEST_IDS.TOP_N_RAIL_DOT}-2`);
+            const slowestColor = slowest.style.getPropertyValue('--top-n-color');
+
+            expect(slowestColor).not.toBe('');
+            expect(fastest.style.getPropertyValue('--top-n-color')).not.toBe(slowestColor);
         });
 
         it('shows the rank number inside each rail dot so the colour scale is legible', () => {
@@ -314,8 +334,8 @@ describe('BufferSummaryVirtualizedList', () => {
             ]);
             renderVirtualizedList(false, { topNAnnotationsByOpId: annotations });
 
-            expect(screen.getByTestId('top-n-rail-dot-1')).toHaveTextContent('2');
-            expect(screen.getByTestId('top-n-rail-dot-2')).toHaveTextContent('1');
+            expect(screen.getByTestId(`${TEST_IDS.TOP_N_RAIL_DOT}-1`)).toHaveTextContent('2');
+            expect(screen.getByTestId(`${TEST_IDS.TOP_N_RAIL_DOT}-2`)).toHaveTextContent('1');
         });
 
         it('scrolls the virtualizer to the row when a rail dot is clicked', () => {
@@ -332,8 +352,30 @@ describe('BufferSummaryVirtualizedList', () => {
             ]);
             renderVirtualizedList(false, { topNAnnotationsByOpId: annotations });
 
-            fireEvent.click(screen.getByTestId('top-n-rail-dot-2'));
+            fireEvent.click(screen.getByTestId(`${TEST_IDS.TOP_N_RAIL_DOT}-2`));
             expect(scrollToIndexMock).toHaveBeenCalledWith(1, { align: 'center' });
+        });
+    });
+
+    // Geometry, hit-target size and `pointer-events: auto` all hang off the
+    // shared `.rail-dot` class, while every other assertion here queries the
+    // per-rail modifier — so losing it would leave both rails rendering dots
+    // that are unstyled and too small to click, with the suite still green.
+    describe('shared rail dot geometry', () => {
+        it('gives every dot the shared class alongside its own modifier', () => {
+            const annotations = new Map<number, RankedAnnotation>([
+                [1, buildAnnotation({ opId: 1, rowIndex: 0, rank: 1 })],
+            ]);
+            renderVirtualizedList(false, {
+                topNAnnotationsByOpId: annotations,
+                lateDeallocationRunStarts: [buildRunStart({ opId: 1, rowIndex: 0 })],
+            });
+
+            expect(screen.getByTestId(`${TEST_IDS.TOP_N_RAIL_DOT}-1`)).toHaveClass('rail-dot', 'top-n-rail-dot');
+            expect(screen.getByTestId(`${TEST_IDS.LATE_DEALLOC_RAIL_DOT}-1`)).toHaveClass(
+                'rail-dot',
+                'late-dealloc-rail-dot',
+            );
         });
     });
 
@@ -380,7 +422,7 @@ describe('BufferSummaryVirtualizedList', () => {
             });
 
             expect(getRailColumns(container)).toBe('0');
-            expect(screen.queryByTestId('top-n-rail')).toBeNull();
+            expect(screen.queryByTestId(TEST_IDS.TOP_N_RAIL)).toBeNull();
             expect(screen.queryByTestId(TEST_IDS.LATE_DEALLOC_RAIL)).toBeNull();
         });
     });
@@ -480,7 +522,7 @@ describe('BufferSummaryVirtualizedList', () => {
             const rails = container.querySelectorAll('.rail-track > ul');
             expect([...rails].map((rail) => rail.getAttribute('data-testid'))).toEqual([
                 TEST_IDS.LATE_DEALLOC_RAIL,
-                'top-n-rail',
+                TEST_IDS.TOP_N_RAIL,
             ]);
         });
 
@@ -512,6 +554,34 @@ describe('BufferSummaryVirtualizedList', () => {
 
             fireEvent.click(screen.getByTestId(`${TEST_IDS.LATE_DEALLOC_RAIL_DOT}-2`));
             expect(scrollToIndexMock).toHaveBeenCalledWith(1, { align: 'center' });
+        });
+
+        // Coalescing only engages past `RAIL_MAX_DOTS` rows, so the arguments the
+        // list hands it are unreachable from every other case here — all of which
+        // have two rows — even though the merging itself is unit-tested.
+        it('caps the dots when a report has more run starts than the rail can show', () => {
+            const rowCount = RAIL_MAX_DOTS * 2;
+            const manyOperations = Array.from({ length: rowCount }, (_unused, index) => ({
+                id: index + 1,
+                name: `op-${index + 1}`,
+                buffers: [{ address: 100, size: 16, device_id: 0, buffer_type: BufferType.L1 }],
+            }));
+            const runStarts = manyOperations.map((operation, rowIndex) =>
+                buildRunStart({
+                    opId: operation.id,
+                    rowIndex,
+                    tensors: [buildTensorReport({ id: operation.id })],
+                }),
+            );
+
+            renderVirtualizedList(false, { operations: manyOperations, lateDeallocationRunStarts: runStarts });
+
+            const dots = screen.getByTestId(TEST_IDS.LATE_DEALLOC_RAIL).querySelectorAll('.late-dealloc-rail-dot');
+
+            expect(runStarts).toHaveLength(rowCount);
+            expect(dots).toHaveLength(RAIL_MAX_DOTS);
+            // A surviving dot still speaks for the run starts it swallowed.
+            expect(dots[0].getAttribute('aria-label')).toMatch(/tensors 1, 2/);
         });
     });
 });

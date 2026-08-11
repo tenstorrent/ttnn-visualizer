@@ -85,10 +85,11 @@ const TOP_N_MODE_ORDER: TopNAnnotationMode[] = [
 
 interface BufferSummaryPlotControlsProps {
     /**
-     * Rows where a tensor goes stale (#963). Shown as a count beside the
-     * overlay toggle, and counted whether or not the overlay is on — a switch
-     * that reads "0" tells the user not to bother, which the switch alone
-     * can't.
+     * Rows where a tensor goes stale (#963). Shown beside the overlay toggle
+     * whether or not the overlay is on, and whether or not it is zero — a
+     * switch that reads "0" tells the user not to bother, which the switch
+     * alone can't. Zero also disables the switch, following the Tensor List's
+     * late-deallocation filter: the same finding, signalled the same way.
      */
     lateDeallocationRunCount?: number;
 }
@@ -119,6 +120,8 @@ const BufferSummaryPlotControls = ({ lateDeallocationRunCount = 0 }: BufferSumma
     // still pick a different metric, so leave the select interactive.
     const isModeSelectDisabled = TOP_N_MODE_ORDER.every((mode) => statusByMode[mode] !== TopNAnnotationStatus.READY);
 
+    const hasLateDeallocations = lateDeallocationRunCount > 0;
+
     return (
         <div className='buffer-summary-controls'>
             <Switch
@@ -135,22 +138,24 @@ const BufferSummaryPlotControls = ({ lateDeallocationRunCount = 0 }: BufferSumma
                         onChange={() => {
                             setShowDeallocationReport(!showDeallocationReport);
                         }}
+                        disabled={!hasLateDeallocations}
                     />
-                    {lateDeallocationRunCount > 0 ? (
-                        <Tooltip
-                            content={getLateDeallocationCountSummary(lateDeallocationRunCount)}
-                            placement={PopoverPosition.BOTTOM}
+                    <Tooltip
+                        content={getLateDeallocationCountSummary(lateDeallocationRunCount)}
+                        placement={PopoverPosition.BOTTOM}
+                    >
+                        <Tag
+                            // Warning colour asserts there is something to look
+                            // at, so a zero stays neutral rather than dressing
+                            // an all-clear as a finding.
+                            intent={hasLateDeallocations ? Intent.WARNING : Intent.NONE}
+                            minimal
+                            round
+                            data-testid={TEST_IDS.LATE_DEALLOC_COUNT}
                         >
-                            <Tag
-                                intent={Intent.WARNING}
-                                minimal
-                                round
-                                data-testid={TEST_IDS.LATE_DEALLOC_COUNT}
-                            >
-                                {lateDeallocationRunCount}
-                            </Tag>
-                        </Tooltip>
-                    ) : null}
+                            {lateDeallocationRunCount}
+                        </Tag>
+                    </Tooltip>
                 </div>
             ) : null}
 

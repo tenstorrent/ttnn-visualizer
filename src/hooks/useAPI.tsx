@@ -65,7 +65,7 @@ import {
 import npeManifestSchema from '../schemas/npe-manifest.schema.json';
 import { getErroredReportFolderLabel, normaliseReportFolder } from '../functions/validateReportFolder';
 import { Signpost } from '../model/Signpost';
-import { TensorDeallocationReport, TensorsByOperationByAddress } from '../model/BufferSummary';
+import { TensorsByOperationByAddress } from '../model/BufferSummary';
 import { L1_DEFAULT_MEMORY_SIZE } from '../definitions/L1MemorySize';
 import {
     NPE_QUERY_KEY,
@@ -79,7 +79,7 @@ import { ReportFolder, SINGLE_HOST_WORLD_SIZE } from '../definitions/Reports';
 import { RemoteFolder } from '../definitions/RemoteConnection';
 import createToastNotification from '../functions/createToastNotification';
 import { ToastType } from '../definitions/ToastType';
-import { LastValidConsumer, getLateDeallocationReport } from '../functions/lateDeallocation';
+import { buildLateDeallocationReports } from '../functions/lateDeallocation';
 import { processInputsOutputs } from '../functions/processMemoryAllocations';
 import { SemVer, semverParse } from '../functions/semverParse';
 import { parseNpeAxiosResponseData } from '../functions/parseNpeAxiosResponseData';
@@ -1491,38 +1491,12 @@ export const useGetTensorDeallocationReportByOperation = () => {
     }, [operations]);
 
     return useMemo(() => {
-        const lateDeallocationsByOperation = new Map<number, TensorDeallocationReport[]>();
-        const nonDeallocatedTensorListById = new Map<number, TensorDeallocationReport>();
-        // Lives for this pass only: a tensor alive across many operations is
-        // asked about once per operation, and resolving its last consumer costs
-        // the same every time.
-        const lastConsumerByTensorId = new Map<number, LastValidConsumer>();
-
-        tensorListByOperation.forEach((tensorsMap, operationId) => {
-            tensorsMap.forEach((tensor, address) => {
-                const report = getLateDeallocationReport(
-                    { tensorId: tensor.id, address, operationId, consumers: tensor.consumers },
-                    operationNamesById,
-                    lastConsumerByTensorId,
-                );
-
-                if (!report) {
-                    return;
-                }
-
-                const reportsForOperation = lateDeallocationsByOperation.get(operationId);
-
-                if (reportsForOperation) {
-                    reportsForOperation.push(report);
-                } else {
-                    lateDeallocationsByOperation.set(operationId, [report]);
-                }
-
-                nonDeallocatedTensorListById.set(report.id, report);
-            });
+        const { reportsByOpId, reportsByTensorId } = buildLateDeallocationReports({
+            tensorsByOperation: tensorListByOperation,
+            operationNamesById,
         });
 
-        return { lateDeallocationsByOperation, nonDeallocatedTensorList: nonDeallocatedTensorListById };
+        return { lateDeallocationsByOperation: reportsByOpId, nonDeallocatedTensorList: reportsByTensorId };
     }, [operationNamesById, tensorListByOperation]);
 };
 
