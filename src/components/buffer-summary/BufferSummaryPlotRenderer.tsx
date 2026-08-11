@@ -10,13 +10,19 @@ import {
     L1_SMALL_MARKER_COLOR,
     L1_START_MARKER_COLOR,
 } from '../../definitions/PlotConfigurations';
-import { useDevices, useGetL1SmallMarker, useGetL1StartMarker, useOperationsList } from '../../hooks/useAPI';
-import { useLateDeallocationOverlay } from '../../hooks/useLateDeallocationOverlay';
+import {
+    useDevices,
+    useGetL1SmallMarker,
+    useGetL1StartMarker,
+    useGetTensorDeallocationReportByOperation,
+    useOperationsList,
+} from '../../hooks/useAPI';
 import LoadingSpinner from '../LoadingSpinner';
 import ROUTES from '../../definitions/Routes';
 import {
     renderMemoryLayoutAtom,
     showBufferSummaryZoomedAtom,
+    showDeallocationReportAtom,
     showMemoryRegionsAtom,
     topNAnnotationModeAtom,
 } from '../../store/app';
@@ -24,11 +30,13 @@ import { L1_DEFAULT_MEMORY_SIZE } from '../../definitions/L1MemorySize';
 import { ScrollLocations } from '../../definitions/VirtualLists';
 import { BuffersByOperation, MarkerTypeLabel } from '../../model/APIData';
 import { DEFAULT_DEVICE_ID } from '../../definitions/Devices';
-import { TensorsByOperationByAddress } from '../../model/BufferSummary';
+import { TensorDeallocationReport, TensorsByOperationByAddress } from '../../model/BufferSummary';
 import { MEMORY_ZOOM_PADDING_RATIO } from '../../definitions/BufferSummary';
 import { getBufferAddressZoomRange, memoryZoomPaddingForRange } from '../../functions/bufferSummary';
 import { useTopNAnnotations } from '../../hooks/useTopNAnnotations';
 import BufferSummaryVirtualizedList from './BufferSummaryVirtualizedList';
+
+const EMPTY_TENSOR_DEALLOCATION_REPORT: TensorDeallocationReport[] = [];
 
 interface BufferSummaryPlotRendererProps {
     uniqueBuffersByOperationList: BuffersByOperation[];
@@ -39,6 +47,7 @@ function BufferSummaryPlotRenderer({
     uniqueBuffersByOperationList,
     tensorListByOperation,
 }: BufferSummaryPlotRendererProps) {
+    const showDeallocationReport = useAtomValue(showDeallocationReportAtom);
     const showMemoryLayout = useAtomValue(renderMemoryLayoutAtom);
     const isZoomedIn = useAtomValue(showBufferSummaryZoomedAtom);
     const showMemoryRegions = useAtomValue(showMemoryRegionsAtom);
@@ -48,11 +57,8 @@ function BufferSummaryPlotRenderer({
     const l1StartMarker = useGetL1StartMarker();
     const l1SmallMarker = useGetL1SmallMarker();
 
-    const {
-        getTensorDeallocationReport,
-        runStarts: lateDeallocationRunStarts,
-        runStartCount: lateDeallocationRunCount,
-    } = useLateDeallocationOverlay({ operations: uniqueBuffersByOperationList });
+    const { lateDeallocationsByOperation: nonDeallocatedTensorsByOperationId } =
+        useGetTensorDeallocationReportByOperation();
 
     const memorySize = useMemo(
         () => (!isLoadingDevices && devices ? devices[DEFAULT_DEVICE_ID]?.worker_l1_size : L1_DEFAULT_MEMORY_SIZE),
@@ -81,6 +87,14 @@ function BufferSummaryPlotRenderer({
     const memoryPadding = useMemo(
         () => memoryZoomPaddingForRange(zoomedMemorySizeStart, zoomedMemorySizeEnd, MEMORY_ZOOM_PADDING_RATIO),
         [zoomedMemorySizeStart, zoomedMemorySizeEnd],
+    );
+
+    const getTensorDeallocationReport = useCallback(
+        (operationId: number) =>
+            showDeallocationReport
+                ? nonDeallocatedTensorsByOperationId.get(operationId) || EMPTY_TENSOR_DEALLOCATION_REPORT
+                : EMPTY_TENSOR_DEALLOCATION_REPORT,
+        [showDeallocationReport, nonDeallocatedTensorsByOperationId],
     );
 
     const getOperationTooltipContent = useCallback(
@@ -118,8 +132,6 @@ function BufferSummaryPlotRenderer({
             markers={memoryRegionsMarkers}
             topNAnnotationsByOpId={topNAnnotationsByOpId}
             topNAnnotationMode={topNAnnotationMode}
-            lateDeallocationRunStarts={lateDeallocationRunStarts}
-            lateDeallocationRunCount={lateDeallocationRunCount}
             getTensorDeallocationReport={getTensorDeallocationReport}
             getOperationTooltipContent={getOperationTooltipContent}
             renderOperationLink={renderOperationLink}

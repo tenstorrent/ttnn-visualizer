@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { HTMLSelect, Intent, NumericInput, PopoverPosition, Switch, Tag, Tooltip } from '@blueprintjs/core';
+import { HTMLSelect, NumericInput, PopoverPosition, Switch, Tooltip } from '@blueprintjs/core';
 import { useAtom, useAtomValue } from 'jotai';
 import GlobalSwitch from '../GlobalSwitch';
 import {
@@ -25,8 +25,6 @@ import {
     TopNAnnotationStatus,
 } from '../../definitions/TopNAnnotations';
 import { useTopNAnnotationAvailability } from '../../hooks/useTopNAnnotations';
-import { getLateDeallocationCountSummary } from '../../functions/lateDeallocation';
-import { TEST_IDS } from '../../definitions/TestIds';
 import 'styles/components/BufferSummaryControls.scss';
 
 // Static copy for the disabled-toggle tooltip, keyed by (mode, availability
@@ -83,18 +81,7 @@ const TOP_N_MODE_ORDER: TopNAnnotationMode[] = [
     TopNAnnotationMode.L1_FULLNESS,
 ];
 
-interface BufferSummaryPlotControlsProps {
-    /**
-     * Rows where a tensor goes stale (#963). Shown beside the overlay toggle
-     * whether or not the overlay is on, and whether or not it is zero — a
-     * switch that reads "0" tells the user not to bother, which the switch
-     * alone can't. Zero also disables the switch, following the Tensor List's
-     * late-deallocation filter: the same finding, signalled the same way.
-     */
-    lateDeallocationRunCount?: number;
-}
-
-const BufferSummaryPlotControls = ({ lateDeallocationRunCount = 0 }: BufferSummaryPlotControlsProps) => {
+const BufferSummaryPlotControls = () => {
     const [showDeallocationReport, setShowDeallocationReport] = useAtom(showDeallocationReportAtom);
     const [renderMemoryLayout, setRenderMemoryLayout] = useAtom(renderMemoryLayoutAtom);
     const [showHex, setShowHex] = useAtom(showHexAtom);
@@ -120,8 +107,6 @@ const BufferSummaryPlotControls = ({ lateDeallocationRunCount = 0 }: BufferSumma
     // still pick a different metric, so leave the select interactive.
     const isModeSelectDisabled = TOP_N_MODE_ORDER.every((mode) => statusByMode[mode] !== TopNAnnotationStatus.READY);
 
-    const hasLateDeallocations = lateDeallocationRunCount > 0;
-
     return (
         <div className='buffer-summary-controls'>
             <Switch
@@ -131,32 +116,13 @@ const BufferSummaryPlotControls = ({ lateDeallocationRunCount = 0 }: BufferSumma
             />
 
             {selectedTabId === TAB_IDS.L1 ? (
-                <div className='late-dealloc-control'>
-                    <GlobalSwitch
-                        label='Mark late tensor deallocations'
-                        checked={showDeallocationReport}
-                        onChange={() => {
-                            setShowDeallocationReport(!showDeallocationReport);
-                        }}
-                        disabled={!hasLateDeallocations}
-                    />
-                    <Tooltip
-                        content={getLateDeallocationCountSummary(lateDeallocationRunCount)}
-                        placement={PopoverPosition.BOTTOM}
-                    >
-                        <Tag
-                            // Warning colour asserts there is something to look
-                            // at, so a zero stays neutral rather than dressing
-                            // an all-clear as a finding.
-                            intent={hasLateDeallocations ? Intent.WARNING : Intent.NONE}
-                            minimal
-                            round
-                            data-testid={TEST_IDS.LATE_DEALLOC_COUNT}
-                        >
-                            {lateDeallocationRunCount}
-                        </Tag>
-                    </Tooltip>
-                </div>
+                <GlobalSwitch
+                    label='Mark late tensor deallocations'
+                    checked={showDeallocationReport}
+                    onChange={() => {
+                        setShowDeallocationReport(!showDeallocationReport);
+                    }}
+                />
             ) : null}
 
             <GlobalSwitch
