@@ -8,6 +8,23 @@
     margin-bottom: 0;
     align-items: flex-start;
 
+    // Row wrapper so the stale-tensor count sits beside its switch instead of
+    // below it — the control stack itself is a column.
+    .late-dealloc-control {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+
+        // The switch's own bottom margin is what spaces the control stack, so
+        // move it to the wrapper — leaving it on the switch would push the
+        // count tag out of line with the label.
+        margin-bottom: 10px;
+
+        > .bp6-control {
+            margin-bottom: 0;
+        }
+    }
+
     .top-n-controls {
         display: inline-flex;
         align-items: center;

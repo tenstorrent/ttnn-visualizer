@@ -5,7 +5,8 @@
 import React, { CSSProperties, useCallback, useEffect, useMemo, useRef } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import classNames from 'classnames';
-import { Tooltip } from '@blueprintjs/core';
+import { Icon, Tooltip } from '@blueprintjs/core';
+import { IconNames } from '@blueprintjs/icons';
 import { PlotConfiguration, PlotMarker } from '../../definitions/PlotConfigurations';
 import MemoryPlotRenderer from '../operation-details/MemoryPlotRenderer';
 import BufferSummaryRow from './BufferSummaryRow';
@@ -18,8 +19,23 @@ import useBufferNavigation from '../../hooks/useBufferNavigation';
 import BufferSummaryPlotControls from './BufferSummaryPlotControls';
 import { TensorDeallocationReport, TensorsByOperationByAddress } from '../../model/BufferSummary';
 import { CHART_DATA, OPERATION_EL_HEIGHT, TOTAL_SHADE_HEIGHT } from '../../definitions/BufferSummary';
-import { RankedAnnotation, TOP_N_MODE_LABEL, TopNAnnotationMode } from '../../definitions/TopNAnnotations';
+import {
+    RankedAnnotation,
+    TOP_N_MODE_LABEL,
+    TOP_N_RAIL_LABEL,
+    TopNAnnotationMode,
+} from '../../definitions/TopNAnnotations';
 import { perfColorScale } from '../../functions/perfOverlay';
+import {
+    LATE_DEALLOC_GLYPH_SIZE,
+    LATE_DEALLOC_RAIL_LABEL,
+    LateDeallocationRunStart,
+} from '../../definitions/LateDeallocation';
+import { coalesceLateDeallocationRunStarts, getLateDeallocationSummary } from '../../functions/lateDeallocation';
+import { NavigationRailItem, RAIL_MAX_DOTS } from '../../definitions/NavigationRail';
+import NavigationRail from './NavigationRail';
+import LateDeallocationBadge from './LateDeallocationBadge';
+import { TEST_IDS } from '../../definitions/TestIds';
 
 interface BufferSummaryVirtualizedListProps {
     operations: BuffersByOperation[];
@@ -43,6 +59,16 @@ interface BufferSummaryVirtualizedListProps {
     topNAnnotationsByOpId?: Map<number, RankedAnnotation>;
     /** Mode the annotations were computed for. Drives tooltip wording. */
     topNAnnotationMode?: TopNAnnotationMode;
+    /**
+     * Rows where a tensor goes stale (#963), plotted as a second navigation
+     * rail inboard of the top-N one. Empty while the overlay toggle is off.
+     */
+    lateDeallocationRunStarts?: readonly LateDeallocationRunStart[];
+    /**
+     * How many rows qualify, passed regardless of the toggle so the control can
+     * advertise the feature before it is switched on.
+     */
+    lateDeallocationRunCount?: number;
     getTensorDeallocationReport?: (operationId: number) => TensorDeallocationReport[];
     getOperationTooltipContent: (operation: BuffersByOperation) => string;
     renderOperationLink: (operation: BuffersByOperation) => React.ReactNode;
@@ -51,9 +77,15 @@ interface BufferSummaryVirtualizedListProps {
 const EMPTY_TENSOR_DEALLOCATION_REPORT: TensorDeallocationReport[] = [];
 const DEFAULT_GET_TENSOR_DEALLOCATION_REPORT = () => EMPTY_TENSOR_DEALLOCATION_REPORT;
 const EMPTY_ANNOTATIONS = new Map<number, RankedAnnotation>();
+const EMPTY_RUN_STARTS: readonly LateDeallocationRunStart[] = [];
+const EMPTY_RAIL_ITEMS: readonly NavigationRailItem[] = [];
 
 interface TopNCssProperties extends CSSProperties {
     '--top-n-color': string;
+}
+
+interface RailCssProperties extends CSSProperties {
+    '--rail-columns': number;
 }
 
 const getRankTooltipText = (annotation: RankedAnnotation, mode: TopNAnnotationMode): string =>
@@ -73,6 +105,8 @@ function BufferSummaryVirtualizedList({
     markers,
     topNAnnotationsByOpId = EMPTY_ANNOTATIONS,
     topNAnnotationMode = TopNAnnotationMode.PERF_TIME,
+    lateDeallocationRunStarts = EMPTY_RUN_STARTS,
+    lateDeallocationRunCount = 0,
     getTensorDeallocationReport = DEFAULT_GET_TENSOR_DEALLOCATION_REPORT,
     getOperationTooltipContent,
     renderOperationLink,
@@ -177,9 +211,71 @@ function BufferSummaryVirtualizedList({
         [topNAnnotationsByOpId],
     );
 
+    // Rail items are memoised because `NavigationRail` is memoised: a fresh
+    // array here would defeat the boundary that keeps the dots out of the
+    // scroll-render path.
+    const lateDeallocationRailItems = useMemo<readonly NavigationRailItem[]>(() => {
+        if (operations.length === 0 || lateDeallocationRunStarts.length === 0) {
+            return EMPTY_RAIL_ITEMS;
+        }
+
+        return coalesceLateDeallocationRunStarts({
+            runStarts: lateDeallocationRunStarts,
+            rowCount: operations.length,
+            maxDots: RAIL_MAX_DOTS,
+        }).map((runStart) => ({
+            key: runStart.opId,
+            rowIndex: runStart.rowIndex,
+            tooltip: getLateDeallocationSummary(runStart.tensors),
+            dotClassName: 'late-dealloc-rail-dot',
+            dotTestId: `${TEST_IDS.LATE_DEALLOC_RAIL_DOT}-${runStart.opId}`,
+            content: (
+                <Icon
+                    icon={IconNames.OUTDATED}
+                    size={LATE_DEALLOC_GLYPH_SIZE}
+                />
+            ),
+        }));
+    }, [lateDeallocationRunStarts, operations.length]);
+
+    const topNRailItems = useMemo<readonly NavigationRailItem[]>(
+        () =>
+            sortedTopNAnnotations.map((annotation) => {
+                const dotStyle: TopNCssProperties = {
+                    '--top-n-color': perfColorScale(annotation.t),
+                };
+
+                return {
+                    key: annotation.opId,
+                    rowIndex: annotation.rowIndex,
+                    tooltip: getRankTooltipText(annotation, topNAnnotationMode),
+                    dotClassName: 'top-n-rail-dot',
+                    dotTestId: `${TEST_IDS.TOP_N_RAIL_DOT}-${annotation.opId}`,
+                    dotStyle,
+                    content: annotation.rank,
+                };
+            }),
+        [sortedTopNAnnotations, topNAnnotationMode],
+    );
+
+    const hasRows = operations.length > 0;
+    const hasTopNRail = hasRows && sortedTopNAnnotations.length > 0;
+    const hasLateDeallocationRail = hasRows && lateDeallocationRunStarts.length > 0;
+    // Drives the gutter the rows and the plot give up, so an absent rail costs
+    // no width. The column size itself stays in SCSS — this is only the count.
+    const railStyle: RailCssProperties = {
+        '--rail-columns': Number(hasTopNRail) + Number(hasLateDeallocationRail),
+    };
+
     return (
-        <div className='buffer-summary-chart'>
-            <BufferSummaryPlotControls />
+        <div
+            // `has-rank-column` tells the stylesheet the rank badges are in
+            // play, so rows without one can reserve the slot and keep the
+            // late-deallocation glyphs in a single scannable column.
+            className={classNames('buffer-summary-chart', { 'has-rank-column': hasTopNRail })}
+            style={railStyle}
+        >
+            <BufferSummaryPlotControls lateDeallocationRunCount={lateDeallocationRunCount} />
 
             <p className='x-axis-label'>Memory Address</p>
 
@@ -229,6 +325,7 @@ function BufferSummaryVirtualizedList({
                                     : undefined;
                                 const badge = annotation ? (
                                     <Tooltip
+                                        className='y-axis-tick-badge'
                                         content={getRankTooltipText(annotation, topNAnnotationMode)}
                                         placement='left'
                                     >
@@ -236,17 +333,25 @@ function BufferSummaryVirtualizedList({
                                             className='top-n-badge'
                                             style={badgeStyle}
                                             data-rank={annotation.rank}
-                                            data-testid={`top-n-badge-${operation.id}`}
+                                            data-testid={`${TEST_IDS.TOP_N_BADGE}-${operation.id}`}
                                         >
                                             #{annotation.rank}
                                         </span>
                                     </Tooltip>
                                 ) : null;
 
+                                // The badge follows the hatching rather than the
+                                // run starts the rail plots: a hatched row with
+                                // an empty gutter reads as a marker that went
+                                // missing, not as one finding continuing.
+                                const rowLateDeallocations = getTensorDeallocationReport(operation.id);
+                                const hasLateDeallocations = rowLateDeallocations.length > 0;
+
                                 return (
                                     <div
                                         className={classNames('buffer-summary-plot-container', {
                                             'has-top-n': annotation !== undefined,
+                                            'has-late-dealloc': hasLateDeallocations,
                                         })}
                                         key={virtualRow.key}
                                         data-index={virtualRow.index}
@@ -257,7 +362,7 @@ function BufferSummaryVirtualizedList({
                                             memoryEnd={rowMemoryEnd}
                                             memoryPadding={memoryPadding}
                                             tensorList={tensorListByOperation.get(operation.id)}
-                                            tensorDeallocationReport={getTensorDeallocationReport(operation.id)}
+                                            tensorDeallocationReport={rowLateDeallocations}
                                             showMemoryLayout={showMemoryLayout}
                                             isScrolling={isVirtualizerScrolling}
                                         />
@@ -270,11 +375,21 @@ function BufferSummaryVirtualizedList({
                                             the `<a>`. */}
                                         <div className='y-axis-tick'>
                                             <Tooltip
+                                                className='y-axis-tick-label'
                                                 content={getOperationTooltipContent(operation)}
                                                 disabled={isVirtualizerScrolling}
                                             >
                                                 {renderOperationLink(operation)}
                                             </Tooltip>
+                                            {/* Ordered to match the rails in the gutter:
+                                                late deallocation inboard, top-N outermost. */}
+                                            {hasLateDeallocations ? (
+                                                <LateDeallocationBadge
+                                                    operationId={operation.id}
+                                                    tensors={rowLateDeallocations}
+                                                    isScrolling={isVirtualizerScrolling}
+                                                />
+                                            ) : null}
                                             {badge}
                                         </div>
                                     </div>
@@ -284,50 +399,32 @@ function BufferSummaryVirtualizedList({
                     </div>
                 </div>
 
-                {sortedTopNAnnotations.length > 0 && operations.length > 0 ? (
-                    // `<li>` carries the absolute positioning so Blueprint's
-                    // Tooltip target span has non-zero geometry to anchor
-                    // against — earlier the dot was the positioned element
-                    // and the wrapper span collapsed to 0×0 at the rail's
-                    // origin, parking every tooltip at the top.
-                    <ul
-                        className='top-n-rail'
-                        aria-label='Top-ranked operations'
-                        data-testid='top-n-rail'
-                    >
-                        {sortedTopNAnnotations.map((annotation) => {
-                            const dotStyle: TopNCssProperties = {
-                                '--top-n-color': perfColorScale(annotation.t),
-                            };
-                            const itemStyle: CSSProperties = {
-                                top: `${(annotation.rowIndex / operations.length) * 100}%`,
-                            };
-                            return (
-                                <li
-                                    key={annotation.opId}
-                                    className='top-n-rail-item'
-                                    style={itemStyle}
-                                >
-                                    <Tooltip
-                                        content={getRankTooltipText(annotation, topNAnnotationMode)}
-                                        placement='left'
-                                    >
-                                        <button
-                                            type='button'
-                                            className='top-n-rail-dot'
-                                            style={dotStyle}
-                                            onClick={() => handleRailDotClick(annotation.rowIndex)}
-                                            aria-label={`Jump to ${getRankTooltipText(annotation, topNAnnotationMode)}`}
-                                            data-testid={`top-n-rail-dot-${annotation.opId}`}
-                                        >
-                                            {annotation.rank}
-                                        </button>
-                                    </Tooltip>
-                                </li>
-                            );
-                        })}
-                    </ul>
-                ) : null}
+                {/* Rails are laid out in flow order inside the track rather than
+                    offset from the right edge individually, so whichever ones are
+                    present pack against the scroll area and none has to know what
+                    else is showing. Top-N renders last to keep the outermost
+                    column when both are up. */}
+                <div className='rail-track'>
+                    {hasLateDeallocationRail ? (
+                        <NavigationRail
+                            ariaLabel={LATE_DEALLOC_RAIL_LABEL}
+                            testId={TEST_IDS.LATE_DEALLOC_RAIL}
+                            rowCount={operations.length}
+                            items={lateDeallocationRailItems}
+                            onDotClick={handleRailDotClick}
+                        />
+                    ) : null}
+
+                    {hasTopNRail ? (
+                        <NavigationRail
+                            ariaLabel={TOP_N_RAIL_LABEL}
+                            testId={TEST_IDS.TOP_N_RAIL}
+                            rowCount={operations.length}
+                            items={topNRailItems}
+                            onDotClick={handleRailDotClick}
+                        />
+                    ) : null}
+                </div>
             </div>
         </div>
     );

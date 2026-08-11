@@ -11,16 +11,73 @@ $width-offset: $label-width;
 $height-offset: 15px;
 $rail-gutter: 26px;
 
-// Right-edge clearance for the fixed Feedback button (`.feedback-button`
-// sits at `right: -3px` with a rotated label extending ~35px into the
-// viewport). Pad the whole chart away from it so the rail dots and op
-// names don't sit under the button.
-$feedback-button-clearance: 40px;
+// Gutter the rows and the plot give up to the navigation rails: one column per
+// rail actually rendered. `--rail-columns` is set by
+// `BufferSummaryVirtualizedList`, which is the only place that knows whether
+// each rail has data; an absent rail therefore costs no width. The trade-off is
+// that toggling an overlay reflows the plot and every row canvas, which is why
+// the count lives in one place instead of each rail reserving its own strip.
+$rail-track: calc(#{$rail-gutter} * var(--rail-columns, 0));
+
+// Right-edge clearance inside the scrolling list. Overlay scrollbars (macOS
+// Firefox and WebKit) float over the scroll container's right edge instead of
+// reserving a gutter, and `scrollbar-gutter: stable` reserves nothing for them
+// because their gutter width is zero. The op-label column ends flush with that
+// edge, so its trailing badge needs the strip kept clear explicitly or the
+// scrollbar paints on top of it. Sized for a hovered overlay scrollbar, which
+// is wider than its idle state.
+$scrollbar-overlay-clearance: 14px;
+
+// Right-edge clearance for the fixed Feedback button, so the rail dots (which
+// are clickable, and would otherwise have their clicks swallowed) and the op
+// labels stay out from under it. `.feedback-button` sits at `right: -3px` and
+// is rotated -90deg about its bottom-right corner, so its ~30px height becomes
+// its horizontal footprint, reaching ~30px in from the viewport edge when
+// hovered. `main` already supplies 15px of that, hence the modest figure here:
+// this is measured clearance, not a margin to taste, and the chart pays for it
+// out of its own width.
+$feedback-button-clearance: 20px;
 
 // Bottom clearance for the fixed `.app-footer` (closed `min-height: 34px`)
 // so the last rail dots and list rows aren't covered by the status bar /
 // Range pill at the viewport bottom. Add a few extra px of breathing room.
 $footer-clearance: 44px;
+
+// Height of the scrolling list, and therefore of the rails beside it.
+// `RAIL_MAX_DOTS` in `definitions/NavigationRail.ts` divides this by
+// `$rail-dot-size` to decide how many dots fit without covering each other, so
+// changing either number here is a change to the coalescing there.
+$scrollable-height: 600px;
+$rail-dot-size: 20px;
+$badge-height: 16px;
+$badge-min-width: 22px;
+
+// Small monospace numeral. Only the rank markers render text; the
+// late-deallocation ones are glyph-only and deliberately skip this.
+%marker-numeral {
+    font-family: monospace;
+    font-size: 10px;
+    font-weight: 600;
+}
+
+// Shared geometry for the badges in the op-label gutter, so the two readings
+// stay the same size and shape and only their colours carry meaning.
+%y-axis-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: $badge-min-width;
+    height: $badge-height;
+    padding: 0 4px;
+
+    // Half the height, so the pill stays a pill if the height ever changes.
+    border-radius: $badge-height * 0.5;
+    line-height: 1;
+
+    // The tick is a flex row whose free space belongs to the op name; a badge
+    // that gave up width would be clipped rather than merely narrow.
+    flex-shrink: 0;
+}
 
 .buffer-summary-chart {
     // Use padding (not margin) + border-box so the clearance is taken
@@ -43,13 +100,13 @@ $footer-clearance: 44px;
 
     .buffer-summary-plot {
         // Width matches the row canvases beneath. Each row sits inside
-        // `.scrollable-with-rail` (padding-right: $rail-gutter) and is
+        // `.scrollable-with-rail` (padding-right: $rail-track) and is
         // sized via the grid's 1fr column, so it shrinks by both the
-        // label column AND the rail gutter. The plot has to subtract the
-        // same — otherwise it extends 26px past the rows on the right
+        // label column AND the rail track. The plot has to subtract the
+        // same — otherwise it extends past the rows on the right
         // (overlapping the left edge of the label column and visually
         // eating the leading op-id digit).
-        width: calc(100% - $width-offset - $rail-gutter);
+        width: calc(100% - #{$width-offset} - #{$rail-track});
         position: absolute;
         top: 0;
         left: 0;
@@ -88,17 +145,33 @@ $footer-clearance: 44px;
             align-items: center;
             gap: 6px;
             padding-left: $label-margin;
+
+            // Keeps the trailing badge out from under the overlay scrollbar.
+            // Applied here rather than on the scroll element or the row so the
+            // plot column keeps its width and stays aligned with the axis above.
+            padding-right: $scrollbar-overlay-clearance;
             margin-bottom: 0;
 
-            // The Tooltip wrapping the op name injects a `.bp6-popover-target`
-            // span between this flex container and the `<a>`. Force it to
-            // participate in flex shrinking so the `<a>` inside can reach
-            // its `text-overflow: ellipsis` when an op name is too long for
-            // the label column.
-            > .bp6-popover-target {
+            // Both children are Tooltips, so Blueprint injects a
+            // `.bp6-popover-target` span between this flex container and the
+            // `<a>`/badge; those spans are the flex items. Each Tooltip passes an
+            // app-owned class through to its span so the two can be told apart —
+            // one rule covering both made the badge's wrapper shrinkable, and a
+            // long op name then stole width from it until the badge overflowed
+            // the column and was clipped.
+            //
+            // The label wrapper absorbs all the shrinking so the `<a>` inside can
+            // reach its `text-overflow: ellipsis`.
+            > .y-axis-tick-label {
                 display: block;
                 min-width: 0;
                 flex: 1 1 auto;
+            }
+
+            // Fixed size: the rank is the one thing here that must stay legible
+            // whatever the op name does.
+            > .y-axis-tick-badge {
+                flex: 0 0 auto;
             }
 
             a {
@@ -119,30 +192,37 @@ $footer-clearance: 44px;
         }
     }
 
-    .top-n-badge {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        min-width: 22px;
-        height: 16px;
-        padding: 0 4px;
-        border-radius: 8px;
-        font-size: 10px;
-        font-weight: 600;
-        font-family: monospace;
-        background-color: var(--top-n-color, #ff3b1f);
-        color: $tt-white;
-        line-height: 1;
-        flex-shrink: 0;
+    // The late-deallocation glyph sits inboard of the rank badge, so on a row
+    // that has no rank it slides a badge-width outward and the glyphs stop
+    // lining up — the column is the whole point of a marker that repeats down
+    // dozens of rows. Rows lacking a rank reserve its slot instead.
+    //
+    // Scoped twice on purpose: only while the rank column is in play (otherwise
+    // every row would give up label width to a slot nothing can occupy), and
+    // only on rows actually showing a glyph (nothing else has a column to join).
+    // Reserves the badge's minimum width, so a two-digit rank still runs a few
+    // px wider.
+    &.has-rank-column .buffer-summary-plot-container.has-late-dealloc:not(.has-top-n) .y-axis-tick::after {
+        content: '';
+        flex: 0 0 auto;
+        width: $badge-min-width;
+    }
+
+    // Shape comes from the widget the marker is (gutter badge or rail dot);
+    // colour comes from the finding it reports, below. Splitting the two axes
+    // keeps a marker's identity in one place instead of once per widget.
+    .top-n-badge,
+    .late-dealloc-badge {
+        @extend %y-axis-badge;
     }
 
     .scrollable-with-rail {
         position: relative;
-        padding-right: $rail-gutter;
+        padding-right: $rail-track;
     }
 
     .scrollable-element {
-        height: 600px;
+        height: $scrollable-height;
         width: 100%;
         overflow-y: auto;
         position: relative;
@@ -151,17 +231,29 @@ $footer-clearance: 44px;
         @include scrollShade.scroll-shade(10px);
     }
 
-    .top-n-rail {
+    // Shrink-wraps its rails: with `right: 0` and no width of its own, the track
+    // is exactly as wide as the columns present, so it always ends flush with
+    // the gutter `--rail-columns` reserved.
+    .rail-track {
         position: absolute;
         right: 0;
         top: $height-offset;
         bottom: 0;
+        display: flex;
+        pointer-events: none;
+        z-index: 2;
+    }
+
+    .navigation-rail {
+        // Containing block for the absolutely positioned `<li>` dots, which are
+        // placed by row fraction down the rail.
+        position: relative;
+        flex: 0 0 auto;
         width: $rail-gutter;
+        height: 100%;
         list-style: none;
         margin: 0;
         padding: 0;
-        pointer-events: none;
-        z-index: 2;
     }
 
     // `<li>` is the absolute-positioned anchor (was `display: contents`).
@@ -169,28 +261,39 @@ $footer-clearance: 44px;
     // bounding box ends up at the dot's location and the popover anchors
     // there. Previously the span had zero geometry and every tooltip
     // parked at the rail origin.
-    .top-n-rail-item {
+    .rail-item {
         position: absolute;
         right: 2px;
+
+        // Flex, not the default block, because `translateY(-50%)` resolves
+        // against this element's own height and the dot is centred on its row by
+        // that half. Left as a block the li holds an inline tooltip span
+        // wrapping a block-level dot — a block-in-inline split, where the height
+        // picks up the font's strut and how much of it survives differs by
+        // engine, so the whole rail sat at a different offset in Firefox than in
+        // Chrome. Flex has no inline formatting context, so the height is the
+        // dot's box in both.
+        display: flex;
         transform: translateY(-50%);
     }
 
-    .top-n-rail-dot {
+    // Appearance and interaction shared by every rail dot. Rails sit in
+    // adjacent gutter columns, so anything but identical geometry reads as an
+    // accident; only their colours and glyph differ, below.
+    .rail-dot {
         display: flex;
         align-items: center;
         justify-content: center;
-        width: 20px;
-        height: 20px;
+        width: $rail-dot-size;
+        height: $rail-dot-size;
         margin: 0;
         padding: 0;
         border: 1px solid rgb(0 0 0 / 30%);
         border-radius: 50%;
-        background-color: var(--top-n-color, #ff3b1f);
-        font-family: monospace;
-        font-size: 10px;
-        font-weight: 600;
-        color: $tt-white;
         line-height: 1;
+
+        // The rails themselves are `pointer-events: none` so they don't blanket
+        // the rows behind them; the dots opt back in to stay clickable.
         pointer-events: auto;
         cursor: pointer;
         transition: transform 80ms ease;
@@ -200,6 +303,24 @@ $footer-clearance: 44px;
             transform: scale(1.3);
             outline: none;
         }
+    }
+
+    // A marker's colour identifies the finding, not the widget: the badge in the
+    // gutter and the dot on the rail report the same thing, so a colour that
+    // drifted between them would imply a distinction that doesn't exist. The
+    // per-row `--top-n-color` is set inline from the perf scale.
+    .top-n-badge,
+    .top-n-rail-dot {
+        @extend %marker-numeral;
+
+        background-color: var(--top-n-color, #ff3b1f);
+        color: $tt-white;
+    }
+
+    .late-dealloc-badge,
+    .late-dealloc-rail-dot {
+        background-color: $tt-yellow;
+        color: $tt-black;
     }
 
     .list-container {
