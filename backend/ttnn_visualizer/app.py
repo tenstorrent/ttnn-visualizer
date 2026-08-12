@@ -439,8 +439,9 @@ def _record_launch(config):
     # anything below WARNING, so an info line here would never be seen.
     print(
         f"📊 Recording usage locally to {get_usage_log_path()}\n"
-        f"   Nothing is sent anywhere. Switch it off with "
-        f"{USAGE_RECORDING_ENV_VAR}=false or by creating {get_disabled_marker_path()}"
+        f"   Written on this machine only; the application transmits nothing. "
+        f"Switch it off with {USAGE_RECORDING_ENV_VAR}=false or by creating "
+        f"{get_disabled_marker_path()}"
     )
 
 

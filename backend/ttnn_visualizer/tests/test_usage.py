@@ -157,6 +157,28 @@ def test_the_environment_switch_survives_config_override(monkeypatch):
     assert config.to_dict()[USAGE_RECORDING_ENV_VAR] is False
 
 
+def test_usage_recording_config_reflects_server_mode(usage_directory, monkeypatch):
+    # The PRINT_ENV dump must not claim recording is on when SERVER_MODE has
+    # switched the writer off.
+    monkeypatch.delenv(USAGE_RECORDING_ENV_VAR, raising=False)
+
+    config = DefaultConfig()
+    config.SERVER_MODE = True
+
+    assert config.USAGE_RECORDING_ENABLED is False
+
+
+def test_usage_recording_config_reflects_the_marker_file(usage_directory, monkeypatch):
+    monkeypatch.delenv(USAGE_RECORDING_ENV_VAR, raising=False)
+    usage_directory.mkdir(parents=True)
+    usage.get_disabled_marker_path().touch()
+
+    config = DefaultConfig()
+    config.SERVER_MODE = False
+
+    assert config.USAGE_RECORDING_ENABLED is False
+
+
 def test_an_event_round_trips_as_logfmt(usage_directory):
     record_event(UsageEvent.APP_START, deployment_mode=DeploymentMode.CONTAINER)
 
@@ -225,6 +247,59 @@ def test_app_start_carries_the_baseline_fields(usage_directory):
     assert fields["python_version"].count(".") == 1
     assert fields["version"]
     assert fields["os"]
+
+
+def test_disabled_recording_does_not_build_the_app_start_payload(
+    usage_directory, monkeypatch
+):
+    monkeypatch.setenv(USAGE_RECORDING_ENV_VAR, "false")
+
+    def fail_if_called(*_args, **_kwargs):
+        raise AssertionError(
+            "app_start details must not be built when recording is off"
+        )
+
+    monkeypatch.setattr(usage, "get_application_version", fail_if_called)
+    monkeypatch.setattr(usage, "get_deployment_mode", fail_if_called)
+    monkeypatch.setattr(usage, "get_operating_system", fail_if_called)
+    monkeypatch.setattr(usage, "get_python_version", fail_if_called)
+
+    record_app_start(SimpleNamespace(TT_METAL_HOME=None))
+
+    assert read_lines(usage_directory) == []
+
+
+def test_a_write_failure_does_not_break_the_caller(
+    usage_directory, monkeypatch, caplog
+):
+    def raise_os_error(_descriptor, _data):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(os, "write", raise_os_error)
+
+    with caplog.at_level("WARNING"):
+        record_event(UsageEvent.APP_START)
+
+    assert read_lines(usage_directory) == []
+    assert "Unable to record usage event" in caplog.text
+
+
+def test_an_app_start_detail_failure_does_not_break_the_caller(
+    usage_directory, monkeypatch, caplog
+):
+    # Detail helpers are evaluated outside record_event's try when passed as kwargs;
+    # record_app_start must absorb those escapes itself.
+    monkeypatch.setattr(
+        usage,
+        "get_deployment_mode",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(OSError("EIO")),
+    )
+
+    with caplog.at_level("WARNING"):
+        record_app_start(SimpleNamespace(TT_METAL_HOME=None))
+
+    assert read_lines(usage_directory) == []
+    assert "Unable to record usage event" in caplog.text
 
 
 def test_deployment_mode_prefers_tt_metal_home(monkeypatch):
@@ -363,7 +438,13 @@ def test_compaction_survives_a_log_that_is_not_valid_utf_8(
 
     usage.compact_if_needed()
 
-    lines = read_lines(usage_directory)
+    # May still hold the original bytes when summarising the older half cannot shrink
+    # the file (rewrite is skipped). Read the way `_compact` does.
+    lines = (
+        (usage_directory / usage.USAGE_LOG_NAME)
+        .read_text(encoding="utf-8", errors="replace")
+        .splitlines()
+    )
 
     assert total_events([line for line in lines if line.startswith("ts=")]) == 3
     assert any("corrupted" in line for line in lines)
@@ -378,11 +459,51 @@ def test_a_log_under_the_cap_is_left_alone(usage_directory):
     assert read_lines(usage_directory) == lines
 
 
-def test_the_log_is_not_world_readable(usage_directory):
+def test_compaction_skips_rewrite_when_nothing_is_summarisable(
+    usage_directory, monkeypatch
+):
+    # An older half of only unparseable lines cannot shrink the file; rewriting
+    # would still pay the replace cost on every launch.
+    monkeypatch.setattr(usage, "MAX_LOG_BYTES", 0)
+    lines = [
+        "garbled-one",
+        "garbled-two",
+        "ts=2026-08-01T10:00:02Z event=app_start schema_version=1 run_id=cccccccc",
+        "ts=2026-08-01T10:00:03Z event=app_start schema_version=1 run_id=dddddddd",
+    ]
+    write_log(usage_directory, lines)
+    before = get_usage_log_path().stat()
+
+    usage.compact_if_needed()
+
+    after = get_usage_log_path().stat()
+    assert read_lines(usage_directory) == lines
+    assert after.st_mtime_ns == before.st_mtime_ns
+
+
+def test_the_log_is_not_world_readable(usage_directory, monkeypatch):
     record_event(UsageEvent.APP_START)
 
     assert get_usage_log_path().stat().st_mode & 0o077 == 0
     assert usage_directory.stat().st_mode & 0o077 == 0
+
+    # Compaction used to recreate the log at umask permissions and undo 0o600.
+    monkeypatch.setattr(usage, "MAX_LOG_BYTES", 0)
+    write_log(
+        usage_directory,
+        [
+            "ts=2026-08-01T10:00:00Z event=app_start schema_version=1 run_id=aaaaaaaa",
+            "ts=2026-08-01T10:00:01Z event=app_start schema_version=1 run_id=bbbbbbbb",
+            "ts=2026-08-01T10:00:02Z event=app_start schema_version=1 run_id=cccccccc",
+            "ts=2026-08-01T10:00:03Z event=app_start schema_version=1 run_id=dddddddd",
+        ],
+    )
+    # Match the append path's mode so a regression is not masked by write_log's umask.
+    os.chmod(get_usage_log_path(), 0o600)
+
+    usage.compact_if_needed()
+
+    assert get_usage_log_path().stat().st_mode & 0o077 == 0
 
 
 def test_record_launch_records_one_line_and_exports_the_run_id(
@@ -390,7 +511,8 @@ def test_record_launch_records_one_line_and_exports_the_run_id(
 ):
     from ttnn_visualizer.app import _record_launch
 
-    monkeypatch.delenv(RUN_ID_ENV_VAR, raising=False)
+    # setenv (not delenv) so the value _record_launch writes is rolled back at teardown.
+    monkeypatch.setenv(RUN_ID_ENV_VAR, "")
     # The string form `.env.sample` produces, which is truthy if taken at face value.
     _record_launch(SimpleNamespace(SERVER_MODE="false", TT_METAL_HOME=None))
 
@@ -404,7 +526,7 @@ def test_record_launch_records_one_line_and_exports_the_run_id(
 def test_record_launch_records_nothing_in_server_mode(usage_directory, monkeypatch):
     from ttnn_visualizer.app import _record_launch
 
-    monkeypatch.delenv(RUN_ID_ENV_VAR, raising=False)
+    monkeypatch.setenv(RUN_ID_ENV_VAR, "")
     _record_launch(SimpleNamespace(SERVER_MODE=True, TT_METAL_HOME=None))
 
     assert read_lines(usage_directory) == []

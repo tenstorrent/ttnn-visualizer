@@ -5,10 +5,11 @@
 """Local-only usage event log.
 
 The application appends one ``key=value`` line per event to a file under a fixed
-path in the user's home directory. Nothing is ever sent anywhere: if the file is
-not read by an out-of-band collector, no usage data leaves the machine at all.
+path in the user's home directory. Written on this machine only; the application
+transmits nothing. An out-of-band collector may later read the file — that is
+outside this process.
 
-Two properties this file's consumers depend on, stated here because they are not
+Properties this file's consumers depend on, stated here because they are not
 obvious from the code that reads it:
 
 * **Every line contributes ``count`` events, defaulting to 1 when the field is
@@ -20,6 +21,11 @@ obvious from the code that reads it:
   Concurrency is handled by ``O_APPEND`` rather than a lock, which is atomic on a
   local filesystem but not over NFS. On an NFS-mounted home two instances writing
   at once can interleave a line.
+* **Only ``*.log`` files are event data.** Compaction leaves a ``.compaction.lock``
+  beside the log; globbing the directory for anything else will pick it up.
+* **Compaction does not preserve line order across the summarised span.**
+  Unparseable lines kept verbatim are appended after the sorted summaries, so
+  they can land out of time order relative to events they sat between.
 
 Every recorded value comes from a closed enum, a bucketed value, or the
 application's own version. No report, file, directory, operation or host names,
@@ -55,7 +61,11 @@ SCHEMA_VERSION = 1
 # by crawling home directories. This path is an interface to another team — narrow,
 # fixed and documented — while the app data directory is an implementation detail
 # that has already moved once.
-USAGE_DIRECTORY = Path.home() / ".ttnn-visualizer" / "usage"
+#
+# Override for tests. Production resolves via :func:`get_usage_directory` on each
+# call so ``Path.home()`` is not on the import path of ``settings`` (it raises
+# ``RuntimeError`` when ``HOME`` is unset and the uid is absent from passwd).
+USAGE_DIRECTORY: Optional[Path] = None
 USAGE_LOG_NAME = "events.log"
 DISABLED_MARKER_NAME = "disabled"
 COMPACTION_LOCK_NAME = ".compaction.lock"
@@ -120,7 +130,10 @@ class OperatingSystem(str, Enum):
 
 def get_usage_directory() -> Path:
     """The one fixed location usage data is written to."""
-    return USAGE_DIRECTORY
+    if USAGE_DIRECTORY is not None:
+        return USAGE_DIRECTORY
+
+    return Path.home() / ".ttnn-visualizer" / "usage"
 
 
 def get_usage_log_path() -> Path:
@@ -293,7 +306,15 @@ def _append_line(line: str) -> None:
         get_usage_log_path(), os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600
     )
     try:
-        os.write(descriptor, line.encode("utf-8"))
+        # ``os.write`` can return a short count without raising (e.g. a full disk).
+        # Leaving a partial line would look identical to an NFS interleave.
+        encoded = line.encode("utf-8")
+        offset = 0
+        while offset < len(encoded):
+            written = os.write(descriptor, encoded[offset:])
+            if written == 0:
+                raise OSError("usage log write returned 0 bytes")
+            offset += written
     finally:
         os.close(descriptor)
 
@@ -320,20 +341,41 @@ def record_event(
             return
 
         _append_line(line)
-    except OSError as error:
-        # Instrumentation must never break the application it measures.
+    except Exception as error:
+        # Instrumentation must never break the application it measures. Narrow
+        # handlers miss real escapes (``UnicodeEncodeError`` is a ``ValueError``;
+        # detail helpers can raise outside ``OSError``) — the cost of guessing wrong
+        # is the thing this module promises cannot happen.
         logger.warning("Unable to record usage event %s: %s", event.value, error)
 
 
 def record_app_start(config: Any, server_mode: Optional[Any] = None) -> None:
-    record_event(
-        UsageEvent.APP_START,
-        server_mode=server_mode,
-        version=get_application_version(),
-        deployment_mode=get_deployment_mode(getattr(config, "TT_METAL_HOME", None)),
-        os=get_operating_system(),
-        python_version=get_python_version(),
-    )
+    """Record a launch, building details only when recording is actually on.
+
+    Detail helpers (version, container detection) can raise outside ``OSError`` and
+    must not run as ``record_event`` keyword arguments — those are evaluated before
+    its ``try``. The enabled check here also avoids three file reads when the switch
+    is off.
+    """
+    try:
+        if server_mode is None:
+            server_mode = _server_mode_from_app_context() or False
+
+        if not is_recording_enabled(server_mode):
+            return
+
+        record_event(
+            UsageEvent.APP_START,
+            server_mode=server_mode,
+            version=get_application_version(),
+            deployment_mode=get_deployment_mode(getattr(config, "TT_METAL_HOME", None)),
+            os=get_operating_system(),
+            python_version=get_python_version(),
+        )
+    except Exception as error:
+        logger.warning(
+            "Unable to record usage event %s: %s", UsageEvent.APP_START.value, error
+        )
 
 
 def _parse_line(line: str) -> Optional[Dict[str, str]]:
@@ -464,10 +506,18 @@ def _compact(log_path: Path) -> None:
         return
 
     compacted = _summarise(lines[:split_at]) + lines[split_at:]
+    # When the older half holds nothing summarisable, rewriting leaves the file at
+    # the same length (or longer) and every later launch would pay the full cost
+    # again for no reduction. Skip the replace — and its append-loss window — then.
+    if len(compacted) >= len(lines):
+        return
 
     # An append landing between the read above and the replace below goes to the old
     # inode and is lost. The window is a few milliseconds once a year, which is a
     # better trade than taking a lock on every append.
     temporary_path = log_path.with_name(f"{log_path.name}.compacting")
     temporary_path.write_text("\n".join(compacted) + "\n", encoding="utf-8")
+    # ``write_text`` creates at ``0o666 & ~umask``; without this, ``os.replace``
+    # would carry that mode onto the log and undo the ``0o600`` from ``_append_line``.
+    os.chmod(temporary_path, 0o600)
     os.replace(temporary_path, log_path)

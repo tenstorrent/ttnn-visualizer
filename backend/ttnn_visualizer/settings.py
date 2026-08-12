@@ -10,7 +10,7 @@ from typing import Any, Callable, List, Mapping, Optional, Set
 
 from dotenv import load_dotenv
 from sqlalchemy.pool import NullPool
-from ttnn_visualizer.usage import USAGE_RECORDING_ENV_VAR
+from ttnn_visualizer.usage import is_recording_enabled
 from ttnn_visualizer.utils import (
     FALSE_VALUES,
     TRUE_VALUES,
@@ -20,7 +20,6 @@ from ttnn_visualizer.utils import (
     parse_bool,
     parse_tcp_port,
     require_tcp_port,
-    str_to_bool,
 )
 
 load_dotenv()
@@ -187,7 +186,7 @@ class _AllowedOrigins:
 
 
 class _UsageRecordingEnabled:
-    """Resolve the usage off switch on read rather than at class-body import time.
+    """Resolve whether usage recording is active, on read rather than at import time.
 
     Read on access so the answer reflects the environment whatever
     ``override_with_env_variables`` reaches — it only sees the concrete config class's
@@ -195,17 +194,15 @@ class _UsageRecordingEnabled:
     is skipped by that loop (it tests for ``__get__``), which is the same reason
     ``ALLOWED_ORIGINS`` is one.
 
-    Parsed with :func:`str_to_bool` rather than the stricter :func:`_parse_env_bool`, to
-    stay in step with :func:`usage.is_recording_enabled`, which is the gate that
-    actually decides whether a line is written. Keeping a default this reports but the
-    gate ignores would publish "recording on" while nothing records.
-
-    This is only the environment half of the switch; :func:`usage.is_recording_enabled`
-    combines it with ``SERVER_MODE`` and the marker file at the usage path.
+    Delegates to :func:`usage.is_recording_enabled` so the ``PRINT_ENV`` dump cannot
+    claim recording is on while ``SERVER_MODE`` or the marker file has switched it off.
     """
 
     def __get__(self, instance: object, owner: type) -> bool:
-        return str_to_bool(os.getenv(USAGE_RECORDING_ENV_VAR, "true"))
+        server_mode = (
+            getattr(instance, "SERVER_MODE", False) if instance is not None else False
+        )
+        return is_recording_enabled(server_mode)
 
 
 _DEFAULT_SSH_PORT = 22
@@ -379,8 +376,8 @@ class DefaultConfig(object):
     TESTING = False
     PRINT_ENV = True
     SERVER_MODE = _parse_env_bool("SERVER_MODE", False)
-    # Local usage recording is on by default and writes nothing anywhere but this
-    # machine. See backend/ttnn_visualizer/usage.py.
+    # Local usage recording is on by default. Written on this machine only; the
+    # application transmits nothing. See backend/ttnn_visualizer/usage.py.
     USAGE_RECORDING_ENABLED = _UsageRecordingEnabled()
     MALWARE_SCANNER = os.getenv("MALWARE_SCANNER")
     BASE_PATH = os.getenv("BASE_PATH", "/")
