@@ -38,15 +38,20 @@ function PerfDeviceKernelDurationChart({ datasets = [] }: PerfDeviceKernelDurati
         [datasets, comparisonReportList, perfReport],
     );
 
-    const configuration: PlotConfiguration = {
-        showLegend: true,
-        xAxis: {
-            title: {
-                text: 'Core Count',
+    // Memoized because PerfChart derives the Plotly layout from it, and a fresh object redraws
+    // the chart — and re-reads the chart chrome from the stylesheet — on every render.
+    const configuration = useMemo<PlotConfiguration>(
+        () => ({
+            showLegend: true,
+            xAxis: {
+                title: {
+                    text: 'Core Count',
+                },
             },
-        },
-        yAxis: getNsAxisConfig('Device Kernel Duration (ns)'),
-    };
+            yAxis: getNsAxisConfig('Device Kernel Duration (ns)'),
+        }),
+        [],
+    );
 
     return (
         <PerfChart

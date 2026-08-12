@@ -10,6 +10,7 @@ import { Button } from '@blueprintjs/core';
 import { PerfTabIds } from '../src/definitions/Performance';
 import { usePrefilterPerfTableByOpCode } from '../src/hooks/usePrefilterPerfTableByOpCode';
 import { perfSelectedTabAtom, rawOpCodeFilterListAtom } from '../src/store/app';
+import { setUpScrollResetMocks } from './helpers/mockScrollReset';
 import { TestProviders } from './helpers/TestProviders';
 
 function Probe() {
@@ -43,11 +44,7 @@ afterEach(() => {
 });
 
 beforeEach(() => {
-    vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback) => {
-        callback(0);
-        return 0;
-    });
-    vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
+    setUpScrollResetMocks();
 });
 
 describe('usePrefilterPerfTableByOpCode', () => {

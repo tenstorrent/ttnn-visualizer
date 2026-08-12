@@ -2,9 +2,15 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-import { useMemo } from 'react';
+import { useCallback, useMemo } from 'react';
+import { DurationBucket } from '../../definitions/PerfDurationHistogram';
 import { ColumnKeys, PerfTableFilters, TypedPerfTableRow } from '../../definitions/PerfTable';
 import { OpType } from '../../definitions/Performance';
+import {
+    buildLogDecadeBuckets,
+    getEmptyBucketMinUs,
+    isDurationInSelectedBuckets,
+} from '../../functions/durationBuckets';
 import alignByOpCode from '../../functions/normalisePerformanceData';
 import { Signpost } from '../../model/Signpost';
 import sortAndFilterPerfTableData from '../../functions/sortAndFilterPerfTableData';
@@ -18,6 +24,7 @@ interface UsePerfReportFilteringParams {
     activeRawOpCodeFilterList: TypedPerfTableRow['raw_op_code'][];
     activeBufferTypeFilterList: TypedPerfTableRow['buffer_type'][];
     activeLayoutFilterList: TypedPerfTableRow['layout'][];
+    activeDurationBucketFilterList: DurationBucket['minUs'][];
     filterBySignpost: (Signpost | null)[];
 }
 
@@ -26,6 +33,8 @@ interface UsePerfReportFilteringReturn {
     processedComparisonRows: TypedPerfTableRow[][];
     combinedRows: TypedPerfTableRow[];
     rawOpCodeOptions: TypedPerfTableRow[];
+    durationBucketOptions: DurationBucket[];
+    emptyDurationBucketMinUsSet: ReadonlySet<DurationBucket['minUs']>;
     filteredRows: TypedPerfTableRow[];
     filteredComparisonRowsList: TypedPerfTableRow[][];
 }
@@ -53,19 +62,22 @@ const usePerfReportFiltering = ({
     activeRawOpCodeFilterList,
     activeBufferTypeFilterList,
     activeLayoutFilterList,
+    activeDurationBucketFilterList,
     filterBySignpost,
 }: UsePerfReportFilteringParams): UsePerfReportFilteringReturn => {
-    const {
-        data: [processedRows, ...processedComparisonRows],
-    } = useMemo(() => {
+    // Split inside the memo: destructuring the rest element in the render body would rebuild the
+    // comparison array on every render even when the memo returns the same object, invalidating
+    // combinedRows and every option set derived from it — two full passes over a report that can
+    // run to hundreds of thousands of rows.
+    const { processedRows, processedComparisonRows } = useMemo(() => {
         const rows = data || [];
         const compRows = comparisonData?.map((dataset) => dataset || []) || [];
+        const [alignedRows, ...alignedComparisonRows] =
+            isNormalisationApplied && rows.length > 0 && compRows.length > 0
+                ? alignByOpCode(rows, compRows).data
+                : [rows, ...compRows];
 
-        if (isNormalisationApplied && rows.length > 0 && compRows.length > 0) {
-            return alignByOpCode(rows, compRows);
-        }
-
-        return { data: [rows, ...compRows], missingRows: [] };
+        return { processedRows: alignedRows, processedComparisonRows: alignedComparisonRows };
     }, [data, comparisonData, isNormalisationApplied]);
 
     const combinedRows = useMemo(
@@ -74,6 +86,13 @@ const usePerfReportFiltering = ({
     );
 
     const rawOpCodeOptions = useMemo(() => getRawOpCodeOptions(combinedRows), [combinedRows]);
+    // Built across every dataset so the option set — and therefore any selected tag — survives
+    // switching comparison tabs, which swaps which report is primary.
+    const durationBucketOptions = useMemo(() => buildLogDecadeBuckets(combinedRows), [combinedRows]);
+    const emptyDurationBucketMinUsSet = useMemo(
+        () => getEmptyBucketMinUs(combinedRows, durationBucketOptions),
+        [combinedRows, durationBucketOptions],
+    );
     const rawOpCodeFilterSet = useMemo(() => new Set(activeRawOpCodeFilterList), [activeRawOpCodeFilterList]);
     const activeMathFilters = useMemo(() => activeMathFilterList, [activeMathFilterList]);
     const mathFilterSet = useMemo(() => new Set(activeMathFilters), [activeMathFilters]);
@@ -81,6 +100,15 @@ const usePerfReportFiltering = ({
     const bufferTypeFilterSet = useMemo(() => new Set(activeBufferTypeFilters), [activeBufferTypeFilters]);
     const activeLayoutFilters = useMemo(() => activeLayoutFilterList, [activeLayoutFilterList]);
     const layoutFilterSet = useMemo(() => new Set(activeLayoutFilters), [activeLayoutFilters]);
+    const durationBucketFilterSet = useMemo(
+        () => new Set(activeDurationBucketFilterList),
+        [activeDurationBucketFilterList],
+    );
+    const matchesDurationBucket = useCallback(
+        (deviceTimeUs: TypedPerfTableRow['device_time']) =>
+            isDurationInSelectedBuckets(deviceTimeUs, durationBucketOptions, durationBucketFilterSet),
+        [durationBucketOptions, durationBucketFilterSet],
+    );
 
     const { filteredRows, filteredComparisonRowsList } = useMemo(() => {
         if (!isNormalisationApplied) {
@@ -90,8 +118,14 @@ const usePerfReportFiltering = ({
             const hasMathFilter = activeMathFilters.length > 0;
             const hasBufferTypeFilter = activeBufferTypeFilters.length > 0;
             const hasLayoutFilter = activeLayoutFilters.length > 0;
+            const hasDurationFilter = durationBucketFilterSet.size > 0;
             const hasCrossReportFilters =
-                hasOpCodeTextFilter || hasRawOpCodeFilter || hasMathFilter || hasBufferTypeFilter || hasLayoutFilter;
+                hasOpCodeTextFilter ||
+                hasRawOpCodeFilter ||
+                hasMathFilter ||
+                hasBufferTypeFilter ||
+                hasLayoutFilter ||
+                hasDurationFilter;
             const filtersWithoutCrossReportFilters = {
                 ...filters,
                 [ColumnKeys.OpCode]: '',
@@ -140,13 +174,15 @@ const usePerfReportFiltering = ({
                     const matchesLayout = hasLayoutFilter
                         ? alignedRow.layout !== null && layoutFilterSet.has(alignedRow.layout)
                         : true;
+                    const matchesDuration = hasDurationFilter ? matchesDurationBucket(alignedRow.device_time) : true;
 
                     return (
                         matchesOpCodeText &&
                         matchesRawOpCode &&
                         matchesMathFidelity &&
                         matchesBufferType &&
-                        matchesLayout
+                        matchesLayout &&
+                        matchesDuration
                     );
                 });
             });
@@ -168,7 +204,9 @@ const usePerfReportFiltering = ({
         const opCodeFilterValue = filters?.[ColumnKeys.OpCode]?.toLowerCase() || '';
         const hasOpCodeTextFilter = opCodeFilterValue.length > 0;
         const hasRawOpCodeFilter = rawOpCodeFilterSet.size > 0;
-        const hasOpFilters = hasOpCodeTextFilter || hasRawOpCodeFilter;
+        const hasDurationFilter = durationBucketFilterSet.size > 0;
+        // Every filter resolved against the aligned rows rather than per dataset
+        const hasAlignedRowFilters = hasOpCodeTextFilter || hasRawOpCodeFilter || hasDurationFilter;
         const filtersWithoutOpCode = {
             ...filters,
             [ColumnKeys.OpCode]: '',
@@ -185,7 +223,7 @@ const usePerfReportFiltering = ({
                 return false;
             }
 
-            if (!hasOpFilters) {
+            if (!hasAlignedRowFilters) {
                 return true;
             }
 
@@ -203,8 +241,9 @@ const usePerfReportFiltering = ({
                 const matchesRawOpCode = hasRawOpCodeFilter
                     ? alignedRow.raw_op_code !== null && rawOpCodeFilterSet.has(alignedRow.raw_op_code)
                     : true;
+                const matchesDuration = hasDurationFilter ? matchesDurationBucket(alignedRow.device_time) : true;
 
-                return matchesOpCodeText && matchesRawOpCode;
+                return matchesOpCodeText && matchesRawOpCode && matchesDuration;
             });
         });
 
@@ -229,6 +268,8 @@ const usePerfReportFiltering = ({
         mathFilterSet,
         bufferTypeFilterSet,
         layoutFilterSet,
+        durationBucketFilterSet,
+        matchesDurationBucket,
         filterBySignpost,
         processedComparisonRows,
     ]);
@@ -238,6 +279,8 @@ const usePerfReportFiltering = ({
         processedComparisonRows,
         combinedRows,
         rawOpCodeOptions,
+        durationBucketOptions,
+        emptyDurationBucketMinUsSet,
         filteredRows,
         filteredComparisonRowsList,
     };

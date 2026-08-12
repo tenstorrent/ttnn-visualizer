@@ -7,7 +7,7 @@
 // Vitest hoists `vi.mock` here when the module is loaded via the named import.
 
 import React from 'react';
-import { PlotMouseEvent } from 'plotly.js';
+import { ClickAnnotationEvent, PlotMouseEvent } from 'plotly.js';
 import { vi } from 'vitest';
 
 const plotState = vi.hoisted(() => ({
@@ -43,4 +43,20 @@ export function firePlotClick(event: Readonly<PlotMouseEvent>) {
     }
 
     onClick(event);
+}
+
+export function getLatestPlotLayout(): Record<string, unknown> | undefined {
+    return plotState.latest?.layout as Record<string, unknown> | undefined;
+}
+
+export function firePlotAnnotationClick(index: number) {
+    const onClickAnnotation = plotState.latest?.onClickAnnotation as
+        | ((event: Readonly<ClickAnnotationEvent>) => void)
+        | undefined;
+
+    if (!onClickAnnotation) {
+        throw new Error('Plot onClickAnnotation handler is not set');
+    }
+
+    onClickAnnotation({ index } as ClickAnnotationEvent);
 }
