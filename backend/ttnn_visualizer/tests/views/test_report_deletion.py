@@ -16,6 +16,7 @@ from pathlib import Path
 
 import pytest
 from ttnn_visualizer.app import create_app
+from ttnn_visualizer.decorators import DIRECT_REPORT_MODE_DELETE_REFUSAL
 from ttnn_visualizer.extensions import db
 from ttnn_visualizer.instances import (
     KEY_PERFORMANCE_LOCATION,
@@ -25,7 +26,6 @@ from ttnn_visualizer.instances import (
 )
 from ttnn_visualizer.models import InstanceTable, RemoteConnection, ReportLocation
 from ttnn_visualizer.utils import create_path_resolver
-from ttnn_visualizer.views import _DIRECT_REPORT_MODE_DELETE_REFUSAL
 
 API = "/api"
 HOST = "yyzc-wh-05"
@@ -33,13 +33,21 @@ HOST = "yyzc-wh-05"
 
 @pytest.fixture
 def app():
-    """A local-mode app: ``@local_only`` refuses these routes under SERVER_MODE."""
+    """A local-mode app: ``@local_only`` refuses these routes under SERVER_MODE.
+
+    ``TT_METAL_HOME`` is pinned off because it is otherwise read from the developer's own
+    environment (via ``DefaultConfig`` and ``create_app``'s ``load_dotenv``), and it is
+    exported on any machine that profiles TT-Metal. Left unpinned, every upload/sync-mode
+    case here meets the direct-report-mode refusal and fails in a way indistinguishable
+    from a real regression.
+    """
     tmpdir = tempfile.mkdtemp()
     try:
         settings = {
             "TESTING": True,
             "SQLALCHEMY_DATABASE_URI": f"sqlite:///{Path(tmpdir) / 'app.db'}",
             "SERVER_MODE": False,
+            "TT_METAL_HOME": None,
             "APP_DATA_DIRECTORY": tmpdir,
             "REPORT_DATA_DIRECTORY": tmpdir,
             "LOCAL_DATA_DIRECTORY": str(Path(tmpdir) / "local"),
@@ -306,7 +314,7 @@ class TestDirectReportModeDeletion:
         assert response.status_code == 403
         # The UI renders this through getResponseError, so a bare "Forbidden" would leave
         # the user with a refusal that says nothing about why.
-        assert response.get_json()["error"] == _DIRECT_REPORT_MODE_DELETE_REFUSAL
+        assert response.get_json()["error"] == DIRECT_REPORT_MODE_DELETE_REFUSAL
         assert (parent / "listed_report").is_dir()
 
     def test_refuses_to_delete_a_listed_performance_report(
@@ -321,7 +329,7 @@ class TestDirectReportModeDeletion:
         )
 
         assert response.status_code == 403
-        assert response.get_json()["error"] == _DIRECT_REPORT_MODE_DELETE_REFUSAL
+        assert response.get_json()["error"] == DIRECT_REPORT_MODE_DELETE_REFUSAL
         assert (parent / "listed_report").is_dir()
 
     def test_refusal_does_not_reach_the_local_data_directory(
