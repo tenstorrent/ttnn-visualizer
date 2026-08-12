@@ -7,6 +7,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { Mock, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import PerformanceReport from '../src/components/performance/PerfReport';
 import { TypedPerfTableRow } from '../src/definitions/PerfTable';
+import { PERF_DURATION_BUCKET_FILTER_PLACEHOLDER } from '../src/definitions/PerfDurationHistogram';
 import { OpType } from '../src/definitions/Performance';
 import { TEST_IDS } from '../src/definitions/TestIds';
 import { useGetNPEManifest, useOpToPerfIdFiltered, useOperationsList, usePerfMeta } from '../src/hooks/useAPI';
@@ -31,7 +32,6 @@ vi.mock('../src/hooks/useAPI.tsx', () => ({
 const COMPARISON_REPORT = 'report-b';
 /** Accessible name Blueprint gives a MultiSelect tag's dismiss button. */
 const REMOVE_TAG_LABEL = 'Remove tag';
-const DEVICE_TIME_PLACEHOLDER = 'Select Device Time...';
 const WAIT_FOR_OPTIONS = { timeout: 1000 };
 
 const row = (opCode: string, id = 1, deviceTime: number | null = null): TypedPerfTableRow =>
@@ -215,6 +215,22 @@ describe('PerformanceReport duration bucket filter', () => {
         expect(screen.getAllByText('Conv2d').length).toBeGreaterThan(0);
         expect(screen.queryByText('Matmul')).not.toBeInTheDocument();
     });
+
+    it('keeps a comparison-only bucket selected when that comparison tab is opened', () => {
+        renderReport({
+            // No active-report row reaches 100us, so options built per dataset would prune the selection
+            data: [row('Matmul', 1, 5), row('Conv2d', 2, 5)],
+            comparisonData: [[row('Matmul', 1, 5), row('Conv2d', 2, 500)]],
+            comparisonReports: [COMPARISON_REPORT],
+            durationBucketFilterList: [100],
+        });
+
+        fireEvent.click(screen.getByRole('tab', { name: COMPARISON_REPORT }));
+
+        expect(screen.getAllByText(formatDurationBucketRange(100, 1000)).length).toBeGreaterThan(0);
+        expect(screen.getAllByText('Conv2d').length).toBeGreaterThan(0);
+        expect(screen.queryByText('Matmul')).not.toBeInTheDocument();
+    });
 });
 
 describe('PerformanceReport duration bucket options', () => {
@@ -224,7 +240,7 @@ describe('PerformanceReport duration bucket options', () => {
 
     /** The options only exist while the MultiSelect popover is open. */
     const openDeviceTimeSelect = async () => {
-        fireEvent.click(screen.getByPlaceholderText(DEVICE_TIME_PLACEHOLDER));
+        fireEvent.click(screen.getByPlaceholderText(PERF_DURATION_BUCKET_FILTER_PLACEHOLDER));
         await waitFor(testForPortal, WAIT_FOR_OPTIONS);
     };
 

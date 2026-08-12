@@ -9,7 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Button } from '@blueprintjs/core';
 import { PerfTabIds } from '../src/definitions/Performance';
 import { usePrefilterPerfTableByDurationBucket } from '../src/hooks/usePrefilterPerfTableByDurationBucket';
-import { durationBucketFilterListAtom, perfSelectedTabAtom } from '../src/store/app';
+import { durationBucketFilterListAtom, isStackedViewAtom, perfSelectedTabAtom } from '../src/store/app';
 import { setUpScrollResetMocks } from './helpers/mockScrollReset';
 import { TestProviders } from './helpers/TestProviders';
 
@@ -17,11 +17,13 @@ function Probe() {
     const prefilter = usePrefilterPerfTableByDurationBucket();
     const durationFilter = useAtomValue(durationBucketFilterListAtom);
     const selectedTab = useAtomValue(perfSelectedTabAtom);
+    const isStackedView = useAtomValue(isStackedViewAtom);
 
     return (
         <div>
             <span data-testid='duration-filter'>{durationFilter.join(',')}</span>
             <span data-testid='selected-tab'>{String(selectedTab)}</span>
+            <span data-testid='stacked-view'>{String(isStackedView)}</span>
             <Button
                 type='button'
                 onClick={() => prefilter(10)}
@@ -65,6 +67,19 @@ describe('usePrefilterPerfTableByDurationBucket', () => {
 
         fireEvent.click(screen.getByRole('button', { name: 'filter-decade' }));
 
+        expect(screen.getByTestId('duration-filter').textContent).toBe('10');
+    });
+
+    it('leaves the stacked view, which the duration filter does not apply to', () => {
+        render(
+            <TestProviders initialAtomValues={[[isStackedViewAtom, true]]}>
+                <Probe />
+            </TestProviders>,
+        );
+
+        fireEvent.click(screen.getByRole('button', { name: 'filter-decade' }));
+
+        expect(screen.getByTestId('stacked-view')).toHaveTextContent('false');
         expect(screen.getByTestId('duration-filter').textContent).toBe('10');
     });
 });

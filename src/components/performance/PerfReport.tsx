@@ -22,7 +22,7 @@ import {
 } from '@blueprintjs/core';
 import { ItemPredicate, ItemRendererProps, Select } from '@blueprintjs/select';
 import { IconNames } from '@blueprintjs/icons';
-import { DurationBucket } from '../../definitions/PerfDurationHistogram';
+import { DurationBucket, PERF_DURATION_BUCKET_FILTER_PLACEHOLDER } from '../../definitions/PerfDurationHistogram';
 import { ColumnKeys, Columns, TypedPerfTableRow } from '../../definitions/PerfTable';
 import { Signpost } from '../../model/Signpost';
 import { calcHighDispatchOps } from '../../functions/perfFunctions';
@@ -590,7 +590,7 @@ const PerformanceReport = ({
                                     keyName='minUs'
                                     options={durationBucketOptions}
                                     labelFormatter={(minUs) => labelByBucketMinUs.get(minUs) ?? String(minUs)}
-                                    placeholder='Select Device Time...'
+                                    placeholder={PERF_DURATION_BUCKET_FILTER_PLACEHOLDER}
                                     values={activeDurationBucketFilterList}
                                     updateHandler={setActiveDurationBucketFilterList}
                                     disabledValues={emptyDurationBucketMinUsSet}

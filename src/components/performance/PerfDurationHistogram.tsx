@@ -83,7 +83,11 @@ function PerfDurationHistogram({
     // the text colour becomes the fill and the label flips to the page surface to stay legible,
     // so returning from the table shows which column the filter came from. Decades run contiguously
     // between the extremes, so an empty column can sit between populated ones; its control is muted
-    // and stops capturing clicks because filtering by it would empty the table.
+    // and stops capturing clicks because there is no column here to filter by.
+    //
+    // Emptiness is judged against the plotted rows — the active report — so a decade populated only
+    // in a comparison report is inert here while the table's own bucket filter still offers it.
+    // That matches the subtitle: the chart is an active-report view onto a cross-report filter.
     const bucketAnnotations = useMemo<Partial<Annotations>[]>(() => {
         const chrome = getPerfChartChrome();
 

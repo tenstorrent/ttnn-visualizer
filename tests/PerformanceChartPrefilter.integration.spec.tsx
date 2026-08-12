@@ -24,7 +24,11 @@ import {
 } from '../src/hooks/useAPI';
 import { L1PressureStatus } from '../src/model/L1Pressure';
 import { TEST_IDS } from '../src/definitions/TestIds';
-import { activePerformanceReportAtom, selectedPerformanceRangeAtom } from '../src/store/app';
+import {
+    activePerformanceReportAtom,
+    comparisonPerformanceReportListAtom,
+    selectedPerformanceRangeAtom,
+} from '../src/store/app';
 import { setUpScrollResetMocks } from './helpers/mockScrollReset';
 import { TestProviders } from './helpers/TestProviders';
 
@@ -224,5 +228,58 @@ describe('Performance chart prefilter integration', () => {
             false,
             false,
         ]);
+    });
+
+    it('plots the active report only, yet filters every dataset, when a comparison report is loaded', async () => {
+        (usePerformanceReport as Mock).mockReturnValue({
+            data: {
+                report: [row('Matmul', 1, 5), row('Conv2d', 2, 50)],
+                stacked_report: [],
+                signposts: [],
+            },
+            isLoading: false,
+            error: null,
+        });
+        // Reaches two decades the active report never does, so the table offers buckets the chart omits
+        (usePerformanceComparisonReport as Mock).mockReturnValue({
+            data: [{ report: [row('Matmul', 1, 5), row('Conv2d', 2, 5000)], stacked_report: [] }],
+            isLoading: false,
+        });
+
+        render(
+            <TestProviders
+                initialAtomValues={[
+                    [activePerformanceReportAtom, { path: '/reports/report-a', reportName: 'report-a' }],
+                    [comparisonPerformanceReportListAtom, ['report-b']],
+                    [selectedPerformanceRangeAtom, [1, 2]],
+                ]}
+            >
+                <Performance />
+            </TestProviders>,
+        );
+
+        fireEvent.click(screen.getByRole('tab', { name: 'Charts' }));
+
+        // Two columns, not four: the histogram bins the active report even though the table's
+        // options span both. Widening it here would let a click name a decade the table cannot
+        // offer, which the stale-selection prune would then discard on arrival.
+        await waitFor(() => {
+            expect(getHistogramLayout()?.annotations).toHaveLength(2);
+        });
+
+        const onClickAnnotation = getHistogramInstances().at(-1)?.onClickAnnotation as
+            | ((event: { index: number }) => void)
+            | undefined;
+
+        onClickAnnotation?.({ index: 0 });
+
+        await waitFor(() => {
+            expect(screen.getByRole('tab', { name: 'Table', selected: true })).toBeInTheDocument();
+        });
+
+        // The selection reaches the table intact, and the mask drops the index no dataset matches
+        const table = screen.getByRole('table');
+        expect(within(table).getAllByText('Matmul').length).toBeGreaterThan(0);
+        expect(within(table).queryByText('Conv2d')).not.toBeInTheDocument();
     });
 });

@@ -5,22 +5,28 @@
 import { useCallback } from 'react';
 import { useSetAtom } from 'jotai';
 import { DurationBucket } from '../definitions/PerfDurationHistogram';
-import { durationBucketFilterListAtom } from '../store/app';
+import { durationBucketFilterListAtom, isStackedViewAtom } from '../store/app';
 import { useShowPerfTable } from './useShowPerfTable';
 
 /**
  * Replaces rather than unions the selection: the click leaves the charts tab immediately,
  * so there is no opportunity to add a second bucket before the table is shown.
+ *
+ * Also leaves the stacked view, which aggregates away the per-op device time this filters on:
+ * staying there would show the table neither filtered nor carrying the tag that explains why,
+ * then apply the filter the moment the user switched back.
  */
 export function usePrefilterPerfTableByDurationBucket() {
     const showPerfTable = useShowPerfTable();
     const setFilters = useSetAtom(durationBucketFilterListAtom);
+    const setIsStackedView = useSetAtom(isStackedViewAtom);
 
     return useCallback(
         (minUs: DurationBucket['minUs']) => {
             setFilters([minUs]);
+            setIsStackedView(false);
             showPerfTable();
         },
-        [setFilters, showPerfTable],
+        [setFilters, setIsStackedView, showPerfTable],
     );
 }
