@@ -38,6 +38,16 @@ from ttnn_visualizer.settings import (
     DefaultConfig,
     build_socketio_origin_check,
 )
+from ttnn_visualizer.usage import (
+    RUN_ID_ENV_VAR,
+    USAGE_RECORDING_ENV_VAR,
+    compact_if_needed,
+    get_disabled_marker_path,
+    get_run_id,
+    get_usage_log_path,
+    is_recording_enabled,
+    record_app_start,
+)
 from ttnn_visualizer.utils import (
     find_gunicorn_path,
     get_app_data_directory,
@@ -407,6 +417,34 @@ def display_mode_info_without_db(config):
         print(f"   Remote directory: {config.REMOTE_DATA_DIRECTORY}")
 
 
+def _record_launch(config):
+    """Record this launch locally, and say so.
+
+    Split out of ``main()`` because ``main()`` binds a socket and spawns gunicorn and
+    so cannot be called from a test, which would leave the wiring — the part that
+    fails open — unpinned.
+    """
+    # Exported unconditionally so every gunicorn worker this launch spawns shares one
+    # identifier, even if recording is switched on part-way through the session.
+    os.environ[RUN_ID_ENV_VAR] = get_run_id()
+
+    if not is_recording_enabled(config.SERVER_MODE):
+        return
+
+    compact_if_needed()
+    record_app_start(config, server_mode=config.SERVER_MODE)
+
+    # `print` rather than `logger.info`: nothing has configured logging at this point
+    # in `main()` — `create_app()` does that — and the last-resort handler drops
+    # anything below WARNING, so an info line here would never be seen.
+    print(
+        f"📊 Recording usage locally to {get_usage_log_path()}\n"
+        f"   Written on this machine only; the application transmits nothing. "
+        f"Switch it off with {USAGE_RECORDING_ENV_VAR}=false or by creating "
+        f"{get_disabled_marker_path()}"
+    )
+
+
 def main():
 
     run_command = sys.argv[0].split("/")
@@ -568,6 +606,11 @@ def main():
     # Upgrade the app database before binding workers (idempotent; workers also
     # upgrade via create_app when using multi-worker mode).
     run_alembic_migrations(config.SQLALCHEMY_DATABASE_URI)
+
+    # Deliberately last: every exit above (an invalid report path, a port already in
+    # use) ends a launch that never served a request, and counting those would
+    # inflate the figure with exactly the sessions where nobody used the tool.
+    _record_launch(config)
 
     try:
         subprocess.run(gunicorn_args)
