@@ -16,10 +16,13 @@ import sys
 
 import orjson
 import zstd
+from ttnn_visualizer.utils import str_to_bool
 
 
 def _server_mode_enabled() -> bool:
-    return os.getenv("SERVER_MODE", "false").lower() in ("1", "t", "true", "yes")
+    # Through the app's own helper so this refusal can't recognise a spelling the app
+    # doesn't, or miss one it does.
+    return str_to_bool(os.getenv("SERVER_MODE", "false"))
 
 
 # Local-only developer tool: it opens an arbitrary caller-supplied report path,

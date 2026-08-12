@@ -45,7 +45,7 @@ class TestRemoteArg:
         assert shlex.split(f"stat {quoted}") == ["stat", "/remote/$(touch /tmp/pwned)"]
 
     def test_a_trailing_slash_is_preserved(self):
-        # `_report_search_find_expression` strips trailing slashes itself because GNU
+        # `_report_search_command` strips trailing slashes itself because GNU
         # and BSD `find` disagree on the root they echo; normalising here would take
         # that decision away from it.
         assert shlex.split(f"find {remote_arg('/reports/')}") == ["find", "/reports/"]

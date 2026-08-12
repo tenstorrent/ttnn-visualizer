@@ -305,27 +305,6 @@ class SSHClient:
                 detail=str(e),
             )
 
-    def check_path_exists(
-        self, remote_path: Union[str, Path], timeout: int = 10
-    ) -> bool:
-        """
-        Check if a remote path exists.
-
-        :param remote_path: Path to check
-        :param timeout: Timeout in seconds
-        :return: True if path exists
-        """
-        path = Path(remote_path)
-        logger.debug(f"Checking if remote path exists: {path}")
-
-        try:
-            self.execute_command(
-                RemoteCommand.of("test", "-e", remote_path), timeout=timeout
-            )
-            return True
-        except SSHException:
-            return False
-
     def download_file(
         self,
         remote_path: Union[str, Path],

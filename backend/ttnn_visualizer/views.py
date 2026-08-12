@@ -88,7 +88,7 @@ from ttnn_visualizer.serializers import (
     serialize_tensors,
 )
 from ttnn_visualizer.sftp_operations import (
-    check_remote_path_exists,
+    MULTIHOST_REPORT_LAYOUT_HINT,
     check_remote_path_for_reports,
     get_active_sync_method,
     get_remote_performance_folders,
@@ -1710,13 +1710,37 @@ def get_mesh_descriptor(instance: Instance):
         return response_bad_request(f"Failed to parse YAML: {str(e)}")
 
 
-def _found_reports_message(
+def _report_search_status(
     label: str, count: int, *, in_rank_subdirectories: bool = False
-) -> str:
-    """Connection-test success line confirming what the report search actually saw."""
-    plural = "report" if count == 1 else "reports"
-    location = " in per-rank subdirectories" if in_rank_subdirectories else ""
-    return f"Found {count} {label} {plural}{location}"
+) -> StatusMessage:
+    """The one connection-test line a configured report path earns.
+
+    The path check and the report search answer halves of the same question, so
+    they report as a single result per report kind. "Exists but empty" can only
+    be said at all because the existence check already passed — a missing path
+    fails before this point.
+    """
+    if count:
+        plural = "report" if count == 1 else "reports"
+        location = " in per-rank subdirectories" if in_rank_subdirectories else ""
+        return StatusMessage(
+            status=ConnectionTestStates.OK.value,
+            message=f"Found {count} {label} {plural}{location}",
+        )
+
+    # Naming the expected layout turns the most likely misconfiguration
+    # (pointing at the parent of the per-rank folders) into a self-diagnosing
+    # warning.
+    hint = (
+        f" (multihost is enabled, so reports are expected at "
+        f"{MULTIHOST_REPORT_LAYOUT_HINT}/<report> under this path)"
+        if in_rank_subdirectories
+        else ""
+    )
+    return StatusMessage(
+        status=ConnectionTestStates.WARNING.value,
+        message=f"{label.capitalize()} path exists but no reports found{hint}",
+    )
 
 
 @api.route("/remote/ssh-config-hosts", methods=["GET"])
@@ -1763,33 +1787,10 @@ def test_remote_folder():
     except RemoteConnectionException as e:
         add_status(e.status.value, e.message, getattr(e, "detail", None))
 
-    # Test Directory Configuration
-    if not has_failures() and connection.profilerPath:
-        try:
-            check_remote_path_exists(connection, "profilerPath")
-            add_status(ConnectionTestStates.OK.value, "Memory folder path exists")
-        except AuthenticationFailedException as e:
-            add_status(
-                ConnectionTestStates.FAILED.value, e.message, getattr(e, "detail", None)
-            )
-            return jsonify([status.model_dump() for status in statuses]), e.http_status
-        except RemoteConnectionException as e:
-            add_status(e.status.value, e.message, getattr(e, "detail", None))
-
-    # Test Directory Configuration (perf)
-    if not has_failures() and connection.performancePath:
-        try:
-            check_remote_path_exists(connection, "performancePath")
-            add_status(ConnectionTestStates.OK.value, "Performance folder path exists")
-        except AuthenticationFailedException as e:
-            add_status(
-                ConnectionTestStates.FAILED.value, e.message, getattr(e, "detail", None)
-            )
-            return jsonify([status.model_dump() for status in statuses]), e.http_status
-        except RemoteConnectionException as e:
-            add_status(e.status.value, e.message, getattr(e, "detail", None))
-
-    # Check for Project Configurations
+    # Both configured paths are checked and searched here, one SSH round trip
+    # each: the search settles whether its root exists as part of the same
+    # command, and a path that exists is silent because the report count it
+    # produces below already says so.
     if not has_failures():
         try:
             report_counts = check_remote_path_for_reports(connection)
@@ -1801,21 +1802,15 @@ def test_remote_folder():
         except RemoteConnectionException as e:
             add_status(e.status.value, e.message, getattr(e, "detail", None))
         else:
-            # A path that exists says nothing about whether reports were found
-            # there, which is what the user is really testing for.
             if report_counts.profiler is not None:
-                add_status(
-                    ConnectionTestStates.OK.value,
-                    _found_reports_message("memory", report_counts.profiler),
-                )
+                statuses.append(_report_search_status("memory", report_counts.profiler))
             if report_counts.performance is not None:
-                add_status(
-                    ConnectionTestStates.OK.value,
-                    _found_reports_message(
+                statuses.append(
+                    _report_search_status(
                         "performance",
                         report_counts.performance,
                         in_rank_subdirectories=connection.multihostPerformance,
-                    ),
+                    )
                 )
 
     return Response(
