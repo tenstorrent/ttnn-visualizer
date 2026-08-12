@@ -65,17 +65,19 @@ const usePerfReportFiltering = ({
     activeDurationBucketFilterList,
     filterBySignpost,
 }: UsePerfReportFilteringParams): UsePerfReportFilteringReturn => {
-    const {
-        data: [processedRows, ...processedComparisonRows],
-    } = useMemo(() => {
+    // Split inside the memo: destructuring the rest element in the render body would rebuild the
+    // comparison array on every render even when the memo returns the same object, invalidating
+    // combinedRows and every option set derived from it — two full passes over a report that can
+    // run to hundreds of thousands of rows.
+    const { processedRows, processedComparisonRows } = useMemo(() => {
         const rows = data || [];
         const compRows = comparisonData?.map((dataset) => dataset || []) || [];
+        const [alignedRows, ...alignedComparisonRows] =
+            isNormalisationApplied && rows.length > 0 && compRows.length > 0
+                ? alignByOpCode(rows, compRows).data
+                : [rows, ...compRows];
 
-        if (isNormalisationApplied && rows.length > 0 && compRows.length > 0) {
-            return alignByOpCode(rows, compRows);
-        }
-
-        return { data: [rows, ...compRows], missingRows: [] };
+        return { processedRows: alignedRows, processedComparisonRows: alignedComparisonRows };
     }, [data, comparisonData, isNormalisationApplied]);
 
     const combinedRows = useMemo(

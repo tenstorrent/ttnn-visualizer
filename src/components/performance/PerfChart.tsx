@@ -102,13 +102,21 @@ function PerfChart(props: PerfChartProps) {
     const isCustomLayout = props.layout != null;
     // react-plotly.js diffs layout by reference, so a fresh object here redraws every chart on
     // every render of the owning view. Callers must memoize their configuration to benefit.
-    const layout = useMemo(
-        () =>
-            props.layout != null
-                ? // Clone custom layouts — pie charts share PerfPieChartLayout as a module singleton.
-                  cloneCustomLayout(props.layout)
-                : getCartesianLayout(props.configuration),
-        [props.layout, props.configuration],
+    //
+    // Derived with the data rather than beside it because Plotly writes computed fields into the
+    // layout it is handed — resolved axis ranges above all. Retaining one across a data change
+    // would hand back a layout already carrying the previous dataset's extent, so the pair is
+    // rebuilt together and `data` is threaded through this memo to keep them in step.
+    const { data, layout } = useMemo(
+        () => ({
+            data: chartData,
+            layout:
+                props.layout != null
+                    ? // Clone custom layouts — pie charts share PerfPieChartLayout as a module singleton.
+                      cloneCustomLayout(props.layout)
+                    : getCartesianLayout(props.configuration),
+        }),
+        [chartData, props.layout, props.configuration],
     );
     // Legend CSS hint is Cartesian-only; custom layout owns its own legend chrome.
     const showLegendInstructions = !isCustomLayout && Boolean(props.configuration?.showLegend);
@@ -126,7 +134,7 @@ function PerfChart(props: PerfChartProps) {
         >
             <Plot
                 className='chart'
-                data={chartData}
+                data={data}
                 layout={layout}
                 config={PerfChartConfig}
                 onClick={onPlotClick}

@@ -54,28 +54,34 @@ function PerfDeviceTimeChart({ datasets = [], chartId }: PerfDeviceTimeChartProp
         [datasets, perfReport, comparisonReportList],
     );
 
-    const maxDeviceTime = Math.max(
-        ...datasets.flatMap((data) => data.map((row) => (row.device_time ? row.device_time * 1000 : 0))),
-    ); // Convert microseconds to nanoseconds
-    const maxIdealTime = Math.max(...datasets.flatMap((data) => data.map((row) => row.pm_ideal_ns ?? 0)));
+    const chartData = useMemo(() => [...deviceTimes, ...idealTimes], [deviceTimes, idealTimes]);
 
-    const configuration: PlotConfiguration = {
-        margin: PERF_CHART_WIDE_LEFT_MARGIN,
-        showLegend: true,
-        xAxis: {
-            title: { text: 'Operation' },
-            range: [0, getAxisUpperRange(datasets)],
-        },
-        yAxis: getNsAxisConfig('Time (ns)', {
-            range: [0, Math.max(maxDeviceTime, maxIdealTime)],
-        }),
-    };
+    // Memoized because PerfChart derives the Plotly layout from it, and a fresh object redraws
+    // the chart — and re-reads the chart chrome from the stylesheet — on every render.
+    const configuration = useMemo<PlotConfiguration>(() => {
+        const maxDeviceTime = Math.max(
+            ...datasets.flatMap((data) => data.map((row) => (row.device_time ? row.device_time * 1000 : 0))),
+        ); // Convert microseconds to nanoseconds
+        const maxIdealTime = Math.max(...datasets.flatMap((data) => data.map((row) => row.pm_ideal_ns ?? 0)));
+
+        return {
+            margin: PERF_CHART_WIDE_LEFT_MARGIN,
+            showLegend: true,
+            xAxis: {
+                title: { text: 'Operation' },
+                range: [0, getAxisUpperRange(datasets)],
+            },
+            yAxis: getNsAxisConfig('Time (ns)', {
+                range: [0, Math.max(maxDeviceTime, maxIdealTime)],
+            }),
+        };
+    }, [datasets]);
 
     return (
         <PerfChart
             id={chartId}
             title={PERF_CHART_LABELS[chartId]}
-            chartData={[...deviceTimes, ...idealTimes]}
+            chartData={chartData}
             configuration={configuration}
         />
     );

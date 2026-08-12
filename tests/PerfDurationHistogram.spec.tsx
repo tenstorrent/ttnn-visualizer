@@ -380,6 +380,31 @@ describe('PerfDurationHistogram duration bucket controls', () => {
         expect(screen.getByTestId('selected-tab')).toHaveTextContent(PerfTabIds.CHARTS);
     });
 
+    // The annotations are memoized for reference stability: PerfChart derives the Plotly layout
+    // from them, and Plotly diffs layout by reference, so losing the identity redraws the whole
+    // chart on every PerfReport render. Nothing else in this suite would notice.
+    it('reuses the derived layout across a re-render with unchanged rows and op codes', () => {
+        const selectedOpCodes = [{ opCode: 'Matmul', colour: MarkerColours[0] }];
+        const tree = () => (
+            <TestProviders initialAtomValues={[[perfSelectedTabAtom, PerfTabIds.CHARTS]]}>
+                <PerfDurationHistogram
+                    rows={twoBucketRows}
+                    selectedOpCodes={selectedOpCodes}
+                />
+            </TestProviders>
+        );
+
+        const { rerender } = render(tree());
+        rerender(tree());
+
+        const [first, second] = getPlotInstances();
+        expect(second).toBeDefined();
+        expect(second.layout).toBe(first.layout);
+        expect((second.layout as { annotations?: unknown }).annotations).toBe(
+            (first.layout as { annotations?: unknown }).annotations,
+        );
+    });
+
     describe('empty columns', () => {
         // Decades run contiguously between 5us and 5000us, so the two middle columns hold no op
         const gappedRows = [row({ device_time: 5 }), row({ device_time: 5000, id: 2 })];

@@ -10,6 +10,12 @@
  * filter options from every dataset — so the histogram's rows must stay a subset of the table's.
  * Widen the histogram beyond the active report and a clicked bucket can name a decade the table
  * has no option for, which the stale-selection prune in PerfReport then discards on sight.
+ *
+ * The row sets also differ by filter, and deliberately: the histogram is fed the charts tab's
+ * op-code selection, whereas clicking a bucket carries only the duration to the table. So a
+ * column of a dozen ops can open a table of hundreds in that decade. Duration is kept a filter
+ * in its own right because the two tabs own separate filter state, and copying the charts op-code
+ * selection across would silently overwrite whatever the table already had selected.
  */
 import { DurationBucket } from '../definitions/PerfDurationHistogram';
 import { OpType } from '../definitions/Performance';

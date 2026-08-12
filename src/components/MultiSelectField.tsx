@@ -41,6 +41,8 @@ const MultiSelectField = <T, K extends keyof T>({
         [updateHandler],
     );
 
+    const isOptionDisabled = useCallback((option: T[K]) => disabledValues?.has(option) ?? false, [disabledValues]);
+
     const renderOption = useCallback(
         (option: T[K], { query }: { query: string }) => (
             <Option
@@ -50,10 +52,10 @@ const MultiSelectField = <T, K extends keyof T>({
                 label={labelFormatter ? labelFormatter(option) : String(option)}
                 values={values}
                 updateHandler={updateMultiSelect}
-                disabled={disabledValues?.has(option) ?? false}
+                disabled={isOptionDisabled(option)}
             />
         ),
-        [values, updateMultiSelect, labelFormatter, disabledValues],
+        [values, updateMultiSelect, labelFormatter, isOptionDisabled],
     );
 
     const formattedOptions = useMemo((): T[K][] => {
@@ -80,14 +82,13 @@ const MultiSelectField = <T, K extends keyof T>({
         <MultiSelect<T[K]>
             items={formattedOptions}
             placeholder={placeholder}
-            onItemSelect={(selectedType) => {
-                // Keyboard activation bypasses the option's own checkbox, so it needs the same guard
-                if (!disabledValues?.has(selectedType)) {
-                    updateMultiSelect(selectedType);
-                }
-            }}
+            onItemSelect={updateMultiSelect}
             selectedItems={selectedItems}
             itemRenderer={renderOption}
+            // Blueprint drives keyboard activation from its own active-item state, which never
+            // touches the option's checkbox: without this, arrowing stops on unselectable options
+            // and Enter has to be swallowed after the fact instead of never reaching them.
+            itemDisabled={isOptionDisabled}
             tagRenderer={(selected) => (labelFormatter ? labelFormatter(selected) : String(selected))}
             onRemove={(selected) => updateMultiSelect(selected)}
             itemPredicate={filterPredicate}

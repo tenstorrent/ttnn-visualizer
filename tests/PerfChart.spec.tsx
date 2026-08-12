@@ -13,6 +13,7 @@ import {
     NS_AXIS_HOVER_FORMAT,
     NS_AXIS_TICK_FORMAT,
     PerfPieChartLayout,
+    PlotConfiguration,
     getNsAxisConfig,
     getPerfChartLayout,
 } from '../src/definitions/PlotConfigurations';
@@ -25,6 +26,8 @@ afterEach(() => {
 
 const barData = [{ type: 'bar', x: ['a'], y: [1] } as Partial<PlotData>];
 const baseLayout = getPerfChartLayout();
+/** Module scope so re-render tests can vary one input at a time; an inline literal is never stable. */
+const stableConfiguration: PlotConfiguration = { yAxis: { title: { text: 'Time (ns)' } } };
 
 describe('PerfChart', () => {
     it('forwards onPlotClick to Plot and shows the table-filter hint when clickable', () => {
@@ -200,6 +203,54 @@ describe('PerfChart', () => {
         expect(first).toEqual(second);
         expect(first.margin).not.toBe(second.margin);
         expect(first.yaxis?.title?.font).not.toBe(second.yaxis?.title?.font);
+    });
+
+    // The memo is the whole reason the layout is derived rather than inlined: react-plotly.js
+    // diffs layout by reference, so losing the identity redraws every chart per parent render.
+    it('hands Plotly the same layout object across a re-render with unchanged configuration and data', () => {
+        const { rerender } = render(
+            <PerfChart
+                title='Test chart'
+                chartData={barData}
+                configuration={stableConfiguration}
+            />,
+        );
+
+        rerender(
+            <PerfChart
+                title='Test chart'
+                chartData={barData}
+                configuration={stableConfiguration}
+            />,
+        );
+
+        const [first, second] = getPlotInstances();
+        expect(second).toBeDefined();
+        expect(second.layout).toBe(first.layout);
+    });
+
+    // Plotly writes resolved axis ranges into the layout it is handed, so retaining one across a
+    // data change would describe the previous dataset's extent.
+    it('rebuilds the layout when the data changes even though configuration is unchanged', () => {
+        const { rerender } = render(
+            <PerfChart
+                title='Test chart'
+                chartData={barData}
+                configuration={stableConfiguration}
+            />,
+        );
+
+        rerender(
+            <PerfChart
+                title='Test chart'
+                chartData={[{ type: 'bar', x: ['a'], y: [2] } as Partial<PlotData>]}
+                configuration={stableConfiguration}
+            />,
+        );
+
+        const [first, second] = getPlotInstances();
+        expect(second.layout).not.toBe(first.layout);
+        expect(second.layout).toEqual(first.layout);
     });
 
     it('applies an explicit all-zero margin rather than falling back to defaults', () => {

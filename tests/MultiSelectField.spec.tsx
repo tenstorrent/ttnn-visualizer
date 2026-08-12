@@ -15,7 +15,8 @@ interface Option {
     value: string;
 }
 
-const OPTIONS: Option[] = [{ value: 'alpha' }, { value: 'beta' }];
+// Three options so a disabled middle one can prove that arrowing lands past it rather than on it.
+const OPTIONS: Option[] = [{ value: 'alpha' }, { value: 'beta' }, { value: 'gamma' }];
 
 interface RenderOptions {
     values?: string[];
@@ -48,8 +49,8 @@ const openSelect = async () => {
 /**
  * Blueprint's QueryList drives selection from its own active-item state, which starts on the
  * first option and moves by arrow key. Activation calls `onItemSelect` without going near the
- * option's checkbox, so the `disabled` attribute on it cannot block this route — and no
- * `itemDisabled` prop is supplied, so arrowing stops on unselectable options too.
+ * option's checkbox, so the `disabled` attribute on it cannot block this route — `itemDisabled`
+ * is what keeps the active item off unselectable options in the first place.
  */
 const activateOptionByKeyboard = (stepsDown: number) => {
     const input = screen.getByPlaceholderText(PLACEHOLDER);
@@ -76,6 +77,7 @@ describe('MultiSelectField', () => {
 
         expect(screen.getByRole('checkbox', { name: 'alpha' })).toBeEnabled();
         expect(screen.getByRole('checkbox', { name: 'beta' })).toBeDisabled();
+        expect(screen.getByRole('checkbox', { name: 'gamma' })).toBeEnabled();
     });
 
     it('toggles a value when an enabled option is clicked', async () => {
@@ -88,13 +90,14 @@ describe('MultiSelectField', () => {
         expect(updateHandler.mock.calls[0][0]([])).toEqual(['alpha']);
     });
 
-    it('ignores keyboard activation of a disabled option', async () => {
+    it('arrows past a disabled option to the next selectable one', async () => {
         const updateHandler = renderField({ disabledValues: new Set(['beta']) });
 
         await openSelect();
         activateOptionByKeyboard(1);
 
-        expect(updateHandler).not.toHaveBeenCalled();
+        expect(updateHandler).toHaveBeenCalledTimes(1);
+        expect(updateHandler.mock.calls[0][0]([])).toEqual(['gamma']);
     });
 
     it('still applies keyboard activation of an enabled option', async () => {
