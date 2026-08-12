@@ -65,16 +65,26 @@ function PerfCoreCountUtilizationChart({ datasets = [], maxCores, chartId }: Per
     );
     const maxY2Value = Math.max(...chartDataUtilization.flatMap((data) => (data.y as number[]) ?? []));
 
-    const configuration: PlotConfiguration = {
-        margin: PERF_CHART_WIDE_LEFT_MARGIN,
-        showLegend: true,
-        xAxis: {
-            title: { text: 'Operation' },
-            range: [0, getAxisUpperRange(datasets)],
-        },
-        yAxis: getCoreCountAxisConfig(maxCores),
-        yAxis2: getDeviceUtilizationAxisConfig(maxY2Value),
-    };
+    const chartData = useMemo(
+        () => [...chartDataDuration, ...chartDataUtilization],
+        [chartDataDuration, chartDataUtilization],
+    );
+
+    // Memoized because PerfChart derives the Plotly layout from it, and a fresh object redraws
+    // the chart — and re-reads the chart chrome from the stylesheet — on every render.
+    const configuration = useMemo<PlotConfiguration>(
+        () => ({
+            margin: PERF_CHART_WIDE_LEFT_MARGIN,
+            showLegend: true,
+            xAxis: {
+                title: { text: 'Operation' },
+                range: [0, getAxisUpperRange(datasets)],
+            },
+            yAxis: getCoreCountAxisConfig(maxCores),
+            yAxis2: getDeviceUtilizationAxisConfig(maxY2Value),
+        }),
+        [datasets, maxCores, maxY2Value],
+    );
 
     return (
         <>
@@ -82,7 +92,7 @@ function PerfCoreCountUtilizationChart({ datasets = [], maxCores, chartId }: Per
             <PerfChart
                 id={chartId}
                 title={PERF_CHART_LABELS[chartId]}
-                chartData={[...chartDataDuration, ...chartDataUtilization]}
+                chartData={chartData}
                 configuration={configuration}
             />
         </>

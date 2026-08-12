@@ -3,71 +3,26 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import {
-    DurationBucket,
     DurationHistogramBucket,
     DurationHistogramData,
     SAMPLE_OPS_PER_BUCKET,
 } from '../definitions/PerfDurationHistogram';
-import { OpType } from '../definitions/Performance';
 import { TypedPerfTableRow } from '../definitions/PerfTable';
-import { formatDurationBucketRange } from './formatDurationBucketRange';
+import {
+    BucketableRow,
+    buildLogDecadeBuckets,
+    findBucketForDuration,
+    hasBucketableDeviceTime,
+} from './durationBuckets';
 
 const hasChartRawOpCode = (row: TypedPerfTableRow): boolean => {
     const { raw_op_code: rawOpCode } = row;
     return rawOpCode != null && rawOpCode !== '';
 };
 
-const isEligibleHistogramRow = (row: TypedPerfTableRow): boolean =>
-    row.op_type !== OpType.SIGNPOST &&
-    row.device_time !== null &&
-    Number.isFinite(row.device_time) &&
-    (row.device_time as number) > 0 &&
-    hasChartRawOpCode(row);
-
-const getMinMaxDuration = (durations: number[]): { min: number; max: number } => {
-    let min = durations[0];
-    let max = durations[0];
-
-    for (let index = 1; index < durations.length; index++) {
-        const duration = durations[index];
-        if (duration < min) {
-            min = duration;
-        }
-        if (duration > max) {
-            max = duration;
-        }
-    }
-
-    return { min, max };
-};
-
-const buildLogDecadeBuckets = (rows: TypedPerfTableRow[]): DurationBucket[] => {
-    const positiveDurations = rows.map((row) => row.device_time as number);
-    const { min, max } = getMinMaxDuration(positiveDurations);
-
-    // floor(log10(max)) so the top decade can contain max; ceil would leave an empty high bucket.
-    const minExponent = Math.floor(Math.log10(min));
-    const maxExponent = Math.floor(Math.log10(max));
-
-    return Array.from({ length: maxExponent - minExponent + 1 }, (_, offset) => {
-        const exponent = minExponent + offset;
-        const minUs = 10 ** exponent;
-        const maxUs = 10 ** (exponent + 1);
-
-        return {
-            bucketIndex: offset,
-            minUs,
-            maxUs,
-            label: formatDurationBucketRange(minUs, maxUs),
-        };
-    });
-};
-
-const findBucketForDuration = (deviceTimeUs: number, buckets: DurationBucket[]): DurationBucket => {
-    const matchedBucket = buckets.find((bucket) => deviceTimeUs >= bucket.minUs && deviceTimeUs < bucket.maxUs);
-
-    return matchedBucket ?? buckets[buckets.length - 1];
-};
+/** Stacking by op code needs a raw op code on top of what plain binning requires. */
+const isEligibleHistogramRow = (row: TypedPerfTableRow): row is BucketableRow =>
+    hasBucketableDeviceTime(row) && hasChartRawOpCode(row);
 
 interface SampleCandidate {
     opCode: string;
@@ -105,10 +60,15 @@ function buildDurationHistogram(rows: TypedPerfTableRow[]): DurationHistogramDat
     }
 
     const buckets = buildLogDecadeBuckets(eligibleRows);
-    const rowsByBucketIndex = new Map<number, TypedPerfTableRow[]>();
+    const rowsByBucketIndex = new Map<number, BucketableRow[]>();
 
     eligibleRows.forEach((row) => {
-        const bucket = findBucketForDuration(row.device_time as number, buckets);
+        const bucket = findBucketForDuration(row.device_time, buckets);
+
+        if (!bucket) {
+            return;
+        }
+
         const bucketRows = rowsByBucketIndex.get(bucket.bucketIndex) ?? [];
         bucketRows.push(row);
         rowsByBucketIndex.set(bucket.bucketIndex, bucketRows);
@@ -124,7 +84,7 @@ function buildDurationHistogram(rows: TypedPerfTableRow[]): DurationHistogramDat
             aggregate.count += 1;
             insertTopSampleByDuration(aggregate.topSamples, {
                 opCode: row.op_code,
-                deviceTime: row.device_time as number,
+                deviceTime: row.device_time,
             });
             aggregateByOpCode.set(rawOpCode, aggregate);
         });

@@ -3,6 +3,7 @@
 # SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import ipaddress
+import logging
 import os
 from pathlib import Path
 from typing import Any, Callable, List, Mapping, Optional, Set
@@ -11,14 +12,20 @@ from dotenv import load_dotenv
 from sqlalchemy.pool import NullPool
 from ttnn_visualizer.usage import USAGE_RECORDING_ENV_VAR
 from ttnn_visualizer.utils import (
+    FALSE_VALUES,
+    TRUE_VALUES,
     get_app_data_directory,
     get_report_data_directory,
     is_running_in_container,
+    parse_bool,
     parse_tcp_port,
+    require_tcp_port,
     str_to_bool,
 )
 
 load_dotenv()
+
+logger = logging.getLogger(__name__)
 
 
 def _build_allowed_origins(
@@ -182,11 +189,16 @@ class _AllowedOrigins:
 class _UsageRecordingEnabled:
     """Resolve the usage off switch on read rather than at class-body import time.
 
-    ``override_with_env_variables`` copies raw environment strings over class
-    attributes, which would replace a parsed bool with ``"false"`` — a truthy string,
-    so setting ``USAGE_RECORDING_ENABLED=false`` would leave recording on. A
-    descriptor is skipped by that loop (it tests for ``__get__``), which is the same
-    reason ``ALLOWED_ORIGINS`` is one.
+    Read on access so the answer reflects the environment whatever
+    ``override_with_env_variables`` reaches — it only sees the concrete config class's
+    own attributes, and this one is declared on ``DefaultConfig`` (#1857). A descriptor
+    is skipped by that loop (it tests for ``__get__``), which is the same reason
+    ``ALLOWED_ORIGINS`` is one.
+
+    Parsed with :func:`str_to_bool` rather than the stricter :func:`_parse_env_bool`, to
+    stay in step with :func:`usage.is_recording_enabled`, which is the gate that
+    actually decides whether a line is written. Keeping a default this reports but the
+    gate ignores would publish "recording on" while nothing records.
 
     This is only the environment half of the switch; :func:`usage.is_recording_enabled`
     combines it with ``SERVER_MODE`` and the marker file at the usage path.
@@ -196,20 +208,183 @@ class _UsageRecordingEnabled:
         return str_to_bool(os.getenv(USAGE_RECORDING_ENV_VAR, "true"))
 
 
+_DEFAULT_SSH_PORT = 22
+
+
+def _parse_max_content_length(env_value: str) -> Optional[int]:
+    """Empty means no limit — the bare form ``.env.sample`` documents.
+
+    Anything else unreadable raises, for the reason ``SERVER_MODE`` is strict: the
+    value to fall back on is *no limit*, so guessing would drop an upload cap the
+    operator asked for. The class-body call is unguarded, so this message is what
+    they get in place of a bare ``int()`` traceback; the override loop catches it
+    and keeps the declared limit instead.
+    """
+    if not env_value:
+        return None
+
+    try:
+        return int(env_value)
+    except ValueError:
+        raise ValueError(
+            f"MAX_CONTENT_LENGTH={env_value!r} is not a byte count. "
+            "Set a whole number of bytes, or leave it empty for no limit."
+        ) from None
+
+
+def _parse_ssh_port(env_value: Optional[str]) -> int:
+    """Range-check an SSH port, falling back to the default for anything unusable.
+
+    The class body has nothing else to keep, so substituting the default is the only
+    option here. The override loop uses :func:`require_tcp_port` instead, which reports
+    a bad value rather than changing the port silently — an out-of-range one is
+    published to the browser through ``_build_spa_client_config``.
+    """
+    return parse_tcp_port(env_value, default=_DEFAULT_SSH_PORT)
+
+
+# Settings whose class body parses more richly than their type. Keyed by name because
+# the rule belongs to the setting: dispatching on ``int`` alone would drop the SSH port
+# range check, and ``MAX_CONTENT_LENGTH`` is an ``int`` whose empty value is not one.
+_ENV_PARSERS: Mapping[str, Callable[[str], Any]] = {
+    "SSH_DEFAULT_PORT": require_tcp_port,
+    "MAX_CONTENT_LENGTH": _parse_max_content_length,
+}
+
+# Booleans an unreadable value must stop the app over rather than warn about. Registered
+# per setting rather than passed at the call site, so the class body and the override
+# loop can't disagree about which spellings are fatal: the loop has no call site to pass
+# it at, and ``create_app``'s ``load_dotenv`` can introduce a value the class body never
+# saw. ``SERVER_MODE`` is the one whose fallback is itself a posture — keeping the
+# default means *local*, which un-gates every ``@local_only`` endpoint.
+_STRICT_BOOLEANS = frozenset({"SERVER_MODE"})
+
+# Config attributes whose environment variable is spelled differently. ``DEBUG`` is the
+# only one: a bare ``DEBUG`` variable is the log-level knob ``pnpm flask:start-debug``
+# sets, so reading the attribute name would let it turn on Flask's debug mode — and
+# suppress the catch-all error handler — for anyone who only wanted verbose logs.
+_ENV_ALIASES: Mapping[str, str] = {"DEBUG": "FLASK_DEBUG"}
+
+
+def _env_name_for(key: str) -> str:
+    """The variable a setting reads, so every registry can be keyed by attribute name.
+
+    Both parse paths take the attribute and resolve the variable here, which keeps the
+    aliased spelling written once and lets warnings still name what the operator set.
+    """
+    return _ENV_ALIASES.get(key, key)
+
+
+def _keep_declared(key: str, declared: Any, env_value: str, expected: str) -> Any:
+    logger.warning(
+        "Ignoring %s=%r: expected %s. Keeping %r.",
+        _env_name_for(key),
+        env_value,
+        expected,
+        declared,
+    )
+    return declared
+
+
+def _coerce_bool(key: str, declared: bool, env_value: str) -> bool:
+    """Parse a boolean setting, refusing a value we don't recognise where it matters.
+
+    Shared by the class body and the override loop so a spelling can't be fatal at
+    import and tolerated afterwards. Everything outside :data:`_STRICT_BOOLEANS` is a
+    feature flag and keeps its default with a warning, which doesn't warrant refusing
+    to boot.
+    """
+    parsed = parse_bool(env_value)
+    if parsed is not None:
+        return parsed
+
+    if key in _STRICT_BOOLEANS:
+        recognised = ", ".join(sorted(TRUE_VALUES | FALSE_VALUES))
+        raise ValueError(
+            f"{_env_name_for(key)}={env_value!r} is not a recognised boolean. "
+            f"Use one of: {recognised}."
+        )
+
+    return bool(_keep_declared(key, declared, env_value, "a boolean"))
+
+
+def _parse_env_bool(key: str, default: bool) -> bool:
+    """Read a boolean setting in the class body, reporting a value we don't recognise.
+
+    The class body — not :meth:`~DefaultConfig.override_with_env_variables`, whose reach
+    stops at ``DEBUG`` and ``TESTING`` until #1857 — is what decides ``SERVER_MODE``, so
+    this is where the vocabulary check has to run to mean anything. A strict setting
+    raises from here, which lands on ``stderr`` before ``create_app`` configures
+    logging; that is the point, since a warning at this stage goes nowhere.
+    """
+    env_value = os.getenv(_env_name_for(key))
+    if env_value is None:
+        return default
+
+    return _coerce_bool(key, default, env_value)
+
+
+def _coerce_env_value(key: str, declared: Any, env_value: str) -> Any:
+    """Parse an environment string into the value the class body would have produced.
+
+    Assigning the raw string would discard that parse, and ``"false"`` is truthy — so
+    an explicitly disabled boolean setting would come back enabled.
+
+    Keyed by *attribute*, like every registry here, so an aliased setting reaches its
+    parser; warnings name the variable through :func:`_env_name_for`.
+
+    Settings with an entry in :data:`_ENV_PARSERS` reuse it; the rest dispatch on the
+    declared type, not on how the value looks, since ``PORT`` and the ``GUNICORN_*``
+    settings are strings because ``main()`` passes them to gunicorn as arguments. A
+    value the declared type can't represent is reported and discarded rather than
+    applied, so a typo can't quietly reconfigure the app.
+    """
+    parser = _ENV_PARSERS.get(key)
+    if parser is not None:
+        try:
+            return parser(env_value)
+        except ValueError:
+            return _keep_declared(key, declared, env_value, "a parseable value")
+
+    # bool before int: ``isinstance(True, int)`` is True.
+    if isinstance(declared, bool):
+        return _coerce_bool(key, declared, env_value)
+
+    if isinstance(declared, int):
+        try:
+            return int(env_value)
+        except ValueError:
+            return _keep_declared(key, declared, env_value, "an integer")
+
+    # A setting declared ``None`` (``MALWARE_SCANNER``, ``TT_METAL_HOME``) is an
+    # optional string, so the raw value is already what the class body would hold.
+    if declared is None or isinstance(declared, str):
+        return env_value
+
+    # Everything else is derived rather than configured — the ``Path`` directories, the
+    # engine options dict — and handing the app a raw string where it expects a parsed
+    # value is worse than declining. Unreachable until #1857 widens the loop's reach.
+    return _keep_declared(
+        key,
+        declared,
+        env_value,
+        f"a coercible type, not {type(declared).__name__}",
+    )
+
+
 class DefaultConfig(object):
     # General Settings
     SECRET_KEY = os.getenv("SECRET_KEY", "90909")
-    DEBUG = bool(str_to_bool(os.getenv("FLASK_DEBUG", "false")))
+    DEBUG = _parse_env_bool("DEBUG", False)
     TESTING = False
     PRINT_ENV = True
-    SERVER_MODE = str_to_bool(os.getenv("SERVER_MODE", "false"))
+    SERVER_MODE = _parse_env_bool("SERVER_MODE", False)
     # Local usage recording is on by default and writes nothing anywhere but this
     # machine. See backend/ttnn_visualizer/usage.py.
     USAGE_RECORDING_ENABLED = _UsageRecordingEnabled()
     MALWARE_SCANNER = os.getenv("MALWARE_SCANNER")
     BASE_PATH = os.getenv("BASE_PATH", "/")
-    _raw_max_content = os.getenv("MAX_CONTENT_LENGTH")
-    MAX_CONTENT_LENGTH = None if not _raw_max_content else int(_raw_max_content)
+    MAX_CONTENT_LENGTH = _parse_max_content_length(os.getenv("MAX_CONTENT_LENGTH", ""))
 
     # Path Settings
     DB_VERSION = "0.29.0"  # App version when DB schema last changed
@@ -233,10 +408,10 @@ class DefaultConfig(object):
     STATIC_ASSETS_DIR = Path(APPLICATION_DIR).joinpath("ttnn_visualizer", "static")
     SEND_FILE_MAX_AGE_DEFAULT = 0
 
-    LAUNCH_BROWSER_ON_START = str_to_bool(os.getenv("LAUNCH_BROWSER_ON_START", "true"))
+    LAUNCH_BROWSER_ON_START = _parse_env_bool("LAUNCH_BROWSER_ON_START", True)
 
     # Remote SSH connection dialog defaults (local install only — suppressed under SERVER_MODE).
-    SSH_DEFAULT_PORT = parse_tcp_port(os.getenv("SSH_DEFAULT_PORT"), default=22)
+    SSH_DEFAULT_PORT = _parse_ssh_port(os.getenv("SSH_DEFAULT_PORT"))
     SSH_DEFAULT_PROFILER_PATH = os.getenv("SSH_DEFAULT_PROFILER_PATH", "")
     SSH_DEFAULT_PERFORMANCE_PATH = os.getenv("SSH_DEFAULT_PERFORMANCE_PATH", "")
     # Remote SSH subprocess timeouts (seconds).
@@ -248,7 +423,7 @@ class DefaultConfig(object):
     SQLITE_DB_PATH = "db.sqlite"
 
     # For development you may want to disable sockets
-    USE_WEBSOCKETS = str_to_bool(os.getenv("USE_WEBSOCKETS", "true"))
+    USE_WEBSOCKETS = _parse_env_bool("USE_WEBSOCKETS", True)
 
     # SQL Alchemy Settings
     # Build database path - use absolute path to avoid any ambiguity
@@ -288,16 +463,49 @@ class DefaultConfig(object):
     SESSION_MAX_UPLOADED_REPORTS = int(os.getenv("SESSION_MAX_UPLOADED_REPORTS", "10"))
 
     def override_with_env_variables(self):
-        """Override config values with environment variables."""
+        """Override config values with environment variables.
+
+        Values are coerced to what the class body would have produced; see
+        :func:`_coerce_env_value`. Attributes read a differently named variable where
+        :data:`_ENV_ALIASES` says so, so the loop and the class body agree on which
+        variable owns a setting.
+
+        Only reaches attributes declared on the *concrete* config class, since it reads
+        that class's own ``__dict__``: ``DevelopmentConfig`` declares none, the others
+        only ``DEBUG`` and ``TESTING``. Tracked as #1857.
+        """
         for key, value in self.__class__.__dict__.items():
             # Descriptors (and methods) resolve their own value on read; assigning the
             # raw environment string over one would shadow it with an unparsed value.
             if key.startswith("_") or hasattr(value, "__get__"):
                 continue
 
-            env_value = os.getenv(key)
-            if env_value is not None:
-                setattr(self, key, env_value)
+            env_value = os.getenv(_env_name_for(key))
+            if env_value is None:
+                continue
+
+            setattr(self, key, _coerce_env_value(key, value, env_value))
+
+        self._refuse_debug_under_server_mode()
+
+    def _refuse_debug_under_server_mode(self) -> None:
+        """Hosted mode wins over debug mode, because ``DEBUG`` is not just verbosity.
+
+        A truthy ``Flask.debug`` suppresses the catch-all error handler, so an unhandled
+        exception answers an untrusted caller with a traceback, and without websockets
+        it mounts Werkzeug's interactive console. Neither survives a multi-user
+        deployment, so the two settings can't both be honoured and the restrictive one
+        has to win. Applied after the loop so it covers the class body and the override
+        alike.
+        """
+        if not (self.SERVER_MODE and self.DEBUG):
+            return
+
+        logger.warning(
+            "Ignoring FLASK_DEBUG under SERVER_MODE: debug mode would return tracebacks "
+            "to untrusted callers. Keeping debug mode off."
+        )
+        self.DEBUG = False
 
     def to_dict(self):
         """Return all config values as a dictionary, including inherited attributes."""
@@ -313,7 +521,7 @@ class DevelopmentConfig(DefaultConfig):
 
 
 class TestingConfig(DefaultConfig):
-    DEBUG = bool(str_to_bool(os.getenv("FLASK_DEBUG", "True")))
+    DEBUG = _parse_env_bool("DEBUG", True)
     TESTING = True
 
 

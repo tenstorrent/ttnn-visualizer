@@ -207,6 +207,21 @@ Use **`null`** when you mean “no value yet” or “cleared” in values you o
 
 3. Import from `GRAPH_COLORS` in components — never literal `'#f6bc42'`.
 
+#### Read on use when the value is needed before the stylesheet is guaranteed to have applied
+
+`GRAPH_COLORS` is an object literal, so its `cssVar()` calls resolve **once, at module evaluation**. That is fine for a value first read during a user interaction, but a module imported before the stylesheet applies captures empty strings for good.
+
+Where that risk is real, expose a **getter** instead of a property and keep everything else about the flow — `getPerfChartChrome()` in `src/definitions/PlotConfigurations.ts` is the reference: the properties still live in `_base.scss`, components still never see a literal, but each call re-reads.
+
+```ts
+export const getPerfChartChrome = (): PerfChartChrome => ({
+    line: cssVar('--perf-chart-line'),
+    // …
+});
+```
+
+Prefer `GRAPH_COLORS` by default; reach for a getter only when import-time evaluation is a genuine hazard, and say so in a docstring, because the repeat `getComputedStyle` read is not free — call it once per render pass, not per element.
+
 ### Same rule for magic layout numbers
 
 If a pixel value, threshold, or duration is used in more than one place, promote it to an SCSS variable or CSS custom property. One-off literals at a single call site are fine.
@@ -709,6 +724,8 @@ def _file_path_from_stack_source_request(stack_trace: str) -> Path:
 
 The underscore signals "not part of this module's public API" and excludes the function from `from foo import *` semantics.
 
+This covers helpers in **test modules** too — `_documented_boolean_defaults` in `test_settings.py` — where the prefix also reads as "not a test case". Older test helpers written without it (`wsgi_environ`) are on-touch cleanup; see [Known inconsistencies](#known-inconsistencies).
+
 ---
 
 ## Lint discipline
@@ -1167,13 +1184,63 @@ All five funnel through `error_response(...)` which produces a consistent `{"err
 
 Upload, sync, and connection-test endpoints return a Pydantic `StatusMessage` that carries a `ConnectionTestStates` status alongside the message. The frontend reads `response.data.status` to drive UI state machines (`PROGRESS` → `OK`/`FAILED`/`WARNING`). Use it whenever the response is consumed by a `ConnectionTestStates`-aware UI; use `response_*` helpers for everything else.
 
-### Env-var booleans go through `str_to_bool`
+### Env-var booleans go through `_parse_env_bool` / `str_to_bool`
 
 ```python
-SERVER_MODE = str_to_bool(os.getenv("SERVER_MODE", "false"))
+SERVER_MODE = _parse_env_bool("SERVER_MODE", False)
 ```
 
-`bool(os.getenv("SERVER_MODE", "false"))` is **truthy** for the string `"false"` — a common foot-gun. The `str_to_bool` helper accepts the usual `"true"/"false"/"1"/"0"/"yes"/"no"` set.
+`bool(os.getenv("SERVER_MODE", "false"))` is **truthy** for the string `"false"` — a common foot-gun.
+
+#### `parse_bool` owns the vocabulary; never re-declare the tokens
+
+`parse_bool` (`utils.py`) is the only place the accepted spellings are written down. It returns `True`, `False`, or `None` for a value it doesn't recognise, and `str_to_bool` is a thin wrapper over it (`parse_bool(value) is True`) for query params and other callers where "unrecognised" and "false" are the same answer.
+
+A second copy of the token list drifts, and **both drift directions fail silently**: add a spelling to one and the other rejects a value the rest of the app honours; remove one and it starts meaning `False`. If a caller needs to know that a value was a typo, take `None` from `parse_bool` — don't re-implement the membership test.
+
+This holds outside `settings.py` too: `create_app`'s root-log-level check, the gunicorn `--reload` check, and `devtools/npe_render_probe.py`'s `SERVER_MODE` refusal all call `str_to_bool`. A dev tool that refuses on a *wider* set than the app looks harmless and isn't — it means the two disagree about what the deployment is.
+
+#### The vocabulary is deliberately narrow, and matched across three consumers
+
+Only `true` / `1` / `false` / `0`, case-insensitive and whitespace-trimmed. That is what `.env.sample` documents, what the SPA's `isServerModeEnabled` (`src/functions/getServerConfig.ts`) accepts, and — because `str_to_bool` backs them — what the `print_signposts` / `hide_host_ops` / `merge_devices` / `tracing_mode` query params on `GET /api/performance/perf-results/report` accept. So `SERVER_MODE` and `VITE_SERVER_MODE` can't select opposite postures from the same spelling. **Widening one side means widening the others in the same change.**
+
+The query params are the easiest consumer to forget and the least noisy when broken: a spelling that stops being recognised doesn't error, it silently means `False`, so `?hide_host_ops=t` returns a different report rather than a 4xx. The SPA sends real axios booleans, so only scripted callers notice. `backend/ttnn_visualizer/tests/test_perf_report_params.py` pins the contract.
+
+#### Config reports a typo rather than obeying it, and `_STRICT_BOOLEANS` refuses to start
+
+`str_to_bool` maps anything unrecognised to `False`, which for `SERVER_MODE` is the *local* posture — the one whose endpoints publish SSH host, username, and path metadata. So `settings.py` reads booleans through `_parse_env_bool`, which logs the value and keeps the coded default instead.
+
+A setting listed in **`_STRICT_BOOLEANS`** raises instead of warning. `SERVER_MODE` is the only member: it is the one boolean whose fallback is itself a security posture, so a value we can't read has to stop the app rather than quietly pick the permissive answer — and the warning that would otherwise cover it is emitted at import, before `create_app` configures logging, so it lands on `stderr` and not in the deployment's logs. Everything else is a feature flag and doesn't warrant refusing to boot.
+
+Strictness is registered **per setting, not passed at the call site**, because both parse paths have to agree: the override loop has no call site to pass a flag at, and `create_app` runs `load_dotenv` long after import, so a `.env` can introduce a spelling the class body never vetted. A flag the loop couldn't honour would become a real hole the moment [#1857](https://github.com/tenstorrent/ttnn-visualizer/issues/1857) widens its reach.
+
+`MAX_CONTENT_LENGTH` is the second setting that can abort startup, for the same reason by a different route: its class-body call to `_parse_max_content_length` is unguarded, and the value it would fall back to is *no limit at all*, so an unreadable upload cap stops the app rather than silently removing it. Both refusals name the variable and the accepted values, because they are what an operator sees instead of a traceback.
+
+The strict path is import-time, so nothing in-process can exercise it — pytest has already imported the module. `test_importing_settings_refuses_an_unreadable_server_mode` re-imports `settings` in a subprocess; without it, deleting `SERVER_MODE` from `_STRICT_BOOLEANS` leaves the whole suite green.
+
+Because a narrow vocabulary makes previously-accepted spellings fatal, **treat widening or narrowing it as a deployment-affecting change**: a hosted install running `SERVER_MODE=yes` now fails to start rather than silently serving in local posture, which is the intended outcome but still an outage if nobody was told.
+
+#### The hosted posture wins over debug mode
+
+`SERVER_MODE` and a truthy `DEBUG` are mutually exclusive, and `override_with_env_variables` forces `DEBUG` off when both are set. `Flask.debug` is not merely verbosity: it suppresses the catch-all error handler, so an unhandled exception answers an untrusted caller with a traceback, and with `USE_WEBSOCKETS=false` it mounts Werkzeug's interactive console (`DebuggedApplication(evalex=True)`), which evaluates arbitrary Python for whoever reaches it. `middleware()` gates that console on the posture as well, since `settings_override` reaches it without passing through the config layer.
+
+#### `override_with_env_variables` coerces rather than assigns
+
+`_coerce_env_value` parses each environment string back to the declared attribute's type, so setting a variable explicitly no longer undoes the class body's parse. It **declines** what it can't represent — an uncoercible `int`, an unrecognised boolean, and any declared type it has no rule for (the `Path` directories, the engine-options dict) — logging and keeping the declared value rather than handing the app a raw string.
+
+Settings that parse more richly than their type register a named parser in `_ENV_PARSERS`: `SSH_DEFAULT_PORT` (range check) and `MAX_CONTENT_LENGTH` (empty means no limit) would both be broken by plain `int` dispatch. Three rules for that registry, and for `_STRICT_BOOLEANS` alongside it:
+
+- **One named function where both paths parse the same setting.** The class body and the registry call the same function (`_parse_max_content_length`) so the import-time and override-time parses can't disagree. Where the two genuinely differ, say why in the docstring: `_parse_ssh_port` falls back to the default because the class body has nothing else to keep, while the registry uses `require_tcp_port` so a bad override is reported rather than silently changing the port. The range itself is still written once, in `require_tcp_port`, which `parse_tcp_port` wraps. Don't "fix" that asymmetry — it is the difference between having a declared value to keep and not.
+- **Key every registry by the attribute name.** `_ENV_PARSERS`, `_STRICT_BOOLEANS` and `_ENV_ALIASES` are all keyed by attribute; the variable is resolved through `_env_name_for` at lookup time and used only in messages. Keying one by the *variable* would pass the guard tests and never fire for the one setting that has an alias.
+- **Keys are strings, so nothing binds them to the attribute.** A rename leaves a dead entry that silently falls back to type dispatch — or, in `_STRICT_BOOLEANS`, downgrades a refusal to a warning. `test_every_env_parser_names_a_real_setting`, `test_every_strict_boolean_names_a_real_boolean_setting` and `test_every_registry_is_keyed_the_way_it_is_looked_up` are what catch it.
+
+#### `_ENV_ALIASES` where the variable isn't named after the attribute
+
+Every setting reads a variable named after its attribute, which is right for all of them but `DEBUG`: it is fed by `FLASK_DEBUG`, because a bare `DEBUG` is the log-level knob (see the entry under [Known inconsistencies](#known-inconsistencies)). `_ENV_ALIASES` maps the attribute to the variable that owns it and `_env_name_for` is the single reader, so the class body and the override loop can't disagree and the aliased spelling is written once. Without it, `DEBUG=true` — what `pnpm flask:start-debug` sets — turned on Flask's debug mode under `FLASK_ENV=production`, which suppresses the catch-all error handler and returns tracebacks. Add an entry here rather than a special case in the loop if another setting ever grows a differently-named variable.
+
+#### The loop only reaches the concrete config class
+
+It reads the concrete class's own `__dict__`, so in practice it visits `DEBUG` and `TESTING` and nothing else; the class body is what parses everything else. Widening that reach is tracked as [#1857](https://github.com/tenstorrent/ttnn-visualizer/issues/1857) — until it lands, don't assume an environment variable changed after import takes effect (`FLASK_DEBUG` and `TESTING` are the two exceptions, since the loop does revisit them), and don't put a guard in the loop expecting it to cover a setting.
 
 ### Domain exceptions live in `exceptions.py`
 
@@ -1192,13 +1259,16 @@ Don't `raise Exception("...")` — there's an existing class for almost every ca
 These exist in the codebase today and don't yet have a single canonical answer. Reviewers should flag new code that goes either direction without considering both:
 
 - **`definitions/` still holds some domain-shaped types.** The `definitions/` vs `model/` boundary is the target layout; leftovers such as rich shapes in `PerfTable.ts`, `RemoteConnection.ts`, `MlirServer.ts`, and `PlotConfigurations.ts` migrate **on-touch**, not in a big-bang move. New types follow the boundary; don't add more domain records under `definitions/`.
+- **Two accessors for CSS-custom-property colours.** `GRAPH_COLORS` resolves at module load; `getPerfChartChrome()` re-reads per call because the perf charts build layouts from a module that may evaluate before the stylesheet applies. Both are legitimate and both keep the literal in `_base.scss` — pick per the guidance under [No hex literals in TS/TSX](#no-hex-literals-in-tstsx), and don't add a third mechanism.
 - **Direct imports from `store/fileTransferRegistry.ts`.** Atoms and mutators are re-exported from `app.ts`; new call sites should import from there. Older hooks/components that still import the co-located module are on-touch cleanup.
 - **`extract_npe_name` is a misnomer.** It's used by both NPE and MLIR upload handlers. Rename to `extract_uploaded_name` is tracked as a follow-up; don't perpetuate the NPE-specific name in new helpers.
 - **`errorMessage` vs `statusMessage` in file loaders.** `MlirJsonFileLoader.tsx` and `NPEFileLoader.tsx` overload a state field called `errorMessage` with both success and failure text. A rename to `statusMessage` is pending.
-- **Upload size cap.** No `MAX_CONTENT_LENGTH` is set on the Flask app; large uploads succeed until they exhaust memory. Tracked as a separate hardening task.
+- **Upload size cap.** `MAX_CONTENT_LENGTH` is a real setting — Flask honours it via `app.config.from_object`, `.env.sample` documents it, and an empty value means "no limit" — but it is **unset by default**, so out of the box large uploads succeed until they exhaust memory. Choosing a shipped default is tracked as a separate hardening task.
 - **Default-export vs named-export of components.** The codebase mixes `export default function Foo()` and `export function Foo()`. Components are predominantly default-exported; hooks and utility functions are predominantly named-exported. Mirror the file you're editing.
 - **Raw `toast()` in `useBufferFocus`.** `src/hooks/useBufferFocus.tsx` calls `toast()` from `react-toastify` directly because it needs `autoClose: false` and persists the returned `Id` into `activeToastAtom` — capabilities `createToastNotification` doesn't expose. Intentional exception, not a precedent. New code still goes through `createToastNotification`; if you need richer options, extend the wrapper.
 - **`flake8 max-line-length = 79` vs `black line-length = 88`.** `.flake8` and `pyproject.toml` disagree. Black wins in practice because `pnpm flask:format` runs it; the flake8 setting only matters if `pre-commit` runs flake8 in isolation, which CI does not. Don't expand or contract files to satisfy 79 — 88 is the source of truth.
 - **`Config.__new__` lacks a return annotation.** `backend/ttnn_visualizer/settings.py` returns the singleton without typing the return, surfacing a mypy `attr-defined` error in `database_migrations.py` against `cast(DefaultConfig, Config()).SQLALCHEMY_DATABASE_URI`. Fix is `def __new__(cls) -> "DefaultConfig":`; tracked as a follow-up.
 - **`useQuery<Data, AxiosError>` not universal.** Four hooks in `useAPI.tsx` (`useGetClusterDescription`, `usePerfMeta`, `useReportFolderList`, `useInstance`) leave the error generic implicit (`unknown`). Call sites currently don't read `error.status` on these specific queries, but the rule is "spell out both generics" — tighten when you touch them.
+- **`DEBUG` and `FLASK_DEBUG` are different knobs with confusable names.** `FLASK_DEBUG` feeds the `DEBUG` *config* value (Flask's debug mode, which suppresses the catch-all error handler); the `DEBUG` *environment variable* raises the root log level and is what `pnpm flask:start-debug` sets. Both are in `.env.sample` with that distinction spelled out, and `_ENV_ALIASES` keeps the override loop from conflating them. Collapsing the two names would be a behaviour change for anyone setting either; until someone does, read the name at the call site rather than assuming.
+- **Underscore prefixes on test-module helpers.** Backend helpers are meant to carry a leading underscore, and newer test modules follow it (`_documented_boolean_defaults`), but plenty of existing ones don't (`wsgi_environ` in the same file). Prefix new helpers; rename existing ones only when you're already editing them.
 - **`dataclasses.asdict(...)` vs `to_dict()` for serialisation.** Models that inherit `SerializeableDataclass` get a `to_dict()` that handles `enum.Enum` conversion; using `dataclasses.asdict` instead (e.g. `views.py`) skips that handling. Safe when the dataclass has no enum fields; otherwise use `.to_dict()`. Reviewers should flag `asdict` on any dataclass with enum-typed fields.

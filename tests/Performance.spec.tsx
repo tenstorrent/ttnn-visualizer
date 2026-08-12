@@ -21,6 +21,7 @@ import {
 import {
     activePerformanceReportAtom,
     bufferTypeFilterListAtom,
+    durationBucketFilterListAtom,
     layoutFilterListAtom,
     mathFilterListAtom,
     rawOpCodeFilterListAtom,
@@ -99,6 +100,7 @@ const REPORT_A = { path: '/reports/a', reportName: 'report-a' };
 const REPORT_B = { path: '/reports/b', reportName: 'report-b' };
 const SELECTED_ROW_ID = 100;
 const MATH_FIDELITY = 'HiFi4';
+const DURATION_BUCKET_MIN_US = 100;
 
 afterEach(cleanup);
 
@@ -126,6 +128,7 @@ function PerformanceController() {
     const [mathFilterList, setMathFilterList] = useAtom(mathFilterListAtom);
     const [bufferTypeFilterList, setBufferTypeFilterList] = useAtom(bufferTypeFilterListAtom);
     const [layoutFilterList, setLayoutFilterList] = useAtom(layoutFilterListAtom);
+    const [durationBucketFilterList, setDurationBucketFilterList] = useAtom(durationBucketFilterListAtom);
     const setReport = useSetAtom(activePerformanceReportAtom);
 
     return (
@@ -135,6 +138,7 @@ function PerformanceController() {
             <span data-testid='math-filter-probe'>{formatFilterProbe(mathFilterList)}</span>
             <span data-testid='buffer-type-filter-probe'>{formatFilterProbe(bufferTypeFilterList)}</span>
             <span data-testid='layout-filter-probe'>{formatFilterProbe(layoutFilterList)}</span>
+            <span data-testid='duration-bucket-filter-probe'>{formatFilterProbe(durationBucketFilterList)}</span>
             <button
                 type='button'
                 data-testid='select-row'
@@ -150,6 +154,7 @@ function PerformanceController() {
                     setMathFilterList([MATH_FIDELITY]);
                     setBufferTypeFilterList([BufferType.L1]);
                     setLayoutFilterList([DeviceOperationLayoutTypes.INTERLEAVED]);
+                    setDurationBucketFilterList([DURATION_BUCKET_MIN_US]);
                 }}
             >
                 filter
@@ -323,6 +328,7 @@ describe('Performance route', () => {
         expect(screen.getByTestId('math-filter-probe')).toHaveTextContent(MATH_FIDELITY);
         expect(screen.getByTestId('buffer-type-filter-probe')).toHaveTextContent(String(BufferType.L1));
         expect(screen.getByTestId('layout-filter-probe')).toHaveTextContent(DeviceOperationLayoutTypes.INTERLEAVED);
+        expect(screen.getByTestId('duration-bucket-filter-probe')).toHaveTextContent(String(DURATION_BUCKET_MIN_US));
 
         fireEvent.click(screen.getByTestId('set-report-b'));
 
@@ -330,6 +336,7 @@ describe('Performance route', () => {
         expect(screen.getByTestId('math-filter-probe')).toHaveTextContent('empty');
         expect(screen.getByTestId('buffer-type-filter-probe')).toHaveTextContent('empty');
         expect(screen.getByTestId('layout-filter-probe')).toHaveTextContent('empty');
+        expect(screen.getByTestId('duration-bucket-filter-probe')).toHaveTextContent('empty');
     });
 
     it('does not re-clear table chip filters while the active report is unchanged', () => {
@@ -351,6 +358,7 @@ describe('Performance route', () => {
         expect(screen.getByTestId('math-filter-probe')).toHaveTextContent(MATH_FIDELITY);
         expect(screen.getByTestId('buffer-type-filter-probe')).toHaveTextContent(String(BufferType.L1));
         expect(screen.getByTestId('layout-filter-probe')).toHaveTextContent(DeviceOperationLayoutTypes.INTERLEAVED);
+        expect(screen.getByTestId('duration-bucket-filter-probe')).toHaveTextContent(String(DURATION_BUCKET_MIN_US));
     });
 
     it('does not clear table chip filters on Performance remount with the same report', () => {
@@ -388,6 +396,7 @@ describe('Performance route', () => {
         expect(screen.getByTestId('math-filter-probe')).toHaveTextContent(MATH_FIDELITY);
         expect(screen.getByTestId('buffer-type-filter-probe')).toHaveTextContent(String(BufferType.L1));
         expect(screen.getByTestId('layout-filter-probe')).toHaveTextContent(DeviceOperationLayoutTypes.INTERLEAVED);
+        expect(screen.getByTestId('duration-bucket-filter-probe')).toHaveTextContent(String(DURATION_BUCKET_MIN_US));
     });
 
     it('does not clear selectedPerfRowIdAtom on Performance remount with the same report', () => {

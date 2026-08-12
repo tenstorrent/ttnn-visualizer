@@ -754,8 +754,55 @@ class PathResolver:
         return True, "TT-Metal setup is valid"
 
 
+TRUE_VALUES = frozenset({"true", "1"})
+FALSE_VALUES = frozenset({"false", "0"})
+
+
+def parse_bool(value: str) -> Optional[bool]:
+    """Parse a boolean setting, returning ``None`` for a value outside the vocabulary.
+
+    Deliberately narrow: the two spellings ``.env.sample`` documents, and the two the
+    SPA's own parsing accepts, so a value can't mean one thing to the API and another
+    to the page reading it.
+
+    Distinguishing "means false" from "we don't recognise this" is what lets a caller
+    report a typo instead of obeying it: ``str_to_bool`` alone maps ``"yes"`` and
+    ``"Ture"`` to ``False``, which for ``SERVER_MODE`` is the local posture.
+    """
+    normalised = value.strip().lower()
+    if normalised in TRUE_VALUES:
+        return True
+
+    if normalised in FALSE_VALUES:
+        return False
+
+    return None
+
+
 def str_to_bool(string_value):
-    return string_value.lower() in ("yes", "true", "t", "1")
+    """Whether a value names truth, treating anything unrecognised as false.
+
+    Callers that need to tell an unrecognised value apart from a false one — config,
+    where the distinction is a security posture — use :func:`parse_bool` instead.
+    """
+    return parse_bool(string_value) is True
+
+
+MIN_TCP_PORT = 1
+MAX_TCP_PORT = 65535
+
+
+def require_tcp_port(value: str) -> int:
+    """Parse a TCP port, raising ``ValueError`` for anything unusable.
+
+    The strict half of :func:`parse_tcp_port`, for callers that have a declared value
+    to keep and would rather report a bad one than silently substitute a default.
+    """
+    port = int(value, 10)
+    if not MIN_TCP_PORT <= port <= MAX_TCP_PORT:
+        raise ValueError(f"port {port} is outside {MIN_TCP_PORT}-{MAX_TCP_PORT}")
+
+    return port
 
 
 def parse_tcp_port(value: Optional[str], default: int = 22) -> int:
@@ -768,14 +815,9 @@ def parse_tcp_port(value: Optional[str], default: int = 22) -> int:
         return default
 
     try:
-        port = int(value, 10)
+        return require_tcp_port(value)
     except ValueError:
         return default
-
-    if 1 <= port <= 65535:
-        return port
-
-    return default
 
 
 def is_running_in_container():
