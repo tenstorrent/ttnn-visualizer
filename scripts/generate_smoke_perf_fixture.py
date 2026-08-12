@@ -43,19 +43,24 @@ import zipfile
 from pathlib import Path
 from typing import Optional
 
+_SCRIPTS_DIR = Path(__file__).resolve().parent
+if str(_SCRIPTS_DIR) not in sys.path:
+    sys.path.insert(0, str(_SCRIPTS_DIR))
+
+from report_fixtures import (  # noqa: E402 - needs the sys.path entry above
+    FIXTURE_ROOT,
+    PERFORMANCE_MARKER_FILE,
+    extract_report_dir,
+)
+
 logger = logging.getLogger(__name__)
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
-# The script rewrites its output directory from scratch, so `--output` is
-# confined to the fixtures tree: it names which fixture to build, not an
-# arbitrary location to delete.
-FIXTURE_ROOT = REPO_ROOT / "scripts" / "fixtures"
-
-DEVICE_LOG_NAME = "profile_log_device.csv"
+DEVICE_LOG_NAME = PERFORMANCE_MARKER_FILE
 OPS_PERF_PREFIX = "ops_perf_results"
 OPS_PERF_OUTPUT_NAME = "ops_perf_results.csv"
 NPE_FOLDER = "npe_viz"
 NPE_MANIFEST_NAME = "manifest.json"
+FIXTURE_README_NAME = "README.md"
 
 OP_TYPE_COLUMN = "OP TYPE"
 OP_CODE_COLUMN = "OP CODE"
@@ -100,31 +105,7 @@ def _find_source_report(source: Path, work_dir: Path) -> Path:
     if not zipfile.is_zipfile(source):
         raise ValueError(f"{source} is neither a directory nor a zip archive")
 
-    with zipfile.ZipFile(source) as archive:
-        device_logs = [
-            name for name in archive.namelist() if name.endswith(f"/{DEVICE_LOG_NAME}")
-        ]
-        if len(device_logs) != 1:
-            raise ValueError(
-                f"Expected exactly one {DEVICE_LOG_NAME} in {source}, "
-                f"found {len(device_logs)}: {device_logs}"
-            )
-
-        prefix = f"{device_logs[0].rsplit('/', 1)[0]}/"
-        report_dir = work_dir / "source-report"
-        report_dir.mkdir(parents=True, exist_ok=True)
-        report_dir_resolved = report_dir.resolve()
-
-        for name in archive.namelist():
-            if not name.startswith(prefix) or name.endswith("/"):
-                continue
-            target = (report_dir / name[len(prefix) :]).resolve()
-            if not target.is_relative_to(report_dir_resolved):
-                raise ValueError(f"Zip entry escapes extraction directory: {name}")
-            target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_bytes(archive.read(name))
-
-        return report_dir
+    return extract_report_dir(source, work_dir, PERFORMANCE_MARKER_FILE)
 
 
 def _trim_device_log(source_report: Path, output: Path, row_limit: int) -> None:
@@ -305,9 +286,20 @@ def build_fixture(
         # but warns and falls back to file order when that column is absent.
         keep = [all_rows[index] for index in sorted(kept_indices)]
 
+        # The README records provenance and the invariants that matter on
+        # regeneration, and the generator cannot reproduce it — so carry it
+        # across the rewrite. Without this, the documented regenerate command
+        # deletes the very notes that explain the fixture.
+        readme = output / FIXTURE_README_NAME
+        preserved_readme = readme.read_bytes() if readme.is_file() else None
+
         if output.exists():
             shutil.rmtree(output)
         output.mkdir(parents=True)
+
+        if preserved_readme is not None:
+            (output / FIXTURE_README_NAME).write_bytes(preserved_readme)
+            logger.info("Preserved %s", readme.name)
 
         _trim_device_log(source_report, output, device_log_rows)
         _write_ops_perf(output, fieldnames, keep)

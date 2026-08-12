@@ -89,6 +89,12 @@ exclude = '''
 profile = "black"
 line_length = 88
 
+[tool.pytest.ini_options]
+# Declared here so a bare `pytest` collects every suite. CI and `flask:test`
+# used to pass `backend/ttnn_visualizer` explicitly, which silently skipped any
+# tests living outside the package — `scripts/tests` would never have run.
+testpaths = ["backend/ttnn_visualizer/tests", "scripts/tests"]
+
 [tool.mypy]
 ignore_missing_imports = true
 follow_imports = "skip"

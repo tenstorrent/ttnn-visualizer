@@ -531,7 +531,7 @@ def test_performance_upload_without_tracy_succeeds(app, client, make_report):
 def test_performance_upload_binds_report_root_when_subdirectory_arrives_first(
     app, client, make_report
 ):
-    """`performance_path` anchors on the device log, not on upload order (#1859).
+    """`performance_path` is the destination folder, not the leading part's parent (#1859).
 
     A performance report legitimately carries an `npe_viz/` subdirectory, and
     browser `FileList` ordering is unspecified, so one of its files can lead the
@@ -570,6 +570,51 @@ def test_performance_upload_binds_report_root_when_subdirectory_arrives_first(
     with app.app_context():
         instance = InstanceTable.query.filter_by(instance_id=instance_id).first()
         assert Path(instance.performance_path).resolve() == report_dir
+
+
+def test_performance_upload_report_root_is_not_caller_chosen(app, client, make_report):
+    """A nested device log must not move the report root (#1866 review).
+
+    `validate_files` skips its depth check whenever `folderName` is supplied, so
+    a part named `<anything>/profile_log_device.csv` lands the log one level
+    below the destination folder. Deriving the root by scanning the payload for
+    the device log would make its final segment fully caller-chosen — and that
+    segment is what `get_performance_data_list` uses to scope hosted sessions,
+    so it would become an existence oracle over other sessions' reports.
+    """
+    instance_id = make_report()
+    app.config["LOCAL_DATA_DIRECTORY"] = Path(app.config["LOCAL_DATA_DIRECTORY"])
+    app.config["SERVER_MODE"] = False
+
+    perf_root = (
+        Path(app.config["LOCAL_DATA_DIRECTORY"])
+        / app.config["PERFORMANCE_DIRECTORY_NAME"]
+    ).resolve()
+
+    response = client.post(
+        "/api/local/upload/performance",
+        query_string={"instanceId": instance_id},
+        data={
+            "folderName": "mine",
+            "files": [
+                (
+                    BytesIO(b"csv,bytes\n"),
+                    "1770000000_victimreport/profile_log_device.csv",
+                ),
+                (BytesIO(b"op,perf\n"), "1770000000_victimreport/ops_perf_results.csv"),
+            ],
+        },
+        content_type="multipart/form-data",
+    )
+
+    assert response.status_code == HTTPStatus.OK, response.get_data(as_text=True)
+
+    with app.app_context():
+        instance = InstanceTable.query.filter_by(instance_id=instance_id).first()
+        stored = Path(instance.performance_path).resolve()
+
+    assert stored == perf_root / "mine"
+    assert stored.name != "1770000000_victimreport"
 
 
 def test_profiler_upload_rejects_traversal_within_folder(app, client, make_report):

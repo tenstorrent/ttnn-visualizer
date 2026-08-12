@@ -90,4 +90,6 @@ jobs:
       - wait-all:
 
       - name: Run Backend Tests
-        run: uv run --frozen pytest backend/ttnn_visualizer
+        # No path argument: `testpaths` in pyproject.toml owns the suite list, so
+        # a new test directory is picked up without editing CI.
+        run: uv run --frozen pytest

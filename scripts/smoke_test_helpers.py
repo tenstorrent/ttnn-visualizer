@@ -10,16 +10,22 @@ import os
 import re
 import urllib.error
 import urllib.request
-import zipfile
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from playwright.async_api import Page, Response
+from report_fixtures import (  # noqa: F401 - re-exported for smoke_test.py
+    DEMO_REPORTS_DIR,
+    PERFORMANCE_FIXTURE_DIR,
+    PROFILER_MARKER_FILE,
+    REPO_ROOT,
+    extract_report_dir,
+)
 
 BASE_URL = os.getenv("SMOKE_TEST_BASE_URL", "http://localhost:8000").rstrip("/")
 HOME_URL = re.compile(f"^{re.escape(BASE_URL)}/?$")
-REPO_ROOT = Path(__file__).resolve().parent.parent
-DEMO_REPORTS_DIR = REPO_ROOT / "demo-reports"
 
 DEMO_REPORT_ZIPS = (
     "n300-llama.zip",
@@ -28,13 +34,6 @@ DEMO_REPORT_ZIPS = (
 )
 
 MAIN_TAB_NAMES = ("Operations", "Tensors", "Buffers")
-
-# Purpose-built performance report, small enough to upload on every matrix leg.
-# The demo archives above carry performance reports too, but they are user-facing
-# artifacts with 3.5-36 MB device logs. See the fixture's README.
-PERFORMANCE_FIXTURE_DIR = (
-    REPO_ROOT / "scripts" / "fixtures" / "smoke-performance-report"
-)
 
 SERVER_SETUP_HINT = """\
 Smoke tests require the production server with a built frontend at {base_url}.
@@ -82,64 +81,61 @@ def verify_server_serving_spa(base_url: str = BASE_URL) -> None:
 
 @dataclass
 class ApiErrorTracker:
-    """Collects /api/ responses with HTTP status >= 500."""
+    """Records every `/api/` response, and flags the ones with status >= 500.
+
+    Flagging only 5xx is deliberately not enough on its own: the report-root bug
+    this suite guards against surfaces as a 404, and the perf page legitimately
+    404s profiler-scoped requests when no memory report is loaded, so blanket
+    4xx failure would be wrong. Instead every status is recorded per path, and
+    scenarios assert that the endpoints they claim to cover were actually seen
+    answering 2xx — which makes a coverage claim checkable rather than
+    aspirational.
+    """
 
     errors: list[str] = field(default_factory=list)
+    statuses_by_path: dict[str, set[int]] = field(default_factory=dict)
 
     def attach(self, page: Page) -> None:
         page.on("response", self._on_response)
 
     def _on_response(self, response: Response) -> None:
-        if "/api/" not in response.url or response.status < 500:
+        path = urlsplit(response.url).path
+        if "/api/" not in path:
             return
-        self.errors.append(
-            f"{response.status} {response.request.method} {response.url}"
-        )
+
+        self.statuses_by_path.setdefault(path, set()).add(response.status)
+
+        if response.status >= 500:
+            self.errors.append(
+                f"{response.status} {response.request.method} {response.url}"
+            )
+
+    def assert_no_server_errors(self, label: str) -> None:
+        if self.errors:
+            raise AssertionError(
+                f"API errors during {label}:\n" + "\n".join(self.errors)
+            )
+
+    def assert_answered_ok(self, paths: Iterable[str]) -> None:
+        """Fail unless each path was observed answering 2xx at least once."""
+        missing = []
+        for path in paths:
+            seen = self.statuses_by_path.get(path)
+            if not seen:
+                missing.append(f"{path} (never requested)")
+            elif not any(200 <= status < 300 for status in seen):
+                missing.append(f"{path} (only saw {sorted(seen)})")
+
+        if missing:
+            raise AssertionError(
+                "Endpoints the smoke test claims to cover did not answer 2xx:\n"
+                + "\n".join(missing)
+            )
 
 
 def extract_profiler_report_dir(zip_path: Path, work_dir: Path) -> Path:
     """Extract the memory-profiler report folder from a demo zip archive."""
-    work_dir_resolved = work_dir.resolve()
-
-    with zipfile.ZipFile(zip_path) as archive:
-        db_paths = [name for name in archive.namelist() if name.endswith("/db.sqlite")]
-        if not db_paths:
-            raise ValueError(f"No db.sqlite found in {zip_path}")
-        if len(db_paths) > 1:
-            raise ValueError(
-                f"Expected exactly one db.sqlite in {zip_path}, found {len(db_paths)}: "
-                f"{db_paths}"
-            )
-
-        report_prefix = f"{db_paths[0].rsplit('/', 1)[0]}/"
-        report_name = report_prefix.rstrip("/").split("/")[-1]
-        if not report_name or report_name in (".", ".."):
-            raise ValueError(
-                f"Invalid report directory name derived from zip entry: {db_paths[0]!r}"
-            )
-
-        report_dir = work_dir / report_name
-        report_dir_resolved = report_dir.resolve()
-        if not report_dir_resolved.is_relative_to(work_dir_resolved):
-            raise ValueError(
-                f"Report directory escapes work directory: {report_dir} in {zip_path}"
-            )
-
-        report_dir.mkdir(parents=True, exist_ok=True)
-
-        for name in archive.namelist():
-            if not name.startswith(report_prefix) or name.endswith("/"):
-                continue
-            relative_path = name[len(report_prefix) :]
-            target = (report_dir / relative_path).resolve()
-            if not target.is_relative_to(report_dir_resolved):
-                raise ValueError(
-                    f"Zip entry escapes extraction directory: {name} in {zip_path}"
-                )
-            target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_bytes(archive.read(name))
-
-        return report_dir
+    return extract_report_dir(zip_path, work_dir, PROFILER_MARKER_FILE)
 
 
 async def assert_no_error_ui(page: Page) -> None:

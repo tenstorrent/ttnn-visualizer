@@ -20,20 +20,18 @@ uv run python scripts/generate_smoke_perf_fixture.py \
 ```
 
 Re-running that command against the same source reproduces this directory
-byte-for-byte. To check that without overwriting the fixture, generate a sibling
-and diff it:
+byte-for-byte, so `git status` staying clean is the check that nothing drifted.
+The generator rewrites its output directory from scratch but carries this
+README across, so regenerating in place does not cost you these notes.
 
-```
-uv run python scripts/generate_smoke_perf_fixture.py \
-    --source demo-reports/n300-llama.zip \
-    --output scripts/fixtures/regen-check
-diff -r --exclude=README.md \
-    scripts/fixtures/smoke-performance-report scripts/fixtures/regen-check
-rm -rf scripts/fixtures/regen-check
-```
+Two guards on `--output`, since it is deleted and recreated: it must name a
+directory inside `scripts/fixtures/`, and it may not be that root itself — a
+typo can't take a real tree with it. `scripts/tests/test_generate_smoke_perf_fixture.py`
+pins both.
 
-`--output` is deleted and rewritten, so the script only accepts a directory
-inside `scripts/fixtures/` — a typo can't take a real tree with it.
+`backend/ttnn_visualizer/tests/test_smoke_perf_fixture.py` asserts the
+invariants below against the committed bytes, so a bad regeneration fails in
+seconds rather than waiting on the Playwright matrix.
 
 ## What matters if you regenerate it
 

@@ -437,6 +437,74 @@ describe('PerfTable heuristic flags column', () => {
     });
 });
 
+describe('PerfTable NPE timeline link', () => {
+    // The smoke test clicks this button to reach /api/performance/npe/timeline, and
+    // the committed fixture is built so a manifest entry joins a report row. Pinning
+    // the join here means a break shows up in unit tests rather than only in the
+    // five-leg Playwright matrix.
+    const npeRow = (globalCallCount: number) =>
+        baseRow({ id: 1, raw_op_code: 'Matmul', op: 11, global_call_count: globalCallCount } as never);
+
+    beforeEach(() => {
+        (useOpToPerfIdFiltered as Mock).mockReturnValue([{ opId: 11, perfId: '1' }]);
+    });
+
+    it('renders the link when a manifest entry matches the row global call count', () => {
+        (useGetNPEManifest as Mock).mockReturnValue({
+            data: [{ global_call_count: 2049, file: '_ID2049.npeviz.zst' }],
+            error: null,
+        });
+
+        renderTable([npeRow(2049)]);
+
+        expect(screen.getByTestId(TEST_IDS.PERF_NPE_LINK)).toBeInTheDocument();
+    });
+
+    it('labels the link for screen readers rather than leaving an icon-only button', () => {
+        (useGetNPEManifest as Mock).mockReturnValue({
+            data: [{ global_call_count: 2049, file: '_ID2049.npeviz.zst' }],
+            error: null,
+        });
+
+        renderTable([npeRow(2049)]);
+
+        expect(screen.getByRole('button', { name: 'Launch NPE timeline for Matmul' })).toBeInTheDocument();
+    });
+
+    it('omits the link when no manifest entry matches the row', () => {
+        (useGetNPEManifest as Mock).mockReturnValue({
+            data: [{ global_call_count: 4097, file: '_ID4097.npeviz.zst' }],
+            error: null,
+        });
+
+        renderTable([npeRow(2049)]);
+
+        expect(screen.queryByTestId(TEST_IDS.PERF_NPE_LINK)).toBeNull();
+    });
+
+    it('omits the link when the manifest is empty', () => {
+        (useGetNPEManifest as Mock).mockReturnValue({ data: [], error: null });
+
+        renderTable([npeRow(2049)]);
+
+        expect(screen.queryByTestId(TEST_IDS.PERF_NPE_LINK)).toBeNull();
+    });
+
+    it('never matches a zero global call count, which NPE uses as "no value"', () => {
+        // `parseInt(...) || -1` maps 0 to -1 deliberately, so a manifest entry of 0
+        // must not light up every unnumbered row. Pinned in both directions because
+        // the behaviour is easy to "fix" by accident.
+        (useGetNPEManifest as Mock).mockReturnValue({
+            data: [{ global_call_count: 0, file: '_ID0.npeviz.zst' }],
+            error: null,
+        });
+
+        renderTable([npeRow(0)]);
+
+        expect(screen.queryByTestId(TEST_IDS.PERF_NPE_LINK)).toBeNull();
+    });
+});
+
 function SelectedRowProbe() {
     const selected = useAtomValue(selectedPerfRowIdAtom);
 
