@@ -9,6 +9,7 @@ import RemoteSyncConfigurator from '../components/report-selection/RemoteSyncCon
 import 'styles/routes/Home.scss';
 import useClearSelectedBuffer from '../hooks/useClearSelectedBuffer';
 import getServerConfig from '../functions/getServerConfig';
+import isDirectReportMode from '../functions/isDirectReportMode';
 import InitialMessage from '../components/InitialMessage';
 import FolderFieldset from '../components/report-selection/FolderFieldset';
 
@@ -16,7 +17,6 @@ function Home() {
     useClearSelectedBuffer();
 
     const isServerMode = !!getServerConfig()?.SERVER_MODE;
-    const isDirectReportMode = !!getServerConfig()?.TT_METAL_HOME;
 
     return (
         <div className='home'>
@@ -31,7 +31,7 @@ function Home() {
                 <FolderFieldset
                     title='Remote sync'
                     icon={IconNames.CLOUD}
-                    isFeatureDisabled={isServerMode || isDirectReportMode}
+                    isFeatureDisabled={isServerMode || isDirectReportMode()}
                 >
                     <RemoteSyncConfigurator />
                 </FolderFieldset>

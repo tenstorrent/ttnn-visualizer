@@ -15,6 +15,7 @@ import {
 } from '../../functions/folderLinkStatus';
 import { ReportFolder } from '../../definitions/Reports';
 import getServerConfig from '../../functions/getServerConfig';
+import isDirectReportMode from '../../functions/isDirectReportMode';
 import { getReportId } from '../../functions/reportLinks';
 import { formatSyncedReportName } from '../../functions/reportRank';
 import { ManagedEntity } from '../../definitions/ManagedEntity';
@@ -63,12 +64,15 @@ const LocalFolderPicker = ({
     const activePath = value;
     const activeName = value ? (valueLabel ?? value) : null;
     const isServerMode = !!getServerConfig()?.SERVER_MODE;
+    // Direct-report mode lists reports out of the TT-Metal tree, which the app neither created nor
+    // manages — the delete routes refuse it outright, so the control could never act on the row.
     // Gates the trash button and its confirmation together — rendering one without the other leaves
     // either a delete with no confirmation step or an alert nothing can open.
-    const canDeleteReports = !!handleDelete && !isServerMode;
+    const canDeleteReports = !!handleDelete && !isServerMode && !isDirectReportMode();
     // Loading disables the Select, so in practice the popover and its rows are already gone by the
     // time this matters; the guard on the alert's onConfirm is what actually stops a delete landing
-    // mid-load, since the alert outlives the popover. canDeleteReports covers SERVER_MODE.
+    // mid-load, since the alert outlives the popover. canDeleteReports covers SERVER_MODE and
+    // direct-report mode.
     const isDeleteDisabled = loading;
     const showLinkStatus = shouldShowFolderLinkStatus(linkedIds, unlinkedIds);
 

@@ -19,11 +19,15 @@ import { ConnectionStatus, ConnectionTestStates } from '../../definitions/Connec
 import {
     ACTIVE_MEMORY_REPORT_TOAST_TITLE,
     ACTIVE_PERFORMANCE_REPORT_TOAST_TITLE,
+    MEMORY_REPORT_DELETED_TOAST_TITLE,
+    MEMORY_REPORT_DELETE_FAILED_TOAST_TITLE,
+    PERFORMANCE_REPORT_DELETED_TOAST_TITLE,
+    PERFORMANCE_REPORT_DELETE_FAILED_TOAST_TITLE,
 } from '../../definitions/notifyActiveReport';
 import createToastNotification from '../../functions/createToastNotification';
 import { ToastType } from '../../definitions/ToastType';
 import getResponseError from '../../functions/getResponseError';
-import getServerConfig from '../../functions/getServerConfig';
+import isDirectReportMode from '../../functions/isDirectReportMode';
 import {
     PERFORMANCE_FOLDER_QUERY_KEY,
     PROFILER_FOLDER_QUERY_KEY,
@@ -83,6 +87,18 @@ const directoryErrorStatus: ConnectionStatus = {
     message: 'Selected directory does not contain a valid report',
 };
 
+const CHOOSE_DIRECTORY_LABEL = 'Choose directory...';
+
+/** The parts a report delete differs by; the sequence around them is identical for both kinds. */
+interface DeleteReportOptions {
+    sendDelete: (reportPath: string) => Promise<unknown>;
+    folderQueryKey: string;
+    failedTitle: string;
+    deletedTitle: string;
+    isActive: boolean;
+    clearActive: () => void;
+}
+
 const LocalFolderOptions = () => {
     const queryClient = useQueryClient();
     const [profilerReportLocation, setProfilerReportLocation] = useAtom(profilerReportLocationAtom);
@@ -118,9 +134,9 @@ const LocalFolderOptions = () => {
     const [profilerFolder, setProfilerFolder] = useState<ConnectionStatus | undefined>();
     const [isUploadingReport, setIsUploadingReport] = useState(false);
     const [isUploadingPerformance, setIsPerformanceUploading] = useState(false);
-    const [profilerUploadLabel, setProfilerUploadLabel] = useState('Choose directory...');
+    const [profilerUploadLabel, setProfilerUploadLabel] = useState(CHOOSE_DIRECTORY_LABEL);
     const [performanceFolder, setPerformanceFolder] = useState<ConnectionStatus | undefined>();
-    const [performanceDataUploadLabel, setPerformanceDataUploadLabel] = useState('Choose directory...');
+    const [performanceDataUploadLabel, setPerformanceDataUploadLabel] = useState(CHOOSE_DIRECTORY_LABEL);
 
     const isProfilerLocal = profilerReportLocation === ReportLocation.LOCAL;
     const isPerformanceLocal = performanceReportLocation === ReportLocation.LOCAL;
@@ -145,7 +161,6 @@ const LocalFolderOptions = () => {
         [activePerformanceReport, perfFolderList, isPerformanceLocal],
     );
 
-    const isDirectReportMode = !!getServerConfig()?.TT_METAL_HOME;
     const { linkedPerfIds, unlinkedPerfIds, linkedProfilerReportIds, unlinkedProfilerReportIds } =
         useReportLinkBadgeIds();
 
@@ -248,18 +263,36 @@ const LocalFolderOptions = () => {
         });
     };
 
-    const handleDeleteProfiler = async (folder: ReportFolder) => {
-        await deleteProfiler(folder.path);
-        await queryClient.invalidateQueries({ queryKey: [PROFILER_FOLDER_QUERY_KEY] });
+    const deleteReport = async (folder: ReportFolder, options: DeleteReportOptions) => {
+        try {
+            await options.sendDelete(folder.path);
+        } catch (err: unknown) {
+            createToastNotification(options.failedTitle, getResponseError(err), ToastType.ERROR);
+            return;
+        }
 
-        createToastNotification('Memory report deleted', folder.reportName, ToastType.INFO);
+        await queryClient.invalidateQueries({ queryKey: [options.folderQueryKey] });
 
-        if (activeProfilerReport?.path === folder.path) {
-            setActiveProfilerReport(null);
-            setProfilerUploadLabel('Choose directory...');
-            setProfilerFolder(undefined);
+        createToastNotification(options.deletedTitle, folder.reportName, ToastType.INFO);
+
+        if (options.isActive) {
+            options.clearActive();
         }
     };
+
+    const handleDeleteProfiler = (folder: ReportFolder) =>
+        deleteReport(folder, {
+            sendDelete: deleteProfiler,
+            folderQueryKey: PROFILER_FOLDER_QUERY_KEY,
+            failedTitle: MEMORY_REPORT_DELETE_FAILED_TOAST_TITLE,
+            deletedTitle: MEMORY_REPORT_DELETED_TOAST_TITLE,
+            isActive: activeProfilerReport?.path === folder.path,
+            clearActive: () => {
+                setActiveProfilerReport(null);
+                setProfilerUploadLabel(CHOOSE_DIRECTORY_LABEL);
+                setProfilerFolder(undefined);
+            },
+        });
 
     const handleSelectPerformance = async (folder: ReportFolder) => {
         await withActivatingReport(async () => {
@@ -274,18 +307,19 @@ const LocalFolderOptions = () => {
         });
     };
 
-    const handleDeletePerformance = async (folder: ReportFolder) => {
-        await deletePerformance(folder.path);
-        await queryClient.invalidateQueries({ queryKey: [PERFORMANCE_FOLDER_QUERY_KEY] });
-
-        createToastNotification(`Performance report deleted`, folder.reportName, ToastType.INFO);
-
-        if (activePerformanceReport?.path === folder.path) {
-            setActivePerformanceReport(null);
-            setPerformanceDataUploadLabel('Choose directory...');
-            setPerformanceFolder(undefined);
-        }
-    };
+    const handleDeletePerformance = (folder: ReportFolder) =>
+        deleteReport(folder, {
+            sendDelete: deletePerformance,
+            folderQueryKey: PERFORMANCE_FOLDER_QUERY_KEY,
+            failedTitle: PERFORMANCE_REPORT_DELETE_FAILED_TOAST_TITLE,
+            deletedTitle: PERFORMANCE_REPORT_DELETED_TOAST_TITLE,
+            isActive: activePerformanceReport?.path === folder.path,
+            clearActive: () => {
+                setActivePerformanceReport(null);
+                setPerformanceDataUploadLabel(CHOOSE_DIRECTORY_LABEL);
+                setPerformanceFolder(undefined);
+            },
+        });
 
     return (
         <>
@@ -307,7 +341,7 @@ const LocalFolderOptions = () => {
                 />
             </FormGroup>
 
-            {!isDirectReportMode && (
+            {!isDirectReportMode() && (
                 <FormGroup subLabel='Upload a local memory report'>
                     <div className='form-container'>
                         <FileInput
@@ -357,7 +391,7 @@ const LocalFolderOptions = () => {
                 />
             </FormGroup>
 
-            {!isDirectReportMode && (
+            {!isDirectReportMode() && (
                 <FormGroup subLabel='Upload a local performance report'>
                     <div className='form-container'>
                         <FileInput
