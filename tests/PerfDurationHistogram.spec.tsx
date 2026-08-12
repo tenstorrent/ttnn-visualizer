@@ -379,4 +379,51 @@ describe('PerfDurationHistogram duration bucket controls', () => {
         expect(getSelectedFlags()).toEqual([false, false]);
         expect(screen.getByTestId('selected-tab')).toHaveTextContent(PerfTabIds.CHARTS);
     });
+
+    describe('empty columns', () => {
+        // Decades run contiguously between 5us and 5000us, so the two middle columns hold no op
+        const gappedRows = [row({ device_time: 5 }), row({ device_time: 5000, id: 2 })];
+
+        const renderGappedHistogram = () =>
+            render(
+                <TestProviders initialAtomValues={[[perfSelectedTabAtom, PerfTabIds.CHARTS]]}>
+                    <PerfDurationHistogram
+                        rows={gappedRows}
+                        selectedOpCodes={[{ opCode: 'Matmul', colour: MarkerColours[0] }]}
+                    />
+                    <SelectedTabProbe />
+                </TestProviders>,
+            );
+
+        it('mutes the controls of the columns holding no op and stops them capturing clicks', () => {
+            renderGappedHistogram();
+
+            const annotations = getAnnotations();
+            expect(annotations.map((annotation) => annotation.captureevents)).toEqual([true, false, false, true]);
+            expect(annotations.map((annotation) => annotation.font?.color)).toEqual([
+                CHART_CHROME.text,
+                CHART_CHROME.line,
+                CHART_CHROME.line,
+                CHART_CHROME.text,
+            ]);
+        });
+
+        it('does not filter on a click through an empty column, which would empty the table', () => {
+            renderGappedHistogram();
+
+            clickBucket(1);
+
+            expect(getSelectedFlags()).toEqual([false, false, false, false]);
+            expect(screen.getByTestId('selected-tab')).toHaveTextContent(PerfTabIds.CHARTS);
+        });
+
+        it('still filters on the populated columns either side of the gap', () => {
+            renderGappedHistogram();
+
+            clickBucket(3);
+
+            expect(getSelectedFlags()).toEqual([false, false, false, true]);
+            expect(screen.getByTestId('selected-tab')).toHaveTextContent(PerfTabIds.TABLE);
+        });
+    });
 });

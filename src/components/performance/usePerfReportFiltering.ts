@@ -6,7 +6,11 @@ import { useCallback, useMemo } from 'react';
 import { DurationBucket } from '../../definitions/PerfDurationHistogram';
 import { ColumnKeys, PerfTableFilters, TypedPerfTableRow } from '../../definitions/PerfTable';
 import { OpType } from '../../definitions/Performance';
-import { buildLogDecadeBuckets, isDurationInSelectedBuckets } from '../../functions/durationBuckets';
+import {
+    buildLogDecadeBuckets,
+    getEmptyBucketMinUs,
+    isDurationInSelectedBuckets,
+} from '../../functions/durationBuckets';
 import alignByOpCode from '../../functions/normalisePerformanceData';
 import { Signpost } from '../../model/Signpost';
 import sortAndFilterPerfTableData from '../../functions/sortAndFilterPerfTableData';
@@ -30,6 +34,7 @@ interface UsePerfReportFilteringReturn {
     combinedRows: TypedPerfTableRow[];
     rawOpCodeOptions: TypedPerfTableRow[];
     durationBucketOptions: DurationBucket[];
+    emptyDurationBucketMinUsSet: ReadonlySet<DurationBucket['minUs']>;
     filteredRows: TypedPerfTableRow[];
     filteredComparisonRowsList: TypedPerfTableRow[][];
 }
@@ -82,6 +87,10 @@ const usePerfReportFiltering = ({
     // Built across every dataset so the option set — and therefore any selected tag — survives
     // switching comparison tabs, which swaps which report is primary.
     const durationBucketOptions = useMemo(() => buildLogDecadeBuckets(combinedRows), [combinedRows]);
+    const emptyDurationBucketMinUsSet = useMemo(
+        () => getEmptyBucketMinUs(combinedRows, durationBucketOptions),
+        [combinedRows, durationBucketOptions],
+    );
     const rawOpCodeFilterSet = useMemo(() => new Set(activeRawOpCodeFilterList), [activeRawOpCodeFilterList]);
     const activeMathFilters = useMemo(() => activeMathFilterList, [activeMathFilterList]);
     const mathFilterSet = useMemo(() => new Set(activeMathFilters), [activeMathFilters]);
@@ -269,6 +278,7 @@ const usePerfReportFiltering = ({
         combinedRows,
         rawOpCodeOptions,
         durationBucketOptions,
+        emptyDurationBucketMinUsSet,
         filteredRows,
         filteredComparisonRowsList,
     };

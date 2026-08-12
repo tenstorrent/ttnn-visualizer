@@ -157,6 +157,7 @@ const PerformanceReport = ({
         combinedRows,
         rawOpCodeOptions,
         durationBucketOptions,
+        emptyDurationBucketMinUsSet,
         filteredRows,
         filteredComparisonRowsList,
     } = usePerfReportFiltering({
@@ -592,6 +593,7 @@ const PerformanceReport = ({
                                     placeholder='Select Device Time...'
                                     values={activeDurationBucketFilterList}
                                     updateHandler={setActiveDurationBucketFilterList}
+                                    disabledValues={emptyDurationBucketMinUsSet}
                                 />
                             </ButtonGroup>
 

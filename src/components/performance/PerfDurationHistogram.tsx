@@ -21,7 +21,12 @@ import {
     SAMPLE_OPS_PER_BUCKET,
 } from '../../definitions/PerfDurationHistogram';
 import { OnOpCodeClick, PERF_CHART_LABELS, PerfChartId } from '../../definitions/PerformanceCharts';
-import { PERF_CHART_TRANSPARENT, PlotConfiguration, getPerfChartChrome } from '../../definitions/PlotConfigurations';
+import {
+    PERF_CHART_TRANSPARENT,
+    PerfChartChrome,
+    PlotConfiguration,
+    getPerfChartChrome,
+} from '../../definitions/PlotConfigurations';
 import { TEST_IDS } from '../../definitions/TestIds';
 import buildDurationHistogram from '../../functions/buildDurationHistogram';
 import { getHistogramOpCodeStacks } from '../../functions/getDisplayedHistogramOpCodes';
@@ -41,6 +46,15 @@ interface OtherBucketStats {
     count: number;
     sampleOpsSummary: string;
 }
+
+/** The axis line colour doubles as the muted tone, matching how Blueprint dims a disabled control. */
+const getBucketLabelColour = (chrome: PerfChartChrome, isSelected: boolean, isEmpty: boolean): string => {
+    if (isSelected) {
+        return chrome.surface;
+    }
+
+    return isEmpty ? chrome.line : chrome.text;
+};
 
 interface PerfDurationHistogramProps {
     rows: TypedPerfTableRow[];
@@ -67,11 +81,14 @@ function PerfDurationHistogram({
 
     // One control per column, standing in for the x tick labels. Selection inverts the control:
     // the text colour becomes the fill and the label flips to the page surface to stay legible,
-    // so returning from the table shows which column the filter came from.
+    // so returning from the table shows which column the filter came from. Decades run contiguously
+    // between the extremes, so an empty column can sit between populated ones; its control is muted
+    // and stops capturing clicks because filtering by it would empty the table.
     const bucketAnnotations = useMemo<Partial<Annotations>[]>(() => {
         const chrome = getPerfChartChrome();
 
-        return bucketList.map((bucket) => {
+        return histogramData.buckets.map(({ bucket, totalCount }) => {
+            const isEmpty = totalCount === 0;
             const isSelected = selectedBucketMinUsList.includes(bucket.minUs);
 
             return {
@@ -83,30 +100,30 @@ function PerfDurationHistogram({
                 yshift: PERF_DURATION_BUCKET_ANNOTATION_Y_SHIFT,
                 text: bucket.label,
                 showarrow: false,
-                captureevents: true,
+                captureevents: !isEmpty,
                 borderwidth: 1,
                 borderpad: 4,
                 bgcolor: isSelected ? chrome.text : PERF_CHART_TRANSPARENT,
                 bordercolor: isSelected ? chrome.text : chrome.line,
                 font: {
                     size: PERF_DURATION_BUCKET_ANNOTATION_FONT_SIZE,
-                    color: isSelected ? chrome.surface : chrome.text,
+                    color: getBucketLabelColour(chrome, isSelected, isEmpty),
                 },
             };
         });
-    }, [bucketList, selectedBucketMinUsList]);
+    }, [histogramData.buckets, selectedBucketMinUsList]);
 
     const handleAnnotationClick = useCallback(
         (event: Readonly<ClickAnnotationEvent>) => {
-            const bucket = bucketList[event.index];
+            const entry = histogramData.buckets[event.index];
 
-            if (!bucket) {
+            if (!entry || entry.totalCount === 0) {
                 return;
             }
 
-            prefilterPerfTableByDurationBucket(bucket.minUs);
+            prefilterPerfTableByDurationBucket(entry.bucket.minUs);
         },
-        [bucketList, prefilterPerfTableByDurationBucket],
+        [histogramData.buckets, prefilterPerfTableByDurationBucket],
     );
 
     const colourByOpCode = useMemo(

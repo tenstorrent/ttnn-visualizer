@@ -89,6 +89,35 @@ export const findBucketForDuration = (deviceTimeUs: number, buckets: DurationBuc
 };
 
 /**
+ * The minUs of every bucket holding no bucketable row. Decades run contiguously between the
+ * smallest and largest duration, so a middle decade can be empty even though the extremes are not,
+ * and selecting one filters every row away with nothing on screen to explain why.
+ */
+export const getEmptyBucketMinUs = (
+    rows: TypedPerfTableRow[],
+    buckets: DurationBucket[],
+): Set<DurationBucket['minUs']> => {
+    const populatedMinUs = new Set<DurationBucket['minUs']>();
+
+    for (const row of rows) {
+        // Reports run to hundreds of thousands of rows and most have no empty decade at all
+        if (populatedMinUs.size === buckets.length) {
+            break;
+        }
+
+        if (hasBucketableDeviceTime(row)) {
+            const bucket = findBucketForDuration(row.device_time, buckets);
+
+            if (bucket) {
+                populatedMinUs.add(bucket.minUs);
+            }
+        }
+    }
+
+    return new Set(buckets.filter((bucket) => !populatedMinUs.has(bucket.minUs)).map((bucket) => bucket.minUs));
+};
+
+/**
  * Matches a device time against selected buckets by resolving it through the same bin
  * assignment the histogram uses, rather than comparing against re-derived intervals.
  */

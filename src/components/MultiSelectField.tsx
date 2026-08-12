@@ -15,6 +15,8 @@ type MultiSelectFieldProps<T, K extends keyof T> = {
     updateHandler: Dispatch<SetStateAction<T[K][]>>;
     labelFormatter?: (value: T[K]) => string;
     disabled?: boolean;
+    /** Options kept visible but unselectable, typically because they would match nothing. */
+    disabledValues?: ReadonlySet<T[K]>;
 };
 
 const MultiSelectField = <T, K extends keyof T>({
@@ -25,6 +27,7 @@ const MultiSelectField = <T, K extends keyof T>({
     updateHandler,
     labelFormatter,
     disabled,
+    disabledValues,
 }: MultiSelectFieldProps<T, K>) => {
     const updateMultiSelect = useCallback(
         (updatedFilter: T[K]) => {
@@ -47,9 +50,10 @@ const MultiSelectField = <T, K extends keyof T>({
                 label={labelFormatter ? labelFormatter(option) : String(option)}
                 values={values}
                 updateHandler={updateMultiSelect}
+                disabled={disabledValues?.has(option) ?? false}
             />
         ),
-        [values, updateMultiSelect, labelFormatter],
+        [values, updateMultiSelect, labelFormatter, disabledValues],
     );
 
     const formattedOptions = useMemo((): T[K][] => {
@@ -76,7 +80,12 @@ const MultiSelectField = <T, K extends keyof T>({
         <MultiSelect<T[K]>
             items={formattedOptions}
             placeholder={placeholder}
-            onItemSelect={(selectedType) => updateMultiSelect(selectedType)}
+            onItemSelect={(selectedType) => {
+                // Keyboard activation bypasses the option's own checkbox, so it needs the same guard
+                if (!disabledValues?.has(selectedType)) {
+                    updateMultiSelect(selectedType);
+                }
+            }}
             selectedItems={selectedItems}
             itemRenderer={renderOption}
             tagRenderer={(selected) => (labelFormatter ? labelFormatter(selected) : String(selected))}
@@ -95,9 +104,10 @@ type OptionProps<T> = {
     updateHandler: (type: T) => void;
     label?: string;
     query?: string;
+    disabled?: boolean;
 };
 
-const Option = <T,>({ type, values, updateHandler, label, query }: OptionProps<T>) => {
+const Option = <T,>({ type, values, updateHandler, label, query, disabled = false }: OptionProps<T>) => {
     return (
         <li>
             <Checkbox
@@ -108,6 +118,7 @@ const Option = <T,>({ type, values, updateHandler, label, query }: OptionProps<T
                     />
                 }
                 checked={values.includes(type)}
+                disabled={disabled}
                 onClick={() => updateHandler(type)}
             />
         </li>

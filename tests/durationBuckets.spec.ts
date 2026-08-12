@@ -8,6 +8,7 @@ import { TypedPerfTableRow } from '../src/definitions/PerfTable';
 import {
     buildLogDecadeBuckets,
     findBucketForDuration,
+    getEmptyBucketMinUs,
     hasBucketableDeviceTime,
     isDurationInSelectedBuckets,
 } from '../src/functions/durationBuckets';
@@ -119,6 +120,44 @@ describe('isDurationInSelectedBuckets', () => {
     it('matches nothing when no bucket is selected or no bucket exists', () => {
         expect(isDurationInSelectedBuckets(5, buckets, selected())).toBe(false);
         expect(isDurationInSelectedBuckets(5, [], selected(1))).toBe(false);
+    });
+});
+
+describe('getEmptyBucketMinUs', () => {
+    const rowsFor = (durations: number[]) => durations.map((duration) => row({ device_time: duration }));
+
+    it('names the decades between the extremes that hold no row', () => {
+        const durations = [5, 5000];
+        const empty = getEmptyBucketMinUs(rowsFor(durations), bucketsFor(durations));
+
+        expect([...empty].sort((a, b) => a - b)).toEqual([10, 100]);
+    });
+
+    it('names nothing when every decade is populated', () => {
+        const durations = [5, 50, 500];
+
+        expect(getEmptyBucketMinUs(rowsFor(durations), bucketsFor(durations)).size).toBe(0);
+    });
+
+    it('ignores rows the buckets were never built from, so unbucketable rows fill no decade', () => {
+        const buckets = bucketsFor([5, 5000]);
+        const rows = [
+            ...rowsFor([5, 5000]),
+            row({ device_time: 50, op_type: OpType.SIGNPOST }),
+            row({ device_time: 5 }),
+        ];
+
+        expect([...getEmptyBucketMinUs(rows, buckets)].sort((a, b) => a - b)).toEqual([10, 100]);
+    });
+
+    it('names nothing when there are no buckets', () => {
+        expect(getEmptyBucketMinUs(rowsFor([5]), []).size).toBe(0);
+    });
+
+    it('names every bucket when no row is bucketable', () => {
+        const buckets = bucketsFor([5, 50]);
+
+        expect([...getEmptyBucketMinUs([row({ device_time: null })], buckets)].sort((a, b) => a - b)).toEqual([1, 10]);
     });
 });
 

@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import '@testing-library/jest-dom/vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { Mock, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import PerformanceReport from '../src/components/performance/PerfReport';
 import { TypedPerfTableRow } from '../src/definitions/PerfTable';
@@ -18,6 +18,7 @@ import {
 import { formatDurationBucketRange } from '../src/functions/formatDurationBucketRange';
 import { AtomProviderInitialValues } from './helpers/atomProvider';
 import { TestProviders } from './helpers/TestProviders';
+import testForPortal from './helpers/testForPortal';
 import { DEFAULT_MAX_CORES } from '../src/functions/getCoreCount';
 
 vi.mock('../src/hooks/useAPI.tsx', () => ({
@@ -30,6 +31,8 @@ vi.mock('../src/hooks/useAPI.tsx', () => ({
 const COMPARISON_REPORT = 'report-b';
 /** Accessible name Blueprint gives a MultiSelect tag's dismiss button. */
 const REMOVE_TAG_LABEL = 'Remove tag';
+const DEVICE_TIME_PLACEHOLDER = 'Select Device Time...';
+const WAIT_FOR_OPTIONS = { timeout: 1000 };
 
 const row = (opCode: string, id = 1, deviceTime: number | null = null): TypedPerfTableRow =>
     ({
@@ -211,6 +214,56 @@ describe('PerformanceReport duration bucket filter', () => {
 
         expect(screen.getAllByText('Conv2d').length).toBeGreaterThan(0);
         expect(screen.queryByText('Matmul')).not.toBeInTheDocument();
+    });
+});
+
+describe('PerformanceReport duration bucket options', () => {
+    // Decades run contiguously between the extremes, so 10-100us and 100-1000us are offered
+    // without holding a single row
+    const gappedRows = [row('Matmul', 1, 5), row('Conv2d', 2, 5000)];
+
+    /** The options only exist while the MultiSelect popover is open. */
+    const openDeviceTimeSelect = async () => {
+        fireEvent.click(screen.getByPlaceholderText(DEVICE_TIME_PLACEHOLDER));
+        await waitFor(testForPortal, WAIT_FOR_OPTIONS);
+    };
+
+    const getOption = (minUs: number, maxUs: number) =>
+        screen.getByRole('checkbox', { name: formatDurationBucketRange(minUs, maxUs) });
+
+    it('disables the buckets holding no rows and leaves the populated ones selectable', async () => {
+        renderReport({ data: gappedRows });
+
+        await openDeviceTimeSelect();
+
+        expect(getOption(1, 10)).toBeEnabled();
+        expect(getOption(10, 100)).toBeDisabled();
+        expect(getOption(100, 1000)).toBeDisabled();
+        expect(getOption(1000, 10000)).toBeEnabled();
+    });
+
+    it('does not filter on a click through a disabled bucket, which would empty the table', async () => {
+        renderReport({ data: gappedRows });
+
+        await openDeviceTimeSelect();
+        fireEvent.click(getOption(10, 100));
+
+        expect(getOption(10, 100)).not.toBeChecked();
+        expect(screen.getAllByText('Matmul').length).toBeGreaterThan(0);
+        expect(screen.getAllByText('Conv2d').length).toBeGreaterThan(0);
+    });
+
+    it('counts a comparison report towards a bucket, since the filter spans every dataset', async () => {
+        renderReport({
+            data: gappedRows,
+            comparisonData: [[row('Matmul', 1, 5), row('Conv2d', 2, 50)]],
+            comparisonReports: [COMPARISON_REPORT],
+        });
+
+        await openDeviceTimeSelect();
+
+        expect(getOption(10, 100)).toBeEnabled();
+        expect(getOption(100, 1000)).toBeDisabled();
     });
 });
 
