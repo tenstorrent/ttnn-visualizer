@@ -30,7 +30,7 @@
     "flask:migrate": "uv run python -m ttnn_visualizer.database_migrations",
     "flask:start-debug": "DEBUG=true uv run python -m ttnn_visualizer.app",
     "flask:start": "uv run python -m ttnn_visualizer.app",
-    "flask:test": "uv run pytest backend/ttnn_visualizer/tests",
+    "flask:test": "uv run pytest",
     "format": "prettier --write \"src/**/*.{js,jsx,ts,tsx,scss,css,json,md}\"",
     "lint:fix": "eslint . --fix --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "lint:licenses:fix": "pnpm licenses ls --json | node scripts/check-missing-dep-licenses.mjs --fix=true",

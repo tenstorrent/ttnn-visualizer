@@ -52,6 +52,7 @@ export const TEST_IDS = Object.freeze({
     PERF_HEURISTIC_FLAGS: 'perf-heuristic-flags',
     PERF_HEURISTIC_FLAG: 'perf-heuristic-flag',
     PERF_CHART_HINT: 'perf-chart-hint',
+    PERF_NPE_LINK: 'perf-npe-link',
 
     // General UI
     LOADING_SPINNER: 'loading-spinner',
