@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { HTMLSelect, NumericInput, PopoverPosition, Switch, Tooltip } from '@blueprintjs/core';
+import { HTMLSelect, Intent, NumericInput, PopoverPosition, Switch, Tag, Tooltip } from '@blueprintjs/core';
 import { useAtom, useAtomValue } from 'jotai';
 import GlobalSwitch from '../GlobalSwitch';
 import {
@@ -25,6 +25,8 @@ import {
     TopNAnnotationStatus,
 } from '../../definitions/TopNAnnotations';
 import { useTopNAnnotationAvailability } from '../../hooks/useTopNAnnotations';
+import { getLateDeallocationCountSummary } from '../../functions/lateDeallocation';
+import { TEST_IDS } from '../../definitions/TestIds';
 import 'styles/components/BufferSummaryControls.scss';
 
 // Static copy for the disabled-toggle tooltip, keyed by (mode, availability
@@ -81,7 +83,18 @@ const TOP_N_MODE_ORDER: TopNAnnotationMode[] = [
     TopNAnnotationMode.L1_FULLNESS,
 ];
 
-const BufferSummaryPlotControls = () => {
+interface BufferSummaryPlotControlsProps {
+    /**
+     * Rows where a tensor goes stale (#963). Shown beside the overlay toggle
+     * whether or not the overlay is on, and whether or not it is zero — a
+     * switch that reads "0" tells the user not to bother, which the switch
+     * alone can't. Zero also disables the switch, following the Tensor List's
+     * late-deallocation filter: the same finding, signalled the same way.
+     */
+    lateDeallocationRunCount?: number;
+}
+
+const BufferSummaryPlotControls = ({ lateDeallocationRunCount = 0 }: BufferSummaryPlotControlsProps) => {
     const [showDeallocationReport, setShowDeallocationReport] = useAtom(showDeallocationReportAtom);
     const [renderMemoryLayout, setRenderMemoryLayout] = useAtom(renderMemoryLayoutAtom);
     const [showHex, setShowHex] = useAtom(showHexAtom);
@@ -107,6 +120,9 @@ const BufferSummaryPlotControls = () => {
     // still pick a different metric, so leave the select interactive.
     const isModeSelectDisabled = TOP_N_MODE_ORDER.every((mode) => statusByMode[mode] !== TopNAnnotationStatus.READY);
 
+    const hasLateDeallocations = lateDeallocationRunCount > 0;
+    const lateDeallocationCountSummary = getLateDeallocationCountSummary(lateDeallocationRunCount);
+
     return (
         <div className='buffer-summary-controls'>
             <Switch
@@ -116,13 +132,37 @@ const BufferSummaryPlotControls = () => {
             />
 
             {selectedTabId === TAB_IDS.L1 ? (
-                <GlobalSwitch
-                    label='Mark late tensor deallocations'
-                    checked={showDeallocationReport}
-                    onChange={() => {
-                        setShowDeallocationReport(!showDeallocationReport);
-                    }}
-                />
+                <div className='late-dealloc-control'>
+                    <GlobalSwitch
+                        label='Mark late tensor deallocations'
+                        checked={showDeallocationReport && hasLateDeallocations}
+                        onChange={() => {
+                            setShowDeallocationReport(!showDeallocationReport);
+                        }}
+                        disabled={!hasLateDeallocations}
+                    />
+                    <Tooltip
+                        content={lateDeallocationCountSummary}
+                        placement={PopoverPosition.BOTTOM}
+                    >
+                        <Tag
+                            // Warning colour asserts there is something to look
+                            // at, so a zero stays neutral rather than dressing
+                            // an all-clear as a finding.
+                            intent={hasLateDeallocations ? Intent.WARNING : Intent.NONE}
+                            minimal
+                            round
+                            // The tag renders a bare numeral, and the tooltip
+                            // that explains it only wires `aria-describedby`
+                            // while its popover is open — so without a name of
+                            // its own the count is announced as just a number.
+                            aria-label={lateDeallocationCountSummary}
+                            data-testid={TEST_IDS.LATE_DEALLOC_COUNT}
+                        >
+                            {lateDeallocationRunCount}
+                        </Tag>
+                    </Tooltip>
+                </div>
             ) : null}
 
             <GlobalSwitch
@@ -153,7 +193,7 @@ const BufferSummaryPlotControls = () => {
 
             <div
                 className='top-n-controls'
-                data-testid='top-n-controls'
+                data-testid={TEST_IDS.TOP_N_CONTROLS}
             >
                 <Tooltip
                     content={topNTooltip}
@@ -168,7 +208,7 @@ const BufferSummaryPlotControls = () => {
                 </Tooltip>
                 <NumericInput
                     aria-label='Top-N count'
-                    value={topNCount}
+                    value={Math.min(topNCount, TOP_N_COUNT_MAX)}
                     min={TOP_N_COUNT_MIN}
                     max={TOP_N_COUNT_MAX}
                     minorStepSize={null}

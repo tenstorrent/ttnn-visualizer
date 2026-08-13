@@ -4,7 +4,12 @@
 
 import { OpPerfAggregate } from './perfOverlay';
 import { formatDuration } from './formatting';
-import { RankedAnnotation, SelectTopNParams, TopNAnnotationMode } from '../definitions/TopNAnnotations';
+import {
+    RankedAnnotation,
+    SelectTopNParams,
+    TOP_N_COUNT_MAX,
+    TopNAnnotationMode,
+} from '../definitions/TopNAnnotations';
 import { L1PressureMetrics } from '../model/L1Pressure';
 
 /**
@@ -194,7 +199,9 @@ export const selectTopNAnnotations = ({
         normalise = spec.normalise;
     }
 
-    const topN = pickTopN(candidates, n);
+    // The count is persisted per user, so a value stored before the ceiling
+    // changed can still arrive here asking for more than the input allows.
+    const topN = pickTopN(candidates, Math.min(n, TOP_N_COUNT_MAX));
     if (topN.length === 0) {
         return annotationsByOpId;
     }
