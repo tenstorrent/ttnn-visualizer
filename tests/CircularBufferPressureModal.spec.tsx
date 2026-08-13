@@ -342,7 +342,8 @@ describe('CircularBufferPressureModal - legend totals', () => {
         renderModal(snapshot);
 
         const [meshRow, singleRow] = document.querySelectorAll('button.cb-row .cores');
-        expect(meshRow).toHaveTextContent('× 8 devices');
+        // Same multiplier form as the legend rows this modal drills into.
+        expect(meshRow).toHaveTextContent('x 8 devices');
         expect(singleRow).not.toHaveTextContent('devices');
     });
 
