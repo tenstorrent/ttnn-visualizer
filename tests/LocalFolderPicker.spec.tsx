@@ -8,12 +8,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import LocalFolderPicker from '../src/components/report-selection/LocalFolderPicker';
 import { CONFIRM_DELETE_LABEL, ManagedEntity } from '../src/definitions/ManagedEntity';
 import { ReportFolder } from '../src/definitions/Reports';
+import { ServerConfig } from '../src/definitions/ServerConfig';
 import { TEST_IDS } from '../src/definitions/TestIds';
 import { getDeleteActionLabel } from '../src/functions/managedEntityLabels';
 import testForPortal from './helpers/testForPortal';
 import { TestProviders } from './helpers/TestProviders';
 
-const getServerConfigMock = vi.hoisted(() => vi.fn(() => ({ SERVER_MODE: false })));
+const getServerConfigMock = vi.hoisted(() => vi.fn((): Partial<ServerConfig> => ({ SERVER_MODE: false })));
 
 afterEach(cleanup);
 
@@ -174,6 +175,29 @@ describe('LocalFolderPicker link badges', () => {
 
     it('offers no delete action or confirmation in server mode', async () => {
         getServerConfigMock.mockReturnValue({ SERVER_MODE: true });
+
+        render(
+            <TestProviders>
+                <LocalFolderPicker
+                    items={folders}
+                    value={null}
+                    handleSelect={vi.fn()}
+                    handleDelete={vi.fn()}
+                />
+            </TestProviders>,
+        );
+
+        fireEvent.click(screen.getByText(SELECT_REPORT_TEXT));
+        await waitFor(testForPortal, WAIT_FOR_OPTIONS);
+
+        // The rows still render, so this is the gate being asserted rather than an empty dropdown.
+        expect(screen.getAllByTestId(TEST_IDS.FOLDER_PICKER_ROW)).toHaveLength(folders.length);
+        folders.forEach((folder) => expect(screen.queryByLabelText(deleteLabel(folder))).toBeNull());
+        expect(document.querySelectorAll('[role="alertdialog"]')).toHaveLength(0);
+    });
+
+    it('offers no delete action or confirmation in direct-report mode', async () => {
+        getServerConfigMock.mockReturnValue({ SERVER_MODE: false, TT_METAL_HOME: '/opt/tt-metal' });
 
         render(
             <TestProviders>

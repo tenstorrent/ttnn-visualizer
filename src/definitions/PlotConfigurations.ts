@@ -2,7 +2,8 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { Config, Layout, PlotData, PlotDatum, PlotMouseEvent } from 'plotly.js';
+import { Annotations, Config, Layout, PlotData, PlotDatum, PlotMouseEvent } from 'plotly.js';
+import { cssVar } from '../functions/colour';
 import { Tensor } from '../model/APIData';
 
 export const L1RenderConfiguration: PlotConfiguration = {
@@ -91,7 +92,10 @@ export const BufferSummaryAxisConfiguration: PlotConfiguration = {
 export interface AxisConfig {
     title?: {
         text?: string;
+        /** Gap between the axis and its title — widen it to clear anything drawn in between. */
+        standoff?: number;
     };
+    showticklabels?: boolean;
     side?: 'top' | 'bottom';
     tickmode?: 'array' | 'auto' | 'linear';
     tick0?: number;
@@ -118,6 +122,7 @@ export interface PlotConfiguration {
     yAxis?: AxisConfig;
     yAxis2?: AxisConfig;
     barMode?: 'stack' | 'group';
+    annotations?: Partial<Annotations>[];
 }
 
 export const CONDENSED_PLOT_CHUNK_COLOR = '#9c9e9f';
@@ -189,63 +194,81 @@ export const PERF_CHART_WIDE_LEFT_MARGIN = {
     t: 0,
 };
 
-const GRID_COLOUR = '#575757';
-const LINE_COLOUR = '#575757';
-const TITLE_COLOUR = '#FFF';
+export const PERF_CHART_TRANSPARENT = 'rgba(0, 0, 0, 0)';
 
-export const PerfChartLayout: Partial<Layout> = {
-    autosize: true,
-    paper_bgcolor: 'transparent',
-    plot_bgcolor: 'transparent',
-    showlegend: false,
-    margin: {
-        l: 50,
-        r: 0,
-        b: 50,
-        t: 0,
-    },
-    xaxis: {
-        gridcolor: GRID_COLOUR,
-        linecolor: LINE_COLOUR,
-        color: TITLE_COLOUR,
-        title: {
-            font: {
-                color: TITLE_COLOUR,
-            },
-        },
+/** Y axis title gap, wide enough to clear the tick labels. */
+const PERF_CHART_Y_AXIS_TITLE_STANDOFF = 20;
+
+export interface PerfChartChrome {
+    line: string;
+    text: string;
+    /** Page surface behind the charts — in-plot controls label themselves in it when their fill inverts. */
+    surface: string;
+}
+
+/**
+ * Read on use rather than captured at import: these resolve against the stylesheet, which
+ * is not guaranteed to have applied when this module first evaluates. In-plot controls must
+ * match the axes they sit against, so both come from here.
+ */
+export const getPerfChartChrome = (): PerfChartChrome => ({
+    line: cssVar('--perf-chart-line'),
+    text: cssVar('--perf-chart-text'),
+    surface: cssVar('--perf-chart-surface'),
+});
+
+export const getPerfChartLayout = (): Partial<Layout> => {
+    const chrome = getPerfChartChrome();
+    const axisChrome = {
+        gridcolor: chrome.line,
+        linecolor: chrome.line,
+        color: chrome.text,
         fixedrange: true,
         zeroline: false,
-    },
-    yaxis: {
-        gridcolor: GRID_COLOUR,
-        linecolor: LINE_COLOUR,
-        color: TITLE_COLOUR,
-        title: {
-            standoff: 20,
-            font: {
-                color: TITLE_COLOUR,
+    };
+
+    return {
+        autosize: true,
+        paper_bgcolor: 'transparent',
+        plot_bgcolor: 'transparent',
+        showlegend: false,
+        margin: {
+            l: 50,
+            r: 0,
+            b: 50,
+            t: 0,
+        },
+        xaxis: {
+            ...axisChrome,
+            title: {
+                font: {
+                    color: chrome.text,
+                },
             },
         },
-        automargin: true,
-        fixedrange: true,
-        zeroline: false,
-    },
-    yaxis2: {
-        gridcolor: GRID_COLOUR,
-        linecolor: LINE_COLOUR,
-        color: TITLE_COLOUR,
-        title: {
-            standoff: 20,
-            font: {
-                color: TITLE_COLOUR,
+        yaxis: {
+            ...axisChrome,
+            title: {
+                standoff: PERF_CHART_Y_AXIS_TITLE_STANDOFF,
+                font: {
+                    color: chrome.text,
+                },
             },
+            automargin: true,
         },
-        overlaying: 'y',
-        side: 'right',
-        automargin: true,
-        fixedrange: true,
-        zeroline: false,
-    },
+        yaxis2: {
+            ...axisChrome,
+            title: {
+                standoff: PERF_CHART_Y_AXIS_TITLE_STANDOFF,
+                font: {
+                    color: chrome.text,
+                },
+            },
+            overlaying: 'y',
+            side: 'right',
+            automargin: true,
+        },
+    };
 };
 
 /** Shared shell for non-Cartesian charts (pie) routed through PerfChart. */

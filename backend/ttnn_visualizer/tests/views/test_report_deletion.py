@@ -4,9 +4,10 @@
 
 """Tests for the profiler and performance report ``DELETE`` routes.
 
-The listings these routes are paired with only ever read the local data
-directory, so every case here pins the blast radius of a delete to the single
-directory the client asked for.
+In upload/sync mode the listings these routes are paired with read the local data
+directory, so those cases pin the blast radius of a delete to the single directory
+the client asked for. In direct-report mode the listings read the TT-Metal tree
+instead, which these routes do not manage, so the delete is refused outright.
 """
 
 import shutil
@@ -15,6 +16,7 @@ from pathlib import Path
 
 import pytest
 from ttnn_visualizer.app import create_app
+from ttnn_visualizer.decorators import DIRECT_REPORT_MODE_DELETE_REFUSAL
 from ttnn_visualizer.extensions import db
 from ttnn_visualizer.instances import (
     KEY_PERFORMANCE_LOCATION,
@@ -23,6 +25,7 @@ from ttnn_visualizer.instances import (
     KEY_PROFILER_NAME,
 )
 from ttnn_visualizer.models import InstanceTable, RemoteConnection, ReportLocation
+from ttnn_visualizer.utils import create_path_resolver
 
 API = "/api"
 HOST = "yyzc-wh-05"
@@ -30,13 +33,21 @@ HOST = "yyzc-wh-05"
 
 @pytest.fixture
 def app():
-    """A local-mode app: ``@local_only`` refuses these routes under SERVER_MODE."""
+    """A local-mode app: ``@local_only`` refuses these routes under SERVER_MODE.
+
+    ``TT_METAL_HOME`` is pinned off because it is otherwise read from the developer's own
+    environment (via ``DefaultConfig`` and ``create_app``'s ``load_dotenv``), and it is
+    exported on any machine that profiles TT-Metal. Left unpinned, every upload/sync-mode
+    case here meets the direct-report-mode refusal and fails in a way indistinguishable
+    from a real regression.
+    """
     tmpdir = tempfile.mkdtemp()
     try:
         settings = {
             "TESTING": True,
             "SQLALCHEMY_DATABASE_URI": f"sqlite:///{Path(tmpdir) / 'app.db'}",
             "SERVER_MODE": False,
+            "TT_METAL_HOME": None,
             "APP_DATA_DIRECTORY": tmpdir,
             "REPORT_DATA_DIRECTORY": tmpdir,
             "LOCAL_DATA_DIRECTORY": str(Path(tmpdir) / "local"),
@@ -65,6 +76,39 @@ def _synced_remote_reports(app, directory_key, *names):
     parent = (
         Path(app.config["REMOTE_DATA_DIRECTORY"]) / HOST / app.config[directory_key]
     )
+    for name in names:
+        (parent / name).mkdir(parents=True)
+    return parent
+
+
+@pytest.fixture
+def direct_mode_app():
+    """A direct-report-mode app: the listings read ``$TT_METAL_HOME/generated``."""
+    tmpdir = tempfile.mkdtemp()
+    try:
+        settings = {
+            "TESTING": True,
+            "SQLALCHEMY_DATABASE_URI": f"sqlite:///{Path(tmpdir) / 'app.db'}",
+            "SERVER_MODE": False,
+            "TT_METAL_HOME": str(Path(tmpdir) / "tt-metal"),
+            "APP_DATA_DIRECTORY": tmpdir,
+            "REPORT_DATA_DIRECTORY": tmpdir,
+            "LOCAL_DATA_DIRECTORY": str(Path(tmpdir) / "local"),
+            "REMOTE_DATA_DIRECTORY": str(Path(tmpdir) / "remote"),
+        }
+        yield create_app(settings_override=settings)
+    finally:
+        shutil.rmtree(tmpdir, ignore_errors=True)
+
+
+@pytest.fixture
+def direct_mode_client(direct_mode_app):
+    return direct_mode_app.test_client()
+
+
+def _tt_metal_reports(app, report_type, *names):
+    """Create reports where direct-report mode lists them, and return their parent."""
+    parent = create_path_resolver(app).get_base_report_path(report_type)
     for name in names:
         (parent / name).mkdir(parents=True)
     return parent
@@ -246,3 +290,61 @@ class TestProfilerReportDeletion:
         assert response.status_code in {400, 404}
         assert parent.is_dir()
         assert (parent / "keep_me").is_dir()
+
+
+class TestDirectReportModeDeletion:
+    """With ``TT_METAL_HOME`` set, the listings read a tree these routes cannot delete from.
+
+    Deleting resolved against the app's own data directory regardless, so every delete of
+    a listed report 404'd and the UI showed nothing at all. Refuse instead of 404ing
+    against a tree the client never saw listed.
+    """
+
+    def test_refuses_to_delete_a_listed_profiler_report(
+        self, direct_mode_app, direct_mode_client
+    ):
+        parent = _tt_metal_reports(direct_mode_app, "profiler", "listed_report")
+        _register_instance(direct_mode_app, "profiler-direct", {})
+
+        response = direct_mode_client.delete(
+            f"{API}/profiler/listed_report",
+            query_string={"instanceId": "profiler-direct"},
+        )
+
+        assert response.status_code == 403
+        # The UI renders this through getResponseError, so a bare "Forbidden" would leave
+        # the user with a refusal that says nothing about why.
+        assert response.get_json()["error"] == DIRECT_REPORT_MODE_DELETE_REFUSAL
+        assert (parent / "listed_report").is_dir()
+
+    def test_refuses_to_delete_a_listed_performance_report(
+        self, direct_mode_app, direct_mode_client
+    ):
+        parent = _tt_metal_reports(direct_mode_app, "performance", "listed_report")
+        _register_instance(direct_mode_app, "perf-direct", {})
+
+        response = direct_mode_client.delete(
+            f"{API}/performance/listed_report",
+            query_string={"instanceId": "perf-direct"},
+        )
+
+        assert response.status_code == 403
+        assert response.get_json()["error"] == DIRECT_REPORT_MODE_DELETE_REFUSAL
+        assert (parent / "listed_report").is_dir()
+
+    def test_refusal_does_not_reach_the_local_data_directory(
+        self, direct_mode_app, direct_mode_client
+    ):
+        """A same-named report in the app's own tree must survive the refusal too."""
+        local_parent = _local_reports(
+            direct_mode_app, "PROFILER_DIRECTORY_NAME", "listed_report"
+        )
+        _register_instance(direct_mode_app, "profiler-direct-local", {})
+
+        response = direct_mode_client.delete(
+            f"{API}/profiler/listed_report",
+            query_string={"instanceId": "profiler-direct-local"},
+        )
+
+        assert response.status_code == 403
+        assert (local_parent / "listed_report").is_dir()

@@ -51,7 +51,8 @@ export const TEST_IDS = Object.freeze({
     PERF_DURATION_HISTOGRAM: 'perf-duration-histogram',
     PERF_HEURISTIC_FLAGS: 'perf-heuristic-flags',
     PERF_HEURISTIC_FLAG: 'perf-heuristic-flag',
-    PERF_CHART_TABLE_FILTER_HINT: 'perf-chart-table-filter-hint',
+    PERF_CHART_HINT: 'perf-chart-hint',
+    PERF_NPE_LINK: 'perf-npe-link',
 
     // Buffer summary late deallocation. The badge and rail dot ids are suffixed
     // with the operation id at the call site.

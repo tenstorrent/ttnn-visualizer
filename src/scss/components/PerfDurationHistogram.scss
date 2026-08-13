@@ -2,12 +2,41 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
+@use '../definitions/variables' as variables;
+
 .perf-duration-histogram-chart {
     margin-bottom: 24px;
 }
 
 .perf-duration-histogram {
     min-height: 280px;
+
+    // Bucket controls are Plotly annotations, which have no hover state of their own.
+    // They carry `captureevents`, so Plotly gives the group `pointer-events: all` and
+    // CSS can reach it. Lightening the background matches the app's minimal buttons;
+    // the border is left alone so the selected bucket stays identifiable while hovered.
+    .annotation-text-g {
+        .bg {
+            transition: fill 100ms ease;
+        }
+
+        // Plotly writes fill on both the background and the label as inline styles,
+        // so the hover state has to outrank them
+        /* stylelint-disable declaration-no-important */
+        &:hover {
+            .bg {
+                fill: variables.$tt-dark-minimal-button-background-color-hover !important;
+                fill-opacity: 1 !important;
+            }
+
+            // The selected bucket labels itself in the surface colour to sit on its inverted
+            // fill, which the hover background would otherwise render unreadable
+            .annotation-text {
+                fill: var(--perf-chart-text) !important;
+            }
+        }
+        /* stylelint-enable declaration-no-important */
+    }
 }
 
 .perf-duration-histogram-empty {

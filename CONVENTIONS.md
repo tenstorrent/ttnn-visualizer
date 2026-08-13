@@ -207,6 +207,21 @@ Use **`null`** when you mean “no value yet” or “cleared” in values you o
 
 3. Import from `GRAPH_COLORS` in components — never literal `'#f6bc42'`.
 
+#### Read on use when the value is needed before the stylesheet is guaranteed to have applied
+
+`GRAPH_COLORS` is an object literal, so its `cssVar()` calls resolve **once, at module evaluation**. That is fine for a value first read during a user interaction, but a module imported before the stylesheet applies captures empty strings for good.
+
+Where that risk is real, expose a **getter** instead of a property and keep everything else about the flow — `getPerfChartChrome()` in `src/definitions/PlotConfigurations.ts` is the reference: the properties still live in `_base.scss`, components still never see a literal, but each call re-reads.
+
+```ts
+export const getPerfChartChrome = (): PerfChartChrome => ({
+    line: cssVar('--perf-chart-line'),
+    // …
+});
+```
+
+Prefer `GRAPH_COLORS` by default; reach for a getter only when import-time evaluation is a genuine hazard, and say so in a docstring, because the repeat `getComputedStyle` read is not free — call it once per render pass, not per element.
+
 ### Same rule for magic layout numbers
 
 If a pixel value, threshold, or duration is used in more than one place, promote it to an SCSS variable or CSS custom property. One-off literals at a single call site are fine.
@@ -1244,6 +1259,7 @@ Don't `raise Exception("...")` — there's an existing class for almost every ca
 These exist in the codebase today and don't yet have a single canonical answer. Reviewers should flag new code that goes either direction without considering both:
 
 - **`definitions/` still holds some domain-shaped types.** The `definitions/` vs `model/` boundary is the target layout; leftovers such as rich shapes in `PerfTable.ts`, `RemoteConnection.ts`, `MlirServer.ts`, and `PlotConfigurations.ts` migrate **on-touch**, not in a big-bang move. New types follow the boundary; don't add more domain records under `definitions/`.
+- **Two accessors for CSS-custom-property colours.** `GRAPH_COLORS` resolves at module load; `getPerfChartChrome()` re-reads per call because the perf charts build layouts from a module that may evaluate before the stylesheet applies. Both are legitimate and both keep the literal in `_base.scss` — pick per the guidance under [No hex literals in TS/TSX](#no-hex-literals-in-tstsx), and don't add a third mechanism.
 - **Direct imports from `store/fileTransferRegistry.ts`.** Atoms and mutators are re-exported from `app.ts`; new call sites should import from there. Older hooks/components that still import the co-located module are on-touch cleanup.
 - **`extract_npe_name` is a misnomer.** It's used by both NPE and MLIR upload handlers. Rename to `extract_uploaded_name` is tracked as a follow-up; don't perpetuate the NPE-specific name in new helpers.
 - **`errorMessage` vs `statusMessage` in file loaders.** `MlirJsonFileLoader.tsx` and `NPEFileLoader.tsx` overload a state field called `errorMessage` with both success and failure text. A rename to `statusMessage` is pending.

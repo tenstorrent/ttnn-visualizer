@@ -89,7 +89,7 @@ describe('PerfOperationTypesChart', () => {
         firePlotClick({ points: [{ customdata: 'Conv2d', label: 'Conv2d' }] } as never);
 
         expect(onOpCodeClick).toHaveBeenCalledWith('Conv2d');
-        expect(screen.getByTestId(TEST_IDS.PERF_CHART_TABLE_FILTER_HINT)).toBeInTheDocument();
+        expect(screen.getAllByTestId(TEST_IDS.PERF_CHART_HINT).length).toBeGreaterThan(0);
     });
 
     it('wires separate chart instances for active and comparison data', () => {
@@ -145,7 +145,7 @@ describe('PerfOperationTypesChart', () => {
             </TestProviders>,
         );
 
-        expect(screen.queryByTestId(TEST_IDS.PERF_CHART_TABLE_FILTER_HINT)).not.toBeInTheDocument();
+        expect(screen.queryAllByTestId(TEST_IDS.PERF_CHART_HINT)).toHaveLength(0);
         expect(getPlotInstances()[0]?.onClick).toBeUndefined();
     });
 });

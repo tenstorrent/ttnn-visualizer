@@ -44,3 +44,16 @@ export const PERF_DURATION_HISTOGRAM_ARIA_LABEL = 'Op duration distribution';
 export const PERF_DURATION_HISTOGRAM_EMPTY_MESSAGE = 'No device ops available for duration histogram.';
 
 export const PERF_DURATION_HISTOGRAM_ACTIVE_REPORT_SUBTITLE = 'Active report only';
+
+export const PERF_DURATION_BUCKET_FILTER_HINT =
+    'Click a duration range below the chart to filter the table by op duration';
+
+export const PERF_DURATION_BUCKET_FILTER_PLACEHOLDER = 'Select Device Time...';
+
+/** Drops the bucket controls just below the axis line, into the space the tick labels vacate. */
+export const PERF_DURATION_BUCKET_ANNOTATION_Y_SHIFT = -8;
+
+/** Pushes the axis title clear of the bucket controls drawn between it and the axis. */
+export const PERF_DURATION_BUCKET_AXIS_TITLE_STANDOFF = 34;
+
+export const PERF_DURATION_BUCKET_ANNOTATION_FONT_SIZE = 11;

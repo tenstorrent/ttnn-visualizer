@@ -26,7 +26,11 @@ from ttnn_visualizer.csv_queries import (
     OpsPerformanceQueries,
     OpsPerformanceReportQueries,
 )
-from ttnn_visualizer.decorators import local_only, with_instance
+from ttnn_visualizer.decorators import (
+    local_only,
+    refuse_in_direct_report_mode,
+    with_instance,
+)
 from ttnn_visualizer.enums import ConnectionTestStates, StackSourceOrigin
 from ttnn_visualizer.exceptions import (
     AuthenticationFailedException,
@@ -998,10 +1002,10 @@ def get_profiler_data_list(instance: Instance):
 def _report_directory_to_delete(directory_name_key: str, report_name: str) -> Path:
     """Resolve a delete request to one report directory under the local data directory.
 
-    The listings these deletes are paired with (``GET /profiler``, ``GET /performance``)
-    only ever read the local data directory, so that is the only tree a delete may
-    reach, and only one report inside it — anything wider removes reports the client
-    never listed.
+    ``refuse_in_direct_report_mode`` rejects the request before this runs, so the listings
+    these deletes are paired with (``GET /profiler``, ``GET /performance``) only ever read
+    the local data directory, making that the only tree a delete may reach — and only one
+    report inside it, since anything wider removes reports the client never listed.
     """
     return (
         Path(current_app.config["LOCAL_DATA_DIRECTORY"])
@@ -1013,6 +1017,7 @@ def _report_directory_to_delete(directory_name_key: str, report_name: str) -> Pa
 @api.route("/profiler/<profiler_name>", methods=["DELETE"])
 @with_instance
 @local_only
+@refuse_in_direct_report_mode
 def delete_profiler_report(profiler_name, instance: Instance):
     if not profiler_name:
         return response_bad_request("Report name is required.")
@@ -1125,6 +1130,7 @@ def get_profiler_performance_data(instance: Instance):
 @api.route("/performance/<performance_name>", methods=["DELETE"])
 @with_instance
 @local_only
+@refuse_in_direct_report_mode
 def delete_performance_report(performance_name, instance: Instance):
     if not performance_name:
         return response_bad_request("Report name is required.")
@@ -1438,7 +1444,25 @@ def create_performance_files():
     except DataFormatError:
         return response_unprocessable_entity()
 
-    performance_path = str(paths[0].parent)
+    # Take the report root from the destination we chose, not from anything in
+    # the payload. Two things make a payload scan wrong here:
+    #
+    # - `save_uploaded_files` returns paths in multipart order and
+    #   `construct_dest_path` preserves sub-paths for folder uploads, so
+    #   `paths[0].parent` binds to `npe_viz/` whenever one of its files leads
+    #   the body, and browser `FileList` ordering is not specified.
+    # - Scanning for the device log instead is no safer: `validate_files` skips
+    #   its depth check when `folderName` is supplied, so a part named
+    #   `<anything>/profile_log_device.csv` lands the log a level deeper and
+    #   makes the final segment caller-chosen. That segment is the hosted
+    #   session scoping key in `get_performance_data_list`, so it must stay
+    #   server-derived.
+    #
+    # `parts[0]` is the folder `construct_dest_path` actually created,
+    # timestamp prefix and all, which keeps `performance_path` consistent with
+    # the `performance_name` written alongside it.
+    report_root = target_directory / paths[0].relative_to(target_directory).parts[0]
+    performance_path = str(report_root)
 
     instance_id = request.args.get("instanceId")
     update_instance(
