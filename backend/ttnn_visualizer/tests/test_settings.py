@@ -21,11 +21,14 @@ from pathlib import Path
 import pytest
 from ttnn_visualizer.settings import (
     _ENV_ALIASES,
+    _ENV_OVERRIDE_SKIP,
     _ENV_PARSERS,
     _STRICT_BOOLEANS,
     DefaultConfig,
+    DevelopmentConfig,
     ProductionConfig,
     _build_allowed_origins,
+    _coerce_env_value,
     _parse_env_bool,
     _parse_max_content_length,
     build_socketio_origin_check,
@@ -454,6 +457,7 @@ def test_every_registry_is_keyed_the_way_it_is_looked_up():
 
     assert not set(_ENV_PARSERS) & aliased
     assert not _STRICT_BOOLEANS & aliased
+    assert not _ENV_OVERRIDE_SKIP & aliased
 
 
 def test_every_strict_boolean_names_a_real_boolean_setting():
@@ -476,18 +480,83 @@ def test_every_env_alias_names_a_real_setting():
 def test_a_setting_with_no_coercible_type_is_reported_and_discarded(
     monkeypatch, caplog
 ):
-    # ``LOCAL_DATA_DIRECTORY`` is a ``Path`` that handlers join onto; handing them a
-    # string is worse than declining the override. Unreachable until #1857 widens the
-    # loop, which is the point of pinning it before then.
-    monkeypatch.setattr(DefaultConfig, "LOCAL_DATA_DIRECTORY", Path("/declared"))
-    monkeypatch.setenv("LOCAL_DATA_DIRECTORY", "/from/env")
+    # ``_coerce_env_value`` declines a ``Path`` rather than handing handlers a string.
+    # ``LOCAL_DATA_DIRECTORY`` is also in ``_ENV_OVERRIDE_SKIP``, so exercise the
+    # backstop directly — the loop never reaches it.
+    declared = Path("/declared")
 
-    config = DefaultConfig()
     with caplog.at_level(logging.WARNING):
-        config.override_with_env_variables()
+        result = _coerce_env_value("LOCAL_DATA_DIRECTORY", declared, "/from/env")
 
-    assert config.LOCAL_DATA_DIRECTORY == Path("/declared")
+    assert result == declared
     assert "LOCAL_DATA_DIRECTORY" in caplog.text
+
+
+def test_every_env_override_skip_names_a_real_setting():
+    # Keyed by string, so a renamed setting leaves a dead skip entry and the loop
+    # starts accepting env strings for a derived attribute again.
+    assert _ENV_OVERRIDE_SKIP <= set(vars(DefaultConfig))
+
+
+def test_an_inherited_setting_is_reachable_on_a_subclass(monkeypatch):
+    # ``Config()`` always returns a subclass; ``DefaultConfig()`` tests mask the reach
+    # bug because that class's own ``__dict__`` already holds every setting.
+    monkeypatch.setenv("SERVER_MODE", "true")
+    monkeypatch.setenv("HOST", "127.0.0.1")
+
+    config = ProductionConfig()
+    config.override_with_env_variables()
+
+    assert config.SERVER_MODE is True
+    assert config.HOST == "127.0.0.1"
+
+
+def test_a_skipped_setting_is_not_overridden(monkeypatch):
+    monkeypatch.setenv("GUNICORN_BIND", "evil.example:9")
+    monkeypatch.setenv("APPLICATION_DIR", "/from/env")
+
+    config = ProductionConfig()
+    declared_app_dir = config.APPLICATION_DIR
+    config.override_with_env_variables()
+
+    assert config.APPLICATION_DIR == declared_app_dir
+    assert config.GUNICORN_BIND != "evil.example:9"
+    assert config.GUNICORN_BIND == f"{config.HOST}:{config.PORT}"
+
+
+def test_gunicorn_bind_is_recomputed_from_host_and_port(monkeypatch):
+    monkeypatch.setenv("HOST", "127.0.0.1")
+    monkeypatch.setenv("PORT", "9001")
+
+    config = DevelopmentConfig()
+    config.override_with_env_variables()
+
+    assert config.HOST == "127.0.0.1"
+    assert config.PORT == "9001"
+    assert config.GUNICORN_BIND == "127.0.0.1:9001"
+
+
+def test_server_cli_flag_enables_server_mode_without_a_manual_patch(monkeypatch):
+    # ``main()`` must not hand-patch ``SERVER_MODE`` / ``HOST``; the override loop is
+    # the single mechanism. Reset the singleton so a prior ``Config()`` cannot poison
+    # the assertion.
+    from argparse import Namespace
+
+    from ttnn_visualizer.app import _config_after_cli_env
+    from ttnn_visualizer.settings import Config
+
+    monkeypatch.setattr(Config, "_instance", None)
+    monkeypatch.setenv("FLASK_ENV", "production")
+    monkeypatch.delenv("SERVER_MODE", raising=False)
+    monkeypatch.delenv("HOST", raising=False)
+    monkeypatch.setenv("PORT", "8000")
+
+    args = Namespace(host=None, server=True, port=None)
+    config = _config_after_cli_env(args)
+
+    assert config.SERVER_MODE is True
+    assert config.HOST == "0.0.0.0"
+    assert config.GUNICORN_BIND == "0.0.0.0:8000"
 
 
 def test_an_unrecognised_boolean_keeps_the_declared_default(monkeypatch, caplog):
@@ -520,8 +589,8 @@ def test_the_override_path_refuses_a_strict_boolean_it_cannot_read(monkeypatch):
 
 @pytest.mark.parametrize("env_value, expected", BOOLEAN_VOCABULARY_CASES)
 def test_the_class_body_parses_a_recognised_boolean(env_value, expected, monkeypatch):
-    # The path that actually decides ``SERVER_MODE``, since the override loop never
-    # reaches it — so it needs its own cover rather than inheriting the loop's.
+    # Import-time path; the override loop has its own cover via
+    # ``test_env_override_parses_booleans`` and the inherited-reach case.
     monkeypatch.setenv("SERVER_MODE", env_value)
 
     assert _parse_env_bool("SERVER_MODE", False) is expected
@@ -608,8 +677,7 @@ def test_the_boolean_vocabulary_has_one_source():
 @pytest.mark.parametrize("key", ["MALWARE_SCANNER", "TT_METAL_HOME"])
 def test_an_optional_string_setting_is_still_overridable(key, monkeypatch):
     # These declare ``None`` when unset, which offers no type to coerce towards. They
-    # are optional strings, so the raw value is already what the class body would hold;
-    # skipping them would silently drop the override once #1857 widens the loop's reach.
+    # are optional strings, so the raw value is already what the class body would hold.
     monkeypatch.setattr(DefaultConfig, key, None)
     monkeypatch.setenv(key, "/some/value")
 

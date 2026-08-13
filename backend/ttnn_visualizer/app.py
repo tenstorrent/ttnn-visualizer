@@ -445,18 +445,13 @@ def _record_launch(config):
     )
 
 
-def main():
+def _apply_cli_env_overrides(args: argparse.Namespace) -> None:
+    """Write ``--host`` / ``--server`` / ``--port`` into the environment.
 
-    run_command = sys.argv[0].split("/")
-    if run_command[-1] == "ttnn-visualizer":
-        os.environ.setdefault("FLASK_ENV", "production")
-
-    args = parse_args()
-
-    # Handle host/port CLI overrides
-    # Priority: CLI args > env vars > auto-detection (in settings.py)
-    # Note: We need to set env vars before creating Config, but also
-    # manually update the config object in case it was already instantiated
+    Must run before ``Config()`` so ``override_with_env_variables`` sees the values.
+    Workers inherit the mutated environment as a fresh import; the launching process
+    relies on the override loop reaching inherited settings.
+    """
     if args.host:
         os.environ["HOST"] = args.host
         print(f"🌐 Binding to host: {args.host} (from --host flag)")
@@ -470,21 +465,28 @@ def main():
         os.environ["PORT"] = args.port
         print(f"🔌 Binding to port: {args.port}")
 
-    config = cast(DefaultConfig, Config())
 
-    # Apply CLI overrides directly to config object
-    # (Config is a singleton that may have been created before we set env vars)
-    if args.host:
-        config.HOST = args.host
-    elif args.server:
-        config.HOST = "0.0.0.0"
-        config.SERVER_MODE = True
+def _config_after_cli_env(args: argparse.Namespace) -> DefaultConfig:
+    """Apply CLI env mutations and return the config singleton.
 
-    if args.port:
-        config.PORT = args.port
+    Split out of ``main()`` so ``--server`` / ``--host`` / ``--port`` can be asserted
+    without binding a socket or spawning gunicorn. Relies on the override loop — no
+    hand-patches of ``HOST`` / ``SERVER_MODE`` / ``PORT``.
+    """
+    _apply_cli_env_overrides(args)
+    return cast(DefaultConfig, Config())
 
-    # Recalculate GUNICORN_BIND with the updated values
-    config.GUNICORN_BIND = f"{config.HOST}:{config.PORT}"
+
+def main():
+
+    run_command = sys.argv[0].split("/")
+    if run_command[-1] == "ttnn-visualizer":
+        os.environ.setdefault("FLASK_ENV", "production")
+
+    args = parse_args()
+
+    # Priority: CLI args > env vars > auto-detection (in settings.py)
+    config = _config_after_cli_env(args)
 
     instance_id = None
 

@@ -188,14 +188,12 @@ class _AllowedOrigins:
 class _UsageRecordingEnabled:
     """Resolve whether usage recording is active, on read rather than at import time.
 
-    Read on access so the answer reflects the environment whatever
-    ``override_with_env_variables`` reaches — it only sees the concrete config class's
-    own attributes, and this one is declared on ``DefaultConfig`` (#1857). A descriptor
-    is skipped by that loop (it tests for ``__get__``), which is the same reason
-    ``ALLOWED_ORIGINS`` is one.
-
-    Delegates to :func:`usage.is_recording_enabled` so the ``PRINT_ENV`` dump cannot
-    claim recording is on while ``SERVER_MODE`` or the marker file has switched it off.
+    A descriptor so the override loop skips it (it tests for ``__get__``) — assigning a
+    raw environment string would shadow the live check. Same reason ``ALLOWED_ORIGINS``
+    is one. Reading on access also picks up a ``SERVER_MODE`` override applied after
+    import, and delegates to :func:`usage.is_recording_enabled` so the ``PRINT_ENV``
+    dump cannot claim recording is on while the posture or the marker file has switched
+    it off.
     """
 
     def __get__(self, instance: object, owner: type) -> bool:
@@ -262,6 +260,37 @@ _STRICT_BOOLEANS = frozenset({"SERVER_MODE"})
 # suppress the catch-all error handler — for anyone who only wanted verbose logs.
 _ENV_ALIASES: Mapping[str, str] = {"DEBUG": "FLASK_DEBUG"}
 
+# Derived or constant attributes the override loop must not touch. String-typed derived
+# values (``GUNICORN_BIND``, ``SQLALCHEMY_DATABASE_URI``, ``APPLICATION_DIR``) would
+# otherwise accept an env string and diverge from their parents; ``Path`` / ``dict``
+# ones are declined by ``_coerce_env_value`` as a backstop, but skipping them here
+# keeps the loop from warning on every visit. Constants have no env story.
+_ENV_OVERRIDE_SKIP = frozenset(
+    {
+        "APPLICATION_DIR",
+        "GUNICORN_BIND",
+        "SQLALCHEMY_DATABASE_URI",
+        "SQLALCHEMY_ENGINE_OPTIONS",
+        "SQLALCHEMY_TRACK_MODIFICATIONS",
+        "LOCAL_DATA_DIRECTORY",
+        "REMOTE_DATA_DIRECTORY",
+        "STATIC_ASSETS_DIR",
+        "DB_VERSION",
+        "PROFILER_DIRECTORY_NAME",
+        "PERFORMANCE_DIRECTORY_NAME",
+        "NPE_DIRECTORY_NAME",
+        "MLIR_DIRECTORY_NAME",
+        "TEST_CONFIG_FILE",
+        "SQLITE_DB_PATH",
+        "SEND_FILE_MAX_AGE_DEFAULT",
+        "DEV_SERVER_PORT",
+        "DEV_SERVER_HOST",
+        "SESSION_COOKIE_SAMESITE",
+        "SESSION_COOKIE_SECURE",
+        "PRINT_ENV",
+    }
+)
+
 
 def _env_name_for(key: str) -> str:
     """The variable a setting reads, so every registry can be keyed by attribute name.
@@ -308,11 +337,10 @@ def _coerce_bool(key: str, declared: bool, env_value: str) -> bool:
 def _parse_env_bool(key: str, default: bool) -> bool:
     """Read a boolean setting in the class body, reporting a value we don't recognise.
 
-    The class body — not :meth:`~DefaultConfig.override_with_env_variables`, whose reach
-    stops at ``DEBUG`` and ``TESTING`` until #1857 — is what decides ``SERVER_MODE``, so
-    this is where the vocabulary check has to run to mean anything. A strict setting
-    raises from here, which lands on ``stderr`` before ``create_app`` configures
-    logging; that is the point, since a warning at this stage goes nowhere.
+    Shared with the override loop via :func:`_coerce_bool`, so a spelling can't be fatal
+    at import and tolerated afterwards. A strict setting raises from here, which lands
+    on ``stderr`` before ``create_app`` configures logging; that is the point, since a
+    warning at this stage goes nowhere.
     """
     env_value = os.getenv(_env_name_for(key))
     if env_value is None:
@@ -360,7 +388,8 @@ def _coerce_env_value(key: str, declared: Any, env_value: str) -> Any:
 
     # Everything else is derived rather than configured — the ``Path`` directories, the
     # engine options dict — and handing the app a raw string where it expects a parsed
-    # value is worse than declining. Unreachable until #1857 widens the loop's reach.
+    # value is worse than declining. The override loop also lists these in
+    # :data:`_ENV_OVERRIDE_SKIP`; this is the backstop for any future non-skipped type.
     return _keep_declared(
         key,
         declared,
@@ -462,27 +491,35 @@ class DefaultConfig(object):
     def override_with_env_variables(self):
         """Override config values with environment variables.
 
-        Values are coerced to what the class body would have produced; see
-        :func:`_coerce_env_value`. Attributes read a differently named variable where
-        :data:`_ENV_ALIASES` says so, so the loop and the class body agree on which
-        variable owns a setting.
+        Walks the MRO so inherited settings on ``DefaultConfig`` are reachable when the
+        concrete class is a subclass. Subclass declarations win because later
+        ``setattr`` calls overwrite earlier ones. Values are coerced to what the class
+        body would have produced; see :func:`_coerce_env_value`. Attributes read a
+        differently named variable where :data:`_ENV_ALIASES` says so.
 
-        Only reaches attributes declared on the *concrete* config class, since it reads
-        that class's own ``__dict__``: ``DevelopmentConfig`` declares none, the others
-        only ``DEBUG`` and ``TESTING``. Tracked as #1857.
+        Derived and constant attributes in :data:`_ENV_OVERRIDE_SKIP` are left alone;
+        ``GUNICORN_BIND`` is recomputed from ``HOST`` and ``PORT`` afterwards so a late
+        bind change cannot go stale.
         """
-        for key, value in self.__class__.__dict__.items():
-            # Descriptors (and methods) resolve their own value on read; assigning the
-            # raw environment string over one would shadow it with an unparsed value.
-            if key.startswith("_") or hasattr(value, "__get__"):
-                continue
+        for cls in reversed(type(self).__mro__):
+            for key, value in cls.__dict__.items():
+                # Descriptors (and methods) resolve their own value on read; assigning
+                # the raw environment string over one would shadow it with an unparsed
+                # value. Derived / constant attrs have no sensible string form.
+                if (
+                    key.startswith("_")
+                    or key in _ENV_OVERRIDE_SKIP
+                    or hasattr(value, "__get__")
+                ):
+                    continue
 
-            env_value = os.getenv(_env_name_for(key))
-            if env_value is None:
-                continue
+                env_value = os.getenv(_env_name_for(key))
+                if env_value is None:
+                    continue
 
-            setattr(self, key, _coerce_env_value(key, value, env_value))
+                setattr(self, key, _coerce_env_value(key, value, env_value))
 
+        self.GUNICORN_BIND = f"{self.HOST}:{self.PORT}"
         self._refuse_debug_under_server_mode()
 
     def _refuse_debug_under_server_mode(self) -> None:
