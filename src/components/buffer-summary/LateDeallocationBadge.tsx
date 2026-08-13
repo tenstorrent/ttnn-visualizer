@@ -42,8 +42,8 @@ function LateDeallocationBadge({ operationId, tensors, isScrolling }: LateDeallo
         >
             {/* A glyph rather than a number, so it can't be misread as a rank
                 sitting next to the top-N badge. The accessible name goes on the
-                wrapper because the Blueprint Icon is decorative, and it names
-                the tensors the glyph can't. */}
+                wrapper because `LateDeallocationGlyph` is decorative, and it
+                names the tensors the glyph can't. */}
             <span
                 className='late-dealloc-badge'
                 role='img'

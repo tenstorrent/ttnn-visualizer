@@ -15,6 +15,7 @@ import {
     getLateDeallocationSummary,
     selectLateDeallocationRunStarts,
 } from '../src/functions/lateDeallocation';
+import { LATE_DEALLOC_OPPORTUNITY_TEXT } from '../src/definitions/LateDeallocation';
 import { Tensor } from '../src/model/APIData';
 import { buildTensorDeallocationReport as buildReport } from './helpers/lateDeallocationFixtures';
 
@@ -358,7 +359,7 @@ describe('getLateDeallocationSummary', () => {
             buildReport({ id: 7, lastConsumerOperationId: 3, consumerName: 'ttnn.add' }),
         ]);
 
-        expect(summary).toContain('Opportunity to deallocate earlier');
+        expect(summary).toContain(LATE_DEALLOC_OPPORTUNITY_TEXT);
         expect(summary).toContain('tensor 7');
         expect(summary).toContain('3 ttnn.add');
     });
@@ -366,7 +367,7 @@ describe('getLateDeallocationSummary', () => {
     it('names the shared last consumer once when the tensors agree on it', () => {
         const summary = getLateDeallocationSummary([buildReport({ id: 7 }), buildReport({ id: 9 })]);
 
-        expect(summary).toBe('Opportunity to deallocate earlier: tensors 7, 9 — last used by 5 ttnn.add');
+        expect(summary).toBe(`${LATE_DEALLOC_OPPORTUNITY_TEXT}: tensors 7, 9 — last used by 5 ttnn.add`);
     });
 
     // Rows are the unique-buffer slice and a run can re-open after a gap, so
@@ -379,7 +380,7 @@ describe('getLateDeallocationSummary', () => {
         ]);
 
         expect(summary).toBe(
-            'Opportunity to deallocate earlier: tensors 7 (last used by 3 ttnn.add), 9 (last used by 11 ttnn.multiply)',
+            `${LATE_DEALLOC_OPPORTUNITY_TEXT}: tensors 7 (last used by 3 ttnn.add), 9 (last used by 11 ttnn.multiply)`,
         );
     });
 
@@ -389,7 +390,7 @@ describe('getLateDeallocationSummary', () => {
     it('names the last consumer by id alone when its name is unknown', () => {
         const summary = getLateDeallocationSummary([buildReport({ id: 7, consumerName: '' })]);
 
-        expect(summary).toBe('Opportunity to deallocate earlier: tensor 7 — last used by 5');
+        expect(summary).toBe(`${LATE_DEALLOC_OPPORTUNITY_TEXT}: tensor 7 — last used by 5`);
     });
 
     it('names each unnamed consumer by id when the tensors disagree on their last use', () => {
@@ -399,7 +400,7 @@ describe('getLateDeallocationSummary', () => {
         ]);
 
         expect(summary).toBe(
-            'Opportunity to deallocate earlier: tensors 7 (last used by 3), 9 (last used by 11 ttnn.multiply)',
+            `${LATE_DEALLOC_OPPORTUNITY_TEXT}: tensors 7 (last used by 3), 9 (last used by 11 ttnn.multiply)`,
         );
     });
 
@@ -415,7 +416,7 @@ describe('getLateDeallocationSummary', () => {
         const summary = getLateDeallocationSummary(tensors);
 
         expect(summary).toBe(
-            'Opportunity to deallocate earlier: tensors 1, 2, 3, 4, 5 and 3 more — last used by 5 ttnn.add',
+            `${LATE_DEALLOC_OPPORTUNITY_TEXT}: tensors 1, 2, 3, 4, 5 and 3 more — last used by 5 ttnn.add`,
         );
     });
 

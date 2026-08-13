@@ -26,8 +26,8 @@ export const LATE_DEALLOC_OPPORTUNITY_TEXT = 'Opportunity to deallocate earlier'
 
 /**
  * Blueprint takes the glyph size as a prop, so it can't come from the stylesheet
- * with the rest of the marker geometry. Shared by the gutter badge and the rail
- * dot, which are meant to read as the same marker twice.
+ * with the rest of the marker geometry. Sized once in `LateDeallocationGlyph`,
+ * which both the gutter badge and the rail dots render.
  */
 export const LATE_DEALLOC_GLYPH_SIZE = 10;
 

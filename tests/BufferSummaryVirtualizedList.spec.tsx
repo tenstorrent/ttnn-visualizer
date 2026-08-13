@@ -11,7 +11,7 @@ import BufferSummaryVirtualizedList from '../src/components/buffer-summary/Buffe
 import { ScrollLocations } from '../src/definitions/VirtualLists';
 import { BufferSummaryAxisConfiguration } from '../src/definitions/PlotConfigurations';
 import { RankedAnnotation, TopNAnnotationMode } from '../src/definitions/TopNAnnotations';
-import { LATE_DEALLOC_RAIL_LABEL, LateDeallocationRunStart } from '../src/definitions/LateDeallocation';
+import { LATE_DEALLOC_OPPORTUNITY_TEXT, LATE_DEALLOC_RAIL_LABEL, LateDeallocationRunStart } from '../src/definitions/LateDeallocation';
 import { RAIL_MAX_DOTS } from '../src/definitions/NavigationRail';
 import { BuffersByOperation } from '../src/model/APIData';
 import { TensorDeallocationReport } from '../src/model/BufferSummary';
@@ -394,6 +394,21 @@ describe('BufferSummaryVirtualizedList', () => {
                 'late-dealloc-rail-dot',
             );
         });
+
+        // Badge and rail both render `LateDeallocationGlyph` — splitting the icon
+        // or size in only one place would leave them reading as different markers.
+        it('puts the same outdated glyph in the badge and the late-dealloc rail dot', () => {
+            renderVirtualizedList(false, {
+                getTensorDeallocationReport: () => [buildTensorReport({ id: 7 })],
+                lateDeallocationRunStarts: [buildRunStart({ opId: 1, rowIndex: 0 })],
+            });
+
+            const badge = screen.getByTestId(`${TEST_IDS.LATE_DEALLOC_BADGE}-1`);
+            const railDot = screen.getByTestId(`${TEST_IDS.LATE_DEALLOC_RAIL_DOT}-1`);
+
+            expect(badge.querySelector('.bp6-icon-outdated')).not.toBeNull();
+            expect(railDot.querySelector('.bp6-icon-outdated')).not.toBeNull();
+        });
     });
 
     describe('rail gutter', () => {
@@ -510,7 +525,9 @@ describe('BufferSummaryVirtualizedList', () => {
             });
 
             const badge = screen.getByTestId(`${TEST_IDS.LATE_DEALLOC_BADGE}-1`);
-            expect(badge.getAttribute('aria-label')).toMatch(/Opportunity to deallocate earlier: tensors 7, 9/i);
+            expect(badge.getAttribute('aria-label')).toMatch(
+                new RegExp(`${LATE_DEALLOC_OPPORTUNITY_TEXT}: tensors 7, 9`, 'i'),
+            );
         });
 
         it('badges no row when nothing is late-deallocated', () => {
@@ -605,8 +622,12 @@ describe('BufferSummaryVirtualizedList', () => {
             const dot = screen.getByTestId(`${TEST_IDS.LATE_DEALLOC_RAIL_DOT}-1`);
             // `Jump to` is the click affordance; dropping it still leaves the
             // tooltip body matching and the suite green.
-            expect(dot.getAttribute('aria-label')).toMatch(/^Jump to Opportunity to deallocate earlier/);
-            expect(dot.getAttribute('aria-label')).toMatch(/Opportunity to deallocate earlier: tensor 7/i);
+            expect(dot.getAttribute('aria-label')).toMatch(
+                new RegExp(`^Jump to ${LATE_DEALLOC_OPPORTUNITY_TEXT}`),
+            );
+            expect(dot.getAttribute('aria-label')).toMatch(
+                new RegExp(`${LATE_DEALLOC_OPPORTUNITY_TEXT}: tensor 7`, 'i'),
+            );
             expect(dot.getAttribute('aria-label')).toMatch(/last used by 0 ttnn\.add/i);
         });
 
