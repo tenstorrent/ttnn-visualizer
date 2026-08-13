@@ -92,6 +92,23 @@ describe('getServerConfig (dev / Vite env)', () => {
         expect(getServerConfig().SERVER_MODE).toBe(expected);
     });
 
+    it.each([
+        ['false', false],
+        ['0', false],
+        ['true', true],
+        ['1', true],
+        [undefined, false],
+    ])('reads VITE_NEW_MENU=%p as %s', async (value, expected) => {
+        // Stubbed even for the unset case: Vite folds a developer `.env` into
+        // `import.meta.env`, so asserting on absence would instead read whichever menu
+        // that particular checkout happens to configure.
+        vi.stubEnv('VITE_NEW_MENU', value);
+
+        const { default: getServerConfig } = await import('../src/functions/getServerConfig');
+
+        expect(getServerConfig().NEW_MENU).toBe(expected);
+    });
+
     it('falls back when VITE_SSH_DEFAULT_PORT is invalid', async () => {
         vi.stubEnv('VITE_SSH_DEFAULT_PORT', 'not-a-port');
 
@@ -149,6 +166,22 @@ describe('getServerConfig (shipped / inlined window config)', () => {
         const { default: getServerConfig } = await import('../src/functions/getServerConfig');
 
         expect(getServerConfig().SERVER_MODE).toBe(expected);
+    });
+
+    it.each([
+        [{ NEW_MENU: true }, true],
+        [{ NEW_MENU: false }, false],
+        [{}, false],
+        // Same stringification hazard as SERVER_MODE: a truthy `'false'` would turn the
+        // menu on for every hosted visitor.
+        [{ NEW_MENU: 'false' as unknown as boolean }, false],
+    ])('reads %o as NEW_MENU=%s', async (windowConfig, expected) => {
+        vi.stubEnv('DEV', false);
+        window.TTNN_VISUALIZER_CONFIG = windowConfig;
+
+        const { default: getServerConfig } = await import('../src/functions/getServerConfig');
+
+        expect(getServerConfig().NEW_MENU).toBe(expected);
     });
 
     it('defaults the rest of the config when nothing was inlined', async () => {

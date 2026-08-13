@@ -49,6 +49,11 @@ export const showHexAtom = atomWithStorage('showHex', false); // Used in Buffers
 export const showMemoryRegionsAtom = atomWithStorage('showMemoryRegions', true); // Used in Buffers and Operation Details
 export const renderMemoryLayoutAtom = atomWithStorage('renderMemoryLayout', false); // Used in Buffers and Operation Details
 
+// App shell / navigation
+// Only consulted under the NEW_MENU flag, where the navigation is a vertical rail.
+// Persisted because a rail width is a stable preference rather than session state.
+export const isNavigationCollapsedAtom = atomWithStorage('navigationCollapsed', false);
+
 // Reports (excluding NPE/MLIR)
 export const profilerReportLocationAtom = atom<ReportLocation | null>(null);
 export const activeProfilerReportAtom = atom<ReportFolder | null>(null);
@@ -75,7 +80,6 @@ export const isActivatingReportAtom = atom(false);
 export const reportLinksAtom = atomWithStorage<ReportLink[]>(REPORT_LINKS_STORAGE_KEY, []);
 export const performanceRangeAtom = atom<NumberRange | null>(null);
 export const selectedPerformanceRangeAtom = atom<NumberRange | null>(null);
-export const hasClusterDescriptionAtom = atom(false);
 
 // Operations route
 export const shouldCollapseAllOperationsAtom = atom(false);

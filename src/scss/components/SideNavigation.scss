@@ -1,0 +1,124 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
+
+@use 'styles/definitions/colours' as *;
+@use 'styles/definitions/navigation' as navigation;
+@use 'styles/definitions/variables' as variables;
+
+.side-navigation {
+    position: sticky;
+    top: 0;
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    width: variables.$side-nav-width-expanded;
+    height: 100vh;
+    padding: 15px 8px;
+
+    // The fixed footer info bar crosses the foot of the rail, so the last item clears it.
+    padding-bottom: variables.$app-footer-height + 15px;
+
+    // Sits back from the page the way the footer info bar does, so the rail reads as app
+    // chrome rather than as part of the report content beside it.
+    background-color: $tt-black;
+
+    // Subtler than the page-level rules: the fill already separates the two, so a bright
+    // edge would only compete with the item colours.
+    border-right: 1px solid $tt-grey-3;
+
+    // The rail itself never scrolls, so the collapse control below the items stays put and
+    // reachable on a short viewport; only the item list scrolls.
+    overflow: hidden;
+    transition: width 200ms ease-out;
+
+    .side-navigation-header {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        min-height: 40px;
+
+        .title {
+            display: flex;
+            flex-direction: column;
+            flex: 1;
+            min-width: 0;
+            color: inherit;
+            text-decoration: none;
+
+            .visualizer-title {
+                font-size: 14px;
+                white-space: nowrap;
+                font-weight: 700;
+                margin-left: 68px;
+            }
+        }
+    }
+
+    .side-navigation-items {
+        display: flex;
+        flex-direction: column;
+        gap: 3px; // avoids focus ring overlap
+        // Takes the slack so the collapse control is pushed to the foot of the rail.
+        flex: 1;
+        overflow: hidden auto;
+
+        .bp6-button {
+            @include navigation.nav-button-styles;
+
+            // A corner superscript reads as attached to a compact horizontal button, but a
+            // full-width rail button strands it at the far edge, so it sits inline after
+            // the label instead. Blueprint already renders it as the label's sibling.
+            small {
+                position: relative;
+                background-color: $tt-black;
+                padding: 2px 4px;
+                top: -5px;
+                right: -3px;
+            }
+        }
+    }
+
+    .side-navigation-footer {
+        display: flex;
+        flex-shrink: 0;
+        justify-content: flex-end;
+
+        .side-navigation-toggle {
+            background-color: transparent;
+            justify-content: flex-start;
+        }
+    }
+
+    &.collapsed {
+        width: variables.$side-nav-width-collapsed;
+
+        // The square mark replaces the lockup, so the header stays and keeps Home clickable.
+        .side-navigation-header {
+            justify-content: center;
+
+            .title {
+                flex: 0 0 auto;
+            }
+        }
+
+        .side-navigation-footer {
+            justify-content: flex-end;
+        }
+
+        // Hidden rather than unrendered so the button keeps its accessible name. Takes the
+        // inline badge with it, which has nowhere to go beside a bare icon.
+        .bp6-button-text {
+            display: none;
+        }
+
+        .bp6-icon {
+            margin-right: 0;
+        }
+
+        .bp6-button {
+            justify-content: center;
+        }
+    }
+}

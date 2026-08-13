@@ -5,9 +5,13 @@
 import { Link, useLocation } from 'react-router-dom';
 import { Helmet } from 'react-helmet-async';
 import { Theme, ToastContainer, ToastPosition, cssTransition } from 'react-toastify';
+import classNames from 'classnames';
 import 'styles/components/ToastOverrides.scss';
 
 import MainNavigation from './MainNavigation';
+import SideNavigation from './SideNavigation';
+import ServerModeBanner from './ServerModeBanner';
+import getServerConfig from '../functions/getServerConfig';
 import ROUTES from '../definitions/Routes';
 import FooterInfobar from './FooterInfobar';
 import ClusterRenderer from './cluster/ClusterRenderer';
@@ -27,6 +31,7 @@ const BounceIn = cssTransition({
 function Layout() {
     const location = useLocation();
     const state = location.state as { background?: Location };
+    const hasSideNavigation = getServerConfig().NEW_MENU;
 
     return (
         <>
@@ -41,30 +46,40 @@ function Layout() {
                 />
             </Helmet>
 
-            <header className='app-header'>
-                <nav className='nav-container'>
-                    <Link
-                        to={ROUTES.HOME}
-                        className='title'
-                    >
-                        <h1>
-                            <img
-                                width={250}
-                                alt='tenstorrent'
-                                src='https://docs.tenstorrent.com/tt-tm-assets/Logo/Standard%20Lockup/svg/tt_logo_color-orange-whitetext.svg'
-                            />
-                            <span className='visualizer-title'>TT-NN Visualizer</span>
-                        </h1>
-                    </Link>
+            <ServerModeBanner />
 
-                    <MainNavigation />
-                </nav>
-            </header>
+            {/* Wraps only the chrome that shares space with the page: the fixed footer and
+                the overlays below must stay outside so a flex shell can't reposition them. */}
+            <div className={classNames('app-shell', { 'app-shell-sidebar': hasSideNavigation })}>
+                {hasSideNavigation ? (
+                    <SideNavigation />
+                ) : (
+                    <header className='app-header'>
+                        <nav className='nav-container'>
+                            <Link
+                                to={ROUTES.HOME}
+                                className='title'
+                            >
+                                <h1>
+                                    <img
+                                        width={250}
+                                        alt='tenstorrent'
+                                        src='https://docs.tenstorrent.com/tt-tm-assets/Logo/Standard%20Lockup/svg/tt_logo_color-orange-whitetext.svg'
+                                    />
+                                    <span className='visualizer-title'>TT-NN Visualizer</span>
+                                </h1>
+                            </Link>
 
-            <main>
-                <ModalAwareOutlet />
-                {location.pathname === ROUTES.CLUSTER && state?.background && <ClusterRenderer />}
-            </main>
+                            <MainNavigation />
+                        </nav>
+                    </header>
+                )}
+
+                <main>
+                    <ModalAwareOutlet />
+                    {location.pathname === ROUTES.CLUSTER && state?.background && <ClusterRenderer />}
+                </main>
+            </div>
 
             <FooterInfobar />
 

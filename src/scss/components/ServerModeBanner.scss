@@ -1,0 +1,21 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
+
+@use 'styles/definitions/colours' as *;
+@use 'styles/definitions/variables' as variables;
+
+.server-mode-banner {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: variables.$z-index-2-interactive;
+    height: 25px;
+    color: $tt-white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 300ms ease-out 50ms;
+    gap: 7px;
+}

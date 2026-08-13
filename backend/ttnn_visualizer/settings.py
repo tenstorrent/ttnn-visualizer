@@ -407,6 +407,10 @@ class DefaultConfig(object):
 
     LAUNCH_BROWSER_ON_START = _parse_env_bool("LAUNCH_BROWSER_ON_START", True)
 
+    # Vertical collapsible navigation instead of the horizontal navbar. Cosmetic, so it
+    # stays out of _STRICT_BOOLEANS: an unreadable value warns and keeps the old menu.
+    NEW_MENU = _parse_env_bool("NEW_MENU", False)
+
     # Remote SSH connection dialog defaults (local install only — suppressed under SERVER_MODE).
     SSH_DEFAULT_PORT = _parse_ssh_port(os.getenv("SSH_DEFAULT_PORT"))
     SSH_DEFAULT_PROFILER_PATH = os.getenv("SSH_DEFAULT_PROFILER_PATH", "")

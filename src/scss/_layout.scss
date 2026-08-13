@@ -4,6 +4,24 @@
 
 @use 'definitions/colours' as *;
 
+// `display: contents` keeps the horizontal layout exactly as it was before the wrapper
+// existed: the header and `main` stay children of the body as far as layout is concerned.
+.app-shell {
+    display: contents;
+}
+
+.app-shell-sidebar {
+    display: flex;
+    align-items: flex-start;
+
+    --app-chrome-height: 0px;
+
+    main {
+        flex: 1;
+        min-width: 0; // Lets wide tables and charts shrink instead of pushing the rail off-screen
+    }
+}
+
 .app-header {
     padding: 15px;
 

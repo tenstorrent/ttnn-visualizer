@@ -47,10 +47,20 @@ $active-transfer-width: 380px;
 // MLIR pickers line up regardless of how long the label they display happens to be.
 $report-select-width: 250px;
 
-// Fixed app chrome bracketing the MLIR page: the content-sized navbar above and
-// the footer info bar below. The title and (optional) loader rows sit inside
-// `.mlir-page` and are laid out by flex, so the graph reclaims their space when
-// absent — these two are the only remaining structural offsets.
-$mlir-navbar-height: 92px;
-$mlir-footer-clearance: 40px;
-$mlir-page-height: calc(100vh - #{$mlir-navbar-height} - #{$mlir-footer-clearance});
+// Vertical navigation rail (NEW_MENU). Collapsed keeps a large Blueprint icon button
+// centred with no room for its label.
+$side-nav-width-expanded: 220px;
+$side-nav-width-collapsed: 56px;
+
+// Closed height of the fixed footer info bar. Anything sharing the bottom of the
+// viewport with it — the navigation rail's last item, the MLIR graph — clears this
+// rather than repeating the number.
+$app-footer-height: 34px;
+
+// Fixed app chrome bracketing the MLIR page: the header above and the footer info bar
+// below. The title and (optional) loader rows sit inside `.mlir-page` and are laid out
+// by flex, so the graph reclaims their space when absent — these two are the only
+// remaining structural offsets. The header height is a custom property because the
+// vertical navigation removes it entirely; see `--app-chrome-height` in _base.scss.
+$mlir-footer-clearance: $app-footer-height + 6px;
+$mlir-page-height: calc(100vh - var(--app-chrome-height) - #{$mlir-footer-clearance});

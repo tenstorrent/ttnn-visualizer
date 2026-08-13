@@ -615,7 +615,7 @@ New routes add an entry to `routeObjectList` and (if they require an active repo
 | `use*` | React hook (must follow rules of hooks) | `useReportMetadata`, `useNpe` |
 | `handle*` | Event handler bound to a UI event | `handleFileChange`, `handleNodeClick` |
 | `get*` | Pure accessor or formatter | `getResponseError`, `getNodeRelationToFocused` |
-| `is*`, `has*` | Boolean predicate | `isDeviceOperation`, `hasClusterDescriptionAtom` |
+| `is*`, `has*` | Boolean predicate | `isDeviceOperation`, `hasRangeSelected` |
 | `fetch*` | Async axios wrapper returning `Promise<T>` | `fetchInstance`, `fetchBufferPages` |
 
 `src/hooks/useAPI.tsx`

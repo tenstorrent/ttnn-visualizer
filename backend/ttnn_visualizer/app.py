@@ -84,6 +84,9 @@ def _build_spa_client_config(app: Flask) -> dict:
         "TT_METAL_HOME": app.config["TT_METAL_HOME"],
         "REPORT_DATA_DIRECTORY": str(app.config["REPORT_DATA_DIRECTORY"]),
         "USERNAME": _get_client_username(server_mode),
+        # Purely a navigation restyle, so it publishes under either posture — unlike
+        # the local-only metadata below.
+        "NEW_MENU": app.config["NEW_MENU"],
     }
 
     # SSH dialog defaults are local-dev convenience only. Never publish

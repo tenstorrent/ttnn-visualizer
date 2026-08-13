@@ -1,0 +1,107 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
+
+@use 'colours' as *;
+
+// $pt-dark-text-color-disabled: rgb(171 179 191 / 60%);
+
+// Per-tab identity colours, shared by the horizontal navbar and the vertical rail so the
+// two menu styles can't drift apart. Keyed by the same class names the navigation item
+// descriptors carry (see src/definitions/NavigationItems.ts).
+@mixin button-colours($color, $colorActive, $icon) {
+    &:not(.bp6-disabled) {
+        color: $color;
+    }
+
+    .bp6-icon.bp6-icon-#{$icon} {
+        color: $color;
+    }
+
+    &.bp6-outlined:not(.bp6-disabled) {
+        border-color: $color;
+
+        &:hover {
+            color: $color;
+        }
+    }
+
+    &.bp6-minimal:not(.bp6-disabled) {
+        background-color: transparent;
+
+        &:hover {
+            background-color: rgba($color, 0.2);
+            color: $color;
+        }
+
+        &.bp6-active {
+            color: $colorActive;
+            background-color: rgba($color, 0.3);
+
+            .bp6-icon.bp6-icon-#{$icon} {
+                color: $colorActive;
+            }
+        }
+    }
+}
+
+// Everything a navigation button looks like regardless of menu orientation. Include this
+// on the `.bp6-button` selector inside the owning menu's scope.
+@mixin nav-button-styles {
+    position: relative;
+
+    &.reports-button {
+        @include button-colours($tt-reports, $tt-reports-active, 'document-open');
+    }
+
+    &.operations-button {
+        @include button-colours($tt-operations, $tt-operations-active, 'cube');
+    }
+
+    &.tensors-button {
+        @include button-colours($tt-tensors, $tt-tensors-active, 'flow-linear');
+    }
+
+    &.buffers-button {
+        @include button-colours($tt-buffers, $tt-buffers-active, 'horizontal-bar-chart');
+    }
+
+    &.graph-button {
+        @include button-colours($tt-graph, $tt-graph-active, 'graph');
+    }
+
+    &.performance-button {
+        @include button-colours($tt-performance, $tt-performance-active, 'lightning');
+    }
+
+    &.npe-button {
+        @include button-colours($tt-npe, $tt-npe-active, 'random');
+    }
+
+    &.cluster-button {
+        @include button-colours($tt-cluster, $tt-cluster-active, 'layout-grid');
+    }
+
+    &.mlir-button {
+        @include button-colours($tt-mlir, $tt-mlir-active, 'layout');
+    }
+
+    // A modal route is already showing, so re-entering it would stack it on itself.
+    &.modal {
+        &.bp6-active {
+            cursor: default;
+            pointer-events: none;
+        }
+    }
+
+    small {
+        font-size: 11px;
+        position: absolute;
+        border-radius: 4px;
+        padding-left: 4px;
+        padding-right: 4px;
+        background-color: $tt-grey-2;
+        right: 0;
+        top: 0;
+    }
+}
