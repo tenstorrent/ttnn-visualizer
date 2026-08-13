@@ -236,7 +236,8 @@ function useDeviceOperationsFullRenderModel(args: {
     } = args;
 
     const selectedAddress = useAtomValue(selectedAddressAtom);
-    const { memoryAllocationList, peakMemoryLoad, cbPressureByOpId } = processMemoryAllocations(deviceOperations);
+    const { memoryAllocationList, peakMemoryLoad, cbPressureByOpId, cbFanout } =
+        processMemoryAllocations(deviceOperations);
 
     const formatTensor = useCallback((node: Node) => formatTensorRendering(node, details), [details]);
 
@@ -448,8 +449,15 @@ function useDeviceOperationsFullRenderModel(args: {
                         />
                     );
                 } else if (nodeType === NodeType.circular_buffer_allocate) {
+                    // Returning rather than falling through leaves
+                    // `consecutiveCBsOutput` set, so the devices we skip here
+                    // don't re-emit the "CBs" heading. #1844
+                    if (cbFanout.duplicateNodeIds.has(node.id)) {
+                        return;
+                    }
                     const cb = node.params;
                     const numCores = parseInt(cb.num_cores, 10) || 1;
+                    const deviceCount = cbFanout.deviceCountByNodeId.get(node.id) ?? 1;
 
                     const variance = cb.allocateOperationId;
                     // `globally_allocated='1'` CBs alias an existing L1
@@ -509,6 +517,7 @@ function useDeviceOperationsFullRenderModel(args: {
                                     onLegendClick={onLegendClick}
                                     colorVariance={variance}
                                     isGloballyAllocated={isGloballyAllocated}
+                                    deviceCount={deviceCount}
                                 />
                                 {memoryInfo}
                             </div>
@@ -534,6 +543,7 @@ function useDeviceOperationsFullRenderModel(args: {
             return output;
         },
         [
+            cbFanout,
             cbPressureByOpId,
             details,
             formatTensor,

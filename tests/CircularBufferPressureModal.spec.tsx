@@ -268,6 +268,7 @@ describe('CircularBufferPressureModal - selection flows', () => {
                     coreRangeSet: '{[(x=1,y=1) - (x=1,y=1)]}',
                     cores: [{ x: 1, y: 1 }],
                     globallyAllocated: false,
+                    deviceCount: 1,
                 },
             ],
         };
@@ -306,6 +307,7 @@ describe('CircularBufferPressureModal - legend totals', () => {
                     coreRangeSet: '{[(x=0,y=0) - (x=0,y=0)]}',
                     cores: [{ x: 0, y: 0 }],
                     globallyAllocated: false,
+                    deviceCount: 1,
                 },
                 {
                     nodeId: 12,
@@ -315,6 +317,7 @@ describe('CircularBufferPressureModal - legend totals', () => {
                     coreRangeSet: '{[(x=0,y=0) - (x=0,y=0)]}',
                     cores: [{ x: 0, y: 0 }],
                     globallyAllocated: false,
+                    deviceCount: 1,
                 },
             ],
         };
@@ -331,6 +334,16 @@ describe('CircularBufferPressureModal - legend totals', () => {
 
         expect(screen.getByText('Peak per core')).toBeInTheDocument();
         expect(screen.getByText('Total CBs')).toBeInTheDocument();
+    });
+
+    it('says how many devices a collapsed row stands for, and stays silent for one (#1844)', () => {
+        const snapshot = buildSnapshot();
+        snapshot.allocations[0].deviceCount = 8;
+        renderModal(snapshot);
+
+        const [meshRow, singleRow] = document.querySelectorAll('button.cb-row .cores');
+        expect(meshRow).toHaveTextContent('× 8 devices');
+        expect(singleRow).not.toHaveTextContent('devices');
     });
 
     it('shows the empty-state message when there are no CBs in the snapshot', () => {
@@ -369,6 +382,7 @@ describe('CircularBufferPressureModal - legend totals', () => {
                     coreRangeSet: '{[(x=0,y=0) - (x=0,y=0)]}',
                     cores: [{ x: 0, y: 0 }],
                     globallyAllocated: true,
+                    deviceCount: 1,
                 },
                 {
                     nodeId: 2,
@@ -378,6 +392,7 @@ describe('CircularBufferPressureModal - legend totals', () => {
                     coreRangeSet: '{[(x=0,y=0) - (x=0,y=0)]}',
                     cores: [{ x: 0, y: 0 }],
                     globallyAllocated: false,
+                    deviceCount: 1,
                 },
             ],
         };
@@ -603,6 +618,7 @@ describe('CircularBufferPressureModal - show/hide globally allocated CBs (#1655)
                     coreRangeSet: '{[(x=0,y=0) - (x=0,y=0)]}',
                     cores: [{ x: 0, y: 0 }],
                     globallyAllocated: true,
+                    deviceCount: 1,
                 },
                 {
                     nodeId: 2,
@@ -612,6 +628,7 @@ describe('CircularBufferPressureModal - show/hide globally allocated CBs (#1655)
                     coreRangeSet: '{[(x=0,y=0) - (x=0,y=0)]}',
                     cores: [{ x: 0, y: 0 }],
                     globallyAllocated: false,
+                    deviceCount: 1,
                 },
                 {
                     nodeId: 3,
@@ -621,6 +638,7 @@ describe('CircularBufferPressureModal - show/hide globally allocated CBs (#1655)
                     coreRangeSet: '{[(x=1,y=0) - (x=1,y=0)]}',
                     cores: [{ x: 1, y: 0 }],
                     globallyAllocated: false,
+                    deviceCount: 1,
                 },
             ],
         };
@@ -688,6 +706,7 @@ function buildAliasedSnapshot(): CBPressureSnapshot {
                 allocateOperationId: 100,
                 allocateOperationName: 'halo',
                 globallyAllocated: true,
+                deviceCount: 1,
             },
             {
                 nodeId: 2,
@@ -699,6 +718,7 @@ function buildAliasedSnapshot(): CBPressureSnapshot {
                 allocateOperationId: 100,
                 allocateOperationName: 'halo',
                 globallyAllocated: false,
+                deviceCount: 1,
             },
         ],
     };
@@ -725,6 +745,7 @@ function buildSnapshot(overrides: Partial<CBPressureSnapshot> = {}): CBPressureS
                 allocateOperationId: 100,
                 allocateOperationName: 'demo_op',
                 globallyAllocated: false,
+                deviceCount: 1,
             },
             {
                 nodeId: 2,
@@ -736,6 +757,7 @@ function buildSnapshot(overrides: Partial<CBPressureSnapshot> = {}): CBPressureS
                 allocateOperationId: 100,
                 allocateOperationName: 'demo_op',
                 globallyAllocated: false,
+                deviceCount: 1,
             },
         ],
         ...overrides,

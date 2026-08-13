@@ -701,6 +701,7 @@ const CircularBufferPressureBody = ({
                                         <span className='size'>{formatMemorySize(cb.size, 2)}</span>
                                         <span className='cores'>
                                             {cb.numCores > 0 ? `× ${cb.numCores} cores` : 'unattributed'}
+                                            {cb.deviceCount > 1 && ` × ${cb.deviceCount} devices`}
                                         </span>
                                     </span>
                                     {isAliased && (

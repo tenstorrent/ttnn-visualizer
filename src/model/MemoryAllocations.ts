@@ -36,6 +36,12 @@ export type CBAllocationSummary = {
     allocateOperationId?: number;
     allocateOperationName?: string;
     /**
+     * Devices that allocated this CB — a mesh op emits one identical
+     * `circular_buffer_allocate` per device, folded into one summary. 1 on a
+     * single-device report. #1844
+     */
+    deviceCount: number;
+    /**
      * `true` when the source node had `globally_allocated=1`. These CBs are
      * kernel-side views bound to an existing L1 sharded buffer (the tensor at
      * the same address) rather than fresh allocations. They are intentionally
@@ -61,4 +67,14 @@ export type CBPressureSnapshot = {
     unattributedBytes: number;
     /** Ordered list of CBs that were live when the snapshot was taken. */
     allocations: CBAllocationSummary[];
+};
+
+/**
+ * Which `circular_buffer_allocate` nodes the renderer should draw, and how many
+ * devices each stands for. A mesh op emits the same CB once per device; only the
+ * first is worth a row, so the rest are listed as duplicates to skip. #1844
+ */
+export type CBDeviceFanout = {
+    deviceCountByNodeId: Map<number, number>;
+    duplicateNodeIds: Set<number>;
 };

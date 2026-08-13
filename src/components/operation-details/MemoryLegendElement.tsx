@@ -43,6 +43,11 @@ interface MemoryLegendElementProps {
      * reads as a tensor view rather than a fresh allocation.
      */
     isGloballyAllocated?: boolean;
+    /**
+     * Devices this row stands for, when a mesh op allocated the same CB on each
+     * of them and the duplicate rows were collapsed into this one. #1844
+     */
+    deviceCount?: number;
 }
 
 export const MemoryLegendElement = ({
@@ -60,6 +65,7 @@ export const MemoryLegendElement = ({
     numCores,
     userL1ZoomRange,
     isGloballyAllocated = false,
+    deviceCount = 1,
 }: MemoryLegendElementProps) => {
     const showHex = useAtomValue(showHexAtom);
     const selectedBufferColour = useAtomValue(selectedBufferColourAtom);
@@ -86,6 +92,7 @@ export const MemoryLegendElement = ({
     const isPerCoreBuffer = bufferType !== StringBufferType.DRAM && bufferType !== StringBufferType.SYSTEM_MEMORY;
     const numCoresLabel =
         isPerCoreBuffer && numCores && numCores > 0 ? ` x ${numCores} ${numCores === 1 ? 'core' : 'cores'}` : '';
+    const deviceCountLabel = deviceCount > 1 ? ` x ${deviceCount} devices` : '';
 
     const resolvedColour =
         chunk.tensorId || derivedTensor
@@ -169,6 +176,7 @@ export const MemoryLegendElement = ({
                     <>
                         {formatMemorySize(chunk.size, 2)}
                         {numCoresLabel}
+                        {deviceCountLabel}
                         {isGloballyAllocated && (
                             <Tooltip
                                 content={
