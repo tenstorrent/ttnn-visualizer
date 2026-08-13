@@ -5,9 +5,8 @@
 import { useEffect, useState } from 'react';
 import { Alignment, Button, ButtonVariant, Icon, Navbar, Position, Size, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
-import { useNavigate } from 'react-router';
+import { useLocation, useNavigate } from 'react-router';
 import { useAtomValue } from 'jotai';
-import { useLocation } from 'react-router-dom';
 import ROUTES from '../definitions/Routes';
 import 'styles/components/MainNavigation.scss';
 import {
@@ -33,11 +32,11 @@ function MainNavigation() {
     const [showBanner, setShowBanner] = useState(false);
 
     const handleNavigate = (path: string) => {
-        navigate(path);
+        void navigate(path);
     };
 
     const handleOpenModal = (path: string) => {
-        navigate(path, { state: { background: location } });
+        void navigate(path, { state: { background: location } });
     };
 
     const hasActiveProfiler = !!activeProfilerReport;

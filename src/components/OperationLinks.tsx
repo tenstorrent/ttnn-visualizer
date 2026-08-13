@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router';
 import ROUTES from '../definitions/Routes';
 import { Operation, Tensor } from '../model/APIData';
 

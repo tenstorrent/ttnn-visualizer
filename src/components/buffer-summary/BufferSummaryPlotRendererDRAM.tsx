@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { useCallback, useMemo } from 'react';
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router';
 import { useAtomValue } from 'jotai';
 import { BufferSummaryAxisConfiguration } from '../../definitions/PlotConfigurations';
 import LoadingSpinner from '../LoadingSpinner';

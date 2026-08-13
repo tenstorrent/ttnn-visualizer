@@ -9,7 +9,7 @@ import { useVirtualizer } from '@tanstack/react-virtual';
 import classNames from 'classnames';
 import { useAtom, useAtomValue } from 'jotai';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router';
 import 'styles/components/ListView.scss';
 import { MAX_NUM_CONSUMERS } from '../definitions/ProducersConsumers';
 import ROUTES from '../definitions/Routes';
@@ -262,7 +262,7 @@ const TensorList = () => {
                 align: 'start',
             });
             // Navigating to the same page replaces the entry in the browser history
-            navigate(ROUTES.OPERATIONS, { replace: true });
+            void navigate(ROUTES.OPERATIONS, { replace: true });
         }
     }, [virtualizer, fetchedTensors, location, navigate]);
 
