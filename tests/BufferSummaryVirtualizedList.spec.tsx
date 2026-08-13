@@ -11,7 +11,11 @@ import BufferSummaryVirtualizedList from '../src/components/buffer-summary/Buffe
 import { ScrollLocations } from '../src/definitions/VirtualLists';
 import { BufferSummaryAxisConfiguration } from '../src/definitions/PlotConfigurations';
 import { RankedAnnotation, TopNAnnotationMode } from '../src/definitions/TopNAnnotations';
-import { LATE_DEALLOC_OPPORTUNITY_TEXT, LATE_DEALLOC_RAIL_LABEL, LateDeallocationRunStart } from '../src/definitions/LateDeallocation';
+import {
+    LATE_DEALLOC_OPPORTUNITY_TEXT,
+    LATE_DEALLOC_RAIL_LABEL,
+    LateDeallocationRunStart,
+} from '../src/definitions/LateDeallocation';
 import { RAIL_MAX_DOTS } from '../src/definitions/NavigationRail';
 import { BuffersByOperation } from '../src/model/APIData';
 import { TensorDeallocationReport } from '../src/model/BufferSummary';
@@ -622,9 +626,7 @@ describe('BufferSummaryVirtualizedList', () => {
             const dot = screen.getByTestId(`${TEST_IDS.LATE_DEALLOC_RAIL_DOT}-1`);
             // `Jump to` is the click affordance; dropping it still leaves the
             // tooltip body matching and the suite green.
-            expect(dot.getAttribute('aria-label')).toMatch(
-                new RegExp(`^Jump to ${LATE_DEALLOC_OPPORTUNITY_TEXT}`),
-            );
+            expect(dot.getAttribute('aria-label')).toMatch(new RegExp(`^Jump to ${LATE_DEALLOC_OPPORTUNITY_TEXT}`));
             expect(dot.getAttribute('aria-label')).toMatch(
                 new RegExp(`${LATE_DEALLOC_OPPORTUNITY_TEXT}: tensor 7`, 'i'),
             );

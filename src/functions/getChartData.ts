@@ -193,9 +193,7 @@ const createHoverTemplate = (
     const formattedAddress = getMemoryAddress(address, options?.showHex || false);
     const formattedSize = formatMemorySize(size);
     const canDeallocateText =
-        options?.lateDeallocation && chunk.lateDeallocation
-            ? ` - <u>${LATE_DEALLOC_OPPORTUNITY_TEXT}</u>`
-            : '';
+        options?.lateDeallocation && chunk.lateDeallocation ? ` - <u>${LATE_DEALLOC_OPPORTUNITY_TEXT}</u>` : '';
     const tensorDetails = tensor
         ? `${toReadableShape(tensor.shape)} ${toReadableType(tensor.dtype)}<br />${tensorMemoryLayout || ''}<br />Tensor ${tensor.id}${canDeallocateText}`
         : '';
