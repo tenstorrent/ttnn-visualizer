@@ -3,6 +3,7 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 @use '../definitions/colours' as *;
+@use '../definitions/variables' as variables;
 
 .device-operations-full-render-wrap {
     .peak-load {
@@ -159,21 +160,58 @@
     // 320px right gutter (either the in-flow `.memory-info` for CB rows, or
     // the invisible `.memory-info-placeholder` for buffer rows where totals
     // live in the h4 above) keeps every legend grid computed against the
-    // same available width. Combined with the default `.legend-item` grid
-    // templates (5-col `15px 0.5fr 2fr 13fr 3fr` and 6-col extra-info
-    // `15px 0.5fr 2fr 10fr 3fr 3fr` — both sum to 18.5fr after the swatch),
-    // this makes swatch / address / size / shape columns line up
-    // column-for-column across buffer and CB rows. Scoped under
-    // `.device-operations-full-render` so it doesn't bleed into the L1 /
-    // DRAM plot legends.
+    // same available width. Scoped under `.device-operations-full-render` so
+    // it doesn't bleed into the L1 / DRAM plot legends.
     .memory-legend-row {
         display: flex;
         align-items: flex-start;
         gap: 10px;
 
+        // Anchor the data columns to the row's shared right edge instead of its
+        // left. Rows sit at different collapsible depths (up to 80px apart) and
+        // carry addresses of differing digit counts (25px), and with left-anchored
+        // share-based tracks both of those shifted every column downstream. The
+        // address is now the only flexible track, so it swallows that variation,
+        // and everything right of it is definite and lands identically on every
+        // row. `minmax(0, …)` lets those tracks give way under space pressure
+        // rather than overflowing the row.
         .legend-item {
             flex: 1 1 auto;
             min-width: 0;
+            grid-template-columns:
+                15px
+                minmax(variables.$legend-address-column, 1fr)
+                variables.$legend-size-column
+                minmax(0, variables.$legend-tensor-column)
+                minmax(0, variables.$legend-buffer-type-column)
+                minmax(0, variables.$legend-shape-column);
+
+            // Placed by class, not by source order: a row carrying no buffer
+            // type leaves track 5 empty rather than pulling its shape info into
+            // the column where other rows show `L1 HEIGHT_SHARDED`.
+            > .extra-info-slot {
+                grid-column: 5;
+            }
+
+            > .shape-info-slot {
+                grid-column: 6;
+            }
+
+            // The size cell is right-aligned, so an in-flow marker shortens the
+            // text run only on aliased rows. Hold its slot open on every row and
+            // position the marker into it.
+            > .format-numbers:nth-child(3) {
+                position: relative;
+                padding-right: variables.$legend-marker-slot;
+            }
+
+            .globally-allocated-marker {
+                position: absolute;
+                top: 50%;
+                right: 0;
+                margin-left: 0;
+                transform: translateY(-50%);
+            }
         }
 
         .memory-info,
