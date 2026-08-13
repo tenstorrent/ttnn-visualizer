@@ -264,10 +264,17 @@ _ENV_ALIASES: Mapping[str, str] = {"DEBUG": "FLASK_DEBUG"}
 # values (``GUNICORN_BIND``, ``SQLALCHEMY_DATABASE_URI``, ``APPLICATION_DIR``) would
 # otherwise accept an env string and diverge from their parents; ``Path`` / ``dict``
 # ones are declined by ``_coerce_env_value`` as a backstop, but skipping them here
-# keeps the loop from warning on every visit. Constants have no env story.
+# keeps the loop from warning on every visit. ``APP_DATA_DIRECTORY`` /
+# ``REPORT_DATA_DIRECTORY`` are skipped so a late ``.env`` cannot update the parent
+# while leaving Path children and the DB URI on the import-time tree — the class body
+# (and ``main()``'s ``--tt_metal_home`` cascade) remain the ways to set them.
+# Constants have no env story. When adding a new constant or derived string attribute,
+# list it here — type decline only catches ``Path`` / ``dict``.
 _ENV_OVERRIDE_SKIP = frozenset(
     {
         "APPLICATION_DIR",
+        "APP_DATA_DIRECTORY",
+        "REPORT_DATA_DIRECTORY",
         "GUNICORN_BIND",
         "SQLALCHEMY_DATABASE_URI",
         "SQLALCHEMY_ENGINE_OPTIONS",
@@ -505,7 +512,9 @@ class DefaultConfig(object):
             for key, value in cls.__dict__.items():
                 # Descriptors (and methods) resolve their own value on read; assigning
                 # the raw environment string over one would shadow it with an unparsed
-                # value. Derived / constant attrs have no sensible string form.
+                # value. Derived / constant attrs are listed in ``_ENV_OVERRIDE_SKIP``
+                # because a string would apply and diverge from their parents (or, for
+                # constants, because they have no env story).
                 if (
                     key.startswith("_")
                     or key in _ENV_OVERRIDE_SKIP

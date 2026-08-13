@@ -138,9 +138,9 @@ def test_a_local_app_context_still_records(app, usage_directory):
 
 
 def test_a_stringified_server_mode_does_not_disable_recording(usage_directory):
-    # `.env.sample` documents `SERVER_MODE=false`, and override_with_env_variables
-    # copies that raw string over the parsed bool — where it is truthy. Trusting it
-    # would silently stop recording on an ordinary local install.
+    # Flask ``settings_override`` can inject a raw string without going through
+    # ``override_with_env_variables``; ``"false"`` is truthy, so ``_as_bool`` has to
+    # re-parse. Trusting the string would silently stop recording on a local install.
     assert is_recording_enabled(server_mode="false") is True
     assert is_recording_enabled(server_mode="true") is False
 

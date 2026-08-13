@@ -492,10 +492,29 @@ def test_a_setting_with_no_coercible_type_is_reported_and_discarded(
     assert "LOCAL_DATA_DIRECTORY" in caplog.text
 
 
+# String-typed derived / path parents that must stay skipped — removing one leaves the
+# suite green under the dead-entry check alone, and ``_coerce_env_value`` would then
+# accept an env string (or, for path parents, desync children from the URI).
+_REQUIRED_ENV_OVERRIDE_SKIPS = frozenset(
+    {
+        "APPLICATION_DIR",
+        "APP_DATA_DIRECTORY",
+        "REPORT_DATA_DIRECTORY",
+        "GUNICORN_BIND",
+        "SQLALCHEMY_DATABASE_URI",
+        "SQLALCHEMY_ENGINE_OPTIONS",
+        "LOCAL_DATA_DIRECTORY",
+        "REMOTE_DATA_DIRECTORY",
+        "STATIC_ASSETS_DIR",
+    }
+)
+
+
 def test_every_env_override_skip_names_a_real_setting():
     # Keyed by string, so a renamed setting leaves a dead skip entry and the loop
     # starts accepting env strings for a derived attribute again.
     assert _ENV_OVERRIDE_SKIP <= set(vars(DefaultConfig))
+    assert _REQUIRED_ENV_OVERRIDE_SKIPS <= _ENV_OVERRIDE_SKIP
 
 
 def test_an_inherited_setting_is_reachable_on_a_subclass(monkeypatch):
@@ -512,16 +531,29 @@ def test_an_inherited_setting_is_reachable_on_a_subclass(monkeypatch):
 
 
 def test_a_skipped_setting_is_not_overridden(monkeypatch):
-    monkeypatch.setenv("GUNICORN_BIND", "evil.example:9")
+    # Prefer a skipped string that the loop does not recompute afterwards —
+    # ``GUNICORN_BIND`` is always rewritten from ``HOST``/``PORT``, so it cannot prove
+    # the skip alone.
     monkeypatch.setenv("APPLICATION_DIR", "/from/env")
+    monkeypatch.setenv("SQLALCHEMY_DATABASE_URI", "sqlite:////tmp/evil.db")
+    monkeypatch.setenv("APP_DATA_DIRECTORY", "/tmp/late-app")
+    monkeypatch.setenv("REPORT_DATA_DIRECTORY", "/tmp/late-reports")
 
     config = ProductionConfig()
     declared_app_dir = config.APPLICATION_DIR
+    declared_uri = config.SQLALCHEMY_DATABASE_URI
+    declared_app_data = config.APP_DATA_DIRECTORY
+    declared_report_data = config.REPORT_DATA_DIRECTORY
+    declared_local = config.LOCAL_DATA_DIRECTORY
+    declared_remote = config.REMOTE_DATA_DIRECTORY
     config.override_with_env_variables()
 
     assert config.APPLICATION_DIR == declared_app_dir
-    assert config.GUNICORN_BIND != "evil.example:9"
-    assert config.GUNICORN_BIND == f"{config.HOST}:{config.PORT}"
+    assert config.SQLALCHEMY_DATABASE_URI == declared_uri
+    assert config.APP_DATA_DIRECTORY == declared_app_data
+    assert config.REPORT_DATA_DIRECTORY == declared_report_data
+    assert config.LOCAL_DATA_DIRECTORY == declared_local
+    assert config.REMOTE_DATA_DIRECTORY == declared_remote
 
 
 def test_gunicorn_bind_is_recomputed_from_host_and_port(monkeypatch):
@@ -539,7 +571,7 @@ def test_gunicorn_bind_is_recomputed_from_host_and_port(monkeypatch):
 def test_server_cli_flag_enables_server_mode_without_a_manual_patch(monkeypatch):
     # ``main()`` must not hand-patch ``SERVER_MODE`` / ``HOST``; the override loop is
     # the single mechanism. Reset the singleton so a prior ``Config()`` cannot poison
-    # the assertion.
+    # the assertion. Prefill env keys the SUT may write so monkeypatch restores them.
     from argparse import Namespace
 
     from ttnn_visualizer.app import _config_after_cli_env
@@ -547,8 +579,8 @@ def test_server_cli_flag_enables_server_mode_without_a_manual_patch(monkeypatch)
 
     monkeypatch.setattr(Config, "_instance", None)
     monkeypatch.setenv("FLASK_ENV", "production")
-    monkeypatch.delenv("SERVER_MODE", raising=False)
-    monkeypatch.delenv("HOST", raising=False)
+    monkeypatch.setenv("SERVER_MODE", "false")
+    monkeypatch.setenv("HOST", "localhost")
     monkeypatch.setenv("PORT", "8000")
 
     args = Namespace(host=None, server=True, port=None)
@@ -639,8 +671,8 @@ def test_importing_settings_accepts_the_documented_vocabulary(env_value):
 def test_server_mode_wins_over_flask_debug(monkeypatch, caplog):
     # ``Flask.debug`` is not merely verbosity: it suppresses the catch-all error handler
     # (tracebacks to untrusted callers) and, without websockets, mounts Werkzeug's
-    # interactive console. ``DEBUG`` is one of the two attributes the loop does reach,
-    # so the hosted posture has to override it rather than merely being documented.
+    # interactive console. The hosted posture must clear ``DEBUG`` even when
+    # ``FLASK_DEBUG`` is set via the override loop.
     monkeypatch.setattr(DefaultConfig, "SERVER_MODE", True)
     monkeypatch.setenv("FLASK_DEBUG", "true")
 
