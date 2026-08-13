@@ -105,7 +105,16 @@ def _spawn_usage_writer(directory: Path, count: int) -> subprocess.Popen:
 
 
 def _await_usage_writer(child: subprocess.Popen) -> None:
-    _, stderr = child.communicate(timeout=_SUBPROCESS_WRITER_TIMEOUT_SECONDS)
+    try:
+        _, stderr = child.communicate(timeout=_SUBPROCESS_WRITER_TIMEOUT_SECONDS)
+    except subprocess.TimeoutExpired:
+        child.kill()
+        _, stderr = child.communicate()
+        pytest.fail(
+            f"usage writer timed out after {_SUBPROCESS_WRITER_TIMEOUT_SECONDS}s"
+            f"{f': {stderr}' if stderr else ''}"
+        )
+
     assert child.returncode == 0, stderr
 
 
