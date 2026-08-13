@@ -3,12 +3,11 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import { memo } from 'react';
-import { Icon, Tooltip } from '@blueprintjs/core';
-import { IconNames } from '@blueprintjs/icons';
+import { Tooltip } from '@blueprintjs/core';
 import { TensorDeallocationReport } from '../../model/BufferSummary';
 import { getLateDeallocationSummary } from '../../functions/lateDeallocation';
-import { LATE_DEALLOC_GLYPH_SIZE } from '../../definitions/LateDeallocation';
 import { TEST_IDS } from '../../definitions/TestIds';
+import LateDeallocationGlyph from './LateDeallocationGlyph';
 
 interface LateDeallocationBadgeProps {
     operationId: number;
@@ -51,10 +50,7 @@ function LateDeallocationBadge({ operationId, tensors, isScrolling }: LateDeallo
                 aria-label={summary}
                 data-testid={`${TEST_IDS.LATE_DEALLOC_BADGE}-${operationId}`}
             >
-                <Icon
-                    icon={IconNames.OUTDATED}
-                    size={LATE_DEALLOC_GLYPH_SIZE}
-                />
+                <LateDeallocationGlyph />
             </span>
         </Tooltip>
     );

@@ -193,7 +193,7 @@ const BufferSummaryPlotControls = ({ lateDeallocationRunCount = 0 }: BufferSumma
 
             <div
                 className='top-n-controls'
-                data-testid='top-n-controls'
+                data-testid={TEST_IDS.TOP_N_CONTROLS}
             >
                 <Tooltip
                     content={topNTooltip}

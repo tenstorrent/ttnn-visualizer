@@ -10,6 +10,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import BufferSummaryPlotControls from '../src/components/buffer-summary/BufferSummaryPlotControls';
 import {
     selectedBufferSummaryTabAtom,
+    showDeallocationReportAtom,
     topNAnnotationCountAtom,
     topNAnnotationEnabledAtom,
     topNAnnotationModeAtom,
@@ -102,7 +103,7 @@ describe('BufferSummaryPlotControls top-N (#1517)', () => {
         renderControls();
 
         expect(getTopNSwitch()).toBeDisabled();
-        const cluster = screen.getByTestId('top-n-controls');
+        const cluster = screen.getByTestId(TEST_IDS.TOP_N_CONTROLS);
         const tooltipHost = cluster.querySelector('[data-testid="tooltip-host"]');
         expect(tooltipHost?.getAttribute('data-content')).toMatch(/Load a performance report/i);
     });
@@ -117,7 +118,7 @@ describe('BufferSummaryPlotControls top-N (#1517)', () => {
         renderControls();
 
         expect(getTopNSwitch()).toBeDisabled();
-        const cluster = screen.getByTestId('top-n-controls');
+        const cluster = screen.getByTestId(TEST_IDS.TOP_N_CONTROLS);
         const tooltipHost = cluster.querySelector('[data-testid="tooltip-host"]');
         expect(tooltipHost?.getAttribute('data-content')).toMatch(/doesn't match/i);
     });
@@ -243,7 +244,7 @@ describe('BufferSummaryPlotControls top-N (#1517)', () => {
 
         for (const [mode, copyRegex] of cases) {
             const { unmount } = renderControls([[topNAnnotationModeAtom, mode]]);
-            const cluster = screen.getByTestId('top-n-controls');
+            const cluster = screen.getByTestId(TEST_IDS.TOP_N_CONTROLS);
             const tooltipHost = cluster.querySelector('[data-testid="tooltip-host"]');
             expect(tooltipHost?.getAttribute('data-content')).toMatch(copyRegex);
             unmount();
@@ -301,7 +302,7 @@ describe('BufferSummaryPlotControls top-N (#1517)', () => {
         renderControls([[topNAnnotationModeAtom, TopNAnnotationMode.PERF_OP_TO_OP_GAP]]);
 
         expect(getTopNSwitch()).toBeDisabled();
-        const cluster = screen.getByTestId('top-n-controls');
+        const cluster = screen.getByTestId(TEST_IDS.TOP_N_CONTROLS);
         const tooltipHost = cluster.querySelector('[data-testid="tooltip-host"]');
         expect(tooltipHost?.getAttribute('data-content')).toMatch(/doesn't include op-to-op gap/i);
     });
@@ -357,6 +358,22 @@ describe('BufferSummaryPlotControls late deallocation count (#963)', () => {
         expect(count).toHaveTextContent('0');
         expect(count).not.toHaveClass(Classes.INTENT_WARNING);
         expect(getLateDeallocationSwitch()).toBeDisabled();
+    });
+
+    // The atom can stay true after a report with findings while the next report
+    // has none — checked must follow findings, not the atom alone.
+    it('keeps the switch unchecked when the atom is on but nothing is flagged', () => {
+        renderControls([[showDeallocationReportAtom, true]], 0);
+
+        expect(getLateDeallocationSwitch()).toBeDisabled();
+        expect(getLateDeallocationSwitch()).not.toBeChecked();
+    });
+
+    it('checks the switch when the atom is on and findings exist', () => {
+        renderControls([[showDeallocationReportAtom, true]], 4);
+
+        expect(getLateDeallocationSwitch()).toBeChecked();
+        expect(getLateDeallocationSwitch()).not.toBeDisabled();
     });
 
     it('explains the zero in the same tooltip, so the disabled switch is not unexplained', () => {

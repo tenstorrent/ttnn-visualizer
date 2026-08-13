@@ -5,8 +5,7 @@
 import React, { CSSProperties, useCallback, useEffect, useMemo, useRef } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import classNames from 'classnames';
-import { Icon, Tooltip } from '@blueprintjs/core';
-import { IconNames } from '@blueprintjs/icons';
+import { Tooltip } from '@blueprintjs/core';
 import { PlotConfiguration, PlotMarker } from '../../definitions/PlotConfigurations';
 import MemoryPlotRenderer from '../operation-details/MemoryPlotRenderer';
 import BufferSummaryRow from './BufferSummaryRow';
@@ -26,15 +25,13 @@ import {
     TopNAnnotationMode,
 } from '../../definitions/TopNAnnotations';
 import { perfColorScale } from '../../functions/perfOverlay';
-import {
-    LATE_DEALLOC_GLYPH_SIZE,
-    LATE_DEALLOC_RAIL_LABEL,
-    LateDeallocationRunStart,
-} from '../../definitions/LateDeallocation';
+import { LATE_DEALLOC_RAIL_LABEL, LateDeallocationRunStart } from '../../definitions/LateDeallocation';
 import { coalesceLateDeallocationRunStarts, getLateDeallocationSummary } from '../../functions/lateDeallocation';
+import { scrollVirtualizerToIndex } from '../../functions/scrollVirtualizerToIndex';
 import { NavigationRailItem, RAIL_MAX_DOTS } from '../../definitions/NavigationRail';
 import NavigationRail from './NavigationRail';
 import LateDeallocationBadge from './LateDeallocationBadge';
+import LateDeallocationGlyph from './LateDeallocationGlyph';
 import { TEST_IDS } from '../../definitions/TestIds';
 
 interface BufferSummaryVirtualizedListProps {
@@ -196,12 +193,7 @@ function BufferSummaryVirtualizedList({
 
     const handleRailDotClick = useCallback(
         (rowIndex: number) => {
-            // Double-call mirrors useBufferNavigation: a single scrollToIndex can be a no-op
-            // when measurements aren't ready yet, so re-fire on the next frame to actually land.
-            virtualizer.scrollToIndex(rowIndex, { align: 'center' });
-            window.requestAnimationFrame(() => {
-                virtualizer.scrollToIndex(rowIndex, { align: 'center' });
-            });
+            scrollVirtualizerToIndex(virtualizer, rowIndex, { align: 'center' });
         },
         [virtualizer],
     );
@@ -229,12 +221,7 @@ function BufferSummaryVirtualizedList({
             tooltip: getLateDeallocationSummary(runStart.tensors),
             dotClassName: 'late-dealloc-rail-dot',
             dotTestId: `${TEST_IDS.LATE_DEALLOC_RAIL_DOT}-${runStart.opId}`,
-            content: (
-                <Icon
-                    icon={IconNames.OUTDATED}
-                    size={LATE_DEALLOC_GLYPH_SIZE}
-                />
-            ),
+            content: <LateDeallocationGlyph />,
         }));
     }, [lateDeallocationRunStarts, operations.length]);
 

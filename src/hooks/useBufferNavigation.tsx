@@ -13,6 +13,7 @@ import useBufferFocus from './useBufferFocus';
 import { BufferType } from '../model/BufferType';
 import { TAB_IDS } from '../definitions/BufferSummary';
 import isValidNumber from '../functions/isValidNumber';
+import { scrollVirtualizerToIndex } from '../functions/scrollVirtualizerToIndex';
 
 interface BufferDetailsLocationState {
     tensorId: number;
@@ -117,10 +118,8 @@ const useBufferNavigation = ({ buffersByOperation, tensorListByOperation, virtua
 
         scrollRafRef.current = requestAnimationFrame(() => {
             scrollRafRef.current = null;
-            // TanStack Virtual can no-op the first scrollToIndex when the scroll element or
-            // item measurements are not ready yet; calling twice after requestAnimationFrame reliably lands the offset.
-            virtualizer.scrollToIndex(scrollIndex, { align: 'start' });
-            virtualizer.scrollToIndex(scrollIndex, { align: 'start' });
+            // Wait a frame for tab/layout measurements, then the shared double-call quirk.
+            scrollVirtualizerToIndex(virtualizer, scrollIndex, { align: 'start' });
 
             navigate(
                 {

@@ -62,6 +62,7 @@ export const TEST_IDS = Object.freeze({
     LATE_DEALLOC_RAIL_DOT: 'late-dealloc-rail-dot',
 
     // Buffer summary top-N annotations, suffixed the same way.
+    TOP_N_CONTROLS: 'top-n-controls',
     TOP_N_BADGE: 'top-n-badge',
     TOP_N_RAIL: 'top-n-rail',
     TOP_N_RAIL_DOT: 'top-n-rail-dot',

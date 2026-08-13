@@ -7,6 +7,7 @@ import { formatMemorySize, getMemoryAddress } from './math';
 import { toReadableShape, toReadableType } from './formatting';
 import { Chunk, ColoredChunk, DecoratedBufferChunk, Tensor } from '../model/APIData';
 import { PlotDataCustom, PlotDataOverrides } from '../definitions/PlotConfigurations';
+import { LATE_DEALLOC_OPPORTUNITY_TEXT } from '../definitions/LateDeallocation';
 import { TensorMemoryLayout } from '../model/MemoryConfig';
 
 // Half-opacity tint + solid border; fill keeps the bar readable when the stroke clips at plot edges. #1652
@@ -192,7 +193,9 @@ const createHoverTemplate = (
     const formattedAddress = getMemoryAddress(address, options?.showHex || false);
     const formattedSize = formatMemorySize(size);
     const canDeallocateText =
-        options?.lateDeallocation && chunk.lateDeallocation ? ' - <u>Opportunity to deallocate earlier</u>' : '';
+        options?.lateDeallocation && chunk.lateDeallocation
+            ? ` - <u>${LATE_DEALLOC_OPPORTUNITY_TEXT}</u>`
+            : '';
     const tensorDetails = tensor
         ? `${toReadableShape(tensor.shape)} ${toReadableType(tensor.dtype)}<br />${tensorMemoryLayout || ''}<br />Tensor ${tensor.id}${canDeallocateText}`
         : '';

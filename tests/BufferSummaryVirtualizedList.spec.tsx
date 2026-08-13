@@ -308,6 +308,20 @@ describe('BufferSummaryVirtualizedList', () => {
             expect(item?.style.top).toBe('50%');
         });
 
+        it('prefixes each rail dot accessible name with Jump to', () => {
+            const annotations = new Map<number, RankedAnnotation>([
+                [1, buildAnnotation({ opId: 1, rowIndex: 0, rank: 1, valueLabel: '850 µs' })],
+            ]);
+            renderVirtualizedList(false, {
+                topNAnnotationsByOpId: annotations,
+                topNAnnotationMode: TopNAnnotationMode.PERF_TIME,
+            });
+
+            expect(screen.getByTestId(`${TEST_IDS.TOP_N_RAIL_DOT}-1`).getAttribute('aria-label')).toMatch(
+                /^Jump to #1 by/,
+            );
+        });
+
         // The rank's position on the perf scale is the dot's only quantitative
         // reading, and it travels through `NavigationRail`'s optional `dotStyle`
         // prop — a boundary that can be dropped on either side without any
@@ -353,7 +367,10 @@ describe('BufferSummaryVirtualizedList', () => {
             renderVirtualizedList(false, { topNAnnotationsByOpId: annotations });
 
             fireEvent.click(screen.getByTestId(`${TEST_IDS.TOP_N_RAIL_DOT}-2`));
-            expect(scrollToIndexMock).toHaveBeenCalledWith(1, { align: 'center' });
+            // TanStack can no-op a single call; scrollVirtualizerToIndex fires twice.
+            expect(scrollToIndexMock).toHaveBeenCalledTimes(2);
+            expect(scrollToIndexMock).toHaveBeenNthCalledWith(1, 1, { align: 'center' });
+            expect(scrollToIndexMock).toHaveBeenNthCalledWith(2, 1, { align: 'center' });
         });
     });
 
@@ -586,6 +603,9 @@ describe('BufferSummaryVirtualizedList', () => {
             renderVirtualizedList(false, { lateDeallocationRunStarts: [buildRunStart({ opId: 1, rowIndex: 0 })] });
 
             const dot = screen.getByTestId(`${TEST_IDS.LATE_DEALLOC_RAIL_DOT}-1`);
+            // `Jump to` is the click affordance; dropping it still leaves the
+            // tooltip body matching and the suite green.
+            expect(dot.getAttribute('aria-label')).toMatch(/^Jump to Opportunity to deallocate earlier/);
             expect(dot.getAttribute('aria-label')).toMatch(/Opportunity to deallocate earlier: tensor 7/i);
             expect(dot.getAttribute('aria-label')).toMatch(/last used by 0 ttnn\.add/i);
         });
@@ -602,7 +622,10 @@ describe('BufferSummaryVirtualizedList', () => {
             renderVirtualizedList(false, { lateDeallocationRunStarts: [buildRunStart({ opId: 2, rowIndex: 1 })] });
 
             fireEvent.click(screen.getByTestId(`${TEST_IDS.LATE_DEALLOC_RAIL_DOT}-2`));
-            expect(scrollToIndexMock).toHaveBeenCalledWith(1, { align: 'center' });
+            // TanStack can no-op a single call; scrollVirtualizerToIndex fires twice.
+            expect(scrollToIndexMock).toHaveBeenCalledTimes(2);
+            expect(scrollToIndexMock).toHaveBeenNthCalledWith(1, 1, { align: 'center' });
+            expect(scrollToIndexMock).toHaveBeenNthCalledWith(2, 1, { align: 'center' });
         });
 
         // Coalescing only engages past `RAIL_MAX_DOTS` rows, so the arguments the
