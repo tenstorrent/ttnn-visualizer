@@ -8,7 +8,7 @@ import { useVirtualizer } from '@tanstack/react-virtual';
 import classNames from 'classnames';
 import { useAtom, useAtomValue } from 'jotai';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router';
 import 'styles/components/ListView.scss';
 import ROUTES from '../definitions/Routes';
 import { ScrollLocations } from '../definitions/VirtualLists';
@@ -287,7 +287,7 @@ const OperationList = () => {
             setFocusedRow(operationIndex);
 
             // Navigating to the same page replaces the entry in the browser history
-            navigate(ROUTES.OPERATIONS, { replace: true });
+            void navigate(ROUTES.OPERATIONS, { replace: true });
         }
     }, [filteredOperationsList, location.state?.previousOperationId, navigate]);
 

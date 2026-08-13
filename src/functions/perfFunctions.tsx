@@ -6,7 +6,7 @@ import { JSX } from 'react';
 import classNames from 'classnames';
 import { Classes, Icon, Intent, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router';
 import { BoundType, ColumnDefinition, ColumnKeys, TypedPerfTableRow } from '../definitions/PerfTable';
 import { MIN_TOTAL_PERCENT } from '../definitions/PerfHeuristics';
 import { OperationDescription } from '../model/APIData';

@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { ReactNode } from 'react';
-import { Navigate, useLocation } from 'react-router-dom';
+import { Navigate, useLocation } from 'react-router';
 import ROUTES from '../definitions/Routes';
 import { RouteRequirements } from '../routes/routeObjectList';
 import LoadingSpinner from './LoadingSpinner';

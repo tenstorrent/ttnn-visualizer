@@ -143,7 +143,6 @@ The following separate and independent dependencies are utilized by this project
 - react-plotly.js - MIT - https://github.com/plotly/react-plotly.js/blob/master/LICENSE
 - react-query - MIT - https://github.com/TanStack/query/blob/main/LICENSE
 - react-router - MIT - https://github.com/remix-run/react-router/blob/main/LICENSE
-- react-router-dom - MIT - https://github.com/remix-run/react-router/blob/main/LICENSE.md
 - react-toastify - MIT - https://github.com/fkhadra/react-toastify/blob/main/LICENSE
 - sass - MIT - https://github.com/sass/dart-sass/blob/main/LICENSE
 - socket.io-client - MIT - https://www.npmjs.com/package/socket.io-client

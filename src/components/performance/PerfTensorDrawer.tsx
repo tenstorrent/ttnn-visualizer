@@ -5,7 +5,7 @@
 import { Button, Drawer, DrawerSize, Intent } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { useAtom } from 'jotai';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router';
 import 'styles/components/PerfTensorDrawer.scss';
 import { TypedPerfTableRow } from '../../definitions/PerfTable';
 import ROUTES from '../../definitions/Routes';

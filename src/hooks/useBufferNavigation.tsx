@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { useEffect, useRef } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router';
 import { useSetAtom } from 'jotai';
 import { Virtualizer } from '@tanstack/react-virtual';
 import { selectedBufferSummaryTabAtom } from '../store/app';
@@ -122,7 +122,7 @@ const useBufferNavigation = ({ buffersByOperation, tensorListByOperation, virtua
             virtualizer.scrollToIndex(scrollIndex, { align: 'start' });
             virtualizer.scrollToIndex(scrollIndex, { align: 'start' });
 
-            navigate(
+            void navigate(
                 {
                     pathname: location.pathname,
                     search: location.search,

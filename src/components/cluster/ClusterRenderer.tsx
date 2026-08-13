@@ -662,7 +662,7 @@ function ClusterRenderer() {
     useEffect(() => {
         const handleKeyDown = (event: KeyboardEvent) => {
             if (event.key === 'Escape') {
-                navigate(-1);
+                void navigate(-1);
             }
         };
         window.addEventListener('keydown', handleKeyDown);
@@ -739,7 +739,7 @@ function ClusterRenderer() {
             <Button
                 icon={IconNames.CROSS}
                 onClick={() => {
-                    navigate(-1);
+                    void navigate(-1);
                 }}
                 aria-label='Close cluster view'
             />
@@ -852,7 +852,7 @@ function ClusterRenderer() {
             <Button
                 icon={IconNames.CROSS}
                 onClick={() => {
-                    navigate(-1);
+                    void navigate(-1);
                 }}
                 aria-label='Close cluster view'
             />
