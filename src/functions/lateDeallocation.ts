@@ -73,7 +73,7 @@ export const getLateDeallocationReport = (
     operationNamesById: Map<number, string>,
     lastConsumerByTensorId?: Map<number, LastValidConsumer>,
 ): TensorDeallocationReport | null => {
-    if (!tensorId || !consumers || consumers.length === 0) {
+    if (tensorId === null || !consumers || consumers.length === 0) {
         return null;
     }
 

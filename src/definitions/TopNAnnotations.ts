@@ -4,7 +4,6 @@
 
 import type { OpPerfAggregate } from '../functions/perfOverlay';
 import type { L1PressureMetrics } from '../model/L1Pressure';
-import { RAIL_MAX_DOTS } from './NavigationRail';
 
 /**
  * Annotation mode for top-N op highlighting on the Buffer Summary view.
@@ -55,15 +54,9 @@ export enum TopNAnnotationStatus {
 /** Sensible default for the numeric input. Bumped here, picked up by the atom default. */
 export const DEFAULT_TOP_N_COUNT = 10;
 
-/**
- * Inclusive bounds on the numeric input. The ceiling is the rail's dot capacity
- * rather than a figure to taste: this rail plots ranks, and a rank can't be
- * pooled into a neighbouring dot the way the late-deallocation rail's tensors
- * are, so capping the input is the only way it avoids drawing dots that cover
- * each other.
- */
+/** Inclusive bounds on the numeric input; chosen so the rail stays legible without scrolling. */
 export const TOP_N_COUNT_MIN = 1;
-export const TOP_N_COUNT_MAX = RAIL_MAX_DOTS;
+export const TOP_N_COUNT_MAX = 50;
 
 /** Accessible name for the top-N navigation rail. */
 export const TOP_N_RAIL_LABEL = 'Top-ranked operations';

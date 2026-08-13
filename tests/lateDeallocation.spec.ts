@@ -222,6 +222,15 @@ describe('getLateDeallocationReport', () => {
         ).toBeNull();
     });
 
+    it('accepts tensor id 0 as a real tensor', () => {
+        expect(
+            getLateDeallocationReport(
+                { tensorId: 0, address: 2048, operationId: 6, consumers: [3] },
+                operationNamesById,
+            ),
+        ).toMatchObject({ id: 0, lastConsumerOperationId: 3, lastOperationId: 6 });
+    });
+
     it('names an unknown consumer operation with an empty string rather than dropping the report', () => {
         expect(
             getLateDeallocationReport({ tensorId: 7, address: 2048, operationId: 6, consumers: [4] }, new Map()),

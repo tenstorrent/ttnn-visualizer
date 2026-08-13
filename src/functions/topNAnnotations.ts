@@ -199,9 +199,8 @@ export const selectTopNAnnotations = ({
         normalise = spec.normalise;
     }
 
-    // The count is persisted per user, so a value stored before the rail gained
-    // a capacity can still arrive here asking for more dots than can be drawn
-    // without them covering each other.
+    // The count is persisted per user, so a value stored before the ceiling
+    // changed can still arrive here asking for more than the input allows.
     const topN = pickTopN(candidates, Math.min(n, TOP_N_COUNT_MAX));
     if (topN.length === 0) {
         return annotationsByOpId;

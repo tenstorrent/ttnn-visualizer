@@ -135,7 +135,7 @@ const BufferSummaryPlotControls = ({ lateDeallocationRunCount = 0 }: BufferSumma
                 <div className='late-dealloc-control'>
                     <GlobalSwitch
                         label='Mark late tensor deallocations'
-                        checked={showDeallocationReport}
+                        checked={showDeallocationReport && hasLateDeallocations}
                         onChange={() => {
                             setShowDeallocationReport(!showDeallocationReport);
                         }}
@@ -208,7 +208,7 @@ const BufferSummaryPlotControls = ({ lateDeallocationRunCount = 0 }: BufferSumma
                 </Tooltip>
                 <NumericInput
                     aria-label='Top-N count'
-                    value={topNCount}
+                    value={Math.min(topNCount, TOP_N_COUNT_MAX)}
                     min={TOP_N_COUNT_MIN}
                     max={TOP_N_COUNT_MAX}
                     minorStepSize={null}
