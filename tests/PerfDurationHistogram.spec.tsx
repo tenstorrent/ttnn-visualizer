@@ -3,21 +3,35 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import '@testing-library/jest-dom/vitest';
-import { cleanup, render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
-import { firePlotClick, getPlotInstances, resetPlotPropsCapture } from './mocks/plotComponent';
+import { act, cleanup, render, screen } from '@testing-library/react';
+import { useAtomValue } from 'jotai';
+import { Annotations } from 'plotly.js';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+    firePlotAnnotationClick,
+    firePlotClick,
+    getLatestPlotLayout,
+    getPlotInstances,
+    resetPlotPropsCapture,
+} from './mocks/plotComponent';
 import PerfDurationHistogram from '../src/components/performance/PerfDurationHistogram';
 import {
     MAX_LEGEND_OP_CODES,
     OTHER_OP_CODE_COLOUR,
     OTHER_OP_CODE_LABEL,
+    PERF_DURATION_BUCKET_FILTER_HINT,
     PERF_DURATION_HISTOGRAM_ACTIVE_REPORT_SUBTITLE,
     PERF_DURATION_HISTOGRAM_EMPTY_MESSAGE,
 } from '../src/definitions/PerfDurationHistogram';
-import { OpType } from '../src/definitions/Performance';
-import { PerfChartId } from '../src/definitions/PerformanceCharts';
+import { OpType, PerfTabIds } from '../src/definitions/Performance';
+import { PERF_CHART_TABLE_FILTER_HINT, PerfChartId } from '../src/definitions/PerformanceCharts';
+import { PERF_CHART_TRANSPARENT } from '../src/definitions/PlotConfigurations';
+import { formatDurationBucketRange } from '../src/functions/formatDurationBucketRange';
 import { TEST_IDS } from '../src/definitions/TestIds';
 import { MarkerColours, TypedPerfTableRow } from '../src/definitions/PerfTable';
+import { durationBucketFilterListAtom, perfSelectedTabAtom } from '../src/store/app';
+import { AtomProviderInitialValues } from './helpers/atomProvider';
+import { setUpScrollResetMocks } from './helpers/mockScrollReset';
 import { TestProviders } from './helpers/TestProviders';
 
 type HistogramTrace = {
@@ -25,7 +39,30 @@ type HistogramTrace = {
     type?: string;
     customdata?: unknown;
     marker?: { color?: string };
+    x?: string[];
     y?: number[];
+};
+
+const getHintText = () => screen.queryAllByTestId(TEST_IDS.PERF_CHART_HINT).map((hint) => hint.textContent);
+
+// Distinct stand-ins for the real theme tokens: jsdom applies no stylesheet, so without these
+// every chrome colour resolves to '' and any assertion comparing two of them would hold vacuously.
+const CHART_CHROME = {
+    line: 'rgb(11, 11, 11)',
+    text: 'rgb(22, 22, 22)',
+    surface: 'rgb(33, 33, 33)',
+};
+
+const setUpChartChrome = () => {
+    document.documentElement.style.setProperty('--perf-chart-line', CHART_CHROME.line);
+    document.documentElement.style.setProperty('--perf-chart-text', CHART_CHROME.text);
+    document.documentElement.style.setProperty('--perf-chart-surface', CHART_CHROME.surface);
+};
+
+const tearDownChartChrome = () => {
+    document.documentElement.style.removeProperty('--perf-chart-line');
+    document.documentElement.style.removeProperty('--perf-chart-text');
+    document.documentElement.style.removeProperty('--perf-chart-surface');
 };
 
 const row = (overrides: Partial<TypedPerfTableRow> = {}): TypedPerfTableRow =>
@@ -147,8 +184,23 @@ describe('PerfDurationHistogram', () => {
             </TestProviders>,
         );
 
-        expect(screen.queryByTestId(TEST_IDS.PERF_CHART_TABLE_FILTER_HINT)).not.toBeInTheDocument();
+        // The bucket controls stay clickable, so a hint remains — minus the op code guidance
+        expect(getHintText()).toEqual([PERF_DURATION_BUCKET_FILTER_HINT]);
         expect(getPlotInstances()[0]?.onClick).toBeUndefined();
+    });
+
+    it('lists the op code and bucket guidance as separate hints when both apply', () => {
+        render(
+            <TestProviders>
+                <PerfDurationHistogram
+                    rows={[row()]}
+                    selectedOpCodes={[{ opCode: 'Matmul', colour: MarkerColours[0] }]}
+                    onOpCodeClick={vi.fn()}
+                />
+            </TestProviders>,
+        );
+
+        expect(getHintText()).toEqual([PERF_CHART_TABLE_FILTER_HINT, PERF_DURATION_BUCKET_FILTER_HINT]);
     });
 
     it('rolls overflow op codes into Other and does not filter on Other clicks', () => {
@@ -190,5 +242,213 @@ describe('PerfDurationHistogram', () => {
 
         firePlotClick({ points: [{ customdata: otherPoint }] } as never);
         expect(onOpCodeClick).not.toHaveBeenCalled();
+    });
+});
+
+describe('PerfDurationHistogram duration bucket controls', () => {
+    // 5us and 50us straddle a decade boundary, so the histogram spans exactly two buckets
+    const twoBucketRows = [row({ device_time: 5 }), row({ device_time: 50, id: 2 })];
+
+    function SelectedTabProbe() {
+        return <span data-testid='selected-tab'>{String(useAtomValue(perfSelectedTabAtom))}</span>;
+    }
+
+    const renderHistogram = (selectedBuckets: number[] = []) => {
+        const initialAtomValues: AtomProviderInitialValues = [[perfSelectedTabAtom, PerfTabIds.CHARTS]];
+
+        if (selectedBuckets.length > 0) {
+            initialAtomValues.push([durationBucketFilterListAtom, selectedBuckets]);
+        }
+
+        return render(
+            <TestProviders initialAtomValues={initialAtomValues}>
+                <PerfDurationHistogram
+                    rows={twoBucketRows}
+                    selectedOpCodes={[{ opCode: 'Matmul', colour: MarkerColours[0] }]}
+                />
+                <SelectedTabProbe />
+            </TestProviders>,
+        );
+    };
+
+    const getAnnotations = () => (getLatestPlotLayout()?.annotations ?? []) as Partial<Annotations>[];
+
+    const getSelectedFlags = () => getAnnotations().map((annotation) => annotation.bgcolor !== PERF_CHART_TRANSPARENT);
+
+    // Plotly calls the handler outside React's event system, so the re-render needs flushing
+    const clickBucket = (index: number) => act(() => firePlotAnnotationClick(index));
+
+    beforeEach(() => {
+        setUpScrollResetMocks();
+        setUpChartChrome();
+    });
+
+    afterEach(() => {
+        tearDownChartChrome();
+        vi.restoreAllMocks();
+    });
+
+    it('draws one clickable annotation per histogram column, labelled with its range', () => {
+        renderHistogram();
+
+        const annotations = getAnnotations();
+        expect(annotations).toHaveLength(2);
+        expect(annotations.every((annotation) => annotation.captureevents === true)).toBe(true);
+        // The x tick labels are switched off, so these carry the only range labelling in the chart
+        expect(annotations.map((annotation) => annotation.text)).toEqual([
+            formatDurationBucketRange(1, 10),
+            formatDurationBucketRange(10, 100),
+        ]);
+    });
+
+    it('anchors each control to the column it filters', () => {
+        renderHistogram();
+
+        const traceCategories = (getPlotInstances()[0]?.data as HistogramTrace[])[0]?.x;
+        expect(traceCategories).toEqual([formatDurationBucketRange(1, 10), formatDurationBucketRange(10, 100)]);
+        expect(getAnnotations().map((annotation) => annotation.x)).toEqual(traceCategories);
+    });
+
+    it('explains the bucket controls in the chart hint rather than per-annotation hover text', () => {
+        renderHistogram();
+
+        expect(getHintText()).toContain(PERF_DURATION_BUCKET_FILTER_HINT);
+        expect(getAnnotations().every((annotation) => annotation.hovertext === undefined)).toBe(true);
+    });
+
+    it('replaces the x tick labels rather than duplicating them', () => {
+        renderHistogram();
+
+        const xaxis = getLatestPlotLayout()?.xaxis as { showticklabels?: boolean } | undefined;
+        expect(xaxis?.showticklabels).toBe(false);
+    });
+
+    it('draws no bucket annotations when there are no eligible ops', () => {
+        render(
+            <TestProviders>
+                <PerfDurationHistogram
+                    rows={[row({ device_time: 0 })]}
+                    selectedOpCodes={[{ opCode: 'Matmul', colour: MarkerColours[0] }]}
+                />
+            </TestProviders>,
+        );
+
+        expect(screen.getByText(PERF_DURATION_HISTOGRAM_EMPTY_MESSAGE)).toBeInTheDocument();
+        expect(getPlotInstances()).toHaveLength(0);
+        expect(getAnnotations()).toHaveLength(0);
+    });
+
+    it('fills in buckets already held in the filter', () => {
+        renderHistogram([1]);
+
+        expect(getSelectedFlags()).toEqual([true, false]);
+
+        // Selection inverts fill, border and label, and the label must flip with the fill to stay legible
+        const [selected, unselected] = getAnnotations();
+        expect(selected.bgcolor).toBe(CHART_CHROME.text);
+        expect(selected.bordercolor).toBe(CHART_CHROME.text);
+        expect(selected.font?.color).toBe(CHART_CHROME.surface);
+        expect(unselected.bgcolor).toBe(PERF_CHART_TRANSPARENT);
+        expect(unselected.bordercolor).toBe(CHART_CHROME.line);
+        expect(unselected.font?.color).toBe(CHART_CHROME.text);
+    });
+
+    it('filters to the clicked bucket and moves to the table tab', () => {
+        renderHistogram();
+        expect(getSelectedFlags()).toEqual([false, false]);
+
+        clickBucket(0);
+
+        expect(getSelectedFlags()).toEqual([true, false]);
+        expect(screen.getByTestId('selected-tab')).toHaveTextContent(PerfTabIds.TABLE);
+    });
+
+    it('replaces the previous selection rather than unioning with it', () => {
+        renderHistogram([1]);
+
+        clickBucket(1);
+
+        expect(getSelectedFlags()).toEqual([false, true]);
+    });
+
+    it('ignores a click on an annotation index with no matching bucket', () => {
+        renderHistogram();
+
+        clickBucket(99);
+
+        expect(getSelectedFlags()).toEqual([false, false]);
+        expect(screen.getByTestId('selected-tab')).toHaveTextContent(PerfTabIds.CHARTS);
+    });
+
+    // The annotations are memoized for reference stability: PerfChart derives the Plotly layout
+    // from them, and Plotly diffs layout by reference, so losing the identity redraws the whole
+    // chart on every PerfReport render. Nothing else in this suite would notice.
+    it('reuses the derived layout across a re-render with unchanged rows and op codes', () => {
+        const selectedOpCodes = [{ opCode: 'Matmul', colour: MarkerColours[0] }];
+        const tree = () => (
+            <TestProviders initialAtomValues={[[perfSelectedTabAtom, PerfTabIds.CHARTS]]}>
+                <PerfDurationHistogram
+                    rows={twoBucketRows}
+                    selectedOpCodes={selectedOpCodes}
+                />
+            </TestProviders>
+        );
+
+        const { rerender } = render(tree());
+        rerender(tree());
+
+        const [first, second] = getPlotInstances();
+        expect(second).toBeDefined();
+        expect(second.layout).toBe(first.layout);
+        expect((second.layout as { annotations?: unknown }).annotations).toBe(
+            (first.layout as { annotations?: unknown }).annotations,
+        );
+    });
+
+    describe('empty columns', () => {
+        // Decades run contiguously between 5us and 5000us, so the two middle columns hold no op
+        const gappedRows = [row({ device_time: 5 }), row({ device_time: 5000, id: 2 })];
+
+        const renderGappedHistogram = () =>
+            render(
+                <TestProviders initialAtomValues={[[perfSelectedTabAtom, PerfTabIds.CHARTS]]}>
+                    <PerfDurationHistogram
+                        rows={gappedRows}
+                        selectedOpCodes={[{ opCode: 'Matmul', colour: MarkerColours[0] }]}
+                    />
+                    <SelectedTabProbe />
+                </TestProviders>,
+            );
+
+        it('mutes the controls of the columns holding no op and stops them capturing clicks', () => {
+            renderGappedHistogram();
+
+            const annotations = getAnnotations();
+            expect(annotations.map((annotation) => annotation.captureevents)).toEqual([true, false, false, true]);
+            expect(annotations.map((annotation) => annotation.font?.color)).toEqual([
+                CHART_CHROME.text,
+                CHART_CHROME.line,
+                CHART_CHROME.line,
+                CHART_CHROME.text,
+            ]);
+        });
+
+        it('does not filter on a click through an empty column, which would empty the table', () => {
+            renderGappedHistogram();
+
+            clickBucket(1);
+
+            expect(getSelectedFlags()).toEqual([false, false, false, false]);
+            expect(screen.getByTestId('selected-tab')).toHaveTextContent(PerfTabIds.CHARTS);
+        });
+
+        it('still filters on the populated columns either side of the gap', () => {
+            renderGappedHistogram();
+
+            clickBucket(3);
+
+            expect(getSelectedFlags()).toEqual([false, false, false, true]);
+            expect(screen.getByTestId('selected-tab')).toHaveTextContent(PerfTabIds.TABLE);
+        });
     });
 });

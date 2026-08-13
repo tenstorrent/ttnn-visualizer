@@ -15,6 +15,9 @@ export interface MlirServerConnection {
 
 export const MLIR_UPLOAD_PATH = '/apipost/v1/upload';
 
+/** Accessible name of the MLIR server's own port field, as opposed to the SSH port beside it. */
+export const MLIR_PORT_LABEL = 'MLIR Port';
+
 // Model formats the MLIR server (Model Explorer) accepts:
 // TF (.pb/.pbtxt/.graphdef), TFLite (.tflite), TFJS/JAX (.json/.pb),
 // PyTorch ExportedProgram (.pt2), MLIR (.mlir/.mlirbc).

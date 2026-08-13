@@ -82,21 +82,31 @@ function PerfOpCountVsRuntimeChart({ selectedOpCodes, datasets = [], onOpCodeCli
         [datasets, filteredOpCodes, selectedOpCodes, perfReport, comparisonReportList],
     );
 
-    const configuration: PlotConfiguration = {
-        // No margin override: all-zero was previously ignored by PerfChart and would now
-        // clip category labels (xaxis has no automargin).
-        barMode: 'stack',
-        yAxis: {
-            tickformat: '.0%',
-            range: [0, 1],
-        },
-    };
+    const chartData = useMemo(
+        () => [...opCountData.flat(), ...opDeviceTimeData.flat()],
+        [opCountData, opDeviceTimeData],
+    );
+
+    // Memoized because PerfChart derives the Plotly layout from it, and a fresh object redraws
+    // the chart — and re-reads the chart chrome from the stylesheet — on every render.
+    const configuration = useMemo<PlotConfiguration>(
+        () => ({
+            // No margin override: all-zero was previously ignored by PerfChart and would now
+            // clip category labels (xaxis has no automargin).
+            barMode: 'stack',
+            yAxis: {
+                tickformat: '.0%',
+                range: [0, 1],
+            },
+        }),
+        [],
+    );
 
     return (
         <PerfChart
             id={PerfChartId.OpCountVsRuntime}
             title={PERF_CHART_LABELS[PerfChartId.OpCountVsRuntime]}
-            chartData={[...opCountData.flat(), ...opDeviceTimeData.flat()]}
+            chartData={chartData}
             configuration={configuration}
             onPlotClick={onOpCodeClick ? handlePlotClick : undefined}
         />

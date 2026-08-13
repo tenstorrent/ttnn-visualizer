@@ -8,9 +8,15 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { ComponentProps } from 'react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import RemoteConnectionSelector from '../src/components/report-selection/RemoteConnectionSelector';
+import { ConnectionNameSubject, getNameFieldLabel } from '../src/definitions/ConnectionDialog';
 import { ConnectionStatus, ConnectionTestStates } from '../src/definitions/ConnectionStatus';
 import { CANCEL_DELETE_LABEL, CONFIRM_DELETE_LABEL } from '../src/definitions/ManagedEntity';
-import { RemoteConnection } from '../src/definitions/RemoteConnection';
+import {
+    FETCH_REMOTE_FOLDERS_LABEL,
+    REMOTE_MEMORY_PATH_LABEL,
+    RemoteConnection,
+} from '../src/definitions/RemoteConnection';
+import { REMOTE_PATH_NOT_ABSOLUTE_ERROR, SSH_HOST_LABEL } from '../src/definitions/SshConnectionFields';
 import { TEST_IDS } from '../src/definitions/TestIds';
 import {
     getConnectionTrigger,
@@ -58,12 +64,13 @@ const SECOND_CONNECTION: RemoteConnection = {
 /** The dialog only enables its save button once a connection test has come back clean. */
 const PASSING_TESTS: ConnectionStatus[] = [
     { status: ConnectionTestStates.OK, message: 'SSH connection established' },
-    { status: ConnectionTestStates.OK, message: 'Memory report folder path exists' },
+    { status: ConnectionTestStates.OK, message: 'Found 3 memory reports' },
 ];
 
 const WAIT_FOR_OPTIONS = { timeout: 1000 };
 const SAVE_CONNECTION_LABEL = 'Save connection';
 const EDITED_NAME = 'Renamed';
+const CONNECTION_NAME_LABEL = getNameFieldLabel(ConnectionNameSubject.CONNECTION);
 
 const renderSelector = (overrides: Partial<ComponentProps<typeof RemoteConnectionSelector>> = {}) => {
     const props = {
@@ -100,7 +107,7 @@ const openConnectionDropdown = async (selected: RemoteConnection = FIRST_CONNECT
 
 /** Rename the open dialog's connection and save it, which needs a passing test result first. */
 const runTestsAndSave = async () => {
-    fireEvent.change(screen.getByLabelText('Name'), { target: { value: EDITED_NAME } });
+    fireEvent.change(screen.getByLabelText(CONNECTION_NAME_LABEL), { target: { value: EDITED_NAME } });
     fireEvent.click(screen.getByRole('button', { name: 'Run tests' }));
 
     await waitFor(() => expect(screen.getByRole('button', { name: SAVE_CONNECTION_LABEL })).toBeEnabled());
@@ -204,8 +211,8 @@ it('seeds the edit dialog from the row that was clicked', async () => {
     fireEvent.click(screen.getByLabelText(getEditConnectionLabel(SECOND_CONNECTION)));
 
     expect(screen.getByText('Edit remote connection')).toBeInTheDocument();
-    expect(screen.getByLabelText('Name')).toHaveValue(SECOND_CONNECTION.name);
-    expect(screen.getByLabelText('SSH Host')).toHaveValue(SECOND_CONNECTION.host);
+    expect(screen.getByLabelText(CONNECTION_NAME_LABEL)).toHaveValue(SECOND_CONNECTION.name);
+    expect(screen.getByLabelText(SSH_HOST_LABEL)).toHaveValue(SECOND_CONNECTION.host);
 });
 
 it('applies a saved edit against the row it was opened from', async () => {
@@ -243,6 +250,61 @@ it('fetches folder lists when the edited connection is the selected one', async 
 
     expect(onSyncRemoteFolderList).toHaveBeenCalledTimes(1);
     expect(onSyncRemoteFolderList).toHaveBeenCalledWith(expect.objectContaining({ name: EDITED_NAME }));
+});
+
+// A connection saved before report paths had to be absolute stays in the list — dropping it
+// on read would erase it from storage on the next write. So the list has to say what is
+// wrong and refuse the fetch, leaving editing as the way out.
+const LEGACY_CONNECTION: RemoteConnection = {
+    name: 'Legacy',
+    username: 'tt',
+    host: 'worker-03',
+    port: 2222,
+    profilerPath: 'tt-metal/generated/ttnn/reports',
+};
+
+it('flags only the row whose report path the server would refuse', async () => {
+    renderSelector({ connectionList: [FIRST_CONNECTION, LEGACY_CONNECTION] });
+    await openConnectionDropdown();
+
+    const warnings = screen.getAllByTestId(TEST_IDS.REMOTE_CONNECTION_PATH_WARNING);
+
+    expect(warnings).toHaveLength(1);
+    expect(screen.getByLabelText(`${LEGACY_CONNECTION.name} has an unusable report path`)).toBeInTheDocument();
+});
+
+it('keeps the flagged connection editable so the path can be fixed', async () => {
+    renderSelector({ connectionList: [FIRST_CONNECTION, LEGACY_CONNECTION] });
+    await openConnectionDropdown();
+
+    fireEvent.click(screen.getByLabelText(getEditConnectionLabel(LEGACY_CONNECTION)));
+
+    const pathInput = screen.getByLabelText(REMOTE_MEMORY_PATH_LABEL);
+
+    expect(pathInput).toHaveValue(LEGACY_CONNECTION.profilerPath);
+    expect(pathInput).toHaveAccessibleDescription(REMOTE_PATH_NOT_ABSOLUTE_ERROR);
+});
+
+it('refuses the folder fetch while the selected connection has an unusable path', () => {
+    const { onSyncRemoteFolderList } = renderSelector({
+        connectionList: [LEGACY_CONNECTION],
+        connection: LEGACY_CONNECTION,
+    });
+
+    const fetchButton = screen.getByRole('button', { name: FETCH_REMOTE_FOLDERS_LABEL });
+
+    expect(fetchButton).toBeDisabled();
+
+    fireEvent.click(fetchButton);
+
+    expect(onSyncRemoteFolderList).not.toHaveBeenCalled();
+});
+
+it('allows the folder fetch for a connection whose paths are accepted', () => {
+    renderSelector();
+
+    expect(screen.getByRole('button', { name: FETCH_REMOTE_FOLDERS_LABEL })).toBeEnabled();
+    expect(screen.queryByTestId(TEST_IDS.REMOTE_CONNECTION_PATH_WARNING)).not.toBeInTheDocument();
 });
 
 it('leaves no reachable row action once the selector is disabled', async () => {

@@ -26,7 +26,6 @@ import json
 import logging
 import os
 import re
-import shlex
 import tempfile
 import time
 import uuid
@@ -41,6 +40,7 @@ from ttnn_visualizer.exceptions import (
     SSHException,
 )
 from ttnn_visualizer.models import MlirServerConnection, RemoteConnection, StatusMessage
+from ttnn_visualizer.remote_command import RemoteCommand, remote_arg
 from ttnn_visualizer.ssh_client import SSHClient
 
 logger = logging.getLogger(__name__)
@@ -147,12 +147,14 @@ def test_mlir_server_connection(
 
     curl_cmd = (
         "curl -s -o /dev/null -w '%{http_code}' "
-        f"--connect-timeout {_CURL_CONNECT_TIMEOUT_SECONDS} {shlex.quote(_remote_upload_url(http_port))}"
+        f"--connect-timeout {_CURL_CONNECT_TIMEOUT_SECONDS} "
+        f"{remote_arg(_remote_upload_url(http_port))}"
     )
 
     try:
         output = client.execute_command(
-            curl_cmd, timeout=_ENDPOINT_TEST_TIMEOUT_SECONDS
+            RemoteCommand.from_shell_fragment(curl_cmd),
+            timeout=_ENDPOINT_TEST_TIMEOUT_SECONDS,
         )
     except SSHException as e:
         # curl exits non-zero (e.g. connection refused) when the server is down.
@@ -212,20 +214,21 @@ def _upload_file_to_server(
         f"/tmp/{_TEMP_UPLOAD_BASENAME_PREFIX}"
         f"{os.getpid()}_{uuid.uuid4().hex}{Path(safe_filename).suffix}"
     )
-    upload_form_arg = shlex.quote(f"{MLIR_UPLOAD_FIELD}=@{remote_path}")
+    upload_form_arg = remote_arg(f"{MLIR_UPLOAD_FIELD}=@{remote_path}")
     curl_cmd = (
         "curl -sS -H 'Expect:' -w '\\n%{http_code}' "
         f"--connect-timeout {_CURL_CONNECT_TIMEOUT_SECONDS} "
         f"--max-time {_UPLOAD_TIMEOUT_SECONDS} "
         f"-F {upload_form_arg} "
-        f"{shlex.quote(upload_url)}"
+        f"{remote_arg(upload_url)}"
     )
 
     started = time.perf_counter()
     try:
         client.upload_file(local_path, remote_path, timeout=_UPLOAD_TIMEOUT_SECONDS)
         stdout = client.execute_command(
-            curl_cmd, timeout=_UPLOAD_TIMEOUT_SECONDS + _CURL_TIMEOUT_GRACE_SECONDS
+            RemoteCommand.from_shell_fragment(curl_cmd),
+            timeout=_UPLOAD_TIMEOUT_SECONDS + _CURL_TIMEOUT_GRACE_SECONDS,
         )
     except SSHException as e:
         elapsed = time.perf_counter() - started
@@ -238,7 +241,7 @@ def _upload_file_to_server(
         Path(local_path).unlink(missing_ok=True)
         try:
             client.execute_command(
-                f"rm -f {shlex.quote(remote_path)}",
+                RemoteCommand.of("rm", "-f", remote_path),
                 timeout=_CURL_CONNECT_TIMEOUT_SECONDS,
             )
         except SSHException:
@@ -388,7 +391,7 @@ def _convert_with_extension(
         "curl -sS -X POST -H 'Content-Type: application/json' "
         f"--connect-timeout {_CURL_CONNECT_TIMEOUT_SECONDS} "
         f"--max-time {_CONVERT_TIMEOUT_SECONDS} "
-        f"-d {shlex.quote(payload)} {shlex.quote(convert_url)}"
+        f"-d {remote_arg(payload)} {remote_arg(convert_url)}"
     )
 
     logger.info(
@@ -398,7 +401,8 @@ def _convert_with_extension(
     started = time.perf_counter()
     try:
         stdout = client.execute_command(
-            curl_cmd, timeout=_CONVERT_TIMEOUT_SECONDS + _CURL_TIMEOUT_GRACE_SECONDS
+            RemoteCommand.from_shell_fragment(curl_cmd),
+            timeout=_CONVERT_TIMEOUT_SECONDS + _CURL_TIMEOUT_GRACE_SECONDS,
         )
     except SSHException as e:
         return None, str(e)

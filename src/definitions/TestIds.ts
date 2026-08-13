@@ -23,10 +23,14 @@ export const TEST_IDS = Object.freeze({
     // Report-selection dropdown rows, each carrying its own edit/delete actions
     FOLDER_PICKER_ROW: 'folder-picker-row',
     REMOTE_CONNECTION_ROW: 'remote-connection-row',
+    REMOTE_CONNECTION_PATH_WARNING: 'remote-connection-path-warning',
     MLIR_SERVER_ROW: 'mlir-server-row',
 
     // Comparison components
     COMPARISON_REPORT_SELECTOR: 'comparison-report-selector',
+
+    // Connection dialogs
+    CONNECTION_TEST_RESULTS: 'connection-test-results',
 
     // Navigation
     ADD_NEW_CONNECTION: 'add-new-connection',
@@ -47,7 +51,8 @@ export const TEST_IDS = Object.freeze({
     PERF_DURATION_HISTOGRAM: 'perf-duration-histogram',
     PERF_HEURISTIC_FLAGS: 'perf-heuristic-flags',
     PERF_HEURISTIC_FLAG: 'perf-heuristic-flag',
-    PERF_CHART_TABLE_FILTER_HINT: 'perf-chart-table-filter-hint',
+    PERF_CHART_HINT: 'perf-chart-hint',
+    PERF_NPE_LINK: 'perf-npe-link',
 
     // General UI
     LOADING_SPINNER: 'loading-spinner',

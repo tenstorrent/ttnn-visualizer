@@ -3,6 +3,7 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { Classes } from '@blueprintjs/core';
+import { HttpStatusCode } from 'axios';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { TestProviders } from './helpers/TestProviders';
@@ -13,6 +14,12 @@ import mockPerformanceReportFolders from './data/mockPerformanceReportFolders.js
 import { ReportFolder } from '../src/definitions/Reports';
 import LocalFolderSelector from '../src/components/report-selection/LocalFolderSelector';
 import { CONFIRM_DELETE_LABEL, ManagedEntity } from '../src/definitions/ManagedEntity';
+import {
+    MEMORY_REPORT_DELETED_TOAST_TITLE,
+    MEMORY_REPORT_DELETE_FAILED_TOAST_TITLE,
+    PERFORMANCE_REPORT_DELETED_TOAST_TITLE,
+    PERFORMANCE_REPORT_DELETE_FAILED_TOAST_TITLE,
+} from '../src/definitions/notifyActiveReport';
 import { TEST_IDS } from '../src/definitions/TestIds';
 import { getDeleteActionLabel } from '../src/functions/managedEntityLabels';
 import { isActivatingReportAtom } from '../src/store/app';
@@ -28,9 +35,10 @@ const mockPerfFolderList = [...mockPerformanceReportFolders];
 
 // The folder list is the mocked query's only source of truth, so deleting has to remove from it
 // for anything downstream of the delete to be observable.
-const { mockUpdateInstance, mockDeleteProfiler, mockProfilerFolders } = vi.hoisted(() => ({
+const { mockUpdateInstance, mockDeleteProfiler, mockDeletePerformance, mockProfilerFolders } = vi.hoisted(() => ({
     mockUpdateInstance: vi.fn(),
     mockDeleteProfiler: vi.fn(),
+    mockDeletePerformance: vi.fn(),
     mockProfilerFolders: [] as { path: string; reportName: string }[],
 }));
 
@@ -71,7 +79,7 @@ vi.mock('../src/hooks/useAPI', async () => {
         useReportFolderList: () => ({ data: mockProfilerFolders }),
         updateInstance: (...args: unknown[]) => mockUpdateInstance(...args),
         deleteProfiler: (...args: unknown[]) => mockDeleteProfiler(...args),
-        deletePerformance: vi.fn().mockResolvedValue({ success: true }),
+        deletePerformance: (...args: unknown[]) => mockDeletePerformance(...args),
     };
 });
 
@@ -105,8 +113,19 @@ afterEach(() => {
 });
 
 beforeEach(() => {
-    // Restore the list in place: the mock factory closed over this array reference.
+    // Restore both lists in place: the mock factories closed over these array references.
     mockProfilerFolders.splice(0, mockProfilerFolders.length, ...mockProfilerFolderList);
+    mockPerfFolderList.splice(0, mockPerfFolderList.length, ...mockPerformanceReportFolders);
+    mockDeletePerformance.mockReset();
+    mockDeletePerformance.mockImplementation((path: string) => {
+        const folderIndex = mockPerfFolderList.findIndex((folder) => folder.path === path);
+
+        if (folderIndex !== -1) {
+            mockPerfFolderList.splice(folderIndex, 1);
+        }
+
+        return Promise.resolve({ success: true });
+    });
     mockDeleteProfiler.mockReset();
     mockDeleteProfiler.mockImplementation((path: string) => {
         const folderIndex = mockProfilerFolders.findIndex((folder) => folder.path === path);
@@ -421,6 +440,7 @@ it('deletes memory report and updates state', async () => {
         WAIT_FOR_OPTIONS,
     );
 
+    expect(screen.getByText(MEMORY_REPORT_DELETED_TOAST_TITLE)).not.toBeNull();
     expect(mockDeleteProfiler).toHaveBeenCalledTimes(1);
     expect(mockDeleteProfiler).toHaveBeenCalledWith(deletedFolder.path);
     expect(getAllButtonsWithText(SELECT_REPORT_TEXT)).toHaveLength(2);
@@ -438,4 +458,121 @@ it('deletes memory report and updates state', async () => {
     mockProfilerFolders.forEach((folder) => {
         expect(menuRows.some((row) => row?.includes(`/${folder.path}`) && row?.includes(folder.reportName))).toBe(true);
     });
+});
+
+it('deletes performance report and updates state', async () => {
+    render(
+        <TestProviders>
+            <LocalFolderSelector />
+        </TestProviders>,
+    );
+    const deletedFolder = mockPerfFolderList[0];
+    const performanceSelect = getAllButtonsWithText(SELECT_REPORT_TEXT)[1];
+
+    performanceSelect.click();
+    await waitFor(testForPortal, WAIT_FOR_OPTIONS);
+
+    fireEvent.click(screen.getByLabelText(getDeleteActionLabel(ManagedEntity.REPORT, deletedFolder.reportName)));
+
+    await waitFor(() => expect(document.querySelector('[role="alertdialog"]')).not.toBe(null), WAIT_FOR_OPTIONS);
+
+    fireEvent.click(screen.getByRole('button', { name: CONFIRM_DELETE_LABEL }));
+
+    await waitFor(
+        () => expect(screen.getByTestId(TEST_IDS.TOAST_FILENAME).textContent).to.contain(deletedFolder.reportName),
+        WAIT_FOR_OPTIONS,
+    );
+
+    expect(screen.getByText(PERFORMANCE_REPORT_DELETED_TOAST_TITLE)).not.toBeNull();
+    expect(mockDeletePerformance).toHaveBeenCalledTimes(1);
+    expect(mockDeletePerformance).toHaveBeenCalledWith(deletedFolder.path);
+
+    performanceSelect.click();
+    await waitFor(testForPortal, WAIT_FOR_OPTIONS);
+
+    // Scoped to the dropdown rows: the delete toast is still on screen and carries the report name
+    // too, so an unscoped query would match it and hide the row's disappearance.
+    const menuRows = screen.getAllByTestId(TEST_IDS.FOLDER_PICKER_ROW).map((row) => row.textContent);
+
+    expect(menuRows).toHaveLength(mockPerformanceReportFolders.length - 1);
+    expect(menuRows.some((row) => row?.includes(`/${deletedFolder.path}`))).toBe(false);
+});
+
+// A stand-in for whatever the server puts in the 403's `error` field, not a copy of it — the
+// backend's exact wording is pinned where it is defined (test_report_deletion.py asserts against
+// the imported constant). What these tests pin is the plumbing: server `error` reaches the toast.
+const SERVER_ERROR_DETAIL = 'Reports in the TT-Metal tree are not managed here';
+
+/** Shaped like the AxiosError a refused DELETE actually rejects with, which is the branch of
+ *  getResponseError the handlers depend on — a bare Error takes a different path. */
+const refusedDelete = () => ({
+    isAxiosError: true,
+    response: { status: HttpStatusCode.Forbidden, data: { error: SERVER_ERROR_DETAIL } },
+});
+
+/** Opens the picker, deletes the named report through the confirmation, and waits for the toast. */
+async function confirmDeleteOf(select: HTMLElement, folder: ReportFolder) {
+    select.click();
+    await waitFor(testForPortal, WAIT_FOR_OPTIONS);
+
+    fireEvent.click(screen.getByLabelText(getDeleteActionLabel(ManagedEntity.REPORT, folder.reportName)));
+
+    await waitFor(() => expect(document.querySelector('[role="alertdialog"]')).not.toBe(null), WAIT_FOR_OPTIONS);
+
+    fireEvent.click(screen.getByRole('button', { name: CONFIRM_DELETE_LABEL }));
+
+    // The failure is what the user sees — without this the delete is silent.
+    await waitFor(
+        () => expect(screen.getByTestId(TEST_IDS.TOAST_FILENAME).textContent).to.contain(SERVER_ERROR_DETAIL),
+        WAIT_FOR_OPTIONS,
+    );
+}
+
+it('surfaces an error toast and keeps the report when the memory delete fails', async () => {
+    mockDeleteProfiler.mockRejectedValueOnce(refusedDelete());
+
+    render(
+        <TestProviders>
+            <LocalFolderSelector />
+        </TestProviders>,
+    );
+    const deletedFolder = mockProfilerFolderList[0];
+    const profilerSelect = getAllButtonsWithText(SELECT_REPORT_TEXT)[0];
+
+    await confirmDeleteOf(profilerSelect, deletedFolder);
+
+    expect(screen.getByText(MEMORY_REPORT_DELETE_FAILED_TOAST_TITLE)).not.toBeNull();
+
+    profilerSelect.click();
+    await waitFor(testForPortal, WAIT_FOR_OPTIONS);
+
+    const menuRows = screen.getAllByTestId(TEST_IDS.FOLDER_PICKER_ROW).map((row) => row.textContent);
+
+    expect(menuRows).toHaveLength(mockProfilerFolderList.length);
+    expect(menuRows.some((row) => row?.includes(`/${deletedFolder.path}`))).toBe(true);
+});
+
+it('surfaces an error toast and keeps the report when the performance delete fails', async () => {
+    mockDeletePerformance.mockRejectedValueOnce(refusedDelete());
+
+    render(
+        <TestProviders>
+            <LocalFolderSelector />
+        </TestProviders>,
+    );
+    const deletedFolder = mockPerfFolderList[0];
+    const performanceSelect = getAllButtonsWithText(SELECT_REPORT_TEXT)[1];
+
+    await confirmDeleteOf(performanceSelect, deletedFolder);
+
+    expect(screen.getByText(PERFORMANCE_REPORT_DELETE_FAILED_TOAST_TITLE)).not.toBeNull();
+    expect(mockDeletePerformance).toHaveBeenCalledWith(deletedFolder.path);
+
+    performanceSelect.click();
+    await waitFor(testForPortal, WAIT_FOR_OPTIONS);
+
+    const menuRows = screen.getAllByTestId(TEST_IDS.FOLDER_PICKER_ROW).map((row) => row.textContent);
+
+    expect(menuRows).toHaveLength(mockPerformanceReportFolders.length);
+    expect(menuRows.some((row) => row?.includes(`/${deletedFolder.path}`))).toBe(true);
 });

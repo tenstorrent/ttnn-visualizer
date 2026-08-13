@@ -223,6 +223,8 @@ const PerformanceTable = ({
                                 onClick={() => navigate(`${ROUTES.NPE}/${manifestRecord.file}`)}
                                 variant={ButtonVariant.MINIMAL}
                                 className='graph-button'
+                                aria-label={`Launch NPE timeline for ${row.raw_op_code}`}
+                                data-testid={TEST_IDS.PERF_NPE_LINK}
                             />
                         </Tooltip>
                     )

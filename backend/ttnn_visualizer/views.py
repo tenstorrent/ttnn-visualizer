@@ -13,7 +13,7 @@ import urllib
 import urllib.request
 from http import HTTPStatus
 from pathlib import Path
-from typing import Callable, List, Optional
+from typing import Any, Callable, List, Optional
 
 import orjson
 import yaml
@@ -26,11 +26,16 @@ from ttnn_visualizer.csv_queries import (
     OpsPerformanceQueries,
     OpsPerformanceReportQueries,
 )
-from ttnn_visualizer.decorators import local_only, with_instance
+from ttnn_visualizer.decorators import (
+    local_only,
+    refuse_in_direct_report_mode,
+    with_instance,
+)
 from ttnn_visualizer.enums import ConnectionTestStates, StackSourceOrigin
 from ttnn_visualizer.exceptions import (
     AuthenticationFailedException,
     DataFormatError,
+    InvalidRequestPayload,
     PerformanceReportNotLoadedException,
     RemoteConnectionException,
     RemoteFileReadException,
@@ -87,7 +92,7 @@ from ttnn_visualizer.serializers import (
     serialize_tensors,
 )
 from ttnn_visualizer.sftp_operations import (
-    check_remote_path_exists,
+    MULTIHOST_REPORT_LAYOUT_HINT,
     check_remote_path_for_reports,
     get_active_sync_method,
     get_remote_performance_folders,
@@ -997,10 +1002,10 @@ def get_profiler_data_list(instance: Instance):
 def _report_directory_to_delete(directory_name_key: str, report_name: str) -> Path:
     """Resolve a delete request to one report directory under the local data directory.
 
-    The listings these deletes are paired with (``GET /profiler``, ``GET /performance``)
-    only ever read the local data directory, so that is the only tree a delete may
-    reach, and only one report inside it — anything wider removes reports the client
-    never listed.
+    ``refuse_in_direct_report_mode`` rejects the request before this runs, so the listings
+    these deletes are paired with (``GET /profiler``, ``GET /performance``) only ever read
+    the local data directory, making that the only tree a delete may reach — and only one
+    report inside it, since anything wider removes reports the client never listed.
     """
     return (
         Path(current_app.config["LOCAL_DATA_DIRECTORY"])
@@ -1012,6 +1017,7 @@ def _report_directory_to_delete(directory_name_key: str, report_name: str) -> Pa
 @api.route("/profiler/<profiler_name>", methods=["DELETE"])
 @with_instance
 @local_only
+@refuse_in_direct_report_mode
 def delete_profiler_report(profiler_name, instance: Instance):
     if not profiler_name:
         return response_bad_request("Report name is required.")
@@ -1124,6 +1130,7 @@ def get_profiler_performance_data(instance: Instance):
 @api.route("/performance/<performance_name>", methods=["DELETE"])
 @with_instance
 @local_only
+@refuse_in_direct_report_mode
 def delete_performance_report(performance_name, instance: Instance):
     if not performance_name:
         return response_bad_request("Report name is required.")
@@ -1437,7 +1444,25 @@ def create_performance_files():
     except DataFormatError:
         return response_unprocessable_entity()
 
-    performance_path = str(paths[0].parent)
+    # Take the report root from the destination we chose, not from anything in
+    # the payload. Two things make a payload scan wrong here:
+    #
+    # - `save_uploaded_files` returns paths in multipart order and
+    #   `construct_dest_path` preserves sub-paths for folder uploads, so
+    #   `paths[0].parent` binds to `npe_viz/` whenever one of its files leads
+    #   the body, and browser `FileList` ordering is not specified.
+    # - Scanning for the device log instead is no safer: `validate_files` skips
+    #   its depth check when `folderName` is supplied, so a part named
+    #   `<anything>/profile_log_device.csv` lands the log a level deeper and
+    #   makes the final segment caller-chosen. That segment is the hosted
+    #   session scoping key in `get_performance_data_list`, so it must stay
+    #   server-derived.
+    #
+    # `parts[0]` is the folder `construct_dest_path` actually created,
+    # timestamp prefix and all, which keeps `performance_path` consistent with
+    # the `performance_name` written alongside it.
+    report_root = target_directory / paths[0].relative_to(target_directory).parts[0]
+    performance_path = str(report_root)
 
     instance_id = request.args.get("instanceId")
     update_instance(
@@ -1562,16 +1587,34 @@ def _annotate_last_synced(
             logger.debug("%s not yet synced", directory_name)
 
 
+def _validated_remote_connection(connection_data: Any) -> RemoteConnection:
+    """Parse a request body's connection, refusing an unusable one as a 400.
+
+    A rejected host, username or report path is user input, not a server fault,
+    and the value can arrive from the client's own stored connections, so every
+    ``/api/remote`` route needs the same answer rather than a 500.
+    """
+    try:
+        return RemoteConnection.model_validate(connection_data, strict=False)
+    except ValidationError as validation_error:
+        raise InvalidRequestPayload("Invalid connection data") from validation_error
+
+
+def _validated_remote_report_folder(folder_data: Any) -> RemoteReportFolder:
+    """As ``_validated_remote_connection``, for a report folder in a request body."""
+    try:
+        return RemoteReportFolder.model_validate(folder_data, strict=False)
+    except ValidationError as validation_error:
+        raise InvalidRequestPayload("Invalid report data") from validation_error
+
+
 def _respond_remote_report_list(fetch_fn, directory_config_key: str):
     connection_data = request.get_json()
 
     if not connection_data:
         return response_bad_request("Missing connection data")
 
-    try:
-        connection = RemoteConnection.model_validate(connection_data, strict=False)
-    except ValidationError:
-        return response_bad_request("Invalid connection data")
+    connection = _validated_remote_connection(connection_data)
 
     try:
         remote_folders: List[RemoteReportFolder] = fetch_fn(connection)
@@ -1594,10 +1637,7 @@ def _respond_local_synced_folders(list_fn, directory_config_key: str):
     if not connection_data:
         return response_bad_request("Missing connection data")
 
-    try:
-        connection = RemoteConnection.model_validate(connection_data, strict=False)
-    except ValidationError:
-        return response_bad_request("Invalid connection data")
+    connection = _validated_remote_connection(connection_data)
 
     folders = list_fn(
         connection,
@@ -1694,13 +1734,37 @@ def get_mesh_descriptor(instance: Instance):
         return response_bad_request(f"Failed to parse YAML: {str(e)}")
 
 
-def _found_reports_message(
+def _report_search_status(
     label: str, count: int, *, in_rank_subdirectories: bool = False
-) -> str:
-    """Connection-test success line confirming what the report search actually saw."""
-    plural = "report" if count == 1 else "reports"
-    location = " in per-rank subdirectories" if in_rank_subdirectories else ""
-    return f"Found {count} {label} {plural}{location}"
+) -> StatusMessage:
+    """The one connection-test line a configured report path earns.
+
+    The path check and the report search answer halves of the same question, so
+    they report as a single result per report kind. "Exists but empty" can only
+    be said at all because the existence check already passed — a missing path
+    fails before this point.
+    """
+    if count:
+        plural = "report" if count == 1 else "reports"
+        location = " in per-rank subdirectories" if in_rank_subdirectories else ""
+        return StatusMessage(
+            status=ConnectionTestStates.OK.value,
+            message=f"Found {count} {label} {plural}{location}",
+        )
+
+    # Naming the expected layout turns the most likely misconfiguration
+    # (pointing at the parent of the per-rank folders) into a self-diagnosing
+    # warning.
+    hint = (
+        f" (multihost is enabled, so reports are expected at "
+        f"{MULTIHOST_REPORT_LAYOUT_HINT}/<report> under this path)"
+        if in_rank_subdirectories
+        else ""
+    )
+    return StatusMessage(
+        status=ConnectionTestStates.WARNING.value,
+        message=f"{label.capitalize()} path exists but no reports found{hint}",
+    )
 
 
 @api.route("/remote/ssh-config-hosts", methods=["GET"])
@@ -1718,7 +1782,8 @@ def test_remote_folder():
     if not connection_data:
         return response_bad_request("Missing connection data")
 
-    connection = RemoteConnection.model_validate(connection_data, strict=False)
+    connection = _validated_remote_connection(connection_data)
+
     logger.debug(
         "test_remote_folder request identityFile=%r, connection.identityFile=%r",
         connection_data.get("identityFile"),
@@ -1746,33 +1811,10 @@ def test_remote_folder():
     except RemoteConnectionException as e:
         add_status(e.status.value, e.message, getattr(e, "detail", None))
 
-    # Test Directory Configuration
-    if not has_failures() and connection.profilerPath:
-        try:
-            check_remote_path_exists(connection, "profilerPath")
-            add_status(ConnectionTestStates.OK.value, "Memory folder path exists")
-        except AuthenticationFailedException as e:
-            add_status(
-                ConnectionTestStates.FAILED.value, e.message, getattr(e, "detail", None)
-            )
-            return jsonify([status.model_dump() for status in statuses]), e.http_status
-        except RemoteConnectionException as e:
-            add_status(e.status.value, e.message, getattr(e, "detail", None))
-
-    # Test Directory Configuration (perf)
-    if not has_failures() and connection.performancePath:
-        try:
-            check_remote_path_exists(connection, "performancePath")
-            add_status(ConnectionTestStates.OK.value, "Performance folder path exists")
-        except AuthenticationFailedException as e:
-            add_status(
-                ConnectionTestStates.FAILED.value, e.message, getattr(e, "detail", None)
-            )
-            return jsonify([status.model_dump() for status in statuses]), e.http_status
-        except RemoteConnectionException as e:
-            add_status(e.status.value, e.message, getattr(e, "detail", None))
-
-    # Check for Project Configurations
+    # Both configured paths are checked and searched here, one SSH round trip
+    # each: the search settles whether its root exists as part of the same
+    # command, and a path that exists is silent because the report count it
+    # produces below already says so.
     if not has_failures():
         try:
             report_counts = check_remote_path_for_reports(connection)
@@ -1784,21 +1826,15 @@ def test_remote_folder():
         except RemoteConnectionException as e:
             add_status(e.status.value, e.message, getattr(e, "detail", None))
         else:
-            # A path that exists says nothing about whether reports were found
-            # there, which is what the user is really testing for.
             if report_counts.profiler is not None:
-                add_status(
-                    ConnectionTestStates.OK.value,
-                    _found_reports_message("memory", report_counts.profiler),
-                )
+                statuses.append(_report_search_status("memory", report_counts.profiler))
             if report_counts.performance is not None:
-                add_status(
-                    ConnectionTestStates.OK.value,
-                    _found_reports_message(
+                statuses.append(
+                    _report_search_status(
                         "performance",
                         report_counts.performance,
                         in_rank_subdirectories=connection.multihostPerformance,
-                    ),
+                    )
                 )
 
     return Response(
@@ -2023,14 +2059,10 @@ def sync_remote_folder():
     profiler = request_body.get("profiler")
     performance = request_body.get("performance", None)
     instance_id = request.args.get("instanceId", None)
-    connection = RemoteConnection.model_validate(
-        request_body.get("connection"), strict=False
-    )
+    connection = _validated_remote_connection(request_body.get("connection"))
 
     if performance:
-        performance_folder = RemoteReportFolder.model_validate(
-            performance, strict=False
-        )
+        performance_folder = _validated_remote_report_folder(performance)
         try:
             sync_method = sync_remote_performance_folders(
                 connection,
@@ -2054,11 +2086,9 @@ def sync_remote_folder():
                 sync_method=e.sync_method or get_active_sync_method(connection).value,
             )
 
-    try:
-        remote_profiler_folder = RemoteReportFolder.model_validate(
-            profiler, strict=False
-        )
+    remote_profiler_folder = _validated_remote_report_folder(profiler)
 
+    try:
         sync_method = sync_remote_profiler_folders(
             connection,
             remote_profiler_folder.remotePath,
@@ -2128,7 +2158,7 @@ def use_remote_folder():
     if not connection_data or not (profiler or performance):
         return response_bad_request("Missing connection or report data")
 
-    connection = RemoteConnection.model_validate(connection_data, strict=False)
+    connection = _validated_remote_connection(connection_data)
 
     kwargs = {
         "instance_id": request.args.get("instanceId"),
@@ -2136,10 +2166,7 @@ def use_remote_folder():
     }
 
     if profiler:
-        remote_profiler_folder = RemoteReportFolder.model_validate(
-            profiler,
-            strict=False,
-        )
+        remote_profiler_folder = _validated_remote_report_folder(profiler)
         profiler_name = _safe_report_folder_name(
             report_name=remote_profiler_folder.reportName,
             remote_path=remote_profiler_folder.remotePath,
@@ -2154,10 +2181,7 @@ def use_remote_folder():
         kwargs["profiler_location"] = ReportLocation.REMOTE.value
 
     if performance:
-        remote_performance_folder = RemoteReportFolder.model_validate(
-            performance,
-            strict=False,
-        )
+        remote_performance_folder = _validated_remote_report_folder(performance)
         performance_name = _safe_report_folder_name(
             report_name=remote_performance_folder.reportName,
             remote_path=remote_performance_folder.remotePath,

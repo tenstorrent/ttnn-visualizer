@@ -10,7 +10,7 @@ import { firePlotClick, getPlotInstances, resetPlotPropsCapture } from './mocks/
 import PerfOpCountVsRuntimeChart from '../src/components/performance/PerfOpCountVsRuntimeChart';
 import { MarkerColours, TypedPerfTableRow } from '../src/definitions/PerfTable';
 import { OpType } from '../src/definitions/Performance';
-import { PerfChartLayout } from '../src/definitions/PlotConfigurations';
+import { getPerfChartLayout } from '../src/definitions/PlotConfigurations';
 import { TEST_IDS } from '../src/definitions/TestIds';
 import { TestProviders } from './helpers/TestProviders';
 
@@ -102,11 +102,11 @@ describe('PerfOpCountVsRuntimeChart', () => {
             </TestProviders>,
         );
 
-        expect(screen.queryByTestId(TEST_IDS.PERF_CHART_TABLE_FILTER_HINT)).not.toBeInTheDocument();
+        expect(screen.queryAllByTestId(TEST_IDS.PERF_CHART_HINT)).toHaveLength(0);
         expect(getPlotInstances()[0]?.onClick).toBeUndefined();
     });
 
-    it('uses PerfChartLayout margins rather than a zero margin override', () => {
+    it('uses the shared chart layout margins rather than a zero margin override', () => {
         render(
             <TestProviders>
                 <PerfOpCountVsRuntimeChart
@@ -117,6 +117,6 @@ describe('PerfOpCountVsRuntimeChart', () => {
         );
 
         const plotLayout = getPlotInstances()[0]?.layout as Partial<Layout> | undefined;
-        expect(plotLayout?.margin).toEqual(PerfChartLayout.margin);
+        expect(plotLayout?.margin).toEqual(getPerfChartLayout().margin);
     });
 });

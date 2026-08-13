@@ -115,8 +115,14 @@ class HostKeyVerificationFailedException(RemoteConnectionException):
         )
 
 
-class NoReportsException(RemoteConnectionException):
-    pass
+class InvalidRequestPayload(Exception):
+    """A request body failed model validation.
+
+    Raised so a rejected payload renders as a 400 the client can display. Model
+    validators tighten over time, and a value a previous release stored is still
+    user input on the way back in — a stored connection whose report path is no
+    longer accepted must not surface as a 500 the user cannot act on.
+    """
 
 
 class DatabaseFileNotFoundException(Exception):

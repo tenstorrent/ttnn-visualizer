@@ -5,13 +5,38 @@
 import json
 import re
 
+import pytest
 from ttnn_visualizer.app import _build_spa_client_config, _serialize_spa_js_config
+from ttnn_visualizer.settings import DefaultConfig, _parse_env_bool
 from ttnn_visualizer.utils import parse_tcp_port
 
 
 class _FakeApp:
     def __init__(self, config: dict):
         self.config = config
+
+
+@pytest.mark.parametrize("env_value, expected", [("false", False), ("true", True)])
+def test_a_configured_server_mode_reaches_the_browser_as_a_boolean(
+    env_value, expected, monkeypatch
+):
+    # The boundary the stringification defect crossed: a truthy ``"false"`` on the config
+    # object is published straight to the page, where it decides which UI the SPA hides.
+    # Built from a real config rather than a hand-written dict so the parse, the override
+    # loop and this serialisation stay connected — the tests above pre-suppose a boolean.
+    monkeypatch.setenv("SERVER_MODE", env_value)
+    # Re-run the class-body parse: it happened at import, long before this test.
+    monkeypatch.setattr(
+        DefaultConfig, "SERVER_MODE", _parse_env_bool("SERVER_MODE", False)
+    )
+
+    config = DefaultConfig()
+    config.override_with_env_variables()
+
+    client_config = _build_spa_client_config(_FakeApp(config.to_dict()))
+
+    assert client_config["SERVER_MODE"] is expected
+    assert ("SSH_DEFAULT_PORT" in client_config) is not expected
 
 
 def test_build_spa_client_config_includes_ssh_defaults_when_not_server_mode():

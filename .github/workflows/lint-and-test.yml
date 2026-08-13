@@ -11,22 +11,18 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
         name: Install pnpm
         with:
           run_install: false
 
-      -   name: Read .nvmrc
-          id: nvm
-          run: echo "NODE_VERSION=$(cat .nvmrc)" >> $GITHUB_OUTPUT
-
-      -   name: Setup Node.js
-          uses: actions/setup-node@v4
-          with:
-              node-version: ${{ steps.nvm.outputs.NODE_VERSION }}
-              cache: 'pnpm'
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'pnpm'
 
       - name: Install dependencies
         run: pnpm install
@@ -55,14 +51,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Read .python-version
         id: python
         run: echo "PYTHON_VERSION=$(cat .python-version)" >> $GITHUB_OUTPUT
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v8.2.0
+        uses: astral-sh/setup-uv@v9.0.0
         with:
           python-version: ${{ steps.python.outputs.PYTHON_VERSION }}
           enable-cache: true
@@ -94,4 +90,6 @@ jobs:
       - wait-all:
 
       - name: Run Backend Tests
-        run: uv run --frozen pytest backend/ttnn_visualizer
+        # No path argument: `testpaths` in pyproject.toml owns the suite list, so
+        # a new test directory is picked up without editing CI.
+        run: uv run --frozen pytest

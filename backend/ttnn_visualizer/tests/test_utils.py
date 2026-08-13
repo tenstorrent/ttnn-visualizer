@@ -5,20 +5,67 @@
 from pathlib import Path
 from unittest.mock import mock_open, patch
 
+import pytest
 from ttnn_visualizer.models import RemoteConnection
 from ttnn_visualizer.utils import (
+    FALSE_VALUES,
+    TRUE_VALUES,
     find_gunicorn_path,
     get_app_data_directory,
     get_mlir_path,
     get_report_data_directory,
     is_running_in_container,
+    parse_bool,
     pick_cluster_descriptor_path,
     pick_mesh_descriptor_path,
     pick_profiler_config_paths,
     ranked_profiler_config_basenames,
     read_profiler_config_api_payload,
     read_profiler_report_name,
+    require_tcp_port,
+    str_to_bool,
 )
+
+# The vocabulary is narrow on purpose — it has to agree with the SPA's
+# ``isServerModeEnabled``, which has no declared default to fall back to.
+UNRECOGNISED_BOOLEANS = ["yes", "no", "t", "f", "on", "off", "Ture", "maybe", ""]
+
+
+@pytest.mark.parametrize("value", sorted(TRUE_VALUES) + ["TRUE", " true ", "True"])
+def test_str_to_bool_accepts_the_true_vocabulary(value):
+    assert str_to_bool(value) is True
+
+
+@pytest.mark.parametrize(
+    "value", sorted(FALSE_VALUES) + ["FALSE", " false ", *UNRECOGNISED_BOOLEANS]
+)
+def test_str_to_bool_is_false_for_everything_else(value):
+    # Lenient by design: its callers are query params (``views.py``) where a value we
+    # don't recognise and an explicit false are the same answer. Config uses
+    # ``parse_bool`` directly so it can tell the two apart.
+    assert str_to_bool(value) is False
+
+
+@pytest.mark.parametrize("value", UNRECOGNISED_BOOLEANS)
+def test_parse_bool_returns_none_outside_the_vocabulary(value):
+    assert parse_bool(value) is None
+
+
+def test_the_boolean_halves_are_disjoint():
+    assert TRUE_VALUES.isdisjoint(FALSE_VALUES)
+
+
+@pytest.mark.parametrize("value", ["1", "22", "65535"])
+def test_require_tcp_port_accepts_ports_in_range(value):
+    assert require_tcp_port(value) == int(value)
+
+
+@pytest.mark.parametrize("value", ["0", "-1", "65536", "not-a-port", "22.5", ""])
+def test_require_tcp_port_rejects_anything_unusable(value):
+    # The strict half exists so the override loop can report a bad port instead of
+    # substituting a default the operator never asked for.
+    with pytest.raises(ValueError):
+        require_tcp_port(value)
 
 
 @patch("sys.argv", ["/home/user/.local/bin/ttnn-visualizer"])

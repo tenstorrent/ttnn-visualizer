@@ -12,31 +12,27 @@ jobs:
     update-version:
         runs-on: ubuntu-latest
         steps:
-            - uses: actions/checkout@v6
+            - uses: actions/checkout@v7
               # TODO Replace email with official email
             - run: git config --global user.email "support@tenstorrent.com"
             - run: git config --global user.name "CI Job"
 
-            - uses: pnpm/action-setup@v4
+            - uses: pnpm/action-setup@v6
               name: Install pnpm
               with:
                   run_install: false
 
-            - name: Read .nvmrc
-              id: nvm
-              run: echo "NODE_VERSION=$(cat .nvmrc)" >> $GITHUB_OUTPUT
-
             - name: Setup Node.js
-              uses: actions/setup-node@v4
+              uses: actions/setup-node@v7
               with:
-                  node-version: ${{ steps.nvm.outputs.NODE_VERSION }}
+                  node-version-file: '.nvmrc'
 
             - name: Read .python-version
               id: python
               run: echo "PYTHON_VERSION=$(cat .python-version)" >> $GITHUB_OUTPUT
 
             - name: Install uv
-              uses: astral-sh/setup-uv@v8.2.0
+              uses: astral-sh/setup-uv@v9.0.0
               with:
                   python-version: ${{ steps.python.outputs.PYTHON_VERSION }}
                   enable-cache: true

@@ -703,6 +703,7 @@ const RemoteSyncConfigurator = () => {
             >
                 <AddRemoteConnection
                     disabled={isDisabled}
+                    connectionList={savedConnectionList}
                     onAddConnection={async (newConnection) => {
                         persistConnectionList([...savedConnectionList, newConnection]);
 

@@ -54,5 +54,10 @@ on the remote machine or container are accessible to the browser on your local m
 working directly with the TT-Metal home directory, the remote sync and upload features are
 disabled, and you can see the reports generated on that machine only.
 
+Report deletion is disabled in this mode too: the reports listed belong to the TT-Metal
+checkout, which `ttnn-visualizer` reads but does not manage. The delete control is hidden,
+and the `DELETE /api/profiler/<name>` and `DELETE /api/performance/<name>` routes refuse
+with a 403.
+
 This feature is intended for custom tools and integrations only, that bypass the default ways
 of loading data into `ttnn-visualizer`.

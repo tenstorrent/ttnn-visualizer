@@ -22,6 +22,7 @@ import {
 } from '@blueprintjs/core';
 import { ItemPredicate, ItemRendererProps, Select } from '@blueprintjs/select';
 import { IconNames } from '@blueprintjs/icons';
+import { DurationBucket, PERF_DURATION_BUCKET_FILTER_PLACEHOLDER } from '../../definitions/PerfDurationHistogram';
 import { ColumnKeys, Columns, TypedPerfTableRow } from '../../definitions/PerfTable';
 import { Signpost } from '../../model/Signpost';
 import { calcHighDispatchOps } from '../../functions/perfFunctions';
@@ -32,6 +33,7 @@ import {
     activePerformanceReportFolderNameAtom,
     bufferTypeFilterListAtom,
     comparisonPerformanceReportListAtom,
+    durationBucketFilterListAtom,
     filterBySignpostAtom,
     hideHostOpsAtom,
     isStackedViewAtom,
@@ -82,6 +84,16 @@ interface PerformanceReportProps {
 const INITIAL_TAB_ID = 'perf-table-0'; // `perf-table-${index}`
 const STACKED_GROUP_BY = [StackedGroupBy.CATEGORY, StackedGroupBy.MEMORY, StackedGroupBy.OP];
 
+/**
+ * Drops selections the current data can no longer offer, preserving the array identity when
+ * nothing changed so the effect that calls this cannot loop.
+ */
+const pruneToValidValues = <T,>(validValues: ReadonlySet<NonNullable<T>>, currentFilters: T[]): T[] => {
+    const nextFilters = currentFilters.filter((value) => value != null && validValues.has(value));
+
+    return nextFilters.length === currentFilters.length ? currentFilters : nextFilters;
+};
+
 const PerformanceReport = ({
     data,
     comparisonData,
@@ -107,6 +119,7 @@ const PerformanceReport = ({
     const [activeRawOpCodeFilterList, setActiveRawOpCodeFilterList] = useAtom(rawOpCodeFilterListAtom);
     const [activeBufferTypeFilterList, setActiveBufferTypeFilterList] = useAtom(bufferTypeFilterListAtom);
     const [activeLayoutFilterList, setActiveLayoutFilterList] = useAtom(layoutFilterListAtom);
+    const [activeDurationBucketFilterList, setActiveDurationBucketFilterList] = useAtom(durationBucketFilterListAtom);
 
     // TODO: Reimplement merge/expand device data toggle
     // const [mergeDeviceData, setMergeDeviceData] = useState<boolean>(true);
@@ -143,6 +156,8 @@ const PerformanceReport = ({
         processedComparisonRows,
         combinedRows,
         rawOpCodeOptions,
+        durationBucketOptions,
+        emptyDurationBucketMinUsSet,
         filteredRows,
         filteredComparisonRowsList,
     } = usePerfReportFiltering({
@@ -154,8 +169,16 @@ const PerformanceReport = ({
         activeRawOpCodeFilterList,
         activeBufferTypeFilterList,
         activeLayoutFilterList,
+        activeDurationBucketFilterList,
         filterBySignpost,
     });
+    const labelByBucketMinUs = useMemo(
+        () =>
+            new Map<DurationBucket['minUs'], string>(
+                durationBucketOptions.map((bucket) => [bucket.minUs, bucket.label]),
+            ),
+        [durationBucketOptions],
+    );
     const validRawOpCodeValues = useMemo(
         () => new Set(rawOpCodeOptions.flatMap((row) => (row.raw_op_code !== null ? [row.raw_op_code] : []))),
         [rawOpCodeOptions],
@@ -186,6 +209,10 @@ const PerformanceReport = ({
                     .filter((value): value is NonNullable<TypedPerfTableRow['layout']> => value !== null),
             ),
         [combinedRows],
+    );
+    const validDurationBucketValues = useMemo(
+        () => new Set(durationBucketOptions.map((bucket) => bucket.minUs)),
+        [durationBucketOptions],
     );
 
     const filteredComparisonRows = useMemo(
@@ -297,36 +324,26 @@ const PerformanceReport = ({
     }, [selectedTabId, processedComparisonRows, comparisonIndex, isNormalisationApplied]);
 
     useEffect(() => {
-        setActiveRawOpCodeFilterList((currentFilters) => {
-            const nextFilters = currentFilters.filter((value) => validRawOpCodeValues.has(value));
-
-            return nextFilters.length === currentFilters.length ? currentFilters : nextFilters;
-        });
+        setActiveRawOpCodeFilterList((currentFilters) => pruneToValidValues(validRawOpCodeValues, currentFilters));
     }, [validRawOpCodeValues, setActiveRawOpCodeFilterList]);
 
     useEffect(() => {
-        setActiveMathFilterList((currentFilters) => {
-            const nextFilters = currentFilters.filter((value) => validMathFilterValues.has(value));
-
-            return nextFilters.length === currentFilters.length ? currentFilters : nextFilters;
-        });
-        setActiveBufferTypeFilterList((currentFilters) => {
-            const nextFilters = currentFilters.filter((value) => value !== null && validBufferTypeValues.has(value));
-
-            return nextFilters.length === currentFilters.length ? currentFilters : nextFilters;
-        });
-        setActiveLayoutFilterList((currentFilters) => {
-            const nextFilters = currentFilters.filter((value) => value !== null && validLayoutValues.has(value));
-
-            return nextFilters.length === currentFilters.length ? currentFilters : nextFilters;
-        });
+        setActiveMathFilterList((currentFilters) => pruneToValidValues(validMathFilterValues, currentFilters));
+        setActiveBufferTypeFilterList((currentFilters) => pruneToValidValues(validBufferTypeValues, currentFilters));
+        setActiveLayoutFilterList((currentFilters) => pruneToValidValues(validLayoutValues, currentFilters));
+        // A bucket that no longer exists would filter every row out with no visible tag to explain it
+        setActiveDurationBucketFilterList((currentFilters) =>
+            pruneToValidValues(validDurationBucketValues, currentFilters),
+        );
     }, [
         validMathFilterValues,
         validBufferTypeValues,
         validLayoutValues,
+        validDurationBucketValues,
         setActiveMathFilterList,
         setActiveBufferTypeFilterList,
         setActiveLayoutFilterList,
+        setActiveDurationBucketFilterList,
     ]);
 
     return (
@@ -567,6 +584,16 @@ const PerformanceReport = ({
                                     values={activeMathFilterList}
                                     updateHandler={setActiveMathFilterList}
                                     disabled={isStackedView}
+                                />
+
+                                <MultiSelectField<DurationBucket, 'minUs'>
+                                    keyName='minUs'
+                                    options={durationBucketOptions}
+                                    labelFormatter={(minUs) => labelByBucketMinUs.get(minUs) ?? String(minUs)}
+                                    placeholder={PERF_DURATION_BUCKET_FILTER_PLACEHOLDER}
+                                    values={activeDurationBucketFilterList}
+                                    updateHandler={setActiveDurationBucketFilterList}
+                                    disabledValues={emptyDurationBucketMinUsSet}
                                 />
                             </ButtonGroup>
 

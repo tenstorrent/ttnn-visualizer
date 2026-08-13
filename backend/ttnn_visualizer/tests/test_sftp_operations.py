@@ -26,6 +26,8 @@ from ttnn_visualizer.exceptions import (
 )
 from ttnn_visualizer.models import RemoteConnection
 from ttnn_visualizer.sftp_operations import (
+    _MISSING_ROOT_EXIT_CODE,
+    RemoteSearchRootState,
     _get_remote_file_list_without_sizes,
     _remote_directory_mtimes,
     _remote_transfer_key,
@@ -33,6 +35,7 @@ from ttnn_visualizer.sftp_operations import (
     find_folders_by_files,
     get_remote_directory_list,
     get_remote_file_list,
+    get_remote_profiler_folder_from_config_path,
     resolve_file_path,
     sync_files_and_directories,
 )
@@ -50,9 +53,9 @@ def connection() -> RemoteConnection:
     )
 
 
-def _completed(stdout: str) -> subprocess.CompletedProcess:
+def _completed(stdout: str, returncode: int = 0) -> subprocess.CompletedProcess:
     return subprocess.CompletedProcess(
-        args=["ssh"], returncode=0, stdout=stdout, stderr=""
+        args=["ssh"], returncode=returncode, stdout=stdout, stderr=""
     )
 
 
@@ -136,6 +139,69 @@ class TestRemoteFindShellQuoting:
         assert shlex.quote(self._APOSTROPHE_FOLDER) in remote_cmd
         assert f"stat -c %Y '{self._APOSTROPHE_FOLDER}'" not in remote_cmd
 
+    # These three ran the path as its own argv element after user@host, which looks
+    # safe but is not: ssh joins everything after the target with spaces and hands the
+    # result to the remote login shell. The paths come from `find` output rooted at the
+    # connection's configured path, so a crafted report path reached a shell unquoted.
+    _CONFIG_PATH = "/remote/reports/o'brien; touch /tmp/pwned/config.json"
+
+    def _config_path_commands(self, connection) -> list:
+        """Every remote command issued while describing one config path."""
+        with patch("subprocess.run", return_value=_completed("")) as run:
+            get_remote_profiler_folder_from_config_path(connection, self._CONFIG_PATH)
+
+        return [call[0][0][-1] for call in run.call_args_list]
+
+    def test_config_path_probe_passes_the_path_as_one_argument(self, connection):
+        commands = self._config_path_commands(connection)
+
+        assert commands, "expected at least one remote command"
+        # `test -f` runs first; the payload must arrive as a single token rather than
+        # as a command terminator followed by a second command.
+        assert shlex.split(commands[0]) == ["test", "-f", self._CONFIG_PATH]
+
+    def test_no_config_path_command_leaks_the_payload_unquoted(self, connection):
+        for command in self._config_path_commands(connection):
+            tokens = shlex.split(command)
+            # A leak splits the payload across argv — the path ends at `o'brien;`
+            # and `touch` becomes a word of its own. Asserted on the tokens rather
+            # than on the command text because some commands carry the config
+            # path's parent folder instead of the path itself, so what has to hold
+            # is that whichever of the two a token carries, it carries whole.
+            assert "touch" not in tokens
+            for token in tokens:
+                if "touch" in token:
+                    assert token.endswith("; touch /tmp/pwned/config.json") or (
+                        token.endswith("; touch /tmp/pwned")
+                    )
+
+    def test_ranked_config_listing_wraps_the_folder_in_one_argument(self, connection):
+        # The `bash -lc` script must reach the remote shell as a single argv element,
+        # or the find expression inside it is split across arguments.
+        def run_remote(cmd, *args, **kwargs):
+            # The ranked listing is only reached once `test -f` reports the single
+            # config absent, so that probe has to fail for this path to be exercised.
+            if "test -f" in cmd[-1]:
+                return subprocess.CompletedProcess(
+                    args=cmd, returncode=1, stdout="", stderr=""
+                )
+            return _completed("")
+
+        with patch("subprocess.run", side_effect=run_remote) as run:
+            get_remote_profiler_folder_from_config_path(
+                connection, "/remote/o'brien/reports/config.json"
+            )
+
+        listing = [
+            command
+            for command in (call[0][0][-1] for call in run.call_args_list)
+            if command.startswith("bash")
+        ]
+        assert listing, "expected a ranked-config listing command"
+        program, flag, script = shlex.split(listing[0])
+        assert (program, flag) == ("bash", "-lc")
+        assert shlex.split(script)[:2] == ["find", "/remote/o'brien/reports"]
+
     def test_resolve_file_path_quotes_around_the_wildcard(self, connection):
         # The wildcard has to reach the remote shell unquoted for `ls` to expand it,
         # so this path can't just be handed to shlex.quote wholesale.
@@ -165,7 +231,7 @@ class TestFindFoldersByFiles:
 
         # A connection per candidate directory is a full SSH handshake each, serially.
         assert run.call_count == 1
-        assert matched == ["/remote/reports/a", "/remote/reports/b"]
+        assert matched.folders == ["/remote/reports/a", "/remote/reports/b"]
 
         remote_cmd = _remote_shell_command_from_run(run)
         # Either file qualifies a directory, and -print is explicit because find only
@@ -184,22 +250,60 @@ class TestFindFoldersByFiles:
                 connection, "/remote/reports", ["config.json"]
             )
 
-        assert matched == ["/remote/reports/a", "/remote/reports/b"]
+        assert matched.folders == ["/remote/reports/a", "/remote/reports/b"]
 
     def test_no_file_names_makes_no_connection(self, connection):
         # Without a probe the find would match every directory, which is the opposite
         # of "folders containing one of these files".
         with patch("subprocess.run") as run:
-            assert find_folders_by_files(connection, "/remote/reports", []) == []
+            assert (
+                find_folders_by_files(connection, "/remote/reports", []).folders == []
+            )
 
         assert run.call_count == 0
 
     def test_no_matches_returns_empty(self, connection):
         with patch("subprocess.run", return_value=_completed("")):
-            assert (
-                find_folders_by_files(connection, "/remote/reports", ["config.json"])
-                == []
+            matched = find_folders_by_files(
+                connection, "/remote/reports", ["config.json"]
             )
+
+        assert matched.folders == []
+        # A root that was there and matched nothing is the case the connection
+        # test reports as a warning, so it must not read as an absent path.
+        assert matched.root_state is RemoteSearchRootState.PRESENT
+
+    def test_the_sentinel_exit_code_is_reported_as_a_missing_root(self, connection):
+        """`find` cannot tell an absent root from one holding nothing.
+
+        The remote command exits with the sentinel from its own `test -e`, and
+        that return code is the only thing carrying the distinction back.
+        """
+        with patch(
+            "subprocess.run",
+            return_value=_completed("", returncode=_MISSING_ROOT_EXIT_CODE),
+        ):
+            matched = find_folders_by_files(
+                connection, "/remote/missing", ["config.json"]
+            )
+
+        assert matched.root_state is RemoteSearchRootState.MISSING
+        assert matched.folders == []
+
+    def test_a_timed_out_search_settles_nothing_about_its_root(self, connection):
+        """No reply is a third answer, distinct from "there" and "not there".
+
+        Returning `PRESENT` here would have the connection test warn that the
+        path exists but holds no reports, asserting a reachable root the search
+        never got to.
+        """
+        with patch("subprocess.run", side_effect=subprocess.TimeoutExpired("ssh", 1)):
+            matched = find_folders_by_files(
+                connection, "/remote/reports", ["config.json"]
+            )
+
+        assert matched.root_state is RemoteSearchRootState.UNKNOWN
+        assert matched.folders == []
 
 
 class TestGetRemoteFileList:

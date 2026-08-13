@@ -29,6 +29,7 @@ from ttnn_visualizer.exceptions import (
     DatabaseFileNotFoundException,
     InvalidProfilerPath,
     InvalidReportPath,
+    InvalidRequestPayload,
     ReportNotLoadedException,
 )
 from ttnn_visualizer.instances import create_instance_from_local_paths
@@ -37,11 +38,22 @@ from ttnn_visualizer.settings import (
     DefaultConfig,
     build_socketio_origin_check,
 )
+from ttnn_visualizer.usage import (
+    RUN_ID_ENV_VAR,
+    USAGE_RECORDING_ENV_VAR,
+    compact_if_needed,
+    get_disabled_marker_path,
+    get_run_id,
+    get_usage_log_path,
+    is_recording_enabled,
+    record_app_start,
+)
 from ttnn_visualizer.utils import (
     find_gunicorn_path,
     get_app_data_directory,
     get_report_data_directory,
     migrate_old_data_directory,
+    str_to_bool,
 )
 from werkzeug.debug import DebuggedApplication
 from werkzeug.exceptions import HTTPException
@@ -106,7 +118,7 @@ def create_app(settings_override=None):
     if dotenv_path.exists():
         load_dotenv(str(dotenv_path))
 
-    debug_logging = os.environ.get("DEBUG", "false").lower() in ("true", "1", "yes")
+    debug_logging = str_to_bool(os.environ.get("DEBUG", "false"))
     log_level = logging.DEBUG if debug_logging else logging.INFO
     root_logger = logging.getLogger()
     root_logger.setLevel(log_level)
@@ -227,6 +239,10 @@ def middleware(app: flask.Flask):
         response.status_code = HTTPStatus.NOT_FOUND
         return response
 
+    @app.errorhandler(InvalidRequestPayload)
+    def handle_invalid_request_payload(error: InvalidRequestPayload):
+        return jsonify({"error": str(error)}), HTTPStatus.BAD_REQUEST
+
     @app.errorhandler(HTTPException)
     def handle_http_error(error: HTTPException):
         message = error.description or error.name or "Request failed"
@@ -248,8 +264,12 @@ def middleware(app: flask.Flask):
 
     # Only use the middleware if running in pure WSGI (HTTP requests)
     if not app.config.get("USE_WEBSOCKETS"):
-        # Enable the Flask interactive debugger in the browser for development.
-        if app.debug:
+        # Enable the Flask interactive debugger in the browser for development. The
+        # console evaluates arbitrary Python for whoever reaches it, so it is gated on
+        # the posture as well as on debug mode: the config layer already refuses that
+        # combination, but ``settings_override`` reaches this point without passing
+        # through it.
+        if app.debug and not app.config.get("SERVER_MODE"):
             app.wsgi_app = DebuggedApplication(app.wsgi_app, evalex=True)
 
         # Set the real IP address into request.remote_addr when behind a proxy.
@@ -397,6 +417,34 @@ def display_mode_info_without_db(config):
         print(f"   Remote directory: {config.REMOTE_DATA_DIRECTORY}")
 
 
+def _record_launch(config):
+    """Record this launch locally, and say so.
+
+    Split out of ``main()`` because ``main()`` binds a socket and spawns gunicorn and
+    so cannot be called from a test, which would leave the wiring — the part that
+    fails open — unpinned.
+    """
+    # Exported unconditionally so every gunicorn worker this launch spawns shares one
+    # identifier, even if recording is switched on part-way through the session.
+    os.environ[RUN_ID_ENV_VAR] = get_run_id()
+
+    if not is_recording_enabled(config.SERVER_MODE):
+        return
+
+    compact_if_needed()
+    record_app_start(config, server_mode=config.SERVER_MODE)
+
+    # `print` rather than `logger.info`: nothing has configured logging at this point
+    # in `main()` — `create_app()` does that — and the last-resort handler drops
+    # anything below WARNING, so an info line here would never be seen.
+    print(
+        f"📊 Recording usage locally to {get_usage_log_path()}\n"
+        f"   Written on this machine only; the application transmits nothing. "
+        f"Switch it off with {USAGE_RECORDING_ENV_VAR}=false or by creating "
+        f"{get_disabled_marker_path()}"
+    )
+
+
 def main():
 
     run_command = sys.argv[0].split("/")
@@ -499,8 +547,7 @@ def main():
         # Clean up this temporary app - workers will create their own
         del app
 
-    # Check if DEBUG environment variable is set
-    debug_mode = os.environ.get("DEBUG", "false").lower() == "true"
+    debug_mode = str_to_bool(os.environ.get("DEBUG", "false"))
     if config.PRINT_ENV:
         print("\nENVIRONMENT:")
         for key, value in config.to_dict().items():
@@ -559,6 +606,11 @@ def main():
     # Upgrade the app database before binding workers (idempotent; workers also
     # upgrade via create_app when using multi-worker mode).
     run_alembic_migrations(config.SQLALCHEMY_DATABASE_URI)
+
+    # Deliberately last: every exit above (an invalid report path, a port already in
+    # use) ends a launch that never served a request, and counting those would
+    # inflate the figure with exactly the sessions where nobody used the tool.
+    _record_launch(config)
 
     try:
         subprocess.run(gunicorn_args)

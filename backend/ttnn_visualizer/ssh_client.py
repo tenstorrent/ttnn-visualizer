@@ -4,7 +4,6 @@
 
 import logging
 import os
-import shlex
 import subprocess
 from http import HTTPStatus
 from pathlib import Path
@@ -21,6 +20,11 @@ from ttnn_visualizer.exceptions import (
     SSHException,
 )
 from ttnn_visualizer.models import RemoteConnection
+from ttnn_visualizer.remote_command import (
+    RemoteCommand,
+    remote_arg,
+    remote_scp_target,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -158,16 +162,20 @@ class SSHClient:
 
         raise_for_ssh_subprocess_error(e, self.connection)
 
-    def execute_command(self, command: str, timeout: int = 30) -> str:
+    def execute_command(self, command: RemoteCommand, timeout: int = 30) -> str:
         """
         Execute a command on the remote server via SSH.
+
+        Takes a ``RemoteCommand`` rather than a ``str`` because the argument is run
+        by a shell on the remote host: only ``remote_command`` can build one, so a
+        path interpolated without quoting fails type checking instead of shipping.
 
         :param command: The command to execute
         :param timeout: Timeout in seconds
         :return: Command output (stdout)
         :raises: AuthenticationException, NoValidConnectionsError, SSHException
         """
-        ssh_cmd = self._base_ssh_cmd + [command]
+        ssh_cmd = self._base_ssh_cmd + [str(command)]
 
         logger.debug(f"Executing SSH command on {self.connection.host}: {command}")
 
@@ -200,7 +208,10 @@ class SSHClient:
                 log_message += f" on port {self.connection.port}"
             logger.info(log_message)
 
-            self.execute_command("echo 'SSH connection test'", timeout=10)
+            self.execute_command(
+                RemoteCommand.from_shell_fragment("echo 'SSH connection test'"),
+                timeout=10,
+            )
             return True
         except AuthenticationException as e:
             # Convert to AuthenticationFailedException for proper HTTP 422 response
@@ -270,7 +281,7 @@ class SSHClient:
 
         try:
             result = self.execute_command(
-                f"cat {shlex.quote(str(remote_path))}", timeout=timeout
+                RemoteCommand.of("cat", remote_path), timeout=timeout
             )
             return result.encode("utf-8")
         except SSHException as e:
@@ -293,27 +304,6 @@ class SSHClient:
                 http_status_code=HTTPStatus.BAD_GATEWAY,
                 detail=str(e),
             )
-
-    def check_path_exists(
-        self, remote_path: Union[str, Path], timeout: int = 10
-    ) -> bool:
-        """
-        Check if a remote path exists.
-
-        :param remote_path: Path to check
-        :param timeout: Timeout in seconds
-        :return: True if path exists
-        """
-        path = Path(remote_path)
-        logger.debug(f"Checking if remote path exists: {path}")
-
-        try:
-            self.execute_command(
-                f"test -e {shlex.quote(str(remote_path))}", timeout=timeout
-            )
-            return True
-        except SSHException:
-            return False
 
     def download_file(
         self,
@@ -338,8 +328,7 @@ class SSHClient:
         # SFTP commands to execute
         # Batch script is parsed by sftp, not the shell — quote paths for spaces/special chars.
         sftp_commands = (
-            f"get {shlex.quote(str(remote_path))} {shlex.quote(str(local_path))}\n"
-            "quit\n"
+            f"get {remote_arg(remote_path)} {remote_arg(local_path)}\n" "quit\n"
         )
 
         logger.debug(f"Downloading: {remote_path} -> {local_path}")
@@ -393,7 +382,7 @@ class SSHClient:
         scp_cmd.extend(
             [
                 str(local_path),
-                f"{self.connection.username}@{self.connection.host}:{remote_path}",
+                remote_scp_target(self.connection, remote_path),
             ]
         )
 
@@ -439,8 +428,10 @@ class SSHClient:
         try:
             # Use stat command to get file information
             result = self.execute_command(
-                f"stat -c '%s %Y %F' {shlex.quote(str(path))} "
-                "2>/dev/null || echo 'NOT_FOUND'",
+                RemoteCommand.from_shell_fragment(
+                    f"stat -c '%s %Y %F' {remote_arg(path)} "
+                    "2>/dev/null || echo 'NOT_FOUND'"
+                ),
                 timeout=timeout,
             )
 
@@ -469,7 +460,10 @@ class SSHClient:
 
         try:
             result = self.execute_command(
-                f"ls -1 {shlex.quote(str(path))} 2>/dev/null", timeout=timeout
+                RemoteCommand.from_shell_fragment(
+                    f"ls -1 {remote_arg(path)} 2>/dev/null"
+                ),
+                timeout=timeout,
             )
             return [line.strip() for line in result.split("\n") if line.strip()]
         except SSHException:

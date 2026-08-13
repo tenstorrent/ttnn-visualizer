@@ -11,16 +11,18 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import RemoteSyncConfigurator from '../src/components/report-selection/RemoteSyncConfigurator';
 import RemoteFolderSelector from '../src/components/report-selection/RemoteFolderSelector';
 import LocalFolderSelector from '../src/components/report-selection/LocalFolderSelector';
+import { ConnectionNameSubject, getNameFieldLabel } from '../src/definitions/ConnectionDialog';
 import { ConnectionStatus, ConnectionTestStates } from '../src/definitions/ConnectionStatus';
 import Endpoints from '../src/definitions/Endpoints';
 import { ACTIVE_PERFORMANCE_REPORT_TOAST_TITLE } from '../src/definitions/notifyActiveReport';
 import { CONFIRM_DELETE_LABEL } from '../src/definitions/ManagedEntity';
 import {
     FETCH_REMOTE_FOLDERS_LABEL,
-    MULTIHOST_CHECKBOX_LABEL,
+    REMOTE_MEMORY_PATH_LABEL,
     RemoteConnection,
     RemoteFolder,
 } from '../src/definitions/RemoteConnection';
+import { SSH_HOST_LABEL, SSH_USERNAME_LABEL } from '../src/definitions/SshConnectionFields';
 import { TEST_IDS } from '../src/definitions/TestIds';
 import {
     LOCAL_STORAGE_KEY_CONNECTIONS,
@@ -46,6 +48,7 @@ import mockRemoteProfilerFolderList from './data/mockRemoteProfilerFolderList.js
 import remoteConnection from './data/remoteConnection.json';
 import getAllButtonsWithText from './helpers/getAllButtonsWithText';
 import getButtonWithText from './helpers/getButtonWithText';
+import { MULTIHOST_CHECKBOX_NAME } from './helpers/multihostCheckbox';
 import {
     getConnectionTrigger,
     getDeleteConnectionLabel,
@@ -73,6 +76,7 @@ const SELECT_LOCAL_REPORT_TEXT = 'Select a report...';
 const IS_ACTIVATING_REPORT_PROBE_TEST_ID = 'is-activating-report-probe';
 
 const EDITED_CONNECTION_NAME = 'Renamed Server';
+const CONNECTION_NAME_LABEL = getNameFieldLabel(ConnectionNameSubject.CONNECTION);
 
 const IsActivatingReportProbe = () => {
     const isActivatingReport = useAtomValue(isActivatingReportAtom);
@@ -373,7 +377,7 @@ it('applies an edit to a connection that is not selected without changing the se
     };
     const passingTests: ConnectionStatus[] = [
         { status: ConnectionTestStates.OK, message: 'SSH connection established' },
-        { status: ConnectionTestStates.OK, message: 'Memory report folder path exists' },
+        { status: ConnectionTestStates.OK, message: 'Found 3 memory reports' },
     ];
 
     const axiosInstance = await import('../src/libs/axiosInstance');
@@ -398,7 +402,7 @@ it('applies an edit to a connection that is not selected without changing the se
     await waitFor(testForPortal, WAIT_FOR_OPTIONS);
 
     fireEvent.click(screen.getByLabelText(getEditConnectionLabel(otherConnection)));
-    fireEvent.change(screen.getByLabelText('Name'), { target: { value: EDITED_CONNECTION_NAME } });
+    fireEvent.change(screen.getByLabelText(CONNECTION_NAME_LABEL), { target: { value: EDITED_CONNECTION_NAME } });
     fireEvent.click(getButtonWithText('Run tests'));
 
     await waitFor(() => expect(getButtonWithText('Save connection')).toBeEnabled(), WAIT_FOR_OPTIONS);
@@ -430,7 +434,7 @@ it('applies an edit to a connection that is not selected without changing the se
 it('lists a newly added connection as a dropdown row', async () => {
     const passingTests: ConnectionStatus[] = [
         { status: ConnectionTestStates.OK, message: 'SSH connection established' },
-        { status: ConnectionTestStates.OK, message: 'Memory report folder path exists' },
+        { status: ConnectionTestStates.OK, message: 'Found 3 memory reports' },
     ];
     const addedName = 'Added Server';
 
@@ -450,10 +454,10 @@ it('lists a newly added connection as a dropdown row', async () => {
     );
 
     fireEvent.click(getButtonWithText(ADD_NEW_CONNECTION));
-    fireEvent.change(screen.getByLabelText('Name'), { target: { value: addedName } });
-    fireEvent.change(screen.getByLabelText('SSH Host'), { target: { value: 'added.example.com' } });
-    fireEvent.change(screen.getByLabelText('Username'), { target: { value: 'prod-user' } });
-    fireEvent.change(screen.getByLabelText('Memory report folder path'), { target: { value: '/opt/reports' } });
+    fireEvent.change(screen.getByLabelText(CONNECTION_NAME_LABEL), { target: { value: addedName } });
+    fireEvent.change(screen.getByLabelText(SSH_HOST_LABEL), { target: { value: 'added.example.com' } });
+    fireEvent.change(screen.getByLabelText(SSH_USERNAME_LABEL), { target: { value: 'prod-user' } });
+    fireEvent.change(screen.getByLabelText(REMOTE_MEMORY_PATH_LABEL), { target: { value: '/opt/reports' } });
     fireEvent.click(getButtonWithText('Run tests'));
 
     await waitFor(() => expect(getButtonWithText('Add connection')).toBeEnabled(), WAIT_FOR_OPTIONS);
@@ -461,9 +465,11 @@ it('lists a newly added connection as a dropdown row', async () => {
 
     const trigger = await screen.findByRole('button', { name: new RegExp(addedName) }, WAIT_FOR_OPTIONS);
     trigger.click();
-    await waitFor(testForPortal, WAIT_FOR_OPTIONS);
 
-    const rows = screen.getAllByTestId(TEST_IDS.REMOTE_CONNECTION_ROW);
+    // Waiting on a portal would be vacuous here: the dialog just dismissed is still running its exit
+    // transition, so its portal satisfies the check while the dropdown's own portal — which Blueprint
+    // only fills on a passive effect, a tick after the trigger reports itself open — is still empty.
+    const rows = await screen.findAllByTestId(TEST_IDS.REMOTE_CONNECTION_ROW, undefined, WAIT_FOR_OPTIONS);
 
     expect(rows).toHaveLength(1);
     expect(rows[0].textContent).toContain(addedName);
@@ -500,7 +506,7 @@ it('moves cached folder lists when an edit changes the host', async () => {
             return Promise.resolve({
                 data: [
                     { status: ConnectionTestStates.OK, message: 'SSH connection established' },
-                    { status: ConnectionTestStates.OK, message: 'Memory report folder path exists' },
+                    { status: ConnectionTestStates.OK, message: 'Found 3 memory reports' },
                 ] as ConnectionStatus[],
             } as AxiosResponse);
         }
@@ -518,7 +524,7 @@ it('moves cached folder lists when an edit changes the host', async () => {
     await waitFor(testForPortal, WAIT_FOR_OPTIONS);
 
     fireEvent.click(screen.getByLabelText(getEditConnectionLabel(original)));
-    fireEvent.change(screen.getByLabelText('SSH Host'), { target: { value: editedHost } });
+    fireEvent.change(screen.getByLabelText(SSH_HOST_LABEL), { target: { value: editedHost } });
     fireEvent.click(getButtonWithText('Run tests'));
 
     await waitFor(() => expect(getButtonWithText('Save connection')).toBeEnabled(), WAIT_FOR_OPTIONS);
@@ -857,7 +863,9 @@ it('does not activate remote report when a local report is chosen mid-sync', asy
     // Activate a local performance report while the remote sync is still in flight.
     getAllButtonsWithText(SELECT_LOCAL_REPORT_TEXT)[1].click();
     await waitFor(testForPortal, WAIT_FOR_OPTIONS);
-    screen.getByText(new RegExp(localPerfFolder.path, 'i')).click();
+    // Both selectors are mounted here with a sync in flight, so testForPortal can be satisfied by
+    // a portal other than this menu — wait for the row itself rather than querying it synchronously.
+    (await screen.findByText(new RegExp(localPerfFolder.path, 'i'), undefined, WAIT_FOR_OPTIONS)).click();
 
     await waitFor(
         () => expect(screen.getByTestId(TEST_IDS.TOAST_FILENAME).textContent).to.contain(localPerfFolder.reportName),
@@ -1663,7 +1671,7 @@ const editConnection = async (connection: RemoteConnection) => {
     fireEvent.click(getConnectionTrigger(connection));
     await waitFor(testForPortal, WAIT_FOR_OPTIONS);
     fireEvent.click(screen.getByLabelText(getEditConnectionLabel(connection)));
-    await waitFor(() => expect(screen.getByRole('checkbox', { name: MULTIHOST_CHECKBOX_LABEL })).toBeTruthy());
+    await waitFor(() => expect(screen.getByRole('checkbox', { name: MULTIHOST_CHECKBOX_NAME })).toBeTruthy());
 };
 
 const runConnectionTestAndSave = async () => {
@@ -1692,7 +1700,7 @@ it('drops cached performance folders when the multihost flag is flipped', async 
     );
 
     await editConnection(connection);
-    fireEvent.click(screen.getByRole('checkbox', { name: MULTIHOST_CHECKBOX_LABEL }));
+    fireEvent.click(screen.getByRole('checkbox', { name: MULTIHOST_CHECKBOX_NAME }));
     await runConnectionTestAndSave();
 
     await waitFor(() => expect(window.localStorage.getItem(cacheKey)).toBeNull(), WAIT_FOR_OPTIONS);
@@ -1714,11 +1722,11 @@ it('keeps cached performance folders when an unrelated field is edited', async (
     await editConnection(connection);
     // Not the name: the cache is keyed on it, so a rename moves the entry rather
     // than dropping it and the assertion below would pass for the wrong reason.
-    fireEvent.change(screen.getByLabelText('Memory report folder path'), { target: { value: '/elsewhere' } });
+    fireEvent.change(screen.getByLabelText(REMOTE_MEMORY_PATH_LABEL), { target: { value: '/elsewhere' } });
     await runConnectionTestAndSave();
 
     await waitFor(
-        () => expect(screen.queryByRole('checkbox', { name: MULTIHOST_CHECKBOX_LABEL })).toBeNull(),
+        () => expect(screen.queryByRole('checkbox', { name: MULTIHOST_CHECKBOX_NAME })).toBeNull(),
         WAIT_FOR_OPTIONS,
     );
     expect(window.localStorage.getItem(cacheKey)).not.toBeNull();

@@ -5,6 +5,7 @@
 import logging
 import re
 from functools import wraps
+from typing import Any, Callable
 
 from flask import abort, request, session
 from ttnn_visualizer.enums import ConnectionTestStates
@@ -13,11 +14,11 @@ from ttnn_visualizer.exceptions import (
     AuthenticationFailedException,
     HostKeyVerificationException,
     HostKeyVerificationFailedException,
-    NoReportsException,
     NoValidConnectionsError,
     RemoteConnectionException,
     RemoteFileReadException,
     SSHException,
+    response_forbidden,
 )
 from ttnn_visualizer.instances import get_or_create_instance
 from ttnn_visualizer.ssh_client import SSH_AUTH_FAILURE_MESSAGE
@@ -100,13 +101,6 @@ def remote_exception_handler(func):
                 status=ConnectionTestStates.FAILED,
                 message=f"Unable to open path: {str(err)}",
             )
-        except NoReportsException as err:
-            current_app.logger.warning(f"No reports: {str(err)}")
-            raise RemoteConnectionException(
-                status=err.status,
-                message=f"No remote reports found: {str(err)}",
-                detail=getattr(err, "detail", None),
-            )
         except NoValidConnectionsError as err:
             current_app.logger.warning(
                 f"SSH connection failed for {connection.username}@{connection.host}: {str(err)}"
@@ -170,6 +164,35 @@ def local_only(f):
     def decorated_function(*args, **kwargs):
         if current_app.config["SERVER_MODE"]:
             abort(403, description="Endpoint not accessible")
+
+        return f(*args, **kwargs)
+
+    return decorated_function
+
+
+DIRECT_REPORT_MODE_DELETE_REFUSAL = (
+    "Reports read from TT_METAL_HOME are not managed by TT-NN Visualizer "
+    "and cannot be deleted."
+)
+
+
+def refuse_in_direct_report_mode(f: Callable[..., Any]) -> Callable[..., Any]:
+    """Refuse a report delete when the paired listing reads the TT-Metal tree.
+
+    In direct-report mode ``GET /profiler`` and ``GET /performance`` list
+    ``$TT_METAL_HOME/generated/...``, which the app neither created nor manages. Saying so
+    is more honest than a 404 against a local data directory the client never saw listed.
+
+    Returns the refusal rather than calling ``abort`` so the body carries the reason as
+    ``{"error": ...}``, which is the shape the SPA's ``getResponseError`` reads.
+    """
+    from flask import current_app
+    from ttnn_visualizer.utils import create_path_resolver
+
+    @wraps(f)
+    def decorated_function(*args: Any, **kwargs: Any) -> Any:
+        if create_path_resolver(current_app).is_direct_report_mode:
+            return response_forbidden(DIRECT_REPORT_MODE_DELETE_REFUSAL)
 
         return f(*args, **kwargs)
 

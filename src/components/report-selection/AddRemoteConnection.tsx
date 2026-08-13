@@ -12,10 +12,11 @@ import { RemoteConnection } from '../../definitions/RemoteConnection';
 
 interface AddRemoteConnectionProps {
     disabled: boolean;
+    connectionList: RemoteConnection[];
     onAddConnection: (remoteConnection: RemoteConnection) => void;
 }
 
-const AddRemoteConnection = ({ disabled, onAddConnection }: AddRemoteConnectionProps) => {
+const AddRemoteConnection = ({ disabled, connectionList, onAddConnection }: AddRemoteConnectionProps) => {
     const [isAddConnectionDialogOpen, setIsAddConnectionDialogOpen] = useState(false);
 
     return (
@@ -29,6 +30,7 @@ const AddRemoteConnection = ({ disabled, onAddConnection }: AddRemoteConnectionP
 
             <RemoteConnectionDialog
                 open={isAddConnectionDialogOpen}
+                existingConnections={connectionList}
                 onAddConnection={(newConnection) => {
                     onAddConnection(newConnection);
                     setIsAddConnectionDialogOpen(false);

@@ -3,14 +3,35 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import '@testing-library/jest-dom/vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { ComponentProps } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import RemoteConnectionDialog from '../src/components/report-selection/RemoteConnectionDialog';
+import {
+    ConnectionNameSubject,
+    STALE_CONNECTION_TESTS_CLASS,
+    getNameAvailableMessage,
+    getNameFieldLabel,
+    getNameRequiredMessage,
+    getNameTakenMessage,
+} from '../src/definitions/ConnectionDialog';
 import { ConnectionStatus, ConnectionTestStates } from '../src/definitions/ConnectionStatus';
-import { MULTIHOST_CHECKBOX_LABEL, RemoteConnection } from '../src/definitions/RemoteConnection';
-import { SSH_CONFIG_HOST_LABEL } from '../src/definitions/SshConfigHostPicker';
-import { SSH_IDENTITY_FILE_LABEL } from '../src/definitions/SshConnectionFields';
+import {
+    REMOTE_MEMORY_PATH_LABEL,
+    REMOTE_PERFORMANCE_PATH_LABEL,
+    RemoteConnection,
+} from '../src/definitions/RemoteConnection';
+import { SSH_CONFIG_HOST_CUSTOM, SSH_CONFIG_HOST_SUBLABEL } from '../src/definitions/SshConfigHostPicker';
+import {
+    REMOTE_PATH_NOT_ABSOLUTE_ERROR,
+    SSH_HOST_LABEL,
+    SSH_IDENTITY_FILE_LABEL,
+    SSH_PORT_LABEL,
+    SSH_USERNAME_LABEL,
+} from '../src/definitions/SshConnectionFields';
+import { TEST_IDS } from '../src/definitions/TestIds';
 import getButtonWithText from './helpers/getButtonWithText';
+import { MULTIHOST_CHECKBOX_NAME } from './helpers/multihostCheckbox';
 import { SshConfigHostsQueryResult, noSshConfigResult, sshConfigHostsResult } from './helpers/sshConfigFixtures';
 import { ExistingTarget, describeSshConfigPrefillContract } from './helpers/sshConfigPrefillContract';
 
@@ -68,10 +89,10 @@ describe('RemoteConnectionDialog defaults', () => {
             />,
         );
 
-        expect(screen.getByLabelText('SSH Port')).toHaveValue('2222');
-        expect(screen.getByLabelText('Memory report folder path')).toHaveValue('/mem');
-        expect(screen.getByLabelText('Performance report folder path')).toHaveValue('/perf');
-        expect(screen.getByLabelText('Username')).toHaveValue('bob');
+        expect(screen.getByLabelText(SSH_PORT_LABEL)).toHaveValue('2222');
+        expect(screen.getByLabelText(REMOTE_MEMORY_PATH_LABEL)).toHaveValue('/mem');
+        expect(screen.getByLabelText(REMOTE_PERFORMANCE_PATH_LABEL)).toHaveValue('/perf');
+        expect(screen.getByLabelText(SSH_USERNAME_LABEL)).toHaveValue('bob');
     });
 
     it('treats a missing performancePath on edit as an empty controlled input', () => {
@@ -92,13 +113,24 @@ describe('RemoteConnectionDialog defaults', () => {
             />,
         );
 
-        expect(screen.getByLabelText('Performance report folder path')).toHaveValue('');
+        expect(screen.getByLabelText(REMOTE_PERFORMANCE_PATH_LABEL)).toHaveValue('');
     });
 });
 
+const CONNECTION_NAME_LABEL = getNameFieldLabel(ConnectionNameSubject.CONNECTION);
+
+const getTestBlock = () => screen.queryByRole('group', { name: 'Test Connection' });
+
+/** The server results, which go stale — as opposed to the name check, which is recomputed. */
+const getServerTestResults = () => screen.getByTestId(TEST_IDS.CONNECTION_TEST_RESULTS);
+
+/** Saving needs a name, so anything that ends at an enabled save button has to supply one. */
+const fillName = (name = 'my lab box') =>
+    fireEvent.change(screen.getByLabelText(CONNECTION_NAME_LABEL), { target: { value: name } });
+
 const PASSING_TESTS: ConnectionStatus[] = [
     { status: ConnectionTestStates.OK, message: 'SSH connection established' },
-    { status: ConnectionTestStates.OK, message: 'Memory report folder path exists' },
+    { status: ConnectionTestStates.OK, message: 'Found 3 memory reports' },
 ];
 
 const renderRemoteConnectionDialog = ({ open = true, existing }: { open?: boolean; existing?: ExistingTarget } = {}) =>
@@ -121,12 +153,10 @@ const renderRemoteConnectionDialog = ({ open = true, existing }: { open?: boolea
 
 describeSshConfigPrefillContract('RemoteConnectionDialog', {
     renderDialog: renderRemoteConnectionDialog,
-    hostLabel: 'SSH Host',
-    sshPortLabel: 'SSH Port',
+    nameSubject: ConnectionNameSubject.CONNECTION,
     runTestsLabel: 'Run tests',
     saveLabel: 'Add connection',
     passingTestMessage: 'SSH connection established',
-    invalidatedTestMessage: 'Check SSH connection is valid',
     useSshConfigHostsMock,
     setServerMode: (serverMode) => getServerConfigMock.mockReturnValue({ ...SERVER_CONFIG, SERVER_MODE: serverMode }),
     mockPassingTest: () => testConnectionMock.mockResolvedValue(PASSING_TESTS),
@@ -141,22 +171,21 @@ describe('RemoteConnectionDialog SSH config prefill specifics', () => {
         render(
             <RemoteConnectionDialog
                 open
-                remoteConnection={{
-                    name: 'my lab box',
-                    host: 'old-host',
-                    port: 22,
-                    username: 'bob',
-                    profilerPath: '/mem',
-                }}
                 onClose={vi.fn()}
                 onAddConnection={vi.fn()}
             />,
         );
 
-        fireEvent.change(screen.getByLabelText(SSH_CONFIG_HOST_LABEL), { target: { value: 'work-gpu' } });
+        // Reaching the Name field at all means choosing something first, so the name is
+        // typed after one alias and kept when the user settles on another.
+        fireEvent.change(screen.getByLabelText(SSH_CONFIG_HOST_SUBLABEL), {
+            target: { value: SSH_CONFIG_HOST_CUSTOM },
+        });
+        fireEvent.change(screen.getByLabelText(CONNECTION_NAME_LABEL), { target: { value: 'my lab box' } });
+        fireEvent.change(screen.getByLabelText(SSH_CONFIG_HOST_SUBLABEL), { target: { value: 'work-gpu' } });
 
-        expect(screen.getByLabelText('Name')).toHaveValue('my lab box');
-        expect(screen.getByLabelText('SSH Host')).toHaveValue('work-gpu');
+        expect(screen.getByLabelText(CONNECTION_NAME_LABEL)).toHaveValue('my lab box');
+        expect(screen.getByLabelText(SSH_HOST_LABEL)).toHaveValue('work-gpu');
     });
 
     it('keeps the existing username when the config host has no User', () => {
@@ -170,24 +199,17 @@ describe('RemoteConnectionDialog SSH config prefill specifics', () => {
             />,
         );
 
-        fireEvent.change(screen.getByLabelText(SSH_CONFIG_HOST_LABEL), { target: { value: 'bare-host' } });
+        fireEvent.change(screen.getByLabelText(SSH_CONFIG_HOST_SUBLABEL), { target: { value: 'bare-host' } });
 
-        expect(screen.getByLabelText('Username')).toHaveValue('bob');
-        expect(screen.getByLabelText('SSH Host')).toHaveValue('bare-host');
-        expect(screen.getByLabelText('Name')).toHaveValue('bare-host');
-        expect(screen.getByLabelText('SSH Port')).toHaveValue('45985');
+        expect(screen.getByLabelText(SSH_USERNAME_LABEL)).toHaveValue('bob');
+        expect(screen.getByLabelText(SSH_HOST_LABEL)).toHaveValue('bare-host');
+        expect(screen.getByLabelText(CONNECTION_NAME_LABEL)).toHaveValue('bare-host');
+        expect(screen.getByLabelText(SSH_PORT_LABEL)).toHaveValue('45985');
     });
 });
 
-describe('RemoteConnectionDialog connection test invalidation', () => {
-    it.each([
-        ['SSH Host', 'other-host'],
-        ['Username', 'carol'],
-        ['SSH Port', '2022'],
-        ['Memory report folder path', '/elsewhere'],
-        ['Performance report folder path', '/elsewhere-perf'],
-        [SSH_IDENTITY_FILE_LABEL, '/tmp/id_ed25519'],
-    ])('discards a passing test result when %s is edited by hand', async (label, value) => {
+describe('RemoteConnectionDialog connection test block', () => {
+    it('stays hidden until a test is run, then survives an edit as a stale result', async () => {
         testConnectionMock.mockResolvedValue(PASSING_TESTS);
 
         render(
@@ -198,13 +220,229 @@ describe('RemoteConnectionDialog connection test invalidation', () => {
             />,
         );
 
-        fireEvent.change(screen.getByLabelText('SSH Host'), { target: { value: 'work-gpu' } });
+        expect(getTestBlock()).not.toBeInTheDocument();
+
+        fireEvent.click(getButtonWithText('Run tests'));
+        await waitFor(() => expect(screen.getByText('SSH connection established')).toBeInTheDocument());
+        expect(getServerTestResults()).not.toHaveClass(STALE_CONNECTION_TESTS_CLASS);
+
+        fireEvent.change(screen.getByLabelText(SSH_HOST_LABEL), { target: { value: 'other-host' } });
+
+        // The record of what the last run found is worth more than a clean slate,
+        // as long as it can't be read as approving the target now in the form.
+        expect(screen.getByText('SSH connection established')).toBeInTheDocument();
+        expect(getServerTestResults()).toHaveClass(STALE_CONNECTION_TESTS_CLASS);
+    });
+
+    it('leaves the name check outside the stale marking, since it is recomputed', async () => {
+        testConnectionMock.mockResolvedValue(PASSING_TESTS);
+
+        render(
+            <RemoteConnectionDialog
+                open
+                onClose={vi.fn()}
+                onAddConnection={vi.fn()}
+            />,
+        );
+
+        fillName();
+        fireEvent.click(getButtonWithText('Run tests'));
+        await waitFor(() => expect(getButtonWithText('Add connection')).toBeEnabled());
+
+        fireEvent.change(screen.getByLabelText(SSH_HOST_LABEL), { target: { value: 'other-host' } });
+
+        // The name check is recomputed against the form as it stands, so greying it out
+        // alongside the run's results would recede a verdict that is still current.
+        const nameMessage = getNameAvailableMessage(ConnectionNameSubject.CONNECTION);
+        expect(screen.getByText(nameMessage)).toBeInTheDocument();
+        expect(getServerTestResults()).toHaveClass(STALE_CONNECTION_TESTS_CLASS);
+        expect(within(getServerTestResults()).queryByText(nameMessage)).not.toBeInTheDocument();
+    });
+
+    it('lets a warning be saved, since an empty report folder is not a broken connection', async () => {
+        // The server reports a configured path holding no reports as WARNING rather than
+        // failing, so tightening this gate to OK-only would lock out the very case it
+        // was widened for — a host whose reports haven't been generated yet.
+        testConnectionMock.mockResolvedValue([
+            { status: ConnectionTestStates.OK, message: 'SSH connection established' },
+            { status: ConnectionTestStates.WARNING, message: 'Memory path exists but no reports found' },
+        ]);
+
+        render(
+            <RemoteConnectionDialog
+                open
+                onClose={vi.fn()}
+                onAddConnection={vi.fn()}
+            />,
+        );
+
+        fillName();
+        fireEvent.click(getButtonWithText('Run tests'));
+
+        await waitFor(() => expect(screen.getByText('Memory path exists but no reports found')).toBeInTheDocument());
+        expect(getButtonWithText('Add connection')).toBeEnabled();
+    });
+
+    it('drops the stale marking once the tests are run again', async () => {
+        testConnectionMock.mockResolvedValue(PASSING_TESTS);
+
+        render(
+            <RemoteConnectionDialog
+                open
+                onClose={vi.fn()}
+                onAddConnection={vi.fn()}
+            />,
+        );
+
+        fillName();
+        fireEvent.click(getButtonWithText('Run tests'));
+        await waitFor(() => expect(getButtonWithText('Add connection')).toBeEnabled());
+        fireEvent.change(screen.getByLabelText(SSH_HOST_LABEL), { target: { value: 'other-host' } });
+        expect(getServerTestResults()).toHaveClass(STALE_CONNECTION_TESTS_CLASS);
+
+        fireEvent.click(getButtonWithText('Run tests'));
+
+        await waitFor(() => expect(getButtonWithText('Add connection')).toBeEnabled());
+        expect(getServerTestResults()).not.toHaveClass(STALE_CONNECTION_TESTS_CLASS);
+    });
+});
+
+describe('RemoteConnectionDialog connection name validation', () => {
+    const SAVED: RemoteConnection = {
+        name: 'Worker',
+        host: 'worker-01',
+        port: 2222,
+        username: 'tt',
+        profilerPath: '/mem',
+    };
+
+    const renderWithSaved = (props: Partial<ComponentProps<typeof RemoteConnectionDialog>> = {}) =>
+        render(
+            <RemoteConnectionDialog
+                open
+                existingConnections={[SAVED]}
+                onClose={vi.fn()}
+                onAddConnection={vi.fn()}
+                {...props}
+            />,
+        );
+
+    it('reports a duplicate name as soon as it is typed, without waiting for a test run', () => {
+        renderWithSaved();
+
+        expect(getTestBlock()).not.toBeInTheDocument();
+
+        fillName(SAVED.name);
+
+        expect(screen.getByText(getNameTakenMessage(ConnectionNameSubject.CONNECTION, SAVED.name))).toBeInTheDocument();
+        expect(getButtonWithText('Add connection')).toBeDisabled();
+    });
+
+    it.each([
+        ['case', 'worker'],
+        ['surrounding space', '  Worker  '],
+    ])('reports a name differing only by %s as a duplicate', (_difference, name) => {
+        renderWithSaved();
+
+        fillName(name);
+
+        expect(
+            screen.getByText(getNameTakenMessage(ConnectionNameSubject.CONNECTION, name.trim())),
+        ).toBeInTheDocument();
+    });
+
+    it('keeps a duplicate name from being saved even after the tests pass', async () => {
+        testConnectionMock.mockResolvedValue(PASSING_TESTS);
+        renderWithSaved();
+
+        fillName('my lab box');
+        fireEvent.click(getButtonWithText('Run tests'));
+        await waitFor(() => expect(getButtonWithText('Add connection')).toBeEnabled());
+
+        // A rename doesn't invalidate the SSH results, so nothing else here would notice.
+        fillName(SAVED.name);
+
+        expect(screen.getByText('SSH connection established')).toBeInTheDocument();
+        expect(getButtonWithText('Add connection')).toBeDisabled();
+    });
+
+    it('takes the failure back down when the name is changed to a free one', () => {
+        renderWithSaved();
+
+        fillName(SAVED.name);
+        expect(getTestBlock()).toBeInTheDocument();
+
+        fillName('Worker 2');
+
+        // With nothing left to report and no test run to report it alongside, the whole
+        // block goes rather than leaving a tick the user never asked for.
+        expect(getTestBlock()).not.toBeInTheDocument();
+    });
+
+    it('reports a missing name with the rest of the results, rather than before them', async () => {
+        testConnectionMock.mockResolvedValue(PASSING_TESTS);
+        renderWithSaved();
+
+        // Nothing to complain about until the user asks for a verdict.
+        expect(getTestBlock()).not.toBeInTheDocument();
+
+        fireEvent.click(getButtonWithText('Run tests'));
+
+        await waitFor(() =>
+            expect(screen.getByText(getNameRequiredMessage(ConnectionNameSubject.CONNECTION))).toBeInTheDocument(),
+        );
+        // Saved without a name, the connection is discarded as invalid on the next read.
+        expect(getButtonWithText('Add connection')).toBeDisabled();
+    });
+
+    it('does not report the connection being edited as a duplicate of itself', async () => {
+        testConnectionMock.mockResolvedValue(PASSING_TESTS);
+        renderWithSaved({ remoteConnection: SAVED, buttonLabel: 'Save connection' });
+
+        fireEvent.click(getButtonWithText('Run tests'));
+
+        await waitFor(() => expect(getButtonWithText('Save connection')).toBeEnabled());
+        expect(screen.getByText(getNameAvailableMessage(ConnectionNameSubject.CONNECTION))).toBeInTheDocument();
+    });
+
+    it('reports an edit that takes the name of a different connection', () => {
+        const other: RemoteConnection = { ...SAVED, name: 'Spare', host: 'worker-02' };
+
+        renderWithSaved({ existingConnections: [SAVED, other], remoteConnection: SAVED });
+
+        fillName(other.name);
+
+        expect(screen.getByText(getNameTakenMessage(ConnectionNameSubject.CONNECTION, other.name))).toBeInTheDocument();
+    });
+});
+
+describe('RemoteConnectionDialog connection test invalidation', () => {
+    it.each([
+        [SSH_HOST_LABEL, 'other-host'],
+        [SSH_USERNAME_LABEL, 'carol'],
+        [SSH_PORT_LABEL, '2022'],
+        [REMOTE_MEMORY_PATH_LABEL, '/elsewhere'],
+        [REMOTE_PERFORMANCE_PATH_LABEL, '/elsewhere-perf'],
+        [SSH_IDENTITY_FILE_LABEL, '/tmp/id_ed25519'],
+    ])('stops a passing test result gating the save when %s is edited by hand', async (label, value) => {
+        testConnectionMock.mockResolvedValue(PASSING_TESTS);
+
+        render(
+            <RemoteConnectionDialog
+                open
+                onClose={vi.fn()}
+                onAddConnection={vi.fn()}
+            />,
+        );
+
+        fillName();
+        fireEvent.change(screen.getByLabelText(SSH_HOST_LABEL), { target: { value: 'work-gpu' } });
         fireEvent.click(getButtonWithText('Run tests'));
         await waitFor(() => expect(getButtonWithText('Add connection')).toBeEnabled());
 
         fireEvent.change(screen.getByLabelText(label), { target: { value } });
 
-        expect(screen.queryByText('SSH connection established')).not.toBeInTheDocument();
+        expect(getServerTestResults()).toHaveClass(STALE_CONNECTION_TESTS_CLASS);
         expect(getButtonWithText('Add connection')).toBeDisabled();
     });
 
@@ -219,12 +457,14 @@ describe('RemoteConnectionDialog connection test invalidation', () => {
             />,
         );
 
+        fillName();
         fireEvent.click(getButtonWithText('Run tests'));
         await waitFor(() => expect(getButtonWithText('Add connection')).toBeEnabled());
 
-        fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'my lab box' } });
+        fireEvent.change(screen.getByLabelText(CONNECTION_NAME_LABEL), { target: { value: 'renamed box' } });
 
         expect(screen.getByText('SSH connection established')).toBeInTheDocument();
+        expect(getServerTestResults()).not.toHaveClass(STALE_CONNECTION_TESTS_CLASS);
         expect(getButtonWithText('Add connection')).toBeEnabled();
     });
 
@@ -241,7 +481,7 @@ describe('RemoteConnectionDialog connection test invalidation', () => {
             />,
         );
 
-        fireEvent.change(screen.getByLabelText(SSH_CONFIG_HOST_LABEL), { target: { value: 'work-gpu' } });
+        fireEvent.change(screen.getByLabelText(SSH_CONFIG_HOST_SUBLABEL), { target: { value: 'work-gpu' } });
         fireEvent.click(getButtonWithText('Run tests'));
         await waitFor(() => expect(getButtonWithText('Add connection')).toBeEnabled());
 
@@ -258,6 +498,185 @@ describe('RemoteConnectionDialog connection test invalidation', () => {
     });
 });
 
+describe('RemoteConnectionDialog remote path validation', () => {
+    // The backend refuses a relative path, so catching it here keeps the user in the
+    // form instead of sending a request that comes back as "Invalid connection data".
+    it.each([
+        [REMOTE_MEMORY_PATH_LABEL, 'tt-metal/generated/ttnn/reports'],
+        [REMOTE_PERFORMANCE_PATH_LABEL, '~/tt-metal/generated/profiler/reports'],
+    ])('reports a path that is not absolute on %s', (label, value) => {
+        render(
+            <RemoteConnectionDialog
+                open
+                onClose={vi.fn()}
+                onAddConnection={vi.fn()}
+            />,
+        );
+
+        const input = screen.getByLabelText(label);
+        fireEvent.change(input, { target: { value } });
+
+        // Asserted as the input's description rather than as text on the page: Blueprint
+        // only colours the field, so the message reaches a screen reader solely through
+        // the aria-describedby the dialog wires up itself.
+        expect(input).toHaveAccessibleDescription(REMOTE_PATH_NOT_ABSOLUTE_ERROR);
+        expect(input).toBeInvalid();
+        expect(getButtonWithText('Run tests')).toBeDisabled();
+    });
+
+    it('does not run the connection test while a path is invalid', () => {
+        render(
+            <RemoteConnectionDialog
+                open
+                onClose={vi.fn()}
+                onAddConnection={vi.fn()}
+            />,
+        );
+
+        fireEvent.change(screen.getByLabelText(REMOTE_MEMORY_PATH_LABEL), {
+            target: { value: 'reports' },
+        });
+        fireEvent.click(getButtonWithText('Run tests'));
+
+        expect(testConnectionMock).not.toHaveBeenCalled();
+    });
+
+    it('clears the error once the path is made absolute', () => {
+        render(
+            <RemoteConnectionDialog
+                open
+                onClose={vi.fn()}
+                onAddConnection={vi.fn()}
+            />,
+        );
+
+        const input = screen.getByLabelText(REMOTE_MEMORY_PATH_LABEL);
+        fireEvent.change(input, { target: { value: 'reports' } });
+        expect(input).toHaveAccessibleDescription(REMOTE_PATH_NOT_ABSOLUTE_ERROR);
+
+        fireEvent.change(input, { target: { value: '/reports' } });
+
+        expect(input).not.toHaveAccessibleDescription(REMOTE_PATH_NOT_ABSOLUTE_ERROR);
+        expect(input).toBeValid();
+        expect(getButtonWithText('Run tests')).toBeEnabled();
+    });
+
+    it('leaves an unconfigured performance path unflagged', () => {
+        render(
+            <RemoteConnectionDialog
+                open
+                onClose={vi.fn()}
+                onAddConnection={vi.fn()}
+            />,
+        );
+
+        const input = screen.getByLabelText(REMOTE_PERFORMANCE_PATH_LABEL);
+        fireEvent.change(input, { target: { value: '' } });
+
+        expect(input).not.toHaveAccessibleDescription(REMOTE_PATH_NOT_ABSOLUTE_ERROR);
+        expect(input).toBeValid();
+        expect(getButtonWithText('Run tests')).toBeEnabled();
+    });
+
+    // The list keeps a connection stored before paths had to be absolute, so this is the
+    // repair route: opening it has to name the problem and leave the test — the only way to
+    // re-enable saving — closed until the path is fixed. Saving is already blocked by the
+    // absent test result, so `!hasPathError` in the save gate is defence in depth.
+    it('names the problem and withholds the test when a stored path is no longer accepted', () => {
+        render(
+            <RemoteConnectionDialog
+                open
+                remoteConnection={{
+                    name: 'legacy',
+                    host: 'work-gpu',
+                    port: 22,
+                    username: 'bob',
+                    profilerPath: 'tt-metal/generated/ttnn/reports',
+                }}
+                onClose={vi.fn()}
+                onAddConnection={vi.fn()}
+            />,
+        );
+
+        expect(screen.getByLabelText(REMOTE_MEMORY_PATH_LABEL)).toHaveAccessibleDescription(
+            REMOTE_PATH_NOT_ABSOLUTE_ERROR,
+        );
+        expect(getButtonWithText('Run tests')).toBeDisabled();
+        expect(getButtonWithText('Add connection')).toBeDisabled();
+    });
+
+    it('re-enables the test once the stored path is corrected', () => {
+        render(
+            <RemoteConnectionDialog
+                open
+                remoteConnection={{
+                    name: 'legacy',
+                    host: 'work-gpu',
+                    port: 22,
+                    username: 'bob',
+                    profilerPath: 'tt-metal/generated/ttnn/reports',
+                }}
+                onClose={vi.fn()}
+                onAddConnection={vi.fn()}
+            />,
+        );
+
+        const input = screen.getByLabelText(REMOTE_MEMORY_PATH_LABEL);
+        fireEvent.change(input, { target: { value: '/tt-metal/generated/ttnn/reports' } });
+
+        expect(input).not.toHaveAccessibleDescription(REMOTE_PATH_NOT_ABSOLUTE_ERROR);
+        expect(input).toBeValid();
+        expect(getButtonWithText('Run tests')).toBeEnabled();
+    });
+});
+
+describe('RemoteConnectionDialog connection test error handling', () => {
+    // A rejected field returns `{ error: … }`, not a status list. Casting that to an
+    // array reached `.map` as a non-array and took the dialog down with it.
+    it('falls back to a rendered failure when the error body is not a status list', async () => {
+        testConnectionMock.mockRejectedValue({
+            isAxiosError: true,
+            response: { status: 400, data: { error: 'Invalid connection data' } },
+        });
+
+        render(
+            <RemoteConnectionDialog
+                open
+                onClose={vi.fn()}
+                onAddConnection={vi.fn()}
+            />,
+        );
+
+        fireEvent.click(getButtonWithText('Run tests'));
+
+        await waitFor(() => expect(screen.getByText('Connection failed')).toBeInTheDocument());
+        expect(screen.getByText('Invalid connection data')).toBeInTheDocument();
+        expect(getButtonWithText('Add connection')).toBeDisabled();
+    });
+
+    it('renders a status list returned as an error body', async () => {
+        testConnectionMock.mockRejectedValue({
+            isAxiosError: true,
+            response: {
+                status: 422,
+                data: [{ status: ConnectionTestStates.FAILED, message: 'SSH authentication failed' }],
+            },
+        });
+
+        render(
+            <RemoteConnectionDialog
+                open
+                onClose={vi.fn()}
+                onAddConnection={vi.fn()}
+            />,
+        );
+
+        fireEvent.click(getButtonWithText('Run tests'));
+
+        await waitFor(() => expect(screen.getByText('SSH authentication failed')).toBeInTheDocument());
+    });
+});
+
 describe('RemoteConnectionDialog multihost performance flag', () => {
     it('defaults to unchecked for a new connection', () => {
         render(
@@ -268,7 +687,7 @@ describe('RemoteConnectionDialog multihost performance flag', () => {
             />,
         );
 
-        expect(screen.getByRole('checkbox', { name: MULTIHOST_CHECKBOX_LABEL })).not.toBeChecked();
+        expect(screen.getByRole('checkbox', { name: MULTIHOST_CHECKBOX_NAME })).not.toBeChecked();
     });
 
     it('reflects the saved flag when editing a connection', () => {
@@ -291,7 +710,7 @@ describe('RemoteConnectionDialog multihost performance flag', () => {
             />,
         );
 
-        expect(screen.getByRole('checkbox', { name: MULTIHOST_CHECKBOX_LABEL })).toBeChecked();
+        expect(screen.getByRole('checkbox', { name: MULTIHOST_CHECKBOX_NAME })).toBeChecked();
     });
 
     it('sends the flag with the connection test and the saved connection', async () => {
@@ -306,7 +725,8 @@ describe('RemoteConnectionDialog multihost performance flag', () => {
             />,
         );
 
-        fireEvent.click(screen.getByRole('checkbox', { name: MULTIHOST_CHECKBOX_LABEL }));
+        fillName();
+        fireEvent.click(screen.getByRole('checkbox', { name: MULTIHOST_CHECKBOX_NAME }));
         fireEvent.click(getButtonWithText('Run tests'));
 
         await waitFor(() =>
@@ -320,7 +740,7 @@ describe('RemoteConnectionDialog multihost performance flag', () => {
         expect(onAddConnection).toHaveBeenCalledWith(expect.objectContaining({ multihostPerformance: true }));
     });
 
-    it('discards a passing test result when the flag is toggled', async () => {
+    it('stops a passing test result gating the save when the flag is toggled', async () => {
         // The flag selects which layout is searched, so a result computed for the
         // other one says nothing about this connection and must not gate the save.
         testConnectionMock.mockResolvedValue(PASSING_TESTS);
@@ -333,12 +753,13 @@ describe('RemoteConnectionDialog multihost performance flag', () => {
             />,
         );
 
+        fillName();
         fireEvent.click(getButtonWithText('Run tests'));
         await waitFor(() => expect(getButtonWithText('Add connection')).toBeEnabled());
 
-        fireEvent.click(screen.getByRole('checkbox', { name: MULTIHOST_CHECKBOX_LABEL }));
+        fireEvent.click(screen.getByRole('checkbox', { name: MULTIHOST_CHECKBOX_NAME }));
 
-        expect(screen.queryByText('SSH connection established')).not.toBeInTheDocument();
+        expect(getServerTestResults()).toHaveClass(STALE_CONNECTION_TESTS_CLASS);
         expect(getButtonWithText('Add connection')).toBeDisabled();
     });
 });

@@ -2,11 +2,16 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import type { Layout, LayoutAxis, PlotData, PlotMouseEvent } from 'plotly.js';
+import type { Annotations, ClickAnnotationEvent, Layout, LayoutAxis, PlotData, PlotMouseEvent } from 'plotly.js';
 import classNames from 'classnames';
-import type { ReactNode } from 'react';
+import { type ReactNode, useMemo } from 'react';
 import Plot from '../../libs/PlotComponent';
-import { AxisConfig, PerfChartConfig, PerfChartLayout, PlotConfiguration } from '../../definitions/PlotConfigurations';
+import {
+    AxisConfig,
+    PerfChartConfig,
+    PlotConfiguration,
+    getPerfChartLayout,
+} from '../../definitions/PlotConfigurations';
 import PerfChartFrame from './PerfChartFrame';
 import 'styles/components/PerfChart.scss';
 
@@ -17,6 +22,10 @@ interface PerfChartSharedProps {
     subtitle?: ReactNode;
     className?: string;
     onPlotClick?: (event: Readonly<PlotMouseEvent>) => void;
+    /** Fires for annotations declared with `captureevents`, e.g. in-plot filter controls. */
+    onAnnotationClick?: (event: Readonly<ClickAnnotationEvent>) => void;
+    /** Guidance for in-plot controls this chart draws itself, one line each below the click hint. */
+    hints?: string[];
 }
 
 /** Custom layout (e.g. pie) — mutually exclusive with configuration. */
@@ -37,13 +46,20 @@ function mergeAxis(base: Partial<LayoutAxis> | undefined, axis?: AxisConfig): Pa
     return {
         ...base,
         ...axis,
-        // Fresh title/font objects so Plotly in-place mutation cannot alter PerfChartLayout.
+        // Caller-supplied title fields win, but the base title font survives a title override.
         title: {
             ...base?.title,
-            ...(base?.title?.font ? { font: { ...base.title.font } } : {}),
             ...axis?.title,
         },
     };
+}
+
+/** Callers memoize their annotations, and Plotly writes computed fields into the ones it is handed. */
+function cloneAnnotations(annotations: Partial<Annotations>[]): Partial<Annotations>[] {
+    return annotations.map((annotation) => ({
+        ...annotation,
+        ...(annotation.font ? { font: { ...annotation.font } } : {}),
+    }));
 }
 
 function cloneCustomLayout(layout: Partial<Layout>): Partial<Layout> {
@@ -54,11 +70,13 @@ function cloneCustomLayout(layout: Partial<Layout>): Partial<Layout> {
 }
 
 function getCartesianLayout(configuration: PlotConfiguration): Partial<Layout> {
+    const baseLayout = getPerfChartLayout();
+
     return {
-        ...PerfChartLayout,
+        ...baseLayout,
         showlegend: configuration.showLegend || false,
-        // Clone margins — never hand Plotly the shared PerfChartLayout.margin reference.
-        margin: { ...(configuration.margin ?? PerfChartLayout.margin!) },
+        margin: { ...(configuration.margin ?? baseLayout.margin!) },
+        ...(configuration.annotations ? { annotations: cloneAnnotations(configuration.annotations) } : {}),
         legend: {
             orientation: 'h',
             font: {
@@ -72,20 +90,36 @@ function getCartesianLayout(configuration: PlotConfiguration): Partial<Layout> {
             xanchor: 'center',
         },
         barmode: configuration.barMode,
-        xaxis: mergeAxis(PerfChartLayout.xaxis, configuration.xAxis),
-        yaxis: mergeAxis(PerfChartLayout.yaxis, configuration.yAxis),
-        yaxis2: mergeAxis(PerfChartLayout.yaxis2, configuration.yAxis2),
+        xaxis: mergeAxis(baseLayout.xaxis, configuration.xAxis),
+        yaxis: mergeAxis(baseLayout.yaxis, configuration.yAxis),
+        yaxis2: mergeAxis(baseLayout.yaxis2, configuration.yAxis2),
     };
 }
 
 function PerfChart(props: PerfChartProps) {
-    const { chartData, id, title, subtitle, className, onPlotClick } = props;
+    const { chartData, id, title, subtitle, className, onPlotClick, onAnnotationClick, hints } = props;
     const isClickable = onPlotClick != null;
     const isCustomLayout = props.layout != null;
-    // Clone custom layouts too — pie charts share PerfPieChartLayout as a module singleton.
-    const layout = isCustomLayout ? cloneCustomLayout(props.layout) : getCartesianLayout(props.configuration);
+    // react-plotly.js diffs layout by reference, so a fresh object here redraws every chart on
+    // every render of the owning view. Callers must memoize their configuration to benefit.
+    //
+    // Derived with the data rather than beside it because Plotly writes computed fields into the
+    // layout it is handed — resolved axis ranges above all. Retaining one across a data change
+    // would hand back a layout already carrying the previous dataset's extent, so the pair is
+    // rebuilt together and `data` is threaded through this memo to keep them in step.
+    const { data, layout } = useMemo(
+        () => ({
+            data: chartData,
+            layout:
+                props.layout != null
+                    ? // Clone custom layouts — pie charts share PerfPieChartLayout as a module singleton.
+                      cloneCustomLayout(props.layout)
+                    : getCartesianLayout(props.configuration),
+        }),
+        [chartData, props.layout, props.configuration],
+    );
     // Legend CSS hint is Cartesian-only; custom layout owns its own legend chrome.
-    const showLegendInstructions = !isCustomLayout && Boolean(props.configuration.showLegend);
+    const showLegendInstructions = !isCustomLayout && Boolean(props.configuration?.showLegend);
 
     return (
         <PerfChartFrame
@@ -96,13 +130,15 @@ function PerfChart(props: PerfChartProps) {
             title={title}
             subtitle={subtitle}
             isClickable={isClickable}
+            hints={hints}
         >
             <Plot
                 className='chart'
-                data={chartData}
+                data={data}
                 layout={layout}
                 config={PerfChartConfig}
                 onClick={onPlotClick}
+                onClickAnnotation={onAnnotationClick}
                 useResizeHandler
             />
         </PerfChartFrame>

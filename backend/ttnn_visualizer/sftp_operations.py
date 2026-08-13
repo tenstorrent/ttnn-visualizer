@@ -6,9 +6,9 @@ import json
 import logging
 import os
 import re
-import shlex
 import subprocess
 import time
+from enum import Enum
 from http import HTTPStatus
 from pathlib import Path
 from threading import Thread
@@ -21,7 +21,6 @@ from ttnn_visualizer.enums import ConnectionTestStates, SyncMethod
 from ttnn_visualizer.exceptions import (
     AuthenticationException,
     HostKeyVerificationException,
-    NoReportsException,
     NoValidConnectionsError,
     RemoteConnectionException,
     SSHException,
@@ -32,6 +31,12 @@ from ttnn_visualizer.models import (
     RemoteReportFolder,
     folder_segment_from_remote_path,
     rank_from_remote_path,
+)
+from ttnn_visualizer.remote_command import (
+    RemoteCommand,
+    remote_arg,
+    remote_glob_arg,
+    remote_scp_target,
 )
 from ttnn_visualizer.sockets import FileProgress, FileStatus, emit_file_status
 from ttnn_visualizer.ssh_client import SSHClient, raise_for_ssh_subprocess_error
@@ -52,6 +57,12 @@ logger = logging.getLogger(__name__)
 # scp where sftp might now work, never a failed sync. A restart clears it.
 _sftp_subsystem_unavailable: set[tuple[str, str, int]] = set()
 
+# What the report search exits with when its root is not there, so the caller can
+# tell an absent path from one holding nothing. Kept clear of the codes the remote
+# side produces on its own: `find` uses 1, a shell that cannot run the command uses
+# 126 or 127, and ssh itself uses 255.
+_MISSING_ROOT_EXIT_CODE = 87
+
 
 def _remote_transfer_key(remote_connection: RemoteConnection) -> tuple[str, str, int]:
     return (
@@ -63,17 +74,6 @@ def _remote_transfer_key(remote_connection: RemoteConnection) -> tuple[str, str,
 
 def _is_sftp_subsystem_unavailable(stderr: str) -> bool:
     return "subsystem request failed" in (stderr or "").lower()
-
-
-def _quote_keeping_globs(pattern: str) -> str:
-    """Shell-quote a remote path while leaving ``*`` free to expand on the host.
-
-    ``shlex.quote`` on the whole pattern would quote the wildcard too, turning a
-    glob the caller depends on into a literal filename. Quoting each side of the
-    wildcards instead keeps the expansion while closing the quote-escape that a
-    hand-rolled ``'{path}'`` leaves open.
-    """
-    return "*".join(shlex.quote(segment) for segment in pattern.split("*"))
 
 
 def get_active_sync_method(remote_connection: RemoteConnection) -> SyncMethod:
@@ -137,6 +137,18 @@ def _ssh_cmd_prefix(remote_connection: RemoteConnection) -> List[str]:
         cmd.extend(["-p", str(remote_connection.port)])
     cmd.append(f"{remote_connection.username}@{remote_connection.host}")
     return cmd
+
+
+def _ssh_argv(remote_connection: RemoteConnection, command: RemoteCommand) -> List[str]:
+    """Full ``ssh`` argv for one remote command.
+
+    The only intended caller of ``_ssh_cmd_prefix``. Everything after ``user@host``
+    is a single element because OpenSSH joins multiple remote arguments with spaces
+    and hands the result to the remote login shell — passing a path as its own argv
+    element looks safe locally but is not quoted remotely. Taking a ``RemoteCommand``
+    rather than a ``str`` is what makes a naive f-string a type error here.
+    """
+    return _ssh_cmd_prefix(remote_connection) + [str(command)]
 
 
 def _sftp_cmd_prefix(remote_connection: RemoteConnection) -> List[str]:
@@ -215,9 +227,10 @@ def resolve_file_path(remote_connection, file_path: str) -> str:
     """
     if "*" in file_path:
         # Build SSH command to list files matching the pattern (never prompts for password)
-        ssh_cmd = _ssh_cmd_prefix(remote_connection) + [
-            f"ls -1 {_quote_keeping_globs(file_path)}"
-        ]
+        ssh_cmd = _ssh_argv(
+            remote_connection,
+            RemoteCommand.from_shell_fragment(f"ls -1 {remote_glob_arg(file_path)}"),
+        )
 
         try:
             result = subprocess.run(
@@ -564,10 +577,13 @@ def get_remote_file_list(
     # POSIX paths, so paths containing tabs/newlines round-trip safely; the
     # first '\t' in each record is the unambiguous separator between the
     # decimal size and the path. Falls back below if -printf is unsupported.
-    quoted_folder = shlex.quote(remote_folder)
-    ssh_cmd = _ssh_cmd_prefix(remote_connection) + [
-        f"find {quoted_folder} -type f -printf '%s\\t%p\\0'",
-    ]
+    quoted_folder = remote_arg(remote_folder)
+    ssh_cmd = _ssh_argv(
+        remote_connection,
+        RemoteCommand.from_shell_fragment(
+            f"find {quoted_folder} -type f -printf '%s\\t%p\\0'"
+        ),
+    )
 
     try:
         result = subprocess.run(
@@ -630,10 +646,10 @@ def _get_remote_file_list_without_sizes(
     exclude_patterns: List[str],
 ) -> List[tuple[str, int]]:
     """Fallback when GNU find -printf is unavailable. Sizes default to 0."""
-    quoted_folder = shlex.quote(remote_folder)
-    ssh_cmd = _ssh_cmd_prefix(remote_connection) + [
-        f"find {quoted_folder} -type f",
-    ]
+    ssh_cmd = _ssh_argv(
+        remote_connection,
+        RemoteCommand.of("find", remote_folder, "-type", "f"),
+    )
     try:
         result = subprocess.run(
             ssh_cmd,
@@ -666,10 +682,10 @@ def get_remote_directory_list(
     exclude_patterns = exclude_patterns or []
 
     # Build SSH command to find all directories recursively (never prompts for password)
-    quoted_folder = shlex.quote(remote_folder)
-    ssh_cmd = _ssh_cmd_prefix(remote_connection) + [
-        f"find {quoted_folder} -type d",
-    ]
+    ssh_cmd = _ssh_argv(
+        remote_connection,
+        RemoteCommand.of("find", remote_folder, "-type", "d"),
+    )
 
     try:
         result = subprocess.run(
@@ -703,17 +719,12 @@ def get_remote_directory_list(
         return []
 
 
-def _scp_remote_target(remote_connection: RemoteConnection, remote_file: str) -> str:
-    """Build scp remote target for argv (no shell quoting — subprocess passes it verbatim)."""
-    return f"{remote_connection.username}@{remote_connection.host}:{remote_file}"
-
-
 def download_single_file_scp(
     remote_connection: RemoteConnection, remote_file: str, local_file: Path
 ) -> SyncMethod:
     """Download a single file using scp (when the remote SFTP subsystem is disabled)."""
     local_file.parent.mkdir(parents=True, exist_ok=True)
-    remote_spec = _scp_remote_target(remote_connection, remote_file)
+    remote_spec = remote_scp_target(remote_connection, remote_file)
     scp_cmd = _scp_cmd_prefix(remote_connection) + [remote_spec, str(local_file)]
     try:
         subprocess.run(
@@ -755,9 +766,7 @@ def download_single_file_sftp(
     local_file.parent.mkdir(parents=True, exist_ok=True)
     sftp_cmd = _sftp_cmd_prefix(remote_connection)
     # Batch script is parsed by sftp, not the shell — quote paths for spaces/special chars.
-    sftp_commands = (
-        f"get {shlex.quote(remote_file)} {shlex.quote(str(local_file))}\nquit\n"
-    )
+    sftp_commands = f"get {remote_arg(remote_file)} {remote_arg(local_file)}\nquit\n"
 
     try:
         subprocess.run(
@@ -825,22 +834,19 @@ def get_remote_profiler_folder_from_config_path(
         )
 
     def ssh_stat_mtime(path: str) -> int:
-        stat_cmd = _ssh_cmd_prefix(remote_connection) + [
-            "stat",
-            "-c",
-            "%Y",
-            path,
-        ]
+        stat_cmd = _ssh_argv(
+            remote_connection, RemoteCommand.of("stat", "-c", "%Y", path)
+        )
         stat_result = ssh_run_checked(stat_cmd)
         return int(float(stat_result.stdout.strip()))
 
     def ssh_cat(path: str) -> str:
-        cat_cmd = _ssh_cmd_prefix(remote_connection) + ["cat", path]
+        cat_cmd = _ssh_argv(remote_connection, RemoteCommand.of("cat", path))
         cat_result = ssh_run_checked(cat_cmd)
         return cat_result.stdout
 
     def ssh_test_file(path: str) -> bool:
-        test_cmd = _ssh_cmd_prefix(remote_connection) + ["test", "-f", path]
+        test_cmd = _ssh_argv(remote_connection, RemoteCommand.of("test", "-f", path))
         result = subprocess.run(
             test_cmd,
             capture_output=True,
@@ -855,11 +861,13 @@ def get_remote_profiler_folder_from_config_path(
         # `bash -lc '<script>'` string instead. Use find so the script has no
         # shell loop syntax.
         inner = (
-            f"find {shlex.quote(folder_str)} -maxdepth 1 "
+            f"find {remote_arg(folder_str)} -maxdepth 1 "
             "-name 'config_*_of_*.json' -print"
         )
-        remote_cmd = "bash -lc " + shlex.quote(inner)
-        list_cmd = _ssh_cmd_prefix(remote_connection) + [remote_cmd]
+        list_cmd = _ssh_argv(
+            remote_connection,
+            RemoteCommand.of("bash", "-lc", inner),
+        )
         result = subprocess.run(
             list_cmd,
             capture_output=True,
@@ -986,13 +994,39 @@ def read_remote_file(
     return ssh_client.read_file(path, timeout=30)
 
 
+class RemoteSearchRootState(Enum):
+    """What the search settled about its root before matching anything under it.
+
+    ``UNKNOWN`` is the honest answer when no reply came back at all: a timeout
+    has not established that the root is there, and calling it ``PRESENT``
+    would report an absence of reports under a directory never reached.
+    """
+
+    PRESENT = "present"
+    MISSING = "missing"
+    UNKNOWN = "unknown"
+
+
+class RemoteFolderSearch(NamedTuple):
+    """Folders the search matched, and what it settled about its root.
+
+    One remote command answers both, but what the root's state *means* belongs
+    to the caller: the connection test reports anything other than ``PRESENT``
+    as a failed path, while the listing flows treat them all the same as a path
+    holding nothing.
+    """
+
+    folders: List[str]
+    root_state: RemoteSearchRootState
+
+
 def _find_performance_report_folders(
     remote_connection: RemoteConnection,
-) -> List[str]:
+) -> RemoteFolderSearch:
     """Remote performance report folders, honouring the connection's layout."""
     performance_path = remote_connection.performancePath
     if not performance_path:
-        return []
+        return RemoteFolderSearch(folders=[], root_state=RemoteSearchRootState.UNKNOWN)
 
     if not remote_connection.multihostPerformance:
         return find_folders_by_files(
@@ -1011,103 +1045,89 @@ def _find_performance_report_folders(
 
 
 class RemoteReportCounts(NamedTuple):
-    """Report folders found per kind; ``None`` when that path is not configured."""
+    """Report folders found per kind; ``None`` when that path is not configured.
+
+    A configured path that holds nothing counts ``0`` rather than raising, so
+    the caller can report each kind's outcome against the path it searched.
+    """
 
     profiler: Optional[int]
     performance: Optional[int]
+
+
+def _raise_report_path_failure(message: str) -> NoReturn:
+    logger.error(message)
+    raise RemoteConnectionException(message=message, status=ConnectionTestStates.FAILED)
+
+
+def _count_reports_found(label: str, search: RemoteFolderSearch) -> int:
+    """Reports the search matched, or a failure naming the path it searched.
+
+    ``label`` is the noun the rest of the connection test uses for this path,
+    so a user reading the failure sees the same word as the form field they
+    have to correct.
+    """
+    if search.root_state is RemoteSearchRootState.MISSING:
+        _raise_report_path_failure(
+            f"{label} directory does not exist or cannot be accessed"
+        )
+
+    if search.root_state is RemoteSearchRootState.UNKNOWN:
+        _raise_report_path_failure(
+            f"{label} directory could not be checked because the search did not "
+            "complete"
+        )
+
+    return len(search.folders)
 
 
 @remote_exception_handler
 def check_remote_path_for_reports(
     remote_connection: RemoteConnection,
 ) -> RemoteReportCounts:
-    remote_profiler_paths = []
+    """Count the reports under each configured path, one SSH round trip each.
+
+    A path the search could not settle fails the whole test rather than counting
+    zero: it cannot say anything about reports under a directory it never
+    reached, and "exists but empty" is advice the user can act on where "does
+    not exist" is a different problem entirely.
+    """
+    profiler_count: Optional[int] = None
     if remote_connection.profilerPath:
-        remote_profiler_paths = find_folders_by_files(
-            remote_connection, remote_connection.profilerPath, [TEST_DB_FILE]
+        profiler_count = _count_reports_found(
+            "Memory",
+            find_folders_by_files(
+                remote_connection, remote_connection.profilerPath, [TEST_DB_FILE]
+            ),
         )
     else:
         logger.info("No profiler path configured; skipping check")
 
-    remote_performance_paths = []
+    performance_count: Optional[int] = None
     if remote_connection.performancePath:
-        remote_performance_paths = _find_performance_report_folders(remote_connection)
+        performance_count = _count_reports_found(
+            "Performance", _find_performance_report_folders(remote_connection)
+        )
     else:
         logger.info("No performance path configured; skipping check")
 
-    errors = []
-    if not remote_profiler_paths and remote_connection.profilerPath:
-        errors.append(f"Profiler folder path: {remote_connection.profilerPath}")
-    if not remote_performance_paths and remote_connection.performancePath:
-        performance_error = (
-            f"Performance folder path: {remote_connection.performancePath}"
-        )
-        if remote_connection.multihostPerformance:
-            # Naming the expected layout turns the most likely misconfiguration
-            # (pointing at the parent of the per-rank folders) into a self-
-            # diagnosing warning.
-            performance_error += (
-                f" (multihost is enabled, so reports are expected at "
-                f"{MULTIHOST_REPORT_LAYOUT_HINT}/<report> under this path)"
-            )
-        errors.append(performance_error)
-
-    if errors:
-        raise NoReportsException(
-            message="; ".join(errors),
-            status=ConnectionTestStates.WARNING,
-        )
-
-    return RemoteReportCounts(
-        profiler=(
-            len(remote_profiler_paths) if remote_connection.profilerPath else None
-        ),
-        performance=(
-            len(remote_performance_paths) if remote_connection.performancePath else None
-        ),
-    )
+    return RemoteReportCounts(profiler=profiler_count, performance=performance_count)
 
 
-@remote_exception_handler
-def check_remote_path_exists(remote_connection: RemoteConnection, path_key: str):
-    """Check if a remote path exists using SSH test command."""
-    path = getattr(remote_connection, path_key)
-
-    ssh_client = SSHClient(remote_connection)
-
-    try:
-        if ssh_client.check_path_exists(path, timeout=10):
-            return True
-        else:
-            # Directory does not exist or is inaccessible
-            if path_key == "performancePath":
-                message = "Performance directory does not exist or cannot be accessed"
-            if path_key == "profilerPath":
-                message = "Profiler directory does not exist or cannot be accessed"
-            else:
-                message = f"Remote path '{path}' does not exist or cannot be accessed"
-
-            logger.error(message)
-            raise RemoteConnectionException(
-                message=message, status=ConnectionTestStates.FAILED
-            )
-    except SSHException as e:
-        logger.error(f"Error checking remote path: {path}")
-        raise RemoteConnectionException(
-            message=f"Error checking remote path: {path}: {str(e)}",
-            status=ConnectionTestStates.FAILED,
-        )
-
-
-def _report_search_find_expression(
+def _report_search_command(
     root_folder: str, subdirectory_glob: Optional[str], file_names: List[str]
 ) -> str:
-    """Remote ``find`` expression listing report directories in one round trip.
+    """Remote command listing report directories in one round trip.
 
     Without ``subdirectory_glob``, candidates are the immediate children of
     ``root_folder``. With it, candidates sit directly below a matching relative
     subpath, so the search depth follows the number of glob segments. Only
     directories holding one of ``file_names`` are printed.
+
+    The root's own existence is settled here rather than by a preceding
+    ``test -e`` over its own SSH connection: ``find`` cannot distinguish "the
+    path is not there" from "nothing under it matched", and the connection test
+    has to tell a user those apart.
     """
     # A configured trailing slash is normalised out of both the root and the
     # pattern below. GNU and BSD `find` disagree on whether the root it echoes
@@ -1124,19 +1144,25 @@ def _report_search_find_expression(
         # the same value is what stops the glob spanning segments and matching a
         # deeper accidental layout.
         depth = 1 + len(subdirectory_glob.split("/"))
-        path_filter = f" -path {shlex.quote(f'{root}/{subdirectory_glob}/*')}"
+        # Fully quoted, not `remote_glob_arg`: this `*` is part of a `-path` pattern
+        # that `find` itself matches, so the shell must not expand it.
+        path_filter = f" -path {remote_arg(f'{root}/{subdirectory_glob}/*')}"
 
     # The report-file test runs inside `find` rather than as a follow-up command
     # per candidate: the multihost layout multiplies candidates by the rank
     # count, and `_ssh_cmd_prefix` sets up no connection sharing, so a round trip
     # each meant a full TCP and auth handshake per rank per report.
+    # `{}` is find's own placeholder for the candidate directory, so this quotes a
+    # pattern find expands rather than a path the shell should resolve.
     tests = " -o ".join(
-        f"-exec test -f {shlex.quote('{}/' + file_name)} ';'"
-        for file_name in file_names
+        f"-exec test -f {remote_arg('{}/' + file_name)} ';'" for file_name in file_names
     )
 
+    # `test -e`, matching what the standalone path check used to run, so a path
+    # whose parent is unreadable still reports as absent rather than as empty.
     return (
-        f"find {shlex.quote(search_root)} "
+        f"test -e {remote_arg(search_root)} || exit {_MISSING_ROOT_EXIT_CODE}; "
+        f"find {remote_arg(search_root)} "
         f"-mindepth {depth} -maxdepth {depth} -type d{path_filter} "
         f"'(' {tests} ')' -print"
     )
@@ -1160,10 +1186,13 @@ def _remote_directory_mtimes(
 
     for index in range(0, len(directories), _MTIME_BATCH_SIZE):
         batch = directories[index : index + _MTIME_BATCH_SIZE]
-        quoted = " ".join(shlex.quote(directory) for directory in batch)
-        ssh_cmd = _ssh_cmd_prefix(remote_connection) + [
-            f'for p in {quoted}; do stat -c %Y "$p" 2>/dev/null || echo; done',
-        ]
+        quoted = " ".join(remote_arg(directory) for directory in batch)
+        ssh_cmd = _ssh_argv(
+            remote_connection,
+            RemoteCommand.from_shell_fragment(
+                f'for p in {quoted}; do stat -c %Y "$p" 2>/dev/null || echo; done'
+            ),
+        )
 
         try:
             result = subprocess.run(
@@ -1204,8 +1233,8 @@ def find_folders_by_files(
     file_names: List[str],
     subdirectory_glob: Optional[str] = None,
     directory_filter: Optional[Callable[[str], bool]] = None,
-) -> List[str]:
-    """Return remote folders containing any of ``file_names``.
+) -> RemoteFolderSearch:
+    """Search for remote folders containing any of ``file_names``.
 
     By default these are report folders directly under ``root_folder``. Pass
     ``subdirectory_glob`` to look one level deeper instead, through intervening
@@ -1213,11 +1242,15 @@ def find_folders_by_files(
     candidates the glob cannot exclude before they cost an SSH round trip.
     """
     if not root_folder or not file_names:
-        return []
+        # Nothing was asked of the remote host, so nothing is known about the root.
+        return RemoteFolderSearch(folders=[], root_state=RemoteSearchRootState.UNKNOWN)
 
-    ssh_cmd = _ssh_cmd_prefix(remote_connection) + [
-        _report_search_find_expression(root_folder, subdirectory_glob, file_names),
-    ]
+    ssh_cmd = _ssh_argv(
+        remote_connection,
+        RemoteCommand.from_shell_fragment(
+            _report_search_command(root_folder, subdirectory_glob, file_names)
+        ),
+    )
 
     try:
         result = subprocess.run(
@@ -1232,7 +1265,11 @@ def find_folders_by_files(
         )
     except subprocess.TimeoutExpired:
         logger.error(f"Timeout finding folders in: {root_folder}")
-        return []
+        return RemoteFolderSearch(folders=[], root_state=RemoteSearchRootState.UNKNOWN)
+
+    if result.returncode == _MISSING_ROOT_EXIT_CODE:
+        logger.info("Search root does not exist or cannot be accessed: %s", root_folder)
+        return RemoteFolderSearch(folders=[], root_state=RemoteSearchRootState.MISSING)
 
     matched_folders = [
         directory.strip()
@@ -1278,7 +1315,9 @@ def find_folders_by_files(
         else:
             logger.error(f"Error finding folders: {stderr}")
 
-    return matched_folders
+    return RemoteFolderSearch(
+        folders=matched_folders, root_state=RemoteSearchRootState.PRESENT
+    )
 
 
 @remote_exception_handler
@@ -1289,7 +1328,7 @@ def get_remote_performance_folders(
     performance_paths = []
 
     if remote_connection.performancePath:
-        performance_paths = _find_performance_report_folders(remote_connection)
+        performance_paths = _find_performance_report_folders(remote_connection).folders
     else:
         logger.info("No performance path configured for this connection")
         return []
@@ -1323,7 +1362,7 @@ def get_remote_profiler_folders(
     if remote_connection.profilerPath:
         profiler_paths = find_folders_by_files(
             remote_connection, remote_connection.profilerPath, [TEST_DB_FILE]
-        )
+        ).folders
     else:
         logger.info("No profiler path configured for this connection")
         return []
