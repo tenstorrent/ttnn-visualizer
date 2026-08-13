@@ -49,7 +49,7 @@ export function getLatestPlotLayout(): Record<string, unknown> | undefined {
     return plotState.latest?.layout as Record<string, unknown> | undefined;
 }
 
-export function firePlotAnnotationClick(index: number, mouseEvent: Partial<MouseEvent> = {}) {
+export function firePlotAnnotationClick(index: number) {
     const onClickAnnotation = plotState.latest?.onClickAnnotation as
         | ((event: Readonly<ClickAnnotationEvent>) => void)
         | undefined;
@@ -58,5 +58,5 @@ export function firePlotAnnotationClick(index: number, mouseEvent: Partial<Mouse
         throw new Error('Plot onClickAnnotation handler is not set');
     }
 
-    onClickAnnotation({ index, event: mouseEvent as MouseEvent } as ClickAnnotationEvent);
+    onClickAnnotation({ index } as ClickAnnotationEvent);
 }

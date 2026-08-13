@@ -35,12 +35,6 @@ export const PERF_CHART_TABLE_FILTER_HINT = 'Click an operation to filter the pe
 
 export type OnOpCodeClick = (opCode: string) => void;
 
-/** Shared second argument for chart-driven table prefilters. */
-export interface PerfTablePrefilterOptions {
-    /** Toggle membership without navigating to the Table tab. */
-    amend?: boolean;
-}
-
 export const PERF_CHART_LABELS: Record<PerfChartId, string> = {
     [PerfChartId.OpDurationHistogram]: 'Op Duration Distribution',
     [PerfChartId.OpCountVsRuntime]: 'Operation Count vs Device Time',

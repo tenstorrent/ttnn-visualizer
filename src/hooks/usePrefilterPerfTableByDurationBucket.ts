@@ -5,15 +5,15 @@
 import { useCallback } from 'react';
 import { useSetAtom } from 'jotai';
 import { DurationBucket } from '../definitions/PerfDurationHistogram';
-import { PerfTablePrefilterOptions } from '../definitions/PerformanceCharts';
-import { toggleListMembership } from '../functions/toggleListMembership';
 import { durationBucketFilterListAtom, isStackedViewAtom } from '../store/app';
 import { useShowPerfTable } from './useShowPerfTable';
 
 /**
- * Default path replaces the selection and navigates to the Table tab. Pass `{ amend: true }` to
- * toggle membership instead and stay on the Charts tab (shift-click / click-again-to-clear on the
- * histogram controls — #1868).
+ * Replaces rather than unions the selection: the click leaves the charts tab immediately, so
+ * there is no opportunity to add a second bucket before the table is shown. Union and clear are
+ * reachable from the Table tab chip instead. That is the current scope boundary rather than a
+ * settled design conclusion — shift-click union from the histogram is #1868, and it needs this
+ * navigation suppressed to be usable.
  *
  * Also leaves the stacked view, which aggregates away the per-op device time this filters on:
  * staying there would show the table neither filtered nor carrying the tag that explains why,
@@ -25,18 +25,10 @@ export function usePrefilterPerfTableByDurationBucket() {
     const setIsStackedView = useSetAtom(isStackedViewAtom);
 
     return useCallback(
-        (minUs: DurationBucket['minUs'], options?: PerfTablePrefilterOptions) => {
-            if (options?.amend) {
-                setFilters((current) => toggleListMembership(current, minUs));
-            } else {
-                setFilters([minUs]);
-            }
-
+        (minUs: DurationBucket['minUs']) => {
+            setFilters([minUs]);
             setIsStackedView(false);
-
-            if (!options?.amend) {
-                showPerfTable();
-            }
+            showPerfTable();
         },
         [setFilters, setIsStackedView, showPerfTable],
     );

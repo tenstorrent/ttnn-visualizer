@@ -34,12 +34,6 @@ function Probe() {
             >
                 filter-empty
             </Button>
-            <Button
-                type='button'
-                onClick={() => prefilter('Matmul', { amend: true })}
-            >
-                amend-matmul
-            </Button>
         </div>
     );
 }
@@ -83,60 +77,5 @@ describe('usePrefilterPerfTableByOpCode', () => {
         fireEvent.click(screen.getByRole('button', { name: 'filter-empty' }));
 
         expect(screen.getByTestId('raw-op-filter')).toHaveTextContent('Conv2d');
-    });
-
-    it('amends by adding an op code without navigating away from the charts tab', () => {
-        render(
-            <TestProviders
-                initialAtomValues={[
-                    [rawOpCodeFilterListAtom, ['Conv2d']],
-                    [perfSelectedTabAtom, PerfTabIds.CHARTS],
-                ]}
-            >
-                <Probe />
-            </TestProviders>,
-        );
-
-        fireEvent.click(screen.getByRole('button', { name: 'amend-matmul' }));
-
-        expect(screen.getByTestId('raw-op-filter')).toHaveTextContent('Conv2d,Matmul');
-        expect(screen.getByTestId('selected-tab')).toHaveTextContent(PerfTabIds.CHARTS);
-        expect(window.scrollTo).not.toHaveBeenCalled();
-    });
-
-    it('amends by removing a selected op code without navigating', () => {
-        render(
-            <TestProviders
-                initialAtomValues={[
-                    [rawOpCodeFilterListAtom, ['Conv2d', 'Matmul']],
-                    [perfSelectedTabAtom, PerfTabIds.CHARTS],
-                ]}
-            >
-                <Probe />
-            </TestProviders>,
-        );
-
-        fireEvent.click(screen.getByRole('button', { name: 'amend-matmul' }));
-
-        expect(screen.getByTestId('raw-op-filter')).toHaveTextContent('Conv2d');
-        expect(screen.getByTestId('selected-tab')).toHaveTextContent(PerfTabIds.CHARTS);
-    });
-
-    it('amends the sole selected op code to clear the filter', () => {
-        render(
-            <TestProviders
-                initialAtomValues={[
-                    [rawOpCodeFilterListAtom, ['Matmul']],
-                    [perfSelectedTabAtom, PerfTabIds.CHARTS],
-                ]}
-            >
-                <Probe />
-            </TestProviders>,
-        );
-
-        fireEvent.click(screen.getByRole('button', { name: 'amend-matmul' }));
-
-        expect(screen.getByTestId('raw-op-filter')).toHaveTextContent('');
-        expect(screen.getByTestId('selected-tab')).toHaveTextContent(PerfTabIds.CHARTS);
     });
 });

@@ -46,7 +46,7 @@ export const PERF_DURATION_HISTOGRAM_EMPTY_MESSAGE = 'No device ops available fo
 export const PERF_DURATION_HISTOGRAM_ACTIVE_REPORT_SUBTITLE = 'Active report only';
 
 export const PERF_DURATION_BUCKET_FILTER_HINT =
-    'Click a duration range below the chart to filter the table; shift-click to add or remove ranges, or click the selected range again to clear';
+    'Click a duration range below the chart to filter the table by op duration';
 
 export const PERF_DURATION_BUCKET_FILTER_PLACEHOLDER = 'Select Device Time...';
 

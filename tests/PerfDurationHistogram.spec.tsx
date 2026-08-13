@@ -276,8 +276,7 @@ describe('PerfDurationHistogram duration bucket controls', () => {
     const getSelectedFlags = () => getAnnotations().map((annotation) => annotation.bgcolor !== PERF_CHART_TRANSPARENT);
 
     // Plotly calls the handler outside React's event system, so the re-render needs flushing
-    const clickBucket = (index: number, mouseEvent: Partial<MouseEvent> = {}) =>
-        act(() => firePlotAnnotationClick(index, mouseEvent));
+    const clickBucket = (index: number) => act(() => firePlotAnnotationClick(index));
 
     beforeEach(() => {
         setUpScrollResetMocks();
@@ -302,23 +301,12 @@ describe('PerfDurationHistogram duration bucket controls', () => {
         ]);
     });
 
-    it('anchors each control over its column by paper fraction, centred', () => {
+    it('anchors each control to the column it filters', () => {
         renderHistogram();
 
         const traceCategories = (getPlotInstances()[0]?.data as HistogramTrace[])[0]?.x;
         expect(traceCategories).toEqual([formatDurationBucketRange(1, 10), formatDurationBucketRange(10, 100)]);
-
-        const annotations = getAnnotations();
-        // Anchored to the plotting area by fraction, not to the x axis: an axis-referenced x is
-        // resolved against a stale category range when react-plotly redraws a single re-styled
-        // annotation, jumping the selected control sideways (#1868). (index + 0.5) / count centres
-        // each control over its evenly-spaced column, and 'center' holds it there.
-        const bucketCount = traceCategories?.length ?? 0;
-        expect(annotations.map((annotation) => annotation.x)).toEqual(
-            traceCategories?.map((_, index) => (index + 0.5) / bucketCount),
-        );
-        expect(annotations.every((annotation) => annotation.xref === 'paper')).toBe(true);
-        expect(annotations.every((annotation) => annotation.xanchor === 'center')).toBe(true);
+        expect(getAnnotations().map((annotation) => annotation.x)).toEqual(traceCategories);
     });
 
     it('explains the bucket controls in the chart hint rather than per-annotation hover text', () => {
@@ -381,33 +369,6 @@ describe('PerfDurationHistogram duration bucket controls', () => {
         clickBucket(1);
 
         expect(getSelectedFlags()).toEqual([false, true]);
-    });
-
-    it('shift-clicks to add a bucket without leaving the charts tab', () => {
-        renderHistogram([1]);
-
-        clickBucket(1, { shiftKey: true });
-
-        expect(getSelectedFlags()).toEqual([true, true]);
-        expect(screen.getByTestId('selected-tab')).toHaveTextContent(PerfTabIds.CHARTS);
-    });
-
-    it('shift-clicks a selected bucket to remove it without leaving the charts tab', () => {
-        renderHistogram([1, 10]);
-
-        clickBucket(0, { shiftKey: true });
-
-        expect(getSelectedFlags()).toEqual([false, true]);
-        expect(screen.getByTestId('selected-tab')).toHaveTextContent(PerfTabIds.CHARTS);
-    });
-
-    it('clears the filter when the sole selected control is clicked again', () => {
-        renderHistogram([1]);
-
-        clickBucket(0);
-
-        expect(getSelectedFlags()).toEqual([false, false]);
-        expect(screen.getByTestId('selected-tab')).toHaveTextContent(PerfTabIds.CHARTS);
     });
 
     it('ignores a click on an annotation index with no matching bucket', () => {
