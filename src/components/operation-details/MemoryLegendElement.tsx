@@ -43,10 +43,6 @@ interface MemoryLegendElementProps {
      * reads as a tensor view rather than a fresh allocation.
      */
     isGloballyAllocated?: boolean;
-    /**
-     * Devices this row stands for, when a mesh op allocated the same CB on each
-     * of them and the duplicate rows were collapsed into this one. #1844
-     */
     deviceCount?: number;
 }
 

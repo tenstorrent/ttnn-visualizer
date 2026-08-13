@@ -10,16 +10,14 @@ import { Node, NodeType } from '../src/model/APIData';
 import { OperationDetails } from '../src/model/OperationDetails';
 import { TestProviders } from './helpers/TestProviders';
 
-// `CircularBufferPressureModal` is always mounted (closed) inside the render, and
-// `useDevices` is the only API hook the subtree touches.
+// The always-mounted `CircularBufferPressureModal` is the subtree's only API caller.
 const mockUseDevices = vi.fn();
 vi.mock('../src/hooks/useAPI.tsx', () => ({
     useDevices: () => mockUseDevices(),
 }));
 
-// Device ids in the order a real mesh capture emits them — unsorted, so a test
-// that only ever sees 0..N-1 can't accidentally depend on ascending order.
-// Mirrors the `[6, 4, 5, 7, 3, 2, 0, 1]` sequence recorded in #1844.
+// Unsorted, as a real capture emits them, so nothing here can lean on ascending
+// order. The sequence recorded in #1844.
 const MESH_DEVICE_IDS = [6, 4, 5, 7, 3, 2, 0, 1];
 const CORE_RANGE = '{[(x=0,y=0) - (x=1,y=0)]}';
 
@@ -67,10 +65,6 @@ function cbDeallocateAll(): Node {
     return mkNode({ node_type: NodeType.circular_buffer_deallocate_all, params: {} } as unknown as Partial<Node>);
 }
 
-/**
- * One DeviceOp allocating each of `sizes` on every device in `deviceIds`,
- * interleaved per CB the way a mesh capture emits them.
- */
 function meshGraph(sizes: { size: number; address: number }[], deviceIds: (number | undefined)[]): Node[] {
     const cbs = sizes.flatMap(({ size, address }) => deviceIds.map((id) => cbAllocate(size, address, id)));
     return [captureStart(), functionStart('MeshOp'), ...cbs, cbDeallocateAll(), functionEnd('MeshOp')];
@@ -132,9 +126,8 @@ describe('DeviceOperationsFullRender - per-device CB fan-out (#1844)', () => {
     it('emits the CBs heading once even though later devices are skipped', () => {
         const container = renderGraph(meshGraph(TWO_CBS, MESH_DEVICE_IDS));
 
-        // The suppression path returns early, which must leave the
-        // `consecutiveCBsOutput` latch set — otherwise every skipped device
-        // re-opens a fresh "CBs" section.
+        // Skipping a row must not clear the heading latch, or each skipped
+        // device opens a fresh "CBs" section.
         expect(container.querySelectorAll('.cbs-heading')).toHaveLength(1);
     });
 
@@ -152,8 +145,6 @@ describe('DeviceOperationsFullRender - per-device CB fan-out (#1844)', () => {
     });
 
     it('keeps a repeat allocation on the same device as its own row', () => {
-        // Same CB twice on one device is a genuine second allocation, not mesh
-        // fan-out, so collapsing it would hide real memory pressure.
         const container = renderGraph(meshGraph([{ size: 4096, address: 0x1000 }], [0, 0]));
 
         expect(legendRows(container)).toHaveLength(2);

@@ -43,27 +43,19 @@ $z-index-4-popover: 15;
 // Component-specific variables
 $active-transfer-width: 380px;
 
-// Width of the "size x cores x devices" column in a device-operation memory
-// legend. Fixed rather than proportional: that cell is `nowrap`, so its text
-// sets the grid track's automatic minimum, and since each row is its own
-// `inline-grid` a share-based track resolves differently per row as soon as the
-// strings differ in length. Fits every realistic string bar one — a 3-digit
-// core count alongside the aliased-CB icon spills 11px, which the 15px column
-// gap absorbs before it can reach the next column.
+// Device-operation memory legend columns. Definite widths, because the cells are
+// `nowrap` and each row is its own grid — a share-based track takes its minimum
+// from the row's own text and so resolves differently per row. Sized to the
+// widest observed content plus headroom; the size column overflows by 11px on a
+// 3-digit core count beside the aliased-CB icon, absorbed by the column gap.
 $legend-size-column: 300px;
-
-// Slot held open at the right of that column for the aliased-CB marker, which
-// is positioned into it rather than left in the text flow — in flow it only
-// consumes width on aliased rows, landing identical strings 25px apart.
-$legend-marker-slot: 25px;
-
-// Remaining device-operation legend columns. All definite so that the address
-// track stays the only flexible one and absorbs every source of row-to-row
-// variation; widths are the widest observed content plus headroom.
 $legend-address-column: 90px;
 $legend-tensor-column: 180px;
 $legend-buffer-type-column: 130px;
 $legend-shape-column: 170px;
+
+// Reserved at the right of the size column for the aliased-CB marker.
+$legend-marker-slot: 25px;
 
 // Every report-selection control on the Home page sizes to this, so the local, remote and
 // MLIR pickers line up regardless of how long the label they display happens to be.

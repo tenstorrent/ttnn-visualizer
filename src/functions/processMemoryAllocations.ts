@@ -8,8 +8,7 @@ import { StringBufferType } from '../model/BufferType';
 import { AllocationDetails, CBAllocationSummary, CBDeviceFanout, CBPressureSnapshot } from '../model/MemoryAllocations';
 import { getCoresInRangeList } from './math';
 
-// Stands in for `device_id` when the graph omits it, so a report with no device
-// dimension accumulates into one bucket exactly as it did before #1844.
+// Keeps a graph with no device dimension accumulating into one bucket. #1844
 const SINGLE_DEVICE_KEY = 'single';
 
 export function processMemoryAllocations(
@@ -24,19 +23,17 @@ export function processMemoryAllocations(
     let peakMemoryLoad = 0;
     const memoryAllocationList: AllocationDetails[] = [];
     const curOpList: { name: string; id: number; deviceId?: string | number }[] = [];
-    // Keyed `${device}|${x},${y}` because core (0,0) of device 0 is not core
-    // (0,0) of device 6; summing the mesh's identical CBs is what inflated every
-    // total by the device count. #1844
+    // Core (0,0) of device 0 is not core (0,0) of device 6; summing the mesh's
+    // identical CBs is what inflated every total by the device count. #1844
     const cbBytesByDeviceCore = new Map<string, number>();
-    // CBs whose `core_range_set` resolved to no cores, per device.
+    // CBs whose `core_range_set` resolved to no cores.
     const unattributedByDevice = new Map<string, number>();
     // Live CB allocations since the last `circular_buffer_deallocate_all` (or
     // since the DeviceOp started, whichever came last), one entry per CB rather
     // than per device. Mirrors `cbBytesByDeviceCore` so the snapshot can
     // attribute pressure back to specific CB events.
     let liveCBs: CBAllocationSummary[] = [];
-    // Lets a later device bump an existing CB's `deviceCount` instead of adding
-    // a row. Same lifetime as `liveCBs`.
+    // Lets a later device bump an existing CB's count instead of adding a row.
     let liveCBByIdentity = new Map<string, { summary: CBAllocationSummary; deviceKeys: Set<string> }>();
     const cbPressureByOpId = new Map<number, CBPressureSnapshot>();
     const cbFanout: CBDeviceFanout = {
@@ -142,7 +139,7 @@ export function processMemoryAllocations(
             const address = parseInt(node.params.address, 10);
             const identity = `${address}|${size}|${node.params.core_range_set}|${globallyAllocated}`;
             const existing = liveCBByIdentity.get(identity);
-            // A repeat within one device is a genuine second allocation, not mesh
+            // A repeat on the same device is a real second allocation, not mesh
             // fan-out, so it keeps its own row.
             if (existing && !existing.deviceKeys.has(deviceKey)) {
                 existing.deviceKeys.add(deviceKey);

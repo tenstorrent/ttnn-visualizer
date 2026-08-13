@@ -35,11 +35,7 @@ export type CBAllocationSummary = {
     /** Op id/name that created the CB, used downstream for color-variance/highlighting. */
     allocateOperationId?: number;
     allocateOperationName?: string;
-    /**
-     * Devices that allocated this CB — a mesh op emits one identical
-     * `circular_buffer_allocate` per device, folded into one summary. 1 on a
-     * single-device report. #1844
-     */
+    /** Devices whose identical allocations were folded into this row; 1 off a mesh. #1844 */
     deviceCount: number;
     /**
      * `true` when the source node had `globally_allocated=1`. These CBs are
@@ -70,9 +66,8 @@ export type CBPressureSnapshot = {
 };
 
 /**
- * Which `circular_buffer_allocate` nodes the renderer should draw, and how many
- * devices each stands for. A mesh op emits the same CB once per device; only the
- * first is worth a row, so the rest are listed as duplicates to skip. #1844
+ * A mesh op emits the same CB once per device; only the first earns a row, so the
+ * rest are listed here for the renderer to skip. #1844
  */
 export type CBDeviceFanout = {
     deviceCountByNodeId: Map<number, number>;

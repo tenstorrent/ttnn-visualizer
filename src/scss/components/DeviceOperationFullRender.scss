@@ -167,14 +167,11 @@
         align-items: flex-start;
         gap: 10px;
 
-        // Anchor the data columns to the row's shared right edge instead of its
-        // left. Rows sit at different collapsible depths (up to 80px apart) and
-        // carry addresses of differing digit counts (25px), and with left-anchored
-        // share-based tracks both of those shifted every column downstream. The
-        // address is now the only flexible track, so it swallows that variation,
-        // and everything right of it is definite and lands identically on every
-        // row. `minmax(0, …)` lets those tracks give way under space pressure
-        // rather than overflowing the row.
+        // Each row is its own grid, so columns only line up across rows if a
+        // single track absorbs the width each row doesn't share — here the
+        // address, leaving the rest definite. Rows differ by collapsible depth
+        // (up to 80px) and address digit count (25px). Below ~1400px the address
+        // hits its floor and those offsets reappear.
         .legend-item {
             flex: 1 1 auto;
             min-width: 0;
@@ -186,9 +183,8 @@
                 minmax(0, variables.$legend-buffer-type-column)
                 minmax(0, variables.$legend-shape-column);
 
-            // Placed by class, not by source order: a row carrying no buffer
-            // type leaves track 5 empty rather than pulling its shape info into
-            // the column where other rows show `L1 HEIGHT_SHARDED`.
+            // Placed by class so a row with no buffer type leaves track 5 empty
+            // instead of pulling its shape info a column left.
             > .extra-info-slot {
                 grid-column: 5;
             }
@@ -197,9 +193,8 @@
                 grid-column: 6;
             }
 
-            // The size cell is right-aligned, so an in-flow marker shortens the
-            // text run only on aliased rows. Hold its slot open on every row and
-            // position the marker into it.
+            // The cell is right-aligned, so an in-flow marker would shorten the
+            // text run on aliased rows only.
             > .format-numbers:nth-child(3) {
                 position: relative;
                 padding-right: variables.$legend-marker-slot;

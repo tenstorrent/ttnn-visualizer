@@ -449,9 +449,6 @@ function useDeviceOperationsFullRenderModel(args: {
                         />
                     );
                 } else if (nodeType === NodeType.circular_buffer_allocate) {
-                    // Returning rather than falling through leaves
-                    // `consecutiveCBsOutput` set, so the devices we skip here
-                    // don't re-emit the "CBs" heading. #1844
                     if (cbFanout.duplicateNodeIds.has(node.id)) {
                         return;
                     }

@@ -66,8 +66,7 @@ function cbAllocate(
             address: String(resolvedAddress),
             // Matches the on-wire string form emitted by tt-metal.
             globally_allocated: options.globallyAllocated ? '1' : '0',
-            // Omitted unless asked for: single-device reports carry no device
-            // dimension and must accumulate exactly as they did before #1844.
+            // Omitted unless asked for, so the no-device-dimension path stays covered.
             ...(options.deviceId !== undefined && { device_id: options.deviceId }),
         },
     } as unknown as Partial<Node>);
@@ -634,8 +633,7 @@ describe('processMemoryAllocations - per-device CB fan-out (#1844)', () => {
     const MESH_DEVICE_IDS = [6, 4, 5, 7, 3, 2, 0, 1];
     const TWO_CORES = '{[(x=0,y=0) - (x=1,y=0)]}';
 
-    // One DeviceOp allocating each of `sizes` on every device in `deviceIds`,
-    // grouped CB-by-CB the way a mesh op emits them.
+    // Grouped CB-by-CB, the way a mesh op emits them.
     function meshGraph(sizes: number[], deviceIds: (number | undefined)[]): { graph: Node[]; opStart: Node } {
         const opStart = functionStart('mesh_op');
         const graph: Node[] = [captureStart(), opStart];
@@ -654,8 +652,7 @@ describe('processMemoryAllocations - per-device CB fan-out (#1844)', () => {
     });
 
     it('reports the same per-core peak for an 8-device report as for one device', () => {
-        // The headline regression: bytes used to accumulate per core position
-        // regardless of device, so this returned 8x the true figure.
+        // The headline regression: this returned 8x the true figure.
         const sizes = [4096, 2048];
         const perCoreTruth = sizes.reduce((total, size) => total + size, 0);
 
