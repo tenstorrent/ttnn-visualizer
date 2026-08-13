@@ -90,14 +90,23 @@ function PerfDurationHistogram({
     // That matches the subtitle: the chart is an active-report view onto a cross-report filter.
     const bucketAnnotations = useMemo<Partial<Annotations>[]>(() => {
         const chrome = getPerfChartChrome();
+        const bucketCount = histogramData.buckets.length;
 
-        return histogramData.buckets.map(({ bucket, totalCount }) => {
+        return histogramData.buckets.map(({ bucket, totalCount }, index) => {
             const isEmpty = totalCount === 0;
             const isSelected = selectedBucketMinUsList.includes(bucket.minUs);
 
             return {
-                x: bucket.label,
-                xref: 'x',
+                // Pin each control to its column by paper fraction, not an axis-referenced x.
+                // Selecting a control flips its fill, so react-plotly redraws that single annotation in
+                // place; Plotly's incremental redraw resolves an axis-referenced x against a stale
+                // category range, and the selected control jumps sideways (#1868). A paper x sidesteps
+                // the axis: the columns are evenly spaced, so (index + 0.5) / bucketCount lands on the
+                // same centre as the bar, and it holds through the redraw. 'center' keeps the box on
+                // that centre — paper's default 'auto' anchor would pull the edge columns inward.
+                x: (index + 0.5) / bucketCount,
+                xref: 'paper',
+                xanchor: 'center',
                 y: 0,
                 yref: 'paper',
                 yanchor: 'top',
@@ -125,9 +134,13 @@ function PerfDurationHistogram({
                 return;
             }
 
-            prefilterPerfTableByDurationBucket(entry.bucket.minUs);
+            const { minUs } = entry.bucket;
+            const isSoleSelected = selectedBucketMinUsList.length === 1 && selectedBucketMinUsList[0] === minUs;
+            const shouldAmend = Boolean(event.event?.shiftKey) || isSoleSelected;
+
+            prefilterPerfTableByDurationBucket(minUs, shouldAmend ? { amend: true } : undefined);
         },
-        [histogramData.buckets, prefilterPerfTableByDurationBucket],
+        [histogramData.buckets, prefilterPerfTableByDurationBucket, selectedBucketMinUsList],
     );
 
     const colourByOpCode = useMemo(
