@@ -738,6 +738,44 @@ describe('processMemoryAllocations - per-device CB fan-out (#1844)', () => {
         expect(peakMemoryLoad).toBe(4096 * 2);
     });
 
+    it("groups each device's repeat with the other devices' repeats, not with the row before it", () => {
+        // Every device allocates the CB twice, emitted device-major. The two
+        // rows must each stand for both devices; folding a device onto whichever
+        // repeat happened to be stored last would strand rows at a count of 1.
+        const opStart = functionStart('mesh_op');
+        const graph: Node[] = [captureStart(), opStart];
+        for (const deviceId of [0, 1]) {
+            graph.push(cbAllocate(TWO_CORES, 4096, 0x1000, { deviceId }));
+            graph.push(cbAllocate(TWO_CORES, 4096, 0x1000, { deviceId }));
+        }
+        graph.push(cbDeallocateAll(), functionEnd('mesh_op'));
+
+        const { peakMemoryLoad, cbPressureByOpId } = processMemoryAllocations(graph);
+
+        const { allocations } = cbPressureByOpId.get(opStart.id)!;
+        expect(allocations).toHaveLength(2);
+        expect(allocations.map((cb) => cb.deviceCount)).toEqual([2, 2]);
+        // Two allocations per device, so the per-core figure is still doubled.
+        expect(peakMemoryLoad).toBe(4096 * 2);
+    });
+
+    it('keeps the first node in graph order as the row the rest collapse onto', () => {
+        const opStart = functionStart('mesh_op');
+        const first = cbAllocate(TWO_CORES, 4096, 0x1000, { deviceId: 0 });
+        const repeat = cbAllocate(TWO_CORES, 4096, 0x1000, { deviceId: 0 });
+        const otherDevice = cbAllocate(TWO_CORES, 4096, 0x1000, { deviceId: 1 });
+        const graph = [captureStart(), opStart, first, repeat, otherDevice, cbDeallocateAll(), functionEnd('mesh_op')];
+
+        const { cbPressureByOpId, cbFanout } = processMemoryAllocations(graph);
+
+        // Device 1's allocation is its first, so it belongs to `first` — not to
+        // `repeat`, which is device 0's second.
+        expect(cbFanout.deviceCountByNodeId.get(first.id)).toBe(2);
+        expect(cbFanout.deviceCountByNodeId.get(repeat.id)).toBe(1);
+        expect(cbFanout.duplicateNodeIds).toEqual(new Set([otherDevice.id]));
+        expect(cbPressureByOpId.get(opStart.id)!.allocations.map((cb) => cb.nodeId)).toEqual([first.id, repeat.id]);
+    });
+
     it('takes the per-device figure for unattributed CBs rather than their sum', () => {
         // `unattributedBytes` has to stay comparable with the per-core numbers
         // beside it, so it collapses across devices the same way.

@@ -35,6 +35,9 @@ export function processMemoryAllocations(
     let liveCBs: CBAllocationSummary[] = [];
     // Lets a later device bump an existing CB's count instead of adding a row.
     let liveCBByIdentity = new Map<string, { summary: CBAllocationSummary; deviceKeys: Set<string> }>();
+    // How many times each device has already allocated a given CB, so the key
+    // above can separate repeats.
+    let cbRepeatsByDevice = new Map<string, number>();
     const cbPressureByOpId = new Map<number, CBPressureSnapshot>();
     const cbFanout: CBDeviceFanout = {
         deviceCountByNodeId: new Map<number, number>(),
@@ -44,6 +47,7 @@ export function processMemoryAllocations(
     const resetLiveCBs = () => {
         liveCBs = [];
         liveCBByIdentity = new Map();
+        cbRepeatsByDevice = new Map();
     };
 
     const snapshotCBPressure = (opId: number) => {
@@ -138,10 +142,17 @@ export function processMemoryAllocations(
 
             const address = parseInt(node.params.address, 10);
             const identity = `${address}|${size}|${node.params.core_range_set}|${globallyAllocated}`;
-            const existing = liveCBByIdentity.get(identity);
             // A repeat on the same device is a real second allocation, not mesh
-            // fan-out, so it keeps its own row.
-            if (existing && !existing.deviceKeys.has(deviceKey)) {
+            // fan-out, so it needs its own row. Keying by the device's repeat
+            // count gives it one, and pairs it with the other devices' repeats
+            // instead of letting it displace the first allocation as the row
+            // they all collapse onto.
+            const repeatKey = `${identity}|${deviceKey}`;
+            const repeat = (cbRepeatsByDevice.get(repeatKey) ?? 0) + 1;
+            cbRepeatsByDevice.set(repeatKey, repeat);
+            const identitySlot = `${identity}|${repeat}`;
+            const existing = liveCBByIdentity.get(identitySlot);
+            if (existing) {
                 existing.deviceKeys.add(deviceKey);
                 existing.summary.deviceCount = existing.deviceKeys.size;
                 cbFanout.deviceCountByNodeId.set(existing.summary.nodeId, existing.deviceKeys.size);
@@ -160,7 +171,7 @@ export function processMemoryAllocations(
                     deviceCount: 1,
                 };
                 liveCBs.push(summary);
-                liveCBByIdentity.set(identity, { summary, deviceKeys: new Set([deviceKey]) });
+                liveCBByIdentity.set(identitySlot, { summary, deviceKeys: new Set([deviceKey]) });
                 cbFanout.deviceCountByNodeId.set(node.id, 1);
             }
         }
