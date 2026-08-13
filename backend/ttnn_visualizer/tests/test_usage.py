@@ -11,7 +11,8 @@ collector — totals never go down, and no line can be forged.
 """
 
 import os
-from concurrent.futures import ThreadPoolExecutor
+import subprocess
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -30,6 +31,22 @@ from ttnn_visualizer.usage import (
     record_app_start,
     record_event,
 )
+
+# Enough for two children to finish 100 appends each on a slow CI runner; a hang
+# should fail the test rather than wedge the suite.
+_SUBPROCESS_WRITER_TIMEOUT_SECONDS = 30
+
+_WRITER_SCRIPT = """
+import sys
+from pathlib import Path
+
+from ttnn_visualizer import usage
+from ttnn_visualizer.usage import UsageEvent, record_event
+
+usage.USAGE_DIRECTORY = Path(sys.argv[1])
+for _ in range(int(sys.argv[2])):
+    record_event(UsageEvent.APP_START)
+"""
 
 
 @pytest.fixture
@@ -63,6 +80,33 @@ def parse(line: str):
 def total_events(lines):
     """Cumulative count the way the collector derives it: ``count``, default 1."""
     return sum(int(parse(line).get(COUNT_FIELD, "1")) for line in lines)
+
+
+def _spawn_usage_writer(directory: Path, count: int) -> subprocess.Popen:
+    """Append ``count`` events from a fresh interpreter into ``directory``.
+
+    ``monkeypatch`` does not cross process boundaries, so the child sets
+    ``USAGE_DIRECTORY`` itself — the same override the fixture uses in-process.
+    """
+    child_env = {
+        **os.environ,
+        # A developer shell with the switch off would otherwise inherit silence;
+        # ``record_event`` then no-ops and the child still exits 0.
+        USAGE_RECORDING_ENV_VAR: "true",
+    }
+
+    return subprocess.Popen(
+        [sys.executable, "-c", _WRITER_SCRIPT, str(directory), str(count)],
+        env=child_env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+
+
+def _await_usage_writer(child: subprocess.Popen) -> None:
+    _, stderr = child.communicate(timeout=_SUBPROCESS_WRITER_TIMEOUT_SECONDS)
+    assert child.returncode == 0, stderr
 
 
 def test_the_path_ignores_every_environment_derived_data_directory(monkeypatch):
@@ -222,19 +266,34 @@ def test_the_run_id_is_inherited_when_it_is_safe(usage_directory, monkeypatch):
     assert parse(read_lines(usage_directory)[0])["run_id"] == "abc12345"
 
 
-def test_concurrent_writers_never_truncate_a_line(usage_directory):
-    writes = 200
+def test_concurrent_subprocess_writers_never_truncate_a_line(usage_directory):
+    # Two separate instances sharing the log — the case ``_append_line``'s
+    # ``O_APPEND`` claim is about. An in-process ThreadPool would still pass if
+    # every writer funnelled through one shared buffered file object.
+    writes_per_writer = 100
+    total_writes = writes_per_writer * 2
 
-    with ThreadPoolExecutor(max_workers=8) as executor:
-        for _ in range(writes):
-            executor.submit(record_event, UsageEvent.APP_START)
+    writers = [
+        _spawn_usage_writer(usage_directory, writes_per_writer),
+        _spawn_usage_writer(usage_directory, writes_per_writer),
+    ]
+    try:
+        for writer in writers:
+            _await_usage_writer(writer)
+    finally:
+        for writer in writers:
+            if writer.poll() is None:
+                writer.kill()
+                writer.communicate()
 
     lines = read_lines(usage_directory)
 
-    assert len(lines) == writes
-    assert all(
-        line.startswith("ts=") and " event=app_start " in f"{line} " for line in lines
-    )
+    assert len(lines) == total_writes
+    for line in lines:
+        fields = parse(line)
+        assert fields["event"] == "app_start"
+        assert "ts" in fields
+        assert "schema_version" in fields
 
 
 def test_app_start_carries_the_baseline_fields(usage_directory):
