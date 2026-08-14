@@ -35,7 +35,7 @@ export const LINKED_PERFORMANCE_REPORT_FILTERS = {
 } as const;
 
 const getSignpostKey = (label: string, signpost: Signpost | null) =>
-    `${label}:${signpost ? `${signpost.id}${signpost.op_code}` : null}`;
+    `${label}:${signpost ? `${signpost.id}:${signpost.op_code}` : null}`;
 
 // Shared by the single-report and comparison queries so the two can't drift into
 // keying on different filters.
