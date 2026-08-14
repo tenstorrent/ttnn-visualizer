@@ -2,9 +2,9 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-import { Button, ButtonVariant, Intent, PopoverPosition, Tooltip } from '@blueprintjs/core';
+import { Button, ButtonVariant, Intent, PopoverPosition, Size, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
-import { memo, useMemo } from 'react';
+import { type ReactNode, memo, useMemo } from 'react';
 import { useNavigate } from 'react-router';
 
 import { NodeRelation } from '../../definitions/NodeRelation';
@@ -75,18 +75,25 @@ interface TensorDetailsProps {
 }
 
 const TensorDetails = ({ tensor }: TensorDetailsProps) => (
-    <div className='tensor-details'>
-        <h3 className='tensor-header'>
-            <span>{tensor.buffer_type !== null && <MemoryTag memory={BufferTypeLabel[tensor.buffer_type]} />}</span>{' '}
-            {toReadableShape(tensor.shape)} Tensor {tensor.id}{' '}
-        </h3>
-
-        <div>{toReadableType(tensor.dtype)}</div>
-        <div>{tensor.layout}</div>
-        <div>{tensor.operationIdentifier}</div>
+    <div className='op-graph-panel-tensor'>
+        <div className='op-graph-panel-tensor-header'>
+            {tensor.buffer_type !== null && <MemoryTag memory={BufferTypeLabel[tensor.buffer_type]} />}
+            <span className='op-graph-panel-tensor-shape'>{toReadableShape(tensor.shape)}</span>
+            <span className='op-graph-panel-tensor-id'>Tensor {tensor.id}</span>
+        </div>
+        <div className='op-graph-panel-tensor-meta'>
+            <span>{toReadableType(tensor.dtype)}</span>
+            <span>{tensor.layout}</span>
+        </div>
+        {tensor.operationIdentifier ? (
+            <div className='op-graph-panel-tensor-source'>{tensor.operationIdentifier}</div>
+        ) : null}
         {tensor.memory_config
             ? Object.entries(tensor.memory_config).map(([key, value]) => (
-                  <table key={key}>
+                  <table
+                      className='op-graph-panel-memory-config'
+                      key={key}
+                  >
                       <tbody>
                           <MemoryConfigRow
                               header={key}
@@ -99,28 +106,66 @@ const TensorDetails = ({ tensor }: TensorDetailsProps) => (
     </div>
 );
 
-interface ConnectedOpHeaderProps {
-    group: ConnectedOpGroup;
+interface PanelSectionProps {
+    title: string;
+    count: number;
+    emptyHint: string;
+    modifierClass?: string;
+    children: ReactNode;
+}
+
+const PanelSection = ({ title, count, emptyHint, modifierClass, children }: PanelSectionProps) => (
+    <section className={`op-graph-panel-section ${modifierClass ?? ''}`.trim()}>
+        <div className='op-graph-panel-section-header'>
+            <span className='op-graph-panel-section-title'>{title}</span>
+            <span className='op-graph-panel-section-count'>{count}</span>
+        </div>
+        <div className='op-graph-panel-section-body'>
+            {count === 0 ? <p className='op-graph-panel-empty'>{emptyHint}</p> : children}
+        </div>
+    </section>
+);
+
+interface ConnectedOpGroupListProps {
+    groups: ConnectedOpGroup[];
+    keyPrefix: string;
     onLocate: (operationId: number) => void;
 }
 
-const ConnectedOpHeader = ({ group, onLocate }: ConnectedOpHeaderProps) => (
-    <div className='connected-op-header'>
-        <h2 className='connected-op-name'>{group.label}</h2>
-        {group.operationId !== null && (
-            <Tooltip
-                placement={PopoverPosition.RIGHT}
-                content={`Locate operation ${group.operationId} in graph`}
+const ConnectedOpGroupList = ({ groups, keyPrefix, onLocate }: ConnectedOpGroupListProps) => (
+    <div className='op-graph-panel-groups'>
+        {groups.map((group) => (
+            <div
+                className='op-graph-panel-group'
+                key={`${keyPrefix}-${group.key}`}
             >
-                <Button
-                    className='connected-op-select'
-                    icon={IconNames.LOCATE}
-                    variant={ButtonVariant.MINIMAL}
-                    onClick={() => onLocate(group.operationId as number)}
-                    aria-label={`Locate operation ${group.operationId} in graph`}
-                />
-            </Tooltip>
-        )}
+                <div className='op-graph-panel-group-header'>
+                    <span className='op-graph-panel-group-label'>{group.label}</span>
+                    {group.operationId !== null && (
+                        <Tooltip
+                            placement={PopoverPosition.LEFT}
+                            content={`Locate operation ${group.operationId} in graph`}
+                            compact
+                        >
+                            <Button
+                                className='op-graph-panel-locate'
+                                icon={IconNames.LOCATE}
+                                size={Size.SMALL}
+                                variant={ButtonVariant.MINIMAL}
+                                onClick={() => onLocate(group.operationId as number)}
+                                aria-label={`Locate operation ${group.operationId} in graph`}
+                            />
+                        </Tooltip>
+                    )}
+                </div>
+                {group.tensors.map((tensor, index) => (
+                    <TensorDetails
+                        tensor={tensor}
+                        key={`${keyPrefix}-${group.key}-${tensor.id}-${index}`}
+                    />
+                ))}
+            </div>
+        ))}
     </div>
 );
 
@@ -149,36 +194,50 @@ const OpGraphInfoPanel = memo(
             [operation, operationNamesById],
         );
 
+        const deviceOperationNames = operation?.deviceOperationNameList ?? [];
+
         return (
-            <div className='operation-graph-props'>
-                <h2 className='operation-name'>
-                    {operationId} {operation?.name} ({operation?.operationFileIdentifier})
-                </h2>
-                <ul className='device-operation-list'>
-                    {operation?.deviceOperationNameList.map((deviceOp, index) => (
-                        <li key={`device-op-${index}`}>{deviceOp}()</li>
-                    ))}
-                </ul>
-                <div className='operation-actions'>
+            <aside
+                className='op-graph-panel'
+                aria-label='Selected operation details'
+            >
+                <header className='op-graph-panel-header'>
+                    <div className='op-graph-panel-titles'>
+                        <h2 className='op-graph-panel-label'>
+                            {operationId} {operation?.name}
+                        </h2>
+                        <p
+                            className='op-graph-panel-id'
+                            title={operation?.operationFileIdentifier}
+                        >
+                            {operation?.operationFileIdentifier}
+                        </p>
+                    </div>
+                    <div className='op-graph-panel-actions'>
+                        <Tooltip
+                            content='Recenter'
+                            compact
+                        >
+                            <Button
+                                icon={IconNames.LOCATE}
+                                size={Size.SMALL}
+                                variant={ButtonVariant.MINIMAL}
+                                onClick={() => onLocateOperation(operationId)}
+                                aria-label={`Recenter on operation ${operationId}`}
+                            />
+                        </Tooltip>
+                    </div>
+                </header>
+
+                <div className='op-graph-panel-links'>
                     <Button
-                        className='navigate-button'
                         endIcon={IconNames.SEGMENTED_CONTROL}
+                        size={Size.SMALL}
                         intent={Intent.PRIMARY}
                         onClick={() => navigate(`${ROUTES.OPERATIONS}/${operationId}`)}
                     >
                         Memory Details
                     </Button>
-
-                    <Button
-                        className='recenter-button'
-                        icon={IconNames.LOCATE}
-                        intent={Intent.PRIMARY}
-                        onClick={() => onLocateOperation(operationId)}
-                        aria-label={`Recenter on operation ${operationId}`}
-                    >
-                        Locate {operationId}
-                    </Button>
-
                     {operationSourceData && operation && (
                         <SourceFileButton
                             filePath={operationSourceData.filePath}
@@ -192,47 +251,44 @@ const OpGraphInfoPanel = memo(
                     )}
                 </div>
 
-                <h3 className='inputs'>Inputs:</h3>
-                <div className='inputs tensors'>
-                    {inputGroups.map((group) => (
-                        <div
-                            className='connected-op'
-                            key={`input-op-${operationId}-${group.key}`}
-                        >
-                            <ConnectedOpHeader
-                                group={group}
-                                onLocate={onLocateOperation}
-                            />
-                            {group.tensors.map((tensor, index) => (
-                                <TensorDetails
-                                    tensor={tensor}
-                                    key={`input-${operationId}-${group.key}-${tensor.id}-${index}`}
-                                />
-                            ))}
-                        </div>
-                    ))}
-                </div>
-                <h3 className='outputs'>Outputs:</h3>
-                <div className='outputs tensors'>
-                    {outputGroups.map((group) => (
-                        <div
-                            className='connected-op'
-                            key={`output-op-${operationId}-${group.key}`}
-                        >
-                            <ConnectedOpHeader
-                                group={group}
-                                onLocate={onLocateOperation}
-                            />
-                            {group.tensors.map((tensor, index) => (
-                                <TensorDetails
-                                    tensor={tensor}
-                                    key={`output-${operationId}-${group.key}-${tensor.id}-${index}`}
-                                />
-                            ))}
-                        </div>
-                    ))}
-                </div>
-            </div>
+                <PanelSection
+                    title='Device operations'
+                    count={deviceOperationNames.length}
+                    emptyHint='No device operations.'
+                >
+                    <ul className='op-graph-panel-device-ops'>
+                        {deviceOperationNames.map((deviceOp, index) => (
+                            <li key={`device-op-${index}`}>{deviceOp}()</li>
+                        ))}
+                    </ul>
+                </PanelSection>
+
+                <PanelSection
+                    title='Inputs'
+                    count={operation?.inputs.length ?? 0}
+                    emptyHint='No inputs.'
+                    modifierClass='op-graph-panel-inputs'
+                >
+                    <ConnectedOpGroupList
+                        groups={inputGroups}
+                        keyPrefix={`input-${operationId}`}
+                        onLocate={onLocateOperation}
+                    />
+                </PanelSection>
+
+                <PanelSection
+                    title='Outputs'
+                    count={operation?.outputs.length ?? 0}
+                    emptyHint='No outputs.'
+                    modifierClass='op-graph-panel-outputs'
+                >
+                    <ConnectedOpGroupList
+                        groups={outputGroups}
+                        keyPrefix={`output-${operationId}`}
+                        onLocate={onLocateOperation}
+                    />
+                </PanelSection>
+            </aside>
         );
     },
 );

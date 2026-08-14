@@ -232,6 +232,11 @@ const OperationGraphInner = ({ operationList, operationId }: OperationGraphReact
         setSelectedOperationId(null);
     }, []);
 
+    // The panel covers the corner the minimap docks in, so the two are mutually
+    // exclusive. Unmounting rather than hiding matters: the minimap draws a rect
+    // per node and re-derives them on every node change.
+    const isPanelOpen = selectedOperationId !== null && !isBuilding;
+
     return (
         <div className='operation-graph-react-flow'>
             {isBuilding ? (
@@ -256,9 +261,9 @@ const OperationGraphInner = ({ operationList, operationId }: OperationGraphReact
             >
                 <Background />
                 <Controls />
-                <MiniMap pannable />
+                {!isPanelOpen ? <MiniMap pannable /> : null}
             </ReactFlow>
-            {selectedOperationId !== null && !isBuilding ? (
+            {isPanelOpen ? (
                 <OpGraphInfoPanel
                     operationId={selectedOperationId}
                     operationList={operationList}

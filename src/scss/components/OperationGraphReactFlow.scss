@@ -11,17 +11,9 @@
 @use '../definitions/variables' as variables;
 
 .operation-graph-react-flow {
-    // Shared by the panel itself and by the minimap offset that keeps clear of
-    // it, so the two can't drift apart.
-    --op-graph-panel-width: 450px;
-
     position: relative;
     width: 100%;
     height: 80vh;
-
-    @media screen and (width <= #{variables.$bp-large}) {
-        --op-graph-panel-width: 350px;
-    }
 
     .operation-graph-react-flow-loader {
         position: absolute;
@@ -99,144 +91,264 @@
         stroke-width: 2;
     }
 
-    // React Flow positions its panels with `.react-flow .react-flow__panel.bottom.right`
-    // from a stylesheet injected after ours, so clearing the info panel needs a
-    // selector that outranks it outright. Scoped to `:has()` so the minimap
-    // returns to the corner when clicking the pane dismisses the panel.
-    &:has(.operation-graph-props) .react-flow__minimap.react-flow__panel.right {
-        right: var(--op-graph-panel-width);
-    }
-
+    // Density, type scale and section banding mirror `MlirNodeDetailsPanel.scss`
+    // so the two graph views read as one product. Worth extracting to a shared
+    // partial if a third details panel turns up.
+    //
     // Anchored to the graph box rather than the viewport: the vis original was
     // `position: fixed` with no `top`, so it leaned on its static position and
     // moved whenever the DOM order changed.
-    .operation-graph-props {
+    .op-graph-panel {
         position: absolute;
         z-index: variables.$z-index-2-interactive;
         top: 0;
         right: 0;
         bottom: 0;
-        width: var(--op-graph-panel-width);
-        background-color: rgba($tt-grey-2, 0.9);
+        display: flex;
+        flex-direction: column;
+
+        // Tracks the canvas width so a narrow window keeps a usable graph, with
+        // the floor set by the widest content the panel has to hold: a tensor's
+        // `[shape] Tensor N` line.
+        width: clamp(280px, 26%, 360px);
         overflow: auto;
-        padding-left: 20px;
+        background-color: rgba($tt-grey-2, 0.95);
+        border-left: 1px solid rgba($tt-white, 0.08);
+        color: $tt-grey-7;
+        font-size: 12px;
+    }
 
-        .operation-actions {
-            display: flex;
-            flex-wrap: wrap;
-            align-items: center;
-            gap: 8px;
-            margin-top: 5px;
-            margin-bottom: 5px;
+    .op-graph-panel-header {
+        position: sticky;
+        top: 0;
+        z-index: 1;
+        display: flex;
+        align-items: flex-start;
+        gap: 8px;
+        padding: 10px 12px;
+        background-color: $tt-grey-3;
+        border-bottom: 1px solid rgba($tt-white, 0.08);
+    }
+
+    .op-graph-panel-titles {
+        flex: 1 1 auto;
+        min-width: 0;
+    }
+
+    .op-graph-panel-label {
+        margin: 0;
+        overflow: hidden;
+        color: $tt-white;
+        font-size: 14px;
+        font-weight: 700;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .op-graph-panel-id {
+        margin: 2px 0 0;
+        overflow: hidden;
+        color: $tt-grey-6;
+        font-family: monospace;
+        font-size: 10px;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        user-select: text;
+    }
+
+    .op-graph-panel-actions {
+        display: flex;
+        flex-shrink: 0;
+        gap: 2px;
+    }
+
+    .op-graph-panel-links {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 6px;
+        padding: 8px 12px;
+        border-bottom: 1px solid rgba($tt-white, 0.06);
+    }
+
+    .op-graph-panel-section {
+        border-bottom: 1px solid rgba($tt-white, 0.06);
+
+        &:last-of-type {
+            border-bottom: none;
+        }
+    }
+
+    .op-graph-panel-section-header {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 6px 12px;
+        background-color: $tt-grey-4;
+        border-left: 3px solid transparent;
+        font-size: 12px;
+        font-weight: 700;
+    }
+
+    .op-graph-panel-section-title {
+        flex: 1 1 auto;
+    }
+
+    .op-graph-panel-section-count {
+        padding: 1px 6px;
+        border-radius: 8px;
+        background-color: rgba($tt-black, 0.3);
+        font-size: 11px;
+        font-weight: 500;
+        font-variant-numeric: tabular-nums;
+    }
+
+    .op-graph-panel-section-body {
+        padding: 8px 12px 10px;
+    }
+
+    .op-graph-panel-empty {
+        margin: 0;
+        color: $tt-grey-5;
+        font-size: 11px;
+        font-style: italic;
+    }
+
+    .op-graph-panel-device-ops {
+        margin: 0;
+        padding: 0;
+        color: $tt-grey-6;
+        font-family: monospace;
+        font-size: 11px;
+        list-style: none;
+    }
+
+    .op-graph-panel-groups {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+    }
+
+    .op-graph-panel-group {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+    }
+
+    .op-graph-panel-group-header {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+    }
+
+    .op-graph-panel-group-label {
+        flex: 1 1 auto;
+        min-width: 0;
+        color: $tt-white;
+        font-size: 11px;
+        font-weight: 700;
+        word-break: break-all;
+    }
+
+    // Blueprint's MINIMAL/SMALL button still carries padding sized for body
+    // buttons; trim it so the icon sits inline without inflating the row.
+    .op-graph-panel-locate {
+        flex: 0 0 auto;
+        min-width: 0;
+        min-height: 0;
+        padding: 2px;
+
+        .bp6-icon {
+            color: $tt-grey-7;
         }
 
-        .operation-name {
-            font-size: 17px;
+        &:hover .bp6-icon {
+            color: $tt-white;
+        }
+    }
+
+    .op-graph-panel-tensor {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        padding: 4px 6px;
+        border-left: 2px solid transparent;
+        border-radius: 4px;
+        background-color: rgba($tt-white, 0.04);
+    }
+
+    // Written as explicit descendant selectors rather than MLIR's `.modifier &`
+    // form: these classes are nested inside `.operation-graph-react-flow`, so
+    // `&` would expand to the whole ancestor chain and place the modifier
+    // outside the root — a selector that never matches.
+    .op-graph-panel-inputs {
+        .op-graph-panel-section-header,
+        .op-graph-panel-tensor {
+            border-left-color: var(--graph-input-edge);
+        }
+    }
+
+    .op-graph-panel-outputs {
+        .op-graph-panel-section-header,
+        .op-graph-panel-tensor {
+            border-left-color: var(--graph-output-edge);
+        }
+    }
+
+    .op-graph-panel-tensor-header {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+    }
+
+    .op-graph-panel-tensor-shape {
+        color: $tt-teal-tint-1;
+        font-family: monospace;
+        font-size: 11px;
+        word-break: break-all;
+    }
+
+    .op-graph-panel-tensor-id {
+        color: $tt-white;
+        font-size: 11px;
+        font-weight: 700;
+    }
+
+    .op-graph-panel-tensor-meta {
+        display: flex;
+        gap: 8px;
+        color: $tt-grey-6;
+        font-family: monospace;
+        font-size: 10px;
+    }
+
+    .op-graph-panel-tensor-source {
+        color: $tt-grey-6;
+        font-family: monospace;
+        font-size: 10px;
+        word-break: break-all;
+    }
+
+    .op-graph-panel-memory-config {
+        // Flex items stretch by default, which pulled the value column out to the
+        // panel edge; shrink-wrapping keeps key and value adjacent.
+        align-self: start;
+        font-size: 10px;
+
+        th {
+            padding: 1px 4px;
+            color: $tt-grey-6;
+            font-weight: 500;
+            text-align: left;
+            vertical-align: top;
         }
 
-        > h3 {
-            background-color: $tt-grey-4;
-            padding: 5px;
-            font-size: 16px;
-            border-left: 3px solid transparent;
-
-            &.inputs {
-                border-left-color: var(--graph-input-edge);
-            }
-
-            &.outputs {
-                border-left-color: var(--graph-output-edge);
-            }
-        }
-
-        .device-operation-list {
-            font-size: 11px;
-            padding-left: 12px;
-            list-style: none;
-            margin-top: 0;
-        }
-
-        .tensors {
-            display: flex;
-            flex-direction: column;
-            gap: 40px;
-
-            h3 {
-                margin: 0;
-                margin-bottom: 2px;
-            }
-
-            .connected-op {
-                display: flex;
-                flex-direction: column;
-                gap: 10px;
-
-                .connected-op-header {
-                    display: flex;
-                    align-items: center;
-                    gap: 10px;
-                }
-
-                .connected-op-name {
-                    margin: 0;
-                    font-size: 14px;
-                    font-weight: 600;
-                }
-
-                .connected-op-select {
-                    padding: 2px;
-                    min-height: 0;
-                    min-width: 0;
-                }
-            }
-
-            .tensor-details {
-                border-left: 3px solid transparent;
-                padding-left: 10px;
-                display: flex;
-                flex-direction: column;
-                gap: 5px;
-
-                .tensor-header {
-                    display: flex;
-                    gap: 5px;
-                    align-items: center;
-                }
-
-                > table {
-                    margin-left: 7px;
-                }
-
-                > div {
-                    margin-left: 15px;
-                }
-            }
-
-            &.inputs {
-                .tensor-details {
-                    border-left-color: var(--graph-input-edge);
-                }
-            }
-
-            &.outputs {
-                .tensor-details {
-                    border-left-color: var(--graph-output-edge);
-                }
-            }
-        }
-
-        @media screen and (width <= #{variables.$bp-large}) {
-            .tensors {
-                .tensor-details {
-                    > table {
-                        tr {
-                            display: flex;
-                            flex-direction: column;
-                            align-items: flex-start;
-                        }
-                    }
-                }
-            }
+        td {
+            padding: 1px 4px;
+            color: $tt-grey-7;
+            text-align: left;
+            vertical-align: top;
+            word-break: break-word;
         }
     }
 }
