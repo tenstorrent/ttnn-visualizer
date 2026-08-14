@@ -72,8 +72,8 @@ interface OperationGraphReactFlowProps {
 }
 
 const OperationGraphInner = ({ operationList, operationId }: OperationGraphReactFlowProps) => {
-    const [nodes, setNodes] = useNodesState<OpGraphFlowNode>([]);
-    const [edges, setEdges] = useEdgesState<OpGraphFlowEdge>([]);
+    const [nodes, setNodes, onNodesChange] = useNodesState<OpGraphFlowNode>([]);
+    const [edges, setEdges, onEdgesChange] = useEdgesState<OpGraphFlowEdge>([]);
     const [selectedOperationId, setSelectedOperationId] = useState<number | null>(operationId ?? null);
     const { setCenter, getNode } = useReactFlow<OpGraphFlowNode, OpGraphFlowEdge>();
 
@@ -235,6 +235,8 @@ const OperationGraphInner = ({ operationList, operationId }: OperationGraphReact
                 edges={styledEdges}
                 nodeTypes={NODE_TYPES}
                 edgeTypes={EDGE_TYPES}
+                onNodesChange={onNodesChange}
+                onEdgesChange={onEdgesChange}
                 onNodeClick={handleNodeClick}
                 onPaneClick={handlePaneClick}
                 minZoom={MIN_ZOOM}
