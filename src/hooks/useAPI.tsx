@@ -32,6 +32,12 @@ import getServerConfig from '../functions/getServerConfig';
 import { PerfTableRow } from '../definitions/PerfTable';
 import { DeviceOperationMapping } from '../model/DeviceOperationMapping';
 import { matchDeviceOperationsToPerf } from '../functions/deviceOperationMatching';
+import {
+    LINKED_PERFORMANCE_REPORT_FILTERS,
+    PerformanceReportParams,
+    getPerformanceComparisonReportQueryKey,
+    getPerformanceReportQueryKey,
+} from '../functions/performanceReportQueryKey';
 import { L1PressureResult } from '../model/L1Pressure';
 import { buildL1PressureResult } from '../functions/l1Pressure';
 import { StackedGroupBy, StackedPerfRow } from '../definitions/StackedPerfTable';
@@ -868,8 +874,7 @@ export const useGetDeviceOperationsList = (): DeviceOperationMapping[] => {
 };
 
 const useProxyPerformanceReport = (): PerformanceReportResponse => {
-    const activeReportFolderName = useAtomValue(activePerformanceReportFolderNameAtom);
-    const response = usePerformanceReport(activeReportFolderName);
+    const response = useLinkedPerformanceReport();
 
     return useMemo(() => {
         if (!response.data) {
@@ -891,7 +896,10 @@ export const useGetDeviceOperationListPerf = () => {
 };
 
 /**
- * @description op id to perf id mapping only for existing perf ids
+ * @description op id to perf id mapping only for existing perf ids. The perf
+ * ids come from the unfiltered report (`useLinkedPerformanceReport`), not from
+ * the rows the performance tab is displaying — a row id survives host-op and
+ * signpost filtering, so consumers can still join against a filtered view.
  */
 export const useOpToPerfIdFiltered = () => {
     const opMapping = useGetDeviceOperationListPerf();
@@ -1160,12 +1168,35 @@ export const usePerfMetas = (reportNames: string[] | null | undefined): (MetaDat
     });
 };
 
-export const usePerformanceReport = (name: string | null) => {
+const useViewPerformanceReportParams = (): PerformanceReportParams => {
     const [startSignpost, endSignpost] = useAtomValue(filterBySignpostAtom);
     const hideHostOps = useAtomValue(hideHostOpsAtom);
     const mergeDevices = useAtomValue(mergeDevicesAtom);
     const tracingMode = useAtomValue(tracingModeAtom);
     const groupBy = useAtomValue(stackedGroupByAtom);
+
+    return useMemo(
+        () => ({
+            startSignpost: startSignpost ?? null,
+            endSignpost: endSignpost ?? null,
+            hideHostOps,
+            mergeDevices,
+            tracingMode,
+            groupBy,
+        }),
+        [startSignpost, endSignpost, hideHostOps, mergeDevices, tracingMode, groupBy],
+    );
+};
+
+const useLinkedPerformanceReportParams = (): PerformanceReportParams => {
+    const tracingMode = useAtomValue(tracingModeAtom);
+    const groupBy = useAtomValue(stackedGroupByAtom);
+
+    return useMemo(() => ({ ...LINKED_PERFORMANCE_REPORT_FILTERS, tracingMode, groupBy }), [tracingMode, groupBy]);
+};
+
+const usePerformanceReportQuery = (name: string | null, params: PerformanceReportParams) => {
+    const { startSignpost, endSignpost, hideHostOps, mergeDevices, tracingMode, groupBy } = params;
 
     const response = useQuery<PerformanceReportResponse, AxiosError>({
         queryFn: () =>
@@ -1180,16 +1211,7 @@ export const usePerformanceReport = (name: string | null) => {
                       groupBy,
                   )
                 : Promise.resolve(EMPTY_PERF_RETURN),
-        queryKey: [
-            'get-performance-report',
-            name,
-            `startSignpost:${startSignpost ? `${startSignpost.id}${startSignpost.op_code}` : null}`,
-            `endSignpost:${endSignpost ? `${endSignpost.id}${endSignpost.op_code}` : null}`,
-            `hideHostOps:${hideHostOps ? 'true' : 'false'}`,
-            `mergeDevices:${mergeDevices ? 'true' : 'false'}`,
-            `tracingMode:${tracingMode ? 'true' : 'false'}`,
-            `groupBy:${groupBy}`,
-        ],
+        queryKey: getPerformanceReportQueryKey(name, params),
         enabled: name !== null,
         retry: false,
         staleTime: Infinity,
@@ -1198,13 +1220,42 @@ export const usePerformanceReport = (name: string | null) => {
     return response;
 };
 
+/**
+ * @description The performance report as the performance tab is currently
+ * displaying it — every view filter applied.
+ */
+export const usePerformanceReport = (name: string | null) => {
+    const params = useViewPerformanceReportParams();
+
+    return usePerformanceReportQuery(name, params);
+};
+
+/**
+ * @description The active performance report in the one shape the memory
+ * report can be matched against: devices merged, host ops hidden, whole run.
+ * Whether two reports come from the same run is a property of the reports, so
+ * it must not move when the user changes how they are viewing the performance
+ * tab (#1812).
+ *
+ * `tracingMode` deliberately still follows the user's toggle. It only reorders
+ * rows, and for a trace-captured run the traced order is the one that lines up
+ * with the memory report — pinning it would leave those reports permanently
+ * unlinkable. `groupBy` is shared for a different reason: it cannot affect
+ * `report` at all, and passing it through keeps this key identical to the view
+ * query's whenever the tab is at its defaults, so the common case shares one
+ * cache entry instead of paying for a second fetch.
+ */
+export const useLinkedPerformanceReport = () => {
+    const name = useAtomValue(activePerformanceReportFolderNameAtom);
+    const params = useLinkedPerformanceReportParams();
+
+    return usePerformanceReportQuery(name, params);
+};
+
 export const usePerformanceComparisonReport = () => {
     const rawReportNames = useAtomValue(comparisonPerformanceReportListAtom);
-    const [startSignpost, endSignpost] = useAtomValue(filterBySignpostAtom);
-    const hideHostOps = useAtomValue(hideHostOpsAtom);
-    const mergeDevices = useAtomValue(mergeDevicesAtom);
-    const tracingMode = useAtomValue(tracingModeAtom);
-    const groupBy = useAtomValue(stackedGroupByAtom);
+    const params = useViewPerformanceReportParams();
+    const { startSignpost, endSignpost, hideHostOps, mergeDevices, tracingMode, groupBy } = params;
 
     const reportNames = useMemo(() => {
         return Array.isArray(rawReportNames) ? [...rawReportNames] : rawReportNames;
@@ -1232,16 +1283,7 @@ export const usePerformanceComparisonReport = () => {
 
             return results;
         },
-        queryKey: [
-            'get-performance-comparison-report',
-            reportNames,
-            `startSignpost:${startSignpost ? `${startSignpost.id}${startSignpost.op_code}` : null}`,
-            `endSignpost:${endSignpost ? `${endSignpost.id}${endSignpost.op_code}` : null}`,
-            `hideHostOps:${hideHostOps ? 'true' : 'false'}`,
-            `mergeDevices:${mergeDevices ? 'true' : 'false'}`,
-            `tracingMode:${tracingMode ? 'true' : 'false'}`,
-            `groupBy:${groupBy}`,
-        ],
+        queryKey: getPerformanceComparisonReportQueryKey(reportNames, params),
         staleTime: Infinity,
         enabled: !!reportNames,
     });

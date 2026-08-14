@@ -21,7 +21,7 @@ vi.mock('../src/hooks/useAPI', () => ({
     useGetDeviceOperationListPerf: () => apiState.matchedOperations,
     useOperationsList: () => apiState.operations,
     useDevices: () => apiState.devices,
-    usePerformanceReport: () => apiState.performance,
+    useLinkedPerformanceReport: () => apiState.performance,
 }));
 
 const PROFILER = { path: 'mem-run', reportName: 'mem-run' };
