@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import { DEALLOCATE_OP_NAME_LIST } from '../../definitions/Deallocate';
-import { OP_GRAPH_SPACING, estimateOpNodeSize, layoutOpGraph } from './opGraphLayout';
+import { estimateOpNodeSize, layoutOpGraph } from './opGraphLayout';
 import {
     type OpGraphBuildOptions,
     type OpGraphBuiltGraph,
@@ -36,7 +36,7 @@ function collectCandidateEdges(operations: OpGraphSourceOperation[]): CandidateE
 
 export function buildOpGraph(
     operations: OpGraphSourceOperation[],
-    { hideDeallocate, compact }: OpGraphBuildOptions,
+    { hideDeallocate }: OpGraphBuildOptions,
 ): OpGraphBuiltGraph {
     const candidates = collectCandidateEdges(operations);
 
@@ -90,7 +90,6 @@ export function buildOpGraph(
     const positions = layoutOpGraph(
         nodes.map((node) => ({ id: node.id, width: node.width ?? 0, height: node.height ?? 0 })),
         edges,
-        compact ? OP_GRAPH_SPACING.compact : OP_GRAPH_SPACING.normal,
     );
 
     return {

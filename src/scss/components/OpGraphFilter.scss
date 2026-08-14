@@ -1,0 +1,68 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
+
+@use '../definitions/colours' as *;
+
+.op-graph-filter {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px;
+    background: $tt-grey-2;
+    border: 1px solid $tt-grey-3;
+    border-radius: 4px;
+    box-shadow: 0 1px 4px rgb(0 0 0 / 30%);
+
+    .bp6-input-group {
+        display: flex;
+        align-items: center;
+        width: 240px;
+    }
+
+    .op-graph-filter-counter {
+        display: inline-flex;
+        align-items: center;
+        padding: 0 4px;
+        color: $tt-grey-6;
+        font-size: 11px;
+        line-height: 1;
+        white-space: nowrap;
+    }
+
+    .op-graph-filter-right-slot {
+        display: inline-flex;
+        align-items: center;
+        gap: 2px;
+    }
+
+    .op-graph-filter-mode {
+        font-family: monospace;
+        font-size: 12px;
+        font-weight: 600;
+
+        &.bp6-button {
+            color: $tt-grey-5;
+            background: transparent;
+            border-radius: 3px;
+        }
+
+        &.bp6-button.bp6-active {
+            color: $tt-black;
+            background: $tt-yellow;
+        }
+
+        &.bp6-button.bp6-active:hover {
+            background: $tt-yellow-tint-1;
+        }
+    }
+
+    .op-graph-filter-clear,
+    .op-graph-filter-step,
+    .op-graph-filter-mode {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+    }
+}

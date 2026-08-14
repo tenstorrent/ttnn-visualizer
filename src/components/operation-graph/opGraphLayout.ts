@@ -10,13 +10,10 @@ const NODE_MIN_WIDTH = 108;
 const NODE_MAX_WIDTH = 560;
 const NODE_HEIGHT = 40;
 const NODE_HEIGHT_WITH_FILE = 56;
-
-export const OP_GRAPH_SPACING = {
-    normal: { nodesep: 30, ranksep: 80 },
-    compact: { nodesep: 16, ranksep: 48 },
-} as const;
-
-export type OpGraphSpacing = (typeof OP_GRAPH_SPACING)[keyof typeof OP_GRAPH_SPACING];
+// Wide enough for an edge to carry its shape label between two ranks without
+// colliding with the neighbouring column.
+const NODE_SEP = 30;
+const RANK_SEP = 80;
 
 export interface LayoutInputNode {
     id: string;
@@ -42,17 +39,12 @@ export function estimateOpNodeSize(label: string, fileIdentifier: string): { wid
     return { width, height: fileIdentifier ? NODE_HEIGHT_WITH_FILE : NODE_HEIGHT };
 }
 
-function runDagre(
-    nodes: LayoutInputNode[],
-    edges: LayoutInputEdge[],
-    spacing: OpGraphSpacing,
-    ranker: string,
-): Map<string, LayoutPosition> {
+function runDagre(nodes: LayoutInputNode[], edges: LayoutInputEdge[], ranker: string): Map<string, LayoutPosition> {
     const graph = new dagre.graphlib.Graph();
     graph.setGraph({
         rankdir: 'TB',
-        nodesep: spacing.nodesep,
-        ranksep: spacing.ranksep,
+        nodesep: NODE_SEP,
+        ranksep: RANK_SEP,
         edgesep: 10,
         ranker,
         marginx: 20,
@@ -84,17 +76,13 @@ function runDagre(
 // `network-simplex` is deliberately not the fallback: on a 4k-node graph it took
 // 28s against `tight-tree`'s 786ms, and over 8 minutes at 8k. `longest-path` is
 // O(V+E) so it cannot degenerate, at the cost of taller layouts. #1809
-export function layoutOpGraph(
-    nodes: LayoutInputNode[],
-    edges: LayoutInputEdge[],
-    spacing: OpGraphSpacing,
-): Map<string, LayoutPosition> {
+export function layoutOpGraph(nodes: LayoutInputNode[], edges: LayoutInputEdge[]): Map<string, LayoutPosition> {
     if (nodes.length === 0) {
         return new Map();
     }
     try {
-        return runDagre(nodes, edges, spacing, 'tight-tree');
+        return runDagre(nodes, edges, 'tight-tree');
     } catch {
-        return runDagre(nodes, edges, spacing, 'longest-path');
+        return runDagre(nodes, edges, 'longest-path');
     }
 }

@@ -56,9 +56,17 @@ export interface OpGraphBuiltGraph {
     edges: OpGraphFlowEdge[];
 }
 
+// Rebuilt only when the worker delivers a graph, in canvas order. The filter and
+// prev/next walk this instead of the React Flow `nodes` array, which gets a fresh
+// identity on every drag frame.
+export interface OpGraphNodeIndexEntry {
+    id: string;
+    operationId: number;
+    name: string;
+}
+
 export interface OpGraphBuildOptions {
     hideDeallocate: boolean;
-    compact: boolean;
 }
 
 export type OpGraphWorkerInboundMessage =

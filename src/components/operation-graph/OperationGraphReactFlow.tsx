@@ -21,8 +21,11 @@ import type { OperationDescription } from '../../model/APIData';
 import type { PerfOverlaySource } from '../../functions/perfOverlay';
 import LoadingSpinner from '../LoadingSpinner';
 import OpGraphEdge from './OpGraphEdge';
+import type { OpGraphFilterHandle } from './OpGraphFilter';
 import OpGraphInfoPanel from './OpGraphInfoPanel';
 import OpGraphNode from './OpGraphNode';
+import OpGraphToolbar from './OpGraphToolbar';
+import { OpGraphFilterMode, buildOpGraphFilterMatcher } from './opGraphFilterMatcher';
 import { useOpGraphLayoutWorker } from './useOpGraphLayoutWorker';
 import {
     type OpGraphBuildOptions,
@@ -30,6 +33,7 @@ import {
     OpGraphEdgeType,
     type OpGraphFlowEdge,
     type OpGraphFlowNode,
+    type OpGraphNodeIndexEntry,
     OpGraphNodeType,
     type OpGraphSourceOperation,
 } from './opGraphTypes';
@@ -46,8 +50,23 @@ const MIN_ZOOM = 0.02;
 const FOCUS_ZOOM = 1;
 const FOCUS_DURATION_MS = 500;
 
-// Fixed at vis's defaults until the toolbar that drives them is ported.
-const BUILD_OPTIONS: OpGraphBuildOptions = { hideDeallocate: true, compact: false };
+// Non-matches fade instead of hiding, so the matched subset keeps its position
+// in the layout rather than the graph reflowing under the user mid-search.
+const FILTER_DIM_OPACITY = 0.18;
+// The applied query lags the input so the match → style → React Flow diff chain
+// doesn't run per keystroke. Clearing bypasses it to keep Escape instant.
+const FILTER_DEBOUNCE_MS = 120;
+// Session-scoped: survives a reload without leaking across browser sessions.
+const FILTER_MODE_STORAGE_KEY = 'opGraphFilterMode';
+
+interface OpGraphMatches {
+    ids: Set<string>;
+    operationIdsInOrder: number[];
+}
+
+// Shared so an idle filter yields one stable identity instead of a fresh empty
+// set per render, which would invalidate every memo downstream.
+const EMPTY_MATCHES: OpGraphMatches = { ids: new Set<string>(), operationIdsInOrder: [] };
 
 const SELECTED_NODE_CLASS = 'op-graph-node-selected';
 
@@ -73,6 +92,16 @@ const OperationGraphInner = ({ operationList, operationId }: OperationGraphReact
     const [nodes, setNodes, onNodesChange] = useNodesState<OpGraphFlowNode>([]);
     const [edges, setEdges, onEdgesChange] = useEdgesState<OpGraphFlowEdge>([]);
     const [selectedOperationId, setSelectedOperationId] = useState<number | null>(operationId ?? null);
+    const [nodeIndex, setNodeIndex] = useState<OpGraphNodeIndexEntry[]>([]);
+    const [hideDeallocate, setHideDeallocate] = useState(true);
+    const [filterQuery, setFilterQuery] = useState('');
+    const [appliedFilterQuery, setAppliedFilterQuery] = useState('');
+    const [filterMode, setFilterMode] = useState<OpGraphFilterMode>(() => {
+        const stored = sessionStorage.getItem(FILTER_MODE_STORAGE_KEY);
+        return stored === OpGraphFilterMode.REGEX ? OpGraphFilterMode.REGEX : OpGraphFilterMode.SUBSTRING;
+    });
+    const [currentMatchIndex, setCurrentMatchIndex] = useState<number | null>(null);
+    const filterRef = useRef<OpGraphFilterHandle>(null);
     const { setCenter, getNode } = useReactFlow<OpGraphFlowNode, OpGraphFlowEdge>();
 
     const selectedOperationIdRef = useRef(selectedOperationId);
@@ -110,6 +139,13 @@ const OperationGraphInner = ({ operationList, operationId }: OperationGraphReact
         (graph: OpGraphBuiltGraph) => {
             setNodes(graph.nodes);
             setEdges(graph.edges.map((edge) => ({ ...edge, markerEnd: EDGE_MARKER })));
+            setNodeIndex(
+                graph.nodes.map((node) => ({
+                    id: node.id,
+                    operationId: node.data.operationId,
+                    name: node.data.filterString,
+                })),
+            );
 
             // An op can drop out between builds (isolated, or filtered as a
             // deallocate), so selection falls back rather than point at nothing.
@@ -126,9 +162,13 @@ const OperationGraphInner = ({ operationList, operationId }: OperationGraphReact
 
     const { runBuild, isBuilding } = useOpGraphLayoutWorker(sourceOperations, onBuilt);
 
+    const buildOptions = useMemo<OpGraphBuildOptions>(() => ({ hideDeallocate }), [hideDeallocate]);
+
+    // `sourceOperations` isn't read here — it's the signal that the worker holds a
+    // new report and the current build is stale.
     useEffect(() => {
-        runBuild(BUILD_OPTIONS);
-    }, [runBuild, sourceOperations]);
+        runBuild(buildOptions);
+    }, [runBuild, sourceOperations, buildOptions]);
 
     const focusOperation = useCallback(
         (id: number) => {
@@ -152,6 +192,115 @@ const OperationGraphInner = ({ operationList, operationId }: OperationGraphReact
         pendingFocusRef.current = null;
         focusOperation(target);
     }, [nodes, focusOperation]);
+
+    const selectOperation = useCallback(
+        (id: number) => {
+            setSelectedOperationId(id);
+            focusOperation(id);
+        },
+        [focusOperation],
+    );
+
+    // Clearing applies straight away so Escape and the clear button feel instant;
+    // typed queries go through the debounce effect below.
+    const handleQueryChange = useCallback((next: string) => {
+        setFilterQuery(next);
+        setCurrentMatchIndex(null);
+        if (next === '') {
+            setAppliedFilterQuery('');
+        }
+    }, []);
+
+    // The same query matches a different set in the other mode, so the cursor
+    // can't carry over.
+    const handleModeChange = useCallback((next: OpGraphFilterMode) => {
+        setFilterMode(next);
+        setCurrentMatchIndex(null);
+        sessionStorage.setItem(FILTER_MODE_STORAGE_KEY, next);
+    }, []);
+
+    useEffect(() => {
+        if (filterQuery === '') {
+            return undefined;
+        }
+        const timeoutId = window.setTimeout(() => setAppliedFilterQuery(filterQuery), FILTER_DEBOUNCE_MS);
+        return () => window.clearTimeout(timeoutId);
+    }, [filterQuery]);
+
+    // Cmd/Ctrl+F focuses the filter while the graph is mounted; the native
+    // find-in-page comes back as soon as the user navigates away.
+    useEffect(() => {
+        const handleFindShortcut = (event: KeyboardEvent) => {
+            if (!(event.metaKey || event.ctrlKey) || event.key !== 'f' || event.shiftKey || event.altKey) {
+                return;
+            }
+            event.preventDefault();
+            filterRef.current?.focus();
+        };
+        window.addEventListener('keydown', handleFindShortcut);
+        return () => {
+            window.removeEventListener('keydown', handleFindShortcut);
+        };
+    }, []);
+
+    const filterMatcher = useMemo(
+        () => (appliedFilterQuery === '' ? null : buildOpGraphFilterMatcher(filterMode, appliedFilterQuery)),
+        [filterMode, appliedFilterQuery],
+    );
+
+    const matches = useMemo<OpGraphMatches>(() => {
+        if (!filterMatcher) {
+            return EMPTY_MATCHES;
+        }
+        const ids = new Set<string>();
+        const operationIdsInOrder: number[] = [];
+        for (const entry of nodeIndex) {
+            if (filterMatcher.testName(entry.name)) {
+                ids.add(entry.id);
+                operationIdsInOrder.push(entry.operationId);
+            }
+        }
+        return { ids, operationIdsInOrder };
+    }, [nodeIndex, filterMatcher]);
+
+    // A query that matches nothing leaves the canvas alone rather than dimming
+    // every node to 18%, which reads as a rendering fault.
+    const matchedIds = matches.ids.size > 0 ? matches.ids : null;
+
+    const { previousOperationId, nextOperationId } = useMemo(() => {
+        const position = nodeIndex.findIndex((entry) => entry.operationId === selectedOperationId);
+        if (position === -1) {
+            return { previousOperationId: null, nextOperationId: nodeIndex[0]?.operationId ?? null };
+        }
+        return {
+            previousOperationId: nodeIndex[position - 1]?.operationId ?? null,
+            nextOperationId: nodeIndex[position + 1]?.operationId ?? null,
+        };
+    }, [nodeIndex, selectedOperationId]);
+
+    // Stepping matches only moves the viewport. Selection is the user's anchor —
+    // and the reason a node stays lit while everything around it fades — so a
+    // search walk shouldn't reassign it.
+    const goToMatch = useCallback(
+        (offset: number) => {
+            const total = matches.operationIdsInOrder.length;
+            if (total === 0) {
+                return;
+            }
+            let nextIndex: number;
+            if (currentMatchIndex === null) {
+                nextIndex = offset > 0 ? 0 : total - 1;
+            } else {
+                nextIndex = (currentMatchIndex + offset + total) % total;
+            }
+            focusOperation(matches.operationIdsInOrder[nextIndex]);
+            setCurrentMatchIndex(nextIndex);
+        },
+        [matches, currentMatchIndex, focusOperation],
+    );
+
+    const goToPreviousMatch = useCallback(() => goToMatch(-1), [goToMatch]);
+    const goToNextMatch = useCallback(() => goToMatch(1), [goToMatch]);
 
     const { edgesBySource, edgesByTarget } = useMemo(() => {
         const bySource = new Map<string, OpGraphFlowEdge[]>();
@@ -194,34 +343,48 @@ const OperationGraphInner = ({ operationList, operationId }: OperationGraphReact
     }, [selectedOperationId, edgesBySource, edgesByTarget]);
 
     const styledNodes = useMemo(() => {
-        if (!highlight) {
+        if (!highlight && !matchedIds) {
             return nodes;
         }
         return nodes.map((node) => {
-            if (node.id === highlight.selectedId) {
-                return { ...node, className: SELECTED_NODE_CLASS };
+            const isSelected = node.id === highlight?.selectedId;
+            let styled = node;
+            if (isSelected) {
+                styled = { ...styled, className: SELECTED_NODE_CLASS };
+            } else if (highlight) {
+                const relation = highlight.relationByNodeId.get(node.id);
+                if (relation) {
+                    styled = { ...styled, className: NODE_CLASS_BY_RELATION[relation] };
+                }
             }
-            const relation = highlight.relationByNodeId.get(node.id);
-            return relation ? { ...node, className: NODE_CLASS_BY_RELATION[relation] } : node;
+            if (matchedIds && !isSelected && !matchedIds.has(node.id)) {
+                styled = { ...styled, style: { ...styled.style, opacity: FILTER_DIM_OPACITY } };
+            }
+            return styled;
         });
-    }, [nodes, highlight]);
+    }, [nodes, highlight, matchedIds]);
 
     const styledEdges = useMemo(() => {
-        if (!highlight) {
+        if (!highlight && !matchedIds) {
             return edges;
         }
         return edges.map((edge) => {
-            const relation = highlight.relationByEdgeId.get(edge.id);
-            return relation ? { ...edge, className: EDGE_CLASS_BY_RELATION[relation] } : edge;
+            const relation = highlight?.relationByEdgeId.get(edge.id);
+            let styled = relation ? { ...edge, className: EDGE_CLASS_BY_RELATION[relation] } : edge;
+            // An edge between two matches stays lit so the matched subset is
+            // traceable; a selection edge outranks the filter either way.
+            if (matchedIds && !relation && !(matchedIds.has(edge.source) && matchedIds.has(edge.target))) {
+                styled = { ...styled, style: { ...styled.style, opacity: FILTER_DIM_OPACITY } };
+            }
+            return styled;
         });
-    }, [edges, highlight]);
+    }, [edges, highlight, matchedIds]);
 
     const handleNodeClick = useCallback(
         (_event: ReactMouseEvent, node: OpGraphFlowNode) => {
-            setSelectedOperationId(node.data.operationId);
-            focusOperation(node.data.operationId);
+            selectOperation(node.data.operationId);
         },
-        [focusOperation],
+        [selectOperation],
     );
 
     const handlePaneClick = useCallback(() => {
@@ -239,6 +402,25 @@ const OperationGraphInner = ({ operationList, operationId }: OperationGraphReact
                     <LoadingSpinner />
                 </div>
             ) : null}
+            <OpGraphToolbar
+                filterRef={filterRef}
+                query={filterQuery}
+                onQueryChange={handleQueryChange}
+                mode={filterMode}
+                onModeChange={handleModeChange}
+                isRegexInvalid={filterMatcher?.isRegexInvalid ?? false}
+                matchCount={matches.operationIdsInOrder.length}
+                currentMatchIndex={currentMatchIndex}
+                onPrevMatch={goToPreviousMatch}
+                onNextMatch={goToNextMatch}
+                selectedOperationId={selectedOperationId}
+                previousOperationId={previousOperationId}
+                nextOperationId={nextOperationId}
+                onGoToOperation={selectOperation}
+                hideDeallocate={hideDeallocate}
+                onHideDeallocateChange={setHideDeallocate}
+                isDisabled={isBuilding}
+            />
             <ReactFlow<OpGraphFlowNode, OpGraphFlowEdge>
                 nodes={styledNodes}
                 edges={styledEdges}
