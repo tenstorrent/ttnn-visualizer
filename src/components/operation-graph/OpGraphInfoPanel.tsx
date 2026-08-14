@@ -26,9 +26,8 @@ interface ConnectedOpGroup {
     tensors: Tensor[];
 }
 
-// Tensors are grouped by the op on the other end of the edge so the panel reads
-// as "who feeds me / who consumes me" rather than a flat tensor list. A tensor
-// with several producers or consumers appears under each of them.
+// Grouped by the op at the other end of the edge, so the panel reads as "who
+// feeds me / who consumes me". A tensor with several appears under each.
 const getConnectedOpGroups = (
     tensors: Tensor[] | undefined,
     direction: NodeRelation,
@@ -176,9 +175,8 @@ interface OpGraphInfoPanelProps {
     onLocateOperation: (operationId: number) => void;
 }
 
-// Memoized because dragging a node re-renders the graph on every pointer frame,
-// and re-rendering every tensor's memory-config table alongside it is enough to
-// make the drag stutter. Callers must keep all four props referentially stable.
+// Node drag re-renders the graph every pointer frame, and re-rendering each
+// tensor's memory-config table with it stutters. All four props must be stable.
 const OpGraphInfoPanel = memo(
     ({ operationId, operationList, operationNamesById, onLocateOperation }: OpGraphInfoPanelProps) => {
         const navigate = useNavigate();

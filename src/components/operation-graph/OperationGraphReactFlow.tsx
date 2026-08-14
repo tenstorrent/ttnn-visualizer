@@ -40,15 +40,13 @@ const EDGE_TYPES = { [OpGraphEdgeType.OP]: OpGraphEdge };
 
 const EDGE_MARKER = { type: MarkerType.ArrowClosed, width: 18, height: 18 } as const;
 
-// vis clamped zoom-in at 3 and the graph is wide enough that fitting a large
-// report needs to zoom far out.
+// A large report only fits at extreme zoom-out; 3 caps zoom-in as vis did.
 const MAX_ZOOM = 3;
 const MIN_ZOOM = 0.02;
 const FOCUS_ZOOM = 1;
 const FOCUS_DURATION_MS = 500;
 
-// The toolbar that drives these lands with the rest of the controls; the
-// defaults match what vis shipped, so the graph is usable in the meantime.
+// Fixed at vis's defaults until the toolbar that drives them is ported.
 const BUILD_OPTIONS: OpGraphBuildOptions = { hideDeallocate: true, compact: false };
 
 const SELECTED_NODE_CLASS = 'op-graph-node-selected';
@@ -66,8 +64,7 @@ const EDGE_CLASS_BY_RELATION: Record<NodeRelation, string> = {
 interface OperationGraphReactFlowProps {
     operationList: OperationDescription[];
     operationId?: number;
-    // Consumed once the perf overlay is ported; declared so `GraphView` keeps
-    // its existing call shape.
+    // Unused until the perf overlay is ported; keeps `GraphView`'s call shape.
     perfRows?: PerfOverlaySource[];
     isPerfReportLoaded?: boolean;
 }
@@ -83,8 +80,8 @@ const OperationGraphInner = ({ operationList, operationId }: OperationGraphReact
         selectedOperationIdRef.current = selectedOperationId;
     }, [selectedOperationId]);
 
-    // `getNode` reads the React Flow store, which is a tick behind `setNodes`,
-    // so a focus requested while applying a build has to wait for the commit.
+    // `getNode` reads the React Flow store, a tick behind `setNodes`, so a focus
+    // requested mid-build has to wait for the commit.
     const pendingFocusRef = useRef<number | null>(null);
 
     const sourceOperations = useMemo<OpGraphSourceOperation[]>(
@@ -114,9 +111,8 @@ const OperationGraphInner = ({ operationList, operationId }: OperationGraphReact
             setNodes(graph.nodes);
             setEdges(graph.edges.map((edge) => ({ ...edge, markerEnd: EDGE_MARKER })));
 
-            // An op can drop out of the graph between builds — isolated, or
-            // filtered as a deallocate — so selection falls back the way the vis
-            // implementation did rather than pointing at nothing.
+            // An op can drop out between builds (isolated, or filtered as a
+            // deallocate), so selection falls back rather than point at nothing.
             const desired = selectedOperationIdRef.current;
             const isPresent = desired !== null && graph.nodes.some((node) => node.data.operationId === desired);
             const target = isPresent ? desired : (graph.nodes[0]?.data.operationId ?? null);
@@ -184,8 +180,8 @@ const OperationGraphInner = ({ operationList, operationId }: OperationGraphReact
         const selectedId = String(selectedOperationId);
         const relationByNodeId = new Map<string, NodeRelation>();
         const relationByEdgeId = new Map<string, NodeRelation>();
-        // Outputs first so that a neighbour on both sides of a cycle reads as an
-        // input, which is the precedence the vis implementation used.
+        // Outputs first: a neighbour on both sides of a cycle reads as an input,
+        // matching vis's precedence.
         for (const edge of edgesBySource.get(selectedId) ?? []) {
             relationByNodeId.set(edge.target, NodeRelation.Output);
             relationByEdgeId.set(edge.id, NodeRelation.Output);
@@ -232,9 +228,8 @@ const OperationGraphInner = ({ operationList, operationId }: OperationGraphReact
         setSelectedOperationId(null);
     }, []);
 
-    // The panel covers the corner the minimap docks in, so the two are mutually
-    // exclusive. Unmounting rather than hiding matters: the minimap draws a rect
-    // per node and re-derives them on every node change.
+    // The panel covers the corner the minimap docks in. Unmounting rather than
+    // hiding it drops a per-node rect that re-derives on every node change.
     const isPanelOpen = selectedOperationId !== null && !isBuilding;
 
     return (

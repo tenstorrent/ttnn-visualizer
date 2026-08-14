@@ -40,9 +40,8 @@ export function buildOpGraph(
 ): OpGraphBuiltGraph {
     const candidates = collectCandidateEdges(operations);
 
-    // Connectivity is decided before the deallocate filter, matching the vis
-    // implementation: hiding deallocate ops must not promote their neighbours
-    // out of the graph, nor pull in ops that were only ever isolated.
+    // Connectivity is decided before the deallocate filter so hiding deallocate
+    // ops cannot drop their neighbours or pull in ops that were always isolated.
     const connected = new Set<number>();
     for (const candidate of candidates) {
         connected.add(candidate.source);

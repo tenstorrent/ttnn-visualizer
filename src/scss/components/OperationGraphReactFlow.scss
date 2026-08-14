@@ -2,9 +2,8 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-// React Flow derives its node class from the registered type name, so
-// `.react-flow__node-opNode` is camelCase, and its own classes use BEM `__`.
-// Neither is expressible in kebab-case, so the pattern has to be off here.
+// React Flow's own classes are BEM `__`, and it derives node classes from the
+// registered type name, so `.react-flow__node-opNode` cannot be kebab-case.
 /* stylelint-disable selector-class-pattern */
 
 @use '../definitions/colours' as *;
@@ -69,8 +68,7 @@
         white-space: nowrap;
     }
 
-    // Painted inside the edge SVG rather than as a positioned div: a real report
-    // carries ~500 labels, and one HTML node each is the documented jank risk.
+    // Painted in the edge SVG, not as a div: a real report carries ~500 labels.
     .op-graph-edge-label {
         fill: $tt-yellow-tint-1;
         font-size: 11px;
@@ -91,13 +89,26 @@
         stroke-width: 2;
     }
 
+    // React Flow's minimap defaults are light-theme (`#fff` pane, `#e2e2e2`
+    // nodes), which reads as a blank pale rectangle on our dark canvas. Setting
+    // the unsuffixed vars rather than the `-props` tier leaves the tier free for
+    // `nodeColor`/`maskColor` props, and keeps the node fill on the same custom
+    // property as the on-canvas rule it has to match.
+    .react-flow__minimap {
+        --xy-minimap-background-color: #{$tt-grey-2};
+        --xy-minimap-node-background-color: var(--graph-normal);
+        --xy-minimap-node-stroke-color: #{$tt-grey-2};
+        --xy-minimap-node-stroke-width: 1px;
+
+        // The mask dims what's off-screen, so it has to be darker than the pane.
+        --xy-minimap-mask-background-color: #{rgba($tt-black, 0.6)};
+        --xy-minimap-mask-stroke-color: #{rgba($tt-white, 0.3)};
+        --xy-minimap-mask-stroke-width: 1px;
+    }
+
     // Density, type scale and section banding mirror `MlirNodeDetailsPanel.scss`
-    // so the two graph views read as one product. Worth extracting to a shared
-    // partial if a third details panel turns up.
-    //
-    // Anchored to the graph box rather than the viewport: the vis original was
-    // `position: fixed` with no `top`, so it leaned on its static position and
-    // moved whenever the DOM order changed.
+    // so the two graph views read as one product. Worth a shared partial if a
+    // third details panel turns up.
     .op-graph-panel {
         position: absolute;
         z-index: variables.$z-index-2-interactive;
@@ -107,9 +118,8 @@
         display: flex;
         flex-direction: column;
 
-        // Tracks the canvas width so a narrow window keeps a usable graph, with
-        // the floor set by the widest content the panel has to hold: a tensor's
-        // `[shape] Tensor N` line.
+        // Tracks the canvas so a narrow window keeps a usable graph; the floor is
+        // the widest line the panel must hold, a tensor's `[shape] Tensor N`.
         width: clamp(280px, 26%, 360px);
         overflow: auto;
         background-color: rgba($tt-grey-2, 0.95);
@@ -250,8 +260,8 @@
         word-break: break-all;
     }
 
-    // Blueprint's MINIMAL/SMALL button still carries padding sized for body
-    // buttons; trim it so the icon sits inline without inflating the row.
+    // Blueprint's MINIMAL/SMALL padding is still body-button sized, which
+    // inflates the row height.
     .op-graph-panel-locate {
         flex: 0 0 auto;
         min-width: 0;
@@ -277,10 +287,8 @@
         background-color: rgba($tt-white, 0.04);
     }
 
-    // Written as explicit descendant selectors rather than MLIR's `.modifier &`
-    // form: these classes are nested inside `.operation-graph-react-flow`, so
-    // `&` would expand to the whole ancestor chain and place the modifier
-    // outside the root — a selector that never matches.
+    // Not MLIR's `.modifier &` form: under this root, `&` expands to the whole
+    // ancestor chain and puts the modifier outside it, matching nothing.
     .op-graph-panel-inputs {
         .op-graph-panel-section-header,
         .op-graph-panel-tensor {
@@ -330,8 +338,7 @@
     }
 
     .op-graph-panel-memory-config {
-        // Flex items stretch by default, which pulled the value column out to the
-        // panel edge; shrink-wrapping keeps key and value adjacent.
+        // Flex stretch pulls the value column out to the panel edge.
         align-self: start;
         font-size: 10px;
 

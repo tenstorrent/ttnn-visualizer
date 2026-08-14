@@ -11,14 +11,8 @@ import {
     type OpGraphWorkerOutboundMessage,
 } from './opGraphTypes';
 
-/**
- * Owns the operation-graph layout worker's lifecycle and request protocol.
- *
- * Dagre measures 43ms on a typical 300-op report and seconds on the rare large
- * one, which is why layout is off the main thread from v1 rather than deferred
- * (#1809). The source projection is posted once per `operations` identity; each
- * build then carries only the toggles.
- */
+// Dagre measures 43ms on a typical 300-op report and seconds on the rare large
+// one, hence a worker from v1 rather than a deferred optimisation. #1809
 export function useOpGraphLayoutWorker(
     operations: OpGraphSourceOperation[],
     onBuilt: (graph: OpGraphBuiltGraph) => void,
@@ -26,16 +20,15 @@ export function useOpGraphLayoutWorker(
     const workerRef = useRef<Worker | null>(null);
     const nextRequestIdRef = useRef(0);
     const activeRequestIdRef = useRef(0);
-    // 0 until the first `set-graph` post; builds before that have no source to
-    // lay out and would get silently dropped, stranding the spinner.
+    // 0 until the first `set-graph` post; builds before that have no source and
+    // would be dropped by the worker, stranding the spinner.
     const sourceVersionRef = useRef(0);
     const [isBuilding, setIsBuilding] = useState(false);
 
     useEffect(() => {
         const worker = new Worker(new URL('./opGraphLayoutWorker.ts', import.meta.url), { type: 'module' });
         workerRef.current = worker;
-        // A worker crash emits no terminal reply, which would strand the
-        // spinner with no way back.
+        // A crash emits no terminal reply, stranding the spinner with no way back.
         worker.onerror = () => {
             setIsBuilding(false);
         };

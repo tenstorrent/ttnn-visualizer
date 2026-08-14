@@ -20,11 +20,8 @@ export enum OpGraphWorkerMessageType {
     ERROR = 'error',
 }
 
-/**
- * The projection of `OperationDescription` the layout worker needs. Sending the
- * full operation list would ship every tensor's dtype, layout and memory config
- * across the structured-clone boundary on each report change.
- */
+// Only what layout needs: the full operation list would clone every tensor's
+// dtype, layout and memory config to the worker on each report change.
 export interface OpGraphSourceOperation {
     id: number;
     name: string;

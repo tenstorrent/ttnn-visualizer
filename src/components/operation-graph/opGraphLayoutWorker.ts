@@ -21,8 +21,7 @@ onmessage = (event: MessageEvent<OpGraphWorkerInboundMessage>) => {
         return;
     }
 
-    // A build for a superseded source would lay out the wrong report; the view
-    // discards mismatched replies too, but bailing here saves the layout pass.
+    // The view also discards mismatched replies; bailing here skips the layout.
     if (message.sourceVersion !== sourceVersion) {
         return;
     }

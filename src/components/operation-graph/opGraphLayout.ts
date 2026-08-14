@@ -81,12 +81,9 @@ function runDagre(
     return positions;
 }
 
-/**
- * `network-simplex` is deliberately not the fallback: measured on a 4k-node
- * operation graph it took 28s against `tight-tree`'s 786ms, and grew past 8
- * minutes at 8k. `longest-path` is O(V+E) and cannot become the pathological
- * case, at the cost of taller layouts. See #1809.
- */
+// `network-simplex` is deliberately not the fallback: on a 4k-node graph it took
+// 28s against `tight-tree`'s 786ms, and over 8 minutes at 8k. `longest-path` is
+// O(V+E) so it cannot degenerate, at the cost of taller layouts. #1809
 export function layoutOpGraph(
     nodes: LayoutInputNode[],
     edges: LayoutInputEdge[],

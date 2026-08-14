@@ -6,9 +6,8 @@ import { BaseEdge, type EdgeProps } from '@xyflow/react';
 import { memo } from 'react';
 import type { OpGraphFlowEdge } from './opGraphTypes';
 
-// One op can feed the same consumer from two different output tensors, which is
-// 20% of edges on a real report. vis auto-curved the twin; React Flow would draw
-// it exactly under the first and lose its label, so the twin is bowed out. #1809
+// An op feeding the same consumer from two output tensors is 20% of edges on a
+// real report; undisplaced, the twin hides under the first and loses its label.
 const PARALLEL_EDGE_BOW_PX = 80;
 
 const OpGraphEdge = memo(
@@ -16,10 +15,8 @@ const OpGraphEdge = memo(
         const bow = (data?.parallelIndex ?? 0) * PARALLEL_EDGE_BOW_PX;
         const midY = (sourceY + targetY) / 2;
 
-        // Bowing along the perpendicular of the chord rather than along x keeps
-        // twins apart in both orientations: a vertical pair splits sideways, a
-        // near-horizontal pair splits vertically. Offsetting x alone left the
-        // wide, shallow pairs almost coincident.
+        // Bowing along the chord's perpendicular separates twins at any
+        // orientation; a fixed x offset leaves wide, shallow pairs coincident.
         const spanX = targetX - sourceX;
         const spanY = targetY - sourceY;
         const span = Math.hypot(spanX, spanY) || 1;
@@ -32,8 +29,7 @@ const OpGraphEdge = memo(
         const control2Y = midY + bowY;
         const path = `M ${sourceX},${sourceY} C ${control1X},${control1Y} ${control2X},${control2Y} ${targetX},${targetY}`;
 
-        // The cubic evaluated at t=0.5, so each twin's label rides its own curve
-        // instead of both landing on the chord midpoint.
+        // The cubic at t=0.5, so each twin's label rides its own curve.
         const labelX = (sourceX + 3 * control1X + 3 * control2X + targetX) / 8;
         const labelY = (sourceY + 3 * control1Y + 3 * control2Y + targetY) / 8;
 
