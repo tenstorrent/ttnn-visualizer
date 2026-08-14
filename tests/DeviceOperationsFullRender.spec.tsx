@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-import { cleanup, render } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import DeviceOperationsFullRender from '../src/components/operation-details/DeviceOperationsFullRender';
@@ -156,5 +156,43 @@ describe('DeviceOperationsFullRender - per-device CB fan-out (#1844)', () => {
 
         expect(legendRows(container)).toHaveLength(2);
         expect([...legendRows(container)].some((row) => row.textContent?.includes('devices'))).toBe(false);
+    });
+
+    // The snapshot reaches the modal only through this button, so without
+    // opening it nothing would catch the wrong DeviceOp being wired up.
+    // The dialog renders through a portal, so its rows are not under `container`.
+    const openPressureModal = () => {
+        fireEvent.click(screen.getByRole('button', { name: /View per-core allocations/ }));
+        return document.querySelectorAll('.cb-row');
+    };
+
+    it('carries the collapsed device counts through to the pressure modal', () => {
+        renderGraph(meshGraph(TWO_CBS, MESH_DEVICE_IDS));
+
+        const rows = openPressureModal();
+        expect(rows).toHaveLength(2);
+        expect([...rows].every((row) => /x 8 devices/.test(row.textContent ?? ''))).toBe(true);
+    });
+
+    it('counts devices per CB in the modal rather than applying one count to all', () => {
+        // dev0 allocates both CBs, dev1 only the first, so a blanket count would
+        // pass a homogeneous fixture but not this one.
+        const shared = { size: 4096, address: 0x1000 };
+        const dev0Only = { size: 2048, address: 0x2000 };
+        const graph = [
+            captureStart(),
+            functionStart('MeshOp'),
+            cbAllocate(shared.size, shared.address, 0),
+            cbAllocate(dev0Only.size, dev0Only.address, 0),
+            cbAllocate(shared.size, shared.address, 1),
+            cbDeallocateAll(),
+            functionEnd('MeshOp'),
+        ];
+        renderGraph(graph);
+
+        const rows = [...openPressureModal()].map((row) => row.textContent ?? '');
+        expect(rows).toHaveLength(2);
+        expect(rows[0]).toMatch(/x 2 devices/);
+        expect(rows[1]).not.toMatch(/devices/);
     });
 });

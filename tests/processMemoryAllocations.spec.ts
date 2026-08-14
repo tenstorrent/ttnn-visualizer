@@ -776,6 +776,95 @@ describe('processMemoryAllocations - per-device CB fan-out (#1844)', () => {
         expect(cbPressureByOpId.get(opStart.id)!.allocations.map((cb) => cb.nodeId)).toEqual([first.id, repeat.id]);
     });
 
+    it('does not let a later op fold a device onto an already-snapshotted row', () => {
+        // No `deallocate_all`, so both ops leave via the `function_end` safety
+        // net. Unscoped, op2's second device folded onto op1's row and moved a
+        // count op1's snapshot had already recorded, so its legend row and its
+        // modal disagreed.
+        const op1 = functionStart('op1');
+        const op1Cb = cbAllocate(TWO_CORES, 4096, 0x1000, { deviceId: 0 });
+        const op2 = functionStart('op2');
+        const op2Dev0 = cbAllocate(TWO_CORES, 4096, 0x1000, { deviceId: 0 });
+        const op2Dev1 = cbAllocate(TWO_CORES, 4096, 0x1000, { deviceId: 1 });
+        const graph = [captureStart(), op1, op1Cb, functionEnd('op1'), op2, op2Dev0, op2Dev1, functionEnd('op2')];
+
+        const { cbPressureByOpId, cbFanout } = processMemoryAllocations(graph);
+
+        expect(cbFanout.deviceCountByNodeId.get(op1Cb.id)).toBe(1);
+        expect(cbFanout.deviceCountByNodeId.get(op2Dev0.id)).toBe(2);
+        expect(cbFanout.duplicateNodeIds).toEqual(new Set([op2Dev1.id]));
+        // The count the legend renders has to match the one the modal shows.
+        const op1Row = cbPressureByOpId.get(op1.id)!.allocations[0];
+        expect(op1Row.deviceCount).toBe(cbFanout.deviceCountByNodeId.get(op1Cb.id));
+    });
+
+    it('collapses only the CB the devices share when one allocates an extra', () => {
+        // Where "max across devices" and "sum" diverge: dev0 carries both CBs,
+        // dev1 only the first.
+        const opStart = functionStart('mesh_op');
+        const graph: Node[] = [
+            captureStart(),
+            opStart,
+            cbAllocate(TWO_CORES, 4096, 0x1000, { deviceId: 0 }),
+            cbAllocate(TWO_CORES, 2048, 0x2000, { deviceId: 0 }),
+            cbAllocate(TWO_CORES, 4096, 0x1000, { deviceId: 1 }),
+            cbDeallocateAll(),
+            functionEnd('mesh_op'),
+        ];
+
+        const { peakMemoryLoad, cbPressureByOpId } = processMemoryAllocations(graph);
+
+        const { allocations, maxBytes } = cbPressureByOpId.get(opStart.id)!;
+        expect(allocations.map((cb) => cb.deviceCount)).toEqual([2, 1]);
+        // dev0's cores hold both CBs; dev1's hold one. The busiest core wins.
+        expect(maxBytes).toBe(4096 + 2048);
+        expect(peakMemoryLoad).toBe(4096 + 2048);
+    });
+
+    it('takes the larger size when devices disagree at one address', () => {
+        const opStart = functionStart('mesh_op');
+        const graph: Node[] = [
+            captureStart(),
+            opStart,
+            cbAllocate(TWO_CORES, 4096, 0x1000, { deviceId: 0 }),
+            cbAllocate(TWO_CORES, 8192, 0x1000, { deviceId: 1 }),
+            cbDeallocateAll(),
+            functionEnd('mesh_op'),
+        ];
+
+        const { cbPressureByOpId } = processMemoryAllocations(graph);
+
+        const { allocations, maxBytes } = cbPressureByOpId.get(opStart.id)!;
+        // Differing sizes are different allocations, so neither row absorbs the
+        // other and the per-core figure is the larger, never the sum.
+        expect(allocations.map((cb) => cb.deviceCount)).toEqual([1, 1]);
+        expect(maxBytes).toBe(8192);
+    });
+
+    it('collapses a batch allocated after deallocate_all by more devices than the last', () => {
+        // The repeat counter has to reset with the live set: carried over, dev1's
+        // first allocation and dev0's second land in different slots and the
+        // second batch reports two rows of one device instead of one of two.
+        const opStart = functionStart('mesh_op');
+        const graph: Node[] = [
+            captureStart(),
+            opStart,
+            cbAllocate(TWO_CORES, 4096, 0x1000, { deviceId: 0 }),
+            cbDeallocateAll(),
+            cbAllocate(TWO_CORES, 4096, 0x1000, { deviceId: 0 }),
+            cbAllocate(TWO_CORES, 4096, 0x1000, { deviceId: 1 }),
+            cbDeallocateAll(),
+            functionEnd('mesh_op'),
+        ];
+
+        const { cbPressureByOpId } = processMemoryAllocations(graph);
+
+        // Only the last snapshot for an op survives, so this is batch two.
+        const { allocations } = cbPressureByOpId.get(opStart.id)!;
+        expect(allocations).toHaveLength(1);
+        expect(allocations[0].deviceCount).toBe(2);
+    });
+
     it('takes the per-device figure for unattributed CBs rather than their sum', () => {
         // `unattributedBytes` has to stay comparable with the per-core numbers
         // beside it, so it collapses across devices the same way.

@@ -83,18 +83,15 @@ export function processMemoryAllocations(
 
     let totalBuffer = 0;
 
-    const maxCbPerCore = (): number => {
-        let m = 0;
-        // Unattributed bytes are excluded — they have no core attribution so
-        // they don't belong in a per-core peak. Mirrors the same exclusion
-        // in snapshotCBPressure() so cbPeak and snapshot.maxBytes agree.
-        for (const bytes of cbBytesByDeviceCore.values()) {
-            if (bytes > m) {
-                m = bytes;
-            }
-        }
-        return m;
-    };
+    // Maintained at the two places `cbBytesByDeviceCore` changes rather than
+    // rescanned per node: the map is read once per graph node but only grows by
+    // accumulation and resets wholesale, so a running max is exact. Rescanning
+    // cost the device count once the key gained a device. #1844
+    //
+    // Unattributed bytes are excluded — they have no core attribution so they
+    // don't belong in a per-core peak. Mirrors the same exclusion in
+    // snapshotCBPressure() so cbPeak and snapshot.maxBytes agree.
+    let cbPeakPerCore = 0;
 
     let i = 1;
     while (i < graph.length) {
@@ -135,13 +132,23 @@ export function processMemoryAllocations(
                 } else {
                     for (const { x, y } of cores) {
                         const k = `${deviceKey}|${x},${y}`;
-                        cbBytesByDeviceCore.set(k, (cbBytesByDeviceCore.get(k) ?? 0) + size);
+                        const coreBytes = (cbBytesByDeviceCore.get(k) ?? 0) + size;
+                        cbBytesByDeviceCore.set(k, coreBytes);
+                        if (coreBytes > cbPeakPerCore) {
+                            cbPeakPerCore = coreBytes;
+                        }
                     }
                 }
             }
 
             const address = parseInt(node.params.address, 10);
-            const identity = `${address}|${size}|${node.params.core_range_set}|${globallyAllocated}`;
+            // Scoped to the enclosing op because `function_end` can snapshot and
+            // unwind without a `circular_buffer_deallocate_all` to reset this;
+            // unscoped, a later op's device folded onto an already-snapshotted
+            // row and moved a count the modal had recorded. Every device's copy
+            // of a CB shares one `function_start`, so the collapse still sees
+            // them all. #1844
+            const identity = `${currentOp?.id}|${address}|${size}|${node.params.core_range_set}|${globallyAllocated}`;
             // A repeat on the same device is a real second allocation, not mesh
             // fan-out, so it needs its own row. Keying by the device's repeat
             // count gives it one, and pairs it with the other devices' repeats
@@ -185,6 +192,7 @@ export function processMemoryAllocations(
                 snapshotCBPressure(currentOp.id);
             }
             cbBytesByDeviceCore.clear();
+            cbPeakPerCore = 0;
             unattributedByDevice.clear();
             resetLiveCBs();
         }
@@ -215,7 +223,7 @@ export function processMemoryAllocations(
             }
         }
 
-        const cbPeak = maxCbPerCore();
+        const cbPeak = cbPeakPerCore;
 
         if (curOpList.length > 0) {
             const obj: AllocationDetails = {

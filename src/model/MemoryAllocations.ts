@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { NodeType } from './APIData';
-import { CoreCoord } from './CoreCoord';
+import { CoreCoordList } from './CoreCoord';
 
 export type AllocationDetails = {
     id: number;
@@ -31,7 +31,7 @@ export type CBAllocationSummary = {
     /** Raw `core_range_set` string from the graph node (for display + reproducibility). */
     coreRangeSet: string;
     /** Expanded cores; empty when the allocation falls into the `'?'` bucket. */
-    cores: CoreCoord[];
+    cores: CoreCoordList;
     /** Op id/name that created the CB, used downstream for color-variance/highlighting. */
     allocateOperationId?: number;
     allocateOperationName?: string;

@@ -11,7 +11,7 @@ import { DeviceOperationLayoutTypes, FragmentationEntry, MarkerType, MarkerTypeL
 import { OperationDetails } from '../../model/OperationDetails';
 import { getBufferColor, getTensorColor } from '../../functions/colorGenerator';
 import { formatMemorySize, prettyPrintAddress } from '../../functions/math';
-import { toReadableShape, toReadableType } from '../../functions/formatting';
+import { getCoreCountLabel, getDeviceCountLabel, toReadableShape, toReadableType } from '../../functions/formatting';
 import 'styles/components/MemoryLegendElement.scss';
 import { L1_SMALL_MARKER_COLOR, L1_START_MARKER_COLOR } from '../../definitions/PlotConfigurations';
 import { selectedBufferColourAtom, showHexAtom } from '../../store/app';
@@ -86,9 +86,8 @@ export const MemoryLegendElement = ({
 
     const derivedTensor = operationDetails.getTensorForAddress(chunk.address);
     const isPerCoreBuffer = bufferType !== StringBufferType.DRAM && bufferType !== StringBufferType.SYSTEM_MEMORY;
-    const numCoresLabel =
-        isPerCoreBuffer && numCores && numCores > 0 ? ` x ${numCores} ${numCores === 1 ? 'core' : 'cores'}` : '';
-    const deviceCountLabel = deviceCount > 1 ? ` x ${deviceCount} devices` : '';
+    const numCoresLabel = isPerCoreBuffer && numCores && numCores > 0 ? ` ${getCoreCountLabel(numCores)}` : '';
+    const deviceCountLabel = deviceCount > 1 ? ` ${getDeviceCountLabel(deviceCount)}` : '';
 
     const resolvedColour =
         chunk.tensorId || derivedTensor
