@@ -32,6 +32,7 @@ import getServerConfig from '../functions/getServerConfig';
 import { PerfTableRow } from '../definitions/PerfTable';
 import { DeviceOperationMapping } from '../model/DeviceOperationMapping';
 import { matchDeviceOperationsToPerf } from '../functions/deviceOperationMatching';
+import memoiseLatest from '../functions/memoiseLatest';
 import {
     LINKED_PERFORMANCE_REPORT_FILTERS,
     PerformanceReportParams,
@@ -40,7 +41,7 @@ import {
 } from '../functions/performanceReportQueryKey';
 import { L1PressureResult } from '../model/L1Pressure';
 import { buildL1PressureResult } from '../functions/l1Pressure';
-import { StackedGroupBy, StackedPerfRow } from '../definitions/StackedPerfTable';
+import { StackedPerfRow } from '../definitions/StackedPerfTable';
 import { isDeviceOperation } from '../functions/filterOperations';
 import { normalizeBufferPagesResponse } from '../functions/normalizeBufferPagesResponse';
 import {
@@ -391,29 +392,23 @@ export interface PerformanceReportResponse {
     signposts?: Signpost[];
 }
 
-const fetchPerformanceReport = async (
-    name: string | null,
-    startSignpost: Signpost | null,
-    endSignpost: Signpost | null,
-    hideHostOps: boolean,
-    mergeDevices: boolean,
-    tracingMode: boolean,
-    groupBy: StackedGroupBy,
-) => {
-    const { data } = await axiosInstance.get<PerformanceReportResponse>(
-        `${Endpoints.PERFORMANCE}/perf-results/report`,
-        {
-            params: {
-                name,
-                group_by: groupBy,
-                start_signpost: startSignpost?.op_code,
-                end_signpost: endSignpost?.op_code,
-                hide_host_ops: hideHostOps,
-                merge_devices: mergeDevices,
-                tracing_mode: tracingMode,
-            },
+// Takes the params as one object rather than positionally: `hideHostOps`,
+// `mergeDevices` and `tracingMode` are adjacent booleans, so a positional
+// signature lets two of them be swapped without a type error while the query key
+// is still built from the correct object — a request cached under a key that
+// misdescribes it.
+const fetchPerformanceReport = async (name: string | null, params: PerformanceReportParams) => {
+    const { data } = await axiosInstance.get<PerformanceReportResponse>(Endpoints.PERFORMANCE_RESULTS_REPORT, {
+        params: {
+            name,
+            group_by: params.groupBy,
+            start_signpost: params.startSignpost?.op_code,
+            end_signpost: params.endSignpost?.op_code,
+            hide_host_ops: params.hideHostOps,
+            merge_devices: params.mergeDevices,
+            tracing_mode: params.tracingMode,
         },
-    );
+    });
 
     return data;
 };
@@ -850,6 +845,47 @@ export const useGetDeviceOperationsListByOp = () => {
     }, [operations]);
 };
 
+// Memoised across call sites, not per hook invocation: both derived values are
+// read by a handful of hooks and by one component instance per virtualised row,
+// and `useMemo` would run the flatMap and the O(rows) match once for each. The
+// inputs are React Query results, so their identity is shared by every caller in
+// a render pass. Callers must not mutate the results — they share them now.
+const getDeviceOperationsList = memoiseLatest((operations?: OperationDescription[]): DeviceOperationMapping[] => {
+    if (!operations) {
+        return [];
+    }
+
+    return operations.flatMap((operation) =>
+        operation.deviceOperationNameList.map((name) => ({
+            name,
+            id: operation.id,
+            operationName: operation.name,
+        })),
+    );
+});
+
+const getDeviceOperationListPerf = memoiseLatest(matchDeviceOperationsToPerf);
+
+const getOpToPerfIds = memoiseLatest((matched: DeviceOperationMapping[]) =>
+    matched.map(({ id, perfData }) => ({ opId: id, perfId: perfData?.id })),
+);
+
+const getDeviceOperationListPerfByOpId = memoiseLatest((matched: DeviceOperationMapping[]) => {
+    const byOpId = new Map<number, DeviceOperationMapping[]>();
+
+    for (const mapping of matched) {
+        const existing = byOpId.get(mapping.id);
+
+        if (existing) {
+            existing.push(mapping);
+        } else {
+            byOpId.set(mapping.id, [mapping]);
+        }
+    }
+
+    return byOpId;
+});
+
 /**
  * @description Every device operation in the memory report, flattened in report
  * order. Multi-device collapsing happens at match time, not here, because only
@@ -858,42 +894,24 @@ export const useGetDeviceOperationsListByOp = () => {
 export const useGetDeviceOperationsList = (): DeviceOperationMapping[] => {
     const { data: operations } = useOperationsList();
 
-    return useMemo(() => {
-        if (!operations) {
-            return [];
-        }
-
-        return operations.flatMap((operation) =>
-            operation.deviceOperationNameList.map((name) => ({
-                name,
-                id: operation.id,
-                operationName: operation.name,
-            })),
-        );
-    }, [operations]);
-};
-
-const useProxyPerformanceReport = (): PerformanceReportResponse => {
-    const response = useLinkedPerformanceReport();
-
-    return useMemo(() => {
-        if (!response.data) {
-            return EMPTY_PERF_RETURN;
-        }
-        return response.data;
-    }, [response.data]);
+    return getDeviceOperationsList(operations);
 };
 
 export const useGetDeviceOperationListPerf = () => {
-    const deviceOperations: DeviceOperationMapping[] = useGetDeviceOperationsList();
+    const deviceOperations = useGetDeviceOperationsList();
     const { data: devices } = useDevices();
-    const data = useProxyPerformanceReport();
+    const { data } = useLinkedPerformanceReport();
 
-    return useMemo(
-        () => matchDeviceOperationsToPerf(deviceOperations, data.report, devices?.length ?? 0),
-        [data, deviceOperations, devices],
-    );
+    return getDeviceOperationListPerf(deviceOperations, (data ?? EMPTY_PERF_RETURN).report, devices?.length ?? 0);
 };
+
+/**
+ * @description The matched device operations grouped by profiler op id, for
+ * consumers that look up one operation at a time. Rendered once per row of a
+ * virtualised list, a linear scan per lookup is O(rows) per row.
+ */
+export const useGetDeviceOperationListPerfByOpId = (): Map<number, DeviceOperationMapping[]> =>
+    getDeviceOperationListPerfByOpId(useGetDeviceOperationListPerf());
 
 /**
  * @description op id to perf id mapping only for existing perf ids. The perf
@@ -903,20 +921,7 @@ export const useGetDeviceOperationListPerf = () => {
  * not survive `mergeDevices: false`, where an operation's per-device rows each
  * carry their own id and only the merged representative joins.
  */
-export const useOpToPerfIdFiltered = () => {
-    const opMapping = useGetDeviceOperationListPerf();
-
-    return useMemo(
-        () =>
-            opMapping.map(({ id, perfData }) => {
-                return {
-                    opId: id,
-                    perfId: perfData?.id,
-                };
-            }),
-        [opMapping],
-    );
-};
+export const useOpToPerfIdFiltered = () => getOpToPerfIds(useGetDeviceOperationListPerf());
 
 export const usePerformanceRange = (): NumberRange | null => {
     const activeReportFolderName = useAtomValue(activePerformanceReportFolderNameAtom);
@@ -1197,21 +1202,8 @@ const useLinkedPerformanceReportParams = (): PerformanceReportParams => {
 };
 
 const usePerformanceReportQuery = (name: string | null, params: PerformanceReportParams) => {
-    const { startSignpost, endSignpost, hideHostOps, mergeDevices, tracingMode, groupBy } = params;
-
     const response = useQuery<PerformanceReportResponse, AxiosError>({
-        queryFn: () =>
-            name !== null
-                ? fetchPerformanceReport(
-                      name,
-                      startSignpost,
-                      endSignpost,
-                      hideHostOps,
-                      mergeDevices,
-                      tracingMode,
-                      groupBy,
-                  )
-                : Promise.resolve(EMPTY_PERF_RETURN),
+        queryFn: () => (name !== null ? fetchPerformanceReport(name, params) : Promise.resolve(EMPTY_PERF_RETURN)),
         queryKey: getPerformanceReportQueryKey(name, params),
         enabled: name !== null,
         retry: false,
@@ -1238,10 +1230,13 @@ export const usePerformanceReport = (name: string | null) => {
  * it must not move when the user changes how they are viewing the performance
  * tab (#1812).
  *
- * `tracingMode` is the one view control still followed, because it only
- * reorders rows and for a trace-captured run the traced order is the one that
+ * `tracingMode` is the one view control still followed, and so a deliberate
+ * carve-out from #1812, which names it alongside the three pinned here. It only
+ * reorders rows, and for a trace-captured run the traced order is the one that
  * lines up with the memory report — pinning it would leave those reports
- * permanently unlinkable.
+ * permanently unlinkable, which is a worse failure than the one it would fix.
+ * Resolving against both orders and keeping whichever aligns would close the
+ * gap properly; it needs #1800's shared run id to be worth the second fetch.
  */
 export const useLinkedPerformanceReport = () => {
     const name = useAtomValue(activePerformanceReportFolderNameAtom);
@@ -1253,7 +1248,6 @@ export const useLinkedPerformanceReport = () => {
 export const usePerformanceComparisonReport = () => {
     const rawReportNames = useAtomValue(comparisonPerformanceReportListAtom);
     const params = useViewPerformanceReportParams();
-    const { startSignpost, endSignpost, hideHostOps, mergeDevices, tracingMode, groupBy } = params;
 
     const reportNames = useMemo(() => {
         return Array.isArray(rawReportNames) ? [...rawReportNames] : rawReportNames;
@@ -1265,19 +1259,7 @@ export const usePerformanceComparisonReport = () => {
                 return [];
             }
 
-            const results = await Promise.all(
-                reportNames.map((name) =>
-                    fetchPerformanceReport(
-                        name,
-                        startSignpost,
-                        endSignpost,
-                        hideHostOps,
-                        mergeDevices,
-                        tracingMode,
-                        groupBy,
-                    ),
-                ),
-            );
+            const results = await Promise.all(reportNames.map((name) => fetchPerformanceReport(name, params)));
 
             return results;
         },

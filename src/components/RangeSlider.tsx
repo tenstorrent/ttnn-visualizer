@@ -35,14 +35,9 @@ import LoadingSpinner from './LoadingSpinner';
 import createToastNotification from '../functions/createToastNotification';
 import { ToastType } from '../definitions/ToastType';
 import getResponseError from '../functions/getResponseError';
+import { clampSelectionToRange } from '../functions/perfRangeSelection';
 
 const RANGE_STEP = 25;
-
-// The op<->perf mapping is resolved against the link-pinned report while the
-// performance slider spans the rows the performance tab is displaying, so a
-// mapped perf id can fall outside a narrowed view (a signpost window, most
-// obviously). Keep the handles inside their own track (#1812).
-const clampToRange = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
 
 function Range() {
     const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
@@ -97,6 +92,7 @@ function Range() {
 
     useEffect(() => {
         if (isInSync && selectedOperationRange && perfRange && selectedPerformanceRange && isUserOpChange) {
+            const [rangeMin, rangeMax] = perfRange;
             // Try to find matching perfIds for the selected operation range
             const matchMin =
                 opIdsMap.find((op) => selectedOperationRange[0] === op.opId)?.perfId ??
@@ -117,17 +113,14 @@ function Range() {
 
             const updatedMin =
                 Number(matchMin) ||
-                (selectedOperationRange[0] < opIdsMap[0].opId ? perfMin! : selectedPerformanceRange[0]);
+                (selectedOperationRange[0] < opIdsMap[0].opId ? rangeMin : selectedPerformanceRange[0]);
             const updatedMax =
                 Number(matchMax) ||
                 (selectedOperationRange[1] > opIdsMap[opIdsMap.length - 1].opId
-                    ? perfMax!
+                    ? rangeMax
                     : selectedPerformanceRange[1]);
 
-            setSelectedPerformanceRange([
-                clampToRange(updatedMin, perfMin!, perfMax!),
-                clampToRange(updatedMax, perfMin!, perfMax!),
-            ]);
+            setSelectedPerformanceRange(clampSelectionToRange(updatedMin, updatedMax, rangeMin, rangeMax));
             queueMicrotask(() => {
                 setIsUserOpChange(false);
             });

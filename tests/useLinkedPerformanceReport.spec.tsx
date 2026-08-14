@@ -60,7 +60,7 @@ interface RequestParams {
 const getReportRequests = (): RequestParams[] =>
     vi
         .mocked(axiosInstance.get)
-        .mock.calls.filter(([url]) => String(url).includes('perf-results/report'))
+        .mock.calls.filter(([url]) => String(url).includes(Endpoints.PERFORMANCE_RESULTS_REPORT))
         .map(([, config]) => (config as { params: RequestParams }).params);
 
 const useBothReports = () => {
@@ -196,7 +196,7 @@ describe('report matching under a filtered performance tab', () => {
         // The endpoint really does return roughly one row per device when merging
         // is off, which is what used to break the positional match (#1812).
         vi.mocked(axiosInstance.get).mockImplementation((url: string, config?: unknown) => {
-            if (url.includes('perf-results/report')) {
+            if (url.includes(Endpoints.PERFORMANCE_RESULTS_REPORT)) {
                 const { params } = config as { params: RequestParams };
 
                 return Promise.resolve({

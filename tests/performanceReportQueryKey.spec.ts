@@ -13,6 +13,7 @@ import { describe, expect, it } from 'vitest';
 import {
     LINKED_PERFORMANCE_REPORT_FILTERS,
     PerformanceReportParams,
+    getPerformanceComparisonReportQueryKey,
     getPerformanceReportQueryKey,
 } from '../src/functions/performanceReportQueryKey';
 import { StackedGroupBy } from '../src/definitions/StackedPerfTable';
@@ -56,7 +57,20 @@ describe('getPerformanceReportQueryKey', () => {
             startSignpost: SIGNPOST,
         });
 
-        expect(key).toContain('startSignpost:42BEGIN_TRACE');
+        expect(key).toContain('startSignpost:42:BEGIN_TRACE');
+    });
+
+    it('delimits id from op code, so no two signposts can collide on one segment', () => {
+        const oneThenTwoX = getPerformanceReportQueryKey(REPORT_NAME, {
+            ...defaultViewParams,
+            startSignpost: { id: 1, op_code: '2X' },
+        });
+        const twelveThenX = getPerformanceReportQueryKey(REPORT_NAME, {
+            ...defaultViewParams,
+            startSignpost: { id: 12, op_code: 'X' },
+        });
+
+        expect(oneThenTwoX).not.toEqual(twelveThenX);
     });
 
     it('matches the link key exactly while the performance tab is at its defaults', () => {
@@ -87,6 +101,44 @@ describe('getPerformanceReportQueryKey', () => {
     ])('diverges from the link key with %s', (_label, overrides) => {
         expect(getPerformanceReportQueryKey(REPORT_NAME, { ...defaultViewParams, ...overrides })).not.toEqual(
             getPerformanceReportQueryKey(REPORT_NAME, linkedParams()),
+        );
+    });
+});
+
+describe('getPerformanceComparisonReportQueryKey', () => {
+    const COMPARISON_NAMES = [REPORT_NAME, '2026_08_14_11_00_00'];
+
+    it('names the reports and carries the same filter segments as the single-report key', () => {
+        expect(getPerformanceComparisonReportQueryKey(COMPARISON_NAMES, defaultViewParams)).toEqual([
+            'get-performance-comparison-report',
+            COMPARISON_NAMES,
+            'startSignpost:null',
+            'endSignpost:null',
+            'hideHostOps:true',
+            'mergeDevices:true',
+            'tracingMode:false',
+            'groupBy:operation',
+        ]);
+    });
+
+    it('never collides with the single-report key for the same filters', () => {
+        expect(getPerformanceComparisonReportQueryKey(COMPARISON_NAMES, defaultViewParams)).not.toEqual(
+            getPerformanceReportQueryKey(REPORT_NAME, defaultViewParams),
+        );
+    });
+
+    it('separates cache entries for different report selections', () => {
+        expect(getPerformanceComparisonReportQueryKey(COMPARISON_NAMES, defaultViewParams)).not.toEqual(
+            getPerformanceComparisonReportQueryKey([REPORT_NAME], defaultViewParams),
+        );
+    });
+
+    it('separates cache entries when a filter changes', () => {
+        expect(getPerformanceComparisonReportQueryKey(COMPARISON_NAMES, defaultViewParams)).not.toEqual(
+            getPerformanceComparisonReportQueryKey(COMPARISON_NAMES, {
+                ...defaultViewParams,
+                mergeDevices: false,
+            }),
         );
     });
 });

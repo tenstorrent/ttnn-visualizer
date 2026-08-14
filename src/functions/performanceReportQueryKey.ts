@@ -5,7 +5,7 @@
 import { StackedGroupBy } from '../definitions/StackedPerfTable';
 import { Signpost } from '../model/Signpost';
 
-/** Everything the `perf-results/report` endpoint varies its rows on. */
+/** Every filter the `perf-results/report` request varies on. */
 export interface PerformanceReportParams {
     startSignpost: Signpost | null;
     endSignpost: Signpost | null;
@@ -23,8 +23,13 @@ export interface PerformanceReportParams {
  * query key, so following the tab's grouping control would blank the link
  * report on every switch, which is the failure this exists to prevent (#1812).
  *
- * Every value is the performance tab's own default, so link resolution normally
- * shares the tab's cache entry rather than costing a second request.
+ * Every value is the performance tab's own default, so while the tab sits at
+ * those defaults link resolution shares its cache entry and costs nothing. Move
+ * the tab off any of them — a signpost window, devices unmerged, host ops shown,
+ * or the stacked grouping switched — and the two keys diverge into a second
+ * `perf-results/report` request. That is not a cheap duplicate: report
+ * generation is uncached server-side and CPU-bound, so the fix is to memoise it
+ * there, not to unpin these filters.
  */
 export const LINKED_PERFORMANCE_REPORT_FILTERS = {
     startSignpost: null,
