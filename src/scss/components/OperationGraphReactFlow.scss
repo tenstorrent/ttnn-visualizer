@@ -41,8 +41,8 @@
         cursor: pointer;
 
         &.op-graph-node-selected {
-            border-color: var(--graph-focused-node);
-            background-color: var(--graph-selected);
+            border-color: var(--graph-selected);
+            box-shadow: 0 0 0 3px var(--graph-selected);
         }
 
         &.op-graph-node-input {

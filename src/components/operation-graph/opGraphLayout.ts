@@ -4,12 +4,13 @@
 
 import dagre from '@dagrejs/dagre';
 
-const CHAR_WIDTH = 7.25;
-const NODE_PADDING_X = 32;
+const CHAR_WIDTH = 6.8;
+const FILE_CHAR_WIDTH = 6.2;
+const NODE_PADDING_X = 28;
 const NODE_MIN_WIDTH = 108;
 const NODE_MAX_WIDTH = 560;
-const NODE_HEIGHT = 40;
-const NODE_HEIGHT_WITH_FILE = 56;
+const NODE_HEIGHT = 32;
+const NODE_HEIGHT_WITH_FILE = 46;
 // Wide enough for an edge to carry its shape label between two ranks without
 // colliding with the neighbouring column.
 const NODE_SEP = 30;
@@ -32,10 +33,8 @@ export interface LayoutPosition {
 }
 
 export function estimateOpNodeSize(label: string, fileIdentifier: string): { width: number; height: number } {
-    const longestLine = Math.max(label.length, fileIdentifier.length);
-    const width = Math.ceil(
-        Math.min(NODE_MAX_WIDTH, Math.max(NODE_MIN_WIDTH, longestLine * CHAR_WIDTH + NODE_PADDING_X)),
-    );
+    const widestLine = Math.max(label.length * CHAR_WIDTH, fileIdentifier.length * FILE_CHAR_WIDTH);
+    const width = Math.ceil(Math.min(NODE_MAX_WIDTH, Math.max(NODE_MIN_WIDTH, widestLine + NODE_PADDING_X)));
     return { width, height: fileIdentifier ? NODE_HEIGHT_WITH_FILE : NODE_HEIGHT };
 }
 
