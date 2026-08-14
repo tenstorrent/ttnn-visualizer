@@ -29,7 +29,7 @@ export interface PerformanceReportParams {
  * or the stacked grouping switched — and the two keys diverge into a second
  * `perf-results/report` request. That is not a cheap duplicate: report
  * generation is uncached server-side and CPU-bound, so the fix is to memoise it
- * there, not to unpin these filters.
+ * there (#1886), not to unpin these filters.
  */
 export const LINKED_PERFORMANCE_REPORT_FILTERS = {
     startSignpost: null,
