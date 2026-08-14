@@ -163,6 +163,24 @@ describe('useOpGraphLayoutWorker', () => {
         expect(result.current.isBuilding).toBe(true);
     });
 
+    it('measures the spinner delay from the first build of a burst', () => {
+        vi.useFakeTimers();
+        const { result } = setup();
+
+        // Restarting the delay per request would let a run of quick toggles
+        // suppress the spinner indefinitely, however long the user waits.
+        act(() => result.current.runBuild(BUILD_OPTIONS));
+        act(() => {
+            vi.advanceTimersByTime(SPINNER_DELAY_MS / 2);
+        });
+        act(() => result.current.runBuild(BUILD_OPTIONS));
+        act(() => {
+            vi.advanceTimersByTime(SPINNER_DELAY_MS / 2);
+        });
+
+        expect(result.current.isBuilding).toBe(true);
+    });
+
     it('ignores a built reply that belongs to a superseded request', () => {
         const { result, onBuilt } = setup();
         act(() => result.current.runBuild(BUILD_OPTIONS));

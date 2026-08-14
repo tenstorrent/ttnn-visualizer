@@ -91,7 +91,11 @@ const OpGraphToolbar = memo(
                         variant={ButtonVariant.OUTLINED}
                         disabled={isDisabled || selectedOperationId === null}
                         onClick={() => selectedOperationId !== null && onGoToOperation(selectedOperationId)}
-                        aria-label={`Center on operation ${selectedOperationId}`}
+                        aria-label={
+                            selectedOperationId !== null
+                                ? `Center on operation ${selectedOperationId}`
+                                : 'No operation selected'
+                        }
                     >
                         {selectedOperationId}
                     </Button>

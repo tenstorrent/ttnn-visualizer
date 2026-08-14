@@ -151,8 +151,16 @@ export function useOpGraphLayoutWorker(
             nextRequestIdRef.current = requestId;
             activeRequestIdRef.current = requestId;
             optionsRef.current = options;
+            // The clock runs from the first build of a burst rather than
+            // restarting per request: someone toggling repeatedly has still been
+            // waiting, and a restarting timer would deny them a spinner for as
+            // long as they keep toggling. Clearing the ref as the timer fires
+            // keeps "non-null" meaning "a timer is still pending".
             if (spinnerTimeoutRef.current === null) {
-                spinnerTimeoutRef.current = window.setTimeout(() => setIsBuilding(true), BUILD_SPINNER_DELAY_MS);
+                spinnerTimeoutRef.current = window.setTimeout(() => {
+                    spinnerTimeoutRef.current = null;
+                    setIsBuilding(true);
+                }, BUILD_SPINNER_DELAY_MS);
             }
             try {
                 worker.postMessage({
