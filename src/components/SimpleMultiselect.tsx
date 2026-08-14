@@ -5,6 +5,7 @@
 import { useState } from 'react';
 import { ItemRenderer, MultiSelect } from '@blueprintjs/select';
 import { Checkbox, MenuItem } from '@blueprintjs/core';
+import { toggleListMembership } from '../functions/toggleListMembership';
 
 const SimpleMultiselect = ({
     label,
@@ -21,7 +22,7 @@ const SimpleMultiselect = ({
 }) => {
     const [selected, setSelected] = useState<string[]>(initialValue ?? []);
     const handleItemSelect = (item: string) => {
-        const list = !selected.includes(item) ? [...selected, item] : selected.filter((v) => v !== item);
+        const list = toggleListMembership(selected, item);
 
         setSelected(list);
         onUpdateHandler(list);

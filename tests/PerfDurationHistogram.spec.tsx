@@ -276,7 +276,8 @@ describe('PerfDurationHistogram duration bucket controls', () => {
     const getSelectedFlags = () => getAnnotations().map((annotation) => annotation.bgcolor !== PERF_CHART_TRANSPARENT);
 
     // Plotly calls the handler outside React's event system, so the re-render needs flushing
-    const clickBucket = (index: number) => act(() => firePlotAnnotationClick(index));
+    const clickBucket = (index: number, mouseEvent: Partial<MouseEvent> = {}) =>
+        act(() => firePlotAnnotationClick(index, mouseEvent));
 
     beforeEach(() => {
         setUpScrollResetMocks();
@@ -301,12 +302,26 @@ describe('PerfDurationHistogram duration bucket controls', () => {
         ]);
     });
 
-    it('anchors each control to the column it filters', () => {
+    it('anchors each control over its column by paper fraction, centred', () => {
         renderHistogram();
 
         const traceCategories = (getPlotInstances()[0]?.data as HistogramTrace[])[0]?.x;
         expect(traceCategories).toEqual([formatDurationBucketRange(1, 10), formatDurationBucketRange(10, 100)]);
-        expect(getAnnotations().map((annotation) => annotation.x)).toEqual(traceCategories);
+
+        // Anchored to the plotting area by fraction, not to the x axis: an axis-referenced x is
+        // resolved against a stale category range when react-plotly redraws a single re-styled
+        // annotation, jumping the selected control sideways (#1868). Hardcoded rather than recomputed
+        // from the implementation's own expression, which could only ever agree with itself.
+        expect(getAnnotations().map((annotation) => annotation.x)).toEqual([0.25, 0.75]);
+        expect(getAnnotations().every((annotation) => annotation.xref === 'paper')).toBe(true);
+        expect(getAnnotations().every((annotation) => annotation.xanchor === 'center')).toBe(true);
+
+        // The bug is a redraw artefact, so the fractions have to survive a selection change. A mocked
+        // Plot under jsdom cannot reproduce the visual jump itself, only that the anchoring holds.
+        clickBucket(0, { shiftKey: true });
+
+        expect(getAnnotations().map((annotation) => annotation.x)).toEqual([0.25, 0.75]);
+        expect(getAnnotations().every((annotation) => annotation.xanchor === 'center')).toBe(true);
     });
 
     it('explains the bucket controls in the chart hint rather than per-annotation hover text', () => {
@@ -369,6 +384,54 @@ describe('PerfDurationHistogram duration bucket controls', () => {
         clickBucket(1);
 
         expect(getSelectedFlags()).toEqual([false, true]);
+        expect(screen.getByTestId('selected-tab')).toHaveTextContent(PerfTabIds.TABLE);
+    });
+
+    it('collapses a multi-bucket selection onto the plain-clicked bucket', () => {
+        renderHistogram([1, 10]);
+
+        clickBucket(0);
+
+        // The branch that separates replace from toggle: clicking one of two selected buckets is the
+        // only case where "is this bucket selected?" and "is this the sole selection?" disagree.
+        expect(getSelectedFlags()).toEqual([true, false]);
+        expect(screen.getByTestId('selected-tab')).toHaveTextContent(PerfTabIds.TABLE);
+    });
+
+    it('shift-clicks the last remaining bucket to clear the filter', () => {
+        renderHistogram([10]);
+
+        clickBucket(1, { shiftKey: true });
+
+        expect(getSelectedFlags()).toEqual([false, false]);
+        expect(screen.getByTestId('selected-tab')).toHaveTextContent(PerfTabIds.CHARTS);
+    });
+
+    it('shift-clicks to add a bucket without leaving the charts tab', () => {
+        renderHistogram([1]);
+
+        clickBucket(1, { shiftKey: true });
+
+        expect(getSelectedFlags()).toEqual([true, true]);
+        expect(screen.getByTestId('selected-tab')).toHaveTextContent(PerfTabIds.CHARTS);
+    });
+
+    it('shift-clicks a selected bucket to remove it without leaving the charts tab', () => {
+        renderHistogram([1, 10]);
+
+        clickBucket(0, { shiftKey: true });
+
+        expect(getSelectedFlags()).toEqual([false, true]);
+        expect(screen.getByTestId('selected-tab')).toHaveTextContent(PerfTabIds.CHARTS);
+    });
+
+    it('clears the filter when the sole selected control is clicked again', () => {
+        renderHistogram([1]);
+
+        clickBucket(0);
+
+        expect(getSelectedFlags()).toEqual([false, false]);
+        expect(screen.getByTestId('selected-tab')).toHaveTextContent(PerfTabIds.CHARTS);
     });
 
     it('ignores a click on an annotation index with no matching bucket', () => {
