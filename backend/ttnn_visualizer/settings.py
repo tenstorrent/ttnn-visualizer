@@ -260,28 +260,37 @@ _STRICT_BOOLEANS = frozenset({"SERVER_MODE"})
 # suppress the catch-all error handler — for anyone who only wanted verbose logs.
 _ENV_ALIASES: Mapping[str, str] = {"DEBUG": "FLASK_DEBUG"}
 
-# Derived or constant attributes the override loop must not touch. String-typed derived
-# values (``GUNICORN_BIND``, ``SQLALCHEMY_DATABASE_URI``, ``APPLICATION_DIR``) would
-# otherwise accept an env string and diverge from their parents; ``Path`` / ``dict``
-# ones are declined by ``_coerce_env_value`` as a backstop, but skipping them here
-# keeps the loop from warning on every visit. ``APP_DATA_DIRECTORY`` /
-# ``REPORT_DATA_DIRECTORY`` are skipped so a late ``.env`` cannot update the parent
-# while leaving Path children and the DB URI on the import-time tree — the class body
-# (and ``main()``'s ``--tt_metal_home`` cascade) remain the ways to set them.
-# Constants have no env story. When adding a new constant or derived string attribute,
-# list it here — type decline only catches ``Path`` / ``dict``.
-_ENV_OVERRIDE_SKIP = frozenset(
+# The override loop leaves three different kinds of attribute alone, and they have
+# three different lifetimes — a maintainer adding a setting needs to know which rule
+# applies, so they are named separately and unioned at the point of use rather than
+# flattened into one set.
+
+# Computed from other settings or from the filesystem, and rebuilt as a group by
+# :meth:`DefaultConfig.recompute_derived_settings`. The loop must not assign these
+# individually: a string-typed one (``GUNICORN_BIND``, ``SQLALCHEMY_DATABASE_URI``,
+# ``APPLICATION_DIR``) would accept an env value and diverge from its parents, and the
+# ``Path`` ones are declined by ``_coerce_env_value`` anyway. ``APP_DATA_DIRECTORY`` /
+# ``REPORT_DATA_DIRECTORY`` are here rather than overridable because setting either one
+# alone would leave the ``Path`` children and the DB URI on the import-time tree — the
+# recompute still honours their variables (:data:`_RECOMPUTE_HONOURS`), it just rebuilds
+# everything below them at the same time.
+_ENV_OVERRIDE_DERIVED = frozenset(
     {
         "APPLICATION_DIR",
         "APP_DATA_DIRECTORY",
         "REPORT_DATA_DIRECTORY",
-        "GUNICORN_BIND",
-        "SQLALCHEMY_DATABASE_URI",
-        "SQLALCHEMY_ENGINE_OPTIONS",
-        "SQLALCHEMY_TRACK_MODIFICATIONS",
         "LOCAL_DATA_DIRECTORY",
         "REMOTE_DATA_DIRECTORY",
+        "SQLALCHEMY_DATABASE_URI",
         "STATIC_ASSETS_DIR",
+        "GUNICORN_BIND",
+    }
+)
+
+# Structural constants: the app is built around these values, so there is no variable to
+# offer. Changing one is a code change.
+_ENV_OVERRIDE_CONSTANTS = frozenset(
+    {
         "DB_VERSION",
         "PROFILER_DIRECTORY_NAME",
         "PERFORMANCE_DIRECTORY_NAME",
@@ -289,14 +298,34 @@ _ENV_OVERRIDE_SKIP = frozenset(
         "MLIR_DIRECTORY_NAME",
         "TEST_CONFIG_FILE",
         "SQLITE_DB_PATH",
+        "SQLALCHEMY_ENGINE_OPTIONS",
+        "SQLALCHEMY_TRACK_MODIFICATIONS",
         "SEND_FILE_MAX_AGE_DEFAULT",
-        "DEV_SERVER_PORT",
-        "DEV_SERVER_HOST",
+    }
+)
+
+# Settings nobody has made configurable *yet* — deployment knobs whose answer today is
+# "no", not "never". These are the entries to revisit first: a TLS-fronted hosted
+# deployment has a genuine reason to want the two cookie settings, and moving one out of
+# here is a one-line change plus a class-body ``os.getenv``.
+_ENV_OVERRIDE_UNCONFIGURED = frozenset(
+    {
         "SESSION_COOKIE_SAMESITE",
         "SESSION_COOKIE_SECURE",
         "PRINT_ENV",
     }
 )
+
+# When adding a new constant or derived string attribute, list it in the matching set
+# above — type decline only catches ``Path`` / ``dict``, and
+# ``test_the_settings_inventory_is_pinned`` will fail until it is classified.
+_ENV_OVERRIDE_SKIP = (
+    _ENV_OVERRIDE_DERIVED | _ENV_OVERRIDE_CONSTANTS | _ENV_OVERRIDE_UNCONFIGURED
+)
+
+# Skipped names whose variable is still honoured, by the recompute rather than the loop.
+# Setting one of these is not a mistake, so it must not draw the warning the rest do.
+_RECOMPUTE_HONOURS = frozenset({"APP_DATA_DIRECTORY", "REPORT_DATA_DIRECTORY"})
 
 
 def _env_name_for(key: str) -> str:
@@ -479,8 +508,11 @@ class DefaultConfig(object):
     GUNICORN_TIMEOUT = os.getenv("GUNICORN_TIMEOUT", "60")
     PORT = os.getenv("PORT", "8000")
     HOST = os.getenv("HOST", "0.0.0.0" if is_running_in_container() else "localhost")
-    DEV_SERVER_PORT = "5173"
-    DEV_SERVER_HOST = "localhost"
+    # Read from the environment because ``.env.sample`` documents both, and an operator
+    # running Vite on a non-default port needs the dev CORS allowlist and ``main()``'s
+    # browser-open target to follow. Plain strings, like ``HOST`` / ``PORT``.
+    DEV_SERVER_PORT = os.getenv("DEV_SERVER_PORT", "5173")
+    DEV_SERVER_HOST = os.getenv("DEV_SERVER_HOST", "localhost")
 
     ALLOWED_ORIGINS = _AllowedOrigins()
 
@@ -505,31 +537,84 @@ class DefaultConfig(object):
         differently named variable where :data:`_ENV_ALIASES` says so.
 
         Derived and constant attributes in :data:`_ENV_OVERRIDE_SKIP` are left alone;
-        ``GUNICORN_BIND`` is recomputed from ``HOST`` and ``PORT`` afterwards so a late
-        bind change cannot go stale.
+        :meth:`recompute_derived_settings` rebuilds everything computed from them
+        afterwards, so a late ``TT_METAL_HOME``, ``HOST`` or ``PORT`` cannot leave a
+        child on the import-time value.
         """
         for cls in reversed(type(self).__mro__):
             for key, value in cls.__dict__.items():
                 # Descriptors (and methods) resolve their own value on read; assigning
                 # the raw environment string over one would shadow it with an unparsed
-                # value. Derived / constant attrs are listed in ``_ENV_OVERRIDE_SKIP``
-                # because a string would apply and diverge from their parents (or, for
-                # constants, because they have no env story).
-                if (
-                    key.startswith("_")
-                    or key in _ENV_OVERRIDE_SKIP
-                    or hasattr(value, "__get__")
-                ):
+                # value.
+                if key.startswith("_") or hasattr(value, "__get__"):
                     continue
 
                 env_value = os.getenv(_env_name_for(key))
                 if env_value is None:
                     continue
 
+                if key in _ENV_OVERRIDE_SKIP:
+                    self._report_ignored_skip(key, env_value)
+                    continue
+
                 setattr(self, key, _coerce_env_value(key, value, env_value))
 
-        self.GUNICORN_BIND = f"{self.HOST}:{self.PORT}"
+        self.recompute_derived_settings()
         self._refuse_debug_under_server_mode()
+
+    @staticmethod
+    def _report_ignored_skip(key: str, env_value: str) -> None:
+        """Say so when a variable names a setting the loop will not apply.
+
+        Declining a value warns (:func:`_keep_declared`), so an operator who sets an
+        uncoercible one hears about it. Dropping a skipped one silently is the same
+        outcome with no signal, and for a hand-maintained list that is where feedback
+        matters most: an inert variable is indistinguishable from a typo in its name.
+        Names the recompute honours are excluded — those are applied, just not here.
+        """
+        if key in _RECOMPUTE_HONOURS:
+            return
+
+        logger.warning(
+            "Ignoring %s=%r: it is derived from other settings or fixed in code, so it "
+            "is not configurable. Keeping the value the application computed.",
+            _env_name_for(key),
+            env_value,
+        )
+
+    def recompute_derived_settings(self) -> None:
+        """Rebuild every value computed from ``TT_METAL_HOME``, ``HOST`` and ``PORT``.
+
+        The whole path tree hangs off ``TT_METAL_HOME``, which the class body reads at
+        import and the override loop can read again later — ``create_app``'s
+        ``load_dotenv`` targets ``backend/.env`` while this module's targets the working
+        directory, so the two reads genuinely can differ. Rebuilding the group as a unit
+        is what stops a new root from serving reports out of ``$TT_METAL_HOME/generated``
+        while the database and upload directories stay on the import-time tree.
+
+        Called after the override loop and from ``main()``'s ``--tt_metal_home``
+        handling, so both paths derive these values once, here, rather than each
+        open-coding a partial cascade.
+
+        ``APP_DATA_DIRECTORY`` / ``REPORT_DATA_DIRECTORY`` keep the precedence the class
+        body gives them: an explicit variable wins over the derivation, and their
+        children follow whichever value won.
+        """
+        self.APP_DATA_DIRECTORY = os.getenv(
+            "APP_DATA_DIRECTORY",
+            get_app_data_directory(self.TT_METAL_HOME, self.APPLICATION_DIR),
+        )
+        self.REPORT_DATA_DIRECTORY = os.getenv(
+            "REPORT_DATA_DIRECTORY",
+            get_report_data_directory(self.TT_METAL_HOME, self.APPLICATION_DIR),
+        )
+        self.LOCAL_DATA_DIRECTORY = Path(self.REPORT_DATA_DIRECTORY).joinpath("local")
+        self.REMOTE_DATA_DIRECTORY = Path(self.REPORT_DATA_DIRECTORY).joinpath("remote")
+
+        db_file_path = str(Path(self.APP_DATA_DIRECTORY) / f"ttnn_{self.DB_VERSION}.db")
+        self.SQLALCHEMY_DATABASE_URI = f"sqlite:///{db_file_path}"
+
+        self.GUNICORN_BIND = f"{self.HOST}:{self.PORT}"
 
     def _refuse_debug_under_server_mode(self) -> None:
         """Hosted mode wins over debug mode, because ``DEBUG`` is not just verbosity.
