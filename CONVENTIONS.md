@@ -1240,9 +1240,21 @@ Every setting reads a variable named after its attribute, which is right for all
 
 #### The loop walks the MRO and skips derived settings
 
-It iterates `reversed(type(self).__mro__)`, so inherited settings on `DefaultConfig` are reachable when `Config()` returns a subclass, and subclass declarations win. Descriptors (`ALLOWED_ORIGINS`, `USAGE_RECORDING_ENABLED`) are skipped because assigning a raw string would shadow them. Derived and constant attributes live in **`_ENV_OVERRIDE_SKIP`** — string-typed ones like `GUNICORN_BIND` / `SQLALCHEMY_DATABASE_URI` / `APPLICATION_DIR` would otherwise accept an env string and diverge from their parents; `Path` / `dict` ones are also declined by `_coerce_env_value` as a backstop. After the loop, `GUNICORN_BIND` is recomputed from `HOST` and `PORT` so a late bind change cannot go stale. `test_every_env_override_skip_names_a_real_setting` is what catches a dead skip entry after a rename.
+It iterates `reversed(type(self).__mro__)`, so inherited settings on `DefaultConfig` are reachable when `Config()` returns a subclass, and subclass declarations win. Descriptors (`ALLOWED_ORIGINS`, `USAGE_RECORDING_ENABLED`) are skipped because assigning a raw string would shadow them.
 
-`create_app` runs `load_dotenv` *before* `Config()`, but the class body already ran at import — so a `.env` value that was absent at import only takes effect because the override loop revisits it. That includes `SERVER_MODE`. `APP_DATA_DIRECTORY` and `REPORT_DATA_DIRECTORY` are in `_ENV_OVERRIDE_SKIP` so a late `.env` cannot update the parent while Path children and `SQLALCHEMY_DATABASE_URI` stay on the import-time tree; set them in the environment before import, or via `main()`'s `--tt_metal_home` cascade.
+Everything else the loop leaves alone is named in one of three frozensets, unioned into **`_ENV_OVERRIDE_SKIP`** at the point of use. They have different lifetimes, so a maintainer adding a setting can tell which rule applies:
+
+- **`_ENV_OVERRIDE_DERIVED`** — computed from other settings or the filesystem, and rebuilt as a group by `recompute_derived_settings()`. A string-typed one (`GUNICORN_BIND`, `SQLALCHEMY_DATABASE_URI`, `APPLICATION_DIR`) would otherwise accept an env string and diverge from its parents; `Path` / `dict` ones are also declined by `_coerce_env_value` as a backstop.
+- **`_ENV_OVERRIDE_CONSTANTS`** — structural values the app is built around. Changing one is a code change.
+- **`_ENV_OVERRIDE_UNCONFIGURED`** — deployment knobs whose answer today is "no", not "never" (the two `SESSION_COOKIE_*` settings, `PRINT_ENV`). This is the group to revisit first; moving one out is a one-line change plus a class-body `os.getenv`.
+
+A variable naming a skipped setting is reported through `_report_ignored_skip` rather than dropped in silence — for a hand-maintained list, an inert variable is otherwise indistinguishable from a typo in its name.
+
+**`recompute_derived_settings()` is the single owner of the derived group.** It runs at the end of the override loop and from `main()`'s `--tt_metal_home` handling, rebuilding `APP_DATA_DIRECTORY`, `REPORT_DATA_DIRECTORY`, `LOCAL_`/`REMOTE_DATA_DIRECTORY`, `SQLALCHEMY_DATABASE_URI` and `GUNICORN_BIND` together. Add a derivation there, not at a call site: the bug it exists to prevent is a new `TT_METAL_HOME` serving reports from `$TT_METAL_HOME/generated` while the database stays on the import-time tree.
+
+`create_app` runs `load_dotenv` *before* `Config()`, but the class body already ran at import — so a `.env` value that was absent at import only takes effect because the override loop revisits it. That includes `SERVER_MODE`. The two `load_dotenv` calls don't even read the same file (`settings.py` searches from the working directory, `create_app` targets `backend/.env`), which is exactly how the two reads come to differ. `APP_DATA_DIRECTORY` and `REPORT_DATA_DIRECTORY` stay out of the loop but are still honoured — `recompute_derived_settings` reads them with the same precedence the class body gives them (`_RECOMPUTE_HONOURS` marks them, so they don't draw the ignored-variable warning), and rebuilds their children around whichever value wins.
+
+`test_every_env_override_skip_names_a_real_setting` catches a dead skip entry after a rename. `test_the_settings_inventory_is_pinned` catches the other direction — it asserts `vars(DefaultConfig)` partitions exactly into `_OVERRIDABLE_SETTINGS` and `_ENV_OVERRIDE_SKIP`, so a new attribute that nobody classified fails rather than silently becoming env-overridable. Update that inventory when you add a setting; it is the forced decision, not busywork.
 
 ### Domain exceptions live in `exceptions.py`
 
