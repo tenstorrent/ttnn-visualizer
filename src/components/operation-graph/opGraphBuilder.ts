@@ -36,7 +36,7 @@ function collectCandidateEdges(operations: OpGraphSourceOperation[]): CandidateE
 
 export function buildOpGraph(
     operations: OpGraphSourceOperation[],
-    { hideDeallocate, isCompact }: OpGraphBuildOptions,
+    { hideDeallocate }: OpGraphBuildOptions,
 ): OpGraphBuiltGraph {
     const candidates = collectCandidateEdges(operations);
 
@@ -90,7 +90,6 @@ export function buildOpGraph(
     const positions = layoutOpGraph(
         nodes.map((node) => ({ id: node.id, width: node.width ?? 0, height: node.height ?? 0 })),
         edges,
-        isCompact,
     );
 
     return {

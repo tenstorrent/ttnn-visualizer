@@ -113,28 +113,6 @@ describe('layoutOpGraph', () => {
         expect(positions.get('dst')!.y).toBeGreaterThan(positions.get('src')!.y);
     });
 
-    it('tightens both axes in compact mode', () => {
-        const nodes = [sized('a', 100, 32), sized('b', 100, 32), sized('sibling', 100, 32)];
-        const edges = [{ source: 'a', target: 'b' }];
-
-        const normal = layoutOpGraph(nodes, edges);
-        const compact = layoutOpGraph(nodes, edges, true);
-
-        // Rank separation, measured between the two ranks of the edge.
-        expect(compact.get('b')!.y - compact.get('a')!.y).toBeLessThan(normal.get('b')!.y - normal.get('a')!.y);
-        // Node separation, between the unconnected pair sharing the first rank.
-        expect(Math.abs(compact.get('sibling')!.x - compact.get('a')!.x)).toBeLessThan(
-            Math.abs(normal.get('sibling')!.x - normal.get('a')!.x),
-        );
-    });
-
-    it('lays out normally when compact is not asked for', () => {
-        const nodes = [sized('a', 100, 32), sized('b', 100, 32)];
-        const edges = [{ source: 'a', target: 'b' }];
-
-        expect(layoutOpGraph(nodes, edges)).toEqual(layoutOpGraph(nodes, edges, false));
-    });
-
     it('ignores an edge naming a node that is not in the graph', () => {
         // Filtering nodes out of the list without pruning their edges is normal
         // here (the deallocate-op toggle does it), and dagre invents a node for

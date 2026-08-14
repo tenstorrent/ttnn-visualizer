@@ -67,7 +67,6 @@ export interface OpGraphNodeIndexEntry {
 
 export interface OpGraphBuildOptions {
     hideDeallocate: boolean;
-    isCompact: boolean;
 }
 
 export type OpGraphWorkerInboundMessage =

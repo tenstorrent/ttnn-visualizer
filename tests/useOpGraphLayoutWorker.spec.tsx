@@ -18,7 +18,7 @@ const OPERATIONS: OpGraphSourceOperation[] = [
     { id: 2, name: 'add', fileIdentifier: 'model.py:2', outputs: [] },
 ];
 
-const BUILD_OPTIONS: OpGraphBuildOptions = { hideDeallocate: true, isCompact: false };
+const BUILD_OPTIONS: OpGraphBuildOptions = { hideDeallocate: true };
 
 // Matches `BUILD_SPINNER_DELAY_MS` in the hook. Duplicated rather than exported,
 // so a change to the delay has to be a deliberate change to this expectation.
