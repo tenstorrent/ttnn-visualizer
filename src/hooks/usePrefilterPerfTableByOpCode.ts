@@ -3,36 +3,39 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import { useCallback } from 'react';
-import { useSetAtom } from 'jotai';
+import { useAtom } from 'jotai';
 import { PerfTablePrefilterOptions } from '../definitions/PerformanceCharts';
-import { toggleListMembership } from '../functions/toggleListMembership';
+import { resolvePerfTablePrefilter } from '../functions/resolvePerfTablePrefilter';
 import { rawOpCodeFilterListAtom } from '../store/app';
 import { useShowPerfTable } from './useShowPerfTable';
 
 /**
- * Default path replaces the selection and navigates to the Table tab. Pass `{ amend: true }` to
- * toggle membership instead and stay put — same shape as usePrefilterPerfTableByDurationBucket.
+ * Applies the gesture the caller reports (see PerfTablePrefilterOptions): a plain click replaces the
+ * selection and navigates to the Table tab, shift and click-again-to-clear amend it and stay on the
+ * Charts tab — the same shape as usePrefilterPerfTableByDurationBucket.
+ *
+ * Unlike that hook this one leaves the stacked view alone, because the stacked table honours the raw
+ * op code filter (`filteredStackedRows`, PerfReport.tsx) while it has no per-op device time for the
+ * bucket filter to act on.
  */
 export function usePrefilterPerfTableByOpCode() {
     const showPerfTable = useShowPerfTable();
-    const setFilters = useSetAtom(rawOpCodeFilterListAtom);
+    const [filters, setFilters] = useAtom(rawOpCodeFilterListAtom);
 
     return useCallback(
-        (opCode: string, options?: PerfTablePrefilterOptions) => {
+        (opCode: string, options?: PerfTablePrefilterOptions<string>) => {
             if (!opCode) {
                 return;
             }
 
-            if (options?.amend) {
-                setFilters((current) => toggleListMembership(current, opCode));
-            } else {
-                setFilters([opCode]);
-            }
+            const { selection, shouldShowPerfTable } = resolvePerfTablePrefilter(filters, opCode, options);
 
-            if (!options?.amend) {
+            setFilters(selection);
+
+            if (shouldShowPerfTable) {
                 showPerfTable();
             }
         },
-        [setFilters, showPerfTable],
+        [filters, setFilters, showPerfTable],
     );
 }

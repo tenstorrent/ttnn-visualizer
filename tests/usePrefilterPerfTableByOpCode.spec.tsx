@@ -36,7 +36,7 @@ function Probe() {
             </Button>
             <Button
                 type='button'
-                onClick={() => prefilter('Matmul', { amend: true })}
+                onClick={() => prefilter('Matmul', { additive: true })}
             >
                 amend-matmul
             </Button>
@@ -68,7 +68,7 @@ describe('usePrefilterPerfTableByOpCode', () => {
 
         fireEvent.click(screen.getByRole('button', { name: 'filter-matmul' }));
 
-        expect(screen.getByTestId('raw-op-filter')).toHaveTextContent('Matmul');
+        expect(screen.getByTestId('raw-op-filter').textContent).toBe('Matmul');
         expect(screen.getByTestId('selected-tab')).toHaveTextContent(PerfTabIds.TABLE);
         expect(window.scrollTo).toHaveBeenCalledWith({ top: 0, left: 0 });
     });
@@ -82,7 +82,7 @@ describe('usePrefilterPerfTableByOpCode', () => {
 
         fireEvent.click(screen.getByRole('button', { name: 'filter-empty' }));
 
-        expect(screen.getByTestId('raw-op-filter')).toHaveTextContent('Conv2d');
+        expect(screen.getByTestId('raw-op-filter').textContent).toBe('Conv2d');
     });
 
     it('amends by adding an op code without navigating away from the charts tab', () => {
@@ -99,7 +99,7 @@ describe('usePrefilterPerfTableByOpCode', () => {
 
         fireEvent.click(screen.getByRole('button', { name: 'amend-matmul' }));
 
-        expect(screen.getByTestId('raw-op-filter')).toHaveTextContent('Conv2d,Matmul');
+        expect(screen.getByTestId('raw-op-filter').textContent).toBe('Conv2d,Matmul');
         expect(screen.getByTestId('selected-tab')).toHaveTextContent(PerfTabIds.CHARTS);
         expect(window.scrollTo).not.toHaveBeenCalled();
     });
@@ -118,7 +118,7 @@ describe('usePrefilterPerfTableByOpCode', () => {
 
         fireEvent.click(screen.getByRole('button', { name: 'amend-matmul' }));
 
-        expect(screen.getByTestId('raw-op-filter')).toHaveTextContent('Conv2d');
+        expect(screen.getByTestId('raw-op-filter').textContent).toBe('Conv2d');
         expect(screen.getByTestId('selected-tab')).toHaveTextContent(PerfTabIds.CHARTS);
     });
 
@@ -136,7 +136,7 @@ describe('usePrefilterPerfTableByOpCode', () => {
 
         fireEvent.click(screen.getByRole('button', { name: 'amend-matmul' }));
 
-        expect(screen.getByTestId('raw-op-filter')).toHaveTextContent('');
+        expect(screen.getByTestId('raw-op-filter').textContent).toBe('');
         expect(screen.getByTestId('selected-tab')).toHaveTextContent(PerfTabIds.CHARTS);
     });
 });
