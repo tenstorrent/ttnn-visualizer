@@ -26,6 +26,7 @@ import { formatDuration, toReadableShape, toReadableType } from '../functions/fo
 import SearchField from './SearchField';
 import MemoryTag from './MemoryTag';
 import { GRAPH_COLORS } from '../definitions/GraphColors';
+import { NodeRelation } from '../definitions/NodeRelation';
 import { DEALLOCATE_OP_NAME_LIST } from '../definitions/Deallocate';
 import {
     PERF_GRADIENT_CSS,
@@ -44,11 +45,6 @@ type OperationNode = Node & {
     filterString: string;
     deviceOpFilter: string;
 };
-
-enum NodeRelation {
-    Input = 'input',
-    Output = 'output',
-}
 
 enum PerfOverlayStatus {
     UNAVAILABLE,

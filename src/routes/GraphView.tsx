@@ -8,7 +8,7 @@ import { useParams } from 'react-router';
 
 import { useAtomValue } from 'jotai';
 import { useGetDeviceOperationListPerf, useOperationsList, usePerformanceReport } from '../hooks/useAPI';
-import OperationGraph from '../components/OperationGraphComponent';
+import OperationGraph from '../components/operation-graph/OperationGraphReactFlow';
 import LoadingSpinner from '../components/LoadingSpinner';
 import useClearSelectedBuffer from '../hooks/useClearSelectedBuffer';
 import { activePerformanceReportFolderNameAtom, selectedOperationRangeAtom } from '../store/app';

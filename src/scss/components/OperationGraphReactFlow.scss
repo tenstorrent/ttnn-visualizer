@@ -1,0 +1,92 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
+
+// React Flow derives its node class from the registered type name, so
+// `.react-flow__node-opNode` is camelCase, and its own classes use BEM `__`.
+// Neither is expressible in kebab-case, so the pattern has to be off here.
+/* stylelint-disable selector-class-pattern */
+
+@use '../definitions/colours' as *;
+
+.operation-graph-react-flow {
+    position: relative;
+    width: 100%;
+    height: 80vh;
+
+    .operation-graph-react-flow-loader {
+        position: absolute;
+        inset: 0;
+        z-index: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background-color: rgba($tt-black, 0.4);
+    }
+
+    .react-flow__node-opNode {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        justify-content: center;
+        box-sizing: border-box;
+        padding: 4px 12px;
+        border: 2px solid transparent;
+        border-radius: 3px;
+        background-color: var(--graph-normal);
+        color: $tt-black;
+        font-size: 13px;
+        line-height: 1.2;
+        text-align: center;
+        cursor: pointer;
+
+        &.op-graph-node-selected {
+            border-color: var(--graph-focused-node);
+            background-color: var(--graph-selected);
+        }
+
+        &.op-graph-node-input {
+            background-color: var(--graph-input-node);
+        }
+
+        &.op-graph-node-output {
+            background-color: var(--graph-output-node);
+        }
+    }
+
+    .op-graph-node-label {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .op-graph-node-file {
+        overflow: hidden;
+        color: $tt-grey-2;
+        font-size: 11px;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    // Painted inside the edge SVG rather than as a positioned div: a real report
+    // carries ~500 labels, and one HTML node each is the documented jank risk.
+    .op-graph-edge-label {
+        fill: $tt-yellow-tint-1;
+        font-size: 11px;
+        paint-order: stroke;
+        stroke: $tt-black;
+        stroke-width: 3px;
+        text-anchor: middle;
+        pointer-events: none;
+    }
+
+    .react-flow__edge.op-graph-edge-input .react-flow__edge-path {
+        stroke: var(--graph-input-edge);
+        stroke-width: 2;
+    }
+
+    .react-flow__edge.op-graph-edge-output .react-flow__edge-path {
+        stroke: var(--graph-output-edge);
+        stroke-width: 2;
+    }
+}
