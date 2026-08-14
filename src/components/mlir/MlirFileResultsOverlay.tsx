@@ -4,7 +4,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useAtom, useAtomValue, useSetAtom } from 'jotai';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router';
 import axios from 'axios';
 import { Button, ButtonVariant, Classes, Icon, Intent, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
@@ -269,7 +269,7 @@ const MlirFileResultsOverlay = () => {
         handleClose();
 
         if (location.pathname !== ROUTES.MLIR) {
-            navigate(ROUTES.MLIR);
+            void navigate(ROUTES.MLIR);
         }
     };
 

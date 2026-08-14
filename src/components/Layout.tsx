@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation } from 'react-router';
 import { Helmet } from 'react-helmet-async';
 import { Theme, ToastContainer, ToastPosition, cssTransition } from 'react-toastify';
 import 'styles/components/ToastOverrides.scss';

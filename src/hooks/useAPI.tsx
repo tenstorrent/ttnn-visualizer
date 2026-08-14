@@ -18,7 +18,6 @@ import {
     DeviceOperationParams,
     Instance,
     NodeType,
-    Operation,
     OperationDescription,
     OperationDetailsData,
     ReportMetadataResponse,
@@ -66,7 +65,7 @@ import {
 import npeManifestSchema from '../schemas/npe-manifest.schema.json';
 import { getErroredReportFolderLabel, normaliseReportFolder } from '../functions/validateReportFolder';
 import { Signpost } from '../model/Signpost';
-import { TensorDeallocationReport, TensorsByOperationByAddress } from '../model/BufferSummary';
+import { TensorsByOperationByAddress } from '../model/BufferSummary';
 import { L1_DEFAULT_MEMORY_SIZE } from '../definitions/L1MemorySize';
 import {
     NPE_QUERY_KEY,
@@ -80,7 +79,7 @@ import { ReportFolder, SINGLE_HOST_WORLD_SIZE } from '../definitions/Reports';
 import { RemoteFolder } from '../definitions/RemoteConnection';
 import createToastNotification from '../functions/createToastNotification';
 import { ToastType } from '../definitions/ToastType';
-import { DEALLOCATE_OP_NAME_LIST } from '../definitions/Deallocate';
+import { buildLateDeallocationReports } from '../functions/lateDeallocation';
 import { processInputsOutputs } from '../functions/processMemoryAllocations';
 import { SemVer, semverParse } from '../functions/semverParse';
 import { parseNpeAxiosResponseData } from '../functions/parseNpeAxiosResponseData';
@@ -1483,55 +1482,22 @@ export const useGetTensorDeallocationReportByOperation = () => {
     const { tensorListByOperation } = useCreateTensorsByOperationByIdList();
     const { data: operations } = useOperationsList();
 
-    const operationsById = useMemo(() => {
-        const map = new Map<number, Operation>();
+    const operationNamesById = useMemo(() => {
+        const namesById = new Map<number, string>();
         operations?.forEach((operation) => {
-            map.set(operation.id, operation);
+            namesById.set(operation.id, operation.name);
         });
-        return map;
+        return namesById;
     }, [operations]);
 
     return useMemo(() => {
-        const getLastValidConsumer = (consumers: number[]) => {
-            const list = [...consumers];
-            while (list && list.length > 0) {
-                const lastConsumerOperationId = list.sort().pop() || -1;
-                const lastConsumerName = operationsById.get(lastConsumerOperationId)?.name || '';
-
-                if (lastConsumerOperationId > -1 && !DEALLOCATE_OP_NAME_LIST.includes(lastConsumerName.toLowerCase())) {
-                    return { lastConsumerOperationId, lastConsumerName };
-                }
-            }
-            return { lastConsumerName: '', lastConsumerOperationId: -1 };
-        };
-        const lateDeallocationsByOperation = new Map<number, TensorDeallocationReport[]>();
-        const nonDeallocatedTensorListById = new Map<number, TensorDeallocationReport>();
-        tensorListByOperation.forEach((tensorsMap, operationId) => {
-            tensorsMap.forEach((tensor, address) => {
-                if (tensor.id && tensor.consumers && tensor.consumers.length > 0) {
-                    const { lastConsumerOperationId, lastConsumerName } = getLastValidConsumer(tensor.consumers);
-                    if (lastConsumerOperationId !== null && lastConsumerOperationId < operationId) {
-                        if (!lateDeallocationsByOperation.has(operationId)) {
-                            lateDeallocationsByOperation.set(operationId, []);
-                        }
-                        const list: TensorDeallocationReport[] = lateDeallocationsByOperation.get(operationId)!;
-                        const tensorInfo: TensorDeallocationReport = {
-                            id: tensor.id,
-                            address,
-                            consumerName: lastConsumerName,
-                            lastConsumerOperationId,
-                            lastOperationId: operationId,
-                        };
-                        list.push(tensorInfo);
-                        lateDeallocationsByOperation.set(operationId, list);
-                        nonDeallocatedTensorListById.set(tensor.id, tensorInfo);
-                    }
-                }
-            });
+        const { reportsByOpId, reportsByTensorId } = buildLateDeallocationReports({
+            tensorsByOperation: tensorListByOperation,
+            operationNamesById,
         });
 
-        return { lateDeallocationsByOperation, nonDeallocatedTensorList: nonDeallocatedTensorListById };
-    }, [operationsById, tensorListByOperation]);
+        return { lateDeallocationsByOperation: reportsByOpId, nonDeallocatedTensorList: reportsByTensorId };
+    }, [operationNamesById, tensorListByOperation]);
 };
 
 const fetchLatestAppVersion = async (): Promise<string | null> => {

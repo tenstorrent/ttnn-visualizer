@@ -3,7 +3,12 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import { describe, expect, it } from 'vitest';
-import { RankedAnnotation, TOP_N_MODE_LABEL, TopNAnnotationMode } from '../src/definitions/TopNAnnotations';
+import {
+    RankedAnnotation,
+    TOP_N_COUNT_MAX,
+    TOP_N_MODE_LABEL,
+    TopNAnnotationMode,
+} from '../src/definitions/TopNAnnotations';
 import { selectTopNAnnotations } from '../src/functions/topNAnnotations';
 import { OpPerfAggregate } from '../src/functions/perfOverlay';
 import { L1PressureMetrics } from '../src/model/L1Pressure';
@@ -399,6 +404,25 @@ describe('selectTopNAnnotations', () => {
                 perfAggregatesByOpId: aggregates,
             });
             expect(result.size).toBe(2);
+        });
+
+        // The count is persisted, so a value stored before the ceiling changed
+        // can still arrive asking for more than the input allows.
+        it('clamps to TOP_N_COUNT_MAX whatever count arrives', () => {
+            const candidateCount = TOP_N_COUNT_MAX + 5;
+            const operations = Array.from({ length: candidateCount }, (_unused, index) => op(index + 1));
+            const aggregates = new Map<number, OpPerfAggregate>(
+                operations.map((operation) => [operation.id, perfAggregate(operation.id, operation.id * 100)]),
+            );
+
+            const result = selectTopNAnnotations({
+                mode: TopNAnnotationMode.PERF_TIME,
+                n: candidateCount,
+                operations,
+                perfAggregatesByOpId: aggregates,
+            });
+
+            expect(result.size).toBe(TOP_N_COUNT_MAX);
         });
     });
 

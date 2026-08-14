@@ -54,6 +54,19 @@ export const TEST_IDS = Object.freeze({
     PERF_CHART_HINT: 'perf-chart-hint',
     PERF_NPE_LINK: 'perf-npe-link',
 
+    // Buffer summary late deallocation. The badge and rail dot ids are suffixed
+    // with the operation id at the call site.
+    LATE_DEALLOC_COUNT: 'late-dealloc-count',
+    LATE_DEALLOC_BADGE: 'late-dealloc-badge',
+    LATE_DEALLOC_RAIL: 'late-dealloc-rail',
+    LATE_DEALLOC_RAIL_DOT: 'late-dealloc-rail-dot',
+
+    // Buffer summary top-N annotations, suffixed the same way.
+    TOP_N_CONTROLS: 'top-n-controls',
+    TOP_N_BADGE: 'top-n-badge',
+    TOP_N_RAIL: 'top-n-rail',
+    TOP_N_RAIL_DOT: 'top-n-rail-dot',
+
     // General UI
     LOADING_SPINNER: 'loading-spinner',
     ERROR_MESSAGE: 'error-message',
