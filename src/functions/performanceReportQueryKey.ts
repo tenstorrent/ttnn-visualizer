@@ -18,15 +18,20 @@ export interface PerformanceReportParams {
 /**
  * @description The filters the memory<->performance match needs held still:
  * one row per operation, host ops out of the way, and the whole run rather
- * than a signpost window. These are also the performance tab's own defaults,
- * so a report fetched for link resolution normally shares the tab's cache
- * entry rather than costing a second request (#1812).
+ * than a signpost window. `groupBy` only selects the stacked report's shape and
+ * cannot affect `report` at all, but it belongs here too — it is part of the
+ * query key, so following the tab's grouping control would blank the link
+ * report on every switch, which is the failure this exists to prevent (#1812).
+ *
+ * Every value is the performance tab's own default, so link resolution normally
+ * shares the tab's cache entry rather than costing a second request.
  */
 export const LINKED_PERFORMANCE_REPORT_FILTERS = {
     startSignpost: null,
     endSignpost: null,
     hideHostOps: true,
     mergeDevices: true,
+    groupBy: StackedGroupBy.OP,
 } as const;
 
 const getSignpostKey = (label: string, signpost: Signpost | null) =>

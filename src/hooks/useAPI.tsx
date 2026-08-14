@@ -897,9 +897,11 @@ export const useGetDeviceOperationListPerf = () => {
 
 /**
  * @description op id to perf id mapping only for existing perf ids. The perf
- * ids come from the unfiltered report (`useLinkedPerformanceReport`), not from
- * the rows the performance tab is displaying — a row id survives host-op and
- * signpost filtering, so consumers can still join against a filtered view.
+ * ids come from the link-pinned report (`useLinkedPerformanceReport`), not from
+ * the rows the performance tab is displaying. A row id survives host-op and
+ * signpost filtering, so consumers can still join against those views; ids do
+ * not survive `mergeDevices: false`, where an operation's per-device rows each
+ * carry their own id and only the merged representative joins.
  */
 export const useOpToPerfIdFiltered = () => {
     const opMapping = useGetDeviceOperationListPerf();
@@ -1190,9 +1192,8 @@ const useViewPerformanceReportParams = (): PerformanceReportParams => {
 
 const useLinkedPerformanceReportParams = (): PerformanceReportParams => {
     const tracingMode = useAtomValue(tracingModeAtom);
-    const groupBy = useAtomValue(stackedGroupByAtom);
 
-    return useMemo(() => ({ ...LINKED_PERFORMANCE_REPORT_FILTERS, tracingMode, groupBy }), [tracingMode, groupBy]);
+    return useMemo(() => ({ ...LINKED_PERFORMANCE_REPORT_FILTERS, tracingMode }), [tracingMode]);
 };
 
 const usePerformanceReportQuery = (name: string | null, params: PerformanceReportParams) => {
@@ -1237,13 +1238,10 @@ export const usePerformanceReport = (name: string | null) => {
  * it must not move when the user changes how they are viewing the performance
  * tab (#1812).
  *
- * `tracingMode` deliberately still follows the user's toggle. It only reorders
- * rows, and for a trace-captured run the traced order is the one that lines up
- * with the memory report — pinning it would leave those reports permanently
- * unlinkable. `groupBy` is shared for a different reason: it cannot affect
- * `report` at all, and passing it through keeps this key identical to the view
- * query's whenever the tab is at its defaults, so the common case shares one
- * cache entry instead of paying for a second fetch.
+ * `tracingMode` is the one view control still followed, because it only
+ * reorders rows and for a trace-captured run the traced order is the one that
+ * lines up with the memory report — pinning it would leave those reports
+ * permanently unlinkable.
  */
 export const useLinkedPerformanceReport = () => {
     const name = useAtomValue(activePerformanceReportFolderNameAtom);

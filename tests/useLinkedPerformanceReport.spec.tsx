@@ -9,10 +9,10 @@
  * the positional match can never line up against the memory report.
  */
 
-import { renderHook, waitFor } from '@testing-library/react';
+import { act, renderHook, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { useAtomValue } from 'jotai';
+import { Provider, createStore, useAtomValue } from 'jotai';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useGetDeviceOperationListPerf, useLinkedPerformanceReport, usePerformanceReport } from '../src/hooks/useAPI';
 import {
@@ -22,10 +22,13 @@ import {
     filterBySignpostAtom,
     hideHostOpsAtom,
     mergeDevicesAtom,
+    stackedGroupByAtom,
     tracingModeAtom,
 } from '../src/store/app';
+import { StackedGroupBy } from '../src/definitions/StackedPerfTable';
 import { AtomProvider, type AtomProviderInitialValues } from './helpers/atomProvider';
 import axiosInstance from '../src/libs/axiosInstance';
+import Endpoints from '../src/definitions/Endpoints';
 
 vi.mock('../src/libs/axiosInstance', () => ({
     default: {
@@ -49,6 +52,7 @@ interface RequestParams {
     hide_host_ops: boolean;
     merge_devices: boolean;
     tracing_mode: boolean;
+    group_by: StackedGroupBy;
     start_signpost?: string;
     end_signpost?: string;
 }
@@ -59,18 +63,42 @@ const getReportRequests = (): RequestParams[] =>
         .mock.calls.filter(([url]) => String(url).includes('perf-results/report'))
         .map(([, config]) => (config as { params: RequestParams }).params);
 
-// A fresh client per render: `staleTime: Infinity` would otherwise let one
-// test's cached report answer the next test's request, hiding a refetch.
-const renderWithView = <T,>(hook: () => T, view: AtomProviderInitialValues = []) =>
-    renderHook(hook, {
+const useBothReports = () => {
+    const name = useAtomValue(activePerformanceReportFolderNameAtom);
+
+    return [usePerformanceReport(name), useLinkedPerformanceReport()];
+};
+
+// A fresh client per test: `staleTime: Infinity` would otherwise let one test's
+// cached report answer the next test's request, hiding a refetch.
+const renderWithView = <T,>(hook: () => T, view: AtomProviderInitialValues = []) => {
+    const queryClient = new QueryClient();
+
+    return renderHook(hook, {
         wrapper: ({ children }: { children: ReactNode }) => (
-            <QueryClientProvider client={new QueryClient()}>
+            <QueryClientProvider client={queryClient}>
                 <AtomProvider initialValues={[[activePerformanceReportAtom, ACTIVE_REPORT], ...view]}>
                     {children}
                 </AtomProvider>
             </QueryClientProvider>
         ),
     });
+};
+
+/** The same wiring against a live store, so a view filter can be changed mid-test. */
+const renderWithStore = <T,>(hook: () => T, store: ReturnType<typeof createStore>) => {
+    const queryClient = new QueryClient();
+
+    store.set(activePerformanceReportAtom, ACTIVE_REPORT);
+
+    return renderHook(hook, {
+        wrapper: ({ children }: { children: ReactNode }) => (
+            <QueryClientProvider client={queryClient}>
+                <Provider store={store}>{children}</Provider>
+            </QueryClientProvider>
+        ),
+    });
+};
 
 beforeEach(() => {
     vi.clearAllMocks();
@@ -101,23 +129,33 @@ describe('useLinkedPerformanceReport', () => {
     });
 
     it('shares the performance tab request while the tab is at its defaults', async () => {
-        renderWithView(() => {
-            const name = useAtomValue(activePerformanceReportFolderNameAtom);
-
-            return [usePerformanceReport(name), useLinkedPerformanceReport()];
-        });
+        renderWithView(useBothReports);
 
         await waitFor(() => expect(getReportRequests().length).toBeGreaterThan(0));
 
         expect(getReportRequests()).toHaveLength(1);
     });
 
-    it('fetches separately once a view filter is applied, leaving the tab request filtered', async () => {
-        renderWithView(() => {
-            const name = useAtomValue(activePerformanceReportFolderNameAtom);
+    it('keeps the report it has when the tab switches its stacked grouping', async () => {
+        // Grouping cannot change `report`, but it is part of the query key, so
+        // following it would move the link query to a fresh key — no data, and
+        // the badge blanking to PENDING — on a control that reshapes only the
+        // stacked chart.
+        const store = createStore();
+        const { result } = renderWithStore(useBothReports, store);
 
-            return [usePerformanceReport(name), useLinkedPerformanceReport()];
-        }, FILTERED_VIEW);
+        await waitFor(() => expect(result.current[1].data).toBeDefined());
+
+        act(() => store.set(stackedGroupByAtom, StackedGroupBy.MEMORY));
+
+        expect(result.current[1].data).toBeDefined();
+        expect(result.current[1].isFetching).toBe(false);
+
+        await waitFor(() => expect(getReportRequests().at(-1)?.group_by).toBe(StackedGroupBy.MEMORY));
+    });
+
+    it('fetches separately once a view filter is applied, leaving the tab request filtered', async () => {
+        renderWithView(useBothReports, FILTERED_VIEW);
 
         await waitFor(() => expect(getReportRequests()).toHaveLength(2));
 
@@ -170,11 +208,11 @@ describe('report matching under a filtered performance tab', () => {
                 });
             }
 
-            if (url.includes('/api/operations')) {
+            if (url.includes(Endpoints.OPERATIONS_LIST)) {
                 return Promise.resolve({ data: memoryOperations });
             }
 
-            if (url.includes('/api/devices')) {
+            if (url.includes(Endpoints.DEVICES)) {
                 return Promise.resolve({
                     data: Array.from({ length: NUM_DEVICES }, (_, device) => ({ device_id: device })),
                 });
@@ -188,21 +226,10 @@ describe('report matching under a filtered performance tab', () => {
         ['at its defaults', [] as AtomProviderInitialValues],
         ['with every view filter applied', FILTERED_VIEW],
     ])('matches the memory report to the performance report with the tab %s', async (_label, view) => {
-        const { result } = renderHook(() => useGetDeviceOperationListPerf(), {
-            wrapper: ({ children }: { children: ReactNode }) => (
-                <QueryClientProvider client={new QueryClient()}>
-                    <AtomProvider
-                        initialValues={[
-                            [activeProfilerReportAtom, ACTIVE_REPORT],
-                            [activePerformanceReportAtom, ACTIVE_REPORT],
-                            ...view,
-                        ]}
-                    >
-                        {children}
-                    </AtomProvider>
-                </QueryClientProvider>
-            ),
-        });
+        const { result } = renderWithView(
+            () => useGetDeviceOperationListPerf(),
+            [[activeProfilerReportAtom, ACTIVE_REPORT], ...view],
+        );
 
         await waitFor(() => expect(result.current).toHaveLength(DEVICE_OP_NAMES.length));
 

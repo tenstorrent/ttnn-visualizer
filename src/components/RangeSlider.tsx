@@ -38,6 +38,12 @@ import getResponseError from '../functions/getResponseError';
 
 const RANGE_STEP = 25;
 
+// The op<->perf mapping is resolved against the link-pinned report while the
+// performance slider spans the rows the performance tab is displaying, so a
+// mapped perf id can fall outside a narrowed view (a signpost window, most
+// obviously). Keep the handles inside their own track (#1812).
+const clampToRange = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
+
 function Range() {
     const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
     const [activePerformanceReport, setActivePerformanceReport] = useAtom(activePerformanceReportAtom);
@@ -118,7 +124,10 @@ function Range() {
                     ? perfMax!
                     : selectedPerformanceRange[1]);
 
-            setSelectedPerformanceRange([updatedMin, updatedMax]);
+            setSelectedPerformanceRange([
+                clampToRange(updatedMin, perfMin!, perfMax!),
+                clampToRange(updatedMax, perfMin!, perfMax!),
+            ]);
             queueMicrotask(() => {
                 setIsUserOpChange(false);
             });

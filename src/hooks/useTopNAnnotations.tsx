@@ -55,12 +55,12 @@ export interface UseTopNAnnotationAvailabilityResult {
 export const useTopNAnnotationAvailability = ({
     forceL1Unavailable = false,
 }: UseTopNAnnotationAvailabilityParams = {}): UseTopNAnnotationAvailabilityResult => {
-    // The unfiltered report, so annotations don't disappear when the user
+    // The link-pinned report, so annotations don't disappear when the user
     // changes how they're viewing the performance tab (#1812).
     const { data: perfReport } = useLinkedPerformanceReport();
     // Lock-step id-space match against the profiler op list, made against that
-    // same unfiltered report. Returns [] when the perf report doesn't line up —
-    // that's the `UNLINKED` signal below.
+    // same report. Returns [] when the perf report doesn't line up — that's the
+    // `UNLINKED` signal below.
     const matchedPerfOps = useGetDeviceOperationListPerf();
     const l1Pressure = useL1PressureByOperation();
 

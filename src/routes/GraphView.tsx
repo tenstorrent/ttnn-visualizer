@@ -18,7 +18,7 @@ const GraphView = () => {
     const { data: operationList, isLoading } = useOperationsList();
     const { operationId } = useParams<{ operationId?: string }>();
     const selectedOperationRange = useAtomValue(selectedOperationRangeAtom);
-    // The unfiltered report, so a perf-tab view filter can neither hide the
+    // The link-pinned report, so a perf-tab view filter can neither hide the
     // report from the overlay nor break the match below (#1812).
     const { data: perfReport } = useLinkedPerformanceReport();
     // Canonical "do the loaded reports belong to the same run?" signal. This is

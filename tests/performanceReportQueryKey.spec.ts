@@ -33,7 +33,6 @@ const defaultViewParams: PerformanceReportParams = {
 const linkedParams = (overrides: Partial<PerformanceReportParams> = {}): PerformanceReportParams => ({
     ...LINKED_PERFORMANCE_REPORT_FILTERS,
     tracingMode: false,
-    groupBy: StackedGroupBy.OP,
     ...overrides,
 });
 
@@ -66,18 +65,25 @@ describe('getPerformanceReportQueryKey', () => {
         );
     });
 
-    it('keeps sharing the link key when only tracing mode or grouping changes', () => {
-        const params = { tracingMode: true, groupBy: StackedGroupBy.MEMORY };
+    it('keeps sharing the link key when only tracing mode changes', () => {
+        const params = { tracingMode: true };
 
         expect(getPerformanceReportQueryKey(REPORT_NAME, { ...defaultViewParams, ...params })).toEqual(
             getPerformanceReportQueryKey(REPORT_NAME, linkedParams(params)),
         );
     });
 
+    it('holds the link key still when the tab changes its stacked grouping', () => {
+        // Grouping cannot change `report`, but it is part of the key — following
+        // it would blank the link report on every switch.
+        expect(getPerformanceReportQueryKey(REPORT_NAME, linkedParams())).toContain(`groupBy:${StackedGroupBy.OP}`);
+    });
+
     it.each([
         ['merge devices off', { mergeDevices: false }],
         ['host ops shown', { hideHostOps: false }],
         ['a signpost range', { startSignpost: SIGNPOST }],
+        ['a different stacked grouping', { groupBy: StackedGroupBy.MEMORY }],
     ])('diverges from the link key with %s', (_label, overrides) => {
         expect(getPerformanceReportQueryKey(REPORT_NAME, { ...defaultViewParams, ...overrides })).not.toEqual(
             getPerformanceReportQueryKey(REPORT_NAME, linkedParams()),
