@@ -283,6 +283,36 @@ describe('RemoteConnectionDialog connection test block', () => {
         expect(getButtonWithText('Add connection')).toBeEnabled();
     });
 
+    it('resolves every path placeholder, so one failing path does not hide the other result', async () => {
+        // Each configured path seeds its own PROGRESS placeholder and the response
+        // replaces the whole list, so a server that answered only the failing path
+        // would silently drop the row the user was watching. See #1856.
+        testConnectionMock.mockResolvedValue([
+            { status: ConnectionTestStates.OK, message: 'SSH connection established' },
+            { status: ConnectionTestStates.OK, message: 'Found 3 memory reports' },
+            {
+                status: ConnectionTestStates.FAILED,
+                message: 'Performance directory does not exist or cannot be accessed',
+            },
+        ]);
+
+        render(
+            <RemoteConnectionDialog
+                open
+                onClose={vi.fn()}
+                onAddConnection={vi.fn()}
+            />,
+        );
+
+        fillName();
+        fireEvent.click(getButtonWithText('Run tests'));
+
+        await waitFor(() => expect(screen.getByText('Found 3 memory reports')).toBeInTheDocument());
+        expect(screen.getByText('Performance directory does not exist or cannot be accessed')).toBeInTheDocument();
+        expect(screen.queryByText('Searching for performance reports')).not.toBeInTheDocument();
+        expect(getButtonWithText('Add connection')).toBeDisabled();
+    });
+
     it('drops the stale marking once the tests are run again', async () => {
         testConnectionMock.mockResolvedValue(PASSING_TESTS);
 
