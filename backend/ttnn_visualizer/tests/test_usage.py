@@ -13,6 +13,7 @@ collector — totals never go down, and no line can be forged.
 import os
 import subprocess
 import sys
+import time
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -20,8 +21,10 @@ import pytest
 from ttnn_visualizer import usage
 from ttnn_visualizer.settings import DefaultConfig
 from ttnn_visualizer.usage import (
+    _REQUIRED_FIELDS,
     COUNT_FIELD,
     RUN_ID_ENV_VAR,
+    RUN_ID_FIELD,
     USAGE_RECORDING_ENV_VAR,
     DeploymentMode,
     UsageEvent,
@@ -32,21 +35,10 @@ from ttnn_visualizer.usage import (
     record_event,
 )
 
-# Enough for two children to finish 100 appends each on a slow CI runner; a hang
-# should fail the test rather than wedge the suite.
+# One budget for the whole set of children, not one each: enough for all of them to
+# finish their appends on a slow CI runner, and a hang fails the test rather than
+# wedging the suite.
 _SUBPROCESS_WRITER_TIMEOUT_SECONDS = 30
-
-_WRITER_SCRIPT = """
-import sys
-from pathlib import Path
-
-from ttnn_visualizer import usage
-from ttnn_visualizer.usage import UsageEvent, record_event
-
-usage.USAGE_DIRECTORY = Path(sys.argv[1])
-for _ in range(int(sys.argv[2])):
-    record_event(UsageEvent.APP_START)
-"""
 
 
 @pytest.fixture
@@ -82,40 +74,67 @@ def total_events(lines):
     return sum(int(parse(line).get(COUNT_FIELD, "1")) for line in lines)
 
 
-def _spawn_usage_writer(directory: Path, count: int) -> subprocess.Popen:
-    """Append ``count`` events from a fresh interpreter into ``directory``.
+def _run_usage_writers(directory: Path, writers: int, writes_each: int) -> None:
+    """Append ``writes_each`` events into ``directory`` from ``writers`` interpreters.
 
-    ``monkeypatch`` does not cross process boundaries, so the child sets
-    ``USAGE_DIRECTORY`` itself — the same override the fixture uses in-process.
+    All-or-nothing on purpose. The children only overlap if every one is spawned
+    before any is awaited, and a separate spawn helper and await helper make
+    ``spawn(); await(); spawn(); await()`` just as natural to write — which reads
+    fine, passes, and silently proves nothing about interleaving.
+
+    Must be called from within the ``usage_directory`` fixture: the children inherit
+    a copy of ``os.environ``, and it is that fixture's ``delenv`` that keeps a
+    developer's own ``TTNN_VISUALIZER_RUN_ID`` from reaching them and collapsing
+    their run ids into one.
     """
     child_env = {
         **os.environ,
-        # A developer shell with the switch off would otherwise inherit silence;
-        # ``record_event`` then no-ops and the child still exits 0.
+        # A developer shell with the switch off would otherwise inherit silence.
         USAGE_RECORDING_ENV_VAR: "true",
     }
+    command = [
+        sys.executable,
+        "-m",
+        "ttnn_visualizer.tests.usage_writer",
+        str(directory),
+        str(writes_each),
+    ]
 
-    return subprocess.Popen(
-        [sys.executable, "-c", _WRITER_SCRIPT, str(directory), str(count)],
-        env=child_env,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-    )
-
-
-def _await_usage_writer(child: subprocess.Popen) -> None:
+    children: list[subprocess.Popen] = []
+    deadline = time.monotonic() + _SUBPROCESS_WRITER_TIMEOUT_SECONDS
     try:
-        _, stderr = child.communicate(timeout=_SUBPROCESS_WRITER_TIMEOUT_SECONDS)
-    except subprocess.TimeoutExpired:
-        child.kill()
-        _, stderr = child.communicate()
-        pytest.fail(
-            f"usage writer timed out after {_SUBPROCESS_WRITER_TIMEOUT_SECONDS}s"
-            f"{f': {stderr}' if stderr else ''}"
-        )
+        for _ in range(writers):
+            # Inside the ``try`` so a fork/exec failure on a loaded runner — the kind
+            # of thing that only ever happens in CI — orphans nothing.
+            children.append(
+                subprocess.Popen(
+                    command,
+                    env=child_env,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                )
+            )
 
-    assert child.returncode == 0, stderr
+        for child in children:
+            try:
+                remaining = max(deadline - time.monotonic(), 0)
+                _, stderr = child.communicate(timeout=remaining)
+            except subprocess.TimeoutExpired:
+                child.kill()
+                _, stderr = child.communicate()
+                pytest.fail(
+                    f"usage writers did not finish within "
+                    f"{_SUBPROCESS_WRITER_TIMEOUT_SECONDS}s"
+                    f"{f': {stderr}' if stderr else ''}"
+                )
+
+            assert child.returncode == 0, stderr
+    finally:
+        for child in children:
+            if child.poll() is None:
+                child.kill()
+                child.communicate()
 
 
 def test_the_path_ignores_every_environment_derived_data_directory(monkeypatch):
@@ -279,30 +298,41 @@ def test_concurrent_subprocess_writers_never_truncate_a_line(usage_directory):
     # Two separate instances sharing the log — the case ``_append_line``'s
     # ``O_APPEND`` claim is about. An in-process ThreadPool would still pass if
     # every writer funnelled through one shared buffered file object.
-    writes_per_writer = 100
-    total_writes = writes_per_writer * 2
+    writers = 2
+    # The detection margin is thin: at 100 appends each a genuinely broken
+    # ``_append_line`` (one line split across two ``os.write`` calls) survives about
+    # one run in ten, because the write windows only overlap for as long as they do
+    # by accident of interpreter startup taking about as long as the loop. 500 costs
+    # ~0.02s and widens the window enough to catch it every time.
+    writes_each = 500
 
-    writers = [
-        _spawn_usage_writer(usage_directory, writes_per_writer),
-        _spawn_usage_writer(usage_directory, writes_per_writer),
-    ]
-    try:
-        for writer in writers:
-            _await_usage_writer(writer)
-    finally:
-        for writer in writers:
-            if writer.poll() is None:
-                writer.kill()
-                writer.communicate()
+    _run_usage_writers(usage_directory, writers=writers, writes_each=writes_each)
 
     lines = read_lines(usage_directory)
 
-    assert len(lines) == total_writes
+    assert len(lines) == writers * writes_each
+
+    parsed = []
     for line in lines:
-        fields = parse(line)
+        try:
+            fields = parse(line)
+        except ValueError:
+            # A line severed mid-token leaves a fragment with no ``=`` in it, which
+            # ``parse`` raises on. Quote it: the module's whole reason for existing
+            # should not report as a traceback out of a shared helper.
+            pytest.fail(f"truncated or interleaved line: {line!r}")
+
+        # Token count as well as key set. Two whole lines merged carry exactly the
+        # same four keys as one, so comparing key sets alone would not see the seam.
+        assert len(line.split(" ")) == len(_REQUIRED_FIELDS) + 1
+        assert set(fields) == {*_REQUIRED_FIELDS, RUN_ID_FIELD}
         assert fields["event"] == "app_start"
-        assert "ts" in fields
-        assert "schema_version" in fields
+
+        parsed.append(fields)
+
+    # The cross-process premise, pinned rather than merely arranged: every assertion
+    # above is equally satisfied by all 1000 lines coming from one interpreter.
+    assert len({fields[RUN_ID_FIELD] for fields in parsed}) == writers
 
 
 def test_app_start_carries_the_baseline_fields(usage_directory):
