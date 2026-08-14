@@ -21,6 +21,7 @@ import type { OperationDescription } from '../../model/APIData';
 import type { PerfOverlaySource } from '../../functions/perfOverlay';
 import LoadingSpinner from '../LoadingSpinner';
 import OpGraphEdge from './OpGraphEdge';
+import OpGraphInfoPanel from './OpGraphInfoPanel';
 import OpGraphNode from './OpGraphNode';
 import { useOpGraphLayoutWorker } from './useOpGraphLayoutWorker';
 import {
@@ -99,6 +100,14 @@ const OperationGraphInner = ({ operationList, operationId }: OperationGraphReact
             })),
         [operationList],
     );
+
+    const operationNamesById = useMemo(() => {
+        const namesById = new Map<number, string>();
+        for (const operation of operationList) {
+            namesById.set(operation.id, operation.name);
+        }
+        return namesById;
+    }, [operationList]);
 
     const onBuilt = useCallback(
         (graph: OpGraphBuiltGraph) => {
@@ -249,6 +258,14 @@ const OperationGraphInner = ({ operationList, operationId }: OperationGraphReact
                 <Controls />
                 <MiniMap pannable />
             </ReactFlow>
+            {selectedOperationId !== null && !isBuilding ? (
+                <OpGraphInfoPanel
+                    operationId={selectedOperationId}
+                    operationList={operationList}
+                    operationNamesById={operationNamesById}
+                    onLocateOperation={focusOperation}
+                />
+            ) : null}
         </div>
     );
 };
