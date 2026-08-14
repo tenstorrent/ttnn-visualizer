@@ -5,6 +5,7 @@
 import { Button, ButtonVariant, PopoverPosition, Switch, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { type FormEvent, type Ref, memo } from 'react';
+import { PERF_OVERLAY_TOOLTIP, PerfOverlayStatus } from '../../definitions/PerfOverlayStatus';
 import OpGraphFilter, { type OpGraphFilterHandle } from './OpGraphFilter';
 import type { OpGraphFilterMode } from './opGraphFilterMatcher';
 import 'styles/components/OpGraphToolbar.scss';
@@ -26,6 +27,11 @@ interface OpGraphToolbarProps {
     onGoToOperation: (operationId: number) => void;
     hideDeallocate: boolean;
     onHideDeallocateChange: (next: boolean) => void;
+    isCompact: boolean;
+    onCompactChange: (next: boolean) => void;
+    isPerfOverlayActive: boolean;
+    onPerfOverlayChange: (next: boolean) => void;
+    perfOverlayStatus: PerfOverlayStatus;
     isDisabled: boolean;
 }
 
@@ -47,6 +53,11 @@ const OpGraphToolbar = memo(
         onGoToOperation,
         hideDeallocate,
         onHideDeallocateChange,
+        isCompact,
+        onCompactChange,
+        isPerfOverlayActive,
+        onPerfOverlayChange,
+        perfOverlayStatus,
         isDisabled,
     }: OpGraphToolbarProps) => (
         <div className='op-graph-toolbar'>
@@ -121,6 +132,29 @@ const OpGraphToolbar = memo(
                     label='Hide deallocate ops'
                     disabled={isDisabled}
                 />
+
+                <Switch
+                    className='op-graph-toolbar-switch'
+                    checked={isCompact}
+                    onChange={(event: FormEvent<HTMLInputElement>) => onCompactChange(event.currentTarget.checked)}
+                    label='Compact view'
+                    disabled={isDisabled}
+                />
+
+                <Tooltip
+                    placement={PopoverPosition.BOTTOM}
+                    content={PERF_OVERLAY_TOOLTIP[perfOverlayStatus]}
+                >
+                    <Switch
+                        className='op-graph-toolbar-switch'
+                        checked={isPerfOverlayActive}
+                        onChange={(event: FormEvent<HTMLInputElement>) =>
+                            onPerfOverlayChange(event.currentTarget.checked)
+                        }
+                        label='Perf overlay'
+                        disabled={isDisabled || perfOverlayStatus !== PerfOverlayStatus.READY}
+                    />
+                </Tooltip>
             </div>
         </div>
     ),

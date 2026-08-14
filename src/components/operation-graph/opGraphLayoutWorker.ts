@@ -27,7 +27,10 @@ onmessage = (event: MessageEvent<OpGraphWorkerInboundMessage>) => {
     }
 
     try {
-        const graph = buildOpGraph(operations, { hideDeallocate: message.hideDeallocate });
+        const graph = buildOpGraph(operations, {
+            hideDeallocate: message.hideDeallocate,
+            isCompact: message.isCompact,
+        });
         postMessage({
             type: OpGraphWorkerMessageType.BUILT,
             sourceVersion: message.sourceVersion,

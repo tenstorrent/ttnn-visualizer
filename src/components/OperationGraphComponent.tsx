@@ -22,14 +22,16 @@ import { StackTraceLanguage } from '../definitions/StackTrace';
 import MemoryConfigRow from './MemoryConfigRow';
 import { ShardSpec } from '../model/MemoryConfig';
 import { BufferTypeLabel } from '../model/BufferType';
-import { formatDuration, toReadableShape, toReadableType } from '../functions/formatting';
+import { toReadableShape, toReadableType } from '../functions/formatting';
 import SearchField from './SearchField';
 import MemoryTag from './MemoryTag';
 import { GRAPH_COLORS } from '../definitions/GraphColors';
 import { NodeRelation } from '../definitions/NodeRelation';
 import { DEALLOCATE_OP_NAME_LIST } from '../definitions/Deallocate';
+import { PERF_OVERLAY_TOOLTIP, PerfOverlayStatus } from '../definitions/PerfOverlayStatus';
+import PerfOverlayLegend from './perf-overlay/PerfOverlayLegend';
+import PerfOverlayOpMetric from './perf-overlay/PerfOverlayOpMetric';
 import {
-    PERF_GRADIENT_CSS,
     PerfOverlaySource,
     aggregatePerfByOp,
     isDarkPerfColor,
@@ -44,18 +46,6 @@ type OperationNode = Node & {
     id: number;
     filterString: string;
     deviceOpFilter: string;
-};
-
-enum PerfOverlayStatus {
-    UNAVAILABLE,
-    UNLINKED,
-    READY,
-}
-
-const PERF_OVERLAY_TOOLTIP: Record<PerfOverlayStatus, string> = {
-    [PerfOverlayStatus.UNAVAILABLE]: 'Load a performance report to enable perf overlay.',
-    [PerfOverlayStatus.UNLINKED]: "Loaded performance report doesn't match this graph (no operations in common).",
-    [PerfOverlayStatus.READY]: 'Colour and size nodes by per-op kernel duration.',
 };
 
 // Node label colours used for nodes whose background is light enough for the
@@ -880,52 +870,6 @@ const OperationGraph = ({ operationList, operationId, perfRows, isPerfReportLoad
         </div>
     );
 };
-
-interface PerfOverlayLegendProps {
-    minNs: number;
-    maxNs: number;
-}
-
-export const PerfOverlayLegend = ({ minNs, maxNs }: PerfOverlayLegendProps) => (
-    <div
-        className='perf-overlay-legend'
-        aria-label='Perf overlay legend'
-    >
-        <div className='perf-overlay-legend-title'>Kernel duration (log)</div>
-        <div
-            className='perf-overlay-legend-gradient'
-            style={{ background: PERF_GRADIENT_CSS }}
-            aria-hidden='true'
-        />
-        <div className='perf-overlay-legend-bounds'>
-            <span>{formatDuration(minNs)}</span>
-            <span>{formatDuration(maxNs)}</span>
-        </div>
-    </div>
-);
-
-interface PerfOverlayOpMetricProps {
-    perfDeviceTimeNs?: number;
-    /** Same colour the node is rendered with on the graph — keeps the panel
-     *  visually tied to the overlay. */
-    perfColor?: string;
-}
-
-export const PerfOverlayOpMetric = ({ perfDeviceTimeNs, perfColor }: PerfOverlayOpMetricProps) => (
-    <div className='perf-overlay-op-metric'>
-        <span className='perf-overlay-op-metric-label'>Kernel duration</span>
-        <span className='perf-overlay-op-metric-value'>
-            {perfColor && perfDeviceTimeNs !== undefined && (
-                <span
-                    className='perf-overlay-op-metric-swatch'
-                    style={{ backgroundColor: perfColor }}
-                    aria-hidden='true'
-                />
-            )}
-            {perfDeviceTimeNs !== undefined ? formatDuration(perfDeviceTimeNs) : 'No perf data'}
-        </span>
-    </div>
-);
 
 interface OperationGraphTensorDetailsProps {
     tensor: Tensor;

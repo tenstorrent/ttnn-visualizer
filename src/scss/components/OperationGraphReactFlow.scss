@@ -52,6 +52,16 @@
         &.op-graph-node-output {
             background-color: var(--graph-output-node);
         }
+
+        // The overlay paints the background inline, so the label colours flip by
+        // class rather than by another inline style.
+        &.op-graph-node-perf-dark {
+            color: $tt-white;
+
+            .op-graph-node-file {
+                color: rgba($tt-white, 0.7);
+            }
+        }
     }
 
     .op-graph-node-label {
@@ -104,6 +114,19 @@
         --xy-minimap-mask-background-color: #{rgba($tt-black, 0.6)};
         --xy-minimap-mask-stroke-color: #{rgba($tt-white, 0.3)};
         --xy-minimap-mask-stroke-width: 1px;
+    }
+
+    // Bottom-left, above React Flow's Controls: the panel owns the right edge and
+    // the minimap the opposite corner.
+    .perf-overlay-legend {
+        position: absolute;
+        z-index: variables.$z-index-2-interactive;
+        bottom: 10px;
+        left: 60px;
+    }
+
+    .op-graph-panel-perf {
+        padding: 6px 12px 0;
     }
 
     // Density, type scale and section banding mirror `MlirNodeDetailsPanel.scss`

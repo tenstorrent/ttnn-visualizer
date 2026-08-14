@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-import { BaseEdge, type EdgeProps } from '@xyflow/react';
+import { BaseEdge, type EdgeProps, useStore } from '@xyflow/react';
 import { memo } from 'react';
 import type { OpGraphFlowEdge } from './opGraphTypes';
 
@@ -10,8 +10,16 @@ import type { OpGraphFlowEdge } from './opGraphTypes';
 // real report; undisplaced, the twin hides under the first and loses its label.
 const PARALLEL_EDGE_BOW_PX = 80;
 
+// Below this the 11px label draws under 8px, past reading, and a report's ~500
+// of them still cost a text layout and repaint on every pan frame. Selecting a
+// zoom that hides them is how a whole-graph overview stays interactive.
+const EDGE_LABEL_MIN_ZOOM = 0.7;
+
 const OpGraphEdge = memo(
     ({ id, sourceX, sourceY, targetX, targetY, label, data, markerEnd, style }: EdgeProps<OpGraphFlowEdge>) => {
+        // A boolean selector re-renders the edge only when the threshold is
+        // crossed, not on every wheel tick of a continuous zoom.
+        const isLabelLegible = useStore((state) => state.transform[2] >= EDGE_LABEL_MIN_ZOOM);
         const bow = (data?.parallelIndex ?? 0) * PARALLEL_EDGE_BOW_PX;
         const midY = (sourceY + targetY) / 2;
 
@@ -41,7 +49,7 @@ const OpGraphEdge = memo(
                     markerEnd={markerEnd}
                     style={style}
                 />
-                {label ? (
+                {label && isLabelLegible ? (
                     <text
                         className='op-graph-edge-label'
                         x={labelX}

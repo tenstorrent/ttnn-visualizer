@@ -14,12 +14,23 @@ import {
     useReactFlow,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
+import { useAtomValue } from 'jotai';
 import { type MouseEvent as ReactMouseEvent, memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { NodeRelation } from '../../definitions/NodeRelation';
+import { PerfOverlayStatus } from '../../definitions/PerfOverlayStatus';
+import type { ReportFolder } from '../../definitions/Reports';
 import { toReadableShape } from '../../functions/formatting';
 import type { OperationDescription } from '../../model/APIData';
-import type { PerfOverlaySource } from '../../functions/perfOverlay';
+import {
+    type PerfOverlaySource,
+    aggregatePerfByOp,
+    isDarkPerfColor,
+    perfColorScale,
+    scoreOps,
+} from '../../functions/perfOverlay';
+import { activePerformanceReportAtom, activeProfilerReportAtom } from '../../store/app';
 import LoadingSpinner from '../LoadingSpinner';
+import PerfOverlayLegend from '../perf-overlay/PerfOverlayLegend';
 import OpGraphEdge from './OpGraphEdge';
 import type { OpGraphFilterHandle } from './OpGraphFilter';
 import OpGraphInfoPanel from './OpGraphInfoPanel';
@@ -48,7 +59,9 @@ const EDGE_MARKER = { type: MarkerType.ArrowClosed, width: 18, height: 18 } as c
 const MAX_ZOOM = 3;
 const MIN_ZOOM = 0.02;
 const FOCUS_ZOOM = 1;
-const FOCUS_DURATION_MS = 500;
+// Matches MLIR's `localJump`: stepping through matches retargets the tween on
+// every press, so a longer one never settles and the camera reads as lagging.
+const FOCUS_DURATION_MS = 200;
 
 // Non-matches fade instead of hiding, so the matched subset keeps its position
 // in the layout rather than the graph reflowing under the user mid-search.
@@ -69,6 +82,13 @@ interface OpGraphMatches {
 const EMPTY_MATCHES: OpGraphMatches = { ids: new Set<string>(), operationIdsInOrder: [] };
 
 const SELECTED_NODE_CLASS = 'op-graph-node-selected';
+// The two cold bins and the hot-red bin of the ramp are dark enough that the
+// node's default near-black label sinks into them.
+const PERF_DARK_NODE_CLASS = 'op-graph-node-perf-dark';
+
+// `syncedName` over `path`, per `ReportFolder`: `path` is still the remote path
+// while a report is freshly selected, so it changes under a report that hasn't.
+const getReportIdentity = (report: ReportFolder | null): string => report?.syncedName ?? report?.path ?? '';
 
 const NODE_CLASS_BY_RELATION: Record<NodeRelation, string> = {
     [NodeRelation.Input]: 'op-graph-node-input',
@@ -83,17 +103,28 @@ const EDGE_CLASS_BY_RELATION: Record<NodeRelation, string> = {
 interface OperationGraphReactFlowProps {
     operationList: OperationDescription[];
     operationId?: number;
-    // Unused until the perf overlay is ported; keeps `GraphView`'s call shape.
     perfRows?: PerfOverlaySource[];
+    /**
+     * Whether *any* perf report is loaded, independent of whether it links up.
+     * Separates "load a report" from "the loaded one doesn't match this graph".
+     * Omitted by callers that bypass the linking pipeline (tests), which then
+     * fall back to a row-count heuristic.
+     */
     isPerfReportLoaded?: boolean;
 }
 
-const OperationGraphInner = ({ operationList, operationId }: OperationGraphReactFlowProps) => {
+const OperationGraphInner = ({
+    operationList,
+    operationId,
+    perfRows,
+    isPerfReportLoaded,
+}: OperationGraphReactFlowProps) => {
     const [nodes, setNodes, onNodesChange] = useNodesState<OpGraphFlowNode>([]);
     const [edges, setEdges, onEdgesChange] = useEdgesState<OpGraphFlowEdge>([]);
     const [selectedOperationId, setSelectedOperationId] = useState<number | null>(operationId ?? null);
     const [nodeIndex, setNodeIndex] = useState<OpGraphNodeIndexEntry[]>([]);
     const [hideDeallocate, setHideDeallocate] = useState(true);
+    const [isCompact, setIsCompact] = useState(false);
     const [filterQuery, setFilterQuery] = useState('');
     const [appliedFilterQuery, setAppliedFilterQuery] = useState('');
     const [filterMode, setFilterMode] = useState<OpGraphFilterMode>(() => {
@@ -101,6 +132,18 @@ const OperationGraphInner = ({ operationList, operationId }: OperationGraphReact
         return stored === OpGraphFilterMode.REGEX ? OpGraphFilterMode.REGEX : OpGraphFilterMode.SUBSTRING;
     });
     const [currentMatchIndex, setCurrentMatchIndex] = useState<number | null>(null);
+    const [perfOverlayEnabledFor, setPerfOverlayEnabledFor] = useState<string | null>(null);
+    // Navigating between `/graphtree/:operationId` URLs keeps this component
+    // mounted, so the incoming id has to be adopted rather than only seeding the
+    // initial state. Adjusting during render instead of in an effect avoids a
+    // pass where the panel still describes the operation we just left.
+    const [adoptedOperationId, setAdoptedOperationId] = useState(operationId);
+    if (operationId !== adoptedOperationId) {
+        setAdoptedOperationId(operationId);
+        if (operationId !== undefined) {
+            setSelectedOperationId(operationId);
+        }
+    }
     const filterRef = useRef<OpGraphFilterHandle>(null);
     const { setCenter, getNode } = useReactFlow<OpGraphFlowNode, OpGraphFlowEdge>();
 
@@ -135,6 +178,48 @@ const OperationGraphInner = ({ operationList, operationId }: OperationGraphReact
         return namesById;
     }, [operationList]);
 
+    const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
+    const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
+    // Overlay intent is per-report, not a stored preference: another report has
+    // other ops, so carrying the toggle over would colour a graph against
+    // numbers the user never asked for. Recording *which* pair it was enabled
+    // for makes switching reports turn it off structurally, with no effect
+    // chasing the change a render later.
+    const perfReportKey = `${getReportIdentity(activeProfilerReport)}|${getReportIdentity(activePerformanceReport)}`;
+    const isPerfOverlayEnabled = perfOverlayEnabledFor === perfReportKey;
+
+    const handlePerfOverlayChange = useCallback(
+        (next: boolean) => {
+            setPerfOverlayEnabledFor(next ? perfReportKey : null);
+        },
+        [perfReportKey],
+    );
+
+    const perfAggregates = useMemo(() => aggregatePerfByOp(perfRows ?? []), [perfRows]);
+    const { scoreByOpId, minNs, maxNs } = useMemo(() => scoreOps(perfAggregates), [perfAggregates]);
+
+    const perfOverlayStatus = useMemo<PerfOverlayStatus>(() => {
+        const isAvailable = isPerfReportLoaded ?? (perfRows !== undefined && perfRows.length > 0);
+        if (!isAvailable) {
+            return PerfOverlayStatus.UNAVAILABLE;
+        }
+        const isLinked = scoreByOpId.size > 0 && operationList.some((operation) => scoreByOpId.has(operation.id));
+        return isLinked ? PerfOverlayStatus.READY : PerfOverlayStatus.UNLINKED;
+    }, [isPerfReportLoaded, perfRows, scoreByOpId, operationList]);
+
+    const isPerfOverlayActive = isPerfOverlayEnabled && perfOverlayStatus === PerfOverlayStatus.READY;
+
+    const selectedPerfMetric = useMemo(() => {
+        if (!isPerfOverlayActive || selectedOperationId === null) {
+            return null;
+        }
+        const score = scoreByOpId.get(selectedOperationId);
+        return {
+            deviceTimeNs: perfAggregates.get(selectedOperationId)?.deviceTimeNs,
+            color: score ? perfColorScale(score.t) : undefined,
+        };
+    }, [isPerfOverlayActive, selectedOperationId, scoreByOpId, perfAggregates]);
+
     const onBuilt = useCallback(
         (graph: OpGraphBuiltGraph) => {
             setNodes(graph.nodes);
@@ -162,7 +247,12 @@ const OperationGraphInner = ({ operationList, operationId }: OperationGraphReact
 
     const { runBuild, isBuilding } = useOpGraphLayoutWorker(sourceOperations, onBuilt);
 
-    const buildOptions = useMemo<OpGraphBuildOptions>(() => ({ hideDeallocate }), [hideDeallocate]);
+    // The only two inputs that change the node set or the layout geometry, and so
+    // the only two that may trigger a rebuild.
+    const buildOptions = useMemo<OpGraphBuildOptions>(
+        () => ({ hideDeallocate, isCompact }),
+        [hideDeallocate, isCompact],
+    );
 
     // `sourceOperations` isn't read here — it's the signal that the worker holds a
     // new report and the current build is stale.
@@ -192,6 +282,14 @@ const OperationGraphInner = ({ operationList, operationId }: OperationGraphReact
         pendingFocusRef.current = null;
         focusOperation(target);
     }, [nodes, focusOperation]);
+
+    // Recentre on the operation the URL names. A no-op on first mount, where the
+    // graph hasn't been laid out yet and `onBuilt`'s pending focus does the work.
+    useEffect(() => {
+        if (operationId !== undefined) {
+            focusOperation(operationId);
+        }
+    }, [operationId, focusOperation]);
 
     const selectOperation = useCallback(
         (id: number) => {
@@ -343,26 +441,49 @@ const OperationGraphInner = ({ operationList, operationId }: OperationGraphReact
     }, [selectedOperationId, edgesBySource, edgesByTarget]);
 
     const styledNodes = useMemo(() => {
-        if (!highlight && !matchedIds) {
+        if (!highlight && !matchedIds && !isPerfOverlayActive) {
             return nodes;
         }
         return nodes.map((node) => {
             const isSelected = node.id === highlight?.selectedId;
-            let styled = node;
+            const relation = isSelected ? undefined : highlight?.relationByNodeId.get(node.id);
+            const classNames: string[] = [];
             if (isSelected) {
-                styled = { ...styled, className: SELECTED_NODE_CLASS };
-            } else if (highlight) {
-                const relation = highlight.relationByNodeId.get(node.id);
-                if (relation) {
-                    styled = { ...styled, className: NODE_CLASS_BY_RELATION[relation] };
-                }
+                classNames.push(SELECTED_NODE_CLASS);
+            } else if (relation) {
+                classNames.push(NODE_CLASS_BY_RELATION[relation]);
             }
-            if (matchedIds && !isSelected && !matchedIds.has(node.id)) {
-                styled = { ...styled, style: { ...styled.style, opacity: FILTER_DIM_OPACITY } };
+
+            // Relation colours outrank the ramp, as they did under vis: an
+            // input/output tint answers "what does the selection touch", which
+            // is the question the user asked most recently.
+            const score = isPerfOverlayActive && !relation ? scoreByOpId.get(node.data.operationId) : undefined;
+            const perfColor = score ? perfColorScale(score.t) : undefined;
+            if (perfColor && isDarkPerfColor(perfColor)) {
+                classNames.push(PERF_DARK_NODE_CLASS);
+            }
+
+            const isDimmed = matchedIds !== null && !isSelected && !matchedIds.has(node.id);
+            if (classNames.length === 0 && !perfColor && !isDimmed) {
+                return node;
+            }
+            let styled = node;
+            if (classNames.length > 0) {
+                styled = { ...styled, className: classNames.join(' ') };
+            }
+            if (perfColor || isDimmed) {
+                styled = {
+                    ...styled,
+                    style: {
+                        ...styled.style,
+                        ...(perfColor ? { backgroundColor: perfColor } : {}),
+                        ...(isDimmed ? { opacity: FILTER_DIM_OPACITY } : {}),
+                    },
+                };
             }
             return styled;
         });
-    }, [nodes, highlight, matchedIds]);
+    }, [nodes, highlight, matchedIds, isPerfOverlayActive, scoreByOpId]);
 
     const styledEdges = useMemo(() => {
         if (!highlight && !matchedIds) {
@@ -419,6 +540,11 @@ const OperationGraphInner = ({ operationList, operationId }: OperationGraphReact
                 onGoToOperation={selectOperation}
                 hideDeallocate={hideDeallocate}
                 onHideDeallocateChange={setHideDeallocate}
+                isCompact={isCompact}
+                onCompactChange={setIsCompact}
+                isPerfOverlayActive={isPerfOverlayActive}
+                onPerfOverlayChange={handlePerfOverlayChange}
+                perfOverlayStatus={perfOverlayStatus}
                 isDisabled={isBuilding}
             />
             <ReactFlow<OpGraphFlowNode, OpGraphFlowEdge>
@@ -440,12 +566,21 @@ const OperationGraphInner = ({ operationList, operationId }: OperationGraphReact
                 <Controls />
                 {!isPanelOpen ? <MiniMap pannable /> : null}
             </ReactFlow>
+            {isPerfOverlayActive && !isBuilding ? (
+                <PerfOverlayLegend
+                    minNs={minNs}
+                    maxNs={maxNs}
+                />
+            ) : null}
             {isPanelOpen ? (
                 <OpGraphInfoPanel
                     operationId={selectedOperationId}
                     operationList={operationList}
                     operationNamesById={operationNamesById}
                     onLocateOperation={focusOperation}
+                    perfDeviceTimeNs={selectedPerfMetric?.deviceTimeNs}
+                    perfColor={selectedPerfMetric?.color}
+                    isPerfOverlayActive={isPerfOverlayActive}
                 />
             ) : null}
         </div>
