@@ -20,9 +20,7 @@ from ttnn_visualizer.decorators import remote_exception_handler
 from ttnn_visualizer.enums import ConnectionTestStates, SyncMethod
 from ttnn_visualizer.exceptions import (
     AuthenticationException,
-    AuthenticationFailedException,
     HostKeyVerificationException,
-    HostKeyVerificationFailedException,
     NoValidConnectionsError,
     RemoteConnectionException,
     SSHException,
@@ -64,10 +62,6 @@ _sftp_subsystem_unavailable: set[tuple[str, str, int]] = set()
 # side produces on its own: `find` uses 1, a shell that cannot run the command uses
 # 126 or 127, and ssh itself uses 255.
 _MISSING_ROOT_EXIT_CODE = 87
-
-# And when the root is there but is not a directory, which `find` would otherwise
-# report as a root holding no reports.
-_NOT_A_DIRECTORY_EXIT_CODE = 88
 
 
 def _remote_transfer_key(remote_connection: RemoteConnection) -> tuple[str, str, int]:
@@ -1006,15 +1000,10 @@ class RemoteSearchRootState(Enum):
     ``UNKNOWN`` is the honest answer when no reply came back at all: a timeout
     has not established that the root is there, and calling it ``PRESENT``
     would report an absence of reports under a directory never reached.
-
-    ``NOT_A_DIRECTORY`` is a root that is there and still cannot hold reports —
-    a path pointing at a file. Neither "missing" nor "empty" describes it, and
-    both are advice the user would act on wrongly.
     """
 
     PRESENT = "present"
     MISSING = "missing"
-    NOT_A_DIRECTORY = "not_a_directory"
     UNKNOWN = "unknown"
 
 
@@ -1055,89 +1044,74 @@ def _find_performance_report_folders(
     )
 
 
-class RemoteReportPathOutcome(NamedTuple):
-    """What one configured path's search settled, whether or not it succeeded.
+class RemoteReportCounts(NamedTuple):
+    """Report folders found per kind; ``None`` when that path is not configured.
 
-    ``error_message`` set means the search raised against this path in
-    particular — an unreadable root, say — and it is the outcome, ``root_state``
-    standing at ``UNKNOWN`` only because nothing was settled. Read the two in
-    that order rather than as independent fields.
+    A configured path that holds nothing counts ``0`` rather than raising, so
+    the caller can report each kind's outcome against the path it searched.
     """
 
-    # Not `count`: `NamedTuple` inherits `tuple.count` and a field cannot shadow it.
-    root_state: RemoteSearchRootState
-    report_count: int = 0
-    error_message: Optional[str] = None
-    error_detail: Optional[str] = None
+    profiler: Optional[int]
+    performance: Optional[int]
 
 
-class RemoteReportSearchResults(NamedTuple):
-    """What each kind's path settled; ``None`` when that path is not configured.
+def _raise_report_path_failure(message: str) -> NoReturn:
+    logger.error(message)
+    raise RemoteConnectionException(message=message, status=ConnectionTestStates.FAILED)
 
-    A path that fails carries its failure here rather than raising, so a bad
-    path costs the other path's answer nothing.
+
+def _count_reports_found(label: str, search: RemoteFolderSearch) -> int:
+    """Reports the search matched, or a failure naming the path it searched.
+
+    ``label`` is the noun the rest of the connection test uses for this path,
+    so a user reading the failure sees the same word as the form field they
+    have to correct.
     """
-
-    profiler: Optional[RemoteReportPathOutcome]
-    performance: Optional[RemoteReportPathOutcome]
-
-
-def _search_report_path(
-    search: Callable[[], RemoteFolderSearch],
-) -> RemoteReportPathOutcome:
-    """Run one path's search, keeping a failure that is only about that path.
-
-    Authentication and host-key failures are re-raised: they are the
-    connection's verdict rather than this path's, and the caller answers them
-    with an HTTP status of their own. The ``SSHException`` family raised deeper
-    down is likewise connection-wide, and is not caught here at all.
-    """
-    try:
-        found = search()
-    except (AuthenticationFailedException, HostKeyVerificationFailedException):
-        raise
-    except RemoteConnectionException as err:
-        logger.error(err.message)
-        return RemoteReportPathOutcome(
-            root_state=RemoteSearchRootState.UNKNOWN,
-            error_message=err.message,
-            error_detail=err.detail,
+    if search.root_state is RemoteSearchRootState.MISSING:
+        _raise_report_path_failure(
+            f"{label} directory does not exist or cannot be accessed"
         )
 
-    return RemoteReportPathOutcome(
-        root_state=found.root_state, report_count=len(found.folders)
-    )
+    if search.root_state is RemoteSearchRootState.UNKNOWN:
+        _raise_report_path_failure(
+            f"{label} directory could not be checked because the search did not "
+            "complete"
+        )
+
+    return len(search.folders)
 
 
 @remote_exception_handler
 def check_remote_path_for_reports(
     remote_connection: RemoteConnection,
-) -> RemoteReportSearchResults:
-    """Search each configured path for reports, one SSH round trip each.
+) -> RemoteReportCounts:
+    """Count the reports under each configured path, one SSH round trip each.
 
-    Every configured path is searched and answered, including when an earlier
-    one failed: the searches are independent, so a path the user typed wrongly
-    says nothing about the path they typed correctly.
+    A path the search could not settle fails the whole test rather than counting
+    zero: it cannot say anything about reports under a directory it never
+    reached, and "exists but empty" is advice the user can act on where "does
+    not exist" is a different problem entirely.
     """
-    profiler: Optional[RemoteReportPathOutcome] = None
+    profiler_count: Optional[int] = None
     if remote_connection.profilerPath:
-        profiler = _search_report_path(
-            lambda: find_folders_by_files(
+        profiler_count = _count_reports_found(
+            "Memory",
+            find_folders_by_files(
                 remote_connection, remote_connection.profilerPath, [TEST_DB_FILE]
-            )
+            ),
         )
     else:
         logger.info("No profiler path configured; skipping check")
 
-    performance: Optional[RemoteReportPathOutcome] = None
+    performance_count: Optional[int] = None
     if remote_connection.performancePath:
-        performance = _search_report_path(
-            lambda: _find_performance_report_folders(remote_connection)
+        performance_count = _count_reports_found(
+            "Performance", _find_performance_report_folders(remote_connection)
         )
     else:
         logger.info("No performance path configured; skipping check")
 
-    return RemoteReportSearchResults(profiler=profiler, performance=performance)
+    return RemoteReportCounts(profiler=profiler_count, performance=performance_count)
 
 
 def _report_search_command(
@@ -1184,13 +1158,10 @@ def _report_search_command(
         f"-exec test -f {remote_arg('{}/' + file_name)} ';'" for file_name in file_names
     )
 
-    # `test -e` first, matching what the standalone path check used to run, so a
-    # path whose parent is unreadable still reports as absent rather than as a
-    # file. `test -d` then separates a path pointing at a file from a directory
-    # holding nothing, which `find` alone reports identically.
+    # `test -e`, matching what the standalone path check used to run, so a path
+    # whose parent is unreadable still reports as absent rather than as empty.
     return (
         f"test -e {remote_arg(search_root)} || exit {_MISSING_ROOT_EXIT_CODE}; "
-        f"test -d {remote_arg(search_root)} || exit {_NOT_A_DIRECTORY_EXIT_CODE}; "
         f"find {remote_arg(search_root)} "
         f"-mindepth {depth} -maxdepth {depth} -type d{path_filter} "
         f"'(' {tests} ')' -print"
@@ -1299,12 +1270,6 @@ def find_folders_by_files(
     if result.returncode == _MISSING_ROOT_EXIT_CODE:
         logger.info("Search root does not exist or cannot be accessed: %s", root_folder)
         return RemoteFolderSearch(folders=[], root_state=RemoteSearchRootState.MISSING)
-
-    if result.returncode == _NOT_A_DIRECTORY_EXIT_CODE:
-        logger.info("Search root is not a directory: %s", root_folder)
-        return RemoteFolderSearch(
-            folders=[], root_state=RemoteSearchRootState.NOT_A_DIRECTORY
-        )
 
     matched_folders = [
         directory.strip()

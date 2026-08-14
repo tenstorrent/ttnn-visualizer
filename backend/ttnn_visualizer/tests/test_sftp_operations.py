@@ -17,10 +17,9 @@ from http import HTTPStatus
 from unittest.mock import patch
 
 import pytest
-from ttnn_visualizer.enums import ConnectionTestStates, SyncMethod
+from ttnn_visualizer.enums import SyncMethod
 from ttnn_visualizer.exceptions import (
     AuthenticationException,
-    AuthenticationFailedException,
     HostKeyVerificationException,
     NoValidConnectionsError,
     RemoteConnectionException,
@@ -28,13 +27,10 @@ from ttnn_visualizer.exceptions import (
 from ttnn_visualizer.models import RemoteConnection
 from ttnn_visualizer.sftp_operations import (
     _MISSING_ROOT_EXIT_CODE,
-    _NOT_A_DIRECTORY_EXIT_CODE,
-    RemoteFolderSearch,
     RemoteSearchRootState,
     _get_remote_file_list_without_sizes,
     _remote_directory_mtimes,
     _remote_transfer_key,
-    _search_report_path,
     _sftp_subsystem_unavailable,
     find_folders_by_files,
     get_remote_directory_list,
@@ -294,21 +290,6 @@ class TestFindFoldersByFiles:
         assert matched.root_state is RemoteSearchRootState.MISSING
         assert matched.folders == []
 
-    def test_the_not_a_directory_exit_code_is_reported_as_its_own_state(
-        self, connection
-    ):
-        """A file at a folder path is neither absent nor a folder holding nothing."""
-        with patch(
-            "subprocess.run",
-            return_value=_completed("", returncode=_NOT_A_DIRECTORY_EXIT_CODE),
-        ):
-            matched = find_folders_by_files(
-                connection, "/remote/a-file", ["config.json"]
-            )
-
-        assert matched.root_state is RemoteSearchRootState.NOT_A_DIRECTORY
-        assert matched.folders == []
-
     def test_a_timed_out_search_settles_nothing_about_its_root(self, connection):
         """No reply is a third answer, distinct from "there" and "not there".
 
@@ -323,49 +304,6 @@ class TestFindFoldersByFiles:
 
         assert matched.root_state is RemoteSearchRootState.UNKNOWN
         assert matched.folders == []
-
-
-class TestSearchReportPath:
-    """Which failures belong to one path, and which to the connection."""
-
-    def test_a_completed_search_carries_its_state_and_count(self):
-        outcome = _search_report_path(
-            lambda: RemoteFolderSearch(
-                folders=["/a", "/b"], root_state=RemoteSearchRootState.PRESENT
-            )
-        )
-
-        assert outcome.root_state is RemoteSearchRootState.PRESENT
-        assert outcome.report_count == 2
-        assert outcome.error_message is None
-
-    def test_a_failure_about_this_path_is_carried_rather_than_raised(self):
-        """Raising here would abandon the other path's answer, which is the bug."""
-
-        def unreadable() -> RemoteFolderSearch:
-            raise RemoteConnectionException(
-                message="Permission denied accessing '/remote/profiler'.",
-                status=ConnectionTestStates.FAILED,
-                detail="find: '/remote/profiler': Permission denied",
-            )
-
-        outcome = _search_report_path(unreadable)
-
-        assert (
-            outcome.error_message == "Permission denied accessing '/remote/profiler'."
-        )
-        assert outcome.error_detail == "find: '/remote/profiler': Permission denied"
-        # Nothing was settled about the root, so it must not read as reachable.
-        assert outcome.root_state is RemoteSearchRootState.UNKNOWN
-
-    def test_an_authentication_failure_still_raises(self):
-        """It subclasses the exception above, and is the connection's verdict, not a path's."""
-
-        def rejected() -> RemoteFolderSearch:
-            raise AuthenticationFailedException(message="SSH authentication failed")
-
-        with pytest.raises(AuthenticationFailedException):
-            _search_report_path(rejected)
 
 
 class TestGetRemoteFileList:

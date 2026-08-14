@@ -11,10 +11,7 @@ from unittest.mock import patch
 
 import pytest
 from ttnn_visualizer.enums import ConnectionTestStates
-from ttnn_visualizer.exceptions import (
-    AuthenticationFailedException,
-    RemoteConnectionException,
-)
+from ttnn_visualizer.exceptions import RemoteConnectionException
 from ttnn_visualizer.models import (
     Instance,
     RemoteConnection,
@@ -24,12 +21,10 @@ from ttnn_visualizer.models import (
 )
 from ttnn_visualizer.sftp_operations import (
     _MISSING_ROOT_EXIT_CODE,
-    _NOT_A_DIRECTORY_EXIT_CODE,
     MULTIHOST_REPORT_LAYOUT_HINT,
     MULTIHOST_REPORT_PARENT_GLOB,
     TEST_PROFILER_FILE,
     RemoteFolderSearch,
-    RemoteReportPathOutcome,
     RemoteSearchRootState,
     _find_performance_report_folders,
     _report_search_command,
@@ -57,20 +52,6 @@ def _missing() -> RemoteFolderSearch:
 def _unsettled() -> RemoteFolderSearch:
     """A search that never got an answer, so its root's state is still open."""
     return RemoteFolderSearch(folders=[], root_state=RemoteSearchRootState.UNKNOWN)
-
-
-def _not_a_directory() -> RemoteFolderSearch:
-    """A search whose root is there but cannot hold reports."""
-    return RemoteFolderSearch(
-        folders=[], root_state=RemoteSearchRootState.NOT_A_DIRECTORY
-    )
-
-
-def _counted(count: int) -> RemoteReportPathOutcome:
-    """The outcome of a search that reached its root and matched ``count`` reports."""
-    return RemoteReportPathOutcome(
-        root_state=RemoteSearchRootState.PRESENT, report_count=count
-    )
 
 
 def _remote_connection_payload():
@@ -790,10 +771,7 @@ class TestMultihostPerformanceDiscovery:
                 return_value=_found(["/remote/match"]),
             ) as find_folders,
         ):
-            assert check_remote_path_for_reports(connection) == (
-                _counted(1),
-                _counted(1),
-            )
+            assert check_remote_path_for_reports(connection) == (1, 1)
 
         profiler_call, performance_call = find_folders.call_args_list
         assert profiler_call.args[1] == connection.profilerPath
@@ -805,9 +783,7 @@ class TestMultihostPerformanceDiscovery:
 
     def test_connection_test_warning_names_the_expected_multihost_layout(self):
         """Pointing at the parent of the per-rank folders must say so, not just warn."""
-        status = _report_search_status(
-            "performance", _counted(0), in_rank_subdirectories=True
-        )
+        status = _report_search_status("performance", 0, in_rank_subdirectories=True)
 
         assert status.status == ConnectionTestStates.WARNING.value
         assert f"{MULTIHOST_REPORT_LAYOUT_HINT}/<report>" in status.message
@@ -815,7 +791,7 @@ class TestMultihostPerformanceDiscovery:
         assert MULTIHOST_REPORT_PARENT_GLOB not in status.message
 
     def test_connection_test_warning_omits_the_hint_for_single_host(self):
-        status = _report_search_status("performance", _counted(0))
+        status = _report_search_status("performance", 0)
 
         assert MULTIHOST_REPORT_LAYOUT_HINT not in status.message
 
@@ -1189,9 +1165,7 @@ class TestConnectionTestReportStatuses:
         app.config["SERVER_MODE"] = False
 
         response = self._run_connection_test_with_searches(
-            client,
-            _remote_connection_payload(),
-            searches=[_missing(), _found(["/x"])],
+            client, _remote_connection_payload(), searches=[_missing()]
         )
 
         statuses = response.get_json()
@@ -1200,9 +1174,8 @@ class TestConnectionTestReportStatuses:
         assert self._messages(response) == [
             "SSH connection established",
             "Memory directory does not exist or cannot be accessed",
-            "Found 1 performance report",
         ]
-        assert statuses[1]["status"] == ConnectionTestStates.FAILED.value
+        assert statuses[-1]["status"] == ConnectionTestStates.FAILED.value
 
     def test_a_missing_performance_path_names_performance_not_the_profiler(
         self, app, client
@@ -1217,53 +1190,13 @@ class TestConnectionTestReportStatuses:
         )
 
         statuses = response.get_json()
-        # The memory count survives the failure beside it: the two searches are
-        # independent, so the path the user typed correctly is still answered.
+        # The profiler count is dropped with it: a test that failed part way
+        # through has not judged the connection, only the path it got to.
         assert self._messages(response) == [
             "SSH connection established",
-            "Found 1 memory report",
             "Performance directory does not exist or cannot be accessed",
         ]
         assert statuses[-1]["status"] == ConnectionTestStates.FAILED.value
-
-    def test_both_paths_failing_are_both_reported(self, app, client):
-        """Fixing one path and re-testing to find the other broken is two round trips."""
-        app.config["SERVER_MODE"] = False
-
-        response = self._run_connection_test_with_searches(
-            client,
-            _remote_connection_payload(),
-            searches=[_missing(), _unsettled()],
-        )
-
-        statuses = response.get_json()
-        assert self._messages(response) == [
-            "SSH connection established",
-            "Memory directory does not exist or cannot be accessed",
-            "Performance directory could not be checked because the search did not complete",
-        ]
-        assert all(
-            status["status"] == ConnectionTestStates.FAILED.value
-            for status in statuses[1:]
-        )
-
-    def test_a_path_pointing_at_a_file_is_not_reported_as_empty(self, app, client):
-        """A file is neither missing nor an empty folder, and the copy says so."""
-        app.config["SERVER_MODE"] = False
-
-        response = self._run_connection_test_with_searches(
-            client,
-            _remote_connection_payload(),
-            searches=[_not_a_directory(), _found([])],
-        )
-
-        statuses = response.get_json()
-        assert self._messages(response) == [
-            "SSH connection established",
-            "Memory path is not a directory",
-            "Performance path exists but no reports found",
-        ]
-        assert statuses[1]["status"] == ConnectionTestStates.FAILED.value
 
     def test_a_search_that_never_answered_is_not_reported_as_an_empty_path(
         self, app, client
@@ -1276,18 +1209,15 @@ class TestConnectionTestReportStatuses:
         app.config["SERVER_MODE"] = False
 
         response = self._run_connection_test_with_searches(
-            client,
-            _remote_connection_payload(),
-            searches=[_unsettled(), _found(["/x"])],
+            client, _remote_connection_payload(), searches=[_unsettled()]
         )
 
         statuses = response.get_json()
         assert self._messages(response) == [
             "SSH connection established",
             "Memory directory could not be checked because the search did not complete",
-            "Found 1 performance report",
         ]
-        assert statuses[1]["status"] == ConnectionTestStates.FAILED.value
+        assert statuses[-1]["status"] == ConnectionTestStates.FAILED.value
 
     def test_an_unreadable_root_fails_under_the_path_it_could_not_read(
         self, app, client
@@ -1296,8 +1226,7 @@ class TestConnectionTestReportStatuses:
 
         `test -e` succeeds on a root whose own contents are unreadable, so the
         failure comes from `find` rather than from the missing-root exit code —
-        a separate code path reaching the same kind of status line, and the one
-        that raises rather than returning a root state.
+        a separate code path reaching the same kind of status line.
         """
         app.config["SERVER_MODE"] = False
 
@@ -1308,48 +1237,13 @@ class TestConnectionTestReportStatuses:
                 RemoteConnectionException(
                     message="Permission denied accessing '/remote/profiler/reports'.",
                     status=ConnectionTestStates.FAILED,
-                    detail="find: '/remote/profiler/reports': Permission denied",
-                ),
-                _found(["/x"]),
-            ],
-        )
-
-        statuses = response.get_json()
-        assert statuses[1]["status"] == ConnectionTestStates.FAILED.value
-        assert "/remote/profiler/reports" in statuses[1]["message"]
-        assert (
-            statuses[1]["detail"]
-            == "find: '/remote/profiler/reports': Permission denied"
-        )
-        # The path that raised must not take the other path's answer with it.
-        assert statuses[-1]["message"] == "Found 1 performance report"
-
-    def test_an_authentication_failure_is_the_connections_verdict_not_a_paths(
-        self, app, client
-    ):
-        """Auth failures subclass the exception a path failure raises, and are not one.
-
-        Reported as a path line they would lose the HTTP status the dialog reads
-        to tell a rejected key from a bad path.
-        """
-        app.config["SERVER_MODE"] = False
-
-        response = self._run_connection_test_with_searches(
-            client,
-            _remote_connection_payload(),
-            searches=[
-                AuthenticationFailedException(
-                    message="SSH authentication failed",
-                    status=ConnectionTestStates.FAILED,
                 )
             ],
         )
 
-        assert response.status_code == HTTPStatus.UNPROCESSABLE_ENTITY
-        assert self._messages(response) == [
-            "SSH connection established",
-            "SSH authentication failed",
-        ]
+        statuses = response.get_json()
+        assert statuses[-1]["status"] == ConnectionTestStates.FAILED.value
+        assert "/remote/profiler/reports" in statuses[-1]["message"]
 
     def test_reports_found_counts_are_confirmed(self, app, client):
         app.config["SERVER_MODE"] = False
@@ -1454,13 +1348,11 @@ class TestConnectionTestReportStatuses:
 
     def test_single_report_is_not_pluralised(self):
         assert (
-            _report_search_status("performance", _counted(1)).message
+            _report_search_status("performance", 1).message
             == "Found 1 performance report"
         )
         assert (
-            _report_search_status(
-                "performance", _counted(1), in_rank_subdirectories=True
-            ).message
+            _report_search_status("performance", 1, in_rank_subdirectories=True).message
             == "Found 1 performance report in per-rank subdirectories"
         )
 
@@ -1663,25 +1555,6 @@ class TestReportSearchAgainstRealFind:
         )
 
         assert result.returncode == _MISSING_ROOT_EXIT_CODE
-        assert result.stdout == ""
-
-    def test_a_root_that_is_a_file_exits_with_its_own_sentinel(self, tmp_path):
-        """A file passes `test -e`, so only the `-d` test separates it from a folder.
-
-        Without it `find` prints nothing and exits cleanly, which the connection
-        test would report as a directory holding no reports.
-        """
-        report_file = tmp_path / "reports"
-        report_file.write_text("x")
-
-        result = subprocess.run(
-            self._expression(str(report_file), None),
-            shell=True,
-            capture_output=True,
-            text=True,
-        )
-
-        assert result.returncode == _NOT_A_DIRECTORY_EXIT_CODE
         assert result.stdout == ""
 
     def test_a_root_that_exists_but_holds_nothing_succeeds_empty(self, tmp_path):

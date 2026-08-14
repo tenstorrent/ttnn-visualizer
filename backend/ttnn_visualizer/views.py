@@ -93,8 +93,6 @@ from ttnn_visualizer.serializers import (
 )
 from ttnn_visualizer.sftp_operations import (
     MULTIHOST_REPORT_LAYOUT_HINT,
-    RemoteReportPathOutcome,
-    RemoteSearchRootState,
     check_remote_path_for_reports,
     get_active_sync_method,
     get_remote_performance_folders,
@@ -1737,49 +1735,15 @@ def get_mesh_descriptor(instance: Instance):
 
 
 def _report_search_status(
-    label: str,
-    outcome: RemoteReportPathOutcome,
-    *,
-    in_rank_subdirectories: bool = False,
+    label: str, count: int, *, in_rank_subdirectories: bool = False
 ) -> StatusMessage:
     """The one connection-test line a configured report path earns.
 
     The path check and the report search answer halves of the same question, so
-    they report as a single result per report kind — including when that result
-    is a failure, which is why the copy for all four outcomes lives here rather
-    than half of it being raised from the search.
-
-    ``label`` is lower case for the count line ("Found 3 memory reports") and
-    capitalised for the rest, so a user reading a failure sees the same noun as
-    the form field they have to correct.
+    they report as a single result per report kind. "Exists but empty" can only
+    be said at all because the existence check already passed — a missing path
+    fails before this point.
     """
-    if outcome.error_message:
-        return StatusMessage(
-            status=ConnectionTestStates.FAILED.value,
-            message=outcome.error_message,
-            detail=outcome.error_detail,
-        )
-
-    if outcome.root_state is RemoteSearchRootState.MISSING:
-        return StatusMessage(
-            status=ConnectionTestStates.FAILED.value,
-            message=f"{label.capitalize()} directory does not exist or cannot be accessed",
-        )
-
-    if outcome.root_state is RemoteSearchRootState.NOT_A_DIRECTORY:
-        return StatusMessage(
-            status=ConnectionTestStates.FAILED.value,
-            message=f"{label.capitalize()} path is not a directory",
-        )
-
-    if outcome.root_state is RemoteSearchRootState.UNKNOWN:
-        return StatusMessage(
-            status=ConnectionTestStates.FAILED.value,
-            message=f"{label.capitalize()} directory could not be checked because "
-            "the search did not complete",
-        )
-
-    count = outcome.report_count
     if count:
         plural = "report" if count == 1 else "reports"
         location = " in per-rank subdirectories" if in_rank_subdirectories else ""
@@ -1849,28 +1813,26 @@ def test_remote_folder():
 
     # Both configured paths are checked and searched here, one SSH round trip
     # each: the search settles whether its root exists as part of the same
-    # command, and every configured path earns exactly one line below whatever
-    # the other path did, so the dialog can resolve the placeholder it seeded.
+    # command, and a path that exists is silent because the report count it
+    # produces below already says so.
     if not has_failures():
         try:
-            searches = check_remote_path_for_reports(connection)
+            report_counts = check_remote_path_for_reports(connection)
         except AuthenticationFailedException as e:
             add_status(
                 ConnectionTestStates.FAILED.value, e.message, getattr(e, "detail", None)
             )
             return jsonify([status.model_dump() for status in statuses]), e.http_status
         except RemoteConnectionException as e:
-            # Only a failure of the connection itself reaches this: one that is
-            # about a single path is carried back as that path's outcome.
             add_status(e.status.value, e.message, getattr(e, "detail", None))
         else:
-            if searches.profiler is not None:
-                statuses.append(_report_search_status("memory", searches.profiler))
-            if searches.performance is not None:
+            if report_counts.profiler is not None:
+                statuses.append(_report_search_status("memory", report_counts.profiler))
+            if report_counts.performance is not None:
                 statuses.append(
                     _report_search_status(
                         "performance",
-                        searches.performance,
+                        report_counts.performance,
                         in_rank_subdirectories=connection.multihostPerformance,
                     )
                 )
