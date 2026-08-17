@@ -113,7 +113,7 @@ function SideNavigation() {
                                     onClick={handleToggleCollapsed}
                                     icon={IconNames.MENU_CLOSED}
                                     variant={ButtonVariant.MINIMAL}
-                                    size={Size.LARGE}
+                                    size={Size.MEDIUM}
                                     // Keeps Blueprint's own target class, which the spread
                                     // would otherwise lose to this one.
                                     className={classNames(className, 'side-navigation-toggle')}
