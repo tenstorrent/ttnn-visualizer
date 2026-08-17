@@ -39,26 +39,6 @@ def test_a_configured_server_mode_reaches_the_browser_as_a_boolean(
     assert ("SSH_DEFAULT_PORT" in client_config) is not expected
 
 
-@pytest.mark.parametrize("env_value, expected", [("false", False), ("true", True)])
-@pytest.mark.parametrize("server_mode", [False, True])
-def test_a_configured_new_menu_reaches_the_browser_as_a_boolean(
-    env_value, expected, server_mode, monkeypatch
-):
-    # Parametrised over both postures because, unlike the SSH defaults, the menu style is
-    # a restyle rather than local metadata: the hosted deployment has to be able to run it,
-    # so an accidental move inside the ``if not server_mode`` block should fail here.
-    monkeypatch.setenv("NEW_MENU", env_value)
-    monkeypatch.setattr(DefaultConfig, "NEW_MENU", _parse_env_bool("NEW_MENU", False))
-    monkeypatch.setattr(DefaultConfig, "SERVER_MODE", server_mode)
-
-    config = DefaultConfig()
-    config.override_with_env_variables()
-
-    client_config = _build_spa_client_config(_FakeApp(config.to_dict()))
-
-    assert client_config["NEW_MENU"] is expected
-
-
 def test_build_spa_client_config_includes_ssh_defaults_when_not_server_mode():
     app = _FakeApp(
         {
@@ -66,7 +46,6 @@ def test_build_spa_client_config_includes_ssh_defaults_when_not_server_mode():
             "BASE_PATH": "/",
             "TT_METAL_HOME": "/metal",
             "REPORT_DATA_DIRECTORY": "/reports",
-            "NEW_MENU": False,
             "SSH_DEFAULT_PORT": 45985,
             "SSH_DEFAULT_PROFILER_PATH": "/mem",
             "SSH_DEFAULT_PERFORMANCE_PATH": "/perf",
@@ -88,7 +67,6 @@ def test_build_spa_client_config_omits_ssh_defaults_under_server_mode():
             "BASE_PATH": "/",
             "TT_METAL_HOME": "/metal",
             "REPORT_DATA_DIRECTORY": "/reports",
-            "NEW_MENU": False,
             "SSH_DEFAULT_PORT": 45985,
             "SSH_DEFAULT_PROFILER_PATH": "/secret/home/reports",
             "SSH_DEFAULT_PERFORMANCE_PATH": "/secret/home/perf",

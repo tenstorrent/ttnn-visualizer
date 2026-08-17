@@ -12,30 +12,36 @@ import SideNavigation from '../src/components/SideNavigation';
 import { TEST_IDS } from '../src/definitions/TestIds';
 import getButtonWithText from './helpers/getButtonWithText';
 import { TestProviders } from './helpers/TestProviders';
+import { AtomProviderInitialValues } from './helpers/atomProvider';
 
 afterEach(cleanup);
-
-// The collapsed state persists through `atomWithStorage`, so without this a test that
-// collapses the rail decides the starting state of every test that runs after it.
-beforeEach(() => {
-    localStorage.clear();
-});
 
 vi.mock('../src/hooks/useAPI.tsx', () => ({
     useGetClusterDescription: vi.fn(),
 }));
 
-describe('SideNavigation reachability', () => {
-    // The same matrix mainNavigation.spec.tsx asserts. Both menus resolve it from
-    // useMainNavigationItems, so a divergence between the two is what these pin.
-    it('disables specific options by default', () => {
-        (useGetClusterDescription as Mock).mockReturnValue({ data: null });
+const renderRail = (initialAtomValues?: AtomProviderInitialValues) =>
+    render(
+        <TestProviders initialAtomValues={initialAtomValues}>
+            <SideNavigation />
+        </TestProviders>,
+    );
 
-        render(
-            <TestProviders initialAtomValues={[[activeProfilerReportAtom, null]]}>
-                <SideNavigation />
-            </TestProviders>,
-        );
+const activeReport = { reportName: 'test', path: 'testPath' };
+
+beforeEach(() => {
+    // The collapsed state persists through `atomWithStorage`, so without this a test that
+    // collapses the rail decides the starting state of every test that runs after it.
+    localStorage.clear();
+    // No cluster data is the majority case; the one test that needs it overrides this.
+    (useGetClusterDescription as Mock).mockReturnValue({ data: null });
+});
+
+describe('SideNavigation reachability', () => {
+    // The reachability matrix useMainNavigationItems resolves: which views a report
+    // unlocks, pinned here at the menu that renders them.
+    it('disables specific options by default', () => {
+        renderRail([[activeProfilerReportAtom, null]]);
 
         expect(getButtonWithText('reports')).toBeEnabled();
         expect(getButtonWithText('operations')).toBeDisabled();
@@ -50,11 +56,7 @@ describe('SideNavigation reachability', () => {
     it('enables specific options when there is an active memory report', () => {
         (useGetClusterDescription as Mock).mockReturnValue({ data: clusterDescription });
 
-        render(
-            <TestProviders initialAtomValues={[[activeProfilerReportAtom, { reportName: 'test', path: 'testPath' }]]}>
-                <SideNavigation />
-            </TestProviders>,
-        );
+        renderRail([[activeProfilerReportAtom, activeReport]]);
 
         expect(getButtonWithText('operations')).toBeEnabled();
         expect(getButtonWithText('tensors')).toBeEnabled();
@@ -68,13 +70,7 @@ describe('SideNavigation reachability', () => {
     // the footer's range slider, which unmounts with no active report — so a report that had
     // cluster data left Topology enabled for reports that don't.
     it('disables topology for an active report that has no cluster data', () => {
-        (useGetClusterDescription as Mock).mockReturnValue({ data: null });
-
-        render(
-            <TestProviders initialAtomValues={[[activeProfilerReportAtom, { reportName: 'test', path: 'testPath' }]]}>
-                <SideNavigation />
-            </TestProviders>,
-        );
+        renderRail([[activeProfilerReportAtom, activeReport]]);
 
         expect(getButtonWithText('operations')).toBeEnabled();
         expect(getButtonWithText('topology')).toBeDisabled();
@@ -84,28 +80,14 @@ describe('SideNavigation reachability', () => {
     // selectors outrank Blueprint's own disabled styling. If an upgrade stopped emitting
     // this class, unavailable views would quietly paint themselves as ready again.
     it('marks unavailable items with the class the colour rules key off', () => {
-        (useGetClusterDescription as Mock).mockReturnValue({ data: null });
-
-        render(
-            <TestProviders initialAtomValues={[[activeProfilerReportAtom, null]]}>
-                <SideNavigation />
-            </TestProviders>,
-        );
+        renderRail([[activeProfilerReportAtom, null]]);
 
         expect(getButtonWithText('operations')).toHaveClass('bp6-disabled');
         expect(getButtonWithText('reports')).not.toHaveClass('bp6-disabled');
     });
 
     it('enables performance when there is an active performance report', () => {
-        (useGetClusterDescription as Mock).mockReturnValue({ data: null });
-
-        render(
-            <TestProviders
-                initialAtomValues={[[activePerformanceReportAtom, { reportName: 'test', path: 'testPath' }]]}
-            >
-                <SideNavigation />
-            </TestProviders>,
-        );
+        renderRail([[activePerformanceReportAtom, activeReport]]);
 
         expect(getButtonWithText('performance')).toBeEnabled();
         expect(getButtonWithText('operations')).toBeDisabled();
@@ -116,14 +98,8 @@ describe('SideNavigation collapsing', () => {
     // Assertions are structural rather than visual: vitest.config.ts does not enable
     // `test.css`, so no stylesheet is ever applied in jsdom and a visibility assertion on
     // the label would pass in both states.
-    it('starts expanded and reports it on the toggle', () => {
-        (useGetClusterDescription as Mock).mockReturnValue({ data: null });
-
-        render(
-            <TestProviders>
-                <SideNavigation />
-            </TestProviders>,
-        );
+    it('starts expanded, showing the lockup and reporting it on the toggle', () => {
+        renderRail();
 
         expect(screen.getByTestId(TEST_IDS.SIDE_NAVIGATION)).not.toHaveClass('collapsed');
         expect(screen.getByTestId(TEST_IDS.SIDE_NAVIGATION_TOGGLE)).toHaveAttribute('aria-expanded', 'true');
@@ -131,16 +107,11 @@ describe('SideNavigation collapsing', () => {
             'aria-label',
             'Collapse navigation',
         );
+        expect(screen.getByAltText('tenstorrent')).toHaveAttribute('src', expect.stringContaining('tt_logo_color'));
     });
 
     it('collapses when the toggle is pressed', () => {
-        (useGetClusterDescription as Mock).mockReturnValue({ data: null });
-
-        render(
-            <TestProviders>
-                <SideNavigation />
-            </TestProviders>,
-        );
+        renderRail();
 
         fireEvent.click(screen.getByTestId(TEST_IDS.SIDE_NAVIGATION_TOGGLE));
 
@@ -148,41 +119,6 @@ describe('SideNavigation collapsing', () => {
         // Collapse control is replaced by the mark, which becomes the expand control.
         expect(screen.getByTestId(TEST_IDS.SIDE_NAVIGATION_TOGGLE)).toHaveAttribute('aria-expanded', 'false');
         expect(screen.getByTestId(TEST_IDS.SIDE_NAVIGATION_TOGGLE)).toHaveAttribute('aria-label', 'Expand navigation');
-        expect(screen.getByTestId(TEST_IDS.SIDE_NAVIGATION_TOGGLE).querySelector('img')).toHaveAttribute(
-            'src',
-            '/logo-small.png',
-        );
-    });
-
-    it('expands when the mark is pressed', () => {
-        (useGetClusterDescription as Mock).mockReturnValue({ data: null });
-
-        render(
-            <TestProviders initialAtomValues={[[isNavigationCollapsedAtom, true]]}>
-                <SideNavigation />
-            </TestProviders>,
-        );
-
-        fireEvent.click(screen.getByTestId(TEST_IDS.SIDE_NAVIGATION_TOGGLE));
-
-        expect(screen.getByTestId(TEST_IDS.SIDE_NAVIGATION)).not.toHaveClass('collapsed');
-        expect(screen.getByTestId(TEST_IDS.SIDE_NAVIGATION_TOGGLE)).toHaveAttribute('aria-expanded', 'true');
-        expect(screen.getByAltText('tenstorrent')).toHaveAttribute('src', expect.stringContaining('tt_logo_color'));
-    });
-
-    it('swaps the lockup for the square mark while collapsed', () => {
-        (useGetClusterDescription as Mock).mockReturnValue({ data: null });
-
-        render(
-            <TestProviders>
-                <SideNavigation />
-            </TestProviders>,
-        );
-
-        expect(screen.getByAltText('tenstorrent')).toHaveAttribute('src', expect.stringContaining('tt_logo_color'));
-
-        fireEvent.click(screen.getByTestId(TEST_IDS.SIDE_NAVIGATION_TOGGLE));
-
         // The collapsed rail is too narrow for the lockup, and the mark is a `public/` file
         // whose URL has to pick up Vite's base rather than being rooted at `/`. Mark is
         // decorative inside the named expand control, so look it up via the button.
@@ -192,14 +128,18 @@ describe('SideNavigation collapsing', () => {
         );
     });
 
-    it('keeps every item reachable by name while collapsed', () => {
-        (useGetClusterDescription as Mock).mockReturnValue({ data: null });
+    it('expands when the mark is pressed', () => {
+        renderRail([[isNavigationCollapsedAtom, true]]);
 
-        render(
-            <TestProviders initialAtomValues={[[isNavigationCollapsedAtom, true]]}>
-                <SideNavigation />
-            </TestProviders>,
-        );
+        fireEvent.click(screen.getByTestId(TEST_IDS.SIDE_NAVIGATION_TOGGLE));
+
+        expect(screen.getByTestId(TEST_IDS.SIDE_NAVIGATION)).not.toHaveClass('collapsed');
+        expect(screen.getByTestId(TEST_IDS.SIDE_NAVIGATION_TOGGLE)).toHaveAttribute('aria-expanded', 'true');
+        expect(screen.getByAltText('tenstorrent')).toHaveAttribute('src', expect.stringContaining('tt_logo_color'));
+    });
+
+    it('keeps every item reachable by name while collapsed', () => {
+        renderRail([[isNavigationCollapsedAtom, true]]);
 
         // The icon-only rail is unusable if collapsing costs the buttons their accessible
         // names, so the labels have to survive as `aria-label` rather than as text nodes.

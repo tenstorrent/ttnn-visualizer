@@ -6,9 +6,9 @@
 
 // $pt-dark-text-color-disabled: rgb(171 179 191 / 60%);
 
-// Per-tab identity colours, shared by the horizontal navbar and the vertical rail so the
-// two menu styles can't drift apart. Keyed by the same class names the navigation item
-// descriptors carry (see src/definitions/NavigationItems.ts).
+// Per-tab identity colours, shared by the navigation rail and the in-page links that lead
+// to the same views, so the two can't drift apart. Keyed by the same class names the
+// navigation item descriptors carry (see src/definitions/NavigationItems.ts).
 @mixin button-colours($color, $colorActive, $icon) {
     &:not(.bp6-disabled) {
         color: $color;

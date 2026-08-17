@@ -3,6 +3,7 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 @use '../definitions/colours' as *;
+@use '../definitions/navigation' as navigation;
 
 $loader-width: 32px;
 
@@ -11,6 +12,12 @@ $loader-width: 32px;
     display: inline-block;
     padding-right: $loader-width;
     margin-bottom: 10px;
+
+    // Borrows the Graph tab's identity colour: this button leads to the same view the
+    // navigation rail's Graph item does.
+    .graph-button {
+        @include navigation.button-colours($tt-graph, $tt-graph-active, 'graph');
+    }
 
     .button-group {
         gap: 10px;

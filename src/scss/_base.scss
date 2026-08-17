@@ -12,11 +12,6 @@
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
 
-    /* Height of the app chrome above the page content. The horizontal navbar is
-     * content-sized at this height; the vertical rail occupies no vertical space at all,
-     * so `.app-shell-sidebar` zeroes it. Pages that size themselves against the viewport
-     * subtract this rather than assuming a header exists. */
-    --app-chrome-height: 92px;
     --graph-input-node: #a8e6a3;
     --graph-output-node: #f6bc42;
     --graph-input-edge: #6bcf8e;

@@ -50,7 +50,6 @@ export const showMemoryRegionsAtom = atomWithStorage('showMemoryRegions', true);
 export const renderMemoryLayoutAtom = atomWithStorage('renderMemoryLayout', false); // Used in Buffers and Operation Details
 
 // App shell / navigation
-// Only consulted under the NEW_MENU flag, where the navigation is a vertical rail.
 // Persisted because a rail width is a stable preference rather than session state.
 export const isNavigationCollapsedAtom = atomWithStorage('navigationCollapsed', false);
 

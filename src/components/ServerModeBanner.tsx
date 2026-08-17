@@ -13,8 +13,8 @@ const REVEAL_THRESHOLD_PX = 80;
 
 /**
  * Points hosted visitors at the installable build. Lives beside the navigation rather
- * than inside it so that switching menu styles can't take the hosted deployment's only
- * signpost with it.
+ * than inside it so that restyling the navigation can't take the hosted deployment's
+ * only signpost with it.
  */
 function ServerModeBanner() {
     const serverMode = getServerConfig().SERVER_MODE;

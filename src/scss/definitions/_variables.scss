@@ -13,12 +13,6 @@ $monospace-font: monospace;
 $bp-large: 1300px;
 $bp-medium: 1100px;
 
-// Nav-specific breakpoints — kick in earlier than the page-level ones because
-// the navbar has many siblings that need to start shrinking before the rest
-// of the layout reflows.
-$bp-nav-large: 1370px;
-$bp-nav-medium: 1180px;
-
 // Colours
 // TODO: Temporary placing of these here - reconcile with usage in _blueprintjs.scss
 $dark-button-background-base: $tt-grey-2;
@@ -61,8 +55,8 @@ $legend-marker-slot: 25px;
 // MLIR pickers line up regardless of how long the label they display happens to be.
 $report-select-width: 250px;
 
-// Vertical navigation rail (NEW_MENU). Collapsed keeps a large Blueprint icon button
-// centred with no room for its label.
+// Vertical navigation rail. Collapsed keeps a large Blueprint icon button centred with
+// no room for its label.
 $side-nav-width-expanded: 220px;
 $side-nav-width-collapsed: 56px;
 
@@ -71,10 +65,9 @@ $side-nav-width-collapsed: 56px;
 // rather than repeating the number.
 $app-footer-height: 34px;
 
-// Fixed app chrome bracketing the MLIR page: the header above and the footer info bar
-// below. The title and (optional) loader rows sit inside `.mlir-page` and are laid out
-// by flex, so the graph reclaims their space when absent — these two are the only
-// remaining structural offsets. The header height is a custom property because the
-// vertical navigation removes it entirely; see `--app-chrome-height` in _base.scss.
+// Fixed app chrome at the foot of the MLIR page: the footer info bar. The navigation is
+// a vertical rail, so nothing sits above the page to offset against. The title and
+// (optional) loader rows sit inside `.mlir-page` and are laid out by flex, so the graph
+// reclaims their space when absent — the footer is the only remaining structural offset.
 $mlir-footer-clearance: $app-footer-height + 6px;
-$mlir-page-height: calc(100vh - var(--app-chrome-height) - #{$mlir-footer-clearance});
+$mlir-page-height: calc(100vh - #{$mlir-footer-clearance});
