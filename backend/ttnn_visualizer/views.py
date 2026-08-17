@@ -33,7 +33,6 @@ from ttnn_visualizer.decorators import (
 )
 from ttnn_visualizer.enums import ConnectionTestStates, StackSourceOrigin
 from ttnn_visualizer.exceptions import (
-    AuthenticationFailedException,
     DataFormatError,
     InvalidRequestPayload,
     PerformanceReportNotLoadedException,
@@ -1736,6 +1735,22 @@ def get_mesh_descriptor(instance: Instance):
         return response_bad_request(f"Failed to parse YAML: {str(e)}")
 
 
+# Why a table rather than a guard per state: this is the only place that reads
+# `RemoteSearchRootState`, so a state added without copy has nothing forcing the
+# second edit. Looking the copy up means that omission raises here, where the
+# state arrived, instead of falling through to the "no reports found" warning —
+# which is the exact mis-description `NOT_A_DIRECTORY` was added to stop.
+_FAILURE_COPY_BY_ROOT_STATE = {
+    RemoteSearchRootState.MISSING: (
+        "{subject} directory does not exist or cannot be accessed"
+    ),
+    RemoteSearchRootState.NOT_A_DIRECTORY: "{subject} path is not a directory",
+    RemoteSearchRootState.UNKNOWN: (
+        "{subject} directory could not be checked because the search did not complete"
+    ),
+}
+
+
 def _report_search_status(
     label: str,
     outcome: RemoteReportPathOutcome,
@@ -1753,6 +1768,8 @@ def _report_search_status(
     capitalised for the rest, so a user reading a failure sees the same noun as
     the form field they have to correct.
     """
+    subject = label.capitalize()
+
     if outcome.error_message:
         return StatusMessage(
             status=ConnectionTestStates.FAILED.value,
@@ -1760,23 +1777,12 @@ def _report_search_status(
             detail=outcome.error_detail,
         )
 
-    if outcome.root_state is RemoteSearchRootState.MISSING:
+    if outcome.root_state is not RemoteSearchRootState.PRESENT:
         return StatusMessage(
             status=ConnectionTestStates.FAILED.value,
-            message=f"{label.capitalize()} directory does not exist or cannot be accessed",
-        )
-
-    if outcome.root_state is RemoteSearchRootState.NOT_A_DIRECTORY:
-        return StatusMessage(
-            status=ConnectionTestStates.FAILED.value,
-            message=f"{label.capitalize()} path is not a directory",
-        )
-
-    if outcome.root_state is RemoteSearchRootState.UNKNOWN:
-        return StatusMessage(
-            status=ConnectionTestStates.FAILED.value,
-            message=f"{label.capitalize()} directory could not be checked because "
-            "the search did not complete",
+            message=_FAILURE_COPY_BY_ROOT_STATE[outcome.root_state].format(
+                subject=subject
+            ),
         )
 
     count = outcome.report_count
@@ -1799,7 +1805,7 @@ def _report_search_status(
     )
     return StatusMessage(
         status=ConnectionTestStates.WARNING.value,
-        message=f"{label.capitalize()} path exists but no reports found{hint}",
+        message=f"{subject} path exists but no reports found{hint}",
     )
 
 
@@ -1839,13 +1845,13 @@ def test_remote_folder():
     try:
         test_ssh_connection(connection)
         add_status(ConnectionTestStates.OK.value, "SSH connection established")
-    except AuthenticationFailedException as e:
-        add_status(
-            ConnectionTestStates.FAILED.value, e.message, getattr(e, "detail", None)
-        )
-        return jsonify([status.model_dump() for status in statuses]), e.http_status
     except RemoteConnectionException as e:
         add_status(e.status.value, e.message, getattr(e, "detail", None))
+        # A verdict on the connection answers the whole request, so it keeps its
+        # own status code (422 for rejected credentials or an untrusted host key)
+        # rather than being reported as one more line in a 200.
+        if e.is_connection_verdict:
+            return jsonify([status.model_dump() for status in statuses]), e.http_status
 
     # Both configured paths are checked and searched here, one SSH round trip
     # each: the search settles whether its root exists as part of the same
@@ -1854,15 +1860,15 @@ def test_remote_folder():
     if not has_failures():
         try:
             searches = check_remote_path_for_reports(connection)
-        except AuthenticationFailedException as e:
-            add_status(
-                ConnectionTestStates.FAILED.value, e.message, getattr(e, "detail", None)
-            )
-            return jsonify([status.model_dump() for status in statuses]), e.http_status
         except RemoteConnectionException as e:
             # Only a failure of the connection itself reaches this: one that is
             # about a single path is carried back as that path's outcome.
             add_status(e.status.value, e.message, getattr(e, "detail", None))
+            if e.is_connection_verdict:
+                return (
+                    jsonify([status.model_dump() for status in statuses]),
+                    e.http_status,
+                )
         else:
             if searches.profiler is not None:
                 statuses.append(_report_search_status("memory", searches.profiler))

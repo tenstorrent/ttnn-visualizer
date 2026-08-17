@@ -283,10 +283,10 @@ describe('RemoteConnectionDialog connection test block', () => {
         expect(getButtonWithText('Add connection')).toBeEnabled();
     });
 
-    it('resolves every path placeholder, so one failing path does not hide the other result', async () => {
-        // Each configured path seeds its own PROGRESS placeholder and the response
-        // replaces the whole list, so a server that answered only the failing path
-        // would silently drop the row the user was watching. See #1856.
+    it('reports both paths when one of them fails, and a failing path blocks saving', async () => {
+        // The bug behind #1856: the server answered only the failing path, and the
+        // response replaces the whole list, so the memory row the user was watching
+        // disappeared rather than showing the count already computed.
         testConnectionMock.mockResolvedValue([
             { status: ConnectionTestStates.OK, message: 'SSH connection established' },
             { status: ConnectionTestStates.OK, message: 'Found 3 memory reports' },
@@ -309,8 +309,71 @@ describe('RemoteConnectionDialog connection test block', () => {
 
         await waitFor(() => expect(screen.getByText('Found 3 memory reports')).toBeInTheDocument());
         expect(screen.getByText('Performance directory does not exist or cannot be accessed')).toBeInTheDocument();
-        expect(screen.queryByText('Searching for performance reports')).not.toBeInTheDocument();
         expect(getButtonWithText('Add connection')).toBeDisabled();
+    });
+
+    it('seeds one search placeholder per configured path while the test is in flight', async () => {
+        // Held unresolved on purpose: the placeholders only exist between the click
+        // and the response, so a mock that resolves immediately asserts nothing about
+        // them — the response replaces the whole list either way.
+        let resolveTest: (statuses: ConnectionStatus[]) => void = () => {};
+        testConnectionMock.mockReturnValue(
+            new Promise<ConnectionStatus[]>((resolve) => {
+                resolveTest = resolve;
+            }),
+        );
+
+        render(
+            <RemoteConnectionDialog
+                open
+                onClose={vi.fn()}
+                onAddConnection={vi.fn()}
+            />,
+        );
+
+        fillName();
+        fireEvent.click(getButtonWithText('Run tests'));
+
+        // Both paths are prefilled from getServerConfig, so both are configured here.
+        expect(screen.getByText('Testing SSH connection')).toBeInTheDocument();
+        expect(screen.getByText('Searching for memory reports')).toBeInTheDocument();
+        expect(screen.getByText('Searching for performance reports')).toBeInTheDocument();
+
+        resolveTest(PASSING_TESTS);
+
+        await waitFor(() => expect(screen.getByText('Found 3 memory reports')).toBeInTheDocument());
+        // Every placeholder is answered by a real result rather than being left pending.
+        expect(screen.queryByText('Searching for memory reports')).not.toBeInTheDocument();
+        expect(screen.queryByText('Searching for performance reports')).not.toBeInTheDocument();
+    });
+
+    it('does not seed a placeholder for a path the user cleared', async () => {
+        let resolveTest: (statuses: ConnectionStatus[]) => void = () => {};
+        testConnectionMock.mockReturnValue(
+            new Promise<ConnectionStatus[]>((resolve) => {
+                resolveTest = resolve;
+            }),
+        );
+
+        render(
+            <RemoteConnectionDialog
+                open
+                onClose={vi.fn()}
+                onAddConnection={vi.fn()}
+            />,
+        );
+
+        fillName();
+        fireEvent.change(screen.getByLabelText(REMOTE_PERFORMANCE_PATH_LABEL), { target: { value: '' } });
+        fireEvent.click(getButtonWithText('Run tests'));
+
+        // An unconfigured path has nothing to search, so a row promising otherwise
+        // would wait on a result the server never sends for it.
+        expect(screen.getByText('Searching for memory reports')).toBeInTheDocument();
+        expect(screen.queryByText('Searching for performance reports')).not.toBeInTheDocument();
+
+        resolveTest(PASSING_TESTS);
+        await waitFor(() => expect(screen.getByText('Found 3 memory reports')).toBeInTheDocument());
     });
 
     it('drops the stale marking once the tests are run again', async () => {

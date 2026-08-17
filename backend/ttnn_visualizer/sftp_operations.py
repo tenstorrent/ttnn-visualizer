@@ -20,9 +20,7 @@ from ttnn_visualizer.decorators import remote_exception_handler
 from ttnn_visualizer.enums import ConnectionTestStates, SyncMethod
 from ttnn_visualizer.exceptions import (
     AuthenticationException,
-    AuthenticationFailedException,
     HostKeyVerificationException,
-    HostKeyVerificationFailedException,
     NoValidConnectionsError,
     RemoteConnectionException,
     SSHException,
@@ -1033,6 +1031,7 @@ class RemoteFolderSearch(NamedTuple):
 
 def _find_performance_report_folders(
     remote_connection: RemoteConnection,
+    timeout_seconds: Optional[float] = None,
 ) -> RemoteFolderSearch:
     """Remote performance report folders, honouring the connection's layout."""
     performance_path = remote_connection.performancePath
@@ -1041,7 +1040,10 @@ def _find_performance_report_folders(
 
     if not remote_connection.multihostPerformance:
         return find_folders_by_files(
-            remote_connection, performance_path, [TEST_PROFILER_FILE]
+            remote_connection,
+            performance_path,
+            [TEST_PROFILER_FILE],
+            timeout_seconds=timeout_seconds,
         )
 
     return find_folders_by_files(
@@ -1052,6 +1054,7 @@ def _find_performance_report_folders(
         # A candidate whose rank we cannot read back would sync to an unqualified
         # folder and collide with the other ranks of the same launch.
         directory_filter=lambda path: rank_from_remote_path(path) is not None,
+        timeout_seconds=timeout_seconds,
     )
 
 
@@ -1087,16 +1090,18 @@ def _search_report_path(
 ) -> RemoteReportPathOutcome:
     """Run one path's search, keeping a failure that is only about that path.
 
-    Authentication and host-key failures are re-raised: they are the
-    connection's verdict rather than this path's, and the caller answers them
-    with an HTTP status of their own. The ``SSHException`` family raised deeper
-    down is likewise connection-wide, and is not caught here at all.
+    A failure that is the connection's verdict (rejected credentials, an
+    untrusted host key) is re-raised instead: reporting it as one path's line
+    would name the wrong culprit and leave the other path looking unanswered.
+    The ``SSHException`` family raised deeper down is likewise connection-wide,
+    and is not caught here at all — ``@remote_exception_handler`` on the caller
+    converts it into those same types, above this frame.
     """
     try:
         found = search()
-    except (AuthenticationFailedException, HostKeyVerificationFailedException):
-        raise
     except RemoteConnectionException as err:
+        if err.is_connection_verdict:
+            raise
         logger.error(err.message)
         return RemoteReportPathOutcome(
             root_state=RemoteSearchRootState.UNKNOWN,
@@ -1118,12 +1123,26 @@ def check_remote_path_for_reports(
     Every configured path is searched and answered, including when an earlier
     one failed: the searches are independent, so a path the user typed wrongly
     says nothing about the path they typed correctly.
+
+    The searches share one timeout budget rather than taking the full one each.
+    A host where ``find`` hangs would otherwise hold this request for twice the
+    configured timeout, and a hang is a fact about the host, not about either
+    path — so the second search inherits whatever the first left, and reports
+    its own line either way.
     """
+    deadline = time.monotonic() + _ssh_subprocess_timeout_seconds()
+
+    def remaining_seconds() -> float:
+        return max(0.0, deadline - time.monotonic())
+
     profiler: Optional[RemoteReportPathOutcome] = None
     if remote_connection.profilerPath:
         profiler = _search_report_path(
             lambda: find_folders_by_files(
-                remote_connection, remote_connection.profilerPath, [TEST_DB_FILE]
+                remote_connection,
+                remote_connection.profilerPath,
+                [TEST_DB_FILE],
+                timeout_seconds=remaining_seconds(),
             )
         )
     else:
@@ -1132,7 +1151,9 @@ def check_remote_path_for_reports(
     performance: Optional[RemoteReportPathOutcome] = None
     if remote_connection.performancePath:
         performance = _search_report_path(
-            lambda: _find_performance_report_folders(remote_connection)
+            lambda: _find_performance_report_folders(
+                remote_connection, timeout_seconds=remaining_seconds()
+            )
         )
     else:
         logger.info("No performance path configured; skipping check")
@@ -1188,10 +1209,16 @@ def _report_search_command(
     # path whose parent is unreadable still reports as absent rather than as a
     # file. `test -d` then separates a path pointing at a file from a directory
     # holding nothing, which `find` alone reports identically.
+    #
+    # `-H` because both probes resolve symlinks and bare `find` does not: a root
+    # symlinked to the real report directory passes `test -d`, then `find` refuses
+    # to descend through it and prints nothing, so the reports sitting there are
+    # reported as a path holding none. `-H` resolves the root only, leaving
+    # symlinks *under* it unfollowed so the search cannot wander off the tree.
     return (
         f"test -e {remote_arg(search_root)} || exit {_MISSING_ROOT_EXIT_CODE}; "
         f"test -d {remote_arg(search_root)} || exit {_NOT_A_DIRECTORY_EXIT_CODE}; "
-        f"find {remote_arg(search_root)} "
+        f"find -H {remote_arg(search_root)} "
         f"-mindepth {depth} -maxdepth {depth} -type d{path_filter} "
         f"'(' {tests} ')' -print"
     )
@@ -1262,6 +1289,7 @@ def find_folders_by_files(
     file_names: List[str],
     subdirectory_glob: Optional[str] = None,
     directory_filter: Optional[Callable[[str], bool]] = None,
+    timeout_seconds: Optional[float] = None,
 ) -> RemoteFolderSearch:
     """Search for remote folders containing any of ``file_names``.
 
@@ -1269,9 +1297,21 @@ def find_folders_by_files(
     ``subdirectory_glob`` to look one level deeper instead, through intervening
     directories whose names match the glob, and ``directory_filter`` to drop
     candidates the glob cannot exclude before they cost an SSH round trip.
+
+    ``timeout_seconds`` overrides the configured budget for this one search, so
+    a caller running several of them can hold them to one shared deadline rather
+    than to the full budget each.
     """
     if not root_folder or not file_names:
         # Nothing was asked of the remote host, so nothing is known about the root.
+        return RemoteFolderSearch(folders=[], root_state=RemoteSearchRootState.UNKNOWN)
+
+    if timeout_seconds is None:
+        timeout_seconds = _ssh_subprocess_timeout_seconds()
+    elif timeout_seconds <= 0:
+        # A shared deadline already spent. Spawning ssh only to kill it would
+        # report the same UNKNOWN a second later, having held the request longer.
+        logger.error(f"No time left to search for folders in: {root_folder}")
         return RemoteFolderSearch(folders=[], root_state=RemoteSearchRootState.UNKNOWN)
 
     ssh_cmd = _ssh_argv(
@@ -1290,7 +1330,7 @@ def find_folders_by_files(
             # Deliberately not `check=True`: `find` exits nonzero for an unreadable
             # subtree after printing everything it did match, and those matches are
             # still reports. The return code is inspected below instead.
-            timeout=_ssh_subprocess_timeout_seconds(),
+            timeout=timeout_seconds,
         )
     except subprocess.TimeoutExpired:
         logger.error(f"Timeout finding folders in: {root_folder}")

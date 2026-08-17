@@ -13,6 +13,7 @@ import pytest
 from ttnn_visualizer.enums import ConnectionTestStates
 from ttnn_visualizer.exceptions import (
     AuthenticationFailedException,
+    HostKeyVerificationFailedException,
     RemoteConnectionException,
 )
 from ttnn_visualizer.models import (
@@ -642,13 +643,13 @@ class TestMultihostPerformanceDiscovery:
             f"-path '{self.MULTIHOST_ROOT}/{MULTIHOST_REPORT_PARENT_GLOB}/*'"
             in expression
         )
-        assert f"find {self.MULTIHOST_ROOT} " in expression
+        assert f"find -H {self.MULTIHOST_ROOT} " in expression
         assert "//" not in expression
 
     def test_a_root_of_only_slashes_still_searches_the_filesystem_root(self):
         expression = self._expression("//")
 
-        assert "find / -mindepth 3 -maxdepth 3" in expression
+        assert "find -H / -mindepth 3 -maxdepth 3" in expression
         assert f"-path '/{MULTIHOST_REPORT_PARENT_GLOB}/*'" in expression
 
     def test_the_report_file_test_runs_inside_find(self):
@@ -817,6 +818,37 @@ class TestMultihostPerformanceDiscovery:
     def test_connection_test_warning_omits_the_hint_for_single_host(self):
         status = _report_search_status("performance", _counted(0))
 
+        assert MULTIHOST_REPORT_LAYOUT_HINT not in status.message
+
+    @pytest.mark.parametrize("label", ["memory", "performance"])
+    @pytest.mark.parametrize(
+        "root_state",
+        [
+            state
+            for state in RemoteSearchRootState
+            if state is not RemoteSearchRootState.PRESENT
+        ],
+        ids=lambda state: state.value,
+    )
+    def test_every_root_state_that_is_not_present_fails_the_path_by_name(
+        self, label, root_state
+    ):
+        """The forcing function for the copy table: a new state has to be given copy.
+
+        Parametrised over the enum rather than a list written out here, so adding
+        a member fails this test instead of rendering as the "no reports found"
+        warning that used to catch everything the guards missed.
+        """
+        status = _report_search_status(
+            label,
+            RemoteReportPathOutcome(root_state=root_state),
+            in_rank_subdirectories=True,
+        )
+
+        assert status.status == ConnectionTestStates.FAILED.value
+        assert status.message.startswith(label.capitalize())
+        # The layout hint is advice for a directory that was searched and held
+        # nothing; on a failure it would point at a path we never got into.
         assert MULTIHOST_REPORT_LAYOUT_HINT not in status.message
 
     def test_flag_reaches_discovery_and_rank_report_round_trips(self, app, client):
@@ -1341,7 +1373,11 @@ class TestConnectionTestReportStatuses:
                 AuthenticationFailedException(
                     message="SSH authentication failed",
                     status=ConnectionTestStates.FAILED,
-                )
+                ),
+                # A second search to consume: a regression that swallowed the
+                # verdict and carried on should fail on the contract below, not
+                # on `StopIteration` surfacing as a 500.
+                _found(["/x"]),
             ],
         )
 
@@ -1349,6 +1385,34 @@ class TestConnectionTestReportStatuses:
         assert self._messages(response) == [
             "SSH connection established",
             "SSH authentication failed",
+        ]
+
+    def test_an_untrusted_host_key_is_the_connections_verdict_too(self, app, client):
+        """The other verdict carrying its own 422, which nothing used to honour.
+
+        `test_remote_folder` special-cased the auth subclass by name, so this one
+        fell through to the generic handler and its status was answered 200. The
+        decision reads `is_connection_verdict` now, so both are covered by the
+        same branch rather than by an enumeration a third subclass would miss.
+        """
+        app.config["SERVER_MODE"] = False
+
+        response = self._run_connection_test_with_searches(
+            client,
+            _remote_connection_payload(),
+            searches=[
+                HostKeyVerificationFailedException(
+                    message="Host key verification failed for user@host",
+                    status=ConnectionTestStates.FAILED,
+                ),
+                _found(["/x"]),
+            ],
+        )
+
+        assert response.status_code == HTTPStatus.UNPROCESSABLE_ENTITY
+        assert self._messages(response) == [
+            "SSH connection established",
+            "Host key verification failed for user@host",
         ]
 
     def test_reports_found_counts_are_confirmed(self, app, client):
@@ -1698,3 +1762,36 @@ class TestReportSearchAgainstRealFind:
 
         assert result.returncode == 0
         assert result.stdout == ""
+
+    def test_a_root_symlinked_to_the_report_directory_still_finds_its_reports(
+        self, tmp_path
+    ):
+        """The third thing `test -d` accepts, and the one `find` alone disagrees about.
+
+        Both probes resolve symlinks, so a symlinked root reaches `find` having
+        passed as a directory. Without `-H`, `find` refuses to descend through it
+        and prints nothing — reported as a path holding no reports, with the
+        reports sitting right there.
+        """
+        profiler = self._profiler_tree(tmp_path)
+        link = tmp_path / "reports-link"
+        link.symlink_to(profiler / "reports")
+
+        found = self._run_find(self._expression(str(link), None))
+
+        assert found == [str(link / "single_host_report")]
+
+    def test_a_symlink_under_the_root_is_still_not_followed(self, tmp_path):
+        """`-H` resolves the root only, so the search cannot wander off the tree.
+
+        The link points at a directory that *does* hold the report CSV, so `-L`
+        would list it as a report living under this root. Only the root was
+        vouched for, so anything reached by following a link below it is not.
+        """
+        profiler = self._profiler_tree(tmp_path)
+        reports = profiler / "reports"
+        (reports / "elsewhere").symlink_to(profiler / "ttrun" / "rank0" / ".logs")
+
+        found = self._run_find(self._expression(str(reports), None))
+
+        assert found == [str(reports / "single_host_report")]

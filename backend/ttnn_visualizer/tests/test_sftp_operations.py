@@ -22,6 +22,7 @@ from ttnn_visualizer.exceptions import (
     AuthenticationException,
     AuthenticationFailedException,
     HostKeyVerificationException,
+    HostKeyVerificationFailedException,
     NoValidConnectionsError,
     RemoteConnectionException,
 )
@@ -36,6 +37,7 @@ from ttnn_visualizer.sftp_operations import (
     _remote_transfer_key,
     _search_report_path,
     _sftp_subsystem_unavailable,
+    check_remote_path_for_reports,
     find_folders_by_files,
     get_remote_directory_list,
     get_remote_file_list,
@@ -57,9 +59,11 @@ def connection() -> RemoteConnection:
     )
 
 
-def _completed(stdout: str, returncode: int = 0) -> subprocess.CompletedProcess:
+def _completed(
+    stdout: str, returncode: int = 0, stderr: str = ""
+) -> subprocess.CompletedProcess:
     return subprocess.CompletedProcess(
-        args=["ssh"], returncode=returncode, stdout=stdout, stderr=""
+        args=["ssh"], returncode=returncode, stdout=stdout, stderr=stderr
     )
 
 
@@ -118,8 +122,15 @@ class TestRemoteFindShellQuoting:
             find_folders_by_files(connection, self._APOSTROPHE_FOLDER, ["config.json"])
 
         remote_cmd = _remote_shell_command_from_run(run)
-        assert shlex.quote(self._APOSTROPHE_FOLDER) in remote_cmd
-        assert f"find '{self._APOSTROPHE_FOLDER}'" not in remote_cmd
+        quoted = shlex.quote(self._APOSTROPHE_FOLDER)
+        # Each of the three interpolations named, not just `quoted in remote_cmd`:
+        # the root reaches the remote shell three times now, and one of them being
+        # hand-rolled back to naive quoting would leave that assertion satisfied by
+        # the other two while reopening the injection this class exists to catch.
+        assert f"test -e {quoted} " in remote_cmd
+        assert f"test -d {quoted} " in remote_cmd
+        assert f"find -H {quoted} " in remote_cmd
+        assert f"'{self._APOSTROPHE_FOLDER}'" not in remote_cmd
 
     def test_find_folders_by_files_quotes_each_probed_file_name(self, connection):
         # find substitutes {} on the remote side, so the directory is never interpolated
@@ -324,6 +335,46 @@ class TestFindFoldersByFiles:
         assert matched.root_state is RemoteSearchRootState.UNKNOWN
         assert matched.folders == []
 
+    def test_an_ssh_auth_failure_raises_the_family_the_decorator_converts(
+        self, connection
+    ):
+        """The chain a rejected key really travels, which no mocked-in `*Failed*` test walks.
+
+        This function is undecorated, so it raises the raw ``SSHException``
+        family and ``@remote_exception_handler`` on the caller does the
+        conversion. A test that injects ``AuthenticationFailedException``
+        directly starts one frame too late to prove that.
+        """
+        rejected = _completed(
+            "",
+            returncode=255,
+            stderr="user@example.test: Permission denied (publickey).",
+        )
+        with patch("subprocess.run", return_value=rejected):
+            with pytest.raises(AuthenticationException):
+                find_folders_by_files(connection, "/remote/reports", ["config.json"])
+
+    def test_an_exhausted_shared_budget_settles_nothing_and_makes_no_connection(
+        self, connection
+    ):
+        """Spawning ssh to kill it costs the same answer a moment later."""
+        with patch("subprocess.run") as run:
+            matched = find_folders_by_files(
+                connection, "/remote/reports", ["config.json"], timeout_seconds=0
+            )
+
+        assert run.call_count == 0
+        assert matched.root_state is RemoteSearchRootState.UNKNOWN
+        assert matched.folders == []
+
+    def test_the_search_is_held_to_the_budget_it_was_given(self, connection):
+        with patch("subprocess.run", return_value=_completed("")) as run:
+            find_folders_by_files(
+                connection, "/remote/reports", ["config.json"], timeout_seconds=7.5
+            )
+
+        assert run.call_args.kwargs["timeout"] == 7.5
+
 
 class TestSearchReportPath:
     """Which failures belong to one path, and which to the connection."""
@@ -358,14 +409,193 @@ class TestSearchReportPath:
         # Nothing was settled about the root, so it must not read as reachable.
         assert outcome.root_state is RemoteSearchRootState.UNKNOWN
 
-    def test_an_authentication_failure_still_raises(self):
-        """It subclasses the exception above, and is the connection's verdict, not a path's."""
+    @pytest.mark.parametrize(
+        "verdict",
+        [
+            AuthenticationFailedException(message="SSH authentication failed"),
+            HostKeyVerificationFailedException(message="Host key not trusted"),
+        ],
+        ids=["authentication", "host_key"],
+    )
+    def test_a_verdict_on_the_connection_still_raises(self, verdict):
+        """Both subclass the exception above, and neither is about one path.
+
+        Carried back as a path outcome, either would name one path as the
+        culprit for something wrong with the whole connection, and would take
+        the 422 that says so down to a 200 with a status line.
+        """
 
         def rejected() -> RemoteFolderSearch:
-            raise AuthenticationFailedException(message="SSH authentication failed")
+            raise verdict
 
-        with pytest.raises(AuthenticationFailedException):
+        with pytest.raises(type(verdict)):
             _search_report_path(rejected)
+
+
+class TestCheckRemotePathForReports:
+    """Every configured path is answered, whatever the other one did.
+
+    The endpoint tests cover the same ground through HTTP, where a status line
+    stands in for the outcome. These pin it one layer down, on the function the
+    short-circuit used to live in, so a regression names the function rather
+    than a rendered message.
+    """
+
+    @pytest.fixture
+    def both_paths(self) -> RemoteConnection:
+        return RemoteConnection(
+            name="test",
+            username="user",
+            host="example.test",
+            port=22,
+            profilerPath="/remote/profiler",
+            performancePath="/remote/performance",
+        )
+
+    @staticmethod
+    def _outcomes(app, connection, searches):
+        with app.app_context():
+            with patch(
+                "ttnn_visualizer.sftp_operations.find_folders_by_files",
+                side_effect=searches,
+            ):
+                return check_remote_path_for_reports(connection)
+
+    def test_a_failing_memory_path_keeps_the_performance_answer(self, app, both_paths):
+        results = self._outcomes(
+            app,
+            both_paths,
+            [
+                RemoteFolderSearch(
+                    folders=[], root_state=RemoteSearchRootState.MISSING
+                ),
+                RemoteFolderSearch(
+                    folders=["/remote/performance/a"],
+                    root_state=RemoteSearchRootState.PRESENT,
+                ),
+            ],
+        )
+
+        assert results.profiler.root_state is RemoteSearchRootState.MISSING
+        assert results.performance.root_state is RemoteSearchRootState.PRESENT
+        assert results.performance.report_count == 1
+
+    def test_a_failing_performance_path_keeps_the_memory_answer(self, app, both_paths):
+        """The case the issue names: the memory count was computed, then discarded."""
+        results = self._outcomes(
+            app,
+            both_paths,
+            [
+                RemoteFolderSearch(
+                    folders=["/remote/profiler/a", "/remote/profiler/b"],
+                    root_state=RemoteSearchRootState.PRESENT,
+                ),
+                RemoteFolderSearch(
+                    folders=[], root_state=RemoteSearchRootState.MISSING
+                ),
+            ],
+        )
+
+        assert results.profiler.report_count == 2
+        assert results.performance.root_state is RemoteSearchRootState.MISSING
+
+    def test_both_paths_failing_are_both_answered(self, app, both_paths):
+        results = self._outcomes(
+            app,
+            both_paths,
+            [
+                RemoteFolderSearch(
+                    folders=[], root_state=RemoteSearchRootState.NOT_A_DIRECTORY
+                ),
+                RemoteFolderSearch(
+                    folders=[], root_state=RemoteSearchRootState.MISSING
+                ),
+            ],
+        )
+
+        assert results.profiler.root_state is RemoteSearchRootState.NOT_A_DIRECTORY
+        assert results.performance.root_state is RemoteSearchRootState.MISSING
+
+    def test_a_path_that_raises_does_not_cost_the_other_its_answer(
+        self, app, both_paths
+    ):
+        """The first search raising is the harder half: nothing returns to carry."""
+        results = self._outcomes(
+            app,
+            both_paths,
+            [
+                RemoteConnectionException(
+                    message="Permission denied accessing '/remote/profiler'.",
+                    status=ConnectionTestStates.FAILED,
+                ),
+                RemoteFolderSearch(
+                    folders=["/remote/performance/a"],
+                    root_state=RemoteSearchRootState.PRESENT,
+                ),
+            ],
+        )
+
+        assert (
+            results.profiler.error_message
+            == "Permission denied accessing '/remote/profiler'."
+        )
+        assert results.performance.report_count == 1
+
+    def test_an_unconfigured_path_is_not_searched_and_has_no_outcome(self, app):
+        """`None` rather than a failure: the user cannot correct a path they never gave."""
+        memory_only = RemoteConnection(
+            name="test",
+            username="user",
+            host="example.test",
+            port=22,
+            profilerPath="/remote/profiler",
+        )
+
+        with app.app_context():
+            with patch(
+                "ttnn_visualizer.sftp_operations.find_folders_by_files",
+                return_value=RemoteFolderSearch(
+                    folders=[], root_state=RemoteSearchRootState.PRESENT
+                ),
+            ) as search:
+                results = check_remote_path_for_reports(memory_only)
+
+        assert search.call_count == 1
+        assert results.profiler is not None
+        assert results.performance is None
+
+    def test_a_connection_verdict_abandons_both_paths(self, app, both_paths):
+        """Driven from the return code, so the decorator does the conversion.
+
+        Nothing about either path is known once the credentials are refused, and
+        the 422 saying so is worth more than two lines blaming the paths.
+        """
+        rejected = _completed(
+            "",
+            returncode=255,
+            stderr="user@example.test: Permission denied (publickey).",
+        )
+        with app.app_context():
+            with patch("subprocess.run", return_value=rejected):
+                with pytest.raises(AuthenticationFailedException) as raised:
+                    check_remote_path_for_reports(both_paths)
+
+        assert raised.value.http_status == HTTPStatus.UNPROCESSABLE_ENTITY
+
+    def test_the_two_searches_share_one_timeout_budget(self, app, both_paths):
+        """Otherwise a host where `find` hangs holds the request for twice the budget."""
+        with app.app_context():
+            budget = app.config["SSH_SUBPROCESS_TIMEOUT"]
+            with patch("subprocess.run", return_value=_completed("")) as run:
+                check_remote_path_for_reports(both_paths)
+
+        timeouts = [call.kwargs["timeout"] for call in run.call_args_list]
+        assert len(timeouts) == 2
+        assert timeouts[0] <= budget
+        # Whatever the first search spent is gone, so the second cannot ask for
+        # the full budget again.
+        assert timeouts[1] <= timeouts[0]
+        assert sum(timeouts) <= 2 * budget
 
 
 class TestGetRemoteFileList:
