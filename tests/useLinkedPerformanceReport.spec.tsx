@@ -39,6 +39,9 @@ vi.mock('../src/libs/axiosInstance', () => ({
     default: {
         get: vi.fn(),
     },
+    // Fixed so the report keys below stay stable across cases; instance scoping
+    // itself is covered in `performanceReportQueryKey.spec.ts`.
+    getOrCreateInstanceId: () => 'test-instance',
 }));
 
 const REPORT_NAME = '2026_08_14_10_00_00';

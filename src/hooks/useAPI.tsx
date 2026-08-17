@@ -1223,7 +1223,7 @@ const useLinkedPerformanceReportParams = (): PerformanceReportParams => {
 const usePerformanceReportQuery = (name: string | null, params: PerformanceReportParams) => {
     const response = useQuery<PerformanceReportResponse, AxiosError>({
         queryFn: () => (name !== null ? fetchPerformanceReport(name, params) : Promise.resolve(EMPTY_PERF_RETURN)),
-        queryKey: getPerformanceReportQueryKey(name, params),
+        queryKey: getPerformanceReportQueryKey({ name, instanceId: getOrCreateInstanceId(), params }),
         enabled: name !== null,
         retry: false,
         staleTime: Infinity,
@@ -1288,7 +1288,11 @@ export const usePerformanceComparisonReport = () => {
 
             return results;
         },
-        queryKey: getPerformanceComparisonReportQueryKey(reportNames, params),
+        queryKey: getPerformanceComparisonReportQueryKey({
+            names: reportNames,
+            instanceId: getOrCreateInstanceId(),
+            params,
+        }),
         staleTime: Infinity,
         enabled: !!reportNames,
     });

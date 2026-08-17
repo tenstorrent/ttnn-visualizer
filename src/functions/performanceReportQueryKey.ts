@@ -60,35 +60,77 @@ export const getLinkedPerformanceReportParams = (tracingMode: boolean): Performa
     tracingMode,
 });
 
+/**
+ * @description Whether link resolution ran against the row order the pinned
+ * filters describe, rather than the traced order `tracingMode` substitutes.
+ *
+ * Only callers that *persist* a verdict need this. `reportLinksAtom` is backed by
+ * localStorage, so an `UNLINKED` reached with tracing mode on would outlive the
+ * toggle that caused it and keep badging the pair as a failed link in the report
+ * pickers. A `LINKED` holds under either order, so it is still worth recording
+ * (#1812).
+ */
+export const isLinkResolutionCanonical = (tracingMode: boolean) => !tracingMode;
+
 const getSignpostKey = (label: string, signpost: Signpost | null) =>
     `${label}:${signpost ? `${signpost.id}:${signpost.op_code}` : null}`;
 
 // Shared by the single-report and comparison queries so the two can't drift into
 // keying on different filters.
-const getFilterKeySegments = ({
-    startSignpost,
-    endSignpost,
-    hideHostOps,
-    mergeDevices,
-    tracingMode,
-    groupBy,
-}: PerformanceReportParams): string[] => [
-    getSignpostKey('startSignpost', startSignpost),
-    getSignpostKey('endSignpost', endSignpost),
-    `hideHostOps:${hideHostOps ? 'true' : 'false'}`,
-    `mergeDevices:${mergeDevices ? 'true' : 'false'}`,
-    `tracingMode:${tracingMode ? 'true' : 'false'}`,
-    `groupBy:${groupBy}`,
-];
+const getFilterKeySegments = (params: PerformanceReportParams): string[] => {
+    // Keyed on the interface rather than built as a free-form array: a filter added
+    // to `PerformanceReportParams` is a compile error here until it is given a
+    // segment. Passing the params as one object stops the request's filters being
+    // transposed; this stops one being sent but left out of the key, which caches a
+    // request under a key that misdescribes it. Insertion order fixes the segment
+    // order, so the keys are unchanged by going through the record.
+    const segments: Record<keyof PerformanceReportParams, string> = {
+        startSignpost: getSignpostKey('startSignpost', params.startSignpost),
+        endSignpost: getSignpostKey('endSignpost', params.endSignpost),
+        hideHostOps: `hideHostOps:${params.hideHostOps ? 'true' : 'false'}`,
+        mergeDevices: `mergeDevices:${params.mergeDevices ? 'true' : 'false'}`,
+        tracingMode: `tracingMode:${params.tracingMode ? 'true' : 'false'}`,
+        groupBy: `groupBy:${params.groupBy}`,
+    };
 
-export const getPerformanceReportQueryKey = (name: string | null, params: PerformanceReportParams) => [
+    return Object.values(segments);
+};
+
+/**
+ * @description Report names are bare folder basenames, so two instances can hold
+ * different reports under one name — a local copy and a remote-synced copy of the
+ * same timestamped run, most obviously. These queries run at `staleTime: Infinity`
+ * and report selection does not always clear the cache, so a basename-only key
+ * would serve one instance's report as another's. The NPE queries scope their keys
+ * for the same reason.
+ *
+ * Taken as one object rather than positionally: the report name and `instanceId`
+ * are adjacent strings, and transposing them would key every report under the
+ * instance and vice versa without a type error.
+ */
+interface PerformanceReportQueryKeyInput {
+    instanceId: string;
+    params: PerformanceReportParams;
+}
+
+export const getPerformanceReportQueryKey = ({
+    name,
+    instanceId,
+    params,
+}: PerformanceReportQueryKeyInput & { name: string | null }) => [
     'get-performance-report',
+    instanceId,
     name,
     ...getFilterKeySegments(params),
 ];
 
-export const getPerformanceComparisonReportQueryKey = (names: string[] | null, params: PerformanceReportParams) => [
+export const getPerformanceComparisonReportQueryKey = ({
+    names,
+    instanceId,
+    params,
+}: PerformanceReportQueryKeyInput & { names: string[] | null }) => [
     'get-performance-comparison-report',
+    instanceId,
     names,
     ...getFilterKeySegments(params),
 ];

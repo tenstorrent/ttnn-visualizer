@@ -20,7 +20,11 @@ import { StackedGroupBy } from '../src/definitions/StackedPerfTable';
 import { Signpost } from '../src/model/Signpost';
 
 const REPORT_NAME = '2026_08_14_10_00_00';
+const INSTANCE_ID = 'instance-a';
 const SIGNPOST: Signpost = { id: 42, op_code: 'BEGIN_TRACE' };
+
+const reportKey = (params: PerformanceReportParams, instanceId = INSTANCE_ID) =>
+    getPerformanceReportQueryKey({ name: REPORT_NAME, instanceId, params });
 
 const defaultViewParams: PerformanceReportParams = {
     startSignpost: null,
@@ -41,8 +45,9 @@ const linkedParams = (overrides: Partial<PerformanceReportParams> = {}): Perform
 
 describe('getPerformanceReportQueryKey', () => {
     it('names the report and every filter the backend varies rows on', () => {
-        expect(getPerformanceReportQueryKey(REPORT_NAME, defaultViewParams)).toEqual([
+        expect(reportKey(defaultViewParams)).toEqual([
             'get-performance-report',
+            INSTANCE_ID,
             REPORT_NAME,
             'startSignpost:null',
             'endSignpost:null',
@@ -54,31 +59,20 @@ describe('getPerformanceReportQueryKey', () => {
     });
 
     it('identifies a signpost by id and op code, so two with the same name stay distinct', () => {
-        const key = getPerformanceReportQueryKey(REPORT_NAME, {
-            ...defaultViewParams,
-            startSignpost: SIGNPOST,
-        });
+        const key = reportKey({ ...defaultViewParams, startSignpost: SIGNPOST });
 
         expect(key).toContain('startSignpost:42:BEGIN_TRACE');
     });
 
     it('delimits id from op code, so no two signposts can collide on one segment', () => {
-        const oneThenTwoX = getPerformanceReportQueryKey(REPORT_NAME, {
-            ...defaultViewParams,
-            startSignpost: { id: 1, op_code: '2X' },
-        });
-        const twelveThenX = getPerformanceReportQueryKey(REPORT_NAME, {
-            ...defaultViewParams,
-            startSignpost: { id: 12, op_code: 'X' },
-        });
+        const oneThenTwoX = reportKey({ ...defaultViewParams, startSignpost: { id: 1, op_code: '2X' } });
+        const twelveThenX = reportKey({ ...defaultViewParams, startSignpost: { id: 12, op_code: 'X' } });
 
         expect(oneThenTwoX).not.toEqual(twelveThenX);
     });
 
     it('matches the link key exactly while the performance tab is at its defaults', () => {
-        expect(getPerformanceReportQueryKey(REPORT_NAME, defaultViewParams)).toEqual(
-            getPerformanceReportQueryKey(REPORT_NAME, linkedParams()),
-        );
+        expect(reportKey(defaultViewParams)).toEqual(reportKey(linkedParams()));
     });
 
     // Documents the residual #1812 gap rather than a fix: tracing mode is the one
@@ -87,15 +81,21 @@ describe('getPerformanceReportQueryKey', () => {
     it('keeps sharing the link key when only tracing mode changes', () => {
         const params = { tracingMode: true };
 
-        expect(getPerformanceReportQueryKey(REPORT_NAME, { ...defaultViewParams, ...params })).toEqual(
-            getPerformanceReportQueryKey(REPORT_NAME, linkedParams(params)),
-        );
+        expect(reportKey({ ...defaultViewParams, ...params })).toEqual(reportKey(linkedParams(params)));
     });
 
     it('holds the link key still when the tab changes its stacked grouping', () => {
         // Grouping cannot change `report`, but it is part of the key — following
         // it would blank the link report on every switch.
-        expect(getPerformanceReportQueryKey(REPORT_NAME, linkedParams())).toContain(`groupBy:${StackedGroupBy.OP}`);
+        expect(reportKey(linkedParams())).toContain(`groupBy:${StackedGroupBy.OP}`);
+    });
+
+    // Report names are bare folder basenames, so two instances can hold different
+    // reports under one name. These queries never expire and report selection does
+    // not always clear the cache, so an unscoped key would hand one instance's
+    // report to another.
+    it('separates cache entries for the same report name in different instances', () => {
+        expect(reportKey(defaultViewParams, 'instance-a')).not.toEqual(reportKey(defaultViewParams, 'instance-b'));
     });
 
     it.each([
@@ -104,18 +104,20 @@ describe('getPerformanceReportQueryKey', () => {
         ['a signpost range', { startSignpost: SIGNPOST }],
         ['a different stacked grouping', { groupBy: StackedGroupBy.MEMORY }],
     ])('diverges from the link key with %s', (_label, overrides) => {
-        expect(getPerformanceReportQueryKey(REPORT_NAME, { ...defaultViewParams, ...overrides })).not.toEqual(
-            getPerformanceReportQueryKey(REPORT_NAME, linkedParams()),
-        );
+        expect(reportKey({ ...defaultViewParams, ...overrides })).not.toEqual(reportKey(linkedParams()));
     });
 });
 
 describe('getPerformanceComparisonReportQueryKey', () => {
     const COMPARISON_NAMES = [REPORT_NAME, '2026_08_14_11_00_00'];
 
+    const comparisonKey = (names: string[] | null, params: PerformanceReportParams, instanceId = INSTANCE_ID) =>
+        getPerformanceComparisonReportQueryKey({ names, instanceId, params });
+
     it('names the reports and carries the same filter segments as the single-report key', () => {
-        expect(getPerformanceComparisonReportQueryKey(COMPARISON_NAMES, defaultViewParams)).toEqual([
+        expect(comparisonKey(COMPARISON_NAMES, defaultViewParams)).toEqual([
             'get-performance-comparison-report',
+            INSTANCE_ID,
             COMPARISON_NAMES,
             'startSignpost:null',
             'endSignpost:null',
@@ -127,23 +129,24 @@ describe('getPerformanceComparisonReportQueryKey', () => {
     });
 
     it('never collides with the single-report key for the same filters', () => {
-        expect(getPerformanceComparisonReportQueryKey(COMPARISON_NAMES, defaultViewParams)).not.toEqual(
-            getPerformanceReportQueryKey(REPORT_NAME, defaultViewParams),
-        );
+        expect(comparisonKey(COMPARISON_NAMES, defaultViewParams)).not.toEqual(reportKey(defaultViewParams));
     });
 
     it('separates cache entries for different report selections', () => {
-        expect(getPerformanceComparisonReportQueryKey(COMPARISON_NAMES, defaultViewParams)).not.toEqual(
-            getPerformanceComparisonReportQueryKey([REPORT_NAME], defaultViewParams),
+        expect(comparisonKey(COMPARISON_NAMES, defaultViewParams)).not.toEqual(
+            comparisonKey([REPORT_NAME], defaultViewParams),
+        );
+    });
+
+    it('separates cache entries for the same selection in different instances', () => {
+        expect(comparisonKey(COMPARISON_NAMES, defaultViewParams, 'instance-a')).not.toEqual(
+            comparisonKey(COMPARISON_NAMES, defaultViewParams, 'instance-b'),
         );
     });
 
     it('separates cache entries when a filter changes', () => {
-        expect(getPerformanceComparisonReportQueryKey(COMPARISON_NAMES, defaultViewParams)).not.toEqual(
-            getPerformanceComparisonReportQueryKey(COMPARISON_NAMES, {
-                ...defaultViewParams,
-                mergeDevices: false,
-            }),
+        expect(comparisonKey(COMPARISON_NAMES, defaultViewParams)).not.toEqual(
+            comparisonKey(COMPARISON_NAMES, { ...defaultViewParams, mergeDevices: false }),
         );
     });
 });

@@ -24,6 +24,7 @@ vi.mock('../src/libs/axiosInstance', () => ({
     default: {
         get: vi.fn(),
     },
+    getOrCreateInstanceId: () => 'test-instance',
 }));
 
 const TIMESTAMP = '2026_07_31_17_20_53';
