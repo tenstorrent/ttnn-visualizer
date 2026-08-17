@@ -4,7 +4,7 @@
 
 import { useAtomValue } from 'jotai';
 import { useCallback } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router';
 import { NAVIGATION_ITEMS, NAV_DISABLED_REASON, NavRequirement, NavigationItem } from '../definitions/NavigationItems';
 import ROUTES from '../definitions/Routes';
 import { activeMlirJsonAtom, activePerformanceReportAtom, activeProfilerReportAtom } from '../store/app';
@@ -79,7 +79,7 @@ export function useMainNavigationItems(): MainNavigationItems {
         (item: ResolvedNavigationItem) => {
             // A modal route keeps the page beneath it mounted, which react-router does
             // from the background location rather than from the path.
-            navigate(item.route, item.isModal ? { state: { background: location } } : undefined);
+            void navigate(item.route, item.isModal ? { state: { background: location } } : undefined);
         },
         [navigate, location],
     );

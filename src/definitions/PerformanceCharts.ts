@@ -35,6 +35,22 @@ export const PERF_CHART_TABLE_FILTER_HINT = 'Click an operation to filter the pe
 
 export type OnOpCodeClick = (opCode: string) => void;
 
+/**
+ * Shared second argument for chart-driven table prefilters. Callers report the gesture and what
+ * they drew; the hook decides replace, toggle or clear, because only it can see the selection.
+ */
+export interface PerfTablePrefilterOptions<T extends string | number = string | number> {
+    /** The user held shift: add or remove rather than replacing, and stay on the Charts tab. */
+    additive?: boolean;
+    /**
+     * The values this caller renders a control for. A plain click on the only one of these that is
+     * selected clears it. Without the scope the check runs against the whole cross-report filter,
+     * which is populated from a wider row set than any single chart draws, so a control that is
+     * visibly the sole selection can silently take the replace-and-navigate path instead.
+     */
+    visibleValues?: readonly T[];
+}
+
 export const PERF_CHART_LABELS: Record<PerfChartId, string> = {
     [PerfChartId.OpDurationHistogram]: 'Op Duration Distribution',
     [PerfChartId.OpCountVsRuntime]: 'Operation Count vs Device Time',

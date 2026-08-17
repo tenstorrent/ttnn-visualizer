@@ -49,6 +49,7 @@
 // on the `.bp6-button` selector inside the owning menu's scope.
 @mixin nav-button-styles {
     position: relative;
+    font-size: 14px;
 
     &.reports-button {
         @include button-colours($tt-reports, $tt-reports-active, 'document-open');

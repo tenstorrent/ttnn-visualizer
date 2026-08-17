@@ -50,8 +50,6 @@ from ttnn_visualizer.usage import (
 )
 from ttnn_visualizer.utils import (
     find_gunicorn_path,
-    get_app_data_directory,
-    get_report_data_directory,
     migrate_old_data_directory,
     str_to_bool,
 )
@@ -448,6 +446,55 @@ def _record_launch(config):
     )
 
 
+def _apply_cli_env_overrides(args: argparse.Namespace) -> None:
+    """Write ``--host`` / ``--server`` / ``--port`` into the environment.
+
+    Must run before ``Config()`` so ``override_with_env_variables`` sees the values.
+    Workers inherit the mutated environment as a fresh import; the launching process
+    relies on the override loop reaching inherited settings.
+    """
+    # Set independently of ``--host``: ``--server`` is documented as enabling server
+    # mode, and the two flags together are the shape that matters — naming an interface
+    # explicitly still binds a reachable socket, so letting ``--host`` suppress this
+    # would leave every ``@local_only`` endpoint open on it.
+    if args.server:
+        os.environ["SERVER_MODE"] = "true"
+        print("🖥️  Server mode enabled")
+
+    if args.host:
+        os.environ["HOST"] = args.host
+        print(f"🌐 Binding to host: {args.host} (from --host flag)")
+    elif args.server:
+        os.environ["HOST"] = "0.0.0.0"
+        print("🌐 Binding to all interfaces (0.0.0.0) via --server flag")
+
+    if args.port:
+        os.environ["PORT"] = args.port
+        print(f"🔌 Binding to port: {args.port}")
+
+
+def _config_after_cli_env(args: argparse.Namespace) -> DefaultConfig:
+    """Apply CLI env mutations and return the config singleton.
+
+    Split out of ``main()`` so ``--server`` / ``--host`` / ``--port`` can be asserted
+    without binding a socket or spawning gunicorn. Relies on the override loop — no
+    hand-patches of ``HOST`` / ``SERVER_MODE`` / ``PORT``.
+
+    That only works while this is the first construction: ``Config`` is a singleton, so
+    an instance built during import would make the writes above silently ineffective and
+    ``--server`` would yield ``SERVER_MODE=False`` with no error. The assert makes a
+    future import-time ``Config()`` fail loudly instead, which is the guarantee the
+    hand-patches used to paper over.
+    """
+    assert Config._instance is None, (
+        "Config was constructed before the CLI flags were applied; "
+        "--server / --host / --port would be ignored."
+    )
+
+    _apply_cli_env_overrides(args)
+    return cast(DefaultConfig, Config())
+
+
 def main():
 
     run_command = sys.argv[0].split("/")
@@ -456,38 +503,8 @@ def main():
 
     args = parse_args()
 
-    # Handle host/port CLI overrides
     # Priority: CLI args > env vars > auto-detection (in settings.py)
-    # Note: We need to set env vars before creating Config, but also
-    # manually update the config object in case it was already instantiated
-    if args.host:
-        os.environ["HOST"] = args.host
-        print(f"🌐 Binding to host: {args.host} (from --host flag)")
-    elif args.server:
-        os.environ["HOST"] = "0.0.0.0"
-        os.environ["SERVER_MODE"] = "true"
-        print("🌐 Binding to all interfaces (0.0.0.0) via --server flag")
-        print("🖥️  Server mode enabled")
-
-    if args.port:
-        os.environ["PORT"] = args.port
-        print(f"🔌 Binding to port: {args.port}")
-
-    config = cast(DefaultConfig, Config())
-
-    # Apply CLI overrides directly to config object
-    # (Config is a singleton that may have been created before we set env vars)
-    if args.host:
-        config.HOST = args.host
-    elif args.server:
-        config.HOST = "0.0.0.0"
-        config.SERVER_MODE = True
-
-    if args.port:
-        config.PORT = args.port
-
-    # Recalculate GUNICORN_BIND with the updated values
-    config.GUNICORN_BIND = f"{config.HOST}:{config.PORT}"
+    config = _config_after_cli_env(args)
 
     instance_id = None
 
@@ -495,16 +512,11 @@ def main():
     if args.tt_metal_home:
         os.environ["TT_METAL_HOME"] = args.tt_metal_home
         config.TT_METAL_HOME = args.tt_metal_home
-
-        if not os.getenv("APP_DATA_DIRECTORY"):
-            config.APP_DATA_DIRECTORY = get_app_data_directory(
-                args.tt_metal_home, config.APPLICATION_DIR
-            )
-            # Recalculate database path with new APP_DATA_DIRECTORY
-            _db_file_path = str(
-                Path(config.APP_DATA_DIRECTORY) / f"ttnn_{config.DB_VERSION}.db"
-            )
-            config.SQLALCHEMY_DATABASE_URI = f"sqlite:///{_db_file_path}"
+        # The whole path tree hangs off this root, so rebuild it in one place rather
+        # than open-coding the cascade here — the hand-rolled version reached
+        # ``APP_DATA_DIRECTORY`` and the DB URI but left ``REPORT_DATA_DIRECTORY`` and
+        # the local/remote directories on the value derived at import.
+        config.recompute_derived_settings()
 
     # Check for and migrate old data from site-packages if needed
     # Only migrate if environment variables are not explicitly set

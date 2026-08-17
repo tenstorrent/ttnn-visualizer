@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { useLocation, useRoutes } from 'react-router-dom';
+import { useLocation, useRoutes } from 'react-router';
 import { routeObjectList } from '../routes/routeObjectList';
 
 export function ModalAwareOutlet() {

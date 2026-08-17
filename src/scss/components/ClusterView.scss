@@ -14,13 +14,13 @@ $mmio-fill: rgba(colours.$tt-yellow, 0.18);
 
 .cluster-view-renderer {
     position: absolute;
-    top: 80px;
+    top: 0;
     left: 0;
     display: flex;
     flex-direction: column;
     background: radial-gradient(circle at 30% 20%, rgb(117 132 230 / 12%), transparent 60%), rgb(0 0 0 / 92%);
     width: 100%;
-    height: calc(100% - 80px);
+    height: 100%;
     bottom: 0;
     z-index: variables.$z-index-3-overlay;
     padding: 10px;

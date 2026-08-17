@@ -6,7 +6,7 @@ import { Alignment, Button, ButtonVariant, Icon, Position, Size, Tooltip } from 
 import { IconNames } from '@blueprintjs/icons';
 import { useAtom } from 'jotai';
 import classNames from 'classnames';
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router';
 import 'styles/components/SideNavigation.scss';
 import ROUTES from '../definitions/Routes';
 import { TEST_IDS } from '../definitions/TestIds';

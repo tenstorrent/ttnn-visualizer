@@ -4,6 +4,7 @@
 
 import { describe, expect, it } from 'vitest';
 import getChartData from '../src/functions/getChartData';
+import { LATE_DEALLOC_OPPORTUNITY_TEXT } from '../src/definitions/LateDeallocation';
 import { Chunk, Tensor } from '../src/model/APIData';
 
 const noTensor = (): Tensor | null => null;
@@ -60,5 +61,16 @@ describe('getChartData outline mode (#1652)', () => {
 
         expect(aliased.hovertemplate).toMatch(/Globally allocated CB/);
         expect(aliased.hovertemplate).not.toMatch(/aliased to/);
+    });
+});
+
+describe('getChartData late deallocation hover', () => {
+    it('uses LATE_DEALLOC_OPPORTUNITY_TEXT in the hover template', () => {
+        const chunk: Chunk = { address: 0x4000, size: 1024, lateDeallocation: true };
+        const tensorLookup = (address: number) => (address === chunk.address ? makeTensor(7, address) : null);
+
+        const [bar] = getChartData([chunk], tensorLookup, undefined, { lateDeallocation: true });
+
+        expect(bar.hovertemplate).toContain(LATE_DEALLOC_OPPORTUNITY_TEXT);
     });
 });

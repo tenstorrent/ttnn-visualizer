@@ -30,6 +30,26 @@ function Probe() {
             >
                 filter-decade
             </Button>
+            <Button
+                type='button'
+                onClick={() => prefilter(10, { additive: true })}
+            >
+                amend-decade
+            </Button>
+            <Button
+                type='button'
+                onClick={() => prefilter(100, { additive: true })}
+            >
+                amend-century
+            </Button>
+            {/* A caller that draws the decade but not the century, as the active-report chart does
+                when only a comparison report populates the higher decade. */}
+            <Button
+                type='button'
+                onClick={() => prefilter(10, { visibleValues: [1, 10] })}
+            >
+                scoped-decade
+            </Button>
         </div>
     );
 }
@@ -81,5 +101,156 @@ describe('usePrefilterPerfTableByDurationBucket', () => {
 
         expect(screen.getByTestId('stacked-view')).toHaveTextContent('false');
         expect(screen.getByTestId('duration-filter').textContent).toBe('10');
+    });
+
+    it('amends by adding a bucket without navigating away from the charts tab', () => {
+        render(
+            <TestProviders
+                initialAtomValues={[
+                    [durationBucketFilterListAtom, [1]],
+                    [perfSelectedTabAtom, PerfTabIds.CHARTS],
+                ]}
+            >
+                <Probe />
+            </TestProviders>,
+        );
+
+        fireEvent.click(screen.getByRole('button', { name: 'amend-decade' }));
+
+        expect(screen.getByTestId('duration-filter').textContent).toBe('1,10');
+        expect(screen.getByTestId('selected-tab')).toHaveTextContent(PerfTabIds.CHARTS);
+        expect(window.scrollTo).not.toHaveBeenCalled();
+    });
+
+    it('amends by removing a selected bucket without navigating', () => {
+        render(
+            <TestProviders
+                initialAtomValues={[
+                    [durationBucketFilterListAtom, [1, 10]],
+                    [perfSelectedTabAtom, PerfTabIds.CHARTS],
+                ]}
+            >
+                <Probe />
+            </TestProviders>,
+        );
+
+        fireEvent.click(screen.getByRole('button', { name: 'amend-decade' }));
+
+        expect(screen.getByTestId('duration-filter').textContent).toBe('1');
+        expect(screen.getByTestId('selected-tab')).toHaveTextContent(PerfTabIds.CHARTS);
+    });
+
+    it('amends the sole selected bucket to clear the filter', () => {
+        render(
+            <TestProviders
+                initialAtomValues={[
+                    [durationBucketFilterListAtom, [10]],
+                    [perfSelectedTabAtom, PerfTabIds.CHARTS],
+                ]}
+            >
+                <Probe />
+            </TestProviders>,
+        );
+
+        fireEvent.click(screen.getByRole('button', { name: 'amend-decade' }));
+
+        expect(screen.getByTestId('duration-filter').textContent).toBe('');
+        expect(screen.getByTestId('selected-tab')).toHaveTextContent(PerfTabIds.CHARTS);
+    });
+
+    it('leaves the stacked view when amending', () => {
+        render(
+            <TestProviders
+                initialAtomValues={[
+                    [isStackedViewAtom, true],
+                    [perfSelectedTabAtom, PerfTabIds.CHARTS],
+                ]}
+            >
+                <Probe />
+            </TestProviders>,
+        );
+
+        fireEvent.click(screen.getByRole('button', { name: 'amend-century' }));
+
+        expect(screen.getByTestId('stacked-view')).toHaveTextContent('false');
+        expect(screen.getByTestId('duration-filter').textContent).toBe('100');
+        expect(screen.getByTestId('selected-tab')).toHaveTextContent(PerfTabIds.CHARTS);
+    });
+
+    it('keeps the stacked view when amending clears the filter', () => {
+        render(
+            <TestProviders
+                initialAtomValues={[
+                    [durationBucketFilterListAtom, [10]],
+                    [isStackedViewAtom, true],
+                    [perfSelectedTabAtom, PerfTabIds.CHARTS],
+                ]}
+            >
+                <Probe />
+            </TestProviders>,
+        );
+
+        fireEvent.click(screen.getByRole('button', { name: 'amend-decade' }));
+
+        // Reverting the view mode is only justified by a filter the stacked table cannot show, and
+        // the subscribers that would explain it are unmounted while the user is on the Charts tab.
+        expect(screen.getByTestId('stacked-view')).toHaveTextContent('true');
+        expect(screen.getByTestId('duration-filter').textContent).toBe('');
+    });
+
+    it('clears when a plain click lands on the only selected value the caller drew', () => {
+        render(
+            <TestProviders
+                initialAtomValues={[
+                    [durationBucketFilterListAtom, [10]],
+                    [perfSelectedTabAtom, PerfTabIds.CHARTS],
+                ]}
+            >
+                <Probe />
+            </TestProviders>,
+        );
+
+        fireEvent.click(screen.getByRole('button', { name: 'scoped-decade' }));
+
+        expect(screen.getByTestId('duration-filter').textContent).toBe('');
+        expect(screen.getByTestId('selected-tab')).toHaveTextContent(PerfTabIds.CHARTS);
+    });
+
+    it('clears against the drawn values, not the rest of the cross-report filter', () => {
+        render(
+            <TestProviders
+                initialAtomValues={[
+                    [durationBucketFilterListAtom, [10, 1000]],
+                    [perfSelectedTabAtom, PerfTabIds.CHARTS],
+                ]}
+            >
+                <Probe />
+            </TestProviders>,
+        );
+
+        fireEvent.click(screen.getByRole('button', { name: 'scoped-decade' }));
+
+        // 1000 is selected but undrawn here, so 10 is still the sole selection on screen: clicking
+        // it clears it and stays put rather than replacing the filter and navigating away.
+        expect(screen.getByTestId('duration-filter').textContent).toBe('1000');
+        expect(screen.getByTestId('selected-tab')).toHaveTextContent(PerfTabIds.CHARTS);
+    });
+
+    it('replaces when a plain click lands alongside another drawn selection', () => {
+        render(
+            <TestProviders
+                initialAtomValues={[
+                    [durationBucketFilterListAtom, [1, 10]],
+                    [perfSelectedTabAtom, PerfTabIds.CHARTS],
+                ]}
+            >
+                <Probe />
+            </TestProviders>,
+        );
+
+        fireEvent.click(screen.getByRole('button', { name: 'scoped-decade' }));
+
+        expect(screen.getByTestId('duration-filter').textContent).toBe('10');
+        expect(screen.getByTestId('selected-tab')).toHaveTextContent(PerfTabIds.TABLE);
     });
 });

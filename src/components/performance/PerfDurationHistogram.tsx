@@ -79,6 +79,8 @@ function PerfDurationHistogram({
 
     const bucketLabels = useMemo(() => bucketList.map((bucket) => bucket.label), [bucketList]);
 
+    const bucketMinUsList = useMemo(() => bucketList.map((bucket) => bucket.minUs), [bucketList]);
+
     // One control per column, standing in for the x tick labels. Selection inverts the control:
     // the text colour becomes the fill and the label flips to the page surface to stay legible,
     // so returning from the table shows which column the filter came from. Decades run contiguously
@@ -90,14 +92,28 @@ function PerfDurationHistogram({
     // That matches the subtitle: the chart is an active-report view onto a cross-report filter.
     const bucketAnnotations = useMemo<Partial<Annotations>[]>(() => {
         const chrome = getPerfChartChrome();
+        const bucketCount = histogramData.buckets.length;
 
-        return histogramData.buckets.map(({ bucket, totalCount }) => {
+        return histogramData.buckets.map(({ bucket, totalCount }, index) => {
             const isEmpty = totalCount === 0;
             const isSelected = selectedBucketMinUsList.includes(bucket.minUs);
 
             return {
-                x: bucket.label,
-                xref: 'x',
+                // Pin each control to its column by paper fraction, not an axis-referenced x.
+                // Selecting a control flips its fill, so react-plotly redraws that single annotation in
+                // place; Plotly's incremental redraw resolves an axis-referenced x against a stale
+                // category range, and the selected control jumps sideways (#1868). A paper x sidesteps
+                // the axis: the columns are evenly spaced, so (index + 0.5) / bucketCount lands on the
+                // same centre as the bar, and it holds through the redraw. 'center' keeps the box on
+                // that centre — paper's default 'auto' anchor would pull the edge columns inward.
+                //
+                // The fraction is exact only because Plotly autoranges this category axis to
+                // [-0.5, N-0.5], which puts category i at (i + 0.5) / N of the plot area. Pinning an
+                // explicit xaxis.range, switching to a numeric x, or adding a non-bar overlay trace
+                // breaks that mapping and detaches every control from its column.
+                x: (index + 0.5) / bucketCount,
+                xref: 'paper',
+                xanchor: 'center',
                 y: 0,
                 yref: 'paper',
                 yanchor: 'top',
@@ -125,9 +141,14 @@ function PerfDurationHistogram({
                 return;
             }
 
-            prefilterPerfTableByDurationBucket(entry.bucket.minUs);
+            // The bucket list scopes click-again-to-clear to the controls actually drawn here: the
+            // filter is cross-report, so it can hold decades this active-report chart never draws.
+            prefilterPerfTableByDurationBucket(entry.bucket.minUs, {
+                additive: Boolean(event.event?.shiftKey),
+                visibleValues: bucketMinUsList,
+            });
         },
-        [histogramData.buckets, prefilterPerfTableByDurationBucket],
+        [bucketMinUsList, histogramData.buckets, prefilterPerfTableByDurationBucket],
     );
 
     const colourByOpCode = useMemo(
