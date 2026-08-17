@@ -279,7 +279,10 @@ export interface CircularBufferDeallocateParams {
 
 interface BaseMemoryParams {
     address: string; // '1259520';
-    device_id: number;
+    // Absent in older captures and emitted as a string by at least one other,
+    // both present in the local report corpus, so consumers must normalise
+    // rather than read this as a number. #1844
+    device_id?: number | string;
     num_cores: string; // '64';
     page_size: string; // '448';
     size: string; // '7340032';
