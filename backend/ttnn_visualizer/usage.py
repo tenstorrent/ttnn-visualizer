@@ -145,11 +145,10 @@ def get_disabled_marker_path() -> Path:
 
 
 def _as_bool(value: Any) -> bool:
-    """Coerce a config value that may have been stringified by the environment.
+    """Coerce a config value that may arrive as a string via ``settings_override``.
 
-    ``DefaultConfig.override_with_env_variables`` copies raw environment strings over
-    class attributes, so a config built with ``SERVER_MODE=false`` in ``.env`` carries
-    the *string* ``"false"`` — which is truthy. Reading that as "hosted" would disable
+    Flask's ``settings_override`` path can inject raw strings without going through
+    ``override_with_env_variables``, so a truthy ``"false"`` would otherwise disable
     recording on an ordinary local install with nothing to show the user why.
     """
     if isinstance(value, str):
