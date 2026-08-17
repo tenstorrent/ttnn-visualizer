@@ -127,6 +127,10 @@ describe('SideNavigation collapsing', () => {
 
         expect(screen.getByTestId(TEST_IDS.SIDE_NAVIGATION)).not.toHaveClass('collapsed');
         expect(screen.getByTestId(TEST_IDS.SIDE_NAVIGATION_TOGGLE)).toHaveAttribute('aria-expanded', 'true');
+        expect(screen.getByTestId(TEST_IDS.SIDE_NAVIGATION_TOGGLE)).toHaveAttribute(
+            'aria-label',
+            'Collapse navigation',
+        );
     });
 
     it('collapses when the toggle is pressed', () => {
@@ -141,7 +145,29 @@ describe('SideNavigation collapsing', () => {
         fireEvent.click(screen.getByTestId(TEST_IDS.SIDE_NAVIGATION_TOGGLE));
 
         expect(screen.getByTestId(TEST_IDS.SIDE_NAVIGATION)).toHaveClass('collapsed');
+        // Collapse control is replaced by the mark, which becomes the expand control.
         expect(screen.getByTestId(TEST_IDS.SIDE_NAVIGATION_TOGGLE)).toHaveAttribute('aria-expanded', 'false');
+        expect(screen.getByTestId(TEST_IDS.SIDE_NAVIGATION_TOGGLE)).toHaveAttribute('aria-label', 'Expand navigation');
+        expect(screen.getByTestId(TEST_IDS.SIDE_NAVIGATION_TOGGLE).querySelector('img')).toHaveAttribute(
+            'src',
+            '/logo-small.png',
+        );
+    });
+
+    it('expands when the mark is pressed', () => {
+        (useGetClusterDescription as Mock).mockReturnValue({ data: null });
+
+        render(
+            <TestProviders initialAtomValues={[[isNavigationCollapsedAtom, true]]}>
+                <SideNavigation />
+            </TestProviders>,
+        );
+
+        fireEvent.click(screen.getByTestId(TEST_IDS.SIDE_NAVIGATION_TOGGLE));
+
+        expect(screen.getByTestId(TEST_IDS.SIDE_NAVIGATION)).not.toHaveClass('collapsed');
+        expect(screen.getByTestId(TEST_IDS.SIDE_NAVIGATION_TOGGLE)).toHaveAttribute('aria-expanded', 'true');
+        expect(screen.getByAltText('tenstorrent')).toHaveAttribute('src', expect.stringContaining('tt_logo_color'));
     });
 
     it('swaps the lockup for the square mark while collapsed', () => {
@@ -158,8 +184,12 @@ describe('SideNavigation collapsing', () => {
         fireEvent.click(screen.getByTestId(TEST_IDS.SIDE_NAVIGATION_TOGGLE));
 
         // The collapsed rail is too narrow for the lockup, and the mark is a `public/` file
-        // whose URL has to pick up Vite's base rather than being rooted at `/`.
-        expect(screen.getByAltText('tenstorrent')).toHaveAttribute('src', '/logo-small.png');
+        // whose URL has to pick up Vite's base rather than being rooted at `/`. Mark is
+        // decorative inside the named expand control, so look it up via the button.
+        expect(screen.getByTestId(TEST_IDS.SIDE_NAVIGATION_TOGGLE).querySelector('img')).toHaveAttribute(
+            'src',
+            '/logo-small.png',
+        );
     });
 
     it('keeps every item reachable by name while collapsed', () => {

@@ -28,21 +28,28 @@
     // edge would only compete with the item colours.
     border-right: 1px solid $tt-grey-3;
 
-    // The rail itself never scrolls, so the collapse control below the items stays put and
-    // reachable on a short viewport; only the item list scrolls.
+    // The rail itself never scrolls; only the item list scrolls. Collapse sits beside the
+    // lockup when expanded; when collapsed the mark itself is the expand control.
     overflow: hidden;
     transition: width 200ms ease-out;
 
     .side-navigation-header {
         display: flex;
-        align-items: center;
+        align-items: flex-start;
+        justify-content: space-between;
         gap: 5px;
         min-height: 40px;
+
+        // Shares the row with the lockup, which is sized to leave the control its width.
+        .side-navigation-toggle {
+            flex: 0 0 auto;
+            background-color: transparent;
+        }
 
         .title {
             display: flex;
             flex-direction: column;
-            flex: 1;
+            flex: 1 1 auto;
             min-width: 0;
             color: inherit;
             text-decoration: none;
@@ -51,7 +58,12 @@
                 font-size: 14px;
                 white-space: nowrap;
                 font-weight: 700;
-                margin-left: 68px;
+
+                // Indents towards the wordmark, clear of the lockup's leading logo mark.
+                // Held short of true alignment on purpose: the row's remaining width is
+                // ~158px and the name sets ~110px, so a deeper indent clips its tail on
+                // whichever font the platform resolves.
+                margin-left: 40px;
             }
         }
     }
@@ -60,7 +72,6 @@
         display: flex;
         flex-direction: column;
         gap: 3px; // avoids focus ring overlap
-        // Takes the slack so the collapse control is pushed to the foot of the rail.
         flex: 1;
         overflow: hidden auto;
 
@@ -80,31 +91,50 @@
         }
     }
 
-    .side-navigation-footer {
-        display: flex;
-        flex-shrink: 0;
-        justify-content: flex-end;
-
-        .side-navigation-toggle {
-            background-color: transparent;
-            justify-content: flex-start;
-        }
-    }
-
     &.collapsed {
         width: variables.$side-nav-width-collapsed;
 
-        // The square mark replaces the lockup, so the header stays and keeps Home clickable.
+        // Mark doubles as the expand control; the dedicated collapse button is unmounted.
         .side-navigation-header {
             justify-content: center;
 
-            .title {
-                flex: 0 0 auto;
-            }
-        }
+            .side-navigation-expand {
+                display: grid;
+                place-items: center;
+                padding: 0;
+                border: 0;
+                cursor: pointer;
+                background-color: transparent;
+                color: inherit;
 
-        .side-navigation-footer {
-            justify-content: flex-end;
+                // Mark and icon share the one cell, so trading them on hover moves nothing
+                // and leaves the control the mark's size either way.
+                > * {
+                    grid-area: 1 / 1;
+                    transition: opacity 100ms ease-out;
+                }
+
+                img {
+                    display: block;
+                }
+
+                .bp6-icon {
+                    opacity: 0;
+                }
+
+                // Keyboard users get the same swap; the focus ring alone doesn't say the mark
+                // is what expands the rail.
+                &:hover,
+                &:focus-visible {
+                    img {
+                        opacity: 0;
+                    }
+
+                    .bp6-icon {
+                        opacity: 1;
+                    }
+                }
+            }
         }
 
         // Hidden rather than unrendered so the button keeps its accessible name. Takes the

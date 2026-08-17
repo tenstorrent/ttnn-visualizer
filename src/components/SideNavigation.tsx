@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-import { Alignment, Button, ButtonVariant, Position, Size, Tooltip } from '@blueprintjs/core';
+import { Alignment, Button, ButtonVariant, Icon, Position, Size, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { useAtom } from 'jotai';
 import classNames from 'classnames';
@@ -19,9 +19,12 @@ const TENSTORRENT_LOGO_SRC =
 // to carry Vite's base itself: a literal `/logo-small.png` 404s in the build, which serves
 // from `/static/`.
 const TENSTORRENT_MARK_SRC = `${import.meta.env.BASE_URL}logo-small.png`;
-const LOGO_WIDTH = 180;
+// Leaves room for the collapse control beside it on the expanded rail's single header row.
+const LOGO_WIDTH = 150;
 // Fits the collapsed rail's width less its padding without crowding the edges.
 const MARK_WIDTH = 32;
+// Sits inside the mark's footprint, so swapping the two can't resize the control.
+const EXPAND_ICON_SIZE = 20;
 
 // Collapsed, the label is the only thing identifying an icon, so it has to reach the
 // tooltip; expanded, the label is already on screen and only a blocked item has
@@ -48,27 +51,78 @@ function SideNavigation() {
             data-testid={TEST_IDS.SIDE_NAVIGATION}
         >
             <div className='side-navigation-header'>
-                <Link
-                    to={ROUTES.HOME}
-                    className='title'
-                >
-                    {isCollapsed ? (
-                        <img
-                            width={MARK_WIDTH}
-                            alt='tenstorrent'
-                            src={TENSTORRENT_MARK_SRC}
-                        />
-                    ) : (
-                        <>
+                {isCollapsed ? (
+                    // renderTarget for the same reason as the collapse control: the Tooltip
+                    // child path would clone this button with `aria-expanded: undefined`.
+                    <Tooltip
+                        content='Expand navigation'
+                        position={Position.RIGHT}
+                        renderTarget={({ isOpen: _isOpen, className, ...tooltipTargetProps }) => (
+                            <button
+                                {...tooltipTargetProps}
+                                type='button'
+                                aria-label='Expand navigation'
+                                aria-expanded={false}
+                                onClick={handleToggleCollapsed}
+                                className={classNames(className, 'side-navigation-expand')}
+                                data-testid={TEST_IDS.SIDE_NAVIGATION_TOGGLE}
+                            >
+                                <img
+                                    width={MARK_WIDTH}
+                                    alt=''
+                                    src={TENSTORRENT_MARK_SRC}
+                                />
+
+                                {/* Takes the mark's place on hover: nothing else on the
+                                    collapsed rail says the mark expands it, and the button's
+                                    label only reaches a screen reader. Decorative, hence
+                                    unlabelled. */}
+                                <Icon
+                                    icon={IconNames.MENU_OPEN}
+                                    size={EXPAND_ICON_SIZE}
+                                    aria-hidden
+                                />
+                            </button>
+                        )}
+                    />
+                ) : (
+                    <>
+                        <Link
+                            to={ROUTES.HOME}
+                            className='title'
+                        >
                             <img
                                 width={LOGO_WIDTH}
                                 alt='tenstorrent'
                                 src={TENSTORRENT_LOGO_SRC}
                             />
                             <span className='visualizer-title'>TT-NN Visualizer</span>
-                        </>
-                    )}
-                </Link>
+                        </Link>
+
+                        {/* renderTarget rather than a Tooltip child: the child path clones the
+                            target with `aria-expanded: undefined` for hover popovers, which
+                            would drop the state this button exists to report. */}
+                        <Tooltip
+                            content='Collapse navigation'
+                            position={Position.RIGHT}
+                            renderTarget={({ isOpen: _isOpen, className, ...tooltipTargetProps }) => (
+                                <Button
+                                    {...tooltipTargetProps}
+                                    aria-label='Collapse navigation'
+                                    aria-expanded
+                                    onClick={handleToggleCollapsed}
+                                    icon={IconNames.MENU_CLOSED}
+                                    variant={ButtonVariant.MINIMAL}
+                                    size={Size.LARGE}
+                                    // Keeps Blueprint's own target class, which the spread
+                                    // would otherwise lose to this one.
+                                    className={classNames(className, 'side-navigation-toggle')}
+                                    data-testid={TEST_IDS.SIDE_NAVIGATION_TOGGLE}
+                                />
+                            )}
+                        />
+                    </>
+                )}
             </div>
 
             <div className='side-navigation-items'>
@@ -101,27 +155,6 @@ function SideNavigation() {
                         </Tooltip>
                     );
                 })}
-            </div>
-
-            <div className='side-navigation-footer'>
-                <Tooltip
-                    content={isCollapsed ? 'Expand navigation' : 'Collapse navigation'}
-                    position={Position.RIGHT}
-                    disabled={!isCollapsed}
-                    fill
-                >
-                    <Button
-                        aria-label={isCollapsed ? 'Expand navigation' : 'Collapse navigation'}
-                        aria-expanded={!isCollapsed}
-                        onClick={handleToggleCollapsed}
-                        icon={isCollapsed ? IconNames.MENU_OPEN : IconNames.MENU_CLOSED}
-                        text={isCollapsed ? 'Expand' : 'Collapse'}
-                        variant={ButtonVariant.MINIMAL}
-                        size={Size.LARGE}
-                        className='side-navigation-toggle'
-                        data-testid={TEST_IDS.SIDE_NAVIGATION_TOGGLE}
-                    />
-                </Tooltip>
             </div>
         </nav>
     );
