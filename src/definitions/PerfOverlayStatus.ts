@@ -14,5 +14,5 @@ export enum PerfOverlayStatus {
 export const PERF_OVERLAY_TOOLTIP: Record<PerfOverlayStatus, string> = {
     [PerfOverlayStatus.UNAVAILABLE]: 'Load a performance report to enable perf overlay.',
     [PerfOverlayStatus.UNLINKED]: "Loaded performance report doesn't match this graph (no operations in common).",
-    [PerfOverlayStatus.READY]: 'Colour nodes by per-op kernel duration.',
+    [PerfOverlayStatus.READY]: 'Size and colour a bar on each node by per-op kernel duration.',
 };

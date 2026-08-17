@@ -14,18 +14,30 @@ import {
     useReactFlow,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { type MouseEvent as ReactMouseEvent, memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+    type CSSProperties,
+    type MouseEvent as ReactMouseEvent,
+    memo,
+    useCallback,
+    useEffect,
+    useMemo,
+    useRef,
+    useState,
+} from 'react';
 import { NodeRelation } from '../../definitions/NodeRelation';
-import { toReadableShape } from '../../functions/formatting';
+import { PerfOverlayStatus } from '../../definitions/PerfOverlayStatus';
+import { formatDuration, toReadableShape } from '../../functions/formatting';
 import type { OperationDescription } from '../../model/APIData';
-import type { PerfOverlaySource } from '../../functions/perfOverlay';
+import { type PerfOverlaySource, perfColorScale } from '../../functions/perfOverlay';
 import LoadingSpinner from '../LoadingSpinner';
+import PerfOverlayLegend from '../perf-overlay/PerfOverlayLegend';
 import OpGraphEdge from './OpGraphEdge';
 import type { OpGraphFilterHandle } from './OpGraphFilter';
 import OpGraphInfoPanel from './OpGraphInfoPanel';
 import OpGraphNode from './OpGraphNode';
 import OpGraphToolbar from './OpGraphToolbar';
 import { OpGraphFilterMode, buildOpGraphFilterMatcher } from './opGraphFilterMatcher';
+import { buildOpGraphPerfOverlay } from './opGraphPerfOverlay';
 import { useOpGraphLayoutWorker } from './useOpGraphLayoutWorker';
 import {
     type OpGraphBuildOptions,
@@ -82,20 +94,39 @@ const EDGE_CLASS_BY_RELATION: Record<NodeRelation, string> = {
     [NodeRelation.Output]: 'op-graph-edge-output',
 };
 
+// Perf rides its own channel — an inset bar drawn as a pseudo-element — because
+// the fill belongs to the input/output highlight and the border to selection.
+// Sizing it from a custom property rather than a child element keeps the node's
+// geometry, and therefore the Dagre layout, untouched by a toggle. #1880
+const PERF_BAR_SCALE_VAR = '--op-graph-perf-scale';
+const PERF_BAR_COLOR_VAR = '--op-graph-perf-color';
+
 interface OperationGraphReactFlowProps {
     operationList: OperationDescription[];
     operationId?: number;
-    // Unused until the perf overlay is ported; keeps `GraphView`'s call shape. #1880
     perfRows?: PerfOverlaySource[];
     isPerfReportLoaded?: boolean;
 }
 
-const OperationGraphInner = ({ operationList, operationId }: OperationGraphReactFlowProps) => {
+interface PerfHover {
+    operationId: number;
+    x: number;
+    y: number;
+}
+
+const OperationGraphInner = ({
+    operationList,
+    operationId,
+    perfRows,
+    isPerfReportLoaded = false,
+}: OperationGraphReactFlowProps) => {
     const [nodes, setNodes, onNodesChange] = useNodesState<OpGraphFlowNode>([]);
     const [edges, setEdges, onEdgesChange] = useEdgesState<OpGraphFlowEdge>([]);
     const [selectedOperationId, setSelectedOperationId] = useState<number | null>(operationId ?? null);
     const [nodeIndex, setNodeIndex] = useState<OpGraphNodeIndexEntry[]>([]);
     const [hideDeallocate, setHideDeallocate] = useState(true);
+    const [isPerfOverlayEnabled, setIsPerfOverlayEnabled] = useState(false);
+    const [perfHover, setPerfHover] = useState<PerfHover | null>(null);
     const [filterQuery, setFilterQuery] = useState('');
     const [appliedFilterQuery, setAppliedFilterQuery] = useState('');
     const [filterMode, setFilterMode] = useState<OpGraphFilterMode>(() => {
@@ -115,6 +146,7 @@ const OperationGraphInner = ({ operationList, operationId }: OperationGraphReact
         }
     }
     const filterRef = useRef<OpGraphFilterHandle>(null);
+    const containerRef = useRef<HTMLDivElement>(null);
     const { setCenter, getNode } = useReactFlow<OpGraphFlowNode, OpGraphFlowEdge>();
 
     const selectedOperationIdRef = useRef(selectedOperationId);
@@ -365,8 +397,36 @@ const OperationGraphInner = ({ operationList, operationId }: OperationGraphReact
         return { selectedId, relationByNodeId, relationByEdgeId };
     }, [selectedOperationId, edgesBySource, edgesByTarget]);
 
+    const graphOperationIds = useMemo(() => nodeIndex.map((entry) => entry.operationId), [nodeIndex]);
+
+    const perfOverlay = useMemo(
+        () => buildOpGraphPerfOverlay(perfRows, isPerfReportLoaded, graphOperationIds),
+        [perfRows, isPerfReportLoaded, graphOperationIds],
+    );
+
+    // Derived rather than stored: a report swap that drops the overlay out of
+    // READY turns it off on its own, with no reset to keep in step.
+    const isPerfOverlayActive = isPerfOverlayEnabled && perfOverlay.status === PerfOverlayStatus.READY;
+
+    // Built once per score change so the styling pass can reuse these object
+    // identities rather than allocating one per node on every drag frame.
+    const perfStyleByNodeId = useMemo(() => {
+        if (!isPerfOverlayActive) {
+            return null;
+        }
+        const styleByNodeId = new Map<string, CSSProperties>();
+        for (const [opId, score] of perfOverlay.scoreByOpId) {
+            // `CSSProperties` has no index signature for custom properties.
+            styleByNodeId.set(String(opId), {
+                [PERF_BAR_SCALE_VAR]: score.t,
+                [PERF_BAR_COLOR_VAR]: perfColorScale(score.t),
+            } as CSSProperties);
+        }
+        return styleByNodeId;
+    }, [isPerfOverlayActive, perfOverlay]);
+
     const styledNodes = useMemo(() => {
-        if (!highlight && !matchedIds) {
+        if (!highlight && !matchedIds && !perfStyleByNodeId) {
             return nodes;
         }
         return nodes.map((node) => {
@@ -380,12 +440,21 @@ const OperationGraphInner = ({ operationList, operationId }: OperationGraphReact
                     styled = { ...styled, className: NODE_CLASS_BY_RELATION[relation] };
                 }
             }
+            // Perf writes only custom properties, so it stacks with selection and
+            // the highlight instead of displacing either. An op with no perf row
+            // gets nothing here, and its bar stays transparent.
+            const perfStyle = perfStyleByNodeId?.get(node.id);
+            if (perfStyle) {
+                styled = { ...styled, style: { ...styled.style, ...perfStyle } };
+            }
             if (matchedIds && !isSelected && !matchedIds.has(node.id)) {
+                // Opacity on the node multiplies its bar, so a dimmed non-match
+                // dims its perf signal with it.
                 styled = { ...styled, style: { ...styled.style, opacity: FILTER_DIM_OPACITY } };
             }
             return styled;
         });
-    }, [nodes, highlight, matchedIds]);
+    }, [nodes, highlight, matchedIds, perfStyleByNodeId]);
 
     const styledEdges = useMemo(() => {
         if (!highlight && !matchedIds) {
@@ -414,12 +483,57 @@ const OperationGraphInner = ({ operationList, operationId }: OperationGraphReact
         setSelectedOperationId(null);
     }, []);
 
+    // Reading the container box on enter rather than per mousemove: the pointer
+    // crosses a node boundary orders of magnitude less often than it moves.
+    const handleNodeMouseEnter = useCallback((event: ReactMouseEvent, node: OpGraphFlowNode) => {
+        const bounds = containerRef.current?.getBoundingClientRect();
+        if (!bounds) {
+            return;
+        }
+        setPerfHover({
+            operationId: node.data.operationId,
+            x: event.clientX - bounds.left,
+            y: event.clientY - bounds.top,
+        });
+    }, []);
+
+    const handleNodeMouseLeave = useCallback(() => setPerfHover(null), []);
+
+    // Dropping the hover here rather than reacting to the overlay going quiet:
+    // switching off mid-hover would otherwise strand an open hover that came
+    // back, at a stale position, the next time the overlay was switched on.
+    const handlePerfOverlayChange = useCallback((next: boolean) => {
+        setIsPerfOverlayEnabled(next);
+        setPerfHover(null);
+    }, []);
+
+    const perfHoverLabel = useMemo(() => {
+        if (!isPerfOverlayActive || perfHover === null) {
+            return null;
+        }
+        const aggregate = perfOverlay.aggregatesByOpId.get(perfHover.operationId);
+        if (aggregate === undefined) {
+            return 'No perf data';
+        }
+        const rank = perfOverlay.rankByOpId.get(perfHover.operationId);
+        const share = perfOverlay.totalNs > 0 ? (aggregate.deviceTimeNs / perfOverlay.totalNs) * 100 : 0;
+        return `${formatDuration(aggregate.deviceTimeNs)} · #${rank} of ${perfOverlay.linkedOpCount} · ${share.toFixed(1)}% of total`;
+    }, [isPerfOverlayActive, perfHover, perfOverlay]);
+
+    const selectedPerfAggregate =
+        selectedOperationId === null ? undefined : perfOverlay.aggregatesByOpId.get(selectedOperationId);
+    const selectedPerfScore =
+        selectedOperationId === null ? undefined : perfOverlay.scoreByOpId.get(selectedOperationId);
+
     // The panel covers the corner the minimap docks in. Unmounting rather than
     // hiding it drops a per-node rect that re-derives on every node change.
     const isPanelOpen = selectedOperationId !== null && !isBuilding;
 
     return (
-        <div className='operation-graph-react-flow'>
+        <div
+            className='operation-graph-react-flow'
+            ref={containerRef}
+        >
             {isBuilding ? (
                 <div className='operation-graph-react-flow-loader'>
                     <LoadingSpinner />
@@ -442,6 +556,11 @@ const OperationGraphInner = ({ operationList, operationId }: OperationGraphReact
                 onGoToOperation={selectOperation}
                 hideDeallocate={hideDeallocate}
                 onHideDeallocateChange={setHideDeallocate}
+                isPerfOverlayActive={isPerfOverlayActive}
+                onPerfOverlayChange={handlePerfOverlayChange}
+                perfOverlayStatus={perfOverlay.status}
+                linkedOpCount={perfOverlay.linkedOpCount}
+                totalOpCount={perfOverlay.totalOpCount}
                 isDisabled={isBuilding}
             />
             <ReactFlow<OpGraphFlowNode, OpGraphFlowEdge>
@@ -453,6 +572,11 @@ const OperationGraphInner = ({ operationList, operationId }: OperationGraphReact
                 onEdgesChange={onEdgesChange}
                 onNodeClick={handleNodeClick}
                 onPaneClick={handlePaneClick}
+                onNodeMouseEnter={isPerfOverlayActive ? handleNodeMouseEnter : undefined}
+                // Always attached, so any pointer exit clears a hover the
+                // overlay left behind. Clearing an already-null hover bails out
+                // of the render, so this costs nothing while the overlay is off.
+                onNodeMouseLeave={handleNodeMouseLeave}
                 minZoom={MIN_ZOOM}
                 maxZoom={MAX_ZOOM}
                 nodesConnectable={false}
@@ -463,12 +587,32 @@ const OperationGraphInner = ({ operationList, operationId }: OperationGraphReact
                 <Controls />
                 {!isPanelOpen ? <MiniMap pannable /> : null}
             </ReactFlow>
+            {isPerfOverlayActive && !isBuilding ? (
+                <div className='op-graph-perf-legend'>
+                    <PerfOverlayLegend
+                        minNs={perfOverlay.minNs}
+                        maxNs={perfOverlay.maxNs}
+                    />
+                </div>
+            ) : null}
+            {perfHoverLabel !== null && perfHover !== null ? (
+                <div
+                    className='op-graph-perf-hover'
+                    style={{ left: perfHover.x, top: perfHover.y }}
+                    role='tooltip'
+                >
+                    {perfHoverLabel}
+                </div>
+            ) : null}
             {isPanelOpen ? (
                 <OpGraphInfoPanel
                     operationId={selectedOperationId}
                     operationList={operationList}
                     operationNamesById={operationNamesById}
                     onLocateOperation={focusOperation}
+                    isPerfOverlayActive={isPerfOverlayActive}
+                    perfDeviceTimeNs={selectedPerfAggregate?.deviceTimeNs}
+                    perfColor={selectedPerfScore ? perfColorScale(selectedPerfScore.t) : undefined}
                 />
             ) : null}
         </div>

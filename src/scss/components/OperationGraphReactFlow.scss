@@ -52,6 +52,58 @@
         &.op-graph-node-output {
             background-color: var(--graph-output-node);
         }
+
+        // The perf overlay's own channel. The fill belongs to the input/output
+        // highlight and the border to selection, so magnitude goes on an inset
+        // bar instead of competing for either. Absolutely positioned to stay out
+        // of the flex flow: a bar that changed the node's height would desync the
+        // Dagre sizes and turn every overlay toggle into a relayout. #1880
+        &::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            min-width: 3px;
+            width: calc(var(--op-graph-perf-scale, 0) * 100%);
+
+            // React Flow scales the node by the viewport transform, so this is
+            // the on-screen thickness only at 1:1 — a whole-graph zoom of ~0.4
+            // renders it at under half. Sized against the node's 4px bottom
+            // padding, which is the room available before it meets the text.
+            height: 6px;
+
+            // Absent custom property means the op has no perf row, so the bar
+            // stays invisible and "no data" never reads as "fastest op".
+            background-color: var(--op-graph-perf-color, transparent);
+            border-radius: 0 2px 0 1px;
+        }
+    }
+
+    // Inside the canvas so it reads against the nodes it explains. The bottom
+    // edge is the only clear one — the toolbar holds the top-left and the
+    // details panel the full right — and the offset clears the Controls column.
+    .op-graph-perf-legend {
+        position: absolute;
+        z-index: variables.$z-index-2-interactive;
+        bottom: 12px;
+        left: 48px;
+    }
+
+    .op-graph-perf-hover {
+        position: absolute;
+        z-index: variables.$z-index-2-interactive;
+        padding: 4px 8px;
+        border-radius: 3px;
+        background-color: rgba($tt-black, 0.9);
+        color: $tt-white;
+        font-size: 11px;
+        line-height: 1.3;
+        white-space: nowrap;
+
+        // Offset from the cursor so it never lands under the pointer and starts
+        // flickering the enter/leave pair that positions it.
+        transform: translate(12px, 12px);
+        pointer-events: none;
     }
 
     .op-graph-node-label {

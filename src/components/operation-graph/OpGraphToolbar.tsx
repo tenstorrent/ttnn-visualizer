@@ -5,6 +5,7 @@
 import { Button, ButtonVariant, PopoverPosition, Switch, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { type FormEvent, type Ref, memo } from 'react';
+import { PERF_OVERLAY_TOOLTIP, PerfOverlayStatus } from '../../definitions/PerfOverlayStatus';
 import OpGraphFilter, { type OpGraphFilterHandle } from './OpGraphFilter';
 import type { OpGraphFilterMode } from './opGraphFilterMatcher';
 import 'styles/components/OpGraphToolbar.scss';
@@ -26,6 +27,11 @@ interface OpGraphToolbarProps {
     onGoToOperation: (operationId: number) => void;
     hideDeallocate: boolean;
     onHideDeallocateChange: (next: boolean) => void;
+    isPerfOverlayActive: boolean;
+    onPerfOverlayChange: (next: boolean) => void;
+    perfOverlayStatus: PerfOverlayStatus;
+    linkedOpCount: number;
+    totalOpCount: number;
     isDisabled: boolean;
 }
 
@@ -47,6 +53,11 @@ const OpGraphToolbar = memo(
         onGoToOperation,
         hideDeallocate,
         onHideDeallocateChange,
+        isPerfOverlayActive,
+        onPerfOverlayChange,
+        perfOverlayStatus,
+        linkedOpCount,
+        totalOpCount,
         isDisabled,
     }: OpGraphToolbarProps) => (
         <div className='op-graph-toolbar'>
@@ -125,6 +136,30 @@ const OpGraphToolbar = memo(
                     label='Hide deallocate ops'
                     disabled={isDisabled}
                 />
+
+                {/* Bound to the Switch itself, not a wrapper: Blueprint's
+                    tooltip target is the enclosing label, which keeps emitting
+                    pointer events while the input inside it is disabled. That
+                    matters because the two states that disable this control are
+                    exactly the ones whose tooltip explains why. #1880 */}
+                <Tooltip
+                    placement={PopoverPosition.BOTTOM}
+                    content={PERF_OVERLAY_TOOLTIP[perfOverlayStatus]}
+                >
+                    <Switch
+                        className='op-graph-toolbar-switch'
+                        checked={isPerfOverlayActive}
+                        onChange={(event: FormEvent<HTMLInputElement>) =>
+                            onPerfOverlayChange(event.currentTarget.checked)
+                        }
+                        label={
+                            perfOverlayStatus === PerfOverlayStatus.READY
+                                ? `Perf overlay (${linkedOpCount}/${totalOpCount})`
+                                : 'Perf overlay'
+                        }
+                        disabled={isDisabled || perfOverlayStatus !== PerfOverlayStatus.READY}
+                    />
+                </Tooltip>
             </div>
         </div>
     ),
