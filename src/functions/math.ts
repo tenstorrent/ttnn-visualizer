@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { CoreCoord } from '../model/CoreCoord';
+import { CoreCoord, CoreCoordList } from '../model/CoreCoord';
 
 const LOCALE = 'en-US';
 
@@ -139,7 +139,17 @@ const CORE_COORD_RE = /\(x=(\d+),y=(\d+)\)|(\d+)-(\d+)/g;
  * Accepts both `{[(x=N,y=N) - (x=N,y=N)]}` (legacy) and `{[N-N - N-N]}` (modern),
  * multi-rectangle unions, and `{}`.
  */
-export const getCoresInRangeList = (rangeString: string): CoreCoord[] => {
+// A mesh op repeats one `core_range_set` string per device, so the parse below
+// runs identically N times for the N devices this expansion exists to
+// distinguish. Entries are handed out shared, which the `readonly` return type
+// is what keeps safe. #1844
+const coresInRangeCache = new Map<string, CoreCoordList>();
+
+export const getCoresInRangeList = (rangeString: string): CoreCoordList => {
+    const cached = coresInRangeCache.get(rangeString);
+    if (cached) {
+        return cached;
+    }
     const cores = new Map<string, CoreCoord>();
     for (const rect of rangeString.matchAll(CORE_RANGE_RECT_RE)) {
         const corners: CoreCoord[] = [];
@@ -168,7 +178,9 @@ export const getCoresInRangeList = (rangeString: string): CoreCoord[] => {
             }
         }
     }
-    return Array.from(cores.values());
+    const expanded: CoreCoordList = Array.from(cores.values());
+    coresInRangeCache.set(rangeString, expanded);
+    return expanded;
 };
 
 export const getCoresInRange = (rangeString: string): number => getCoresInRangeList(rangeString).length;

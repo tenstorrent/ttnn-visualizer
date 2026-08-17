@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { NodeType } from './APIData';
-import { CoreCoord } from './CoreCoord';
+import { CoreCoordList } from './CoreCoord';
 
 export type AllocationDetails = {
     id: number;
@@ -31,10 +31,12 @@ export type CBAllocationSummary = {
     /** Raw `core_range_set` string from the graph node (for display + reproducibility). */
     coreRangeSet: string;
     /** Expanded cores; empty when the allocation falls into the `'?'` bucket. */
-    cores: CoreCoord[];
+    cores: CoreCoordList;
     /** Op id/name that created the CB, used downstream for color-variance/highlighting. */
     allocateOperationId?: number;
     allocateOperationName?: string;
+    /** Devices whose identical allocations were folded into this row; 1 off a mesh. #1844 */
+    deviceCount: number;
     /**
      * `true` when the source node had `globally_allocated=1`. These CBs are
      * kernel-side views bound to an existing L1 sharded buffer (the tensor at
@@ -61,4 +63,13 @@ export type CBPressureSnapshot = {
     unattributedBytes: number;
     /** Ordered list of CBs that were live when the snapshot was taken. */
     allocations: CBAllocationSummary[];
+};
+
+/**
+ * A mesh op emits the same CB once per device; only the first earns a row, so the
+ * rest are listed here for the renderer to skip. #1844
+ */
+export type CBDeviceFanout = {
+    deviceCountByNodeId: Map<number, number>;
+    duplicateNodeIds: Set<number>;
 };
