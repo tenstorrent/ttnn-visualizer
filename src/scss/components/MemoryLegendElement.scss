@@ -103,11 +103,12 @@
         box-sizing: border-box;
     }
 
-    // Inline "aliased" marker. Renders icon-only in the per-DeviceOp row to
-    // preserve the existing grid template (`15px 0.5fr 2fr 13fr 3fr`) - the
-    // full "Globally allocated" text label only fits in the wider modal
-    // legend. Tooltip + aria-label still carry the semantic payload here so
-    // mouse and AT users get the same information.
+    // Inline "aliased" marker, icon-only outside the modal legend because only
+    // the wider modal fits the full "Globally allocated" text. Tooltip +
+    // aria-label carry the semantic payload wherever the text is dropped.
+    // The per-DeviceOp row overrides the flow and margin below in
+    // `DeviceOperationFullRender.scss`, where the marker sits in a reserved
+    // slot instead. #1844
     .globally-allocated-marker {
         display: inline-flex;
         align-items: center;

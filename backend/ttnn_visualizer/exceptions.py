@@ -67,6 +67,20 @@ class RemoteConnectionException(Exception):
         self.sync_method = sync_method
 
     @property
+    def is_connection_verdict(self) -> bool:
+        """Whether this failure is about the connection, not about one thing checked.
+
+        Carrying an explicit HTTP status is what distinguishes the two: a
+        subclass sets one precisely because the whole request has an answer
+        (untrusted host key, rejected credentials) rather than one item in a list
+        of checks having failed. Callers that collect a status line per item use
+        this to decide whether to answer with ``http_status`` instead of adding
+        another line — asking the exception rather than enumerating its subclasses,
+        so a new one carrying a status is honoured without editing every caller.
+        """
+        return self._http_status_code is not None
+
+    @property
     def http_status(self):
         # Use custom HTTP status code if provided
         if self._http_status_code is not None:

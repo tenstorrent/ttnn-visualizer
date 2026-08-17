@@ -107,3 +107,11 @@ export const getUTCFromEpoch = (epoch: number): Date => new Date(epoch * 1000);
 /** Dropdown label for a `~/.ssh/config` alias, disambiguated by its HostName. */
 export const getSshConfigHostLabel = (host: SshConfigHost): string =>
     host.hostName ? `${host.host} — ${host.hostName}` : host.host;
+
+// The CB legend row and the pressure modal both spell out these multipliers.
+// Written twice, they drifted on pluralisation; callers keep their own gating,
+// which genuinely differs, and share only the wording. #1844
+export const getCoreCountLabel = (numCores: number): string => `x ${numCores} ${numCores === 1 ? 'core' : 'cores'}`;
+
+export const getDeviceCountLabel = (deviceCount: number): string =>
+    `x ${deviceCount} ${deviceCount === 1 ? 'device' : 'devices'}`;
