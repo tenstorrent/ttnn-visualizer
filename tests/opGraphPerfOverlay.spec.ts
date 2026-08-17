@@ -2,11 +2,20 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
+import type { CSSProperties } from 'react';
 import { describe, expect, it } from 'vitest';
 
-import { buildOpGraphPerfOverlay } from '../src/components/operation-graph/opGraphPerfOverlay';
+import {
+    NO_PERF_DATA_LABEL,
+    PERF_BAR_COLOR_VAR,
+    PERF_BAR_SCALE_VAR,
+    buildOpGraphPerfOverlay,
+    buildPerfNodeStyleByNodeId,
+    getPerfHoverLabel,
+} from '../src/components/operation-graph/opGraphPerfOverlay';
 import { PerfOverlayStatus } from '../src/definitions/PerfOverlayStatus';
-import type { PerfOverlaySource } from '../src/functions/perfOverlay';
+import { formatDuration } from '../src/functions/formatting';
+import { type PerfOverlaySource, perfColorScale } from '../src/functions/perfOverlay';
 
 // `device_time` is microseconds on the wire; the aggregator converts to ns.
 const rows = (...pairs: [id: number, deviceTimeUs: number][]): PerfOverlaySource[] =>
@@ -123,5 +132,88 @@ describe('buildOpGraphPerfOverlay ranking', () => {
 
         expect(overlay.aggregatesByOpId.get(1)?.deviceTimeNs).toBe(90 * 1_000);
         expect(overlay.rankByOpId.get(1)).toBe(1);
+    });
+});
+
+describe('buildPerfNodeStyleByNodeId', () => {
+    const overlay = buildOpGraphPerfOverlay(rows([1, 10], [2, 1_000]), true, [1, 2, 3]);
+
+    // `CSSProperties` has no index signature for custom properties, which is the
+    // same reason the builder casts on the way out.
+    const customProps = (style: CSSProperties | undefined): Record<string, unknown> =>
+        (style ?? {}) as Record<string, unknown>;
+
+    it('produces nothing at all when the overlay is off', () => {
+        // `null` rather than an empty map, so the styling pass can return the
+        // node array by identity instead of rebuilding it.
+        expect(buildPerfNodeStyleByNodeId(overlay, false)).toBeNull();
+    });
+
+    it('writes only the two custom properties, leaving fill and border alone', () => {
+        // Node background encodes the input/output highlight, the border and
+        // box-shadow encode selection, and `className` carries both. Perf has to
+        // compose with all of them rather than displace any, so the patch must
+        // not reach for a single standard property. #1880
+        const style = buildPerfNodeStyleByNodeId(overlay, true)?.get('2');
+
+        expect(Object.keys(style ?? {})).toEqual([PERF_BAR_SCALE_VAR, PERF_BAR_COLOR_VAR]);
+    });
+
+    it('keys by node id so the styling pass can look up without a conversion', () => {
+        const styleByNodeId = buildPerfNodeStyleByNodeId(overlay, true);
+
+        expect(styleByNodeId?.has('1')).toBe(true);
+        expect(styleByNodeId?.has('2')).toBe(true);
+    });
+
+    it('skips an op with no perf row, leaving its bar transparent', () => {
+        // Op 3 is on the canvas but absent from the report. No custom property
+        // means the CSS fallback paints nothing, which is what separates it from
+        // the fastest op.
+        expect(buildPerfNodeStyleByNodeId(overlay, true)?.has('3')).toBe(false);
+    });
+
+    it('puts the slowest visible op at the hot end of the ramp', () => {
+        const styleByNodeId = buildPerfNodeStyleByNodeId(overlay, true);
+
+        expect(customProps(styleByNodeId?.get('2'))[PERF_BAR_SCALE_VAR]).toBe(1);
+        expect(customProps(styleByNodeId?.get('1'))[PERF_BAR_SCALE_VAR]).toBe(0);
+    });
+
+    it('colours the bar with the same ramp the side panel swatch uses', () => {
+        // The panel derives its swatch from `perfColorScale(score.t)` too, so a
+        // divergence here would show up as a node and its own detail panel
+        // disagreeing about how hot the op is.
+        const styleByNodeId = buildPerfNodeStyleByNodeId(overlay, true);
+
+        expect(customProps(styleByNodeId?.get('2'))[PERF_BAR_COLOR_VAR]).toBe(perfColorScale(1));
+    });
+});
+
+describe('getPerfHoverLabel', () => {
+    it('gives the duration, the rank and the share of total', () => {
+        const overlay = buildOpGraphPerfOverlay(rows([1, 30], [2, 10]), true, [1, 2]);
+
+        expect(getPerfHoverLabel(overlay, 1)).toBe(`${formatDuration(30_000)} · #1 of 2 · 75.0% of total`);
+    });
+
+    it('says so plainly when the op carries no perf row', () => {
+        const overlay = buildOpGraphPerfOverlay(rows([1, 30]), true, [1, 2]);
+
+        expect(getPerfHoverLabel(overlay, 2)).toBe(NO_PERF_DATA_LABEL);
+    });
+
+    it('ranks against the linked ops, not every op on the canvas', () => {
+        // Saying "#1 of 40" when only two ops have perf data would overstate
+        // what the report actually covers.
+        const overlay = buildOpGraphPerfOverlay(rows([1, 30], [2, 10]), true, [1, 2, 3, 4]);
+
+        expect(getPerfHoverLabel(overlay, 1)).toContain('#1 of 2');
+    });
+
+    it('reports a whole-budget op as the whole budget', () => {
+        const overlay = buildOpGraphPerfOverlay(rows([1, 30]), true, [1]);
+
+        expect(getPerfHoverLabel(overlay, 1)).toContain('100.0% of total');
     });
 });

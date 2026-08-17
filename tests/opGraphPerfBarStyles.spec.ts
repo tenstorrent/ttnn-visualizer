@@ -13,10 +13,6 @@ const STYLESHEET = readFileSync(resolve(process.cwd(), 'src/scss/components/Oper
     encoding: 'utf8',
 });
 
-const COMPONENT = readFileSync(resolve(process.cwd(), 'src/components/operation-graph/OperationGraphReactFlow.tsx'), {
-    encoding: 'utf8',
-});
-
 const ruleBody = (selector: string): string => {
     const start = STYLESHEET.indexOf(selector);
     expect(start, `${selector} not found`).toBeGreaterThan(-1);
@@ -64,21 +60,5 @@ describe('perf overlay bar encoding', () => {
         // A zero-length bar for the coolest op would read as missing data, so
         // the scale floor is a visible stub rather than nothing.
         expect(ruleBody(PERF_BAR)).toMatch(/min-width:\s*[1-9]/);
-    });
-});
-
-describe('perf overlay style channels', () => {
-    it('writes only custom properties, leaving fill and border to their owners', () => {
-        // Node background encodes the input/output highlight and the border
-        // encodes selection. Perf has to compose with both rather than displace
-        // either, which is why it gets its own channel.
-        const perfPass = COMPONENT.slice(
-            COMPONENT.indexOf('const perfStyleByNodeId'),
-            COMPONENT.indexOf('const styledNodes'),
-        );
-
-        expect(perfPass).toContain('PERF_BAR_SCALE_VAR');
-        expect(perfPass).toContain('PERF_BAR_COLOR_VAR');
-        expect(perfPass).not.toMatch(/backgroundColor|borderColor|boxShadow|className/);
     });
 });

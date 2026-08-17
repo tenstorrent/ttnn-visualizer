@@ -14,19 +14,10 @@ import {
     useReactFlow,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import {
-    type CSSProperties,
-    type MouseEvent as ReactMouseEvent,
-    memo,
-    useCallback,
-    useEffect,
-    useMemo,
-    useRef,
-    useState,
-} from 'react';
+import { type MouseEvent as ReactMouseEvent, memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { NodeRelation } from '../../definitions/NodeRelation';
 import { PerfOverlayStatus } from '../../definitions/PerfOverlayStatus';
-import { formatDuration, toReadableShape } from '../../functions/formatting';
+import { toReadableShape } from '../../functions/formatting';
 import type { OperationDescription } from '../../model/APIData';
 import { type PerfOverlaySource, perfColorScale } from '../../functions/perfOverlay';
 import LoadingSpinner from '../LoadingSpinner';
@@ -37,7 +28,7 @@ import OpGraphInfoPanel from './OpGraphInfoPanel';
 import OpGraphNode from './OpGraphNode';
 import OpGraphToolbar from './OpGraphToolbar';
 import { OpGraphFilterMode, buildOpGraphFilterMatcher } from './opGraphFilterMatcher';
-import { buildOpGraphPerfOverlay } from './opGraphPerfOverlay';
+import { buildOpGraphPerfOverlay, buildPerfNodeStyleByNodeId, getPerfHoverLabel } from './opGraphPerfOverlay';
 import { useOpGraphLayoutWorker } from './useOpGraphLayoutWorker';
 import {
     type OpGraphBuildOptions,
@@ -93,13 +84,6 @@ const EDGE_CLASS_BY_RELATION: Record<NodeRelation, string> = {
     [NodeRelation.Input]: 'op-graph-edge-input',
     [NodeRelation.Output]: 'op-graph-edge-output',
 };
-
-// Perf rides its own channel — an inset bar drawn as a pseudo-element — because
-// the fill belongs to the input/output highlight and the border to selection.
-// Sizing it from a custom property rather than a child element keeps the node's
-// geometry, and therefore the Dagre layout, untouched by a toggle. #1880
-const PERF_BAR_SCALE_VAR = '--op-graph-perf-scale';
-const PERF_BAR_COLOR_VAR = '--op-graph-perf-color';
 
 interface OperationGraphReactFlowProps {
     operationList: OperationDescription[];
@@ -410,20 +394,10 @@ const OperationGraphInner = ({
 
     // Built once per score change so the styling pass can reuse these object
     // identities rather than allocating one per node on every drag frame.
-    const perfStyleByNodeId = useMemo(() => {
-        if (!isPerfOverlayActive) {
-            return null;
-        }
-        const styleByNodeId = new Map<string, CSSProperties>();
-        for (const [opId, score] of perfOverlay.scoreByOpId) {
-            // `CSSProperties` has no index signature for custom properties.
-            styleByNodeId.set(String(opId), {
-                [PERF_BAR_SCALE_VAR]: score.t,
-                [PERF_BAR_COLOR_VAR]: perfColorScale(score.t),
-            } as CSSProperties);
-        }
-        return styleByNodeId;
-    }, [isPerfOverlayActive, perfOverlay]);
+    const perfStyleByNodeId = useMemo(
+        () => buildPerfNodeStyleByNodeId(perfOverlay, isPerfOverlayActive),
+        [isPerfOverlayActive, perfOverlay],
+    );
 
     const styledNodes = useMemo(() => {
         if (!highlight && !matchedIds && !perfStyleByNodeId) {
@@ -507,18 +481,11 @@ const OperationGraphInner = ({
         setPerfHover(null);
     }, []);
 
-    const perfHoverLabel = useMemo(() => {
-        if (!isPerfOverlayActive || perfHover === null) {
-            return null;
-        }
-        const aggregate = perfOverlay.aggregatesByOpId.get(perfHover.operationId);
-        if (aggregate === undefined) {
-            return 'No perf data';
-        }
-        const rank = perfOverlay.rankByOpId.get(perfHover.operationId);
-        const share = perfOverlay.totalNs > 0 ? (aggregate.deviceTimeNs / perfOverlay.totalNs) * 100 : 0;
-        return `${formatDuration(aggregate.deviceTimeNs)} · #${rank} of ${perfOverlay.linkedOpCount} · ${share.toFixed(1)}% of total`;
-    }, [isPerfOverlayActive, perfHover, perfOverlay]);
+    const perfHoverLabel = useMemo(
+        () =>
+            isPerfOverlayActive && perfHover !== null ? getPerfHoverLabel(perfOverlay, perfHover.operationId) : null,
+        [isPerfOverlayActive, perfHover, perfOverlay],
+    );
 
     const selectedPerfAggregate =
         selectedOperationId === null ? undefined : perfOverlay.aggregatesByOpId.get(selectedOperationId);

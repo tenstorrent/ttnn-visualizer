@@ -2,14 +2,27 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
+import type { CSSProperties } from 'react';
+
 import { PerfOverlayStatus } from '../../definitions/PerfOverlayStatus';
+import { formatDuration } from '../../functions/formatting';
 import {
     type OpPerfAggregate,
     type OpPerfScore,
     type PerfOverlaySource,
     aggregatePerfByOp,
+    perfColorScale,
     scoreOps,
 } from '../../functions/perfOverlay';
+
+// Perf rides its own channel — an inset bar drawn as a pseudo-element — because
+// the fill belongs to the input/output highlight and the border to selection.
+// Sizing it from a custom property rather than a child element keeps the node's
+// geometry, and therefore the Dagre layout, untouched by a toggle. #1880
+export const PERF_BAR_SCALE_VAR = '--op-graph-perf-scale';
+export const PERF_BAR_COLOR_VAR = '--op-graph-perf-color';
+
+export const NO_PERF_DATA_LABEL = 'No perf data';
 
 export interface OpGraphPerfOverlay {
     status: PerfOverlayStatus;
@@ -93,4 +106,41 @@ export const buildOpGraphPerfOverlay = (
         totalOpCount: graphOperationIds.length,
         totalNs,
     };
+};
+
+/**
+ * Per-node style patch keyed by React Flow node id, or `null` when the overlay
+ * is off so the caller can skip the styling pass entirely.
+ *
+ * Only custom properties are written. `className` already carries selection and
+ * the input/output highlight, and `style.opacity` carries the filter dim, so
+ * perf has to compose with all three rather than displace any of them.
+ */
+export const buildPerfNodeStyleByNodeId = (
+    overlay: OpGraphPerfOverlay,
+    isActive: boolean,
+): Map<string, CSSProperties> | null => {
+    if (!isActive) {
+        return null;
+    }
+    const styleByNodeId = new Map<string, CSSProperties>();
+    for (const [opId, score] of overlay.scoreByOpId) {
+        // `CSSProperties` has no index signature for custom properties.
+        styleByNodeId.set(String(opId), {
+            [PERF_BAR_SCALE_VAR]: score.t,
+            [PERF_BAR_COLOR_VAR]: perfColorScale(score.t),
+        } as CSSProperties);
+    }
+    return styleByNodeId;
+};
+
+/** Duration, rank among the linked ops, and share of their total. #1610 */
+export const getPerfHoverLabel = (overlay: OpGraphPerfOverlay, operationId: number): string => {
+    const aggregate = overlay.aggregatesByOpId.get(operationId);
+    if (aggregate === undefined) {
+        return NO_PERF_DATA_LABEL;
+    }
+    const rank = overlay.rankByOpId.get(operationId);
+    const share = overlay.totalNs > 0 ? (aggregate.deviceTimeNs / overlay.totalNs) * 100 : 0;
+    return `${formatDuration(aggregate.deviceTimeNs)} · #${rank} of ${overlay.linkedOpCount} · ${share.toFixed(1)}% of total`;
 };
