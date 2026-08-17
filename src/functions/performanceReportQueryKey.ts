@@ -27,9 +27,14 @@ export interface PerformanceReportParams {
  * those defaults link resolution shares its cache entry and costs nothing. Move
  * the tab off any of them — a signpost window, devices unmerged, host ops shown,
  * or the stacked grouping switched — and the two keys diverge into a second
- * `perf-results/report` request. That is not a cheap duplicate: report
- * generation is uncached server-side and CPU-bound, so the fix is to memoise it
- * there (#1886), not to unpin these filters.
+ * `perf-results/report` request.
+ *
+ * Expect that on the first toggle of any of those controls, not as a rare case:
+ * `RangeSlider` is mounted app-wide and subscribes to both queries, so once they
+ * diverge the app holds two live report queries for the rest of the session, each
+ * retaining a full `PerfTableRow[]` under `staleTime: Infinity`. Report generation
+ * is uncached server-side and CPU-bound on a single worker, so the fix is to
+ * memoise it there (#1886) rather than to unpin these filters.
  */
 export const LINKED_PERFORMANCE_REPORT_FILTERS = {
     startSignpost: null,
@@ -38,6 +43,22 @@ export const LINKED_PERFORMANCE_REPORT_FILTERS = {
     mergeDevices: true,
     groupBy: StackedGroupBy.OP,
 } as const;
+
+/**
+ * @description The full parameter set link resolution fetches with: every pinned
+ * filter, plus the one view control it still follows.
+ *
+ * Exported so the hook and its tests compose the pinned set the same way. A test
+ * that spread `LINKED_PERFORMANCE_REPORT_FILTERS` itself would assert against its
+ * own composition, and would keep passing if the hook started pinning
+ * `tracingMode` too. The `PerformanceReportParams` return type also makes a new
+ * filter added to that interface a compile error until it is either pinned above
+ * or forwarded here deliberately.
+ */
+export const getLinkedPerformanceReportParams = (tracingMode: boolean): PerformanceReportParams => ({
+    ...LINKED_PERFORMANCE_REPORT_FILTERS,
+    tracingMode,
+});
 
 const getSignpostKey = (label: string, signpost: Signpost | null) =>
     `${label}:${signpost ? `${signpost.id}:${signpost.op_code}` : null}`;

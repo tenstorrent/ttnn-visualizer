@@ -14,21 +14,41 @@
  * A cache of one never serves a stale result: arguments that differ by reference
  * always recompute. Callers must treat the result as immutable, since they now
  * share it.
+ *
+ * A cache of one also degrades to no cache at all: two live consumers passing
+ * different arguments in the same render pass each recompute and each receive a
+ * fresh identity, defeating any downstream `useMemo` keyed on the result. Every
+ * argument must come from a source all consumers share.
  */
 const memoiseLatest = <TArgs extends unknown[], TResult>(compute: (...args: TArgs) => TResult) => {
-    let lastArgs: TArgs | null = null;
-    let lastResult: TResult;
+    // Arguments and result live or die together in one record, so a reset cannot
+    // release the arguments while leaving the result reachable.
+    let cache: { args: TArgs; result: TResult } | null = null;
 
-    return (...args: TArgs): TResult => {
-        if (lastArgs !== null && lastArgs.length === args.length && lastArgs.every((arg, i) => arg === args[i])) {
-            return lastResult;
+    const memoised = (...args: TArgs): TResult => {
+        if (cache !== null && cache.args.length === args.length && cache.args.every((arg, i) => arg === args[i])) {
+            return cache.result;
         }
 
-        lastArgs = args;
-        lastResult = compute(...args);
+        // Written only once `compute` has returned. Recording the arguments first
+        // would pair them with the *previous* result if `compute` threw, and every
+        // later call with those same arguments would then be served that
+        // mismatched result from cache — permanently, and silently.
+        const result = compute(...args);
 
-        return lastResult;
+        cache = { args, result };
+
+        return result;
     };
+
+    // The cache outlives the query data it derives from, so whoever discards that
+    // data has to say so — otherwise the previous report's rows stay reachable
+    // from module state for the lifetime of the page.
+    memoised.reset = () => {
+        cache = null;
+    };
+
+    return memoised;
 };
 
 export default memoiseLatest;

@@ -9,12 +9,17 @@
  * the positional match can never line up against the memory report.
  */
 
-import { act, renderHook, waitFor } from '@testing-library/react';
+import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Provider, createStore, useAtomValue } from 'jotai';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { useGetDeviceOperationListPerf, useLinkedPerformanceReport, usePerformanceReport } from '../src/hooks/useAPI';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+    useGetDeviceOperationListPerf,
+    useGetDeviceOperationListPerfByOpId,
+    useLinkedPerformanceReport,
+    usePerformanceReport,
+} from '../src/hooks/useAPI';
 import {
     activePerformanceReportAtom,
     activePerformanceReportFolderNameAtom,
@@ -39,6 +44,7 @@ vi.mock('../src/libs/axiosInstance', () => ({
 const REPORT_NAME = '2026_08_14_10_00_00';
 const ACTIVE_REPORT = { path: REPORT_NAME, reportName: REPORT_NAME };
 const SIGNPOST = { id: 42, op_code: 'BEGIN_TRACE' };
+const END_SIGNPOST = { id: 43, op_code: 'END_TRACE' };
 
 /** Every view filter turned away from its default at once. */
 const FILTERED_VIEW: AtomProviderInitialValues = [
@@ -105,6 +111,11 @@ beforeEach(() => {
     vi.mocked(axiosInstance.get).mockResolvedValue({ data: { report: [], stacked_report: [], signposts: [] } });
 });
 
+// RTL auto-cleanup is off in this project, and these cases assert exact request
+// counts — a tree left mounted keeps its query subscriptions alive and can fire a
+// refetch into the next test's tally.
+afterEach(cleanup);
+
 describe('useLinkedPerformanceReport', () => {
     it('asks for the whole run with devices merged and host ops hidden, whatever the tab is showing', async () => {
         renderWithView(() => useLinkedPerformanceReport(), FILTERED_VIEW);
@@ -120,12 +131,50 @@ describe('useLinkedPerformanceReport', () => {
         expect(getReportRequests()[0].end_signpost).toBeUndefined();
     });
 
+    // Asserts a known residual gap in #1812, not a closed one: #1812 names
+    // `tracingModeAtom` alongside the three filters this pins, so toggling Tracing
+    // mode can still break the positional match and flip the badge — and
+    // `ReportLinkStatus` persists that to `reportLinksAtom`, so the failure outlives
+    // the toggle. Pinning it is not the fix (a trace-captured run's traced order is
+    // the one that lines up, so pinning would make those reports permanently
+    // unlinkable); resolving against both orders and keeping whichever aligns is,
+    // once #1800 makes the second fetch worth it. Change this test when that lands.
     it('still follows tracing mode, which only reorders rows', async () => {
         renderWithView(() => useLinkedPerformanceReport(), [[tracingModeAtom, true]]);
 
         await waitFor(() => expect(getReportRequests()).toHaveLength(1));
 
         expect(getReportRequests()[0].tracing_mode).toBe(true);
+    });
+
+    // `fetchPerformanceReport` takes its params as one object precisely so two of
+    // these adjacent booleans cannot be swapped without a type error. Nothing
+    // enforced the object -> query-string mapping itself, though, and every other
+    // case here happens to hold the three at the same value, so a swap stayed
+    // invisible. Assert the whole params object with all three distinct.
+    it('sends every filter under its own request parameter', async () => {
+        renderWithView(
+            () => usePerformanceReport(REPORT_NAME),
+            [
+                [mergeDevicesAtom, false],
+                [hideHostOpsAtom, true],
+                [tracingModeAtom, true],
+                [stackedGroupByAtom, StackedGroupBy.MEMORY],
+                [filterBySignpostAtom, [SIGNPOST, END_SIGNPOST]],
+            ],
+        );
+
+        await waitFor(() => expect(getReportRequests()).toHaveLength(1));
+
+        expect(getReportRequests()[0]).toEqual({
+            name: REPORT_NAME,
+            merge_devices: false,
+            hide_host_ops: true,
+            tracing_mode: true,
+            group_by: StackedGroupBy.MEMORY,
+            start_signpost: SIGNPOST.op_code,
+            end_signpost: END_SIGNPOST.op_code,
+        });
     });
 
     it('shares the performance tab request while the tab is at its defaults', async () => {
@@ -201,7 +250,11 @@ describe('report matching under a filtered performance tab', () => {
 
                 return Promise.resolve({
                     data: {
-                        report: params.merge_devices ? mergedRows : unmergedRows,
+                        // Copied per response, as a real one would be. Handing back the
+                        // same array reference lets the module-level match cache in
+                        // `useAPI` serve one case's result to the next, so a case would
+                        // assert against a cached match rather than its own.
+                        report: [...(params.merge_devices ? mergedRows : unmergedRows)],
                         stacked_report: [],
                         signposts: [],
                     },
@@ -209,7 +262,7 @@ describe('report matching under a filtered performance tab', () => {
             }
 
             if (url.includes(Endpoints.OPERATIONS_LIST)) {
-                return Promise.resolve({ data: memoryOperations });
+                return Promise.resolve({ data: [...memoryOperations] });
             }
 
             if (url.includes(Endpoints.DEVICES)) {
@@ -234,5 +287,40 @@ describe('report matching under a filtered performance tab', () => {
         await waitFor(() => expect(result.current).toHaveLength(DEVICE_OP_NAMES.length));
 
         expect(result.current.map((operation) => operation.perfData?.raw_op_code)).toEqual(DEVICE_OP_NAMES);
+    });
+
+    // Keyed on the profiler op id, which is deliberately not the perf row's own id
+    // in these fixtures (op 1 matches perf row '2'). Keyed on anything else, every
+    // virtualised row would show another operation's perf data, or none.
+    it('groups the match by profiler op id, not by the perf row id', async () => {
+        const { result } = renderWithView(
+            () => useGetDeviceOperationListPerfByOpId(),
+            [[activeProfilerReportAtom, ACTIVE_REPORT]],
+        );
+
+        await waitFor(() => expect(result.current.size).toBe(DEVICE_OP_NAMES.length));
+
+        expect(result.current.get(1)?.map((operation) => operation.perfData?.raw_op_code)).toEqual(['Matmul']);
+        expect(result.current.get(2)?.map((operation) => operation.perfData?.raw_op_code)).toEqual(['Softmax']);
+    });
+
+    // The match is memoised across call sites rather than per invocation, and
+    // `useOpPerfRowScores` and `useTopNAnnotations` both use the result as a
+    // `useMemo` dependency — so a copy handed out per render would silently undo
+    // every downstream memo without failing any behavioural assertion.
+    it('hands every consumer the same match, and keeps it across re-renders', async () => {
+        const { result, rerender } = renderWithView(
+            () => [useGetDeviceOperationListPerf(), useGetDeviceOperationListPerf()] as const,
+            [[activeProfilerReportAtom, ACTIVE_REPORT]],
+        );
+
+        await waitFor(() => expect(result.current[0]).toHaveLength(DEVICE_OP_NAMES.length));
+
+        expect(result.current[0]).toBe(result.current[1]);
+
+        const beforeRerender = result.current[0];
+        rerender();
+
+        expect(result.current[0]).toBe(beforeRerender);
     });
 });

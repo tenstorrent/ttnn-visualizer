@@ -507,6 +507,38 @@ return useQuery({
 });
 ```
 
+### View-filtered and link-pinned performance reports are different queries
+
+There are two hooks for the performance report, and picking the wrong one is a correctness bug rather than a style slip:
+
+- **`usePerformanceReport(name)`** — the report as the performance tab is displaying it, with every view filter applied. For rendering the tab.
+- **`useLinkedPerformanceReport()`** — the same report pinned to devices merged, host ops hidden, whole run, default grouping. For *anything that decides whether two reports describe the same run*: the link badge, the perf-table Op column, L1-pressure columns, tensor-drawer gating, the graph perf overlay, top-N annotations.
+
+Link status is a property of the reports, not of the current view. Resolving it from the filtered query means toggling **Merge devices** flips the badge to "Failed to link" and drops every dependent feature with it — and `ReportLinkStatus` persists that verdict to `localStorage`, so the failure outlives the toggle (#1812).
+
+Build both keys through `src/functions/performanceReportQueryKey.ts` rather than assembling one inline, so the two cannot drift into keying on different filters. `tracingMode` is a known carve-out: it is still followed, because a trace-captured run's traced order is the one that lines up with the memory report, so pinning it would make those pairs permanently unlinkable.
+
+### Share derived values with `memoiseLatest`, not `useMemo`
+
+`useMemo` caches per hook invocation. A derived value read by several hooks *and* by one component instance per virtualised row is therefore recomputed once per consumer, even though every consumer sees the same query data — an O(rows) match plus a flatMap, per row.
+
+`src/functions/memoiseLatest.ts` is a module-level cache of one, keyed on reference-equal arguments:
+
+`src/hooks/useAPI.tsx`
+
+```ts
+const getDeviceOperationListPerf = memoiseLatest(matchDeviceOperationsToPerf);
+
+export const useGetDeviceOperationListPerf = () =>
+    getDeviceOperationListPerf(deviceOperations, (data ?? EMPTY_PERF_RETURN).report, devices?.length ?? 0);
+```
+
+Three constraints come with it:
+
+- **Every argument must come from a source all consumers share** — a query result, not a per-caller `useMemo`. A cache of one degrades to *no* cache when two live callers pass different arguments, and then hands each a fresh identity, invalidating every downstream `useMemo` keyed on the result. Note the `EMPTY_PERF_RETURN.report` fallback above rather than `data?.report ?? []`: a fresh `[]` per render would miss the cache every time.
+- **Results are shared, so treat them as immutable.** Sorting or pushing in place corrupts every other consumer's view. Copy first (`useSortTable` does).
+- **The cache outlives the query data.** Pair report teardown with the reset — `clearReportCaches(queryClient)` rather than a bare `queryClient.clear()` — or the previous report's rows stay reachable from module state for the lifetime of the page.
+
 ---
 
 ## Errors and toasts

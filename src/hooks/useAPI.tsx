@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { AxiosError, AxiosRequestConfig } from 'axios';
-import { keepPreviousData, useQueries, useQuery } from '@tanstack/react-query';
+import { QueryClient, keepPreviousData, useQueries, useQuery } from '@tanstack/react-query';
 import { useCallback, useEffect, useMemo } from 'react';
 import { useAtomValue } from 'jotai';
 import { NumberRange } from '@blueprintjs/core';
@@ -34,8 +34,8 @@ import { DeviceOperationMapping } from '../model/DeviceOperationMapping';
 import { matchDeviceOperationsToPerf } from '../functions/deviceOperationMatching';
 import memoiseLatest from '../functions/memoiseLatest';
 import {
-    LINKED_PERFORMANCE_REPORT_FILTERS,
     PerformanceReportParams,
+    getLinkedPerformanceReportParams,
     getPerformanceComparisonReportQueryKey,
     getPerformanceReportQueryKey,
 } from '../functions/performanceReportQueryKey';
@@ -871,20 +871,35 @@ const getOpToPerfIds = memoiseLatest((matched: DeviceOperationMapping[]) =>
 );
 
 const getDeviceOperationListPerfByOpId = memoiseLatest((matched: DeviceOperationMapping[]) => {
-    const byOpId = new Map<number, DeviceOperationMapping[]>();
+    const mappingsByOpId = new Map<number, DeviceOperationMapping[]>();
 
     for (const mapping of matched) {
-        const existing = byOpId.get(mapping.id);
+        const existing = mappingsByOpId.get(mapping.id);
 
         if (existing) {
             existing.push(mapping);
         } else {
-            byOpId.set(mapping.id, [mapping]);
+            mappingsByOpId.set(mapping.id, [mapping]);
         }
     }
 
-    return byOpId;
+    return mappingsByOpId;
 });
+
+/**
+ * @description Discards every cached report query along with the values derived
+ * from them. The derived caches are module-level, so clearing React Query alone
+ * leaves the previous report's rows reachable from them for the lifetime of the
+ * page — the two have to be dropped together, which is why this exists rather
+ * than a bare `queryClient.clear()` at each report-switch call site.
+ */
+export const clearReportCaches = (queryClient: QueryClient) => {
+    queryClient.clear();
+    getDeviceOperationsList.reset();
+    getDeviceOperationListPerf.reset();
+    getOpToPerfIds.reset();
+    getDeviceOperationListPerfByOpId.reset();
+};
 
 /**
  * @description Every device operation in the memory report, flattened in report
@@ -914,12 +929,16 @@ export const useGetDeviceOperationListPerfByOpId = (): Map<number, DeviceOperati
     getDeviceOperationListPerfByOpId(useGetDeviceOperationListPerf());
 
 /**
- * @description op id to perf id mapping only for existing perf ids. The perf
- * ids come from the link-pinned report (`useLinkedPerformanceReport`), not from
- * the rows the performance tab is displaying. A row id survives host-op and
- * signpost filtering, so consumers can still join against those views; ids do
- * not survive `mergeDevices: false`, where an operation's per-device rows each
- * carry their own id and only the merged representative joins.
+ * @description One entry per matched device operation, pairing its op id with
+ * the perf row it matched. An operation that matched no perf row still gets an
+ * entry, with `perfId` left `undefined` — consumers filter or coerce it
+ * themselves (`RangeSlider` leans on `Number(undefined)` being falsy).
+ *
+ * The perf ids come from the link-pinned report (`useLinkedPerformanceReport`),
+ * not from the rows the performance tab is displaying. A row id survives host-op
+ * and signpost filtering, so consumers can still join against those views; ids
+ * do not survive `mergeDevices: false`, where an operation's per-device rows
+ * each carry their own id and only the merged representative joins.
  */
 export const useOpToPerfIdFiltered = () => getOpToPerfIds(useGetDeviceOperationListPerf());
 
@@ -1198,7 +1217,7 @@ const useViewPerformanceReportParams = (): PerformanceReportParams => {
 const useLinkedPerformanceReportParams = (): PerformanceReportParams => {
     const tracingMode = useAtomValue(tracingModeAtom);
 
-    return useMemo(() => ({ ...LINKED_PERFORMANCE_REPORT_FILTERS, tracingMode }), [tracingMode]);
+    return useMemo(() => getLinkedPerformanceReportParams(tracingMode), [tracingMode]);
 };
 
 const usePerformanceReportQuery = (name: string | null, params: PerformanceReportParams) => {
@@ -1237,6 +1256,12 @@ export const usePerformanceReport = (name: string | null) => {
  * permanently unlinkable, which is a worse failure than the one it would fix.
  * Resolving against both orders and keeping whichever aligns would close the
  * gap properly; it needs #1800's shared run id to be worth the second fetch.
+ *
+ * So a Tracing mode toggle can still flip the badge, and that outcome is not
+ * transient: `ReportLinkStatus` writes it to `reportLinksAtom`, which is backed by
+ * localStorage, so an `UNLINKED` reached this way keeps badging the pair as failed
+ * in the report pickers afterwards. #1812 stays open on that residual until the
+ * both-orders resolution lands.
  */
 export const useLinkedPerformanceReport = () => {
     const name = useAtomValue(activePerformanceReportFolderNameAtom);

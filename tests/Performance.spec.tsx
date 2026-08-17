@@ -264,6 +264,33 @@ describe('Performance route', () => {
         expect(lastProps?.data?.[0]?.heuristicFlags).toContain(PerfHeuristicFlag.DRAM_BOUND);
     });
 
+    // The other half of `clampSelectionToRange`'s widen contract. Op<->perf ids now
+    // resolve against the link-pinned report while this table spans the rows the tab
+    // is showing, so a mapped selection can land entirely outside the report — here
+    // it must fall back to the full span rather than render an empty table.
+    it('falls back to the whole report when the selected range misses it entirely', () => {
+        (usePerformanceReport as Mock).mockReturnValue({
+            data: { report: [DRAM_PERF_ROW], stacked_report: [], signposts: [] },
+            isLoading: false,
+            error: null,
+        });
+        (usePerformanceRange as Mock).mockReturnValue([1, 1]);
+
+        render(
+            <TestProviders
+                initialAtomValues={[
+                    [activePerformanceReportAtom, REPORT_A],
+                    // Left over from a signpost window that does not overlap this report.
+                    [selectedPerformanceRangeAtom, [40, 50]],
+                ]}
+            >
+                <Performance />
+            </TestProviders>,
+        );
+
+        expect(perfReportProps.mock.calls.at(-1)?.[0]?.data).toHaveLength(1);
+    });
+
     it('keeps the table loading while report rows exist but no range is available yet', () => {
         (usePerformanceReport as Mock).mockReturnValue({
             data: { report: [DRAM_PERF_ROW], stacked_report: [], signposts: [] },

@@ -11,8 +11,8 @@
 
 import { describe, expect, it } from 'vitest';
 import {
-    LINKED_PERFORMANCE_REPORT_FILTERS,
     PerformanceReportParams,
+    getLinkedPerformanceReportParams,
     getPerformanceComparisonReportQueryKey,
     getPerformanceReportQueryKey,
 } from '../src/functions/performanceReportQueryKey';
@@ -31,9 +31,11 @@ const defaultViewParams: PerformanceReportParams = {
     groupBy: StackedGroupBy.OP,
 };
 
+// Composed through the same function the hook uses, not by spreading the pinned
+// filters here — a local copy of that composition would let these key-equality
+// assertions keep passing after the hook changed which filters it pins.
 const linkedParams = (overrides: Partial<PerformanceReportParams> = {}): PerformanceReportParams => ({
-    ...LINKED_PERFORMANCE_REPORT_FILTERS,
-    tracingMode: false,
+    ...getLinkedPerformanceReportParams(false),
     ...overrides,
 });
 
@@ -79,6 +81,9 @@ describe('getPerformanceReportQueryKey', () => {
         );
     });
 
+    // Documents the residual #1812 gap rather than a fix: tracing mode is the one
+    // named filter still followed, so it can still move link status. See the note on
+    // the matching case in `useLinkedPerformanceReport.spec.tsx`.
     it('keeps sharing the link key when only tracing mode changes', () => {
         const params = { tracingMode: true };
 
