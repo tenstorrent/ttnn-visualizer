@@ -63,14 +63,24 @@
             position: absolute;
             bottom: 0;
             left: 0;
-            min-width: 3px;
+
+            // The bar lives inside the scaled viewport, so a fixed size here is
+            // in graph units and shrinks with the zoom — at the ~0.1–0.3 a large
+            // report fits in, a few px became sub-pixel and the colour washed
+            // out, which is the whole encoding gone at the zoom it matters most.
+            // Dividing by the live zoom holds the on-screen size instead. The
+            // 100% ceiling then lets the bar grow into a full-node fill once the
+            // node itself is only a few px tall, degrading into the zoom-
+            // invariant encoding this replaced (#1515) rather than vanishing.
+            // Trade-off: at overview zoom a hot op's bar covers the node, so
+            // perf outranks the input/output highlight there — deliberate, since
+            // the highlight is unreadable at that scale anyway. #1610
+            min-width: max(3px, calc(2px / var(--op-graph-perf-zoom, 1)));
             width: calc(var(--op-graph-perf-scale, 0) * 100%);
 
-            // React Flow scales the node by the viewport transform, so this is
-            // the on-screen thickness only at 1:1 — a whole-graph zoom of ~0.4
-            // renders it at under half. Sized against the node's 4px bottom
-            // padding, which is the room available before it meets the text.
-            height: 6px;
+            // Matches the node's 4px bottom padding, which is the room available
+            // before the bar starts clipping the descenders of the file line.
+            height: min(100%, max(4px, calc(4px / var(--op-graph-perf-zoom, 1))));
 
             // Absent custom property means the op has no perf row, so the bar
             // stays invisible and "no data" never reads as "fastest op".

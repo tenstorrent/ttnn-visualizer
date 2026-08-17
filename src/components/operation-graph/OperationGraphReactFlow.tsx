@@ -12,14 +12,17 @@ import {
     useEdgesState,
     useNodesState,
     useReactFlow,
+    useStoreApi,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
+import { useAtomValue } from 'jotai';
 import { type MouseEvent as ReactMouseEvent, memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { NodeRelation } from '../../definitions/NodeRelation';
 import { PerfOverlayStatus } from '../../definitions/PerfOverlayStatus';
 import { toReadableShape } from '../../functions/formatting';
 import type { OperationDescription } from '../../model/APIData';
 import { type PerfOverlaySource, perfColorScale } from '../../functions/perfOverlay';
+import { activePerformanceReportAtom, activeProfilerReportAtom } from '../../store/app';
 import LoadingSpinner from '../LoadingSpinner';
 import PerfOverlayLegend from '../perf-overlay/PerfOverlayLegend';
 import OpGraphEdge from './OpGraphEdge';
@@ -28,7 +31,12 @@ import OpGraphInfoPanel from './OpGraphInfoPanel';
 import OpGraphNode from './OpGraphNode';
 import OpGraphToolbar from './OpGraphToolbar';
 import { OpGraphFilterMode, buildOpGraphFilterMatcher } from './opGraphFilterMatcher';
-import { buildOpGraphPerfOverlay, buildPerfNodeStyleByNodeId, getPerfHoverLabel } from './opGraphPerfOverlay';
+import {
+    PERF_BAR_ZOOM_VAR,
+    buildOpGraphPerfOverlay,
+    buildPerfNodeStyleByNodeId,
+    getPerfHoverLabel,
+} from './opGraphPerfOverlay';
 import { useOpGraphLayoutWorker } from './useOpGraphLayoutWorker';
 import {
     type OpGraphBuildOptions,
@@ -132,6 +140,28 @@ const OperationGraphInner = ({
     const filterRef = useRef<OpGraphFilterHandle>(null);
     const containerRef = useRef<HTMLDivElement>(null);
     const { setCenter, getNode } = useReactFlow<OpGraphFlowNode, OpGraphFlowEdge>();
+    const flowStore = useStoreApi();
+
+    const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
+    const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
+    // Overlay intent is scoped to the report it was enabled for: another report
+    // has a different ramp and a different linked set, so carrying the toggle
+    // across would re-anchor the encoding under the user. Dropping it also stops
+    // a report that leaves and re-enters `READY` from switching the overlay back
+    // on by itself. Adjusted during render like `adoptedOperationId` above,
+    // because an effect would commit one frame still encoding the old ramp. #1880
+    const [overlayReportScope, setOverlayReportScope] = useState({
+        profiler: activeProfilerReport,
+        performance: activePerformanceReport,
+    });
+    if (
+        overlayReportScope.profiler !== activeProfilerReport ||
+        overlayReportScope.performance !== activePerformanceReport
+    ) {
+        setOverlayReportScope({ profiler: activeProfilerReport, performance: activePerformanceReport });
+        setIsPerfOverlayEnabled(false);
+        setPerfHover(null);
+    }
 
     const selectedOperationIdRef = useRef(selectedOperationId);
     useEffect(() => {
@@ -388,9 +418,34 @@ const OperationGraphInner = ({
         [perfRows, isPerfReportLoaded, graphOperationIds],
     );
 
-    // Derived rather than stored: a report swap that drops the overlay out of
-    // READY turns it off on its own, with no reset to keep in step.
+    // Derived rather than stored, so perf data arriving or going away can't leave
+    // a stored flag disagreeing with what the encoding can actually show. The
+    // report-scope reset above is what keeps intent itself from outliving its
+    // report — the two cover different failures and both are needed.
     const isPerfOverlayActive = isPerfOverlayEnabled && perfOverlay.status === PerfOverlayStatus.READY;
+
+    // Zoom is written straight to the DOM instead of through state: it changes on
+    // every wheel and pinch frame, and routing it through React would re-render
+    // the whole graph per frame to move one bar. `OpGraphEdge` can afford
+    // `useStore` because it selects a threshold boolean; this needs the
+    // continuous value, so it subscribes and mutates the custom property.
+    useEffect(() => {
+        const container = containerRef.current;
+        if (container === null || !isPerfOverlayActive) {
+            return undefined;
+        }
+        let lastZoom: number | null = null;
+        const writeZoom = (zoom: number) => {
+            if (zoom !== lastZoom) {
+                lastZoom = zoom;
+                container.style.setProperty(PERF_BAR_ZOOM_VAR, String(zoom));
+            }
+        };
+        writeZoom(flowStore.getState().transform[2]);
+        // The vanilla store has no selector support, so every store change calls
+        // back and the guard above keeps it to one style write per zoom change.
+        return flowStore.subscribe((state) => writeZoom(state.transform[2]));
+    }, [isPerfOverlayActive, flowStore]);
 
     // Built once per score change so the styling pass can reuse these object
     // identities rather than allocating one per node on every drag frame.

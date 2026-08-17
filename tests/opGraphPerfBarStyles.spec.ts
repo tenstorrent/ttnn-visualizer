@@ -35,9 +35,38 @@ describe('perf overlay bar geometry', () => {
         const body = ruleBody(PERF_BAR);
 
         expect(body).toMatch(/bottom:\s*0/);
-        expect(body).toMatch(/height:\s*\d/);
+        expect(body).toMatch(/height:\s*\S/);
         // Anchored to a declaration so prose in the comments can't satisfy it.
         expect(body).not.toMatch(/^\s*(margin|padding)[a-z-]*\s*:/m);
+    });
+
+    it('never grows past the node it annotates', () => {
+        // The zoom divisor below is unbounded as the zoom approaches its 0.02
+        // floor, so without the ceiling the bar would overflow the node by two
+        // orders of magnitude and paint over its neighbours.
+        expect(ruleBody(PERF_BAR)).toMatch(/height:\s*min\(\s*100%/);
+    });
+});
+
+describe('perf overlay bar zoom floor', () => {
+    it('divides both dimensions by the live zoom so the bar holds its on-screen size', () => {
+        // A size fixed in graph units is scaled down by the viewport transform,
+        // so at the zoom a large report fits in it goes sub-pixel and the encoding
+        // disappears exactly where a whole-graph scan needs it. #1610
+        const body = ruleBody(PERF_BAR);
+
+        expect(body).toMatch(/height:.*calc\(\s*\d+px\s*\/\s*var\(--op-graph-perf-zoom,\s*1\)\s*\)/);
+        expect(body).toMatch(/min-width:.*calc\(\s*\d+px\s*\/\s*var\(--op-graph-perf-zoom,\s*1\)\s*\)/);
+    });
+
+    it('falls back to an unscaled bar when the zoom is not published', () => {
+        // The custom property is only written while the overlay is active, so the
+        // fallback is the resting state rather than an error path — a missing
+        // divisor must leave the bar at its 1:1 size, not collapse it to zero.
+        const body = ruleBody(PERF_BAR);
+
+        expect(body).not.toMatch(/var\(--op-graph-perf-zoom\)/);
+        expect(body).toMatch(/var\(--op-graph-perf-zoom,\s*1\)/);
     });
 });
 
@@ -59,6 +88,6 @@ describe('perf overlay bar encoding', () => {
     it('keeps the slowest op distinguishable from the fastest', () => {
         // A zero-length bar for the coolest op would read as missing data, so
         // the scale floor is a visible stub rather than nothing.
-        expect(ruleBody(PERF_BAR)).toMatch(/min-width:\s*[1-9]/);
+        expect(ruleBody(PERF_BAR)).toMatch(/min-width:\s*max\(\s*[1-9]/);
     });
 });

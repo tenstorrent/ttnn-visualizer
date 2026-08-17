@@ -22,6 +22,12 @@ import {
 export const PERF_BAR_SCALE_VAR = '--op-graph-perf-scale';
 export const PERF_BAR_COLOR_VAR = '--op-graph-perf-color';
 
+// The bar is inside the scaled viewport, so its stylesheet size is in graph
+// units, not screen pixels. Publishing the live zoom lets the SCSS divide by it
+// and hold an on-screen floor — without it the encoding washes out at exactly
+// the zoom a whole report fits in, which is where it's most useful. #1610
+export const PERF_BAR_ZOOM_VAR = '--op-graph-perf-zoom';
+
 export const NO_PERF_DATA_LABEL = 'No perf data';
 
 export interface OpGraphPerfOverlay {
