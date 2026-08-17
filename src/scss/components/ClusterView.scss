@@ -13,17 +13,24 @@ $mmio-glow-chip: rgba(colours.$tt-yellow, 0.35);
 $mmio-fill: rgba(colours.$tt-yellow, 0.18);
 
 .cluster-view-renderer {
-    position: absolute;
-    top: 0;
-    left: 0;
+    // Fixed, not absolute: absolute anchored it to the document origin at one viewport
+    // tall, so on a page longer than the viewport -- operation details runs to tens of
+    // thousands of pixels -- scrolling slid the whole overlay off the top and left the
+    // page behind on screen with the overlay still open.
+    position: fixed;
+    inset: 0;
     display: flex;
     flex-direction: column;
     background: radial-gradient(circle at 30% 20%, rgb(117 132 230 / 12%), transparent 60%), rgb(0 0 0 / 92%);
-    width: 100%;
-    height: 100%;
-    bottom: 0;
     z-index: variables.$z-index-3-overlay;
     padding: 10px;
+
+    // The overlay covers the page but does not stop its scrolling, so a wheel over any
+    // non-scrolling part of it used to chain straight through to the page beneath.
+    // `overflow` makes this a scroll container so `overscroll-behavior` has something to
+    // apply to; the overlay itself has nothing to scroll.
+    overflow: hidden;
+    overscroll-behavior: contain;
 
     .cluster-view-header {
         display: flex;
@@ -127,6 +134,10 @@ $mmio-fill: rgba(colours.$tt-yellow, 0.18);
     min-height: 0;
     width: 100%;
     overflow: auto;
+
+    // Reaching the end of the topology must not hand the rest of the wheel gesture to the
+    // page underneath, which would scroll it behind the overlay.
+    overscroll-behavior: contain;
     scrollbar-gutter: stable;
     margin-top: 8px;
     padding: 10px;
