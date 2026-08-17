@@ -13,7 +13,6 @@ $header-footer-border: 2px solid colours.$tt-grey-5;
 
 .perf-report {
     color: #fff;
-    min-width: 1240px;
     overflow: auto;
     display: flex;
     flex-direction: column;
@@ -231,6 +230,13 @@ $header-footer-border: 2px solid colours.$tt-grey-5;
             gap: 4px;
             max-width: 180px;
         }
+
+        .perf-heuristic-flag {
+            &:hover,
+            &:active {
+                cursor: help;
+            }
+        }
     }
 
     .perf-heuristic-flag-tooltip {
@@ -255,7 +261,7 @@ $header-footer-border: 2px solid colours.$tt-grey-5;
         font-style: italic;
 
         td {
-            padding: 1rem 0.25rem;
+            line-height: 1;
 
             &.pre-wrap {
                 white-space: pre-wrap;
