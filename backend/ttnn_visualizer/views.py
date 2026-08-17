@@ -1861,8 +1861,9 @@ def test_remote_folder():
         try:
             searches = check_remote_path_for_reports(connection)
         except RemoteConnectionException as e:
-            # Only a failure of the connection itself reaches this: one that is
-            # about a single path is carried back as that path's outcome.
+            # Only the connection's own verdict reaches this: a failure about a
+            # single path — including a transport error raised mid-search — is
+            # converted and carried back as that path's outcome instead.
             add_status(e.status.value, e.message, getattr(e, "detail", None))
             if e.is_connection_verdict:
                 return (

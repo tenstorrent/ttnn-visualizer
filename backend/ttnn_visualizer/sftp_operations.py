@@ -1085,7 +1085,24 @@ class RemoteReportSearchResults(NamedTuple):
     performance: Optional[RemoteReportPathOutcome]
 
 
+@remote_exception_handler
+def _converted_search(
+    remote_connection: RemoteConnection, search: Callable[[], RemoteFolderSearch]
+) -> RemoteFolderSearch:
+    """Run one search with the ``SSHException`` family already converted.
+
+    The searches raise that family rather than ``RemoteConnectionException``, so
+    without this frame the conversion would only happen on the way out of
+    ``check_remote_path_for_reports`` — above the per-path handling, which is
+    exactly where one path's transient failure takes the other path's answer
+    with it. Converting here instead lets ``_search_report_path`` apply the
+    verdict test it already applies.
+    """
+    return search()
+
+
 def _search_report_path(
+    remote_connection: RemoteConnection,
     search: Callable[[], RemoteFolderSearch],
 ) -> RemoteReportPathOutcome:
     """Run one path's search, keeping a failure that is only about that path.
@@ -1093,12 +1110,14 @@ def _search_report_path(
     A failure that is the connection's verdict (rejected credentials, an
     untrusted host key) is re-raised instead: reporting it as one path's line
     would name the wrong culprit and leave the other path looking unanswered.
-    The ``SSHException`` family raised deeper down is likewise connection-wide,
-    and is not caught here at all — ``@remote_exception_handler`` on the caller
-    converts it into those same types, above this frame.
+    Anything else — including a transport error that happens to be transient —
+    is this path's line, so the other path keeps whatever it already answered.
+    A genuinely dead connection therefore says the same thing twice, which is
+    honest and unreachable from a cold start: ``test_ssh_connection`` runs first
+    and short-circuits the search entirely.
     """
     try:
-        found = search()
+        found = _converted_search(remote_connection, search)
     except RemoteConnectionException as err:
         if err.is_connection_verdict:
             raise
@@ -1138,12 +1157,13 @@ def check_remote_path_for_reports(
     profiler: Optional[RemoteReportPathOutcome] = None
     if remote_connection.profilerPath:
         profiler = _search_report_path(
+            remote_connection,
             lambda: find_folders_by_files(
                 remote_connection,
                 remote_connection.profilerPath,
                 [TEST_DB_FILE],
                 timeout_seconds=remaining_seconds(),
-            )
+            ),
         )
     else:
         logger.info("No profiler path configured; skipping check")
@@ -1151,9 +1171,10 @@ def check_remote_path_for_reports(
     performance: Optional[RemoteReportPathOutcome] = None
     if remote_connection.performancePath:
         performance = _search_report_path(
+            remote_connection,
             lambda: _find_performance_report_folders(
                 remote_connection, timeout_seconds=remaining_seconds()
-            )
+            ),
         )
     else:
         logger.info("No performance path configured; skipping check")

@@ -25,6 +25,7 @@ from ttnn_visualizer.exceptions import (
     HostKeyVerificationFailedException,
     NoValidConnectionsError,
     RemoteConnectionException,
+    SSHException,
 )
 from ttnn_visualizer.models import RemoteConnection
 from ttnn_visualizer.sftp_operations import (
@@ -379,18 +380,19 @@ class TestFindFoldersByFiles:
 class TestSearchReportPath:
     """Which failures belong to one path, and which to the connection."""
 
-    def test_a_completed_search_carries_its_state_and_count(self):
+    def test_a_completed_search_carries_its_state_and_count(self, connection):
         outcome = _search_report_path(
+            connection,
             lambda: RemoteFolderSearch(
                 folders=["/a", "/b"], root_state=RemoteSearchRootState.PRESENT
-            )
+            ),
         )
 
         assert outcome.root_state is RemoteSearchRootState.PRESENT
         assert outcome.report_count == 2
         assert outcome.error_message is None
 
-    def test_a_failure_about_this_path_is_carried_rather_than_raised(self):
+    def test_a_failure_about_this_path_is_carried_rather_than_raised(self, connection):
         """Raising here would abandon the other path's answer, which is the bug."""
 
         def unreadable() -> RemoteFolderSearch:
@@ -400,7 +402,7 @@ class TestSearchReportPath:
                 detail="find: '/remote/profiler': Permission denied",
             )
 
-        outcome = _search_report_path(unreadable)
+        outcome = _search_report_path(connection, unreadable)
 
         assert (
             outcome.error_message == "Permission denied accessing '/remote/profiler'."
@@ -417,7 +419,7 @@ class TestSearchReportPath:
         ],
         ids=["authentication", "host_key"],
     )
-    def test_a_verdict_on_the_connection_still_raises(self, verdict):
+    def test_a_verdict_on_the_connection_still_raises(self, verdict, connection):
         """Both subclass the exception above, and neither is about one path.
 
         Carried back as a path outcome, either would name one path as the
@@ -429,7 +431,7 @@ class TestSearchReportPath:
             raise verdict
 
         with pytest.raises(type(verdict)):
-            _search_report_path(rejected)
+            _search_report_path(connection, rejected)
 
 
 class TestCheckRemotePathForReports:
@@ -541,6 +543,33 @@ class TestCheckRemotePathForReports:
         )
         assert results.performance.report_count == 1
 
+    def test_a_transport_error_mid_search_does_not_cost_the_other_its_answer(
+        self, app, both_paths
+    ):
+        """The narrow instance the per-function conversion used to miss.
+
+        The searches raise the ``SSHException`` family, not
+        ``RemoteConnectionException``, so converting once around the whole
+        function let a reset connection on the second search discard the first
+        path's already-computed count. It carries no HTTP status, so nothing
+        downstream noticed either: the request answered 200 a line short.
+        """
+        results = self._outcomes(
+            app,
+            both_paths,
+            [
+                RemoteFolderSearch(
+                    folders=["/remote/profiler/a", "/remote/profiler/b"],
+                    root_state=RemoteSearchRootState.PRESENT,
+                ),
+                SSHException("SSH command failed: Connection reset by peer"),
+            ],
+        )
+
+        assert results.profiler.report_count == 2
+        assert results.performance.root_state is RemoteSearchRootState.UNKNOWN
+        assert "Connection reset by peer" in results.performance.error_message
+
     def test_an_unconfigured_path_is_not_searched_and_has_no_outcome(self, app):
         """`None` rather than a failure: the user cannot correct a path they never gave."""
         memory_only = RemoteConnection(
@@ -591,11 +620,13 @@ class TestCheckRemotePathForReports:
 
         timeouts = [call.kwargs["timeout"] for call in run.call_args_list]
         assert len(timeouts) == 2
-        assert timeouts[0] <= budget
+        # Strict throughout: `<=` is satisfied by `[budget, budget]`, which is
+        # precisely the unshared behaviour this test exists to rule out.
+        assert timeouts[0] < budget
         # Whatever the first search spent is gone, so the second cannot ask for
         # the full budget again.
-        assert timeouts[1] <= timeouts[0]
-        assert sum(timeouts) <= 2 * budget
+        assert timeouts[1] < timeouts[0]
+        assert sum(timeouts) < 2 * budget
 
 
 class TestGetRemoteFileList:

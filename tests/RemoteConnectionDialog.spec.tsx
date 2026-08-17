@@ -133,6 +133,18 @@ const PASSING_TESTS: ConnectionStatus[] = [
     { status: ConnectionTestStates.OK, message: 'Found 3 memory reports' },
 ];
 
+/**
+ * What the server really sends when both paths are configured: a line each.
+ *
+ * `PASSING_TESTS` is one line short of that, so asserting a placeholder is gone
+ * against it proves only that the response was shorter — which is the failure
+ * being ruled out, not the behaviour being checked.
+ */
+const PASSING_TESTS_BOTH_PATHS: ConnectionStatus[] = [
+    ...PASSING_TESTS,
+    { status: ConnectionTestStates.OK, message: 'Found 2 performance reports' },
+];
+
 const renderRemoteConnectionDialog = ({ open = true, existing }: { open?: boolean; existing?: ExistingTarget } = {}) =>
     render(
         <RemoteConnectionDialog
@@ -339,10 +351,45 @@ describe('RemoteConnectionDialog connection test block', () => {
         expect(screen.getByText('Searching for memory reports')).toBeInTheDocument();
         expect(screen.getByText('Searching for performance reports')).toBeInTheDocument();
 
+        resolveTest(PASSING_TESTS_BOTH_PATHS);
+
+        // Every placeholder is answered by a real result rather than being left
+        // pending — which is why the fixture has to carry a line per placeholder.
+        await waitFor(() => expect(screen.getByText('Found 3 memory reports')).toBeInTheDocument());
+        expect(screen.getByText('Found 2 performance reports')).toBeInTheDocument();
+        expect(screen.queryByText('Searching for memory reports')).not.toBeInTheDocument();
+        expect(screen.queryByText('Searching for performance reports')).not.toBeInTheDocument();
+    });
+
+    it('leaves no placeholder pending when the server answers with fewer lines than it seeded', async () => {
+        // The backend answers every configured path, so this shape should not
+        // arrive — but the placeholders are the dialog's own, and a row of its
+        // making must never outlive the response and spin forever.
+        let resolveTest: (statuses: ConnectionStatus[]) => void = () => {};
+        testConnectionMock.mockReturnValue(
+            new Promise<ConnectionStatus[]>((resolve) => {
+                resolveTest = resolve;
+            }),
+        );
+
+        render(
+            <RemoteConnectionDialog
+                open
+                onClose={vi.fn()}
+                onAddConnection={vi.fn()}
+            />,
+        );
+
+        fillName();
+        fireEvent.click(getButtonWithText('Run tests'));
+
+        expect(screen.getByText('Searching for performance reports')).toBeInTheDocument();
+
+        // Two lines against the three placeholders above.
         resolveTest(PASSING_TESTS);
 
         await waitFor(() => expect(screen.getByText('Found 3 memory reports')).toBeInTheDocument());
-        // Every placeholder is answered by a real result rather than being left pending.
+        expect(screen.queryByText('Testing SSH connection')).not.toBeInTheDocument();
         expect(screen.queryByText('Searching for memory reports')).not.toBeInTheDocument();
         expect(screen.queryByText('Searching for performance reports')).not.toBeInTheDocument();
     });

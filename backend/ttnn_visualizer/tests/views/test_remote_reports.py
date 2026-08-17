@@ -15,6 +15,7 @@ from ttnn_visualizer.exceptions import (
     AuthenticationFailedException,
     HostKeyVerificationFailedException,
     RemoteConnectionException,
+    SSHException,
 )
 from ttnn_visualizer.models import (
     Instance,
@@ -1257,6 +1258,31 @@ class TestConnectionTestReportStatuses:
             "Performance directory does not exist or cannot be accessed",
         ]
         assert statuses[-1]["status"] == ConnectionTestStates.FAILED.value
+
+    def test_a_transport_error_mid_search_still_answers_every_path(self, app, client):
+        """Three lines against the three placeholders the dialog seeded.
+
+        A reset connection on the second search carries no HTTP status, so it
+        never triggered the verdict return — it just took the memory count with
+        it and answered 200 one line short of what the dialog was waiting on.
+        """
+        app.config["SERVER_MODE"] = False
+
+        response = self._run_connection_test_with_searches(
+            client,
+            _remote_connection_payload(),
+            searches=[
+                _found(["/a"]),
+                SSHException("SSH command failed: Connection reset by peer"),
+            ],
+        )
+
+        assert response.status_code == HTTPStatus.OK
+        messages = self._messages(response)
+        assert len(messages) == 3
+        assert messages[:2] == ["SSH connection established", "Found 1 memory report"]
+        assert "Connection reset by peer" in messages[2]
+        assert response.get_json()[-1]["status"] == ConnectionTestStates.FAILED.value
 
     def test_both_paths_failing_are_both_reported(self, app, client):
         """Fixing one path and re-testing to find the other broken is two round trips."""
