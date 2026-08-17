@@ -11,7 +11,7 @@ import { DeviceOperationLayoutTypes, FragmentationEntry, MarkerType, MarkerTypeL
 import { OperationDetails } from '../../model/OperationDetails';
 import { getBufferColor, getTensorColor } from '../../functions/colorGenerator';
 import { formatMemorySize, prettyPrintAddress } from '../../functions/math';
-import { toReadableShape, toReadableType } from '../../functions/formatting';
+import { getCoreCountLabel, getDeviceCountLabel, toReadableShape, toReadableType } from '../../functions/formatting';
 import 'styles/components/MemoryLegendElement.scss';
 import { L1_SMALL_MARKER_COLOR, L1_START_MARKER_COLOR } from '../../definitions/PlotConfigurations';
 import { selectedBufferColourAtom, showHexAtom } from '../../store/app';
@@ -43,6 +43,7 @@ interface MemoryLegendElementProps {
      * reads as a tensor view rather than a fresh allocation.
      */
     isGloballyAllocated?: boolean;
+    deviceCount?: number;
 }
 
 export const MemoryLegendElement = ({
@@ -60,6 +61,7 @@ export const MemoryLegendElement = ({
     numCores,
     userL1ZoomRange,
     isGloballyAllocated = false,
+    deviceCount = 1,
 }: MemoryLegendElementProps) => {
     const showHex = useAtomValue(showHexAtom);
     const selectedBufferColour = useAtomValue(selectedBufferColourAtom);
@@ -84,8 +86,8 @@ export const MemoryLegendElement = ({
 
     const derivedTensor = operationDetails.getTensorForAddress(chunk.address);
     const isPerCoreBuffer = bufferType !== StringBufferType.DRAM && bufferType !== StringBufferType.SYSTEM_MEMORY;
-    const numCoresLabel =
-        isPerCoreBuffer && numCores && numCores > 0 ? ` x ${numCores} ${numCores === 1 ? 'core' : 'cores'}` : '';
+    const numCoresLabel = isPerCoreBuffer && numCores && numCores > 0 ? ` ${getCoreCountLabel(numCores)}` : '';
+    const deviceCountLabel = deviceCount > 1 ? ` ${getDeviceCountLabel(deviceCount)}` : '';
 
     const resolvedColour =
         chunk.tensorId || derivedTensor
@@ -169,6 +171,7 @@ export const MemoryLegendElement = ({
                     <>
                         {formatMemorySize(chunk.size, 2)}
                         {numCoresLabel}
+                        {deviceCountLabel}
                         {isGloballyAllocated && (
                             <Tooltip
                                 content={

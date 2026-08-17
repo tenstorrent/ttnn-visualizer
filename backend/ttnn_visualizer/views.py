@@ -33,7 +33,6 @@ from ttnn_visualizer.decorators import (
 )
 from ttnn_visualizer.enums import ConnectionTestStates, StackSourceOrigin
 from ttnn_visualizer.exceptions import (
-    AuthenticationFailedException,
     DataFormatError,
     InvalidRequestPayload,
     PerformanceReportNotLoadedException,
@@ -93,6 +92,8 @@ from ttnn_visualizer.serializers import (
 )
 from ttnn_visualizer.sftp_operations import (
     MULTIHOST_REPORT_LAYOUT_HINT,
+    RemoteReportPathOutcome,
+    RemoteSearchRootState,
     check_remote_path_for_reports,
     get_active_sync_method,
     get_remote_performance_folders,
@@ -1734,16 +1735,57 @@ def get_mesh_descriptor(instance: Instance):
         return response_bad_request(f"Failed to parse YAML: {str(e)}")
 
 
+# Why a table rather than a guard per state: this is the only place that reads
+# `RemoteSearchRootState`, so a state added without copy has nothing forcing the
+# second edit. Looking the copy up means that omission raises here, where the
+# state arrived, instead of falling through to the "no reports found" warning —
+# which is the exact mis-description `NOT_A_DIRECTORY` was added to stop.
+_FAILURE_COPY_BY_ROOT_STATE = {
+    RemoteSearchRootState.MISSING: (
+        "{subject} directory does not exist or cannot be accessed"
+    ),
+    RemoteSearchRootState.NOT_A_DIRECTORY: "{subject} path is not a directory",
+    RemoteSearchRootState.UNKNOWN: (
+        "{subject} directory could not be checked because the search did not complete"
+    ),
+}
+
+
 def _report_search_status(
-    label: str, count: int, *, in_rank_subdirectories: bool = False
+    label: str,
+    outcome: RemoteReportPathOutcome,
+    *,
+    in_rank_subdirectories: bool = False,
 ) -> StatusMessage:
     """The one connection-test line a configured report path earns.
 
     The path check and the report search answer halves of the same question, so
-    they report as a single result per report kind. "Exists but empty" can only
-    be said at all because the existence check already passed — a missing path
-    fails before this point.
+    they report as a single result per report kind — including when that result
+    is a failure, which is why the copy for all four outcomes lives here rather
+    than half of it being raised from the search.
+
+    ``label`` is lower case for the count line ("Found 3 memory reports") and
+    capitalised for the rest, so a user reading a failure sees the same noun as
+    the form field they have to correct.
     """
+    subject = label.capitalize()
+
+    if outcome.error_message:
+        return StatusMessage(
+            status=ConnectionTestStates.FAILED.value,
+            message=outcome.error_message,
+            detail=outcome.error_detail,
+        )
+
+    if outcome.root_state is not RemoteSearchRootState.PRESENT:
+        return StatusMessage(
+            status=ConnectionTestStates.FAILED.value,
+            message=_FAILURE_COPY_BY_ROOT_STATE[outcome.root_state].format(
+                subject=subject
+            ),
+        )
+
+    count = outcome.report_count
     if count:
         plural = "report" if count == 1 else "reports"
         location = " in per-rank subdirectories" if in_rank_subdirectories else ""
@@ -1763,7 +1805,7 @@ def _report_search_status(
     )
     return StatusMessage(
         status=ConnectionTestStates.WARNING.value,
-        message=f"{label.capitalize()} path exists but no reports found{hint}",
+        message=f"{subject} path exists but no reports found{hint}",
     )
 
 
@@ -1803,36 +1845,39 @@ def test_remote_folder():
     try:
         test_ssh_connection(connection)
         add_status(ConnectionTestStates.OK.value, "SSH connection established")
-    except AuthenticationFailedException as e:
-        add_status(
-            ConnectionTestStates.FAILED.value, e.message, getattr(e, "detail", None)
-        )
-        return jsonify([status.model_dump() for status in statuses]), e.http_status
     except RemoteConnectionException as e:
         add_status(e.status.value, e.message, getattr(e, "detail", None))
+        # A verdict on the connection answers the whole request, so it keeps its
+        # own status code (422 for rejected credentials or an untrusted host key)
+        # rather than being reported as one more line in a 200.
+        if e.is_connection_verdict:
+            return jsonify([status.model_dump() for status in statuses]), e.http_status
 
     # Both configured paths are checked and searched here, one SSH round trip
     # each: the search settles whether its root exists as part of the same
-    # command, and a path that exists is silent because the report count it
-    # produces below already says so.
+    # command, and every configured path earns exactly one line below whatever
+    # the other path did, so the dialog can resolve the placeholder it seeded.
     if not has_failures():
         try:
-            report_counts = check_remote_path_for_reports(connection)
-        except AuthenticationFailedException as e:
-            add_status(
-                ConnectionTestStates.FAILED.value, e.message, getattr(e, "detail", None)
-            )
-            return jsonify([status.model_dump() for status in statuses]), e.http_status
+            searches = check_remote_path_for_reports(connection)
         except RemoteConnectionException as e:
+            # Only the connection's own verdict reaches this: a failure about a
+            # single path — including a transport error raised mid-search — is
+            # converted and carried back as that path's outcome instead.
             add_status(e.status.value, e.message, getattr(e, "detail", None))
+            if e.is_connection_verdict:
+                return (
+                    jsonify([status.model_dump() for status in statuses]),
+                    e.http_status,
+                )
         else:
-            if report_counts.profiler is not None:
-                statuses.append(_report_search_status("memory", report_counts.profiler))
-            if report_counts.performance is not None:
+            if searches.profiler is not None:
+                statuses.append(_report_search_status("memory", searches.profiler))
+            if searches.performance is not None:
                 statuses.append(
                     _report_search_status(
                         "performance",
-                        report_counts.performance,
+                        searches.performance,
                         in_rank_subdirectories=connection.multihostPerformance,
                     )
                 )

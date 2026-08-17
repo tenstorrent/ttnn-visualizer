@@ -21,6 +21,7 @@ import classNames from 'classnames';
 import { useDevices } from '../../hooks/useAPI';
 import LoadingSpinner from '../LoadingSpinner';
 import { formatMemorySize, prettyPrintAddress } from '../../functions/math';
+import { getCoreCountLabel, getDeviceCountLabel } from '../../functions/formatting';
 import { getBufferColor } from '../../functions/colorGenerator';
 import { CBAllocationSummary, CBPressureSnapshot } from '../../model/MemoryAllocations';
 import 'styles/components/CircularBufferPressureModal.scss';
@@ -700,7 +701,8 @@ const CircularBufferPressureBody = ({
                                         <span className='addr'>{prettyPrintAddress(cb.address, l1Budget)}</span>
                                         <span className='size'>{formatMemorySize(cb.size, 2)}</span>
                                         <span className='cores'>
-                                            {cb.numCores > 0 ? `× ${cb.numCores} cores` : 'unattributed'}
+                                            {cb.numCores > 0 ? getCoreCountLabel(cb.numCores) : 'unattributed'}
+                                            {cb.deviceCount > 1 && ` ${getDeviceCountLabel(cb.deviceCount)}`}
                                         </span>
                                     </span>
                                     {isAliased && (

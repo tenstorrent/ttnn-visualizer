@@ -5,8 +5,11 @@
 import { DeviceOperationNode, Node, NodeType } from '../model/APIData';
 import { L1_NUM_CORES } from '../definitions/L1MemorySize';
 import { StringBufferType } from '../model/BufferType';
-import { AllocationDetails, CBAllocationSummary, CBPressureSnapshot } from '../model/MemoryAllocations';
+import { AllocationDetails, CBAllocationSummary, CBDeviceFanout, CBPressureSnapshot } from '../model/MemoryAllocations';
 import { getCoresInRangeList } from './math';
+
+// Keeps a graph with no device dimension accumulating into one bucket. #1844
+const SINGLE_DEVICE_KEY = 'single';
 
 export function processMemoryAllocations(
     graph: Node[],
@@ -15,56 +18,80 @@ export function processMemoryAllocations(
     peakMemoryLoad: number;
     memoryAllocationList: AllocationDetails[];
     cbPressureByOpId: Map<number, CBPressureSnapshot>;
+    cbFanout: CBDeviceFanout;
 } {
     let peakMemoryLoad = 0;
     const memoryAllocationList: AllocationDetails[] = [];
     const curOpList: { name: string; id: number; deviceId?: string | number }[] = [];
-    const cbBytesByCore = new Map<string, number>();
+    // Core (0,0) of device 0 is not core (0,0) of device 6; summing the mesh's
+    // identical CBs is what inflated every total by the device count. #1844
+    const cbBytesByDeviceCore = new Map<string, number>();
+    // CBs whose `core_range_set` resolved to no cores.
+    const unattributedByDevice = new Map<string, number>();
     // Live CB allocations since the last `circular_buffer_deallocate_all` (or
-    // since the DeviceOp started, whichever came last). Mirrors `cbBytesByCore`
-    // so the snapshot can attribute pressure back to specific CB events.
+    // since the DeviceOp started, whichever came last), one entry per CB rather
+    // than per device. Mirrors `cbBytesByDeviceCore` so the snapshot can
+    // attribute pressure back to specific CB events.
     let liveCBs: CBAllocationSummary[] = [];
+    // Lets a later device bump an existing CB's count instead of adding a row.
+    let liveCBByIdentity = new Map<string, { summary: CBAllocationSummary; deviceKeys: Set<string> }>();
+    // How many times each device has already allocated a given CB, so the key
+    // above can separate repeats.
+    let cbRepeatsByDevice = new Map<string, number>();
     const cbPressureByOpId = new Map<number, CBPressureSnapshot>();
+    const cbFanout: CBDeviceFanout = {
+        deviceCountByNodeId: new Map<number, number>(),
+        duplicateNodeIds: new Set<number>(),
+    };
+
+    const resetLiveCBs = () => {
+        liveCBs = [];
+        liveCBByIdentity = new Map();
+        cbRepeatsByDevice = new Map();
+    };
 
     const snapshotCBPressure = (opId: number) => {
-        if (liveCBs.length === 0 && cbBytesByCore.size === 0) {
+        if (liveCBs.length === 0 && cbBytesByDeviceCore.size === 0 && unattributedByDevice.size === 0) {
             return;
         }
         const byCore: Record<string, number> = {};
         let maxBytes = 0;
-        let unattributedBytes = 0;
-        for (const [k, v] of cbBytesByCore.entries()) {
-            byCore[k] = v;
-            if (k === '?') {
-                unattributedBytes = v;
-            } else if (v > maxBytes) {
-                maxBytes = v;
+        for (const [key, bytes] of cbBytesByDeviceCore.entries()) {
+            const core = key.slice(key.indexOf('|') + 1);
+            const perCore = Math.max(byCore[core] ?? 0, bytes);
+            byCore[core] = perCore;
+            if (perCore > maxBytes) {
+                maxBytes = perCore;
             }
         }
-        // Last writer wins if a DeviceOp triggers multiple snapshots. v1
-        // assumption: one `circular_buffer_deallocate_all` per DeviceOp.
+        let unattributedBytes = 0;
+        for (const bytes of unattributedByDevice.values()) {
+            unattributedBytes = Math.max(unattributedBytes, bytes);
+        }
+        if (unattributedByDevice.size > 0) {
+            byCore['?'] = unattributedBytes;
+        }
+        // Copied per entry because `deviceCount` stays mutable on the live
+        // objects; a snapshot must not change after it is taken.
         cbPressureByOpId.set(opId, {
             byCore,
             maxBytes,
             unattributedBytes,
-            allocations: liveCBs.slice(),
+            allocations: liveCBs.map((cb) => ({ ...cb })),
         });
     };
 
     let totalBuffer = 0;
 
-    const maxCbPerCore = (): number => {
-        let m = 0;
-        // Skip the '?' bucket — those bytes have no core attribution so
-        // they don't belong in a per-core peak. Mirrors the same exclusion
-        // in snapshotCBPressure() so cbPeak and snapshot.maxBytes agree.
-        for (const [k, v] of cbBytesByCore.entries()) {
-            if (k !== '?' && v > m) {
-                m = v;
-            }
-        }
-        return m;
-    };
+    // Maintained at the two places `cbBytesByDeviceCore` changes rather than
+    // rescanned per node: the map is read once per graph node but only grows by
+    // accumulation and resets wholesale, so a running max is exact. Rescanning
+    // cost the device count once the key gained a device. #1844
+    //
+    // Unattributed bytes are excluded — they have no core attribution so they
+    // don't belong in a per-core peak. Mirrors the same exclusion in
+    // snapshotCBPressure() so cbPeak and snapshot.maxBytes agree.
+    let cbPeakPerCore = 0;
 
     let i = 1;
     while (i < graph.length) {
@@ -98,27 +125,62 @@ export function processMemoryAllocations(
             // forward-compat with future tt-metal emit changes. #1651
             const rawGlobalFlag = node.params.globally_allocated as unknown;
             const globallyAllocated = rawGlobalFlag === '1' || rawGlobalFlag === 1;
+            const deviceKey = String(node.params.device_id ?? SINGLE_DEVICE_KEY);
             if (!globallyAllocated) {
                 if (cores.length === 0) {
-                    cbBytesByCore.set('?', (cbBytesByCore.get('?') ?? 0) + size);
+                    unattributedByDevice.set(deviceKey, (unattributedByDevice.get(deviceKey) ?? 0) + size);
                 } else {
                     for (const { x, y } of cores) {
-                        const k = `${x},${y}`;
-                        cbBytesByCore.set(k, (cbBytesByCore.get(k) ?? 0) + size);
+                        const k = `${deviceKey}|${x},${y}`;
+                        const coreBytes = (cbBytesByDeviceCore.get(k) ?? 0) + size;
+                        cbBytesByDeviceCore.set(k, coreBytes);
+                        if (coreBytes > cbPeakPerCore) {
+                            cbPeakPerCore = coreBytes;
+                        }
                     }
                 }
             }
-            liveCBs.push({
-                nodeId: node.id,
-                address: parseInt(node.params.address, 10),
-                size,
-                numCores: cores.length,
-                coreRangeSet: node.params.core_range_set,
-                cores,
-                allocateOperationId: currentOp?.id,
-                allocateOperationName: currentOp?.name,
-                globallyAllocated,
-            });
+
+            const address = parseInt(node.params.address, 10);
+            // Scoped to the enclosing op because `function_end` can snapshot and
+            // unwind without a `circular_buffer_deallocate_all` to reset this;
+            // unscoped, a later op's device folded onto an already-snapshotted
+            // row and moved a count the modal had recorded. Every device's copy
+            // of a CB shares one `function_start`, so the collapse still sees
+            // them all. #1844
+            const identity = `${currentOp?.id}|${address}|${size}|${node.params.core_range_set}|${globallyAllocated}`;
+            // A repeat on the same device is a real second allocation, not mesh
+            // fan-out, so it needs its own row. Keying by the device's repeat
+            // count gives it one, and pairs it with the other devices' repeats
+            // instead of letting it displace the first allocation as the row
+            // they all collapse onto.
+            const repeatKey = `${identity}|${deviceKey}`;
+            const repeat = (cbRepeatsByDevice.get(repeatKey) ?? 0) + 1;
+            cbRepeatsByDevice.set(repeatKey, repeat);
+            const identitySlot = `${identity}|${repeat}`;
+            const existing = liveCBByIdentity.get(identitySlot);
+            if (existing) {
+                existing.deviceKeys.add(deviceKey);
+                existing.summary.deviceCount = existing.deviceKeys.size;
+                cbFanout.deviceCountByNodeId.set(existing.summary.nodeId, existing.deviceKeys.size);
+                cbFanout.duplicateNodeIds.add(node.id);
+            } else {
+                const summary: CBAllocationSummary = {
+                    nodeId: node.id,
+                    address,
+                    size,
+                    numCores: cores.length,
+                    coreRangeSet: node.params.core_range_set,
+                    cores,
+                    allocateOperationId: currentOp?.id,
+                    allocateOperationName: currentOp?.name,
+                    globallyAllocated,
+                    deviceCount: 1,
+                };
+                liveCBs.push(summary);
+                liveCBByIdentity.set(identitySlot, { summary, deviceKeys: new Set([deviceKey]) });
+                cbFanout.deviceCountByNodeId.set(node.id, 1);
+            }
         }
 
         if (node.node_type === NodeType.circular_buffer_deallocate_all) {
@@ -129,8 +191,10 @@ export function processMemoryAllocations(
             if (currentOp) {
                 snapshotCBPressure(currentOp.id);
             }
-            cbBytesByCore.clear();
-            liveCBs = [];
+            cbBytesByDeviceCore.clear();
+            cbPeakPerCore = 0;
+            unattributedByDevice.clear();
+            resetLiveCBs();
         }
 
         if (node.node_type === NodeType.buffer_allocate && node.params.type === StringBufferType.L1) {
@@ -159,7 +223,7 @@ export function processMemoryAllocations(
             }
         }
 
-        const cbPeak = maxCbPerCore();
+        const cbPeak = cbPeakPerCore;
 
         if (curOpList.length > 0) {
             const obj: AllocationDetails = {
@@ -177,7 +241,7 @@ export function processMemoryAllocations(
         peakMemoryLoad = Math.max(peakMemoryLoad, cbPeak + totalBuffer);
     }
 
-    return { peakMemoryLoad, memoryAllocationList, cbPressureByOpId };
+    return { peakMemoryLoad, memoryAllocationList, cbPressureByOpId, cbFanout };
 }
 
 export const processInputsOutputs = (graph: Node[]): DeviceOperationNode[] => {
