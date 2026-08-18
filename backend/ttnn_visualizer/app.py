@@ -81,6 +81,13 @@ def _build_spa_client_config(app: Flask) -> dict:
         "TT_METAL_HOME": app.config["TT_METAL_HOME"],
         "REPORT_DATA_DIRECTORY": str(app.config["REPORT_DATA_DIRECTORY"]),
         "USERNAME": _get_client_username(server_mode),
+        # Recomputed rather than read from ``app.config``: ``from_object`` resolves the
+        # ``_UsageRecordingEnabled`` descriptor before ``settings_override`` is applied,
+        # so the snapshot can claim recording is on for an app that is in server mode.
+        # Published under both postures, unlike the local-only metadata below — a missing
+        # key would be indistinguishable from a disabled switch, and the client needs to
+        # tell those apart to decide whether to post at all.
+        "USAGE_RECORDING_ACTIVE": is_recording_enabled(server_mode),
     }
 
     # SSH dialog defaults are local-dev convenience only. Never publish

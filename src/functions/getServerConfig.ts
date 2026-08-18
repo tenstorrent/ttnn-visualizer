@@ -40,9 +40,8 @@ const SERVER_MODE_DISABLED_VALUES = new Set<string>(['false', '0']);
 // Accepts both shapes the two branches below supply: a real boolean from the JSON the
 // backend inlines, and a string from a Vite env var — where `!!value` made the
 // `VITE_SERVER_MODE=false` that `.env.sample` documents truthy. Anything else — a missing
-// key, a spelling neither side recognises — is the local posture, which is the only safe
-// answer a dev checkout can default to.
-export function isServerModeEnabled(value: unknown): boolean {
+// key, a spelling neither side recognises — is off.
+export function isFlagEnabled(value: unknown): boolean {
     if (typeof value === 'boolean') {
         return value;
     }
@@ -52,6 +51,14 @@ export function isServerModeEnabled(value: unknown): boolean {
     }
 
     return SERVER_MODE_ENABLED_VALUES.has(value.trim().toLowerCase());
+}
+
+// Kept as its own name because this flag is a security posture rather than a feature
+// toggle: call sites read as the boundary they gate, and the warning below is only owed
+// to this one. Off here means the local posture, which is the only safe answer a dev
+// checkout can default to.
+export function isServerModeEnabled(value: unknown): boolean {
+    return isFlagEnabled(value);
 }
 
 // The backend refuses to start on a SERVER_MODE it can't read, because falling back means
@@ -95,6 +102,10 @@ const getServerConfig = (): ServerConfig => {
             TT_METAL_HOME: import.meta.env.VITE_TT_METAL_HOME,
             REPORT_DATA_DIRECTORY: import.meta.env.VITE_REPORT_DATA_DIRECTORY || '/path/to/data/directory', // Default value for development
             REPORT_LINKING_ENABLED: true,
+            // Off unless explicitly opted in, unlike the backend's on-by-default: a
+            // developer clicking through their own checkout is not usage, and defaulting
+            // on would write it into their real events.log.
+            USAGE_RECORDING_ACTIVE: isFlagEnabled(import.meta.env.VITE_USAGE_RECORDING_ACTIVE),
             USERNAME: import.meta.env.VITE_USERNAME,
             ...getSshDefaults(
                 import.meta.env.VITE_SSH_DEFAULT_PORT,
@@ -115,6 +126,7 @@ const getServerConfig = (): ServerConfig => {
         TT_METAL_HOME: windowConfig?.TT_METAL_HOME,
         REPORT_DATA_DIRECTORY: windowConfig?.REPORT_DATA_DIRECTORY,
         REPORT_LINKING_ENABLED: windowConfig?.REPORT_LINKING_ENABLED || false,
+        USAGE_RECORDING_ACTIVE: isFlagEnabled(windowConfig?.USAGE_RECORDING_ACTIVE),
         USERNAME: windowConfig?.USERNAME,
         ...getSshDefaults(
             windowConfig?.SSH_DEFAULT_PORT,

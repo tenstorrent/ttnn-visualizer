@@ -92,6 +92,24 @@ describe('getServerConfig (dev / Vite env)', () => {
         expect(getServerConfig().SERVER_MODE).toBe(expected);
     });
 
+    it.each([
+        ['true', true],
+        ['1', true],
+        ['false', false],
+        ['', false],
+        [undefined, false],
+    ])('reads VITE_USAGE_RECORDING_ACTIVE=%p as %s', async (value, expected) => {
+        if (value !== undefined) {
+            vi.stubEnv('VITE_USAGE_RECORDING_ACTIVE', value);
+        }
+
+        const { default: getServerConfig } = await import('../src/functions/getServerConfig');
+
+        // Unset means off in dev, unlike the backend's on-by-default: a developer clicking
+        // through their own checkout is not usage.
+        expect(getServerConfig().USAGE_RECORDING_ACTIVE).toBe(expected);
+    });
+
     it('falls back when VITE_SSH_DEFAULT_PORT is invalid', async () => {
         vi.stubEnv('VITE_SSH_DEFAULT_PORT', 'not-a-port');
 
@@ -149,6 +167,22 @@ describe('getServerConfig (shipped / inlined window config)', () => {
         const { default: getServerConfig } = await import('../src/functions/getServerConfig');
 
         expect(getServerConfig().SERVER_MODE).toBe(expected);
+    });
+
+    it.each([
+        [{ USAGE_RECORDING_ACTIVE: true }, true],
+        [{ USAGE_RECORDING_ACTIVE: false }, false],
+        // Absent is off. The backend publishes the key under both postures precisely so
+        // this case means "nothing inlined", never "recording is on but unsaid".
+        [{}, false],
+        [{ USAGE_RECORDING_ACTIVE: 'false' as unknown as boolean }, false],
+    ])('reads %o as USAGE_RECORDING_ACTIVE=%s', async (windowConfig, expected) => {
+        vi.stubEnv('DEV', false);
+        window.TTNN_VISUALIZER_CONFIG = windowConfig;
+
+        const { default: getServerConfig } = await import('../src/functions/getServerConfig');
+
+        expect(getServerConfig().USAGE_RECORDING_ACTIVE).toBe(expected);
     });
 
     it('defaults the rest of the config when nothing was inlined', async () => {
