@@ -47,9 +47,15 @@ def main(argv: list[str]) -> int:
         return 1
 
     if batch_size > 1:
-        batch = [(UsageEvent.VIEW_OPENED, {"view": UsageView.OPERATIONS})] * batch_size
-        for _ in range(count // batch_size):
-            record_events(batch)
+        event = (UsageEvent.VIEW_OPENED, {"view": UsageView.OPERATIONS})
+        # A final short batch rather than `count // batch_size` whole ones, which would
+        # drop the remainder — and write nothing at all when the batch is bigger than the
+        # count. The lower-bound check below would catch it, but as a confusing failure
+        # about interleaving rather than about arithmetic here.
+        remaining = count
+        while remaining:
+            record_events([event] * min(batch_size, remaining))
+            remaining -= min(batch_size, remaining)
     else:
         for _ in range(count):
             record_event(UsageEvent.APP_START)

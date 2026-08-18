@@ -128,7 +128,9 @@ def test_concurrent_batches_do_not_interleave(usage_directory):
     doing the most work — and where a regression to a per-line loop would start
     splitting one instance's flush across another's.
     """
-    writers, writes_each, batch_size = 3, 12, 3
+    # 10 is deliberately not a multiple of 3: the writer has to finish with a short
+    # batch, and a regression that dropped the remainder would fail the line count.
+    writers, writes_each, batch_size = 3, 10, 3
 
     _run_usage_writers(usage_directory, writers, writes_each, batch_size)
 

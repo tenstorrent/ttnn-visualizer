@@ -32,9 +32,12 @@ obvious from the code that reads it:
   is late by up to the client's flush interval. Fine for the day- and week-
   granularity questions this file exists to answer; not a source for anything
   needing sub-minute ordering.
-* **The log stops growing at ``MAX_LOG_BYTES``.** Appends are refused past the cap
-  rather than trimmed, because trimming is what makes cumulative totals go down.
-  Compaction at the next launch summarises the older half and appends resume.
+* **The log stops growing shortly past ``MAX_LOG_BYTES``.** Appends are refused once it
+  is over the cap, rather than trimmed, because trimming is what makes cumulative totals
+  go down. The check is amortised, so the overshoot is bounded by
+  ``LOG_SIZE_CHECK_INTERVAL_BYTES`` plus one batch rather than being exact — treat the cap
+  as approximate. Compaction at the next launch summarises the older half and appends
+  resume.
 
 Every recorded value comes from a closed enum, a bucketed value, or the
 application's own version. No report, file, directory, operation or host names,
@@ -499,6 +502,12 @@ def _log_is_full() -> bool:
     extrapolates — losing history and inventing activity at once. Compacting here is no
     better: ``_compact`` reads the whole file, and this runs on a request path.
     Compaction at the next launch summarises the older half and appends resume.
+
+    Strictly greater than, matching ``compact_if_needed``'s own threshold, and the two have
+    to agree: with ``>=`` here a log sitting exactly on the cap would refuse every append
+    while compaction still skipped it as not-yet-over, leaving it stuck. The boundary is
+    not where the precision is lost anyway — the interval check above means the log can
+    already be up to ``LOG_SIZE_CHECK_INTERVAL_BYTES`` over before this runs at all.
     """
     global _bytes_since_size_check
 
