@@ -8,6 +8,8 @@ import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 
+import type { NodeChange } from '@xyflow/react';
+
 import type { OperationDescription } from '../src/model/APIData';
 import type {
     OpGraphBuiltGraph,
@@ -28,7 +30,12 @@ const harness: {
     onBuilt: ((graph: OpGraphBuiltGraph) => void) | null;
     setNodes: ((updater: (previous: OpGraphFlowNode[]) => OpGraphFlowNode[]) => void) | null;
     onNodeClick: ((event: unknown, node: OpGraphFlowNode) => void) | null;
-} = { onBuilt: null, setNodes: null, onNodeClick: null };
+    onNodesChange: ((changes: NodeChange<OpGraphFlowNode>[]) => void) | null;
+} = { onBuilt: null, setNodes: null, onNodeClick: null, onNodesChange: null };
+
+// What `useNodesState` hands the view as its change applier. Stable, because the
+// view's own handler lists it as a dependency.
+const applyNodeChanges = vi.fn();
 
 vi.mock('@xyflow/react', async () => {
     const { useState } = await import('react');
@@ -45,15 +52,18 @@ vi.mock('@xyflow/react', async () => {
             nodes,
             edges,
             onNodeClick,
+            onNodesChange,
             children,
         }: {
             nodes: OpGraphFlowNode[];
             edges: OpGraphFlowEdge[];
             onNodeClick: (event: unknown, node: OpGraphFlowNode) => void;
+            onNodesChange: (changes: NodeChange<OpGraphFlowNode>[]) => void;
             children?: ReactNode;
         }) => {
             flowRenders.push({ nodes, edges });
             harness.onNodeClick = onNodeClick;
+            harness.onNodesChange = onNodesChange;
             return children ?? null;
         },
         ReactFlowProvider: Passthrough,
@@ -68,7 +78,7 @@ vi.mock('@xyflow/react', async () => {
         useNodesState: (initial: OpGraphFlowNode[]) => {
             const [value, setValue] = useState(initial);
             harness.setNodes = setValue;
-            return [value, setValue, () => {}];
+            return [value, setValue, applyNodeChanges];
         },
         useEdgesState: (initial: OpGraphFlowEdge[]) => {
             const [value, setValue] = useState(initial);
@@ -153,13 +163,21 @@ const typeFilter = (query: string) => {
     });
 };
 
+const emitNodeChanges = (changes: NodeChange<OpGraphFlowNode>[]) => {
+    act(() => {
+        harness.onNodesChange?.(changes);
+    });
+};
+
 beforeEach(() => {
     vi.useFakeTimers();
     runBuild.mockClear();
+    applyNodeChanges.mockClear();
     flowRenders.length = 0;
     harness.onBuilt = null;
     harness.setNodes = null;
     harness.onNodeClick = null;
+    harness.onNodesChange = null;
     sessionStorage.clear();
 });
 
@@ -239,6 +257,68 @@ describe('OperationGraphReactFlow rebuild triggers', () => {
         );
 
         expect(runBuild).toHaveBeenCalledTimes(1);
+    });
+});
+
+describe('OperationGraphReactFlow keyboard selection', () => {
+    // Enter or Space on a focused node is handled inside React Flow: it emits a
+    // select change and never calls `onNodeClick`. Before this was read, the ring
+    // moved and nothing else did — no panel, no neighbour highlight, no cursor.
+    it('adopts a selection reported without a click', () => {
+        renderGraph();
+        emitNodeChanges([{ type: 'select', id: '3', selected: true }]);
+
+        const { nodes } = lastFlowRender();
+        expect(nodeById(nodes, '3').className).toContain('op-graph-node-selected');
+        // The neighbour highlight is derived from app state, so its arrival is what
+        // proves the selection reached the app and not just React Flow's store.
+        expect(nodeById(nodes, '2').className).toContain('op-graph-node-input');
+        expect(nodeById(nodes, '4').className).toContain('op-graph-node-output');
+    });
+
+    it('mirrors the selection back so React Flow agrees about what is selected', () => {
+        renderGraph();
+
+        act(() => {
+            harness.onNodeClick?.(null, nodeById(lastFlowRender().nodes, '4'));
+        });
+
+        const { nodes } = lastFlowRender();
+        expect(nodeById(nodes, '4').selected).toBe(true);
+        expect(nodes.filter((node) => node.selected === true)).toHaveLength(1);
+    });
+
+    it('clears the selection when an unselect is reported with nothing replacing it', () => {
+        renderGraph();
+        emitNodeChanges([{ type: 'select', id: '3', selected: true }]);
+
+        // Escape on the focused node, which React Flow turns into a bare unselect.
+        emitNodeChanges([{ type: 'select', id: '3', selected: false }]);
+
+        expect(lastFlowRender().nodes.some((node) => node.selected === true)).toBe(false);
+    });
+
+    it('keeps select changes out of the node array so selection has one source', () => {
+        renderGraph();
+        applyNodeChanges.mockClear();
+
+        emitNodeChanges([
+            { type: 'select', id: '3', selected: true },
+            { type: 'position', id: '3', position: { x: 1, y: 2 } },
+        ]);
+
+        expect(applyNodeChanges).toHaveBeenCalledTimes(1);
+        expect(applyNodeChanges).toHaveBeenCalledWith([{ type: 'position', id: '3', position: { x: 1, y: 2 } }]);
+    });
+
+    it('forwards a drag frame without rebuilding the change array', () => {
+        renderGraph();
+        applyNodeChanges.mockClear();
+        const changes: NodeChange<OpGraphFlowNode>[] = [{ type: 'position', id: '1', position: { x: 3, y: 4 } }];
+
+        emitNodeChanges(changes);
+
+        expect(applyNodeChanges).toHaveBeenCalledWith(changes);
     });
 });
 

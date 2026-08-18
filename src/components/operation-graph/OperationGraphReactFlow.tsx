@@ -7,6 +7,7 @@ import {
     Controls,
     MarkerType,
     MiniMap,
+    type NodeChange,
     ReactFlow,
     ReactFlowProvider,
     useEdgesState,
@@ -145,6 +146,16 @@ const OperationGraphInner = ({ operationList, operationId }: OperationGraphReact
         [operationList],
     );
 
+    // React Flow reports selection by node id; the panel and the toolbar work in
+    // operation ids.
+    const operationIdByNodeId = useMemo(() => {
+        const idsByNodeId = new Map<string, number>();
+        for (const entry of nodeIndex) {
+            idsByNodeId.set(entry.id, entry.operationId);
+        }
+        return idsByNodeId;
+    }, [nodeIndex]);
+
     const operationNamesById = useMemo(() => {
         const namesById = new Map<number, string>();
         for (const operation of operationList) {
@@ -227,6 +238,49 @@ const OperationGraphInner = ({ operationList, operationId }: OperationGraphReact
             focusOperation(id);
         },
         [focusOperation],
+    );
+
+    // Pressing Enter or Space on a focused node reaches React Flow's own handler,
+    // which emits a select change and never calls `onNodeClick` — so a keyboard
+    // user could move the selection ring without the panel, the highlight or the
+    // prev/next cursor following. Reading selection here instead covers the
+    // keyboard, the pointer and Escape through one path.
+    const handleNodesChange = useCallback(
+        (changes: NodeChange<OpGraphFlowNode>[]) => {
+            let hasSelectChange = false;
+            let selectedNodeId: string | null = null;
+            for (const change of changes) {
+                if (change.type === 'select') {
+                    hasSelectChange = true;
+                    if (change.selected) {
+                        selectedNodeId = change.id;
+                    }
+                }
+            }
+            // A drag emits position changes only, so the common case forwards the
+            // array it was handed rather than rebuilding it.
+            if (!hasSelectChange) {
+                onNodesChange(changes);
+                return;
+            }
+            // Select changes are read and dropped rather than applied, leaving
+            // `selectedOperationId` as the single answer to what is selected.
+            const remainingChanges = changes.filter((change) => change.type !== 'select');
+            if (remainingChanges.length > 0) {
+                onNodesChange(remainingChanges);
+            }
+            if (selectedNodeId === null) {
+                setSelectedOperationId(null);
+                return;
+            }
+            const selectedId = operationIdByNodeId.get(selectedNodeId);
+            // Pointer selection arrives here on mousedown and again as a click, and
+            // re-running it would restart the centring tween mid-flight.
+            if (selectedId !== undefined && selectedId !== selectedOperationIdRef.current) {
+                selectOperation(selectedId);
+            }
+        },
+        [onNodesChange, operationIdByNodeId, selectOperation],
     );
 
     // Clearing applies straight away so Escape and the clear button feel instant;
@@ -390,6 +444,13 @@ const OperationGraphInner = ({ operationList, operationId }: OperationGraphReact
             if (matchedIds && (isSelected || matchedIds.has(node.id))) {
                 classNames.push(MATCHED_NODE_CLASS);
             }
+            if (isSelected) {
+                // Mirrored into React Flow's own flag so its keyboard handler reads
+                // the same selection the app holds: Escape on the selected node has
+                // to register as an unselect, and Enter on it as a no-op. Nothing
+                // else ever sets `selected`, since select changes are dropped.
+                return { ...node, className: classNames.join(' '), selected: true };
+            }
             return classNames.length > 0 ? { ...node, className: classNames.join(' ') } : node;
         });
     }, [nodes, highlight, matchedIds]);
@@ -459,7 +520,7 @@ const OperationGraphInner = ({ operationList, operationId }: OperationGraphReact
                 edges={styledEdges}
                 nodeTypes={NODE_TYPES}
                 edgeTypes={EDGE_TYPES}
-                onNodesChange={onNodesChange}
+                onNodesChange={handleNodesChange}
                 onEdgesChange={onEdgesChange}
                 onNodeClick={handleNodeClick}
                 onPaneClick={handlePaneClick}
