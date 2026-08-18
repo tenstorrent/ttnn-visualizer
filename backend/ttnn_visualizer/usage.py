@@ -28,10 +28,13 @@ obvious from the code that reads it:
   they can land out of time order relative to events they sat between.
 * **``ts`` is when the event was written, not when it happened.** Events posted by
   the frontend arrive in batches, and the server stamps them on receipt rather than
-  trusting a client clock, so a whole batch shares one timestamp and every event in
-  it is late by up to the client's flush interval. Fine for the day- and week-
+  trusting a client clock, so one batch carries one timestamp and every event in it
+  is late by up to the client's flush interval. Fine for the day- and week-
   granularity questions this file exists to answer; not a source for anything
   needing sub-minute ordering.
+* **The log stops growing at ``MAX_LOG_BYTES``.** Appends are refused past the cap
+  rather than trimmed, because trimming is what makes cumulative totals go down.
+  Compaction at the next launch summarises the older half and appends resume.
 
 Every recorded value comes from a closed enum, a bucketed value, or the
 application's own version. No report, file, directory, operation or host names,
@@ -79,10 +82,20 @@ COMPACTION_LOCK_NAME = ".compaction.lock"
 USAGE_RECORDING_ENV_VAR = "USAGE_RECORDING_ENABLED"
 RUN_ID_ENV_VAR = "TTNN_VISUALIZER_RUN_ID"
 
-# ~110 bytes a line and ~250 events a day for a heavy user is ~27 KB/day, so this
-# holds roughly a year before compaction. The cap is a privacy control as much as a
-# disk one.
+# The cap is a privacy control as much as a disk one. The original budget assumed only
+# launch events (~110 bytes a line, ~250 a day, so ~27 KB/day and roughly a year before
+# compaction); frontend view and engagement events are per-navigation, not per-launch,
+# so a heavy user can be an order of magnitude above that and compaction becomes a
+# routine startup cost rather than effectively never. That is why the cap is now
+# enforced on the write path too, not only at launch.
 MAX_LOG_BYTES = 10 * 1024 * 1024
+
+# How much may be appended between two size checks. The cap was unreachable within a
+# session while the only writer was one line per launch; a client posting batches makes
+# growth client-driven, so the write path has to honour it too. Stat'ing per batch would
+# put a syscall on every flush, so amortise: ~2,400 events between checks, which can
+# overshoot the cap by this much and no more.
+LOG_SIZE_CHECK_INTERVAL_BYTES = 256 * 1024
 
 # Only has to be unique within one machine's log for one sitting, and is never
 # exported, so a full 32-character UUID would be 24 wasted bytes on every line.
@@ -93,6 +106,13 @@ EVENT_FIELD = "event"
 SCHEMA_VERSION_FIELD = "schema_version"
 RUN_ID_FIELD = "run_id"
 COUNT_FIELD = "count"
+
+# Detail field names. Constants for the same reason the fields above are: they cross
+# both the HTTP boundary and the log format, and the frontend will re-enumerate them.
+KIND_FIELD = "kind"
+SOURCE_FIELD = "source"
+REASON_CLASS_FIELD = "reason_class"
+VIEW_FIELD = "view"
 
 # UTC, fixed width. `datetime.isoformat()` would give microseconds and `+00:00`
 # rather than `Z`, which is neither fixed width nor the form the collector parses.
@@ -115,6 +135,17 @@ _UNSUMMARISABLE_FIELDS = (TIMESTAMP_FIELD, RUN_ID_FIELD, COUNT_FIELD)
 _REQUIRED_FIELDS = (TIMESTAMP_FIELD, EVENT_FIELD, SCHEMA_VERSION_FIELD)
 
 _run_id: Optional[str] = None
+
+# Bytes appended since the last size check, primed so the first append of the process
+# checks immediately — a log left over the cap by an earlier session must not get one
+# free interval.
+_bytes_since_size_check = LOG_SIZE_CHECK_INTERVAL_BYTES
+
+# The directory this process has already created, so `_append_line` does not pay a
+# `mkdir` (plus its caught `FileExistsError` and stat) on every request. Keyed on the
+# path rather than a boolean so overriding `USAGE_DIRECTORY` invalidates it, which is
+# what keeps the test fixture honest.
+_ensured_directory: Optional[Path] = None
 
 
 class UsageEvent(str, Enum):
@@ -167,12 +198,12 @@ class ReportLoadFailureReason(str, Enum):
 class UsageView(str, Enum):
     """The navigable surfaces worth counting.
 
-    Nine, not the ten proposed in the parent issue, and the two omissions are
-    deliberate. ``topology`` (``ROUTES.CLUSTER``) has ``element: null``, so nothing
-    renders and it could never be engaged — a permanent zero reads as "nobody wants
-    topology", which is the opposite of what it would mean. ``styleguide`` is a
-    development surface and counting it would pollute reach. Add ``topology`` when the
-    page exists.
+    Nine of the ten proposed in #1819. ``topology`` (``ROUTES.CLUSTER``) is the
+    omission: it has ``element: null``, so nothing renders and it could never be
+    engaged — a permanent zero reads as "nobody wants topology", which is the opposite
+    of what it would mean. Add it when the page exists. ``styleguide`` was never among
+    the ten and is also excluded: a development surface, so counting it would pollute
+    reach.
 
     ``REPORTS`` is the index route ``/`` rather than a named route, and ``GRAPH``
     and ``BUFFERS`` deliberately differ in name from their paths (``/graphtree``,
@@ -198,24 +229,25 @@ class UsageView(str, Enum):
 # is not enough on its own: it would happily accept `kind=totally-made-up`, and the
 # bounded contents of this file are the entire promise being made.
 _DETAIL_FIELD_ENUMS: Mapping[str, Type[Enum]] = {
-    "kind": ReportKind,
-    "source": ReportSource,
-    "reason_class": ReportLoadFailureReason,
-    "view": UsageView,
+    KIND_FIELD: ReportKind,
+    SOURCE_FIELD: ReportSource,
+    REASON_CLASS_FIELD: ReportLoadFailureReason,
+    VIEW_FIELD: UsageView,
 }
 
-# What a client may post, and the exact detail fields each event carries. Exported
-# because the frontend enums and the docs page both have to enumerate it, and a single
-# source is what stops the client emitting events the server rejects.
+# What a client may post, and the exact detail fields each event carries. Exported so
+# the frontend enums and the docs page can be derived from one source rather than
+# transcribed — a silent divergence there means events the client emits and the server
+# rejects, which the client is designed not to notice.
 #
 # `APP_START` is deliberately absent: the server records launches itself, and a client
 # able to post one could forge the deployment population every other figure is read
 # against.
 CLIENT_EVENT_DETAIL_FIELDS: Mapping[UsageEvent, Tuple[str, ...]] = {
-    UsageEvent.REPORT_LOADED: ("kind", "source"),
-    UsageEvent.REPORT_LOAD_FAILED: ("kind", "reason_class"),
-    UsageEvent.VIEW_OPENED: ("view",),
-    UsageEvent.VIEW_ENGAGED: ("view",),
+    UsageEvent.REPORT_LOADED: (KIND_FIELD, SOURCE_FIELD),
+    UsageEvent.REPORT_LOAD_FAILED: (KIND_FIELD, REASON_CLASS_FIELD),
+    UsageEvent.VIEW_OPENED: (VIEW_FIELD,),
+    UsageEvent.VIEW_ENGAGED: (VIEW_FIELD,),
 }
 
 
@@ -373,10 +405,22 @@ def _render_line(fields: List[Tuple[str, str]]) -> str:
     return " ".join(f"{key}={value}" for key, value in fields) + "\n"
 
 
-def _format_line(event: UsageEvent, details: Dict[str, Any]) -> Optional[str]:
-    """A whole logfmt line, or ``None`` if any part of it is unsafe to write."""
+def _now() -> str:
+    return datetime.now(timezone.utc).strftime(TIMESTAMP_FORMAT)
+
+
+def _format_line(
+    event: UsageEvent, details: Dict[str, Any], timestamp: str
+) -> Optional[str]:
+    """A whole logfmt line, or ``None`` if any part of it is unsafe to write.
+
+    ``timestamp`` is passed in rather than read here so every line in one batch carries
+    the same one — ``TIMESTAMP_FORMAT`` is second-granular, so a batch straddling a
+    second boundary would otherwise split across two, and the module docstring promises
+    a collector it will not.
+    """
     fields = [
-        (TIMESTAMP_FIELD, datetime.now(timezone.utc).strftime(TIMESTAMP_FORMAT)),
+        (TIMESTAMP_FIELD, timestamp),
         (EVENT_FIELD, event.value),
         (SCHEMA_VERSION_FIELD, str(SCHEMA_VERSION)),
         (RUN_ID_FIELD, get_run_id()),
@@ -404,10 +448,16 @@ def _append_line(line: str) -> None:
     interleave; readers of this file are expected to skip malformed lines.
 
     The argument may hold several newline-terminated lines, which is how a batch stays
-    one atomic write rather than N interleavable ones. Keeping it short enough for that
-    to hold is the caller's job — see the batch cap on the ingest route.
+    one write rather than N interleavable ones. Keeping it short enough to go out in a
+    single ``os.write`` is the caller's job — see the batch cap on the ingest route —
+    since the short-write loop below forfeits the guarantee if it has to iterate.
     """
-    get_usage_directory().mkdir(mode=0o700, parents=True, exist_ok=True)
+    global _bytes_since_size_check, _ensured_directory
+
+    directory = get_usage_directory()
+    if _ensured_directory != directory:
+        directory.mkdir(mode=0o700, parents=True, exist_ok=True)
+        _ensured_directory = directory
 
     descriptor = os.open(
         get_usage_log_path(), os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600
@@ -422,8 +472,85 @@ def _append_line(line: str) -> None:
             if written == 0:
                 raise OSError("usage log write returned 0 bytes")
             offset += written
+
+        _bytes_since_size_check += offset
     finally:
         os.close(descriptor)
+
+
+def _log_is_full() -> bool:
+    """Whether the log has reached its cap, checked at most once per interval.
+
+    Refusing appends is the only correct answer at the cap. Trimming here is what makes
+    cumulative totals go down, which Prometheus reads as a counter reset and then
+    extrapolates — losing history and inventing activity at once. Compacting here is no
+    better: ``_compact`` reads the whole file, and this runs on a request path.
+    Compaction at the next launch summarises the older half and appends resume.
+    """
+    global _bytes_since_size_check
+
+    if _bytes_since_size_check < LOG_SIZE_CHECK_INTERVAL_BYTES:
+        return False
+
+    _bytes_since_size_check = 0
+
+    try:
+        return get_usage_log_path().stat().st_size > MAX_LOG_BYTES
+    except OSError:
+        # No log yet, or it is unreadable. Either way not full; a real write failure is
+        # the append's problem to report, not this check's.
+        return False
+
+
+def _resolve_server_mode(server_mode: Optional[Any]) -> Any:
+    """``server_mode`` as given, or whatever the active Flask app says.
+
+    Shared so the ``or False`` fallback cannot be corrected at two of its three call
+    sites: callers inside a request need not pass it, while ``main()`` passes it
+    explicitly because it runs before any app exists.
+    """
+    if server_mode is not None:
+        return server_mode
+
+    return _server_mode_from_app_context() or False
+
+
+def _write_events(
+    events: Sequence[Tuple[UsageEvent, Mapping[str, Any]]], server_mode: Any
+) -> bool:
+    """The whole write path, all of it or none of it, in a single append.
+
+    All-or-nothing because a reader cannot tell a partial batch from a complete one, and
+    a file whose bounded contents are the entire promise must not hold half an event.
+    Formatting every line before writing any is what buys that.
+
+    Shared by both public recorders so the guard order and the failure semantics have one
+    definition; each caller keeps only its own warning wording, which is the part that
+    legitimately differs.
+    """
+    # Once per batch, not per event: the first stats the disabled marker, the second the
+    # log itself.
+    if not is_recording_enabled(server_mode):
+        return False
+
+    if _log_is_full():
+        return False
+
+    timestamp = _now()
+    lines = []
+
+    for event, details in events:
+        line = _format_line(event, dict(details), timestamp)
+        if line is None:
+            return False
+
+        lines.append(line)
+
+    if not lines:
+        return False
+
+    _append_line("".join(lines))
+    return True
 
 
 def record_event(
@@ -431,23 +558,11 @@ def record_event(
 ) -> None:
     """Append one event, doing nothing at all if recording is disabled.
 
-    ``server_mode`` defaults to whatever the active Flask app says, so callers inside
-    a request need not pass it; ``main()`` passes it explicitly because it runs before
-    any app exists. The check is repeated here rather than trusted to callers so that
-    the writer, not the route, is the thing that enforces it.
+    The enabled check happens in the writer rather than being trusted to callers, so the
+    writer is the thing that enforces it.
     """
     try:
-        if server_mode is None:
-            server_mode = _server_mode_from_app_context() or False
-
-        if not is_recording_enabled(server_mode):
-            return
-
-        line = _format_line(event, details)
-        if line is None:
-            return
-
-        _append_line(line)
+        _write_events([(event, details)], _resolve_server_mode(server_mode))
     except Exception as error:
         # Instrumentation must never break the application it measures. Narrow
         # handlers miss real escapes (``UnicodeEncodeError`` is a ``ValueError``;
@@ -537,26 +652,7 @@ def record_events(
     the application it measures, least of all from a request handler.
     """
     try:
-        if server_mode is None:
-            server_mode = _server_mode_from_app_context() or False
-
-        # Once for the batch, not once per event: the check stats the disabled marker.
-        if not is_recording_enabled(server_mode):
-            return False
-
-        lines = []
-        for event, details in events:
-            line = _format_line(event, dict(details))
-            if line is None:
-                return False
-
-            lines.append(line)
-
-        if not lines:
-            return False
-
-        _append_line("".join(lines))
-        return True
+        return _write_events(events, _resolve_server_mode(server_mode))
     except Exception as error:
         # One warning for the batch. Per-event logging on a request path would turn a
         # single failed flush into a screenful.
@@ -573,8 +669,7 @@ def record_app_start(config: Any, server_mode: Optional[Any] = None) -> None:
     is off.
     """
     try:
-        if server_mode is None:
-            server_mode = _server_mode_from_app_context() or False
+        server_mode = _resolve_server_mode(server_mode)
 
         if not is_recording_enabled(server_mode):
             return

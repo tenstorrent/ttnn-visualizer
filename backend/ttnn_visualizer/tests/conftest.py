@@ -18,7 +18,7 @@ from ttnn_visualizer.extensions import db
 from ttnn_visualizer.models import InstanceTable
 from ttnn_visualizer.tests.report_schemas import SCHEMA_V2
 from ttnn_visualizer.usage import (
-    COUNT_FIELD,
+    LOG_SIZE_CHECK_INTERVAL_BYTES,
     RUN_ID_ENV_VAR,
     USAGE_RECORDING_ENV_VAR,
 )
@@ -67,27 +67,13 @@ def usage_directory(tmp_path, monkeypatch):
     directory = tmp_path / "usage"
     monkeypatch.setattr(usage, "USAGE_DIRECTORY", directory)
     monkeypatch.setattr(usage, "_run_id", None)
+    # Primed rather than zeroed, so the first append of every test performs the size
+    # check instead of inheriting a fresh interval from whichever test ran before.
+    monkeypatch.setattr(usage, "_bytes_since_size_check", LOG_SIZE_CHECK_INTERVAL_BYTES)
     monkeypatch.delenv(RUN_ID_ENV_VAR, raising=False)
     monkeypatch.delenv(USAGE_RECORDING_ENV_VAR, raising=False)
 
     return directory
-
-
-def read_lines(directory: Path):
-    log_path = directory / usage.USAGE_LOG_NAME
-    if not log_path.exists():
-        return []
-
-    return log_path.read_text(encoding="utf-8").splitlines()
-
-
-def parse(line: str):
-    return dict(token.split("=", 1) for token in line.split(" "))
-
-
-def total_events(lines):
-    """Cumulative count the way the collector derives it: ``count``, default 1."""
-    return sum(int(parse(line).get(COUNT_FIELD, "1")) for line in lines)
 
 
 @pytest.fixture

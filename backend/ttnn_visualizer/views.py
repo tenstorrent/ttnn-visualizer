@@ -11,9 +11,10 @@ import shutil
 import time
 import urllib
 import urllib.request
+from enum import Enum
 from http import HTTPStatus
 from pathlib import Path
-from typing import Any, Callable, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import orjson
 import yaml
@@ -113,6 +114,7 @@ from ttnn_visualizer.stack_trace_source import (
 from ttnn_visualizer.usage import (
     UsageEvent,
     UsageEventRejected,
+    is_recording_enabled,
     record_events,
     validate_client_event,
 )
@@ -156,9 +158,13 @@ _NOSNIFF_HEADERS = {"X-Content-Type-Options": "nosniff"}
 # to be set per request.
 MAX_USAGE_BATCH_EVENTS = 50
 MAX_USAGE_REQUEST_BYTES = 16 * 1024
-USAGE_EVENTS_FIELD = "events"
-USAGE_EVENT_NAME_FIELD = "event"
-USAGE_EVENT_DETAILS_FIELD = "details"
+
+# Module-private, unlike the two caps above: those are part of the contract the tests
+# pin, these are just the wire field names.
+_USAGE_EVENTS_FIELD = "events"
+_USAGE_EVENT_NAME_FIELD = "event"
+_USAGE_EVENT_DETAILS_FIELD = "details"
+_USAGE_EVENT_KEYS = frozenset({_USAGE_EVENT_NAME_FIELD, _USAGE_EVENT_DETAILS_FIELD})
 
 
 def _stack_source_request_params():
@@ -2588,6 +2594,13 @@ def record_usage_events():
     # `RequestEntityTooLarge` renders as a 413 through the app's `HTTPException` handler.
     request.max_content_length = MAX_USAGE_REQUEST_BYTES
 
+    # Checked here as well as in the writer so a user who switched recording off does not
+    # pay a 16 KB parse and a 50-event validation on every flush for the rest of the
+    # session. The answer is the same 204 either way, so the client never learns which
+    # branch it took and never backs off.
+    if not is_recording_enabled(current_app.config["SERVER_MODE"]):
+        return Response(status=HTTPStatus.NO_CONTENT)
+
     # Not `force=True`: requiring `application/json` is load-bearing rather than
     # pedantic. It makes this a non-simple request, so a hostile origin cannot post to it
     # without a preflight `ALLOWED_ORIGINS` refuses, whereas a `text/plain` body would
@@ -2599,17 +2612,17 @@ def record_usage_events():
     if not isinstance(payload, dict):
         return response_bad_request("Expected a JSON object")
 
-    events = payload.get(USAGE_EVENTS_FIELD)
+    events = payload.get(_USAGE_EVENTS_FIELD)
 
     if not isinstance(events, list) or not events:
-        return response_bad_request(f"Expected a non-empty {USAGE_EVENTS_FIELD} list")
+        return response_bad_request(f"Expected a non-empty {_USAGE_EVENTS_FIELD} list")
 
     if len(events) > MAX_USAGE_BATCH_EVENTS:
         return response_bad_request(
             f"A batch may carry at most {MAX_USAGE_BATCH_EVENTS} events"
         )
 
-    validated: List[Tuple[UsageEvent, Any]] = []
+    validated: List[Tuple[UsageEvent, Dict[str, Enum]]] = []
 
     # Every event is validated before any is written, so a batch carrying one bad event
     # appends nothing. Partial acceptance would leave a reader unable to tell a truncated
@@ -2618,11 +2631,20 @@ def record_usage_events():
         if not isinstance(entry, dict):
             return response_unprocessable_entity("Each event must be an object")
 
+        # Closed at this level too, not just inside `details`. An ignored top-level key
+        # writes nothing, but it lets a client believe it is sending a field that is
+        # being dropped.
+        if set(entry) - _USAGE_EVENT_KEYS:
+            return response_unprocessable_entity(
+                "An event carries only: "
+                f"{_USAGE_EVENT_NAME_FIELD}, {_USAGE_EVENT_DETAILS_FIELD}"
+            )
+
         try:
             validated.append(
                 validate_client_event(
-                    entry.get(USAGE_EVENT_NAME_FIELD),
-                    entry.get(USAGE_EVENT_DETAILS_FIELD),
+                    entry.get(_USAGE_EVENT_NAME_FIELD),
+                    entry.get(_USAGE_EVENT_DETAILS_FIELD),
                 )
             )
         except UsageEventRejected as rejection:
