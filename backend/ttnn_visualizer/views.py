@@ -110,6 +110,12 @@ from ttnn_visualizer.stack_trace_source import (
     read_stack_source_remote,
     stack_source_response,
 )
+from ttnn_visualizer.usage import (
+    UsageEvent,
+    UsageEventRejected,
+    record_events,
+    validate_client_event,
+)
 from ttnn_visualizer.utils import (
     PERFORMANCE_OPS_PERF_PREFIX,
     PERFORMANCE_REPORT_REQUIRED_FILES,
@@ -143,6 +149,16 @@ api = Blueprint("api", __name__)
 # Sent on JSON endpoints that stream report-derived content so browsers can't
 # MIME-sniff the response as HTML and execute embedded markup.
 _NOSNIFF_HEADERS = {"X-Content-Type-Options": "nosniff"}
+
+# The usage client buffers and flushes, so a batch is the unit. Both caps bound what one
+# permitted page can write into a privacy-reviewed artefact, and neither is inherited:
+# `MAX_CONTENT_LENGTH` defaults to no limit at all (`settings.py`), so a limit here has
+# to be set per request.
+MAX_USAGE_BATCH_EVENTS = 50
+MAX_USAGE_REQUEST_BYTES = 16 * 1024
+USAGE_EVENTS_FIELD = "events"
+USAGE_EVENT_NAME_FIELD = "event"
+USAGE_EVENT_DETAILS_FIELD = "details"
 
 
 def _stack_source_request_params():
@@ -2542,3 +2558,79 @@ def get_latest_version():
     except Exception as e:
         logger.error(f"Error fetching releases XML: {str(e)}")
         return response_internal_server_error("Failed to fetch releases")
+
+
+@api.route("/usage", methods=["POST"])
+@local_only
+def record_usage_events():
+    """Append a batch of frontend usage events to the local log.
+
+    Recording happens frontend-side because backend API counts are misleading — React
+    Query caching, prefetching and retries inflate them, and the interactions worth
+    measuring (chart views, table toggles, filters, playback) never reach the API at
+    all. So the client needs somewhere local to post, and this is it.
+
+    **No ``@with_instance``, deliberately.** The log is machine-scoped rather than
+    report-scoped, so this route takes no ``instanceId`` — an exception to the
+    convention every report-backed route follows, not an omission to be tidied up.
+
+    **No ``@timer`` either**: it logs a line per call, and this endpoint is called often
+    by design.
+
+    ``@local_only`` is the control that matters. Nothing here is authenticated and
+    ``ALLOWED_ORIGINS`` is the only other gate, so the handler validates its body
+    against a closed schema rather than trusting it: a permitted page must not be able
+    to write arbitrary lines into the file we are asking IT to parse.
+    """
+    # Before anything reads the stream. Werkzeug enforces this both against a declared
+    # `Content-Length` and while reading a stream the server has terminated, which a
+    # manual `request.content_length` check would miss for chunked bodies. The resulting
+    # `RequestEntityTooLarge` renders as a 413 through the app's `HTTPException` handler.
+    request.max_content_length = MAX_USAGE_REQUEST_BYTES
+
+    # Not `force=True`: requiring `application/json` is load-bearing rather than
+    # pedantic. It makes this a non-simple request, so a hostile origin cannot post to it
+    # without a preflight `ALLOWED_ORIGINS` refuses, whereas a `text/plain` body would
+    # sail through. The client's `sendBeacon` flush must therefore send a typed Blob —
+    # `new Blob([body], { type: 'application/json' })` — since a bare string beacon is
+    # sent as `text/plain` and would be refused here.
+    payload = request.get_json(silent=True)
+
+    if not isinstance(payload, dict):
+        return response_bad_request("Expected a JSON object")
+
+    events = payload.get(USAGE_EVENTS_FIELD)
+
+    if not isinstance(events, list) or not events:
+        return response_bad_request(f"Expected a non-empty {USAGE_EVENTS_FIELD} list")
+
+    if len(events) > MAX_USAGE_BATCH_EVENTS:
+        return response_bad_request(
+            f"A batch may carry at most {MAX_USAGE_BATCH_EVENTS} events"
+        )
+
+    validated: List[Tuple[UsageEvent, Any]] = []
+
+    # Every event is validated before any is written, so a batch carrying one bad event
+    # appends nothing. Partial acceptance would leave a reader unable to tell a truncated
+    # batch from a complete one.
+    for entry in events:
+        if not isinstance(entry, dict):
+            return response_unprocessable_entity("Each event must be an object")
+
+        try:
+            validated.append(
+                validate_client_event(
+                    entry.get(USAGE_EVENT_NAME_FIELD),
+                    entry.get(USAGE_EVENT_DETAILS_FIELD),
+                )
+            )
+        except UsageEventRejected as rejection:
+            return response_unprocessable_entity(str(rejection))
+
+    # Deliberately the same answer whether or not the write happened. Recording being
+    # switched off locally is not the client's problem, and whether a log exists on this
+    # machine is not something a page needs told.
+    record_events(validated)
+
+    return Response(status=HTTPStatus.NO_CONTENT)

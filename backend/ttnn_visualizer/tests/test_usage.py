@@ -20,19 +20,24 @@ from types import SimpleNamespace
 import pytest
 from ttnn_visualizer import usage
 from ttnn_visualizer.settings import DefaultConfig
+from ttnn_visualizer.tests.conftest import parse, read_lines, total_events
 from ttnn_visualizer.usage import (
+    _DETAIL_FIELD_ENUMS,
     _REQUIRED_FIELDS,
+    CLIENT_EVENT_DETAIL_FIELDS,
     COUNT_FIELD,
     RUN_ID_ENV_VAR,
     RUN_ID_FIELD,
     USAGE_RECORDING_ENV_VAR,
     DeploymentMode,
     UsageEvent,
+    UsageView,
     get_deployment_mode,
     get_usage_log_path,
     is_recording_enabled,
     record_app_start,
     record_event,
+    record_events,
 )
 
 # One budget for the whole set of children, not one each: enough for all of them to
@@ -41,37 +46,8 @@ from ttnn_visualizer.usage import (
 _SUBPROCESS_WRITER_TIMEOUT_SECONDS = 30
 
 
-@pytest.fixture
-def usage_directory(tmp_path, monkeypatch):
-    """Redirect the log into a temporary directory and reset per-process state.
-
-    Every test in this module depends on this: without it they would write to the
-    developer's real ``~/.ttnn-visualizer/usage``.
-    """
-    directory = tmp_path / "usage"
-    monkeypatch.setattr(usage, "USAGE_DIRECTORY", directory)
-    monkeypatch.setattr(usage, "_run_id", None)
-    monkeypatch.delenv(RUN_ID_ENV_VAR, raising=False)
-    monkeypatch.delenv(USAGE_RECORDING_ENV_VAR, raising=False)
-
-    return directory
-
-
-def read_lines(directory: Path):
-    log_path = directory / usage.USAGE_LOG_NAME
-    if not log_path.exists():
-        return []
-
-    return log_path.read_text(encoding="utf-8").splitlines()
-
-
-def parse(line: str):
-    return dict(token.split("=", 1) for token in line.split(" "))
-
-
-def total_events(lines):
-    """Cumulative count the way the collector derives it: ``count``, default 1."""
-    return sum(int(parse(line).get(COUNT_FIELD, "1")) for line in lines)
+# `usage_directory`, `read_lines`, `parse` and `total_events` come from `conftest.py`,
+# shared with the ingest endpoint's tests.
 
 
 def _run_usage_writers(directory: Path, writers: int, writes_each: int) -> None:
@@ -630,3 +606,96 @@ def test_record_launch_records_nothing_in_server_mode(usage_directory, monkeypat
     assert read_lines(usage_directory) == []
     # The run id is still exported so workers agree on one if it is switched on later.
     assert os.environ[RUN_ID_ENV_VAR]
+
+
+def test_every_client_postable_event_has_a_validation_rule():
+    """A new event without a rule must fail here, not be rejected in production.
+
+    ``app_start`` is the one exclusion, and it is deliberate: the server records launches
+    itself, so a client able to post one could forge the deployment population every
+    other figure is read against.
+    """
+    assert set(CLIENT_EVENT_DETAIL_FIELDS) == set(UsageEvent) - {UsageEvent.APP_START}
+
+
+def test_every_detail_field_draws_from_an_enum():
+    """A detail field with no enum behind it would be validated by nothing at all."""
+    for fields in CLIENT_EVENT_DETAIL_FIELDS.values():
+        for field in fields:
+            assert field in _DETAIL_FIELD_ENUMS
+
+
+def test_no_client_detail_field_collides_with_a_server_owned_one():
+    """The server supplies these, and a client that could set one could forge a line."""
+    server_owned = set(_REQUIRED_FIELDS) | {RUN_ID_FIELD, "count"}
+
+    for fields in CLIENT_EVENT_DETAIL_FIELDS.values():
+        assert not server_owned.intersection(fields)
+
+
+def test_every_enum_value_is_safe_to_write_unquoted():
+    """logfmt values are unquoted, so a member carrying a space would forge a field."""
+    for enum_type in _DETAIL_FIELD_ENUMS.values():
+        for member in enum_type:
+            assert usage._is_safe_value(str(member.value))
+
+
+def test_record_events_writes_the_whole_batch_or_none_of_it(usage_directory):
+    """The route rejects first, so this is belt and braces — but it is the guarantee.
+
+    An unsafe value reaching the writer must cost the batch, not half of it: a reader
+    cannot tell a truncated batch from a complete one, and the file's bounded contents
+    are the whole promise being made.
+    """
+    written = record_events(
+        [
+            (UsageEvent.VIEW_OPENED, {"view": UsageView.OPERATIONS}),
+            (UsageEvent.VIEW_OPENED, {"view": "operations\nts=forged"}),
+        ]
+    )
+
+    assert written is False
+    assert read_lines(usage_directory) == []
+
+
+def test_record_events_appends_a_batch_as_one_write(usage_directory):
+    written = record_events(
+        [
+            (UsageEvent.VIEW_OPENED, {"view": UsageView.OPERATIONS}),
+            (UsageEvent.VIEW_ENGAGED, {"view": UsageView.OPERATIONS}),
+        ]
+    )
+
+    lines = read_lines(usage_directory)
+
+    assert written is True
+    assert [parse(line)["event"] for line in lines] == [
+        UsageEvent.VIEW_OPENED.value,
+        UsageEvent.VIEW_ENGAGED.value,
+    ]
+
+
+def test_record_events_cannot_have_its_enabled_check_turned_against_it(usage_directory):
+    """``server_mode`` is a detail field like any other here, not a hidden parameter.
+
+    With ``**kwargs`` it would bind to the parameter instead, and a value of ``true``
+    would make the enabled check drop the event — a bypass wearing a no-op's clothes.
+    The schema refuses the key, but the batch path takes untrusted keys and must not
+    depend on the schema for that.
+    """
+    written = record_events([(UsageEvent.VIEW_OPENED, {"server_mode": "true"})])
+
+    assert written is True
+    assert parse(read_lines(usage_directory)[0])["server_mode"] == "true"
+
+
+def test_record_events_writes_nothing_when_recording_is_disabled(
+    usage_directory, monkeypatch
+):
+    monkeypatch.setenv(USAGE_RECORDING_ENV_VAR, "false")
+
+    assert (
+        record_events([(UsageEvent.VIEW_OPENED, {"view": UsageView.OPERATIONS})])
+        is False
+    )
+    assert read_lines(usage_directory) == []

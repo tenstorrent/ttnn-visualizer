@@ -26,6 +26,12 @@ obvious from the code that reads it:
 * **Compaction does not preserve line order across the summarised span.**
   Unparseable lines kept verbatim are appended after the sorted summaries, so
   they can land out of time order relative to events they sat between.
+* **``ts`` is when the event was written, not when it happened.** Events posted by
+  the frontend arrive in batches, and the server stamps them on receipt rather than
+  trusting a client clock, so a whole batch shares one timestamp and every event in
+  it is late by up to the client's flush interval. Fine for the day- and week-
+  granularity questions this file exists to answer; not a source for anything
+  needing sub-minute ordering.
 
 Every recorded value comes from a closed enum, a bucketed value, or the
 application's own version. No report, file, directory, operation or host names,
@@ -43,7 +49,7 @@ from enum import Enum
 from importlib.metadata import PackageNotFoundError
 from importlib.metadata import version as distribution_version
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple, Type
 
 from ttnn_visualizer.utils import (
     is_running_in_container,
@@ -113,6 +119,10 @@ _run_id: Optional[str] = None
 
 class UsageEvent(str, Enum):
     APP_START = "app_start"
+    REPORT_LOADED = "report_loaded"
+    REPORT_LOAD_FAILED = "report_load_failed"
+    VIEW_OPENED = "view_opened"
+    VIEW_ENGAGED = "view_engaged"
 
 
 class DeploymentMode(str, Enum):
@@ -126,6 +136,100 @@ class OperatingSystem(str, Enum):
     LINUX = "linux"
     WINDOWS = "windows"
     OTHER = "other"
+
+
+class ReportKind(str, Enum):
+    PROFILER = "profiler"
+    PERFORMANCE = "performance"
+    NPE = "npe"
+    MLIR = "mlir"
+    CLUSTER_DESCRIPTOR = "cluster_descriptor"
+
+
+class ReportSource(str, Enum):
+    UPLOAD = "upload"
+    REMOTE_SYNC = "remote_sync"
+    LOCAL_TT_METAL = "local_tt_metal"
+    DEMO = "demo"
+
+
+class ReportLoadFailureReason(str, Enum):
+    """Why a report failed to load, coarsely enough to never carry a message body."""
+
+    UNSUPPORTED_VERSION = "unsupported_version"
+    MISSING_FILE = "missing_file"
+    PARSE_ERROR = "parse_error"
+    TOO_LARGE = "too_large"
+    PERMISSION = "permission"
+    OTHER = "other"
+
+
+class UsageView(str, Enum):
+    """The navigable surfaces worth counting.
+
+    Nine, not the ten proposed in the parent issue, and the two omissions are
+    deliberate. ``topology`` (``ROUTES.CLUSTER``) has ``element: null``, so nothing
+    renders and it could never be engaged — a permanent zero reads as "nobody wants
+    topology", which is the opposite of what it would mean. ``styleguide`` is a
+    development surface and counting it would pollute reach. Add ``topology`` when the
+    page exists.
+
+    ``REPORTS`` is the index route ``/`` rather than a named route, and ``GRAPH``
+    and ``BUFFERS`` deliberately differ in name from their paths (``/graphtree``,
+    ``/buffer-summary``) because the enum names the surface, not the URL.
+
+    ``OPERATION_DETAILS`` is a real route and so belongs here, but it is also a
+    Tier 3 drill-down target. Whichever issue adds ``drilldown_opened`` has to
+    decide which event owns it, or the same click is counted twice.
+    """
+
+    REPORTS = "reports"
+    OPERATIONS = "operations"
+    OPERATION_DETAILS = "operation_details"
+    TENSORS = "tensors"
+    BUFFERS = "buffers"
+    GRAPH = "graph"
+    PERFORMANCE = "performance"
+    NPE = "npe"
+    MLIR = "mlir"
+
+
+# Where every detail value a client may post has to come from. `_SAFE_VALUE_PATTERN`
+# is not enough on its own: it would happily accept `kind=totally-made-up`, and the
+# bounded contents of this file are the entire promise being made.
+_DETAIL_FIELD_ENUMS: Mapping[str, Type[Enum]] = {
+    "kind": ReportKind,
+    "source": ReportSource,
+    "reason_class": ReportLoadFailureReason,
+    "view": UsageView,
+}
+
+# What a client may post, and the exact detail fields each event carries. Exported
+# because the frontend enums and the docs page both have to enumerate it, and a single
+# source is what stops the client emitting events the server rejects.
+#
+# `APP_START` is deliberately absent: the server records launches itself, and a client
+# able to post one could forge the deployment population every other figure is read
+# against.
+CLIENT_EVENT_DETAIL_FIELDS: Mapping[UsageEvent, Tuple[str, ...]] = {
+    UsageEvent.REPORT_LOADED: ("kind", "source"),
+    UsageEvent.REPORT_LOAD_FAILED: ("kind", "reason_class"),
+    UsageEvent.VIEW_OPENED: ("view",),
+    UsageEvent.VIEW_ENGAGED: ("view",),
+}
+
+
+class UsageEventRejected(Exception):
+    """A posted event failed the schema above.
+
+    Lives here rather than in ``exceptions.py`` because it carries no HTTP status and
+    describes the log's schema, not a transport failure — the route decides what a
+    rejection means over HTTP.
+
+    The message must describe what was *expected*, never echo what arrived. A response
+    body is one of the few ways client-supplied free-form text could re-enter a system
+    whose whole point is that it holds none.
+    """
 
 
 def get_usage_directory() -> Path:
@@ -292,12 +396,16 @@ def _format_line(event: UsageEvent, details: Dict[str, Any]) -> Optional[str]:
 
 
 def _append_line(line: str) -> None:
-    """Append one line, relying on ``O_APPEND`` instead of a lock.
+    """Append one write, relying on ``O_APPEND`` instead of a lock.
 
     A single short write to a file opened ``O_APPEND`` is atomic on a local
     filesystem, so any number of instances can share the log with no coordination.
     That guarantee does not hold over NFS, where two simultaneous writers may
     interleave; readers of this file are expected to skip malformed lines.
+
+    The argument may hold several newline-terminated lines, which is how a batch stays
+    one atomic write rather than N interleavable ones. Keeping it short enough for that
+    to hold is the caller's job — see the batch cap on the ingest route.
     """
     get_usage_directory().mkdir(mode=0o700, parents=True, exist_ok=True)
 
@@ -346,6 +454,114 @@ def record_event(
         # detail helpers can raise outside ``OSError``) — the cost of guessing wrong
         # is the thing this module promises cannot happen.
         logger.warning("Unable to record usage event %s: %s", event.value, error)
+
+
+def validate_client_event(
+    name: Any, details: Any
+) -> Tuple[UsageEvent, Dict[str, Enum]]:
+    """Resolve one posted event against the schema, or refuse it outright.
+
+    Rejects rather than coerces, in every case. A missing ``kind`` defaulted to
+    ``unknown`` would corrupt the denominator every feature ratio is read against, and
+    a coerced value is indistinguishable afterwards from one the user really produced.
+
+    Nothing client-supplied appears in the messages raised here — they describe what
+    was expected instead. Echoing a rejected key or value back would put free-form text
+    into a response from a subsystem that holds none.
+    """
+    if not isinstance(name, str):
+        raise UsageEventRejected("Event name must be a string")
+
+    try:
+        event = UsageEvent(name)
+    except ValueError:
+        raise UsageEventRejected("Unknown usage event") from None
+
+    if event not in CLIENT_EVENT_DETAIL_FIELDS:
+        # `app_start` is a real member, so an unqualified `UsageEvent(name)` accepts it.
+        raise UsageEventRejected("That usage event cannot be recorded by a client")
+
+    expected = CLIENT_EVENT_DETAIL_FIELDS[event]
+
+    if not isinstance(details, dict):
+        raise UsageEventRejected(
+            f"Event {event.value} needs a details object with: {', '.join(expected)}"
+        )
+
+    # Exact match, so an unknown key and a missing one are the same failure. This is
+    # also what refuses `ts`, `schema_version`, `run_id` and `count` as details: the
+    # server owns those fields and none of them appears in any expected tuple.
+    if set(details) != set(expected):
+        raise UsageEventRejected(
+            f"Event {event.value} expects exactly these details: {', '.join(expected)}"
+        )
+
+    resolved: Dict[str, Enum] = {}
+    for field in expected:
+        value = details[field]
+        if not isinstance(value, str):
+            raise UsageEventRejected(f"Detail {field} must be a string")
+
+        try:
+            # Enum membership subsumes the newline / `=` / space checks, since every
+            # member already matches `_SAFE_VALUE_PATTERN`. `_format_line` keeps its own
+            # guard so the two layers stay independently true.
+            resolved[field] = _DETAIL_FIELD_ENUMS[field](value)
+        except ValueError:
+            raise UsageEventRejected(
+                f"Detail {field} is outside its permitted set of values"
+            ) from None
+
+    return event, resolved
+
+
+def record_events(
+    events: Sequence[Tuple[UsageEvent, Mapping[str, Any]]],
+    server_mode: Optional[Any] = None,
+) -> bool:
+    """Append a batch of events, all of them or none, in a single write.
+
+    All-or-nothing because the alternative leaves half a batch in a file whose bounded
+    contents are the entire promise, and because a reader cannot tell a partial batch
+    from a complete one. Formatting every line before writing any is what buys that.
+
+    ``details`` is an explicit mapping rather than ``**kwargs`` as in
+    :func:`record_event`: with keyword expansion, a detail field named ``server_mode``
+    would bind to the parameter instead of becoming a field, and a client-supplied
+    ``server_mode=true`` would turn the enabled check against itself and silently drop
+    the event. The schema refuses that key, but the batch path takes untrusted keys and
+    should not depend on the schema to be safe.
+
+    Returns whether the batch was written, so a caller can tell "recording is off" from
+    "written" without inspecting the log. Never raises: instrumentation must not break
+    the application it measures, least of all from a request handler.
+    """
+    try:
+        if server_mode is None:
+            server_mode = _server_mode_from_app_context() or False
+
+        # Once for the batch, not once per event: the check stats the disabled marker.
+        if not is_recording_enabled(server_mode):
+            return False
+
+        lines = []
+        for event, details in events:
+            line = _format_line(event, dict(details))
+            if line is None:
+                return False
+
+            lines.append(line)
+
+        if not lines:
+            return False
+
+        _append_line("".join(lines))
+        return True
+    except Exception as error:
+        # One warning for the batch. Per-event logging on a request path would turn a
+        # single failed flush into a screenful.
+        logger.warning("Unable to record %d usage events: %s", len(events), error)
+        return False
 
 
 def record_app_start(config: Any, server_mode: Optional[Any] = None) -> None:

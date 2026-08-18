@@ -12,10 +12,16 @@ import tempfile
 from pathlib import Path
 
 import pytest
+from ttnn_visualizer import usage
 from ttnn_visualizer.app import create_app
 from ttnn_visualizer.extensions import db
 from ttnn_visualizer.models import InstanceTable
 from ttnn_visualizer.tests.report_schemas import SCHEMA_V2
+from ttnn_visualizer.usage import (
+    COUNT_FIELD,
+    RUN_ID_ENV_VAR,
+    USAGE_RECORDING_ENV_VAR,
+)
 
 
 @pytest.fixture
@@ -48,6 +54,40 @@ def app():
 def client(app):
     """Flask test client for API requests (GET, POST, etc.)."""
     return app.test_client()
+
+
+@pytest.fixture
+def usage_directory(tmp_path, monkeypatch):
+    """Redirect the usage log into a temporary directory and reset per-process state.
+
+    Shared rather than module-local because both the writer's own tests and the ingest
+    endpoint's need it, and the consequence of a test forgetting it is not a failure but
+    an append to the developer's real ``~/.ttnn-visualizer/usage``.
+    """
+    directory = tmp_path / "usage"
+    monkeypatch.setattr(usage, "USAGE_DIRECTORY", directory)
+    monkeypatch.setattr(usage, "_run_id", None)
+    monkeypatch.delenv(RUN_ID_ENV_VAR, raising=False)
+    monkeypatch.delenv(USAGE_RECORDING_ENV_VAR, raising=False)
+
+    return directory
+
+
+def read_lines(directory: Path):
+    log_path = directory / usage.USAGE_LOG_NAME
+    if not log_path.exists():
+        return []
+
+    return log_path.read_text(encoding="utf-8").splitlines()
+
+
+def parse(line: str):
+    return dict(token.split("=", 1) for token in line.split(" "))
+
+
+def total_events(lines):
+    """Cumulative count the way the collector derives it: ``count``, default 1."""
+    return sum(int(parse(line).get(COUNT_FIELD, "1")) for line in lines)
 
 
 @pytest.fixture
