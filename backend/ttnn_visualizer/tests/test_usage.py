@@ -5,12 +5,13 @@
 """The usage log is a privacy commitment expressed as code.
 
 Recording is on by default, so the tests that matter most are the ones asserting it
-does *not* happen: under ``SERVER_MODE``, with the switch off, and with anything
+does *not* happen: under ``SERVER_MODE``, with the opt-out set, and with anything
 free-form in a field. The rest pin the file's contract with the out-of-band
 collector — totals never go down, and no line can be forged.
 """
 
 import os
+import re
 import subprocess
 import sys
 import time
@@ -20,12 +21,14 @@ from types import SimpleNamespace
 import pytest
 from ttnn_visualizer import usage
 from ttnn_visualizer.settings import DefaultConfig
+from ttnn_visualizer.tests.test_settings import ENV_SAMPLE_PATH
 from ttnn_visualizer.usage import (
     _REQUIRED_FIELDS,
+    _RETIRED_RECORDING_ENV_VAR,
     COUNT_FIELD,
     RUN_ID_ENV_VAR,
     RUN_ID_FIELD,
-    USAGE_RECORDING_ENV_VAR,
+    USAGE_DISABLED_ENV_VAR,
     DeploymentMode,
     UsageEvent,
     get_deployment_mode,
@@ -51,8 +54,14 @@ def usage_directory(tmp_path, monkeypatch):
     directory = tmp_path / "usage"
     monkeypatch.setattr(usage, "USAGE_DIRECTORY", directory)
     monkeypatch.setattr(usage, "_run_id", None)
+    # Sticky by design, so a test that trips either warn-once would otherwise leave the
+    # next one with that warning already spent.
+    monkeypatch.setattr(usage, "_warned_env_vars", set())
     monkeypatch.delenv(RUN_ID_ENV_VAR, raising=False)
-    monkeypatch.delenv(USAGE_RECORDING_ENV_VAR, raising=False)
+    monkeypatch.delenv(USAGE_DISABLED_ENV_VAR, raising=False)
+    # The retired name is no longer read, but a developer who still exports it would
+    # otherwise get the deprecation warning on every test in this module.
+    monkeypatch.delenv(_RETIRED_RECORDING_ENV_VAR, raising=False)
 
     return directory
 
@@ -87,10 +96,11 @@ def _run_usage_writers(directory: Path, writers: int, writes_each: int) -> None:
     developer's own ``TTNN_VISUALIZER_RUN_ID`` from reaching them and collapsing
     their run ids into one.
     """
+    # A developer shell with the opt-out set would otherwise inherit silence. Popped
+    # rather than overridden with a false value: unset is the shipped state, and it is
+    # the state every other test in this module runs under.
     child_env = {
-        **os.environ,
-        # A developer shell with the switch off would otherwise inherit silence.
-        USAGE_RECORDING_ENV_VAR: "true",
+        key: value for key, value in os.environ.items() if key != USAGE_DISABLED_ENV_VAR
     }
     command = [
         sys.executable,
@@ -152,7 +162,7 @@ def test_recording_is_on_by_default(usage_directory):
 
 
 def test_the_environment_switches_recording_off(usage_directory, monkeypatch):
-    monkeypatch.setenv(USAGE_RECORDING_ENV_VAR, "false")
+    monkeypatch.setenv(USAGE_DISABLED_ENV_VAR, "true")
 
     assert is_recording_enabled() is False
 
@@ -172,8 +182,150 @@ def test_the_marker_file_switches_recording_off(usage_directory):
     assert read_lines(usage_directory) == []
 
 
+def test_an_explicit_false_keeps_recording_on(usage_directory, monkeypatch):
+    # Guards against a presence check: the variable is documented in `.env.sample` at
+    # its default, so the commented line being uncommented unchanged must record.
+    monkeypatch.setenv(USAGE_DISABLED_ENV_VAR, "false")
+
+    assert is_recording_enabled() is True
+
+    record_event(UsageEvent.APP_START)
+
+    assert len(read_lines(usage_directory)) == 1
+
+
+def test_the_documented_default_keeps_recording_on(usage_directory, monkeypatch):
+    # The generic `.env.sample` pin in ``test_settings.py`` cannot reach this setting:
+    # ``_documented_boolean_defaults`` keys off a boolean config attribute of the same
+    # name, and there is deliberately no ``USAGE_RECORDING_DISABLED`` attribute. So the
+    # one boolean whose polarity is inverted — where an inverted sample line is most
+    # likely to recur — would otherwise be the only one nothing polices.
+    documented = [
+        line
+        for line in ENV_SAMPLE_PATH.read_text(encoding="utf-8").splitlines()
+        if line.strip().startswith(f"# {USAGE_DISABLED_ENV_VAR}=")
+    ]
+
+    # Asserted rather than skipped: a renamed or deleted line must fail here, which is
+    # the whole point of pinning the file.
+    assert len(documented) == 1
+
+    monkeypatch.setenv(USAGE_DISABLED_ENV_VAR, documented[0].split("=", 1)[1].strip())
+
+    assert is_recording_enabled() is True
+
+    # The retired name must not reappear in the sample as though it still worked.
+    assert f"# {_RETIRED_RECORDING_ENV_VAR}=" not in ENV_SAMPLE_PATH.read_text(
+        encoding="utf-8"
+    )
+
+
+def test_the_launch_banner_names_a_working_opt_out(
+    usage_directory, monkeypatch, capsys
+):
+    # Executable documentation. The banner is where a user actually learns how to opt
+    # out, and this rename inverted its instruction — a banner naming a stale variable,
+    # or the right one at the wrong polarity, would otherwise ship green.
+    from ttnn_visualizer.app import _record_launch
+
+    monkeypatch.setenv(RUN_ID_ENV_VAR, "")
+    _record_launch(SimpleNamespace(SERVER_MODE="false", TT_METAL_HOME=None))
+
+    printed = re.search(r"(USAGE_RECORDING_\w+)=(\w+)", capsys.readouterr().out)
+
+    assert printed is not None
+
+    monkeypatch.setenv(printed.group(1), printed.group(2))
+
+    assert is_recording_enabled() is False
+
+
+@pytest.mark.parametrize("value", ["yes", "off", "", "  ", "Ture"])
+def test_an_unrecognised_disable_value_switches_recording_off(
+    usage_directory, monkeypatch, caplog, value
+):
+    # The one boolean in the project that obeys a value it does not recognise. Every
+    # other setting keeps its declared default and warns (`_coerce_env_value`), which
+    # for an opt-out would mean reading a typo as consent to record.
+    monkeypatch.setenv(USAGE_DISABLED_ENV_VAR, value)
+
+    with caplog.at_level("WARNING"):
+        assert is_recording_enabled() is False
+
+    assert USAGE_DISABLED_ENV_VAR in caplog.text
+
+    record_event(UsageEvent.APP_START)
+
+    assert read_lines(usage_directory) == []
+
+
+def test_the_retired_variable_is_not_honoured(usage_directory, monkeypatch):
+    # The rename is a replacement, not an addition: the old spelling stops working.
+    monkeypatch.setenv(_RETIRED_RECORDING_ENV_VAR, "false")
+
+    assert is_recording_enabled() is True
+
+    record_event(UsageEvent.APP_START)
+
+    assert len(read_lines(usage_directory)) == 1
+
+
+def test_an_unrecognised_disable_value_is_reported_once(
+    usage_directory, monkeypatch, caplog
+):
+    # The warning fires from the path every recorded event takes, so without warn-once
+    # the misconfiguration it reports is also the one that floods the log.
+    monkeypatch.setenv(USAGE_DISABLED_ENV_VAR, "yes")
+
+    with caplog.at_level("WARNING"):
+        is_recording_enabled()
+        is_recording_enabled()
+
+    warnings = [
+        record
+        for record in caplog.records
+        if "not a recognised boolean" in record.getMessage()
+    ]
+
+    assert len(warnings) == 1
+
+
+def test_the_retired_variable_is_reported_once(usage_directory, monkeypatch, caplog):
+    # Silence is the failure mode this warning exists for — the config attribute is a
+    # descriptor, so `override_with_env_variables` never sees the variable and its own
+    # ignored-variable warning cannot fire. Once, because the descriptor puts this call
+    # on every config read.
+    monkeypatch.setenv(_RETIRED_RECORDING_ENV_VAR, "false")
+
+    with caplog.at_level("WARNING"):
+        is_recording_enabled()
+        is_recording_enabled()
+
+    warnings = [
+        record
+        for record in caplog.records
+        if _RETIRED_RECORDING_ENV_VAR in record.getMessage()
+    ]
+
+    assert len(warnings) == 1
+    assert USAGE_DISABLED_ENV_VAR in warnings[0].getMessage()
+
+
+def test_the_retired_variable_is_reported_under_server_mode(
+    usage_directory, monkeypatch, caplog
+):
+    # Reported before the SERVER_MODE early return, so a hosted operator carrying a
+    # stale export does not first discover it on a local install.
+    monkeypatch.setenv(_RETIRED_RECORDING_ENV_VAR, "false")
+
+    with caplog.at_level("WARNING"):
+        assert is_recording_enabled(server_mode=True) is False
+
+    assert _RETIRED_RECORDING_ENV_VAR in caplog.text
+
+
 def test_a_disabled_install_leaves_no_directory_behind(usage_directory, monkeypatch):
-    monkeypatch.setenv(USAGE_RECORDING_ENV_VAR, "false")
+    monkeypatch.setenv(USAGE_DISABLED_ENV_VAR, "true")
 
     is_recording_enabled()
     record_event(UsageEvent.APP_START)
@@ -220,35 +372,38 @@ def test_a_stringified_server_mode_does_not_disable_recording(usage_directory):
 def test_the_environment_switch_survives_config_override(monkeypatch):
     # The same stringification the other way round: as a plain bool class attribute
     # this setting would come back as the truthy string "false" and fail open.
-    monkeypatch.setenv(USAGE_RECORDING_ENV_VAR, "false")
+    monkeypatch.setenv(USAGE_DISABLED_ENV_VAR, "true")
 
     config = DefaultConfig()
     config.override_with_env_variables()
 
-    assert config.USAGE_RECORDING_ENABLED is False
-    assert config.to_dict()[USAGE_RECORDING_ENV_VAR] is False
+    # Spelled out rather than taken from a constant: the attribute is named for the
+    # state and the variable for the opt-out, so there is no single name that names
+    # both and a shared constant here would suggest there is.
+    assert config.USAGE_RECORDING_ACTIVE is False
+    assert config.to_dict()["USAGE_RECORDING_ACTIVE"] is False
 
 
 def test_usage_recording_config_reflects_server_mode(usage_directory, monkeypatch):
     # The PRINT_ENV dump must not claim recording is on when SERVER_MODE has
     # switched the writer off.
-    monkeypatch.delenv(USAGE_RECORDING_ENV_VAR, raising=False)
+    monkeypatch.delenv(USAGE_DISABLED_ENV_VAR, raising=False)
 
     config = DefaultConfig()
     config.SERVER_MODE = True
 
-    assert config.USAGE_RECORDING_ENABLED is False
+    assert config.USAGE_RECORDING_ACTIVE is False
 
 
 def test_usage_recording_config_reflects_the_marker_file(usage_directory, monkeypatch):
-    monkeypatch.delenv(USAGE_RECORDING_ENV_VAR, raising=False)
+    monkeypatch.delenv(USAGE_DISABLED_ENV_VAR, raising=False)
     usage_directory.mkdir(parents=True)
     usage.get_disabled_marker_path().touch()
 
     config = DefaultConfig()
     config.SERVER_MODE = False
 
-    assert config.USAGE_RECORDING_ENABLED is False
+    assert config.USAGE_RECORDING_ACTIVE is False
 
 
 def test_an_event_round_trips_as_logfmt(usage_directory):
@@ -350,7 +505,7 @@ def test_app_start_carries_the_baseline_fields(usage_directory):
 def test_disabled_recording_does_not_build_the_app_start_payload(
     usage_directory, monkeypatch
 ):
-    monkeypatch.setenv(USAGE_RECORDING_ENV_VAR, "false")
+    monkeypatch.setenv(USAGE_DISABLED_ENV_VAR, "true")
 
     def fail_if_called(*_args, **_kwargs):
         raise AssertionError(
