@@ -414,8 +414,8 @@ const OperationGraphInner = ({ operationList, operationId }: OperationGraphReact
         setSelectedOperationId(null);
     }, []);
 
-    // The panel covers the corner the minimap docks in. Unmounting rather than
-    // hiding it drops a per-node rect that re-derives on every node change.
+    // Closed mid-build so the panel can't describe an operation the graph being
+    // laid out is about to drop.
     const isPanelOpen = selectedOperationId !== null && !isBuilding;
 
     return (
@@ -457,11 +457,22 @@ const OperationGraphInner = ({ operationList, operationId }: OperationGraphReact
                 maxZoom={MAX_ZOOM}
                 nodesConnectable={false}
                 selectNodesOnDrag={false}
+                // The graph is a read-only view of a report, but React Flow's
+                // stock delete key still reaches `onNodesChange`, so a selected
+                // node can be removed until the next relayout puts it back.
+                deleteKeyCode={null}
                 proOptions={{ hideAttribution: true }}
             >
                 <Background />
                 <Controls />
-                {!isPanelOpen ? <MiniMap pannable /> : null}
+                {/* Docked left rather than in React Flow's default corner: the
+                    panel is a full-height right column, and `onBuilt` always
+                    resolves a selection, so a right-docked minimap would be
+                    hidden in every state the user lands in. */}
+                <MiniMap
+                    pannable
+                    position='bottom-left'
+                />
             </ReactFlow>
             {isPanelOpen ? (
                 <OpGraphInfoPanel

@@ -95,6 +95,12 @@
     // `nodeColor`/`maskColor` props, and keeps the node fill on the same custom
     // property as the on-canvas rule it has to match.
     .react-flow__minimap {
+        // Shares the bottom-left corner with the zoom controls, so it starts
+        // past their 26px column and the 15px panel gutter either side of it.
+        // Set on the margin because React Flow's own `left` rule matches at the
+        // same specificity and lands later in the cascade.
+        margin-left: 56px;
+
         --xy-minimap-background-color: #{$tt-grey-2};
         --xy-minimap-node-background-color: var(--graph-normal);
         --xy-minimap-node-stroke-color: #{$tt-grey-2};
