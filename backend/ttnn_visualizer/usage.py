@@ -47,6 +47,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from ttnn_visualizer.utils import (
     is_running_in_container,
+    parse_bool,
     read_version_from_package_json,
     str_to_bool,
 )
@@ -70,7 +71,17 @@ USAGE_LOG_NAME = "events.log"
 DISABLED_MARKER_NAME = "disabled"
 COMPACTION_LOCK_NAME = ".compaction.lock"
 
-USAGE_RECORDING_ENV_VAR = "USAGE_RECORDING_ENABLED"
+# Recording is on by default, so the variable is an opt-out rather than a switch: an
+# operator who wants no usage data sets this, and everyone else sets nothing.
+USAGE_DISABLED_ENV_VAR = "USAGE_RECORDING_DISABLED"
+
+# Retired in favour of the variable above, and kept only so a stale export can be
+# reported. ``DefaultConfig.USAGE_RECORDING_ENABLED`` is a descriptor, so
+# ``override_with_env_variables`` never looks at this name and its ignored-variable
+# warning cannot fire for it. Without the warning below, an operator who opted out with
+# the old spelling would start recording again with no signal at all.
+_RETIRED_RECORDING_ENV_VAR = "USAGE_RECORDING_ENABLED"
+
 RUN_ID_ENV_VAR = "TTNN_VISUALIZER_RUN_ID"
 
 # ~110 bytes a line and ~250 events a day for a heavy user is ~27 KB/day, so this
@@ -109,6 +120,11 @@ _UNSUMMARISABLE_FIELDS = (TIMESTAMP_FIELD, RUN_ID_FIELD, COUNT_FIELD)
 _REQUIRED_FIELDS = (TIMESTAMP_FIELD, EVENT_FIELD, SCHEMA_VERSION_FIELD)
 
 _run_id: Optional[str] = None
+
+# Warn-once state. ``is_recording_enabled`` is called on every config read — the
+# ``PRINT_ENV`` dump alone triggers one through the descriptor — so an unconditional
+# warning would bury the launch output it is meant to stand out in.
+_retired_env_var_warned = False
 
 
 class UsageEvent(str, Enum):
@@ -171,8 +187,63 @@ def _server_mode_from_app_context() -> Optional[bool]:
     return _as_bool(current_app.config.get("SERVER_MODE", False))
 
 
+def _warn_about_the_retired_env_var() -> None:
+    """Say so, once, when the old spelling is still exported.
+
+    Warned about rather than honoured: two variables that both answer the same question
+    is the ambiguity this rename exists to remove, and honouring the retired one would
+    keep it indefinitely. Reported before the ``SERVER_MODE`` check in
+    :func:`is_recording_enabled` so a hosted operator carrying a stale export hears
+    about it too, rather than only discovering it on the day they move to a local
+    install.
+    """
+    global _retired_env_var_warned
+
+    if _retired_env_var_warned or os.getenv(_RETIRED_RECORDING_ENV_VAR) is None:
+        return
+
+    _retired_env_var_warned = True
+    logger.warning(
+        "%s is no longer read. Recording is on by default; switch it off with "
+        "%s=true or by creating %s.",
+        _RETIRED_RECORDING_ENV_VAR,
+        USAGE_DISABLED_ENV_VAR,
+        get_disabled_marker_path(),
+    )
+
+
+def _is_recording_disabled_by_environment() -> bool:
+    """Whether the operator's environment asks us not to record.
+
+    Unset means record. Anything set that is not a recognised *false* disables, which
+    is the opposite of how every other boolean setting treats a value outside the
+    vocabulary: :func:`_coerce_env_value` in ``settings`` discards an unrecognised one
+    and keeps the declared default. That is right for a feature flag and wrong here.
+    This is an opt-out, so ``USAGE_RECORDING_DISABLED=yes`` must not be read as
+    consent — the cost of obeying a typo is one missing data point, and the cost of
+    ignoring it is recording against an explicit request.
+    """
+    value = os.getenv(USAGE_DISABLED_ENV_VAR)
+    if value is None:
+        return False
+
+    parsed = parse_bool(value)
+    if parsed is None:
+        logger.warning(
+            "%s=%r is not a recognised boolean. Treating it as a request to switch "
+            "recording off; use true/1 or false/0.",
+            USAGE_DISABLED_ENV_VAR,
+            value,
+        )
+        return True
+
+    return parsed
+
+
 def is_recording_enabled(server_mode: Any = False) -> bool:
     """Whether usage may be written at all.
+
+    Recording is on by default, and ``USAGE_RECORDING_DISABLED`` is the opt-out.
 
     The hosted deployment records nothing: a "local file on a managed machine" there
     would be a shared server file mixing many users, including external ones, which
@@ -181,10 +252,12 @@ def is_recording_enabled(server_mode: Any = False) -> bool:
     The file half of the off switch exists because an environment variable is
     per-shell, and so easy to set in one terminal and lose in the next.
     """
+    _warn_about_the_retired_env_var()
+
     if _as_bool(server_mode):
         return False
 
-    if not str_to_bool(os.getenv(USAGE_RECORDING_ENV_VAR, "true")):
+    if _is_recording_disabled_by_environment():
         return False
 
     # Deliberately does not create the directory: a disabled install should leave
