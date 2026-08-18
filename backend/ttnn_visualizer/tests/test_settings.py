@@ -37,6 +37,10 @@ from ttnn_visualizer.settings import (
     _parse_max_content_length,
     build_socketio_origin_check,
 )
+from ttnn_visualizer.tests.fixture_settings import (
+    PINNED_ENV_SETTINGS,
+    pinned_settings_sample,
+)
 from ttnn_visualizer.utils import (
     FALSE_VALUES,
     TRUE_VALUES,
@@ -131,7 +135,12 @@ def test_empty_configured_origins_trust_nothing():
     assert _build_allowed_origins("", flask_env="development", **DEV_ARGS) == []
 
 
-def test_config_defaults_to_localhost_on_the_serving_port():
+def test_config_defaults_to_localhost_on_the_serving_port(monkeypatch):
+    # ``_AllowedOrigins`` resolves on every read, so an operator's own variable reaches
+    # this assertion about the *default*. Deleting it is enough here, and necessary:
+    # there is no class attribute to pin, the descriptor is the value.
+    monkeypatch.delenv("ALLOWED_ORIGINS", raising=False)
+
     origins = DefaultConfig.ALLOWED_ORIGINS
 
     assert isinstance(origins, list)
@@ -141,6 +150,7 @@ def test_config_defaults_to_localhost_on_the_serving_port():
 def test_config_narrows_to_production_set_after_import(monkeypatch):
     # ``main()`` defaults FLASK_ENV to production long after this module is imported,
     # so an allowlist frozen at import time would keep trusting the Vite dev server.
+    monkeypatch.delenv("ALLOWED_ORIGINS", raising=False)
     monkeypatch.setenv("FLASK_ENV", "production")
 
     assert DefaultConfig.ALLOWED_ORIGINS == [f"http://localhost:{DefaultConfig.PORT}"]
@@ -149,6 +159,7 @@ def test_config_narrows_to_production_set_after_import(monkeypatch):
 def test_config_follows_a_port_applied_after_import(monkeypatch):
     # ``--port`` is applied by mutating the environment and the config object, both
     # after import; the allowlist has to name the port the app actually serves on.
+    monkeypatch.delenv("ALLOWED_ORIGINS", raising=False)
     monkeypatch.setenv("FLASK_ENV", "production")
     monkeypatch.setenv("PORT", "9123")
 
@@ -241,6 +252,10 @@ def test_the_logging_debug_variable_does_not_enable_flask_debug(monkeypatch):
     # Matching it to the ``DEBUG`` *attribute* would hand Flask debug mode to anyone
     # who wanted verbose logs, and ``Flask.debug`` returning truthy suppresses the
     # catch-all error handler — tracebacks in responses, under SERVER_MODE too.
+    # ``ProductionConfig`` declares ``DEBUG = False`` in its own body, so an exported
+    # ``FLASK_DEBUG`` can only arrive through the override loop's alias — deleting the
+    # variable is the whole fix, and no ``setattr`` is needed.
+    monkeypatch.delenv("FLASK_DEBUG", raising=False)
     monkeypatch.setenv("DEBUG", "true")
 
     config = ProductionConfig()
@@ -544,6 +559,49 @@ def test_every_env_override_skip_names_a_real_setting():
     assert _ENV_OVERRIDE_SKIP <= set(vars(DefaultConfig))
 
 
+# Settings the test fixtures deliberately let the environment reach. Every name here was
+# exported individually against the full suite and left it green; the ones that did not
+# are either pinned in ``PINNED_ENV_SETTINGS`` or neutralised on the test that reads them
+# (``ALLOWED_ORIGINS``, ``FLASK_DEBUG``, ``DEV_SERVER_HOST``). ``DEV_SERVER_HOST`` is
+# listed here because no app under test depends on it — only the allowlist tests do.
+#
+# Limitation worth knowing before trusting this test: ``override_with_env_variables``
+# skips anything with ``__get__``, so ``_OVERRIDABLE_SETTINGS`` excludes the
+# descriptor-backed ``ALLOWED_ORIGINS`` and ``USAGE_RECORDING_ENABLED``, and this test
+# cannot see them either.
+_INHERITED_BY_TEST_FIXTURES = frozenset(
+    {
+        "DEBUG",
+        "DEV_SERVER_HOST",
+        "DEV_SERVER_PORT",
+        "GUNICORN_APP_MODULE",
+        "GUNICORN_TIMEOUT",
+        "GUNICORN_WORKERS",
+        "GUNICORN_WORKER_CLASS",
+        "HOST",
+        "LAUNCH_BROWSER_ON_START",
+        "PORT",
+        "SECRET_KEY",
+        "SESSION_MAX_UPLOADED_REPORTS",
+        "SSH_REMOTE_CHECK_TIMEOUT",
+        "SSH_SUBPROCESS_TIMEOUT",
+    }
+)
+
+
+def test_the_test_fixtures_pin_every_env_reachable_setting():
+    # The fixture counterpart to ``test_the_settings_inventory_is_pinned``: a new
+    # overridable setting has to be classified as pinned or inherited before it can reach
+    # an app under test from whatever the developer happens to export. Enumerated rather
+    # than derived — a computed complement would pass no matter what, which is the same
+    # reason ``_OVERRIDABLE_SETTINGS`` is hand-maintained.
+    assert _OVERRIDABLE_SETTINGS == PINNED_ENV_SETTINGS | _INHERITED_BY_TEST_FIXTURES
+    assert not (PINNED_ENV_SETTINGS & _INHERITED_BY_TEST_FIXTURES)
+
+    # The load-bearing one: deleting a pin from the baseline fails here.
+    assert PINNED_ENV_SETTINGS <= set(pinned_settings_sample())
+
+
 def test_the_settings_inventory_is_pinned():
     # Forces a classification for every setting rather than only catching the entries
     # someone remembered to list. A new attribute lands in neither set and fails here,
@@ -689,6 +747,11 @@ def test_a_documented_dev_server_setting_is_readable(key, env_value, monkeypatch
 
 def test_a_dev_server_override_reaches_the_allowlist(monkeypatch):
     monkeypatch.delenv("ALLOWED_ORIGINS", raising=False)
+    # Both layers, because either alone still reads the operator's value: the class body
+    # bound it at import (so ``delenv`` cannot reach it) and the override loop re-applies
+    # it from the environment (so ``setattr`` alone is overwritten).
+    monkeypatch.delenv("DEV_SERVER_HOST", raising=False)
+    monkeypatch.setattr(DefaultConfig, "DEV_SERVER_HOST", "localhost")
     monkeypatch.setenv("FLASK_ENV", "development")
     monkeypatch.setenv("DEV_SERVER_PORT", "4173")
 

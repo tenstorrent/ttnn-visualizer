@@ -830,12 +830,15 @@ Run with `pnpm test`. Tests live in `tests/` at the repo root — see [the dedic
 
 The Flask test client (`app.test_client()`) is exposed as the `client` fixture in `backend/ttnn_visualizer/tests/conftest.py`. Routes are mounted under the **`{BASE_PATH}api`** prefix — `backend/ttnn_visualizer/app.py` registers the `api = Blueprint("api", __name__)` blueprint with `url_prefix=f"{app.config['BASE_PATH']}api"`. When `BASE_PATH` is `/` (the default in `conftest.app` and in single-tenant deployments) the effective prefix is `/api`; when `BASE_PATH` is something like `/visualizer/` the prefix becomes `/visualizer/api`. Tests run against `conftest.app` so `/api/...` is the right path in test URLs — just don't hard-code that assumption into production-facing docs or curl examples. Endpoints decorated with `@with_instance` require an `instanceId` query param — the `make_report` fixture returns one. Pass it through `query_string={...}` (see the dedicated subsection below).
 
-Two `conftest.app` defaults that bite local-upload tests in particular:
+Every fixture that builds an app starts from **`base_test_settings`** in `backend/ttnn_visualizer/tests/fixture_settings.py`, not from a hand-rolled dict. Three `conftest.app` defaults bite in particular:
 
-- **`SERVER_MODE=True`** (`conftest.py`) — `@local_only` handlers like `/api/remote/mlir/upload` return `403 Forbidden` until you override it.
-- **`LOCAL_DATA_DIRECTORY` is a `str`** (`conftest.py`) but production `settings.py` initialises it as a `Path` and handlers do `data_directory / config["MLIR_DIRECTORY_NAME"]`. Cast it to `Path` in the test so you exercise the same operand types as the deployed app.
+- **`SERVER_MODE=True`** — `@local_only` handlers like `/api/remote/mlir/upload` return `403 Forbidden` until you override it.
+- **`LOCAL_DATA_DIRECTORY` is a `str`** but production `settings.py` initialises it as a `Path` and handlers do `data_directory / config["MLIR_DIRECTORY_NAME"]`. Cast it to `Path` in the test so you exercise the same operand types as the deployed app.
+- **Ten settings are pinned away from the environment**, `TT_METAL_HOME` among them. `DefaultConfig` reads them from the environment and `TT_METAL_HOME` is exported on any machine that profiles TT-Metal, so an unpinned fixture serves reports from a TT-Metal tree the test never created. A fixture that genuinely wants one passes it to `base_test_settings` explicitly — see `direct_mode_app` in `views/test_report_deletion.py`. Adding an overridable setting means classifying it: `test_the_test_fixtures_pin_every_env_reachable_setting` fails until you do. See #1869.
 
-Both overrides match the canonical pattern at `backend/ttnn_visualizer/tests/test_file_uploads.py`. A runnable example:
+**Pinning a setting and unsetting its variable are not the same thing**, and the difference is easy to get backwards. `Config` is a process singleton whose class attributes bind at *import*, and `override_with_env_variables` skips any key whose variable is unset — so `monkeypatch.delenv` cannot un-bind an import-time value, and for anything reaching an app the only lever is `settings_override`, which `create_app` applies last. For a test that constructs a config itself, pick by how the value arrives: `delenv` when it comes through the override loop or a live descriptor, `monkeypatch.setattr(DefaultConfig, ...)` when the class body bound it, and **both** when either alone still reads the operator's value (`DEV_SERVER_HOST` in `test_settings.py`). Beware blanket env scrubbing in an autouse fixture: `test_the_documented_defaults_match_the_code_defaults` reads `os.environ` as *input* to decide what to skip, so deleting a variable turns that test red.
+
+The first two overrides match the canonical pattern at `backend/ttnn_visualizer/tests/test_file_uploads.py`. A runnable example:
 
 ```python
 def test_local_upload_rejects_invalid_extension(app, client, make_report):
