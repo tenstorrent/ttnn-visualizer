@@ -1,0 +1,215 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
+
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+    type OpGraphBuildOptions,
+    type OpGraphBuiltGraph,
+    type OpGraphSourceOperation,
+    type OpGraphWorkerInboundMessage,
+    OpGraphWorkerMessageType,
+    type OpGraphWorkerOutboundMessage,
+} from '../src/components/operation-graph/opGraphTypes';
+
+// Stubbed so a test can count layouts, which is what coalescing and the cache are
+// both about. The builder's own behaviour is covered by opGraphBuilder.spec.ts.
+const buildOpGraph = vi.hoisted(() =>
+    vi.fn<(operations: OpGraphSourceOperation[], options: OpGraphBuildOptions) => OpGraphBuiltGraph>(),
+);
+
+vi.mock('../src/components/operation-graph/opGraphBuilder', () => ({ buildOpGraph }));
+
+const OPERATIONS: OpGraphSourceOperation[] = [
+    { id: 1, name: 'matmul', fileIdentifier: 'model.py:1', outputs: [{ edgeLabel: '[1, 32]', consumers: [2] }] },
+    { id: 2, name: 'add', fileIdentifier: 'model.py:2', outputs: [] },
+];
+
+const posted: OpGraphWorkerOutboundMessage[] = [];
+
+type WorkerHandler = (event: MessageEvent<OpGraphWorkerInboundMessage>) => void;
+type Send = (message: OpGraphWorkerInboundMessage) => void;
+
+// The worker installs itself on the global `onmessage`, so a test drives it by
+// calling that. Modules are reset per test because the queue, the cache and the
+// source version are all module-level state.
+const loadWorker = async (): Promise<Send> => {
+    vi.resetModules();
+    await import('../src/components/operation-graph/opGraphLayoutWorker');
+    // The worker's bare `onmessage = ` assignment lands on the jsdom global, whose
+    // handler slot is typed for a `Window` receiver a worker doesn't have; the read
+    // is narrowed to what a caller actually needs.
+    const handler = window.onmessage as unknown as WorkerHandler | null;
+    if (handler === null) {
+        throw new Error('worker did not install an onmessage handler');
+    }
+    return (message) => handler({ data: message } as MessageEvent<OpGraphWorkerInboundMessage>);
+};
+
+const setGraph = (sourceVersion: number): OpGraphWorkerInboundMessage => ({
+    type: OpGraphWorkerMessageType.SET_GRAPH,
+    sourceVersion,
+    operations: OPERATIONS,
+});
+
+const build = (requestId: number, hideDeallocate: boolean, sourceVersion = 1): OpGraphWorkerInboundMessage => ({
+    type: OpGraphWorkerMessageType.BUILD,
+    sourceVersion,
+    requestId,
+    hideDeallocate,
+});
+
+const builtReplies = () => posted.filter((message) => message.type === OpGraphWorkerMessageType.BUILT);
+
+const drain = () => vi.advanceTimersByTime(0);
+
+beforeEach(() => {
+    posted.length = 0;
+    buildOpGraph.mockReset();
+    // A fresh object per layout, so object identity distinguishes a cache hit
+    // from a rebuild that happens to produce an equal graph.
+    buildOpGraph.mockImplementation(() => ({ nodes: [], edges: [] }));
+    vi.stubGlobal('postMessage', (message: OpGraphWorkerOutboundMessage) => {
+        posted.push(message);
+    });
+    vi.useFakeTimers();
+});
+
+afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.useRealTimers();
+});
+
+describe('opGraphLayoutWorker', () => {
+    describe('coalescing', () => {
+        it('lays out once for a burst and answers the newest request', async () => {
+            const send = await loadWorker();
+            send(setGraph(1));
+
+            // What a drag on the op-range slider looks like: a request per
+            // pointer frame, all arriving before the first layout could finish.
+            send(build(1, true));
+            send(build(2, true));
+            send(build(3, true));
+            drain();
+
+            expect(buildOpGraph).toHaveBeenCalledTimes(1);
+            expect(builtReplies()).toHaveLength(1);
+            expect(builtReplies()[0].requestId).toBe(3);
+        });
+
+        it('still answers a lone request', async () => {
+            const send = await loadWorker();
+            send(setGraph(1));
+
+            send(build(1, true));
+            drain();
+
+            expect(builtReplies().map((message) => message.requestId)).toEqual([1]);
+        });
+
+        it('answers each request that arrives in its own turn', async () => {
+            const send = await loadWorker();
+            send(setGraph(1));
+
+            send(build(1, true));
+            drain();
+            send(build(2, false));
+            drain();
+
+            expect(builtReplies().map((message) => message.requestId)).toEqual([1, 2]);
+        });
+
+        it('drops a queued build when a new source arrives before it runs', async () => {
+            const send = await loadWorker();
+            send(setGraph(1));
+            send(build(1, true));
+
+            // The view posts SET_GRAPH before the build for the new report, so a
+            // build still queued against the old source must not be laid out.
+            send(setGraph(2));
+            drain();
+
+            expect(buildOpGraph).not.toHaveBeenCalled();
+            expect(posted).toHaveLength(0);
+        });
+
+        it('skips a build whose source version is already stale', async () => {
+            const send = await loadWorker();
+            send(setGraph(2));
+
+            send(build(1, true, 1));
+            drain();
+
+            expect(buildOpGraph).not.toHaveBeenCalled();
+            expect(posted).toHaveLength(0);
+        });
+    });
+
+    describe('layout cache', () => {
+        it('serves a repeated option set without laying it out again', async () => {
+            const send = await loadWorker();
+            send(setGraph(1));
+
+            send(build(1, true));
+            drain();
+            send(build(2, false));
+            drain();
+            send(build(3, true));
+            drain();
+
+            // Toggling hide-deallocate off and back on is the case this exists
+            // for: three replies, two layouts, and the third is the first graph.
+            expect(buildOpGraph).toHaveBeenCalledTimes(2);
+            const replies = builtReplies();
+            expect(replies).toHaveLength(3);
+            expect(replies[2].graph).toBe(replies[0].graph);
+        });
+
+        it('does not serve one report\u2019s layout for another', async () => {
+            const send = await loadWorker();
+            send(setGraph(1));
+            send(build(1, true));
+            drain();
+
+            send(setGraph(2));
+            send(build(2, true, 2));
+            drain();
+
+            expect(buildOpGraph).toHaveBeenCalledTimes(2);
+            const replies = builtReplies();
+            expect(replies[1].graph).not.toBe(replies[0].graph);
+        });
+    });
+
+    describe('failures', () => {
+        it('reports a failed layout against the request that asked for it', async () => {
+            const send = await loadWorker();
+            send(setGraph(1));
+            buildOpGraph.mockImplementation(() => {
+                throw new Error('dagre exploded');
+            });
+
+            send(build(7, true));
+            drain();
+
+            expect(posted).toEqual([{ type: OpGraphWorkerMessageType.ERROR, requestId: 7, error: 'dagre exploded' }]);
+        });
+
+        it('does not cache a failed layout', async () => {
+            const send = await loadWorker();
+            send(setGraph(1));
+            buildOpGraph.mockImplementationOnce(() => {
+                throw new Error('dagre exploded');
+            });
+
+            send(build(1, true));
+            drain();
+            send(build(2, true));
+            drain();
+
+            expect(buildOpGraph).toHaveBeenCalledTimes(2);
+            expect(builtReplies()).toHaveLength(1);
+        });
+    });
+});

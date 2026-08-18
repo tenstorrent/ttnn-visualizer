@@ -1,0 +1,46 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
+
+@use '../definitions/colours' as *;
+@use '../definitions/variables' as variables;
+
+.op-graph-toolbar {
+    position: absolute;
+    z-index: variables.$z-index-2-interactive;
+    top: 12px;
+    left: 12px;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+
+    // The cluster's box is as wide as the filter but the row below is narrower,
+    // and an absolutely positioned wrapper still swallows pointer events over
+    // that empty corner — which is canvas the user needs to pan and click.
+    pointer-events: none;
+
+    > * {
+        pointer-events: auto;
+    }
+}
+
+.op-graph-toolbar-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    padding: 4px;
+    background: $tt-grey-2;
+    border: 1px solid $tt-grey-3;
+    border-radius: 4px;
+    box-shadow: 0 1px 4px rgb(0 0 0 / 30%);
+}
+
+.op-graph-toolbar-switch {
+    // Blueprint gives switches bottom margin for stacked forms, which knocks
+    // them out of alignment with the buttons on this row.
+    margin-bottom: 0;
+    font-size: 12px;
+    white-space: nowrap;
+}
