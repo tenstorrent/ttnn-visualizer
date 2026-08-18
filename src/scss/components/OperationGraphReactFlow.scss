@@ -89,6 +89,24 @@
         stroke-width: 2;
     }
 
+    // Non-matches fade rather than hide, so the matched subset keeps its place
+    // in the layout instead of the graph reflowing under the user mid-search.
+    // Dimming from the container and exempting the matches — rather than setting
+    // an opacity on each non-match — keeps the element objects React Flow diffs
+    // by identity untouched for the whole non-matching majority. Fading the edge
+    // group also carries the label, which an inline style on the path cannot.
+    &.op-graph-filtering {
+        .react-flow__node,
+        .react-flow__edge {
+            opacity: 0.18;
+        }
+
+        .react-flow__node.op-graph-node-match,
+        .react-flow__edge.op-graph-edge-match {
+            opacity: 1;
+        }
+    }
+
     // React Flow's minimap defaults are light-theme (`#fff` pane, `#e2e2e2`
     // nodes), which reads as a blank pale rectangle on our dark canvas. Setting
     // the unsuffixed vars rather than the `-props` tier leaves the tier free for

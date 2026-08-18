@@ -3,7 +3,8 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import { describe, expect, it } from 'vitest';
-import { CACHE_LIMIT_PER_GRAPH, touchLruCache } from '../src/components/mlir/mlirLayoutWorkerCache';
+import { touchLruCache } from '../src/functions/touchLruCache';
+import { CACHE_LIMIT_PER_GRAPH } from '../src/components/mlir/mlirLayoutWorkerCache';
 
 describe('touchLruCache', () => {
     it('inserts a new entry at the tail', () => {

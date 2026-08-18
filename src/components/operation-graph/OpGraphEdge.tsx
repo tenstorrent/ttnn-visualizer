@@ -54,10 +54,6 @@ const OpGraphEdge = memo(
                         className='op-graph-edge-label'
                         x={labelX}
                         y={labelY}
-                        // React Flow only forwards `style` to the path, so the label
-                        // has to opt into the filter fade or it stays bright over a
-                        // faded edge.
-                        opacity={style?.opacity}
                     >
                         {label}
                     </text>

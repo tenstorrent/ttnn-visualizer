@@ -52,9 +52,6 @@ const FOCUS_ZOOM = 1;
 // every press, so a longer one never settles and the camera reads as lagging.
 const FOCUS_DURATION_MS = 200;
 
-// Non-matches fade instead of hiding, so the matched subset keeps its position
-// in the layout rather than the graph reflowing under the user mid-search.
-const FILTER_DIM_OPACITY = 0.18;
 // The applied query lags the input so the match → style → React Flow diff chain
 // doesn't run per keystroke. Clearing bypasses it to keep Escape instant.
 const FILTER_DEBOUNCE_MS = 120;
@@ -71,6 +68,14 @@ interface OpGraphMatches {
 const EMPTY_MATCHES: OpGraphMatches = { ids: new Set<string>(), operationIdsInOrder: [] };
 
 const SELECTED_NODE_CLASS = 'op-graph-node-selected';
+
+// Filter dimming is a container rule with an exemption for the matched set,
+// rather than an opacity on each non-match. React Flow diffs elements by object
+// identity, so dressing the ~500 non-matches would hand it a new object for
+// every one of them on each drag frame; the matched set is normally a handful.
+const FILTERING_CLASS = 'op-graph-filtering';
+const MATCHED_NODE_CLASS = 'op-graph-node-match';
+const MATCHED_EDGE_CLASS = 'op-graph-edge-match';
 
 const NODE_CLASS_BY_RELATION: Record<NodeRelation, string> = {
     [NodeRelation.Input]: 'op-graph-node-input',
@@ -371,19 +376,21 @@ const OperationGraphInner = ({ operationList, operationId }: OperationGraphReact
         }
         return nodes.map((node) => {
             const isSelected = node.id === highlight?.selectedId;
-            let styled = node;
+            const classNames: string[] = [];
             if (isSelected) {
-                styled = { ...styled, className: SELECTED_NODE_CLASS };
+                classNames.push(SELECTED_NODE_CLASS);
             } else if (highlight) {
                 const relation = highlight.relationByNodeId.get(node.id);
                 if (relation) {
-                    styled = { ...styled, className: NODE_CLASS_BY_RELATION[relation] };
+                    classNames.push(NODE_CLASS_BY_RELATION[relation]);
                 }
             }
-            if (matchedIds && !isSelected && !matchedIds.has(node.id)) {
-                styled = { ...styled, style: { ...styled.style, opacity: FILTER_DIM_OPACITY } };
+            // Selection outranks the filter: the anchor stays lit even while a
+            // search dims everything around it.
+            if (matchedIds && (isSelected || matchedIds.has(node.id))) {
+                classNames.push(MATCHED_NODE_CLASS);
             }
-            return styled;
+            return classNames.length > 0 ? { ...node, className: classNames.join(' ') } : node;
         });
     }, [nodes, highlight, matchedIds]);
 
@@ -393,13 +400,16 @@ const OperationGraphInner = ({ operationList, operationId }: OperationGraphReact
         }
         return edges.map((edge) => {
             const relation = highlight?.relationByEdgeId.get(edge.id);
-            let styled = relation ? { ...edge, className: EDGE_CLASS_BY_RELATION[relation] } : edge;
+            const classNames: string[] = [];
+            if (relation) {
+                classNames.push(EDGE_CLASS_BY_RELATION[relation]);
+            }
             // An edge between two matches stays lit so the matched subset is
             // traceable; a selection edge outranks the filter either way.
-            if (matchedIds && !relation && !(matchedIds.has(edge.source) && matchedIds.has(edge.target))) {
-                styled = { ...styled, style: { ...styled.style, opacity: FILTER_DIM_OPACITY } };
+            if (matchedIds && (relation || (matchedIds.has(edge.source) && matchedIds.has(edge.target)))) {
+                classNames.push(MATCHED_EDGE_CLASS);
             }
-            return styled;
+            return classNames.length > 0 ? { ...edge, className: classNames.join(' ') } : edge;
         });
     }, [edges, highlight, matchedIds]);
 
@@ -419,7 +429,7 @@ const OperationGraphInner = ({ operationList, operationId }: OperationGraphReact
     const isPanelOpen = selectedOperationId !== null && !isBuilding;
 
     return (
-        <div className='operation-graph-react-flow'>
+        <div className={matchedIds ? `operation-graph-react-flow ${FILTERING_CLASS}` : 'operation-graph-react-flow'}>
             {isBuilding ? (
                 <div className='operation-graph-react-flow-loader'>
                     <LoadingSpinner />
