@@ -4,7 +4,7 @@
 
 @use '../definitions/colours' as *;
 
-.op-graph-filter {
+.graph-op-filter {
     display: flex;
     align-items: center;
     gap: 4px;
@@ -20,7 +20,7 @@
         width: 240px;
     }
 
-    .op-graph-filter-counter {
+    .graph-op-filter-counter {
         display: inline-flex;
         align-items: center;
         padding: 0 4px;
@@ -30,13 +30,13 @@
         white-space: nowrap;
     }
 
-    .op-graph-filter-right-slot {
+    .graph-op-filter-right-slot {
         display: inline-flex;
         align-items: center;
         gap: 2px;
     }
 
-    .op-graph-filter-mode {
+    .graph-op-filter-mode {
         font-family: monospace;
         font-size: 12px;
         font-weight: 600;
@@ -57,9 +57,9 @@
         }
     }
 
-    .op-graph-filter-clear,
-    .op-graph-filter-step,
-    .op-graph-filter-mode {
+    .graph-op-filter-clear,
+    .graph-op-filter-step,
+    .graph-op-filter-mode {
         display: inline-flex;
         align-items: center;
         justify-content: center;

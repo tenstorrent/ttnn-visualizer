@@ -2,40 +2,40 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-import { type KeyboardEvent, forwardRef, memo, useImperativeHandle, useRef } from 'react';
 import { Button, ButtonVariant, InputGroup, Intent } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
-import 'styles/components/MlirOpFilter.scss';
-import { MlirFilterMode } from './mlirFilter';
+import { type KeyboardEvent, forwardRef, memo, useImperativeHandle, useRef } from 'react';
+import { GraphFilterMode } from '../definitions/GraphFilterMode';
+import 'styles/components/GraphOpFilter.scss';
 
-export { MlirFilterMode };
-
-export interface MlirOpFilterHandle {
+export interface GraphOpFilterHandle {
     focus: () => void;
 }
 
-interface MlirOpFilterProps {
+interface GraphOpFilterProps {
     query: string;
     onQueryChange: (next: string) => void;
-    mode: MlirFilterMode;
-    onModeChange: (next: MlirFilterMode) => void;
+    mode: GraphFilterMode;
+    onModeChange: (next: GraphFilterMode) => void;
     // True only when in regex mode and the current query fails to compile —
     // drives the danger-intent input styling and the counter text.
     isRegexInvalid: boolean;
-    // Number of visible reps prev/next steps through; collapsed anchors
-    // standing in for buried descendants are counted here.
+    // What prev/next steps through. In MLIR a collapsed anchor standing in for
+    // buried descendants counts as one.
     matchCount: number;
-    // Buried descendants across all anchors; drives the "+K inside" suffix.
-    hiddenMatchCount: number;
     // 0-based cursor within `matchCount`, or null when no match is focused.
     currentMatchIndex: number | null;
     onPrev: () => void;
     onNext: () => void;
+    // Matches hidden inside collapsed namespaces, which drives the "+K inside"
+    // suffix. Only MLIR has a hierarchy deep enough to bury one.
+    hiddenMatchCount?: number;
+    isDisabled?: boolean;
 }
 
-// Floating filter control over the React Flow canvas. Dim/highlight lives
-// in the view component; this is just the input + counter + prev/next.
-const MlirOpFilterInner = forwardRef<MlirOpFilterHandle, MlirOpFilterProps>(
+// Input, counter and prev/next only; the dim/highlight lives in the view that
+// owns the canvas.
+const GraphOpFilterInner = forwardRef<GraphOpFilterHandle, GraphOpFilterProps>(
     (
         {
             query,
@@ -44,10 +44,11 @@ const MlirOpFilterInner = forwardRef<MlirOpFilterHandle, MlirOpFilterProps>(
             onModeChange,
             isRegexInvalid,
             matchCount,
-            hiddenMatchCount,
             currentMatchIndex,
             onPrev,
             onNext,
+            hiddenMatchCount = 0,
+            isDisabled = false,
         },
         ref,
     ) => {
@@ -77,11 +78,11 @@ const MlirOpFilterInner = forwardRef<MlirOpFilterHandle, MlirOpFilterProps>(
         };
 
         const hasQuery = query.length > 0;
-        const isRegexMode = mode === MlirFilterMode.Regex;
+        const isRegexMode = mode === GraphFilterMode.REGEX;
         const hiddenSuffix = hiddenMatchCount > 0 ? ` (+${hiddenMatchCount} inside)` : '';
-        // Ignore a stale cursor whose index no longer lives inside the current
-        // match set (e.g. after an expand/collapse changed the visible reps)
-        // so the counter can't render impossible ratios like "5 / 2".
+        // A cursor left over from a wider match set would render an impossible
+        // ratio like "5 / 2" after the query narrows — or, in MLIR, after an
+        // expand/collapse changed which reps are visible.
         const activeMatchIndex =
             currentMatchIndex !== null && currentMatchIndex < matchCount ? currentMatchIndex : null;
         let counterText: string | null = null;
@@ -97,10 +98,10 @@ const MlirOpFilterInner = forwardRef<MlirOpFilterHandle, MlirOpFilterProps>(
             }
         }
 
-        const toggleMode = () => onModeChange(isRegexMode ? MlirFilterMode.Substring : MlirFilterMode.Regex);
+        const toggleMode = () => onModeChange(isRegexMode ? GraphFilterMode.SUBSTRING : GraphFilterMode.REGEX);
 
         return (
-            <div className='mlir-op-filter'>
+            <div className='graph-op-filter'>
                 <InputGroup
                     inputRef={inputRef}
                     leftIcon={IconNames.SEARCH}
@@ -109,10 +110,11 @@ const MlirOpFilterInner = forwardRef<MlirOpFilterHandle, MlirOpFilterProps>(
                     onChange={(event) => onQueryChange(event.target.value)}
                     onKeyDown={handleKeyDown}
                     intent={isRegexInvalid ? Intent.DANGER : Intent.NONE}
+                    disabled={isDisabled}
                     rightElement={
-                        <div className='mlir-op-filter-right-slot'>
+                        <div className='graph-op-filter-right-slot'>
                             <Button
-                                className='mlir-op-filter-mode'
+                                className='graph-op-filter-mode'
                                 variant={ButtonVariant.MINIMAL}
                                 active={isRegexMode}
                                 text='.*'
@@ -126,7 +128,7 @@ const MlirOpFilterInner = forwardRef<MlirOpFilterHandle, MlirOpFilterProps>(
                             />
                             {hasQuery ? (
                                 <Button
-                                    className='mlir-op-filter-clear'
+                                    className='graph-op-filter-clear'
                                     variant={ButtonVariant.MINIMAL}
                                     icon={IconNames.CROSS}
                                     aria-label='Clear filter'
@@ -138,21 +140,21 @@ const MlirOpFilterInner = forwardRef<MlirOpFilterHandle, MlirOpFilterProps>(
                     spellCheck={false}
                     autoComplete='off'
                 />
-                {counterText ? <span className='mlir-op-filter-counter'>{counterText}</span> : null}
+                {counterText ? <span className='graph-op-filter-counter'>{counterText}</span> : null}
                 <Button
-                    className='mlir-op-filter-step'
+                    className='graph-op-filter-step'
                     variant={ButtonVariant.MINIMAL}
                     icon={IconNames.CHEVRON_UP}
                     aria-label='Previous match'
-                    disabled={matchCount === 0}
+                    disabled={isDisabled || matchCount === 0}
                     onClick={onPrev}
                 />
                 <Button
-                    className='mlir-op-filter-step'
+                    className='graph-op-filter-step'
                     variant={ButtonVariant.MINIMAL}
                     icon={IconNames.CHEVRON_DOWN}
                     aria-label='Next match'
-                    disabled={matchCount === 0}
+                    disabled={isDisabled || matchCount === 0}
                     onClick={onNext}
                 />
             </div>
@@ -160,7 +162,7 @@ const MlirOpFilterInner = forwardRef<MlirOpFilterHandle, MlirOpFilterProps>(
     },
 );
 
-const MlirOpFilter = memo(MlirOpFilterInner);
-MlirOpFilter.displayName = 'MlirOpFilter';
+const GraphOpFilter = memo(GraphOpFilterInner);
+GraphOpFilter.displayName = 'GraphOpFilter';
 
-export default MlirOpFilter;
+export default GraphOpFilter;

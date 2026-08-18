@@ -16,17 +16,18 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { type MouseEvent as ReactMouseEvent, memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { GraphFilterMode } from '../../definitions/GraphFilterMode';
 import { NodeRelation } from '../../definitions/NodeRelation';
 import { toReadableShape } from '../../functions/formatting';
+import { buildGraphFilterMatcher } from '../../functions/graphFilterMatcher';
 import type { OperationDescription } from '../../model/APIData';
 import type { PerfOverlaySource } from '../../functions/perfOverlay';
+import type { GraphOpFilterHandle } from '../GraphOpFilter';
 import LoadingSpinner from '../LoadingSpinner';
 import OpGraphEdge from './OpGraphEdge';
-import type { OpGraphFilterHandle } from './OpGraphFilter';
 import OpGraphInfoPanel from './OpGraphInfoPanel';
 import OpGraphNode from './OpGraphNode';
 import OpGraphToolbar from './OpGraphToolbar';
-import { OpGraphFilterMode, buildOpGraphFilterMatcher } from './opGraphFilterMatcher';
 import { useOpGraphLayoutWorker } from './useOpGraphLayoutWorker';
 import {
     type OpGraphBuildOptions,
@@ -104,9 +105,9 @@ const OperationGraphInner = ({ operationList, operationId }: OperationGraphReact
     const [hideDeallocate, setHideDeallocate] = useState(true);
     const [filterQuery, setFilterQuery] = useState('');
     const [appliedFilterQuery, setAppliedFilterQuery] = useState('');
-    const [filterMode, setFilterMode] = useState<OpGraphFilterMode>(() => {
+    const [filterMode, setFilterMode] = useState<GraphFilterMode>(() => {
         const stored = sessionStorage.getItem(FILTER_MODE_STORAGE_KEY);
-        return stored === OpGraphFilterMode.REGEX ? OpGraphFilterMode.REGEX : OpGraphFilterMode.SUBSTRING;
+        return stored === GraphFilterMode.REGEX ? GraphFilterMode.REGEX : GraphFilterMode.SUBSTRING;
     });
     const [currentMatchIndex, setCurrentMatchIndex] = useState<number | null>(null);
     // Navigating between `/graphtree/:operationId` URLs keeps this component
@@ -120,7 +121,7 @@ const OperationGraphInner = ({ operationList, operationId }: OperationGraphReact
             setSelectedOperationId(operationId);
         }
     }
-    const filterRef = useRef<OpGraphFilterHandle>(null);
+    const filterRef = useRef<GraphOpFilterHandle>(null);
     const { setCenter, getNode } = useReactFlow<OpGraphFlowNode, OpGraphFlowEdge>();
 
     const selectedOperationIdRef = useRef(selectedOperationId);
@@ -295,7 +296,7 @@ const OperationGraphInner = ({ operationList, operationId }: OperationGraphReact
 
     // The same query matches a different set in the other mode, so the cursor
     // can't carry over.
-    const handleModeChange = useCallback((next: OpGraphFilterMode) => {
+    const handleModeChange = useCallback((next: GraphFilterMode) => {
         setFilterMode(next);
         setCurrentMatchIndex(null);
         sessionStorage.setItem(FILTER_MODE_STORAGE_KEY, next);
@@ -326,7 +327,7 @@ const OperationGraphInner = ({ operationList, operationId }: OperationGraphReact
     }, []);
 
     const filterMatcher = useMemo(
-        () => (appliedFilterQuery === '' ? null : buildOpGraphFilterMatcher(filterMode, appliedFilterQuery)),
+        () => (appliedFilterQuery === '' ? null : buildGraphFilterMatcher(filterMode, appliedFilterQuery)),
         [filterMode, appliedFilterQuery],
     );
 
@@ -337,7 +338,7 @@ const OperationGraphInner = ({ operationList, operationId }: OperationGraphReact
         const ids = new Set<string>();
         const operationIdsInOrder: number[] = [];
         for (const entry of nodeIndex) {
-            if (filterMatcher.testName(entry.name)) {
+            if (filterMatcher.test(entry.name)) {
                 ids.add(entry.id);
                 operationIdsInOrder.push(entry.operationId);
             }
