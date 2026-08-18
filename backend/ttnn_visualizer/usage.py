@@ -43,7 +43,7 @@ from enum import Enum
 from importlib.metadata import PackageNotFoundError
 from importlib.metadata import version as distribution_version
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 from ttnn_visualizer.utils import (
     is_running_in_container,
@@ -121,10 +121,13 @@ _REQUIRED_FIELDS = (TIMESTAMP_FIELD, EVENT_FIELD, SCHEMA_VERSION_FIELD)
 
 _run_id: Optional[str] = None
 
-# Warn-once state. ``is_recording_enabled`` is called on every config read — the
-# ``PRINT_ENV`` dump alone triggers one through the descriptor — so an unconditional
-# warning would bury the launch output it is meant to stand out in.
-_retired_env_var_warned = False
+# Variables already warned about. ``is_recording_enabled`` is called on every config
+# read — the ``PRINT_ENV`` dump alone triggers one through the descriptor, and every
+# recorded event another — so an unconditional warning would bury the launch output it
+# is meant to stand out in, and would be loudest in exactly the misconfigured case it
+# is trying to report. One set rather than a flag per warning, so a third needs no new
+# global and no ``global`` statement inside a predicate.
+_warned_env_vars: Set[str] = set()
 
 
 class UsageEvent(str, Enum):
@@ -200,23 +203,35 @@ def _server_mode_from_app_context() -> Optional[bool]:
     return _as_bool(current_app.config.get("SERVER_MODE", False))
 
 
+def _warn_once(env_var: str, message: str, *args: Any) -> None:
+    """Emit one warning per variable for the life of the process.
+
+    Keyed on the variable rather than the message, so changing an offending value
+    mid-process does not earn a second warning — the operator has already been told
+    which name to look at, which is the actionable part.
+    """
+    if env_var in _warned_env_vars:
+        return
+
+    _warned_env_vars.add(env_var)
+    logger.warning(message, *args)
+
+
 def _warn_about_the_retired_env_var() -> None:
     """Say so, once, when the old spelling is still exported.
 
     Warned about rather than honoured: two variables that both answer the same question
-    is the ambiguity this rename exists to remove, and honouring the retired one would
+    are the ambiguity this rename exists to remove, and honouring the retired one would
     keep it indefinitely. Reported before the ``SERVER_MODE`` check in
     :func:`is_recording_enabled` so a hosted operator carrying a stale export hears
     about it too, rather than only discovering it on the day they move to a local
     install.
     """
-    global _retired_env_var_warned
-
-    if _retired_env_var_warned or os.getenv(_RETIRED_RECORDING_ENV_VAR) is None:
+    if os.getenv(_RETIRED_RECORDING_ENV_VAR) is None:
         return
 
-    _retired_env_var_warned = True
-    logger.warning(
+    _warn_once(
+        _RETIRED_RECORDING_ENV_VAR,
         "%s is no longer read. Recording is on by default. %s",
         _RETIRED_RECORDING_ENV_VAR,
         describe_opt_out(),
@@ -240,7 +255,8 @@ def _is_recording_disabled_by_environment() -> bool:
 
     parsed = parse_bool(value)
     if parsed is None:
-        logger.warning(
+        _warn_once(
+            USAGE_DISABLED_ENV_VAR,
             "%s=%r is not a recognised boolean. Treating it as a request to switch "
             "recording off; use true/1 or false/0.",
             USAGE_DISABLED_ENV_VAR,

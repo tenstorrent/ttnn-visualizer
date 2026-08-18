@@ -54,9 +54,9 @@ def usage_directory(tmp_path, monkeypatch):
     directory = tmp_path / "usage"
     monkeypatch.setattr(usage, "USAGE_DIRECTORY", directory)
     monkeypatch.setattr(usage, "_run_id", None)
-    # Sticky by design, so a test that trips the deprecation warning would otherwise
-    # leave the next one with its single warning already spent.
-    monkeypatch.setattr(usage, "_retired_env_var_warned", False)
+    # Sticky by design, so a test that trips either warn-once would otherwise leave the
+    # next one with that warning already spent.
+    monkeypatch.setattr(usage, "_warned_env_vars", set())
     monkeypatch.delenv(RUN_ID_ENV_VAR, raising=False)
     monkeypatch.delenv(USAGE_DISABLED_ENV_VAR, raising=False)
     # The retired name is no longer read, but a developer who still exports it would
@@ -268,6 +268,26 @@ def test_the_retired_variable_is_not_honoured(usage_directory, monkeypatch):
     record_event(UsageEvent.APP_START)
 
     assert len(read_lines(usage_directory)) == 1
+
+
+def test_an_unrecognised_disable_value_is_reported_once(
+    usage_directory, monkeypatch, caplog
+):
+    # The warning fires from the path every recorded event takes, so without warn-once
+    # the misconfiguration it reports is also the one that floods the log.
+    monkeypatch.setenv(USAGE_DISABLED_ENV_VAR, "yes")
+
+    with caplog.at_level("WARNING"):
+        is_recording_enabled()
+        is_recording_enabled()
+
+    warnings = [
+        record
+        for record in caplog.records
+        if "not a recognised boolean" in record.getMessage()
+    ]
+
+    assert len(warnings) == 1
 
 
 def test_the_retired_variable_is_reported_once(usage_directory, monkeypatch, caplog):
