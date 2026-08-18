@@ -16,11 +16,13 @@ from ttnn_visualizer import usage
 from ttnn_visualizer.app import create_app
 from ttnn_visualizer.extensions import db
 from ttnn_visualizer.models import InstanceTable
+from ttnn_visualizer.tests.fixture_settings import base_test_settings
 from ttnn_visualizer.tests.report_schemas import SCHEMA_V2
 from ttnn_visualizer.usage import (
+    _RETIRED_RECORDING_ENV_VAR,
     LOG_SIZE_CHECK_INTERVAL_BYTES,
     RUN_ID_ENV_VAR,
-    USAGE_RECORDING_ENV_VAR,
+    USAGE_DISABLED_ENV_VAR,
 )
 
 
@@ -29,22 +31,13 @@ def app():
     """Create a Flask app with test config and an isolated app SQLite file.
 
     Uses a file-backed database (not ``:memory:``) so Alembic's migration
-    connection and the app's pool see the same on-disk database.
+    connection and the app's pool see the same on-disk database. The settings, and why
+    several are pinned rather than inherited from the environment, live in
+    :func:`ttnn_visualizer.tests.fixture_settings.base_test_settings`.
     """
     tmpdir = tempfile.mkdtemp()
     try:
-        app_db_path = Path(tmpdir) / "app.db"
-        settings = {
-            "TESTING": True,
-            "SQLALCHEMY_DATABASE_URI": f"sqlite:///{app_db_path}",
-            "SERVER_MODE": True,
-            "USE_WEBSOCKETS": True,
-            "APP_DATA_DIRECTORY": tmpdir,
-            "REPORT_DATA_DIRECTORY": tmpdir,
-            "LOCAL_DATA_DIRECTORY": str(Path(tmpdir) / "local"),
-            "REMOTE_DATA_DIRECTORY": str(Path(tmpdir) / "remote"),
-        }
-        app = create_app(settings_override=settings)
+        app = create_app(settings_override=base_test_settings(tmpdir))
         yield app
     finally:
         shutil.rmtree(tmpdir, ignore_errors=True)
@@ -77,8 +70,14 @@ def usage_directory(tmp_path, monkeypatch):
     # Keyed on the path, so a fresh `tmp_path` invalidates it anyway — reset regardless,
     # since relying on that couples every test to the fixture's choice of directory.
     monkeypatch.setattr(usage, "_ensured_directory", None)
+    # Sticky by design too, so a test that trips a warn-once would otherwise leave the
+    # next one with that warning already spent.
+    monkeypatch.setattr(usage, "_warned_env_vars", set())
     monkeypatch.delenv(RUN_ID_ENV_VAR, raising=False)
-    monkeypatch.delenv(USAGE_RECORDING_ENV_VAR, raising=False)
+    monkeypatch.delenv(USAGE_DISABLED_ENV_VAR, raising=False)
+    # The retired name is no longer read, but a developer who still exports it would
+    # otherwise get the deprecation warning on every test that records.
+    monkeypatch.delenv(_RETIRED_RECORDING_ENV_VAR, raising=False)
 
     return directory
 

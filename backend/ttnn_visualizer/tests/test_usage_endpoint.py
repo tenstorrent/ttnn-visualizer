@@ -31,7 +31,7 @@ from ttnn_visualizer.usage import (
     SCHEMA_VERSION,
     SCHEMA_VERSION_FIELD,
     TIMESTAMP_FIELD,
-    USAGE_RECORDING_ENV_VAR,
+    USAGE_DISABLED_ENV_VAR,
     UsageEvent,
     get_disabled_marker_path,
 )
@@ -549,7 +549,7 @@ def test_switch_off_via_environment_writes_nothing(
     client, usage_directory, monkeypatch
 ):
     """Answers the same either way: whether a log exists here is not the client's business."""
-    monkeypatch.setenv(USAGE_RECORDING_ENV_VAR, "false")
+    monkeypatch.setenv(USAGE_DISABLED_ENV_VAR, "true")
 
     response = post_events(client, [REPORT_LOADED_EVENT])
 
@@ -588,7 +588,7 @@ def test_a_disabled_install_answers_before_it_validates(
     to bodies it currently accepts silently, and the response would begin to depend on
     machine-local state the client is deliberately not told about.
     """
-    monkeypatch.setenv(USAGE_RECORDING_ENV_VAR, "false")
+    monkeypatch.setenv(USAGE_DISABLED_ENV_VAR, "true")
 
     response = post(client)
 
