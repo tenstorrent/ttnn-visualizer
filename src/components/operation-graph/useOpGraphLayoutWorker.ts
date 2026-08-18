@@ -23,6 +23,10 @@ export function useOpGraphLayoutWorker(
     onBuilt: (graph: OpGraphBuiltGraph) => void,
 ): { runBuild: (options: OpGraphBuildOptions) => void; isBuilding: boolean } {
     const workerRef = useRef<Worker | null>(null);
+    // `onerror` fires once, when the script fails to load or throws at top
+    // level. Posting to the dead worker afterwards doesn't throw, so nothing
+    // else would ever notice that no reply is coming.
+    const isWorkerDeadRef = useRef(false);
     const nextRequestIdRef = useRef(0);
     const activeRequestIdRef = useRef(0);
     // 0 until the first `set-graph` post; builds before that have no source and
@@ -73,7 +77,12 @@ export function useOpGraphLayoutWorker(
                 // eslint-disable-next-line no-console
                 console.error('operation graph layout: main-thread fallback failed', error);
             } finally {
-                endBuild();
+                // The early returns above land here too, so without this guard a
+                // superseded fallback clears the spinner the active build armed
+                // and the view sits unspinnered until that build replies.
+                if (requestId === activeRequestIdRef.current) {
+                    endBuild();
+                }
             }
         },
         [endBuild],
@@ -85,11 +94,13 @@ export function useOpGraphLayoutWorker(
         // A crash emits no terminal reply, so the layout has to be redone here or
         // the view keeps whatever graph it had with no way back.
         worker.onerror = () => {
+            isWorkerDeadRef.current = true;
             void buildOnMainThread(activeRequestIdRef.current);
         };
         return () => {
             worker.terminate();
             workerRef.current = null;
+            isWorkerDeadRef.current = false;
         };
     }, [buildOnMainThread]);
 
@@ -161,6 +172,10 @@ export function useOpGraphLayoutWorker(
                     spinnerTimeoutRef.current = null;
                     setIsBuilding(true);
                 }, BUILD_SPINNER_DELAY_MS);
+            }
+            if (isWorkerDeadRef.current) {
+                void buildOnMainThread(requestId);
+                return;
             }
             try {
                 worker.postMessage({

@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-import { act, renderHook, waitFor } from '@testing-library/react';
+import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useOpGraphLayoutWorker } from '../src/components/operation-graph/useOpGraphLayoutWorker';
 import {
@@ -90,6 +90,10 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+    // `globals` is off in vitest.config.ts, so RTL's auto-cleanup never runs.
+    // Unmounting matters here because the hook arms a real 200ms spinner timer
+    // that would otherwise outlive the test and set state during teardown.
+    cleanup();
     vi.unstubAllGlobals();
     vi.useRealTimers();
 });
@@ -193,5 +197,47 @@ describe('useOpGraphLayoutWorker', () => {
         });
 
         expect(onBuilt).not.toHaveBeenCalled();
+    });
+
+    it('routes builds issued after a crash straight to the main thread', async () => {
+        const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+        const { result, onBuilt } = setup();
+        act(() => result.current.runBuild(BUILD_OPTIONS));
+        worker().crash();
+        await waitFor(() => expect(onBuilt).toHaveBeenCalledTimes(1));
+
+        // `onerror` fires once. Posting to the dead worker afterwards doesn't
+        // throw, so an unlatched hook would wait forever for a reply that the
+        // terminated worker can never send.
+        const postedBeforeSecondBuild = worker().posted.length;
+        act(() => result.current.runBuild(BUILD_OPTIONS));
+
+        await waitFor(() => expect(onBuilt).toHaveBeenCalledTimes(2));
+        expect(worker().posted).toHaveLength(postedBeforeSecondBuild);
+        expect(result.current.isBuilding).toBe(false);
+        consoleError.mockRestore();
+    });
+
+    it('leaves the spinner armed when a superseded fallback finishes', async () => {
+        const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+        const { result, onBuilt } = setup();
+
+        // An error reply hands request 1 to the fallback without killing the
+        // worker; request 2 supersedes it while its dynamic import is still
+        // pending. Request 2 owns the spinner from that point, so request 1
+        // unwinding must not clear it.
+        act(() => result.current.runBuild(BUILD_OPTIONS));
+        worker().emit({
+            type: OpGraphWorkerMessageType.ERROR,
+            requestId: lastBuildRequestId(),
+            error: 'layout failed',
+        });
+        act(() => result.current.runBuild(BUILD_OPTIONS));
+
+        // Real timers: the fallback settles on the import, well inside the
+        // delay, so a spinner that survives to fire is the whole assertion.
+        await waitFor(() => expect(result.current.isBuilding).toBe(true), { timeout: SPINNER_DELAY_MS * 5 });
+        expect(onBuilt).not.toHaveBeenCalled();
+        consoleError.mockRestore();
     });
 });

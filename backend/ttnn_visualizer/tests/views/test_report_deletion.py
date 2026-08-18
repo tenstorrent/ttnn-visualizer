@@ -25,6 +25,7 @@ from ttnn_visualizer.instances import (
     KEY_PROFILER_NAME,
 )
 from ttnn_visualizer.models import InstanceTable, RemoteConnection, ReportLocation
+from ttnn_visualizer.tests.fixture_settings import base_test_settings
 from ttnn_visualizer.utils import create_path_resolver
 
 API = "/api"
@@ -35,25 +36,14 @@ HOST = "yyzc-wh-05"
 def app():
     """A local-mode app: ``@local_only`` refuses these routes under SERVER_MODE.
 
-    ``TT_METAL_HOME`` is pinned off because it is otherwise read from the developer's own
-    environment (via ``DefaultConfig`` and ``create_app``'s ``load_dotenv``), and it is
-    exported on any machine that profiles TT-Metal. Left unpinned, every upload/sync-mode
-    case here meets the direct-report-mode refusal and fails in a way indistinguishable
-    from a real regression.
+    ``TT_METAL_HOME`` is among the settings ``base_test_settings`` pins off, which is what
+    keeps every upload/sync-mode case here away from the direct-report-mode refusal.
     """
     tmpdir = tempfile.mkdtemp()
     try:
-        settings = {
-            "TESTING": True,
-            "SQLALCHEMY_DATABASE_URI": f"sqlite:///{Path(tmpdir) / 'app.db'}",
-            "SERVER_MODE": False,
-            "TT_METAL_HOME": None,
-            "APP_DATA_DIRECTORY": tmpdir,
-            "REPORT_DATA_DIRECTORY": tmpdir,
-            "LOCAL_DATA_DIRECTORY": str(Path(tmpdir) / "local"),
-            "REMOTE_DATA_DIRECTORY": str(Path(tmpdir) / "remote"),
-        }
-        yield create_app(settings_override=settings)
+        yield create_app(
+            settings_override=base_test_settings(tmpdir, SERVER_MODE=False)
+        )
     finally:
         shutil.rmtree(tmpdir, ignore_errors=True)
 
@@ -83,20 +73,20 @@ def _synced_remote_reports(app, directory_key, *names):
 
 @pytest.fixture
 def direct_mode_app():
-    """A direct-report-mode app: the listings read ``$TT_METAL_HOME/generated``."""
+    """A direct-report-mode app: the listings read ``$TT_METAL_HOME/generated``.
+
+    The explicit opt-in ``base_test_settings`` describes — every other fixture wants the
+    variable pinned off, so the one that needs it says so.
+    """
     tmpdir = tempfile.mkdtemp()
     try:
-        settings = {
-            "TESTING": True,
-            "SQLALCHEMY_DATABASE_URI": f"sqlite:///{Path(tmpdir) / 'app.db'}",
-            "SERVER_MODE": False,
-            "TT_METAL_HOME": str(Path(tmpdir) / "tt-metal"),
-            "APP_DATA_DIRECTORY": tmpdir,
-            "REPORT_DATA_DIRECTORY": tmpdir,
-            "LOCAL_DATA_DIRECTORY": str(Path(tmpdir) / "local"),
-            "REMOTE_DATA_DIRECTORY": str(Path(tmpdir) / "remote"),
-        }
-        yield create_app(settings_override=settings)
+        yield create_app(
+            settings_override=base_test_settings(
+                tmpdir,
+                SERVER_MODE=False,
+                TT_METAL_HOME=str(Path(tmpdir) / "tt-metal"),
+            )
+        )
     finally:
         shutil.rmtree(tmpdir, ignore_errors=True)
 

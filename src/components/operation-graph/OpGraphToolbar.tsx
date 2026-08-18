@@ -5,17 +5,17 @@
 import { Button, ButtonVariant, PopoverPosition, Switch, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { type FormEvent, type Ref, memo } from 'react';
+import GraphOpFilter, { type GraphOpFilterHandle } from '../GraphOpFilter';
+import type { GraphFilterMode } from '../../definitions/GraphFilterMode';
 import { PERF_OVERLAY_TOOLTIP, PerfOverlayStatus } from '../../definitions/PerfOverlayStatus';
-import OpGraphFilter, { type OpGraphFilterHandle } from './OpGraphFilter';
-import type { OpGraphFilterMode } from './opGraphFilterMatcher';
 import 'styles/components/OpGraphToolbar.scss';
 
 interface OpGraphToolbarProps {
-    filterRef: Ref<OpGraphFilterHandle>;
+    filterRef: Ref<GraphOpFilterHandle>;
     query: string;
     onQueryChange: (next: string) => void;
-    mode: OpGraphFilterMode;
-    onModeChange: (next: OpGraphFilterMode) => void;
+    mode: GraphFilterMode;
+    onModeChange: (next: GraphFilterMode) => void;
     isRegexInvalid: boolean;
     matchCount: number;
     currentMatchIndex: number | null;
@@ -61,7 +61,7 @@ const OpGraphToolbar = memo(
         isDisabled,
     }: OpGraphToolbarProps) => (
         <div className='op-graph-toolbar'>
-            <OpGraphFilter
+            <GraphOpFilter
                 ref={filterRef}
                 query={query}
                 onQueryChange={onQueryChange}

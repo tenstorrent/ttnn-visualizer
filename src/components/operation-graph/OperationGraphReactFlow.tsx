@@ -7,6 +7,7 @@ import {
     Controls,
     MarkerType,
     MiniMap,
+    type NodeChange,
     ReactFlow,
     ReactFlowProvider,
     useEdgesState,
@@ -17,20 +18,21 @@ import {
 import '@xyflow/react/dist/style.css';
 import { useAtomValue } from 'jotai';
 import { type MouseEvent as ReactMouseEvent, memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { GraphFilterMode } from '../../definitions/GraphFilterMode';
 import { NodeRelation } from '../../definitions/NodeRelation';
 import { PerfOverlayStatus } from '../../definitions/PerfOverlayStatus';
 import { toReadableShape } from '../../functions/formatting';
+import { buildGraphFilterMatcher } from '../../functions/graphFilterMatcher';
 import type { OperationDescription } from '../../model/APIData';
 import { type PerfOverlaySource, perfColorScale } from '../../functions/perfOverlay';
 import { activePerformanceReportAtom, activeProfilerReportAtom } from '../../store/app';
+import type { GraphOpFilterHandle } from '../GraphOpFilter';
 import LoadingSpinner from '../LoadingSpinner';
 import PerfOverlayLegend from '../perf-overlay/PerfOverlayLegend';
 import OpGraphEdge from './OpGraphEdge';
-import type { OpGraphFilterHandle } from './OpGraphFilter';
 import OpGraphInfoPanel from './OpGraphInfoPanel';
 import OpGraphNode from './OpGraphNode';
 import OpGraphToolbar from './OpGraphToolbar';
-import { OpGraphFilterMode, buildOpGraphFilterMatcher } from './opGraphFilterMatcher';
 import {
     PERF_BAR_ZOOM_VAR,
     buildOpGraphPerfOverlay,
@@ -63,9 +65,6 @@ const FOCUS_ZOOM = 1;
 // every press, so a longer one never settles and the camera reads as lagging.
 const FOCUS_DURATION_MS = 200;
 
-// Non-matches fade instead of hiding, so the matched subset keeps its position
-// in the layout rather than the graph reflowing under the user mid-search.
-const FILTER_DIM_OPACITY = 0.18;
 // The applied query lags the input so the match → style → React Flow diff chain
 // doesn't run per keystroke. Clearing bypasses it to keep Escape instant.
 const FILTER_DEBOUNCE_MS = 120;
@@ -82,6 +81,14 @@ interface OpGraphMatches {
 const EMPTY_MATCHES: OpGraphMatches = { ids: new Set<string>(), operationIdsInOrder: [] };
 
 const SELECTED_NODE_CLASS = 'op-graph-node-selected';
+
+// Filter dimming is a container rule with an exemption for the matched set,
+// rather than an opacity on each non-match. React Flow diffs elements by object
+// identity, so dressing the ~500 non-matches would hand it a new object for
+// every one of them on each drag frame; the matched set is normally a handful.
+const FILTERING_CLASS = 'op-graph-filtering';
+const MATCHED_NODE_CLASS = 'op-graph-node-match';
+const MATCHED_EDGE_CLASS = 'op-graph-edge-match';
 
 const NODE_CLASS_BY_RELATION: Record<NodeRelation, string> = {
     [NodeRelation.Input]: 'op-graph-node-input',
@@ -121,9 +128,9 @@ const OperationGraphInner = ({
     const [perfHover, setPerfHover] = useState<PerfHover | null>(null);
     const [filterQuery, setFilterQuery] = useState('');
     const [appliedFilterQuery, setAppliedFilterQuery] = useState('');
-    const [filterMode, setFilterMode] = useState<OpGraphFilterMode>(() => {
+    const [filterMode, setFilterMode] = useState<GraphFilterMode>(() => {
         const stored = sessionStorage.getItem(FILTER_MODE_STORAGE_KEY);
-        return stored === OpGraphFilterMode.REGEX ? OpGraphFilterMode.REGEX : OpGraphFilterMode.SUBSTRING;
+        return stored === GraphFilterMode.REGEX ? GraphFilterMode.REGEX : GraphFilterMode.SUBSTRING;
     });
     const [currentMatchIndex, setCurrentMatchIndex] = useState<number | null>(null);
     // Navigating between `/graphtree/:operationId` URLs keeps this component
@@ -137,7 +144,7 @@ const OperationGraphInner = ({
             setSelectedOperationId(operationId);
         }
     }
-    const filterRef = useRef<OpGraphFilterHandle>(null);
+    const filterRef = useRef<GraphOpFilterHandle>(null);
     const containerRef = useRef<HTMLDivElement>(null);
     const { setCenter, getNode } = useReactFlow<OpGraphFlowNode, OpGraphFlowEdge>();
     const flowStore = useStoreApi();
@@ -185,6 +192,16 @@ const OperationGraphInner = ({
             })),
         [operationList],
     );
+
+    // React Flow reports selection by node id; the panel and the toolbar work in
+    // operation ids.
+    const operationIdByNodeId = useMemo(() => {
+        const idsByNodeId = new Map<string, number>();
+        for (const entry of nodeIndex) {
+            idsByNodeId.set(entry.id, entry.operationId);
+        }
+        return idsByNodeId;
+    }, [nodeIndex]);
 
     const operationNamesById = useMemo(() => {
         const namesById = new Map<number, string>();
@@ -270,6 +287,49 @@ const OperationGraphInner = ({
         [focusOperation],
     );
 
+    // Pressing Enter or Space on a focused node reaches React Flow's own handler,
+    // which emits a select change and never calls `onNodeClick` — so a keyboard
+    // user could move the selection ring without the panel, the highlight or the
+    // prev/next cursor following. Reading selection here instead covers the
+    // keyboard, the pointer and Escape through one path.
+    const handleNodesChange = useCallback(
+        (changes: NodeChange<OpGraphFlowNode>[]) => {
+            let hasSelectChange = false;
+            let selectedNodeId: string | null = null;
+            for (const change of changes) {
+                if (change.type === 'select') {
+                    hasSelectChange = true;
+                    if (change.selected) {
+                        selectedNodeId = change.id;
+                    }
+                }
+            }
+            // A drag emits position changes only, so the common case forwards the
+            // array it was handed rather than rebuilding it.
+            if (!hasSelectChange) {
+                onNodesChange(changes);
+                return;
+            }
+            // Select changes are read and dropped rather than applied, leaving
+            // `selectedOperationId` as the single answer to what is selected.
+            const remainingChanges = changes.filter((change) => change.type !== 'select');
+            if (remainingChanges.length > 0) {
+                onNodesChange(remainingChanges);
+            }
+            if (selectedNodeId === null) {
+                setSelectedOperationId(null);
+                return;
+            }
+            const selectedId = operationIdByNodeId.get(selectedNodeId);
+            // Pointer selection arrives here on mousedown and again as a click, and
+            // re-running it would restart the centring tween mid-flight.
+            if (selectedId !== undefined && selectedId !== selectedOperationIdRef.current) {
+                selectOperation(selectedId);
+            }
+        },
+        [onNodesChange, operationIdByNodeId, selectOperation],
+    );
+
     // Clearing applies straight away so Escape and the clear button feel instant;
     // typed queries go through the debounce effect below.
     const handleQueryChange = useCallback((next: string) => {
@@ -282,7 +342,7 @@ const OperationGraphInner = ({
 
     // The same query matches a different set in the other mode, so the cursor
     // can't carry over.
-    const handleModeChange = useCallback((next: OpGraphFilterMode) => {
+    const handleModeChange = useCallback((next: GraphFilterMode) => {
         setFilterMode(next);
         setCurrentMatchIndex(null);
         sessionStorage.setItem(FILTER_MODE_STORAGE_KEY, next);
@@ -313,7 +373,7 @@ const OperationGraphInner = ({
     }, []);
 
     const filterMatcher = useMemo(
-        () => (appliedFilterQuery === '' ? null : buildOpGraphFilterMatcher(filterMode, appliedFilterQuery)),
+        () => (appliedFilterQuery === '' ? null : buildGraphFilterMatcher(filterMode, appliedFilterQuery)),
         [filterMode, appliedFilterQuery],
     );
 
@@ -324,7 +384,7 @@ const OperationGraphInner = ({
         const ids = new Set<string>();
         const operationIdsInOrder: number[] = [];
         for (const entry of nodeIndex) {
-            if (filterMatcher.testName(entry.name)) {
+            if (filterMatcher.test(entry.name)) {
                 ids.add(entry.id);
                 operationIdsInOrder.push(entry.operationId);
             }
@@ -460,28 +520,35 @@ const OperationGraphInner = ({
         }
         return nodes.map((node) => {
             const isSelected = node.id === highlight?.selectedId;
-            let styled = node;
+            const classNames: string[] = [];
             if (isSelected) {
-                styled = { ...styled, className: SELECTED_NODE_CLASS };
+                classNames.push(SELECTED_NODE_CLASS);
             } else if (highlight) {
                 const relation = highlight.relationByNodeId.get(node.id);
                 if (relation) {
-                    styled = { ...styled, className: NODE_CLASS_BY_RELATION[relation] };
+                    classNames.push(NODE_CLASS_BY_RELATION[relation]);
                 }
+            }
+            // Selection outranks the filter: the anchor stays lit even while a
+            // search dims everything around it.
+            if (matchedIds && (isSelected || matchedIds.has(node.id))) {
+                classNames.push(MATCHED_NODE_CLASS);
             }
             // Perf writes only custom properties, so it stacks with selection and
             // the highlight instead of displacing either. An op with no perf row
-            // gets nothing here, and its bar stays transparent.
+            // gets nothing here, and its bar stays transparent. Filter dimming is
+            // an opacity on the node element, which the bar inherits as part of
+            // the same group, so a dimmed non-match dims its perf signal with it.
             const perfStyle = perfStyleByNodeId?.get(node.id);
-            if (perfStyle) {
-                styled = { ...styled, style: { ...styled.style, ...perfStyle } };
+            const styled = perfStyle ? { ...node, style: { ...node.style, ...perfStyle } } : node;
+            if (isSelected) {
+                // Mirrored into React Flow's own flag so its keyboard handler reads
+                // the same selection the app holds: Escape on the selected node has
+                // to register as an unselect, and Enter on it as a no-op. Nothing
+                // else ever sets `selected`, since select changes are dropped.
+                return { ...styled, className: classNames.join(' '), selected: true };
             }
-            if (matchedIds && !isSelected && !matchedIds.has(node.id)) {
-                // Opacity on the node multiplies its bar, so a dimmed non-match
-                // dims its perf signal with it.
-                styled = { ...styled, style: { ...styled.style, opacity: FILTER_DIM_OPACITY } };
-            }
-            return styled;
+            return classNames.length > 0 ? { ...styled, className: classNames.join(' ') } : styled;
         });
     }, [nodes, highlight, matchedIds, perfStyleByNodeId]);
 
@@ -491,13 +558,16 @@ const OperationGraphInner = ({
         }
         return edges.map((edge) => {
             const relation = highlight?.relationByEdgeId.get(edge.id);
-            let styled = relation ? { ...edge, className: EDGE_CLASS_BY_RELATION[relation] } : edge;
+            const classNames: string[] = [];
+            if (relation) {
+                classNames.push(EDGE_CLASS_BY_RELATION[relation]);
+            }
             // An edge between two matches stays lit so the matched subset is
             // traceable; a selection edge outranks the filter either way.
-            if (matchedIds && !relation && !(matchedIds.has(edge.source) && matchedIds.has(edge.target))) {
-                styled = { ...styled, style: { ...styled.style, opacity: FILTER_DIM_OPACITY } };
+            if (matchedIds && (relation || (matchedIds.has(edge.source) && matchedIds.has(edge.target)))) {
+                classNames.push(MATCHED_EDGE_CLASS);
             }
-            return styled;
+            return classNames.length > 0 ? { ...edge, className: classNames.join(' ') } : edge;
         });
     }, [edges, highlight, matchedIds]);
 
@@ -547,13 +617,13 @@ const OperationGraphInner = ({
     const selectedPerfScore =
         selectedOperationId === null ? undefined : perfOverlay.scoreByOpId.get(selectedOperationId);
 
-    // The panel covers the corner the minimap docks in. Unmounting rather than
-    // hiding it drops a per-node rect that re-derives on every node change.
+    // Closed mid-build so the panel can't describe an operation the graph being
+    // laid out is about to drop.
     const isPanelOpen = selectedOperationId !== null && !isBuilding;
 
     return (
         <div
-            className='operation-graph-react-flow'
+            className={matchedIds ? `operation-graph-react-flow ${FILTERING_CLASS}` : 'operation-graph-react-flow'}
             ref={containerRef}
         >
             {isBuilding ? (
@@ -590,7 +660,7 @@ const OperationGraphInner = ({
                 edges={styledEdges}
                 nodeTypes={NODE_TYPES}
                 edgeTypes={EDGE_TYPES}
-                onNodesChange={onNodesChange}
+                onNodesChange={handleNodesChange}
                 onEdgesChange={onEdgesChange}
                 onNodeClick={handleNodeClick}
                 onPaneClick={handlePaneClick}
@@ -603,11 +673,22 @@ const OperationGraphInner = ({
                 maxZoom={MAX_ZOOM}
                 nodesConnectable={false}
                 selectNodesOnDrag={false}
+                // The graph is a read-only view of a report, but React Flow's
+                // stock delete key still reaches `onNodesChange`, so a selected
+                // node can be removed until the next relayout puts it back.
+                deleteKeyCode={null}
                 proOptions={{ hideAttribution: true }}
             >
                 <Background />
                 <Controls />
-                {!isPanelOpen ? <MiniMap pannable /> : null}
+                {/* Docked left rather than in React Flow's default corner: the
+                    panel is a full-height right column, and `onBuilt` always
+                    resolves a selection, so a right-docked minimap would be
+                    hidden in every state the user lands in. */}
+                <MiniMap
+                    pannable
+                    position='bottom-left'
+                />
             </ReactFlow>
             {isPerfOverlayActive && !isBuilding ? (
                 <div className='op-graph-perf-legend'>

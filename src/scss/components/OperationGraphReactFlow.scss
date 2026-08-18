@@ -9,6 +9,11 @@
 @use '../definitions/colours' as *;
 @use '../definitions/variables' as variables;
 
+// Where the minimap docks and how much room it takes, shared by the minimap
+// itself and by the perf legend that has to sit clear of it along the same edge.
+$minimap-dock-left: 56px;
+$minimap-width: 200px;
+
 .operation-graph-react-flow {
     position: relative;
     width: 100%;
@@ -91,12 +96,13 @@
 
     // Inside the canvas so it reads against the nodes it explains. The bottom
     // edge is the only clear one — the toolbar holds the top-left and the
-    // details panel the full right — and the offset clears the Controls column.
+    // details panel the full right — so it continues that band rightwards,
+    // starting after the zoom controls and the minimap docked ahead of it.
     .op-graph-perf-legend {
         position: absolute;
         z-index: variables.$z-index-2-interactive;
         bottom: 12px;
-        left: 48px;
+        left: $minimap-dock-left + $minimap-width + 16px;
     }
 
     .op-graph-perf-hover {
@@ -151,12 +157,36 @@
         stroke-width: 2;
     }
 
+    // Non-matches fade rather than hide, so the matched subset keeps its place
+    // in the layout instead of the graph reflowing under the user mid-search.
+    // Dimming from the container and exempting the matches — rather than setting
+    // an opacity on each non-match — keeps the element objects React Flow diffs
+    // by identity untouched for the whole non-matching majority. Fading the edge
+    // group also carries the label, which an inline style on the path cannot.
+    &.op-graph-filtering {
+        .react-flow__node,
+        .react-flow__edge {
+            opacity: 0.18;
+        }
+
+        .react-flow__node.op-graph-node-match,
+        .react-flow__edge.op-graph-edge-match {
+            opacity: 1;
+        }
+    }
+
     // React Flow's minimap defaults are light-theme (`#fff` pane, `#e2e2e2`
     // nodes), which reads as a blank pale rectangle on our dark canvas. Setting
     // the unsuffixed vars rather than the `-props` tier leaves the tier free for
     // `nodeColor`/`maskColor` props, and keeps the node fill on the same custom
     // property as the on-canvas rule it has to match.
     .react-flow__minimap {
+        // Shares the bottom-left corner with the zoom controls, so it starts
+        // past their 26px column and the 15px panel gutter either side of it.
+        // Set on the margin because React Flow's own `left` rule matches at the
+        // same specificity and lands later in the cascade.
+        margin-left: $minimap-dock-left;
+
         --xy-minimap-background-color: #{$tt-grey-2};
         --xy-minimap-node-background-color: var(--graph-normal);
         --xy-minimap-node-stroke-color: #{$tt-grey-2};

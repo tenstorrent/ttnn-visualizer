@@ -119,6 +119,38 @@ describe('MemoryLegendElement core count label', () => {
     });
 });
 
+describe('MemoryLegendElement device count label (#1844)', () => {
+    const chunk = { address: 0x4000, size: 1024 };
+
+    it('omits the label when deviceCount is unset', () => {
+        renderLegendElement(chunk);
+        expect(screen.queryByText(/devices?/)).not.toBeInTheDocument();
+    });
+
+    it('omits the label for a single device, which is every non-mesh row', () => {
+        renderLegendElement(chunk, { deviceCount: 1 });
+        expect(screen.queryByText(/devices?/)).not.toBeInTheDocument();
+    });
+
+    it('renders "x 8 devices" when a mesh op collapsed eight rows into one', () => {
+        renderLegendElement(chunk, { deviceCount: 8 });
+        expect(screen.getByText(/x 8 devices/)).toBeInTheDocument();
+    });
+
+    it('reads cores then devices when both apply', () => {
+        renderLegendElement(chunk, { numCores: 2, bufferType: StringBufferType.L1, deviceCount: 8 });
+        expect(screen.getByText(/x 2 cores x 8 devices/)).toBeInTheDocument();
+    });
+
+    it('renders the device label on DRAM rows, which drop the core context', () => {
+        // Unreachable from the only call site today, but the prop is public and
+        // unlike `numCores` it is not gated on the buffer being per-core.
+        renderLegendElement(chunk, { numCores: 2, bufferType: StringBufferType.DRAM, deviceCount: 8 });
+        expect(screen.queryByText(/cores?/)).not.toBeInTheDocument();
+        expect(screen.getByText(/x 8 devices/)).toBeInTheDocument();
+    });
+});
+
 describe('MemoryLegendElement globally_allocated marker (#1651)', () => {
     const chunk = { address: 0x4000, size: 1024 };
 

@@ -60,10 +60,10 @@ const GraphView = () => {
         });
     }, [matchedPerfOps]);
 
-    // The component needs to distinguish "no perf report loaded at all"
+    // The overlay needs to distinguish "no perf report loaded at all"
     // (UNAVAILABLE) from "loaded but doesn't match this graph" (UNLINKED).
     // `perfOverlayRows` collapses both into "empty"; this flag preserves the
-    // distinction so the tooltip can say the right thing.
+    // distinction, which is what the toggle's disabled tooltip reads. #1880
     const isPerfReportLoaded = Boolean(perfReport?.report?.length);
 
     return (

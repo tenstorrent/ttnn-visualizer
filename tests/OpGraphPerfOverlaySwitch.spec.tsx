@@ -8,7 +8,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 
 import OpGraphToolbar from '../src/components/operation-graph/OpGraphToolbar';
 import { PERF_OVERLAY_TOOLTIP, PerfOverlayStatus } from '../src/definitions/PerfOverlayStatus';
-import { OpGraphFilterMode } from '../src/components/operation-graph/opGraphFilterMatcher';
+import { GraphFilterMode } from '../src/definitions/GraphFilterMode';
 
 const renderToolbar = (status: PerfOverlayStatus, onPerfOverlayChange: (next: boolean) => void = vi.fn()) => {
     render(
@@ -16,7 +16,7 @@ const renderToolbar = (status: PerfOverlayStatus, onPerfOverlayChange: (next: bo
             filterRef={null}
             query=''
             onQueryChange={vi.fn()}
-            mode={OpGraphFilterMode.SUBSTRING}
+            mode={GraphFilterMode.SUBSTRING}
             onModeChange={vi.fn()}
             isRegexInvalid={false}
             matchCount={0}

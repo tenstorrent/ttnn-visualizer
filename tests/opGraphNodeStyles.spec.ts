@@ -40,3 +40,31 @@ describe('op graph selected node styling', () => {
         expect(ruleBody('&.op-graph-node-selected')).not.toContain('background');
     });
 });
+
+describe('op graph filter dimming', () => {
+    // The direction matters for more than tidiness: React Flow diffs elements by
+    // object identity, so the side carrying the class is the side that gets a
+    // fresh object on every render. Dimming has to be the container's job and the
+    // exemption the matched set's, never the other way round.
+    it('dims from the container rather than per non-matching element', () => {
+        const body = ruleBody('&.op-graph-filtering');
+
+        expect(body).toMatch(/\.react-flow__node/);
+        expect(body).toMatch(/\.react-flow__edge/);
+        expect(body).toMatch(/opacity:\s*0?\.\d+/);
+    });
+
+    it('exempts the matched set rather than listing the dimmed one', () => {
+        const filtering = STYLESHEET.slice(STYLESHEET.indexOf('&.op-graph-filtering'));
+
+        expect(filtering).toMatch(/\.op-graph-node-match[\s,][^}]*opacity:\s*1/s);
+        expect(filtering).toMatch(/\.op-graph-edge-match[^}]*opacity:\s*1/s);
+    });
+
+    it('fades whole edge groups so a label cannot outlive its edge', () => {
+        // The label is a sibling of the path inside the edge group, so an opacity
+        // on `.react-flow__edge-path` would leave it bright over a faded edge —
+        // which is what the removed inline `opacity` on the `<text>` was for.
+        expect(ruleBody('&.op-graph-filtering')).not.toContain('__edge-path');
+    });
+});
