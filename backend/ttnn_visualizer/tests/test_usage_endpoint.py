@@ -25,7 +25,8 @@ from ttnn_visualizer.tests.usage_log import (
 from ttnn_visualizer.usage import (
     CLIENT_EVENT_DETAIL_FIELDS,
     EVENT_FIELD,
-    MAX_LOG_BYTES,
+    LOG_SIZE_CHECK_INTERVAL_BYTES,
+    MAX_USAGE_BATCH_EVENTS,
     RUN_ID_FIELD,
     SCHEMA_VERSION,
     SCHEMA_VERSION_FIELD,
@@ -34,7 +35,7 @@ from ttnn_visualizer.usage import (
     UsageEvent,
     get_disabled_marker_path,
 )
-from ttnn_visualizer.views import MAX_USAGE_BATCH_EVENTS, MAX_USAGE_REQUEST_BYTES
+from ttnn_visualizer.views import MAX_USAGE_REQUEST_BYTES
 
 USAGE_ENDPOINT = "/api/usage"
 
@@ -285,10 +286,13 @@ def test_a_failed_write_does_not_fail_the_request(
     path.
     """
 
-    def failing_write(*args, **kwargs):
+    # `_append_line` rather than `os.write`, which is process-global while patched: an
+    # unrelated write in the window would raise too, including the logging call this test
+    # then reads back.
+    def failing_append(_line):
         raise OSError("disk full")
 
-    monkeypatch.setattr(usage.os, "write", failing_write)
+    monkeypatch.setattr(usage, "_append_line", failing_append)
 
     with caplog.at_level("WARNING"):
         response = post_events(client, [REPORT_LOADED_EVENT, VIEW_OPENED_EVENT])
@@ -311,6 +315,11 @@ def test_a_log_at_the_cap_accepts_no_further_events(
     Compaction runs at launch only, so without this an unthrottled client could drive
     the log past a limit the module documents as a privacy control, not just a disk one.
 
+    Several flushes, because refusing one is not a cap. A version that re-derived the
+    verdict from the byte counter refused the first flush and then accepted every flush
+    until another whole interval had been appended — which a single-flush test cannot
+    tell from a cap that holds.
+
     The log has to exist and hold something first: an absent or empty one is not over
     any cap, so the guard is deliberately silent until there is something to measure.
     """
@@ -319,14 +328,40 @@ def test_a_log_at_the_cap_accepts_no_further_events(
     assert len(already_written) == 1
 
     monkeypatch.setattr(usage, "MAX_LOG_BYTES", 0)
-    monkeypatch.setattr(
-        usage, "_bytes_since_size_check", usage.LOG_SIZE_CHECK_INTERVAL_BYTES
-    )
+    monkeypatch.setattr(usage, "_bytes_since_size_check", LOG_SIZE_CHECK_INTERVAL_BYTES)
 
-    response = post_events(client, [REPORT_LOADED_EVENT])
+    for _ in range(3):
+        response = post_events(client, [REPORT_LOADED_EVENT])
+        # 204 every time: a client that could tell a full log from a written one would
+        # have something to back off from, and this is not its business.
+        assert response.status_code == HTTPStatus.NO_CONTENT
 
-    assert response.status_code == HTTPStatus.NO_CONTENT
     assert read_usage_lines(usage_directory) == already_written
+
+
+def test_a_full_log_is_reported_once_rather_than_per_flush(
+    client, usage_directory, monkeypatch, caplog
+):
+    """Silent refusal reads as "nobody uses this machine" months later.
+
+    One line on the way in, and no more: the endpoint answers 204 either way, so without
+    it there is nothing anywhere to distinguish recording having stopped from a user
+    having stopped — and with one per flush it would bury the application's own log.
+    """
+    post_events(client, [VIEW_OPENED_EVENT])
+
+    monkeypatch.setattr(usage, "MAX_LOG_BYTES", 0)
+    monkeypatch.setattr(usage, "_bytes_since_size_check", LOG_SIZE_CHECK_INTERVAL_BYTES)
+
+    with caplog.at_level("WARNING"):
+        for _ in range(3):
+            post_events(client, [VIEW_OPENED_EVENT])
+
+    warnings = [
+        record for record in caplog.records if "byte cap" in record.getMessage()
+    ]
+
+    assert len(warnings) == 1
 
 
 def test_the_size_check_is_amortised_rather_than_per_request(
@@ -372,16 +407,48 @@ def test_the_topology_overlay_is_a_countable_view(client, usage_directory):
     assert parse_usage_line(read_usage_lines(usage_directory)[0])["view"] == "topology"
 
 
-def test_rejection_never_echoes_the_offending_value(client):
-    """A response body must not become the way free-form text re-enters the system."""
-    secret = "modelname-customer-a"
+SECRET = "modelname-customer-a"
 
-    response = post_events(
-        client, [{"event": UsageEvent.VIEW_OPENED.value, "details": {"view": secret}}]
-    )
+
+@pytest.mark.parametrize(
+    "event",
+    [
+        pytest.param({"event": SECRET, "details": {}}, id="event_name"),
+        pytest.param(
+            {"event": UsageEvent.VIEW_OPENED.value, "details": {"view": SECRET}},
+            id="detail_value",
+        ),
+        pytest.param(
+            {
+                "event": UsageEvent.VIEW_OPENED.value,
+                "details": {"view": "operations", SECRET: "x"},
+            },
+            id="detail_key",
+        ),
+        pytest.param(
+            {**VIEW_OPENED_EVENT, SECRET: "x"},
+            id="top_level_key",
+        ),
+        pytest.param(
+            {"event": UsageEvent.VIEW_OPENED.value, "details": SECRET},
+            id="details_not_an_object",
+        ),
+        pytest.param(
+            {"event": UsageEvent.VIEW_OPENED.value, "details": {"view": {"a": SECRET}}},
+            id="non_string_value",
+        ),
+    ],
+)
+def test_rejection_never_echoes_the_offending_value(client, event):
+    """A response body must not become the way free-form text re-enters the system.
+
+    Every rejection branch, not the one that happens to be easiest to reach: each message
+    is written by hand, so the next one to grow an f-string is the one nobody tested.
+    """
+    response = post_events(client, [event])
 
     assert response.status_code == HTTPStatus.UNPROCESSABLE_ENTITY
-    assert secret not in response.get_data(as_text=True)
+    assert SECRET not in response.get_data(as_text=True)
 
 
 def test_mixed_batch_appends_nothing_at_all(client, usage_directory):
@@ -485,6 +552,45 @@ def test_switch_off_via_environment_writes_nothing(
     monkeypatch.setenv(USAGE_RECORDING_ENV_VAR, "false")
 
     response = post_events(client, [REPORT_LOADED_EVENT])
+
+    assert response.status_code == HTTPStatus.NO_CONTENT
+    assert read_usage_lines(usage_directory) == []
+
+
+@pytest.mark.parametrize(
+    "post",
+    [
+        pytest.param(
+            lambda client: client.post(
+                USAGE_ENDPOINT, data="{not json", content_type="application/json"
+            ),
+            id="unparseable_body",
+        ),
+        pytest.param(
+            lambda client: post_events(
+                client, [VIEW_OPENED_EVENT] * (MAX_USAGE_BATCH_EVENTS + 1)
+            ),
+            id="oversized_batch",
+        ),
+        pytest.param(
+            lambda client: post_events(client, [{"event": "not_an_event"}]),
+            id="unknown_event",
+        ),
+    ],
+)
+def test_a_disabled_install_answers_before_it_validates(
+    client, usage_directory, monkeypatch, post
+):
+    """The early off-switch check is what keeps a disabled install from parsing 16 KB.
+
+    Pinned because moving it below validation is invisible otherwise: the other off-switch
+    tests post well-formed bodies, so a disabled install would start answering 400 and 422
+    to bodies it currently accepts silently, and the response would begin to depend on
+    machine-local state the client is deliberately not told about.
+    """
+    monkeypatch.setenv(USAGE_RECORDING_ENV_VAR, "false")
+
+    response = post(client)
 
     assert response.status_code == HTTPStatus.NO_CONTENT
     assert read_usage_lines(usage_directory) == []

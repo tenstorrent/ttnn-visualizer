@@ -70,6 +70,13 @@ def usage_directory(tmp_path, monkeypatch):
     # Primed rather than zeroed, so the first append of every test performs the size
     # check instead of inheriting a fresh interval from whichever test ran before.
     monkeypatch.setattr(usage, "_bytes_since_size_check", LOG_SIZE_CHECK_INTERVAL_BYTES)
+    # Both latches are sticky by design, so a test that trips one would otherwise leave
+    # the next test with a full log or with its first warning already spent.
+    monkeypatch.setattr(usage, "_log_full", False)
+    monkeypatch.setattr(usage, "_write_failure_logged", False)
+    # Keyed on the path, so a fresh `tmp_path` invalidates it anyway — reset regardless,
+    # since relying on that couples every test to the fixture's choice of directory.
+    monkeypatch.setattr(usage, "_ensured_directory", None)
     monkeypatch.delenv(RUN_ID_ENV_VAR, raising=False)
     monkeypatch.delenv(USAGE_RECORDING_ENV_VAR, raising=False)
 

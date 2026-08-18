@@ -112,6 +112,7 @@ from ttnn_visualizer.stack_trace_source import (
     stack_source_response,
 )
 from ttnn_visualizer.usage import (
+    MAX_USAGE_BATCH_EVENTS,
     UsageEvent,
     UsageEventRejected,
     is_recording_enabled,
@@ -152,19 +153,17 @@ api = Blueprint("api", __name__)
 # MIME-sniff the response as HTML and execute embedded markup.
 _NOSNIFF_HEADERS = {"X-Content-Type-Options": "nosniff"}
 
-# The usage client buffers and flushes, so a batch is the unit. Both caps bound what one
-# permitted page can write into a privacy-reviewed artefact, and neither is inherited:
-# `MAX_CONTENT_LENGTH` defaults to no limit at all (`settings.py`), so a limit here has
-# to be set per request.
-MAX_USAGE_BATCH_EVENTS = 50
+# What one permitted page may write into a privacy-reviewed artefact in a single request.
+# Not inherited: `MAX_CONTENT_LENGTH` defaults to no limit at all (`settings.py`), so the
+# limit has to be set per request. It has to stay consistent with `MAX_USAGE_BATCH_EVENTS`,
+# which lives in `usage.py` beside the write-atomicity guarantee it bounds — a full batch
+# of the largest permitted event must still fit inside this.
 MAX_USAGE_REQUEST_BYTES = 16 * 1024
 
-# Module-private, unlike the two caps above: those are part of the contract the tests
-# pin, these are just the wire field names.
+# Module-private, unlike the cap above: that is part of the contract the tests pin, this
+# is just the envelope's field name. The shape of an event *inside* the envelope belongs
+# to `usage.py`, which validates it.
 _USAGE_EVENTS_FIELD = "events"
-_USAGE_EVENT_NAME_FIELD = "event"
-_USAGE_EVENT_DETAILS_FIELD = "details"
-_USAGE_EVENT_KEYS = frozenset({_USAGE_EVENT_NAME_FIELD, _USAGE_EVENT_DETAILS_FIELD})
 
 
 def _stack_source_request_params():
@@ -2628,26 +2627,11 @@ def record_usage_events():
     # appends nothing. Partial acceptance would leave a reader unable to tell a truncated
     # batch from a complete one.
     for entry in events:
-        if not isinstance(entry, dict):
-            return response_unprocessable_entity("Each event must be an object")
-
-        # Closed at this level too, not just inside `details`. An ignored top-level key
-        # writes nothing, but it lets a client believe it is sending a field that is
-        # being dropped.
-        if set(entry) - _USAGE_EVENT_KEYS:
-            return response_unprocessable_entity(
-                "An event carries only: "
-                f"{_USAGE_EVENT_NAME_FIELD}, {_USAGE_EVENT_DETAILS_FIELD}"
-            )
-
         try:
-            validated.append(
-                validate_client_event(
-                    entry.get(_USAGE_EVENT_NAME_FIELD),
-                    entry.get(_USAGE_EVENT_DETAILS_FIELD),
-                )
-            )
+            validated.append(validate_client_event(entry))
         except UsageEventRejected as rejection:
+            # `UsageEventRejected` messages describe the schema rather than echoing what
+            # arrived, so passing one through cannot leak client-supplied text.
             return response_unprocessable_entity(str(rejection))
 
     # Deliberately the same answer whether or not the write happened. Recording being

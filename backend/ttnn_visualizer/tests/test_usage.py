@@ -11,6 +11,7 @@ collector — totals never go down, and no line can be forged.
 """
 
 import os
+import shutil
 import subprocess
 import sys
 import time
@@ -31,10 +32,13 @@ from ttnn_visualizer.usage import (
     CLIENT_EVENT_DETAIL_FIELDS,
     COUNT_FIELD,
     LOG_SIZE_CHECK_INTERVAL_BYTES,
+    MAX_USAGE_BATCH_EVENTS,
     RUN_ID_ENV_VAR,
     RUN_ID_FIELD,
     USAGE_RECORDING_ENV_VAR,
     DeploymentMode,
+    ReportKind,
+    ReportLoadFailureReason,
     UsageEvent,
     UsageView,
     get_deployment_mode,
@@ -382,10 +386,13 @@ def test_disabled_recording_does_not_build_the_app_start_payload(
 def test_a_write_failure_does_not_break_the_caller(
     usage_directory, monkeypatch, caplog
 ):
-    def raise_os_error(_descriptor, _data):
+    # `_append_line` rather than `os.write`: patching the latter is process-global for the
+    # duration, so every unrelated write in the window — including the one that emits the
+    # warning being asserted on — would raise too.
+    def raise_os_error(_line):
         raise OSError("disk full")
 
-    monkeypatch.setattr(os, "write", raise_os_error)
+    monkeypatch.setattr(usage, "_append_line", raise_os_error)
 
     with caplog.at_level("WARNING"):
         record_event(UsageEvent.APP_START)
@@ -707,7 +714,11 @@ def test_record_events_appends_a_batch_as_one_write(usage_directory, monkeypatch
     real_write = os.write
 
     def counting_write(descriptor, data):
-        writes.append(data)
+        # Only this module's appends. `os.write` is process-global while it is patched, so
+        # any unrelated write landing in the window would otherwise count as a second one
+        # and fail a test that is about batching.
+        if data.startswith(b"ts="):
+            writes.append(data)
         return real_write(descriptor, data)
 
     monkeypatch.setattr(usage.os, "write", counting_write)
@@ -736,7 +747,7 @@ def test_a_batch_carries_one_timestamp(usage_directory, monkeypatch):
     that straddled a second boundary across two timestamps.
     """
     timestamps = iter(["2026-08-18T10:00:00Z", "2026-08-18T10:00:01Z"])
-    monkeypatch.setattr(usage, "_now", lambda: next(timestamps))
+    monkeypatch.setattr(usage, "_get_timestamp", lambda: next(timestamps))
 
     record_events(
         [
@@ -758,6 +769,11 @@ def test_record_events_refuses_to_grow_a_log_past_the_cap(usage_directory, monke
     Refusing rather than trimming: dropping old lines makes cumulative totals go down,
     which Prometheus reads as a counter reset and then extrapolates — losing history and
     inventing activity at once.
+
+    Several batches rather than one, because one batch is the case a broken cap also
+    passes. A version that recomputed the verdict instead of caching it refused the first
+    batch, left the byte counter at zero, and then accepted everything until another whole
+    interval had been appended — one refusal per interval, indefinitely.
     """
     record_event(UsageEvent.APP_START)
     before = read_usage_lines(usage_directory)
@@ -765,11 +781,198 @@ def test_record_events_refuses_to_grow_a_log_past_the_cap(usage_directory, monke
     monkeypatch.setattr(usage, "MAX_LOG_BYTES", 0)
     monkeypatch.setattr(usage, "_bytes_since_size_check", LOG_SIZE_CHECK_INTERVAL_BYTES)
 
+    refusals = [
+        record_events([(UsageEvent.VIEW_OPENED, {"view": UsageView.OPERATIONS})])
+        for _ in range(5)
+    ]
+
+    assert refusals == [False] * 5
+    assert read_usage_lines(usage_directory) == before
+
+
+def test_the_cap_is_reached_by_ordinary_appends_alone(usage_directory, monkeypatch):
+    """Nothing here sets the byte counter by hand, unlike every other cap test.
+
+    Those all prime ``_bytes_since_size_check`` to the interval, so removing the
+    accumulator in ``_append_line`` would disarm the write-path cap for the whole process
+    and leave them green. This crosses the interval by appending, and pins that the
+    refusal from that crossing is permanent rather than one batch wide.
+    """
+    event = (UsageEvent.APP_START, {})
+
+    assert record_events([event]) is True
+    line_size = get_usage_log_path().stat().st_size
+
+    # Two lines' worth of headroom, so a handful of appends crosses the interval and the
+    # log is over the cap by the time it is measured.
+    monkeypatch.setattr(usage, "LOG_SIZE_CHECK_INTERVAL_BYTES", line_size * 2)
+    monkeypatch.setattr(usage, "MAX_LOG_BYTES", line_size * 2)
+    monkeypatch.setattr(usage, "_bytes_since_size_check", 0)
+
+    results = [record_events([event]) for _ in range(10)]
+
+    assert False in results, "the cap was never reached by appending alone"
+
+    first_refusal = results.index(False)
+    assert all(result is False for result in results[first_refusal:])
+    # One line for the append above, plus everything accepted before the first refusal.
+    assert len(read_usage_lines(usage_directory)) == 1 + first_refusal
+
+
+def test_a_log_exactly_on_the_cap_still_accepts_appends(usage_directory, monkeypatch):
+    """``_is_log_full`` and ``compact_if_needed`` have to agree about the boundary.
+
+    Compaction skips a log at ``<= MAX_LOG_BYTES``, so a ``>=`` in the write path would
+    refuse every append to a log sitting exactly on the cap while compaction declined to
+    shrink it — wedged, with nothing short of deleting the file to unwedge it.
+    """
+    for _ in range(4):
+        record_event(UsageEvent.APP_START)
+
+    before = read_usage_lines(usage_directory)
+    monkeypatch.setattr(usage, "MAX_LOG_BYTES", get_usage_log_path().stat().st_size)
+    monkeypatch.setattr(usage, "_bytes_since_size_check", LOG_SIZE_CHECK_INTERVAL_BYTES)
+
+    # Compaction leaves a log that is only *at* the cap alone...
+    usage.compact_if_needed()
+    assert read_usage_lines(usage_directory) == before
+
+    # ...so the write path must not refuse it, or nothing would ever move it again.
     assert (
         record_events([(UsageEvent.VIEW_OPENED, {"view": UsageView.OPERATIONS})])
-        is False
+        is True
     )
-    assert read_usage_lines(usage_directory) == before
+
+
+def test_compaction_lets_a_full_log_record_again(usage_directory, monkeypatch):
+    """The escape route the module docstring promises, asserted as the sequence it is.
+
+    The refusal is cached, so compaction has to clear it. Without that, shrinking the log
+    would leave recording off until the process restarted — and every append in between
+    answered as though it had been written.
+    """
+    event = (UsageEvent.VIEW_OPENED, {"view": UsageView.OPERATIONS})
+
+    for _ in range(10):
+        record_event(UsageEvent.APP_START)
+
+    # Between the compacted size and the current one: ten identical launches summarise to
+    # a single counted line, so compaction takes the log to roughly six lines.
+    monkeypatch.setattr(
+        usage, "MAX_LOG_BYTES", get_usage_log_path().stat().st_size * 4 // 5
+    )
+    monkeypatch.setattr(usage, "_bytes_since_size_check", LOG_SIZE_CHECK_INTERVAL_BYTES)
+
+    assert record_events([event]) is False
+
+    usage.compact_if_needed()
+    assert get_usage_log_path().stat().st_size <= usage.MAX_LOG_BYTES
+
+    assert record_events([event]) is True
+    assert total_usage_events(read_usage_lines(usage_directory)) == 11
+
+
+def test_a_full_batch_of_the_largest_event_is_still_one_write(
+    usage_directory, monkeypatch
+):
+    """``_append_line`` defers its single-``os.write`` obligation to the batch cap.
+
+    ``MAX_USAGE_BATCH_EVENTS`` copies of the longest permitted event is the biggest line
+    the writer can be handed, so it is where the short-write loop would begin to iterate
+    and forfeit the ``O_APPEND`` atomicity the no-lock design rests on.
+    """
+    writes = []
+    real_write = os.write
+
+    def counting_write(descriptor, data):
+        if data.startswith(b"ts="):
+            writes.append(data)
+        return real_write(descriptor, data)
+
+    monkeypatch.setattr(usage.os, "write", counting_write)
+
+    largest = (
+        UsageEvent.REPORT_LOAD_FAILED,
+        {
+            "kind": ReportKind.CLUSTER_DESCRIPTOR,
+            "reason_class": ReportLoadFailureReason.UNSUPPORTED_VERSION,
+        },
+    )
+
+    assert record_events([largest] * MAX_USAGE_BATCH_EVENTS) is True
+    assert len(writes) == 1
+    assert len(read_usage_lines(usage_directory)) == MAX_USAGE_BATCH_EVENTS
+
+
+def test_recording_recovers_when_the_directory_is_removed(usage_directory):
+    """The directory may go mid-session — the docs invite the user to delete it.
+
+    Caching the created directory made that permanent: every later append failed on a
+    condition one ``mkdir`` fixes, silently, for the rest of the process.
+    """
+    record_event(UsageEvent.APP_START)
+    shutil.rmtree(usage_directory)
+
+    record_event(UsageEvent.APP_START)
+
+    assert len(read_usage_lines(usage_directory)) == 1
+    assert get_usage_log_path().stat().st_mode & 0o077 == 0
+
+
+def test_a_persistent_write_failure_warns_once_not_once_per_flush(
+    usage_directory, monkeypatch, caplog
+):
+    """A full disk fails every flush, and flushes arrive on a route called often.
+
+    One warning each would fill the application log with the failure of the subsystem
+    that exists not to disturb it, so the repeats drop to debug.
+    """
+
+    def raise_os_error(_line):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(usage, "_append_line", raise_os_error)
+
+    with caplog.at_level("WARNING"):
+        for _ in range(5):
+            record_events([(UsageEvent.VIEW_OPENED, {"view": UsageView.OPERATIONS})])
+
+    warnings = [
+        record for record in caplog.records if "usage events" in record.getMessage()
+    ]
+
+    assert len(warnings) == 1
+
+
+def test_a_write_landing_again_re_arms_the_failure_warning(
+    usage_directory, monkeypatch, caplog
+):
+    """Suppression lasts until a write succeeds, not for the life of the process.
+
+    A transient failure must not buy silence for every real one after it.
+    """
+    real_append = usage._append_line
+
+    def raise_os_error(_line):
+        raise OSError("disk full")
+
+    event = (UsageEvent.VIEW_OPENED, {"view": UsageView.OPERATIONS})
+
+    with caplog.at_level("WARNING"):
+        monkeypatch.setattr(usage, "_append_line", raise_os_error)
+        record_events([event])
+
+        monkeypatch.setattr(usage, "_append_line", real_append)
+        assert record_events([event]) is True
+
+        monkeypatch.setattr(usage, "_append_line", raise_os_error)
+        record_events([event])
+
+    warnings = [
+        record for record in caplog.records if "usage events" in record.getMessage()
+    ]
+
+    assert len(warnings) == 2
 
 
 def test_compaction_keeps_detail_bearing_events_in_separate_buckets(

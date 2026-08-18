@@ -35,9 +35,10 @@ obvious from the code that reads it:
 * **The log stops growing shortly past ``MAX_LOG_BYTES``.** Appends are refused once it
   is over the cap, rather than trimmed, because trimming is what makes cumulative totals
   go down. The check is amortised, so the overshoot is bounded by
-  ``LOG_SIZE_CHECK_INTERVAL_BYTES`` plus one batch rather than being exact — treat the cap
-  as approximate. Compaction at the next launch summarises the older half and appends
-  resume.
+  ``LOG_SIZE_CHECK_INTERVAL_BYTES`` plus one batch rather than being exact — and the
+  counter behind it is per-process, so a multi-worker deployment multiplies that
+  overshoot by its worker count. Treat the cap as approximate. Compaction at the next
+  launch summarises the older half and appends resume.
 
 Every recorded value comes from a closed enum, a bucketed value, or the
 application's own version. No report, file, directory, operation or host names,
@@ -85,20 +86,26 @@ COMPACTION_LOCK_NAME = ".compaction.lock"
 USAGE_RECORDING_ENV_VAR = "USAGE_RECORDING_ENABLED"
 RUN_ID_ENV_VAR = "TTNN_VISUALIZER_RUN_ID"
 
-# The cap is a privacy control as much as a disk one. The original budget assumed only
-# launch events (~110 bytes a line, ~250 a day, so ~27 KB/day and roughly a year before
-# compaction); frontend view and engagement events are per-navigation, not per-launch,
-# so a heavy user can be an order of magnitude above that and compaction becomes a
-# routine startup cost rather than effectively never. That is why the cap is now
-# enforced on the write path too, not only at launch.
+# The cap is a privacy control as much as a disk one. View and engagement events are
+# per-navigation rather than per-launch, so a heavy user's log grows an order of magnitude
+# faster than the ~27 KB/day a launch-only log manages (~110 bytes a line, ~250 a day).
+# That is what puts the cap on the write path rather than leaving it to the next launch:
+# within one long session there is enough traffic to reach it.
 MAX_LOG_BYTES = 10 * 1024 * 1024
 
-# How much may be appended between two size checks. The cap was unreachable within a
-# session while the only writer was one line per launch; a client posting batches makes
-# growth client-driven, so the write path has to honour it too. Stat'ing per batch would
-# put a syscall on every flush, so amortise: ~2,400 events between checks, which can
-# overshoot the cap by this much and no more.
+# How much may be appended between two size checks. Growth is client-driven, so the write
+# path enforces the cap, but stat'ing per batch would put a syscall on every flush:
+# amortise instead, at ~2,400 events between checks. Once a check finds the log over the
+# cap that verdict is cached rather than re-derived (see :func:`_is_log_full`), so the
+# overshoot is this interval plus one batch — not this interval per refused batch.
 LOG_SIZE_CHECK_INTERVAL_BYTES = 256 * 1024
+
+# The largest batch one request may carry, which is also the largest number of lines one
+# ``os.write`` has to hold. It lives here rather than beside the ingest route's byte cap
+# because what it bounds is ``_append_line``'s atomicity, not merely an HTTP body: a
+# second batch caller would otherwise get no cap at all, and raising it in ``views.py``
+# would silently relax a guarantee documented here.
+MAX_USAGE_BATCH_EVENTS = 50
 
 # Only has to be unique within one machine's log for one sitting, and is never
 # exported, so a full 32-character UUID would be 24 wasted bytes on every line.
@@ -116,6 +123,12 @@ KIND_FIELD = "kind"
 SOURCE_FIELD = "source"
 REASON_CLASS_FIELD = "reason_class"
 VIEW_FIELD = "view"
+
+# The wire shape of one posted event. ``EVENT_FIELD`` doubles as its name on the wire and
+# so is not restated; ``DETAILS_FIELD`` has no log equivalent, since details are flattened
+# into the line rather than nested inside it.
+DETAILS_FIELD = "details"
+_CLIENT_EVENT_KEYS = frozenset({EVENT_FIELD, DETAILS_FIELD})
 
 # UTC, fixed width. `datetime.isoformat()` would give microseconds and `+00:00`
 # rather than `Z`, which is neither fixed width nor the form the collector parses.
@@ -149,6 +162,20 @@ _bytes_since_size_check = LOG_SIZE_CHECK_INTERVAL_BYTES
 # path rather than a boolean so overriding `USAGE_DIRECTORY` invalidates it, which is
 # what keeps the test fixture honest.
 _ensured_directory: Optional[Path] = None
+
+# Whether the last size check found the log over its cap. Cached rather than re-derived
+# because `_bytes_since_size_check` only advances when an append lands: a refused batch
+# moves nothing, so recomputing from the counter would hand the next batch a fresh
+# interval and the log would keep growing, one interval per refusal. Cleared only when
+# compaction has had a chance to give the log room again.
+_log_full = False
+
+# Whether a write failure has already been reported. The failures that reach the
+# recorders are persistent rather than transient — a full disk, a permissions change, a
+# directory the user removed — and they arrive on a route called often by design, so one
+# warning per flush would fill the log of the application this module promises not to
+# disturb.
+_write_failure_logged = False
 
 
 class UsageEvent(str, Enum):
@@ -421,7 +448,7 @@ def _render_line(fields: List[Tuple[str, str]]) -> str:
     return " ".join(f"{key}={value}" for key, value in fields) + "\n"
 
 
-def _now() -> str:
+def _get_timestamp() -> str:
     return datetime.now(timezone.utc).strftime(TIMESTAMP_FORMAT)
 
 
@@ -455,6 +482,24 @@ def _format_line(
     return _render_line(fields)
 
 
+def _open_log() -> int:
+    return os.open(get_usage_log_path(), os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
+
+
+def _ensure_directory(directory: Path, force: bool = False) -> None:
+    """Create the usage directory unless this process is known to have done so already.
+
+    Cached because ``mkdir`` — plus its caught ``FileExistsError`` and stat — would
+    otherwise run on every request. ``force`` re-creates it after an append has found it
+    missing, which is the only way the cache can be wrong in a way retrying fixes.
+    """
+    global _ensured_directory
+
+    if force or _ensured_directory != directory:
+        directory.mkdir(mode=0o700, parents=True, exist_ok=True)
+        _ensured_directory = directory
+
+
 def _append_line(line: str) -> None:
     """Append one write, relying on ``O_APPEND`` instead of a lock.
 
@@ -465,19 +510,29 @@ def _append_line(line: str) -> None:
 
     The argument may hold several newline-terminated lines, which is how a batch stays
     one write rather than N interleavable ones. Keeping it short enough to go out in a
-    single ``os.write`` is the caller's job — see the batch cap on the ingest route —
-    since the short-write loop below forfeits the guarantee if it has to iterate.
+    single ``os.write`` is the caller's job — that is what ``MAX_USAGE_BATCH_EVENTS``
+    bounds — since the short-write loop below forfeits the guarantee if it has to
+    iterate.
     """
-    global _bytes_since_size_check, _ensured_directory
+    global _bytes_since_size_check, _ensured_directory, _write_failure_logged
 
     directory = get_usage_directory()
-    if _ensured_directory != directory:
-        directory.mkdir(mode=0o700, parents=True, exist_ok=True)
-        _ensured_directory = directory
+    _ensure_directory(directory)
 
-    descriptor = os.open(
-        get_usage_log_path(), os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600
-    )
+    try:
+        descriptor = _open_log()
+    except FileNotFoundError:
+        # The directory has gone since it was cached, which the docs actively invite by
+        # offering a delete command. Recreate it and retry rather than losing this batch
+        # and every batch after it to a condition one ``mkdir`` fixes.
+        _ensure_directory(directory, force=True)
+        descriptor = _open_log()
+    except OSError:
+        # A revoked permission or a full disk may equally be fixed before the next
+        # append, so stop claiming the directory is known-good.
+        _ensured_directory = None
+        raise
+
     try:
         # ``os.write`` can return a short count without raising (e.g. a full disk).
         # Leaving a partial line would look identical to an NFS interleave.
@@ -490,12 +545,14 @@ def _append_line(line: str) -> None:
             offset += written
 
         _bytes_since_size_check += offset
+        # Writes are landing again, so the next failure is worth a warning of its own.
+        _write_failure_logged = False
     finally:
         os.close(descriptor)
 
 
-def _log_is_full() -> bool:
-    """Whether the log has reached its cap, checked at most once per interval.
+def _is_log_full() -> bool:
+    """Whether the log has reached its cap, re-measured at most once per interval.
 
     Refusing appends is the only correct answer at the cap. Trimming here is what makes
     cumulative totals go down, which Prometheus reads as a counter reset and then
@@ -503,25 +560,81 @@ def _log_is_full() -> bool:
     better: ``_compact`` reads the whole file, and this runs on a request path.
     Compaction at the next launch summarises the older half and appends resume.
 
+    Between measurements the previous verdict is returned rather than recomputed, and that
+    is load-bearing rather than an optimisation. ``_bytes_since_size_check`` counts bytes
+    *appended*, so a refused batch cannot advance it: answering "not full" while the
+    counter sits below the interval would give every batch after a refusal a free
+    interval, and the log would grow by one interval per refusal for as long as a client
+    kept posting — a cap that drops one batch in every few thousand rather than one that
+    holds. Only :func:`_invalidate_size_check` clears the verdict.
+
     Strictly greater than, matching ``compact_if_needed``'s own threshold, and the two have
     to agree: with ``>=`` here a log sitting exactly on the cap would refuse every append
     while compaction still skipped it as not-yet-over, leaving it stuck. The boundary is
     not where the precision is lost anyway — the interval check above means the log can
     already be up to ``LOG_SIZE_CHECK_INTERVAL_BYTES`` over before this runs at all.
     """
-    global _bytes_since_size_check
+    global _bytes_since_size_check, _log_full
 
     if _bytes_since_size_check < LOG_SIZE_CHECK_INTERVAL_BYTES:
-        return False
+        return _log_full
 
     _bytes_since_size_check = 0
+    was_full = _log_full
 
     try:
-        return get_usage_log_path().stat().st_size > MAX_LOG_BYTES
+        _log_full = get_usage_log_path().stat().st_size > MAX_LOG_BYTES
     except OSError:
         # No log yet, or it is unreadable. Either way not full; a real write failure is
         # the append's problem to report, not this check's.
-        return False
+        _log_full = False
+
+    if _log_full and not was_full:
+        # Once, on the way in. Everything after this point is dropped and answered 204,
+        # so without a line here a machine whose recording has stopped is indistinguishable
+        # from a user who stopped using the application — the same misreading the refusal
+        # itself exists to prevent.
+        logger.warning(
+            "Usage log has reached its %d byte cap; no further events will be recorded "
+            "until it is compacted at the next launch",
+            MAX_LOG_BYTES,
+        )
+
+    return _log_full
+
+
+def _invalidate_size_check() -> None:
+    """Force the next append to measure the log again.
+
+    Called after compaction, which is the only thing that gives a full log room. It does
+    not simply declare the log not-full because compaction does not promise to get under
+    the cap — it skips the rewrite when the older half holds nothing summarisable — so the
+    next append pays one stat and finds out for itself.
+    """
+    global _bytes_since_size_check, _log_full
+
+    _log_full = False
+    _bytes_since_size_check = LOG_SIZE_CHECK_INTERVAL_BYTES
+
+
+def _warn_write_failure(message: str, *args: Any) -> None:
+    """Report the first failure of a run of them, then stay quiet until a write lands.
+
+    A persistent failure — a full disk, a revoked permission, a deleted directory — would
+    otherwise produce one warning per flush on a route called often by design, so an
+    instrumentation subsystem that must not disturb the application it measures would end
+    up flooding that application's log instead. Repeats go to debug; ``_append_line``
+    clears the latch as soon as a write succeeds, so a genuinely new failure is still
+    reported.
+    """
+    global _write_failure_logged
+
+    if _write_failure_logged:
+        logger.debug(message, *args)
+        return
+
+    _write_failure_logged = True
+    logger.warning(message, *args)
 
 
 def _resolve_server_mode(server_mode: Optional[Any]) -> Any:
@@ -555,10 +668,10 @@ def _write_events(
     if not is_recording_enabled(server_mode):
         return False
 
-    if _log_is_full():
+    if _is_log_full():
         return False
 
-    timestamp = _now()
+    timestamp = _get_timestamp()
     lines = []
 
     for event, details in events:
@@ -590,13 +703,16 @@ def record_event(
         # handlers miss real escapes (``UnicodeEncodeError`` is a ``ValueError``;
         # detail helpers can raise outside ``OSError``) — the cost of guessing wrong
         # is the thing this module promises cannot happen.
-        logger.warning("Unable to record usage event %s: %s", event.value, error)
+        _warn_write_failure("Unable to record usage event %s: %s", event.value, error)
 
 
-def validate_client_event(
-    name: Any, details: Any
-) -> Tuple[UsageEvent, Dict[str, Enum]]:
-    """Resolve one posted event against the schema, or refuse it outright.
+def validate_client_event(entry: Any) -> Tuple[UsageEvent, Dict[str, Enum]]:
+    """Resolve one posted event object against the schema, or refuse it outright.
+
+    Takes the whole object rather than a name and a details mapping so the wire shape has
+    a single owner. Split, the route implemented the closed-key rule for the envelope
+    while this function implemented the same rule for ``details``, leaving one schema with
+    two definitions in two modules — the transcription the tables above exist to prevent.
 
     Rejects rather than coerces, in every case. A missing ``kind`` defaulted to
     ``unknown`` would corrupt the denominator every feature ratio is read against, and
@@ -606,6 +722,20 @@ def validate_client_event(
     was expected instead. Echoing a rejected key or value back would put free-form text
     into a response from a subsystem that holds none.
     """
+    if not isinstance(entry, dict):
+        raise UsageEventRejected("Each event must be an object")
+
+    # Closed at the envelope level too, not only inside `details`. An ignored top-level
+    # key writes nothing, but it lets a client believe it is sending a field that is
+    # being dropped.
+    if set(entry) - _CLIENT_EVENT_KEYS:
+        raise UsageEventRejected(
+            f"An event carries only: {EVENT_FIELD}, {DETAILS_FIELD}"
+        )
+
+    name = entry.get(EVENT_FIELD)
+    details = entry.get(DETAILS_FIELD)
+
     if not isinstance(name, str):
         raise UsageEventRejected("Event name must be a string")
 
@@ -676,9 +806,10 @@ def record_events(
     try:
         return _write_events(events, _resolve_server_mode(server_mode))
     except Exception as error:
-        # One warning for the batch. Per-event logging on a request path would turn a
-        # single failed flush into a screenful.
-        logger.warning("Unable to record %d usage events: %s", len(events), error)
+        # One warning for the batch, and only for the first of a run of them: per-event
+        # logging on a request path would turn one failed flush into a screenful, and a
+        # persistent failure would turn every later flush into another screenful.
+        _warn_write_failure("Unable to record %d usage events: %s", len(events), error)
         return False
 
 
@@ -821,6 +952,11 @@ def compact_if_needed() -> None:
 
             try:
                 _compact(log_path)
+                # The refusal is sticky, so nothing would resume in this process without
+                # this — `main()` compacts before serving, and the workers it spawns
+                # inherit the module fresh, but a compaction from anywhere else would
+                # otherwise leave recording off until restart.
+                _invalidate_size_check()
             finally:
                 fcntl.flock(lock_file, fcntl.LOCK_UN)
     except OSError as error:
