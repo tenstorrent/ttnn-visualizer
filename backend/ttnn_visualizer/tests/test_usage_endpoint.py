@@ -356,21 +356,20 @@ def test_the_size_check_is_amortised_rather_than_per_request(
     assert checks_during_requests == 1
 
 
-def test_topology_is_not_yet_a_countable_view(client, usage_directory):
-    """Deferred deliberately, and this is the only test that should notice.
+def test_the_topology_overlay_is_a_countable_view(client, usage_directory):
+    """A modal route is still a view, and this one is easy to lose.
 
-    ``ROUTES.CLUSTER`` renders ``element: null``, so a ``topology`` counter could only
-    ever be zero — which reads as "nobody wants topology". When the page lands, this
-    test is the one that should fail, rather than an out-of-enum case that happens to
-    have borrowed the value.
+    ``ROUTES.CLUSTER`` has ``element: null`` only because ``Layout`` renders the overlay
+    itself, so a mapping built from the route elements rather than from ``ROUTES`` would
+    emit nothing here and the counter would read as "nobody opens topology".
     """
     response = post_events(
         client,
         [{"event": UsageEvent.VIEW_OPENED.value, "details": {"view": "topology"}}],
     )
 
-    assert response.status_code == HTTPStatus.UNPROCESSABLE_ENTITY
-    assert read_usage_lines(usage_directory) == []
+    assert response.status_code == HTTPStatus.NO_CONTENT
+    assert parse_usage_line(read_usage_lines(usage_directory)[0])["view"] == "topology"
 
 
 def test_rejection_never_echoes_the_offending_value(client):

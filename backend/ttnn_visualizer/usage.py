@@ -196,14 +196,26 @@ class ReportLoadFailureReason(str, Enum):
 
 
 class UsageView(str, Enum):
-    """The navigable surfaces worth counting.
+    """The navigable surfaces worth counting: the ten proposed in #1819.
 
-    Nine of the ten proposed in #1819. ``topology`` (``ROUTES.CLUSTER``) is the
-    omission: it has ``element: null``, so nothing renders and it could never be
-    engaged — a permanent zero reads as "nobody wants topology", which is the opposite
-    of what it would mean. Add it when the page exists. ``styleguide`` was never among
-    the ten and is also excluded: a development surface, so counting it would pollute
-    reach.
+    ``TOPOLOGY`` is a **modal route**, and that is a trap worth stating rather than
+    rediscovering. ``ROUTES.CLUSTER`` carries ``element: null`` in
+    ``routeObjectList.tsx`` *because* ``Layout`` renders ``ClusterRenderer`` itself as an
+    overlay over the background route, keyed on ``location.state.background``; the nav
+    button navigates with that state and Escape closes it with ``navigate(-1)``. So the
+    surface is fully implemented, and a route-to-view mapping derived from the route
+    *elements* would silently drop it — derive from ``ROUTES``, which does contain
+    ``CLUSTER``.
+
+    Two consequences for reading its counts. It is the only view reachable solely by
+    clicking a nav button, which makes every navigation to it a deliberate act rather
+    than something a redirect can produce. And its button is disabled unless the active
+    report carries cluster data, so it must be read against *reports containing a cluster
+    descriptor* — a narrower denominator than "a profiler report is loaded", which is the
+    ratio caveat 6 asks for everywhere else.
+
+    ``styleguide`` is excluded and stays excluded: a development surface, so counting it
+    would pollute reach.
 
     ``REPORTS`` is the index route ``/`` rather than a named route, and ``GRAPH``
     and ``BUFFERS`` deliberately differ in name from their paths (``/graphtree``,
@@ -223,6 +235,7 @@ class UsageView(str, Enum):
     PERFORMANCE = "performance"
     NPE = "npe"
     MLIR = "mlir"
+    TOPOLOGY = "topology"
 
 
 # Where every detail value a client may post has to come from. `_SAFE_VALUE_PATTERN`
