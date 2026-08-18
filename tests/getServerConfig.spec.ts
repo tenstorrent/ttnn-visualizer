@@ -92,22 +92,13 @@ describe('getServerConfig (dev / Vite env)', () => {
         expect(getServerConfig().SERVER_MODE).toBe(expected);
     });
 
-    it.each([
-        ['true', true],
-        ['1', true],
-        ['false', false],
-        ['', false],
-        [undefined, false],
-    ])('reads VITE_USAGE_RECORDING_ACTIVE=%p as %s', async (value, expected) => {
-        if (value !== undefined) {
-            vi.stubEnv('VITE_USAGE_RECORDING_ACTIVE', value);
-        }
-
+    // No VITE_ counterpart on purpose: `/api` proxies to Flask, so the backend's own
+    // switch decides whether anything is recorded. A dev-only flag could only disagree
+    // with it, and an off default would stop dev exercising the path production takes.
+    it('assumes recording is active, leaving the decision to the backend', async () => {
         const { default: getServerConfig } = await import('../src/functions/getServerConfig');
 
-        // Unset means off in dev, unlike the backend's on-by-default: a developer clicking
-        // through their own checkout is not usage.
-        expect(getServerConfig().USAGE_RECORDING_ACTIVE).toBe(expected);
+        expect(getServerConfig().USAGE_RECORDING_ACTIVE).toBe(true);
     });
 
     it('falls back when VITE_SSH_DEFAULT_PORT is invalid', async () => {

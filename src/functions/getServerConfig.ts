@@ -102,10 +102,11 @@ const getServerConfig = (): ServerConfig => {
             TT_METAL_HOME: import.meta.env.VITE_TT_METAL_HOME,
             REPORT_DATA_DIRECTORY: import.meta.env.VITE_REPORT_DATA_DIRECTORY || '/path/to/data/directory', // Default value for development
             REPORT_LINKING_ENABLED: true,
-            // Off unless explicitly opted in, unlike the backend's on-by-default: a
-            // developer clicking through their own checkout is not usage, and defaulting
-            // on would write it into their real events.log.
-            USAGE_RECORDING_ACTIVE: isFlagEnabled(import.meta.env.VITE_USAGE_RECORDING_ACTIVE),
+            // On, matching the backend default, because this is not the switch: `/api`
+            // proxies to Flask in dev, so the real `is_recording_enabled` decides whether
+            // anything is written. A second flag here could only disagree with it, and
+            // would stop dev exercising the path production takes.
+            USAGE_RECORDING_ACTIVE: true,
             USERNAME: import.meta.env.VITE_USERNAME,
             ...getSshDefaults(
                 import.meta.env.VITE_SSH_DEFAULT_PORT,
