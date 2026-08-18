@@ -15,6 +15,7 @@ import pytest
 from ttnn_visualizer.app import create_app
 from ttnn_visualizer.extensions import db
 from ttnn_visualizer.models import InstanceTable
+from ttnn_visualizer.tests.fixture_settings import base_test_settings
 from ttnn_visualizer.tests.report_schemas import SCHEMA_V2
 
 
@@ -23,22 +24,13 @@ def app():
     """Create a Flask app with test config and an isolated app SQLite file.
 
     Uses a file-backed database (not ``:memory:``) so Alembic's migration
-    connection and the app's pool see the same on-disk database.
+    connection and the app's pool see the same on-disk database. The settings, and why
+    several are pinned rather than inherited from the environment, live in
+    :func:`ttnn_visualizer.tests.fixture_settings.base_test_settings`.
     """
     tmpdir = tempfile.mkdtemp()
     try:
-        app_db_path = Path(tmpdir) / "app.db"
-        settings = {
-            "TESTING": True,
-            "SQLALCHEMY_DATABASE_URI": f"sqlite:///{app_db_path}",
-            "SERVER_MODE": True,
-            "USE_WEBSOCKETS": True,
-            "APP_DATA_DIRECTORY": tmpdir,
-            "REPORT_DATA_DIRECTORY": tmpdir,
-            "LOCAL_DATA_DIRECTORY": str(Path(tmpdir) / "local"),
-            "REMOTE_DATA_DIRECTORY": str(Path(tmpdir) / "remote"),
-        }
-        app = create_app(settings_override=settings)
+        app = create_app(settings_override=base_test_settings(tmpdir))
         yield app
     finally:
         shutil.rmtree(tmpdir, ignore_errors=True)
