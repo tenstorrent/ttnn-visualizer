@@ -9,15 +9,28 @@
 @use '../definitions/colours' as *;
 @use '../definitions/variables' as variables;
 
-// Where the minimap docks and how much room it takes, shared by the minimap
-// itself and by the perf legend that has to sit clear of it along the same edge.
-$minimap-dock-left: 56px;
+// React Flow's bottom-left chrome docks from a `left: 12px; bottom: 16px` origin
+// — set by a global `.react-flow` rule in MLIRViewReactFlow.scss that reaches
+// every graph in the app, not just the MLIR one — plus its own 15px panel
+// margin. The minimap swaps that left margin for a wider one to clear the zoom
+// controls, and the perf legend lines up beside the minimap, so both read these.
+$panel-origin-left: 12px;
+$panel-origin-bottom: 16px;
+$panel-margin: 15px;
+$minimap-margin-left: 56px;
 $minimap-width: 200px;
 
 .operation-graph-react-flow {
     position: relative;
     width: 100%;
-    height: 80vh;
+
+    // Sized to the space the page actually has rather than a flat 80vh, which
+    // left the zoom controls, minimap and perf legend docked along the bottom
+    // edge floating well above the footer. Subtracts the navbar and `main`'s top
+    // padding above, and `main` plus `.data-padding`'s bottom padding below —
+    // the clearance that keeps content out from under the fixed footer. Summing
+    // to exactly the viewport is what stops the page itself from scrolling.
+    height: calc(100vh - 92px - 15px - 50px);
 
     .operation-graph-react-flow-loader {
         position: absolute;
@@ -97,12 +110,12 @@ $minimap-width: 200px;
     // Inside the canvas so it reads against the nodes it explains. The bottom
     // edge is the only clear one — the toolbar holds the top-left and the
     // details panel the full right — so it continues that band rightwards,
-    // starting after the zoom controls and the minimap docked ahead of it.
+    // sharing the baseline of the zoom controls and minimap docked ahead of it.
     .op-graph-perf-legend {
         position: absolute;
         z-index: variables.$z-index-2-interactive;
-        bottom: 12px;
-        left: $minimap-dock-left + $minimap-width + 16px;
+        bottom: $panel-origin-bottom + $panel-margin;
+        left: $panel-origin-left + $minimap-margin-left + $minimap-width + $panel-margin;
     }
 
     .op-graph-perf-hover {
@@ -185,7 +198,7 @@ $minimap-width: 200px;
         // past their 26px column and the 15px panel gutter either side of it.
         // Set on the margin because React Flow's own `left` rule matches at the
         // same specificity and lands later in the cascade.
-        margin-left: $minimap-dock-left;
+        margin-left: $minimap-margin-left;
 
         --xy-minimap-background-color: #{$tt-grey-2};
         --xy-minimap-node-background-color: var(--graph-normal);
