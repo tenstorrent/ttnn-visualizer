@@ -76,7 +76,7 @@ COMPACTION_LOCK_NAME = ".compaction.lock"
 USAGE_DISABLED_ENV_VAR = "USAGE_RECORDING_DISABLED"
 
 # Retired in favour of the variable above, and kept only so a stale export can be
-# reported. ``DefaultConfig.USAGE_RECORDING_ENABLED`` is a descriptor, so
+# reported. ``DefaultConfig.USAGE_RECORDING_ACTIVE`` is a descriptor, so
 # ``override_with_env_variables`` never looks at this name and its ignored-variable
 # warning cannot fire for it. Without the warning below, an operator who opted out with
 # the old spelling would start recording again with no signal at all.
@@ -160,6 +160,19 @@ def get_disabled_marker_path() -> Path:
     return get_usage_directory() / DISABLED_MARKER_NAME
 
 
+def describe_opt_out() -> str:
+    """The sentence telling an operator how to switch recording off.
+
+    One function because two places say it — the launch banner and the retired-variable
+    warning — from the same two ingredients, and they have to agree. The rename that
+    introduced this helper had to edit both in lockstep, which is the drift it prevents.
+    """
+    return (
+        f"Switch it off with {USAGE_DISABLED_ENV_VAR}=true or by creating "
+        f"{get_disabled_marker_path()}."
+    )
+
+
 def _as_bool(value: Any) -> bool:
     """Coerce a config value that may arrive as a string via ``settings_override``.
 
@@ -204,11 +217,9 @@ def _warn_about_the_retired_env_var() -> None:
 
     _retired_env_var_warned = True
     logger.warning(
-        "%s is no longer read. Recording is on by default; switch it off with "
-        "%s=true or by creating %s.",
+        "%s is no longer read. Recording is on by default. %s",
         _RETIRED_RECORDING_ENV_VAR,
-        USAGE_DISABLED_ENV_VAR,
-        get_disabled_marker_path(),
+        describe_opt_out(),
     )
 
 

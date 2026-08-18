@@ -185,7 +185,7 @@ class _AllowedOrigins:
         )
 
 
-class _UsageRecordingEnabled:
+class _UsageRecordingActive:
     """Resolve whether usage recording is active, on read rather than at import time.
 
     A descriptor so the override loop skips it (it tests for ``__get__``) — assigning a
@@ -195,12 +195,13 @@ class _UsageRecordingEnabled:
     dump cannot claim recording is on while the posture or the marker file has switched
     it off.
 
-    Deliberately the opposite polarity to the variable that feeds it. The attribute is
-    a resolved *state* — the answer to "is recording on", which ``PRINT_ENV`` and
-    ``to_dict`` publish — while ``USAGE_RECORDING_DISABLED`` is the operator's opt-out.
-    Naming the attribute after the variable would mean publishing a config value that
-    reads true when recording is off. There is no attribute named for the variable, so
-    unlike every other setting these two names do not correspond.
+    Named for the state rather than for any variable, and deliberately not
+    ``USAGE_RECORDING_DISABLED``: the attribute answers "is recording on", which is what
+    ``PRINT_ENV`` and ``to_dict`` publish, so borrowing the variable's name would
+    publish a value that reads true when recording is off. It is not called
+    ``USAGE_RECORDING_ENABLED`` either — that spelling is a retired *variable*
+    (:data:`usage._RETIRED_RECORDING_ENV_VAR`), and an env dump advertising it would
+    invite an operator to set a name nothing reads.
     """
 
     def __get__(self, instance: object, owner: type) -> bool:
@@ -451,7 +452,7 @@ class DefaultConfig(object):
     # Local usage recording is on by default; ``USAGE_RECORDING_DISABLED=true`` is the
     # opt-out. Written on this machine only; the application transmits nothing.
     # See backend/ttnn_visualizer/usage.py.
-    USAGE_RECORDING_ENABLED = _UsageRecordingEnabled()
+    USAGE_RECORDING_ACTIVE = _UsageRecordingActive()
     MALWARE_SCANNER = os.getenv("MALWARE_SCANNER")
     BASE_PATH = os.getenv("BASE_PATH", "/")
     MAX_CONTENT_LENGTH = _parse_max_content_length(os.getenv("MAX_CONTENT_LENGTH", ""))

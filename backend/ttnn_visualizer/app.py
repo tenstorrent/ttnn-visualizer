@@ -40,9 +40,8 @@ from ttnn_visualizer.settings import (
 )
 from ttnn_visualizer.usage import (
     RUN_ID_ENV_VAR,
-    USAGE_DISABLED_ENV_VAR,
     compact_if_needed,
-    get_disabled_marker_path,
+    describe_opt_out,
     get_run_id,
     get_usage_log_path,
     is_recording_enabled,
@@ -438,8 +437,7 @@ def _record_launch(config):
     print(
         f"📊 Recording usage locally to {get_usage_log_path()}\n"
         f"   Written on this machine only; the application transmits nothing. "
-        f"Switch it off with {USAGE_DISABLED_ENV_VAR}=true or by creating "
-        f"{get_disabled_marker_path()}"
+        f"{describe_opt_out()}"
     )
 
 

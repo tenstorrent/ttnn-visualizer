@@ -11,6 +11,7 @@ collector — totals never go down, and no line can be forged.
 """
 
 import os
+import re
 import subprocess
 import sys
 import time
@@ -20,6 +21,7 @@ from types import SimpleNamespace
 import pytest
 from ttnn_visualizer import usage
 from ttnn_visualizer.settings import DefaultConfig
+from ttnn_visualizer.tests.test_settings import ENV_SAMPLE_PATH
 from ttnn_visualizer.usage import (
     _REQUIRED_FIELDS,
     _RETIRED_RECORDING_ENV_VAR,
@@ -192,6 +194,52 @@ def test_an_explicit_false_keeps_recording_on(usage_directory, monkeypatch):
     assert len(read_lines(usage_directory)) == 1
 
 
+def test_the_documented_default_keeps_recording_on(usage_directory, monkeypatch):
+    # The generic `.env.sample` pin in ``test_settings.py`` cannot reach this setting:
+    # ``_documented_boolean_defaults`` keys off a boolean config attribute of the same
+    # name, and there is deliberately no ``USAGE_RECORDING_DISABLED`` attribute. So the
+    # one boolean whose polarity is inverted — where an inverted sample line is most
+    # likely to recur — would otherwise be the only one nothing polices.
+    documented = [
+        line
+        for line in ENV_SAMPLE_PATH.read_text(encoding="utf-8").splitlines()
+        if line.strip().startswith(f"# {USAGE_DISABLED_ENV_VAR}=")
+    ]
+
+    # Asserted rather than skipped: a renamed or deleted line must fail here, which is
+    # the whole point of pinning the file.
+    assert len(documented) == 1
+
+    monkeypatch.setenv(USAGE_DISABLED_ENV_VAR, documented[0].split("=", 1)[1].strip())
+
+    assert is_recording_enabled() is True
+
+    # The retired name must not reappear in the sample as though it still worked.
+    assert f"# {_RETIRED_RECORDING_ENV_VAR}=" not in ENV_SAMPLE_PATH.read_text(
+        encoding="utf-8"
+    )
+
+
+def test_the_launch_banner_names_a_working_opt_out(
+    usage_directory, monkeypatch, capsys
+):
+    # Executable documentation. The banner is where a user actually learns how to opt
+    # out, and this rename inverted its instruction — a banner naming a stale variable,
+    # or the right one at the wrong polarity, would otherwise ship green.
+    from ttnn_visualizer.app import _record_launch
+
+    monkeypatch.setenv(RUN_ID_ENV_VAR, "")
+    _record_launch(SimpleNamespace(SERVER_MODE="false", TT_METAL_HOME=None))
+
+    printed = re.search(r"(USAGE_RECORDING_\w+)=(\w+)", capsys.readouterr().out)
+
+    assert printed is not None
+
+    monkeypatch.setenv(printed.group(1), printed.group(2))
+
+    assert is_recording_enabled() is False
+
+
 @pytest.mark.parametrize("value", ["yes", "off", "", "  ", "Ture"])
 def test_an_unrecognised_disable_value_switches_recording_off(
     usage_directory, monkeypatch, caplog, value
@@ -309,11 +357,11 @@ def test_the_environment_switch_survives_config_override(monkeypatch):
     config = DefaultConfig()
     config.override_with_env_variables()
 
-    # Spelled out rather than taken from a constant: the config attribute and the
-    # variable are deliberately opposite polarities, so there is no single name that
-    # names both and a shared constant here would suggest there is.
-    assert config.USAGE_RECORDING_ENABLED is False
-    assert config.to_dict()["USAGE_RECORDING_ENABLED"] is False
+    # Spelled out rather than taken from a constant: the attribute is named for the
+    # state and the variable for the opt-out, so there is no single name that names
+    # both and a shared constant here would suggest there is.
+    assert config.USAGE_RECORDING_ACTIVE is False
+    assert config.to_dict()["USAGE_RECORDING_ACTIVE"] is False
 
 
 def test_usage_recording_config_reflects_server_mode(usage_directory, monkeypatch):
@@ -324,7 +372,7 @@ def test_usage_recording_config_reflects_server_mode(usage_directory, monkeypatc
     config = DefaultConfig()
     config.SERVER_MODE = True
 
-    assert config.USAGE_RECORDING_ENABLED is False
+    assert config.USAGE_RECORDING_ACTIVE is False
 
 
 def test_usage_recording_config_reflects_the_marker_file(usage_directory, monkeypatch):
@@ -335,7 +383,7 @@ def test_usage_recording_config_reflects_the_marker_file(usage_directory, monkey
     config = DefaultConfig()
     config.SERVER_MODE = False
 
-    assert config.USAGE_RECORDING_ENABLED is False
+    assert config.USAGE_RECORDING_ACTIVE is False
 
 
 def test_an_event_round_trips_as_logfmt(usage_directory):
