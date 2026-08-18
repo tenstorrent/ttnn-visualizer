@@ -8,9 +8,12 @@ A module of its own rather than part of ``conftest.py`` so that ``test_settings.
 import the inventory below without importing a conftest.
 """
 
+import os
 import tempfile
 from pathlib import Path
 from typing import Any, Dict
+
+from ttnn_visualizer.settings import DefaultConfig, _build_allowed_origins
 
 # Settings an exported environment variable would otherwise reach through
 # ``DefaultConfig``. Every name in ``test_settings._OVERRIDABLE_SETTINGS`` was exported
@@ -20,6 +23,7 @@ from typing import Any, Dict
 PINNED_ENV_SETTINGS = frozenset(
     {
         "BASE_PATH",
+        "DEBUG",
         "MALWARE_SCANNER",
         "MAX_CONTENT_LENGTH",
         "SERVER_MODE",
@@ -31,6 +35,13 @@ PINNED_ENV_SETTINGS = frozenset(
         "USE_WEBSOCKETS",
     }
 )
+
+# ``ALLOWED_ORIGINS`` is pinned too but deliberately absent from the frozenset above:
+# ``override_with_env_variables`` skips anything with ``__get__``, so it never reaches
+# ``_OVERRIDABLE_SETTINGS`` and the guard test that reconciles these two inventories
+# cannot police it. Pinned in the baseline all the same, because the CORS and socket
+# boundary tests use the shared fixture and read the resolved allowlist.
+_UNPOLICEABLE_PINS = frozenset({"ALLOWED_ORIGINS"})
 
 
 def base_test_settings(tmpdir: str, **overrides: Any) -> Dict[str, Any]:
@@ -47,7 +58,12 @@ def base_test_settings(tmpdir: str, **overrides: Any) -> Dict[str, Any]:
     variables: ``Config`` is a process singleton whose class attributes bind at import,
     and ``override_with_env_variables`` skips a key whose variable is unset, so
     ``monkeypatch.delenv`` cannot un-bind one. ``create_app`` applies
-    ``settings_override`` last, so it always wins.
+    ``settings_override`` after ``from_object``, so it wins for every value read once the
+    app exists — but not for the two things ``create_app`` consumes while building it:
+    ``static_url_path`` is composed from the pre-override ``BASE_PATH``, and
+    ``_refuse_debug_under_server_mode`` has already run against the pre-override
+    ``SERVER_MODE``, which is why ``DEBUG`` is pinned here rather than left to the guard
+    in ``settings.py``.
 
     The directory pins are load-bearing for the ``TT_METAL_HOME`` one:
     ``app.config.update`` sets a single key and does not run
@@ -63,11 +79,25 @@ def base_test_settings(tmpdir: str, **overrides: Any) -> Dict[str, Any]:
         "USE_WEBSOCKETS": True,
         "TT_METAL_HOME": None,
         "MALWARE_SCANNER": None,
+        # Not merely verbosity: a truthy ``Flask.debug`` suppresses the catch-all error
+        # handler, so a fixture app inheriting ``FLASK_DEBUG`` answers with tracebacks and
+        # stops reproducing the hosted posture the ``SERVER_MODE`` tests assert.
+        "DEBUG": False,
         "MAX_CONTENT_LENGTH": None,
         "BASE_PATH": "/",
         "SSH_DEFAULT_PORT": 22,
         "SSH_DEFAULT_PROFILER_PATH": "",
         "SSH_DEFAULT_PERFORMANCE_PATH": "",
+        # The allowlist the descriptor would resolve with no operator variable set.
+        # Derived from ``DefaultConfig`` rather than written as a literal so it follows a
+        # change to the shipped defaults.
+        "ALLOWED_ORIGINS": _build_allowed_origins(
+            None,
+            app_port=DefaultConfig.PORT,
+            dev_server_host=DefaultConfig.DEV_SERVER_HOST,
+            dev_server_port=DefaultConfig.DEV_SERVER_PORT,
+            flask_env=os.getenv("FLASK_ENV", "development"),
+        ),
         "APP_DATA_DIRECTORY": tmpdir,
         "REPORT_DATA_DIRECTORY": tmpdir,
         "LOCAL_DATA_DIRECTORY": str(Path(tmpdir) / "local"),

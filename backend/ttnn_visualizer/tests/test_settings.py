@@ -11,6 +11,7 @@ switches between the local and hosted postures, so a config layer that hands bac
 truthy string ``"false"`` inverts a security setting.
 """
 
+import ast
 import logging
 import os
 import re
@@ -227,6 +228,11 @@ BOOLEAN_VOCABULARY_CASES = (
     ],
 )
 def test_env_override_parses_booleans(env_name, key, env_value, expected, monkeypatch):
+    # An exported ``SERVER_MODE`` would refuse the ``FLASK_DEBUG`` cases outright. Both
+    # layers, and before the parametrised ``setenv`` so the ``SERVER_MODE`` case still
+    # sets its own value and wins.
+    monkeypatch.delenv("SERVER_MODE", raising=False)
+    monkeypatch.setattr(DefaultConfig, "SERVER_MODE", False)
     monkeypatch.setenv(env_name, env_value)
 
     config = DefaultConfig()
@@ -270,6 +276,9 @@ def test_flask_debug_applies_after_the_class_body_has_been_evaluated(monkeypatch
     # ``create_app()`` loads, say — to reach the attribute it feeds. The posture is
     # pinned because the hosted one refuses debug mode outright; this is the local case
     # debug mode exists for, and a developer ``.env`` must not decide which is tested.
+    # ``setattr`` alone is not a pin: the override loop re-reads the variable, so an
+    # exported ``SERVER_MODE`` would decide which posture is tested after all.
+    monkeypatch.delenv("SERVER_MODE", raising=False)
     monkeypatch.setattr(DefaultConfig, "SERVER_MODE", False)
     monkeypatch.setenv("FLASK_DEBUG", "true")
 
@@ -561,17 +570,21 @@ def test_every_env_override_skip_names_a_real_setting():
 
 # Settings the test fixtures deliberately let the environment reach. Every name here was
 # exported individually against the full suite and left it green; the ones that did not
-# are either pinned in ``PINNED_ENV_SETTINGS`` or neutralised on the test that reads them
-# (``ALLOWED_ORIGINS``, ``FLASK_DEBUG``, ``DEV_SERVER_HOST``). ``DEV_SERVER_HOST`` is
-# listed here because no app under test depends on it — only the allowlist tests do.
+# are pinned in ``PINNED_ENV_SETTINGS``, or neutralised on the test that constructs its
+# own config (``FLASK_DEBUG`` and ``DEV_SERVER_HOST`` here, ``SERVER_MODE`` in three
+# places). ``DEV_SERVER_HOST`` is listed here because no app under test depends on it —
+# only the allowlist tests do.
 #
-# Limitation worth knowing before trusting this test: ``override_with_env_variables``
-# skips anything with ``__get__``, so ``_OVERRIDABLE_SETTINGS`` excludes the
-# descriptor-backed ``ALLOWED_ORIGINS`` and ``USAGE_RECORDING_ENABLED``, and this test
-# cannot see them either.
+# Two limitations worth knowing before trusting this test. First,
+# ``override_with_env_variables`` skips anything with ``__get__``, so
+# ``_OVERRIDABLE_SETTINGS`` excludes the descriptor-backed ``ALLOWED_ORIGINS`` and
+# ``USAGE_RECORDING_ENABLED``; the former is pinned in the baseline anyway (see
+# ``_UNPOLICEABLE_PINS``) and the latter is neutralised by the ``usage_directory`` fixture,
+# but neither is reconciled here. Second, ``APP_DATA_DIRECTORY`` and
+# ``REPORT_DATA_DIRECTORY`` are env-reachable through ``recompute_derived_settings`` while
+# living in ``_ENV_OVERRIDE_SKIP``, so they too are pinned without being policed.
 _INHERITED_BY_TEST_FIXTURES = frozenset(
     {
-        "DEBUG",
         "DEV_SERVER_HOST",
         "DEV_SERVER_PORT",
         "GUNICORN_APP_MODULE",
@@ -598,8 +611,46 @@ def test_the_test_fixtures_pin_every_env_reachable_setting():
     assert _OVERRIDABLE_SETTINGS == PINNED_ENV_SETTINGS | _INHERITED_BY_TEST_FIXTURES
     assert not (PINNED_ENV_SETTINGS & _INHERITED_BY_TEST_FIXTURES)
 
-    # The load-bearing one: deleting a pin from the baseline fails here.
-    assert PINNED_ENV_SETTINGS <= set(pinned_settings_sample())
+    # Equality, not containment, and in both directions: a pin deleted from the baseline
+    # fails, and so does one added to the baseline while still listed as inherited — which
+    # containment alone would let through, leaving the inventory quietly lying. The
+    # intersection drops the derived directory keys, which no variable reaches directly.
+    assert PINNED_ENV_SETTINGS == set(pinned_settings_sample()) & _OVERRIDABLE_SETTINGS
+
+
+def test_every_app_under_test_is_built_from_the_shared_baseline():
+    # The other half of #1869: the inventory above stops a new *setting* escaping
+    # classification, but nothing stopped a new *fixture* hand-rolling its own settings
+    # dict and reintroducing the whole bug class with the suite green. Read at the source
+    # level because the offending fixture would be correct Python that simply never calls
+    # ``base_test_settings`` — there is no runtime hook to catch that.
+    tests_root = Path(__file__).parent
+    offenders = []
+
+    for path in sorted(tests_root.rglob("*.py")):
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+
+            for keyword in node.keywords:
+                if keyword.arg != "settings_override":
+                    continue
+
+                called = {
+                    inner.func.id
+                    for inner in ast.walk(keyword.value)
+                    if isinstance(inner, ast.Call) and isinstance(inner.func, ast.Name)
+                }
+                if "base_test_settings" not in called:
+                    offenders.append(f"{path.relative_to(tests_root)}:{node.lineno}")
+
+    assert offenders == [], (
+        "these call sites build an app without the shared baseline, so the developer's "
+        f"environment reaches it: {offenders}. Pass overrides to base_test_settings "
+        "instead — see backend/ttnn_visualizer/tests/fixture_settings.py."
+    )
 
 
 def test_the_settings_inventory_is_pinned():
@@ -916,6 +967,9 @@ def test_server_mode_wins_over_flask_debug(monkeypatch, caplog):
     # (tracebacks to untrusted callers) and, without websockets, mounts Werkzeug's
     # interactive console. The hosted posture must clear ``DEBUG`` even when
     # ``FLASK_DEBUG`` is set via the override loop.
+    # Both layers, for the reason above — here an exported ``SERVER_MODE=false`` would
+    # otherwise leave the hosted posture untested and the assertion inverted.
+    monkeypatch.delenv("SERVER_MODE", raising=False)
     monkeypatch.setattr(DefaultConfig, "SERVER_MODE", True)
     monkeypatch.setenv("FLASK_DEBUG", "true")
 
