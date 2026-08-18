@@ -9,13 +9,11 @@
 @use '../definitions/colours' as *;
 @use '../definitions/variables' as variables;
 
-// React Flow's bottom-left chrome docks from a `left: 12px; bottom: 16px` origin
-// — set by a global `.react-flow` rule in MLIRViewReactFlow.scss that reaches
-// every graph in the app, not just the MLIR one — plus its own 15px panel
-// margin. The minimap swaps that left margin for a wider one to clear the zoom
-// controls, and the perf legend lines up beside the minimap, so both read these.
+// Shared by the bottom-left chrome — zoom controls, minimap and perf legend — so
+// the three keep one baseline. The origin and margin are React Flow's own; the
+// minimap widens its left margin to clear the controls.
+$chrome-dock-bottom: 8px;
 $panel-origin-left: 12px;
-$panel-origin-bottom: 16px;
 $panel-margin: 15px;
 $minimap-margin-left: 56px;
 $minimap-width: 200px;
@@ -24,13 +22,12 @@ $minimap-width: 200px;
     position: relative;
     width: 100%;
 
-    // Sized to the space the page actually has rather than a flat 80vh, which
-    // left the zoom controls, minimap and perf legend docked along the bottom
-    // edge floating well above the footer. Subtracts the navbar and `main`'s top
-    // padding above, and `main` plus `.data-padding`'s bottom padding below —
-    // the clearance that keeps content out from under the fixed footer. Summing
-    // to exactly the viewport is what stops the page itself from scrolling.
-    height: calc(100vh - 92px - 15px - 50px);
+    // Fills the band between the navbar and the fixed status bar: 92px navbar,
+    // 15px `main` top padding, 34px bar. The negative margin drops the trailing
+    // page padding (`main` 30px + `.data-padding` 20px), which exists to keep
+    // scrolling content off the bar and here only adds a scrollbar.
+    height: calc(100vh - 92px - 15px - 34px);
+    margin-bottom: -50px;
 
     .operation-graph-react-flow-loader {
         position: absolute;
@@ -107,14 +104,13 @@ $minimap-width: 200px;
         }
     }
 
-    // Inside the canvas so it reads against the nodes it explains. The bottom
-    // edge is the only clear one — the toolbar holds the top-left and the
-    // details panel the full right — so it continues that band rightwards,
-    // sharing the baseline of the zoom controls and minimap docked ahead of it.
+    // Inside the canvas so it reads against the nodes it explains, on the bottom
+    // band beside the minimap — the toolbar holds the top-left corner and the
+    // details panel the full right edge.
     .op-graph-perf-legend {
         position: absolute;
         z-index: variables.$z-index-2-interactive;
-        bottom: $panel-origin-bottom + $panel-margin;
+        bottom: $chrome-dock-bottom;
         left: $panel-origin-left + $minimap-margin-left + $minimap-width + $panel-margin;
     }
 
@@ -186,6 +182,14 @@ $minimap-width: 200px;
         .react-flow__edge.op-graph-edge-match {
             opacity: 1;
         }
+    }
+
+    // Outranks the bare-`.react-flow` rule in MLIRViewReactFlow.scss, which lifts
+    // bottom-left panels 16px for that view and reaches every graph in the app.
+    // Specificity rather than order, since both stylesheets are app-wide.
+    .react-flow .react-flow__panel.bottom.left {
+        bottom: 0;
+        margin-bottom: $chrome-dock-bottom;
     }
 
     // React Flow's minimap defaults are light-theme (`#fff` pane, `#e2e2e2`
