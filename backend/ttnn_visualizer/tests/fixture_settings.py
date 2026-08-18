@@ -13,7 +13,11 @@ import tempfile
 from pathlib import Path
 from typing import Any, Dict
 
-from ttnn_visualizer.settings import DefaultConfig, _build_allowed_origins
+from ttnn_visualizer.settings import (
+    _DEFAULT_SESSION_MAX_UPLOADED_REPORTS,
+    DefaultConfig,
+    _build_allowed_origins,
+)
 
 # Settings an exported environment variable would otherwise reach through
 # ``DefaultConfig``. Every name in ``test_settings._OVERRIDABLE_SETTINGS`` was exported
@@ -27,6 +31,7 @@ PINNED_ENV_SETTINGS = frozenset(
         "MALWARE_SCANNER",
         "MAX_CONTENT_LENGTH",
         "SERVER_MODE",
+        "SESSION_MAX_UPLOADED_REPORTS",
         "SSH_DEFAULT_PERFORMANCE_PATH",
         "SSH_DEFAULT_PORT",
         "SSH_DEFAULT_PROFILER_PATH",
@@ -50,9 +55,10 @@ def base_test_settings(tmpdir: str, **overrides: Any) -> Dict[str, Any]:
     ``DefaultConfig`` reads each pinned name from the environment, and ``TT_METAL_HOME``
     is exported on any machine that profiles TT-Metal. Left to the environment they flip
     the app into direct-report mode, cap request bodies at whatever an operator set, shell
-    uploads out to a real malware scanner, publish an operator's SSH defaults, and move
-    every route off ``/api`` — each failing in a way indistinguishable from a real
-    regression. See issue #1869.
+    uploads out to a real malware scanner, publish an operator's SSH defaults, bound the
+    session's stored report list at whatever an operator set, and move every route off
+    ``/api`` — each failing in a way indistinguishable from a real regression. See issue
+    #1869.
 
     Pinning has to happen through ``settings_override`` rather than by deleting the
     variables: ``Config`` is a process singleton whose class attributes bind at import,
@@ -85,6 +91,10 @@ def base_test_settings(tmpdir: str, **overrides: Any) -> Dict[str, Any]:
         "DEBUG": False,
         "MAX_CONTENT_LENGTH": None,
         "BASE_PATH": "/",
+        # The shipped default rather than a literal, so it follows a change to it. Not
+        # ``DefaultConfig.SESSION_MAX_UPLOADED_REPORTS``, which is the value this pin
+        # exists to displace: it binds at import from the environment.
+        "SESSION_MAX_UPLOADED_REPORTS": _DEFAULT_SESSION_MAX_UPLOADED_REPORTS,
         "SSH_DEFAULT_PORT": 22,
         "SSH_DEFAULT_PROFILER_PATH": "",
         "SSH_DEFAULT_PERFORMANCE_PATH": "",
