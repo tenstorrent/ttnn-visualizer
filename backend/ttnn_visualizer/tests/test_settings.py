@@ -417,9 +417,13 @@ def test_importing_settings_substitutes_a_usable_session_cap(env_value):
     assert int(result.stdout.strip()) >= 1
 
 
-def test_the_session_cap_bounds_the_stored_list():
+def test_the_session_cap_bounds_the_stored_list(monkeypatch):
     # The property the range check exists to protect, asserted against the slice idiom the
-    # call sites in ``decorators.py`` and ``views.py`` all use.
+    # call sites in ``decorators.py`` and ``views.py`` all use. The cap is pinned rather
+    # than taken as declared: the class attribute binds at import from the environment, and
+    # an operator's large-but-valid value would leave this loop slicing for hours. Any cap
+    # of one or more exercises the property.
+    monkeypatch.setattr(DefaultConfig, "SESSION_MAX_UPLOADED_REPORTS", 3)
     cap = DefaultConfig.SESSION_MAX_UPLOADED_REPORTS
     stored: list = []
 
