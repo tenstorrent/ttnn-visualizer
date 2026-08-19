@@ -3,19 +3,17 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 @use '../definitions/colours' as *;
+@use '../mixins/graphChromeChip' as *;
 
 // Appearance only. Placement stays with each graph view, whose panel widths and
 // stacking contexts differ, so the legend is positioned where it's used.
 .perf-overlay-legend {
+    @include graph-chrome-chip;
+
     display: flex;
     flex-direction: column;
     gap: 4px;
     padding: 8px 10px;
-    background-color: rgba($tt-grey-2, 0.85);
-    border-radius: 4px;
-    font-size: 11px;
-    line-height: 1.4;
-    pointer-events: none;
 }
 
 .perf-overlay-legend-title {

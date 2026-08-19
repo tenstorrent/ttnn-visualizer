@@ -7,8 +7,46 @@ import { IconNames } from '@blueprintjs/icons';
 import { type FormEvent, type Ref, memo } from 'react';
 import GraphOpFilter, { type GraphOpFilterHandle } from '../GraphOpFilter';
 import type { GraphFilterMode } from '../../definitions/GraphFilterMode';
-import { PERF_OVERLAY_TOOLTIP, PerfOverlayStatus } from '../../definitions/PerfOverlayStatus';
+import { CRITICAL_PATH_TOOLTIP, PERF_OVERLAY_TOOLTIP, PerfOverlayStatus } from '../../definitions/PerfOverlayStatus';
 import 'styles/components/OpGraphToolbar.scss';
+
+interface PerfGatedSwitchProps {
+    tooltipByStatus: Record<PerfOverlayStatus, string>;
+    label: string;
+    checked: boolean;
+    onChange: (next: boolean) => void;
+    perfOverlayStatus: PerfOverlayStatus;
+    isDisabled: boolean;
+}
+
+// Both switches read per-op durations, so a report that can't feed the bars can't
+// weigh the path either — the gate below is that shared contract, held in one
+// place so the two can't drift apart. #1613
+//
+// The tooltip is bound to the Switch, not a wrapper: Blueprint targets the
+// enclosing label, which still emits pointer events while the input is disabled —
+// and disabled is when the tooltip explaining why matters most. #1880
+const PerfGatedSwitch = ({
+    tooltipByStatus,
+    label,
+    checked,
+    onChange,
+    perfOverlayStatus,
+    isDisabled,
+}: PerfGatedSwitchProps) => (
+    <Tooltip
+        placement={PopoverPosition.BOTTOM}
+        content={tooltipByStatus[perfOverlayStatus]}
+    >
+        <Switch
+            className='op-graph-toolbar-switch'
+            checked={checked}
+            onChange={(event: FormEvent<HTMLInputElement>) => onChange(event.currentTarget.checked)}
+            label={label}
+            disabled={isDisabled || perfOverlayStatus !== PerfOverlayStatus.READY}
+        />
+    </Tooltip>
+);
 
 interface OpGraphToolbarProps {
     filterRef: Ref<GraphOpFilterHandle>;
@@ -29,6 +67,8 @@ interface OpGraphToolbarProps {
     onHideDeallocateChange: (next: boolean) => void;
     isPerfOverlayActive: boolean;
     onPerfOverlayChange: (next: boolean) => void;
+    isCriticalPathActive: boolean;
+    onCriticalPathChange: (next: boolean) => void;
     perfOverlayStatus: PerfOverlayStatus;
     linkedOpCount: number;
     totalOpCount: number;
@@ -55,6 +95,8 @@ const OpGraphToolbar = memo(
         onHideDeallocateChange,
         isPerfOverlayActive,
         onPerfOverlayChange,
+        isCriticalPathActive,
+        onCriticalPathChange,
         perfOverlayStatus,
         linkedOpCount,
         totalOpCount,
@@ -137,28 +179,27 @@ const OpGraphToolbar = memo(
                     disabled={isDisabled}
                 />
 
-                {/* Bound to the Switch, not a wrapper: Blueprint targets the
-                    enclosing label, which still emits pointer events while the
-                    input is disabled — and disabled is when the tooltip
-                    explaining why matters most. #1880 */}
-                <Tooltip
-                    placement={PopoverPosition.BOTTOM}
-                    content={PERF_OVERLAY_TOOLTIP[perfOverlayStatus]}
-                >
-                    <Switch
-                        className='op-graph-toolbar-switch'
-                        checked={isPerfOverlayActive}
-                        onChange={(event: FormEvent<HTMLInputElement>) =>
-                            onPerfOverlayChange(event.currentTarget.checked)
-                        }
-                        label={
-                            perfOverlayStatus === PerfOverlayStatus.READY
-                                ? `Perf overlay (${linkedOpCount}/${totalOpCount})`
-                                : 'Perf overlay'
-                        }
-                        disabled={isDisabled || perfOverlayStatus !== PerfOverlayStatus.READY}
-                    />
-                </Tooltip>
+                <PerfGatedSwitch
+                    tooltipByStatus={PERF_OVERLAY_TOOLTIP}
+                    label={
+                        perfOverlayStatus === PerfOverlayStatus.READY
+                            ? `Perf overlay (${linkedOpCount}/${totalOpCount})`
+                            : 'Perf overlay'
+                    }
+                    checked={isPerfOverlayActive}
+                    onChange={onPerfOverlayChange}
+                    perfOverlayStatus={perfOverlayStatus}
+                    isDisabled={isDisabled}
+                />
+
+                <PerfGatedSwitch
+                    tooltipByStatus={CRITICAL_PATH_TOOLTIP}
+                    label='Highlight critical path'
+                    checked={isCriticalPathActive}
+                    onChange={onCriticalPathChange}
+                    perfOverlayStatus={perfOverlayStatus}
+                    isDisabled={isDisabled}
+                />
             </div>
         </div>
     ),

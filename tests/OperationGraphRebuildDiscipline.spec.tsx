@@ -30,6 +30,7 @@ const flowRenders: { nodes: OpGraphFlowNode[]; edges: OpGraphFlowEdge[] }[] = []
 const harness: {
     onBuilt: ((graph: OpGraphBuiltGraph) => void) | null;
     setNodes: ((updater: (previous: OpGraphFlowNode[]) => OpGraphFlowNode[]) => void) | null;
+    setEdges: ((updater: (previous: OpGraphFlowEdge[]) => OpGraphFlowEdge[]) => void) | null;
     onNodeClick: ((event: unknown, node: OpGraphFlowNode) => void) | null;
     onNodesChange: ((changes: NodeChange<OpGraphFlowNode>[]) => void) | null;
     // Left as `undefined` by the view when the overlay is off, which is the gating
@@ -39,6 +40,7 @@ const harness: {
 } = {
     onBuilt: null,
     setNodes: null,
+    setEdges: null,
     onNodeClick: null,
     onNodesChange: null,
     onNodeMouseEnter: undefined,
@@ -116,6 +118,7 @@ vi.mock('@xyflow/react', async () => {
         },
         useEdgesState: (initial: OpGraphFlowEdge[]) => {
             const [value, setValue] = useState(initial);
+            harness.setEdges = setValue;
             return [value, setValue, () => {}];
         },
         useStore: (selector: (state: { transform: [number, number, number] }) => unknown) =>
@@ -130,11 +133,21 @@ vi.mock('../src/components/operation-graph/useOpGraphLayoutWorker', () => ({
     },
 }));
 
+// Wraps the real traversal instead of replacing it: the rendering assertions need
+// the true path, and one assertion needs to count how often it is computed.
+vi.mock('../src/components/operation-graph/opGraphCriticalPath', async () => {
+    const actual = await vi.importActual<typeof import('../src/components/operation-graph/opGraphCriticalPath')>(
+        '../src/components/operation-graph/opGraphCriticalPath',
+    );
+    return { ...actual, findCriticalPath: vi.fn(actual.findCriticalPath) };
+});
+
 // Imported after the `vi.mock` factories so the stubs are registered first. The
 // builder is the real one: the identity assertions below only mean something
 // against the node shapes production actually produces.
 /* eslint-disable import/first */
 import { buildOpGraph } from '../src/components/operation-graph/opGraphBuilder';
+import { findCriticalPath } from '../src/components/operation-graph/opGraphCriticalPath';
 import OperationGraphReactFlow from '../src/components/operation-graph/OperationGraphReactFlow';
 import {
     PERF_BAR_COLOR_VAR,
@@ -144,7 +157,7 @@ import {
 import { NO_PERF_DATA_LABEL } from '../src/definitions/PerfOverlayStatus';
 import { formatDuration } from '../src/functions/formatting';
 import type { PerfOverlaySource } from '../src/functions/perfOverlay';
-import { activePerformanceReportAtom, activeProfilerReportAtom } from '../src/store/app';
+import { activePerformanceReportAtom, activeProfilerReportAtom, criticalPathScopeAtom } from '../src/store/app';
 import type { ReportFolder } from '../src/definitions/Reports';
 /* eslint-enable import/first */
 
@@ -225,6 +238,34 @@ const hoverNode = (id: string) => {
 
 const PERF_ROWS: PerfOverlaySource[] = OPERATION_LIST.map((op) => ({ id: op.id, device_time: op.id * 10 }));
 
+// Two routes from op 1 to op 4, so the graph has ops on the path and ops beside
+// it. `OPERATION_LIST` is a chain, which puts every node on the path and would let
+// an unconditionally applied highlight pass every assertion below.
+const BRANCHING_OPERATION_LIST: OperationDescription[] = [
+    operation(1, 'entry_a', [2, 3]),
+    operation(2, 'quick_b', [4]),
+    operation(3, 'slow_c', [4]),
+    operation(4, 'exit_d', []),
+];
+
+// 1 → 3 → 4 costs 120ns against the 25ns of 1 → 2 → 4, so op 2 is the one op the
+// highlight must leave alone.
+const BRANCHING_PERF_ROWS: PerfOverlaySource[] = [
+    { id: 1, device_time: 10 },
+    { id: 2, device_time: 5 },
+    { id: 3, device_time: 100 },
+    { id: 4, device_time: 10 },
+];
+
+const edgeBetween = (edges: OpGraphFlowEdge[], source: string, target: string) => {
+    const found = edges.find((edge) => edge.source === source && edge.target === target);
+    expect(found, `edge ${source} → ${target} missing`).toBeDefined();
+    return found as OpGraphFlowEdge;
+};
+
+const hasClass = (element: { className?: string }, className: string) =>
+    (element.className ?? '').split(' ').includes(className);
+
 const perfScaleOf = (node: OpGraphFlowNode) =>
     (node.style as Record<string, unknown> | undefined)?.[PERF_BAR_SCALE_VAR];
 
@@ -253,13 +294,19 @@ const overlaySwitch = () => screen.getByRole('checkbox', { name: /^Perf overlay/
 
 const enableOverlay = () => fireEvent.click(overlaySwitch());
 
+const criticalPathSwitch = () => screen.getByRole('checkbox', { name: /^Highlight critical path/ }) as HTMLInputElement;
+
+const enableCriticalPath = () => fireEvent.click(criticalPathSwitch());
+
 beforeEach(() => {
     vi.useFakeTimers();
     runBuild.mockClear();
     applyNodeChanges.mockClear();
+    vi.mocked(findCriticalPath).mockClear();
     flowRenders.length = 0;
     harness.onBuilt = null;
     harness.setNodes = null;
+    harness.setEdges = null;
     harness.onNodeClick = null;
     harness.onNodesChange = null;
     harness.onNodeMouseEnter = undefined;
@@ -271,6 +318,10 @@ beforeEach(() => {
     // would otherwise carry into the next test.
     getDefaultStore().set(activePerformanceReportAtom, null);
     getDefaultStore().set(activeProfilerReportAtom, null);
+    // Scoping makes critical-path intent inert against a different report, but two
+    // tests using the same fixture paths are the same scope, so it still needs
+    // clearing.
+    getDefaultStore().set(criticalPathScopeAtom, null);
 });
 
 afterEach(() => {
@@ -757,5 +808,161 @@ describe('OperationGraphReactFlow perf overlay chrome', () => {
         fireEvent.click(overlaySwitch());
 
         expect(nodeById(lastFlowRender().nodes, '4')).toBe(nodeById(beforeOverlay, '4'));
+    });
+});
+
+// Same behaviour as the overlay above, reached differently: intent records the
+// reports it was switched on for, so a swap makes it inert immediately and the
+// view then clears it. Both halves are worth holding — the first is what keeps a
+// stale path off the screen, the second is what stops a swap back reviving it.
+// #1613
+describe('OperationGraphReactFlow critical path report scope', () => {
+    const reportFolder = (name: string) => ({ path: `/reports/${name}`, reportName: name }) as ReportFolder;
+
+    const setReport = (atom: typeof activeProfilerReportAtom, report: ReportFolder | null) => {
+        act(() => {
+            getDefaultStore().set(atom, report);
+        });
+    };
+
+    it('drops the highlight when the performance report changes', () => {
+        // The weights come from that report, so a stale path is a wrong path drawn
+        // with full confidence.
+        renderGraph(OPERATION_LIST, PERF_ROWS);
+        enableCriticalPath();
+        expect(criticalPathSwitch().checked).toBe(true);
+
+        setReport(activePerformanceReportAtom, reportFolder('resnet50-perf'));
+
+        expect(criticalPathSwitch().checked).toBe(false);
+    });
+
+    it('drops the highlight when the profiler report changes', () => {
+        renderGraph(OPERATION_LIST, PERF_ROWS);
+        enableCriticalPath();
+
+        setReport(activeProfilerReportAtom, reportFolder('resnet50'));
+
+        expect(criticalPathSwitch().checked).toBe(false);
+    });
+
+    it('does not re-enable itself when a report is swapped back', () => {
+        // Scoping alone would leave the intent sitting there, matching again on
+        // return; the switch has to come back off, like the overlay's.
+        const first = reportFolder('resnet50');
+        renderGraph(OPERATION_LIST, PERF_ROWS);
+        setReport(activeProfilerReportAtom, first);
+        enableCriticalPath();
+        setReport(activeProfilerReportAtom, reportFolder('bert'));
+        expect(criticalPathSwitch().checked).toBe(false);
+
+        setReport(activeProfilerReportAtom, first);
+
+        expect(criticalPathSwitch().checked).toBe(false);
+    });
+
+    it('leaves the highlight alone while the reports hold still', () => {
+        const report = reportFolder('resnet50');
+        renderGraph(OPERATION_LIST, PERF_ROWS);
+        setReport(activeProfilerReportAtom, report);
+        enableCriticalPath();
+        setReport(activeProfilerReportAtom, reportFolder('resnet50'));
+
+        // A rebuilt-but-equivalent `ReportFolder` is the same scope: the atom holds
+        // paths, not object identity.
+        expect(criticalPathSwitch().checked).toBe(true);
+    });
+
+    it('ignores intent recorded against a report that is no longer loaded', () => {
+        act(() => {
+            getDefaultStore().set(criticalPathScopeAtom, { profiler: '/reports/other', performance: null });
+        });
+
+        renderGraph(OPERATION_LIST, PERF_ROWS);
+
+        expect(criticalPathSwitch().checked).toBe(false);
+    });
+});
+
+// What the switch actually puts on screen. The stylesheet specs assert the cascade
+// these classes feed; without the assertions here nothing said the classes reach
+// React Flow at all, so deleting the three class pushes and the annotation left
+// the suite green. #1613
+describe('OperationGraphReactFlow critical path rendering', () => {
+    it('marks the ops on the path and leaves the branch beside it alone', () => {
+        renderGraph(BRANCHING_OPERATION_LIST, BRANCHING_PERF_ROWS);
+
+        enableCriticalPath();
+
+        const { nodes } = lastFlowRender();
+        expect(hasClass(nodeById(nodes, '3'), 'op-graph-node-critical-path')).toBe(true);
+        expect(hasClass(nodeById(nodes, '4'), 'op-graph-node-critical-path')).toBe(true);
+        expect(hasClass(nodeById(nodes, '2'), 'op-graph-node-critical-path')).toBe(false);
+    });
+
+    it('marks the edges the path traverses and not the ones it skips', () => {
+        renderGraph(BRANCHING_OPERATION_LIST, BRANCHING_PERF_ROWS);
+
+        enableCriticalPath();
+
+        const { edges } = lastFlowRender();
+        expect(hasClass(edgeBetween(edges, '1', '3'), 'op-graph-edge-critical-path')).toBe(true);
+        expect(hasClass(edgeBetween(edges, '3', '4'), 'op-graph-edge-critical-path')).toBe(true);
+        expect(hasClass(edgeBetween(edges, '1', '2'), 'op-graph-edge-critical-path')).toBe(false);
+        expect(hasClass(edgeBetween(edges, '2', '4'), 'op-graph-edge-critical-path')).toBe(false);
+    });
+
+    it('flags the container so the stylesheet can dim what is off the path', () => {
+        const { container } = renderGraph(BRANCHING_OPERATION_LIST, BRANCHING_PERF_ROWS);
+        expect(container.querySelector('.op-graph-critical-path')).toBeNull();
+
+        enableCriticalPath();
+
+        expect(container.querySelector('.op-graph-critical-path')).not.toBeNull();
+    });
+
+    it('summarises the path it drew', () => {
+        renderGraph(BRANCHING_OPERATION_LIST, BRANCHING_PERF_ROWS);
+        expect(screen.queryByLabelText('Critical path summary')).toBeNull();
+
+        enableCriticalPath();
+
+        // Three of the four ops, and the total excludes the branch that lost.
+        // `device_time` is microseconds, so the 120 on the path is 120_000ns here.
+        const summary = screen.getByLabelText('Critical path summary').textContent ?? '';
+        expect(summary).toContain('3 ops');
+        expect(summary).toContain(formatDuration(120_000));
+        // 120 of the 125 total across the four linked ops.
+        expect(summary).toContain('96.0% of total kernel duration');
+    });
+
+    it('takes every mark back off when switched off', () => {
+        renderGraph(BRANCHING_OPERATION_LIST, BRANCHING_PERF_ROWS);
+        enableCriticalPath();
+
+        fireEvent.click(criticalPathSwitch());
+
+        const { nodes, edges } = lastFlowRender();
+        expect(nodes.some((node) => hasClass(node, 'op-graph-node-critical-path'))).toBe(false);
+        expect(edges.some((edge) => hasClass(edge, 'op-graph-edge-critical-path'))).toBe(false);
+        expect(screen.queryByLabelText('Critical path summary')).toBeNull();
+    });
+
+    it('does not retraverse the graph when React Flow replaces the edge array', () => {
+        // Selecting an edge hands back a fresh array through `applyEdgeChanges`,
+        // which cannot change the path — so keying the traversal on that state
+        // paid O(V+E) plus a re-map of every edge on each edge click.
+        renderGraph(BRANCHING_OPERATION_LIST, BRANCHING_PERF_ROWS);
+        enableCriticalPath();
+        expect(vi.mocked(findCriticalPath)).toHaveBeenCalled();
+        vi.mocked(findCriticalPath).mockClear();
+
+        act(() => {
+            harness.setEdges?.((previous) => previous.map((edge) => ({ ...edge, selected: true })));
+        });
+
+        expect(vi.mocked(findCriticalPath)).not.toHaveBeenCalled();
+        // Still drawn: the point is that the answer was reused, not dropped.
+        expect(hasClass(edgeBetween(lastFlowRender().edges, '1', '3'), 'op-graph-edge-critical-path')).toBe(true);
     });
 });

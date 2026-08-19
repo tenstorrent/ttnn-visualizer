@@ -16,7 +16,7 @@ import {
     useStoreApi,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { useAtomValue } from 'jotai';
+import { useAtom, useAtomValue } from 'jotai';
 import {
     type CSSProperties,
     type MouseEvent as ReactMouseEvent,
@@ -34,10 +34,12 @@ import { toReadableShape } from '../../functions/formatting';
 import { buildGraphFilterMatcher } from '../../functions/graphFilterMatcher';
 import type { OperationDescription } from '../../model/APIData';
 import { type PerfOverlaySource, perfColorScale } from '../../functions/perfOverlay';
-import { activePerformanceReportAtom, activeProfilerReportAtom } from '../../store/app';
+import { type ReportScope, isSameReportScope } from '../../definitions/ReportScope';
+import { activePerformanceReportAtom, activeProfilerReportAtom, criticalPathScopeAtom } from '../../store/app';
 import type { GraphOpFilterHandle } from '../GraphOpFilter';
 import LoadingSpinner from '../LoadingSpinner';
 import PerfOverlayLegend from '../perf-overlay/PerfOverlayLegend';
+import CriticalPathAnnotation from './CriticalPathAnnotation';
 import OpGraphEdge from './OpGraphEdge';
 import OpGraphInfoPanel from './OpGraphInfoPanel';
 import OpGraphNode from './OpGraphNode';
@@ -49,6 +51,7 @@ import {
     getPerfHoverLabel,
     getQuantisedPerfZoom,
 } from './opGraphPerfOverlay';
+import { EMPTY_CRITICAL_PATH, findCriticalPath } from './opGraphCriticalPath';
 import { useOpGraphLayoutWorker } from './useOpGraphLayoutWorker';
 import {
     type OpGraphBuildOptions,
@@ -110,6 +113,12 @@ const EDGE_CLASS_BY_RELATION: Record<NodeRelation, string> = {
     [NodeRelation.Output]: 'op-graph-edge-output',
 };
 
+// Off-path edges dim from the container for the same identity reason as the
+// filter above; only the path itself gets per-element classes. #1613
+const CRITICAL_PATH_CLASS = 'op-graph-critical-path';
+const CRITICAL_PATH_NODE_CLASS = 'op-graph-node-critical-path';
+const CRITICAL_PATH_EDGE_CLASS = 'op-graph-edge-critical-path';
+
 interface OperationGraphReactFlowProps {
     operationList: OperationDescription[];
     operationId?: number;
@@ -139,8 +148,14 @@ const OperationGraphInner = ({
     const [edges, setEdges, onEdgesChange] = useEdgesState<OpGraphFlowEdge>([]);
     const [selectedOperationId, setSelectedOperationId] = useState<number | null>(operationId ?? null);
     const [nodeIndex, setNodeIndex] = useState<OpGraphNodeIndexEntry[]>([]);
+    // The edge set as built, kept apart from React Flow's edge state: that array is
+    // replaced by `applyEdgeChanges` on every edge selection, which cannot change
+    // the graph's shape. Anything deriving from the graph's topology reads this, so
+    // selecting an edge doesn't pay for a traversal. #1613
+    const [builtEdges, setBuiltEdges] = useState<OpGraphFlowEdge[]>([]);
     const [hideDeallocate, setHideDeallocate] = useState(true);
     const [isPerfOverlayEnabled, setIsPerfOverlayEnabled] = useState(false);
+    const [criticalPathScope, setCriticalPathScope] = useAtom(criticalPathScopeAtom);
     const [perfHover, setPerfHover] = useState<PerfHover | null>(null);
     const [filterQuery, setFilterQuery] = useState('');
     const [appliedFilterQuery, setAppliedFilterQuery] = useState('');
@@ -174,22 +189,35 @@ const OperationGraphInner = ({
     const profilerReportPath = useAtomValue(activeProfilerReportAtom)?.path ?? null;
     const performanceReportPath = useAtomValue(activePerformanceReportAtom)?.path ?? null;
 
+    const reportScope = useMemo<ReportScope>(
+        () => ({ profiler: profilerReportPath, performance: performanceReportPath }),
+        [profilerReportPath, performanceReportPath],
+    );
+
     // Intent is scoped to the report it was enabled for — another report has a
     // different ramp and linked set. Adjusted during render like
     // `adoptedOperationId` above; an effect would commit one frame still
     // encoding the old ramp. #1880
-    const [overlayReportScope, setOverlayReportScope] = useState({
-        profiler: profilerReportPath,
-        performance: performanceReportPath,
-    });
-    if (
-        overlayReportScope.profiler !== profilerReportPath ||
-        overlayReportScope.performance !== performanceReportPath
-    ) {
-        setOverlayReportScope({ profiler: profilerReportPath, performance: performanceReportPath });
+    const [overlayReportScope, setOverlayReportScope] = useState<ReportScope>(reportScope);
+    if (!isSameReportScope(overlayReportScope, reportScope)) {
+        setOverlayReportScope(reportScope);
         setIsPerfOverlayEnabled(false);
         setPerfHover(null);
     }
+
+    // The atom carries the scope it was enabled for, so a swap invalidates the
+    // intent by not matching it — no stale frame to close, and no render-phase
+    // write to a shared atom. #1613
+    const isCriticalPathEnabled = criticalPathScope !== null && isSameReportScope(criticalPathScope, reportScope);
+
+    // Forgetting, not resetting: the read above already ignores a scope that
+    // doesn't match, so this only stops a return trip from reviving the switch —
+    // the overlay's behaviour. Effect timing is unobservable for the same reason.
+    useEffect(() => {
+        if (criticalPathScope !== null && !isSameReportScope(criticalPathScope, reportScope)) {
+            setCriticalPathScope(null);
+        }
+    }, [criticalPathScope, reportScope, setCriticalPathScope]);
 
     const selectedOperationIdRef = useRef(selectedOperationId);
     useEffect(() => {
@@ -234,8 +262,10 @@ const OperationGraphInner = ({
 
     const onBuilt = useCallback(
         (graph: OpGraphBuiltGraph) => {
+            const edgesForBuild = graph.edges.map((edge) => ({ ...edge, markerEnd: EDGE_MARKER }));
             setNodes(graph.nodes);
-            setEdges(graph.edges.map((edge) => ({ ...edge, markerEnd: EDGE_MARKER })));
+            setEdges(edgesForBuild);
+            setBuiltEdges(edgesForBuild);
             setNodeIndex(
                 graph.nodes.map((node) => ({
                     id: node.id,
@@ -525,6 +555,38 @@ const OperationGraphInner = ({
         return flowStore.subscribe((state) => writeZoom(state.transform[2]));
     }, [isPerfOverlayActive, flowStore]);
 
+    const isCriticalPathActive = isCriticalPathEnabled && perfOverlay.status === PerfOverlayStatus.READY;
+
+    const criticalPath = useMemo(() => {
+        if (!isCriticalPathActive) {
+            return EMPTY_CRITICAL_PATH;
+        }
+        const deviceTimeNsByOpId = new Map<number, number>();
+        for (const [opId, aggregate] of perfOverlay.aggregatesByOpId) {
+            deviceTimeNsByOpId.set(opId, aggregate.deviceTimeNs);
+        }
+        return findCriticalPath(nodeIndex, builtEdges, deviceTimeNsByOpId);
+    }, [isCriticalPathActive, perfOverlay, nodeIndex, builtEdges]);
+
+    useEffect(() => {
+        if (criticalPath.hasCycle) {
+            // Edges follow each tensor's consumer list, which nothing constrains
+            // to run forwards, so a cycle is a property of the report rather than
+            // a bug here. The annotation says the path is partial; this names the
+            // reason for whoever is debugging the report.
+            // eslint-disable-next-line no-console
+            console.warn('operation graph critical path: cycle found, path covers the acyclic portion only');
+        }
+    }, [criticalPath]);
+
+    // Null rather than an empty set so the styling passes below can keep their
+    // early bail, and their memo identity, while the feature is off. Both keyed
+    // on the node set: a single-node path has no edges, and dimming everything
+    // around one outlined node is still the right read.
+    const hasCriticalPath = criticalPath.nodeIds.size > 0;
+    const criticalPathNodeIds = hasCriticalPath ? criticalPath.nodeIds : null;
+    const criticalPathEdgeIds = hasCriticalPath ? criticalPath.edgeIds : null;
+
     // Built once per score change so the styling pass reuses these identities
     // instead of allocating one per node on every drag frame.
     const perfStyleByNodeId = useMemo(
@@ -533,7 +595,7 @@ const OperationGraphInner = ({
     );
 
     const styledNodes = useMemo(() => {
-        if (!highlight && !matchedIds && !perfStyleByNodeId) {
+        if (!highlight && !matchedIds && !perfStyleByNodeId && !criticalPathNodeIds) {
             return nodes;
         }
         return nodes.map((node) => {
@@ -551,6 +613,9 @@ const OperationGraphInner = ({
             // search dims everything around it.
             if (matchedIds && (isSelected || matchedIds.has(node.id))) {
                 classNames.push(MATCHED_NODE_CLASS);
+            }
+            if (criticalPathNodeIds?.has(node.id)) {
+                classNames.push(CRITICAL_PATH_NODE_CLASS);
             }
             const className = classNames.length > 0 ? classNames.join(' ') : undefined;
             // Custom properties only, so perf stacks with selection, the
@@ -584,10 +649,10 @@ const OperationGraphInner = ({
             styledNodeCache.set(node, { className, perfStyle, styled });
             return styled;
         });
-    }, [nodes, highlight, matchedIds, perfStyleByNodeId, styledNodeCache]);
+    }, [nodes, highlight, matchedIds, perfStyleByNodeId, criticalPathNodeIds, styledNodeCache]);
 
     const styledEdges = useMemo(() => {
-        if (!highlight && !matchedIds) {
+        if (!highlight && !matchedIds && !criticalPathEdgeIds) {
             return edges;
         }
         return edges.map((edge) => {
@@ -596,6 +661,9 @@ const OperationGraphInner = ({
             if (relation) {
                 classNames.push(EDGE_CLASS_BY_RELATION[relation]);
             }
+            if (criticalPathEdgeIds?.has(edge.id)) {
+                classNames.push(CRITICAL_PATH_EDGE_CLASS);
+            }
             // An edge between two matches stays lit so the matched subset is
             // traceable; a selection edge outranks the filter either way.
             if (matchedIds && (relation || (matchedIds.has(edge.source) && matchedIds.has(edge.target)))) {
@@ -603,7 +671,7 @@ const OperationGraphInner = ({
             }
             return classNames.length > 0 ? { ...edge, className: classNames.join(' ') } : edge;
         });
-    }, [edges, highlight, matchedIds]);
+    }, [edges, highlight, matchedIds, criticalPathEdgeIds]);
 
     const handleNodeClick = useCallback(
         (_event: ReactMouseEvent, node: OpGraphFlowNode) => {
@@ -667,6 +735,11 @@ const OperationGraphInner = ({
         setPerfHover(null);
     }, []);
 
+    const handleCriticalPathChange = useCallback(
+        (next: boolean) => setCriticalPathScope(next ? reportScope : null),
+        [setCriticalPathScope, reportScope],
+    );
+
     const perfHoverLabel = useMemo(
         () =>
             isPerfOverlayActive && perfHover !== null ? getPerfHoverLabel(perfOverlay, perfHover.operationId) : null,
@@ -682,9 +755,15 @@ const OperationGraphInner = ({
     // laid out is about to drop.
     const isPanelOpen = selectedOperationId !== null && !isBuilding;
 
+    const containerClassName = [
+        'operation-graph-react-flow',
+        ...(matchedIds ? [FILTERING_CLASS] : []),
+        ...(hasCriticalPath ? [CRITICAL_PATH_CLASS] : []),
+    ].join(' ');
+
     return (
         <div
-            className={matchedIds ? `operation-graph-react-flow ${FILTERING_CLASS}` : 'operation-graph-react-flow'}
+            className={containerClassName}
             ref={containerRef}
         >
             {isBuilding ? (
@@ -711,6 +790,8 @@ const OperationGraphInner = ({
                 onHideDeallocateChange={setHideDeallocate}
                 isPerfOverlayActive={isPerfOverlayActive}
                 onPerfOverlayChange={handlePerfOverlayChange}
+                isCriticalPathActive={isCriticalPathActive}
+                onCriticalPathChange={handleCriticalPathChange}
                 perfOverlayStatus={perfOverlay.status}
                 linkedOpCount={perfOverlay.linkedOpCount}
                 totalOpCount={perfOverlay.totalOpCount}
@@ -750,14 +831,22 @@ const OperationGraphInner = ({
                     position='bottom-left'
                 />
             </ReactFlow>
-            {isPerfOverlayActive && !isBuilding ? (
-                <div className='op-graph-perf-legend'>
+            <div className='op-graph-bottom-band'>
+                {isCriticalPathActive && hasCriticalPath && !isBuilding ? (
+                    <CriticalPathAnnotation
+                        opCount={criticalPath.opIds.length}
+                        totalNs={criticalPath.totalNs}
+                        measuredNs={perfOverlay.totalNs}
+                        isPartial={criticalPath.hasCycle}
+                    />
+                ) : null}
+                {isPerfOverlayActive && !isBuilding ? (
                     <PerfOverlayLegend
                         minNs={perfOverlay.minNs}
                         maxNs={perfOverlay.maxNs}
                     />
-                </div>
-            ) : null}
+                ) : null}
+            </div>
             {perfHoverLabel !== null && perfHover !== null ? (
                 // Pointer-only, and `role='tooltip'` would promise a relationship no
                 // `aria-describedby` provides. The panel's Kernel duration row carries

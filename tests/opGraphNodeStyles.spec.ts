@@ -68,3 +68,71 @@ describe('op graph filter dimming', () => {
         expect(ruleBody('&.op-graph-filtering')).not.toContain('__edge-path');
     });
 });
+
+describe('op graph critical path styling', () => {
+    const OFF_PATH_DIM_SELECTOR = '&.op-graph-critical-path:not(.op-graph-filtering)';
+
+    it('accents the path before the I/O rules so a focused node keeps its own colours', () => {
+        // Both match at the same specificity, so the later rule wins. Order is the
+        // only thing keeping the selected node's edges their input/output colour
+        // while the rest of the path reads magenta. #1613
+        const accent = STYLESHEET.indexOf('.op-graph-edge-critical-path .react-flow__edge-path');
+        const inputEdge = STYLESHEET.indexOf('.op-graph-edge-input .react-flow__edge-path');
+        const outputEdge = STYLESHEET.indexOf('.op-graph-edge-output .react-flow__edge-path');
+
+        expect(accent).toBeGreaterThan(-1);
+        expect(inputEdge).toBeGreaterThan(-1);
+        expect(outputEdge).toBeGreaterThan(-1);
+        expect(accent).toBeLessThan(inputEdge);
+        // Both I/O rules, not just the first: a selected node's outgoing edges
+        // have the same claim on their colour as its incoming ones.
+        expect(accent).toBeLessThan(outputEdge);
+    });
+
+    it('yields the dimming to an active search', () => {
+        // Without the `:not()` this rule's extra specificity would beat the
+        // filter's 0.18 and quietly weaken search dimming whenever the path is on.
+        expect(STYLESHEET).toContain(OFF_PATH_DIM_SELECTOR);
+    });
+
+    it('exempts the selected node′s own edges from the off-path dim', () => {
+        // Clicking a node to read its inputs and outputs would otherwise fade
+        // whichever of them sit off the path. Read out of the `:not()` arguments
+        // rather than matched as text: a selector list and chained `:not()`s exclude
+        // the same set, so asserting one spelling pins the authoring style instead.
+        const exclusions = Array.from(ruleBody(OFF_PATH_DIM_SELECTOR).matchAll(/:not\(([^)]*)\)/g))
+            .flatMap(([, argument]) => argument.split(','))
+            .map((selector) => selector.trim());
+
+        // The path's own edges first: dropping this member dims the feature's
+        // central visual to 0.35 along with everything it was meant to stand out
+        // from.
+        expect(exclusions).toContain('.op-graph-edge-critical-path');
+        expect(exclusions).toContain('.op-graph-edge-input');
+        expect(exclusions).toContain('.op-graph-edge-output');
+    });
+
+    it('dims from the container rather than per off-path element', () => {
+        // Same identity argument as the filter above: ~500 off-path edges must not
+        // each carry a class.
+        const body = ruleBody(OFF_PATH_DIM_SELECTOR);
+
+        expect(body).toMatch(/\.react-flow__edge/);
+        expect(body).toMatch(/opacity:\s*0?\.\d+/);
+    });
+
+    it('offsets the path outline clear of the selection ring', () => {
+        // Outline paints over box-shadow, so an offset inside the ring's radius
+        // replaces the selection colour with the path colour on a node that is
+        // both. Asserted against the ring's own width so the two can't drift.
+        const ringWidth = Number(
+            /box-shadow:[^;]*?(\d+)px\s*(?:var|#|rgb)/.exec(ruleBody('&.op-graph-node-selected'))?.[1],
+        );
+        const outlineOffset = Number(
+            /outline-offset:\s*(\d+)px/.exec(ruleBody('.react-flow__node-opNode.op-graph-node-critical-path'))?.[1],
+        );
+
+        expect(ringWidth).toBeGreaterThan(0);
+        expect(outlineOffset).toBeGreaterThan(ringWidth);
+    });
+});
