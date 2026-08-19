@@ -17,14 +17,18 @@ import {
     getPerformanceReportQueryKey,
 } from '../src/functions/performanceReportQueryKey';
 import { StackedGroupBy } from '../src/definitions/StackedPerfTable';
+import { ReportLocation } from '../src/definitions/Reports';
 import { Signpost } from '../src/model/Signpost';
 
 const REPORT_NAME = '2026_08_14_10_00_00';
 const INSTANCE_ID = 'instance-a';
 const SIGNPOST: Signpost = { id: 42, op_code: 'BEGIN_TRACE' };
 
-const reportKey = (params: PerformanceReportParams, instanceId = INSTANCE_ID) =>
-    getPerformanceReportQueryKey({ name: REPORT_NAME, instanceId, params });
+const reportKey = (
+    params: PerformanceReportParams,
+    instanceId = INSTANCE_ID,
+    location: ReportLocation | null = ReportLocation.LOCAL,
+) => getPerformanceReportQueryKey({ name: REPORT_NAME, instanceId, location, params });
 
 const defaultViewParams: PerformanceReportParams = {
     startSignpost: null,
@@ -48,6 +52,7 @@ describe('getPerformanceReportQueryKey', () => {
         expect(reportKey(defaultViewParams)).toEqual([
             'get-performance-report',
             INSTANCE_ID,
+            ReportLocation.LOCAL,
             REPORT_NAME,
             'startSignpost:null',
             'endSignpost:null',
@@ -98,6 +103,17 @@ describe('getPerformanceReportQueryKey', () => {
         expect(reportKey(defaultViewParams, 'instance-a')).not.toEqual(reportKey(defaultViewParams, 'instance-b'));
     });
 
+    // `instanceId` is per browser session, so it is the same for a local and a
+    // remote selection in one tab. The server resolves `?name=` against the parent
+    // of the instance's `performance_path` — the uploads folder or the synced one —
+    // so one basename addresses two reports, and selecting a local report does not
+    // clear the cache. Without this segment the remote rows survive the switch.
+    it('separates cache entries for the same report name in different locations', () => {
+        expect(reportKey(defaultViewParams, INSTANCE_ID, ReportLocation.REMOTE)).not.toEqual(
+            reportKey(defaultViewParams, INSTANCE_ID, ReportLocation.LOCAL),
+        );
+    });
+
     it.each([
         ['merge devices off', { mergeDevices: false }],
         ['host ops shown', { hideHostOps: false }],
@@ -111,13 +127,18 @@ describe('getPerformanceReportQueryKey', () => {
 describe('getPerformanceComparisonReportQueryKey', () => {
     const COMPARISON_NAMES = [REPORT_NAME, '2026_08_14_11_00_00'];
 
-    const comparisonKey = (names: string[] | null, params: PerformanceReportParams, instanceId = INSTANCE_ID) =>
-        getPerformanceComparisonReportQueryKey({ names, instanceId, params });
+    const comparisonKey = (
+        names: string[] | null,
+        params: PerformanceReportParams,
+        instanceId = INSTANCE_ID,
+        location: ReportLocation | null = ReportLocation.LOCAL,
+    ) => getPerformanceComparisonReportQueryKey({ names, instanceId, location, params });
 
     it('names the reports and carries the same filter segments as the single-report key', () => {
         expect(comparisonKey(COMPARISON_NAMES, defaultViewParams)).toEqual([
             'get-performance-comparison-report',
             INSTANCE_ID,
+            ReportLocation.LOCAL,
             COMPARISON_NAMES,
             'startSignpost:null',
             'endSignpost:null',
@@ -141,6 +162,12 @@ describe('getPerformanceComparisonReportQueryKey', () => {
     it('separates cache entries for the same selection in different instances', () => {
         expect(comparisonKey(COMPARISON_NAMES, defaultViewParams, 'instance-a')).not.toEqual(
             comparisonKey(COMPARISON_NAMES, defaultViewParams, 'instance-b'),
+        );
+    });
+
+    it('separates cache entries for the same selection in different locations', () => {
+        expect(comparisonKey(COMPARISON_NAMES, defaultViewParams, INSTANCE_ID, ReportLocation.REMOTE)).not.toEqual(
+            comparisonKey(COMPARISON_NAMES, defaultViewParams, INSTANCE_ID, ReportLocation.LOCAL),
         );
     });
 

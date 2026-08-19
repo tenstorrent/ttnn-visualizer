@@ -225,13 +225,23 @@ const NUM_DEVICES = 2;
 
 const perfRow = (id: number, rawOpCode: string) => ({ id: String(id), raw_op_code: rawOpCode, device_time: '100' });
 
-/** One row per operation — the shape the memory report's op sequence lines up with. */
-const mergedRows = DEVICE_OP_NAMES.map((name, index) => perfRow(index + 2, name));
-
 /** The same run with devices unmerged: each operation appears once per device. */
 const unmergedRows = DEVICE_OP_NAMES.flatMap((name, index) =>
     Array.from({ length: NUM_DEVICES }, (_, device) => perfRow(index * NUM_DEVICES + device + 2, name)),
 );
+
+/**
+ * One row per operation — the shape the memory report's op sequence lines up with.
+ *
+ * Derived from the unmerged rows rather than renumbered, because tt-perf-report
+ * does not renumber either: `ORIGINAL_ROW` is stamped from the source CSV's row
+ * index before `merge_device_rows` runs, and merging keeps one constituent row's
+ * dict, so a merged id is always one of the unmerged ids. Numbering these `2, 3`
+ * against unmerged `2, 3, 4, 5` would invent a second id space in which unmerged
+ * row 3 (Matmul on device 1) collides with merged row 3 (Softmax) — a join the
+ * real report cannot produce, and a false alarm for whoever reads the fixture next.
+ */
+const mergedRows = DEVICE_OP_NAMES.map((_name, index) => unmergedRows[index * NUM_DEVICES]!);
 
 const memoryOperations = DEVICE_OP_NAMES.map((name, index) => ({
     id: index + 1,

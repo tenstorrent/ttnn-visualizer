@@ -2,6 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
+import { ReportLocation } from '../definitions/Reports';
 import { StackedGroupBy } from '../definitions/StackedPerfTable';
 import { Signpost } from '../model/Signpost';
 
@@ -104,22 +105,34 @@ const getFilterKeySegments = (params: PerformanceReportParams): string[] => {
  * would serve one instance's report as another's. The NPE queries scope their keys
  * for the same reason.
  *
+ * `instanceId` alone does not cover the local/remote pair: it is per browser
+ * session, so both selections carry the same one. `location` is what the server
+ * actually resolves the name against — `?name=` is joined onto the parent of the
+ * instance's `performance_path`, and that parent is the uploads folder for a local
+ * report and the synced folder for a remote one — so the same name genuinely
+ * addresses two different reports. Selecting a local report does not clear the
+ * cache (`LocalFolderSelector`'s select handlers call only `updateInstance`), so
+ * without this segment the remote report's rows survive the switch.
+ *
  * Taken as one object rather than positionally: the report name and `instanceId`
  * are adjacent strings, and transposing them would key every report under the
  * instance and vice versa without a type error.
  */
 interface PerformanceReportQueryKeyInput {
     instanceId: string;
+    location: ReportLocation | null;
     params: PerformanceReportParams;
 }
 
 export const getPerformanceReportQueryKey = ({
     name,
     instanceId,
+    location,
     params,
 }: PerformanceReportQueryKeyInput & { name: string | null }) => [
     'get-performance-report',
     instanceId,
+    location,
     name,
     ...getFilterKeySegments(params),
 ];
@@ -127,10 +140,12 @@ export const getPerformanceReportQueryKey = ({
 export const getPerformanceComparisonReportQueryKey = ({
     names,
     instanceId,
+    location,
     params,
 }: PerformanceReportQueryKeyInput & { names: string[] | null }) => [
     'get-performance-comparison-report',
     instanceId,
+    location,
     names,
     ...getFilterKeySegments(params),
 ];

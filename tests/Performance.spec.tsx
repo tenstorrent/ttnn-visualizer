@@ -268,13 +268,22 @@ describe('Performance route', () => {
     // resolve against the link-pinned report while this table spans the rows the tab
     // is showing, so a mapped selection can land entirely outside the report — here
     // it must fall back to the full span rather than render an empty table.
+    //
+    // The range has to have width for this to pin anything: over a zero-width range
+    // the widen branch and the clamp branch both return that single id, so the
+    // assertion could not tell them apart. With [1, 9] and two rows, widening keeps
+    // both and clamping to the far edge would keep one.
     it('falls back to the whole report when the selected range misses it entirely', () => {
         (usePerformanceReport as Mock).mockReturnValue({
-            data: { report: [DRAM_PERF_ROW], stacked_report: [], signposts: [] },
+            data: {
+                report: [DRAM_PERF_ROW, { ...DRAM_PERF_ROW, id: '9' }],
+                stacked_report: [],
+                signposts: [],
+            },
             isLoading: false,
             error: null,
         });
-        (usePerformanceRange as Mock).mockReturnValue([1, 1]);
+        (usePerformanceRange as Mock).mockReturnValue([1, 9]);
 
         render(
             <TestProviders
@@ -288,7 +297,7 @@ describe('Performance route', () => {
             </TestProviders>,
         );
 
-        expect(perfReportProps.mock.calls.at(-1)?.[0]?.data).toHaveLength(1);
+        expect(perfReportProps.mock.calls.at(-1)?.[0]?.data).toHaveLength(2);
     });
 
     it('keeps the table loading while report rows exist but no range is available yet', () => {

@@ -54,6 +54,7 @@ import {
     filterBySignpostAtom,
     hideHostOpsAtom,
     mergeDevicesAtom,
+    performanceReportLocationAtom,
     selectedOperationRangeAtom,
     stackedGroupByAtom,
     tracingModeAtom,
@@ -1221,9 +1222,11 @@ const useLinkedPerformanceReportParams = (): PerformanceReportParams => {
 };
 
 const usePerformanceReportQuery = (name: string | null, params: PerformanceReportParams) => {
+    const location = useAtomValue(performanceReportLocationAtom);
+
     const response = useQuery<PerformanceReportResponse, AxiosError>({
         queryFn: () => (name !== null ? fetchPerformanceReport(name, params) : Promise.resolve(EMPTY_PERF_RETURN)),
-        queryKey: getPerformanceReportQueryKey({ name, instanceId: getOrCreateInstanceId(), params }),
+        queryKey: getPerformanceReportQueryKey({ name, instanceId: getOrCreateInstanceId(), location, params }),
         enabled: name !== null,
         retry: false,
         staleTime: Infinity,
@@ -1272,6 +1275,7 @@ export const useLinkedPerformanceReport = () => {
 
 export const usePerformanceComparisonReport = () => {
     const rawReportNames = useAtomValue(comparisonPerformanceReportListAtom);
+    const location = useAtomValue(performanceReportLocationAtom);
     const params = useViewPerformanceReportParams();
 
     const reportNames = useMemo(() => {
@@ -1291,6 +1295,7 @@ export const usePerformanceComparisonReport = () => {
         queryKey: getPerformanceComparisonReportQueryKey({
             names: reportNames,
             instanceId: getOrCreateInstanceId(),
+            location,
             params,
         }),
         staleTime: Infinity,
