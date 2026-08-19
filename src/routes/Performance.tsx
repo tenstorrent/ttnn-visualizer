@@ -35,6 +35,7 @@ import { L1PressureStatus } from '../model/L1Pressure';
 import { annotatePerfHeuristicFlags } from '../functions/computePerfHeuristicFlags';
 import { resolveMaxCores } from '../functions/getCoreCount';
 import { enrichRowData } from '../functions/enrichPerfRowData';
+import { clampSelectionToRange } from '../functions/perfRangeSelection';
 import ComparisonReportSelector from '../components/performance/ComparisonReportSelector';
 import 'styles/routes/Performance.scss';
 import getServerConfig from '../functions/getServerConfig';
@@ -121,6 +122,11 @@ export default function Performance() {
     // Prefer the user's selected range, but don't wait on RangeSlider's sync effect — when
     // selectedRange is still null (or left over from a disjoint prior report) fall back to
     // the report's full span so we never flash "No data to display" after the skeleton.
+    //
+    // The same helper the slider clamps its handles with, so the two cannot disagree about
+    // what "misses the report" means. Clamping an overhanging selection is row-set neutral
+    // here — every row id already lies inside `perfRange` — so only the widen branch, which
+    // produces the full-span fallback, changes what the table shows.
     const rangeForTable = useMemo(() => {
         if (!perfRange) {
             return selectedRange;
@@ -130,9 +136,7 @@ export default function Performance() {
             return perfRange;
         }
 
-        const selectionMissesReport = selectedRange[1] < perfRange[0] || selectedRange[0] > perfRange[1];
-
-        return selectionMissesReport ? perfRange : selectedRange;
+        return clampSelectionToRange(selectedRange[0], selectedRange[1], perfRange[0], perfRange[1]);
     }, [selectedRange, perfRange]);
 
     const rangedData = useMemo(

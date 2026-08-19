@@ -15,7 +15,15 @@ const axiosInstance = axios.create({
     baseURL,
 });
 
-export const getOrCreateInstanceId = () => {
+// Resolved once per page load rather than per call. The id is fixed for the
+// lifetime of the tab — it is read from the URL or sessionStorage and written
+// straight back — but it is read inside query keys, and those are rebuilt in the
+// render body of hooks reached once per virtualised row (`useLinkedPerformanceReport`
+// through `OperationListPerfData`). Uncached, that is a synchronous sessionStorage
+// read plus a `URLSearchParams` allocation per row, per scroll tick.
+let cachedInstanceId: string | null = null;
+
+const resolveInstanceId = () => {
     const urlInstanceId = new URLSearchParams(window.location.search).get('instanceId');
     let instanceId = sessionStorage.getItem('instanceId');
 
@@ -35,6 +43,12 @@ export const getOrCreateInstanceId = () => {
     }
 
     return instanceId;
+};
+
+export const getOrCreateInstanceId = () => {
+    cachedInstanceId ??= resolveInstanceId();
+
+    return cachedInstanceId;
 };
 
 axiosInstance.interceptors.request.use(

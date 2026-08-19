@@ -14,6 +14,7 @@ import {
     performanceReportLocationAtom,
     profilerReportLocationAtom,
     reportLinksAtom,
+    tracingModeAtom,
 } from '../src/store/app';
 import { TestProviders } from './helpers/TestProviders';
 
@@ -40,7 +41,7 @@ function LinksProbe() {
     return <pre data-testid='report-links'>{JSON.stringify(links)}</pre>;
 }
 
-function renderWithReports() {
+function renderWithReports({ tracingMode = false }: { tracingMode?: boolean } = {}) {
     return render(
         <TestProviders
             initialAtomValues={[
@@ -49,6 +50,7 @@ function renderWithReports() {
                 [profilerReportLocationAtom, ReportLocation.LOCAL],
                 [performanceReportLocationAtom, ReportLocation.LOCAL],
                 [reportLinksAtom, []],
+                [tracingModeAtom, tracingMode],
             ]}
         >
             <ReportLinkStatus />
@@ -113,6 +115,29 @@ describe('ReportLinkStatus', () => {
                 performanceId: 'perf-run',
                 status: ReportPairLinkStatus.UNLINKED,
             });
+        });
+    });
+
+    // Link resolution still follows tracing mode (#1812). This atom is backed by
+    // localStorage, so an UNLINKED recorded under the traced row order would keep
+    // badging the pair as a failed link after the toggle went away.
+    it('does not persist an UNLINKED reached with tracing mode on', async () => {
+        matchState.result = ReportLinkMatchResult.UNLINKED;
+        renderWithReports({ tracingMode: true });
+
+        await waitFor(() => {
+            expect(JSON.parse(screen.getByTestId('report-links').textContent ?? '[]')).toEqual([]);
+        });
+    });
+
+    it('still persists a LINKED reached with tracing mode on, which holds under either order', async () => {
+        matchState.result = ReportLinkMatchResult.LINKED;
+        renderWithReports({ tracingMode: true });
+
+        await waitFor(() => {
+            const links = JSON.parse(screen.getByTestId('report-links').textContent ?? '[]');
+            expect(links).toHaveLength(1);
+            expect(links[0]).toMatchObject({ status: ReportPairLinkStatus.LINKED });
         });
     });
 });

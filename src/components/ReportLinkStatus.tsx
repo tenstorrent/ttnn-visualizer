@@ -10,6 +10,7 @@ import { useEffect } from 'react';
 import { ReportLocation } from '../definitions/Reports';
 import { ReportLinkMatchResult, ReportPairLinkStatus } from '../definitions/ReportLinks';
 import { getReportId, upsertReportLink } from '../functions/reportLinks';
+import { isLinkResolutionCanonical } from '../functions/performanceReportQueryKey';
 import useRemoteConnection from '../hooks/useRemote';
 import { useReportLinkMatch } from '../hooks/useReportLinkMatch';
 import {
@@ -18,6 +19,7 @@ import {
     performanceReportLocationAtom,
     profilerReportLocationAtom,
     reportLinksAtom,
+    tracingModeAtom,
 } from '../store/app';
 
 const ReportLinkStatus = () => {
@@ -29,6 +31,7 @@ const ReportLinkStatus = () => {
     const profilerLocation = useAtomValue(profilerReportLocationAtom);
     const performanceLocation = useAtomValue(performanceReportLocationAtom);
     const setReportLinks = useSetAtom(reportLinksAtom);
+    const tracingMode = useAtomValue(tracingModeAtom);
     const { persistentState } = useRemoteConnection();
 
     // Persist LINKED / UNLINKED once the live comparison settles so pickers can
@@ -39,6 +42,15 @@ const ReportLinkStatus = () => {
         }
 
         if (matchResult !== ReportLinkMatchResult.LINKED && matchResult !== ReportLinkMatchResult.UNLINKED) {
+            return;
+        }
+
+        // Link resolution still follows tracing mode (#1812), which reorders the
+        // rows it matches against, so an UNLINKED reached with it on may describe
+        // the ordering rather than the reports. Persisting that would outlive the
+        // toggle and keep badging the pair as failed. A LINKED is a true positive
+        // under either order, so it is recorded as normal.
+        if (matchResult === ReportLinkMatchResult.UNLINKED && !isLinkResolutionCanonical(tracingMode)) {
             return;
         }
 
@@ -79,6 +91,7 @@ const ReportLinkStatus = () => {
         profilerLocation,
         performanceLocation,
         setReportLinks,
+        tracingMode,
         persistentState.selectedConnection?.host,
     ]);
 
