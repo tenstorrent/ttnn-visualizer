@@ -7,6 +7,7 @@ import type { ReactNode } from 'react';
 import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { getDefaultStore } from 'jotai';
 
 import type { NodeChange } from '@xyflow/react';
 
@@ -31,11 +32,28 @@ const harness: {
     setNodes: ((updater: (previous: OpGraphFlowNode[]) => OpGraphFlowNode[]) => void) | null;
     onNodeClick: ((event: unknown, node: OpGraphFlowNode) => void) | null;
     onNodesChange: ((changes: NodeChange<OpGraphFlowNode>[]) => void) | null;
-} = { onBuilt: null, setNodes: null, onNodeClick: null, onNodesChange: null };
+    // Left as `undefined` by the view when the overlay is off, which is the gating
+    // a test can only see by reading the prop React Flow was actually handed.
+    onNodeMouseEnter: ((event: unknown, node: OpGraphFlowNode) => void) | undefined;
+    onNodeMouseLeave: (() => void) | undefined;
+} = {
+    onBuilt: null,
+    setNodes: null,
+    onNodeClick: null,
+    onNodesChange: null,
+    onNodeMouseEnter: undefined,
+    onNodeMouseLeave: undefined,
+};
 
 // What `useNodesState` hands the view as its change applier. Stable, because the
 // view's own handler lists it as a dependency.
 const applyNodeChanges = vi.fn();
+
+// A real subscriber list. The zoom effect's entire contract is what it writes when
+// the store publishes, so a `subscribe` that never invoked its callback left both
+// the initial write and the subscription itself impossible to falsify.
+const flowTransform: { current: [number, number, number] } = { current: [0, 0, 1] };
+const flowStoreListeners = new Set<(state: { transform: [number, number, number] }) => void>();
 
 vi.mock('@xyflow/react', async () => {
     const { useState } = await import('react');
@@ -47,23 +65,38 @@ vi.mock('@xyflow/react', async () => {
         setCenter: () => Promise.resolve(),
         getNode: (id: string) => ({ id, position: { x: 0, y: 0 }, width: 100, height: 40 }),
     };
+    // Stable like `flowApi`: the zoom effect lists the store as a dependency, so
+    // a fresh object per render would resubscribe on every pass.
+    const flowStoreApi = {
+        getState: () => ({ transform: flowTransform.current }),
+        subscribe: (listener: (state: { transform: [number, number, number] }) => void) => {
+            flowStoreListeners.add(listener);
+            return () => flowStoreListeners.delete(listener);
+        },
+    };
     return {
         ReactFlow: ({
             nodes,
             edges,
             onNodeClick,
             onNodesChange,
+            onNodeMouseEnter,
+            onNodeMouseLeave,
             children,
         }: {
             nodes: OpGraphFlowNode[];
             edges: OpGraphFlowEdge[];
             onNodeClick: (event: unknown, node: OpGraphFlowNode) => void;
             onNodesChange: (changes: NodeChange<OpGraphFlowNode>[]) => void;
+            onNodeMouseEnter?: (event: unknown, node: OpGraphFlowNode) => void;
+            onNodeMouseLeave?: () => void;
             children?: ReactNode;
         }) => {
             flowRenders.push({ nodes, edges });
             harness.onNodeClick = onNodeClick;
             harness.onNodesChange = onNodesChange;
+            harness.onNodeMouseEnter = onNodeMouseEnter;
+            harness.onNodeMouseLeave = onNodeMouseLeave;
             return children ?? null;
         },
         ReactFlowProvider: Passthrough,
@@ -75,6 +108,7 @@ vi.mock('@xyflow/react', async () => {
         MarkerType: { ArrowClosed: 'arrowclosed' },
         ConnectionLineType: { SmoothStep: 'smoothstep' },
         useReactFlow: () => flowApi,
+        useStoreApi: () => flowStoreApi,
         useNodesState: (initial: OpGraphFlowNode[]) => {
             const [value, setValue] = useState(initial);
             harness.setNodes = setValue;
@@ -85,7 +119,7 @@ vi.mock('@xyflow/react', async () => {
             return [value, setValue, () => {}];
         },
         useStore: (selector: (state: { transform: [number, number, number] }) => unknown) =>
-            selector({ transform: [0, 0, 1] }),
+            selector({ transform: flowTransform.current }),
     };
 });
 
@@ -102,6 +136,16 @@ vi.mock('../src/components/operation-graph/useOpGraphLayoutWorker', () => ({
 /* eslint-disable import/first */
 import { buildOpGraph } from '../src/components/operation-graph/opGraphBuilder';
 import OperationGraphReactFlow from '../src/components/operation-graph/OperationGraphReactFlow';
+import {
+    PERF_BAR_COLOR_VAR,
+    PERF_BAR_SCALE_VAR,
+    PERF_BAR_ZOOM_VAR,
+} from '../src/components/operation-graph/opGraphPerfOverlay';
+import { NO_PERF_DATA_LABEL } from '../src/definitions/PerfOverlayStatus';
+import { formatDuration } from '../src/functions/formatting';
+import type { PerfOverlaySource } from '../src/functions/perfOverlay';
+import { activePerformanceReportAtom, activeProfilerReportAtom } from '../src/store/app';
+import type { ReportFolder } from '../src/definitions/Reports';
 /* eslint-enable import/first */
 
 const FILTER_DEBOUNCE_MS = 120;
@@ -134,10 +178,14 @@ const sourceFor = (operations: OperationDescription[]) =>
         outputs: op.outputs.map((tensor) => ({ edgeLabel: '[1, 32]', consumers: tensor.consumers })),
     }));
 
-const renderGraph = (operations = OPERATION_LIST) => {
+const renderGraph = (operations = OPERATION_LIST, perfRows?: PerfOverlaySource[]) => {
     const view = render(
         <MemoryRouter>
-            <OperationGraphReactFlow operationList={operations} />
+            <OperationGraphReactFlow
+                operationList={operations}
+                perfRows={perfRows}
+                isPerfReportLoaded={perfRows !== undefined}
+            />
         </MemoryRouter>,
     );
     // The worker is stubbed, so the view only receives a graph when a test says
@@ -169,6 +217,42 @@ const emitNodeChanges = (changes: NodeChange<OpGraphFlowNode>[]) => {
     });
 };
 
+const hoverNode = (id: string) => {
+    act(() => {
+        harness.onNodeMouseEnter?.({ clientX: 20, clientY: 30 }, nodeById(lastFlowRender().nodes, id));
+    });
+};
+
+const PERF_ROWS: PerfOverlaySource[] = OPERATION_LIST.map((op) => ({ id: op.id, device_time: op.id * 10 }));
+
+const perfScaleOf = (node: OpGraphFlowNode) =>
+    (node.style as Record<string, unknown> | undefined)?.[PERF_BAR_SCALE_VAR];
+
+const perfColorOf = (node: OpGraphFlowNode) =>
+    (node.style as Record<string, unknown> | undefined)?.[PERF_BAR_COLOR_VAR];
+
+// One store publish, as d3-zoom produces on a wheel frame.
+const setFlowZoom = (zoom: number) => {
+    flowTransform.current = [0, 0, zoom];
+    act(() => {
+        flowStoreListeners.forEach((listener) => listener({ transform: flowTransform.current }));
+    });
+};
+
+// jsdom serialises an inline `background-color` as `rgb(...)`, so the hex the graph
+// writes has to go through the same normalisation before comparing.
+const asRenderedColor = (color: string) => {
+    const probe = document.createElement('div');
+    probe.style.backgroundColor = color;
+    return probe.style.backgroundColor;
+};
+
+// By role, because the legend the overlay renders carries an `aria-label` that
+// starts the same way.
+const overlaySwitch = () => screen.getByRole('checkbox', { name: /^Perf overlay/ }) as HTMLInputElement;
+
+const enableOverlay = () => fireEvent.click(overlaySwitch());
+
 beforeEach(() => {
     vi.useFakeTimers();
     runBuild.mockClear();
@@ -178,7 +262,15 @@ beforeEach(() => {
     harness.setNodes = null;
     harness.onNodeClick = null;
     harness.onNodesChange = null;
+    harness.onNodeMouseEnter = undefined;
+    harness.onNodeMouseLeave = undefined;
+    flowTransform.current = [0, 0, 1];
+    flowStoreListeners.clear();
     sessionStorage.clear();
+    // No `Provider` here, so the view reads the default store and report state
+    // would otherwise carry into the next test.
+    getDefaultStore().set(activePerformanceReportAtom, null);
+    getDefaultStore().set(activeProfilerReportAtom, null);
 });
 
 afterEach(() => {
@@ -363,5 +455,307 @@ describe('OperationGraphReactFlow filter dimming', () => {
         expect(after).not.toBe(before);
         expect(nodeById(after, '4')).toBe(nodeById(before, '4'));
         expect(nodeById(after, '5')).toBe(nodeById(before, '5'));
+    });
+});
+
+describe('OperationGraphReactFlow perf overlay identity', () => {
+    // The overlay patches every linked node rather than the handful a filter or a
+    // selection touches, so it is the case where re-dressing nodes per render
+    // costs a full canvas re-render instead of a few nodes.
+    it('keeps untouched nodes byte-for-byte across a drag frame', () => {
+        renderGraph(OPERATION_LIST, PERF_ROWS);
+        enableOverlay();
+        const before = lastFlowRender().nodes;
+        // Without this the drag assertion below would pass on an overlay that
+        // never applied anything.
+        expect(perfScaleOf(nodeById(before, '4'))).toBeDefined();
+
+        act(() => {
+            harness.setNodes?.((previous) =>
+                previous.map((node) => (node.id === '1' ? { ...node, position: { x: 5, y: 5 } } : node)),
+            );
+        });
+
+        const after = lastFlowRender().nodes;
+        expect(after).not.toBe(before);
+        expect(nodeById(after, '4')).toBe(nodeById(before, '4'));
+        expect(nodeById(after, '5')).toBe(nodeById(before, '5'));
+    });
+
+    it('re-dresses the nodes when the scores themselves change', () => {
+        const { rerender } = renderGraph(OPERATION_LIST, PERF_ROWS);
+        enableOverlay();
+        const before = lastFlowRender().nodes;
+
+        rerender(
+            <MemoryRouter>
+                <OperationGraphReactFlow
+                    operationList={OPERATION_LIST}
+                    perfRows={PERF_ROWS.map((row) => ({ ...row, device_time: (row.device_time ?? 0) * 100 }))}
+                    isPerfReportLoaded
+                />
+            </MemoryRouter>,
+        );
+
+        // The cache is keyed on the patch identity, so a new ramp has to reach
+        // React Flow even though the node objects behind it never changed.
+        expect(nodeById(lastFlowRender().nodes, '4')).not.toBe(nodeById(before, '4'));
+    });
+});
+
+// Intent is scoped to the report it was enabled for, and the switch reads derived
+// active state, so the reset has to clear intent itself rather than rely on the
+// overlay going quiet. The rows stay linked throughout, which is what makes the
+// switch a faithful read of intent here.
+describe('OperationGraphReactFlow perf overlay report scope', () => {
+    const reportFolder = (name: string) => ({ path: `/reports/${name}`, reportName: name }) as ReportFolder;
+
+    const setReport = (atom: typeof activeProfilerReportAtom, report: ReportFolder | null) => {
+        act(() => {
+            getDefaultStore().set(atom, report);
+        });
+    };
+
+    it('drops the overlay when the profiler report changes', () => {
+        renderGraph(OPERATION_LIST, PERF_ROWS);
+        enableOverlay();
+        expect(overlaySwitch().checked).toBe(true);
+
+        setReport(activeProfilerReportAtom, reportFolder('resnet50'));
+
+        expect(overlaySwitch().checked).toBe(false);
+    });
+
+    it('drops the overlay when the performance report changes', () => {
+        // A perf swap is the more dangerous of the two: the graph is unchanged, so
+        // a stale overlay looks plausible while encoding a different run.
+        renderGraph(OPERATION_LIST, PERF_ROWS);
+        enableOverlay();
+
+        setReport(activePerformanceReportAtom, reportFolder('resnet50-perf'));
+
+        expect(overlaySwitch().checked).toBe(false);
+        // The encoding has to go with it, not just the control.
+        expect(perfScaleOf(nodeById(lastFlowRender().nodes, '4'))).toBeUndefined();
+    });
+
+    it('does not re-enable itself when a report is swapped back', () => {
+        const first = reportFolder('resnet50');
+        renderGraph(OPERATION_LIST, PERF_ROWS);
+        setReport(activeProfilerReportAtom, first);
+        enableOverlay();
+        setReport(activeProfilerReportAtom, reportFolder('bert'));
+
+        expect(overlaySwitch().checked).toBe(false);
+
+        setReport(activeProfilerReportAtom, first);
+
+        expect(overlaySwitch().checked).toBe(false);
+    });
+
+    it('leaves the overlay alone while the reports hold still', () => {
+        // A reset firing on every render would make the switch unusable.
+        const report = reportFolder('resnet50');
+        renderGraph(OPERATION_LIST, PERF_ROWS);
+        setReport(activeProfilerReportAtom, report);
+        enableOverlay();
+        setReport(activeProfilerReportAtom, report);
+
+        expect(overlaySwitch().checked).toBe(true);
+    });
+
+    it('survives the same report arriving as a rebuilt object', () => {
+        // Restoring an instance or refetching writes a fresh `ReportFolder` for the
+        // report already loaded, which reference equality read as a swap.
+        renderGraph(OPERATION_LIST, PERF_ROWS);
+        setReport(activeProfilerReportAtom, reportFolder('resnet50'));
+        enableOverlay();
+        setReport(activeProfilerReportAtom, reportFolder('resnet50'));
+
+        expect(overlaySwitch().checked).toBe(true);
+    });
+});
+
+// The SCSS divides the bar's floor by this property to hold an on-screen size at
+// overview zoom. `opGraphPerfBarStyles.spec.ts` asserts the stylesheet reads it;
+// these assert something writes it, so the compensation cannot go dead silently.
+describe('OperationGraphReactFlow perf bar zoom compensation', () => {
+    const graphRoot = (container: HTMLElement) =>
+        container.querySelector<HTMLElement>('.operation-graph-react-flow') as HTMLElement;
+
+    const publishedZoom = (container: HTMLElement) => graphRoot(container).style.getPropertyValue(PERF_BAR_ZOOM_VAR);
+
+    it('publishes the current zoom when the overlay turns on', () => {
+        const { container } = renderGraph(OPERATION_LIST, PERF_ROWS);
+        expect(publishedZoom(container)).toBe('');
+
+        enableOverlay();
+
+        expect(publishedZoom(container)).toBe('1');
+    });
+
+    it('republishes when a gesture crosses a bucket', () => {
+        const { container } = renderGraph(OPERATION_LIST, PERF_ROWS);
+        enableOverlay();
+
+        setFlowZoom(0.3);
+
+        // Bucketed, so the nearest bucket rather than 0.3 exactly. The contract is
+        // the tolerance, not the bucket boundaries.
+        const published = Number(publishedZoom(container));
+        expect(published).toBeGreaterThan(0.3 * 0.95);
+        expect(published).toBeLessThan(0.3 * 1.05);
+    });
+
+    it('coalesces sub-bucket frames into a single write', () => {
+        const { container } = renderGraph(OPERATION_LIST, PERF_ROWS);
+        enableOverlay();
+        const setProperty = vi.spyOn(graphRoot(container).style, 'setProperty');
+
+        // d3-zoom emits a new scale nearly every frame. The property is inherited by
+        // every node's bar, so an unquantised write invalidates style graph-wide per
+        // frame — the jank lands at exactly the overview zooms this exists for.
+        setFlowZoom(1.01);
+        setFlowZoom(1.02);
+        setFlowZoom(1.03);
+
+        expect(setProperty).not.toHaveBeenCalled();
+
+        setFlowZoom(1.5);
+
+        expect(setProperty).toHaveBeenCalledTimes(1);
+    });
+
+    it('never publishes a zero, which would invalidate the bar geometry', () => {
+        // The bar sizes with `calc(2px / var(--op-graph-perf-zoom))`: invalid at 0,
+        // so the declaration would drop and the bar vanish at MIN_ZOOM. Absolute
+        // quantisation steps round the whole overview range to zero.
+        const { container } = renderGraph(OPERATION_LIST, PERF_ROWS);
+        enableOverlay();
+
+        setFlowZoom(0.02);
+
+        const published = Number(publishedZoom(container));
+        expect(published).toBeGreaterThan(0);
+        expect(published).toBeLessThan(0.02 * 1.05);
+    });
+
+    it('unsubscribes when the overlay is switched off', () => {
+        const { container } = renderGraph(OPERATION_LIST, PERF_ROWS);
+        enableOverlay();
+        setFlowZoom(2);
+        const lastPublished = publishedZoom(container);
+
+        fireEvent.click(overlaySwitch());
+        setFlowZoom(0.5);
+
+        expect(flowStoreListeners.size).toBe(0);
+        expect(publishedZoom(container)).toBe(lastPublished);
+    });
+});
+
+// The panel is the only keyboard-reachable route to the metric, and its props are
+// assembled here rather than in the leaf that renders them.
+describe('OperationGraphReactFlow perf overlay panel wiring', () => {
+    const metricValue = () => screen.getByText('Kernel duration').nextElementSibling as HTMLElement;
+
+    it('hands the selected op its duration and the colour the graph drew it with', () => {
+        renderGraph(OPERATION_LIST, PERF_ROWS);
+        enableOverlay();
+
+        emitNodeChanges([{ type: 'select', id: '4', selected: true }]);
+
+        expect(metricValue()).toHaveTextContent(formatDuration(40_000));
+        const swatch = metricValue().querySelector<HTMLElement>('.perf-overlay-op-metric-swatch');
+        // Same colour the node carries, so the two encodings cannot disagree.
+        const nodeColor = perfColorOf(nodeById(lastFlowRender().nodes, '4'));
+        expect(swatch?.style.backgroundColor).toBe(asRenderedColor(String(nodeColor)));
+    });
+
+    it('reads no data for an op the perf report never mentioned', () => {
+        // Hard-coding the props to `undefined` would make every op in the report
+        // read this way with the whole suite still green.
+        renderGraph(
+            OPERATION_LIST,
+            PERF_ROWS.filter((row) => row.id !== 4),
+        );
+        enableOverlay();
+
+        emitNodeChanges([{ type: 'select', id: '4', selected: true }]);
+
+        expect(metricValue()).toHaveTextContent(NO_PERF_DATA_LABEL);
+        expect(metricValue().querySelector('.perf-overlay-op-metric-swatch')).toBeNull();
+    });
+});
+
+describe('OperationGraphReactFlow perf overlay chrome', () => {
+    const legend = () => screen.queryByLabelText('Perf overlay legend');
+    const hoverChip = () => document.querySelector<HTMLElement>('.op-graph-perf-hover');
+
+    it('mounts the legend with the linked ops bounds', () => {
+        renderGraph(OPERATION_LIST, PERF_ROWS);
+        expect(legend()).toBeNull();
+
+        enableOverlay();
+
+        // Bounds come from the aggregate; a legend fed constants would read the
+        // same for every report.
+        expect(legend()).toHaveTextContent(formatDuration(10_000));
+        expect(legend()).toHaveTextContent(formatDuration(50_000));
+    });
+
+    it('attaches the hover handler only while the overlay is on', () => {
+        renderGraph(OPERATION_LIST, PERF_ROWS);
+
+        expect(harness.onNodeMouseEnter).toBeUndefined();
+
+        enableOverlay();
+
+        expect(harness.onNodeMouseEnter).toBeInstanceOf(Function);
+    });
+
+    it('shows the hovered op its duration and rank', () => {
+        renderGraph(OPERATION_LIST, PERF_ROWS);
+        enableOverlay();
+
+        hoverNode('5');
+
+        expect(hoverChip()).toHaveTextContent(`${formatDuration(50_000)} · #1 of 5`);
+    });
+
+    it('clears the hover when the pointer leaves', () => {
+        renderGraph(OPERATION_LIST, PERF_ROWS);
+        enableOverlay();
+        hoverNode('5');
+
+        act(() => {
+            harness.onNodeMouseLeave?.();
+        });
+
+        expect(hoverChip()).toBeNull();
+    });
+
+    it('drops a hover the overlay left behind when it is switched off', () => {
+        // Otherwise it returns, at a stale position, the next time it goes on.
+        renderGraph(OPERATION_LIST, PERF_ROWS);
+        enableOverlay();
+        hoverNode('5');
+
+        fireEvent.click(overlaySwitch());
+        enableOverlay();
+
+        expect(hoverChip()).toBeNull();
+    });
+
+    it('returns the nodes to the builder objects when the overlay goes off', () => {
+        // The identity contract has to survive the round trip, not just the on state.
+        renderGraph(OPERATION_LIST, PERF_ROWS);
+        const beforeOverlay = lastFlowRender().nodes;
+        enableOverlay();
+        expect(perfScaleOf(nodeById(lastFlowRender().nodes, '4'))).toBeDefined();
+
+        fireEvent.click(overlaySwitch());
+
+        expect(nodeById(lastFlowRender().nodes, '4')).toBe(nodeById(beforeOverlay, '4'));
     });
 });

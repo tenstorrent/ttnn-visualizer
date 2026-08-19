@@ -13,21 +13,42 @@ import {
     useEdgesState,
     useNodesState,
     useReactFlow,
+    useStoreApi,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { type MouseEvent as ReactMouseEvent, memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useAtomValue } from 'jotai';
+import {
+    type CSSProperties,
+    type MouseEvent as ReactMouseEvent,
+    memo,
+    useCallback,
+    useEffect,
+    useMemo,
+    useRef,
+    useState,
+} from 'react';
 import { GraphFilterMode } from '../../definitions/GraphFilterMode';
 import { NodeRelation } from '../../definitions/NodeRelation';
+import { PerfOverlayStatus } from '../../definitions/PerfOverlayStatus';
 import { toReadableShape } from '../../functions/formatting';
 import { buildGraphFilterMatcher } from '../../functions/graphFilterMatcher';
 import type { OperationDescription } from '../../model/APIData';
-import type { PerfOverlaySource } from '../../functions/perfOverlay';
+import { type PerfOverlaySource, perfColorScale } from '../../functions/perfOverlay';
+import { activePerformanceReportAtom, activeProfilerReportAtom } from '../../store/app';
 import type { GraphOpFilterHandle } from '../GraphOpFilter';
 import LoadingSpinner from '../LoadingSpinner';
+import PerfOverlayLegend from '../perf-overlay/PerfOverlayLegend';
 import OpGraphEdge from './OpGraphEdge';
 import OpGraphInfoPanel from './OpGraphInfoPanel';
 import OpGraphNode from './OpGraphNode';
 import OpGraphToolbar from './OpGraphToolbar';
+import {
+    PERF_BAR_ZOOM_VAR,
+    buildOpGraphPerfOverlay,
+    buildPerfNodeStyleByNodeId,
+    getPerfHoverLabel,
+    getQuantisedPerfZoom,
+} from './opGraphPerfOverlay';
 import { useOpGraphLayoutWorker } from './useOpGraphLayoutWorker';
 import {
     type OpGraphBuildOptions,
@@ -92,17 +113,35 @@ const EDGE_CLASS_BY_RELATION: Record<NodeRelation, string> = {
 interface OperationGraphReactFlowProps {
     operationList: OperationDescription[];
     operationId?: number;
-    // Unused until the perf overlay is ported; keeps `GraphView`'s call shape. #1880
     perfRows?: PerfOverlaySource[];
     isPerfReportLoaded?: boolean;
 }
 
-const OperationGraphInner = ({ operationList, operationId }: OperationGraphReactFlowProps) => {
+interface PerfHover {
+    operationId: number;
+    x: number;
+    y: number;
+}
+
+interface StyledNodeCacheEntry {
+    className: string | undefined;
+    perfStyle: CSSProperties | undefined;
+    styled: OpGraphFlowNode;
+}
+
+const OperationGraphInner = ({
+    operationList,
+    operationId,
+    perfRows,
+    isPerfReportLoaded = false,
+}: OperationGraphReactFlowProps) => {
     const [nodes, setNodes, onNodesChange] = useNodesState<OpGraphFlowNode>([]);
     const [edges, setEdges, onEdgesChange] = useEdgesState<OpGraphFlowEdge>([]);
     const [selectedOperationId, setSelectedOperationId] = useState<number | null>(operationId ?? null);
     const [nodeIndex, setNodeIndex] = useState<OpGraphNodeIndexEntry[]>([]);
     const [hideDeallocate, setHideDeallocate] = useState(true);
+    const [isPerfOverlayEnabled, setIsPerfOverlayEnabled] = useState(false);
+    const [perfHover, setPerfHover] = useState<PerfHover | null>(null);
     const [filterQuery, setFilterQuery] = useState('');
     const [appliedFilterQuery, setAppliedFilterQuery] = useState('');
     const [filterMode, setFilterMode] = useState<GraphFilterMode>(() => {
@@ -122,7 +161,35 @@ const OperationGraphInner = ({ operationList, operationId }: OperationGraphReact
         }
     }
     const filterRef = useRef<GraphOpFilterHandle>(null);
+    const containerRef = useRef<HTMLDivElement>(null);
+    const containerBoundsRef = useRef<DOMRect | null>(null);
+    // A singleton for the component's lifetime rather than a ref, since the
+    // styling pass reads it during render and never replaces it.
+    const [styledNodeCache] = useState(() => new WeakMap<OpGraphFlowNode, StyledNodeCacheEntry>());
     const { setCenter, getNode } = useReactFlow<OpGraphFlowNode, OpGraphFlowEdge>();
+    const flowStore = useStoreApi();
+
+    // Path, not the `ReportFolder` object: a rebuilt-but-equivalent object would
+    // otherwise read as a report swap. Matches the report-scoped query keys.
+    const profilerReportPath = useAtomValue(activeProfilerReportAtom)?.path ?? null;
+    const performanceReportPath = useAtomValue(activePerformanceReportAtom)?.path ?? null;
+
+    // Intent is scoped to the report it was enabled for — another report has a
+    // different ramp and linked set. Adjusted during render like
+    // `adoptedOperationId` above; an effect would commit one frame still
+    // encoding the old ramp. #1880
+    const [overlayReportScope, setOverlayReportScope] = useState({
+        profiler: profilerReportPath,
+        performance: performanceReportPath,
+    });
+    if (
+        overlayReportScope.profiler !== profilerReportPath ||
+        overlayReportScope.performance !== performanceReportPath
+    ) {
+        setOverlayReportScope({ profiler: profilerReportPath, performance: performanceReportPath });
+        setIsPerfOverlayEnabled(false);
+        setPerfHover(null);
+    }
 
     const selectedOperationIdRef = useRef(selectedOperationId);
     useEffect(() => {
@@ -425,8 +492,48 @@ const OperationGraphInner = ({ operationList, operationId }: OperationGraphReact
         return { selectedId, relationByNodeId, relationByEdgeId };
     }, [selectedOperationId, edgesBySource, edgesByTarget]);
 
+    const graphOperationIds = useMemo(() => nodeIndex.map((entry) => entry.operationId), [nodeIndex]);
+
+    const perfOverlay = useMemo(
+        () => buildOpGraphPerfOverlay(perfRows, isPerfReportLoaded, graphOperationIds),
+        [perfRows, isPerfReportLoaded, graphOperationIds],
+    );
+
+    // Derived, so perf data arriving or going away can't leave a stored flag
+    // disagreeing with what the encoding can show.
+    const isPerfOverlayActive = isPerfOverlayEnabled && perfOverlay.status === PerfOverlayStatus.READY;
+
+    // Zoom goes straight to the DOM: it changes every wheel frame, and through
+    // state it would re-render the whole graph per frame to move one bar.
+    // `OpGraphEdge` can afford `useStore` only because it selects a boolean.
+    useEffect(() => {
+        const container = containerRef.current;
+        if (container === null || !isPerfOverlayActive) {
+            return undefined;
+        }
+        let lastZoom: number | null = null;
+        const writeZoom = (zoom: number) => {
+            const quantised = getQuantisedPerfZoom(zoom);
+            if (quantised !== lastZoom) {
+                lastZoom = quantised;
+                container.style.setProperty(PERF_BAR_ZOOM_VAR, String(quantised));
+            }
+        };
+        writeZoom(flowStore.getState().transform[2]);
+        // No selector support in the vanilla store, so every change calls back
+        // and the guard above keeps it to one write per zoom bucket.
+        return flowStore.subscribe((state) => writeZoom(state.transform[2]));
+    }, [isPerfOverlayActive, flowStore]);
+
+    // Built once per score change so the styling pass reuses these identities
+    // instead of allocating one per node on every drag frame.
+    const perfStyleByNodeId = useMemo(
+        () => buildPerfNodeStyleByNodeId(perfOverlay, isPerfOverlayActive),
+        [isPerfOverlayActive, perfOverlay],
+    );
+
     const styledNodes = useMemo(() => {
-        if (!highlight && !matchedIds) {
+        if (!highlight && !matchedIds && !perfStyleByNodeId) {
             return nodes;
         }
         return nodes.map((node) => {
@@ -445,16 +552,39 @@ const OperationGraphInner = ({ operationList, operationId }: OperationGraphReact
             if (matchedIds && (isSelected || matchedIds.has(node.id))) {
                 classNames.push(MATCHED_NODE_CLASS);
             }
-            if (isSelected) {
-                // Mirrored into React Flow's own flag so its keyboard handler reads
-                // the same selection the app holds: Escape on the selected node has
-                // to register as an unselect, and Enter on it as a no-op. Nothing
-                // else ever sets `selected`, since select changes are dropped.
-                return { ...node, className: classNames.join(' '), selected: true };
+            const className = classNames.length > 0 ? classNames.join(' ') : undefined;
+            // Custom properties only, so perf stacks with selection, the
+            // highlight and the inherited filter dim instead of displacing any.
+            const perfStyle = perfStyleByNodeId?.get(node.id);
+            if (className === undefined && perfStyle === undefined) {
+                return node;
             }
-            return classNames.length > 0 ? { ...node, className: classNames.join(' ') } : node;
+
+            // A drag frame hands back a new array with one new node object, so a
+            // node dressed again here would lose the identity React Flow diffs
+            // on. Both inputs are stable — the patches are rebuilt only when the
+            // scores change — so an untouched node hits the cache and keeps the
+            // object it was given.
+            const cached = styledNodeCache.get(node);
+            if (cached !== undefined && cached.className === className && cached.perfStyle === perfStyle) {
+                return cached.styled;
+            }
+
+            const styled = {
+                ...node,
+                ...(perfStyle ? { style: { ...node.style, ...perfStyle } } : {}),
+                ...(className === undefined ? {} : { className }),
+                // Selection is mirrored into React Flow's own flag so its keyboard
+                // handler reads the same selection the app holds: Escape on the
+                // selected node has to register as an unselect, and Enter on it as
+                // a no-op. Nothing else ever sets `selected`, since select changes
+                // are dropped.
+                ...(isSelected ? { selected: true } : {}),
+            };
+            styledNodeCache.set(node, { className, perfStyle, styled });
+            return styled;
         });
-    }, [nodes, highlight, matchedIds]);
+    }, [nodes, highlight, matchedIds, perfStyleByNodeId, styledNodeCache]);
 
     const styledEdges = useMemo(() => {
         if (!highlight && !matchedIds) {
@@ -486,12 +616,77 @@ const OperationGraphInner = ({ operationList, operationId }: OperationGraphReact
         setSelectedOperationId(null);
     }, []);
 
+    // Cached rather than read per enter: sweeping a dense graph crosses node
+    // boundaries many times a second, each fire follows a commit that moved the
+    // tooltip, so the read flushes layout for the whole graph DOM — the one cost
+    // that scales with node count. The box only moves on resize, scroll, and
+    // panel open/close, the last of which resizes the container. #1880
+    useEffect(() => {
+        const container = containerRef.current;
+        if (container === null || !isPerfOverlayActive) {
+            return undefined;
+        }
+        const readBounds = () => {
+            containerBoundsRef.current = container.getBoundingClientRect();
+        };
+        readBounds();
+        window.addEventListener('resize', readBounds);
+        // Capture: an ancestor scrolling moves the box without scrolling the window.
+        window.addEventListener('scroll', readBounds, true);
+        // Matches `ChipCongestionCanvas`: jsdom and older browsers without it keep
+        // the box read above, refreshed by the two listeners.
+        // eslint-disable-next-line compat/compat
+        const observer = typeof window.ResizeObserver === 'function' ? new window.ResizeObserver(readBounds) : null;
+        observer?.observe(container);
+        return () => {
+            observer?.disconnect();
+            window.removeEventListener('resize', readBounds);
+            window.removeEventListener('scroll', readBounds, true);
+            containerBoundsRef.current = null;
+        };
+    }, [isPerfOverlayActive]);
+
+    const handleNodeMouseEnter = useCallback((event: ReactMouseEvent, node: OpGraphFlowNode) => {
+        const bounds = containerBoundsRef.current ?? containerRef.current?.getBoundingClientRect();
+        if (!bounds) {
+            return;
+        }
+        setPerfHover({
+            operationId: node.data.operationId,
+            x: event.clientX - bounds.left,
+            y: event.clientY - bounds.top,
+        });
+    }, []);
+
+    const handleNodeMouseLeave = useCallback(() => setPerfHover(null), []);
+
+    // Switching off mid-hover would otherwise strand a hover that came back, at
+    // a stale position, the next time the overlay was switched on.
+    const handlePerfOverlayChange = useCallback((next: boolean) => {
+        setIsPerfOverlayEnabled(next);
+        setPerfHover(null);
+    }, []);
+
+    const perfHoverLabel = useMemo(
+        () =>
+            isPerfOverlayActive && perfHover !== null ? getPerfHoverLabel(perfOverlay, perfHover.operationId) : null,
+        [isPerfOverlayActive, perfHover, perfOverlay],
+    );
+
+    const selectedPerfAggregate =
+        selectedOperationId === null ? undefined : perfOverlay.aggregatesByOpId.get(selectedOperationId);
+    const selectedPerfScore =
+        selectedOperationId === null ? undefined : perfOverlay.scoreByOpId.get(selectedOperationId);
+
     // Closed mid-build so the panel can't describe an operation the graph being
     // laid out is about to drop.
     const isPanelOpen = selectedOperationId !== null && !isBuilding;
 
     return (
-        <div className={matchedIds ? `operation-graph-react-flow ${FILTERING_CLASS}` : 'operation-graph-react-flow'}>
+        <div
+            className={matchedIds ? `operation-graph-react-flow ${FILTERING_CLASS}` : 'operation-graph-react-flow'}
+            ref={containerRef}
+        >
             {isBuilding ? (
                 <div className='operation-graph-react-flow-loader'>
                     <LoadingSpinner />
@@ -514,6 +709,11 @@ const OperationGraphInner = ({ operationList, operationId }: OperationGraphReact
                 onGoToOperation={selectOperation}
                 hideDeallocate={hideDeallocate}
                 onHideDeallocateChange={setHideDeallocate}
+                isPerfOverlayActive={isPerfOverlayActive}
+                onPerfOverlayChange={handlePerfOverlayChange}
+                perfOverlayStatus={perfOverlay.status}
+                linkedOpCount={perfOverlay.linkedOpCount}
+                totalOpCount={perfOverlay.totalOpCount}
                 isDisabled={isBuilding}
             />
             <ReactFlow<OpGraphFlowNode, OpGraphFlowEdge>
@@ -525,6 +725,10 @@ const OperationGraphInner = ({ operationList, operationId }: OperationGraphReact
                 onEdgesChange={onEdgesChange}
                 onNodeClick={handleNodeClick}
                 onPaneClick={handlePaneClick}
+                onNodeMouseEnter={isPerfOverlayActive ? handleNodeMouseEnter : undefined}
+                // Always attached so any exit clears a hover the overlay left
+                // behind; clearing a null hover bails out of the render.
+                onNodeMouseLeave={handleNodeMouseLeave}
                 minZoom={MIN_ZOOM}
                 maxZoom={MAX_ZOOM}
                 nodesConnectable={false}
@@ -546,12 +750,36 @@ const OperationGraphInner = ({ operationList, operationId }: OperationGraphReact
                     position='bottom-left'
                 />
             </ReactFlow>
+            {isPerfOverlayActive && !isBuilding ? (
+                <div className='op-graph-perf-legend'>
+                    <PerfOverlayLegend
+                        minNs={perfOverlay.minNs}
+                        maxNs={perfOverlay.maxNs}
+                    />
+                </div>
+            ) : null}
+            {perfHoverLabel !== null && perfHover !== null ? (
+                // Pointer-only, and `role='tooltip'` would promise a relationship no
+                // `aria-describedby` provides. The panel's Kernel duration row carries
+                // the same figure and is reachable by keyboard, so this stays decorative
+                // rather than advertising a path assistive tech cannot follow. #1880
+                <div
+                    className='op-graph-perf-hover'
+                    style={{ left: perfHover.x, top: perfHover.y }}
+                    aria-hidden='true'
+                >
+                    {perfHoverLabel}
+                </div>
+            ) : null}
             {isPanelOpen ? (
                 <OpGraphInfoPanel
                     operationId={selectedOperationId}
                     operationList={operationList}
                     operationNamesById={operationNamesById}
                     onLocateOperation={focusOperation}
+                    isPerfOverlayActive={isPerfOverlayActive}
+                    perfDeviceTimeNs={selectedPerfAggregate?.deviceTimeNs}
+                    perfColor={selectedPerfScore ? perfColorScale(selectedPerfScore.t) : undefined}
                 />
             ) : null}
         </div>

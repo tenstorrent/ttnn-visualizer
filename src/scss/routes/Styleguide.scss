@@ -27,6 +27,28 @@
     }
 }
 
+// The perf bar is a pseudo-element of `.react-flow__node-opNode` scoped under
+// `.operation-graph-react-flow`, so the preview has to carry that class to get any
+// of it. Compound rather than descendant: the view's own rule matches at the same
+// specificity, and this has to win regardless of bundle order.
+/* stylelint-disable-next-line selector-class-pattern */
+.operation-graph-react-flow.styleguide-perf-bar-host {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+
+    // Neutralises the view's viewport-filling band and its trailing negative
+    // margin, neither of which means anything for an inline sample.
+    height: auto;
+    margin-bottom: 10px;
+
+    // React Flow sizes nodes inline from the layout; these are hand-mounted.
+    /* stylelint-disable-next-line selector-class-pattern */
+    .react-flow__node-opNode {
+        width: 170px;
+    }
+}
+
 .table {
     border-spacing: 5px;
 }

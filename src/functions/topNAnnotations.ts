@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-import { OpPerfAggregate } from './perfOverlay';
+import { OpPerfAggregate, getRankComparator } from './perfOverlay';
 import { formatDuration } from './formatting';
 import {
     RankedAnnotation,
@@ -24,10 +24,6 @@ interface OperationsLike {
     id: number;
 }
 
-// Op-id rendered before its metric is computed — sort tiebreaker, deterministic. Always
-// resolves to an integer comparison so we never tie-rank two ops with identical metric.
-const compareByOpIdAsc = (a: { opId: number }, b: { opId: number }) => a.opId - b.opId;
-
 interface RankedCandidate {
     opId: number;
     rowIndex: number;
@@ -43,12 +39,7 @@ const pickTopN = (candidates: RankedCandidate[], n: number): RankedCandidate[] =
     if (n <= 0 || candidates.length === 0) {
         return [];
     }
-    const sorted = [...candidates].sort((a, b) => {
-        if (a.rawValue !== b.rawValue) {
-            return b.rawValue - a.rawValue;
-        }
-        return compareByOpIdAsc(a, b);
-    });
+    const sorted = [...candidates].sort(getRankComparator<RankedCandidate>((candidate) => candidate.rawValue));
     return sorted.slice(0, n);
 };
 

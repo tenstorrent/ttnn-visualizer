@@ -2,6 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
+import { NO_PERF_DATA_LABEL } from '../../definitions/PerfOverlayStatus';
 import { formatDuration } from '../../functions/formatting';
 import 'styles/components/PerfOverlay.scss';
 
@@ -22,7 +23,7 @@ const PerfOverlayOpMetric = ({ perfDeviceTimeNs, perfColor }: PerfOverlayOpMetri
                     aria-hidden='true'
                 />
             )}
-            {perfDeviceTimeNs !== undefined ? formatDuration(perfDeviceTimeNs) : 'No perf data'}
+            {perfDeviceTimeNs !== undefined ? formatDuration(perfDeviceTimeNs) : NO_PERF_DATA_LABEL}
         </span>
     </div>
 );
