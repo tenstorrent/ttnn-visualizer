@@ -94,7 +94,6 @@ const getServerConfig = (): ServerConfig => {
             SERVER_MODE: isServerModeEnabled(import.meta.env.VITE_SERVER_MODE),
             TT_METAL_HOME: import.meta.env.VITE_TT_METAL_HOME,
             REPORT_DATA_DIRECTORY: import.meta.env.VITE_REPORT_DATA_DIRECTORY || '/path/to/data/directory', // Default value for development
-            REPORT_LINKING_ENABLED: true,
             USERNAME: import.meta.env.VITE_USERNAME,
             ...getSshDefaults(
                 import.meta.env.VITE_SSH_DEFAULT_PORT,
@@ -114,7 +113,6 @@ const getServerConfig = (): ServerConfig => {
         SERVER_MODE: isServerModeEnabled(windowConfig?.SERVER_MODE),
         TT_METAL_HOME: windowConfig?.TT_METAL_HOME,
         REPORT_DATA_DIRECTORY: windowConfig?.REPORT_DATA_DIRECTORY,
-        REPORT_LINKING_ENABLED: windowConfig?.REPORT_LINKING_ENABLED || false,
         USERNAME: windowConfig?.USERNAME,
         ...getSshDefaults(
             windowConfig?.SSH_DEFAULT_PORT,

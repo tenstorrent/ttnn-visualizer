@@ -8,7 +8,7 @@ import { useParams } from 'react-router';
 
 import { useAtomValue } from 'jotai';
 import { useGetDeviceOperationListPerf, useLinkedPerformanceReport, useOperationsList } from '../hooks/useAPI';
-import OperationGraph from '../components/OperationGraphComponent';
+import OperationGraph from '../components/operation-graph/OperationGraphReactFlow';
 import LoadingSpinner from '../components/LoadingSpinner';
 import useClearSelectedBuffer from '../hooks/useClearSelectedBuffer';
 import { selectedOperationRangeAtom } from '../store/app';
@@ -61,10 +61,10 @@ const GraphView = () => {
         });
     }, [matchedPerfOps]);
 
-    // The component needs to distinguish "no perf report loaded at all"
+    // The overlay needs to distinguish "no perf report loaded at all"
     // (UNAVAILABLE) from "loaded but doesn't match this graph" (UNLINKED).
     // `perfOverlayRows` collapses both into "empty"; this flag preserves the
-    // distinction so the tooltip can say the right thing.
+    // distinction. Unread until the overlay lands, alongside `perfRows`. #1880
     const isPerfReportLoaded = Boolean(perfReport?.report?.length);
 
     return (

@@ -116,7 +116,7 @@ enum NodeRelation {
 }
 ```
 
-Used in `src/components/OperationGraphComponent.tsx` after refactoring from `'input' | 'output' | null`. Enums are searchable, autocompletable, and rename-safe. **One-off booleans/flags** (`'asc' | 'desc'` on a single call site) don't need promotion to enums.
+Declared in `src/definitions/NodeRelation.ts` after refactoring from `'input' | 'output' | null`. Enums are searchable, autocompletable, and rename-safe. **One-off booleans/flags** (`'asc' | 'desc'` on a single call site) don't need promotion to enums.
 
 ### Spell out generic type parameters on third-party containers
 
@@ -125,7 +125,7 @@ const dataset = new DataSet<OperationNode>(initial);
 const cache = new Map<string, Buffer>();
 ```
 
-When using `DataSet<T>` from `vis-data` (paired with `Edge`/`Node`/`Network` from `vis-network` — see `src/components/OperationGraphComponent.tsx`), `Map<K, V>`, or a similar container, write the type parameter. Letting inference quietly widen to `any`/`unknown` is the single most common source of latent typing bugs we hit.
+When using `DataSet<T>` from `vis-data` (paired with `Edge`/`Node`/`Network` from `vis-network` — see `src/components/operation-details/DeviceOperationsGraphComponent.tsx`), `Map<K, V>`, or a similar container, write the type parameter. Letting inference quietly widen to `any`/`unknown` is the single most common source of latent typing bugs we hit.
 
 ### Respect `react-hooks/exhaustive-deps`
 

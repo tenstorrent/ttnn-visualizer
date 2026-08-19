@@ -32,10 +32,6 @@ vi.mock('../src/hooks/useRemote', () => ({
     }),
 }));
 
-vi.mock('../src/functions/getServerConfig', () => ({
-    default: () => ({ REPORT_LINKING_ENABLED: true }),
-}));
-
 const PROFILER = { path: '/data/local/profiler-reports/mem-run', reportName: 'mem-run' };
 const PERFORMANCE = { path: '/data/local/performance-reports/perf-run', reportName: 'perf-run' };
 
