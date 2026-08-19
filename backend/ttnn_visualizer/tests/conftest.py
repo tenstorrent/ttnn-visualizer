@@ -19,7 +19,6 @@ from ttnn_visualizer.models import InstanceTable
 from ttnn_visualizer.tests.fixture_settings import base_test_settings
 from ttnn_visualizer.tests.report_schemas import SCHEMA_V2
 from ttnn_visualizer.usage import (
-    _RETIRED_RECORDING_ENV_VAR,
     LOG_SIZE_CHECK_INTERVAL_BYTES,
     RUN_ID_ENV_VAR,
     USAGE_DISABLED_ENV_VAR,
@@ -75,9 +74,6 @@ def usage_directory(tmp_path, monkeypatch):
     monkeypatch.setattr(usage, "_warned_env_vars", set())
     monkeypatch.delenv(RUN_ID_ENV_VAR, raising=False)
     monkeypatch.delenv(USAGE_DISABLED_ENV_VAR, raising=False)
-    # The retired name is no longer read, but a developer who still exports it would
-    # otherwise get the deprecation warning on every test that records.
-    monkeypatch.delenv(_RETIRED_RECORDING_ENV_VAR, raising=False)
 
     return directory
 
