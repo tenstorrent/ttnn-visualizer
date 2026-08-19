@@ -39,6 +39,15 @@ export const EMPTY_CRITICAL_PATH: CriticalPath = {
 };
 
 /**
+ * Cost, then chain length, then op id. Length second so an equal-cost tie reads
+ * as the fuller sequence rather than a prefix of it; op id last so the pick can't
+ * move with build order. Both the relaxation guard and the end-node scan decide
+ * through this one comparator, because determinism only holds while they agree.
+ */
+const isPreferredChain = (costDelta: number, opCountDelta: number, opIdDelta: number) =>
+    costDelta > 0 || (costDelta === 0 && (opCountDelta > 0 || (opCountDelta === 0 && opIdDelta < 0)));
+
+/**
  * Longest cumulative-duration path, where cost is carried by the ops and edges
  * are unweighted. An op with no perf row costs 0 and stays traversable, so a
  * gap in the report shortens the total rather than severing the path.
@@ -53,10 +62,10 @@ export const findCriticalPath = (
     }
 
     const opIdByNodeId = new Map<string, number>();
-    const inDegree = new Map<string, number>();
+    const inDegreeByNodeId = new Map<string, number>();
     for (const node of nodes) {
         opIdByNodeId.set(node.id, node.operationId);
-        inDegree.set(node.id, 0);
+        inDegreeByNodeId.set(node.id, 0);
     }
 
     const outgoingByNodeId = new Map<string, CriticalPathEdge[]>();
@@ -64,26 +73,26 @@ export const findCriticalPath = (
         // Defensive: this function doesn't assume its inputs came from
         // `opGraphBuilder`, which already drops edges with a dropped endpoint. An
         // unmatched target would sit in-degree bound and read as a cycle.
-        if (inDegree.has(edge.source) && inDegree.has(edge.target)) {
+        if (inDegreeByNodeId.has(edge.source) && inDegreeByNodeId.has(edge.target)) {
             const outgoing = outgoingByNodeId.get(edge.source);
             if (outgoing === undefined) {
                 outgoingByNodeId.set(edge.source, [edge]);
             } else {
                 outgoing.push(edge);
             }
-            inDegree.set(edge.target, (inDegree.get(edge.target) ?? 0) + 1);
+            inDegreeByNodeId.set(edge.target, (inDegreeByNodeId.get(edge.target) ?? 0) + 1);
         }
     }
 
     const weightOf = (nodeId: string) => deviceTimeNsByOpId.get(opIdByNodeId.get(nodeId) ?? UNKNOWN_OP_ID) ?? 0;
 
-    const cost = new Map<string, number>();
-    const opCount = new Map<string, number>();
+    const costByNodeId = new Map<string, number>();
+    const opCountByNodeId = new Map<string, number>();
     const predecessorByNodeId = new Map<string, string>();
     const predecessorEdgeByNodeId = new Map<string, string>();
     for (const node of nodes) {
-        cost.set(node.id, weightOf(node.id));
-        opCount.set(node.id, 1);
+        costByNodeId.set(node.id, weightOf(node.id));
+        opCountByNodeId.set(node.id, 1);
     }
 
     const byOpId = (left: string, right: string) =>
@@ -92,38 +101,34 @@ export const findCriticalPath = (
     // Sources in whatever order they arrive: the comparators below settle every
     // tie on op id, so the result doesn't depend on this order and sorting it
     // would be the one super-linear step in an otherwise O(V+E) pass.
-    const topoOrder = nodes.filter((node) => inDegree.get(node.id) === 0).map((node) => node.id);
+    const topoOrder = nodes.filter((node) => inDegreeByNodeId.get(node.id) === 0).map((node) => node.id);
 
     for (let head = 0; head < topoOrder.length; head++) {
         const nodeId = topoOrder[head];
-        const nodeCost = cost.get(nodeId) ?? 0;
-        const nodeOpCount = opCount.get(nodeId) ?? 1;
+        const nodeCost = costByNodeId.get(nodeId) ?? 0;
+        const nodeOpCount = opCountByNodeId.get(nodeId) ?? 1;
 
         for (const edge of outgoingByNodeId.get(nodeId) ?? []) {
             const candidateCost = nodeCost + weightOf(edge.target);
             const candidateOpCount = nodeOpCount + 1;
-            const currentCost = cost.get(edge.target) ?? 0;
-            const currentOpCount = opCount.get(edge.target) ?? 1;
             const currentPredecessor = predecessorByNodeId.get(edge.target);
-            // Cost, then chain length, then op id. Length second so an equal-cost
-            // tie reads as the fuller sequence rather than a prefix of it; op id
-            // last so the pick can't move with build order.
-            const isBetter =
-                candidateCost > currentCost ||
-                (candidateCost === currentCost && candidateOpCount > currentOpCount) ||
-                (candidateCost === currentCost &&
-                    candidateOpCount === currentOpCount &&
-                    currentPredecessor !== undefined &&
-                    byOpId(nodeId, currentPredecessor) < 0);
+            const isBetter = isPreferredChain(
+                candidateCost - (costByNodeId.get(edge.target) ?? 0),
+                candidateOpCount - (opCountByNodeId.get(edge.target) ?? 1),
+                // A target without a predecessor has no chain to compare op ids
+                // against, and can't reach the op-id tie either: its own single op
+                // is always shorter than the candidate chain arriving at it.
+                currentPredecessor === undefined ? 0 : byOpId(nodeId, currentPredecessor),
+            );
             if (isBetter) {
-                cost.set(edge.target, candidateCost);
-                opCount.set(edge.target, candidateOpCount);
+                costByNodeId.set(edge.target, candidateCost);
+                opCountByNodeId.set(edge.target, candidateOpCount);
                 predecessorByNodeId.set(edge.target, nodeId);
                 predecessorEdgeByNodeId.set(edge.target, edge.id);
             }
 
-            const remaining = (inDegree.get(edge.target) ?? 0) - 1;
-            inDegree.set(edge.target, remaining);
+            const remaining = (inDegreeByNodeId.get(edge.target) ?? 0) - 1;
+            inDegreeByNodeId.set(edge.target, remaining);
             if (remaining === 0) {
                 topoOrder.push(edge.target);
             }
@@ -137,12 +142,11 @@ export const findCriticalPath = (
 
     let endNodeId = topoOrder[0];
     for (const nodeId of topoOrder) {
-        const costDelta = (cost.get(nodeId) ?? 0) - (cost.get(endNodeId) ?? 0);
-        const opCountDelta = (opCount.get(nodeId) ?? 1) - (opCount.get(endNodeId) ?? 1);
-        const isBetterEnd =
-            costDelta > 0 ||
-            (costDelta === 0 && opCountDelta > 0) ||
-            (costDelta === 0 && opCountDelta === 0 && byOpId(nodeId, endNodeId) < 0);
+        const isBetterEnd = isPreferredChain(
+            (costByNodeId.get(nodeId) ?? 0) - (costByNodeId.get(endNodeId) ?? 0),
+            (opCountByNodeId.get(nodeId) ?? 1) - (opCountByNodeId.get(endNodeId) ?? 1),
+            byOpId(nodeId, endNodeId),
+        );
         if (isBetterEnd) {
             endNodeId = nodeId;
         }
@@ -167,7 +171,7 @@ export const findCriticalPath = (
         opIds,
         nodeIds,
         edgeIds,
-        totalNs: cost.get(endNodeId) ?? 0,
+        totalNs: costByNodeId.get(endNodeId) ?? 0,
         // Kahn only orders what it can reach, so a short order means a cycle held
         // its members back.
         hasCycle: topoOrder.length < nodes.length,

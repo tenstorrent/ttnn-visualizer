@@ -78,10 +78,15 @@ describe('op graph critical path styling', () => {
         // while the rest of the path reads magenta. #1613
         const accent = STYLESHEET.indexOf('.op-graph-edge-critical-path .react-flow__edge-path');
         const inputEdge = STYLESHEET.indexOf('.op-graph-edge-input .react-flow__edge-path');
+        const outputEdge = STYLESHEET.indexOf('.op-graph-edge-output .react-flow__edge-path');
 
         expect(accent).toBeGreaterThan(-1);
         expect(inputEdge).toBeGreaterThan(-1);
+        expect(outputEdge).toBeGreaterThan(-1);
         expect(accent).toBeLessThan(inputEdge);
+        // Both I/O rules, not just the first: a selected node's outgoing edges
+        // have the same claim on their colour as its incoming ones.
+        expect(accent).toBeLessThan(outputEdge);
     });
 
     it('yields the dimming to an active search', () => {
@@ -99,6 +104,10 @@ describe('op graph critical path styling', () => {
             .flatMap(([, argument]) => argument.split(','))
             .map((selector) => selector.trim());
 
+        // The path's own edges first: dropping this member dims the feature's
+        // central visual to 0.35 along with everything it was meant to stand out
+        // from.
+        expect(exclusions).toContain('.op-graph-edge-critical-path');
         expect(exclusions).toContain('.op-graph-edge-input');
         expect(exclusions).toContain('.op-graph-edge-output');
     });

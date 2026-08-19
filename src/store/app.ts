@@ -94,6 +94,11 @@ export const isFullStackTraceAtom = atom(false);
 // swap stops it matching in the same render, so no frame can outlive its data
 // while the view gets around to clearing the intent. Never persisted, since the
 // highlight only reads on a READY perf overlay. #1613
+//
+// Module scope, so the intent outlives leaving `/graphtree` and coming back — the
+// report it names is what invalidates it, not the view's lifetime. The perf
+// overlay's own flag is local `useState` and does not survive that trip; the two
+// switches deliberately differ until #1903 decides whether they should agree.
 export const criticalPathScopeAtom = atom<ReportScope | null>(null);
 
 // Tensors route

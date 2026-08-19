@@ -148,6 +148,11 @@ const OperationGraphInner = ({
     const [edges, setEdges, onEdgesChange] = useEdgesState<OpGraphFlowEdge>([]);
     const [selectedOperationId, setSelectedOperationId] = useState<number | null>(operationId ?? null);
     const [nodeIndex, setNodeIndex] = useState<OpGraphNodeIndexEntry[]>([]);
+    // The edge set as built, kept apart from React Flow's edge state: that array is
+    // replaced by `applyEdgeChanges` on every edge selection, which cannot change
+    // the graph's shape. Anything deriving from the graph's topology reads this, so
+    // selecting an edge doesn't pay for a traversal. #1613
+    const [builtEdges, setBuiltEdges] = useState<OpGraphFlowEdge[]>([]);
     const [hideDeallocate, setHideDeallocate] = useState(true);
     const [isPerfOverlayEnabled, setIsPerfOverlayEnabled] = useState(false);
     const [criticalPathScope, setCriticalPathScope] = useAtom(criticalPathScopeAtom);
@@ -257,8 +262,10 @@ const OperationGraphInner = ({
 
     const onBuilt = useCallback(
         (graph: OpGraphBuiltGraph) => {
+            const edgesForBuild = graph.edges.map((edge) => ({ ...edge, markerEnd: EDGE_MARKER }));
             setNodes(graph.nodes);
-            setEdges(graph.edges.map((edge) => ({ ...edge, markerEnd: EDGE_MARKER })));
+            setEdges(edgesForBuild);
+            setBuiltEdges(edgesForBuild);
             setNodeIndex(
                 graph.nodes.map((node) => ({
                     id: node.id,
@@ -558,8 +565,8 @@ const OperationGraphInner = ({
         for (const [opId, aggregate] of perfOverlay.aggregatesByOpId) {
             deviceTimeNsByOpId.set(opId, aggregate.deviceTimeNs);
         }
-        return findCriticalPath(nodeIndex, edges, deviceTimeNsByOpId);
-    }, [isCriticalPathActive, perfOverlay, nodeIndex, edges]);
+        return findCriticalPath(nodeIndex, builtEdges, deviceTimeNsByOpId);
+    }, [isCriticalPathActive, perfOverlay, nodeIndex, builtEdges]);
 
     useEffect(() => {
         if (criticalPath.hasCycle) {

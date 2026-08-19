@@ -25,6 +25,10 @@ describe('findCriticalPath', () => {
         expect(path.totalNs).toBe(600);
         expect([...path.edgeIds]).toEqual(expect.arrayContaining([edgeId(1, 2), edgeId(2, 3)]));
         expect(path.hasCycle).toBe(false);
+        // The set the view actually reads: node outlines, the container dim and
+        // the annotation are all gated on `nodeIds.size`, so correct `opIds`
+        // beside an empty `nodeIds` would disable the feature silently.
+        expect([...path.nodeIds].sort()).toEqual(['1', '2', '3']);
     });
 
     it('prefers two sequential ops over one heavier op on a side branch', () => {
@@ -49,6 +53,9 @@ describe('findCriticalPath', () => {
 
         expect(path.opIds).toEqual([1, 2, 4]);
         expect(path.totalNs).toBe(10);
+        // The losing branch must be absent from what gets outlined, not merely
+        // absent from `opIds`.
+        expect([...path.nodeIds].sort()).toEqual(['1', '2', '4']);
     });
 
     it('picks the same branch whichever order the edges arrive in', () => {
@@ -64,22 +71,22 @@ describe('findCriticalPath', () => {
     });
 
     it('picks the same branch whichever order the sources arrive in', () => {
-        // Sources are no longer sorted, so determinism rests entirely on the
-        // comparators — including the end-node scan, which walks the topological
-        // order it is handed.
-        const forwards = findCriticalPath(
-            nodes(1, 2, 3, 4),
-            edges([1, 2], [2, 4], [1, 3], [3, 4]),
-            weights([2, 10], [3, 10]),
-        );
-        const backwards = findCriticalPath(
-            nodes(4, 3, 2, 1),
-            edges([1, 2], [2, 4], [1, 3], [3, 4]),
-            weights([2, 10], [3, 10]),
-        );
+        // Two zero-indegree sources converging on one sink, so reversing the node
+        // list actually reverses the order Kahn seeds. A fixture with one source
+        // cannot: the seed is that node either way, whatever the list does.
+        //
+        // Ops 1 and 2 cost the same and both reach op 3 in one hop, so the sink's
+        // predecessor is settled by the op-id tie-break alone — drop it and the
+        // reversed run answers [2, 3].
+        const converging = edges([1, 3], [2, 3]);
+        const equalCost = weights([1, 10], [2, 10], [3, 5]);
+        const forwards = findCriticalPath(nodes(1, 2, 3), converging, equalCost);
+        const backwards = findCriticalPath(nodes(3, 2, 1), converging, equalCost);
 
+        expect(forwards.opIds).toEqual([1, 3]);
         expect(backwards.opIds).toEqual(forwards.opIds);
         expect(backwards.totalNs).toBe(forwards.totalNs);
+        expect(backwards.edgeIds).toEqual(forwards.edgeIds);
     });
 
     it('crosses an op with no perf row as a zero-cost pass-through', () => {
@@ -141,6 +148,18 @@ describe('findCriticalPath', () => {
         expect(path.hasCycle).toBe(true);
         expect(path.opIds).toEqual([]);
         expect(path.totalNs).toBe(0);
+    });
+
+    it('picks the heaviest op when nothing is connected', () => {
+        // The single-node branch the view's `hasCriticalPath` nulling exists for:
+        // one op, no edges, and the outline still has to land on it.
+        const path = findCriticalPath(nodes(1, 2, 3), [], weights([1, 10], [2, 50], [3, 20]));
+
+        expect(path.opIds).toEqual([2]);
+        expect(path.nodeIds).toEqual(new Set(['2']));
+        expect(path.edgeIds.size).toBe(0);
+        expect(path.totalNs).toBe(50);
+        expect(path.hasCycle).toBe(false);
     });
 
     it('returns an empty path for an empty graph', () => {
