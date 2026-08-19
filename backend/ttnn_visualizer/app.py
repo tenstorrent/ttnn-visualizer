@@ -82,7 +82,7 @@ def _build_spa_client_config(app: Flask) -> dict:
         "REPORT_DATA_DIRECTORY": str(app.config["REPORT_DATA_DIRECTORY"]),
         "USERNAME": _get_client_username(server_mode),
         # Recomputed rather than read from ``app.config``: ``from_object`` resolves the
-        # ``_UsageRecordingEnabled`` descriptor before ``settings_override`` is applied,
+        # ``_UsageRecordingActive`` descriptor before ``settings_override`` is applied,
         # so the snapshot can claim recording is on for an app that is in server mode.
         # Published under both postures, unlike the local-only metadata below — a missing
         # key would be indistinguishable from a disabled switch, and the client needs to
