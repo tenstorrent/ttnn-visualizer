@@ -47,11 +47,14 @@ $minimap-width: 200px;
         justify-content: center;
         box-sizing: border-box;
 
-        // Owns the containing block for the perf bar below. `@xyflow/react`'s own
-        // `.react-flow__node` already sets `position: absolute`, but relying on it
-        // means a vendor change would silently anchor every bar to the relatively
-        // positioned canvas and pile them in one corner. #1880
-        position: relative;
+        // Owns the containing block for the perf bar below, and must stay
+        // `absolute` to do it: React Flow positions nodes out of flow and offsets
+        // them from the pane origin, so `relative` drops them into document flow
+        // while the edge SVG keeps drawing at the store's coordinates — every arrow
+        // detaches from its node. Declared rather than inherited from
+        // `.react-flow__node` (which this outranks) so a vendor change cannot take
+        // the containing block away and pile every bar in the canvas corner. #1880
+        position: absolute;
         padding: 4px 12px;
         border: 2px solid transparent;
         border-radius: 3px;
