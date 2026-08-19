@@ -5,7 +5,7 @@
 @use '../definitions/colours' as *;
 
 /* stylelint-disable selector-class-pattern */
-.react-flow {
+.mlir-page .react-flow {
     --xy-edge-label-color: #{$tt-grey-7};
     --xy-edge-label-background-color: transparent;
     --xy-controls-button-background-color-hover-props: #{$tt-grey-6};
@@ -62,12 +62,12 @@
     box-shadow: 0 1px 4px rgb(0 0 0 / 30%);
 }
 
-.react-flow__edge-text {
+.mlir-page .react-flow__edge-text {
     font-size: 10px;
     font-family: monospace;
 }
 
-.react-flow__node-default {
+.mlir-page .react-flow__node-default {
     color: #222;
 
     /* DefaultNode renders label as a raw text node; clip when width is capped by layout. */
@@ -75,7 +75,7 @@
     white-space: nowrap;
 }
 
-.react-flow__node-mlirOp {
+.mlir-page .react-flow__node-mlirOp {
     /* Visual chrome formerly inline-set by `makeOpNode` in mlirGraphBuilder.ts. */
     position: relative;
     display: flex;
@@ -95,8 +95,8 @@
     }
 }
 
-.react-flow__node-group.selected,
-.react-flow__node-mlirGroup.selected {
+.mlir-page .react-flow__node-group.selected,
+.mlir-page .react-flow__node-mlirGroup.selected {
     box-shadow: 0 0 0 3px var(--graph-selected);
     outline: none;
 }
@@ -116,7 +116,7 @@
  * own clicks/drags never trigger a stray canvas pan; that combined with
  * `onMouseDown stopPropagation()` in the React component keeps the collapse
  * click clean. */
-.react-flow__node.react-flow__node-mlirGroup {
+.mlir-page .react-flow__node.react-flow__node-mlirGroup {
     background: transparent;
     padding: 0;
     border: none;
