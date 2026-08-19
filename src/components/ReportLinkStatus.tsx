@@ -10,7 +10,6 @@ import { useEffect } from 'react';
 import { ReportLocation } from '../definitions/Reports';
 import { ReportLinkMatchResult, ReportPairLinkStatus } from '../definitions/ReportLinks';
 import { getReportId, upsertReportLink } from '../functions/reportLinks';
-import getServerConfig from '../functions/getServerConfig';
 import useRemoteConnection from '../hooks/useRemote';
 import { useReportLinkMatch } from '../hooks/useReportLinkMatch';
 import {
@@ -32,18 +31,10 @@ const ReportLinkStatus = () => {
     const setReportLinks = useSetAtom(reportLinksAtom);
     const { persistentState } = useRemoteConnection();
 
-    const isReportLinkingEnabled = !!getServerConfig()?.REPORT_LINKING_ENABLED;
-
     // Persist LINKED / UNLINKED once the live comparison settles so pickers can
     // badge known counterparts (including failed pairs).
     useEffect(() => {
-        if (
-            !isReportLinkingEnabled ||
-            !activeProfilerReport ||
-            !activePerformanceReport ||
-            !profilerLocation ||
-            !performanceLocation
-        ) {
+        if (!activeProfilerReport || !activePerformanceReport || !profilerLocation || !performanceLocation) {
             return;
         }
 
@@ -88,7 +79,6 @@ const ReportLinkStatus = () => {
         profilerLocation,
         performanceLocation,
         setReportLinks,
-        isReportLinkingEnabled,
         persistentState.selectedConnection?.host,
     ]);
 
