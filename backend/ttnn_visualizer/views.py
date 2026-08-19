@@ -2591,6 +2591,9 @@ def record_usage_events():
     # `Content-Length` and while reading a stream the server has terminated, which a
     # manual `request.content_length` check would miss for chunked bodies. The resulting
     # `RequestEntityTooLarge` renders as a 413 through the app's `HTTPException` handler.
+    # Assigning it per request needs Flask >= 3.1 — the attribute is read-only before
+    # that, so relaxing the pin in `pyproject.toml` turns every request here into a 500
+    # rather than a quietly uncapped body.
     request.max_content_length = MAX_USAGE_REQUEST_BYTES
 
     # Checked here as well as in the writer so a user who switched recording off does not

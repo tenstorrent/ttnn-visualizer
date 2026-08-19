@@ -113,9 +113,9 @@ LOG_SIZE_CHECK_INTERVAL_BYTES = 256 * 1024
 
 # The largest batch one request may carry, which is also the largest number of lines one
 # ``os.write`` has to hold. It lives here rather than beside the ingest route's byte cap
-# because what it bounds is ``_append_line``'s atomicity, not merely an HTTP body: a
-# second batch caller would otherwise get no cap at all, and raising it in ``views.py``
-# would silently relax a guarantee documented here.
+# because what it bounds is ``_append_line``'s atomicity, not merely an HTTP body, and is
+# enforced in ``_write_events`` so a second batch caller cannot bypass it: raising it in
+# ``views.py`` alone would silently relax a guarantee documented here.
 MAX_USAGE_BATCH_EVENTS = 50
 
 # Only has to be unique within one machine's log for one sitting, and is never
@@ -756,7 +756,9 @@ def _write_events(
 
     All-or-nothing because a reader cannot tell a partial batch from a complete one, and
     a file whose bounded contents are the entire promise must not hold half an event.
-    Formatting every line before writing any is what buys that.
+    Formatting every line before writing any is what buys that — except under a short
+    write that then fails, which leaves a partial line indistinguishable from an NFS
+    interleave and is quarantined by ``_summarise`` (see :func:`_append_line`).
 
     Shared by both public recorders so the guard order and the failure semantics have one
     definition; each caller keeps only its own warning wording, which is the part that
@@ -765,6 +767,13 @@ def _write_events(
     # Once per batch, not per event: the first stats the disabled marker, the second the
     # log itself.
     if not is_recording_enabled(server_mode):
+        return False
+
+    # Here rather than only at the route, so ``MAX_USAGE_BATCH_EVENTS`` binds every batch
+    # caller and not just the one that happens to exist. A batch over the cap would hand
+    # ``_append_line`` more than one ``os.write`` can carry, forfeiting the ``O_APPEND``
+    # atomicity the no-lock design rests on — a refusal is the cheaper answer.
+    if len(events) > MAX_USAGE_BATCH_EVENTS:
         return False
 
     if _is_log_full():
@@ -889,7 +898,11 @@ def record_events(
 
     All-or-nothing because the alternative leaves half a batch in a file whose bounded
     contents are the entire promise, and because a reader cannot tell a partial batch
-    from a complete one. Formatting every line before writing any is what buys that.
+    from a complete one. Formatting every line before writing any is what buys that. The
+    one exception is a short write that then fails: the bytes already out stay on disk
+    while this returns ``False``. That residue is indistinguishable from an NFS interleave
+    and is quarantined by ``_summarise``, so it costs a skipped line rather than a
+    misread one.
 
     ``details`` is an explicit mapping rather than ``**kwargs`` as in
     :func:`record_event`: with keyword expansion, a detail field named ``server_mode``
