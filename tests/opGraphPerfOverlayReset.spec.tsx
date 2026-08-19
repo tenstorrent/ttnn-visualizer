@@ -10,18 +10,17 @@ import { useState } from 'react';
 import { activePerformanceReportAtom, activeProfilerReportAtom } from '../src/store/app';
 import type { ReportFolder } from '../src/definitions/Reports';
 
-// The reset lives in `OperationGraphReactFlow`, which cannot mount under jsdom
-// (React Flow needs a measured container and the layout worker needs a real
-// `Worker`). This exercises the same effect in isolation: the contract is that
-// overlay intent is dropped whenever either report identity changes, so a report
-// that leaves and re-enters `READY` cannot switch the overlay back on. #1880
+// `OperationGraphReactFlow` cannot mount under jsdom — React Flow needs a
+// measured container and the worker a real `Worker` — so this mirrors its reset
+// in isolation, render-phase adjustment included. Contract: intent drops on
+// either report identity changing. #1880
 const useOverlayIntent = () => {
     const [isEnabled, setIsEnabled] = useState(false);
-    const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
-    const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
-    const [scope, setScope] = useState({ profiler: activeProfilerReport, performance: activePerformanceReport });
-    if (scope.profiler !== activeProfilerReport || scope.performance !== activePerformanceReport) {
-        setScope({ profiler: activeProfilerReport, performance: activePerformanceReport });
+    const profilerPath = useAtomValue(activeProfilerReportAtom)?.path ?? null;
+    const performancePath = useAtomValue(activePerformanceReportAtom)?.path ?? null;
+    const [scope, setScope] = useState({ profiler: profilerPath, performance: performancePath });
+    if (scope.profiler !== profilerPath || scope.performance !== performancePath) {
+        setScope({ profiler: profilerPath, performance: performancePath });
         setIsEnabled(false);
     }
     return [isEnabled, setIsEnabled] as const;
@@ -29,8 +28,8 @@ const useOverlayIntent = () => {
 
 const TOGGLE_LABEL = 'toggle overlay';
 
-// Intent is driven and read through the DOM rather than captured into module
-// state, so nothing is written during render.
+// Driven and read through the DOM, not module scope, so no assertion depends on
+// when the hook happens to run.
 const OverlayIntentProbe = () => {
     const [isEnabled, setIsEnabled] = useOverlayIntent();
     return (
@@ -75,9 +74,8 @@ describe('op graph perf overlay reset', () => {
     });
 
     it('drops overlay intent when the performance report changes', () => {
-        // Either report re-anchors the ramp, so either has to reset. A perf report
-        // swap is the more dangerous of the two: the graph is unchanged, so a
-        // stale overlay looks plausible while encoding a different run.
+        // A perf swap is the more dangerous of the two: the graph is unchanged,
+        // so a stale overlay looks plausible while encoding a different run.
         const store = renderProbe();
         enableOverlay();
         act(() => store.set(activePerformanceReportAtom, reportFolder('resnet50-perf')));
@@ -86,9 +84,8 @@ describe('op graph perf overlay reset', () => {
     });
 
     it('does not re-enable itself when a report is swapped back', () => {
-        // The regression this guards: binding the switch to derived active state
-        // while holding intent meant a report leaving and re-entering READY turned
-        // the overlay back on with no user action.
+        // The regression: holding intent while the switch reads derived active
+        // state let a report re-entering READY turn the overlay back on.
         const store = renderProbe();
         const first = reportFolder('resnet50');
         act(() => store.set(activeProfilerReportAtom, first));
@@ -103,13 +100,23 @@ describe('op graph perf overlay reset', () => {
     });
 
     it('leaves intent alone while the reports hold still', () => {
-        // A reset that fired on every render would make the switch impossible to
-        // turn on at all.
+        // A reset firing on every render would make the switch unusable.
         const store = renderProbe();
         const report = reportFolder('resnet50');
         act(() => store.set(activeProfilerReportAtom, report));
         enableOverlay();
         act(() => store.set(activeProfilerReportAtom, report));
+
+        expect(intent()).toBe('true');
+    });
+
+    it('survives the same report arriving as a rebuilt object', () => {
+        // Restoring an instance or refetching writes a fresh `ReportFolder` for
+        // the loaded report; keyed on object identity that reads as a swap.
+        const store = renderProbe();
+        act(() => store.set(activeProfilerReportAtom, reportFolder('resnet50')));
+        enableOverlay();
+        act(() => store.set(activeProfilerReportAtom, reportFolder('resnet50')));
 
         expect(intent()).toBe('true');
     });

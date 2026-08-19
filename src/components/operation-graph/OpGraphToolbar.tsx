@@ -137,11 +137,10 @@ const OpGraphToolbar = memo(
                     disabled={isDisabled}
                 />
 
-                {/* Bound to the Switch itself, not a wrapper: Blueprint's
-                    tooltip target is the enclosing label, which keeps emitting
-                    pointer events while the input inside it is disabled. That
-                    matters because the two states that disable this control are
-                    exactly the ones whose tooltip explains why. #1880 */}
+                {/* Bound to the Switch, not a wrapper: Blueprint targets the
+                    enclosing label, which still emits pointer events while the
+                    input is disabled — and disabled is when the tooltip
+                    explaining why matters most. #1880 */}
                 <Tooltip
                     placement={PopoverPosition.BOTTOM}
                     content={PERF_OVERLAY_TOOLTIP[perfOverlayStatus]}

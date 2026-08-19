@@ -61,10 +61,12 @@ $legend-marker-slot: 25px;
 // MLIR pickers line up regardless of how long the label they display happens to be.
 $report-select-width: 250px;
 
-// Fixed app chrome bracketing the MLIR page: the content-sized navbar above and
-// the footer info bar below. The title and (optional) loader rows sit inside
-// `.mlir-page` and are laid out by flex, so the graph reclaims their space when
-// absent — these two are the only remaining structural offsets.
-$mlir-navbar-height: 92px;
+// Fixed app chrome that every viewport-height view subtracts. The status bar is
+// `.app-footer`'s closed `min-height`; it grows when opened.
+$app-navbar-height: 92px;
+$app-status-bar-height: 34px;
+
+// MLIR takes the status bar plus its own slack. Its title and loader rows are
+// flex-laid inside `.mlir-page`, so the graph reclaims them when absent.
 $mlir-footer-clearance: 40px;
-$mlir-page-height: calc(100vh - #{$mlir-navbar-height} - #{$mlir-footer-clearance});
+$mlir-page-height: calc(100vh - #{$app-navbar-height} - #{$mlir-footer-clearance});

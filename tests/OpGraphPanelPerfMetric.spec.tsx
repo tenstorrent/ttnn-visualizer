@@ -52,8 +52,8 @@ afterEach(cleanup);
 
 describe('op graph panel perf metric', () => {
     it('stays out of the panel while the overlay is off', () => {
-        // The panel is the op's permanent detail view; a duration row that
-        // appeared unconditionally would imply perf data the report may not have.
+        // The panel is the op's permanent detail view, so an unconditional
+        // duration row would imply perf data the report may not have.
         renderPanel({ isPerfOverlayActive: false, perfDeviceTimeNs: 12_500_000 });
 
         expect(screen.queryByText('Kernel duration')).not.toBeInTheDocument();
@@ -67,8 +67,7 @@ describe('op graph panel perf metric', () => {
     });
 
     it('names the gap when the selected op has no perf row', () => {
-        // Selecting an unmapped node has to say why the node has no bar, rather
-        // than showing a blank row the user reads as a zero.
+        // Must say why the node has no bar, not show a row that reads as zero.
         renderPanel({ isPerfOverlayActive: true });
 
         expect(screen.getByText(NO_PERF_DATA_LABEL)).toBeInTheDocument();

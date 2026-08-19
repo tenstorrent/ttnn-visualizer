@@ -9,9 +9,8 @@
 @use '../definitions/colours' as *;
 @use '../definitions/variables' as variables;
 
-// Shared by the bottom-left chrome — zoom controls, minimap and perf legend — so
-// the three keep one baseline. The origin and margin are React Flow's own; the
-// minimap widens its left margin to clear the controls.
+// Bottom-left chrome — zoom controls, minimap, perf legend — on one baseline.
+// The origin and margin are React Flow's own.
 $chrome-dock-bottom: 8px;
 $panel-origin-left: 12px;
 $panel-margin: 15px;
@@ -22,11 +21,10 @@ $minimap-width: 200px;
     position: relative;
     width: 100%;
 
-    // Fills the band between the navbar and the fixed status bar: 92px navbar,
-    // 15px `main` top padding, 34px bar. The negative margin drops the trailing
-    // page padding (`main` 30px + `.data-padding` 20px), which exists to keep
-    // scrolling content off the bar and here only adds a scrollbar.
-    height: calc(100vh - 92px - 15px - 34px);
+    // Fills the band between the navbar and the status bar, less `main`'s 15px
+    // top padding. The negative margin drops the 50px of trailing page padding,
+    // which here would only add a scrollbar.
+    height: calc(100vh - #{variables.$app-navbar-height} - 15px - #{variables.$app-status-bar-height});
     margin-bottom: -50px;
 
     .operation-graph-react-flow-loader {
@@ -68,45 +66,35 @@ $minimap-width: 200px;
             background-color: var(--graph-output-node);
         }
 
-        // The perf overlay's own channel. The fill belongs to the input/output
-        // highlight and the border to selection, so magnitude goes on an inset
-        // bar instead of competing for either. Absolutely positioned to stay out
-        // of the flex flow: a bar that changed the node's height would desync the
-        // Dagre sizes and turn every overlay toggle into a relayout. #1880
+        // Magnitude goes on an inset bar: the fill belongs to the I/O highlight
+        // and the border to selection. Absolute so it cannot resize the node and
+        // turn every overlay toggle into a relayout. #1880
         &::after {
             content: '';
             position: absolute;
             bottom: 0;
             left: 0;
 
-            // The bar lives inside the scaled viewport, so a fixed size here is
-            // in graph units and shrinks with the zoom — at the ~0.1–0.3 a large
-            // report fits in, a few px became sub-pixel and the colour washed
-            // out, which is the whole encoding gone at the zoom it matters most.
-            // Dividing by the live zoom holds the on-screen size instead. The
-            // 100% ceiling then lets the bar grow into a full-node fill once the
-            // node itself is only a few px tall, degrading into the zoom-
-            // invariant encoding this replaced (#1515) rather than vanishing.
-            // Trade-off: at overview zoom a hot op's bar covers the node, so
-            // perf outranks the input/output highlight there — deliberate, since
-            // the highlight is unreadable at that scale anyway. #1610
+            // Graph units inside the scaled viewport: at the ~0.1–0.3 zoom a
+            // large report needs, a few fixed px go sub-pixel and wash out.
+            // Dividing by live zoom holds the on-screen size, and the 100%
+            // ceiling degrades to a full-node fill rather than vanishing — so at
+            // overview zoom perf deliberately outranks the I/O highlight. #1610
             min-width: max(3px, calc(2px / var(--op-graph-perf-zoom, 1)));
             width: calc(var(--op-graph-perf-scale, 0) * 100%);
 
-            // Matches the node's 4px bottom padding, which is the room available
-            // before the bar starts clipping the descenders of the file line.
+            // The node's 4px bottom padding, before the bar clips descenders.
             height: min(100%, max(4px, calc(4px / var(--op-graph-perf-zoom, 1))));
 
-            // Absent custom property means the op has no perf row, so the bar
-            // stays invisible and "no data" never reads as "fastest op".
+            // No custom property means no perf row, so no bar — "no data" must
+            // not read as "fastest op".
             background-color: var(--op-graph-perf-color, transparent);
             border-radius: 0 2px 0 1px;
         }
     }
 
-    // Inside the canvas so it reads against the nodes it explains, on the bottom
-    // band beside the minimap — the toolbar holds the top-left corner and the
-    // details panel the full right edge.
+    // On the bottom band beside the minimap, reading against the nodes it
+    // explains; the toolbar owns the top-left and the details panel the right.
     .op-graph-perf-legend {
         position: absolute;
         z-index: variables.$z-index-2-interactive;
@@ -125,8 +113,7 @@ $minimap-width: 200px;
         line-height: 1.3;
         white-space: nowrap;
 
-        // Offset from the cursor so it never lands under the pointer and starts
-        // flickering the enter/leave pair that positions it.
+        // Clear of the pointer, which would flicker the enter/leave pair.
         transform: translate(12px, 12px);
         pointer-events: none;
     }
@@ -184,9 +171,8 @@ $minimap-width: 200px;
         }
     }
 
-    // Outranks the bare-`.react-flow` rule in MLIRViewReactFlow.scss, which lifts
-    // bottom-left panels 16px for that view and reaches every graph in the app.
-    // Specificity rather than order, since both stylesheets are app-wide.
+    // Outranks MLIRViewReactFlow.scss's bare-`.react-flow` rule, which lifts
+    // bottom-left panels 16px app-wide. Specificity, not stylesheet order.
     .react-flow .react-flow__panel.bottom.left {
         bottom: 0;
         margin-bottom: $chrome-dock-bottom;

@@ -38,9 +38,8 @@ const renderToolbar = (status: PerfOverlayStatus, onPerfOverlayChange: (next: bo
         />,
     );
 
-    // The label is Blueprint's own wrapper and the tooltip's hover target, so
-    // querying it rather than a test-only container keeps these assertions
-    // pointed at the element a user actually reaches for.
+    // Blueprint's own wrapper and the tooltip's hover target, so this queries
+    // the element a user reaches for rather than a test-only container.
     const label = screen.getByText(/^Perf overlay/).closest('label') as HTMLElement;
     return { label, input: label.querySelector('input') as HTMLInputElement };
 };
@@ -84,9 +83,8 @@ describe('perf overlay switch', () => {
 });
 
 describe('perf overlay switch tooltip', () => {
-    // The two states that disable the switch are the two whose tooltip explains
-    // why it's disabled, so "reachable while disabled" is the property worth
-    // holding — not the markup that happens to deliver it today.
+    // Disabled is when the tooltip matters most, so "reachable while disabled"
+    // is the property worth holding — not today's markup.
     it.each([
         ['unavailable', PerfOverlayStatus.UNAVAILABLE],
         ['unlinked', PerfOverlayStatus.UNLINKED],

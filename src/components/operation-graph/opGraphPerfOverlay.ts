@@ -15,17 +15,15 @@ import {
     scoreOps,
 } from '../../functions/perfOverlay';
 
-// Perf rides its own channel — an inset bar drawn as a pseudo-element — because
-// the fill belongs to the input/output highlight and the border to selection.
-// Sizing it from a custom property rather than a child element keeps the node's
-// geometry, and therefore the Dagre layout, untouched by a toggle. #1880
+// Perf gets its own channel — an inset pseudo-element bar — since the fill
+// belongs to the I/O highlight and the border to selection. Driving it from a
+// custom property leaves the node geometry, and so the Dagre layout, alone. #1880
 export const PERF_BAR_SCALE_VAR = '--op-graph-perf-scale';
 export const PERF_BAR_COLOR_VAR = '--op-graph-perf-color';
 
-// The bar is inside the scaled viewport, so its stylesheet size is in graph
-// units, not screen pixels. Publishing the live zoom lets the SCSS divide by it
-// and hold an on-screen floor — without it the encoding washes out at exactly
-// the zoom a whole report fits in, which is where it's most useful. #1610
+// Sizes inside the scaled viewport are graph units, not screen pixels. The SCSS
+// divides by the live zoom to hold an on-screen floor, without which the
+// encoding washes out at exactly the zoom a whole report fits in. #1610
 export const PERF_BAR_ZOOM_VAR = '--op-graph-perf-zoom';
 
 export const NO_PERF_DATA_LABEL = 'No perf data';
@@ -58,13 +56,10 @@ const EMPTY_OVERLAY: OpGraphPerfOverlay = {
 };
 
 /**
- * Fold the perf rows down to everything the graph overlay needs, restricted to
- * the ops the graph is currently showing.
- *
- * Restricting to `graphOperationIds` is what makes the ramp answer "where is
- * the time *in this view*": an operation-range selection or hidden deallocates
- * would otherwise leave the scale anchored to a max the user cannot see, and
- * the "N of M linked" count would compare against the wrong denominator.
+ * Restricting to `graphOperationIds` makes the ramp answer "where is the time
+ * *in this view*": a range selection or hidden deallocates would otherwise
+ * anchor the scale to a max the user cannot see, and count "N of M" against the
+ * wrong denominator.
  */
 export const buildOpGraphPerfOverlay = (
     rows: PerfOverlaySource[] | undefined,
@@ -115,12 +110,9 @@ export const buildOpGraphPerfOverlay = (
 };
 
 /**
- * Per-node style patch keyed by React Flow node id, or `null` when the overlay
- * is off so the caller can skip the styling pass entirely.
- *
- * Only custom properties are written. `className` already carries selection and
- * the input/output highlight, and `style.opacity` carries the filter dim, so
- * perf has to compose with all three rather than displace any of them.
+ * Style patch by node id, or `null` when the overlay is off so the caller can
+ * skip the styling pass. Custom properties only: `className` already carries
+ * selection and the I/O highlight, and the filter dim is inherited.
  */
 export const buildPerfNodeStyleByNodeId = (
     overlay: OpGraphPerfOverlay,

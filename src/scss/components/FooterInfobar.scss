@@ -15,7 +15,7 @@
     width: 100%;
     background-color: rgba($tt-black, 0.9);
     padding: 5px 15px;
-    min-height: 34px; // Closed height
+    min-height: variables.$app-status-bar-height; // Closed height
 
     &.is-open {
         gap: 5px;

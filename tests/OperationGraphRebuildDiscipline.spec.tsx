@@ -47,9 +47,8 @@ vi.mock('@xyflow/react', async () => {
         setCenter: () => Promise.resolve(),
         getNode: (id: string) => ({ id, position: { x: 0, y: 0 }, width: 100, height: 40 }),
     };
-    // Stable for the same reason as `flowApi`: the perf overlay's zoom effect
-    // lists the store among its dependencies, so a fresh object per render would
-    // tear down and resubscribe on every pass.
+    // Stable like `flowApi`: the zoom effect lists the store as a dependency, so
+    // a fresh object per render would resubscribe on every pass.
     const flowStoreApi = {
         getState: () => ({ transform: [0, 0, 1] as [number, number, number] }),
         subscribe: () => () => {},

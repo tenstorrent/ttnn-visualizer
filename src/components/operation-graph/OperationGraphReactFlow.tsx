@@ -149,23 +149,24 @@ const OperationGraphInner = ({
     const { setCenter, getNode } = useReactFlow<OpGraphFlowNode, OpGraphFlowEdge>();
     const flowStore = useStoreApi();
 
-    const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
-    const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
-    // Overlay intent is scoped to the report it was enabled for: another report
-    // has a different ramp and a different linked set, so carrying the toggle
-    // across would re-anchor the encoding under the user. Dropping it also stops
-    // a report that leaves and re-enters `READY` from switching the overlay back
-    // on by itself. Adjusted during render like `adoptedOperationId` above,
-    // because an effect would commit one frame still encoding the old ramp. #1880
+    // Path, not the `ReportFolder` object: a rebuilt-but-equivalent object would
+    // otherwise read as a report swap. Matches the report-scoped query keys.
+    const profilerReportPath = useAtomValue(activeProfilerReportAtom)?.path ?? null;
+    const performanceReportPath = useAtomValue(activePerformanceReportAtom)?.path ?? null;
+
+    // Intent is scoped to the report it was enabled for — another report has a
+    // different ramp and linked set. Adjusted during render like
+    // `adoptedOperationId` above; an effect would commit one frame still
+    // encoding the old ramp. #1880
     const [overlayReportScope, setOverlayReportScope] = useState({
-        profiler: activeProfilerReport,
-        performance: activePerformanceReport,
+        profiler: profilerReportPath,
+        performance: performanceReportPath,
     });
     if (
-        overlayReportScope.profiler !== activeProfilerReport ||
-        overlayReportScope.performance !== activePerformanceReport
+        overlayReportScope.profiler !== profilerReportPath ||
+        overlayReportScope.performance !== performanceReportPath
     ) {
-        setOverlayReportScope({ profiler: activeProfilerReport, performance: activePerformanceReport });
+        setOverlayReportScope({ profiler: profilerReportPath, performance: performanceReportPath });
         setIsPerfOverlayEnabled(false);
         setPerfHover(null);
     }
@@ -478,17 +479,13 @@ const OperationGraphInner = ({
         [perfRows, isPerfReportLoaded, graphOperationIds],
     );
 
-    // Derived rather than stored, so perf data arriving or going away can't leave
-    // a stored flag disagreeing with what the encoding can actually show. The
-    // report-scope reset above is what keeps intent itself from outliving its
-    // report — the two cover different failures and both are needed.
+    // Derived, so perf data arriving or going away can't leave a stored flag
+    // disagreeing with what the encoding can show.
     const isPerfOverlayActive = isPerfOverlayEnabled && perfOverlay.status === PerfOverlayStatus.READY;
 
-    // Zoom is written straight to the DOM instead of through state: it changes on
-    // every wheel and pinch frame, and routing it through React would re-render
-    // the whole graph per frame to move one bar. `OpGraphEdge` can afford
-    // `useStore` because it selects a threshold boolean; this needs the
-    // continuous value, so it subscribes and mutates the custom property.
+    // Zoom goes straight to the DOM: it changes every wheel frame, and through
+    // state it would re-render the whole graph per frame to move one bar.
+    // `OpGraphEdge` can afford `useStore` only because it selects a boolean.
     useEffect(() => {
         const container = containerRef.current;
         if (container === null || !isPerfOverlayActive) {
@@ -502,13 +499,13 @@ const OperationGraphInner = ({
             }
         };
         writeZoom(flowStore.getState().transform[2]);
-        // The vanilla store has no selector support, so every store change calls
-        // back and the guard above keeps it to one style write per zoom change.
+        // No selector support in the vanilla store, so every change calls back
+        // and the guard above keeps it to one write per zoom change.
         return flowStore.subscribe((state) => writeZoom(state.transform[2]));
     }, [isPerfOverlayActive, flowStore]);
 
-    // Built once per score change so the styling pass can reuse these object
-    // identities rather than allocating one per node on every drag frame.
+    // Built once per score change so the styling pass reuses these identities
+    // instead of allocating one per node on every drag frame.
     const perfStyleByNodeId = useMemo(
         () => buildPerfNodeStyleByNodeId(perfOverlay, isPerfOverlayActive),
         [isPerfOverlayActive, perfOverlay],
@@ -534,11 +531,8 @@ const OperationGraphInner = ({
             if (matchedIds && (isSelected || matchedIds.has(node.id))) {
                 classNames.push(MATCHED_NODE_CLASS);
             }
-            // Perf writes only custom properties, so it stacks with selection and
-            // the highlight instead of displacing either. An op with no perf row
-            // gets nothing here, and its bar stays transparent. Filter dimming is
-            // an opacity on the node element, which the bar inherits as part of
-            // the same group, so a dimmed non-match dims its perf signal with it.
+            // Custom properties only, so perf stacks with selection, the
+            // highlight and the inherited filter dim instead of displacing any.
             const perfStyle = perfStyleByNodeId?.get(node.id);
             const styled = perfStyle ? { ...node, style: { ...node.style, ...perfStyle } } : node;
             if (isSelected) {
@@ -582,8 +576,8 @@ const OperationGraphInner = ({
         setSelectedOperationId(null);
     }, []);
 
-    // Reading the container box on enter rather than per mousemove: the pointer
-    // crosses a node boundary orders of magnitude less often than it moves.
+    // Box read on enter, not per mousemove: crossing a node boundary is orders
+    // of magnitude rarer than moving, and the read forces a layout flush.
     const handleNodeMouseEnter = useCallback((event: ReactMouseEvent, node: OpGraphFlowNode) => {
         const bounds = containerRef.current?.getBoundingClientRect();
         if (!bounds) {
@@ -598,9 +592,8 @@ const OperationGraphInner = ({
 
     const handleNodeMouseLeave = useCallback(() => setPerfHover(null), []);
 
-    // Dropping the hover here rather than reacting to the overlay going quiet:
-    // switching off mid-hover would otherwise strand an open hover that came
-    // back, at a stale position, the next time the overlay was switched on.
+    // Switching off mid-hover would otherwise strand a hover that came back, at
+    // a stale position, the next time the overlay was switched on.
     const handlePerfOverlayChange = useCallback((next: boolean) => {
         setIsPerfOverlayEnabled(next);
         setPerfHover(null);
@@ -665,9 +658,8 @@ const OperationGraphInner = ({
                 onNodeClick={handleNodeClick}
                 onPaneClick={handlePaneClick}
                 onNodeMouseEnter={isPerfOverlayActive ? handleNodeMouseEnter : undefined}
-                // Always attached, so any pointer exit clears a hover the
-                // overlay left behind. Clearing an already-null hover bails out
-                // of the render, so this costs nothing while the overlay is off.
+                // Always attached so any exit clears a hover the overlay left
+                // behind; clearing a null hover bails out of the render.
                 onNodeMouseLeave={handleNodeMouseLeave}
                 minZoom={MIN_ZOOM}
                 maxZoom={MAX_ZOOM}

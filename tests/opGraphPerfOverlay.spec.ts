@@ -27,13 +27,12 @@ describe('buildOpGraphPerfOverlay status', () => {
 
         expect(overlay.status).toBe(PerfOverlayStatus.UNAVAILABLE);
         expect(overlay.linkedOpCount).toBe(0);
-        // The denominator is known even with nothing to put over it, so the
-        // toolbar never has to special-case which half of the pair it has.
+        // Known even with nothing over it, so the toolbar never special-cases.
         expect(overlay.totalOpCount).toBe(3);
     });
 
     it('is unavailable rather than unlinked when rows arrive without a loaded report', () => {
-        // `GraphView` derives the two independently; a stale row set must not
+        // `GraphView` derives the two independently, so a stale row set must not
         // upgrade the status past what the loaded report supports.
         const overlay = buildOpGraphPerfOverlay(rows([1, 10]), false, [1]);
 
@@ -48,8 +47,8 @@ describe('buildOpGraphPerfOverlay status', () => {
     });
 
     it('is unlinked when every row belongs to an op this graph does not show', () => {
-        // The failure mode a plain "are there rows?" check misses: a perf report
-        // from a different run parses fine and matches no node on the canvas.
+        // What a plain "are there rows?" check misses: a report from another run
+        // parses fine and matches no node on the canvas.
         const overlay = buildOpGraphPerfOverlay(rows([900, 10], [901, 20]), true, [1, 2]);
 
         expect(overlay.status).toBe(PerfOverlayStatus.UNLINKED);
@@ -66,9 +65,8 @@ describe('buildOpGraphPerfOverlay status', () => {
 
 describe('buildOpGraphPerfOverlay scope', () => {
     it('anchors the ramp to the ops on the canvas, not the whole report', () => {
-        // An operation-range selection or hidden deallocates would otherwise
-        // leave the scale pinned to a maximum the user cannot see, flattening
-        // every visible node into the cool end.
+        // A range selection or hidden deallocates would otherwise pin the scale
+        // to an invisible maximum, flattening every visible node.
         const overlay = buildOpGraphPerfOverlay(rows([1, 10], [2, 100], [3, 100_000]), true, [1, 2]);
 
         expect(overlay.maxNs).toBe(100 * 1_000);
@@ -138,22 +136,19 @@ describe('buildOpGraphPerfOverlay ranking', () => {
 describe('buildPerfNodeStyleByNodeId', () => {
     const overlay = buildOpGraphPerfOverlay(rows([1, 10], [2, 1_000]), true, [1, 2, 3]);
 
-    // `CSSProperties` has no index signature for custom properties, which is the
-    // same reason the builder casts on the way out.
+    // `CSSProperties` has no index signature for custom properties.
     const customProps = (style: CSSProperties | undefined): Record<string, unknown> =>
         (style ?? {}) as Record<string, unknown>;
 
     it('produces nothing at all when the overlay is off', () => {
-        // `null` rather than an empty map, so the styling pass can return the
-        // node array by identity instead of rebuilding it.
+        // `null`, not an empty map, so the styling pass can return the node
+        // array by identity instead of rebuilding it.
         expect(buildPerfNodeStyleByNodeId(overlay, false)).toBeNull();
     });
 
     it('writes only the two custom properties, leaving fill and border alone', () => {
-        // Node background encodes the input/output highlight, the border and
-        // box-shadow encode selection, and `className` carries both. Perf has to
-        // compose with all of them rather than displace any, so the patch must
-        // not reach for a single standard property. #1880
+        // Background is the I/O highlight and border/box-shadow are selection,
+        // so perf must not reach for a single standard property. #1880
         const style = buildPerfNodeStyleByNodeId(overlay, true)?.get('2');
 
         expect(Object.keys(style ?? {})).toEqual([PERF_BAR_SCALE_VAR, PERF_BAR_COLOR_VAR]);
@@ -167,9 +162,8 @@ describe('buildPerfNodeStyleByNodeId', () => {
     });
 
     it('skips an op with no perf row, leaving its bar transparent', () => {
-        // Op 3 is on the canvas but absent from the report. No custom property
-        // means the CSS fallback paints nothing, which is what separates it from
-        // the fastest op.
+        // Op 3 is on the canvas but absent from the report, so the CSS fallback
+        // paints nothing — which is what separates it from the fastest op.
         expect(buildPerfNodeStyleByNodeId(overlay, true)?.has('3')).toBe(false);
     });
 
@@ -181,9 +175,8 @@ describe('buildPerfNodeStyleByNodeId', () => {
     });
 
     it('colours the bar with the same ramp the side panel swatch uses', () => {
-        // The panel derives its swatch from `perfColorScale(score.t)` too, so a
-        // divergence here would show up as a node and its own detail panel
-        // disagreeing about how hot the op is.
+        // The panel swatch is `perfColorScale(score.t)` too, so a divergence
+        // shows up as a node and its own detail panel disagreeing.
         const styleByNodeId = buildPerfNodeStyleByNodeId(overlay, true);
 
         expect(customProps(styleByNodeId?.get('2'))[PERF_BAR_COLOR_VAR]).toBe(perfColorScale(1));
@@ -204,8 +197,7 @@ describe('getPerfHoverLabel', () => {
     });
 
     it('ranks against the linked ops, not every op on the canvas', () => {
-        // Saying "#1 of 40" when only two ops have perf data would overstate
-        // what the report actually covers.
+        // "#1 of 40" with two linked ops would overstate the report's coverage.
         const overlay = buildOpGraphPerfOverlay(rows([1, 30], [2, 10]), true, [1, 2, 3, 4]);
 
         expect(getPerfHoverLabel(overlay, 1)).toContain('#1 of 2');
