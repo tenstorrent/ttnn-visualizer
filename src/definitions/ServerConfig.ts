@@ -7,7 +7,6 @@ export interface ServerConfig {
     BASE_PATH?: string;
     TT_METAL_HOME?: string;
     REPORT_DATA_DIRECTORY?: string;
-    REPORT_LINKING_ENABLED?: boolean;
     USERNAME?: string;
     // Named for the state, matching DefaultConfig.USAGE_RECORDING_ACTIVE. Not
     // USAGE_RECORDING_ENABLED: that spelling is a retired env var the backend no

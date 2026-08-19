@@ -1051,6 +1051,21 @@ def test_a_full_batch_of_the_largest_event_is_still_one_write(
     assert len(read_usage_lines(usage_directory)) == MAX_USAGE_BATCH_EVENTS
 
 
+def test_a_batch_over_the_cap_is_refused_by_the_writer(usage_directory):
+    """The cap binds every batch caller, not just the ingest route.
+
+    ``_append_line`` defers its single-``os.write`` obligation to
+    ``MAX_USAGE_BATCH_EVENTS``, so a caller reaching ``record_events`` directly has to
+    meet it too — otherwise the guarantee holds only for the one caller that happens to
+    check first. Refused whole, since a truncated batch is exactly what the write path
+    promises never to leave behind.
+    """
+    event = (UsageEvent.VIEW_OPENED, {"view": UsageView.OPERATIONS})
+
+    assert record_events([event] * (MAX_USAGE_BATCH_EVENTS + 1)) is False
+    assert read_usage_lines(usage_directory) == []
+
+
 def test_recording_recovers_when_the_directory_is_removed(usage_directory):
     """The directory may go mid-session — the docs invite the user to delete it.
 

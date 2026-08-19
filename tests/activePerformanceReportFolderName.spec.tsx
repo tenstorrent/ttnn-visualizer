@@ -18,11 +18,13 @@ import { ReportFolder } from '../src/definitions/Reports';
 import { AtomProvider } from './helpers/atomProvider';
 import { QueryProvider } from './helpers/queryClientProvider';
 import axiosInstance from '../src/libs/axiosInstance';
+import Endpoints from '../src/definitions/Endpoints';
 
 vi.mock('../src/libs/axiosInstance', () => ({
     default: {
         get: vi.fn(),
     },
+    getOrCreateInstanceId: () => 'test-instance',
 }));
 
 const TIMESTAMP = '2026_07_31_17_20_53';
@@ -107,7 +109,7 @@ describe('performance requests for a multihost report', () => {
         await waitFor(() => expect(axiosInstance.get).toHaveBeenCalled());
 
         const call = vi.mocked(axiosInstance.get).mock.calls[0];
-        expect(call[0]).toContain('perf-results/report');
+        expect(call[0]).toContain(Endpoints.PERFORMANCE_RESULTS_REPORT);
         expect(getRequestedName(call)).toBe(SYNCED_NAME);
     });
 

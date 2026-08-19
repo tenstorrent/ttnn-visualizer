@@ -35,6 +35,7 @@ import LoadingSpinner from './LoadingSpinner';
 import createToastNotification from '../functions/createToastNotification';
 import { ToastType } from '../definitions/ToastType';
 import getResponseError from '../functions/getResponseError';
+import { clampSelectionToRange } from '../functions/perfRangeSelection';
 
 const RANGE_STEP = 25;
 
@@ -91,6 +92,7 @@ function Range() {
 
     useEffect(() => {
         if (isInSync && selectedOperationRange && perfRange && selectedPerformanceRange && isUserOpChange) {
+            const [rangeMin, rangeMax] = perfRange;
             // Try to find matching perfIds for the selected operation range
             const matchMin =
                 opIdsMap.find((op) => selectedOperationRange[0] === op.opId)?.perfId ??
@@ -111,14 +113,14 @@ function Range() {
 
             const updatedMin =
                 Number(matchMin) ||
-                (selectedOperationRange[0] < opIdsMap[0].opId ? perfMin! : selectedPerformanceRange[0]);
+                (selectedOperationRange[0] < opIdsMap[0].opId ? rangeMin : selectedPerformanceRange[0]);
             const updatedMax =
                 Number(matchMax) ||
                 (selectedOperationRange[1] > opIdsMap[opIdsMap.length - 1].opId
-                    ? perfMax!
+                    ? rangeMax
                     : selectedPerformanceRange[1]);
 
-            setSelectedPerformanceRange([updatedMin, updatedMax]);
+            setSelectedPerformanceRange(clampSelectionToRange(updatedMin, updatedMax, rangeMin, rangeMax));
             queueMicrotask(() => {
                 setIsUserOpChange(false);
             });
@@ -126,8 +128,22 @@ function Range() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isInSync, selectedOperationRange]);
 
+    // No `clampSelectionToRange` in this direction, unlike its sibling above. The
+    // forward effect maps into the perf track, whose bounds come from the *view*
+    // report while the ids come from the link-pinned one, so a mapped id can land
+    // outside a narrowed view. Here both sides come from the operations list —
+    // every `opId` in `opIdsMap` is one of its ids, and the fallbacks are the track's
+    // own ends — so the result is inside the track by construction.
     useEffect(() => {
-        if (isInSync && selectedOperationRange && perfRange && selectedPerformanceRange && isUserPerfChange) {
+        if (
+            isInSync &&
+            selectedOperationRange &&
+            operationRange &&
+            perfRange &&
+            selectedPerformanceRange &&
+            isUserPerfChange
+        ) {
+            const [opRangeMin, opRangeMax] = operationRange;
             // Try to find matching opIds for the selected performance range
             const matchMin =
                 opIdsMap.find((op) => selectedPerformanceRange[0] === Number(op.perfId))?.opId ??
@@ -148,11 +164,13 @@ function Range() {
 
             const updatedMin =
                 matchMin ||
-                (selectedPerformanceRange[0] < Number(opIdsMap?.[0]?.perfId ?? 0) ? opMin! : selectedOperationRange[0]);
+                (selectedPerformanceRange[0] < Number(opIdsMap?.[0]?.perfId ?? 0)
+                    ? opRangeMin
+                    : selectedOperationRange[0]);
             const updatedMax =
                 matchMax ||
                 (selectedPerformanceRange[1] > Number(opIdsMap?.[opIdsMap.length - 1]?.perfId ?? 0)
-                    ? opMax!
+                    ? opRangeMax
                     : selectedOperationRange[1]);
 
             setSelectedOperationRange([updatedMin, updatedMax]);
@@ -271,7 +289,10 @@ function Range() {
                                 value={selectedOperationRange[0].toString()}
                                 onValueChange={(value) => {
                                     setSelectedOperationRange([
-                                        parseInt(value, 10) || opMin!,
+                                        // `operationRange` can be null while a selection from the
+                                        // previous report is still in the atom, so fall back to the
+                                        // current handle rather than writing `undefined` into it.
+                                        parseInt(value, 10) || opMin || selectedOperationRange[0],
                                         selectedOperationRange[1],
                                     ]);
                                     setIsUserOpChange(true);
@@ -286,7 +307,7 @@ function Range() {
                                 onValueChange={(value) => {
                                     setSelectedOperationRange([
                                         selectedOperationRange[0],
-                                        parseInt(value, 10) || opMax!,
+                                        parseInt(value, 10) || opMax || selectedOperationRange[1],
                                     ]);
                                     setIsUserOpChange(true);
                                 }}

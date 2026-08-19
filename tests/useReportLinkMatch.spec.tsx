@@ -21,7 +21,15 @@ vi.mock('../src/hooks/useAPI', () => ({
     useGetDeviceOperationListPerf: () => apiState.matchedOperations,
     useOperationsList: () => apiState.operations,
     useDevices: () => apiState.devices,
-    usePerformanceReport: () => apiState.performance,
+    useLinkedPerformanceReport: () => apiState.performance,
+    // Link status is a property of the reports, not of how the performance tab is
+    // being viewed (#1812), so this hook must read the link-pinned report and never
+    // the filtered one. This module is mocked wholesale, so without a stand-in that
+    // throws, swapping the hook back to `usePerformanceReport` would leave every
+    // case below green.
+    usePerformanceReport: () => {
+        throw new Error('useReportLinkMatch must read useLinkedPerformanceReport, not the filtered view query');
+    },
 }));
 
 const PROFILER = { path: 'mem-run', reportName: 'mem-run' };
@@ -100,6 +108,19 @@ describe('useReportLinkMatch', () => {
         });
 
         expect(result.current).toBe(ReportLinkMatchResult.UNLINKED);
+    });
+
+    // The throwing `usePerformanceReport` stand-in in the module mock makes reading
+    // the filtered query fail outright; this pins the other half, that the settled
+    // state the outcome is derived from is the link-pinned query's.
+    it('derives PENDING from the link-pinned report query, not the filtered view', () => {
+        apiState.performance = { isFetched: false, isFetching: true, isError: false };
+
+        const { result } = renderHook(() => useReportLinkMatch(), {
+            wrapper: wrapperWithReports(),
+        });
+
+        expect(result.current).toBe(ReportLinkMatchResult.PENDING);
     });
 
     it('returns UNAVAILABLE when settled with a query error', () => {

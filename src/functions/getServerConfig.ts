@@ -101,7 +101,6 @@ const getServerConfig = (): ServerConfig => {
             SERVER_MODE: isServerModeEnabled(import.meta.env.VITE_SERVER_MODE),
             TT_METAL_HOME: import.meta.env.VITE_TT_METAL_HOME,
             REPORT_DATA_DIRECTORY: import.meta.env.VITE_REPORT_DATA_DIRECTORY || '/path/to/data/directory', // Default value for development
-            REPORT_LINKING_ENABLED: true,
             // On, matching the backend default, because this is not the switch: `/api`
             // proxies to Flask in dev, so the real `is_recording_enabled` decides whether
             // anything is written. A second flag here could only disagree with it, and
@@ -126,7 +125,6 @@ const getServerConfig = (): ServerConfig => {
         SERVER_MODE: isServerModeEnabled(windowConfig?.SERVER_MODE),
         TT_METAL_HOME: windowConfig?.TT_METAL_HOME,
         REPORT_DATA_DIRECTORY: windowConfig?.REPORT_DATA_DIRECTORY,
-        REPORT_LINKING_ENABLED: windowConfig?.REPORT_LINKING_ENABLED || false,
         USAGE_RECORDING_ACTIVE: isFlagEnabled(windowConfig?.USAGE_RECORDING_ACTIVE),
         USERNAME: windowConfig?.USERNAME,
         ...getSshDefaults(

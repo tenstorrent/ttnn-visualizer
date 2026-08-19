@@ -223,6 +223,16 @@ ACCEPTED_EVENTS = {
 }
 
 
+def test_the_round_trip_fixture_covers_every_client_postable_event():
+    """The parametrisation above is hand-written, so nothing else would notice a gap.
+
+    A fifth entry in ``CLIENT_EVENT_DETAIL_FIELDS`` fails no existing test: it would
+    simply never be posted, and the suite would stay green while end-to-end coverage
+    quietly narrowed.
+    """
+    assert set(ACCEPTED_EVENTS) == set(CLIENT_EVENT_DETAIL_FIELDS)
+
+
 @pytest.mark.parametrize("event", list(ACCEPTED_EVENTS), ids=lambda event: event.value)
 def test_every_client_postable_event_round_trips(client, usage_directory, event):
     """All four, not just the two the other cases happen to use.
