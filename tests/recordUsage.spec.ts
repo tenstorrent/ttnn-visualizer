@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import Endpoints from '../src/definitions/Endpoints';
 import { ReportKind, ReportSource, UsageEvent, UsageView } from '../src/definitions/UsageEvent';
 
@@ -29,6 +29,8 @@ const VIEW_OPENED = {
 // Mirrors MAX_BUFFERED_EVENTS. Duplicated rather than imported so a change to the module
 // constant fails a test rather than silently redefining what these assert.
 const MAX_BUFFERED_EVENTS = 50;
+const MIN_BATCH_WINDOW_MS = 2_000;
+const IDLE_FLUSH_TIMEOUT_MS = 2_000;
 const FLUSH_INTERVAL_MS = 30_000;
 
 /**
@@ -53,6 +55,24 @@ async function loadRecorder() {
 
 let sendBeacon: ReturnType<typeof vi.fn>;
 
+// Collected for the lifetime of the file. Registering and removing the listener around a
+// single `await` cannot work: Node emits `unhandledRejection` after the microtask queue
+// drains, by which point the listener is already gone — so the assertion passed whether or
+// not the rejection was handled, which is how a missing `.catch` went unnoticed.
+const unhandledRejections: unknown[] = [];
+const captureUnhandledRejection = (reason: unknown) => unhandledRejections.push(reason);
+
+beforeAll(() => process.on('unhandledRejection', captureUnhandledRejection));
+afterAll(() => process.off('unhandledRejection', captureUnhandledRejection));
+
+/** Give Node a real macrotask turn so any unhandled rejection has been emitted. */
+async function settleRejections(): Promise<void> {
+    vi.useRealTimers();
+    await new Promise((resolve) => {
+        setTimeout(resolve, 0);
+    });
+}
+
 // Listeners live on the shared jsdom document, so one left attached outlives the module
 // instance that owns it and flushes that instance's buffer into the next test. Torn down
 // centrally rather than per test, because forgetting once produces a confusing failure
@@ -67,6 +87,7 @@ function startRecording(init: () => () => void): () => void {
 
 beforeEach(() => {
     vi.clearAllMocks();
+    unhandledRejections.length = 0;
     serverConfigMock.mockReturnValue({ SERVER_MODE: false, USAGE_RECORDING_ACTIVE: true, BASE_PATH: '/' });
 
     sendBeacon = vi.fn(() => true);
@@ -74,7 +95,8 @@ beforeEach(() => {
 
     // jsdom provides neither, and the sender's fallback path is what runs in that case —
     // pinned explicitly so a future jsdom that adds them does not quietly change which
-    // branch these tests cover.
+    // branch these tests cover. The idle path real browsers take has its own describe
+    // block below, which restubs both as callable fakes.
     vi.stubGlobal('requestIdleCallback', undefined);
     vi.stubGlobal('cancelIdleCallback', undefined);
 
@@ -152,6 +174,43 @@ describe('recordUsage flush triggers', () => {
         expect(post).toHaveBeenCalledTimes(1);
     });
 
+    it('coalesces over the batch window rather than posting on the first event', async () => {
+        const { recordUsage, post } = await loadRecorder();
+        post.mockResolvedValue({ status: 204 });
+
+        recordUsage(VIEW_OPENED);
+        vi.advanceTimersByTime(MIN_BATCH_WINDOW_MS - 1);
+
+        expect(post).not.toHaveBeenCalled();
+
+        recordUsage(REPORT_LOADED);
+        vi.advanceTimersByTime(1);
+
+        // Both events in one request: the window is a floor on batching, which is what an
+        // unguarded requestIdleCallback would destroy by firing within a frame.
+        expect(post).toHaveBeenCalledTimes(1);
+        expect((post.mock.calls[0][1] as { events: unknown[] }).events).toHaveLength(2);
+    });
+
+    it('re-arms after a flush, so later events are not stranded', async () => {
+        const { recordUsage, post } = await loadRecorder();
+        post.mockResolvedValue({ status: 204 });
+
+        recordUsage(VIEW_OPENED);
+        vi.advanceTimersByTime(MIN_BATCH_WINDOW_MS);
+
+        expect(post).toHaveBeenCalledTimes(1);
+
+        // Scheduling early-returns while a flush is armed, so clearing the handle is the
+        // only thing that lets a second one be scheduled. Without it every event after the
+        // first flush would wait for the 50-event cap or a beacon.
+        recordUsage(REPORT_LOADED);
+        vi.advanceTimersByTime(MIN_BATCH_WINDOW_MS);
+
+        expect(post).toHaveBeenCalledTimes(2);
+        expect((post.mock.calls[1][1] as { events: unknown[] }).events).toEqual([REPORT_LOADED]);
+    });
+
     it('beacons on pagehide without touching axios', async () => {
         const { recordUsage, initUsageRecording, post } = await loadRecorder();
         startRecording(initUsageRecording);
@@ -226,6 +285,97 @@ describe('recordUsage flush triggers', () => {
     });
 });
 
+describe('recordUsage idle scheduling', () => {
+    // The branch every real browser takes. The rest of the file stubs both callbacks away
+    // to pin the fallback, which left the production path — and its cancellation — with no
+    // coverage at all: a leaked idle callback firing after teardown would go unnoticed.
+    let idleCallbacks: Map<number, IdleRequestCallback>;
+    let requestIdle: ReturnType<typeof vi.fn>;
+    let cancelIdle: ReturnType<typeof vi.fn>;
+    let nextIdleHandle: number;
+
+    beforeEach(() => {
+        idleCallbacks = new Map();
+        nextIdleHandle = 1;
+
+        requestIdle = vi.fn((callback: IdleRequestCallback) => {
+            const handle = nextIdleHandle;
+            nextIdleHandle += 1;
+            idleCallbacks.set(handle, callback);
+
+            return handle;
+        });
+        cancelIdle = vi.fn((handle: number) => idleCallbacks.delete(handle));
+
+        vi.stubGlobal('requestIdleCallback', requestIdle);
+        vi.stubGlobal('cancelIdleCallback', cancelIdle);
+    });
+
+    function runIdleCallbacks(): void {
+        const pending = [...idleCallbacks.values()];
+        idleCallbacks.clear();
+        pending.forEach((callback) => callback({ didTimeout: false, timeRemaining: () => 0 }));
+    }
+
+    it('arms the idle callback only once the batch window closes', async () => {
+        const { recordUsage } = await loadRecorder();
+
+        recordUsage(VIEW_OPENED);
+
+        expect(requestIdle).not.toHaveBeenCalled();
+
+        vi.advanceTimersByTime(MIN_BATCH_WINDOW_MS);
+
+        expect(requestIdle).toHaveBeenCalledTimes(1);
+        expect(requestIdle.mock.calls[0][1]).toEqual({ timeout: IDLE_FLUSH_TIMEOUT_MS });
+    });
+
+    it('posts when the idle callback runs', async () => {
+        const { recordUsage, post } = await loadRecorder();
+        post.mockResolvedValue({ status: 204 });
+
+        recordUsage(VIEW_OPENED);
+        vi.advanceTimersByTime(MIN_BATCH_WINDOW_MS);
+
+        expect(post).not.toHaveBeenCalled();
+
+        runIdleCallbacks();
+
+        expect(post).toHaveBeenCalledTimes(1);
+    });
+
+    it('cancels the idle callback and the ceiling on teardown', async () => {
+        const { recordUsage, initUsageRecording, post } = await loadRecorder();
+        post.mockResolvedValue({ status: 204 });
+
+        const teardown = startRecording(initUsageRecording);
+
+        recordUsage(VIEW_OPENED);
+        vi.advanceTimersByTime(MIN_BATCH_WINDOW_MS);
+        teardown();
+
+        expect(cancelIdle).toHaveBeenCalledTimes(1);
+
+        // Both timers cleared, not just the idle handle: a surviving ceiling would fire
+        // into a torn-down module.
+        runIdleCallbacks();
+        vi.advanceTimersByTime(FLUSH_INTERVAL_MS);
+
+        expect(post).not.toHaveBeenCalled();
+    });
+
+    it('still flushes when the tab is hidden and no idle period ever arrives', async () => {
+        const { recordUsage, post } = await loadRecorder();
+        post.mockResolvedValue({ status: 204 });
+
+        recordUsage(VIEW_OPENED);
+        // A hidden tab runs no idle callbacks, which is what the ceiling is for.
+        vi.advanceTimersByTime(FLUSH_INTERVAL_MS);
+
+        expect(post).toHaveBeenCalledTimes(1);
+    });
+});
+
 describe('recordUsage gating', () => {
     it.each([
         ['recording is switched off', { SERVER_MODE: false, USAGE_RECORDING_ACTIVE: false, BASE_PATH: '/' }],
@@ -252,15 +402,57 @@ describe('recordUsage failure handling', () => {
         const { recordUsage, flushUsage, post } = await loadRecorder();
         post.mockRejectedValue(new Error('no endpoint'));
 
-        const unhandled = vi.fn();
-        process.on('unhandledRejection', unhandled);
+        recordUsage(VIEW_OPENED);
+        flushUsage();
+        await vi.waitFor(() => expect(post).toHaveBeenCalled());
+        await settleRejections();
+
+        expect(unhandledRejections).toEqual([]);
+    });
+
+    it('reports the refusal status in dev, and never the response body', async () => {
+        const { recordUsage, flushUsage, post } = await loadRecorder();
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+        // axios resolves only on 2xx, so a 422 arrives as a rejection carrying a response.
+        // Warning solely from the success path left this unable to report the one case the
+        // diagnostic exists for: a vocabulary mismatch the server rejects and nothing says.
+        post.mockRejectedValue({ response: { status: 422, data: { error: 'Unknown usage event' } } });
+
+        recordUsage(VIEW_OPENED);
+        flushUsage();
+        await vi.waitFor(() => expect(warn).toHaveBeenCalled());
+
+        const [message] = warn.mock.calls[0];
+
+        expect(message).toContain('422');
+        expect(message).not.toContain('Unknown usage event');
+    });
+
+    it('reports a post that never reached the server', async () => {
+        const { recordUsage, flushUsage, post } = await loadRecorder();
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+        // No response at all — offline, or no server listening.
+        post.mockRejectedValue(new Error('Network Error'));
+
+        recordUsage(VIEW_OPENED);
+        flushUsage();
+        await vi.waitFor(() => expect(warn).toHaveBeenCalled());
+
+        expect(warn.mock.calls[0][0]).toContain('could not be delivered');
+    });
+
+    it('says nothing when the server accepts the batch', async () => {
+        const { recordUsage, flushUsage, post } = await loadRecorder();
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        post.mockResolvedValue({ status: 204 });
 
         recordUsage(VIEW_OPENED);
         flushUsage();
         await vi.waitFor(() => expect(post).toHaveBeenCalled());
 
-        process.off('unhandledRejection', unhandled);
-        expect(unhandled).not.toHaveBeenCalled();
+        expect(warn).not.toHaveBeenCalled();
     });
 
     it('drops a failed batch rather than re-buffering it', async () => {

@@ -28,10 +28,18 @@ import isUsageRecordingEnabled from './isUsageRecordingEnabled';
 // pins the two equal so a batch this client builds can never be refused wholesale.
 const MAX_BUFFERED_EVENTS = 50;
 
-// A long-lived tab may sit idle for hours, so the timer is the floor on how stale a
-// buffered event can get; the idle callback is what usually gets there first.
-const FLUSH_INTERVAL_MS = 30_000;
+// The minimum window events coalesce over. `requestIdleCallback` is armed only after it
+// elapses, never on the first buffered event: its `timeout` is an upper bound on the delay,
+// not a lower one, so on a quiet tab the next idle period arrives within a frame and each
+// event would get its own request — the opposite of batching.
+const MIN_BATCH_WINDOW_MS = 2_000;
+
+// How long the flush may then wait for an actual idle moment before going anyway.
 const IDLE_FLUSH_TIMEOUT_MS = 2_000;
+
+// The ceiling. Still meaningful despite the two above: a hidden tab runs no idle callbacks
+// at all, so this is what eventually drains a buffer filled just before the tab was hidden.
+const FLUSH_INTERVAL_MS = 30_000;
 
 const buffer: UsageEventPayload[] = [];
 
@@ -46,17 +54,39 @@ function getUsageEndpointUrl(): string {
     return `${basePath.replace(/\/+$/, '')}/${String(Endpoints.USAGE).replace(/^\/+/, '')}`;
 }
 
-function warnOnUnexpectedStatus(status: number): void {
+function warnOnUnexpectedOutcome(status: number | null): void {
     // Both sides are silent by design, which is right in production and hostile while
     // events are being wired: a mistyped enum value or a renamed detail key is a 422 that
     // nothing anywhere reports. The status only — echoing a response body would put server
     // text back into a subsystem whose whole point is that it holds none.
-    if (import.meta.env.DEV && status !== HttpStatusCode.NoContent) {
-        // eslint-disable-next-line no-console -- dev-only, and there is no UI that could carry this.
-        console.warn(
-            `Usage events were refused with status ${status}. The client and server vocabularies may disagree.`,
-        );
+    //
+    // Called from the rejection path as well as the success path, because axios resolves
+    // only on 2xx: a 422 never reaches `.then`, so warning there alone left this unable to
+    // report the single case it exists for.
+    if (!import.meta.env.DEV || status === HttpStatusCode.NoContent) {
+        return;
     }
+
+    const reason =
+        status === null
+            ? 'could not be delivered'
+            : `were refused with status ${status}, so the client and server vocabularies may disagree`;
+
+    // eslint-disable-next-line no-console -- dev-only, and there is no UI that could carry this.
+    console.warn(`Usage events ${reason}.`);
+}
+
+function postEvents(events: UsageEventPayload[]): void {
+    // One sender for both callers, so a header, timeout or signal added later cannot land
+    // on one path and not the other — a divergence neither side would report.
+    axiosInstance
+        .post(Endpoints.USAGE, { events })
+        .then((response) => warnOnUnexpectedOutcome(response.status))
+        // Dropped, never re-buffered: a refused or unreachable endpoint would otherwise
+        // grow the buffer without bound for the life of the tab, and a batch rejected for
+        // being malformed would be resubmitted forever. A transport failure has no
+        // response at all, hence the null.
+        .catch((error) => warnOnUnexpectedOutcome(error?.response?.status ?? null));
 }
 
 function takeBatch(): UsageEventPayload[] {
@@ -75,28 +105,30 @@ function scheduleFlush(): void {
         return;
     }
 
-    // Both, not either: the idle callback usually wins, and the timer is what guarantees a
-    // flush on a tab that never goes idle. Whichever loses finds an empty buffer.
+    // Armed once the coalescing window closes, so the idle callback decides *when* within
+    // an idle period to flush rather than how much was batched.
+    let cancelIdle: (() => void) | null = null;
+
+    const windowHandle = setTimeout(() => {
+        // jsdom has no requestIdleCallback and Safari only shipped it recently, so the
+        // straight-to-flush path is load-bearing for the test suite as well as for users.
+        // Written as a positive guard because that is the shape `compat/compat` recognises
+        // as guarding the call — inverted, it reports the unsupported browsers instead.
+        if (typeof requestIdleCallback === 'function') {
+            const idleHandle = requestIdleCallback(flushUsage, { timeout: IDLE_FLUSH_TIMEOUT_MS });
+            cancelIdle = () => cancelIdleCallback(idleHandle);
+        } else {
+            flushUsage();
+        }
+    }, MIN_BATCH_WINDOW_MS);
+
+    // The ceiling runs alongside rather than after: whichever loses finds an empty buffer.
     const intervalHandle = setTimeout(flushUsage, FLUSH_INTERVAL_MS);
 
-    // jsdom has no requestIdleCallback and Safari only shipped it recently, so the
-    // setTimeout path is load-bearing for the test suite as well as for users.
-    if (typeof requestIdleCallback === 'function') {
-        const idleHandle = requestIdleCallback(flushUsage, { timeout: IDLE_FLUSH_TIMEOUT_MS });
-
-        cancelScheduledFlush = () => {
-            cancelIdleCallback(idleHandle);
-            clearTimeout(intervalHandle);
-        };
-
-        return;
-    }
-
-    const idleHandle = setTimeout(flushUsage, IDLE_FLUSH_TIMEOUT_MS);
-
     cancelScheduledFlush = () => {
-        clearTimeout(idleHandle);
+        clearTimeout(windowHandle);
         clearTimeout(intervalHandle);
+        cancelIdle?.();
     };
 }
 
@@ -107,15 +139,7 @@ export function flushUsage(): void {
         return;
     }
 
-    const events = takeBatch();
-
-    axiosInstance
-        .post(Endpoints.USAGE, { events })
-        .then((response) => warnOnUnexpectedStatus(response.status))
-        // Dropped, never re-buffered: a refused or unreachable endpoint would otherwise
-        // grow the buffer without bound for the life of the tab, and a batch rejected for
-        // being malformed would be resubmitted forever.
-        .catch(() => {});
+    postEvents(takeBatch());
 }
 
 function flushUsageViaBeacon(allowFallback: boolean): void {
@@ -144,10 +168,7 @@ function flushUsageViaBeacon(allowFallback: boolean): void {
     // run, so falling back there would read as a safety net while being close to dead
     // code. A hidden tab usually survives, so it is worth trying.
     if (allowFallback) {
-        axiosInstance
-            .post(Endpoints.USAGE, { events })
-            .then((response) => warnOnUnexpectedStatus(response.status))
-            .catch(() => {});
+        postEvents(events);
     }
 }
 
