@@ -227,6 +227,12 @@ export function initUsageRecording(): () => void {
     return () => {
         document.removeEventListener('visibilitychange', handleVisibilityChange);
         window.removeEventListener('pagehide', handlePageHide);
-        clearScheduledFlush();
+
+        // Drain rather than discard. Teardown removes the `pagehide` listener and cancels
+        // the pending flush, so anything still buffered would be stranded and then lost if
+        // the tab closed before another event re-armed the schedule. `flushUsage` clears
+        // the schedule itself, and is a no-op on an empty buffer — which is the StrictMode
+        // mount/unmount/mount case in dev.
+        flushUsage();
     };
 }

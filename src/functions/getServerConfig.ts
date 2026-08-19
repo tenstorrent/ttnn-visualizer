@@ -33,9 +33,12 @@ export function getOptionalPathDefault(value: unknown): string {
 }
 
 // The same vocabulary the backend's `parse_bool` accepts, so one spelling can't select
-// opposite postures either side of the boundary.
-const SERVER_MODE_ENABLED_VALUES = new Set<string>(['true', '1']);
-const SERVER_MODE_DISABLED_VALUES = new Set<string>(['false', '0']);
+// opposite answers either side of the boundary. Named for the vocabulary rather than for
+// SERVER_MODE: `isFlagEnabled` now decides USAGE_RECORDING_ACTIVE through these too, and a
+// constant named for one setting that silently governs another is the trap the naming
+// rules in AGENTS.md exist to prevent.
+const BOOLEAN_TRUE_VALUES = new Set<string>(['true', '1']);
+const BOOLEAN_FALSE_VALUES = new Set<string>(['false', '0']);
 
 // Accepts both shapes the two branches below supply: a real boolean from the JSON the
 // backend inlines, and a string from a Vite env var — where `!!value` made the
@@ -50,7 +53,7 @@ export function isFlagEnabled(value: unknown): boolean {
         return false;
     }
 
-    return SERVER_MODE_ENABLED_VALUES.has(value.trim().toLowerCase());
+    return BOOLEAN_TRUE_VALUES.has(value.trim().toLowerCase());
 }
 
 // Kept as its own name because this flag is a security posture rather than a feature
@@ -71,11 +74,11 @@ function warnOnUnrecognisedServerMode(value: unknown): void {
     }
 
     const normalised = value.trim().toLowerCase();
-    if (SERVER_MODE_ENABLED_VALUES.has(normalised) || SERVER_MODE_DISABLED_VALUES.has(normalised)) {
+    if (BOOLEAN_TRUE_VALUES.has(normalised) || BOOLEAN_FALSE_VALUES.has(normalised)) {
         return;
     }
 
-    const recognised = [...SERVER_MODE_ENABLED_VALUES, ...SERVER_MODE_DISABLED_VALUES].join(', ');
+    const recognised = [...BOOLEAN_TRUE_VALUES, ...BOOLEAN_FALSE_VALUES].join(', ');
 
     // eslint-disable-next-line no-console -- there is no UI yet at config-read time, and this branch is dev-only.
     console.warn(

@@ -229,6 +229,35 @@ describe('recordUsage flush triggers', () => {
         expect((blob as Blob).type).toBe('application/json');
     });
 
+    it('drains the buffer, so hiding then closing sends one beacon not two', async () => {
+        const { recordUsage, initUsageRecording } = await loadRecorder();
+        startRecording(initUsageRecording);
+
+        recordUsage(VIEW_OPENED);
+        vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden');
+        document.dispatchEvent(new Event('visibilitychange'));
+        window.dispatchEvent(new Event('pagehide'));
+
+        // Hide-then-close is a common sequence, and the batch is spliced out before the
+        // send precisely so the second trigger finds nothing left to count again.
+        expect(sendBeacon).toHaveBeenCalledTimes(1);
+    });
+
+    it('drains what is buffered on teardown rather than stranding it', async () => {
+        const { recordUsage, initUsageRecording, post } = await loadRecorder();
+        post.mockResolvedValue({ status: 204 });
+
+        const teardown = startRecording(initUsageRecording);
+
+        recordUsage(VIEW_OPENED);
+        teardown();
+
+        // Teardown removes the pagehide listener and cancels the pending flush, so
+        // anything still held would otherwise be lost if the tab closed next.
+        expect(post).toHaveBeenCalledTimes(1);
+        expect((post.mock.calls[0][1] as { events: unknown[] }).events).toEqual([VIEW_OPENED]);
+    });
+
     it('beacons when the tab is hidden', async () => {
         const { recordUsage, initUsageRecording } = await loadRecorder();
         startRecording(initUsageRecording);
@@ -356,12 +385,15 @@ describe('recordUsage idle scheduling', () => {
 
         expect(cancelIdle).toHaveBeenCalledTimes(1);
 
-        // Both timers cleared, not just the idle handle: a surviving ceiling would fire
-        // into a torn-down module.
+        // Teardown drains what was buffered, so one post is expected here. What must not
+        // happen is a second one: both timers cleared, not just the idle handle, or a
+        // surviving ceiling would fire into a torn-down module.
+        expect(post).toHaveBeenCalledTimes(1);
+
         runIdleCallbacks();
         vi.advanceTimersByTime(FLUSH_INTERVAL_MS);
 
-        expect(post).not.toHaveBeenCalled();
+        expect(post).toHaveBeenCalledTimes(1);
     });
 
     it('still flushes when the tab is hidden and no idle period ever arrives', async () => {

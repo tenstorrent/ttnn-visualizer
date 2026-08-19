@@ -398,6 +398,8 @@ For HTTP API calls going through `axiosInstance`, the frontend never embeds the 
 
 **Don't.** Building a URL like `${Endpoints.OPERATIONS_LIST}/${instanceId}` collides with the operation-detail route shape and loses session scoping for every other call sharing the axios config.
 
+**Documented exception.** The unload flush in `src/functions/recordUsage.ts` calls `navigator.sendBeacon` rather than `axiosInstance`, because a beacon is the only request the browser guarantees to send while the document is being discarded. It therefore gets neither interceptor, and composes `BASE_PATH` + `Endpoints.USAGE` by hand — deliberately without `instanceId`, since `POST /api/usage` is machine-scoped and takes no `@with_instance`. The body must be a `Blob` typed `application/json`: the route requires that content type so the request stays non-simple and a hostile origin needs a preflight `ALLOWED_ORIGINS` refuses, and a bare-string beacon is sent as `text/plain` and rejected.
+
 **Documented exception.** The Socket.IO connection URL is built at module scope in `src/libs/SocketProvider.tsx` (`io(\`${BASE_PATH}?instanceId=${getOrCreateInstanceId()}\`)`) because `io(...)` doesn't go through axios and there's no interceptor to inject the param. The instance ID still travels as a `?instanceId=...` query string — just one assembled by hand rather than injected.
 
 **Report-bound read errors.** Memory-profiler routes (`/api/operations`, `/api/tensors`, `/api/buffers`, …) open the instance's `profiler_path` via `LocalQueryRunner` (`backend/ttnn_visualizer/queries.py`); performance routes (`/api/performance/...`) open `performance_path` via `backend/ttnn_visualizer/csv_queries.py`. Status codes:
@@ -1237,7 +1239,7 @@ This holds outside `settings.py` too: `create_app`'s root-log-level check, the g
 
 #### The vocabulary is deliberately narrow, and matched across three consumers
 
-Only `true` / `1` / `false` / `0`, case-insensitive and whitespace-trimmed. That is what `.env.sample` documents, what the SPA's `isServerModeEnabled` (`src/functions/getServerConfig.ts`) accepts, and — because `str_to_bool` backs them — what the `print_signposts` / `hide_host_ops` / `merge_devices` / `tracing_mode` query params on `GET /api/performance/perf-results/report` accept. So `SERVER_MODE` and `VITE_SERVER_MODE` can't select opposite postures from the same spelling. **Widening one side means widening the others in the same change.**
+Only `true` / `1` / `false` / `0`, case-insensitive and whitespace-trimmed. That is what `.env.sample` documents, what the SPA's `isFlagEnabled` (`src/functions/getServerConfig.ts`) accepts — the predicate behind both `isServerModeEnabled` and `USAGE_RECORDING_ACTIVE`, and — because `str_to_bool` backs them — what the `print_signposts` / `hide_host_ops` / `merge_devices` / `tracing_mode` query params on `GET /api/performance/perf-results/report` accept. So `SERVER_MODE` and `VITE_SERVER_MODE` can't select opposite postures from the same spelling. **Widening one side means widening the others in the same change.**
 
 The query params are the easiest consumer to forget and the least noisy when broken: a spelling that stops being recognised doesn't error, it silently means `False`, so `?hide_host_ops=t` returns a different report rather than a 4xx. The SPA sends real axios booleans, so only scripted callers notice. `backend/ttnn_visualizer/tests/test_perf_report_params.py` pins the contract.
 

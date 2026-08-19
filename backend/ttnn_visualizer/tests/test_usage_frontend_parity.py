@@ -23,6 +23,7 @@ from pathlib import Path
 from typing import Dict, Set, Type
 
 import pytest
+from ttnn_visualizer import usage
 from ttnn_visualizer.usage import (
     CLIENT_EVENT_DETAIL_FIELDS,
     MAX_USAGE_BATCH_EVENTS,
@@ -36,6 +37,13 @@ from ttnn_visualizer.usage import (
 _REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 _DEFINITIONS = _REPOSITORY_ROOT / "src" / "definitions" / "UsageEvent.ts"
 _RECORD_USAGE = _REPOSITORY_ROOT / "src" / "functions" / "recordUsage.ts"
+_ENDPOINTS = _REPOSITORY_ROOT / "src" / "definitions" / "Endpoints.ts"
+
+# Declared in ``usage.py`` but never posted by a client: they describe the machine this
+# process runs on, and only the server can know them. Named here so that adding a
+# client-facing enum without a TypeScript copy fails
+# :func:`test_every_client_facing_enum_is_paired`, rather than going unnoticed.
+_SERVER_ONLY_ENUMS = frozenset({"DeploymentMode", "OperatingSystem"})
 
 _PAIRED_ENUMS: Dict[str, Type[Enum]] = {
     "UsageEvent": UsageEvent,
@@ -148,3 +156,58 @@ def test_the_client_batch_cap_matches_the_write_atomicity_cap():
     )
 
     assert int(declared.group(1)) == MAX_USAGE_BATCH_EVENTS
+
+
+def test_every_client_facing_enum_is_paired():
+    """A new enum in ``usage.py`` must gain a TypeScript copy or be declared server-only.
+
+    ``_PAIRED_ENUMS`` is hand-maintained, so without this the failure mode the parity tests
+    exist to prevent reappears one level up: an enum added here and forgotten in the client
+    is simply not compared by anything.
+    """
+    declared = {
+        name
+        for name, value in vars(usage).items()
+        if isinstance(value, type) and issubclass(value, Enum) and value is not Enum
+    }
+
+    assert declared == set(_PAIRED_ENUMS) | _SERVER_ONLY_ENUMS
+
+
+def test_the_client_posts_to_the_route_the_blueprint_registers():
+    """The path is duplicated in TypeScript, and a mismatch is silent on both sides.
+
+    A renamed route would make every post a 404 that the client swallows by design, so
+    nothing anywhere would report it.
+    """
+    from ttnn_visualizer.app import create_app
+
+    declared = _require_match(
+        r"USAGE = '([^']+)'", _read(_ENDPOINTS), 0, "No USAGE member in Endpoints.ts"
+    ).group(1)
+
+    rules = {
+        str(rule)
+        for rule in create_app().url_map.iter_rules()
+        if "POST" in (rule.methods or set())
+    }
+
+    assert declared in rules
+
+
+def test_the_client_envelope_key_matches_the_route():
+    """``{ events }`` in the sender against ``_USAGE_EVENTS_FIELD`` in the route.
+
+    Renaming one leaves the other posting a body the handler reads as empty, answered with
+    a 400 the client never surfaces.
+    """
+    from ttnn_visualizer.views import _USAGE_EVENTS_FIELD
+
+    declared = _require_match(
+        r"axiosInstance\s*\.post\(Endpoints\.USAGE,\s*\{\s*(\w+)\s*\}\)",
+        _read(_RECORD_USAGE),
+        re.DOTALL,
+        "No axiosInstance.post(Endpoints.USAGE, { ... }) in recordUsage.ts",
+    ).group(1)
+
+    assert declared == _USAGE_EVENTS_FIELD
