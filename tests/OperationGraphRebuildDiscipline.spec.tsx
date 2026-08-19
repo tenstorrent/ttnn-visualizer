@@ -7,6 +7,7 @@ import type { ReactNode } from 'react';
 import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { getDefaultStore } from 'jotai';
 
 import type { NodeChange } from '@xyflow/react';
 
@@ -109,6 +110,10 @@ vi.mock('../src/components/operation-graph/useOpGraphLayoutWorker', () => ({
 /* eslint-disable import/first */
 import { buildOpGraph } from '../src/components/operation-graph/opGraphBuilder';
 import OperationGraphReactFlow from '../src/components/operation-graph/OperationGraphReactFlow';
+import { PERF_BAR_SCALE_VAR } from '../src/components/operation-graph/opGraphPerfOverlay';
+import type { PerfOverlaySource } from '../src/functions/perfOverlay';
+import { activePerformanceReportAtom, activeProfilerReportAtom } from '../src/store/app';
+import type { ReportFolder } from '../src/definitions/Reports';
 /* eslint-enable import/first */
 
 const FILTER_DEBOUNCE_MS = 120;
@@ -141,10 +146,14 @@ const sourceFor = (operations: OperationDescription[]) =>
         outputs: op.outputs.map((tensor) => ({ edgeLabel: '[1, 32]', consumers: tensor.consumers })),
     }));
 
-const renderGraph = (operations = OPERATION_LIST) => {
+const renderGraph = (operations = OPERATION_LIST, perfRows?: PerfOverlaySource[]) => {
     const view = render(
         <MemoryRouter>
-            <OperationGraphReactFlow operationList={operations} />
+            <OperationGraphReactFlow
+                operationList={operations}
+                perfRows={perfRows}
+                isPerfReportLoaded={perfRows !== undefined}
+            />
         </MemoryRouter>,
     );
     // The worker is stubbed, so the view only receives a graph when a test says
@@ -176,6 +185,17 @@ const emitNodeChanges = (changes: NodeChange<OpGraphFlowNode>[]) => {
     });
 };
 
+const PERF_ROWS: PerfOverlaySource[] = OPERATION_LIST.map((op) => ({ id: op.id, device_time: op.id * 10 }));
+
+const perfScaleOf = (node: OpGraphFlowNode) =>
+    (node.style as Record<string, unknown> | undefined)?.[PERF_BAR_SCALE_VAR];
+
+// By role, because the legend the overlay renders carries an `aria-label` that
+// starts the same way.
+const overlaySwitch = () => screen.getByRole('checkbox', { name: /^Perf overlay/ }) as HTMLInputElement;
+
+const enableOverlay = () => fireEvent.click(overlaySwitch());
+
 beforeEach(() => {
     vi.useFakeTimers();
     runBuild.mockClear();
@@ -186,6 +206,10 @@ beforeEach(() => {
     harness.onNodeClick = null;
     harness.onNodesChange = null;
     sessionStorage.clear();
+    // No `Provider` here, so the view reads the default store and report state
+    // would otherwise carry into the next test.
+    getDefaultStore().set(activePerformanceReportAtom, null);
+    getDefaultStore().set(activeProfilerReportAtom, null);
 });
 
 afterEach(() => {
@@ -370,5 +394,123 @@ describe('OperationGraphReactFlow filter dimming', () => {
         expect(after).not.toBe(before);
         expect(nodeById(after, '4')).toBe(nodeById(before, '4'));
         expect(nodeById(after, '5')).toBe(nodeById(before, '5'));
+    });
+});
+
+describe('OperationGraphReactFlow perf overlay identity', () => {
+    // The overlay patches every linked node rather than the handful a filter or a
+    // selection touches, so it is the case where re-dressing nodes per render
+    // costs a full canvas re-render instead of a few nodes.
+    it('keeps untouched nodes byte-for-byte across a drag frame', () => {
+        renderGraph(OPERATION_LIST, PERF_ROWS);
+        enableOverlay();
+        const before = lastFlowRender().nodes;
+        // Without this the drag assertion below would pass on an overlay that
+        // never applied anything.
+        expect(perfScaleOf(nodeById(before, '4'))).toBeDefined();
+
+        act(() => {
+            harness.setNodes?.((previous) =>
+                previous.map((node) => (node.id === '1' ? { ...node, position: { x: 5, y: 5 } } : node)),
+            );
+        });
+
+        const after = lastFlowRender().nodes;
+        expect(after).not.toBe(before);
+        expect(nodeById(after, '4')).toBe(nodeById(before, '4'));
+        expect(nodeById(after, '5')).toBe(nodeById(before, '5'));
+    });
+
+    it('re-dresses the nodes when the scores themselves change', () => {
+        const { rerender } = renderGraph(OPERATION_LIST, PERF_ROWS);
+        enableOverlay();
+        const before = lastFlowRender().nodes;
+
+        rerender(
+            <MemoryRouter>
+                <OperationGraphReactFlow
+                    operationList={OPERATION_LIST}
+                    perfRows={PERF_ROWS.map((row) => ({ ...row, device_time: (row.device_time ?? 0) * 100 }))}
+                    isPerfReportLoaded
+                />
+            </MemoryRouter>,
+        );
+
+        // The cache is keyed on the patch identity, so a new ramp has to reach
+        // React Flow even though the node objects behind it never changed.
+        expect(nodeById(lastFlowRender().nodes, '4')).not.toBe(nodeById(before, '4'));
+    });
+});
+
+// Intent is scoped to the report it was enabled for, and the switch reads derived
+// active state, so the reset has to clear intent itself rather than rely on the
+// overlay going quiet. The rows stay linked throughout, which is what makes the
+// switch a faithful read of intent here.
+describe('OperationGraphReactFlow perf overlay report scope', () => {
+    const reportFolder = (name: string) => ({ path: `/reports/${name}`, reportName: name }) as ReportFolder;
+
+    const setReport = (atom: typeof activeProfilerReportAtom, report: ReportFolder | null) => {
+        act(() => {
+            getDefaultStore().set(atom, report);
+        });
+    };
+
+    it('drops the overlay when the profiler report changes', () => {
+        renderGraph(OPERATION_LIST, PERF_ROWS);
+        enableOverlay();
+        expect(overlaySwitch().checked).toBe(true);
+
+        setReport(activeProfilerReportAtom, reportFolder('resnet50'));
+
+        expect(overlaySwitch().checked).toBe(false);
+    });
+
+    it('drops the overlay when the performance report changes', () => {
+        // A perf swap is the more dangerous of the two: the graph is unchanged, so
+        // a stale overlay looks plausible while encoding a different run.
+        renderGraph(OPERATION_LIST, PERF_ROWS);
+        enableOverlay();
+
+        setReport(activePerformanceReportAtom, reportFolder('resnet50-perf'));
+
+        expect(overlaySwitch().checked).toBe(false);
+        // The encoding has to go with it, not just the control.
+        expect(perfScaleOf(nodeById(lastFlowRender().nodes, '4'))).toBeUndefined();
+    });
+
+    it('does not re-enable itself when a report is swapped back', () => {
+        const first = reportFolder('resnet50');
+        renderGraph(OPERATION_LIST, PERF_ROWS);
+        setReport(activeProfilerReportAtom, first);
+        enableOverlay();
+        setReport(activeProfilerReportAtom, reportFolder('bert'));
+
+        expect(overlaySwitch().checked).toBe(false);
+
+        setReport(activeProfilerReportAtom, first);
+
+        expect(overlaySwitch().checked).toBe(false);
+    });
+
+    it('leaves the overlay alone while the reports hold still', () => {
+        // A reset firing on every render would make the switch unusable.
+        const report = reportFolder('resnet50');
+        renderGraph(OPERATION_LIST, PERF_ROWS);
+        setReport(activeProfilerReportAtom, report);
+        enableOverlay();
+        setReport(activeProfilerReportAtom, report);
+
+        expect(overlaySwitch().checked).toBe(true);
+    });
+
+    it('survives the same report arriving as a rebuilt object', () => {
+        // Restoring an instance or refetching writes a fresh `ReportFolder` for the
+        // report already loaded, which reference equality read as a swap.
+        renderGraph(OPERATION_LIST, PERF_ROWS);
+        setReport(activeProfilerReportAtom, reportFolder('resnet50'));
+        enableOverlay();
+        setReport(activeProfilerReportAtom, reportFolder('resnet50'));
+
+        expect(overlaySwitch().checked).toBe(true);
     });
 });

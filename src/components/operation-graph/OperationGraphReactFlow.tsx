@@ -17,7 +17,16 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { useAtomValue } from 'jotai';
-import { type MouseEvent as ReactMouseEvent, memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+    type CSSProperties,
+    type MouseEvent as ReactMouseEvent,
+    memo,
+    useCallback,
+    useEffect,
+    useMemo,
+    useRef,
+    useState,
+} from 'react';
 import { GraphFilterMode } from '../../definitions/GraphFilterMode';
 import { NodeRelation } from '../../definitions/NodeRelation';
 import { PerfOverlayStatus } from '../../definitions/PerfOverlayStatus';
@@ -113,6 +122,12 @@ interface PerfHover {
     y: number;
 }
 
+interface StyledNodeCacheEntry {
+    className: string | undefined;
+    perfStyle: CSSProperties | undefined;
+    styled: OpGraphFlowNode;
+}
+
 const OperationGraphInner = ({
     operationList,
     operationId,
@@ -146,6 +161,9 @@ const OperationGraphInner = ({
     }
     const filterRef = useRef<GraphOpFilterHandle>(null);
     const containerRef = useRef<HTMLDivElement>(null);
+    // A singleton for the component's lifetime rather than a ref, since the
+    // styling pass reads it during render and never replaces it.
+    const [styledNodeCache] = useState(() => new WeakMap<OpGraphFlowNode, StyledNodeCacheEntry>());
     const { setCenter, getNode } = useReactFlow<OpGraphFlowNode, OpGraphFlowEdge>();
     const flowStore = useStoreApi();
 
@@ -531,20 +549,39 @@ const OperationGraphInner = ({
             if (matchedIds && (isSelected || matchedIds.has(node.id))) {
                 classNames.push(MATCHED_NODE_CLASS);
             }
+            const className = classNames.length > 0 ? classNames.join(' ') : undefined;
             // Custom properties only, so perf stacks with selection, the
             // highlight and the inherited filter dim instead of displacing any.
             const perfStyle = perfStyleByNodeId?.get(node.id);
-            const styled = perfStyle ? { ...node, style: { ...node.style, ...perfStyle } } : node;
-            if (isSelected) {
-                // Mirrored into React Flow's own flag so its keyboard handler reads
-                // the same selection the app holds: Escape on the selected node has
-                // to register as an unselect, and Enter on it as a no-op. Nothing
-                // else ever sets `selected`, since select changes are dropped.
-                return { ...styled, className: classNames.join(' '), selected: true };
+            if (className === undefined && perfStyle === undefined) {
+                return node;
             }
-            return classNames.length > 0 ? { ...styled, className: classNames.join(' ') } : styled;
+
+            // A drag frame hands back a new array with one new node object, so a
+            // node dressed again here would lose the identity React Flow diffs
+            // on. Both inputs are stable — the patches are rebuilt only when the
+            // scores change — so an untouched node hits the cache and keeps the
+            // object it was given.
+            const cached = styledNodeCache.get(node);
+            if (cached !== undefined && cached.className === className && cached.perfStyle === perfStyle) {
+                return cached.styled;
+            }
+
+            const styled = {
+                ...node,
+                ...(perfStyle ? { style: { ...node.style, ...perfStyle } } : {}),
+                ...(className === undefined ? {} : { className }),
+                // Selection is mirrored into React Flow's own flag so its keyboard
+                // handler reads the same selection the app holds: Escape on the
+                // selected node has to register as an unselect, and Enter on it as
+                // a no-op. Nothing else ever sets `selected`, since select changes
+                // are dropped.
+                ...(isSelected ? { selected: true } : {}),
+            };
+            styledNodeCache.set(node, { className, perfStyle, styled });
+            return styled;
         });
-    }, [nodes, highlight, matchedIds, perfStyleByNodeId]);
+    }, [nodes, highlight, matchedIds, perfStyleByNodeId, styledNodeCache]);
 
     const styledEdges = useMemo(() => {
         if (!highlight && !matchedIds) {
