@@ -88,13 +88,6 @@ COMPACTION_LOCK_NAME = ".compaction.lock"
 # operator who wants no usage data sets this, and everyone else sets nothing.
 USAGE_DISABLED_ENV_VAR = "USAGE_RECORDING_DISABLED"
 
-# Retired in favour of the variable above, and kept only so a stale export can be
-# reported. ``DefaultConfig.USAGE_RECORDING_ACTIVE`` is a descriptor, so
-# ``override_with_env_variables`` never looks at this name and its ignored-variable
-# warning cannot fire for it. Without the warning below, an operator who opted out with
-# the old spelling would start recording again with no signal at all.
-_RETIRED_RECORDING_ENV_VAR = "USAGE_RECORDING_ENABLED"
-
 RUN_ID_ENV_VAR = "TTNN_VISUALIZER_RUN_ID"
 
 # The cap is a privacy control as much as a disk one. View and engagement events are
@@ -395,27 +388,6 @@ def _warn_once(env_var: str, message: str, *args: Any) -> None:
     logger.warning(message, *args)
 
 
-def _warn_about_the_retired_env_var() -> None:
-    """Say so, once, when the old spelling is still exported.
-
-    Warned about rather than honoured: two variables that both answer the same question
-    are the ambiguity this rename exists to remove, and honouring the retired one would
-    keep it indefinitely. Reported before the ``SERVER_MODE`` check in
-    :func:`is_recording_enabled` so a hosted operator carrying a stale export hears
-    about it too, rather than only discovering it on the day they move to a local
-    install.
-    """
-    if os.getenv(_RETIRED_RECORDING_ENV_VAR) is None:
-        return
-
-    _warn_once(
-        _RETIRED_RECORDING_ENV_VAR,
-        "%s is no longer read. Recording is on by default. %s",
-        _RETIRED_RECORDING_ENV_VAR,
-        describe_opt_out(),
-    )
-
-
 def _is_recording_disabled_by_environment() -> bool:
     """Whether the operator's environment asks us not to record.
 
@@ -457,8 +429,6 @@ def is_recording_enabled(server_mode: Any = False) -> bool:
     The file half of the off switch exists because an environment variable is
     per-shell, and so easy to set in one terminal and lose in the next.
     """
-    _warn_about_the_retired_env_var()
-
     if _as_bool(server_mode):
         return False
 

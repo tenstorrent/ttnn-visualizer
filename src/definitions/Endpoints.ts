@@ -30,6 +30,7 @@ enum Endpoints {
     REPORT_METADATA = '/api/report-metadata',
     SYSTEM_CAPABILITIES = '/api/system-capabilities', // Currently unused
     TENSOR_LIST = '/api/tensors',
+    USAGE = '/api/usage',
     LATEST_VERSION = '/api/latest-version',
 }
 
