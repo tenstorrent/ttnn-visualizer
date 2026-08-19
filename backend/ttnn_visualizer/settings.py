@@ -185,7 +185,7 @@ class _AllowedOrigins:
         )
 
 
-class _UsageRecordingEnabled:
+class _UsageRecordingActive:
     """Resolve whether usage recording is active, on read rather than at import time.
 
     A descriptor so the override loop skips it (it tests for ``__get__``) — assigning a
@@ -194,6 +194,14 @@ class _UsageRecordingEnabled:
     import, and delegates to :func:`usage.is_recording_enabled` so the ``PRINT_ENV``
     dump cannot claim recording is on while the posture or the marker file has switched
     it off.
+
+    Named for the state rather than for any variable, and deliberately not
+    ``USAGE_RECORDING_DISABLED``: the attribute answers "is recording on", which is what
+    ``PRINT_ENV`` and ``to_dict`` publish, so borrowing the variable's name would
+    publish a value that reads true when recording is off. It is not called
+    ``USAGE_RECORDING_ENABLED`` either — that spelling is a retired *variable*
+    (:data:`usage._RETIRED_RECORDING_ENV_VAR`), and an env dump advertising it would
+    invite an operator to set a name nothing reads.
     """
 
     def __get__(self, instance: object, owner: type) -> bool:
@@ -238,12 +246,57 @@ def _parse_ssh_port(env_value: Optional[str]) -> int:
     return parse_tcp_port(env_value, default=_DEFAULT_SSH_PORT)
 
 
+_MIN_SESSION_MAX_UPLOADED_REPORTS = 1
+_DEFAULT_SESSION_MAX_UPLOADED_REPORTS = 10
+
+
+def _require_session_max_uploaded_reports(env_value: str) -> int:
+    """Range-check the session report cap, raising ``ValueError`` for anything unusable.
+
+    ``0`` is the value worth refusing rather than accepting. It reads as "store nothing",
+    but every call site spells the bound ``lst[-cap:]`` and ``[-0:]`` returns the *whole*
+    list, so a zero turns the cap into no cap at all — the opposite of what the setting
+    exists for, and the signed session cookie then grows without limit as uploads
+    accumulate. A negative value inverts the slice in its own surprising way.
+
+    The strict half, for the override loop, which has a declared value to keep and would
+    rather report a bad one than substitute silently. Same split as
+    :func:`require_tcp_port` against :func:`_parse_ssh_port`.
+    """
+    cap = int(env_value, 10)
+    if cap < _MIN_SESSION_MAX_UPLOADED_REPORTS:
+        raise ValueError(
+            f"cap {cap} is below the smallest meaningful one, "
+            f"{_MIN_SESSION_MAX_UPLOADED_REPORTS}"
+        )
+
+    return cap
+
+
+def _parse_session_max_uploaded_reports(env_value: Optional[str]) -> int:
+    """Lenient half, for the class body, which has no declared value to fall back on.
+
+    Substituting the default is safe here in a way it is not for ``MAX_CONTENT_LENGTH``:
+    the fallback is a *tighter* bound than the unusable value asked for, so guessing
+    cannot drop a protection the operator wanted. The override loop still reports the bad
+    value, so nobody is left guessing why their setting was ignored.
+    """
+    if env_value is None or not env_value.strip():
+        return _DEFAULT_SESSION_MAX_UPLOADED_REPORTS
+
+    try:
+        return _require_session_max_uploaded_reports(env_value)
+    except ValueError:
+        return _DEFAULT_SESSION_MAX_UPLOADED_REPORTS
+
+
 # Settings whose class body parses more richly than their type. Keyed by name because
 # the rule belongs to the setting: dispatching on ``int`` alone would drop the SSH port
 # range check, and ``MAX_CONTENT_LENGTH`` is an ``int`` whose empty value is not one.
 _ENV_PARSERS: Mapping[str, Callable[[str], Any]] = {
     "SSH_DEFAULT_PORT": require_tcp_port,
     "MAX_CONTENT_LENGTH": _parse_max_content_length,
+    "SESSION_MAX_UPLOADED_REPORTS": _require_session_max_uploaded_reports,
 }
 
 # Booleans an unreadable value must stop the app over rather than warn about. Registered
@@ -441,9 +494,10 @@ class DefaultConfig(object):
     TESTING = False
     PRINT_ENV = True
     SERVER_MODE = _parse_env_bool("SERVER_MODE", False)
-    # Local usage recording is on by default. Written on this machine only; the
-    # application transmits nothing. See backend/ttnn_visualizer/usage.py.
-    USAGE_RECORDING_ENABLED = _UsageRecordingEnabled()
+    # Local usage recording is on by default; ``USAGE_RECORDING_DISABLED=true`` is the
+    # opt-out. Written on this machine only; the application transmits nothing.
+    # See backend/ttnn_visualizer/usage.py.
+    USAGE_RECORDING_ACTIVE = _UsageRecordingActive()
     MALWARE_SCANNER = os.getenv("MALWARE_SCANNER")
     BASE_PATH = os.getenv("BASE_PATH", "/")
     MAX_CONTENT_LENGTH = _parse_max_content_length(os.getenv("MAX_CONTENT_LENGTH", ""))
@@ -525,7 +579,9 @@ class DefaultConfig(object):
     SESSION_COOKIE_SAMESITE = "Lax"
     SESSION_COOKIE_SECURE = False  # For development on HTTP
     # Max uploaded report paths / instance IDs stored in session cookie (FIFO); avoids cookie size limits (e.g. 4KB)
-    SESSION_MAX_UPLOADED_REPORTS = int(os.getenv("SESSION_MAX_UPLOADED_REPORTS", "10"))
+    SESSION_MAX_UPLOADED_REPORTS = _parse_session_max_uploaded_reports(
+        os.getenv("SESSION_MAX_UPLOADED_REPORTS")
+    )
 
     def override_with_env_variables(self):
         """Override config values with environment variables.

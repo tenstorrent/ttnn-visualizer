@@ -5,12 +5,14 @@
 """The usage log is a privacy commitment expressed as code.
 
 Recording is on by default, so the tests that matter most are the ones asserting it
-does *not* happen: under ``SERVER_MODE``, with the switch off, and with anything
+does *not* happen: under ``SERVER_MODE``, with the opt-out set, and with anything
 free-form in a field. The rest pin the file's contract with the out-of-band
 collector — totals never go down, and no line can be forged.
 """
 
 import os
+import re
+import shutil
 import subprocess
 import sys
 import time
@@ -20,19 +22,34 @@ from types import SimpleNamespace
 import pytest
 from ttnn_visualizer import usage
 from ttnn_visualizer.settings import DefaultConfig
+from ttnn_visualizer.tests.test_settings import ENV_SAMPLE_PATH
+from ttnn_visualizer.tests.usage_log import (
+    parse_usage_line,
+    read_usage_lines,
+    total_usage_events,
+)
 from ttnn_visualizer.usage import (
+    _DETAIL_FIELD_ENUMS,
     _REQUIRED_FIELDS,
+    _RETIRED_RECORDING_ENV_VAR,
+    CLIENT_EVENT_DETAIL_FIELDS,
     COUNT_FIELD,
+    LOG_SIZE_CHECK_INTERVAL_BYTES,
+    MAX_USAGE_BATCH_EVENTS,
     RUN_ID_ENV_VAR,
     RUN_ID_FIELD,
-    USAGE_RECORDING_ENV_VAR,
+    USAGE_DISABLED_ENV_VAR,
     DeploymentMode,
+    ReportKind,
+    ReportLoadFailureReason,
     UsageEvent,
+    UsageView,
     get_deployment_mode,
     get_usage_log_path,
     is_recording_enabled,
     record_app_start,
     record_event,
+    record_events,
 )
 
 # One budget for the whole set of children, not one each: enough for all of them to
@@ -41,40 +58,11 @@ from ttnn_visualizer.usage import (
 _SUBPROCESS_WRITER_TIMEOUT_SECONDS = 30
 
 
-@pytest.fixture
-def usage_directory(tmp_path, monkeypatch):
-    """Redirect the log into a temporary directory and reset per-process state.
-
-    Every test in this module depends on this: without it they would write to the
-    developer's real ``~/.ttnn-visualizer/usage``.
-    """
-    directory = tmp_path / "usage"
-    monkeypatch.setattr(usage, "USAGE_DIRECTORY", directory)
-    monkeypatch.setattr(usage, "_run_id", None)
-    monkeypatch.delenv(RUN_ID_ENV_VAR, raising=False)
-    monkeypatch.delenv(USAGE_RECORDING_ENV_VAR, raising=False)
-
-    return directory
-
-
-def read_lines(directory: Path):
-    log_path = directory / usage.USAGE_LOG_NAME
-    if not log_path.exists():
-        return []
-
-    return log_path.read_text(encoding="utf-8").splitlines()
-
-
-def parse(line: str):
-    return dict(token.split("=", 1) for token in line.split(" "))
-
-
-def total_events(lines):
-    """Cumulative count the way the collector derives it: ``count``, default 1."""
-    return sum(int(parse(line).get(COUNT_FIELD, "1")) for line in lines)
-
-
-def _run_usage_writers(directory: Path, writers: int, writes_each: int) -> None:
+# The `usage_directory` fixture comes from `conftest.py`; the log readers come from
+# `usage_log.py`. Both are shared with the ingest endpoint's tests.
+def _run_usage_writers(
+    directory: Path, writers: int, writes_each: int, batch_size: int = 1
+) -> None:
     """Append ``writes_each`` events into ``directory`` from ``writers`` interpreters.
 
     All-or-nothing on purpose. The children only overlap if every one is spawned
@@ -87,10 +75,11 @@ def _run_usage_writers(directory: Path, writers: int, writes_each: int) -> None:
     developer's own ``TTNN_VISUALIZER_RUN_ID`` from reaching them and collapsing
     their run ids into one.
     """
+    # A developer shell with the opt-out set would otherwise inherit silence. Popped
+    # rather than overridden with a false value: unset is the shipped state, and it is
+    # the state every other test in this module runs under.
     child_env = {
-        **os.environ,
-        # A developer shell with the switch off would otherwise inherit silence.
-        USAGE_RECORDING_ENV_VAR: "true",
+        key: value for key, value in os.environ.items() if key != USAGE_DISABLED_ENV_VAR
     }
     command = [
         sys.executable,
@@ -98,6 +87,7 @@ def _run_usage_writers(directory: Path, writers: int, writes_each: int) -> None:
         "ttnn_visualizer.tests.usage_writer",
         str(directory),
         str(writes_each),
+        str(batch_size),
     ]
 
     children: list[subprocess.Popen] = []
@@ -137,6 +127,32 @@ def _run_usage_writers(directory: Path, writers: int, writes_each: int) -> None:
                 child.communicate()
 
 
+def test_concurrent_batches_do_not_interleave(usage_directory):
+    """The single-line case is covered elsewhere; a batch is the harder one.
+
+    A batch goes out as one multi-line ``os.write``, so it is where ``O_APPEND`` is
+    doing the most work — and where a regression to a per-line loop would start
+    splitting one instance's flush across another's.
+    """
+    # 10 is deliberately not a multiple of 3: the writer has to finish with a short
+    # batch, and a regression that dropped the remainder would fail the line count.
+    writers, writes_each, batch_size = 3, 10, 3
+
+    _run_usage_writers(usage_directory, writers, writes_each, batch_size)
+
+    lines = read_usage_lines(usage_directory)
+
+    assert len(lines) == writers * writes_each
+    # Every line whole: a torn write would leave a fragment missing these fields.
+    for line in lines:
+        fields = parse_usage_line(line)
+        assert all(name in fields for name in _REQUIRED_FIELDS)
+        assert fields["view"] == UsageView.OPERATIONS.value
+    # Three run ids, one per interpreter, so the writers really did overlap rather than
+    # one having finished before the next was spawned.
+    assert len({parse_usage_line(line)[RUN_ID_FIELD] for line in lines}) == writers
+
+
 def test_the_path_ignores_every_environment_derived_data_directory(monkeypatch):
     # The whole reason for not using get_app_data_directory(): a collector running as
     # root cannot read the user's shell environment, so the path has to be knowable
@@ -152,13 +168,13 @@ def test_recording_is_on_by_default(usage_directory):
 
 
 def test_the_environment_switches_recording_off(usage_directory, monkeypatch):
-    monkeypatch.setenv(USAGE_RECORDING_ENV_VAR, "false")
+    monkeypatch.setenv(USAGE_DISABLED_ENV_VAR, "true")
 
     assert is_recording_enabled() is False
 
     record_event(UsageEvent.APP_START)
 
-    assert read_lines(usage_directory) == []
+    assert read_usage_lines(usage_directory) == []
 
 
 def test_the_marker_file_switches_recording_off(usage_directory):
@@ -169,11 +185,153 @@ def test_the_marker_file_switches_recording_off(usage_directory):
 
     record_event(UsageEvent.APP_START)
 
-    assert read_lines(usage_directory) == []
+    assert read_usage_lines(usage_directory) == []
+
+
+def test_an_explicit_false_keeps_recording_on(usage_directory, monkeypatch):
+    # Guards against a presence check: the variable is documented in `.env.sample` at
+    # its default, so the commented line being uncommented unchanged must record.
+    monkeypatch.setenv(USAGE_DISABLED_ENV_VAR, "false")
+
+    assert is_recording_enabled() is True
+
+    record_event(UsageEvent.APP_START)
+
+    assert len(read_usage_lines(usage_directory)) == 1
+
+
+def test_the_documented_default_keeps_recording_on(usage_directory, monkeypatch):
+    # The generic `.env.sample` pin in ``test_settings.py`` cannot reach this setting:
+    # ``_documented_boolean_defaults`` keys off a boolean config attribute of the same
+    # name, and there is deliberately no ``USAGE_RECORDING_DISABLED`` attribute. So the
+    # one boolean whose polarity is inverted — where an inverted sample line is most
+    # likely to recur — would otherwise be the only one nothing polices.
+    documented = [
+        line
+        for line in ENV_SAMPLE_PATH.read_text(encoding="utf-8").splitlines()
+        if line.strip().startswith(f"# {USAGE_DISABLED_ENV_VAR}=")
+    ]
+
+    # Asserted rather than skipped: a renamed or deleted line must fail here, which is
+    # the whole point of pinning the file.
+    assert len(documented) == 1
+
+    monkeypatch.setenv(USAGE_DISABLED_ENV_VAR, documented[0].split("=", 1)[1].strip())
+
+    assert is_recording_enabled() is True
+
+    # The retired name must not reappear in the sample as though it still worked.
+    assert f"# {_RETIRED_RECORDING_ENV_VAR}=" not in ENV_SAMPLE_PATH.read_text(
+        encoding="utf-8"
+    )
+
+
+def test_the_launch_banner_names_a_working_opt_out(
+    usage_directory, monkeypatch, capsys
+):
+    # Executable documentation. The banner is where a user actually learns how to opt
+    # out, and this rename inverted its instruction — a banner naming a stale variable,
+    # or the right one at the wrong polarity, would otherwise ship green.
+    from ttnn_visualizer.app import _record_launch
+
+    monkeypatch.setenv(RUN_ID_ENV_VAR, "")
+    _record_launch(SimpleNamespace(SERVER_MODE="false", TT_METAL_HOME=None))
+
+    printed = re.search(r"(USAGE_RECORDING_\w+)=(\w+)", capsys.readouterr().out)
+
+    assert printed is not None
+
+    monkeypatch.setenv(printed.group(1), printed.group(2))
+
+    assert is_recording_enabled() is False
+
+
+@pytest.mark.parametrize("value", ["yes", "off", "", "  ", "Ture"])
+def test_an_unrecognised_disable_value_switches_recording_off(
+    usage_directory, monkeypatch, caplog, value
+):
+    # The one boolean in the project that obeys a value it does not recognise. Every
+    # other setting keeps its declared default and warns (`_coerce_env_value`), which
+    # for an opt-out would mean reading a typo as consent to record.
+    monkeypatch.setenv(USAGE_DISABLED_ENV_VAR, value)
+
+    with caplog.at_level("WARNING"):
+        assert is_recording_enabled() is False
+
+    assert USAGE_DISABLED_ENV_VAR in caplog.text
+
+    record_event(UsageEvent.APP_START)
+
+    assert read_usage_lines(usage_directory) == []
+
+
+def test_the_retired_variable_is_not_honoured(usage_directory, monkeypatch):
+    # The rename is a replacement, not an addition: the old spelling stops working.
+    monkeypatch.setenv(_RETIRED_RECORDING_ENV_VAR, "false")
+
+    assert is_recording_enabled() is True
+
+    record_event(UsageEvent.APP_START)
+
+    assert len(read_usage_lines(usage_directory)) == 1
+
+
+def test_an_unrecognised_disable_value_is_reported_once(
+    usage_directory, monkeypatch, caplog
+):
+    # The warning fires from the path every recorded event takes, so without warn-once
+    # the misconfiguration it reports is also the one that floods the log.
+    monkeypatch.setenv(USAGE_DISABLED_ENV_VAR, "yes")
+
+    with caplog.at_level("WARNING"):
+        is_recording_enabled()
+        is_recording_enabled()
+
+    warnings = [
+        record
+        for record in caplog.records
+        if "not a recognised boolean" in record.getMessage()
+    ]
+
+    assert len(warnings) == 1
+
+
+def test_the_retired_variable_is_reported_once(usage_directory, monkeypatch, caplog):
+    # Silence is the failure mode this warning exists for — the config attribute is a
+    # descriptor, so `override_with_env_variables` never sees the variable and its own
+    # ignored-variable warning cannot fire. Once, because the descriptor puts this call
+    # on every config read.
+    monkeypatch.setenv(_RETIRED_RECORDING_ENV_VAR, "false")
+
+    with caplog.at_level("WARNING"):
+        is_recording_enabled()
+        is_recording_enabled()
+
+    warnings = [
+        record
+        for record in caplog.records
+        if _RETIRED_RECORDING_ENV_VAR in record.getMessage()
+    ]
+
+    assert len(warnings) == 1
+    assert USAGE_DISABLED_ENV_VAR in warnings[0].getMessage()
+
+
+def test_the_retired_variable_is_reported_under_server_mode(
+    usage_directory, monkeypatch, caplog
+):
+    # Reported before the SERVER_MODE early return, so a hosted operator carrying a
+    # stale export does not first discover it on a local install.
+    monkeypatch.setenv(_RETIRED_RECORDING_ENV_VAR, "false")
+
+    with caplog.at_level("WARNING"):
+        assert is_recording_enabled(server_mode=True) is False
+
+    assert _RETIRED_RECORDING_ENV_VAR in caplog.text
 
 
 def test_a_disabled_install_leaves_no_directory_behind(usage_directory, monkeypatch):
-    monkeypatch.setenv(USAGE_RECORDING_ENV_VAR, "false")
+    monkeypatch.setenv(USAGE_DISABLED_ENV_VAR, "true")
 
     is_recording_enabled()
     record_event(UsageEvent.APP_START)
@@ -186,7 +344,7 @@ def test_nothing_is_recorded_under_server_mode(usage_directory):
 
     record_event(UsageEvent.APP_START, server_mode=True)
 
-    assert read_lines(usage_directory) == []
+    assert read_usage_lines(usage_directory) == []
 
 
 def test_server_mode_is_read_from_the_app_context(app, usage_directory):
@@ -197,7 +355,7 @@ def test_server_mode_is_read_from_the_app_context(app, usage_directory):
     with app.app_context():
         record_event(UsageEvent.APP_START)
 
-    assert read_lines(usage_directory) == []
+    assert read_usage_lines(usage_directory) == []
 
 
 def test_a_local_app_context_still_records(app, usage_directory):
@@ -206,7 +364,7 @@ def test_a_local_app_context_still_records(app, usage_directory):
     with app.app_context():
         record_event(UsageEvent.APP_START)
 
-    assert len(read_lines(usage_directory)) == 1
+    assert len(read_usage_lines(usage_directory)) == 1
 
 
 def test_a_stringified_server_mode_does_not_disable_recording(usage_directory):
@@ -220,42 +378,45 @@ def test_a_stringified_server_mode_does_not_disable_recording(usage_directory):
 def test_the_environment_switch_survives_config_override(monkeypatch):
     # The same stringification the other way round: as a plain bool class attribute
     # this setting would come back as the truthy string "false" and fail open.
-    monkeypatch.setenv(USAGE_RECORDING_ENV_VAR, "false")
+    monkeypatch.setenv(USAGE_DISABLED_ENV_VAR, "true")
 
     config = DefaultConfig()
     config.override_with_env_variables()
 
-    assert config.USAGE_RECORDING_ENABLED is False
-    assert config.to_dict()[USAGE_RECORDING_ENV_VAR] is False
+    # Spelled out rather than taken from a constant: the attribute is named for the
+    # state and the variable for the opt-out, so there is no single name that names
+    # both and a shared constant here would suggest there is.
+    assert config.USAGE_RECORDING_ACTIVE is False
+    assert config.to_dict()["USAGE_RECORDING_ACTIVE"] is False
 
 
 def test_usage_recording_config_reflects_server_mode(usage_directory, monkeypatch):
     # The PRINT_ENV dump must not claim recording is on when SERVER_MODE has
     # switched the writer off.
-    monkeypatch.delenv(USAGE_RECORDING_ENV_VAR, raising=False)
+    monkeypatch.delenv(USAGE_DISABLED_ENV_VAR, raising=False)
 
     config = DefaultConfig()
     config.SERVER_MODE = True
 
-    assert config.USAGE_RECORDING_ENABLED is False
+    assert config.USAGE_RECORDING_ACTIVE is False
 
 
 def test_usage_recording_config_reflects_the_marker_file(usage_directory, monkeypatch):
-    monkeypatch.delenv(USAGE_RECORDING_ENV_VAR, raising=False)
+    monkeypatch.delenv(USAGE_DISABLED_ENV_VAR, raising=False)
     usage_directory.mkdir(parents=True)
     usage.get_disabled_marker_path().touch()
 
     config = DefaultConfig()
     config.SERVER_MODE = False
 
-    assert config.USAGE_RECORDING_ENABLED is False
+    assert config.USAGE_RECORDING_ACTIVE is False
 
 
 def test_an_event_round_trips_as_logfmt(usage_directory):
     record_event(UsageEvent.APP_START, deployment_mode=DeploymentMode.CONTAINER)
 
-    (line,) = read_lines(usage_directory)
-    fields = parse(line)
+    (line,) = read_usage_lines(usage_directory)
+    fields = parse_usage_line(line)
 
     assert fields["event"] == "app_start"
     assert fields["schema_version"] == "1"
@@ -274,7 +435,7 @@ def test_an_unsafe_value_writes_no_line_at_all(usage_directory, value):
     # extra event in a file another team parses as a privacy-reviewed artefact.
     record_event(UsageEvent.APP_START, deployment_mode=value)
 
-    assert read_lines(usage_directory) == []
+    assert read_usage_lines(usage_directory) == []
 
 
 def test_an_unsafe_inherited_run_id_is_replaced(usage_directory, monkeypatch):
@@ -282,8 +443,8 @@ def test_an_unsafe_inherited_run_id_is_replaced(usage_directory, monkeypatch):
 
     record_event(UsageEvent.APP_START)
 
-    (line,) = read_lines(usage_directory)
-    assert parse(line)["run_id"] != "forged"
+    (line,) = read_usage_lines(usage_directory)
+    assert parse_usage_line(line)["run_id"] != "forged"
 
 
 def test_the_run_id_is_inherited_when_it_is_safe(usage_directory, monkeypatch):
@@ -291,7 +452,9 @@ def test_the_run_id_is_inherited_when_it_is_safe(usage_directory, monkeypatch):
 
     record_event(UsageEvent.APP_START)
 
-    assert parse(read_lines(usage_directory)[0])["run_id"] == "abc12345"
+    assert (
+        parse_usage_line(read_usage_lines(usage_directory)[0])["run_id"] == "abc12345"
+    )
 
 
 def test_concurrent_subprocess_writers_never_truncate_a_line(usage_directory):
@@ -308,14 +471,14 @@ def test_concurrent_subprocess_writers_never_truncate_a_line(usage_directory):
 
     _run_usage_writers(usage_directory, writers=writers, writes_each=writes_each)
 
-    lines = read_lines(usage_directory)
+    lines = read_usage_lines(usage_directory)
 
     assert len(lines) == writers * writes_each
 
     parsed = []
     for line in lines:
         try:
-            fields = parse(line)
+            fields = parse_usage_line(line)
         except ValueError:
             # A line severed mid-token leaves a fragment with no ``=`` in it, which
             # ``parse`` raises on. Quote it: the module's whole reason for existing
@@ -338,7 +501,7 @@ def test_concurrent_subprocess_writers_never_truncate_a_line(usage_directory):
 def test_app_start_carries_the_baseline_fields(usage_directory):
     record_app_start(SimpleNamespace(TT_METAL_HOME=None))
 
-    fields = parse(read_lines(usage_directory)[0])
+    fields = parse_usage_line(read_usage_lines(usage_directory)[0])
 
     assert fields["event"] == "app_start"
     assert fields["deployment_mode"] == DeploymentMode.LOCAL_UPLOAD.value
@@ -350,7 +513,7 @@ def test_app_start_carries_the_baseline_fields(usage_directory):
 def test_disabled_recording_does_not_build_the_app_start_payload(
     usage_directory, monkeypatch
 ):
-    monkeypatch.setenv(USAGE_RECORDING_ENV_VAR, "false")
+    monkeypatch.setenv(USAGE_DISABLED_ENV_VAR, "true")
 
     def fail_if_called(*_args, **_kwargs):
         raise AssertionError(
@@ -364,21 +527,24 @@ def test_disabled_recording_does_not_build_the_app_start_payload(
 
     record_app_start(SimpleNamespace(TT_METAL_HOME=None))
 
-    assert read_lines(usage_directory) == []
+    assert read_usage_lines(usage_directory) == []
 
 
 def test_a_write_failure_does_not_break_the_caller(
     usage_directory, monkeypatch, caplog
 ):
-    def raise_os_error(_descriptor, _data):
+    # `_append_line` rather than `os.write`: patching the latter is process-global for the
+    # duration, so every unrelated write in the window — including the one that emits the
+    # warning being asserted on — would raise too.
+    def raise_os_error(_line):
         raise OSError("disk full")
 
-    monkeypatch.setattr(os, "write", raise_os_error)
+    monkeypatch.setattr(usage, "_append_line", raise_os_error)
 
     with caplog.at_level("WARNING"):
         record_event(UsageEvent.APP_START)
 
-    assert read_lines(usage_directory) == []
+    assert read_usage_lines(usage_directory) == []
     assert "Unable to record usage event" in caplog.text
 
 
@@ -396,7 +562,7 @@ def test_an_app_start_detail_failure_does_not_break_the_caller(
     with caplog.at_level("WARNING"):
         record_app_start(SimpleNamespace(TT_METAL_HOME=None))
 
-    assert read_lines(usage_directory) == []
+    assert read_usage_lines(usage_directory) == []
     assert "Unable to record usage event" in caplog.text
 
 
@@ -433,12 +599,12 @@ def test_compaction_keeps_cumulative_totals_monotonic(usage_directory, monkeypat
         for day in range(40)
     ]
     write_log(usage_directory, lines)
-    before = total_events(lines)
+    before = total_usage_events(lines)
 
     usage.compact_if_needed()
 
-    after = read_lines(usage_directory)
-    assert total_events(after) == before
+    after = read_usage_lines(usage_directory)
+    assert total_usage_events(after) == before
     assert len(after) < len(lines)
 
 
@@ -455,7 +621,9 @@ def test_compaction_does_not_merge_schema_versions(usage_directory, monkeypatch)
     usage.compact_if_needed()
 
     summaries = [
-        parse(line) for line in read_lines(usage_directory) if COUNT_FIELD in line
+        parse_usage_line(line)
+        for line in read_usage_lines(usage_directory)
+        if COUNT_FIELD in line
     ]
     assert {summary["schema_version"] for summary in summaries} == {"1", "2"}
     assert all(summary[COUNT_FIELD] == "2" for summary in summaries)
@@ -475,7 +643,7 @@ def test_compaction_is_idempotent_on_already_counted_lines(
 
     usage.compact_if_needed()
 
-    assert total_events(read_lines(usage_directory)) == 752
+    assert total_usage_events(read_usage_lines(usage_directory)) == 752
 
 
 def test_compaction_keeps_lines_it_cannot_parse(usage_directory, monkeypatch):
@@ -491,7 +659,7 @@ def test_compaction_keeps_lines_it_cannot_parse(usage_directory, monkeypatch):
 
     usage.compact_if_needed()
 
-    assert "garbled" in read_lines(usage_directory)
+    assert "garbled" in read_usage_lines(usage_directory)
 
 
 def test_compaction_does_not_dress_up_a_fragment_as_a_summary(
@@ -512,12 +680,12 @@ def test_compaction_does_not_dress_up_a_fragment_as_a_summary(
 
     usage.compact_if_needed()
 
-    compacted = read_lines(usage_directory)
+    compacted = read_usage_lines(usage_directory)
 
     assert fragment in compacted
     assert not any(line.startswith("ts= ") for line in compacted)
     assert not any(usage.UNKNOWN_VALUE in line for line in compacted)
-    assert total_events(compacted) == total_events(lines)
+    assert total_usage_events(compacted) == total_usage_events(lines)
 
 
 def test_compaction_survives_a_log_that_is_not_valid_utf_8(
@@ -544,7 +712,7 @@ def test_compaction_survives_a_log_that_is_not_valid_utf_8(
         .splitlines()
     )
 
-    assert total_events([line for line in lines if line.startswith("ts=")]) == 3
+    assert total_usage_events([line for line in lines if line.startswith("ts=")]) == 3
     assert any("corrupted" in line for line in lines)
 
 
@@ -554,7 +722,7 @@ def test_a_log_under_the_cap_is_left_alone(usage_directory):
 
     usage.compact_if_needed()
 
-    assert read_lines(usage_directory) == lines
+    assert read_usage_lines(usage_directory) == lines
 
 
 def test_compaction_skips_rewrite_when_nothing_is_summarisable(
@@ -575,7 +743,7 @@ def test_compaction_skips_rewrite_when_nothing_is_summarisable(
     usage.compact_if_needed()
 
     after = get_usage_log_path().stat()
-    assert read_lines(usage_directory) == lines
+    assert read_usage_lines(usage_directory) == lines
     assert after.st_mtime_ns == before.st_mtime_ns
 
 
@@ -614,11 +782,11 @@ def test_record_launch_records_one_line_and_exports_the_run_id(
     # The string form `.env.sample` produces, which is truthy if taken at face value.
     _record_launch(SimpleNamespace(SERVER_MODE="false", TT_METAL_HOME=None))
 
-    lines = read_lines(usage_directory)
+    lines = read_usage_lines(usage_directory)
 
     assert len(lines) == 1
-    assert parse(lines[0])["event"] == "app_start"
-    assert os.environ[RUN_ID_ENV_VAR] == parse(lines[0])["run_id"]
+    assert parse_usage_line(lines[0])["event"] == "app_start"
+    assert os.environ[RUN_ID_ENV_VAR] == parse_usage_line(lines[0])["run_id"]
 
 
 def test_record_launch_records_nothing_in_server_mode(usage_directory, monkeypatch):
@@ -627,6 +795,412 @@ def test_record_launch_records_nothing_in_server_mode(usage_directory, monkeypat
     monkeypatch.setenv(RUN_ID_ENV_VAR, "")
     _record_launch(SimpleNamespace(SERVER_MODE=True, TT_METAL_HOME=None))
 
-    assert read_lines(usage_directory) == []
+    assert read_usage_lines(usage_directory) == []
     # The run id is still exported so workers agree on one if it is switched on later.
     assert os.environ[RUN_ID_ENV_VAR]
+
+
+def test_every_client_postable_event_has_a_validation_rule():
+    """A new event without a rule must fail here, not be rejected in production.
+
+    ``app_start`` is the one exclusion, and it is deliberate: the server records launches
+    itself, so a client able to post one could forge the deployment population every
+    other figure is read against.
+    """
+    assert set(CLIENT_EVENT_DETAIL_FIELDS) == set(UsageEvent) - {UsageEvent.APP_START}
+
+
+def test_every_detail_field_draws_from_an_enum():
+    """A detail field with no enum behind it would be validated by nothing at all."""
+    for fields in CLIENT_EVENT_DETAIL_FIELDS.values():
+        for field in fields:
+            assert field in _DETAIL_FIELD_ENUMS
+
+
+def test_no_client_detail_field_collides_with_a_server_owned_one():
+    """The server supplies these, and a client that could set one could forge a line."""
+    server_owned = set(_REQUIRED_FIELDS) | {RUN_ID_FIELD, COUNT_FIELD}
+
+    for fields in CLIENT_EVENT_DETAIL_FIELDS.values():
+        assert not server_owned.intersection(fields)
+
+
+def test_every_enum_value_is_safe_to_write_unquoted():
+    """logfmt values are unquoted, so a member carrying a space would forge a field."""
+    for enum_type in _DETAIL_FIELD_ENUMS.values():
+        for member in enum_type:
+            assert usage._is_safe_value(str(member.value))
+
+
+def test_record_events_writes_the_whole_batch_or_none_of_it(usage_directory):
+    """The route rejects first, so this is belt and braces — but it is the guarantee.
+
+    An unsafe value reaching the writer must cost the batch, not half of it: a reader
+    cannot tell a truncated batch from a complete one, and the file's bounded contents
+    are the whole promise being made.
+    """
+    written = record_events(
+        [
+            (UsageEvent.VIEW_OPENED, {"view": UsageView.OPERATIONS}),
+            (UsageEvent.VIEW_OPENED, {"view": "operations\nts=forged"}),
+        ]
+    )
+
+    assert written is False
+    assert read_usage_lines(usage_directory) == []
+
+
+def test_record_events_appends_a_batch_as_one_write(usage_directory, monkeypatch):
+    """Counts the writes, since the line contents alone cannot tell one from N.
+
+    ``_append_line``'s no-lock design rests on a batch going out in a single
+    ``os.write``; a per-event loop would produce identical file contents and interleave
+    with another instance's appends.
+    """
+    writes = []
+    real_write = os.write
+
+    def counting_write(descriptor, data):
+        # Only this module's appends. `os.write` is process-global while it is patched, so
+        # any unrelated write landing in the window would otherwise count as a second one
+        # and fail a test that is about batching.
+        if data.startswith(b"ts="):
+            writes.append(data)
+        return real_write(descriptor, data)
+
+    monkeypatch.setattr(usage.os, "write", counting_write)
+
+    written = record_events(
+        [
+            (UsageEvent.VIEW_OPENED, {"view": UsageView.OPERATIONS}),
+            (UsageEvent.VIEW_ENGAGED, {"view": UsageView.OPERATIONS}),
+        ]
+    )
+
+    lines = read_usage_lines(usage_directory)
+
+    assert written is True
+    assert len(writes) == 1
+    assert [parse_usage_line(line)["event"] for line in lines] == [
+        UsageEvent.VIEW_OPENED.value,
+        UsageEvent.VIEW_ENGAGED.value,
+    ]
+
+
+def test_a_batch_carries_one_timestamp(usage_directory, monkeypatch):
+    """The module docstring promises a collector this, and it has to be exactly true.
+
+    ``TIMESTAMP_FORMAT`` is second-granular, so stamping per line would split a batch
+    that straddled a second boundary across two timestamps.
+    """
+    timestamps = iter(["2026-08-18T10:00:00Z", "2026-08-18T10:00:01Z"])
+    monkeypatch.setattr(usage, "_get_timestamp", lambda: next(timestamps))
+
+    record_events(
+        [
+            (UsageEvent.VIEW_OPENED, {"view": UsageView.OPERATIONS}),
+            (UsageEvent.VIEW_ENGAGED, {"view": UsageView.OPERATIONS}),
+        ]
+    )
+
+    stamps = {
+        parse_usage_line(line)["ts"] for line in read_usage_lines(usage_directory)
+    }
+
+    assert stamps == {"2026-08-18T10:00:00Z"}
+
+
+def test_record_events_refuses_to_grow_a_log_past_the_cap(usage_directory, monkeypatch):
+    """The cap is a privacy control, and only launch-time compaction honoured it before.
+
+    Refusing rather than trimming: dropping old lines makes cumulative totals go down,
+    which Prometheus reads as a counter reset and then extrapolates — losing history and
+    inventing activity at once.
+
+    Several batches rather than one, because one batch is the case a broken cap also
+    passes. A version that recomputed the verdict instead of caching it refused the first
+    batch, left the byte counter at zero, and then accepted everything until another whole
+    interval had been appended — one refusal per interval, indefinitely.
+    """
+    record_event(UsageEvent.APP_START)
+    before = read_usage_lines(usage_directory)
+
+    monkeypatch.setattr(usage, "MAX_LOG_BYTES", 0)
+    monkeypatch.setattr(usage, "_bytes_since_size_check", LOG_SIZE_CHECK_INTERVAL_BYTES)
+
+    refusals = [
+        record_events([(UsageEvent.VIEW_OPENED, {"view": UsageView.OPERATIONS})])
+        for _ in range(5)
+    ]
+
+    assert refusals == [False] * 5
+    assert read_usage_lines(usage_directory) == before
+
+
+def test_the_cap_is_reached_by_ordinary_appends_alone(usage_directory, monkeypatch):
+    """Nothing here sets the byte counter by hand, unlike every other cap test.
+
+    Those all prime ``_bytes_since_size_check`` to the interval, so removing the
+    accumulator in ``_append_line`` would disarm the write-path cap for the whole process
+    and leave them green. This crosses the interval by appending, and pins that the
+    refusal from that crossing is permanent rather than one batch wide.
+    """
+    event = (UsageEvent.APP_START, {})
+
+    assert record_events([event]) is True
+    line_size = get_usage_log_path().stat().st_size
+
+    # Two lines' worth of headroom, so a handful of appends crosses the interval and the
+    # log is over the cap by the time it is measured.
+    monkeypatch.setattr(usage, "LOG_SIZE_CHECK_INTERVAL_BYTES", line_size * 2)
+    monkeypatch.setattr(usage, "MAX_LOG_BYTES", line_size * 2)
+    monkeypatch.setattr(usage, "_bytes_since_size_check", 0)
+
+    results = [record_events([event]) for _ in range(10)]
+
+    assert False in results, "the cap was never reached by appending alone"
+
+    first_refusal = results.index(False)
+    assert all(result is False for result in results[first_refusal:])
+    # One line for the append above, plus everything accepted before the first refusal.
+    assert len(read_usage_lines(usage_directory)) == 1 + first_refusal
+
+
+def test_a_log_exactly_on_the_cap_still_accepts_appends(usage_directory, monkeypatch):
+    """``_is_log_full`` and ``compact_if_needed`` have to agree about the boundary.
+
+    Compaction skips a log at ``<= MAX_LOG_BYTES``, so a ``>=`` in the write path would
+    refuse every append to a log sitting exactly on the cap while compaction declined to
+    shrink it — wedged, with nothing short of deleting the file to unwedge it.
+    """
+    for _ in range(4):
+        record_event(UsageEvent.APP_START)
+
+    before = read_usage_lines(usage_directory)
+    monkeypatch.setattr(usage, "MAX_LOG_BYTES", get_usage_log_path().stat().st_size)
+    monkeypatch.setattr(usage, "_bytes_since_size_check", LOG_SIZE_CHECK_INTERVAL_BYTES)
+
+    # Compaction leaves a log that is only *at* the cap alone...
+    usage.compact_if_needed()
+    assert read_usage_lines(usage_directory) == before
+
+    # ...so the write path must not refuse it, or nothing would ever move it again.
+    assert (
+        record_events([(UsageEvent.VIEW_OPENED, {"view": UsageView.OPERATIONS})])
+        is True
+    )
+
+
+def test_compaction_lets_a_full_log_record_again(usage_directory, monkeypatch):
+    """The escape route the module docstring promises, asserted as the sequence it is.
+
+    The refusal is cached, so compaction has to clear it. Without that, shrinking the log
+    would leave recording off until the process restarted — and every append in between
+    answered as though it had been written.
+    """
+    event = (UsageEvent.VIEW_OPENED, {"view": UsageView.OPERATIONS})
+
+    for _ in range(10):
+        record_event(UsageEvent.APP_START)
+
+    # Between the compacted size and the current one: ten identical launches summarise to
+    # a single counted line, so compaction takes the log to roughly six lines.
+    monkeypatch.setattr(
+        usage, "MAX_LOG_BYTES", get_usage_log_path().stat().st_size * 4 // 5
+    )
+    monkeypatch.setattr(usage, "_bytes_since_size_check", LOG_SIZE_CHECK_INTERVAL_BYTES)
+
+    assert record_events([event]) is False
+
+    usage.compact_if_needed()
+    assert get_usage_log_path().stat().st_size <= usage.MAX_LOG_BYTES
+
+    assert record_events([event]) is True
+    assert total_usage_events(read_usage_lines(usage_directory)) == 11
+
+
+def test_a_full_batch_of_the_largest_event_is_still_one_write(
+    usage_directory, monkeypatch
+):
+    """``_append_line`` defers its single-``os.write`` obligation to the batch cap.
+
+    ``MAX_USAGE_BATCH_EVENTS`` copies of the longest permitted event is the biggest line
+    the writer can be handed, so it is where the short-write loop would begin to iterate
+    and forfeit the ``O_APPEND`` atomicity the no-lock design rests on.
+    """
+    writes = []
+    real_write = os.write
+
+    def counting_write(descriptor, data):
+        if data.startswith(b"ts="):
+            writes.append(data)
+        return real_write(descriptor, data)
+
+    monkeypatch.setattr(usage.os, "write", counting_write)
+
+    largest = (
+        UsageEvent.REPORT_LOAD_FAILED,
+        {
+            "kind": ReportKind.CLUSTER_DESCRIPTOR,
+            "reason_class": ReportLoadFailureReason.UNSUPPORTED_VERSION,
+        },
+    )
+
+    assert record_events([largest] * MAX_USAGE_BATCH_EVENTS) is True
+    assert len(writes) == 1
+    assert len(read_usage_lines(usage_directory)) == MAX_USAGE_BATCH_EVENTS
+
+
+def test_a_batch_over_the_cap_is_refused_by_the_writer(usage_directory):
+    """The cap binds every batch caller, not just the ingest route.
+
+    ``_append_line`` defers its single-``os.write`` obligation to
+    ``MAX_USAGE_BATCH_EVENTS``, so a caller reaching ``record_events`` directly has to
+    meet it too — otherwise the guarantee holds only for the one caller that happens to
+    check first. Refused whole, since a truncated batch is exactly what the write path
+    promises never to leave behind.
+    """
+    event = (UsageEvent.VIEW_OPENED, {"view": UsageView.OPERATIONS})
+
+    assert record_events([event] * (MAX_USAGE_BATCH_EVENTS + 1)) is False
+    assert read_usage_lines(usage_directory) == []
+
+
+def test_recording_recovers_when_the_directory_is_removed(usage_directory):
+    """The directory may go mid-session — the docs invite the user to delete it.
+
+    Caching the created directory made that permanent: every later append failed on a
+    condition one ``mkdir`` fixes, silently, for the rest of the process.
+    """
+    record_event(UsageEvent.APP_START)
+    shutil.rmtree(usage_directory)
+
+    record_event(UsageEvent.APP_START)
+
+    assert len(read_usage_lines(usage_directory)) == 1
+    assert get_usage_log_path().stat().st_mode & 0o077 == 0
+
+
+def test_a_persistent_write_failure_warns_once_not_once_per_flush(
+    usage_directory, monkeypatch, caplog
+):
+    """A full disk fails every flush, and flushes arrive on a route called often.
+
+    One warning each would fill the application log with the failure of the subsystem
+    that exists not to disturb it, so the repeats drop to debug.
+    """
+
+    def raise_os_error(_line):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(usage, "_append_line", raise_os_error)
+
+    with caplog.at_level("WARNING"):
+        for _ in range(5):
+            record_events([(UsageEvent.VIEW_OPENED, {"view": UsageView.OPERATIONS})])
+
+    warnings = [
+        record for record in caplog.records if "usage events" in record.getMessage()
+    ]
+
+    assert len(warnings) == 1
+
+
+def test_a_write_landing_again_re_arms_the_failure_warning(
+    usage_directory, monkeypatch, caplog
+):
+    """Suppression lasts until a write succeeds, not for the life of the process.
+
+    A transient failure must not buy silence for every real one after it.
+    """
+    real_append = usage._append_line
+
+    def raise_os_error(_line):
+        raise OSError("disk full")
+
+    event = (UsageEvent.VIEW_OPENED, {"view": UsageView.OPERATIONS})
+
+    with caplog.at_level("WARNING"):
+        monkeypatch.setattr(usage, "_append_line", raise_os_error)
+        record_events([event])
+
+        monkeypatch.setattr(usage, "_append_line", real_append)
+        assert record_events([event]) is True
+
+        monkeypatch.setattr(usage, "_append_line", raise_os_error)
+        record_events([event])
+
+    warnings = [
+        record for record in caplog.records if "usage events" in record.getMessage()
+    ]
+
+    assert len(warnings) == 2
+
+
+def test_compaction_keeps_detail_bearing_events_in_separate_buckets(
+    usage_directory, monkeypatch
+):
+    """``_summarise`` keys on the whole field set, and the new events multiply buckets.
+
+    ``app_start`` alone barely exercises that: ``kind`` x ``source`` is twenty
+    combinations before views are counted, and a bucketing bug here silently corrupts
+    the ratios the whole file exists to produce.
+    """
+    monkeypatch.setattr(usage, "MAX_LOG_BYTES", 0)
+    combinations = [
+        ("profiler", "upload"),
+        ("profiler", "local_tt_metal"),
+        ("mlir", "upload"),
+    ]
+    # Interleaved, not grouped: `_compact` summarises only the older half, so grouping
+    # by combination would leave whole buckets in the untouched half and the assertion
+    # below would be about nothing.
+    lines = [
+        f"ts=2026-08-0{cycle + 1}T10:00:0{index} event=report_loaded schema_version=1 "
+        f"run_id=abc1234{cycle} kind={kind} source={source}"
+        for cycle in range(4)
+        for index, (kind, source) in enumerate(combinations)
+    ]
+    write_log(usage_directory, lines)
+
+    usage.compact_if_needed()
+
+    after = read_usage_lines(usage_directory)
+    summaries = [parse_usage_line(line) for line in after if COUNT_FIELD in line]
+
+    assert total_usage_events(after) == len(lines)
+    # One summary per combination, none merged into another, and the older half held two
+    # of each.
+    assert {(summary["kind"], summary["source"]) for summary in summaries} == set(
+        combinations
+    )
+    assert len(summaries) == len(combinations)
+    assert all(summary[COUNT_FIELD] == "2" for summary in summaries)
+
+
+def test_record_events_cannot_have_its_enabled_check_turned_against_it(usage_directory):
+    """``server_mode`` is a detail field like any other here, not a hidden parameter.
+
+    With ``**kwargs`` it would bind to the parameter instead, and a value of ``true``
+    would make the enabled check drop the event — a bypass wearing a no-op's clothes.
+    The schema refuses the key, but the batch path takes untrusted keys and must not
+    depend on the schema for that.
+    """
+    written = record_events([(UsageEvent.VIEW_OPENED, {"server_mode": "true"})])
+
+    assert written is True
+    assert (
+        parse_usage_line(read_usage_lines(usage_directory)[0])["server_mode"] == "true"
+    )
+
+
+def test_record_events_writes_nothing_when_recording_is_disabled(
+    usage_directory, monkeypatch
+):
+    monkeypatch.setenv(USAGE_DISABLED_ENV_VAR, "true")
+
+    assert (
+        record_events([(UsageEvent.VIEW_OPENED, {"view": UsageView.OPERATIONS})])
+        is False
+    )
+    assert read_usage_lines(usage_directory) == []

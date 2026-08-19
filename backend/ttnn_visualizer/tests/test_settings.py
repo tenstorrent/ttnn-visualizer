@@ -11,6 +11,7 @@ switches between the local and hosted postures, so a config layer that hands bac
 truthy string ``"false"`` inverts a security setting.
 """
 
+import ast
 import logging
 import os
 import re
@@ -37,6 +38,10 @@ from ttnn_visualizer.settings import (
     _parse_max_content_length,
     build_socketio_origin_check,
 )
+from ttnn_visualizer.tests.fixture_settings import (
+    PINNED_ENV_SETTINGS,
+    pinned_settings_sample,
+)
 from ttnn_visualizer.utils import (
     FALSE_VALUES,
     TRUE_VALUES,
@@ -56,7 +61,9 @@ def wsgi_environ(host: str, scheme: str = "http", **headers: str) -> dict:
     return {"wsgi.url_scheme": scheme, "HTTP_HOST": host, **headers}
 
 
-def _import_settings_with(**env: str) -> subprocess.CompletedProcess:
+def _import_settings_with(
+    code: str = "import ttnn_visualizer.settings", **env: str
+) -> subprocess.CompletedProcess:
     """Import ``settings`` in a fresh interpreter under the given environment.
 
     The class body runs once per process and this one imported the module before the
@@ -68,7 +75,7 @@ def _import_settings_with(**env: str) -> subprocess.CompletedProcess:
     child_env = {key: value for key, value in os.environ.items() if key not in env}
 
     return subprocess.run(
-        [sys.executable, "-c", "import ttnn_visualizer.settings"],
+        [sys.executable, "-c", code],
         env={**child_env, **env},
         capture_output=True,
         text=True,
@@ -131,7 +138,12 @@ def test_empty_configured_origins_trust_nothing():
     assert _build_allowed_origins("", flask_env="development", **DEV_ARGS) == []
 
 
-def test_config_defaults_to_localhost_on_the_serving_port():
+def test_config_defaults_to_localhost_on_the_serving_port(monkeypatch):
+    # ``_AllowedOrigins`` resolves on every read, so an operator's own variable reaches
+    # this assertion about the *default*. Deleting it is enough here, and necessary:
+    # there is no class attribute to pin, the descriptor is the value.
+    monkeypatch.delenv("ALLOWED_ORIGINS", raising=False)
+
     origins = DefaultConfig.ALLOWED_ORIGINS
 
     assert isinstance(origins, list)
@@ -141,6 +153,7 @@ def test_config_defaults_to_localhost_on_the_serving_port():
 def test_config_narrows_to_production_set_after_import(monkeypatch):
     # ``main()`` defaults FLASK_ENV to production long after this module is imported,
     # so an allowlist frozen at import time would keep trusting the Vite dev server.
+    monkeypatch.delenv("ALLOWED_ORIGINS", raising=False)
     monkeypatch.setenv("FLASK_ENV", "production")
 
     assert DefaultConfig.ALLOWED_ORIGINS == [f"http://localhost:{DefaultConfig.PORT}"]
@@ -149,6 +162,7 @@ def test_config_narrows_to_production_set_after_import(monkeypatch):
 def test_config_follows_a_port_applied_after_import(monkeypatch):
     # ``--port`` is applied by mutating the environment and the config object, both
     # after import; the allowlist has to name the port the app actually serves on.
+    monkeypatch.delenv("ALLOWED_ORIGINS", raising=False)
     monkeypatch.setenv("FLASK_ENV", "production")
     monkeypatch.setenv("PORT", "9123")
 
@@ -216,6 +230,11 @@ BOOLEAN_VOCABULARY_CASES = (
     ],
 )
 def test_env_override_parses_booleans(env_name, key, env_value, expected, monkeypatch):
+    # An exported ``SERVER_MODE`` would refuse the ``FLASK_DEBUG`` cases outright. Both
+    # layers, and before the parametrised ``setenv`` so the ``SERVER_MODE`` case still
+    # sets its own value and wins.
+    monkeypatch.delenv("SERVER_MODE", raising=False)
+    monkeypatch.setattr(DefaultConfig, "SERVER_MODE", False)
     monkeypatch.setenv(env_name, env_value)
 
     config = DefaultConfig()
@@ -241,6 +260,10 @@ def test_the_logging_debug_variable_does_not_enable_flask_debug(monkeypatch):
     # Matching it to the ``DEBUG`` *attribute* would hand Flask debug mode to anyone
     # who wanted verbose logs, and ``Flask.debug`` returning truthy suppresses the
     # catch-all error handler — tracebacks in responses, under SERVER_MODE too.
+    # ``ProductionConfig`` declares ``DEBUG = False`` in its own body, so an exported
+    # ``FLASK_DEBUG`` can only arrive through the override loop's alias — deleting the
+    # variable is the whole fix, and no ``setattr`` is needed.
+    monkeypatch.delenv("FLASK_DEBUG", raising=False)
     monkeypatch.setenv("DEBUG", "true")
 
     config = ProductionConfig()
@@ -255,6 +278,9 @@ def test_flask_debug_applies_after_the_class_body_has_been_evaluated(monkeypatch
     # ``create_app()`` loads, say — to reach the attribute it feeds. The posture is
     # pinned because the hosted one refuses debug mode outright; this is the local case
     # debug mode exists for, and a developer ``.env`` must not decide which is tested.
+    # ``setattr`` alone is not a pin: the override loop re-reads the variable, so an
+    # exported ``SERVER_MODE`` would decide which posture is tested after all.
+    monkeypatch.delenv("SERVER_MODE", raising=False)
     monkeypatch.setattr(DefaultConfig, "SERVER_MODE", False)
     monkeypatch.setenv("FLASK_DEBUG", "true")
 
@@ -345,6 +371,66 @@ def test_env_override_parses_integers(monkeypatch):
 
     assert config.SESSION_MAX_UPLOADED_REPORTS == 5
     assert config.SSH_SUBPROCESS_TIMEOUT == 30
+
+
+@pytest.mark.parametrize("env_value", ["0", "-1", "-10"])
+def test_a_session_cap_below_one_keeps_the_declared_default(
+    env_value, monkeypatch, caplog
+):
+    # ``0`` is the dangerous one rather than the merely odd one: every call site spells the
+    # bound ``lst[-cap:]``, and ``[-0:]`` returns the whole list, so accepting it would turn
+    # the cap into no cap and let the signed session cookie grow without limit.
+    monkeypatch.setenv("SESSION_MAX_UPLOADED_REPORTS", env_value)
+
+    config = DefaultConfig()
+    with caplog.at_level(logging.WARNING):
+        config.override_with_env_variables()
+
+    assert (
+        config.SESSION_MAX_UPLOADED_REPORTS
+        == DefaultConfig.SESSION_MAX_UPLOADED_REPORTS
+    )
+    assert "SESSION_MAX_UPLOADED_REPORTS" in caplog.text
+
+
+def test_the_smallest_accepted_session_cap_is_one(monkeypatch):
+    # The floor is a real cap, not a rejection of every small value.
+    monkeypatch.setenv("SESSION_MAX_UPLOADED_REPORTS", "1")
+
+    config = DefaultConfig()
+    config.override_with_env_variables()
+
+    assert config.SESSION_MAX_UPLOADED_REPORTS == 1
+
+
+@pytest.mark.parametrize("env_value", ["0", "-1", "not-a-number"])
+def test_importing_settings_substitutes_a_usable_session_cap(env_value):
+    # The class body needs its own guard: the override loop keeps the *declared* value for
+    # a bad variable, so a zero that reached the class body would be the value it kept.
+    result = _import_settings_with(
+        "import ttnn_visualizer.settings as s;"
+        " print(s.DefaultConfig.SESSION_MAX_UPLOADED_REPORTS)",
+        SESSION_MAX_UPLOADED_REPORTS=env_value,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert int(result.stdout.strip()) >= 1
+
+
+def test_the_session_cap_bounds_the_stored_list(monkeypatch):
+    # The property the range check exists to protect, asserted against the slice idiom the
+    # call sites in ``decorators.py`` and ``views.py`` all use. The cap is pinned rather
+    # than taken as declared: the class attribute binds at import from the environment, and
+    # an operator's large-but-valid value would leave this loop slicing for hours. Any cap
+    # of one or more exercises the property.
+    monkeypatch.setattr(DefaultConfig, "SESSION_MAX_UPLOADED_REPORTS", 3)
+    cap = DefaultConfig.SESSION_MAX_UPLOADED_REPORTS
+    stored: list = []
+
+    for report in range(cap + 5):
+        stored = (stored + [report])[-cap:]
+
+    assert len(stored) == cap
 
 
 def test_a_port_stays_a_string_so_gunicorn_can_take_it(monkeypatch):
@@ -544,6 +630,90 @@ def test_every_env_override_skip_names_a_real_setting():
     assert _ENV_OVERRIDE_SKIP <= set(vars(DefaultConfig))
 
 
+# Settings the test fixtures deliberately let the environment reach. Every name here was
+# exported individually against the full suite and left it green; the ones that did not
+# are pinned in ``PINNED_ENV_SETTINGS``, or neutralised on the test that constructs its
+# own config (``FLASK_DEBUG`` and ``DEV_SERVER_HOST`` here, ``SERVER_MODE`` in three
+# places). ``DEV_SERVER_HOST`` is listed here because no app under test depends on it —
+# only the allowlist tests do.
+#
+# Two limitations worth knowing before trusting this test. First,
+# ``override_with_env_variables`` skips anything with ``__get__``, so
+# ``_OVERRIDABLE_SETTINGS`` excludes the descriptor-backed ``ALLOWED_ORIGINS`` and
+# ``USAGE_RECORDING_ENABLED``; the former is pinned in the baseline anyway (see
+# ``_UNPOLICEABLE_PINS``) and the latter is neutralised by the ``usage_directory`` fixture,
+# but neither is reconciled here. Second, ``APP_DATA_DIRECTORY`` and
+# ``REPORT_DATA_DIRECTORY`` are env-reachable through ``recompute_derived_settings`` while
+# living in ``_ENV_OVERRIDE_SKIP``, so they too are pinned without being policed.
+_INHERITED_BY_TEST_FIXTURES = frozenset(
+    {
+        "DEV_SERVER_HOST",
+        "DEV_SERVER_PORT",
+        "GUNICORN_APP_MODULE",
+        "GUNICORN_TIMEOUT",
+        "GUNICORN_WORKERS",
+        "GUNICORN_WORKER_CLASS",
+        "HOST",
+        "LAUNCH_BROWSER_ON_START",
+        "PORT",
+        "SECRET_KEY",
+        "SSH_REMOTE_CHECK_TIMEOUT",
+        "SSH_SUBPROCESS_TIMEOUT",
+    }
+)
+
+
+def test_the_test_fixtures_pin_every_env_reachable_setting():
+    # The fixture counterpart to ``test_the_settings_inventory_is_pinned``: a new
+    # overridable setting has to be classified as pinned or inherited before it can reach
+    # an app under test from whatever the developer happens to export. Enumerated rather
+    # than derived — a computed complement would pass no matter what, which is the same
+    # reason ``_OVERRIDABLE_SETTINGS`` is hand-maintained.
+    assert _OVERRIDABLE_SETTINGS == PINNED_ENV_SETTINGS | _INHERITED_BY_TEST_FIXTURES
+    assert not (PINNED_ENV_SETTINGS & _INHERITED_BY_TEST_FIXTURES)
+
+    # Equality, not containment, and in both directions: a pin deleted from the baseline
+    # fails, and so does one added to the baseline while still listed as inherited — which
+    # containment alone would let through, leaving the inventory quietly lying. The
+    # intersection drops the derived directory keys, which no variable reaches directly.
+    assert PINNED_ENV_SETTINGS == set(pinned_settings_sample()) & _OVERRIDABLE_SETTINGS
+
+
+def test_every_app_under_test_is_built_from_the_shared_baseline():
+    # The other half of #1869: the inventory above stops a new *setting* escaping
+    # classification, but nothing stopped a new *fixture* hand-rolling its own settings
+    # dict and reintroducing the whole bug class with the suite green. Read at the source
+    # level because the offending fixture would be correct Python that simply never calls
+    # ``base_test_settings`` — there is no runtime hook to catch that.
+    tests_root = Path(__file__).parent
+    offenders = []
+
+    for path in sorted(tests_root.rglob("*.py")):
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+
+            for keyword in node.keywords:
+                if keyword.arg != "settings_override":
+                    continue
+
+                called = {
+                    inner.func.id
+                    for inner in ast.walk(keyword.value)
+                    if isinstance(inner, ast.Call) and isinstance(inner.func, ast.Name)
+                }
+                if "base_test_settings" not in called:
+                    offenders.append(f"{path.relative_to(tests_root)}:{node.lineno}")
+
+    assert offenders == [], (
+        "these call sites build an app without the shared baseline, so the developer's "
+        f"environment reaches it: {offenders}. Pass overrides to base_test_settings "
+        "instead — see backend/ttnn_visualizer/tests/fixture_settings.py."
+    )
+
+
 def test_the_settings_inventory_is_pinned():
     # Forces a classification for every setting rather than only catching the entries
     # someone remembered to list. A new attribute lands in neither set and fails here,
@@ -689,6 +859,11 @@ def test_a_documented_dev_server_setting_is_readable(key, env_value, monkeypatch
 
 def test_a_dev_server_override_reaches_the_allowlist(monkeypatch):
     monkeypatch.delenv("ALLOWED_ORIGINS", raising=False)
+    # Both layers, because either alone still reads the operator's value: the class body
+    # bound it at import (so ``delenv`` cannot reach it) and the override loop re-applies
+    # it from the environment (so ``setattr`` alone is overwritten).
+    monkeypatch.delenv("DEV_SERVER_HOST", raising=False)
+    monkeypatch.setattr(DefaultConfig, "DEV_SERVER_HOST", "localhost")
     monkeypatch.setenv("FLASK_ENV", "development")
     monkeypatch.setenv("DEV_SERVER_PORT", "4173")
 
@@ -853,6 +1028,9 @@ def test_server_mode_wins_over_flask_debug(monkeypatch, caplog):
     # (tracebacks to untrusted callers) and, without websockets, mounts Werkzeug's
     # interactive console. The hosted posture must clear ``DEBUG`` even when
     # ``FLASK_DEBUG`` is set via the override loop.
+    # Both layers, for the reason above — here an exported ``SERVER_MODE=false`` would
+    # otherwise leave the hosted posture untested and the assertion inverted.
+    monkeypatch.delenv("SERVER_MODE", raising=False)
     monkeypatch.setattr(DefaultConfig, "SERVER_MODE", True)
     monkeypatch.setenv("FLASK_DEBUG", "true")
 

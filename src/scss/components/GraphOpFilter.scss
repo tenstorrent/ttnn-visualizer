@@ -4,7 +4,7 @@
 
 @use '../definitions/colours' as *;
 
-.mlir-op-filter {
+.graph-op-filter {
     display: flex;
     align-items: center;
     gap: 4px;
@@ -20,7 +20,7 @@
         width: 240px;
     }
 
-    .mlir-op-filter-counter {
+    .graph-op-filter-counter {
         display: inline-flex;
         align-items: center;
         padding: 0 4px;
@@ -30,13 +30,13 @@
         white-space: nowrap;
     }
 
-    .mlir-op-filter-right-slot {
+    .graph-op-filter-right-slot {
         display: inline-flex;
         align-items: center;
         gap: 2px;
     }
 
-    .mlir-op-filter-mode {
+    .graph-op-filter-mode {
         font-family: monospace;
         font-size: 12px;
         font-weight: 600;
@@ -57,9 +57,9 @@
         }
     }
 
-    .mlir-op-filter-clear,
-    .mlir-op-filter-step,
-    .mlir-op-filter-mode {
+    .graph-op-filter-clear,
+    .graph-op-filter-step,
+    .graph-op-filter-mode {
         display: inline-flex;
         align-items: center;
         justify-content: center;

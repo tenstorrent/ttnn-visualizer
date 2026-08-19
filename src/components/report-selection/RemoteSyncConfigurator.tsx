@@ -47,7 +47,7 @@ import AddRemoteConnection from './AddRemoteConnection';
 import RemoteConnectionSelector from './RemoteConnectionSelector';
 import RemoteFolderSelector from './RemoteFolderSelector';
 import RemoteSyncButton from './RemoteSyncButton';
-import { updateInstance, useReportMetadata } from '../../hooks/useAPI';
+import { clearReportCaches, updateInstance, useReportMetadata } from '../../hooks/useAPI';
 import { ActiveReport } from '../../model/APIData';
 import { DBVersionValidation } from '../../definitions/Versions';
 import { evaluateDbVersion } from '../../functions/compareDbVersion';
@@ -379,7 +379,7 @@ const RemoteSyncConfigurator = () => {
     };
 
     const applyProfilerReportSelection = (folder: RemoteFolder) => {
-        queryClient.clear();
+        clearReportCaches(queryClient);
         setProfilerReportLocation(ReportLocation.REMOTE);
         setActiveProfilerReport({
             path: folder.remotePath,
@@ -389,7 +389,7 @@ const RemoteSyncConfigurator = () => {
     };
 
     const applyPerformanceReportSelection = (folder: RemoteFolder) => {
-        queryClient.clear();
+        clearReportCaches(queryClient);
         setPerformanceReportLocation(ReportLocation.REMOTE);
         setActivePerformanceReport({
             path: folder.remotePath,

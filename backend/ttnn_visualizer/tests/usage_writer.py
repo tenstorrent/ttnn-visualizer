@@ -19,12 +19,24 @@ import sys
 from pathlib import Path
 
 from ttnn_visualizer import usage
-from ttnn_visualizer.usage import UsageEvent, is_recording_enabled, record_event
+from ttnn_visualizer.usage import (
+    UsageEvent,
+    UsageView,
+    is_recording_enabled,
+    record_event,
+    record_events,
+)
 
 
 def main(argv: list[str]) -> int:
-    """Write ``argv[2]`` events into the directory named by ``argv[1]``."""
+    """Write ``argv[2]`` events into the directory named by ``argv[1]``.
+
+    An optional ``argv[3]`` batch size sends them through ``record_events`` in groups of
+    that many. Batches are the case worth exercising separately: a batch is one
+    multi-line ``os.write``, so it is where ``O_APPEND``'s guarantee has the most to do.
+    """
     directory, count = Path(argv[1]), int(argv[2])
+    batch_size = int(argv[3]) if len(argv) > 3 else 1
 
     # ``monkeypatch`` does not cross process boundaries, so apply the same override
     # the ``usage_directory`` fixture applies in-process.
@@ -34,8 +46,19 @@ def main(argv: list[str]) -> int:
         print("recording is disabled; refusing to write", file=sys.stderr)
         return 1
 
-    for _ in range(count):
-        record_event(UsageEvent.APP_START)
+    if batch_size > 1:
+        event = (UsageEvent.VIEW_OPENED, {"view": UsageView.OPERATIONS})
+        # A final short batch rather than `count // batch_size` whole ones, which would
+        # drop the remainder — and write nothing at all when the batch is bigger than the
+        # count. The lower-bound check below would catch it, but as a confusing failure
+        # about interleaving rather than about arithmetic here.
+        remaining = count
+        while remaining:
+            record_events([event] * min(batch_size, remaining))
+            remaining -= min(batch_size, remaining)
+    else:
+        for _ in range(count):
+            record_event(UsageEvent.APP_START)
 
     try:
         written = usage.get_usage_log_path().read_text(encoding="utf-8")

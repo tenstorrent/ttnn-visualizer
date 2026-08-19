@@ -7,19 +7,20 @@ import { Helmet } from 'react-helmet-async';
 import { useParams } from 'react-router';
 
 import { useAtomValue } from 'jotai';
-import { useGetDeviceOperationListPerf, useOperationsList, usePerformanceReport } from '../hooks/useAPI';
-import OperationGraph from '../components/OperationGraphComponent';
+import { useGetDeviceOperationListPerf, useLinkedPerformanceReport, useOperationsList } from '../hooks/useAPI';
+import OperationGraph from '../components/operation-graph/OperationGraphReactFlow';
 import LoadingSpinner from '../components/LoadingSpinner';
 import useClearSelectedBuffer from '../hooks/useClearSelectedBuffer';
-import { activePerformanceReportFolderNameAtom, selectedOperationRangeAtom } from '../store/app';
+import { selectedOperationRangeAtom } from '../store/app';
 import { PerfOverlaySource } from '../functions/perfOverlay';
 
 const GraphView = () => {
     const { data: operationList, isLoading } = useOperationsList();
     const { operationId } = useParams<{ operationId?: string }>();
     const selectedOperationRange = useAtomValue(selectedOperationRangeAtom);
-    const activeReportFolderName = useAtomValue(activePerformanceReportFolderNameAtom);
-    const { data: perfReport } = usePerformanceReport(activeReportFolderName);
+    // The link-pinned report, so a perf-tab view filter can neither hide the
+    // report from the overlay nor break the match below (#1812).
+    const { data: perfReport } = useLinkedPerformanceReport();
     // Canonical "do the loaded reports belong to the same run?" signal. This is
     // the same name-based lock-step match used by `ReportLinkStatus`: returns
     // `[]` whenever the loaded perf report doesn't line up with the profiler
@@ -60,10 +61,10 @@ const GraphView = () => {
         });
     }, [matchedPerfOps]);
 
-    // The component needs to distinguish "no perf report loaded at all"
+    // The overlay needs to distinguish "no perf report loaded at all"
     // (UNAVAILABLE) from "loaded but doesn't match this graph" (UNLINKED).
     // `perfOverlayRows` collapses both into "empty"; this flag preserves the
-    // distinction so the tooltip can say the right thing.
+    // distinction. Unread until the overlay lands, alongside `perfRows`. #1880
     const isPerfReportLoaded = Boolean(perfReport?.report?.length);
 
     return (

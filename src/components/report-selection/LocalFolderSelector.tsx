@@ -31,6 +31,7 @@ import isDirectReportMode from '../../functions/isDirectReportMode';
 import {
     PERFORMANCE_FOLDER_QUERY_KEY,
     PROFILER_FOLDER_QUERY_KEY,
+    clearReportCaches,
     deletePerformance,
     deleteProfiler,
     updateInstance,
@@ -203,7 +204,7 @@ const LocalFolderOptions = () => {
             const message = getResponseError(err, 'Unable to upload selected directory');
             setProfilerFolder({ status: ConnectionTestStates.FAILED, message });
         } finally {
-            queryClient.clear();
+            clearReportCaches(queryClient);
             setIsUploadingReport(false);
         }
     };
@@ -241,7 +242,7 @@ const LocalFolderOptions = () => {
             const message = getResponseError(err, 'Unable to upload selected directory');
             setPerformanceFolder({ status: ConnectionTestStates.FAILED, message });
         } finally {
-            queryClient.clear();
+            clearReportCaches(queryClient);
             setIsPerformanceUploading(false);
         }
     };
