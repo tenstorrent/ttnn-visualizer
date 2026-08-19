@@ -4,7 +4,6 @@
 
 import { useAtomValue } from 'jotai';
 import { useMemo } from 'react';
-import getServerConfig from '../functions/getServerConfig';
 import { LinkedReportIdOptions } from '../definitions/ReportLinks';
 import {
     getReportId,
@@ -31,27 +30,17 @@ export const useReportLinkBadgeIds = (options?: LinkedReportIdOptions): ReportLi
     const reportLinks = useAtomValue(reportLinksAtom);
     const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
     const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
-    const isReportLinkingEnabled = !!getServerConfig()?.REPORT_LINKING_ENABLED;
     const remoteHost = options?.remoteHost ?? null;
 
     const profilerId = getReportId(activeProfilerReport?.syncedName, activeProfilerReport?.path);
     const performanceId = getReportId(activePerformanceReport?.syncedName, activePerformanceReport?.path);
 
     return useMemo(() => {
-        if (!isReportLinkingEnabled) {
-            return {
-                linkedPerfIds: null,
-                unlinkedPerfIds: null,
-                linkedProfilerReportIds: null,
-                unlinkedProfilerReportIds: null,
-            };
-        }
-
         return {
             linkedPerfIds: linkedPerformanceIds(reportLinks, profilerId, { remoteHost }),
             unlinkedPerfIds: unlinkedPerformanceIds(reportLinks, profilerId, { remoteHost }),
             linkedProfilerReportIds: linkedProfilerIds(reportLinks, performanceId, { remoteHost }),
             unlinkedProfilerReportIds: unlinkedProfilerIds(reportLinks, performanceId, { remoteHost }),
         };
-    }, [reportLinks, profilerId, performanceId, isReportLinkingEnabled, remoteHost]);
+    }, [reportLinks, profilerId, performanceId, remoteHost]);
 };
