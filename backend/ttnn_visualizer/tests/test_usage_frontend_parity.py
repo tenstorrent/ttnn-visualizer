@@ -17,6 +17,7 @@ it; a test that started failing to find members would fail loudly rather than pa
 (see :func:`_enum_values`).
 """
 
+import json
 import re
 from enum import Enum
 from pathlib import Path
@@ -25,7 +26,10 @@ from typing import Dict, Set, Type
 import pytest
 from ttnn_visualizer import usage
 from ttnn_visualizer.usage import (
+    _DETAIL_FIELD_ENUMS,
     CLIENT_EVENT_DETAIL_FIELDS,
+    DETAILS_FIELD,
+    EVENT_FIELD,
     MAX_USAGE_BATCH_EVENTS,
     ReportKind,
     ReportLoadFailureReason,
@@ -211,3 +215,40 @@ def test_the_client_envelope_key_matches_the_route():
     ).group(1)
 
     assert declared == _USAGE_EVENTS_FIELD
+
+
+def test_a_full_batch_of_the_largest_events_fits_the_request_cap():
+    """The client knows the count cap but not the byte cap; this is what defends it.
+
+    ``MAX_USAGE_BATCH_EVENTS`` is mirrored in ``recordUsage.ts`` and pinned above, so an
+    oversized *batch* is unreachable from this client. ``MAX_USAGE_REQUEST_BYTES`` is not
+    mirrored anywhere in ``src/``, and the endpoint enforces it as a 413 that the client
+    swallows by design — so consuming the headroom would surface as events quietly going
+    missing, not as a failure.
+
+    Built from the enums rather than a fixed string so that widening any of them, or adding
+    a detail field, is what moves the number.
+    """
+    from ttnn_visualizer.views import _USAGE_EVENTS_FIELD, MAX_USAGE_REQUEST_BYTES
+
+    def widest(field: str) -> str:
+        return max((member.value for member in _DETAIL_FIELD_ENUMS[field]), key=len)
+
+    largest = max(
+        (
+            {
+                EVENT_FIELD: event.value,
+                DETAILS_FIELD: {field: widest(field) for field in fields},
+            }
+            for event, fields in CLIENT_EVENT_DETAIL_FIELDS.items()
+        ),
+        key=lambda entry: len(json.dumps(entry)),
+    )
+
+    body = json.dumps({_USAGE_EVENTS_FIELD: [largest] * MAX_USAGE_BATCH_EVENTS})
+
+    assert len(body.encode("utf-8")) < MAX_USAGE_REQUEST_BYTES, (
+        "A full batch of the largest event the client can express no longer fits "
+        "MAX_USAGE_REQUEST_BYTES. The endpoint would answer 413 and the client would "
+        "swallow it, so the events would simply stop arriving."
+    )

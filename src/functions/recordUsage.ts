@@ -167,6 +167,11 @@ function flushUsageViaBeacon(allowFallback: boolean): void {
     // On pagehide the document is being discarded and an async post is not guaranteed to
     // run, so falling back there would read as a safety net while being close to dead
     // code. A hidden tab usually survives, so it is worth trying.
+    //
+    // Which of the two runs first matters, and rests on the HTML unload algorithm firing
+    // `pagehide` *before* the visibility state flips to hidden: on a real tab close the
+    // drop wins and no post is attempted during discard. If a browser ever reversed that
+    // order, the fallback would fire on the discard path this is written to avoid.
     if (allowFallback) {
         postEvents(events);
     }
@@ -177,19 +182,18 @@ export default function recordUsage(payload: UsageEventPayload): void {
         return;
     }
 
-    // Defensive: the buffer is emptied synchronously on flush, so it should never be at
-    // cap here. Dropping rather than growing is the deliberate answer if it ever is.
+    // Dropped rather than buffered once full, and deliberately *not* flushed inline. A
+    // synchronous post here would put the axios config build and interceptor pass on the
+    // caller's tick — so an event wired to scroll or hover on the performance table would
+    // issue a request per 50 interactions, as fast as the gesture produced them, on the
+    // main thread. The scheduled flush drains within MIN_BATCH_WINDOW_MS instead, which
+    // bounds the request rate no matter how fast a caller records. Losing the overflow is
+    // the correct trade: instrumentation must never destabilise what it measures.
     if (buffer.length >= MAX_BUFFERED_EVENTS) {
         return;
     }
 
     buffer.push(payload);
-
-    if (buffer.length >= MAX_BUFFERED_EVENTS) {
-        flushUsage();
-        return;
-    }
-
     scheduleFlush();
 }
 

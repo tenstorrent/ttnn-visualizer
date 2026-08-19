@@ -65,6 +65,24 @@ const captureUnhandledRejection = (reason: unknown) => unhandledRejections.push(
 beforeAll(() => process.on('unhandledRejection', captureUnhandledRejection));
 afterAll(() => process.off('unhandledRejection', captureUnhandledRejection));
 
+/**
+ * Read a Blob's bytes.
+ *
+ * jsdom's Blob exposes only `slice`, `size` and `type` — no `text()` or `arrayBuffer()` —
+ * and Node's `Response` will not accept it across realms, so FileReader is the way in.
+ * Needs real timers because its completion is not a fake-timer task.
+ */
+async function readBlobText(blob: Blob): Promise<string> {
+    vi.useRealTimers();
+
+    return new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result));
+        reader.onerror = () => reject(reader.error);
+        reader.readAsText(blob);
+    });
+}
+
 /** Give Node a real macrotask turn so any unhandled rejection has been emitted. */
 async function settleRejections(): Promise<void> {
     vi.useRealTimers();
@@ -142,7 +160,7 @@ describe('recordUsage batching', () => {
         expect(event.details).toEqual({ kind: 'profiler', source: 'upload' });
     });
 
-    it('flushes immediately once the buffer reaches the batch cap', async () => {
+    it('sends a full buffer on the scheduled flush rather than inline', async () => {
         const { recordUsage, post } = await loadRecorder();
         post.mockResolvedValue({ status: 204 });
 
@@ -150,6 +168,29 @@ describe('recordUsage batching', () => {
             recordUsage(VIEW_OPENED);
         }
 
+        // Nothing yet: a synchronous post here would land on the caller's tick, which for
+        // an interaction-wired event is the render path the module exists to stay off.
+        expect(post).not.toHaveBeenCalled();
+
+        vi.advanceTimersByTime(MIN_BATCH_WINDOW_MS);
+
+        expect(post).toHaveBeenCalledTimes(1);
+        expect((post.mock.calls[0][1] as { events: unknown[] }).events).toHaveLength(MAX_BUFFERED_EVENTS);
+    });
+
+    it('bounds the request rate under a burst, dropping the overflow', async () => {
+        const { recordUsage, post } = await loadRecorder();
+        post.mockResolvedValue({ status: 204 });
+
+        // The shape a VIEW_ENGAGED wired to scroll would produce on a large table.
+        for (let index = 0; index < 5_000; index++) {
+            recordUsage(VIEW_OPENED);
+        }
+
+        vi.advanceTimersByTime(MIN_BATCH_WINDOW_MS);
+
+        // One request for the window, not one per fifty events. Everything past the cap is
+        // dropped, which is the deliberate trade over issuing 100 posts mid-gesture.
         expect(post).toHaveBeenCalledTimes(1);
         expect((post.mock.calls[0][1] as { events: unknown[] }).events).toHaveLength(MAX_BUFFERED_EVENTS);
     });
@@ -227,6 +268,11 @@ describe('recordUsage flush triggers', () => {
         // The type is load-bearing: it makes the request non-simple, and a bare-string
         // beacon would go as text/plain and be refused by the route.
         expect((blob as Blob).type).toBe('application/json');
+
+        // And the bytes, not just the wrapper. This is the path every real tab close
+        // takes, and a flattened envelope would pass a type check while the route's
+        // closed-envelope validation rejects it outright.
+        expect(JSON.parse(await readBlobText(blob as Blob))).toEqual({ events: [VIEW_OPENED] });
     });
 
     it('drains the buffer, so hiding then closing sends one beacon not two', async () => {
@@ -241,6 +287,25 @@ describe('recordUsage flush triggers', () => {
         // Hide-then-close is a common sequence, and the batch is spliced out before the
         // send precisely so the second trigger finds nothing left to count again.
         expect(sendBeacon).toHaveBeenCalledTimes(1);
+    });
+
+    it('attempts no post during document discard when the beacon is refused', async () => {
+        const { recordUsage, initUsageRecording, post } = await loadRecorder();
+        startRecording(initUsageRecording);
+        sendBeacon.mockReturnValue(false);
+
+        recordUsage(VIEW_OPENED);
+
+        // Real browsers fire pagehide before the visibility state flips, so the drop wins
+        // and the hidden handler finds an empty buffer. Pinned as a sequence because each
+        // trigger is otherwise only tested alone, and the order is what keeps a post off
+        // the discard path.
+        window.dispatchEvent(new Event('pagehide'));
+        vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden');
+        document.dispatchEvent(new Event('visibilitychange'));
+
+        expect(sendBeacon).toHaveBeenCalledTimes(1);
+        expect(post).not.toHaveBeenCalled();
     });
 
     it('drains what is buffered on teardown rather than stranding it', async () => {
