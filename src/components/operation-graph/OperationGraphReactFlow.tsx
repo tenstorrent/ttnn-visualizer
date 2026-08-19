@@ -34,7 +34,8 @@ import { toReadableShape } from '../../functions/formatting';
 import { buildGraphFilterMatcher } from '../../functions/graphFilterMatcher';
 import type { OperationDescription } from '../../model/APIData';
 import { type PerfOverlaySource, perfColorScale } from '../../functions/perfOverlay';
-import { activePerformanceReportAtom, activeProfilerReportAtom, criticalPathEnabledAtom } from '../../store/app';
+import { type ReportScope, isSameReportScope } from '../../definitions/ReportScope';
+import { activePerformanceReportAtom, activeProfilerReportAtom, criticalPathScopeAtom } from '../../store/app';
 import type { GraphOpFilterHandle } from '../GraphOpFilter';
 import LoadingSpinner from '../LoadingSpinner';
 import PerfOverlayLegend from '../perf-overlay/PerfOverlayLegend';
@@ -148,7 +149,7 @@ const OperationGraphInner = ({
     const [nodeIndex, setNodeIndex] = useState<OpGraphNodeIndexEntry[]>([]);
     const [hideDeallocate, setHideDeallocate] = useState(true);
     const [isPerfOverlayEnabled, setIsPerfOverlayEnabled] = useState(false);
-    const [isCriticalPathEnabled, setIsCriticalPathEnabled] = useAtom(criticalPathEnabledAtom);
+    const [criticalPathScope, setCriticalPathScope] = useAtom(criticalPathScopeAtom);
     const [perfHover, setPerfHover] = useState<PerfHover | null>(null);
     const [filterQuery, setFilterQuery] = useState('');
     const [appliedFilterQuery, setAppliedFilterQuery] = useState('');
@@ -181,29 +182,35 @@ const OperationGraphInner = ({
     const profilerReportPath = useAtomValue(activeProfilerReportAtom)?.path ?? null;
     const performanceReportPath = useAtomValue(activePerformanceReportAtom)?.path ?? null;
 
+    const reportScope = useMemo<ReportScope>(
+        () => ({ profiler: profilerReportPath, performance: performanceReportPath }),
+        [profilerReportPath, performanceReportPath],
+    );
+
     // Intent is scoped to the report it was enabled for — another report has a
     // different ramp and linked set. Adjusted during render like
     // `adoptedOperationId` above; an effect would commit one frame still
     // encoding the old ramp. #1880
-    const [overlayReportScope, setOverlayReportScope] = useState({
-        profiler: profilerReportPath,
-        performance: performanceReportPath,
-    });
-    if (
-        overlayReportScope.profiler !== profilerReportPath ||
-        overlayReportScope.performance !== performanceReportPath
-    ) {
-        setOverlayReportScope({ profiler: profilerReportPath, performance: performanceReportPath });
+    const [overlayReportScope, setOverlayReportScope] = useState<ReportScope>(reportScope);
+    if (!isSameReportScope(overlayReportScope, reportScope)) {
+        setOverlayReportScope(reportScope);
         setIsPerfOverlayEnabled(false);
         setPerfHover(null);
     }
 
-    // Report-scoped like the overlay above, but in an effect: this flag is a
-    // shared atom, and writing one during render can update its other
-    // subscribers mid-render. #1613
+    // The atom carries the scope it was enabled for, so a swap invalidates the
+    // intent by not matching it — no stale frame to close, and no render-phase
+    // write to a shared atom. #1613
+    const isCriticalPathEnabled = criticalPathScope !== null && isSameReportScope(criticalPathScope, reportScope);
+
+    // Forgetting, not resetting: the read above already ignores a scope that
+    // doesn't match, so this only stops a return trip from reviving the switch —
+    // the overlay's behaviour. Effect timing is unobservable for the same reason.
     useEffect(() => {
-        setIsCriticalPathEnabled(false);
-    }, [profilerReportPath, performanceReportPath, setIsCriticalPathEnabled]);
+        if (criticalPathScope !== null && !isSameReportScope(criticalPathScope, reportScope)) {
+            setCriticalPathScope(null);
+        }
+    }, [criticalPathScope, reportScope, setCriticalPathScope]);
 
     const selectedOperationIdRef = useRef(selectedOperationId);
     useEffect(() => {
@@ -553,17 +560,22 @@ const OperationGraphInner = ({
 
     useEffect(() => {
         if (criticalPath.hasCycle) {
-            // Console, not the UI: a cyclic op graph means a malformed report,
-            // which the user can't act on from here.
+            // Edges follow each tensor's consumer list, which nothing constrains
+            // to run forwards, so a cycle is a property of the report rather than
+            // a bug here. The annotation says the path is partial; this names the
+            // reason for whoever is debugging the report.
             // eslint-disable-next-line no-console
             console.warn('operation graph critical path: cycle found, path covers the acyclic portion only');
         }
     }, [criticalPath]);
 
     // Null rather than an empty set so the styling passes below can keep their
-    // early bail, and their memo identity, while the feature is off.
-    const criticalPathNodeIds = criticalPath.nodeIds.size > 0 ? criticalPath.nodeIds : null;
-    const criticalPathEdgeIds = criticalPath.edgeIds.size > 0 ? criticalPath.edgeIds : null;
+    // early bail, and their memo identity, while the feature is off. Both keyed
+    // on the node set: a single-node path has no edges, and dimming everything
+    // around one outlined node is still the right read.
+    const hasCriticalPath = criticalPath.nodeIds.size > 0;
+    const criticalPathNodeIds = hasCriticalPath ? criticalPath.nodeIds : null;
+    const criticalPathEdgeIds = hasCriticalPath ? criticalPath.edgeIds : null;
 
     // Built once per score change so the styling pass reuses these identities
     // instead of allocating one per node on every drag frame.
@@ -685,6 +697,11 @@ const OperationGraphInner = ({
         setPerfHover(null);
     }, []);
 
+    const handleCriticalPathChange = useCallback(
+        (next: boolean) => setCriticalPathScope(next ? reportScope : null),
+        [setCriticalPathScope, reportScope],
+    );
+
     const perfHoverLabel = useMemo(
         () =>
             isPerfOverlayActive && perfHover !== null ? getPerfHoverLabel(perfOverlay, perfHover.operationId) : null,
@@ -703,7 +720,7 @@ const OperationGraphInner = ({
     const containerClassName = [
         'operation-graph-react-flow',
         ...(matchedIds ? [FILTERING_CLASS] : []),
-        ...(criticalPathEdgeIds ? [CRITICAL_PATH_CLASS] : []),
+        ...(hasCriticalPath ? [CRITICAL_PATH_CLASS] : []),
     ].join(' ');
 
     return (
@@ -736,7 +753,7 @@ const OperationGraphInner = ({
                 isPerfOverlayActive={isPerfOverlayActive}
                 onPerfOverlayChange={handlePerfOverlayChange}
                 isCriticalPathActive={isCriticalPathActive}
-                onCriticalPathChange={setIsCriticalPathEnabled}
+                onCriticalPathChange={handleCriticalPathChange}
                 perfOverlayStatus={perfOverlay.status}
                 linkedOpCount={perfOverlay.linkedOpCount}
                 totalOpCount={perfOverlay.totalOpCount}
@@ -777,11 +794,12 @@ const OperationGraphInner = ({
                 />
             </ReactFlow>
             <div className='op-graph-bottom-band'>
-                {isCriticalPathActive && !isBuilding ? (
+                {isCriticalPathActive && hasCriticalPath && !isBuilding ? (
                     <CriticalPathAnnotation
                         opCount={criticalPath.opIds.length}
                         totalNs={criticalPath.totalNs}
                         measuredNs={perfOverlay.totalNs}
+                        isPartial={criticalPath.hasCycle}
                     />
                 ) : null}
                 {isPerfOverlayActive && !isBuilding ? (

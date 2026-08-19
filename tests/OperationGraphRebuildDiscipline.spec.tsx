@@ -112,7 +112,7 @@ import { buildOpGraph } from '../src/components/operation-graph/opGraphBuilder';
 import OperationGraphReactFlow from '../src/components/operation-graph/OperationGraphReactFlow';
 import { PERF_BAR_SCALE_VAR } from '../src/components/operation-graph/opGraphPerfOverlay';
 import type { PerfOverlaySource } from '../src/functions/perfOverlay';
-import { activePerformanceReportAtom, activeProfilerReportAtom } from '../src/store/app';
+import { activePerformanceReportAtom, activeProfilerReportAtom, criticalPathScopeAtom } from '../src/store/app';
 import type { ReportFolder } from '../src/definitions/Reports';
 /* eslint-enable import/first */
 
@@ -196,6 +196,10 @@ const overlaySwitch = () => screen.getByRole('checkbox', { name: /^Perf overlay/
 
 const enableOverlay = () => fireEvent.click(overlaySwitch());
 
+const criticalPathSwitch = () => screen.getByRole('checkbox', { name: /^Highlight critical path/ }) as HTMLInputElement;
+
+const enableCriticalPath = () => fireEvent.click(criticalPathSwitch());
+
 beforeEach(() => {
     vi.useFakeTimers();
     runBuild.mockClear();
@@ -210,6 +214,10 @@ beforeEach(() => {
     // would otherwise carry into the next test.
     getDefaultStore().set(activePerformanceReportAtom, null);
     getDefaultStore().set(activeProfilerReportAtom, null);
+    // Scoping makes critical-path intent inert against a different report, but two
+    // tests using the same fixture paths are the same scope, so it still needs
+    // clearing.
+    getDefaultStore().set(criticalPathScopeAtom, null);
 });
 
 afterEach(() => {
@@ -512,5 +520,78 @@ describe('OperationGraphReactFlow perf overlay report scope', () => {
         setReport(activeProfilerReportAtom, reportFolder('resnet50'));
 
         expect(overlaySwitch().checked).toBe(true);
+    });
+});
+
+// Same behaviour as the overlay above, reached differently: intent records the
+// reports it was switched on for, so a swap makes it inert immediately and the
+// view then clears it. Both halves are worth holding — the first is what keeps a
+// stale path off the screen, the second is what stops a swap back reviving it.
+// #1613
+describe('OperationGraphReactFlow critical path report scope', () => {
+    const reportFolder = (name: string) => ({ path: `/reports/${name}`, reportName: name }) as ReportFolder;
+
+    const setReport = (atom: typeof activeProfilerReportAtom, report: ReportFolder | null) => {
+        act(() => {
+            getDefaultStore().set(atom, report);
+        });
+    };
+
+    it('drops the highlight when the performance report changes', () => {
+        // The weights come from that report, so a stale path is a wrong path drawn
+        // with full confidence.
+        renderGraph(OPERATION_LIST, PERF_ROWS);
+        enableCriticalPath();
+        expect(criticalPathSwitch().checked).toBe(true);
+
+        setReport(activePerformanceReportAtom, reportFolder('resnet50-perf'));
+
+        expect(criticalPathSwitch().checked).toBe(false);
+    });
+
+    it('drops the highlight when the profiler report changes', () => {
+        renderGraph(OPERATION_LIST, PERF_ROWS);
+        enableCriticalPath();
+
+        setReport(activeProfilerReportAtom, reportFolder('resnet50'));
+
+        expect(criticalPathSwitch().checked).toBe(false);
+    });
+
+    it('does not re-enable itself when a report is swapped back', () => {
+        // Scoping alone would leave the intent sitting there, matching again on
+        // return; the switch has to come back off, like the overlay's.
+        const first = reportFolder('resnet50');
+        renderGraph(OPERATION_LIST, PERF_ROWS);
+        setReport(activeProfilerReportAtom, first);
+        enableCriticalPath();
+        setReport(activeProfilerReportAtom, reportFolder('bert'));
+        expect(criticalPathSwitch().checked).toBe(false);
+
+        setReport(activeProfilerReportAtom, first);
+
+        expect(criticalPathSwitch().checked).toBe(false);
+    });
+
+    it('leaves the highlight alone while the reports hold still', () => {
+        const report = reportFolder('resnet50');
+        renderGraph(OPERATION_LIST, PERF_ROWS);
+        setReport(activeProfilerReportAtom, report);
+        enableCriticalPath();
+        setReport(activeProfilerReportAtom, reportFolder('resnet50'));
+
+        // A rebuilt-but-equivalent `ReportFolder` is the same scope: the atom holds
+        // paths, not object identity.
+        expect(criticalPathSwitch().checked).toBe(true);
+    });
+
+    it('ignores intent recorded against a report that is no longer loaded', () => {
+        act(() => {
+            getDefaultStore().set(criticalPathScopeAtom, { profiler: '/reports/other', performance: null });
+        });
+
+        renderGraph(OPERATION_LIST, PERF_ROWS);
+
+        expect(criticalPathSwitch().checked).toBe(false);
     });
 });

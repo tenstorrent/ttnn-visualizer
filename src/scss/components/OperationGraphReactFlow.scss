@@ -187,18 +187,21 @@ $minimap-width: 200px;
     }
 
     // Skipped while a search runs: the filter dim is the narrower intent and
-    // would otherwise lose to this rule's extra `:not()` specificity.
+    // would otherwise lose to this rule's extra `:not()` specificity. The
+    // selected node's own edges are exempt too, or clicking a node to inspect its
+    // inputs and outputs would fade half of them.
     &.op-graph-critical-path:not(.op-graph-filtering) {
-        .react-flow__edge:not(.op-graph-edge-critical-path) {
+        .react-flow__edge:not(.op-graph-edge-critical-path, .op-graph-edge-input, .op-graph-edge-output) {
             opacity: 0.35;
         }
     }
 
     // Outline, not border or fill: selection owns the border and the I/O
-    // highlight the fill, so the path stacks with either.
+    // highlight the fill, so the path stacks with either. Offset clears the 3px
+    // selection ring, which an outline would otherwise paint over.
     .react-flow__node-opNode.op-graph-node-critical-path {
         outline: 2px solid var(--graph-critical-path-edge);
-        outline-offset: 1px;
+        outline-offset: 4px;
     }
 
     // Outranks MLIRViewReactFlow.scss's bare-`.react-flow` rule, which lifts

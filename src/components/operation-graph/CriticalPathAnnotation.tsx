@@ -10,10 +10,16 @@ interface CriticalPathAnnotationProps {
     totalNs: number;
     /** Device time across every linked op in the graph, the share's denominator. */
     measuredNs: number;
+    /** A cycle held part of the graph back, so the path and total understate. */
+    isPartial?: boolean;
 }
 
-const CriticalPathAnnotation = ({ opCount, totalNs, measuredNs }: CriticalPathAnnotationProps) => {
-    const share = measuredNs > 0 ? Math.round((totalNs / measuredNs) * 100) : null;
+const CriticalPathAnnotation = ({ opCount, totalNs, measuredNs, isPartial = false }: CriticalPathAnnotationProps) => {
+    // Device time is the only measured quantity, so the share is of summed op
+    // time, not wall clock — said plainly, because "of measured time" reads as
+    // wall clock. One decimal matches the per-op hover, where rounding to whole
+    // percent prints 0% for a short path on a large graph.
+    const share = measuredNs > 0 ? `${((totalNs / measuredNs) * 100).toFixed(1)}% of total device time` : null;
 
     return (
         <div
@@ -25,8 +31,9 @@ const CriticalPathAnnotation = ({ opCount, totalNs, measuredNs }: CriticalPathAn
                 aria-hidden='true'
             />
             <span>
-                Critical path: {opCount} {opCount === 1 ? 'op' : 'ops'}, {formatDuration(totalNs)} total
-                {share === null ? null : ` (${share}% of measured time)`}
+                {isPartial ? 'Critical path (partial)' : 'Critical path'}: {opCount} {opCount === 1 ? 'op' : 'ops'} ·{' '}
+                {formatDuration(totalNs)}
+                {share === null ? null : ` · ${share}`}
             </span>
         </div>
     );

@@ -13,13 +13,20 @@ interface CriticalPathEdge {
     target: string;
 }
 
+// Every node id in `nodes` is registered before any lookup, so a miss is
+// unreachable; the sentinel keeps the comparators total without an assertion.
+const UNKNOWN_OP_ID = -1;
+
 export interface CriticalPath {
     /** Source to sink. */
     opIds: number[];
-    nodeIds: Set<string>;
-    edgeIds: Set<string>;
+    nodeIds: ReadonlySet<string>;
+    edgeIds: ReadonlySet<string>;
     totalNs: number;
-    /** The graph is meant to be acyclic; a cycle leaves part of it unvisited. */
+    /**
+     * A cycle leaves its members and everything downstream of them unordered, so
+     * the path covers the acyclic portion only and the total understates.
+     */
     hasCycle: boolean;
 }
 
@@ -54,8 +61,9 @@ export const findCriticalPath = (
 
     const outgoingByNodeId = new Map<string, CriticalPathEdge[]>();
     for (const edge of edges) {
-        // Both endpoints have to be in the node set: an edge to an op the build
-        // dropped would otherwise leave a node permanently in-degree bound.
+        // Defensive: this function doesn't assume its inputs came from
+        // `opGraphBuilder`, which already drops edges with a dropped endpoint. An
+        // unmatched target would sit in-degree bound and read as a cycle.
         if (inDegree.has(edge.source) && inDegree.has(edge.target)) {
             const outgoing = outgoingByNodeId.get(edge.source);
             if (outgoing === undefined) {
@@ -67,7 +75,7 @@ export const findCriticalPath = (
         }
     }
 
-    const weightOf = (nodeId: string) => deviceTimeNsByOpId.get(opIdByNodeId.get(nodeId) ?? -1) ?? 0;
+    const weightOf = (nodeId: string) => deviceTimeNsByOpId.get(opIdByNodeId.get(nodeId) ?? UNKNOWN_OP_ID) ?? 0;
 
     const cost = new Map<string, number>();
     const opCount = new Map<string, number>();
@@ -78,18 +86,16 @@ export const findCriticalPath = (
         opCount.set(node.id, 1);
     }
 
-    // Op id order rather than insertion order, so an unrelated change in build
-    // order cannot silently pick a different path among equal-cost candidates.
-    const byOpId = (left: string, right: string) => (opIdByNodeId.get(left) ?? 0) - (opIdByNodeId.get(right) ?? 0);
-    const queue = nodes
-        .filter((node) => inDegree.get(node.id) === 0)
-        .map((node) => node.id)
-        .sort(byOpId);
+    const byOpId = (left: string, right: string) =>
+        (opIdByNodeId.get(left) ?? UNKNOWN_OP_ID) - (opIdByNodeId.get(right) ?? UNKNOWN_OP_ID);
 
-    let visited = 0;
-    for (let head = 0; head < queue.length; head++) {
-        const nodeId = queue[head];
-        visited++;
+    // Sources in whatever order they arrive: the comparators below settle every
+    // tie on op id, so the result doesn't depend on this order and sorting it
+    // would be the one super-linear step in an otherwise O(V+E) pass.
+    const topoOrder = nodes.filter((node) => inDegree.get(node.id) === 0).map((node) => node.id);
+
+    for (let head = 0; head < topoOrder.length; head++) {
+        const nodeId = topoOrder[head];
         const nodeCost = cost.get(nodeId) ?? 0;
         const nodeOpCount = opCount.get(nodeId) ?? 1;
 
@@ -119,18 +125,18 @@ export const findCriticalPath = (
             const remaining = (inDegree.get(edge.target) ?? 0) - 1;
             inDegree.set(edge.target, remaining);
             if (remaining === 0) {
-                queue.push(edge.target);
+                topoOrder.push(edge.target);
             }
         }
     }
 
     // Every node sits in a cycle, so nothing is ordered and no path is defined.
-    if (queue.length === 0) {
+    if (topoOrder.length === 0) {
         return { ...EMPTY_CRITICAL_PATH, hasCycle: true };
     }
 
-    let endNodeId = queue[0];
-    for (const nodeId of queue) {
+    let endNodeId = topoOrder[0];
+    for (const nodeId of topoOrder) {
         const costDelta = (cost.get(nodeId) ?? 0) - (cost.get(endNodeId) ?? 0);
         const opCountDelta = (opCount.get(nodeId) ?? 1) - (opCount.get(endNodeId) ?? 1);
         const isBetterEnd =
@@ -148,7 +154,7 @@ export const findCriticalPath = (
     let nodeId: string | undefined = endNodeId;
     while (nodeId !== undefined) {
         nodeIds.add(nodeId);
-        opIds.push(opIdByNodeId.get(nodeId) ?? -1);
+        opIds.push(opIdByNodeId.get(nodeId) ?? UNKNOWN_OP_ID);
         const edgeId = predecessorEdgeByNodeId.get(nodeId);
         if (edgeId !== undefined) {
             edgeIds.add(edgeId);
@@ -162,6 +168,8 @@ export const findCriticalPath = (
         nodeIds,
         edgeIds,
         totalNs: cost.get(endNodeId) ?? 0,
-        hasCycle: visited < nodes.length,
+        // Kahn only orders what it can reach, so a short order means a cycle held
+        // its members back.
+        hasCycle: topoOrder.length < nodes.length,
     };
 };

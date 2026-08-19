@@ -68,3 +68,58 @@ describe('op graph filter dimming', () => {
         expect(ruleBody('&.op-graph-filtering')).not.toContain('__edge-path');
     });
 });
+
+describe('op graph critical path styling', () => {
+    const OFF_PATH_DIM_SELECTOR = '&.op-graph-critical-path:not(.op-graph-filtering)';
+
+    it('accents the path before the I/O rules so a focused node keeps its own colours', () => {
+        // Both match at the same specificity, so the later rule wins. Order is the
+        // only thing keeping the selected node's edges their input/output colour
+        // while the rest of the path reads magenta. #1613
+        const accent = STYLESHEET.indexOf('.op-graph-edge-critical-path .react-flow__edge-path');
+        const inputEdge = STYLESHEET.indexOf('.op-graph-edge-input .react-flow__edge-path');
+
+        expect(accent).toBeGreaterThan(-1);
+        expect(inputEdge).toBeGreaterThan(-1);
+        expect(accent).toBeLessThan(inputEdge);
+    });
+
+    it('yields the dimming to an active search', () => {
+        // Without the `:not()` this rule's extra specificity would beat the
+        // filter's 0.18 and quietly weaken search dimming whenever the path is on.
+        expect(STYLESHEET).toContain(OFF_PATH_DIM_SELECTOR);
+    });
+
+    it('exempts the selected node′s own edges from the off-path dim', () => {
+        // Clicking a node to read its inputs and outputs would otherwise fade
+        // whichever of them sit off the path.
+        const body = ruleBody(OFF_PATH_DIM_SELECTOR);
+
+        expect(body).toContain(':not(.op-graph-edge-input)');
+        expect(body).toContain(':not(.op-graph-edge-output)');
+    });
+
+    it('dims from the container rather than per off-path element', () => {
+        // Same identity argument as the filter above: ~500 off-path edges must not
+        // each carry a class.
+        const body = ruleBody(OFF_PATH_DIM_SELECTOR);
+
+        expect(body).toMatch(/\.react-flow__edge/);
+        expect(body).toMatch(/opacity:\s*0?\.\d+/);
+    });
+
+    it('offsets the path outline clear of the selection ring', () => {
+        // Outline paints over box-shadow, so an offset inside the ring's radius
+        // replaces the selection colour with the path colour on a node that is
+        // both. Asserted against the ring's own width so the two can't drift.
+        const ringWidth = Number(
+            /box-shadow:[^;]*?(\d+)px\s*(?:var|#|rgb)/.exec(ruleBody('&.op-graph-node-selected'))?.[1],
+        );
+        const outlineOffset = Number(
+            /outline-offset:\s*(\d+)px/.exec(ruleBody('.react-flow__node-opNode.op-graph-node-critical-path'))?.[1],
+        );
+
+        expect(ringWidth).toBeGreaterThan(0);
+        expect(outlineOffset).toBeGreaterThan(ringWidth);
+    });
+});

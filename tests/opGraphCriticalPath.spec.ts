@@ -63,6 +63,25 @@ describe('findCriticalPath', () => {
         expect(path.opIds).toEqual([1, 2, 4]);
     });
 
+    it('picks the same branch whichever order the sources arrive in', () => {
+        // Sources are no longer sorted, so determinism rests entirely on the
+        // comparators — including the end-node scan, which walks the topological
+        // order it is handed.
+        const forwards = findCriticalPath(
+            nodes(1, 2, 3, 4),
+            edges([1, 2], [2, 4], [1, 3], [3, 4]),
+            weights([2, 10], [3, 10]),
+        );
+        const backwards = findCriticalPath(
+            nodes(4, 3, 2, 1),
+            edges([1, 2], [2, 4], [1, 3], [3, 4]),
+            weights([2, 10], [3, 10]),
+        );
+
+        expect(backwards.opIds).toEqual(forwards.opIds);
+        expect(backwards.totalNs).toBe(forwards.totalNs);
+    });
+
     it('crosses an op with no perf row as a zero-cost pass-through', () => {
         // A gap in the report shortens the total rather than severing the path.
         const path = findCriticalPath(nodes(1, 2, 3), edges([1, 2], [2, 3]), weights([1, 100], [3, 100]));
