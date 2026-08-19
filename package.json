@@ -17,7 +17,7 @@
     "node": "24.15.0",
     "pnpm": ">=11"
   },
-  "packageManager": "pnpm@11.1.2",
+  "packageManager": "pnpm@11.22.0",
   "scripts": {
     "build:docs": "uv run --no-default-groups --group docs sphinx-build docs docs/output",
     "build:wheel": "pnpm run build && uv build --wheel",

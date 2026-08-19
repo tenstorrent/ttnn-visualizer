@@ -14,12 +14,14 @@ interface RenderToolbarOptions {
     status: PerfOverlayStatus;
     onPerfOverlayChange?: (next: boolean) => void;
     onCriticalPathChange?: (next: boolean) => void;
+    isDisabled?: boolean;
 }
 
 const renderToolbar = ({
     status,
     onPerfOverlayChange = vi.fn(),
     onCriticalPathChange = vi.fn(),
+    isDisabled = false,
 }: RenderToolbarOptions) => {
     render(
         <OpGraphToolbar
@@ -46,7 +48,7 @@ const renderToolbar = ({
             perfOverlayStatus={status}
             linkedOpCount={180}
             totalOpCount={302}
-            isDisabled={false}
+            isDisabled={isDisabled}
         />,
     );
 };
@@ -81,10 +83,14 @@ describe('perf overlay switch', () => {
     });
 
     it.each([
-        ['no report loaded', PerfOverlayStatus.UNAVAILABLE],
-        ['a report that does not match', PerfOverlayStatus.UNLINKED],
-    ])('cannot be turned on with %s', (_label, status) => {
-        renderToolbar({ status });
+        ['no report loaded', PerfOverlayStatus.UNAVAILABLE, false],
+        ['a report that does not match', PerfOverlayStatus.UNLINKED, false],
+        // The other half of the switch's disjunction: mid-build the op ids the
+        // overlay keys on are about to be replaced, so a report that lines up
+        // perfectly still must not be switchable yet.
+        ['a graph still being laid out', PerfOverlayStatus.READY, true],
+    ])('cannot be turned on with %s', (_label, status, isDisabled) => {
+        renderToolbar({ status, isDisabled });
 
         expect(perfOverlaySwitch().input).toBeDisabled();
     });
@@ -107,12 +113,14 @@ describe('critical path switch', () => {
     });
 
     it.each([
-        ['no report loaded', PerfOverlayStatus.UNAVAILABLE],
-        ['a report that does not match', PerfOverlayStatus.UNLINKED],
-    ])('cannot be turned on with %s', (_label, status) => {
+        ['no report loaded', PerfOverlayStatus.UNAVAILABLE, false],
+        ['a report that does not match', PerfOverlayStatus.UNLINKED, false],
+        ['a graph still being laid out', PerfOverlayStatus.READY, true],
+    ])('cannot be turned on with %s', (_label, status, isDisabled) => {
         // Same gate as the overlay: both read per-op durations, so a report that
-        // can't feed the bars can't weigh the path either.
-        renderToolbar({ status });
+        // can't feed the bars can't weigh the path either. The path is computed
+        // over the built graph, so a rebuild in flight bars it for the same reason.
+        renderToolbar({ status, isDisabled });
 
         expect(criticalPathSwitch().input).toBeDisabled();
     });

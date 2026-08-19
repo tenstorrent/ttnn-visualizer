@@ -4,17 +4,12 @@
 
 import { useMemo } from 'react';
 import { useAtomValue } from 'jotai';
-import {
-    activePerformanceReportFolderNameAtom,
-    topNAnnotationCountAtom,
-    topNAnnotationEnabledAtom,
-    topNAnnotationModeAtom,
-} from '../store/app';
+import { topNAnnotationCountAtom, topNAnnotationEnabledAtom, topNAnnotationModeAtom } from '../store/app';
 import { RankedAnnotation, TopNAnnotationMode, TopNAnnotationStatus } from '../definitions/TopNAnnotations';
 import { isPerfMode, selectTopNAnnotations } from '../functions/topNAnnotations';
 import { OpPerfAggregate, PerfOverlaySource, aggregatePerfByOp } from '../functions/perfOverlay';
 import { L1PressureMetrics, L1PressureStatus } from '../model/L1Pressure';
-import { useGetDeviceOperationListPerf, useL1PressureByOperation, usePerformanceReport } from './useAPI';
+import { useGetDeviceOperationListPerf, useL1PressureByOperation, useLinkedPerformanceReport } from './useAPI';
 
 export interface UseTopNAnnotationAvailabilityParams {
     /**
@@ -60,11 +55,12 @@ export interface UseTopNAnnotationAvailabilityResult {
 export const useTopNAnnotationAvailability = ({
     forceL1Unavailable = false,
 }: UseTopNAnnotationAvailabilityParams = {}): UseTopNAnnotationAvailabilityResult => {
-    const activeReportFolderName = useAtomValue(activePerformanceReportFolderNameAtom);
-
-    const { data: perfReport } = usePerformanceReport(activeReportFolderName);
-    // Lock-step id-space match against the profiler op list. Returns [] when
-    // the perf report doesn't line up — that's the `UNLINKED` signal below.
+    // The link-pinned report, so annotations don't disappear when the user
+    // changes how they're viewing the performance tab (#1812).
+    const { data: perfReport } = useLinkedPerformanceReport();
+    // Lock-step id-space match against the profiler op list, made against that
+    // same report. Returns [] when the perf report doesn't line up — that's the
+    // `UNLINKED` signal below.
     const matchedPerfOps = useGetDeviceOperationListPerf();
     const l1Pressure = useL1PressureByOperation();
 

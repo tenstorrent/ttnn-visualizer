@@ -7,7 +7,7 @@ import { Helmet } from 'react-helmet-async';
 import { useParams } from 'react-router';
 
 import { useAtomValue } from 'jotai';
-import { useGetDeviceOperationListPerf, useOperationsList, usePerformanceReport } from '../hooks/useAPI';
+import { useGetDeviceOperationListPerf, useLinkedPerformanceReport, useOperationsList } from '../hooks/useAPI';
 import OperationGraph from '../components/operation-graph/OperationGraphReactFlow';
 import LoadingSpinner from '../components/LoadingSpinner';
 import useClearSelectedBuffer from '../hooks/useClearSelectedBuffer';
@@ -18,8 +18,13 @@ const GraphView = () => {
     const { data: operationList, isLoading } = useOperationsList();
     const { operationId } = useParams<{ operationId?: string }>();
     const selectedOperationRange = useAtomValue(selectedOperationRangeAtom);
+    // Read alongside the report rather than out of it: `useLinkedPerformanceReport`
+    // resolves the name internally and returns only the data, which cannot
+    // distinguish "nothing selected" from "selected and still in flight". #1880
     const activeReportFolderName = useAtomValue(activePerformanceReportFolderNameAtom);
-    const { data: perfReport } = usePerformanceReport(activeReportFolderName);
+    // The link-pinned report, so a perf-tab view filter can neither hide the
+    // report from the overlay nor break the match below (#1812).
+    const { data: perfReport } = useLinkedPerformanceReport();
     // Canonical "do the loaded reports belong to the same run?" signal. This is
     // the same name-based lock-step match used by `ReportLinkStatus`: returns
     // `[]` whenever the loaded perf report doesn't line up with the profiler

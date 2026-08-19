@@ -4,13 +4,14 @@
 
 import type { CSSProperties } from 'react';
 
-import { PerfOverlayStatus } from '../../definitions/PerfOverlayStatus';
+import { NO_PERF_DATA_LABEL, PerfOverlayStatus } from '../../definitions/PerfOverlayStatus';
 import { formatDuration } from '../../functions/formatting';
 import {
     type OpPerfAggregate,
     type OpPerfScore,
     type PerfOverlaySource,
     aggregatePerfByOp,
+    getRankComparator,
     perfColorScale,
     scoreOps,
 } from '../../functions/perfOverlay';
@@ -26,7 +27,26 @@ export const PERF_BAR_COLOR_VAR = '--op-graph-perf-color';
 // encoding washes out at exactly the zoom a whole report fits in. #1610
 export const PERF_BAR_ZOOM_VAR = '--op-graph-perf-zoom';
 
-export const NO_PERF_DATA_LABEL = 'No perf data';
+// d3-zoom emits a new scale nearly every frame, and the property above is
+// inherited by every node's bar, so an unquantised write invalidates style for
+// the whole graph per frame. Buckets are proportional rather than a fixed step
+// because the zoom range spans 0.02–3: absolute tenths collapse the entire
+// overview range to 0, which would divide by zero in the SCSS and drop the
+// declaration. A 1.1 ratio holds the bar floor within ~5% of true. #1610
+const PERF_ZOOM_BUCKET_RATIO = 1.1;
+
+/**
+ * Zoom rounded to the nearest proportional bucket. Falls back to `1` — the
+ * SCSS's own fallback — for non-positive or non-finite input, so a degenerate
+ * transform can never write a value that invalidates the bar geometry.
+ */
+export const getQuantisedPerfZoom = (zoom: number): number => {
+    if (!Number.isFinite(zoom) || zoom <= 0) {
+        return 1;
+    }
+    const bucket = Math.round(Math.log(zoom) / Math.log(PERF_ZOOM_BUCKET_RATIO));
+    return PERF_ZOOM_BUCKET_RATIO ** bucket;
+};
 
 export interface OpGraphPerfOverlay {
     status: PerfOverlayStatus;
@@ -90,7 +110,9 @@ export const buildOpGraphPerfOverlay = (
 
     const rankByOpId = new Map<number, number>();
     let totalNs = 0;
-    const slowestFirst = Array.from(aggregatesByOpId.values()).sort((a, b) => b.deviceTimeNs - a.deviceTimeNs);
+    const slowestFirst = Array.from(aggregatesByOpId.values()).sort(
+        getRankComparator<OpPerfAggregate>((aggregate) => aggregate.deviceTimeNs),
+    );
     slowestFirst.forEach((aggregate, index) => {
         rankByOpId.set(aggregate.opId, index + 1);
         totalNs += aggregate.deviceTimeNs;

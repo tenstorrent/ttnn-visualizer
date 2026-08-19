@@ -59,8 +59,8 @@ body {
 }
 
 main {
-    padding: 15px;
-    padding-bottom: 30px; // Offsets the fixed current data bar
+    padding: variables.$main-padding;
+    padding-bottom: variables.$main-padding-bottom; // Offsets the fixed current data bar
 }
 
 button {

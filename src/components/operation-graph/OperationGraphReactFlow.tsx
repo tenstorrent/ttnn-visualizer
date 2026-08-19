@@ -49,6 +49,7 @@ import {
     buildOpGraphPerfOverlay,
     buildPerfNodeStyleByNodeId,
     getPerfHoverLabel,
+    getQuantisedPerfZoom,
 } from './opGraphPerfOverlay';
 import { EMPTY_CRITICAL_PATH, findCriticalPath } from './opGraphCriticalPath';
 import { useOpGraphLayoutWorker } from './useOpGraphLayoutWorker';
@@ -171,6 +172,7 @@ const OperationGraphInner = ({
     }
     const filterRef = useRef<GraphOpFilterHandle>(null);
     const containerRef = useRef<HTMLDivElement>(null);
+    const containerBoundsRef = useRef<DOMRect | null>(null);
     // A singleton for the component's lifetime rather than a ref, since the
     // styling pass reads it during render and never replaces it.
     const [styledNodeCache] = useState(() => new WeakMap<OpGraphFlowNode, StyledNodeCacheEntry>());
@@ -534,14 +536,15 @@ const OperationGraphInner = ({
         }
         let lastZoom: number | null = null;
         const writeZoom = (zoom: number) => {
-            if (zoom !== lastZoom) {
-                lastZoom = zoom;
-                container.style.setProperty(PERF_BAR_ZOOM_VAR, String(zoom));
+            const quantised = getQuantisedPerfZoom(zoom);
+            if (quantised !== lastZoom) {
+                lastZoom = quantised;
+                container.style.setProperty(PERF_BAR_ZOOM_VAR, String(quantised));
             }
         };
         writeZoom(flowStore.getState().transform[2]);
         // No selector support in the vanilla store, so every change calls back
-        // and the guard above keeps it to one write per zoom change.
+        // and the guard above keeps it to one write per zoom bucket.
         return flowStore.subscribe((state) => writeZoom(state.transform[2]));
     }, [isPerfOverlayActive, flowStore]);
 
@@ -674,10 +677,38 @@ const OperationGraphInner = ({
         setSelectedOperationId(null);
     }, []);
 
-    // Box read on enter, not per mousemove: crossing a node boundary is orders
-    // of magnitude rarer than moving, and the read forces a layout flush.
+    // Cached rather than read per enter: sweeping a dense graph crosses node
+    // boundaries many times a second, each fire follows a commit that moved the
+    // tooltip, so the read flushes layout for the whole graph DOM — the one cost
+    // that scales with node count. The box only moves on resize, scroll, and
+    // panel open/close, the last of which resizes the container. #1880
+    useEffect(() => {
+        const container = containerRef.current;
+        if (container === null || !isPerfOverlayActive) {
+            return undefined;
+        }
+        const readBounds = () => {
+            containerBoundsRef.current = container.getBoundingClientRect();
+        };
+        readBounds();
+        window.addEventListener('resize', readBounds);
+        // Capture: an ancestor scrolling moves the box without scrolling the window.
+        window.addEventListener('scroll', readBounds, true);
+        // Matches `ChipCongestionCanvas`: jsdom and older browsers without it keep
+        // the box read above, refreshed by the two listeners.
+        // eslint-disable-next-line compat/compat
+        const observer = typeof window.ResizeObserver === 'function' ? new window.ResizeObserver(readBounds) : null;
+        observer?.observe(container);
+        return () => {
+            observer?.disconnect();
+            window.removeEventListener('resize', readBounds);
+            window.removeEventListener('scroll', readBounds, true);
+            containerBoundsRef.current = null;
+        };
+    }, [isPerfOverlayActive]);
+
     const handleNodeMouseEnter = useCallback((event: ReactMouseEvent, node: OpGraphFlowNode) => {
-        const bounds = containerRef.current?.getBoundingClientRect();
+        const bounds = containerBoundsRef.current ?? containerRef.current?.getBoundingClientRect();
         if (!bounds) {
             return;
         }
@@ -810,10 +841,14 @@ const OperationGraphInner = ({
                 ) : null}
             </div>
             {perfHoverLabel !== null && perfHover !== null ? (
+                // Pointer-only, and `role='tooltip'` would promise a relationship no
+                // `aria-describedby` provides. The panel's Kernel duration row carries
+                // the same figure and is reachable by keyboard, so this stays decorative
+                // rather than advertising a path assistive tech cannot follow. #1880
                 <div
                     className='op-graph-perf-hover'
                     style={{ left: perfHover.x, top: perfHover.y }}
-                    role='tooltip'
+                    aria-hidden='true'
                 >
                     {perfHoverLabel}
                 </div>

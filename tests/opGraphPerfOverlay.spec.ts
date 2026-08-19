@@ -6,14 +6,13 @@ import type { CSSProperties } from 'react';
 import { describe, expect, it } from 'vitest';
 
 import {
-    NO_PERF_DATA_LABEL,
     PERF_BAR_COLOR_VAR,
     PERF_BAR_SCALE_VAR,
     buildOpGraphPerfOverlay,
     buildPerfNodeStyleByNodeId,
     getPerfHoverLabel,
 } from '../src/components/operation-graph/opGraphPerfOverlay';
-import { PerfOverlayStatus } from '../src/definitions/PerfOverlayStatus';
+import { NO_PERF_DATA_LABEL, PerfOverlayStatus } from '../src/definitions/PerfOverlayStatus';
 import { formatDuration } from '../src/functions/formatting';
 import { type PerfOverlaySource, perfColorScale } from '../src/functions/perfOverlay';
 
