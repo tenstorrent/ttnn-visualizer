@@ -219,7 +219,7 @@ $row-background: $tt-grey-2;
 
 // Padding to offest content from the FooterInfobar
 .data-padding {
-    padding-bottom: 20px;
+    padding-bottom: variables.$data-padding-bottom;
 }
 
 .form-group {

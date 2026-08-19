@@ -66,6 +66,17 @@ $report-select-width: 250px;
 $app-navbar-height: 92px;
 $app-status-bar-height: 34px;
 
+// `main`'s own padding and the trailing gutter that clears the fixed data bar,
+// owned here rather than copied into each viewport-height view: a view that
+// subtracts its own literal silently mis-sizes the moment `main` changes.
+$main-padding: 15px;
+$main-padding-bottom: 30px;
+$data-padding-bottom: 20px;
+
+// Where React Flow docks its bottom-left panel. Both graph views lay their own
+// bottom-left chrome out from it, so it is owned here rather than copied into each.
+$reactflow-panel-origin-left: 12px;
+
 // MLIR takes the status bar plus its own slack. Its title and loader rows are
 // flex-laid inside `.mlir-page`, so the graph reclaims them when absent.
 $mlir-footer-clearance: 40px;

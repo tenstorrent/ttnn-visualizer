@@ -10,7 +10,11 @@ import OpGraphToolbar from '../src/components/operation-graph/OpGraphToolbar';
 import { PERF_OVERLAY_TOOLTIP, PerfOverlayStatus } from '../src/definitions/PerfOverlayStatus';
 import { GraphFilterMode } from '../src/definitions/GraphFilterMode';
 
-const renderToolbar = (status: PerfOverlayStatus, onPerfOverlayChange: (next: boolean) => void = vi.fn()) => {
+const renderToolbar = (
+    status: PerfOverlayStatus,
+    onPerfOverlayChange: (next: boolean) => void = vi.fn(),
+    isDisabled = false,
+) => {
     render(
         <OpGraphToolbar
             filterRef={null}
@@ -34,7 +38,7 @@ const renderToolbar = (status: PerfOverlayStatus, onPerfOverlayChange: (next: bo
             perfOverlayStatus={status}
             linkedOpCount={180}
             totalOpCount={302}
-            isDisabled={false}
+            isDisabled={isDisabled}
         />,
     );
 
@@ -64,10 +68,14 @@ describe('perf overlay switch', () => {
     });
 
     it.each([
-        ['no report loaded', PerfOverlayStatus.UNAVAILABLE],
-        ['a report that does not match', PerfOverlayStatus.UNLINKED],
-    ])('cannot be turned on with %s', (_label, status) => {
-        const { input } = renderToolbar(status);
+        ['no report loaded', PerfOverlayStatus.UNAVAILABLE, false],
+        ['a report that does not match', PerfOverlayStatus.UNLINKED, false],
+        // The other half of the switch's disjunction: mid-build the op ids the
+        // overlay keys on are about to be replaced, so a report that lines up
+        // perfectly still must not be switchable yet.
+        ['a graph still being laid out', PerfOverlayStatus.READY, true],
+    ])('cannot be turned on with %s', (_label, status, isDisabled) => {
+        const { input } = renderToolbar(status, vi.fn(), isDisabled);
 
         expect(input).toBeDisabled();
     });

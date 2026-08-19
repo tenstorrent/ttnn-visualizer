@@ -6,6 +6,12 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
+import {
+    PERF_BAR_COLOR_VAR,
+    PERF_BAR_SCALE_VAR,
+    PERF_BAR_ZOOM_VAR,
+} from '../src/components/operation-graph/opGraphPerfOverlay';
+
 // jsdom doesn't compile SCSS, so a rendered node carries the class but none of
 // its declarations. Same approach as `opGraphNodeStyles.spec.ts`.
 const STYLESHEET = readFileSync(resolve(process.cwd(), 'src/scss/components/OperationGraphReactFlow.scss'), {
@@ -20,6 +26,12 @@ const ruleBody = (selector: string): string => {
 };
 
 const PERF_BAR = '&::after';
+
+// Built from the exported names rather than re-typed. This is the seam the spec
+// exists to protect: with literals, renaming a constant stops the bar painting
+// while every assertion below still matches the SCSS the TS no longer writes.
+const varRef = (name: string, fallback?: string) =>
+    `var\\(${name}${fallback === undefined ? '' : `,\\s*${fallback}`}\\)`;
 
 describe('perf overlay bar geometry', () => {
     it('is taken out of the node flow so toggling the overlay cannot relayout the graph', () => {
@@ -51,8 +63,10 @@ describe('perf overlay bar zoom floor', () => {
         // losing the encoding exactly where a whole-graph scan needs it. #1610
         const body = ruleBody(PERF_BAR);
 
-        expect(body).toMatch(/height:.*calc\(\s*\d+px\s*\/\s*var\(--op-graph-perf-zoom,\s*1\)\s*\)/);
-        expect(body).toMatch(/min-width:.*calc\(\s*\d+px\s*\/\s*var\(--op-graph-perf-zoom,\s*1\)\s*\)/);
+        expect(body).toMatch(new RegExp(`height:.*calc\\(\\s*\\d+px\\s*/\\s*${varRef(PERF_BAR_ZOOM_VAR, '1')}\\s*\\)`));
+        expect(body).toMatch(
+            new RegExp(`min-width:.*calc\\(\\s*\\d+px\\s*/\\s*${varRef(PERF_BAR_ZOOM_VAR, '1')}\\s*\\)`),
+        );
     });
 
     it('falls back to an unscaled bar when the zoom is not published', () => {
@@ -60,8 +74,8 @@ describe('perf overlay bar zoom floor', () => {
         // fallback is the resting state: 1:1 size, not a collapse to zero.
         const body = ruleBody(PERF_BAR);
 
-        expect(body).not.toMatch(/var\(--op-graph-perf-zoom\)/);
-        expect(body).toMatch(/var\(--op-graph-perf-zoom,\s*1\)/);
+        expect(body).not.toMatch(new RegExp(varRef(PERF_BAR_ZOOM_VAR)));
+        expect(body).toMatch(new RegExp(varRef(PERF_BAR_ZOOM_VAR, '1')));
     });
 });
 
@@ -69,18 +83,30 @@ describe('perf overlay bar encoding', () => {
     it('takes both its length and its colour from the score', () => {
         const body = ruleBody(PERF_BAR);
 
-        expect(body).toMatch(/width:\s*calc\(var\(--op-graph-perf-scale/);
-        expect(body).toMatch(/background-color:\s*var\(--op-graph-perf-color/);
+        expect(body).toMatch(new RegExp(`width:\\s*calc\\(var\\(${PERF_BAR_SCALE_VAR}`));
+        expect(body).toMatch(new RegExp(`background-color:\\s*var\\(${PERF_BAR_COLOR_VAR}`));
     });
 
     it('stays invisible for an op with no perf row', () => {
         // What separates "no perf data" from "fastest op": an unmapped node sets
         // neither property, so nothing paints even though min-width applies.
-        expect(ruleBody(PERF_BAR)).toMatch(/background-color:\s*var\(--op-graph-perf-color,\s*transparent\)/);
+        expect(ruleBody(PERF_BAR)).toMatch(
+            new RegExp(`background-color:\\s*${varRef(PERF_BAR_COLOR_VAR, 'transparent')}`),
+        );
     });
 
     it('keeps the slowest op distinguishable from the fastest', () => {
         // A zero-length bar for the coolest op would read as missing data.
         expect(ruleBody(PERF_BAR)).toMatch(/min-width:\s*max\(\s*[1-9]/);
+    });
+});
+
+describe('perf overlay bar containing block', () => {
+    it('anchors the bar to the node it annotates', () => {
+        // Every geometry assertion above is relative to this. `@xyflow/react`'s own
+        // `.react-flow__node { position: absolute }` would otherwise supply the
+        // containing block, so a vendor change would anchor all the bars to the
+        // canvas — which *is* relative — and pile them in one corner, green.
+        expect(ruleBody('.react-flow__node-opNode {')).toMatch(/position:\s*relative/);
     });
 });

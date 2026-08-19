@@ -8,7 +8,7 @@ import { cleanup, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 
 import OpGraphInfoPanel from '../src/components/operation-graph/OpGraphInfoPanel';
-import { NO_PERF_DATA_LABEL } from '../src/components/operation-graph/opGraphPerfOverlay';
+import { NO_PERF_DATA_LABEL } from '../src/definitions/PerfOverlayStatus';
 import { perfColorScale } from '../src/functions/perfOverlay';
 import { formatDuration } from '../src/functions/formatting';
 import type { OperationDescription } from '../src/model/APIData';

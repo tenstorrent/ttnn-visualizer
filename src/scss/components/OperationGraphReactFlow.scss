@@ -10,9 +10,10 @@
 @use '../definitions/variables' as variables;
 
 // Bottom-left chrome — zoom controls, minimap, perf legend — on one baseline.
-// The origin and margin are React Flow's own.
+// The origin and margin are React Flow's own; the width below is authored onto
+// `.react-flow__minimap` rather than assumed, so the legend's offset cannot drift
+// on a library bump that changes the default.
 $chrome-dock-bottom: 8px;
-$panel-origin-left: 12px;
 $panel-margin: 15px;
 $minimap-margin-left: 56px;
 $minimap-width: 200px;
@@ -21,11 +22,13 @@ $minimap-width: 200px;
     position: relative;
     width: 100%;
 
-    // Fills the band between the navbar and the status bar, less `main`'s 15px
-    // top padding. The negative margin drops the 50px of trailing page padding,
-    // which here would only add a scrollbar.
-    height: calc(100vh - #{variables.$app-navbar-height} - 15px - #{variables.$app-status-bar-height});
-    margin-bottom: -50px;
+    // Fills the band between the navbar and the status bar, less `main`'s top
+    // padding. The negative margin drops the trailing page padding — `main`'s
+    // bottom gutter plus `.data-padding`'s — which here would only add a scrollbar.
+    height: calc(
+        100vh - #{variables.$app-navbar-height} - #{variables.$main-padding} - #{variables.$app-status-bar-height}
+    );
+    margin-bottom: -(variables.$main-padding-bottom + variables.$data-padding-bottom);
 
     .operation-graph-react-flow-loader {
         position: absolute;
@@ -43,6 +46,12 @@ $minimap-width: 200px;
         gap: 2px;
         justify-content: center;
         box-sizing: border-box;
+
+        // Owns the containing block for the perf bar below. `@xyflow/react`'s own
+        // `.react-flow__node` already sets `position: absolute`, but relying on it
+        // means a vendor change would silently anchor every bar to the relatively
+        // positioned canvas and pile them in one corner. #1880
+        position: relative;
         padding: 4px 12px;
         border: 2px solid transparent;
         border-radius: 3px;
@@ -99,7 +108,7 @@ $minimap-width: 200px;
         position: absolute;
         z-index: variables.$z-index-2-interactive;
         bottom: $chrome-dock-bottom;
-        left: $panel-origin-left + $minimap-margin-left + $minimap-width + $panel-margin;
+        left: variables.$reactflow-panel-origin-left + $minimap-margin-left + $minimap-width + $panel-margin;
     }
 
     .op-graph-perf-hover {
@@ -171,8 +180,11 @@ $minimap-width: 200px;
         }
     }
 
-    // Outranks MLIRViewReactFlow.scss's bare-`.react-flow` rule, which lifts
-    // bottom-left panels 16px app-wide. Specificity, not stylesheet order.
+    // `MLIRViewReactFlow.scss` nests its panel offsets under a bare top-level
+    // `.react-flow`, so they leak into every graph in the app and lift bottom-left
+    // panels 16px here. That unscoped stylesheet is the cause; out-specifying it is
+    // a containment measure, not the fix. Scoping the MLIR block removes the need
+    // for this rule entirely — #1899. Specificity, not source order.
     .react-flow .react-flow__panel.bottom.left {
         bottom: 0;
         margin-bottom: $chrome-dock-bottom;
@@ -189,6 +201,10 @@ $minimap-width: 200px;
         // Set on the margin because React Flow's own `left` rule matches at the
         // same specificity and lands later in the cascade.
         margin-left: $minimap-margin-left;
+
+        // Declared, not inherited from React Flow's default: the legend is placed
+        // past this box, so the offset has to depend on a width we own.
+        width: $minimap-width;
 
         --xy-minimap-background-color: #{$tt-grey-2};
         --xy-minimap-node-background-color: var(--graph-normal);
