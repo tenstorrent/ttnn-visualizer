@@ -1,0 +1,27 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
+
+@use '../definitions/colours' as *;
+
+// Appearance only; the graph view that shows it owns the placement.
+.critical-path-annotation {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    background-color: rgba($tt-grey-2, 0.85);
+    border-radius: 4px;
+    font-size: 11px;
+    line-height: 1.4;
+    white-space: nowrap;
+    pointer-events: none;
+}
+
+.critical-path-annotation-accent {
+    flex-shrink: 0;
+    width: 18px;
+    height: 3px;
+    background-color: var(--graph-critical-path-edge);
+    border-radius: 2px;
+}

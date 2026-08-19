@@ -95,11 +95,18 @@ $minimap-width: 200px;
 
     // On the bottom band beside the minimap, reading against the nodes it
     // explains; the toolbar owns the top-left and the details panel the right.
-    .op-graph-perf-legend {
+    // One column so the critical-path annotation and the perf legend share a
+    // baseline whether one or both are showing.
+    .op-graph-bottom-band {
         position: absolute;
         z-index: variables.$z-index-2-interactive;
         bottom: $chrome-dock-bottom;
         left: $panel-origin-left + $minimap-margin-left + $minimap-width + $panel-margin;
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 6px;
+        pointer-events: none;
     }
 
     .op-graph-perf-hover {
@@ -143,6 +150,14 @@ $minimap-width: 200px;
         pointer-events: none;
     }
 
+    // Ahead of the I/O rules on purpose: they match at the same specificity and
+    // win by order, so the few edges touching the selected node keep their
+    // input/output colour instead of the path recolouring them mid-click.
+    .react-flow__edge.op-graph-edge-critical-path .react-flow__edge-path {
+        stroke: var(--graph-critical-path-edge);
+        stroke-width: 3;
+    }
+
     .react-flow__edge.op-graph-edge-input .react-flow__edge-path {
         stroke: var(--graph-input-edge);
         stroke-width: 2;
@@ -169,6 +184,21 @@ $minimap-width: 200px;
         .react-flow__edge.op-graph-edge-match {
             opacity: 1;
         }
+    }
+
+    // Skipped while a search runs: the filter dim is the narrower intent and
+    // would otherwise lose to this rule's extra `:not()` specificity.
+    &.op-graph-critical-path:not(.op-graph-filtering) {
+        .react-flow__edge:not(.op-graph-edge-critical-path) {
+            opacity: 0.35;
+        }
+    }
+
+    // Outline, not border or fill: selection owns the border and the I/O
+    // highlight the fill, so the path stacks with either.
+    .react-flow__node-opNode.op-graph-node-critical-path {
+        outline: 2px solid var(--graph-critical-path-edge);
+        outline-offset: 1px;
     }
 
     // Outranks MLIRViewReactFlow.scss's bare-`.react-flow` rule, which lifts

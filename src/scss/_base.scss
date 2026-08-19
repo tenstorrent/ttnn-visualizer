@@ -19,6 +19,10 @@
     --graph-normal: #e0e0e0;
     --graph-focused-node: #f6bc42;
 
+    /* Magenta so it stays separable from the warm perf ramp it draws on top of,
+     * and from the green/amber input and output edges. */
+    --graph-critical-path-edge: #ff4fd8;
+
     /* MLIR node identity colours — shared by the SCSS, the minimap callback and
      * the colour legend (see GRAPH_COLORS). */
     --graph-op-node: #f5f5f5;

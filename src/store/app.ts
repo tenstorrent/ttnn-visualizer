@@ -87,6 +87,11 @@ export const shouldSortDurationAtom = atom<SortingOptions>(SortingOptions.OFF);
 // Operation details route
 export const isFullStackTraceAtom = atom(false);
 
+// Operation graph route
+// In-memory by design: the highlight only reads on a READY perf overlay, so a
+// persisted flag would come back on against a report that isn't loaded. #1613
+export const criticalPathEnabledAtom = atom(false);
+
 // Tensors route
 export const shouldCollapseAllTensorsAtom = atom(false);
 export const tensorBufferTypeFiltersAtom = atom<(BufferType | null)[]>([]);

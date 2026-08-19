@@ -7,7 +7,7 @@ import { IconNames } from '@blueprintjs/icons';
 import { type FormEvent, type Ref, memo } from 'react';
 import GraphOpFilter, { type GraphOpFilterHandle } from '../GraphOpFilter';
 import type { GraphFilterMode } from '../../definitions/GraphFilterMode';
-import { PERF_OVERLAY_TOOLTIP, PerfOverlayStatus } from '../../definitions/PerfOverlayStatus';
+import { CRITICAL_PATH_TOOLTIP, PERF_OVERLAY_TOOLTIP, PerfOverlayStatus } from '../../definitions/PerfOverlayStatus';
 import 'styles/components/OpGraphToolbar.scss';
 
 interface OpGraphToolbarProps {
@@ -29,6 +29,8 @@ interface OpGraphToolbarProps {
     onHideDeallocateChange: (next: boolean) => void;
     isPerfOverlayActive: boolean;
     onPerfOverlayChange: (next: boolean) => void;
+    isCriticalPathActive: boolean;
+    onCriticalPathChange: (next: boolean) => void;
     perfOverlayStatus: PerfOverlayStatus;
     linkedOpCount: number;
     totalOpCount: number;
@@ -55,6 +57,8 @@ const OpGraphToolbar = memo(
         onHideDeallocateChange,
         isPerfOverlayActive,
         onPerfOverlayChange,
+        isCriticalPathActive,
+        onCriticalPathChange,
         perfOverlayStatus,
         linkedOpCount,
         totalOpCount,
@@ -156,6 +160,21 @@ const OpGraphToolbar = memo(
                                 ? `Perf overlay (${linkedOpCount}/${totalOpCount})`
                                 : 'Perf overlay'
                         }
+                        disabled={isDisabled || perfOverlayStatus !== PerfOverlayStatus.READY}
+                    />
+                </Tooltip>
+
+                <Tooltip
+                    placement={PopoverPosition.BOTTOM}
+                    content={CRITICAL_PATH_TOOLTIP[perfOverlayStatus]}
+                >
+                    <Switch
+                        className='op-graph-toolbar-switch'
+                        checked={isCriticalPathActive}
+                        onChange={(event: FormEvent<HTMLInputElement>) =>
+                            onCriticalPathChange(event.currentTarget.checked)
+                        }
+                        label='Highlight critical path'
                         disabled={isDisabled || perfOverlayStatus !== PerfOverlayStatus.READY}
                     />
                 </Tooltip>
