@@ -64,10 +64,11 @@ const GraphView = () => {
     // (UNAVAILABLE) from "loaded but doesn't match this graph" (UNLINKED).
     // `perfOverlayRows` collapses both into "empty"; this flag preserves the
     // distinction, which is what the toggle's disabled tooltip reads. Keyed on
-    // the fetched report rather than its row count, so a report that parsed to
-    // zero rows still reads as loaded and the tooltip stops telling the user to
-    // load the report they already have. #1880
-    const isPerfReportLoaded = perfReport?.report !== undefined;
+    // the selection rather than the row count, so a report that parsed to zero
+    // rows still reads as loaded instead of telling the user to load the report
+    // they already have. The query resolves an empty report when nothing is
+    // selected, so its data alone cannot answer this. #1880
+    const isPerfReportLoaded = activeReportFolderName !== null && perfReport !== undefined;
 
     return (
         <div className='data-padding'>
