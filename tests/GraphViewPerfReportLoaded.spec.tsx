@@ -13,9 +13,9 @@ import type { ReportFolder } from '../src/definitions/Reports';
 
 // Route wiring only. The flag under test never reaches the DOM, so the graph is
 // stubbed to record what the route actually handed it.
-const { mockUseOperationsList, mockUsePerformanceReport, mockUseMatchedPerfOps, graphProps } = vi.hoisted(() => ({
+const { mockUseOperationsList, mockUseLinkedPerformanceReport, mockUseMatchedPerfOps, graphProps } = vi.hoisted(() => ({
     mockUseOperationsList: vi.fn(),
-    mockUsePerformanceReport: vi.fn(),
+    mockUseLinkedPerformanceReport: vi.fn(),
     mockUseMatchedPerfOps: vi.fn(),
     graphProps: [] as { isPerfReportLoaded: boolean }[],
 }));
@@ -24,7 +24,9 @@ vi.mock('react-helmet-async', () => ({ Helmet: () => null }));
 vi.mock('../src/hooks/useClearSelectedBuffer', () => ({ default: () => {} }));
 vi.mock('../src/hooks/useAPI', () => ({
     useOperationsList: () => mockUseOperationsList(),
-    usePerformanceReport: () => mockUsePerformanceReport(),
+    // The link-pinned report the route reads since #1883, not the view-filtered
+    // `usePerformanceReport` — the overlay must not follow perf-tab filters.
+    useLinkedPerformanceReport: () => mockUseLinkedPerformanceReport(),
     useGetDeviceOperationListPerf: () => mockUseMatchedPerfOps(),
 }));
 vi.mock('../src/components/operation-graph/OperationGraphReactFlow', () => ({
@@ -49,7 +51,7 @@ const renderRoute = (selectedReport: ReportFolder | null, perfReportData: unknow
     const store = createStore();
     store.set(activePerformanceReportAtom, selectedReport);
     mockUseOperationsList.mockReturnValue({ data: OPERATIONS, isLoading: false });
-    mockUsePerformanceReport.mockReturnValue({ data: perfReportData });
+    mockUseLinkedPerformanceReport.mockReturnValue({ data: perfReportData });
     mockUseMatchedPerfOps.mockReturnValue([]);
 
     render(

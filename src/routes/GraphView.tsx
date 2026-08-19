@@ -11,13 +11,17 @@ import { useGetDeviceOperationListPerf, useLinkedPerformanceReport, useOperation
 import OperationGraph from '../components/operation-graph/OperationGraphReactFlow';
 import LoadingSpinner from '../components/LoadingSpinner';
 import useClearSelectedBuffer from '../hooks/useClearSelectedBuffer';
-import { selectedOperationRangeAtom } from '../store/app';
+import { activePerformanceReportFolderNameAtom, selectedOperationRangeAtom } from '../store/app';
 import { PerfOverlaySource } from '../functions/perfOverlay';
 
 const GraphView = () => {
     const { data: operationList, isLoading } = useOperationsList();
     const { operationId } = useParams<{ operationId?: string }>();
     const selectedOperationRange = useAtomValue(selectedOperationRangeAtom);
+    // Read alongside the report rather than out of it: `useLinkedPerformanceReport`
+    // resolves the name internally and returns only the data, which cannot
+    // distinguish "nothing selected" from "selected and still in flight". #1880
+    const activeReportFolderName = useAtomValue(activePerformanceReportFolderNameAtom);
     // The link-pinned report, so a perf-tab view filter can neither hide the
     // report from the overlay nor break the match below (#1812).
     const { data: perfReport } = useLinkedPerformanceReport();
