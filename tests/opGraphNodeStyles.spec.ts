@@ -92,11 +92,15 @@ describe('op graph critical path styling', () => {
 
     it('exempts the selected node′s own edges from the off-path dim', () => {
         // Clicking a node to read its inputs and outputs would otherwise fade
-        // whichever of them sit off the path.
-        const body = ruleBody(OFF_PATH_DIM_SELECTOR);
+        // whichever of them sit off the path. Read out of the `:not()` arguments
+        // rather than matched as text: a selector list and chained `:not()`s exclude
+        // the same set, so asserting one spelling pins the authoring style instead.
+        const exclusions = Array.from(ruleBody(OFF_PATH_DIM_SELECTOR).matchAll(/:not\(([^)]*)\)/g))
+            .flatMap(([, argument]) => argument.split(','))
+            .map((selector) => selector.trim());
 
-        expect(body).toContain(':not(.op-graph-edge-input)');
-        expect(body).toContain(':not(.op-graph-edge-output)');
+        expect(exclusions).toContain('.op-graph-edge-input');
+        expect(exclusions).toContain('.op-graph-edge-output');
     });
 
     it('dims from the container rather than per off-path element', () => {
