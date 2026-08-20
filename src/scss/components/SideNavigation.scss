@@ -13,12 +13,12 @@
     display: flex;
     flex-direction: column;
     gap: 15px;
-    width: variables.$side-nav-width-expanded;
     height: 100vh;
+    width: 180px;
     padding: 15px 8px;
 
     // The fixed footer info bar crosses the foot of the rail, so the last item clears it.
-    padding-bottom: variables.$app-footer-height + 15px;
+    padding-bottom: variables.$app-status-bar-height + 15px;
 
     // Sits back from the page the way the footer info bar does, so the rail reads as app
     // chrome rather than as part of the report content beside it.
@@ -36,9 +36,10 @@
     .side-navigation-header {
         display: flex;
         align-items: flex-start;
-        min-height: 40px;
 
-        .title {
+        // min-height: 40px;
+
+        .logo-link {
             display: flex;
             flex-direction: column;
             flex: 1 1 auto;
@@ -88,27 +89,32 @@
     .side-navigation-footer {
         flex: 0 0 auto;
         padding-top: 8px;
-        border-top: 1px solid $tt-grey-3;
+        position: relative;
 
         .side-navigation-toggle {
             font-size: 14px;
-            background-color: transparent;
+            background-color: $tt-grey-3;
+            position: absolute;
+            top: -20px;
+            right: -8px;
+            border-radius: 5px 0 0 5px;
         }
     }
 
     &.collapsed {
         width: variables.$side-nav-width-collapsed;
 
+        .visualizer-title {
+            display: none;
+        }
+
         // Nothing but the mark fits the narrow rail, and it no longer doubles as a control.
         .side-navigation-header {
             justify-content: center;
 
-            .title {
-                align-items: center;
-            }
-
-            img {
-                display: block;
+            .logo-link {
+                flex: 0 0 27px;
+                overflow: hidden;
             }
         }
 
@@ -124,6 +130,16 @@
 
         .bp6-button {
             justify-content: center;
+        }
+
+        .side-navigation-footer {
+            border-top: 1px solid $tt-grey-3;
+
+            .side-navigation-toggle {
+                position: static;
+                background-color: transparent;
+                border-radius: 0;
+            }
         }
     }
 }

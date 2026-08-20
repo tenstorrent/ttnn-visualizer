@@ -60,11 +60,6 @@ $report-select-width: 250px;
 $side-nav-width-expanded: 220px;
 $side-nav-width-collapsed: 56px;
 
-// Closed height of the fixed footer info bar. Anything sharing the bottom of the
-// viewport with it — the navigation rail's last item, the MLIR graph — clears this
-// rather than repeating the number.
-$app-footer-height: 34px;
-
 // Fixed app chrome that every viewport-height view subtracts. The status bar is
 // `.app-footer`'s closed `min-height`; it grows when opened.
 $app-navbar-height: 92px;
@@ -85,5 +80,5 @@ $reactflow-panel-origin-left: 12px;
 // a vertical rail, so nothing sits above the page to offset against. The title and
 // (optional) loader rows sit inside `.mlir-page` and are laid out by flex, so the graph
 // reclaims their space when absent — the footer is the only remaining structural offset.
-$mlir-footer-clearance: $app-footer-height + 6px;
+$mlir-footer-clearance: $app-status-bar-height + 6px;
 $mlir-page-height: calc(100vh - #{$mlir-footer-clearance});

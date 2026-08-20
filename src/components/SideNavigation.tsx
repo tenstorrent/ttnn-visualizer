@@ -15,15 +15,7 @@ import { isNavigationCollapsedAtom } from '../store/app';
 
 const TENSTORRENT_LOGO_SRC =
     'https://docs.tenstorrent.com/tt-tm-assets/Logo/Standard%20Lockup/svg/tt_logo_color-orange-whitetext.svg';
-// Files under `public/` are copied verbatim rather than resolved as imports, so the URL has
-// to carry Vite's base itself: a literal `/logo-small.png` 404s in the build, which serves
-// from `/static/`.
-const TENSTORRENT_MARK_SRC = `${import.meta.env.BASE_URL}logo-small.png`;
-// The expanded rail's header row is the lockup alone, so it can take the full width less
-// the rail's padding.
 const LOGO_WIDTH = 150;
-// Fits the collapsed rail's width less its padding without crowding the edges.
-const MARK_WIDTH = 32;
 
 // Collapsed, the label is the only thing identifying an icon, so it has to reach the
 // tooltip; expanded, the label is already on screen and only a blocked item has
@@ -50,29 +42,19 @@ function SideNavigation() {
             className={classNames('side-navigation', { collapsed: isCollapsed })}
             data-testid={TEST_IDS.SIDE_NAVIGATION}
         >
-            <div className='side-navigation-header'>
+            <div className={classNames('side-navigation-header', { collapsed: isCollapsed })}>
                 <Link
                     to={ROUTES.HOME}
-                    className='title'
+                    className='logo-link'
                 >
-                    {isCollapsed ? (
-                        // The collapsed rail is too narrow for the lockup, and the mark
-                        // carries the same meaning: home, not a rail control.
+                    <>
                         <img
-                            width={MARK_WIDTH}
+                            width={LOGO_WIDTH}
                             alt='tenstorrent'
-                            src={TENSTORRENT_MARK_SRC}
+                            src={TENSTORRENT_LOGO_SRC}
                         />
-                    ) : (
-                        <>
-                            <img
-                                width={LOGO_WIDTH}
-                                alt='tenstorrent'
-                                src={TENSTORRENT_LOGO_SRC}
-                            />
-                            <span className='visualizer-title'>TT-NN Visualizer</span>
-                        </>
-                    )}
+                        <span className='visualizer-title'>TT-NN Visualizer</span>
+                    </>
                 </Link>
             </div>
 
@@ -115,25 +97,20 @@ function SideNavigation() {
                 <Tooltip
                     content={toggleLabel}
                     position={Position.RIGHT}
-                    // Expanded, the button carries its own label; collapsed, the tooltip is
-                    // the only thing naming a bare icon.
-                    disabled={!isCollapsed}
-                    fill
                     // renderTarget rather than a Tooltip child: the child path clones the
                     // target with `aria-expanded: undefined` for hover popovers, which
                     // would drop the state this button exists to report.
                     renderTarget={({ isOpen: _isOpen, className, ...tooltipTargetProps }) => (
                         <Button
                             {...tooltipTargetProps}
-                            text={toggleLabel}
                             aria-label={toggleLabel}
                             aria-expanded={!isCollapsed}
                             onClick={handleToggleCollapsed}
                             icon={isCollapsed ? IconNames.MENU_OPEN : IconNames.MENU_CLOSED}
                             variant={ButtonVariant.MINIMAL}
-                            size={Size.LARGE}
+                            size={Size.MEDIUM}
                             alignText={Alignment.START}
-                            fill
+                            fill={isCollapsed}
                             // Keeps Blueprint's own target class, which the spread would
                             // otherwise lose to this one.
                             className={classNames(className, 'side-navigation-toggle')}
