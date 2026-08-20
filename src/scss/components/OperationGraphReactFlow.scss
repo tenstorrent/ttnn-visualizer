@@ -9,10 +9,26 @@
 @use '../definitions/colours' as *;
 @use '../definitions/variables' as variables;
 
+// Bottom-left chrome — zoom controls, minimap, perf legend — on one baseline.
+// The origin and margin are React Flow's own; the width below is authored onto
+// `.react-flow__minimap` rather than assumed, so the legend's offset cannot drift
+// on a library bump that changes the default.
+$chrome-dock-bottom: 8px;
+$panel-margin: 15px;
+$minimap-margin-left: 56px;
+$minimap-width: 200px;
+
 .operation-graph-react-flow {
     position: relative;
     width: 100%;
-    height: 80vh;
+
+    // Fills the band between the navbar and the status bar, less `main`'s top
+    // padding. The negative margin drops the trailing page padding — `main`'s
+    // bottom gutter plus `.data-padding`'s — which here would only add a scrollbar.
+    height: calc(
+        100vh - #{variables.$app-navbar-height} - #{variables.$main-padding} - #{variables.$app-status-bar-height}
+    );
+    margin-bottom: -(variables.$main-padding-bottom + variables.$data-padding-bottom);
 
     .operation-graph-react-flow-loader {
         position: absolute;
@@ -30,6 +46,15 @@
         gap: 2px;
         justify-content: center;
         box-sizing: border-box;
+
+        // Owns the containing block for the perf bar below, and must stay
+        // `absolute` to do it: React Flow positions nodes out of flow and offsets
+        // them from the pane origin, so `relative` drops them into document flow
+        // while the edge SVG keeps drawing at the store's coordinates — every arrow
+        // detaches from its node. Declared rather than inherited from
+        // `.react-flow__node` (which this outranks) so a vendor change cannot take
+        // the containing block away and pile every bar in the canvas corner. #1880
+        position: absolute;
         padding: 4px 12px;
         border: 2px solid transparent;
         border-radius: 3px;
@@ -52,6 +77,64 @@
         &.op-graph-node-output {
             background-color: var(--graph-output-node);
         }
+
+        // Magnitude goes on an inset bar: the fill belongs to the I/O highlight
+        // and the border to selection. Absolute so it cannot resize the node and
+        // turn every overlay toggle into a relayout. #1880
+        &::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 0;
+
+            // Graph units inside the scaled viewport: at the ~0.1–0.3 zoom a
+            // large report needs, a few fixed px go sub-pixel and wash out.
+            // Dividing by live zoom holds the on-screen size, and the 100%
+            // ceiling degrades to a full-node fill rather than vanishing — so at
+            // overview zoom perf deliberately outranks the I/O highlight. #1610
+            min-width: max(3px, calc(2px / var(--op-graph-perf-zoom, 1)));
+            width: calc(var(--op-graph-perf-scale, 0) * 100%);
+
+            // The node's 4px bottom padding, before the bar clips descenders.
+            height: min(100%, max(4px, calc(4px / var(--op-graph-perf-zoom, 1))));
+
+            // No custom property means no perf row, so no bar — "no data" must
+            // not read as "fastest op".
+            background-color: var(--op-graph-perf-color, transparent);
+            border-radius: 0 2px 0 1px;
+        }
+    }
+
+    // On the bottom band beside the minimap, reading against the nodes it
+    // explains; the toolbar owns the top-left and the details panel the right.
+    // One column so the critical-path annotation and the perf legend share a
+    // baseline whether one or both are showing.
+    .op-graph-bottom-band {
+        position: absolute;
+        z-index: variables.$z-index-2-interactive;
+        bottom: $chrome-dock-bottom;
+        left: variables.$reactflow-panel-origin-left + $minimap-margin-left + $minimap-width + $panel-margin;
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 6px;
+        pointer-events: none;
+    }
+
+    .op-graph-perf-hover {
+        position: absolute;
+        z-index: variables.$z-index-2-interactive;
+        padding: 4px 8px;
+        border-radius: 3px;
+        background-color: rgba($tt-black, 0.9);
+        color: $tt-white;
+        font-size: 11px;
+        line-height: 1.3;
+        white-space: nowrap;
+
+        // Clear of the pointer, which would flicker the enter/leave pair.
+        transform: translate(12px, 12px);
+        pointer-events: none;
     }
 
     .op-graph-node-label {
@@ -77,6 +160,14 @@
         stroke-width: 3px;
         text-anchor: middle;
         pointer-events: none;
+    }
+
+    // Ahead of the I/O rules on purpose: they match at the same specificity and
+    // win by order, so the few edges touching the selected node keep their
+    // input/output colour instead of the path recolouring them mid-click.
+    .react-flow__edge.op-graph-edge-critical-path .react-flow__edge-path {
+        stroke: var(--graph-critical-path-edge);
+        stroke-width: 3;
     }
 
     .react-flow__edge.op-graph-edge-input .react-flow__edge-path {
@@ -107,6 +198,34 @@
         }
     }
 
+    // Skipped while a search runs: the filter dim is the narrower intent and
+    // would otherwise lose to this rule's extra `:not()` specificity. The
+    // selected node's own edges are exempt too, or clicking a node to inspect its
+    // inputs and outputs would fade half of them.
+    &.op-graph-critical-path:not(.op-graph-filtering) {
+        .react-flow__edge:not(.op-graph-edge-critical-path, .op-graph-edge-input, .op-graph-edge-output) {
+            opacity: 0.35;
+        }
+    }
+
+    // Outline, not border or fill: selection owns the border and the I/O
+    // highlight the fill, so the path stacks with either. Offset clears the 3px
+    // selection ring, which an outline would otherwise paint over.
+    .react-flow__node-opNode.op-graph-node-critical-path {
+        outline: 2px solid var(--graph-critical-path-edge);
+        outline-offset: 4px;
+    }
+
+    // `MLIRViewReactFlow.scss` nests its panel offsets under a bare top-level
+    // `.react-flow`, so they leak into every graph in the app and lift bottom-left
+    // panels 16px here. That unscoped stylesheet is the cause; out-specifying it is
+    // a containment measure, not the fix. Scoping the MLIR block removes the need
+    // for this rule entirely — #1899. Specificity, not source order.
+    .react-flow .react-flow__panel.bottom.left {
+        bottom: 0;
+        margin-bottom: $chrome-dock-bottom;
+    }
+
     // React Flow's minimap defaults are light-theme (`#fff` pane, `#e2e2e2`
     // nodes), which reads as a blank pale rectangle on our dark canvas. Setting
     // the unsuffixed vars rather than the `-props` tier leaves the tier free for
@@ -117,7 +236,11 @@
         // past their 26px column and the 15px panel gutter either side of it.
         // Set on the margin because React Flow's own `left` rule matches at the
         // same specificity and lands later in the cascade.
-        margin-left: 56px;
+        margin-left: $minimap-margin-left;
+
+        // Declared, not inherited from React Flow's default: the legend is placed
+        // past this box, so the offset has to depend on a width we own.
+        width: $minimap-width;
 
         --xy-minimap-background-color: #{$tt-grey-2};
         --xy-minimap-node-background-color: var(--graph-normal);

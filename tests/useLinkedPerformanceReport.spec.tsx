@@ -53,6 +53,7 @@ const END_SIGNPOST = { id: 43, op_code: 'END_TRACE' };
 const FILTERED_VIEW: AtomProviderInitialValues = [
     [mergeDevicesAtom, false],
     [hideHostOpsAtom, false],
+    [tracingModeAtom, true],
     [filterBySignpostAtom, [SIGNPOST, null]],
 ];
 
@@ -129,25 +130,23 @@ describe('useLinkedPerformanceReport', () => {
             name: REPORT_NAME,
             merge_devices: true,
             hide_host_ops: true,
+            tracing_mode: false,
         });
         expect(getReportRequests()[0].start_signpost).toBeUndefined();
         expect(getReportRequests()[0].end_signpost).toBeUndefined();
     });
 
-    // Asserts a known residual gap in #1812, not a closed one: #1812 names
-    // `tracingModeAtom` alongside the three filters this pins, so toggling Tracing
-    // mode can still break the positional match and flip the badge — and
-    // `ReportLinkStatus` persists that to `reportLinksAtom`, so the failure outlives
-    // the toggle. Pinning it is not the fix (a trace-captured run's traced order is
-    // the one that lines up, so pinning would make those reports permanently
-    // unlinkable); resolving against both orders and keeping whichever aligns is,
-    // once #1800 makes the second fetch worth it. Change this test when that lands.
-    it('still follows tracing mode, which only reorders rows', async () => {
+    // The last filter #1812 named to be pinned. It was left following the atom on
+    // the premise that a trace-captured run's traced order is the one that lines up
+    // with the memory report — but that order never reaches the match: this query
+    // pins `mergeDevices: true`, so `merge_device_rows` always runs and ends by
+    // re-sorting on `ORIGINAL_ROW`, overwriting the sort `tracingMode` suppressed.
+    it('pins tracing mode off, whatever the tab is showing', async () => {
         renderWithView(() => useLinkedPerformanceReport(), [[tracingModeAtom, true]]);
 
         await waitFor(() => expect(getReportRequests()).toHaveLength(1));
 
-        expect(getReportRequests()[0].tracing_mode).toBe(true);
+        expect(getReportRequests()[0].tracing_mode).toBe(false);
     });
 
     // `fetchPerformanceReport` takes its params as one object precisely so two of
@@ -213,8 +212,13 @@ describe('useLinkedPerformanceReport', () => {
 
         expect(getReportRequests()).toEqual(
             expect.arrayContaining([
-                expect.objectContaining({ merge_devices: false, hide_host_ops: false, start_signpost: 'BEGIN_TRACE' }),
-                expect.objectContaining({ merge_devices: true, hide_host_ops: true }),
+                expect.objectContaining({
+                    merge_devices: false,
+                    hide_host_ops: false,
+                    tracing_mode: true,
+                    start_signpost: 'BEGIN_TRACE',
+                }),
+                expect.objectContaining({ merge_devices: true, hide_host_ops: true, tracing_mode: false }),
             ]),
         );
     });

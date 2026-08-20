@@ -18,7 +18,7 @@ import {
 } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { Helmet } from 'react-helmet-async';
-import { useState } from 'react';
+import { type CSSProperties, useState } from 'react';
 import { useAtomValue } from 'jotai';
 import ConnectionTestMessage from '../components/report-selection/ConnectionTestMessage';
 import { ConnectionTestStates } from '../definitions/ConnectionStatus';
@@ -38,10 +38,17 @@ import { FileProgress, FileStatus } from '../model/APIData';
 import NPEProcessingStatus from '../components/NPEProcessingStatus';
 import PerfOverlayLegend from '../components/perf-overlay/PerfOverlayLegend';
 import PerfOverlayOpMetric from '../components/perf-overlay/PerfOverlayOpMetric';
+import { PERF_BAR_COLOR_VAR, PERF_BAR_SCALE_VAR } from '../components/operation-graph/opGraphPerfOverlay';
 import { perfColorScale } from '../functions/perfOverlay';
+// The bar exists only as a pseudo-element of the graph's node rule, and this page
+// mounts mock nodes rather than the graph, so nothing else pulls the sheet in.
+import 'styles/components/OperationGraphReactFlow.scss';
 import { MIN_SUPPORTED_VERSION, NPEValidationError } from '../definitions/NPEData';
 import MlirNodeDetailsPanel from '../components/mlir/MlirNodeDetailsPanel';
 import type { IncomingEdgeView, OutgoingEdge, SourceNode } from '../components/mlir/mlirGraphTypes';
+
+// Ends at 1 so the widest bar is shown against the node it has to stay inside.
+const PERF_BAR_SAMPLE_SCORES = [0.05, 0.35, 0.7, 1] as const;
 
 const FORM_GROUP = {
     label: 'Form label',
@@ -949,6 +956,35 @@ export default function Styleguide() {
 
                 <h4>Op metric &mdash; no perf data for selected op</h4>
                 <PerfOverlayOpMetric />
+
+                <h4>Node bar &mdash; the score ramp on the graph</h4>
+                <p>
+                    Width and colour both carry the op&apos;s log-normalised score, so magnitude survives where colour
+                    alone was ambiguous. The last node sets neither custom property &mdash; how an op the perf report
+                    never mentioned renders, with no bar at all, so &quot;no data&quot; cannot read as &quot;fastest
+                    op&quot;.
+                </p>
+                <div className='operation-graph-react-flow styleguide-perf-bar-host'>
+                    {PERF_BAR_SAMPLE_SCORES.map((score) => (
+                        <div
+                            key={score}
+                            className='react-flow__node-opNode'
+                            style={
+                                {
+                                    [PERF_BAR_SCALE_VAR]: score,
+                                    [PERF_BAR_COLOR_VAR]: perfColorScale(score),
+                                } as CSSProperties
+                            }
+                        >
+                            <span className='op-graph-node-label'>matmul (t = {score})</span>
+                            <span className='op-graph-node-file'>model.py:42</span>
+                        </div>
+                    ))}
+                    <div className='react-flow__node-opNode'>
+                        <span className='op-graph-node-label'>unmapped op</span>
+                        <span className='op-graph-node-file'>no perf row</span>
+                    </div>
+                </div>
             </div>
 
             <div className='container'>

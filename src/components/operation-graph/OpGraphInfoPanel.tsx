@@ -18,6 +18,7 @@ import type { ShardSpec } from '../../model/MemoryConfig';
 import MemoryConfigRow from '../MemoryConfigRow';
 import MemoryTag from '../MemoryTag';
 import SourceFileButton from '../operation-details/SourceFileButton';
+import PerfOverlayOpMetric from '../perf-overlay/PerfOverlayOpMetric';
 
 interface ConnectedOpGroup {
     key: string;
@@ -173,12 +174,23 @@ interface OpGraphInfoPanelProps {
     operationList: OperationDescription[];
     operationNamesById: Map<number, string>;
     onLocateOperation: (operationId: number) => void;
+    isPerfOverlayActive: boolean;
+    perfDeviceTimeNs?: number;
+    perfColor?: string;
 }
 
 // Node drag re-renders the graph every pointer frame, and re-rendering each
 // tensor's memory-config table with it stutters. Every prop must be stable.
 const OpGraphInfoPanel = memo(
-    ({ operationId, operationList, operationNamesById, onLocateOperation }: OpGraphInfoPanelProps) => {
+    ({
+        operationId,
+        operationList,
+        operationNamesById,
+        onLocateOperation,
+        isPerfOverlayActive,
+        perfDeviceTimeNs,
+        perfColor,
+    }: OpGraphInfoPanelProps) => {
         const navigate = useNavigate();
         const operation = operationList.find((op) => op.id === operationId);
         const operationSourceData = operation ? extractOperationSourceData(operation) : null;
@@ -248,6 +260,13 @@ const OpGraphInfoPanel = memo(
                         />
                     )}
                 </div>
+
+                {isPerfOverlayActive ? (
+                    <PerfOverlayOpMetric
+                        perfDeviceTimeNs={perfDeviceTimeNs}
+                        perfColor={perfColor}
+                    />
+                ) : null}
 
                 <PanelSection
                     title='Device operations'

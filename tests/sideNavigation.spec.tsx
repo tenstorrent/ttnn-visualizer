@@ -110,25 +110,33 @@ describe('SideNavigation collapsing', () => {
         expect(screen.getByAltText('tenstorrent')).toHaveAttribute('src', expect.stringContaining('tt_logo_color'));
     });
 
+    // The single control lives below the items in both states, so it can't be the header's
+    // to lose when the lockup swaps for the mark.
+    it('renders the toggle at the foot of the rail, after the items', () => {
+        renderRail();
+
+        const toggle = screen.getByTestId(TEST_IDS.SIDE_NAVIGATION_TOGGLE);
+        const rail = screen.getByTestId(TEST_IDS.SIDE_NAVIGATION);
+
+        expect(toggle.closest('.side-navigation-footer')).toBeInTheDocument();
+        expect(rail.lastElementChild).toContainElement(toggle);
+        expect(getButtonWithText('reports').compareDocumentPosition(toggle)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    });
+
     it('collapses when the toggle is pressed', () => {
         renderRail();
 
         fireEvent.click(screen.getByTestId(TEST_IDS.SIDE_NAVIGATION_TOGGLE));
 
         expect(screen.getByTestId(TEST_IDS.SIDE_NAVIGATION)).toHaveClass('collapsed');
-        // Collapse control is replaced by the mark, which becomes the expand control.
         expect(screen.getByTestId(TEST_IDS.SIDE_NAVIGATION_TOGGLE)).toHaveAttribute('aria-expanded', 'false');
         expect(screen.getByTestId(TEST_IDS.SIDE_NAVIGATION_TOGGLE)).toHaveAttribute('aria-label', 'Expand navigation');
         // The collapsed rail is too narrow for the lockup, and the mark is a `public/` file
-        // whose URL has to pick up Vite's base rather than being rooted at `/`. Mark is
-        // decorative inside the named expand control, so look it up via the button.
-        expect(screen.getByTestId(TEST_IDS.SIDE_NAVIGATION_TOGGLE).querySelector('img')).toHaveAttribute(
-            'src',
-            '/logo-small.png',
-        );
+        // whose URL has to pick up Vite's base rather than being rooted at `/`.
+        expect(screen.getByAltText('tenstorrent')).toHaveAttribute('src', '/logo-small.png');
     });
 
-    it('expands when the mark is pressed', () => {
+    it('expands when the toggle is pressed while collapsed', () => {
         renderRail([[isNavigationCollapsedAtom, true]]);
 
         fireEvent.click(screen.getByTestId(TEST_IDS.SIDE_NAVIGATION_TOGGLE));
@@ -136,6 +144,17 @@ describe('SideNavigation collapsing', () => {
         expect(screen.getByTestId(TEST_IDS.SIDE_NAVIGATION)).not.toHaveClass('collapsed');
         expect(screen.getByTestId(TEST_IDS.SIDE_NAVIGATION_TOGGLE)).toHaveAttribute('aria-expanded', 'true');
         expect(screen.getByAltText('tenstorrent')).toHaveAttribute('src', expect.stringContaining('tt_logo_color'));
+    });
+
+    // The mark used to be the expand control. It is now the home link it is when expanded,
+    // so clicking it must not touch the rail's state.
+    it('does not expand the rail when the collapsed mark is pressed', () => {
+        renderRail([[isNavigationCollapsedAtom, true]]);
+
+        fireEvent.click(screen.getByAltText('tenstorrent'));
+
+        expect(screen.getByTestId(TEST_IDS.SIDE_NAVIGATION)).toHaveClass('collapsed');
+        expect(screen.getByAltText('tenstorrent').closest('a')).toHaveAttribute('href', '/');
     });
 
     it('keeps every item reachable by name while collapsed', () => {

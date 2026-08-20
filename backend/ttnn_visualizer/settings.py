@@ -198,10 +198,7 @@ class _UsageRecordingActive:
     Named for the state rather than for any variable, and deliberately not
     ``USAGE_RECORDING_DISABLED``: the attribute answers "is recording on", which is what
     ``PRINT_ENV`` and ``to_dict`` publish, so borrowing the variable's name would
-    publish a value that reads true when recording is off. It is not called
-    ``USAGE_RECORDING_ENABLED`` either — that spelling is a retired *variable*
-    (:data:`usage._RETIRED_RECORDING_ENV_VAR`), and an env dump advertising it would
-    invite an operator to set a name nothing reads.
+    publish a value that reads true when recording is off.
     """
 
     def __get__(self, instance: object, owner: type) -> bool:

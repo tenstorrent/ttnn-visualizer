@@ -28,23 +28,15 @@
     // edge would only compete with the item colours.
     border-right: 1px solid $tt-grey-3;
 
-    // The rail itself never scrolls; only the item list scrolls. Collapse sits beside the
-    // lockup when expanded; when collapsed the mark itself is the expand control.
+    // The rail itself never scrolls; only the item list scrolls. The collapse control sits
+    // at the foot, below the items, in both states.
     overflow: hidden;
     transition: width 200ms ease-out;
 
     .side-navigation-header {
         display: flex;
         align-items: flex-start;
-        justify-content: space-between;
-        gap: 5px;
         min-height: 40px;
-
-        // Shares the row with the lockup, which is sized to leave the control its width.
-        .side-navigation-toggle {
-            flex: 0 0 auto;
-            background-color: transparent;
-        }
 
         .title {
             display: flex;
@@ -91,49 +83,32 @@
         }
     }
 
+    // Separated from the items so the control doesn't read as one more destination in the
+    // list it sits under.
+    .side-navigation-footer {
+        flex: 0 0 auto;
+        padding-top: 8px;
+        border-top: 1px solid $tt-grey-3;
+
+        .side-navigation-toggle {
+            font-size: 14px;
+            background-color: transparent;
+        }
+    }
+
     &.collapsed {
         width: variables.$side-nav-width-collapsed;
 
-        // Mark doubles as the expand control; the dedicated collapse button is unmounted.
+        // Nothing but the mark fits the narrow rail, and it no longer doubles as a control.
         .side-navigation-header {
             justify-content: center;
 
-            .side-navigation-expand {
-                display: grid;
-                place-items: center;
-                padding: 0;
-                border: 0;
-                cursor: pointer;
-                background-color: transparent;
-                color: inherit;
+            .title {
+                align-items: center;
+            }
 
-                // Mark and icon share the one cell, so trading them on hover moves nothing
-                // and leaves the control the mark's size either way.
-                > * {
-                    grid-area: 1 / 1;
-                    transition: opacity 100ms ease-out;
-                }
-
-                img {
-                    display: block;
-                }
-
-                .bp6-icon {
-                    opacity: 0;
-                }
-
-                // Keyboard users get the same swap; the focus ring alone doesn't say the mark
-                // is what expands the rail.
-                &:hover,
-                &:focus-visible {
-                    img {
-                        opacity: 0;
-                    }
-
-                    .bp6-icon {
-                        opacity: 1;
-                    }
-                }
+            img {
+                display: block;
             }
         }
 

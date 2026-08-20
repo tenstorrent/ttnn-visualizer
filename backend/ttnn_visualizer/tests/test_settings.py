@@ -640,7 +640,7 @@ def test_every_env_override_skip_names_a_real_setting():
 # Two limitations worth knowing before trusting this test. First,
 # ``override_with_env_variables`` skips anything with ``__get__``, so
 # ``_OVERRIDABLE_SETTINGS`` excludes the descriptor-backed ``ALLOWED_ORIGINS`` and
-# ``USAGE_RECORDING_ENABLED``; the former is pinned in the baseline anyway (see
+# ``USAGE_RECORDING_ACTIVE``; the former is pinned in the baseline anyway (see
 # ``_UNPOLICEABLE_PINS``) and the latter is neutralised by the ``usage_directory`` fixture,
 # but neither is reconciled here. Second, ``APP_DATA_DIRECTORY`` and
 # ``REPORT_DATA_DIRECTORY`` are env-reachable through ``recompute_derived_settings`` while

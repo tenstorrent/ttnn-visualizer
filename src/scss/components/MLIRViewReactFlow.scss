@@ -3,6 +3,7 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 @use '../definitions/colours' as *;
+@use '../definitions/variables' as variables;
 
 /* stylelint-disable selector-class-pattern */
 .react-flow {
@@ -33,7 +34,7 @@
      * sitting beside them (see MlirNodeColorLegend.scss). */
     .react-flow__panel.bottom.left {
         bottom: 16px;
-        left: 12px;
+        left: variables.$reactflow-panel-origin-left;
     }
 }
 

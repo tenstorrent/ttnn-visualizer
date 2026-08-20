@@ -24,11 +24,22 @@ export interface PerformanceReportParams {
  * query key, so following the tab's grouping control would blank the link
  * report on every switch, which is the failure this exists to prevent (#1812).
  *
+ * `tracingMode` is pinned too, though the reason is not the one you would guess
+ * from its name. It suppresses a single `sort_values(by="HOST START TS")` in
+ * `tt-perf-report` (`perf_report.py:2168`), but merging runs on this path — we
+ * pin `mergeDevices: true` — and `merge_device_rows` ends by re-sorting on
+ * `ORIGINAL_ROW`, i.e. raw CSV order (`perf_report.py:1947-1949`). So the merge
+ * re-sort overwrites the tracing branch, and for a single-device report the row
+ * sequence is identical either way. The traced order never reaches link
+ * resolution, so following the toggle bought nothing and let a view control move
+ * the answer (#1812). Line numbers are against the pinned `tt-perf-report`
+ * version in `pyproject.toml`; re-check them when it moves.
+ *
  * Every value is the performance tab's own default, so while the tab sits at
  * those defaults link resolution shares its cache entry and costs nothing. Move
  * the tab off any of them — a signpost window, devices unmerged, host ops shown,
- * or the stacked grouping switched — and the two keys diverge into a second
- * `perf-results/report` request.
+ * the stacked grouping switched, or tracing mode on — and the two keys diverge
+ * into a second `perf-results/report` request.
  *
  * Expect that on the first toggle of any of those controls, not as a rare case:
  * `RangeSlider` is mounted app-wide and subscribes to both queries, so once they
@@ -42,36 +53,23 @@ export const LINKED_PERFORMANCE_REPORT_FILTERS = {
     endSignpost: null,
     hideHostOps: true,
     mergeDevices: true,
+    tracingMode: false,
     groupBy: StackedGroupBy.OP,
 } as const;
 
 /**
- * @description The full parameter set link resolution fetches with: every pinned
- * filter, plus the one view control it still follows.
+ * @description The parameter set link resolution fetches with. Every filter is
+ * pinned, so this takes no arguments — no performance-tab control can move it.
  *
- * Exported so the hook and its tests compose the pinned set the same way. A test
- * that spread `LINKED_PERFORMANCE_REPORT_FILTERS` itself would assert against its
- * own composition, and would keep passing if the hook started pinning
- * `tracingMode` too. The `PerformanceReportParams` return type also makes a new
- * filter added to that interface a compile error until it is either pinned above
- * or forwarded here deliberately.
+ * Exported so the hook and its tests compose the set the same way. A test that
+ * spread `LINKED_PERFORMANCE_REPORT_FILTERS` itself would assert against its own
+ * composition, and would keep passing if the hook started forwarding a view
+ * filter again. The `PerformanceReportParams` return type also makes a new filter
+ * added to that interface a compile error until it is pinned above.
  */
-export const getLinkedPerformanceReportParams = (tracingMode: boolean): PerformanceReportParams => ({
+export const getLinkedPerformanceReportParams = (): PerformanceReportParams => ({
     ...LINKED_PERFORMANCE_REPORT_FILTERS,
-    tracingMode,
 });
-
-/**
- * @description Whether link resolution ran against the row order the pinned
- * filters describe, rather than the traced order `tracingMode` substitutes.
- *
- * Only callers that *persist* a verdict need this. `reportLinksAtom` is backed by
- * localStorage, so an `UNLINKED` reached with tracing mode on would outlive the
- * toggle that caused it and keep badging the pair as a failed link in the report
- * pickers. A `LINKED` holds under either order, so it is still worth recording
- * (#1812).
- */
-export const isLinkResolutionCanonical = (tracingMode: boolean) => !tracingMode;
 
 const getSignpostKey = (label: string, signpost: Signpost | null) =>
     `${label}:${signpost ? `${signpost.id}:${signpost.op_code}` : null}`;

@@ -92,6 +92,15 @@ describe('getServerConfig (dev / Vite env)', () => {
         expect(getServerConfig().SERVER_MODE).toBe(expected);
     });
 
+    // No VITE_ counterpart on purpose: `/api` proxies to Flask, so the backend's own
+    // switch decides whether anything is recorded. A dev-only flag could only disagree
+    // with it, and an off default would stop dev exercising the path production takes.
+    it('assumes recording is active, leaving the decision to the backend', async () => {
+        const { default: getServerConfig } = await import('../src/functions/getServerConfig');
+
+        expect(getServerConfig().USAGE_RECORDING_ACTIVE).toBe(true);
+    });
+
     it('falls back when VITE_SSH_DEFAULT_PORT is invalid', async () => {
         vi.stubEnv('VITE_SSH_DEFAULT_PORT', 'not-a-port');
 
@@ -149,6 +158,22 @@ describe('getServerConfig (shipped / inlined window config)', () => {
         const { default: getServerConfig } = await import('../src/functions/getServerConfig');
 
         expect(getServerConfig().SERVER_MODE).toBe(expected);
+    });
+
+    it.each([
+        [{ USAGE_RECORDING_ACTIVE: true }, true],
+        [{ USAGE_RECORDING_ACTIVE: false }, false],
+        // Absent is off. The backend publishes the key under both postures precisely so
+        // this case means "nothing inlined", never "recording is on but unsaid".
+        [{}, false],
+        [{ USAGE_RECORDING_ACTIVE: 'false' as unknown as boolean }, false],
+    ])('reads %o as USAGE_RECORDING_ACTIVE=%s', async (windowConfig, expected) => {
+        vi.stubEnv('DEV', false);
+        window.TTNN_VISUALIZER_CONFIG = windowConfig;
+
+        const { default: getServerConfig } = await import('../src/functions/getServerConfig');
+
+        expect(getServerConfig().USAGE_RECORDING_ACTIVE).toBe(expected);
     });
 
     it('defaults the rest of the config when nothing was inlined', async () => {

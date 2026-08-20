@@ -19,11 +19,10 @@ export const GRAPH_COLORS = {
     selected: cssVar(`--graph-selected`),
 };
 
-// Perf overlay bins (#1515). Hardcoded hex — these are tuned for the dark
-// vis-network canvas. Colour-only encoding for now: vis-network's `size`
-// option is ignored for the `'box'` shape used by op nodes (boxes size
-// to their label content), so a node-size dimension would need a shape
-// change to take effect. Revisit alongside any future shape rework.
+// Perf overlay bins (#1515). Hardcoded hex — tuned to read against the graph's
+// node fills. Since #1880 the ramp is one of two dimensions: it colours an inset
+// bar whose width carries the same score, so magnitude survives where colour
+// alone was ambiguous.
 export interface PerfBin {
     color: string;
 }

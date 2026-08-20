@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import { describe, expect, it } from 'vitest';
-import { aggregatePerfByOp, isDarkPerfColor, perfColorScale, scoreOps } from '../src/functions/perfOverlay';
+import { aggregatePerfByOp, getRankComparator, perfColorScale, scoreOps } from '../src/functions/perfOverlay';
 import { PERF_BINS } from '../src/definitions/GraphColors';
 import { TypedPerfTableRow } from '../src/definitions/PerfTable';
 
@@ -109,33 +109,27 @@ describe('perfColorScale', () => {
     });
 });
 
-describe('isDarkPerfColor', () => {
-    // Locks the perf-overlay label-colour pivot against the actual bin
-    // palette: the two cold bins and the hot-red sit below the threshold so
-    // the dark default label flips to a light one; the yellow/orange bins
-    // stay above so the dark default still wins.
-    it.each([
-        ['#3b4a6b', true], // PERF_BINS[0] — cold navy
-        ['#3f7d8c', true], // PERF_BINS[1] — cold teal
-        ['#f0c800', false], // PERF_BINS[2] — yellow
-        ['#f08a00', false], // PERF_BINS[3] — orange
-        ['#ff3b1f', true], // PERF_BINS[4] — hot red (low green/blue drag the luma down)
-    ])('treats %s as dark=%s', (hex, expected) => {
-        expect(isDarkPerfColor(hex)).toBe(expected);
+describe('getRankComparator', () => {
+    const ranked = (...pairs: [opId: number, value: number][]) => pairs.map(([opId, value]) => ({ opId, value }));
+    const byValue = getRankComparator<{ opId: number; value: number }>((op) => op.value);
+
+    it('orders by the selected metric descending', () => {
+        const sorted = ranked([1, 10], [2, 30], [3, 20]).sort(byValue);
+        expect(sorted.map((op) => op.opId)).toEqual([2, 3, 1]);
     });
 
-    it('treats the GRAPH_COLORS non-overlay backgrounds as light', () => {
-        // These never flow through `isDarkPerfColor` in practice (the helper is
-        // only consulted when the perf overlay paints a node), but locking the
-        // direction ensures a future palette change is caught before it strands
-        // a light label on a light pill.
-        for (const hex of ['#e0e0e0', '#a8e6a3', '#f6bc42', '#74c5df', '#ccd2f9']) {
-            expect(isDarkPerfColor(hex)).toBe(false);
-        }
+    it('breaks ties on op id ascending', () => {
+        const sorted = ranked([7, 100], [3, 100], [5, 100]).sort(byValue);
+        expect(sorted.map((op) => op.opId)).toEqual([3, 5, 7]);
     });
 
-    it('returns false for unparseable input so we never paint white-on-white', () => {
-        expect(isDarkPerfColor('not-a-hex')).toBe(false);
-        expect(isDarkPerfColor('')).toBe(false);
+    it('ranks equal values identically regardless of input order', () => {
+        // The reason the tie-break exists: perf-report row order must not decide
+        // the hover's `#N of M`, or it disagrees with the Buffer Summary top-N
+        // over the same data and shuffles between report reloads.
+        const forwards = ranked([4, 50], [1, 50], [9, 50], [2, 80]).sort(byValue);
+        const backwards = ranked([2, 80], [9, 50], [1, 50], [4, 50]).sort(byValue);
+        expect(forwards.map((op) => op.opId)).toEqual(backwards.map((op) => op.opId));
+        expect(forwards.map((op) => op.opId)).toEqual([2, 1, 4, 9]);
     });
 });

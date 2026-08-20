@@ -11,6 +11,7 @@ import { ListStates } from '../definitions/VirtualLists';
 import { Signpost } from '../model/Signpost';
 import { PerfTabIds } from '../definitions/Performance';
 import { ReportFolder, ReportLocation } from '../definitions/Reports';
+import { ReportScope } from '../definitions/ReportScope';
 import { REPORT_LINKS_STORAGE_KEY } from '../definitions/ReportLinks';
 import { getReportId } from '../functions/reportLinks';
 import { ReportLink } from '../model/ReportLinks';
@@ -89,6 +90,19 @@ export const shouldSortDurationAtom = atom<SortingOptions>(SortingOptions.OFF);
 
 // Operation details route
 export const isFullStackTraceAtom = atom(false);
+
+// Operation graph route
+// Holds the reports the highlight was switched on for, or null for off. Carrying
+// the scope rather than a bare flag makes a stale intent inert on sight: a report
+// swap stops it matching in the same render, so no frame can outlive its data
+// while the view gets around to clearing the intent. Never persisted, since the
+// highlight only reads on a READY perf overlay. #1613
+//
+// Module scope, so the intent outlives leaving `/graphtree` and coming back — the
+// report it names is what invalidates it, not the view's lifetime. The perf
+// overlay's own flag is local `useState` and does not survive that trip; the two
+// switches deliberately differ until #1903 decides whether they should agree.
+export const criticalPathScopeAtom = atom<ReportScope | null>(null);
 
 // Tensors route
 export const shouldCollapseAllTensorsAtom = atom(false);

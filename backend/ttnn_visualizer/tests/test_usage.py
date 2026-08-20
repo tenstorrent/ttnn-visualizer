@@ -31,7 +31,6 @@ from ttnn_visualizer.tests.usage_log import (
 from ttnn_visualizer.usage import (
     _DETAIL_FIELD_ENUMS,
     _REQUIRED_FIELDS,
-    _RETIRED_RECORDING_ENV_VAR,
     CLIENT_EVENT_DETAIL_FIELDS,
     COUNT_FIELD,
     LOG_SIZE_CHECK_INTERVAL_BYTES,
@@ -220,11 +219,6 @@ def test_the_documented_default_keeps_recording_on(usage_directory, monkeypatch)
 
     assert is_recording_enabled() is True
 
-    # The retired name must not reappear in the sample as though it still worked.
-    assert f"# {_RETIRED_RECORDING_ENV_VAR}=" not in ENV_SAMPLE_PATH.read_text(
-        encoding="utf-8"
-    )
-
 
 def test_the_launch_banner_names_a_working_opt_out(
     usage_directory, monkeypatch, capsys
@@ -265,17 +259,6 @@ def test_an_unrecognised_disable_value_switches_recording_off(
     assert read_usage_lines(usage_directory) == []
 
 
-def test_the_retired_variable_is_not_honoured(usage_directory, monkeypatch):
-    # The rename is a replacement, not an addition: the old spelling stops working.
-    monkeypatch.setenv(_RETIRED_RECORDING_ENV_VAR, "false")
-
-    assert is_recording_enabled() is True
-
-    record_event(UsageEvent.APP_START)
-
-    assert len(read_usage_lines(usage_directory)) == 1
-
-
 def test_an_unrecognised_disable_value_is_reported_once(
     usage_directory, monkeypatch, caplog
 ):
@@ -294,40 +277,6 @@ def test_an_unrecognised_disable_value_is_reported_once(
     ]
 
     assert len(warnings) == 1
-
-
-def test_the_retired_variable_is_reported_once(usage_directory, monkeypatch, caplog):
-    # Silence is the failure mode this warning exists for — the config attribute is a
-    # descriptor, so `override_with_env_variables` never sees the variable and its own
-    # ignored-variable warning cannot fire. Once, because the descriptor puts this call
-    # on every config read.
-    monkeypatch.setenv(_RETIRED_RECORDING_ENV_VAR, "false")
-
-    with caplog.at_level("WARNING"):
-        is_recording_enabled()
-        is_recording_enabled()
-
-    warnings = [
-        record
-        for record in caplog.records
-        if _RETIRED_RECORDING_ENV_VAR in record.getMessage()
-    ]
-
-    assert len(warnings) == 1
-    assert USAGE_DISABLED_ENV_VAR in warnings[0].getMessage()
-
-
-def test_the_retired_variable_is_reported_under_server_mode(
-    usage_directory, monkeypatch, caplog
-):
-    # Reported before the SERVER_MODE early return, so a hosted operator carrying a
-    # stale export does not first discover it on a local install.
-    monkeypatch.setenv(_RETIRED_RECORDING_ENV_VAR, "false")
-
-    with caplog.at_level("WARNING"):
-        assert is_recording_enabled(server_mode=True) is False
-
-    assert _RETIRED_RECORDING_ENV_VAR in caplog.text
 
 
 def test_a_disabled_install_leaves_no_directory_behind(usage_directory, monkeypatch):
