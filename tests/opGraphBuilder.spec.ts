@@ -9,18 +9,23 @@ import type { OpGraphSourceOperation } from '../src/components/operation-graph/o
 interface OperationSpec {
     id: number;
     name?: string;
-    outputs?: { label?: string; consumers: number[] }[];
+    outputs?: { label?: string; consumers: number[]; tensorId?: number }[];
 }
 
 const operation = ({ id, name = `ttnn.op${id}`, outputs = [] }: OperationSpec): OpGraphSourceOperation => ({
     id,
     name,
     fileIdentifier: `model.py:${id}`,
-    outputs: outputs.map(({ label = '[1, 32]', consumers }) => ({ edgeLabel: label, consumers })),
+    outputs: outputs.map(({ label = '[1, 32]', consumers, tensorId = id * 100 }, index) => ({
+        edgeLabel: label,
+        consumers,
+        tensorId: tensorId + index,
+    })),
+    deviceOperationCount: 0,
 });
 
 const build = (operations: OpGraphSourceOperation[], hideDeallocate: boolean) =>
-    buildOpGraph(operations, { hideDeallocate });
+    buildOpGraph(operations, { hideDeallocate, deviceSubgraphs: [] });
 
 const operationIdsOf = (graph: ReturnType<typeof buildOpGraph>) => graph.nodes.map((node) => node.data.operationId);
 

@@ -7,6 +7,10 @@ import type { NodeRelation } from '../../definitions/NodeRelation';
 
 export enum OpGraphNodeType {
     OP = 'opNode',
+    /** An operation showing its device operations: same node, nested body. */
+    DEVICE_GROUP = 'deviceGroupNode',
+    /** One device operation, parented to the operation it belongs to. */
+    DEVICE_OP = 'deviceOpNode',
 }
 
 export enum OpGraphEdgeType {
@@ -27,29 +31,64 @@ export interface OpGraphSourceOperation {
     name: string;
     fileIdentifier: string;
     outputs: OpGraphSourceOutput[];
+    /** Drives the expander badge. Already counted per operation by `fetchOperations`. */
+    deviceOperationCount: number;
 }
 
 export interface OpGraphSourceOutput {
     /** Already run through `toReadableShape`, so the worker needs no formatters. */
     edgeLabel: string;
     consumers: number[];
+    /** Identifies which device operation an edge reaches inside an expanded node. */
+    tensorId: number;
 }
 
+// One data shape for both kinds, discriminated by the node's `type`. A device
+// operation carries the id of the operation it belongs to, so selecting or
+// hovering a child answers with its parent rather than with nothing.
 export type OpGraphNodeData = {
     operationId: number;
     label: string;
     fileIdentifier: string;
     filterString: string;
+    /** 0 when the operation decomposes into nothing the graph would draw. */
+    deviceOperationCount: number;
     highlight?: NodeRelation;
 };
 
 export type OpGraphEdgeData = {
     /** 0 for the first edge of a `(source, target)` pair, 1 for its twin. */
     parallelIndex: number;
+    // An endpoint may be a device operation nested inside the operation it belongs
+    // to, so the operation an edge really joins is carried rather than read off the
+    // endpoint id. Everything reasoning about graph topology — the I/O highlight,
+    // the critical path, the filter's edge exemption — uses these, and so reads the
+    // same whether either end is expanded. #1195
+    sourceOperationId: number;
+    targetOperationId: number;
 };
 
-export type OpGraphFlowNode = Node<OpGraphNodeData, OpGraphNodeType.OP>;
+export type OpGraphFlowNode = Node<OpGraphNodeData, OpGraphNodeType>;
 export type OpGraphFlowEdge = Edge<OpGraphEdgeData, OpGraphEdgeType.OP>;
+
+/**
+ * A device-operation subgraph, assembled on the main thread when its operation is
+ * expanded and shipped with the build request. Ids arrive already namespaced, so
+ * the builder places them without knowing how they were derived.
+ */
+export interface OpGraphDeviceSubgraph {
+    operationId: number;
+    nodes: { id: string; label: string }[];
+    edges: { id: string; source: string; target: string; label: string }[];
+    /**
+     * Where an edge carrying a given tensor crosses the boundary. An incoming edge
+     * lands on the device operation that consumes its tensor and an outgoing one
+     * leaves the device operation that produced it, so an expanded node reads as
+     * part of the dataflow rather than as a box the arrows stop at.
+     */
+    entryNodeIdByTensorId: Record<number, string>;
+    exitNodeIdByTensorId: Record<number, string>;
+}
 
 export interface OpGraphBuiltGraph {
     nodes: OpGraphFlowNode[];
@@ -67,6 +106,8 @@ export interface OpGraphNodeIndexEntry {
 
 export interface OpGraphBuildOptions {
     hideDeallocate: boolean;
+    /** Only the expanded operations, so a collapsed graph carries no payload. */
+    deviceSubgraphs: OpGraphDeviceSubgraph[];
 }
 
 export type OpGraphWorkerInboundMessage =

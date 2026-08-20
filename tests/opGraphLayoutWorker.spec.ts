@@ -21,8 +21,14 @@ const buildOpGraph = vi.hoisted(() =>
 vi.mock('../src/components/operation-graph/opGraphBuilder', () => ({ buildOpGraph }));
 
 const OPERATIONS: OpGraphSourceOperation[] = [
-    { id: 1, name: 'matmul', fileIdentifier: 'model.py:1', outputs: [{ edgeLabel: '[1, 32]', consumers: [2] }] },
-    { id: 2, name: 'add', fileIdentifier: 'model.py:2', outputs: [] },
+    {
+        id: 1,
+        name: 'matmul',
+        fileIdentifier: 'model.py:1',
+        outputs: [{ edgeLabel: '[1, 32]', consumers: [2], tensorId: 10 }],
+        deviceOperationCount: 0,
+    },
+    { id: 2, name: 'add', fileIdentifier: 'model.py:2', outputs: [], deviceOperationCount: 0 },
 ];
 
 const posted: OpGraphWorkerOutboundMessage[] = [];
@@ -57,6 +63,7 @@ const build = (requestId: number, hideDeallocate: boolean, sourceVersion = 1): O
     sourceVersion,
     requestId,
     hideDeallocate,
+    deviceSubgraphs: [],
 });
 
 const builtReplies = () => posted.filter((message) => message.type === OpGraphWorkerMessageType.BUILT);

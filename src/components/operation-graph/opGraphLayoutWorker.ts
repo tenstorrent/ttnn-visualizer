@@ -5,7 +5,9 @@
 import { touchLruCache } from '../../functions/touchLruCache';
 import { buildOpGraph } from './opGraphBuilder';
 import {
+    type OpGraphBuildOptions,
     type OpGraphBuiltGraph,
+    type OpGraphDeviceSubgraph,
     type OpGraphSourceOperation,
     type OpGraphWorkerInboundMessage,
     OpGraphWorkerMessageType,
@@ -16,13 +18,13 @@ import {
 // and seconds on a large one. Only the newest request of a burst is ever built;
 // the rest are dropped unbuilt, which is safe because the view is only listening
 // for its own newest request id anyway.
-let pendingBuild: { requestId: number; sourceVersion: number; hideDeallocate: boolean } | null = null;
+let pendingBuild: ({ requestId: number; sourceVersion: number } & OpGraphBuildOptions) | null = null;
 let isDrainScheduled = false;
 
-// The option space is one boolean today, so eviction only bites if a second
-// layout knob lands; the limit is here so that growth can't turn this into a
-// leak, since each entry holds a fully laid-out graph.
-const LAYOUT_CACHE_LIMIT = 4;
+// Expansion makes the option space combinatorial rather than a single boolean, so
+// the cache now earns its keep on the walk back out of a subgraph. Each entry
+// holds a fully laid-out graph, which is what keeps this in the tens.
+const LAYOUT_CACHE_LIMIT = 16;
 const layoutCache = new Map<string, OpGraphBuiltGraph>();
 
 let sourceVersion = -1;
@@ -31,7 +33,16 @@ let operations: OpGraphSourceOperation[] = [];
 // Keyed on the source version as well as the options. The `SET_GRAPH` clear is
 // what frees the previous report's graphs, but keying on the version too means a
 // stale entry can never be served if that clear is ever moved or missed.
-const cacheKeyOf = (version: number, hideDeallocate: boolean): string => `${version}:${hideDeallocate}`;
+//
+// Expanded ids are sorted so the key describes the set rather than the order it
+// was clicked in: opening A then B is the same graph as opening B then A.
+const cacheKeyOf = (version: number, hideDeallocate: boolean, deviceSubgraphs: OpGraphDeviceSubgraph[]): string => {
+    const expanded = deviceSubgraphs
+        .map((subgraph) => subgraph.operationId)
+        .sort((left, right) => left - right)
+        .join(',');
+    return `${version}:${hideDeallocate}:${expanded}`;
+};
 
 const postError = (requestId: number, error: unknown): void => {
     postMessage({
@@ -57,7 +68,7 @@ const drainPendingBuild = (): void => {
         return;
     }
 
-    const cacheKey = cacheKeyOf(request.sourceVersion, request.hideDeallocate);
+    const cacheKey = cacheKeyOf(request.sourceVersion, request.hideDeallocate, request.deviceSubgraphs);
     const cached = layoutCache.get(cacheKey);
     if (cached) {
         touchLruCache(layoutCache, cacheKey, cached, LAYOUT_CACHE_LIMIT);
@@ -71,7 +82,10 @@ const drainPendingBuild = (): void => {
     }
 
     try {
-        const graph = buildOpGraph(operations, { hideDeallocate: request.hideDeallocate });
+        const graph = buildOpGraph(operations, {
+            hideDeallocate: request.hideDeallocate,
+            deviceSubgraphs: request.deviceSubgraphs,
+        });
         touchLruCache(layoutCache, cacheKey, graph, LAYOUT_CACHE_LIMIT);
         postMessage({
             type: OpGraphWorkerMessageType.BUILT,
@@ -101,6 +115,7 @@ onmessage = (event: MessageEvent<OpGraphWorkerInboundMessage>) => {
         requestId: message.requestId,
         sourceVersion: message.sourceVersion,
         hideDeallocate: message.hideDeallocate,
+        deviceSubgraphs: message.deviceSubgraphs,
     };
 
     if (!isDrainScheduled) {

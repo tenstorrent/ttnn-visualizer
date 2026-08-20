@@ -40,7 +40,13 @@ $minimap-width: 200px;
         background-color: rgba($tt-black, 0.4);
     }
 
-    .react-flow__node-opNode {
+    // React Flow derives a node's class from its registered type, so an expanded
+    // operation lands on a different selector than a collapsed one while needing
+    // all the same chrome: the fill, the selection ring, the I/O highlight and the
+    // perf bar all belong to the operation, not to whether it is showing its
+    // device operations. #1195
+    .react-flow__node-opNode,
+    .react-flow__node-deviceGroupNode {
         display: flex;
         flex-direction: column;
         gap: 2px;
@@ -103,6 +109,75 @@ $minimap-width: 200px;
             background-color: var(--op-graph-perf-color, transparent);
             border-radius: 0 2px 0 1px;
         }
+    }
+
+    // An expanded operation holds its device operations, so its content stacks
+    // from the top rather than centring, and the header owns the padding the
+    // collapsed node applies to the box.
+    .react-flow__node-deviceGroupNode {
+        justify-content: flex-start;
+        padding: 0;
+    }
+
+    .op-graph-group-header {
+        display: flex;
+        gap: 6px;
+        align-items: center;
+        justify-content: space-between;
+        padding: 4px 6px 4px 12px;
+        border-bottom: 1px solid rgba($tt-black, 0.2);
+    }
+
+    // `min-width: 0` so the label ellipsises inside the flex row instead of
+    // pushing the expander out of the header.
+    .op-graph-group-heading {
+        min-width: 0;
+    }
+
+    // Carries the fill the standalone device-operations graph has always used, so
+    // the same nodes read the same way now that they appear on this canvas.
+    .react-flow__node-deviceOpNode {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        box-sizing: border-box;
+        padding: 4px 10px;
+        border: 1px solid rgba($tt-black, 0.25);
+        border-radius: 3px;
+        background-color: $tt-blue-tint-2;
+        color: $tt-black;
+        font-size: 12px;
+        line-height: 1.2;
+        text-align: center;
+        cursor: pointer;
+    }
+
+    .op-graph-node-expander {
+        display: inline-flex;
+        gap: 3px;
+        align-items: center;
+        padding: 1px 4px;
+        border: none;
+        border-radius: 3px;
+        background-color: rgba($tt-black, 0.12);
+        color: inherit;
+        font-family: inherit;
+        font-size: 10px;
+        line-height: 1.4;
+        cursor: pointer;
+
+        &:hover {
+            background-color: rgba($tt-black, 0.24);
+        }
+    }
+
+    // A collapsed node is sized to its label alone, so the badge hangs off the
+    // corner rather than taking a third row the box has no height for. Overlapping
+    // the boundary also keeps it clear of the label on the narrowest nodes.
+    .react-flow__node-opNode > .op-graph-node-expander {
+        position: absolute;
+        top: -7px;
+        right: -7px;
     }
 
     // On the bottom band beside the minimap, reading against the nodes it
@@ -211,7 +286,8 @@ $minimap-width: 200px;
     // Outline, not border or fill: selection owns the border and the I/O
     // highlight the fill, so the path stacks with either. Offset clears the 3px
     // selection ring, which an outline would otherwise paint over.
-    .react-flow__node-opNode.op-graph-node-critical-path {
+    .react-flow__node-opNode.op-graph-node-critical-path,
+    .react-flow__node-deviceGroupNode.op-graph-node-critical-path {
         outline: 2px solid var(--graph-critical-path-edge);
         outline-offset: 4px;
     }

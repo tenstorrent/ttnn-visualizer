@@ -148,6 +148,7 @@ vi.mock('../src/components/operation-graph/opGraphCriticalPath', async () => {
 /* eslint-disable import/first */
 import { buildOpGraph } from '../src/components/operation-graph/opGraphBuilder';
 import { findCriticalPath } from '../src/components/operation-graph/opGraphCriticalPath';
+import { countDeviceOperations } from '../src/components/operation-graph/opGraphDeviceSubgraph';
 import OperationGraphReactFlow from '../src/components/operation-graph/OperationGraphReactFlow';
 import {
     PERF_BAR_COLOR_VAR,
@@ -188,7 +189,12 @@ const sourceFor = (operations: OperationDescription[]) =>
         id: op.id,
         name: op.name,
         fileIdentifier: op.operationFileIdentifier,
-        outputs: op.outputs.map((tensor) => ({ edgeLabel: '[1, 32]', consumers: tensor.consumers })),
+        outputs: op.outputs.map((tensor) => ({
+            edgeLabel: '[1, 32]',
+            consumers: tensor.consumers,
+            tensorId: tensor.id,
+        })),
+        deviceOperationCount: countDeviceOperations(op),
     }));
 
 const renderGraph = (operations = OPERATION_LIST, perfRows?: PerfOverlaySource[]) => {
@@ -204,7 +210,7 @@ const renderGraph = (operations = OPERATION_LIST, perfRows?: PerfOverlaySource[]
     // The worker is stubbed, so the view only receives a graph when a test says
     // so; this is the reply the mount's own `runBuild` would have produced.
     act(() => {
-        harness.onBuilt?.(buildOpGraph(sourceFor(operations), { hideDeallocate: true }));
+        harness.onBuilt?.(buildOpGraph(sourceFor(operations), { hideDeallocate: true, deviceSubgraphs: [] }));
     });
     return view;
 };
@@ -386,7 +392,7 @@ describe('OperationGraphReactFlow rebuild triggers', () => {
         fireEvent.click(screen.getByLabelText('Hide deallocate ops'));
 
         expect(runBuild).toHaveBeenCalledTimes(1);
-        expect(runBuild).toHaveBeenLastCalledWith({ hideDeallocate: false });
+        expect(runBuild).toHaveBeenLastCalledWith({ hideDeallocate: false, deviceSubgraphs: [] });
     });
 
     it('relayouts when the report changes', () => {
