@@ -514,11 +514,15 @@ return useQuery({
 There are two hooks for the performance report, and picking the wrong one is a correctness bug rather than a style slip:
 
 - **`usePerformanceReport(name)`** — the report as the performance tab is displaying it, with every view filter applied. For rendering the tab.
-- **`useLinkedPerformanceReport()`** — the same report pinned to devices merged, host ops hidden, whole run, default grouping. For *anything that decides whether two reports describe the same run*: the link badge, the perf-table Op column, L1-pressure columns, tensor-drawer gating, the graph perf overlay, top-N annotations.
+- **`useLinkedPerformanceReport()`** — the same report pinned to devices merged, host ops hidden, whole run, default grouping, tracing mode off. For *anything that decides whether two reports describe the same run*: the link badge, the perf-table Op column, L1-pressure columns, tensor-drawer gating, the graph perf overlay, top-N annotations.
 
 Link status is a property of the reports, not of the current view. Resolving it from the filtered query means toggling **Merge devices** flips the badge to "Failed to link" and drops every dependent feature with it — and `ReportLinkStatus` persists that verdict to `localStorage`, so the failure outlives the toggle (#1812).
 
-Build both keys through `src/functions/performanceReportQueryKey.ts` rather than assembling one inline, so the two cannot drift into keying on different filters. `tracingMode` is a known carve-out: it is still followed, because a trace-captured run's traced order is the one that lines up with the memory report, so pinning it would make those pairs permanently unlinkable.
+Build both keys through `src/functions/performanceReportQueryKey.ts` rather than assembling one inline, so the two cannot drift into keying on different filters. **Every** filter is pinned, so `getLinkedPerformanceReportParams()` takes no arguments — a view control that needs threading through it is a sign the call site wants `usePerformanceReport` instead.
+
+`tracingMode` was the last carve-out, and it was removed on a mistaken premise: that a trace-captured run's traced order is the one that lines up with the memory report, so pinning it would make those pairs unlinkable. It doesn't reach the match. `tracingMode` only suppresses a `HOST START TS` sort in `tt-perf-report` (`perf_report.py:2168`), and because the link query pins `mergeDevices: true`, `merge_device_rows` always runs and ends by re-sorting on `ORIGINAL_ROW` — raw CSV order (`perf_report.py:1947-1949`). The merge re-sort overwrites the tracing branch, so for a single-device report the sequence is identical either way.
+
+Two consequences worth knowing before touching this. Pinning `tracingMode` **adds** Tracing mode to the controls whose toggle forks the link query onto a second `perf-results/report` build for the session, so it makes #1886 more pressing, not less. And `merge_device_rows` pairs per-device queues positionally, so on a multi-device report a changed input order can still change which physical row represents a merged op — pinning makes that deterministic rather than eliminating it.
 
 ### Share derived values with `memoiseLatest`, not `useMemo`
 

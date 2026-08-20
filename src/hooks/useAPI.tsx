@@ -1215,11 +1215,10 @@ const useViewPerformanceReportParams = (): PerformanceReportParams => {
     );
 };
 
-const useLinkedPerformanceReportParams = (): PerformanceReportParams => {
-    const tracingMode = useAtomValue(tracingModeAtom);
-
-    return useMemo(() => getLinkedPerformanceReportParams(tracingMode), [tracingMode]);
-};
+// Every filter is pinned, so this is a constant rather than a hook. Held at module
+// scope for a stable identity; the query key is hashed structurally, so this is for
+// readers rather than for React Query.
+const LINKED_PERFORMANCE_REPORT_PARAMS: PerformanceReportParams = Object.freeze(getLinkedPerformanceReportParams());
 
 const usePerformanceReportQuery = (name: string | null, params: PerformanceReportParams) => {
     const location = useAtomValue(performanceReportLocationAtom);
@@ -1252,25 +1251,14 @@ export const usePerformanceReport = (name: string | null) => {
  * it must not move when the user changes how they are viewing the performance
  * tab (#1812).
  *
- * `tracingMode` is the one view control still followed, and so a deliberate
- * carve-out from #1812, which names it alongside the three pinned here. It only
- * reorders rows, and for a trace-captured run the traced order is the one that
- * lines up with the memory report — pinning it would leave those reports
- * permanently unlinkable, which is a worse failure than the one it would fix.
- * Resolving against both orders and keeping whichever aligns would close the
- * gap properly; it needs #1800's shared run id to be worth the second fetch.
- *
- * So a Tracing mode toggle can still flip the badge, and that outcome is not
- * transient: `ReportLinkStatus` writes it to `reportLinksAtom`, which is backed by
- * localStorage, so an `UNLINKED` reached this way keeps badging the pair as failed
- * in the report pickers afterwards. #1812 stays open on that residual until the
- * both-orders resolution lands.
+ * No performance-tab control moves this, tracing mode included — see
+ * `LINKED_PERFORMANCE_REPORT_FILTERS` for why that toggle cannot change the row
+ * order the match runs against once devices are merged.
  */
 export const useLinkedPerformanceReport = () => {
     const name = useAtomValue(activePerformanceReportFolderNameAtom);
-    const params = useLinkedPerformanceReportParams();
 
-    return usePerformanceReportQuery(name, params);
+    return usePerformanceReportQuery(name, LINKED_PERFORMANCE_REPORT_PARAMS);
 };
 
 export const usePerformanceComparisonReport = () => {
