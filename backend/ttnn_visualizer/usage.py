@@ -45,6 +45,7 @@ application's own version. No report, file, directory, operation or host names,
 and no free-form text, may ever be written here.
 """
 
+import json
 import logging
 import os
 import platform
@@ -53,7 +54,7 @@ import sys
 import uuid
 from datetime import datetime, timezone
 from enum import Enum
-from importlib.metadata import PackageNotFoundError
+from importlib.metadata import PackageNotFoundError, distribution
 from importlib.metadata import version as distribution_version
 from pathlib import Path
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Set, Tuple, Type
@@ -201,6 +202,12 @@ class DeploymentMode(str, Enum):
     TT_METAL_HOME = "tt_metal_home"
     CONTAINER = "container"
     LOCAL_UPLOAD = "local_upload"
+
+
+class LaunchMode(str, Enum):
+    SOURCE = "source"
+    WHEEL = "wheel"
+    HOSTED = "hosted"
 
 
 class OperatingSystem(str, Enum):
@@ -478,6 +485,22 @@ def get_deployment_mode(tt_metal_home: Optional[str]) -> DeploymentMode:
         return DeploymentMode.CONTAINER
 
     return DeploymentMode.LOCAL_UPLOAD
+
+
+def get_launch_mode(server_mode: Any = False) -> LaunchMode:
+    """How this process was launched, without exposing an installation path."""
+    if _as_bool(server_mode):
+        return LaunchMode.HOSTED
+
+    try:
+        direct_url = distribution(DISTRIBUTION_NAME).read_text("direct_url.json")
+        if direct_url and json.loads(direct_url).get("dir_info", {}).get("editable"):
+            return LaunchMode.SOURCE
+    except (PackageNotFoundError, OSError, ValueError):
+        # A direct source invocation has no distribution metadata.
+        return LaunchMode.SOURCE
+
+    return LaunchMode.WHEEL
 
 
 def get_operating_system() -> OperatingSystem:
@@ -914,6 +937,7 @@ def record_app_start(config: Any, server_mode: Optional[Any] = None) -> None:
             server_mode=server_mode,
             version=get_application_version(),
             deployment_mode=get_deployment_mode(getattr(config, "TT_METAL_HOME", None)),
+            launch_mode=get_launch_mode(server_mode),
             os=get_operating_system(),
             python_version=get_python_version(),
         )
