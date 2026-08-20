@@ -2,7 +2,6 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-/* eslint-disable no-void */
 /* eslint-disable react/prop-types */
 /* eslint-disable no-continue */
 /* eslint-disable no-nested-ternary */
@@ -52,8 +51,10 @@ import { GRAPH_COLORS } from '../../definitions/GraphColors';
 import { MLIR_FIT_VIEW_OPTIONS } from '../../definitions/MlirFitView';
 import { useMlirLayoutWorker } from './useMlirLayoutWorker';
 import MlirNodeDetailsPanel from './MlirNodeDetailsPanel';
-import MlirOpFilter, { MlirOpFilterHandle } from './MlirOpFilter';
-import { MlirFilterMode, buildFilterMatcher, resolveFilterMatches } from './mlirFilter';
+import GraphOpFilter, { GraphOpFilterHandle } from '../GraphOpFilter';
+import { GraphFilterMode } from '../../definitions/GraphFilterMode';
+import { buildGraphFilterMatcher } from '../../functions/graphFilterMatcher';
+import { resolveFilterMatches } from './mlirFilter';
 import MlirNodeBodyToggles from './MlirNodeBodyToggles';
 import MlirExpandCollapseControls from './MlirExpandCollapseControls';
 import MlirNodeColorLegend from './MlirNodeColorLegend';
@@ -429,13 +430,13 @@ const MlGraphInner = ({ data, detailsCollapsible = false }: ViewProps) => {
     // by `FILTER_DEBOUNCE_MS` on non-empty queries.
     const [filterQuery, setFilterQuery] = useState('');
     const [appliedFilterQuery, setAppliedFilterQuery] = useState('');
-    const [filterMode, setFilterMode] = useState<MlirFilterMode>(() => {
+    const [filterMode, setFilterMode] = useState<GraphFilterMode>(() => {
         const stored = sessionStorage.getItem(FILTER_MODE_STORAGE_KEY);
-        return stored === MlirFilterMode.Regex ? MlirFilterMode.Regex : MlirFilterMode.Substring;
+        return stored === GraphFilterMode.REGEX ? GraphFilterMode.REGEX : GraphFilterMode.SUBSTRING;
     });
     const [currentMatchIndex, setCurrentMatchIndex] = useState<number | null>(null);
     const [nodeBodyToggles, setNodeBodyToggles] = useAtom(mlirNodeBodyTogglesAtom);
-    const filterRef = useRef<MlirOpFilterHandle>(null);
+    const filterRef = useRef<GraphOpFilterHandle>(null);
     const selectedNodeIdRef = useRef<string | null>(null);
     // Passive mirror of `nodes` so callbacks stored in context (see
     // `toggleNamespaceFromGroup`) don't churn identity per drag frame.
@@ -511,7 +512,7 @@ const MlGraphInner = ({ data, detailsCollapsible = false }: ViewProps) => {
     }, []);
 
     // Match set differs across modes, so reset the cursor on toggle.
-    const handleModeChange = useCallback((next: MlirFilterMode) => {
+    const handleModeChange = useCallback((next: GraphFilterMode) => {
         setFilterMode(next);
         setCurrentMatchIndex(null);
         sessionStorage.setItem(FILTER_MODE_STORAGE_KEY, next);
@@ -693,7 +694,7 @@ const MlGraphInner = ({ data, detailsCollapsible = false }: ViewProps) => {
         if (appliedFilterQuery.length === 0) {
             return null;
         }
-        return buildFilterMatcher(filterMode, appliedFilterQuery);
+        return buildGraphFilterMatcher(filterMode, appliedFilterQuery);
     }, [filterMode, appliedFilterQuery]);
 
     const filterMatchInfo = useMemo<{
@@ -706,7 +707,7 @@ const MlGraphInner = ({ data, detailsCollapsible = false }: ViewProps) => {
             return null;
         }
         const resolution = resolveFilterMatches({
-            testLabel: filterMatcher.testLabel,
+            testLabel: filterMatcher.test,
             sources: sourceNodes,
             expandedNamespaces,
             anchorByNamespace: interactionIndex?.anchorByNamespace ?? {},
@@ -1555,7 +1556,7 @@ const MlGraphInner = ({ data, detailsCollapsible = false }: ViewProps) => {
             </MlirGroupContext.Provider>
 
             <div className='mlir-top-left-controls'>
-                <MlirOpFilter
+                <GraphOpFilter
                     ref={filterRef}
                     query={filterQuery}
                     onQueryChange={handleQueryChange}

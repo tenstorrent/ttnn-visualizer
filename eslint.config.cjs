@@ -175,6 +175,10 @@ module.exports = defineConfig([
             'no-underscore-dangle': 'off',
             'no-unused-vars': 'off',
             'no-use-before-define': 'off',
+            // Statement-position `void` is how we acknowledge a fire-and-forget promise under
+            // `no-floating-promises` (`ignoreVoid: true`); airbnb-base's blanket `no-void` forbids it.
+            // Still an error when `void` is used as an expression, which is the confusing case.
+            'no-void': ['error', { allowAsStatement: true }],
             'prefer-const': 'warn',
             'prettier/prettier': 'warn',
 

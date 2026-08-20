@@ -11,6 +11,7 @@ switches between the local and hosted postures, so a config layer that hands bac
 truthy string ``"false"`` inverts a security setting.
 """
 
+import ast
 import logging
 import os
 import re
@@ -21,16 +22,33 @@ from pathlib import Path
 import pytest
 from ttnn_visualizer.settings import (
     _ENV_ALIASES,
+    _ENV_OVERRIDE_CONSTANTS,
+    _ENV_OVERRIDE_DERIVED,
+    _ENV_OVERRIDE_SKIP,
+    _ENV_OVERRIDE_UNCONFIGURED,
     _ENV_PARSERS,
+    _RECOMPUTE_HONOURS,
     _STRICT_BOOLEANS,
     DefaultConfig,
+    DevelopmentConfig,
     ProductionConfig,
     _build_allowed_origins,
+    _coerce_env_value,
     _parse_env_bool,
     _parse_max_content_length,
     build_socketio_origin_check,
 )
-from ttnn_visualizer.utils import FALSE_VALUES, TRUE_VALUES, parse_bool
+from ttnn_visualizer.tests.fixture_settings import (
+    PINNED_ENV_SETTINGS,
+    pinned_settings_sample,
+)
+from ttnn_visualizer.utils import (
+    FALSE_VALUES,
+    TRUE_VALUES,
+    get_app_data_directory,
+    get_report_data_directory,
+    parse_bool,
+)
 
 DEV_ARGS = {
     "app_port": "8000",
@@ -43,7 +61,9 @@ def wsgi_environ(host: str, scheme: str = "http", **headers: str) -> dict:
     return {"wsgi.url_scheme": scheme, "HTTP_HOST": host, **headers}
 
 
-def _import_settings_with(**env: str) -> subprocess.CompletedProcess:
+def _import_settings_with(
+    code: str = "import ttnn_visualizer.settings", **env: str
+) -> subprocess.CompletedProcess:
     """Import ``settings`` in a fresh interpreter under the given environment.
 
     The class body runs once per process and this one imported the module before the
@@ -55,7 +75,7 @@ def _import_settings_with(**env: str) -> subprocess.CompletedProcess:
     child_env = {key: value for key, value in os.environ.items() if key not in env}
 
     return subprocess.run(
-        [sys.executable, "-c", "import ttnn_visualizer.settings"],
+        [sys.executable, "-c", code],
         env={**child_env, **env},
         capture_output=True,
         text=True,
@@ -118,7 +138,12 @@ def test_empty_configured_origins_trust_nothing():
     assert _build_allowed_origins("", flask_env="development", **DEV_ARGS) == []
 
 
-def test_config_defaults_to_localhost_on_the_serving_port():
+def test_config_defaults_to_localhost_on_the_serving_port(monkeypatch):
+    # ``_AllowedOrigins`` resolves on every read, so an operator's own variable reaches
+    # this assertion about the *default*. Deleting it is enough here, and necessary:
+    # there is no class attribute to pin, the descriptor is the value.
+    monkeypatch.delenv("ALLOWED_ORIGINS", raising=False)
+
     origins = DefaultConfig.ALLOWED_ORIGINS
 
     assert isinstance(origins, list)
@@ -128,6 +153,7 @@ def test_config_defaults_to_localhost_on_the_serving_port():
 def test_config_narrows_to_production_set_after_import(monkeypatch):
     # ``main()`` defaults FLASK_ENV to production long after this module is imported,
     # so an allowlist frozen at import time would keep trusting the Vite dev server.
+    monkeypatch.delenv("ALLOWED_ORIGINS", raising=False)
     monkeypatch.setenv("FLASK_ENV", "production")
 
     assert DefaultConfig.ALLOWED_ORIGINS == [f"http://localhost:{DefaultConfig.PORT}"]
@@ -136,6 +162,7 @@ def test_config_narrows_to_production_set_after_import(monkeypatch):
 def test_config_follows_a_port_applied_after_import(monkeypatch):
     # ``--port`` is applied by mutating the environment and the config object, both
     # after import; the allowlist has to name the port the app actually serves on.
+    monkeypatch.delenv("ALLOWED_ORIGINS", raising=False)
     monkeypatch.setenv("FLASK_ENV", "production")
     monkeypatch.setenv("PORT", "9123")
 
@@ -203,6 +230,11 @@ BOOLEAN_VOCABULARY_CASES = (
     ],
 )
 def test_env_override_parses_booleans(env_name, key, env_value, expected, monkeypatch):
+    # An exported ``SERVER_MODE`` would refuse the ``FLASK_DEBUG`` cases outright. Both
+    # layers, and before the parametrised ``setenv`` so the ``SERVER_MODE`` case still
+    # sets its own value and wins.
+    monkeypatch.delenv("SERVER_MODE", raising=False)
+    monkeypatch.setattr(DefaultConfig, "SERVER_MODE", False)
     monkeypatch.setenv(env_name, env_value)
 
     config = DefaultConfig()
@@ -228,6 +260,10 @@ def test_the_logging_debug_variable_does_not_enable_flask_debug(monkeypatch):
     # Matching it to the ``DEBUG`` *attribute* would hand Flask debug mode to anyone
     # who wanted verbose logs, and ``Flask.debug`` returning truthy suppresses the
     # catch-all error handler — tracebacks in responses, under SERVER_MODE too.
+    # ``ProductionConfig`` declares ``DEBUG = False`` in its own body, so an exported
+    # ``FLASK_DEBUG`` can only arrive through the override loop's alias — deleting the
+    # variable is the whole fix, and no ``setattr`` is needed.
+    monkeypatch.delenv("FLASK_DEBUG", raising=False)
     monkeypatch.setenv("DEBUG", "true")
 
     config = ProductionConfig()
@@ -242,6 +278,9 @@ def test_flask_debug_applies_after_the_class_body_has_been_evaluated(monkeypatch
     # ``create_app()`` loads, say — to reach the attribute it feeds. The posture is
     # pinned because the hosted one refuses debug mode outright; this is the local case
     # debug mode exists for, and a developer ``.env`` must not decide which is tested.
+    # ``setattr`` alone is not a pin: the override loop re-reads the variable, so an
+    # exported ``SERVER_MODE`` would decide which posture is tested after all.
+    monkeypatch.delenv("SERVER_MODE", raising=False)
     monkeypatch.setattr(DefaultConfig, "SERVER_MODE", False)
     monkeypatch.setenv("FLASK_DEBUG", "true")
 
@@ -332,6 +371,66 @@ def test_env_override_parses_integers(monkeypatch):
 
     assert config.SESSION_MAX_UPLOADED_REPORTS == 5
     assert config.SSH_SUBPROCESS_TIMEOUT == 30
+
+
+@pytest.mark.parametrize("env_value", ["0", "-1", "-10"])
+def test_a_session_cap_below_one_keeps_the_declared_default(
+    env_value, monkeypatch, caplog
+):
+    # ``0`` is the dangerous one rather than the merely odd one: every call site spells the
+    # bound ``lst[-cap:]``, and ``[-0:]`` returns the whole list, so accepting it would turn
+    # the cap into no cap and let the signed session cookie grow without limit.
+    monkeypatch.setenv("SESSION_MAX_UPLOADED_REPORTS", env_value)
+
+    config = DefaultConfig()
+    with caplog.at_level(logging.WARNING):
+        config.override_with_env_variables()
+
+    assert (
+        config.SESSION_MAX_UPLOADED_REPORTS
+        == DefaultConfig.SESSION_MAX_UPLOADED_REPORTS
+    )
+    assert "SESSION_MAX_UPLOADED_REPORTS" in caplog.text
+
+
+def test_the_smallest_accepted_session_cap_is_one(monkeypatch):
+    # The floor is a real cap, not a rejection of every small value.
+    monkeypatch.setenv("SESSION_MAX_UPLOADED_REPORTS", "1")
+
+    config = DefaultConfig()
+    config.override_with_env_variables()
+
+    assert config.SESSION_MAX_UPLOADED_REPORTS == 1
+
+
+@pytest.mark.parametrize("env_value", ["0", "-1", "not-a-number"])
+def test_importing_settings_substitutes_a_usable_session_cap(env_value):
+    # The class body needs its own guard: the override loop keeps the *declared* value for
+    # a bad variable, so a zero that reached the class body would be the value it kept.
+    result = _import_settings_with(
+        "import ttnn_visualizer.settings as s;"
+        " print(s.DefaultConfig.SESSION_MAX_UPLOADED_REPORTS)",
+        SESSION_MAX_UPLOADED_REPORTS=env_value,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert int(result.stdout.strip()) >= 1
+
+
+def test_the_session_cap_bounds_the_stored_list(monkeypatch):
+    # The property the range check exists to protect, asserted against the slice idiom the
+    # call sites in ``decorators.py`` and ``views.py`` all use. The cap is pinned rather
+    # than taken as declared: the class attribute binds at import from the environment, and
+    # an operator's large-but-valid value would leave this loop slicing for hours. Any cap
+    # of one or more exercises the property.
+    monkeypatch.setattr(DefaultConfig, "SESSION_MAX_UPLOADED_REPORTS", 3)
+    cap = DefaultConfig.SESSION_MAX_UPLOADED_REPORTS
+    stored: list = []
+
+    for report in range(cap + 5):
+        stored = (stored + [report])[-cap:]
+
+    assert len(stored) == cap
 
 
 def test_a_port_stays_a_string_so_gunicorn_can_take_it(monkeypatch):
@@ -454,6 +553,7 @@ def test_every_registry_is_keyed_the_way_it_is_looked_up():
 
     assert not set(_ENV_PARSERS) & aliased
     assert not _STRICT_BOOLEANS & aliased
+    assert not _ENV_OVERRIDE_SKIP & aliased
 
 
 def test_every_strict_boolean_names_a_real_boolean_setting():
@@ -476,18 +576,374 @@ def test_every_env_alias_names_a_real_setting():
 def test_a_setting_with_no_coercible_type_is_reported_and_discarded(
     monkeypatch, caplog
 ):
-    # ``LOCAL_DATA_DIRECTORY`` is a ``Path`` that handlers join onto; handing them a
-    # string is worse than declining the override. Unreachable until #1857 widens the
-    # loop, which is the point of pinning it before then.
-    monkeypatch.setattr(DefaultConfig, "LOCAL_DATA_DIRECTORY", Path("/declared"))
-    monkeypatch.setenv("LOCAL_DATA_DIRECTORY", "/from/env")
+    # ``_coerce_env_value`` declines a ``Path`` rather than handing handlers a string.
+    # ``LOCAL_DATA_DIRECTORY`` is also in ``_ENV_OVERRIDE_SKIP``, so exercise the
+    # backstop directly — the loop never reaches it.
+    declared = Path("/declared")
 
-    config = DefaultConfig()
     with caplog.at_level(logging.WARNING):
+        result = _coerce_env_value("LOCAL_DATA_DIRECTORY", declared, "/from/env")
+
+    assert result == declared
+    assert "LOCAL_DATA_DIRECTORY" in caplog.text
+
+
+# Every setting an environment variable is allowed to reach. Pinned rather than derived
+# so that adding a setting is a decision: the skip list on its own only fails closed for
+# a *dead* entry, and the type backstop in ``_coerce_env_value`` only catches ``Path`` /
+# ``dict``, so a new derived string or constant that nobody classified would silently
+# become configurable. Deleting a name from here without deleting the setting fails too,
+# which is what the old ``_REQUIRED_ENV_OVERRIDE_SKIPS`` list existed to catch.
+_OVERRIDABLE_SETTINGS = frozenset(
+    {
+        "BASE_PATH",
+        "DEBUG",
+        "DEV_SERVER_HOST",
+        "DEV_SERVER_PORT",
+        "GUNICORN_APP_MODULE",
+        "GUNICORN_TIMEOUT",
+        "GUNICORN_WORKERS",
+        "GUNICORN_WORKER_CLASS",
+        "HOST",
+        "LAUNCH_BROWSER_ON_START",
+        "MALWARE_SCANNER",
+        "MAX_CONTENT_LENGTH",
+        "PORT",
+        "SECRET_KEY",
+        "SERVER_MODE",
+        "SESSION_MAX_UPLOADED_REPORTS",
+        "SSH_DEFAULT_PERFORMANCE_PATH",
+        "SSH_DEFAULT_PORT",
+        "SSH_DEFAULT_PROFILER_PATH",
+        "SSH_REMOTE_CHECK_TIMEOUT",
+        "SSH_SUBPROCESS_TIMEOUT",
+        "TESTING",
+        "TT_METAL_HOME",
+        "USE_WEBSOCKETS",
+    }
+)
+
+
+def test_every_env_override_skip_names_a_real_setting():
+    # Keyed by string, so a renamed setting leaves a dead skip entry and the loop
+    # starts accepting env strings for a derived attribute again.
+    assert _ENV_OVERRIDE_SKIP <= set(vars(DefaultConfig))
+
+
+# Settings the test fixtures deliberately let the environment reach. Every name here was
+# exported individually against the full suite and left it green; the ones that did not
+# are pinned in ``PINNED_ENV_SETTINGS``, or neutralised on the test that constructs its
+# own config (``FLASK_DEBUG`` and ``DEV_SERVER_HOST`` here, ``SERVER_MODE`` in three
+# places). ``DEV_SERVER_HOST`` is listed here because no app under test depends on it —
+# only the allowlist tests do.
+#
+# Two limitations worth knowing before trusting this test. First,
+# ``override_with_env_variables`` skips anything with ``__get__``, so
+# ``_OVERRIDABLE_SETTINGS`` excludes the descriptor-backed ``ALLOWED_ORIGINS`` and
+# ``USAGE_RECORDING_ACTIVE``; the former is pinned in the baseline anyway (see
+# ``_UNPOLICEABLE_PINS``) and the latter is neutralised by the ``usage_directory`` fixture,
+# but neither is reconciled here. Second, ``APP_DATA_DIRECTORY`` and
+# ``REPORT_DATA_DIRECTORY`` are env-reachable through ``recompute_derived_settings`` while
+# living in ``_ENV_OVERRIDE_SKIP``, so they too are pinned without being policed.
+_INHERITED_BY_TEST_FIXTURES = frozenset(
+    {
+        "DEV_SERVER_HOST",
+        "DEV_SERVER_PORT",
+        "GUNICORN_APP_MODULE",
+        "GUNICORN_TIMEOUT",
+        "GUNICORN_WORKERS",
+        "GUNICORN_WORKER_CLASS",
+        "HOST",
+        "LAUNCH_BROWSER_ON_START",
+        "PORT",
+        "SECRET_KEY",
+        "SSH_REMOTE_CHECK_TIMEOUT",
+        "SSH_SUBPROCESS_TIMEOUT",
+    }
+)
+
+
+def test_the_test_fixtures_pin_every_env_reachable_setting():
+    # The fixture counterpart to ``test_the_settings_inventory_is_pinned``: a new
+    # overridable setting has to be classified as pinned or inherited before it can reach
+    # an app under test from whatever the developer happens to export. Enumerated rather
+    # than derived — a computed complement would pass no matter what, which is the same
+    # reason ``_OVERRIDABLE_SETTINGS`` is hand-maintained.
+    assert _OVERRIDABLE_SETTINGS == PINNED_ENV_SETTINGS | _INHERITED_BY_TEST_FIXTURES
+    assert not (PINNED_ENV_SETTINGS & _INHERITED_BY_TEST_FIXTURES)
+
+    # Equality, not containment, and in both directions: a pin deleted from the baseline
+    # fails, and so does one added to the baseline while still listed as inherited — which
+    # containment alone would let through, leaving the inventory quietly lying. The
+    # intersection drops the derived directory keys, which no variable reaches directly.
+    assert PINNED_ENV_SETTINGS == set(pinned_settings_sample()) & _OVERRIDABLE_SETTINGS
+
+
+def test_every_app_under_test_is_built_from_the_shared_baseline():
+    # The other half of #1869: the inventory above stops a new *setting* escaping
+    # classification, but nothing stopped a new *fixture* hand-rolling its own settings
+    # dict and reintroducing the whole bug class with the suite green. Read at the source
+    # level because the offending fixture would be correct Python that simply never calls
+    # ``base_test_settings`` — there is no runtime hook to catch that.
+    tests_root = Path(__file__).parent
+    offenders = []
+
+    for path in sorted(tests_root.rglob("*.py")):
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+
+            for keyword in node.keywords:
+                if keyword.arg != "settings_override":
+                    continue
+
+                called = {
+                    inner.func.id
+                    for inner in ast.walk(keyword.value)
+                    if isinstance(inner, ast.Call) and isinstance(inner.func, ast.Name)
+                }
+                if "base_test_settings" not in called:
+                    offenders.append(f"{path.relative_to(tests_root)}:{node.lineno}")
+
+    assert offenders == [], (
+        "these call sites build an app without the shared baseline, so the developer's "
+        f"environment reaches it: {offenders}. Pass overrides to base_test_settings "
+        "instead — see backend/ttnn_visualizer/tests/fixture_settings.py."
+    )
+
+
+def test_the_settings_inventory_is_pinned():
+    # Forces a classification for every setting rather than only catching the entries
+    # someone remembered to list. A new attribute lands in neither set and fails here,
+    # which is the direction the skip list alone cannot see.
+    declared = {
+        key: value
+        for key, value in vars(DefaultConfig).items()
+        if not key.startswith("_") and not hasattr(value, "__get__")
+    }
+
+    assert set(declared) == _OVERRIDABLE_SETTINGS | _ENV_OVERRIDE_SKIP
+    assert not (_OVERRIDABLE_SETTINGS & _ENV_OVERRIDE_SKIP)
+
+
+def test_the_three_skip_rationales_stay_disjoint():
+    # Unioned at the point of use, so an entry listed twice would still work and hide
+    # which rule a maintainer is editing under.
+    assert not (_ENV_OVERRIDE_DERIVED & _ENV_OVERRIDE_CONSTANTS)
+    assert not (_ENV_OVERRIDE_DERIVED & _ENV_OVERRIDE_UNCONFIGURED)
+    assert not (_ENV_OVERRIDE_CONSTANTS & _ENV_OVERRIDE_UNCONFIGURED)
+    assert _RECOMPUTE_HONOURS <= _ENV_OVERRIDE_DERIVED
+
+
+def test_an_inherited_setting_is_reachable_on_a_subclass(monkeypatch):
+    # ``Config()`` always returns a subclass; ``DefaultConfig()`` tests mask the reach
+    # bug because that class's own ``__dict__`` already holds every setting.
+    monkeypatch.setenv("SERVER_MODE", "true")
+    monkeypatch.setenv("HOST", "127.0.0.1")
+
+    config = ProductionConfig()
+    config.override_with_env_variables()
+
+    assert config.SERVER_MODE is True
+    assert config.HOST == "127.0.0.1"
+
+
+def test_a_skipped_setting_is_not_overridden(monkeypatch):
+    # Only settings the loop is the sole writer of prove anything here: ``GUNICORN_BIND``
+    # and the path tree are rewritten by ``recompute_derived_settings`` afterwards, and
+    # ``LOCAL_``/``REMOTE_DATA_DIRECTORY`` are ``Path``-typed, so the type backstop would
+    # decline them with or without the skip.
+    monkeypatch.setenv("APPLICATION_DIR", "/from/env")
+    monkeypatch.setenv("STATIC_ASSETS_DIR", "/from/env/static")
+    monkeypatch.setenv("DB_VERSION", "0.0.0")
+    monkeypatch.setenv("SQLITE_DB_PATH", "evil.sqlite")
+    monkeypatch.setenv("SESSION_COOKIE_SAMESITE", "None")
+
+    config = ProductionConfig()
+    declared_app_dir = config.APPLICATION_DIR
+    declared_static = config.STATIC_ASSETS_DIR
+    config.override_with_env_variables()
+
+    assert config.APPLICATION_DIR == declared_app_dir
+    assert config.STATIC_ASSETS_DIR == declared_static
+    assert config.DB_VERSION == DefaultConfig.DB_VERSION
+    assert config.SQLITE_DB_PATH == DefaultConfig.SQLITE_DB_PATH
+    assert config.SESSION_COOKIE_SAMESITE == "Lax"
+
+
+def test_an_ignored_variable_says_so(monkeypatch, caplog):
+    # Declining an uncoercible value warns, so dropping a skipped one in silence is the
+    # same outcome with no signal — and an inert variable looks exactly like a typo.
+    monkeypatch.setenv("SQLALCHEMY_DATABASE_URI", "sqlite:////tmp/evil.db")
+
+    with caplog.at_level(logging.WARNING, logger="ttnn_visualizer.settings"):
+        ProductionConfig().override_with_env_variables()
+
+    assert "SQLALCHEMY_DATABASE_URI" in caplog.text
+    assert "not configurable" in caplog.text
+
+
+def test_a_variable_the_recompute_honours_is_not_reported_as_ignored(
+    monkeypatch, caplog
+):
+    # ``APP_DATA_DIRECTORY`` is skipped by the loop but applied by the recompute, so
+    # warning about it would send an operator chasing a variable that works.
+    monkeypatch.setenv("APP_DATA_DIRECTORY", "/tmp/late-app")
+
+    with caplog.at_level(logging.WARNING, logger="ttnn_visualizer.settings"):
+        config = ProductionConfig()
         config.override_with_env_variables()
 
-    assert config.LOCAL_DATA_DIRECTORY == Path("/declared")
-    assert "LOCAL_DATA_DIRECTORY" in caplog.text
+    assert "APP_DATA_DIRECTORY" not in caplog.text
+    assert config.APP_DATA_DIRECTORY == "/tmp/late-app"
+
+
+def test_a_late_tt_metal_home_carries_the_whole_path_tree(monkeypatch, tmp_path):
+    # The root the class body read and the one the override loop reads can differ —
+    # this module's ``load_dotenv`` targets the working directory while ``create_app``'s
+    # targets ``backend/.env``. Applying the root alone would serve reports from
+    # ``$TT_METAL_HOME/generated`` while the database stayed on the import-time tree.
+    monkeypatch.delenv("APP_DATA_DIRECTORY", raising=False)
+    monkeypatch.delenv("REPORT_DATA_DIRECTORY", raising=False)
+    monkeypatch.setenv("TT_METAL_HOME", str(tmp_path))
+
+    config = ProductionConfig()
+    config.override_with_env_variables()
+
+    expected_app_data = get_app_data_directory(str(tmp_path), config.APPLICATION_DIR)
+    expected_reports = get_report_data_directory(str(tmp_path), config.APPLICATION_DIR)
+
+    assert config.TT_METAL_HOME == str(tmp_path)
+    assert config.APP_DATA_DIRECTORY == expected_app_data
+    assert config.REPORT_DATA_DIRECTORY == expected_reports
+    assert config.LOCAL_DATA_DIRECTORY == Path(expected_reports).joinpath("local")
+    assert config.REMOTE_DATA_DIRECTORY == Path(expected_reports).joinpath("remote")
+    assert config.SQLALCHEMY_DATABASE_URI.endswith(
+        f"{Path(expected_app_data) / f'ttnn_{config.DB_VERSION}.db'}"
+    )
+
+
+def test_an_explicit_report_directory_still_wins_over_the_derived_one(
+    monkeypatch, tmp_path
+):
+    # Same precedence the class body gives it, and the children follow the winner
+    # rather than the value ``TT_METAL_HOME`` would have produced.
+    monkeypatch.setenv("TT_METAL_HOME", str(tmp_path))
+    monkeypatch.setenv("REPORT_DATA_DIRECTORY", "/tmp/explicit-reports")
+
+    config = ProductionConfig()
+    config.override_with_env_variables()
+
+    assert config.REPORT_DATA_DIRECTORY == "/tmp/explicit-reports"
+    assert config.LOCAL_DATA_DIRECTORY == Path("/tmp/explicit-reports/local")
+    assert config.REMOTE_DATA_DIRECTORY == Path("/tmp/explicit-reports/remote")
+
+
+@pytest.mark.parametrize(
+    "key, env_value",
+    [("DEV_SERVER_HOST", "vite.internal"), ("DEV_SERVER_PORT", "4173")],
+)
+def test_a_documented_dev_server_setting_is_readable(key, env_value, monkeypatch):
+    # ``.env.sample`` offers both, and they feed the dev CORS allowlist and ``main()``'s
+    # browser-open target — an operator on a non-default Vite port would otherwise set
+    # them and get silence.
+    monkeypatch.setenv(key, env_value)
+
+    config = DevelopmentConfig()
+    config.override_with_env_variables()
+
+    assert getattr(config, key) == env_value
+
+
+def test_a_dev_server_override_reaches_the_allowlist(monkeypatch):
+    monkeypatch.delenv("ALLOWED_ORIGINS", raising=False)
+    # Both layers, because either alone still reads the operator's value: the class body
+    # bound it at import (so ``delenv`` cannot reach it) and the override loop re-applies
+    # it from the environment (so ``setattr`` alone is overwritten).
+    monkeypatch.delenv("DEV_SERVER_HOST", raising=False)
+    monkeypatch.setattr(DefaultConfig, "DEV_SERVER_HOST", "localhost")
+    monkeypatch.setenv("FLASK_ENV", "development")
+    monkeypatch.setenv("DEV_SERVER_PORT", "4173")
+
+    config = DevelopmentConfig()
+    config.override_with_env_variables()
+
+    assert "http://localhost:4173" in config.ALLOWED_ORIGINS
+
+
+def test_gunicorn_bind_is_recomputed_from_host_and_port(monkeypatch):
+    monkeypatch.setenv("HOST", "127.0.0.1")
+    monkeypatch.setenv("PORT", "9001")
+
+    config = DevelopmentConfig()
+    config.override_with_env_variables()
+
+    assert config.HOST == "127.0.0.1"
+    assert config.PORT == "9001"
+    assert config.GUNICORN_BIND == "127.0.0.1:9001"
+
+
+def test_server_cli_flag_enables_server_mode_without_a_manual_patch(monkeypatch):
+    # ``main()`` must not hand-patch ``SERVER_MODE`` / ``HOST``; the override loop is
+    # the single mechanism. Reset the singleton so a prior ``Config()`` cannot poison
+    # the assertion. Prefill env keys the SUT may write so monkeypatch restores them.
+    from argparse import Namespace
+
+    from ttnn_visualizer.app import _config_after_cli_env
+    from ttnn_visualizer.settings import Config
+
+    monkeypatch.setattr(Config, "_instance", None)
+    monkeypatch.setenv("FLASK_ENV", "production")
+    monkeypatch.setenv("SERVER_MODE", "false")
+    monkeypatch.setenv("HOST", "localhost")
+    monkeypatch.setenv("PORT", "8000")
+
+    args = Namespace(host=None, server=True, port=None)
+    config = _config_after_cli_env(args)
+
+    assert config.SERVER_MODE is True
+    assert config.HOST == "0.0.0.0"
+    assert config.GUNICORN_BIND == "0.0.0.0:8000"
+
+
+def test_an_explicit_host_does_not_suppress_server_mode(monkeypatch):
+    # ``--server`` is documented as enabling server mode, and naming an interface still
+    # binds a reachable socket. If ``--host`` won outright, ``--server --host <addr>``
+    # would leave every ``@local_only`` endpoint open on it.
+    from argparse import Namespace
+
+    from ttnn_visualizer.app import _config_after_cli_env
+    from ttnn_visualizer.settings import Config
+
+    monkeypatch.setattr(Config, "_instance", None)
+    monkeypatch.setenv("FLASK_ENV", "production")
+    monkeypatch.setenv("SERVER_MODE", "false")
+    monkeypatch.setenv("HOST", "localhost")
+    monkeypatch.setenv("PORT", "8000")
+
+    args = Namespace(host="192.0.2.10", server=True, port=None)
+    config = _config_after_cli_env(args)
+
+    assert config.SERVER_MODE is True
+    assert config.HOST == "192.0.2.10"
+    assert config.GUNICORN_BIND == "192.0.2.10:8000"
+
+
+def test_the_cli_refuses_to_run_after_the_config_singleton_exists(monkeypatch):
+    # The CLI writes environment variables and relies on ``Config()`` reading them, so
+    # an instance built during import would make ``--server`` a silent no-op. Fail
+    # loudly instead — that is the guarantee the removed hand-patches provided.
+    from argparse import Namespace
+
+    from ttnn_visualizer.app import _config_after_cli_env
+    from ttnn_visualizer.settings import Config
+
+    monkeypatch.setattr(Config, "_instance", ProductionConfig())
+
+    with pytest.raises(AssertionError, match="constructed before"):
+        _config_after_cli_env(Namespace(host=None, server=True, port=None))
 
 
 def test_an_unrecognised_boolean_keeps_the_declared_default(monkeypatch, caplog):
@@ -520,8 +976,8 @@ def test_the_override_path_refuses_a_strict_boolean_it_cannot_read(monkeypatch):
 
 @pytest.mark.parametrize("env_value, expected", BOOLEAN_VOCABULARY_CASES)
 def test_the_class_body_parses_a_recognised_boolean(env_value, expected, monkeypatch):
-    # The path that actually decides ``SERVER_MODE``, since the override loop never
-    # reaches it — so it needs its own cover rather than inheriting the loop's.
+    # Import-time path; the override loop has its own cover via
+    # ``test_env_override_parses_booleans`` and the inherited-reach case.
     monkeypatch.setenv("SERVER_MODE", env_value)
 
     assert _parse_env_bool("SERVER_MODE", False) is expected
@@ -570,8 +1026,11 @@ def test_importing_settings_accepts_the_documented_vocabulary(env_value):
 def test_server_mode_wins_over_flask_debug(monkeypatch, caplog):
     # ``Flask.debug`` is not merely verbosity: it suppresses the catch-all error handler
     # (tracebacks to untrusted callers) and, without websockets, mounts Werkzeug's
-    # interactive console. ``DEBUG`` is one of the two attributes the loop does reach,
-    # so the hosted posture has to override it rather than merely being documented.
+    # interactive console. The hosted posture must clear ``DEBUG`` even when
+    # ``FLASK_DEBUG`` is set via the override loop.
+    # Both layers, for the reason above — here an exported ``SERVER_MODE=false`` would
+    # otherwise leave the hosted posture untested and the assertion inverted.
+    monkeypatch.delenv("SERVER_MODE", raising=False)
     monkeypatch.setattr(DefaultConfig, "SERVER_MODE", True)
     monkeypatch.setenv("FLASK_DEBUG", "true")
 
@@ -608,8 +1067,7 @@ def test_the_boolean_vocabulary_has_one_source():
 @pytest.mark.parametrize("key", ["MALWARE_SCANNER", "TT_METAL_HOME"])
 def test_an_optional_string_setting_is_still_overridable(key, monkeypatch):
     # These declare ``None`` when unset, which offers no type to coerce towards. They
-    # are optional strings, so the raw value is already what the class body would hold;
-    # skipping them would silently drop the override once #1857 widens the loop's reach.
+    # are optional strings, so the raw value is already what the class body would hold.
     monkeypatch.setattr(DefaultConfig, key, None)
     monkeypatch.setenv(key, "/some/value")
 

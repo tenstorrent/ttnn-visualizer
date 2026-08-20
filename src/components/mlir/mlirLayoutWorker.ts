@@ -6,7 +6,8 @@
 /* eslint-disable no-continue */
 import { buildVisibleGraph } from './mlirGraphBuilder';
 import { buildGraphIndex } from './mlirGraphIndexBuilder';
-import { CACHE_LIMIT_PER_GRAPH, touchLruCache } from './mlirLayoutWorkerCache';
+import { touchLruCache } from '../../functions/touchLruCache';
+import { CACHE_LIMIT_PER_GRAPH } from './mlirLayoutWorkerCache';
 import type { BuiltGraph, GraphIndex, WorkerInboundMessage } from './mlirGraphTypes';
 
 const touchGraphCache = (cache: Map<string, BuiltGraph>, key: string, value: BuiltGraph): void =>

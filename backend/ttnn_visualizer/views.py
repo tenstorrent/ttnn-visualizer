@@ -11,9 +11,10 @@ import shutil
 import time
 import urllib
 import urllib.request
+from enum import Enum
 from http import HTTPStatus
 from pathlib import Path
-from typing import Any, Callable, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import orjson
 import yaml
@@ -33,7 +34,6 @@ from ttnn_visualizer.decorators import (
 )
 from ttnn_visualizer.enums import ConnectionTestStates, StackSourceOrigin
 from ttnn_visualizer.exceptions import (
-    AuthenticationFailedException,
     DataFormatError,
     InvalidRequestPayload,
     PerformanceReportNotLoadedException,
@@ -93,6 +93,8 @@ from ttnn_visualizer.serializers import (
 )
 from ttnn_visualizer.sftp_operations import (
     MULTIHOST_REPORT_LAYOUT_HINT,
+    RemoteReportPathOutcome,
+    RemoteSearchRootState,
     check_remote_path_for_reports,
     get_active_sync_method,
     get_remote_performance_folders,
@@ -108,6 +110,14 @@ from ttnn_visualizer.stack_trace_source import (
     read_stack_source_local,
     read_stack_source_remote,
     stack_source_response,
+)
+from ttnn_visualizer.usage import (
+    MAX_USAGE_BATCH_EVENTS,
+    UsageEvent,
+    UsageEventRejected,
+    is_recording_enabled,
+    record_events,
+    validate_client_event,
 )
 from ttnn_visualizer.utils import (
     PERFORMANCE_OPS_PERF_PREFIX,
@@ -142,6 +152,18 @@ api = Blueprint("api", __name__)
 # Sent on JSON endpoints that stream report-derived content so browsers can't
 # MIME-sniff the response as HTML and execute embedded markup.
 _NOSNIFF_HEADERS = {"X-Content-Type-Options": "nosniff"}
+
+# What one permitted page may write into a privacy-reviewed artefact in a single request.
+# Not inherited: `MAX_CONTENT_LENGTH` defaults to no limit at all (`settings.py`), so the
+# limit has to be set per request. It has to stay consistent with `MAX_USAGE_BATCH_EVENTS`,
+# which lives in `usage.py` beside the write-atomicity guarantee it bounds — a full batch
+# of the largest permitted event must still fit inside this.
+MAX_USAGE_REQUEST_BYTES = 16 * 1024
+
+# Module-private, unlike the cap above: that is part of the contract the tests pin, this
+# is just the envelope's field name. The shape of an event *inside* the envelope belongs
+# to `usage.py`, which validates it.
+_USAGE_EVENTS_FIELD = "events"
 
 
 def _stack_source_request_params():
@@ -1734,16 +1756,57 @@ def get_mesh_descriptor(instance: Instance):
         return response_bad_request(f"Failed to parse YAML: {str(e)}")
 
 
+# Why a table rather than a guard per state: this is the only place that reads
+# `RemoteSearchRootState`, so a state added without copy has nothing forcing the
+# second edit. Looking the copy up means that omission raises here, where the
+# state arrived, instead of falling through to the "no reports found" warning —
+# which is the exact mis-description `NOT_A_DIRECTORY` was added to stop.
+_FAILURE_COPY_BY_ROOT_STATE = {
+    RemoteSearchRootState.MISSING: (
+        "{subject} directory does not exist or cannot be accessed"
+    ),
+    RemoteSearchRootState.NOT_A_DIRECTORY: "{subject} path is not a directory",
+    RemoteSearchRootState.UNKNOWN: (
+        "{subject} directory could not be checked because the search did not complete"
+    ),
+}
+
+
 def _report_search_status(
-    label: str, count: int, *, in_rank_subdirectories: bool = False
+    label: str,
+    outcome: RemoteReportPathOutcome,
+    *,
+    in_rank_subdirectories: bool = False,
 ) -> StatusMessage:
     """The one connection-test line a configured report path earns.
 
     The path check and the report search answer halves of the same question, so
-    they report as a single result per report kind. "Exists but empty" can only
-    be said at all because the existence check already passed — a missing path
-    fails before this point.
+    they report as a single result per report kind — including when that result
+    is a failure, which is why the copy for all four outcomes lives here rather
+    than half of it being raised from the search.
+
+    ``label`` is lower case for the count line ("Found 3 memory reports") and
+    capitalised for the rest, so a user reading a failure sees the same noun as
+    the form field they have to correct.
     """
+    subject = label.capitalize()
+
+    if outcome.error_message:
+        return StatusMessage(
+            status=ConnectionTestStates.FAILED.value,
+            message=outcome.error_message,
+            detail=outcome.error_detail,
+        )
+
+    if outcome.root_state is not RemoteSearchRootState.PRESENT:
+        return StatusMessage(
+            status=ConnectionTestStates.FAILED.value,
+            message=_FAILURE_COPY_BY_ROOT_STATE[outcome.root_state].format(
+                subject=subject
+            ),
+        )
+
+    count = outcome.report_count
     if count:
         plural = "report" if count == 1 else "reports"
         location = " in per-rank subdirectories" if in_rank_subdirectories else ""
@@ -1763,7 +1826,7 @@ def _report_search_status(
     )
     return StatusMessage(
         status=ConnectionTestStates.WARNING.value,
-        message=f"{label.capitalize()} path exists but no reports found{hint}",
+        message=f"{subject} path exists but no reports found{hint}",
     )
 
 
@@ -1803,36 +1866,39 @@ def test_remote_folder():
     try:
         test_ssh_connection(connection)
         add_status(ConnectionTestStates.OK.value, "SSH connection established")
-    except AuthenticationFailedException as e:
-        add_status(
-            ConnectionTestStates.FAILED.value, e.message, getattr(e, "detail", None)
-        )
-        return jsonify([status.model_dump() for status in statuses]), e.http_status
     except RemoteConnectionException as e:
         add_status(e.status.value, e.message, getattr(e, "detail", None))
+        # A verdict on the connection answers the whole request, so it keeps its
+        # own status code (422 for rejected credentials or an untrusted host key)
+        # rather than being reported as one more line in a 200.
+        if e.is_connection_verdict:
+            return jsonify([status.model_dump() for status in statuses]), e.http_status
 
     # Both configured paths are checked and searched here, one SSH round trip
     # each: the search settles whether its root exists as part of the same
-    # command, and a path that exists is silent because the report count it
-    # produces below already says so.
+    # command, and every configured path earns exactly one line below whatever
+    # the other path did, so the dialog can resolve the placeholder it seeded.
     if not has_failures():
         try:
-            report_counts = check_remote_path_for_reports(connection)
-        except AuthenticationFailedException as e:
-            add_status(
-                ConnectionTestStates.FAILED.value, e.message, getattr(e, "detail", None)
-            )
-            return jsonify([status.model_dump() for status in statuses]), e.http_status
+            searches = check_remote_path_for_reports(connection)
         except RemoteConnectionException as e:
+            # Only the connection's own verdict reaches this: a failure about a
+            # single path — including a transport error raised mid-search — is
+            # converted and carried back as that path's outcome instead.
             add_status(e.status.value, e.message, getattr(e, "detail", None))
+            if e.is_connection_verdict:
+                return (
+                    jsonify([status.model_dump() for status in statuses]),
+                    e.http_status,
+                )
         else:
-            if report_counts.profiler is not None:
-                statuses.append(_report_search_status("memory", report_counts.profiler))
-            if report_counts.performance is not None:
+            if searches.profiler is not None:
+                statuses.append(_report_search_status("memory", searches.profiler))
+            if searches.performance is not None:
                 statuses.append(
                     _report_search_status(
                         "performance",
-                        report_counts.performance,
+                        searches.performance,
                         in_rank_subdirectories=connection.multihostPerformance,
                     )
                 )
@@ -2497,3 +2563,83 @@ def get_latest_version():
     except Exception as e:
         logger.error(f"Error fetching releases XML: {str(e)}")
         return response_internal_server_error("Failed to fetch releases")
+
+
+@api.route("/usage", methods=["POST"])
+@local_only
+def record_usage_events():
+    """Append a batch of frontend usage events to the local log.
+
+    Recording happens frontend-side because backend API counts are misleading — React
+    Query caching, prefetching and retries inflate them, and the interactions worth
+    measuring (chart views, table toggles, filters, playback) never reach the API at
+    all. So the client needs somewhere local to post, and this is it.
+
+    **No ``@with_instance``, deliberately.** The log is machine-scoped rather than
+    report-scoped, so this route takes no ``instanceId`` — an exception to the
+    convention every report-backed route follows, not an omission to be tidied up.
+
+    **No ``@timer`` either**: it logs a line per call, and this endpoint is called often
+    by design.
+
+    ``@local_only`` is the control that matters. Nothing here is authenticated and
+    ``ALLOWED_ORIGINS`` is the only other gate, so the handler validates its body
+    against a closed schema rather than trusting it: a permitted page must not be able
+    to write arbitrary lines into the file we are asking IT to parse.
+    """
+    # Before anything reads the stream. Werkzeug enforces this both against a declared
+    # `Content-Length` and while reading a stream the server has terminated, which a
+    # manual `request.content_length` check would miss for chunked bodies. The resulting
+    # `RequestEntityTooLarge` renders as a 413 through the app's `HTTPException` handler.
+    # Assigning it per request needs Flask >= 3.1 — the attribute is read-only before
+    # that, so relaxing the pin in `pyproject.toml` turns every request here into a 500
+    # rather than a quietly uncapped body.
+    request.max_content_length = MAX_USAGE_REQUEST_BYTES
+
+    # Checked here as well as in the writer so a user who switched recording off does not
+    # pay a 16 KB parse and a 50-event validation on every flush for the rest of the
+    # session. The answer is the same 204 either way, so the client never learns which
+    # branch it took and never backs off.
+    if not is_recording_enabled(current_app.config["SERVER_MODE"]):
+        return Response(status=HTTPStatus.NO_CONTENT)
+
+    # Not `force=True`: requiring `application/json` is load-bearing rather than
+    # pedantic. It makes this a non-simple request, so a hostile origin cannot post to it
+    # without a preflight `ALLOWED_ORIGINS` refuses, whereas a `text/plain` body would
+    # sail through. The client's `sendBeacon` flush must therefore send a typed Blob —
+    # `new Blob([body], { type: 'application/json' })` — since a bare string beacon is
+    # sent as `text/plain` and would be refused here.
+    payload = request.get_json(silent=True)
+
+    if not isinstance(payload, dict):
+        return response_bad_request("Expected a JSON object")
+
+    events = payload.get(_USAGE_EVENTS_FIELD)
+
+    if not isinstance(events, list) or not events:
+        return response_bad_request(f"Expected a non-empty {_USAGE_EVENTS_FIELD} list")
+
+    if len(events) > MAX_USAGE_BATCH_EVENTS:
+        return response_bad_request(
+            f"A batch may carry at most {MAX_USAGE_BATCH_EVENTS} events"
+        )
+
+    validated: List[Tuple[UsageEvent, Dict[str, Enum]]] = []
+
+    # Every event is validated before any is written, so a batch carrying one bad event
+    # appends nothing. Partial acceptance would leave a reader unable to tell a truncated
+    # batch from a complete one.
+    for entry in events:
+        try:
+            validated.append(validate_client_event(entry))
+        except UsageEventRejected as rejection:
+            # `UsageEventRejected` messages describe the schema rather than echoing what
+            # arrived, so passing one through cannot leak client-supplied text.
+            return response_unprocessable_entity(str(rejection))
+
+    # Deliberately the same answer whether or not the write happened. Recording being
+    # switched off locally is not the client's problem, and whether a log exists on this
+    # machine is not something a page needs told.
+    record_events(validated)
+
+    return Response(status=HTTPStatus.NO_CONTENT)

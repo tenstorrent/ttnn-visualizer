@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { useRouteError } from 'react-router-dom';
+import { useRouteError } from 'react-router';
 
 interface RouteErrorProps {
     statusText: string;

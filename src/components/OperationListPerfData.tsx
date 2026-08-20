@@ -6,17 +6,20 @@ import classNames from 'classnames';
 import { Fragment } from 'react/jsx-runtime';
 import { formatPercentage, formatSize } from '../functions/math';
 import { getCoreColour, getOpToOpGapColour } from '../functions/perfFunctions';
-import { useGetDeviceOperationListPerf } from '../hooks/useAPI';
+import { useGetDeviceOperationListPerfByOpId } from '../hooks/useAPI';
 import { OperationDescription } from '../model/APIData';
-import { DeviceOperationMapping } from '../model/DeviceOperationMapping';
 
 interface OperationListPerfDataProps {
     operation: OperationDescription;
 }
 
+const EMPTY_PERF_DEVICE_OPERATIONS: never[] = [];
+
 const OperationListPerfData = ({ operation }: OperationListPerfDataProps) => {
-    const perfData = useGetDeviceOperationListPerf();
-    const perfDeviceOperations = perfData?.filter((perf: DeviceOperationMapping) => perf.id === operation.id) || [];
+    // Grouped by op id rather than scanned, because this renders once per row of
+    // a virtualised list and a filter over the whole match is O(rows) per row.
+    const perfDataByOpId = useGetDeviceOperationListPerfByOpId();
+    const perfDeviceOperations = perfDataByOpId.get(operation.id) ?? EMPTY_PERF_DEVICE_OPERATIONS;
 
     return (
         <div className='perf-data'>

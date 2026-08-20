@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { AxiosError, AxiosRequestConfig } from 'axios';
-import { keepPreviousData, useQueries, useQuery } from '@tanstack/react-query';
+import { QueryClient, keepPreviousData, useQueries, useQuery } from '@tanstack/react-query';
 import { useCallback, useEffect, useMemo } from 'react';
 import { useAtomValue } from 'jotai';
 import { NumberRange } from '@blueprintjs/core';
@@ -18,7 +18,6 @@ import {
     DeviceOperationParams,
     Instance,
     NodeType,
-    Operation,
     OperationDescription,
     OperationDetailsData,
     ReportMetadataResponse,
@@ -33,9 +32,16 @@ import getServerConfig from '../functions/getServerConfig';
 import { PerfTableRow } from '../definitions/PerfTable';
 import { DeviceOperationMapping } from '../model/DeviceOperationMapping';
 import { matchDeviceOperationsToPerf } from '../functions/deviceOperationMatching';
+import memoiseLatest from '../functions/memoiseLatest';
+import {
+    PerformanceReportParams,
+    getLinkedPerformanceReportParams,
+    getPerformanceComparisonReportQueryKey,
+    getPerformanceReportQueryKey,
+} from '../functions/performanceReportQueryKey';
 import { L1PressureResult } from '../model/L1Pressure';
 import { buildL1PressureResult } from '../functions/l1Pressure';
-import { StackedGroupBy, StackedPerfRow } from '../definitions/StackedPerfTable';
+import { StackedPerfRow } from '../definitions/StackedPerfTable';
 import { isDeviceOperation } from '../functions/filterOperations';
 import { normalizeBufferPagesResponse } from '../functions/normalizeBufferPagesResponse';
 import {
@@ -48,6 +54,7 @@ import {
     filterBySignpostAtom,
     hideHostOpsAtom,
     mergeDevicesAtom,
+    performanceReportLocationAtom,
     selectedOperationRangeAtom,
     stackedGroupByAtom,
     tracingModeAtom,
@@ -66,7 +73,7 @@ import {
 import npeManifestSchema from '../schemas/npe-manifest.schema.json';
 import { getErroredReportFolderLabel, normaliseReportFolder } from '../functions/validateReportFolder';
 import { Signpost } from '../model/Signpost';
-import { TensorDeallocationReport, TensorsByOperationByAddress } from '../model/BufferSummary';
+import { TensorsByOperationByAddress } from '../model/BufferSummary';
 import { L1_DEFAULT_MEMORY_SIZE } from '../definitions/L1MemorySize';
 import {
     NPE_QUERY_KEY,
@@ -80,7 +87,7 @@ import { ReportFolder, SINGLE_HOST_WORLD_SIZE } from '../definitions/Reports';
 import { RemoteFolder } from '../definitions/RemoteConnection';
 import createToastNotification from '../functions/createToastNotification';
 import { ToastType } from '../definitions/ToastType';
-import { DEALLOCATE_OP_NAME_LIST } from '../definitions/Deallocate';
+import { buildLateDeallocationReports } from '../functions/lateDeallocation';
 import { processInputsOutputs } from '../functions/processMemoryAllocations';
 import { SemVer, semverParse } from '../functions/semverParse';
 import { parseNpeAxiosResponseData } from '../functions/parseNpeAxiosResponseData';
@@ -386,29 +393,23 @@ export interface PerformanceReportResponse {
     signposts?: Signpost[];
 }
 
-const fetchPerformanceReport = async (
-    name: string | null,
-    startSignpost: Signpost | null,
-    endSignpost: Signpost | null,
-    hideHostOps: boolean,
-    mergeDevices: boolean,
-    tracingMode: boolean,
-    groupBy: StackedGroupBy,
-) => {
-    const { data } = await axiosInstance.get<PerformanceReportResponse>(
-        `${Endpoints.PERFORMANCE}/perf-results/report`,
-        {
-            params: {
-                name,
-                group_by: groupBy,
-                start_signpost: startSignpost?.op_code,
-                end_signpost: endSignpost?.op_code,
-                hide_host_ops: hideHostOps,
-                merge_devices: mergeDevices,
-                tracing_mode: tracingMode,
-            },
+// Takes the params as one object rather than positionally: `hideHostOps`,
+// `mergeDevices` and `tracingMode` are adjacent booleans, so a positional
+// signature lets two of them be swapped without a type error while the query key
+// is still built from the correct object — a request cached under a key that
+// misdescribes it.
+const fetchPerformanceReport = async (name: string | null, params: PerformanceReportParams) => {
+    const { data } = await axiosInstance.get<PerformanceReportResponse>(Endpoints.PERFORMANCE_RESULTS_REPORT, {
+        params: {
+            name,
+            group_by: params.groupBy,
+            start_signpost: params.startSignpost?.op_code,
+            end_signpost: params.endSignpost?.op_code,
+            hide_host_ops: params.hideHostOps,
+            merge_devices: params.mergeDevices,
+            tracing_mode: params.tracingMode,
         },
-    );
+    });
 
     return data;
 };
@@ -845,6 +846,62 @@ export const useGetDeviceOperationsListByOp = () => {
     }, [operations]);
 };
 
+// Memoised across call sites, not per hook invocation: both derived values are
+// read by a handful of hooks and by one component instance per virtualised row,
+// and `useMemo` would run the flatMap and the O(rows) match once for each. The
+// inputs are React Query results, so their identity is shared by every caller in
+// a render pass. Callers must not mutate the results — they share them now.
+const getDeviceOperationsList = memoiseLatest((operations?: OperationDescription[]): DeviceOperationMapping[] => {
+    if (!operations) {
+        return [];
+    }
+
+    return operations.flatMap((operation) =>
+        operation.deviceOperationNameList.map((name) => ({
+            name,
+            id: operation.id,
+            operationName: operation.name,
+        })),
+    );
+});
+
+const getDeviceOperationListPerf = memoiseLatest(matchDeviceOperationsToPerf);
+
+const getOpToPerfIds = memoiseLatest((matched: DeviceOperationMapping[]) =>
+    matched.map(({ id, perfData }) => ({ opId: id, perfId: perfData?.id })),
+);
+
+const getDeviceOperationListPerfByOpId = memoiseLatest((matched: DeviceOperationMapping[]) => {
+    const mappingsByOpId = new Map<number, DeviceOperationMapping[]>();
+
+    for (const mapping of matched) {
+        const existing = mappingsByOpId.get(mapping.id);
+
+        if (existing) {
+            existing.push(mapping);
+        } else {
+            mappingsByOpId.set(mapping.id, [mapping]);
+        }
+    }
+
+    return mappingsByOpId;
+});
+
+/**
+ * @description Discards every cached report query along with the values derived
+ * from them. The derived caches are module-level, so clearing React Query alone
+ * leaves the previous report's rows reachable from them for the lifetime of the
+ * page — the two have to be dropped together, which is why this exists rather
+ * than a bare `queryClient.clear()` at each report-switch call site.
+ */
+export const clearReportCaches = (queryClient: QueryClient) => {
+    queryClient.clear();
+    getDeviceOperationsList.reset();
+    getDeviceOperationListPerf.reset();
+    getOpToPerfIds.reset();
+    getDeviceOperationListPerfByOpId.reset();
+};
+
 /**
  * @description Every device operation in the memory report, flattened in report
  * order. Multi-device collapsing happens at match time, not here, because only
@@ -853,61 +910,38 @@ export const useGetDeviceOperationsListByOp = () => {
 export const useGetDeviceOperationsList = (): DeviceOperationMapping[] => {
     const { data: operations } = useOperationsList();
 
-    return useMemo(() => {
-        if (!operations) {
-            return [];
-        }
-
-        return operations.flatMap((operation) =>
-            operation.deviceOperationNameList.map((name) => ({
-                name,
-                id: operation.id,
-                operationName: operation.name,
-            })),
-        );
-    }, [operations]);
-};
-
-const useProxyPerformanceReport = (): PerformanceReportResponse => {
-    const activeReportFolderName = useAtomValue(activePerformanceReportFolderNameAtom);
-    const response = usePerformanceReport(activeReportFolderName);
-
-    return useMemo(() => {
-        if (!response.data) {
-            return EMPTY_PERF_RETURN;
-        }
-        return response.data;
-    }, [response.data]);
+    return getDeviceOperationsList(operations);
 };
 
 export const useGetDeviceOperationListPerf = () => {
-    const deviceOperations: DeviceOperationMapping[] = useGetDeviceOperationsList();
+    const deviceOperations = useGetDeviceOperationsList();
     const { data: devices } = useDevices();
-    const data = useProxyPerformanceReport();
+    const { data } = useLinkedPerformanceReport();
 
-    return useMemo(
-        () => matchDeviceOperationsToPerf(deviceOperations, data.report, devices?.length ?? 0),
-        [data, deviceOperations, devices],
-    );
+    return getDeviceOperationListPerf(deviceOperations, (data ?? EMPTY_PERF_RETURN).report, devices?.length ?? 0);
 };
 
 /**
- * @description op id to perf id mapping only for existing perf ids
+ * @description The matched device operations grouped by profiler op id, for
+ * consumers that look up one operation at a time. Rendered once per row of a
+ * virtualised list, a linear scan per lookup is O(rows) per row.
  */
-export const useOpToPerfIdFiltered = () => {
-    const opMapping = useGetDeviceOperationListPerf();
+export const useGetDeviceOperationListPerfByOpId = (): Map<number, DeviceOperationMapping[]> =>
+    getDeviceOperationListPerfByOpId(useGetDeviceOperationListPerf());
 
-    return useMemo(
-        () =>
-            opMapping.map(({ id, perfData }) => {
-                return {
-                    opId: id,
-                    perfId: perfData?.id,
-                };
-            }),
-        [opMapping],
-    );
-};
+/**
+ * @description One entry per matched device operation, pairing its op id with
+ * the perf row it matched. An operation that matched no perf row still gets an
+ * entry, with `perfId` left `undefined` — consumers filter or coerce it
+ * themselves (`RangeSlider` leans on `Number(undefined)` being falsy).
+ *
+ * The perf ids come from the link-pinned report (`useLinkedPerformanceReport`),
+ * not from the rows the performance tab is displaying. A row id survives host-op
+ * and signpost filtering, so consumers can still join against those views; ids
+ * do not survive `mergeDevices: false`, where an operation's per-device rows
+ * each carry their own id and only the merged representative joins.
+ */
+export const useOpToPerfIdFiltered = () => getOpToPerfIds(useGetDeviceOperationListPerf());
 
 export const usePerformanceRange = (): NumberRange | null => {
     const activeReportFolderName = useAtomValue(activePerformanceReportFolderNameAtom);
@@ -1161,36 +1195,38 @@ export const usePerfMetas = (reportNames: string[] | null | undefined): (MetaDat
     });
 };
 
-export const usePerformanceReport = (name: string | null) => {
+const useViewPerformanceReportParams = (): PerformanceReportParams => {
     const [startSignpost, endSignpost] = useAtomValue(filterBySignpostAtom);
     const hideHostOps = useAtomValue(hideHostOpsAtom);
     const mergeDevices = useAtomValue(mergeDevicesAtom);
     const tracingMode = useAtomValue(tracingModeAtom);
     const groupBy = useAtomValue(stackedGroupByAtom);
 
+    return useMemo(
+        () => ({
+            startSignpost: startSignpost ?? null,
+            endSignpost: endSignpost ?? null,
+            hideHostOps,
+            mergeDevices,
+            tracingMode,
+            groupBy,
+        }),
+        [startSignpost, endSignpost, hideHostOps, mergeDevices, tracingMode, groupBy],
+    );
+};
+
+const useLinkedPerformanceReportParams = (): PerformanceReportParams => {
+    const tracingMode = useAtomValue(tracingModeAtom);
+
+    return useMemo(() => getLinkedPerformanceReportParams(tracingMode), [tracingMode]);
+};
+
+const usePerformanceReportQuery = (name: string | null, params: PerformanceReportParams) => {
+    const location = useAtomValue(performanceReportLocationAtom);
+
     const response = useQuery<PerformanceReportResponse, AxiosError>({
-        queryFn: () =>
-            name !== null
-                ? fetchPerformanceReport(
-                      name,
-                      startSignpost,
-                      endSignpost,
-                      hideHostOps,
-                      mergeDevices,
-                      tracingMode,
-                      groupBy,
-                  )
-                : Promise.resolve(EMPTY_PERF_RETURN),
-        queryKey: [
-            'get-performance-report',
-            name,
-            `startSignpost:${startSignpost ? `${startSignpost.id}${startSignpost.op_code}` : null}`,
-            `endSignpost:${endSignpost ? `${endSignpost.id}${endSignpost.op_code}` : null}`,
-            `hideHostOps:${hideHostOps ? 'true' : 'false'}`,
-            `mergeDevices:${mergeDevices ? 'true' : 'false'}`,
-            `tracingMode:${tracingMode ? 'true' : 'false'}`,
-            `groupBy:${groupBy}`,
-        ],
+        queryFn: () => (name !== null ? fetchPerformanceReport(name, params) : Promise.resolve(EMPTY_PERF_RETURN)),
+        queryKey: getPerformanceReportQueryKey({ name, instanceId: getOrCreateInstanceId(), location, params }),
         enabled: name !== null,
         retry: false,
         staleTime: Infinity,
@@ -1199,13 +1235,48 @@ export const usePerformanceReport = (name: string | null) => {
     return response;
 };
 
+/**
+ * @description The performance report as the performance tab is currently
+ * displaying it — every view filter applied.
+ */
+export const usePerformanceReport = (name: string | null) => {
+    const params = useViewPerformanceReportParams();
+
+    return usePerformanceReportQuery(name, params);
+};
+
+/**
+ * @description The active performance report in the one shape the memory
+ * report can be matched against: devices merged, host ops hidden, whole run.
+ * Whether two reports come from the same run is a property of the reports, so
+ * it must not move when the user changes how they are viewing the performance
+ * tab (#1812).
+ *
+ * `tracingMode` is the one view control still followed, and so a deliberate
+ * carve-out from #1812, which names it alongside the three pinned here. It only
+ * reorders rows, and for a trace-captured run the traced order is the one that
+ * lines up with the memory report — pinning it would leave those reports
+ * permanently unlinkable, which is a worse failure than the one it would fix.
+ * Resolving against both orders and keeping whichever aligns would close the
+ * gap properly; it needs #1800's shared run id to be worth the second fetch.
+ *
+ * So a Tracing mode toggle can still flip the badge, and that outcome is not
+ * transient: `ReportLinkStatus` writes it to `reportLinksAtom`, which is backed by
+ * localStorage, so an `UNLINKED` reached this way keeps badging the pair as failed
+ * in the report pickers afterwards. #1812 stays open on that residual until the
+ * both-orders resolution lands.
+ */
+export const useLinkedPerformanceReport = () => {
+    const name = useAtomValue(activePerformanceReportFolderNameAtom);
+    const params = useLinkedPerformanceReportParams();
+
+    return usePerformanceReportQuery(name, params);
+};
+
 export const usePerformanceComparisonReport = () => {
     const rawReportNames = useAtomValue(comparisonPerformanceReportListAtom);
-    const [startSignpost, endSignpost] = useAtomValue(filterBySignpostAtom);
-    const hideHostOps = useAtomValue(hideHostOpsAtom);
-    const mergeDevices = useAtomValue(mergeDevicesAtom);
-    const tracingMode = useAtomValue(tracingModeAtom);
-    const groupBy = useAtomValue(stackedGroupByAtom);
+    const location = useAtomValue(performanceReportLocationAtom);
+    const params = useViewPerformanceReportParams();
 
     const reportNames = useMemo(() => {
         return Array.isArray(rawReportNames) ? [...rawReportNames] : rawReportNames;
@@ -1217,32 +1288,16 @@ export const usePerformanceComparisonReport = () => {
                 return [];
             }
 
-            const results = await Promise.all(
-                reportNames.map((name) =>
-                    fetchPerformanceReport(
-                        name,
-                        startSignpost,
-                        endSignpost,
-                        hideHostOps,
-                        mergeDevices,
-                        tracingMode,
-                        groupBy,
-                    ),
-                ),
-            );
+            const results = await Promise.all(reportNames.map((name) => fetchPerformanceReport(name, params)));
 
             return results;
         },
-        queryKey: [
-            'get-performance-comparison-report',
-            reportNames,
-            `startSignpost:${startSignpost ? `${startSignpost.id}${startSignpost.op_code}` : null}`,
-            `endSignpost:${endSignpost ? `${endSignpost.id}${endSignpost.op_code}` : null}`,
-            `hideHostOps:${hideHostOps ? 'true' : 'false'}`,
-            `mergeDevices:${mergeDevices ? 'true' : 'false'}`,
-            `tracingMode:${tracingMode ? 'true' : 'false'}`,
-            `groupBy:${groupBy}`,
-        ],
+        queryKey: getPerformanceComparisonReportQueryKey({
+            names: reportNames,
+            instanceId: getOrCreateInstanceId(),
+            location,
+            params,
+        }),
         staleTime: Infinity,
         enabled: !!reportNames,
     });
@@ -1483,55 +1538,22 @@ export const useGetTensorDeallocationReportByOperation = () => {
     const { tensorListByOperation } = useCreateTensorsByOperationByIdList();
     const { data: operations } = useOperationsList();
 
-    const operationsById = useMemo(() => {
-        const map = new Map<number, Operation>();
+    const operationNamesById = useMemo(() => {
+        const namesById = new Map<number, string>();
         operations?.forEach((operation) => {
-            map.set(operation.id, operation);
+            namesById.set(operation.id, operation.name);
         });
-        return map;
+        return namesById;
     }, [operations]);
 
     return useMemo(() => {
-        const getLastValidConsumer = (consumers: number[]) => {
-            const list = [...consumers];
-            while (list && list.length > 0) {
-                const lastConsumerOperationId = list.sort().pop() || -1;
-                const lastConsumerName = operationsById.get(lastConsumerOperationId)?.name || '';
-
-                if (lastConsumerOperationId > -1 && !DEALLOCATE_OP_NAME_LIST.includes(lastConsumerName.toLowerCase())) {
-                    return { lastConsumerOperationId, lastConsumerName };
-                }
-            }
-            return { lastConsumerName: '', lastConsumerOperationId: -1 };
-        };
-        const lateDeallocationsByOperation = new Map<number, TensorDeallocationReport[]>();
-        const nonDeallocatedTensorListById = new Map<number, TensorDeallocationReport>();
-        tensorListByOperation.forEach((tensorsMap, operationId) => {
-            tensorsMap.forEach((tensor, address) => {
-                if (tensor.id && tensor.consumers && tensor.consumers.length > 0) {
-                    const { lastConsumerOperationId, lastConsumerName } = getLastValidConsumer(tensor.consumers);
-                    if (lastConsumerOperationId !== null && lastConsumerOperationId < operationId) {
-                        if (!lateDeallocationsByOperation.has(operationId)) {
-                            lateDeallocationsByOperation.set(operationId, []);
-                        }
-                        const list: TensorDeallocationReport[] = lateDeallocationsByOperation.get(operationId)!;
-                        const tensorInfo: TensorDeallocationReport = {
-                            id: tensor.id,
-                            address,
-                            consumerName: lastConsumerName,
-                            lastConsumerOperationId,
-                            lastOperationId: operationId,
-                        };
-                        list.push(tensorInfo);
-                        lateDeallocationsByOperation.set(operationId, list);
-                        nonDeallocatedTensorListById.set(tensor.id, tensorInfo);
-                    }
-                }
-            });
+        const { reportsByOpId, reportsByTensorId } = buildLateDeallocationReports({
+            tensorsByOperation: tensorListByOperation,
+            operationNamesById,
         });
 
-        return { lateDeallocationsByOperation, nonDeallocatedTensorList: nonDeallocatedTensorListById };
-    }, [operationsById, tensorListByOperation]);
+        return { lateDeallocationsByOperation: reportsByOpId, nonDeallocatedTensorList: reportsByTensorId };
+    }, [operationNamesById, tensorListByOperation]);
 };
 
 const fetchLatestAppVersion = async (): Promise<string | null> => {

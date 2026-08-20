@@ -133,6 +133,18 @@ const PASSING_TESTS: ConnectionStatus[] = [
     { status: ConnectionTestStates.OK, message: 'Found 3 memory reports' },
 ];
 
+/**
+ * What the server really sends when both paths are configured: a line each.
+ *
+ * `PASSING_TESTS` is one line short of that, so asserting a placeholder is gone
+ * against it proves only that the response was shorter — which is the failure
+ * being ruled out, not the behaviour being checked.
+ */
+const PASSING_TESTS_BOTH_PATHS: ConnectionStatus[] = [
+    ...PASSING_TESTS,
+    { status: ConnectionTestStates.OK, message: 'Found 2 performance reports' },
+];
+
 const renderRemoteConnectionDialog = ({ open = true, existing }: { open?: boolean; existing?: ExistingTarget } = {}) =>
     render(
         <RemoteConnectionDialog
@@ -281,6 +293,134 @@ describe('RemoteConnectionDialog connection test block', () => {
 
         await waitFor(() => expect(screen.getByText('Memory path exists but no reports found')).toBeInTheDocument());
         expect(getButtonWithText('Add connection')).toBeEnabled();
+    });
+
+    it('reports both paths when one of them fails, and a failing path blocks saving', async () => {
+        // The bug behind #1856: the server answered only the failing path, and the
+        // response replaces the whole list, so the memory row the user was watching
+        // disappeared rather than showing the count already computed.
+        testConnectionMock.mockResolvedValue([
+            { status: ConnectionTestStates.OK, message: 'SSH connection established' },
+            { status: ConnectionTestStates.OK, message: 'Found 3 memory reports' },
+            {
+                status: ConnectionTestStates.FAILED,
+                message: 'Performance directory does not exist or cannot be accessed',
+            },
+        ]);
+
+        render(
+            <RemoteConnectionDialog
+                open
+                onClose={vi.fn()}
+                onAddConnection={vi.fn()}
+            />,
+        );
+
+        fillName();
+        fireEvent.click(getButtonWithText('Run tests'));
+
+        await waitFor(() => expect(screen.getByText('Found 3 memory reports')).toBeInTheDocument());
+        expect(screen.getByText('Performance directory does not exist or cannot be accessed')).toBeInTheDocument();
+        expect(getButtonWithText('Add connection')).toBeDisabled();
+    });
+
+    it('seeds one search placeholder per configured path while the test is in flight', async () => {
+        // Held unresolved on purpose: the placeholders only exist between the click
+        // and the response, so a mock that resolves immediately asserts nothing about
+        // them — the response replaces the whole list either way.
+        let resolveTest: (statuses: ConnectionStatus[]) => void = () => {};
+        testConnectionMock.mockReturnValue(
+            new Promise<ConnectionStatus[]>((resolve) => {
+                resolveTest = resolve;
+            }),
+        );
+
+        render(
+            <RemoteConnectionDialog
+                open
+                onClose={vi.fn()}
+                onAddConnection={vi.fn()}
+            />,
+        );
+
+        fillName();
+        fireEvent.click(getButtonWithText('Run tests'));
+
+        // Both paths are prefilled from getServerConfig, so both are configured here.
+        expect(screen.getByText('Testing SSH connection')).toBeInTheDocument();
+        expect(screen.getByText('Searching for memory reports')).toBeInTheDocument();
+        expect(screen.getByText('Searching for performance reports')).toBeInTheDocument();
+
+        resolveTest(PASSING_TESTS_BOTH_PATHS);
+
+        // Every placeholder is answered by a real result rather than being left
+        // pending — which is why the fixture has to carry a line per placeholder.
+        await waitFor(() => expect(screen.getByText('Found 3 memory reports')).toBeInTheDocument());
+        expect(screen.getByText('Found 2 performance reports')).toBeInTheDocument();
+        expect(screen.queryByText('Searching for memory reports')).not.toBeInTheDocument();
+        expect(screen.queryByText('Searching for performance reports')).not.toBeInTheDocument();
+    });
+
+    it('leaves no placeholder pending when the server answers with fewer lines than it seeded', async () => {
+        // The backend answers every configured path, so this shape should not
+        // arrive — but the placeholders are the dialog's own, and a row of its
+        // making must never outlive the response and spin forever.
+        let resolveTest: (statuses: ConnectionStatus[]) => void = () => {};
+        testConnectionMock.mockReturnValue(
+            new Promise<ConnectionStatus[]>((resolve) => {
+                resolveTest = resolve;
+            }),
+        );
+
+        render(
+            <RemoteConnectionDialog
+                open
+                onClose={vi.fn()}
+                onAddConnection={vi.fn()}
+            />,
+        );
+
+        fillName();
+        fireEvent.click(getButtonWithText('Run tests'));
+
+        expect(screen.getByText('Searching for performance reports')).toBeInTheDocument();
+
+        // Two lines against the three placeholders above.
+        resolveTest(PASSING_TESTS);
+
+        await waitFor(() => expect(screen.getByText('Found 3 memory reports')).toBeInTheDocument());
+        expect(screen.queryByText('Testing SSH connection')).not.toBeInTheDocument();
+        expect(screen.queryByText('Searching for memory reports')).not.toBeInTheDocument();
+        expect(screen.queryByText('Searching for performance reports')).not.toBeInTheDocument();
+    });
+
+    it('does not seed a placeholder for a path the user cleared', async () => {
+        let resolveTest: (statuses: ConnectionStatus[]) => void = () => {};
+        testConnectionMock.mockReturnValue(
+            new Promise<ConnectionStatus[]>((resolve) => {
+                resolveTest = resolve;
+            }),
+        );
+
+        render(
+            <RemoteConnectionDialog
+                open
+                onClose={vi.fn()}
+                onAddConnection={vi.fn()}
+            />,
+        );
+
+        fillName();
+        fireEvent.change(screen.getByLabelText(REMOTE_PERFORMANCE_PATH_LABEL), { target: { value: '' } });
+        fireEvent.click(getButtonWithText('Run tests'));
+
+        // An unconfigured path has nothing to search, so a row promising otherwise
+        // would wait on a result the server never sends for it.
+        expect(screen.getByText('Searching for memory reports')).toBeInTheDocument();
+        expect(screen.queryByText('Searching for performance reports')).not.toBeInTheDocument();
+
+        resolveTest(PASSING_TESTS);
+        await waitFor(() => expect(screen.getByText('Found 3 memory reports')).toBeInTheDocument());
     });
 
     it('drops the stale marking once the tests are run again', async () => {

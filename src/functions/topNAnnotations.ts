@@ -2,9 +2,14 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-import { OpPerfAggregate } from './perfOverlay';
+import { OpPerfAggregate, getRankComparator } from './perfOverlay';
 import { formatDuration } from './formatting';
-import { RankedAnnotation, SelectTopNParams, TopNAnnotationMode } from '../definitions/TopNAnnotations';
+import {
+    RankedAnnotation,
+    SelectTopNParams,
+    TOP_N_COUNT_MAX,
+    TopNAnnotationMode,
+} from '../definitions/TopNAnnotations';
 import { L1PressureMetrics } from '../model/L1Pressure';
 
 /**
@@ -18,10 +23,6 @@ export const isPerfMode = (mode: TopNAnnotationMode): boolean => mode !== TopNAn
 interface OperationsLike {
     id: number;
 }
-
-// Op-id rendered before its metric is computed — sort tiebreaker, deterministic. Always
-// resolves to an integer comparison so we never tie-rank two ops with identical metric.
-const compareByOpIdAsc = (a: { opId: number }, b: { opId: number }) => a.opId - b.opId;
 
 interface RankedCandidate {
     opId: number;
@@ -38,12 +39,7 @@ const pickTopN = (candidates: RankedCandidate[], n: number): RankedCandidate[] =
     if (n <= 0 || candidates.length === 0) {
         return [];
     }
-    const sorted = [...candidates].sort((a, b) => {
-        if (a.rawValue !== b.rawValue) {
-            return b.rawValue - a.rawValue;
-        }
-        return compareByOpIdAsc(a, b);
-    });
+    const sorted = [...candidates].sort(getRankComparator<RankedCandidate>((candidate) => candidate.rawValue));
     return sorted.slice(0, n);
 };
 
@@ -194,7 +190,9 @@ export const selectTopNAnnotations = ({
         normalise = spec.normalise;
     }
 
-    const topN = pickTopN(candidates, n);
+    // The count is persisted per user, so a value stored before the ceiling
+    // changed can still arrive here asking for more than the input allows.
+    const topN = pickTopN(candidates, Math.min(n, TOP_N_COUNT_MAX));
     if (topN.length === 0) {
         return annotationsByOpId;
     }

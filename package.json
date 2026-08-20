@@ -1,7 +1,7 @@
 {
   "name": "ttnn-visualizer",
   "private": true,
-  "version": "0.98.0",
+  "version": "0.99.0",
   "type": "module",
   "description": "A tool for visualizing the Tenstorrent Neural Network model (TT-NN)",
   "repository": {
@@ -17,7 +17,7 @@
     "node": "24.15.0",
     "pnpm": ">=11"
   },
-  "packageManager": "pnpm@11.1.2",
+  "packageManager": "pnpm@11.22.0",
   "scripts": {
     "build:docs": "uv run --no-default-groups --group docs sphinx-build docs docs/output",
     "build:wheel": "pnpm run build && uv build --wheel",
@@ -72,8 +72,7 @@
     "react-dom": "^18.3.1",
     "react-helmet-async": "^2.0.5",
     "react-plotly.js": "^2.6.0",
-    "react-router": "^6.30.4",
-    "react-router-dom": "^6.30.4",
+    "react-router": "^7.18.2",
     "react-toastify": "^11.1.0",
     "socket.io-client": "^4.8.3",
     "tinycolor2": "^1.6.0",

@@ -1,0 +1,508 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
+
+// React Flow's own classes are BEM `__`, and it derives node classes from the
+// registered type name, so `.react-flow__node-opNode` cannot be kebab-case.
+/* stylelint-disable selector-class-pattern */
+
+@use '../definitions/colours' as *;
+@use '../definitions/variables' as variables;
+
+// Bottom-left chrome — zoom controls, minimap, perf legend — on one baseline.
+// The origin and margin are React Flow's own; the width below is authored onto
+// `.react-flow__minimap` rather than assumed, so the legend's offset cannot drift
+// on a library bump that changes the default.
+$chrome-dock-bottom: 8px;
+$panel-margin: 15px;
+$minimap-margin-left: 56px;
+$minimap-width: 200px;
+
+.operation-graph-react-flow {
+    position: relative;
+    width: 100%;
+
+    // Fills the band between the navbar and the status bar, less `main`'s top
+    // padding. The negative margin drops the trailing page padding — `main`'s
+    // bottom gutter plus `.data-padding`'s — which here would only add a scrollbar.
+    height: calc(
+        100vh - #{variables.$app-navbar-height} - #{variables.$main-padding} - #{variables.$app-status-bar-height}
+    );
+    margin-bottom: -(variables.$main-padding-bottom + variables.$data-padding-bottom);
+
+    .operation-graph-react-flow-loader {
+        position: absolute;
+        inset: 0;
+        z-index: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background-color: rgba($tt-black, 0.4);
+    }
+
+    .react-flow__node-opNode {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        justify-content: center;
+        box-sizing: border-box;
+
+        // Owns the containing block for the perf bar below, and must stay
+        // `absolute` to do it: React Flow positions nodes out of flow and offsets
+        // them from the pane origin, so `relative` drops them into document flow
+        // while the edge SVG keeps drawing at the store's coordinates — every arrow
+        // detaches from its node. Declared rather than inherited from
+        // `.react-flow__node` (which this outranks) so a vendor change cannot take
+        // the containing block away and pile every bar in the canvas corner. #1880
+        position: absolute;
+        padding: 4px 12px;
+        border: 2px solid transparent;
+        border-radius: 3px;
+        background-color: var(--graph-normal);
+        color: $tt-black;
+        font-size: 13px;
+        line-height: 1.2;
+        text-align: center;
+        cursor: pointer;
+
+        &.op-graph-node-selected {
+            border-color: var(--graph-selected);
+            box-shadow: 0 0 0 3px var(--graph-selected);
+        }
+
+        &.op-graph-node-input {
+            background-color: var(--graph-input-node);
+        }
+
+        &.op-graph-node-output {
+            background-color: var(--graph-output-node);
+        }
+
+        // Magnitude goes on an inset bar: the fill belongs to the I/O highlight
+        // and the border to selection. Absolute so it cannot resize the node and
+        // turn every overlay toggle into a relayout. #1880
+        &::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 0;
+
+            // Graph units inside the scaled viewport: at the ~0.1–0.3 zoom a
+            // large report needs, a few fixed px go sub-pixel and wash out.
+            // Dividing by live zoom holds the on-screen size, and the 100%
+            // ceiling degrades to a full-node fill rather than vanishing — so at
+            // overview zoom perf deliberately outranks the I/O highlight. #1610
+            min-width: max(3px, calc(2px / var(--op-graph-perf-zoom, 1)));
+            width: calc(var(--op-graph-perf-scale, 0) * 100%);
+
+            // The node's 4px bottom padding, before the bar clips descenders.
+            height: min(100%, max(4px, calc(4px / var(--op-graph-perf-zoom, 1))));
+
+            // No custom property means no perf row, so no bar — "no data" must
+            // not read as "fastest op".
+            background-color: var(--op-graph-perf-color, transparent);
+            border-radius: 0 2px 0 1px;
+        }
+    }
+
+    // On the bottom band beside the minimap, reading against the nodes it
+    // explains; the toolbar owns the top-left and the details panel the right.
+    // One column so the critical-path annotation and the perf legend share a
+    // baseline whether one or both are showing.
+    .op-graph-bottom-band {
+        position: absolute;
+        z-index: variables.$z-index-2-interactive;
+        bottom: $chrome-dock-bottom;
+        left: variables.$reactflow-panel-origin-left + $minimap-margin-left + $minimap-width + $panel-margin;
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 6px;
+        pointer-events: none;
+    }
+
+    .op-graph-perf-hover {
+        position: absolute;
+        z-index: variables.$z-index-2-interactive;
+        padding: 4px 8px;
+        border-radius: 3px;
+        background-color: rgba($tt-black, 0.9);
+        color: $tt-white;
+        font-size: 11px;
+        line-height: 1.3;
+        white-space: nowrap;
+
+        // Clear of the pointer, which would flicker the enter/leave pair.
+        transform: translate(12px, 12px);
+        pointer-events: none;
+    }
+
+    .op-graph-node-label {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .op-graph-node-file {
+        overflow: hidden;
+        color: $tt-grey-2;
+        font-size: 11px;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    // Painted in the edge SVG, not as a div: a real report carries ~500 labels.
+    .op-graph-edge-label {
+        fill: $tt-yellow-tint-1;
+        font-size: 11px;
+        paint-order: stroke;
+        stroke: $tt-black;
+        stroke-width: 3px;
+        text-anchor: middle;
+        pointer-events: none;
+    }
+
+    // Ahead of the I/O rules on purpose: they match at the same specificity and
+    // win by order, so the few edges touching the selected node keep their
+    // input/output colour instead of the path recolouring them mid-click.
+    .react-flow__edge.op-graph-edge-critical-path .react-flow__edge-path {
+        stroke: var(--graph-critical-path-edge);
+        stroke-width: 3;
+    }
+
+    .react-flow__edge.op-graph-edge-input .react-flow__edge-path {
+        stroke: var(--graph-input-edge);
+        stroke-width: 2;
+    }
+
+    .react-flow__edge.op-graph-edge-output .react-flow__edge-path {
+        stroke: var(--graph-output-edge);
+        stroke-width: 2;
+    }
+
+    // Non-matches fade rather than hide, so the matched subset keeps its place
+    // in the layout instead of the graph reflowing under the user mid-search.
+    // Dimming from the container and exempting the matches — rather than setting
+    // an opacity on each non-match — keeps the element objects React Flow diffs
+    // by identity untouched for the whole non-matching majority. Fading the edge
+    // group also carries the label, which an inline style on the path cannot.
+    &.op-graph-filtering {
+        .react-flow__node,
+        .react-flow__edge {
+            opacity: 0.18;
+        }
+
+        .react-flow__node.op-graph-node-match,
+        .react-flow__edge.op-graph-edge-match {
+            opacity: 1;
+        }
+    }
+
+    // Skipped while a search runs: the filter dim is the narrower intent and
+    // would otherwise lose to this rule's extra `:not()` specificity. The
+    // selected node's own edges are exempt too, or clicking a node to inspect its
+    // inputs and outputs would fade half of them.
+    &.op-graph-critical-path:not(.op-graph-filtering) {
+        .react-flow__edge:not(.op-graph-edge-critical-path, .op-graph-edge-input, .op-graph-edge-output) {
+            opacity: 0.35;
+        }
+    }
+
+    // Outline, not border or fill: selection owns the border and the I/O
+    // highlight the fill, so the path stacks with either. Offset clears the 3px
+    // selection ring, which an outline would otherwise paint over.
+    .react-flow__node-opNode.op-graph-node-critical-path {
+        outline: 2px solid var(--graph-critical-path-edge);
+        outline-offset: 4px;
+    }
+
+    // `MLIRViewReactFlow.scss` nests its panel offsets under a bare top-level
+    // `.react-flow`, so they leak into every graph in the app and lift bottom-left
+    // panels 16px here. That unscoped stylesheet is the cause; out-specifying it is
+    // a containment measure, not the fix. Scoping the MLIR block removes the need
+    // for this rule entirely — #1899. Specificity, not source order.
+    .react-flow .react-flow__panel.bottom.left {
+        bottom: 0;
+        margin-bottom: $chrome-dock-bottom;
+    }
+
+    // React Flow's minimap defaults are light-theme (`#fff` pane, `#e2e2e2`
+    // nodes), which reads as a blank pale rectangle on our dark canvas. Setting
+    // the unsuffixed vars rather than the `-props` tier leaves the tier free for
+    // `nodeColor`/`maskColor` props, and keeps the node fill on the same custom
+    // property as the on-canvas rule it has to match.
+    .react-flow__minimap {
+        // Shares the bottom-left corner with the zoom controls, so it starts
+        // past their 26px column and the 15px panel gutter either side of it.
+        // Set on the margin because React Flow's own `left` rule matches at the
+        // same specificity and lands later in the cascade.
+        margin-left: $minimap-margin-left;
+
+        // Declared, not inherited from React Flow's default: the legend is placed
+        // past this box, so the offset has to depend on a width we own.
+        width: $minimap-width;
+
+        --xy-minimap-background-color: #{$tt-grey-2};
+        --xy-minimap-node-background-color: var(--graph-normal);
+        --xy-minimap-node-stroke-color: #{$tt-grey-2};
+        --xy-minimap-node-stroke-width: 1px;
+
+        // The mask dims what's off-screen, so it has to be darker than the pane.
+        --xy-minimap-mask-background-color: #{rgba($tt-black, 0.6)};
+        --xy-minimap-mask-stroke-color: #{rgba($tt-white, 0.3)};
+        --xy-minimap-mask-stroke-width: 1px;
+    }
+
+    // Density, type scale and section banding mirror `MlirNodeDetailsPanel.scss`
+    // so the two graph views read as one product. Worth a shared partial if a
+    // third details panel turns up.
+    .op-graph-panel {
+        position: absolute;
+        z-index: variables.$z-index-2-interactive;
+        top: 0;
+        right: 0;
+        bottom: 0;
+        display: flex;
+        flex-direction: column;
+
+        // Tracks the canvas so a narrow window keeps a usable graph; the floor is
+        // the widest line the panel must hold, a tensor's `[shape] Tensor N`.
+        width: clamp(280px, 26%, 360px);
+        overflow: auto;
+        background-color: rgba($tt-grey-2, 0.95);
+        border-left: 1px solid rgba($tt-white, 0.08);
+        color: $tt-grey-7;
+        font-size: 12px;
+    }
+
+    .op-graph-panel-header {
+        position: sticky;
+        top: 0;
+        z-index: 1;
+        display: flex;
+        align-items: flex-start;
+        gap: 8px;
+        padding: 10px 12px;
+        background-color: $tt-grey-3;
+        border-bottom: 1px solid rgba($tt-white, 0.08);
+    }
+
+    .op-graph-panel-titles {
+        flex: 1 1 auto;
+        min-width: 0;
+    }
+
+    .op-graph-panel-label {
+        margin: 0;
+        overflow: hidden;
+        color: $tt-white;
+        font-size: 14px;
+        font-weight: 700;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .op-graph-panel-id {
+        margin: 2px 0 0;
+        overflow: hidden;
+        color: $tt-grey-6;
+        font-family: monospace;
+        font-size: 10px;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        user-select: text;
+    }
+
+    .op-graph-panel-actions {
+        display: flex;
+        flex-shrink: 0;
+        gap: 2px;
+    }
+
+    .op-graph-panel-links {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 6px;
+        padding: 8px 12px;
+        border-bottom: 1px solid rgba($tt-white, 0.06);
+    }
+
+    .op-graph-panel-section {
+        border-bottom: 1px solid rgba($tt-white, 0.06);
+
+        &:last-of-type {
+            border-bottom: none;
+        }
+    }
+
+    .op-graph-panel-section-header {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 6px 12px;
+        background-color: $tt-grey-4;
+        border-left: 3px solid transparent;
+        font-size: 12px;
+        font-weight: 700;
+    }
+
+    .op-graph-panel-section-title {
+        flex: 1 1 auto;
+    }
+
+    .op-graph-panel-section-count {
+        padding: 1px 6px;
+        border-radius: 8px;
+        background-color: rgba($tt-black, 0.3);
+        font-size: 11px;
+        font-weight: 500;
+        font-variant-numeric: tabular-nums;
+    }
+
+    .op-graph-panel-section-body {
+        padding: 8px 12px 10px;
+    }
+
+    .op-graph-panel-empty {
+        margin: 0;
+        color: $tt-grey-5;
+        font-size: 11px;
+        font-style: italic;
+    }
+
+    .op-graph-panel-device-ops {
+        margin: 0;
+        padding: 0;
+        color: $tt-grey-6;
+        font-family: monospace;
+        font-size: 11px;
+        list-style: none;
+    }
+
+    .op-graph-panel-groups {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+    }
+
+    .op-graph-panel-group {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+    }
+
+    .op-graph-panel-group-header {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+    }
+
+    .op-graph-panel-group-label {
+        flex: 1 1 auto;
+        min-width: 0;
+        color: $tt-white;
+        font-size: 11px;
+        font-weight: 700;
+        word-break: break-all;
+    }
+
+    // Blueprint's MINIMAL/SMALL padding is still body-button sized, which
+    // inflates the row height.
+    .op-graph-panel-locate {
+        flex: 0 0 auto;
+        min-width: 0;
+        min-height: 0;
+        padding: 2px;
+
+        .bp6-icon {
+            color: $tt-grey-7;
+        }
+
+        &:hover .bp6-icon {
+            color: $tt-white;
+        }
+    }
+
+    .op-graph-panel-tensor {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        padding: 4px 6px;
+        border-left: 2px solid transparent;
+        border-radius: 4px;
+        background-color: rgba($tt-white, 0.04);
+    }
+
+    // Not MLIR's `.modifier &` form: under this root, `&` expands to the whole
+    // ancestor chain and puts the modifier outside it, matching nothing.
+    .op-graph-panel-inputs {
+        .op-graph-panel-section-header,
+        .op-graph-panel-tensor {
+            border-left-color: var(--graph-input-edge);
+        }
+    }
+
+    .op-graph-panel-outputs {
+        .op-graph-panel-section-header,
+        .op-graph-panel-tensor {
+            border-left-color: var(--graph-output-edge);
+        }
+    }
+
+    .op-graph-panel-tensor-header {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+    }
+
+    .op-graph-panel-tensor-shape {
+        color: $tt-teal-tint-1;
+        font-family: monospace;
+        font-size: 11px;
+        word-break: break-all;
+    }
+
+    .op-graph-panel-tensor-id {
+        color: $tt-white;
+        font-size: 11px;
+        font-weight: 700;
+    }
+
+    .op-graph-panel-tensor-meta {
+        display: flex;
+        gap: 8px;
+        color: $tt-grey-6;
+        font-family: monospace;
+        font-size: 10px;
+    }
+
+    .op-graph-panel-tensor-source {
+        color: $tt-grey-6;
+        font-family: monospace;
+        font-size: 10px;
+        word-break: break-all;
+    }
+
+    .op-graph-panel-memory-config {
+        // Flex stretch pulls the value column out to the panel edge.
+        align-self: start;
+        font-size: 10px;
+
+        th {
+            padding: 1px 4px;
+            color: $tt-grey-6;
+            font-weight: 500;
+            text-align: left;
+            vertical-align: top;
+        }
+
+        td {
+            padding: 1px 4px;
+            color: $tt-grey-7;
+            text-align: left;
+            vertical-align: top;
+            word-break: break-word;
+        }
+    }
+}

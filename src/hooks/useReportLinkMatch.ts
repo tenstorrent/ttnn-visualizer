@@ -3,12 +3,8 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import { useAtomValue } from 'jotai';
-import { useDevices, useGetDeviceOperationListPerf, useOperationsList, usePerformanceReport } from './useAPI';
-import {
-    activePerformanceReportAtom,
-    activePerformanceReportFolderNameAtom,
-    activeProfilerReportAtom,
-} from '../store/app';
+import { useDevices, useGetDeviceOperationListPerf, useLinkedPerformanceReport, useOperationsList } from './useAPI';
+import { activePerformanceReportAtom, activeProfilerReportAtom } from '../store/app';
 import { ReportLinkMatchResult } from '../definitions/ReportLinks';
 
 /**
@@ -19,7 +15,6 @@ export const useReportLinkMatch = (): ReportLinkMatchResult => {
     const matchedOperations = useGetDeviceOperationListPerf();
     const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
     const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
-    const activeReportFolderName = useAtomValue(activePerformanceReportFolderNameAtom);
 
     const {
         isFetched: isOperationsFetched,
@@ -31,7 +26,7 @@ export const useReportLinkMatch = (): ReportLinkMatchResult => {
         isFetched: isPerformanceFetched,
         isFetching: isPerformanceFetching,
         isError: isPerformanceError,
-    } = usePerformanceReport(activeReportFolderName);
+    } = useLinkedPerformanceReport();
 
     if (!activeProfilerReport || !activePerformanceReport) {
         return ReportLinkMatchResult.UNAVAILABLE;

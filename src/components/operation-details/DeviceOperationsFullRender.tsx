@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import React, { Fragment, JSX, useCallback, useState } from 'react';
+import React, { Fragment, JSX, useCallback, useMemo, useState } from 'react';
 import {
     Button,
     ButtonVariant,
@@ -236,7 +236,20 @@ function useDeviceOperationsFullRenderModel(args: {
     } = args;
 
     const selectedAddress = useAtomValue(selectedAddressAtom);
-    const { memoryAllocationList, peakMemoryLoad, cbPressureByOpId } = processMemoryAllocations(deviceOperations);
+    // Walking the graph is proportional to node count, which a mesh capture
+    // multiplies by the device count, so it cannot run on renders driven by
+    // `selectedAddress` — every legend click is one. Memoising also makes the
+    // three returned objects stable, without which the `renderNodes`
+    // `useCallback` below memoises nothing. #1844
+    const { memoryAllocationList, peakMemoryLoad, cbPressureByOpId, cbFanout } = useMemo(
+        () => processMemoryAllocations(deviceOperations),
+        [deviceOperations],
+    );
+    // A linear scan per node is quadratic over a graph with one entry per node.
+    const memoryDetailsByNodeId = useMemo(
+        () => new Map<number, AllocationDetails>(memoryAllocationList.map((data) => [data.id, data])),
+        [memoryAllocationList],
+    );
 
     const formatTensor = useCallback((node: Node) => formatTensorRendering(node, details), [details]);
 
@@ -253,7 +266,14 @@ function useDeviceOperationsFullRenderModel(args: {
 
             nodes.forEach((node, index) => {
                 const nodeType = node.node_type;
-                const memoryDetails = memoryAllocationList.find((data) => data.id === node.id);
+                // Ahead of the lookup and `renderMemoryInfo` below, both of
+                // which were being paid for rows that are then dropped — most
+                // CB nodes in a mesh capture. Returning here keeps the "CBs"
+                // heading latch untouched, same as the guard it replaces. #1844
+                if (nodeType === NodeType.circular_buffer_allocate && cbFanout.duplicateNodeIds.has(node.id)) {
+                    return;
+                }
+                const memoryDetails = memoryDetailsByNodeId.get(node.id);
                 const memoryInfo = renderMemoryInfo(memoryDetails, peakMemoryLoad);
 
                 if (nodeType === NodeType.function_start) {
@@ -450,6 +470,7 @@ function useDeviceOperationsFullRenderModel(args: {
                 } else if (nodeType === NodeType.circular_buffer_allocate) {
                     const cb = node.params;
                     const numCores = parseInt(cb.num_cores, 10) || 1;
+                    const deviceCount = cbFanout.deviceCountByNodeId.get(node.id) ?? 1;
 
                     const variance = cb.allocateOperationId;
                     // `globally_allocated='1'` CBs alias an existing L1
@@ -509,6 +530,7 @@ function useDeviceOperationsFullRenderModel(args: {
                                     onLegendClick={onLegendClick}
                                     colorVariance={variance}
                                     isGloballyAllocated={isGloballyAllocated}
+                                    deviceCount={deviceCount}
                                 />
                                 {memoryInfo}
                             </div>
@@ -534,10 +556,11 @@ function useDeviceOperationsFullRenderModel(args: {
             return output;
         },
         [
+            cbFanout,
             cbPressureByOpId,
             details,
             formatTensor,
-            memoryAllocationList,
+            memoryDetailsByNodeId,
             onLegendClick,
             peakMemoryLoad,
             selectedAddress,

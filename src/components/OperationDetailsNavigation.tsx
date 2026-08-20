@@ -47,11 +47,11 @@ function OperationDetailsNavigation({ operationId, isLoading }: OperationDetails
     const nextOperation = useNextOperation(operationId);
 
     const navigateToPreviousOperation = useCallback(() => {
-        navigate(`${ROUTES.OPERATIONS}/${previousOperation?.id}`);
+        void navigate(`${ROUTES.OPERATIONS}/${previousOperation?.id}`);
     }, [navigate, previousOperation]);
 
     const navigateToNextOperation = useCallback(() => {
-        navigate(`${ROUTES.OPERATIONS}/${nextOperation?.id}`);
+        void navigate(`${ROUTES.OPERATIONS}/${nextOperation?.id}`);
     }, [navigate, nextOperation]);
 
     useEffect(() => {

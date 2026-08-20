@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import classNames from 'classnames';
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router';
 import { useAtomValue } from 'jotai';
 import { OperationDescription, Tensor } from '../model/APIData';
 import { getMemoryAddress } from '../functions/math';

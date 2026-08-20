@@ -116,7 +116,7 @@ enum NodeRelation {
 }
 ```
 
-Used in `src/components/OperationGraphComponent.tsx` after refactoring from `'input' | 'output' | null`. Enums are searchable, autocompletable, and rename-safe. **One-off booleans/flags** (`'asc' | 'desc'` on a single call site) don't need promotion to enums.
+Declared in `src/definitions/NodeRelation.ts` after refactoring from `'input' | 'output' | null`. Enums are searchable, autocompletable, and rename-safe. **One-off booleans/flags** (`'asc' | 'desc'` on a single call site) don't need promotion to enums.
 
 ### Spell out generic type parameters on third-party containers
 
@@ -125,7 +125,7 @@ const dataset = new DataSet<OperationNode>(initial);
 const cache = new Map<string, Buffer>();
 ```
 
-When using `DataSet<T>` from `vis-data` (paired with `Edge`/`Node`/`Network` from `vis-network` — see `src/components/OperationGraphComponent.tsx`), `Map<K, V>`, or a similar container, write the type parameter. Letting inference quietly widen to `any`/`unknown` is the single most common source of latent typing bugs we hit.
+When using `DataSet<T>` from `vis-data` (paired with `Edge`/`Node`/`Network` from `vis-network` — see `src/components/operation-details/DeviceOperationsGraphComponent.tsx`), `Map<K, V>`, or a similar container, write the type parameter. Letting inference quietly widen to `any`/`unknown` is the single most common source of latent typing bugs we hit.
 
 ### Respect `react-hooks/exhaustive-deps`
 
@@ -398,6 +398,8 @@ For HTTP API calls going through `axiosInstance`, the frontend never embeds the 
 
 **Don't.** Building a URL like `${Endpoints.OPERATIONS_LIST}/${instanceId}` collides with the operation-detail route shape and loses session scoping for every other call sharing the axios config.
 
+**Documented exception.** The unload flush in `src/functions/recordUsage.ts` calls `navigator.sendBeacon` rather than `axiosInstance`, because a beacon is the only request the browser guarantees to send while the document is being discarded. It therefore gets neither interceptor, and composes `BASE_PATH` + `Endpoints.USAGE` by hand — deliberately without `instanceId`, since `POST /api/usage` is machine-scoped and takes no `@with_instance`. The body must be a `Blob` typed `application/json`: the route requires that content type so the request stays non-simple and a hostile origin needs a preflight `ALLOWED_ORIGINS` refuses, and a bare-string beacon is sent as `text/plain` and rejected.
+
 **Documented exception.** The Socket.IO connection URL is built at module scope in `src/libs/SocketProvider.tsx` (`io(\`${BASE_PATH}?instanceId=${getOrCreateInstanceId()}\`)`) because `io(...)` doesn't go through axios and there's no interceptor to inject the param. The instance ID still travels as a `?instanceId=...` query string — just one assembled by hand rather than injected.
 
 **Report-bound read errors.** Memory-profiler routes (`/api/operations`, `/api/tensors`, `/api/buffers`, …) open the instance's `profiler_path` via `LocalQueryRunner` (`backend/ttnn_visualizer/queries.py`); performance routes (`/api/performance/...`) open `performance_path` via `backend/ttnn_visualizer/csv_queries.py`. Status codes:
@@ -506,6 +508,38 @@ return useQuery({
     enabled: operationId !== null,
 });
 ```
+
+### View-filtered and link-pinned performance reports are different queries
+
+There are two hooks for the performance report, and picking the wrong one is a correctness bug rather than a style slip:
+
+- **`usePerformanceReport(name)`** — the report as the performance tab is displaying it, with every view filter applied. For rendering the tab.
+- **`useLinkedPerformanceReport()`** — the same report pinned to devices merged, host ops hidden, whole run, default grouping. For *anything that decides whether two reports describe the same run*: the link badge, the perf-table Op column, L1-pressure columns, tensor-drawer gating, the graph perf overlay, top-N annotations.
+
+Link status is a property of the reports, not of the current view. Resolving it from the filtered query means toggling **Merge devices** flips the badge to "Failed to link" and drops every dependent feature with it — and `ReportLinkStatus` persists that verdict to `localStorage`, so the failure outlives the toggle (#1812).
+
+Build both keys through `src/functions/performanceReportQueryKey.ts` rather than assembling one inline, so the two cannot drift into keying on different filters. `tracingMode` is a known carve-out: it is still followed, because a trace-captured run's traced order is the one that lines up with the memory report, so pinning it would make those pairs permanently unlinkable.
+
+### Share derived values with `memoiseLatest`, not `useMemo`
+
+`useMemo` caches per hook invocation. A derived value read by several hooks *and* by one component instance per virtualised row is therefore recomputed once per consumer, even though every consumer sees the same query data — an O(rows) match plus a flatMap, per row.
+
+`src/functions/memoiseLatest.ts` is a module-level cache of one, keyed on reference-equal arguments:
+
+`src/hooks/useAPI.tsx`
+
+```ts
+const getDeviceOperationListPerf = memoiseLatest(matchDeviceOperationsToPerf);
+
+export const useGetDeviceOperationListPerf = () =>
+    getDeviceOperationListPerf(deviceOperations, (data ?? EMPTY_PERF_RETURN).report, devices?.length ?? 0);
+```
+
+Three constraints come with it:
+
+- **Every argument must come from a source all consumers share** — a query result, not a per-caller `useMemo`. A cache of one degrades to *no* cache when two live callers pass different arguments, and then hands each a fresh identity, invalidating every downstream `useMemo` keyed on the result. Note the `EMPTY_PERF_RETURN.report` fallback above rather than `data?.report ?? []`: a fresh `[]` per render would miss the cache every time.
+- **Results are shared, so treat them as immutable.** Sorting or pushing in place corrupts every other consumer's view. Copy first (`useSortTable` does).
+- **The cache outlives the query data.** Pair report teardown with the reset — `clearReportCaches(queryClient)` rather than a bare `queryClient.clear()` — or the previous report's rows stay reachable from module state for the lifetime of the page.
 
 ---
 
@@ -830,12 +864,15 @@ Run with `pnpm test`. Tests live in `tests/` at the repo root — see [the dedic
 
 The Flask test client (`app.test_client()`) is exposed as the `client` fixture in `backend/ttnn_visualizer/tests/conftest.py`. Routes are mounted under the **`{BASE_PATH}api`** prefix — `backend/ttnn_visualizer/app.py` registers the `api = Blueprint("api", __name__)` blueprint with `url_prefix=f"{app.config['BASE_PATH']}api"`. When `BASE_PATH` is `/` (the default in `conftest.app` and in single-tenant deployments) the effective prefix is `/api`; when `BASE_PATH` is something like `/visualizer/` the prefix becomes `/visualizer/api`. Tests run against `conftest.app` so `/api/...` is the right path in test URLs — just don't hard-code that assumption into production-facing docs or curl examples. Endpoints decorated with `@with_instance` require an `instanceId` query param — the `make_report` fixture returns one. Pass it through `query_string={...}` (see the dedicated subsection below).
 
-Two `conftest.app` defaults that bite local-upload tests in particular:
+Every fixture that builds an app starts from **`base_test_settings`** in `backend/ttnn_visualizer/tests/fixture_settings.py`, not from a hand-rolled dict. Three `conftest.app` defaults bite in particular:
 
-- **`SERVER_MODE=True`** (`conftest.py`) — `@local_only` handlers like `/api/remote/mlir/upload` return `403 Forbidden` until you override it.
-- **`LOCAL_DATA_DIRECTORY` is a `str`** (`conftest.py`) but production `settings.py` initialises it as a `Path` and handlers do `data_directory / config["MLIR_DIRECTORY_NAME"]`. Cast it to `Path` in the test so you exercise the same operand types as the deployed app.
+- **`SERVER_MODE=True`** — `@local_only` handlers like `/api/remote/mlir/upload` return `403 Forbidden` until you override it.
+- **`LOCAL_DATA_DIRECTORY` is a `str`** but production `settings.py` initialises it as a `Path` and handlers do `data_directory / config["MLIR_DIRECTORY_NAME"]`. Cast it to `Path` in the test so you exercise the same operand types as the deployed app.
+- **The settings in `PINNED_ENV_SETTINGS` are pinned away from the environment**, `TT_METAL_HOME` among them. `DefaultConfig` reads them from the environment and `TT_METAL_HOME` is exported on any machine that profiles TT-Metal, so an unpinned fixture serves reports from a TT-Metal tree the test never created. A fixture that genuinely wants one passes it to `base_test_settings` explicitly — see `direct_mode_app` in `views/test_report_deletion.py`. Adding an overridable setting means classifying it: `test_the_test_fixtures_pin_every_env_reachable_setting` fails until you do. See #1869.
 
-Both overrides match the canonical pattern at `backend/ttnn_visualizer/tests/test_file_uploads.py`. A runnable example:
+**Pinning a setting and unsetting its variable are not the same thing**, and the difference is easy to get backwards. `Config` is a process singleton whose class attributes bind at *import*, and `override_with_env_variables` skips any key whose variable is unset — so `monkeypatch.delenv` cannot un-bind an import-time value, and for anything reaching an app the only lever is `settings_override`, which `create_app` applies last. For a test that constructs a config itself, pick by how the value arrives: `delenv` when it comes through the override loop or a live descriptor, `monkeypatch.setattr(DefaultConfig, ...)` when the class body bound it, and **both** when either alone still reads the operator's value (`DEV_SERVER_HOST` in `test_settings.py`). Beware blanket env scrubbing in an autouse fixture: `test_the_documented_defaults_match_the_code_defaults` reads `os.environ` as *input* to decide what to skip, so deleting a variable turns that test red.
+
+The first two overrides match the canonical pattern at `backend/ttnn_visualizer/tests/test_file_uploads.py`. A runnable example:
 
 ```python
 def test_local_upload_rejects_invalid_extension(app, client, make_report):
@@ -1202,7 +1239,7 @@ This holds outside `settings.py` too: `create_app`'s root-log-level check, the g
 
 #### The vocabulary is deliberately narrow, and matched across three consumers
 
-Only `true` / `1` / `false` / `0`, case-insensitive and whitespace-trimmed. That is what `.env.sample` documents, what the SPA's `isServerModeEnabled` (`src/functions/getServerConfig.ts`) accepts, and — because `str_to_bool` backs them — what the `print_signposts` / `hide_host_ops` / `merge_devices` / `tracing_mode` query params on `GET /api/performance/perf-results/report` accept. So `SERVER_MODE` and `VITE_SERVER_MODE` can't select opposite postures from the same spelling. **Widening one side means widening the others in the same change.**
+Only `true` / `1` / `false` / `0`, case-insensitive and whitespace-trimmed. That is what `.env.sample` documents, what the SPA's `isFlagEnabled` (`src/functions/getServerConfig.ts`) accepts — the predicate behind both `isServerModeEnabled` and `USAGE_RECORDING_ACTIVE`, and — because `str_to_bool` backs them — what the `print_signposts` / `hide_host_ops` / `merge_devices` / `tracing_mode` query params on `GET /api/performance/perf-results/report` accept. So `SERVER_MODE` and `VITE_SERVER_MODE` can't select opposite postures from the same spelling. **Widening one side means widening the others in the same change.**
 
 The query params are the easiest consumer to forget and the least noisy when broken: a spelling that stops being recognised doesn't error, it silently means `False`, so `?hide_host_ops=t` returns a different report rather than a 4xx. The SPA sends real axios booleans, so only scripted callers notice. `backend/ttnn_visualizer/tests/test_perf_report_params.py` pins the contract.
 
@@ -1210,9 +1247,11 @@ The query params are the easiest consumer to forget and the least noisy when bro
 
 `str_to_bool` maps anything unrecognised to `False`, which for `SERVER_MODE` is the *local* posture — the one whose endpoints publish SSH host, username, and path metadata. So `settings.py` reads booleans through `_parse_env_bool`, which logs the value and keeps the coded default instead.
 
+**`USAGE_RECORDING_DISABLED` is the one exception, and obeys a value it doesn't recognise.** `_is_recording_disabled_by_environment` (`usage.py`) warns and then switches recording *off* for anything set that isn't a recognised `false`. Keeping the default there would mean reading `USAGE_RECORDING_DISABLED=yes` as consent to record; the cost of obeying a typo is one missing data point, and the cost of ignoring it is recording against an explicit request. The vocabulary itself is unchanged — it still comes from `parse_bool`, and only the treatment of `None` differs. Don't generalise this to other settings, and don't "fix" it back to `str_to_bool`: `test_an_unrecognised_disable_value_switches_recording_off` pins it.
+
 A setting listed in **`_STRICT_BOOLEANS`** raises instead of warning. `SERVER_MODE` is the only member: it is the one boolean whose fallback is itself a security posture, so a value we can't read has to stop the app rather than quietly pick the permissive answer — and the warning that would otherwise cover it is emitted at import, before `create_app` configures logging, so it lands on `stderr` and not in the deployment's logs. Everything else is a feature flag and doesn't warrant refusing to boot.
 
-Strictness is registered **per setting, not passed at the call site**, because both parse paths have to agree: the override loop has no call site to pass a flag at, and `create_app` runs `load_dotenv` long after import, so a `.env` can introduce a spelling the class body never vetted. A flag the loop couldn't honour would become a real hole the moment [#1857](https://github.com/tenstorrent/ttnn-visualizer/issues/1857) widens its reach.
+Strictness is registered **per setting, not passed at the call site**, because both parse paths have to agree: the override loop has no call site to pass a flag at, and `create_app` runs `load_dotenv` long after import, so a `.env` can introduce a spelling the class body never vetted. Both paths must refuse the same spellings — a flag only the class body honoured would leave `.env`-introduced typos selecting the local posture.
 
 `MAX_CONTENT_LENGTH` is the second setting that can abort startup, for the same reason by a different route: its class-body call to `_parse_max_content_length` is unguarded, and the value it would fall back to is *no limit at all*, so an unreadable upload cap stops the app rather than silently removing it. Both refusals name the variable and the accepted values, because they are what an operator sees instead of a traceback.
 
@@ -1228,19 +1267,33 @@ Because a narrow vocabulary makes previously-accepted spellings fatal, **treat w
 
 `_coerce_env_value` parses each environment string back to the declared attribute's type, so setting a variable explicitly no longer undoes the class body's parse. It **declines** what it can't represent — an uncoercible `int`, an unrecognised boolean, and any declared type it has no rule for (the `Path` directories, the engine-options dict) — logging and keeping the declared value rather than handing the app a raw string.
 
-Settings that parse more richly than their type register a named parser in `_ENV_PARSERS`: `SSH_DEFAULT_PORT` (range check) and `MAX_CONTENT_LENGTH` (empty means no limit) would both be broken by plain `int` dispatch. Three rules for that registry, and for `_STRICT_BOOLEANS` alongside it:
+Settings that parse more richly than their type register a named parser in `_ENV_PARSERS`: `SSH_DEFAULT_PORT` (range check) and `MAX_CONTENT_LENGTH` (empty means no limit) would both be broken by plain `int` dispatch. Three rules for that registry, and for `_STRICT_BOOLEANS` / `_ENV_OVERRIDE_SKIP` alongside it:
 
 - **One named function where both paths parse the same setting.** The class body and the registry call the same function (`_parse_max_content_length`) so the import-time and override-time parses can't disagree. Where the two genuinely differ, say why in the docstring: `_parse_ssh_port` falls back to the default because the class body has nothing else to keep, while the registry uses `require_tcp_port` so a bad override is reported rather than silently changing the port. The range itself is still written once, in `require_tcp_port`, which `parse_tcp_port` wraps. Don't "fix" that asymmetry — it is the difference between having a declared value to keep and not.
-- **Key every registry by the attribute name.** `_ENV_PARSERS`, `_STRICT_BOOLEANS` and `_ENV_ALIASES` are all keyed by attribute; the variable is resolved through `_env_name_for` at lookup time and used only in messages. Keying one by the *variable* would pass the guard tests and never fire for the one setting that has an alias.
-- **Keys are strings, so nothing binds them to the attribute.** A rename leaves a dead entry that silently falls back to type dispatch — or, in `_STRICT_BOOLEANS`, downgrades a refusal to a warning. `test_every_env_parser_names_a_real_setting`, `test_every_strict_boolean_names_a_real_boolean_setting` and `test_every_registry_is_keyed_the_way_it_is_looked_up` are what catch it.
+- **Key every registry by the attribute name.** `_ENV_PARSERS`, `_STRICT_BOOLEANS`, `_ENV_ALIASES`, and `_ENV_OVERRIDE_SKIP` are all keyed by attribute; the variable is resolved through `_env_name_for` at lookup time and used only in messages. Keying one by the *variable* would pass the guard tests and never fire for the one setting that has an alias.
+- **Keys are strings, so nothing binds them to the attribute.** A rename leaves a dead entry that silently falls back to type dispatch — or, in `_STRICT_BOOLEANS`, downgrades a refusal to a warning; or, in `_ENV_OVERRIDE_SKIP`, starts accepting env strings for a derived attribute. `test_every_env_parser_names_a_real_setting`, `test_every_strict_boolean_names_a_real_boolean_setting`, `test_every_env_override_skip_names_a_real_setting` and `test_every_registry_is_keyed_the_way_it_is_looked_up` are what catch it.
 
 #### `_ENV_ALIASES` where the variable isn't named after the attribute
 
 Every setting reads a variable named after its attribute, which is right for all of them but `DEBUG`: it is fed by `FLASK_DEBUG`, because a bare `DEBUG` is the log-level knob (see the entry under [Known inconsistencies](#known-inconsistencies)). `_ENV_ALIASES` maps the attribute to the variable that owns it and `_env_name_for` is the single reader, so the class body and the override loop can't disagree and the aliased spelling is written once. Without it, `DEBUG=true` — what `pnpm flask:start-debug` sets — turned on Flask's debug mode under `FLASK_ENV=production`, which suppresses the catch-all error handler and returns tracebacks. Add an entry here rather than a special case in the loop if another setting ever grows a differently-named variable.
 
-#### The loop only reaches the concrete config class
+#### The loop walks the MRO and skips derived settings
 
-It reads the concrete class's own `__dict__`, so in practice it visits `DEBUG` and `TESTING` and nothing else; the class body is what parses everything else. Widening that reach is tracked as [#1857](https://github.com/tenstorrent/ttnn-visualizer/issues/1857) — until it lands, don't assume an environment variable changed after import takes effect (`FLASK_DEBUG` and `TESTING` are the two exceptions, since the loop does revisit them), and don't put a guard in the loop expecting it to cover a setting.
+It iterates `reversed(type(self).__mro__)`, so inherited settings on `DefaultConfig` are reachable when `Config()` returns a subclass, and subclass declarations win. Descriptors (`ALLOWED_ORIGINS`, `USAGE_RECORDING_ACTIVE`) are skipped because assigning a raw string would shadow them.
+
+Everything else the loop leaves alone is named in one of three frozensets, unioned into **`_ENV_OVERRIDE_SKIP`** at the point of use. They have different lifetimes, so a maintainer adding a setting can tell which rule applies:
+
+- **`_ENV_OVERRIDE_DERIVED`** — computed from other settings or the filesystem, and rebuilt as a group by `recompute_derived_settings()`. A string-typed one (`GUNICORN_BIND`, `SQLALCHEMY_DATABASE_URI`, `APPLICATION_DIR`) would otherwise accept an env string and diverge from its parents; `Path` / `dict` ones are also declined by `_coerce_env_value` as a backstop.
+- **`_ENV_OVERRIDE_CONSTANTS`** — structural values the app is built around. Changing one is a code change.
+- **`_ENV_OVERRIDE_UNCONFIGURED`** — deployment knobs whose answer today is "no", not "never" (the two `SESSION_COOKIE_*` settings, `PRINT_ENV`). This is the group to revisit first; moving one out is a one-line change plus a class-body `os.getenv`.
+
+A variable naming a skipped setting is reported through `_report_ignored_skip` rather than dropped in silence — for a hand-maintained list, an inert variable is otherwise indistinguishable from a typo in its name.
+
+**`recompute_derived_settings()` is the single owner of the derived group.** It runs at the end of the override loop and from `main()`'s `--tt_metal_home` handling, rebuilding `APP_DATA_DIRECTORY`, `REPORT_DATA_DIRECTORY`, `LOCAL_`/`REMOTE_DATA_DIRECTORY`, `SQLALCHEMY_DATABASE_URI` and `GUNICORN_BIND` together. Add a derivation there, not at a call site: the bug it exists to prevent is a new `TT_METAL_HOME` serving reports from `$TT_METAL_HOME/generated` while the database stays on the import-time tree.
+
+`create_app` runs `load_dotenv` *before* `Config()`, but the class body already ran at import — so a `.env` value that was absent at import only takes effect because the override loop revisits it. That includes `SERVER_MODE`. The two `load_dotenv` calls don't even read the same file (`settings.py` searches from the working directory, `create_app` targets `backend/.env`), which is exactly how the two reads come to differ. `APP_DATA_DIRECTORY` and `REPORT_DATA_DIRECTORY` stay out of the loop but are still honoured — `recompute_derived_settings` reads them with the same precedence the class body gives them (`_RECOMPUTE_HONOURS` marks them, so they don't draw the ignored-variable warning), and rebuilds their children around whichever value wins.
+
+`test_every_env_override_skip_names_a_real_setting` catches a dead skip entry after a rename. `test_the_settings_inventory_is_pinned` catches the other direction — it asserts `vars(DefaultConfig)` partitions exactly into `_OVERRIDABLE_SETTINGS` and `_ENV_OVERRIDE_SKIP`, so a new attribute that nobody classified fails rather than silently becoming env-overridable. Update that inventory when you add a setting; it is the forced decision, not busywork. An overridable setting needs a second decision as well — pinned away from the environment for the test fixtures, or deliberately inherited — which `test_the_test_fixtures_pin_every_env_reachable_setting` forces; see [the pytest section](#backend-pytest--the-shared-client-fixture).
 
 ### Domain exceptions live in `exceptions.py`
 
@@ -1269,6 +1322,7 @@ These exist in the codebase today and don't yet have a single canonical answer. 
 - **`flake8 max-line-length = 79` vs `black line-length = 88`.** `.flake8` and `pyproject.toml` disagree. Black wins in practice because `pnpm flask:format` runs it; the flake8 setting only matters if `pre-commit` runs flake8 in isolation, which CI does not. Don't expand or contract files to satisfy 79 — 88 is the source of truth.
 - **`Config.__new__` lacks a return annotation.** `backend/ttnn_visualizer/settings.py` returns the singleton without typing the return, surfacing a mypy `attr-defined` error in `database_migrations.py` against `cast(DefaultConfig, Config()).SQLALCHEMY_DATABASE_URI`. Fix is `def __new__(cls) -> "DefaultConfig":`; tracked as a follow-up.
 - **`useQuery<Data, AxiosError>` not universal.** Four hooks in `useAPI.tsx` (`useGetClusterDescription`, `usePerfMeta`, `useReportFolderList`, `useInstance`) leave the error generic implicit (`unknown`). Call sites currently don't read `error.status` on these specific queries, but the rule is "spell out both generics" — tighten when you touch them.
+- **`USAGE_RECORDING_ACTIVE` is a config attribute with no matching variable.** Every other setting reads a variable named after its attribute (`_ENV_ALIASES` covers the one exception, `DEBUG`). This one is fed by `USAGE_RECORDING_DISABLED`, the opposite polarity, so it is named for the state instead: the attribute is what `PRINT_ENV` publishes, and borrowing the variable's name would print `true` when recording is off.
 - **`DEBUG` and `FLASK_DEBUG` are different knobs with confusable names.** `FLASK_DEBUG` feeds the `DEBUG` *config* value (Flask's debug mode, which suppresses the catch-all error handler); the `DEBUG` *environment variable* raises the root log level and is what `pnpm flask:start-debug` sets. Both are in `.env.sample` with that distinction spelled out, and `_ENV_ALIASES` keeps the override loop from conflating them. Collapsing the two names would be a behaviour change for anyone setting either; until someone does, read the name at the call site rather than assuming.
 - **Underscore prefixes on test-module helpers.** Backend helpers are meant to carry a leading underscore, and newer test modules follow it (`_documented_boolean_defaults`), but plenty of existing ones don't (`wsgi_environ` in the same file). Prefix new helpers; rename existing ones only when you're already editing them.
 - **`dataclasses.asdict(...)` vs `to_dict()` for serialisation.** Models that inherit `SerializeableDataclass` get a `to_dict()` that handles `enum.Enum` conversion; using `dataclasses.asdict` instead (e.g. `views.py`) skips that handling. Safe when the dataclass has no enum fields; otherwise use `.to_dict()`. Reviewers should flag `asdict` on any dataclass with enum-typed fields.

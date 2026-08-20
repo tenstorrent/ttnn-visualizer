@@ -58,6 +58,9 @@ export const DEFAULT_TOP_N_COUNT = 10;
 export const TOP_N_COUNT_MIN = 1;
 export const TOP_N_COUNT_MAX = 50;
 
+/** Accessible name for the top-N navigation rail. */
+export const TOP_N_RAIL_LABEL = 'Top-ranked operations';
+
 /**
  * User-facing mode label. Used in both the dropdown label and the per-row tooltip
  * ("#3 slowest by …").

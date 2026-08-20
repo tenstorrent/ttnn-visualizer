@@ -1,0 +1,968 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
+
+import '@testing-library/jest-dom/vitest';
+import type { ReactNode } from 'react';
+import { MemoryRouter } from 'react-router';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { getDefaultStore } from 'jotai';
+
+import type { NodeChange } from '@xyflow/react';
+
+import type { OperationDescription } from '../src/model/APIData';
+import type {
+    OpGraphBuiltGraph,
+    OpGraphFlowEdge,
+    OpGraphFlowNode,
+} from '../src/components/operation-graph/opGraphTypes';
+
+// A layout is the most expensive thing this view can do, and every cheap
+// interaction — typing, selecting, stepping matches — is one dependency array away
+// from triggering one. Nothing else counts `runBuild`, so a plausible-looking
+// tidy-up of that effect's deps would relayout per keystroke and still go green.
+const runBuild = vi.fn();
+
+// Populated on render by the stubs below. Renders accumulate so a test can compare
+// what React Flow was handed before and after an interaction.
+const flowRenders: { nodes: OpGraphFlowNode[]; edges: OpGraphFlowEdge[] }[] = [];
+const harness: {
+    onBuilt: ((graph: OpGraphBuiltGraph) => void) | null;
+    setNodes: ((updater: (previous: OpGraphFlowNode[]) => OpGraphFlowNode[]) => void) | null;
+    setEdges: ((updater: (previous: OpGraphFlowEdge[]) => OpGraphFlowEdge[]) => void) | null;
+    onNodeClick: ((event: unknown, node: OpGraphFlowNode) => void) | null;
+    onNodesChange: ((changes: NodeChange<OpGraphFlowNode>[]) => void) | null;
+    // Left as `undefined` by the view when the overlay is off, which is the gating
+    // a test can only see by reading the prop React Flow was actually handed.
+    onNodeMouseEnter: ((event: unknown, node: OpGraphFlowNode) => void) | undefined;
+    onNodeMouseLeave: (() => void) | undefined;
+} = {
+    onBuilt: null,
+    setNodes: null,
+    setEdges: null,
+    onNodeClick: null,
+    onNodesChange: null,
+    onNodeMouseEnter: undefined,
+    onNodeMouseLeave: undefined,
+};
+
+// What `useNodesState` hands the view as its change applier. Stable, because the
+// view's own handler lists it as a dependency.
+const applyNodeChanges = vi.fn();
+
+// A real subscriber list. The zoom effect's entire contract is what it writes when
+// the store publishes, so a `subscribe` that never invoked its callback left both
+// the initial write and the subscription itself impossible to falsify.
+const flowTransform: { current: [number, number, number] } = { current: [0, 0, 1] };
+const flowStoreListeners = new Set<(state: { transform: [number, number, number] }) => void>();
+
+vi.mock('@xyflow/react', async () => {
+    const { useState } = await import('react');
+    const Passthrough = ({ children }: { children?: ReactNode }) => children ?? null;
+    // Stable across renders: the real `useReactFlow` returns a stable API object,
+    // and an unstable one here would invalidate the callbacks whose stability the
+    // rebuild effect depends on, quietly weakening every assertion below.
+    const flowApi = {
+        setCenter: () => Promise.resolve(),
+        getNode: (id: string) => ({ id, position: { x: 0, y: 0 }, width: 100, height: 40 }),
+    };
+    // Stable like `flowApi`: the zoom effect lists the store as a dependency, so
+    // a fresh object per render would resubscribe on every pass.
+    const flowStoreApi = {
+        getState: () => ({ transform: flowTransform.current }),
+        subscribe: (listener: (state: { transform: [number, number, number] }) => void) => {
+            flowStoreListeners.add(listener);
+            return () => flowStoreListeners.delete(listener);
+        },
+    };
+    return {
+        ReactFlow: ({
+            nodes,
+            edges,
+            onNodeClick,
+            onNodesChange,
+            onNodeMouseEnter,
+            onNodeMouseLeave,
+            children,
+        }: {
+            nodes: OpGraphFlowNode[];
+            edges: OpGraphFlowEdge[];
+            onNodeClick: (event: unknown, node: OpGraphFlowNode) => void;
+            onNodesChange: (changes: NodeChange<OpGraphFlowNode>[]) => void;
+            onNodeMouseEnter?: (event: unknown, node: OpGraphFlowNode) => void;
+            onNodeMouseLeave?: () => void;
+            children?: ReactNode;
+        }) => {
+            flowRenders.push({ nodes, edges });
+            harness.onNodeClick = onNodeClick;
+            harness.onNodesChange = onNodesChange;
+            harness.onNodeMouseEnter = onNodeMouseEnter;
+            harness.onNodeMouseLeave = onNodeMouseLeave;
+            return children ?? null;
+        },
+        ReactFlowProvider: Passthrough,
+        Background: () => null,
+        Controls: () => null,
+        Handle: () => null,
+        MiniMap: () => null,
+        Position: { Top: 'top', Bottom: 'bottom', Left: 'left', Right: 'right' },
+        MarkerType: { ArrowClosed: 'arrowclosed' },
+        ConnectionLineType: { SmoothStep: 'smoothstep' },
+        useReactFlow: () => flowApi,
+        useStoreApi: () => flowStoreApi,
+        useNodesState: (initial: OpGraphFlowNode[]) => {
+            const [value, setValue] = useState(initial);
+            harness.setNodes = setValue;
+            return [value, setValue, applyNodeChanges];
+        },
+        useEdgesState: (initial: OpGraphFlowEdge[]) => {
+            const [value, setValue] = useState(initial);
+            harness.setEdges = setValue;
+            return [value, setValue, () => {}];
+        },
+        useStore: (selector: (state: { transform: [number, number, number] }) => unknown) =>
+            selector({ transform: flowTransform.current }),
+    };
+});
+
+vi.mock('../src/components/operation-graph/useOpGraphLayoutWorker', () => ({
+    useOpGraphLayoutWorker: (_operations: unknown, onBuilt: (graph: OpGraphBuiltGraph) => void) => {
+        harness.onBuilt = onBuilt;
+        return { runBuild, isBuilding: false };
+    },
+}));
+
+// Wraps the real traversal instead of replacing it: the rendering assertions need
+// the true path, and one assertion needs to count how often it is computed.
+vi.mock('../src/components/operation-graph/opGraphCriticalPath', async () => {
+    const actual = await vi.importActual<typeof import('../src/components/operation-graph/opGraphCriticalPath')>(
+        '../src/components/operation-graph/opGraphCriticalPath',
+    );
+    return { ...actual, findCriticalPath: vi.fn(actual.findCriticalPath) };
+});
+
+// Imported after the `vi.mock` factories so the stubs are registered first. The
+// builder is the real one: the identity assertions below only mean something
+// against the node shapes production actually produces.
+/* eslint-disable import/first */
+import { buildOpGraph } from '../src/components/operation-graph/opGraphBuilder';
+import { findCriticalPath } from '../src/components/operation-graph/opGraphCriticalPath';
+import OperationGraphReactFlow from '../src/components/operation-graph/OperationGraphReactFlow';
+import {
+    PERF_BAR_COLOR_VAR,
+    PERF_BAR_SCALE_VAR,
+    PERF_BAR_ZOOM_VAR,
+} from '../src/components/operation-graph/opGraphPerfOverlay';
+import { NO_PERF_DATA_LABEL } from '../src/definitions/PerfOverlayStatus';
+import { formatDuration } from '../src/functions/formatting';
+import type { PerfOverlaySource } from '../src/functions/perfOverlay';
+import { activePerformanceReportAtom, activeProfilerReportAtom, criticalPathScopeAtom } from '../src/store/app';
+import type { ReportFolder } from '../src/definitions/Reports';
+/* eslint-enable import/first */
+
+const FILTER_DEBOUNCE_MS = 120;
+
+const operation = (id: number, name: string, consumers: number[]): OperationDescription =>
+    ({
+        id,
+        name,
+        operationFileIdentifier: `model.py:${id}`,
+        outputs: [{ shape: 'Shape([1, 32])', consumers }],
+        inputs: [],
+        arguments: [],
+    }) as unknown as OperationDescription;
+
+// A chain, so every op is connected and survives the builder's isolated-op drop.
+// Two `matmul` names give a filter something to match that is a strict subset.
+const OPERATION_LIST: OperationDescription[] = [
+    operation(1, 'matmul_a', [2]),
+    operation(2, 'add_b', [3]),
+    operation(3, 'matmul_c', [4]),
+    operation(4, 'relu_d', [5]),
+    operation(5, 'softmax_e', []),
+];
+
+const sourceFor = (operations: OperationDescription[]) =>
+    operations.map((op) => ({
+        id: op.id,
+        name: op.name,
+        fileIdentifier: op.operationFileIdentifier,
+        outputs: op.outputs.map((tensor) => ({ edgeLabel: '[1, 32]', consumers: tensor.consumers })),
+    }));
+
+const renderGraph = (operations = OPERATION_LIST, perfRows?: PerfOverlaySource[]) => {
+    const view = render(
+        <MemoryRouter>
+            <OperationGraphReactFlow
+                operationList={operations}
+                perfRows={perfRows}
+                isPerfReportLoaded={perfRows !== undefined}
+            />
+        </MemoryRouter>,
+    );
+    // The worker is stubbed, so the view only receives a graph when a test says
+    // so; this is the reply the mount's own `runBuild` would have produced.
+    act(() => {
+        harness.onBuilt?.(buildOpGraph(sourceFor(operations), { hideDeallocate: true }));
+    });
+    return view;
+};
+
+const lastFlowRender = () => flowRenders[flowRenders.length - 1];
+
+const nodeById = (nodes: OpGraphFlowNode[], id: string) => {
+    const found = nodes.find((node) => node.id === id);
+    expect(found, `node ${id} missing`).toBeDefined();
+    return found as OpGraphFlowNode;
+};
+
+const typeFilter = (query: string) => {
+    fireEvent.change(screen.getByPlaceholderText('Filter ops (substring)'), { target: { value: query } });
+    act(() => {
+        vi.advanceTimersByTime(FILTER_DEBOUNCE_MS);
+    });
+};
+
+const emitNodeChanges = (changes: NodeChange<OpGraphFlowNode>[]) => {
+    act(() => {
+        harness.onNodesChange?.(changes);
+    });
+};
+
+const hoverNode = (id: string) => {
+    act(() => {
+        harness.onNodeMouseEnter?.({ clientX: 20, clientY: 30 }, nodeById(lastFlowRender().nodes, id));
+    });
+};
+
+const PERF_ROWS: PerfOverlaySource[] = OPERATION_LIST.map((op) => ({ id: op.id, device_time: op.id * 10 }));
+
+// Two routes from op 1 to op 4, so the graph has ops on the path and ops beside
+// it. `OPERATION_LIST` is a chain, which puts every node on the path and would let
+// an unconditionally applied highlight pass every assertion below.
+const BRANCHING_OPERATION_LIST: OperationDescription[] = [
+    operation(1, 'entry_a', [2, 3]),
+    operation(2, 'quick_b', [4]),
+    operation(3, 'slow_c', [4]),
+    operation(4, 'exit_d', []),
+];
+
+// 1 → 3 → 4 costs 120ns against the 25ns of 1 → 2 → 4, so op 2 is the one op the
+// highlight must leave alone.
+const BRANCHING_PERF_ROWS: PerfOverlaySource[] = [
+    { id: 1, device_time: 10 },
+    { id: 2, device_time: 5 },
+    { id: 3, device_time: 100 },
+    { id: 4, device_time: 10 },
+];
+
+const edgeBetween = (edges: OpGraphFlowEdge[], source: string, target: string) => {
+    const found = edges.find((edge) => edge.source === source && edge.target === target);
+    expect(found, `edge ${source} → ${target} missing`).toBeDefined();
+    return found as OpGraphFlowEdge;
+};
+
+const hasClass = (element: { className?: string }, className: string) =>
+    (element.className ?? '').split(' ').includes(className);
+
+const perfScaleOf = (node: OpGraphFlowNode) =>
+    (node.style as Record<string, unknown> | undefined)?.[PERF_BAR_SCALE_VAR];
+
+const perfColorOf = (node: OpGraphFlowNode) =>
+    (node.style as Record<string, unknown> | undefined)?.[PERF_BAR_COLOR_VAR];
+
+// One store publish, as d3-zoom produces on a wheel frame.
+const setFlowZoom = (zoom: number) => {
+    flowTransform.current = [0, 0, zoom];
+    act(() => {
+        flowStoreListeners.forEach((listener) => listener({ transform: flowTransform.current }));
+    });
+};
+
+// jsdom serialises an inline `background-color` as `rgb(...)`, so the hex the graph
+// writes has to go through the same normalisation before comparing.
+const asRenderedColor = (color: string) => {
+    const probe = document.createElement('div');
+    probe.style.backgroundColor = color;
+    return probe.style.backgroundColor;
+};
+
+// By role, because the legend the overlay renders carries an `aria-label` that
+// starts the same way.
+const overlaySwitch = () => screen.getByRole('checkbox', { name: /^Perf overlay/ }) as HTMLInputElement;
+
+const enableOverlay = () => fireEvent.click(overlaySwitch());
+
+const criticalPathSwitch = () => screen.getByRole('checkbox', { name: /^Highlight critical path/ }) as HTMLInputElement;
+
+const enableCriticalPath = () => fireEvent.click(criticalPathSwitch());
+
+beforeEach(() => {
+    vi.useFakeTimers();
+    runBuild.mockClear();
+    applyNodeChanges.mockClear();
+    vi.mocked(findCriticalPath).mockClear();
+    flowRenders.length = 0;
+    harness.onBuilt = null;
+    harness.setNodes = null;
+    harness.setEdges = null;
+    harness.onNodeClick = null;
+    harness.onNodesChange = null;
+    harness.onNodeMouseEnter = undefined;
+    harness.onNodeMouseLeave = undefined;
+    flowTransform.current = [0, 0, 1];
+    flowStoreListeners.clear();
+    sessionStorage.clear();
+    // No `Provider` here, so the view reads the default store and report state
+    // would otherwise carry into the next test.
+    getDefaultStore().set(activePerformanceReportAtom, null);
+    getDefaultStore().set(activeProfilerReportAtom, null);
+    // Scoping makes critical-path intent inert against a different report, but two
+    // tests using the same fixture paths are the same scope, so it still needs
+    // clearing.
+    getDefaultStore().set(criticalPathScopeAtom, null);
+});
+
+afterEach(() => {
+    cleanup();
+    vi.useRealTimers();
+});
+
+describe('OperationGraphReactFlow rebuild triggers', () => {
+    it('lays out once for a mount', () => {
+        renderGraph();
+
+        expect(runBuild).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not relayout for a filter query', () => {
+        renderGraph();
+        runBuild.mockClear();
+
+        typeFilter('matmul');
+
+        // Filtering dims nodes that are already laid out. Routing it through the
+        // build would run Dagre per debounce window on the full graph.
+        expect(runBuild).not.toHaveBeenCalled();
+    });
+
+    it('does not relayout for a filter mode change', () => {
+        renderGraph();
+        typeFilter('matmul');
+        runBuild.mockClear();
+
+        fireEvent.click(screen.getByLabelText('Switch to regex mode'));
+
+        expect(runBuild).not.toHaveBeenCalled();
+    });
+
+    it('does not relayout for a selection', () => {
+        renderGraph();
+        runBuild.mockClear();
+
+        act(() => {
+            harness.onNodeClick?.(null, nodeById(lastFlowRender().nodes, '3'));
+        });
+
+        expect(runBuild).not.toHaveBeenCalled();
+    });
+
+    it('does not relayout for stepping through matches', () => {
+        renderGraph();
+        typeFilter('matmul');
+        runBuild.mockClear();
+
+        fireEvent.click(screen.getByLabelText('Next match'));
+        fireEvent.click(screen.getByLabelText('Next match'));
+
+        expect(runBuild).not.toHaveBeenCalled();
+    });
+
+    it('relayouts when hide-deallocate is toggled, because the node set changes', () => {
+        renderGraph();
+        runBuild.mockClear();
+
+        fireEvent.click(screen.getByLabelText('Hide deallocate ops'));
+
+        expect(runBuild).toHaveBeenCalledTimes(1);
+        expect(runBuild).toHaveBeenLastCalledWith({ hideDeallocate: false });
+    });
+
+    it('relayouts when the report changes', () => {
+        const { rerender } = renderGraph();
+        runBuild.mockClear();
+
+        rerender(
+            <MemoryRouter>
+                <OperationGraphReactFlow operationList={[operation(9, 'conv_x', [10]), operation(10, 'add_y', [])]} />
+            </MemoryRouter>,
+        );
+
+        expect(runBuild).toHaveBeenCalledTimes(1);
+    });
+});
+
+describe('OperationGraphReactFlow keyboard selection', () => {
+    // Enter or Space on a focused node is handled inside React Flow: it emits a
+    // select change and never calls `onNodeClick`. Before this was read, the ring
+    // moved and nothing else did — no panel, no neighbour highlight, no cursor.
+    it('adopts a selection reported without a click', () => {
+        renderGraph();
+        emitNodeChanges([{ type: 'select', id: '3', selected: true }]);
+
+        const { nodes } = lastFlowRender();
+        expect(nodeById(nodes, '3').className).toContain('op-graph-node-selected');
+        // The neighbour highlight is derived from app state, so its arrival is what
+        // proves the selection reached the app and not just React Flow's store.
+        expect(nodeById(nodes, '2').className).toContain('op-graph-node-input');
+        expect(nodeById(nodes, '4').className).toContain('op-graph-node-output');
+    });
+
+    it('mirrors the selection back so React Flow agrees about what is selected', () => {
+        renderGraph();
+
+        act(() => {
+            harness.onNodeClick?.(null, nodeById(lastFlowRender().nodes, '4'));
+        });
+
+        const { nodes } = lastFlowRender();
+        expect(nodeById(nodes, '4').selected).toBe(true);
+        expect(nodes.filter((node) => node.selected === true)).toHaveLength(1);
+    });
+
+    it('clears the selection when an unselect is reported with nothing replacing it', () => {
+        renderGraph();
+        emitNodeChanges([{ type: 'select', id: '3', selected: true }]);
+
+        // Escape on the focused node, which React Flow turns into a bare unselect.
+        emitNodeChanges([{ type: 'select', id: '3', selected: false }]);
+
+        expect(lastFlowRender().nodes.some((node) => node.selected === true)).toBe(false);
+    });
+
+    it('keeps select changes out of the node array so selection has one source', () => {
+        renderGraph();
+        applyNodeChanges.mockClear();
+
+        emitNodeChanges([
+            { type: 'select', id: '3', selected: true },
+            { type: 'position', id: '3', position: { x: 1, y: 2 } },
+        ]);
+
+        expect(applyNodeChanges).toHaveBeenCalledTimes(1);
+        expect(applyNodeChanges).toHaveBeenCalledWith([{ type: 'position', id: '3', position: { x: 1, y: 2 } }]);
+    });
+
+    it('forwards a drag frame without rebuilding the change array', () => {
+        renderGraph();
+        applyNodeChanges.mockClear();
+        const changes: NodeChange<OpGraphFlowNode>[] = [{ type: 'position', id: '1', position: { x: 3, y: 4 } }];
+
+        emitNodeChanges(changes);
+
+        expect(applyNodeChanges).toHaveBeenCalledWith(changes);
+    });
+});
+
+describe('OperationGraphReactFlow filter dimming', () => {
+    it('marks the matched set and leaves the rest of the elements untouched', () => {
+        renderGraph();
+
+        typeFilter('matmul');
+
+        const { nodes } = lastFlowRender();
+        expect(nodeById(nodes, '3').className).toContain('op-graph-node-match');
+        expect(nodeById(nodes, '4').className ?? '').not.toContain('op-graph-node-match');
+        // The dim itself is the container's job, so nothing should have grown an
+        // inline opacity on the way through.
+        expect(nodes.every((node) => node.style?.opacity === undefined)).toBe(true);
+    });
+
+    it('flags the container so the stylesheet can dim the non-matches', () => {
+        const { container } = renderGraph();
+        expect(container.querySelector('.op-graph-filtering')).toBeNull();
+
+        typeFilter('matmul');
+
+        expect(container.querySelector('.op-graph-filtering')).not.toBeNull();
+    });
+
+    it('keeps non-matching nodes byte-for-byte across a drag frame', () => {
+        renderGraph();
+        typeFilter('matmul');
+        const before = lastFlowRender().nodes;
+
+        // What React Flow hands back mid-drag: a new array, a new object for the
+        // node under the pointer, and the other several hundred untouched. Any
+        // per-non-match styling turns that into a full re-render of the canvas.
+        act(() => {
+            harness.setNodes?.((previous) =>
+                previous.map((node) => (node.id === '1' ? { ...node, position: { x: 5, y: 5 } } : node)),
+            );
+        });
+
+        const after = lastFlowRender().nodes;
+        expect(after).not.toBe(before);
+        expect(nodeById(after, '4')).toBe(nodeById(before, '4'));
+        expect(nodeById(after, '5')).toBe(nodeById(before, '5'));
+    });
+});
+
+describe('OperationGraphReactFlow perf overlay identity', () => {
+    // The overlay patches every linked node rather than the handful a filter or a
+    // selection touches, so it is the case where re-dressing nodes per render
+    // costs a full canvas re-render instead of a few nodes.
+    it('keeps untouched nodes byte-for-byte across a drag frame', () => {
+        renderGraph(OPERATION_LIST, PERF_ROWS);
+        enableOverlay();
+        const before = lastFlowRender().nodes;
+        // Without this the drag assertion below would pass on an overlay that
+        // never applied anything.
+        expect(perfScaleOf(nodeById(before, '4'))).toBeDefined();
+
+        act(() => {
+            harness.setNodes?.((previous) =>
+                previous.map((node) => (node.id === '1' ? { ...node, position: { x: 5, y: 5 } } : node)),
+            );
+        });
+
+        const after = lastFlowRender().nodes;
+        expect(after).not.toBe(before);
+        expect(nodeById(after, '4')).toBe(nodeById(before, '4'));
+        expect(nodeById(after, '5')).toBe(nodeById(before, '5'));
+    });
+
+    it('re-dresses the nodes when the scores themselves change', () => {
+        const { rerender } = renderGraph(OPERATION_LIST, PERF_ROWS);
+        enableOverlay();
+        const before = lastFlowRender().nodes;
+
+        rerender(
+            <MemoryRouter>
+                <OperationGraphReactFlow
+                    operationList={OPERATION_LIST}
+                    perfRows={PERF_ROWS.map((row) => ({ ...row, device_time: (row.device_time ?? 0) * 100 }))}
+                    isPerfReportLoaded
+                />
+            </MemoryRouter>,
+        );
+
+        // The cache is keyed on the patch identity, so a new ramp has to reach
+        // React Flow even though the node objects behind it never changed.
+        expect(nodeById(lastFlowRender().nodes, '4')).not.toBe(nodeById(before, '4'));
+    });
+});
+
+// Intent is scoped to the report it was enabled for, and the switch reads derived
+// active state, so the reset has to clear intent itself rather than rely on the
+// overlay going quiet. The rows stay linked throughout, which is what makes the
+// switch a faithful read of intent here.
+describe('OperationGraphReactFlow perf overlay report scope', () => {
+    const reportFolder = (name: string) => ({ path: `/reports/${name}`, reportName: name }) as ReportFolder;
+
+    const setReport = (atom: typeof activeProfilerReportAtom, report: ReportFolder | null) => {
+        act(() => {
+            getDefaultStore().set(atom, report);
+        });
+    };
+
+    it('drops the overlay when the profiler report changes', () => {
+        renderGraph(OPERATION_LIST, PERF_ROWS);
+        enableOverlay();
+        expect(overlaySwitch().checked).toBe(true);
+
+        setReport(activeProfilerReportAtom, reportFolder('resnet50'));
+
+        expect(overlaySwitch().checked).toBe(false);
+    });
+
+    it('drops the overlay when the performance report changes', () => {
+        // A perf swap is the more dangerous of the two: the graph is unchanged, so
+        // a stale overlay looks plausible while encoding a different run.
+        renderGraph(OPERATION_LIST, PERF_ROWS);
+        enableOverlay();
+
+        setReport(activePerformanceReportAtom, reportFolder('resnet50-perf'));
+
+        expect(overlaySwitch().checked).toBe(false);
+        // The encoding has to go with it, not just the control.
+        expect(perfScaleOf(nodeById(lastFlowRender().nodes, '4'))).toBeUndefined();
+    });
+
+    it('does not re-enable itself when a report is swapped back', () => {
+        const first = reportFolder('resnet50');
+        renderGraph(OPERATION_LIST, PERF_ROWS);
+        setReport(activeProfilerReportAtom, first);
+        enableOverlay();
+        setReport(activeProfilerReportAtom, reportFolder('bert'));
+
+        expect(overlaySwitch().checked).toBe(false);
+
+        setReport(activeProfilerReportAtom, first);
+
+        expect(overlaySwitch().checked).toBe(false);
+    });
+
+    it('leaves the overlay alone while the reports hold still', () => {
+        // A reset firing on every render would make the switch unusable.
+        const report = reportFolder('resnet50');
+        renderGraph(OPERATION_LIST, PERF_ROWS);
+        setReport(activeProfilerReportAtom, report);
+        enableOverlay();
+        setReport(activeProfilerReportAtom, report);
+
+        expect(overlaySwitch().checked).toBe(true);
+    });
+
+    it('survives the same report arriving as a rebuilt object', () => {
+        // Restoring an instance or refetching writes a fresh `ReportFolder` for the
+        // report already loaded, which reference equality read as a swap.
+        renderGraph(OPERATION_LIST, PERF_ROWS);
+        setReport(activeProfilerReportAtom, reportFolder('resnet50'));
+        enableOverlay();
+        setReport(activeProfilerReportAtom, reportFolder('resnet50'));
+
+        expect(overlaySwitch().checked).toBe(true);
+    });
+});
+
+// The SCSS divides the bar's floor by this property to hold an on-screen size at
+// overview zoom. `opGraphPerfBarStyles.spec.ts` asserts the stylesheet reads it;
+// these assert something writes it, so the compensation cannot go dead silently.
+describe('OperationGraphReactFlow perf bar zoom compensation', () => {
+    const graphRoot = (container: HTMLElement) =>
+        container.querySelector<HTMLElement>('.operation-graph-react-flow') as HTMLElement;
+
+    const publishedZoom = (container: HTMLElement) => graphRoot(container).style.getPropertyValue(PERF_BAR_ZOOM_VAR);
+
+    it('publishes the current zoom when the overlay turns on', () => {
+        const { container } = renderGraph(OPERATION_LIST, PERF_ROWS);
+        expect(publishedZoom(container)).toBe('');
+
+        enableOverlay();
+
+        expect(publishedZoom(container)).toBe('1');
+    });
+
+    it('republishes when a gesture crosses a bucket', () => {
+        const { container } = renderGraph(OPERATION_LIST, PERF_ROWS);
+        enableOverlay();
+
+        setFlowZoom(0.3);
+
+        // Bucketed, so the nearest bucket rather than 0.3 exactly. The contract is
+        // the tolerance, not the bucket boundaries.
+        const published = Number(publishedZoom(container));
+        expect(published).toBeGreaterThan(0.3 * 0.95);
+        expect(published).toBeLessThan(0.3 * 1.05);
+    });
+
+    it('coalesces sub-bucket frames into a single write', () => {
+        const { container } = renderGraph(OPERATION_LIST, PERF_ROWS);
+        enableOverlay();
+        const setProperty = vi.spyOn(graphRoot(container).style, 'setProperty');
+
+        // d3-zoom emits a new scale nearly every frame. The property is inherited by
+        // every node's bar, so an unquantised write invalidates style graph-wide per
+        // frame — the jank lands at exactly the overview zooms this exists for.
+        setFlowZoom(1.01);
+        setFlowZoom(1.02);
+        setFlowZoom(1.03);
+
+        expect(setProperty).not.toHaveBeenCalled();
+
+        setFlowZoom(1.5);
+
+        expect(setProperty).toHaveBeenCalledTimes(1);
+    });
+
+    it('never publishes a zero, which would invalidate the bar geometry', () => {
+        // The bar sizes with `calc(2px / var(--op-graph-perf-zoom))`: invalid at 0,
+        // so the declaration would drop and the bar vanish at MIN_ZOOM. Absolute
+        // quantisation steps round the whole overview range to zero.
+        const { container } = renderGraph(OPERATION_LIST, PERF_ROWS);
+        enableOverlay();
+
+        setFlowZoom(0.02);
+
+        const published = Number(publishedZoom(container));
+        expect(published).toBeGreaterThan(0);
+        expect(published).toBeLessThan(0.02 * 1.05);
+    });
+
+    it('unsubscribes when the overlay is switched off', () => {
+        const { container } = renderGraph(OPERATION_LIST, PERF_ROWS);
+        enableOverlay();
+        setFlowZoom(2);
+        const lastPublished = publishedZoom(container);
+
+        fireEvent.click(overlaySwitch());
+        setFlowZoom(0.5);
+
+        expect(flowStoreListeners.size).toBe(0);
+        expect(publishedZoom(container)).toBe(lastPublished);
+    });
+});
+
+// The panel is the only keyboard-reachable route to the metric, and its props are
+// assembled here rather than in the leaf that renders them.
+describe('OperationGraphReactFlow perf overlay panel wiring', () => {
+    const metricValue = () => screen.getByText('Kernel duration').nextElementSibling as HTMLElement;
+
+    it('hands the selected op its duration and the colour the graph drew it with', () => {
+        renderGraph(OPERATION_LIST, PERF_ROWS);
+        enableOverlay();
+
+        emitNodeChanges([{ type: 'select', id: '4', selected: true }]);
+
+        expect(metricValue()).toHaveTextContent(formatDuration(40_000));
+        const swatch = metricValue().querySelector<HTMLElement>('.perf-overlay-op-metric-swatch');
+        // Same colour the node carries, so the two encodings cannot disagree.
+        const nodeColor = perfColorOf(nodeById(lastFlowRender().nodes, '4'));
+        expect(swatch?.style.backgroundColor).toBe(asRenderedColor(String(nodeColor)));
+    });
+
+    it('reads no data for an op the perf report never mentioned', () => {
+        // Hard-coding the props to `undefined` would make every op in the report
+        // read this way with the whole suite still green.
+        renderGraph(
+            OPERATION_LIST,
+            PERF_ROWS.filter((row) => row.id !== 4),
+        );
+        enableOverlay();
+
+        emitNodeChanges([{ type: 'select', id: '4', selected: true }]);
+
+        expect(metricValue()).toHaveTextContent(NO_PERF_DATA_LABEL);
+        expect(metricValue().querySelector('.perf-overlay-op-metric-swatch')).toBeNull();
+    });
+});
+
+describe('OperationGraphReactFlow perf overlay chrome', () => {
+    const legend = () => screen.queryByLabelText('Perf overlay legend');
+    const hoverChip = () => document.querySelector<HTMLElement>('.op-graph-perf-hover');
+
+    it('mounts the legend with the linked ops bounds', () => {
+        renderGraph(OPERATION_LIST, PERF_ROWS);
+        expect(legend()).toBeNull();
+
+        enableOverlay();
+
+        // Bounds come from the aggregate; a legend fed constants would read the
+        // same for every report.
+        expect(legend()).toHaveTextContent(formatDuration(10_000));
+        expect(legend()).toHaveTextContent(formatDuration(50_000));
+    });
+
+    it('attaches the hover handler only while the overlay is on', () => {
+        renderGraph(OPERATION_LIST, PERF_ROWS);
+
+        expect(harness.onNodeMouseEnter).toBeUndefined();
+
+        enableOverlay();
+
+        expect(harness.onNodeMouseEnter).toBeInstanceOf(Function);
+    });
+
+    it('shows the hovered op its duration and rank', () => {
+        renderGraph(OPERATION_LIST, PERF_ROWS);
+        enableOverlay();
+
+        hoverNode('5');
+
+        expect(hoverChip()).toHaveTextContent(`${formatDuration(50_000)} · #1 of 5`);
+    });
+
+    it('clears the hover when the pointer leaves', () => {
+        renderGraph(OPERATION_LIST, PERF_ROWS);
+        enableOverlay();
+        hoverNode('5');
+
+        act(() => {
+            harness.onNodeMouseLeave?.();
+        });
+
+        expect(hoverChip()).toBeNull();
+    });
+
+    it('drops a hover the overlay left behind when it is switched off', () => {
+        // Otherwise it returns, at a stale position, the next time it goes on.
+        renderGraph(OPERATION_LIST, PERF_ROWS);
+        enableOverlay();
+        hoverNode('5');
+
+        fireEvent.click(overlaySwitch());
+        enableOverlay();
+
+        expect(hoverChip()).toBeNull();
+    });
+
+    it('returns the nodes to the builder objects when the overlay goes off', () => {
+        // The identity contract has to survive the round trip, not just the on state.
+        renderGraph(OPERATION_LIST, PERF_ROWS);
+        const beforeOverlay = lastFlowRender().nodes;
+        enableOverlay();
+        expect(perfScaleOf(nodeById(lastFlowRender().nodes, '4'))).toBeDefined();
+
+        fireEvent.click(overlaySwitch());
+
+        expect(nodeById(lastFlowRender().nodes, '4')).toBe(nodeById(beforeOverlay, '4'));
+    });
+});
+
+// Same behaviour as the overlay above, reached differently: intent records the
+// reports it was switched on for, so a swap makes it inert immediately and the
+// view then clears it. Both halves are worth holding — the first is what keeps a
+// stale path off the screen, the second is what stops a swap back reviving it.
+// #1613
+describe('OperationGraphReactFlow critical path report scope', () => {
+    const reportFolder = (name: string) => ({ path: `/reports/${name}`, reportName: name }) as ReportFolder;
+
+    const setReport = (atom: typeof activeProfilerReportAtom, report: ReportFolder | null) => {
+        act(() => {
+            getDefaultStore().set(atom, report);
+        });
+    };
+
+    it('drops the highlight when the performance report changes', () => {
+        // The weights come from that report, so a stale path is a wrong path drawn
+        // with full confidence.
+        renderGraph(OPERATION_LIST, PERF_ROWS);
+        enableCriticalPath();
+        expect(criticalPathSwitch().checked).toBe(true);
+
+        setReport(activePerformanceReportAtom, reportFolder('resnet50-perf'));
+
+        expect(criticalPathSwitch().checked).toBe(false);
+    });
+
+    it('drops the highlight when the profiler report changes', () => {
+        renderGraph(OPERATION_LIST, PERF_ROWS);
+        enableCriticalPath();
+
+        setReport(activeProfilerReportAtom, reportFolder('resnet50'));
+
+        expect(criticalPathSwitch().checked).toBe(false);
+    });
+
+    it('does not re-enable itself when a report is swapped back', () => {
+        // Scoping alone would leave the intent sitting there, matching again on
+        // return; the switch has to come back off, like the overlay's.
+        const first = reportFolder('resnet50');
+        renderGraph(OPERATION_LIST, PERF_ROWS);
+        setReport(activeProfilerReportAtom, first);
+        enableCriticalPath();
+        setReport(activeProfilerReportAtom, reportFolder('bert'));
+        expect(criticalPathSwitch().checked).toBe(false);
+
+        setReport(activeProfilerReportAtom, first);
+
+        expect(criticalPathSwitch().checked).toBe(false);
+    });
+
+    it('leaves the highlight alone while the reports hold still', () => {
+        const report = reportFolder('resnet50');
+        renderGraph(OPERATION_LIST, PERF_ROWS);
+        setReport(activeProfilerReportAtom, report);
+        enableCriticalPath();
+        setReport(activeProfilerReportAtom, reportFolder('resnet50'));
+
+        // A rebuilt-but-equivalent `ReportFolder` is the same scope: the atom holds
+        // paths, not object identity.
+        expect(criticalPathSwitch().checked).toBe(true);
+    });
+
+    it('ignores intent recorded against a report that is no longer loaded', () => {
+        act(() => {
+            getDefaultStore().set(criticalPathScopeAtom, { profiler: '/reports/other', performance: null });
+        });
+
+        renderGraph(OPERATION_LIST, PERF_ROWS);
+
+        expect(criticalPathSwitch().checked).toBe(false);
+    });
+});
+
+// What the switch actually puts on screen. The stylesheet specs assert the cascade
+// these classes feed; without the assertions here nothing said the classes reach
+// React Flow at all, so deleting the three class pushes and the annotation left
+// the suite green. #1613
+describe('OperationGraphReactFlow critical path rendering', () => {
+    it('marks the ops on the path and leaves the branch beside it alone', () => {
+        renderGraph(BRANCHING_OPERATION_LIST, BRANCHING_PERF_ROWS);
+
+        enableCriticalPath();
+
+        const { nodes } = lastFlowRender();
+        expect(hasClass(nodeById(nodes, '3'), 'op-graph-node-critical-path')).toBe(true);
+        expect(hasClass(nodeById(nodes, '4'), 'op-graph-node-critical-path')).toBe(true);
+        expect(hasClass(nodeById(nodes, '2'), 'op-graph-node-critical-path')).toBe(false);
+    });
+
+    it('marks the edges the path traverses and not the ones it skips', () => {
+        renderGraph(BRANCHING_OPERATION_LIST, BRANCHING_PERF_ROWS);
+
+        enableCriticalPath();
+
+        const { edges } = lastFlowRender();
+        expect(hasClass(edgeBetween(edges, '1', '3'), 'op-graph-edge-critical-path')).toBe(true);
+        expect(hasClass(edgeBetween(edges, '3', '4'), 'op-graph-edge-critical-path')).toBe(true);
+        expect(hasClass(edgeBetween(edges, '1', '2'), 'op-graph-edge-critical-path')).toBe(false);
+        expect(hasClass(edgeBetween(edges, '2', '4'), 'op-graph-edge-critical-path')).toBe(false);
+    });
+
+    it('flags the container so the stylesheet can dim what is off the path', () => {
+        const { container } = renderGraph(BRANCHING_OPERATION_LIST, BRANCHING_PERF_ROWS);
+        expect(container.querySelector('.op-graph-critical-path')).toBeNull();
+
+        enableCriticalPath();
+
+        expect(container.querySelector('.op-graph-critical-path')).not.toBeNull();
+    });
+
+    it('summarises the path it drew', () => {
+        renderGraph(BRANCHING_OPERATION_LIST, BRANCHING_PERF_ROWS);
+        expect(screen.queryByLabelText('Critical path summary')).toBeNull();
+
+        enableCriticalPath();
+
+        // Three of the four ops, and the total excludes the branch that lost.
+        // `device_time` is microseconds, so the 120 on the path is 120_000ns here.
+        const summary = screen.getByLabelText('Critical path summary').textContent ?? '';
+        expect(summary).toContain('3 ops');
+        expect(summary).toContain(formatDuration(120_000));
+        // 120 of the 125 total across the four linked ops.
+        expect(summary).toContain('96.0% of total kernel duration');
+    });
+
+    it('takes every mark back off when switched off', () => {
+        renderGraph(BRANCHING_OPERATION_LIST, BRANCHING_PERF_ROWS);
+        enableCriticalPath();
+
+        fireEvent.click(criticalPathSwitch());
+
+        const { nodes, edges } = lastFlowRender();
+        expect(nodes.some((node) => hasClass(node, 'op-graph-node-critical-path'))).toBe(false);
+        expect(edges.some((edge) => hasClass(edge, 'op-graph-edge-critical-path'))).toBe(false);
+        expect(screen.queryByLabelText('Critical path summary')).toBeNull();
+    });
+
+    it('does not retraverse the graph when React Flow replaces the edge array', () => {
+        // Selecting an edge hands back a fresh array through `applyEdgeChanges`,
+        // which cannot change the path — so keying the traversal on that state
+        // paid O(V+E) plus a re-map of every edge on each edge click.
+        renderGraph(BRANCHING_OPERATION_LIST, BRANCHING_PERF_ROWS);
+        enableCriticalPath();
+        expect(vi.mocked(findCriticalPath)).toHaveBeenCalled();
+        vi.mocked(findCriticalPath).mockClear();
+
+        act(() => {
+            harness.setEdges?.((previous) => previous.map((edge) => ({ ...edge, selected: true })));
+        });
+
+        expect(vi.mocked(findCriticalPath)).not.toHaveBeenCalled();
+        // Still drawn: the point is that the answer was reused, not dropped.
+        expect(hasClass(edgeBetween(lastFlowRender().edges, '1', '3'), 'op-graph-edge-critical-path')).toBe(true);
+    });
+});

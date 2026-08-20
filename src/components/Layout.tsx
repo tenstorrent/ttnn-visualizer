@@ -2,7 +2,8 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { Link, useLocation } from 'react-router-dom';
+import { useEffect } from 'react';
+import { Link, useLocation } from 'react-router';
 import { Helmet } from 'react-helmet-async';
 import { Theme, ToastContainer, ToastPosition, cssTransition } from 'react-toastify';
 import 'styles/components/ToastOverrides.scss';
@@ -15,6 +16,7 @@ import { ModalAwareOutlet } from '../libs/ModalAwareOutlet';
 import FeedbackButton from './FeedbackButton';
 import FileStatusOverlay from './FileStatusOverlay';
 import MlirFileResultsOverlay from './mlir/MlirFileResultsOverlay';
+import { initUsageRecording } from '../functions/recordUsage';
 
 const BounceIn = cssTransition({
     enter: `Toastify--animate Toastify__bounce-enter`,
@@ -27,6 +29,11 @@ const BounceIn = cssTransition({
 function Layout() {
     const location = useLocation();
     const state = location.state as { background?: Location };
+
+    // Starts the usage flush lifecycle; it records nothing on its own. Here rather than at
+    // module scope so importing the sender has no side effect, and so the listeners are
+    // owned the way every other listener in this app is.
+    useEffect(() => initUsageRecording(), []);
 
     return (
         <>

@@ -80,7 +80,10 @@ let clusterArch: Record<number, string> = WORMHOLE;
 // Set by tests that need a shape the arch knob can't express (extra links, multi-host, no hosts).
 let topologyOverride: ClusterTopology | null = null;
 
-vi.mock('react-router', () => ({ useNavigate: () => vi.fn() }));
+vi.mock('react-router', async () => ({
+    ...(await vi.importActual<typeof import('react-router')>('react-router')),
+    useNavigate: () => vi.fn(),
+}));
 vi.mock('../src/hooks/useAPI', async (importOriginal) => ({
     ...(await importOriginal<typeof import('../src/hooks/useAPI')>()),
     useGetClusterTopology: () => ({
