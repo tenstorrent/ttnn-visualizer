@@ -23,7 +23,8 @@ const initUsageRecording = vi.hoisted(() => vi.fn(() => teardown));
 
 vi.mock('../src/functions/recordUsage', () => ({ initUsageRecording }));
 
-vi.mock('../src/components/MainNavigation', () => ({ default: () => null }));
+vi.mock('../src/components/SideNavigation', () => ({ default: () => null }));
+vi.mock('../src/components/ServerModeBanner', () => ({ default: () => null }));
 vi.mock('../src/components/FooterInfobar', () => ({ default: () => null }));
 vi.mock('../src/components/FeedbackButton', () => ({ default: () => null }));
 vi.mock('../src/components/FileStatusOverlay', () => ({ default: () => null }));

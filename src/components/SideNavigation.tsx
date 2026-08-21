@@ -42,19 +42,17 @@ function SideNavigation() {
             className={classNames('side-navigation', { collapsed: isCollapsed })}
             data-testid={TEST_IDS.SIDE_NAVIGATION}
         >
-            <div className={classNames('side-navigation-header', { collapsed: isCollapsed })}>
+            <div className='side-navigation-header'>
                 <Link
                     to={ROUTES.HOME}
                     className='logo-link'
                 >
-                    <>
-                        <img
-                            width={LOGO_WIDTH}
-                            alt='tenstorrent'
-                            src={TENSTORRENT_LOGO_SRC}
-                        />
-                        <span className='visualizer-title'>TT-NN Visualizer</span>
-                    </>
+                    <img
+                        width={LOGO_WIDTH}
+                        alt='tenstorrent'
+                        src={TENSTORRENT_LOGO_SRC}
+                    />
+                    <span className='visualizer-title'>TT-NN Visualizer</span>
                 </Link>
             </div>
 
@@ -91,8 +89,7 @@ function SideNavigation() {
             </div>
 
             {/* Below the items rather than beside the lockup: the control belongs to the
-                rail as a whole, and the foot is the one spot it can hold while the header
-                swaps between lockup and mark. */}
+                rail as a whole, and the header is the home link in both states. */}
             <div className='side-navigation-footer'>
                 <Tooltip
                     content={toggleLabel}
@@ -108,7 +105,7 @@ function SideNavigation() {
                             onClick={handleToggleCollapsed}
                             icon={isCollapsed ? IconNames.MENU_OPEN : IconNames.MENU_CLOSED}
                             variant={ButtonVariant.MINIMAL}
-                            size={Size.MEDIUM}
+                            size={isCollapsed ? Size.LARGE : Size.MEDIUM}
                             alignText={Alignment.START}
                             fill={isCollapsed}
                             // Keeps Blueprint's own target class, which the spread would

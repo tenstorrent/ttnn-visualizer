@@ -13,11 +13,18 @@ import { TEST_IDS } from '../src/definitions/TestIds';
 import getButtonWithText from './helpers/getButtonWithText';
 import { TestProviders } from './helpers/TestProviders';
 import { AtomProviderInitialValues } from './helpers/atomProvider';
+import { ServerConfig } from '../src/definitions/ServerConfig';
 
 afterEach(cleanup);
 
+const getServerConfigMock = vi.hoisted(() => vi.fn((): Partial<ServerConfig> => ({ SERVER_MODE: false })));
+
 vi.mock('../src/hooks/useAPI.tsx', () => ({
     useGetClusterDescription: vi.fn(),
+}));
+
+vi.mock('../src/functions/getServerConfig', () => ({
+    default: getServerConfigMock,
 }));
 
 const renderRail = (initialAtomValues?: AtomProviderInitialValues) =>
@@ -35,6 +42,8 @@ beforeEach(() => {
     localStorage.clear();
     // No cluster data is the majority case; the one test that needs it overrides this.
     (useGetClusterDescription as Mock).mockReturnValue({ data: null });
+    // Likewise the local deployment: the hosted build is the exception, not the default.
+    getServerConfigMock.mockReturnValue({ SERVER_MODE: false });
 });
 
 describe('SideNavigation reachability', () => {
@@ -111,7 +120,7 @@ describe('SideNavigation collapsing', () => {
     });
 
     // The single control lives below the items in both states, so it can't be the header's
-    // to lose when the lockup swaps for the mark.
+    // to lose to a change in the lockup above it.
     it('renders the toggle at the foot of the rail, after the items', () => {
         renderRail();
 
@@ -131,9 +140,11 @@ describe('SideNavigation collapsing', () => {
         expect(screen.getByTestId(TEST_IDS.SIDE_NAVIGATION)).toHaveClass('collapsed');
         expect(screen.getByTestId(TEST_IDS.SIDE_NAVIGATION_TOGGLE)).toHaveAttribute('aria-expanded', 'false');
         expect(screen.getByTestId(TEST_IDS.SIDE_NAVIGATION_TOGGLE)).toHaveAttribute('aria-label', 'Expand navigation');
-        // The collapsed rail is too narrow for the lockup, and the mark is a `public/` file
-        // whose URL has to pick up Vite's base rather than being rooted at `/`.
-        expect(screen.getByAltText('tenstorrent')).toHaveAttribute('src', '/logo-small.png');
+        // One asset in both states: the narrow rail clips the lockup down to its leading
+        // mark in CSS rather than swapping in a second image that could drift from it.
+        // Hence a class assertion — the clip itself is unobservable in jsdom.
+        expect(screen.getByAltText('tenstorrent')).toHaveAttribute('src', expect.stringContaining('tt_logo_color'));
+        expect(screen.getByAltText('tenstorrent').closest('.side-navigation')).toHaveClass('collapsed');
     });
 
     it('expands when the toggle is pressed while collapsed', () => {
@@ -146,8 +157,8 @@ describe('SideNavigation collapsing', () => {
         expect(screen.getByAltText('tenstorrent')).toHaveAttribute('src', expect.stringContaining('tt_logo_color'));
     });
 
-    // The mark used to be the expand control. It is now the home link it is when expanded,
-    // so clicking it must not touch the rail's state.
+    // The logo used to be the expand control while collapsed. It is now the home link it is
+    // when expanded, so clicking it must not touch the rail's state.
     it('does not expand the rail when the collapsed mark is pressed', () => {
         renderRail([[isNavigationCollapsedAtom, true]]);
 
@@ -166,5 +177,28 @@ describe('SideNavigation collapsing', () => {
         expect(getButtonWithText('reports')).toBeEnabled();
         expect(getButtonWithText('npe')).toBeEnabled();
         expect(getButtonWithText('operations')).toBeDisabled();
+    });
+});
+
+describe('SideNavigation server mode', () => {
+    // The frontend half of the dual gate AGENTS.md requires: MLIR's endpoints are
+    // `@local_only`, so the hosted rail must not offer a door that 403s behind it. The
+    // gate is one `hiddenInServerMode` flag consumed by one filter — cheap to delete by
+    // accident during a restyle, hence pinned here.
+    it('offers MLIR in a local deployment', () => {
+        renderRail();
+
+        expect(getButtonWithText('mlir')).toBeInTheDocument();
+    });
+
+    it('hides MLIR in server mode and leaves the rest of the rail alone', () => {
+        getServerConfigMock.mockReturnValue({ SERVER_MODE: true });
+
+        renderRail();
+
+        expect(screen.queryByRole('button', { name: /mlir/i })).not.toBeInTheDocument();
+        // The filter drops one item, not a category.
+        expect(getButtonWithText('reports')).toBeEnabled();
+        expect(getButtonWithText('npe')).toBeEnabled();
     });
 });

@@ -5,8 +5,8 @@
 import { IconName, IconNames } from '@blueprintjs/icons';
 import ROUTES from './Routes';
 
-// What an item needs loaded before it can be entered. Shared by both navigation
-// renderers so a horizontal and a vertical menu can't disagree about what is reachable.
+// What an item needs loaded before it can be entered. Kept as data rather than JSX so the
+// rail, the hook that resolves reachability and the SCSS colour mixin all key off one list.
 export enum NavRequirement {
     NONE = 'none',
     PROFILER_REPORT = 'profiler-report',

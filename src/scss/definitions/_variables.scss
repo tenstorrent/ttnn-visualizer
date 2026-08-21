@@ -55,14 +55,13 @@ $legend-marker-slot: 25px;
 // MLIR pickers line up regardless of how long the label they display happens to be.
 $report-select-width: 250px;
 
-// Vertical navigation rail. Collapsed keeps a large Blueprint icon button centred with
-// no room for its label.
-$side-nav-width-expanded: 220px;
+// Vertical navigation rail. Collapsed keeps a Blueprint icon button centred with no
+// room for its label.
+$side-nav-width-expanded: 180px;
 $side-nav-width-collapsed: 56px;
 
 // Fixed app chrome that every viewport-height view subtracts. The status bar is
 // `.app-footer`'s closed `min-height`; it grows when opened.
-$app-navbar-height: 92px;
 $app-status-bar-height: 34px;
 
 // `main`'s own padding and the trailing gutter that clears the fixed data bar,

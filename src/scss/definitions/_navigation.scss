@@ -4,8 +4,6 @@
 
 @use 'colours' as *;
 
-// $pt-dark-text-color-disabled: rgb(171 179 191 / 60%);
-
 // Per-tab identity colours, shared by the navigation rail and the in-page links that lead
 // to the same views, so the two can't drift apart. Keyed by the same class names the
 // navigation item descriptors carry (see src/definitions/NavigationItems.ts).

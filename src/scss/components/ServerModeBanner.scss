@@ -13,6 +13,10 @@
     z-index: variables.$z-index-2-interactive;
     height: 25px;
     color: $tt-white;
+
+    // Carries its own backdrop: it used to reveal itself inside the dark navbar, and now
+    // slides over whatever report content happens to be beneath it.
+    background-color: $tt-black;
     display: flex;
     align-items: center;
     justify-content: center;

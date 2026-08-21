@@ -52,7 +52,12 @@ export const renderMemoryLayoutAtom = atomWithStorage('renderMemoryLayout', fals
 
 // App shell / navigation
 // Persisted because a rail width is a stable preference rather than session state.
-export const isNavigationCollapsedAtom = atomWithStorage('navigationCollapsed', false);
+// `getOnInit` because this one drives the app shell's layout: without it a user who
+// collapsed the rail renders it expanded first and the page beside it reflows on every
+// load.
+export const isNavigationCollapsedAtom = atomWithStorage('navigationCollapsed', false, undefined, {
+    getOnInit: true,
+});
 
 // Reports (excluding NPE/MLIR)
 export const profilerReportLocationAtom = atom<ReportLocation | null>(null);
