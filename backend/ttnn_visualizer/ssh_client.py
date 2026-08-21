@@ -21,7 +21,7 @@ from ttnn_visualizer.exceptions import (
     SSHException,
 )
 from ttnn_visualizer.known_hosts import host_key_status
-from ttnn_visualizer.models import HostKeyTarget, RemoteConnection
+from ttnn_visualizer.models import HostKeyStatus, HostKeyTarget, RemoteConnection
 from ttnn_visualizer.remote_command import (
     RemoteCommand,
     remote_arg,
@@ -91,46 +91,38 @@ def is_ssh_host_key_verification_error(stderr: str) -> bool:
     return classify_ssh_host_key_error(stderr) is not None
 
 
-def ssh_host_key_unknown_message(connection: RemoteConnection) -> str:
+def ssh_host_key_unknown_message(
+    connection: RemoteConnection, host_key: HostKeyStatus
+) -> str:
+    """Advice for a host we have no key for, quoting the resolved target.
+
+    Both commands come off ``host_key`` rather than being rebuilt here: they were once
+    derived independently from the typed host while the UI derived them from the
+    resolved one, so a config alias produced two different commands on screen at once.
+    """
     return (
-        f"SSH host key for {connection.host} (port {connection.port}) is not in "
-        "~/.ssh/known_hosts. Remote sync cannot prompt to accept new keys. "
+        f"SSH host key for {host_key.host} (port {host_key.port}) is not in "
+        "known_hosts. Remote sync cannot prompt to accept new keys. "
         "Review the key's fingerprint and trust the host to continue, or run "
-        f"{_ssh_example_command(connection)} once in a terminal and accept it there."
+        f"{host_key.terminalCommand} once in a terminal and accept it there."
     )
 
 
-def ssh_host_key_changed_message(connection: RemoteConnection) -> str:
+def ssh_host_key_changed_message(
+    connection: RemoteConnection, host_key: HostKeyStatus
+) -> str:
     """Advice for a key that no longer matches the one already trusted.
 
     Deliberately offers no way to accept the new key: this is either a rebuilt host or
     a machine-in-the-middle, and only the user can tell which.
     """
     return (
-        f"The SSH host key for {connection.host} (port {connection.port}) has changed "
-        "since it was added to ~/.ssh/known_hosts. This can mean the host was "
+        f"The SSH host key for {host_key.host} (port {host_key.port}) has changed "
+        "since it was added to known_hosts. This can mean the host was "
         "rebuilt, or that something is intercepting the connection. Confirm the new "
         "fingerprint with whoever runs the host, then remove the old entry with "
-        f"{_ssh_keygen_removal_command(connection)} and test again."
+        f"{host_key.removalCommand} and test again."
     )
-
-
-def _ssh_example_command(connection: RemoteConnection) -> str:
-    user_host = f"{connection.username}@{connection.host}"
-    if connection.port != 22:
-        return f"ssh -p {connection.port} {user_host}"
-    return f"ssh {user_host}"
-
-
-def _ssh_keygen_removal_command(connection: RemoteConnection) -> str:
-    """``ssh-keygen -R`` for this target, in the form ``known_hosts`` keys entries by.
-
-    A non-default port is stored as ``[host]:port``, and the brackets are shell
-    metacharacters, so the argument is quoted for the command to be copyable as-is.
-    """
-    if connection.port != 22:
-        return f"ssh-keygen -R '[{connection.host}]:{connection.port}'"
-    return f"ssh-keygen -R {connection.host}"
 
 
 def raise_for_ssh_subprocess_error(
@@ -144,12 +136,19 @@ def raise_for_ssh_subprocess_error(
     stderr = (e.stderr or "").lower()
     host_key_issue = classify_ssh_host_key_error(stderr)
     if host_key_issue is not None:
-        message = (
-            ssh_host_key_changed_message(connection)
-            if host_key_issue is HostKeyIssue.CHANGED
-            else ssh_host_key_unknown_message(connection)
+        # Resolved once, here, so the message and the status the UI renders describe the
+        # same target and quote the same commands.
+        status = host_key_status(
+            HostKeyTarget.from_connection(connection), host_key_issue
         )
-        raise HostKeyVerificationException(message, issue=host_key_issue)
+        message = (
+            ssh_host_key_changed_message(connection, status)
+            if host_key_issue is HostKeyIssue.CHANGED
+            else ssh_host_key_unknown_message(connection, status)
+        )
+        raise HostKeyVerificationException(
+            message, issue=host_key_issue, host_key=status
+        )
     if any(auth_err in stderr for auth_err in _SSH_AUTH_ERROR_FRAGMENTS):
         raise AuthenticationException(SSH_AUTH_FAILURE_MESSAGE)
     if any(conn_err in stderr for conn_err in _SSH_CONNECTION_ERROR_FRAGMENTS):
@@ -291,10 +290,9 @@ class SSHClient:
                 message=str(host_key_err),
                 status=ConnectionTestStates.FAILED,
                 detail=getattr(self, "_last_raw_error", None),
-                host_key=host_key_status(
-                    HostKeyTarget.from_connection(self.connection),
-                    host_key_err.issue,
-                ),
+                # Already resolved when the error was classified; re-resolving would
+                # spawn a second `ssh -G` and could disagree with the message above.
+                host_key=host_key_err.host_key,
             )
         except AuthenticationException as e:
             # Convert to AuthenticationFailedException for proper HTTP 422 response

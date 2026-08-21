@@ -25,18 +25,36 @@ export interface HostKeyStatus {
     port: number;
     alias?: string | null;
     isProxied?: boolean;
+    /** What `known_hosts` keys the entry on — the `HostKeyAlias` when one is set. */
+    entryName?: string;
+    /**
+     * `ssh-keygen -R` for this target, ready to copy.
+     *
+     * Backend-supplied rather than rebuilt here: it was once derived in both places from
+     * different halves of the resolution, and both copies rendered at once — two
+     * different commands for one failure.
+     */
+    removalCommand?: string;
+    /** The `ssh` command that lets OpenSSH prompt for the key itself. */
+    terminalCommand?: string;
     /** `"<file>:<line>"` of the entry to remove, for a key that changed. */
     knownHostsEntry?: string | null;
 }
 
-/** Response shape for POST /api/remote/host-key. `issue` is null when already trusted. */
-export interface HostKeyOfferResponse {
+/**
+ * Response shape for POST /api/remote/host-key.
+ *
+ * Extends the status because the offer may legitimately *disagree* with the verdict the
+ * connection test gave — a key accepted in a terminal since, or an entry found in a file
+ * the test's resolution did not reach — and the later answer is the truer one.
+ *
+ * `issue` is null when the host is already trusted, meaning the failure the caller saw
+ * was about something else.
+ */
+export interface HostKeyOfferResponse extends Omit<HostKeyStatus, 'issue'> {
     issue?: HostKeyIssue | null;
-    host: string;
-    port: number;
-    alias?: string | null;
-    isProxied?: boolean;
-    knownHostsEntry?: string | null;
+    /** The scan produced nothing, so no judgement about the key was possible. */
+    scanFailed?: boolean;
     offers: HostKeyOffer[];
 }
 

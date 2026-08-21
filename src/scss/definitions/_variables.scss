@@ -81,3 +81,8 @@ $reactflow-panel-origin-left: 12px;
 // flex-laid inside `.mlir-page`, so the graph reclaims them when absent.
 $mlir-footer-clearance: 40px;
 $mlir-page-height: calc(100vh - #{$app-navbar-height} - #{$mlir-footer-clearance});
+
+// Width the connection dialogs' results block must stay inside: the Blueprint dialog
+// footer is narrower than the dialog, and both the error detail and the host-key prompt
+// have to fit it.
+$connection-detail-width: 415px;

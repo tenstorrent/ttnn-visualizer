@@ -218,10 +218,16 @@ class HostKeyVerificationException(SSHException):
     """
 
     def __init__(
-        self, message: str, issue: HostKeyIssue = HostKeyIssue.UNKNOWN
+        self,
+        message: str,
+        issue: HostKeyIssue = HostKeyIssue.UNKNOWN,
+        host_key: Optional["HostKeyStatus"] = None,
     ) -> None:
         super().__init__(message)
         self.issue = issue
+        # Resolved at classification time and carried rather than recomputed, so every
+        # consumer describes the same target the message quotes.
+        self.host_key = host_key
 
 
 class NoValidConnectionsError(SSHException):

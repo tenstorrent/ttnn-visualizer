@@ -33,6 +33,14 @@ export const HOST_KEY_TRUST_ON_FIRST_USE_NOTICE =
 
 export const HOST_KEY_FETCHING_MESSAGE = 'Fetching the host key…';
 
+export const HOST_KEY_COPY_LABEL = 'Copy';
+
+export const HOST_KEY_COPIED_LABEL = 'Copied';
+
+/** Shown when the form has moved on, so the fingerprints describe the previous target. */
+export const HOST_KEY_STALE_NOTICE =
+    'These fingerprints were fetched for the connection as it was last tested. Run the tests again before trusting the host.';
+
 export const HOST_KEY_TRUST_BUTTON_LABEL = 'Trust this host';
 
 export const HOST_KEY_TRUST_FAILED_MESSAGE = 'The host key could not be trusted.';

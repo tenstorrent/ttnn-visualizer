@@ -10,9 +10,12 @@ import { IconNames } from '@blueprintjs/icons';
 import { HostKeyIssue } from '../../definitions/HostKey';
 import {
     HOST_KEY_CHANGED_TITLE,
+    HOST_KEY_COPIED_LABEL,
+    HOST_KEY_COPY_LABEL,
     HOST_KEY_FETCHING_MESSAGE,
     HOST_KEY_NO_OFFER_NOTICE,
     HOST_KEY_PROXIED_NOTICE,
+    HOST_KEY_STALE_NOTICE,
     HOST_KEY_TRUST_BUTTON_LABEL,
     HOST_KEY_TRUST_FAILED_MESSAGE,
     HOST_KEY_TRUST_IN_PROGRESS_LABEL,
@@ -28,19 +31,28 @@ import 'styles/components/HostKeyTrustPrompt.scss';
 
 interface HostKeyTrustPromptProps {
     hostKey: HostKeyStatus;
-    /** Fetches the offered keys. Omitted ⇒ the prompt explains but offers no action. */
+    /** Fetches the offered keys. Omitted ⇒ the prompt falls back to the terminal remedy. */
     onRequestOffer?: () => Promise<HostKeyOfferResponse | null>;
     /** Records the keys the user confirmed. Omitted ⇒ no trust button. */
     onTrust?: (fingerprints: readonly string[]) => Promise<void>;
+    /** The form has moved on since this verdict, so the offer no longer describes it. */
+    isStale?: boolean;
 }
 
 const COPIED_LABEL_DURATION_MS = 2000;
 
 const HOST_KEY_OFFER_QUERY_KEY = 'host-key-offer';
 
-/** `ssh-keygen -R` for a target, in the form `known_hosts` keys entries by. */
-const getRemovalCommand = ({ host, port }: HostKeyStatus): string =>
-    port === 22 ? `ssh-keygen -R ${host}` : `ssh-keygen -R '[${host}]:${port}'`;
+/**
+ * Long enough that re-running the connection test does not re-probe the host.
+ *
+ * `ConnectionTestResults` keys its rows on the message, so each run swaps the verdict for
+ * a progress line and back, remounting this component — with no stale window every one of
+ * those remounts spawned another outbound `ssh-keyscan`. Rotation between the fingerprint
+ * being shown and Trust being pressed is caught by the endpoint's own re-scan, which
+ * refuses rather than trusting a key the user never saw.
+ */
+const HOST_KEY_OFFER_STALE_TIME_MS = 30_000;
 
 const getTargetLabel = ({ host, port, alias }: HostKeyStatus): string => {
     const target = `${host} (port ${port})`;
@@ -51,40 +63,14 @@ const getTargetLabel = ({ host, port, alias }: HostKeyStatus): string => {
     return alias && alias !== host ? `${alias} → ${target}` : target;
 };
 
-/**
- * The remedy attached to a host-key failure: a fingerprint plus a decision for an unknown
- * host, and a warning with no action for one whose key changed.
- *
- * Renders nothing under `SERVER_MODE` — the paired endpoints are `@local_only`, and this
- * is the frontend half of that gate.
- */
-function HostKeyTrustPrompt({ hostKey, onRequestOffer, onTrust }: HostKeyTrustPromptProps) {
-    const isServerMode = !!getServerConfig()?.SERVER_MODE;
-    const [isTrusting, setIsTrusting] = useState(false);
-    const [trustError, setTrustError] = useState<string | null>(null);
+interface CopyableCommandProps {
+    command: string;
+    testId: string;
+}
+
+/** A command the user has to run, with a copy affordance that confirms in place. */
+function CopyableCommand({ command, testId }: CopyableCommandProps) {
     const [hasCopied, setHasCopied] = useState(false);
-
-    const isUnknownKey = hostKey.issue === HostKeyIssue.UNKNOWN;
-    const canFetchOffer = !isServerMode && isUnknownKey && !hostKey.isProxied && !!onRequestOffer;
-
-    // Keyed on the target, not on the callback the dialog rebuilds each render, so typing
-    // in the form cannot set off a fresh scan of the host.
-    const {
-        data: offer,
-        isFetching: isLoadingOffer,
-        error: offerError,
-    } = useQuery<HostKeyOfferResponse | null, AxiosError>({
-        queryKey: [HOST_KEY_OFFER_QUERY_KEY, hostKey.host, hostKey.port],
-        queryFn: () => (onRequestOffer ? onRequestOffer() : Promise.resolve(null)),
-        enabled: canFetchOffer,
-        // Not report-bound, and a key that failed to scan should be retried by the user
-        // pressing the button again rather than by three more connections to the host.
-        staleTime: 0,
-        retry: false,
-    });
-
-    const offers: HostKeyOffer[] = offer?.offers ?? [];
-    const error = trustError ?? (offerError ? getResponseError(offerError, HOST_KEY_NO_OFFER_NOTICE) : null);
 
     useEffect(() => {
         if (!hasCopied) {
@@ -96,13 +82,68 @@ function HostKeyTrustPrompt({ hostKey, onRequestOffer, onTrust }: HostKeyTrustPr
         return () => window.clearTimeout(timer);
     }, [hasCopied]);
 
+    const handleCopy = async () => {
+        setHasCopied(await copyToClipboard(command));
+    };
+
+    return (
+        <div className='host-key-command'>
+            <code>{command}</code>
+
+            <Button
+                data-testid={testId}
+                icon={hasCopied ? IconNames.TICK : IconNames.DUPLICATE}
+                text={hasCopied ? HOST_KEY_COPIED_LABEL : HOST_KEY_COPY_LABEL}
+                onClick={handleCopy}
+                variant='minimal'
+                size='small'
+            />
+        </div>
+    );
+}
+
+/**
+ * The remedy attached to a host-key failure: a fingerprint plus a decision for an unknown
+ * host, and a warning with no action for one whose key changed.
+ *
+ * Renders nothing under `SERVER_MODE` — the paired endpoints are `@local_only`, and this
+ * is the frontend half of that gate.
+ */
+function HostKeyTrustPrompt({ hostKey, onRequestOffer, onTrust, isStale = false }: HostKeyTrustPromptProps) {
+    const isServerMode = !!getServerConfig()?.SERVER_MODE;
+    const [isTrusting, setIsTrusting] = useState(false);
+    const [trustError, setTrustError] = useState<string | null>(null);
+
+    const canFetchOffer =
+        !isServerMode && hostKey.issue === HostKeyIssue.UNKNOWN && !hostKey.isProxied && !!onRequestOffer;
+
+    // Keyed on `entryName` rather than the raw host/port: it *is* the resolution outcome,
+    // so two connections that resolve differently (an identity file suppresses
+    // `~/.ssh/config`) get separate cache entries instead of sharing one wrong answer.
+    const {
+        data: cachedOffer,
+        isFetching: isLoadingOffer,
+        error: offerError,
+    } = useQuery<HostKeyOfferResponse | null, AxiosError>({
+        queryKey: [HOST_KEY_OFFER_QUERY_KEY, hostKey.host, hostKey.port, hostKey.entryName],
+        queryFn: () => (onRequestOffer ? onRequestOffer() : Promise.resolve(null)),
+        enabled: canFetchOffer,
+        staleTime: HOST_KEY_OFFER_STALE_TIME_MS,
+        // A key that failed to scan is retried by running the test again, not by three
+        // more connections to a host that is probably down.
+        retry: false,
+    });
+
+    // A disabled query still hands back whatever is cached for its key, so a verdict we
+    // never fetched for must not read one: an offer cached as UNKNOWN would otherwise
+    // override a later CHANGED verdict and put a Trust button on a key that changed.
+    const offer = canFetchOffer ? cachedOffer : undefined;
+    const offers: HostKeyOffer[] = offer?.offers ?? [];
+    const error = trustError ?? (offerError ? getResponseError(offerError, HOST_KEY_NO_OFFER_NOTICE) : null);
+
     if (isServerMode) {
         return null;
     }
-
-    const handleCopyRemovalCommand = async () => {
-        setHasCopied(await copyToClipboard(getRemovalCommand(hostKey)));
-    };
 
     const handleTrust = async () => {
         if (!onTrust) {
@@ -121,7 +162,16 @@ function HostKeyTrustPrompt({ hostKey, onRequestOffer, onTrust }: HostKeyTrustPr
         }
     };
 
-    if (!isUnknownKey) {
+    // The offer is the later answer and may legitimately disagree: the key may have been
+    // accepted in a terminal since the test ran, or found in a `known_hosts` file the
+    // test's own resolution never reached. Preferring the earlier verdict would show
+    // "not recognised" for a host that is now trusted, with no fingerprint to explain it.
+    const effectiveIssue = offer ? offer.issue : hostKey.issue;
+    const knownHostsEntry = offer?.knownHostsEntry ?? hostKey.knownHostsEntry;
+    const removalCommand = offer?.removalCommand ?? hostKey.removalCommand;
+    const terminalCommand = offer?.terminalCommand ?? hostKey.terminalCommand;
+
+    if (effectiveIssue === HostKeyIssue.CHANGED) {
         return (
             <Callout
                 className='host-key-prompt'
@@ -132,23 +182,24 @@ function HostKeyTrustPrompt({ hostKey, onRequestOffer, onTrust }: HostKeyTrustPr
             >
                 <p>{getTargetLabel(hostKey)}</p>
 
-                {hostKey.knownHostsEntry && <p className='host-key-entry'>{hostKey.knownHostsEntry}</p>}
+                {knownHostsEntry && <p className='host-key-entry'>{knownHostsEntry}</p>}
 
-                <div className='host-key-command'>
-                    <code>{getRemovalCommand(hostKey)}</code>
-
-                    <Button
-                        data-testid={TEST_IDS.HOST_KEY_COPY_COMMAND}
-                        icon={hasCopied ? IconNames.TICK : IconNames.DUPLICATE}
-                        text={hasCopied ? 'Copied' : 'Copy'}
-                        onClick={handleCopyRemovalCommand}
-                        variant='minimal'
-                        size='small'
+                {removalCommand && (
+                    <CopyableCommand
+                        command={removalCommand}
+                        testId={TEST_IDS.HOST_KEY_COPY_COMMAND}
                     />
-                </div>
+                )}
             </Callout>
         );
     }
+
+    // No key to show, so the terminal is the only remedy left — a jump host that cannot
+    // be scanned, a scan that came back empty, or a dialog with no trust affordance
+    // wired in. Saying nothing here is what left the MLIR dialog with an empty callout
+    // next to a message telling the user to review a fingerprint.
+    const hasNoOffer = !isLoadingOffer && offers.length === 0;
+    const shouldFallBackToTerminal = hostKey.isProxied || !onRequestOffer || !!offer?.scanFailed || hasNoOffer;
 
     return (
         <Callout
@@ -182,9 +233,32 @@ function HostKeyTrustPrompt({ hostKey, onRequestOffer, onTrust }: HostKeyTrustPr
                 </>
             )}
 
-            {error && <p className='host-key-error'>{error}</p>}
+            {shouldFallBackToTerminal && terminalCommand && (
+                <>
+                    {!hostKey.isProxied && <p>{HOST_KEY_NO_OFFER_NOTICE}</p>}
 
-            {onTrust && offers.length > 0 && (
+                    <CopyableCommand
+                        command={terminalCommand}
+                        testId={TEST_IDS.HOST_KEY_COPY_COMMAND}
+                    />
+                </>
+            )}
+
+            {error && (
+                <p
+                    className='host-key-error'
+                    role='alert'
+                >
+                    {error}
+                </p>
+            )}
+
+            {/* Withheld once the form has moved on: the fingerprints on screen were
+                fetched for the target the test failed on, and trusting would post the
+                one now in the form. */}
+            {isStale && offers.length > 0 && <p className='host-key-notice'>{HOST_KEY_STALE_NOTICE}</p>}
+
+            {onTrust && offers.length > 0 && !isStale && (
                 <Button
                     data-testid={TEST_IDS.HOST_KEY_TRUST_BUTTON}
                     text={isTrusting ? HOST_KEY_TRUST_IN_PROGRESS_LABEL : HOST_KEY_TRUST_BUTTON_LABEL}

@@ -14,7 +14,7 @@ class ConnectionTestStates(enum.Enum):
     WARNING = 4
 
 
-# Keep in sync with src/definitions/ConnectionStatus.ts
+# Keep in sync with src/definitions/HostKey.ts
 class HostKeyIssue(str, enum.Enum):
     """Why OpenSSH refused a host key, which decides whether trusting it is offered.
 

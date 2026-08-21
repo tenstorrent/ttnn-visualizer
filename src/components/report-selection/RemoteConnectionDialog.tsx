@@ -184,10 +184,13 @@ const RemoteConnectionDialog = ({
 
     // This dialog is the only place holding both the form and the test runner, so the
     // host-key prompt reaches them through here rather than learning the connection shape.
+    // `connection` is a Partial, so host and port are narrowed even though
+    // getDefaultConnection seeds both — the backend rejects an empty host anyway.
     const getHostKeyTarget = (): HostKeyTarget => ({
         host: connection.host ?? '',
         port: connection.port ?? getServerConfig().SSH_DEFAULT_PORT,
         identityFile: connection.identityFile,
+        username: connection.username,
     });
 
     const handleRequestHostKeyOffer = () => fetchHostKeyOffer(getHostKeyTarget());

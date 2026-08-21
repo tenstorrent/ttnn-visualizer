@@ -74,6 +74,7 @@ const ConnectionTestResults = ({
                         hostKey={test.hostKey}
                         onRequestHostKeyOffer={onRequestHostKeyOffer}
                         onTrustHost={onTrustHost}
+                        isStale={isStale}
                     />
                 ))}
             </div>

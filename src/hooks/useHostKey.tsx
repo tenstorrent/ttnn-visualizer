@@ -12,6 +12,11 @@ export interface HostKeyTarget {
     host: string;
     port: number;
     identityFile?: string;
+    /**
+     * Sent because `Match user …` stanzas can set HostName, Port, HostKeyAlias and
+     * ProxyJump: resolving without it answers for a different connection.
+     */
+    username?: string;
 }
 
 const HOST_KEY_TRUST_ENDPOINT = `${Endpoints.REMOTE_HOST_KEY}/trust`;
@@ -46,7 +51,7 @@ const useHostKey = () => {
         await axiosInstance.post(HOST_KEY_TRUST_ENDPOINT, { target, fingerprints });
     };
 
-    return { fetchHostKeyOffer, trustHostKey, isHostKeyTrustAvailable: !isServerMode };
+    return { fetchHostKeyOffer, trustHostKey };
 };
 
 export default useHostKey;

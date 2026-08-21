@@ -12,6 +12,7 @@ from ttnn_visualizer.known_hosts import (
     append_host_keys,
     host_key_fingerprint,
     known_hosts_entry_name,
+    rekey_host_line,
     resolve_ssh_target,
     scan_host_keys,
     search_known_hosts,
@@ -56,6 +57,42 @@ def _offer_line(blob: str = ED25519_BLOB, entry: str = SCAN_ENTRY) -> str:
 def _patch_run(monkeypatch, handler):
     """Route `subprocess.run` in this module by the program being invoked."""
     monkeypatch.setattr("ttnn_visualizer.known_hosts.subprocess.run", handler)
+
+
+@pytest.fixture(autouse=True)
+def isolated_known_hosts(monkeypatch, tmp_path):
+    """Keep every test in this module away from the real ``~/.ssh/known_hosts``.
+
+    ``append_host_keys`` and ``search_known_hosts`` fall back to
+    ``DEFAULT_KNOWN_HOSTS_PATH`` when given no path, and the trust endpoint reaches
+    ``append_host_keys`` for real. One test that forgets to stub it would otherwise
+    append host keys to the developer's own security-sensitive file — so this is pinned
+    for the module rather than remembered per test. Both functions read the module
+    global at call time, so patching it is enough.
+    """
+    isolated = tmp_path / "isolated_ssh" / "known_hosts"
+    monkeypatch.setattr(
+        "ttnn_visualizer.known_hosts.DEFAULT_KNOWN_HOSTS_PATH", isolated
+    )
+    return isolated
+
+
+def _resolved(**overrides):
+    """A `ResolvedSshTarget` whose fields differ from the payload unless overridden."""
+    from ttnn_visualizer.known_hosts import ResolvedSshTarget
+
+    fields = {
+        "requested_host": SCAN_HOST,
+        "username": None,
+        "scan_host": SCAN_HOST,
+        "scan_port": SCAN_PORT,
+        "entry_name": SCAN_ENTRY,
+        "is_proxied": False,
+        "known_hosts_files": (Path("/home/u/.ssh/known_hosts"),),
+        "write_target": Path("/home/u/.ssh/known_hosts"),
+    }
+    fields.update(overrides)
+    return ResolvedSshTarget(**fields)
 
 
 class TestFingerprints:
@@ -255,7 +292,7 @@ class TestSearchingKnownHosts:
         )
         _patch_run(monkeypatch, lambda *a, **k: _completed(stdout=stdout))
 
-        match = search_known_hosts(SCAN_ENTRY, Path("/home/u/.ssh/known_hosts"))
+        match = search_known_hosts(SCAN_ENTRY, [Path("/home/u/.ssh/known_hosts")])
 
         assert bool(match) is True
         assert match.location == "/home/u/.ssh/known_hosts:7"
@@ -331,34 +368,45 @@ class TestAppendingHostKeys:
 
 
 def _open_local_gate(app, monkeypatch, *, resolved=None, existing=None, offers=None):
-    """Point both endpoints at fixtures, with the local-only gate open."""
+    """Point both endpoints at fixtures, with the local-only gate open.
+
+    Stubs *record* their arguments rather than ignoring them: the whole point of the
+    resolution machinery is that the endpoint searches and scans the resolved target
+    rather than the typed one, and argument-ignoring lambdas would keep passing while
+    the app recorded a key under a name nothing looks up.
+    """
     app.config["SERVER_MODE"] = False
+    calls: dict = {"searched": [], "scanned": [], "appended": []}
 
     if resolved is not None:
         monkeypatch.setattr(
             "ttnn_visualizer.views.resolve_ssh_target", lambda target: resolved
         )
     if existing is not None:
-        monkeypatch.setattr(
-            "ttnn_visualizer.views.search_known_hosts", lambda entry: existing
-        )
+
+        def record_search(entry, paths=None):
+            calls["searched"].append((entry, tuple(paths or ())))
+            return existing
+
+        monkeypatch.setattr("ttnn_visualizer.views.search_known_hosts", record_search)
     if offers is not None:
-        monkeypatch.setattr(
-            "ttnn_visualizer.views.scan_host_keys", lambda host, port: list(offers)
-        )
+
+        def record_scan(host, port):
+            calls["scanned"].append((host, port))
+            return list(offers)
+
+        monkeypatch.setattr("ttnn_visualizer.views.scan_host_keys", record_scan)
+
+    def record_append(lines, path=None):
+        calls["appended"].append((list(lines), path))
+
+    monkeypatch.setattr("ttnn_visualizer.views.append_host_keys", record_append)
+    return calls
 
 
 @pytest.fixture
 def resolved_target():
-    from ttnn_visualizer.known_hosts import ResolvedSshTarget
-
-    return ResolvedSshTarget(
-        requested_host=SCAN_HOST,
-        scan_host=SCAN_HOST,
-        scan_port=SCAN_PORT,
-        entry_name=SCAN_ENTRY,
-        is_proxied=False,
-    )
+    return _resolved()
 
 
 @pytest.fixture
@@ -459,30 +507,24 @@ class TestTheOfferEndpoint:
 
 class TestTheTrustEndpoint:
     def test_a_confirmed_key_is_appended(
-        self, app, client, monkeypatch, resolved_target, offered_key, tmp_path
+        self, app, client, monkeypatch, resolved_target, offered_key
     ):
         from ttnn_visualizer.known_hosts import KnownHostsMatch
 
-        appended = []
-        _open_local_gate(
+        calls = _open_local_gate(
             app,
             monkeypatch,
             resolved=resolved_target,
             existing=KnownHostsMatch(lines=[]),
             offers=[offered_key],
         )
-        monkeypatch.setattr(
-            "ttnn_visualizer.views.append_host_keys",
-            lambda lines: appended.extend(lines),
-        )
-
         response = client.post(
             HOST_KEY_TRUST_ENDPOINT,
             json={"target": _payload(), "fingerprints": [ED25519_FINGERPRINT]},
         )
 
         assert response.status_code == HTTPStatus.OK
-        assert appended == [offered_key.line]
+        assert calls["appended"] == [([offered_key.line], resolved_target.write_target)]
 
     def test_an_existing_entry_is_refused_and_left_untouched(
         self, app, client, monkeypatch, resolved_target, offered_key
@@ -490,18 +532,13 @@ class TestTheTrustEndpoint:
         """The refusal that keeps this from being a one-click "trust anyway"."""
         from ttnn_visualizer.known_hosts import KnownHostsMatch
 
-        def fail(lines):
-            raise AssertionError("must not write over an existing entry")
-
-        _open_local_gate(
+        calls = _open_local_gate(
             app,
             monkeypatch,
             resolved=resolved_target,
             existing=KnownHostsMatch(lines=["something else"], location="kh:2"),
             offers=[offered_key],
         )
-        monkeypatch.setattr("ttnn_visualizer.views.append_host_keys", fail)
-
         response = client.post(
             HOST_KEY_TRUST_ENDPOINT,
             json={"target": _payload(), "fingerprints": [ED25519_FINGERPRINT]},
@@ -509,6 +546,7 @@ class TestTheTrustEndpoint:
 
         assert response.status_code == HTTPStatus.UNPROCESSABLE_ENTITY
         assert "ssh-keygen -R" in response.get_json()["error"]
+        assert calls["appended"] == []
 
     def test_a_key_swapped_since_the_offer_is_refused(
         self, app, client, monkeypatch, resolved_target, offered_key
@@ -516,24 +554,20 @@ class TestTheTrustEndpoint:
         """Guards the gap between showing a fingerprint and the user clicking trust."""
         from ttnn_visualizer.known_hosts import KnownHostsMatch
 
-        def fail(lines):
-            raise AssertionError("must not append a key the user never saw")
-
-        _open_local_gate(
+        calls = _open_local_gate(
             app,
             monkeypatch,
             resolved=resolved_target,
             existing=KnownHostsMatch(lines=[]),
             offers=[offered_key],
         )
-        monkeypatch.setattr("ttnn_visualizer.views.append_host_keys", fail)
-
         response = client.post(
             HOST_KEY_TRUST_ENDPOINT,
             json={"target": _payload(), "fingerprints": [ECDSA_FINGERPRINT]},
         )
 
         assert response.status_code == HTTPStatus.UNPROCESSABLE_ENTITY
+        assert calls["appended"] == []
 
     def test_an_extra_key_appearing_since_the_offer_is_refused(
         self, app, client, monkeypatch, resolved_target, offered_key
@@ -546,16 +580,12 @@ class TestTheTrustEndpoint:
             fingerprint=ECDSA_FINGERPRINT,
             line=_offer_line(ECDSA_BLOB),
         )
-        _open_local_gate(
+        calls = _open_local_gate(
             app,
             monkeypatch,
             resolved=resolved_target,
             existing=KnownHostsMatch(lines=[]),
             offers=[offered_key, extra],
-        )
-        monkeypatch.setattr(
-            "ttnn_visualizer.views.append_host_keys",
-            lambda lines: (_ for _ in ()).throw(AssertionError("must not append")),
         )
 
         response = client.post(
@@ -566,13 +596,10 @@ class TestTheTrustEndpoint:
         assert response.status_code == HTTPStatus.UNPROCESSABLE_ENTITY
 
     def test_a_proxied_host_cannot_be_trusted(self, app, client, monkeypatch):
-        from ttnn_visualizer.known_hosts import ResolvedSshTarget
-
         _open_local_gate(
             app,
             monkeypatch,
-            resolved=ResolvedSshTarget(
-                requested_host=SCAN_HOST,
+            resolved=_resolved(
                 scan_host="internal.example",
                 scan_port=22,
                 entry_name="internal.example",
@@ -647,3 +674,342 @@ def test_a_broken_resolver_does_not_cost_us_the_verdict(monkeypatch):
     assert status.issue == HostKeyIssue.UNKNOWN.value
     assert status.host == SCAN_HOST
     assert status.port == SCAN_PORT
+
+
+class TestTheEndpointHonoursResolution:
+    """The wiring the resolution machinery exists for.
+
+    `resolve_ssh_target` is unit-tested in isolation above, but nothing checked that the
+    endpoint *uses* what it returns. With argument-ignoring stubs, passing the typed host
+    where the resolved one belongs kept every endpoint test green while the app recorded
+    a key under a name OpenSSH never looks up.
+    """
+
+    RESOLVED = dict(
+        scan_host="ssh.github.com",
+        scan_port=443,
+        entry_name="lab-key",
+        known_hosts_files=(Path("/home/u/.ssh/alt_known_hosts"),),
+        write_target=Path("/home/u/.ssh/alt_known_hosts"),
+    )
+
+    def test_the_offer_searches_and_scans_the_resolved_target(
+        self, app, client, monkeypatch, offered_key
+    ):
+        from ttnn_visualizer.known_hosts import KnownHostsMatch
+
+        calls = _open_local_gate(
+            app,
+            monkeypatch,
+            resolved=_resolved(**self.RESOLVED),
+            existing=KnownHostsMatch(lines=[]),
+            offers=[offered_key],
+        )
+
+        body = client.post(HOST_KEY_ENDPOINT, json=_payload()).get_json()
+
+        assert calls["searched"] == [
+            ("lab-key", (Path("/home/u/.ssh/alt_known_hosts"),))
+        ]
+        assert calls["scanned"] == [("ssh.github.com", 443)]
+        assert body["host"] == "ssh.github.com"
+        assert body["port"] == 443
+        assert body["entryName"] == "lab-key"
+        assert body["alias"] == SCAN_HOST
+
+    def test_trust_appends_to_the_resolved_file_under_the_resolved_name(
+        self, app, client, monkeypatch, offered_key
+    ):
+        """The HostKeyAlias case: the scanned line is keyed on the address, not the alias.
+
+        Appending it unchanged records the key under a name OpenSSH never reads, so the
+        retest fails identically and every retry appends another unused copy.
+        """
+        from ttnn_visualizer.known_hosts import KnownHostsMatch
+
+        calls = _open_local_gate(
+            app,
+            monkeypatch,
+            resolved=_resolved(**self.RESOLVED),
+            existing=KnownHostsMatch(lines=[]),
+            offers=[offered_key],
+        )
+
+        response = client.post(
+            HOST_KEY_TRUST_ENDPOINT,
+            json={"target": _payload(), "fingerprints": [ED25519_FINGERPRINT]},
+        )
+
+        assert response.status_code == HTTPStatus.OK
+        lines, path = calls["appended"][0]
+        assert path == Path("/home/u/.ssh/alt_known_hosts")
+        assert lines == [f"lab-key ssh-ed25519 {ED25519_BLOB}"]
+
+    def test_an_existing_entry_plus_a_failed_scan_is_not_reported_as_changed(
+        self, app, client, monkeypatch, resolved_target
+    ):
+        """A known host that is merely unreachable must not read as an interception.
+
+        Every scan failure — host down, DNS, timeout — comes back as zero keys, so
+        judging by "entry exists and nothing matched" cries wolf on the one warning that
+        has to be believed, down the same path a real MITM takes.
+        """
+        from ttnn_visualizer.known_hosts import KnownHostsMatch
+
+        _open_local_gate(
+            app,
+            monkeypatch,
+            resolved=resolved_target,
+            existing=KnownHostsMatch(lines=["existing line"], location="kh:1"),
+            offers=[],
+        )
+
+        body = client.post(HOST_KEY_ENDPOINT, json=_payload()).get_json()
+
+        assert body["issue"] is None
+        assert body["scanFailed"] is True
+
+    def test_the_offer_carries_the_commands_the_ui_renders(
+        self, app, client, monkeypatch, offered_key
+    ):
+        """One producer for both commands, so the UI never re-derives them."""
+        from ttnn_visualizer.known_hosts import KnownHostsMatch
+
+        _open_local_gate(
+            app,
+            monkeypatch,
+            resolved=_resolved(scan_port=2222, entry_name="[aus-wh-05]:2222"),
+            existing=KnownHostsMatch(lines=[]),
+            offers=[offered_key],
+        )
+
+        body = client.post(HOST_KEY_ENDPOINT, json=_payload()).get_json()
+
+        assert body["removalCommand"] == "ssh-keygen -R '[aus-wh-05]:2222'"
+        assert body["terminalCommand"] == "ssh -p 2222 aus-wh-05"
+
+
+class TestTheTargetIsSanitisedBeforeReachingArgv:
+    """`host` and `username` land in `ssh -G` / `ssh-keyscan` argv positions.
+
+    The model's validators are the only thing between a form field and an option-like
+    argument, and nothing pinned them for this model — so a refactor that simplified
+    `HostKeyTarget.host` to a plain `str` would reopen option injection with a green
+    suite.
+    """
+
+    @pytest.mark.parametrize(
+        "host",
+        ["-oProxyCommand=id", "-J jump", "-p2222", "--"],
+        ids=["proxy-command", "jump", "port", "end-of-options"],
+    )
+    def test_an_option_like_host_is_refused(self, app, client, monkeypatch, host):
+        _open_local_gate(app, monkeypatch)
+
+        response = client.post(HOST_KEY_ENDPOINT, json=_payload(host=host))
+
+        assert response.status_code == HTTPStatus.BAD_REQUEST
+
+    @pytest.mark.parametrize(
+        "username",
+        ["-oProxyCommand=id", "-l root"],
+        ids=["proxy-command", "login-name"],
+    )
+    def test_an_option_like_username_is_refused(
+        self, app, client, monkeypatch, username
+    ):
+        _open_local_gate(app, monkeypatch)
+
+        response = client.post(HOST_KEY_ENDPOINT, json=_payload(username=username))
+
+        assert response.status_code == HTTPStatus.BAD_REQUEST
+
+    def test_a_path_bearing_host_is_collapsed_to_an_inert_segment(self):
+        """Documents the surprising half: a payload with a separator is basenamed."""
+        assert HostKeyTarget(host="/etc/../tmp/pwn", port=22).host == "pwn"
+
+
+class TestResolvingKnownHostsFiles:
+    def test_every_configured_file_is_searched_user_files_first(self, monkeypatch):
+        """OpenSSH accepts a key matching an entry in *any* of these.
+
+        Deciding "unknown" from the default file alone would call a globally-pinned host
+        new, and appending to the user's file would then override the admin's pin.
+        """
+        _patch_run(
+            monkeypatch,
+            lambda *a, **k: _completed(
+                stdout=(
+                    "hostname h\nport 22\n"
+                    "userknownhostsfile /u/.ssh/known_hosts /u/.ssh/known_hosts2\n"
+                    "globalknownhostsfile /etc/ssh/ssh_known_hosts\n"
+                )
+            ),
+        )
+
+        resolved = resolve_ssh_target(_target())
+
+        assert resolved.known_hosts_files == (
+            Path("/u/.ssh/known_hosts"),
+            Path("/u/.ssh/known_hosts2"),
+            Path("/etc/ssh/ssh_known_hosts"),
+        )
+        # Never a global file: those are the administrator's, and OpenSSH never writes
+        # to them either.
+        assert resolved.write_target == Path("/u/.ssh/known_hosts")
+
+    def test_a_global_only_file_is_searched_but_never_written_to(
+        self, monkeypatch, isolated_known_hosts
+    ):
+        _patch_run(
+            monkeypatch,
+            lambda *a, **k: _completed(
+                stdout=(
+                    "hostname h\nport 22\n"
+                    "globalknownhostsfile /etc/ssh/ssh_known_hosts\n"
+                )
+            ),
+        )
+
+        resolved = resolve_ssh_target(_target())
+
+        assert Path("/etc/ssh/ssh_known_hosts") in resolved.known_hosts_files
+        assert resolved.write_target == isolated_known_hosts
+
+    def test_a_known_hosts_file_of_none_is_dropped(
+        self, monkeypatch, isolated_known_hosts
+    ):
+        """`ssh -G` spells "no file" as the literal string "none"."""
+        _patch_run(
+            monkeypatch,
+            lambda *a, **k: _completed(
+                stdout="hostname h\nport 22\nuserknownhostsfile none\n"
+            ),
+        )
+
+        assert resolve_ssh_target(_target()).known_hosts_files == (
+            isolated_known_hosts,
+        )
+
+    def test_a_quoted_path_containing_a_space_survives(self, monkeypatch):
+        _patch_run(
+            monkeypatch,
+            lambda *a, **k: _completed(
+                stdout='hostname h\nport 22\nuserknownhostsfile "/u/my hosts"\n'
+            ),
+        )
+
+        assert resolve_ssh_target(_target()).write_target == Path("/u/my hosts")
+
+    def test_the_username_is_passed_so_match_user_stanzas_apply(self, monkeypatch):
+        """`Match user …` can set HostName, Port, HostKeyAlias and ProxyJump.
+
+        Resolving without it answers for a different connection than the one that
+        failed — and getting `proxyjump` wrong means offering to scan a host only
+        reachable through a jump.
+        """
+        argv_seen = []
+
+        def record(argv, *args, **kwargs):
+            argv_seen.append(argv)
+            return _completed(stdout="hostname h\nport 22\n")
+
+        _patch_run(monkeypatch, record)
+
+        resolve_ssh_target(_target(username="alice"))
+        resolve_ssh_target(_target(username=None))
+
+        assert argv_seen[0][argv_seen[0].index("-l") + 1] == "alice"
+        assert "-l" not in argv_seen[1]
+
+    def test_a_search_across_files_reports_the_first_location(self, monkeypatch):
+        def per_file(argv, *args, **kwargs):
+            if "/u/second" in argv:
+                return _completed(
+                    stdout=f"# Host x found: line 4 \n{_offer_line(ED25519_BLOB)}\n"
+                )
+            return _completed(returncode=1)
+
+        _patch_run(monkeypatch, per_file)
+
+        match = search_known_hosts(SCAN_ENTRY, [Path("/u/first"), Path("/u/second")])
+
+        assert bool(match) is True
+        assert match.location == "/u/second:4"
+
+    def test_a_single_path_is_accepted_as_well_as_a_sequence(self, monkeypatch):
+        _patch_run(
+            monkeypatch,
+            lambda *a, **k: _completed(
+                stdout=f"# Host x found: line 1 \n{_offer_line(ED25519_BLOB)}\n"
+            ),
+        )
+
+        assert bool(search_known_hosts(SCAN_ENTRY, Path("/u/known_hosts"))) is True
+
+
+class TestRekeyingAScannedLine:
+    def test_the_host_field_is_replaced_and_the_key_kept(self):
+        line = _offer_line(ED25519_BLOB)
+
+        assert rekey_host_line(line, "lab-key") == f"lab-key ssh-ed25519 {ED25519_BLOB}"
+
+    def test_a_line_already_keyed_correctly_is_unchanged(self):
+        line = _offer_line(ED25519_BLOB)
+
+        assert rekey_host_line(line, SCAN_ENTRY) == line
+
+    def test_a_truncated_line_is_left_alone(self):
+        assert rekey_host_line("just-a-host", "lab-key") == "just-a-host"
+
+
+class TestTheChangedKeyEntryIsPopulated:
+    def test_a_changed_key_status_carries_the_offending_entry(self, monkeypatch):
+        """The pointer the changed-key callout renders, which was always null before."""
+        from ttnn_visualizer.known_hosts import host_key_status
+
+        def run(argv, *args, **kwargs):
+            if "-G" in argv:
+                return _completed(stdout="hostname h\nport 22\n")
+            return _completed(stdout=f"# Host h found: line 9 \n{_offer_line()}\n")
+
+        _patch_run(monkeypatch, run)
+
+        status = host_key_status(_target(port=22), HostKeyIssue.CHANGED)
+
+        assert status.knownHostsEntry is not None
+        assert status.knownHostsEntry.endswith(":9")
+        assert status.removalCommand == "ssh-keygen -R h"
+
+    def test_an_unknown_key_does_not_pay_for_the_lookup(self, monkeypatch):
+        """Only the changed case needs the entry, and the lookup costs a subprocess."""
+        from ttnn_visualizer.known_hosts import host_key_status
+
+        argv_seen = []
+
+        def run(argv, *args, **kwargs):
+            argv_seen.append(argv)
+            return _completed(stdout="hostname h\nport 22\n")
+
+        _patch_run(monkeypatch, run)
+
+        host_key_status(_target(), HostKeyIssue.UNKNOWN)
+
+        assert all(argv[0] != "ssh-keygen" for argv in argv_seen)
+
+    def test_a_failed_lookup_costs_only_the_pointer(self, monkeypatch):
+        """A resolution that worked must not be discarded because the lookup did not."""
+        from ttnn_visualizer.known_hosts import host_key_status
+
+        def run(argv, *args, **kwargs):
+            if "-G" in argv:
+                return _completed(stdout="hostname resolved.example\nport 2222\n")
+            raise RuntimeError("lookup exploded")
+
+        _patch_run(monkeypatch, run)
+
+        status = host_key_status(_target(), HostKeyIssue.CHANGED)
+
+        assert status.host == "resolved.example"
+        assert status.port == 2222
+        assert status.knownHostsEntry is None

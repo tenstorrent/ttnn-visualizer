@@ -313,6 +313,11 @@ class TestHostKeyFailuresAreTheConnectionsVerdict:
                     stdout="hostname work-gpu\nport 45985\n",
                     stderr="",
                 )
+            if argv and argv[0] == "ssh-keygen":
+                # The changed-key path looks up the offending entry; "not found".
+                return subprocess.CompletedProcess(
+                    args=argv, returncode=1, stdout="", stderr=""
+                )
             raise subprocess.CalledProcessError(255, argv, output="", stderr=stderr)
 
         patch("subprocess.run", side_effect=run).start()

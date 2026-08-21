@@ -14,6 +14,8 @@ interface ConnectionTestMessageProps extends ConnectionStatus {
     onRequestHostKeyOffer?: () => Promise<HostKeyOfferResponse | null>;
     /** Records the keys the user confirmed. Omitted ⇒ no trust button. */
     onTrustHost?: (fingerprints: readonly string[]) => Promise<void>;
+    /** The form has moved on since this result, so a host-key offer no longer fits it. */
+    isStale?: boolean;
 }
 
 const ICON_MAP: Record<ConnectionTestStates, IconName> = {
@@ -39,6 +41,7 @@ function ConnectionTestMessage({
     hostKey,
     onRequestHostKeyOffer,
     onTrustHost,
+    isStale,
 }: ConnectionTestMessageProps) {
     return (
         <div className={`connection-test-message status-${ConnectionTestStates[status].toLowerCase()}`}>
@@ -61,6 +64,7 @@ function ConnectionTestMessage({
                         hostKey={hostKey}
                         onRequestOffer={onRequestHostKeyOffer}
                         onTrust={onTrustHost}
+                        isStale={isStale}
                     />
                 )}
             </div>

@@ -2,8 +2,14 @@
 #
 # SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
+from pathlib import Path
+
 from ttnn_visualizer.enums import HostKeyIssue
-from ttnn_visualizer.models import RemoteConnection
+from ttnn_visualizer.known_hosts import (
+    ResolvedSshTarget,
+    known_hosts_entry_name,
+)
+from ttnn_visualizer.models import HostKeyStatus, RemoteConnection
 from ttnn_visualizer.ssh_client import (
     classify_ssh_host_key_error,
     is_ssh_host_key_verification_error,
@@ -82,29 +88,65 @@ def test_the_predicate_still_covers_both_host_key_cases():
     assert not is_ssh_host_key_verification_error("Permission denied (publickey).")
 
 
+def _resolved_status(issue: HostKeyIssue, port: int = 45985) -> HostKeyStatus:
+    """The status a real resolution would produce for ``_connection(port)``."""
+    target = ResolvedSshTarget(
+        requested_host="aus-wh-05",
+        username="user",
+        scan_host="aus-wh-05",
+        scan_port=port,
+        entry_name=known_hosts_entry_name("aus-wh-05", port),
+        is_proxied=False,
+        known_hosts_files=(Path("/home/u/.ssh/known_hosts"),),
+        write_target=Path("/home/u/.ssh/known_hosts"),
+    )
+    return target.describe(issue)
+
+
 def test_unknown_host_message_names_the_port_and_the_terminal_fallback():
-    message = ssh_host_key_unknown_message(_connection())
+    message = ssh_host_key_unknown_message(
+        _connection(), _resolved_status(HostKeyIssue.UNKNOWN)
+    )
 
     assert "45985" in message
     assert "ssh -p 45985 user@aus-wh-05" in message
 
 
 def test_unknown_host_message_omits_the_port_flag_on_the_default_port():
-    assert "ssh user@aus-wh-05" in ssh_host_key_unknown_message(_connection(port=22))
+    message = ssh_host_key_unknown_message(
+        _connection(port=22), _resolved_status(HostKeyIssue.UNKNOWN, port=22)
+    )
+
+    assert "ssh user@aus-wh-05" in message
 
 
 def test_changed_key_message_offers_removal_and_never_acceptance():
     """A changed key must not be one-clickable, and the copy must not invite it."""
-    message = ssh_host_key_changed_message(_connection())
+    message = ssh_host_key_changed_message(
+        _connection(), _resolved_status(HostKeyIssue.CHANGED)
+    )
 
     assert "ssh-keygen -R '[aus-wh-05]:45985'" in message
     assert "accept" not in message.lower()
 
 
 def test_changed_key_message_uses_the_bare_host_on_the_default_port():
-    message = ssh_host_key_changed_message(_connection(port=22))
+    message = ssh_host_key_changed_message(
+        _connection(port=22), _resolved_status(HostKeyIssue.CHANGED, port=22)
+    )
 
     assert "ssh-keygen -R aus-wh-05" in message
     # The bracket form is only how a non-default port is keyed; using it at 22 would
     # send the user to remove an entry that does not exist.
     assert "[" not in message
+
+
+def test_the_message_and_the_status_quote_the_same_command():
+    """One producer for the removal command, which is why both read it off the status.
+
+    They were once derived independently — the message from the typed host, the UI from
+    the resolved one — so a config alias put two different commands on screen at once.
+    """
+    status = _resolved_status(HostKeyIssue.CHANGED)
+
+    assert status.removalCommand in ssh_host_key_changed_message(_connection(), status)

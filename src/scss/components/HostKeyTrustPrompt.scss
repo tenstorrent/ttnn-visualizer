@@ -3,13 +3,10 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 @use '../definitions/colours' as *;
-
-// Widths the block must not exceed to stay inside the dialog footer, which is narrower
-// than the dialog itself.
-$host-key-prompt-max-width: 415px;
+@use '../definitions/variables' as *;
 
 .host-key-prompt {
-    max-width: $host-key-prompt-max-width;
+    max-width: $connection-detail-width;
     margin-top: 6px;
 
     p {
@@ -47,10 +44,12 @@ $host-key-prompt-max-width: 415px;
         color: $tt-grey-5;
     }
 
-    // A fingerprint is compared character by character against one read from elsewhere,
-    // so it wraps rather than scrolling like `.connection-status-detail` — a partly
-    // scrolled-out fingerprint invites confirming only the half that is visible.
-    .host-key-fingerprint {
+    // Wraps rather than scrolling like `.connection-status-detail`: a fingerprint is
+    // compared character by character against one read from elsewhere, and a partly
+    // scrolled-out one invites confirming only the half that is visible. The same goes
+    // for a command that has to be copied whole.
+    .host-key-fingerprint,
+    .host-key-command code {
         font-size: 12px;
         background-color: $tt-grey-2;
         border-radius: 4px;
@@ -63,13 +62,5 @@ $host-key-prompt-max-width: 415px;
         align-items: center;
         gap: 6px;
         margin-bottom: 6px;
-
-        code {
-            font-size: 12px;
-            background-color: $tt-grey-2;
-            border-radius: 4px;
-            padding: 4px 6px;
-            overflow-wrap: anywhere;
-        }
     }
 }

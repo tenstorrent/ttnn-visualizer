@@ -1461,6 +1461,10 @@ class TestConnectionTestReportStatuses:
                     stdout="hostname remote.example.com\nport 22\n",
                     stderr="",
                 )
+            if argv and argv[0] == "ssh-keygen":
+                return subprocess.CompletedProcess(
+                    args=argv, returncode=1, stdout="", stderr=""
+                )
             raise subprocess.CalledProcessError(
                 255, argv, output="", stderr="Host key verification failed.\r\n"
             )
@@ -1488,6 +1492,10 @@ class TestConnectionTestReportStatuses:
             if "-G" in argv:
                 return subprocess.CompletedProcess(
                     args=argv, returncode=0, stdout="hostname h\nport 22\n", stderr=""
+                )
+            if argv and argv[0] == "ssh-keygen":
+                return subprocess.CompletedProcess(
+                    args=argv, returncode=1, stdout="", stderr=""
                 )
             raise subprocess.CalledProcessError(
                 255, argv, output="", stderr=CHANGED_HOST_STDERR

@@ -59,6 +59,7 @@ from ttnn_visualizer.file_uploads import (
 from ttnn_visualizer.instances import get_instances, update_instance
 from ttnn_visualizer.known_hosts import (
     append_host_keys,
+    rekey_host_line,
     resolve_ssh_target,
     scan_host_keys,
     search_known_hosts,
@@ -75,7 +76,6 @@ from ttnn_visualizer.mlir import (
     upload_and_convert_mlir,
 )
 from ttnn_visualizer.models import (
-    ConnectionStatusMessage,
     HostKeyOfferResponse,
     HostKeyTarget,
     HostKeyTrustRequest,
@@ -85,6 +85,8 @@ from ttnn_visualizer.models import (
     RemoteReportFolder,
     ReportLocation,
     StatusMessage,
+    connection_status,
+    connection_status_from_exception,
     folder_segment_from_remote_path,
     sanitise_path_segment,
     sanitise_remote_host_segment,
@@ -1860,10 +1862,10 @@ def _validated_host_key_target(payload) -> HostKeyTarget:
     """
     try:
         return HostKeyTarget.model_validate(payload)
-    except ValidationError:
+    except ValidationError as validation_error:
         raise InvalidRequestPayload(
             "A host key request requires a host and a port in range"
-        )
+        ) from validation_error
 
 
 @api.route("/remote/host-key", methods=["POST"])
@@ -1883,17 +1885,15 @@ def read_remote_host_key():
 
     target = _validated_host_key_target(request.json)
     resolved = resolve_ssh_target(target)
-    existing = search_known_hosts(resolved.entry_name)
+    existing = search_known_hosts(resolved.entry_name, resolved.known_hosts_files)
 
-    def offer_response(issue, offers=(), known_hosts_entry=None):
+    def offer_response(issue, offers=(), known_hosts_entry=None, scan_failed=False):
         return jsonify(
             HostKeyOfferResponse(
+                **resolved.wire_fields,
                 issue=issue,
-                host=resolved.scan_host,
-                port=resolved.scan_port,
-                alias=resolved.alias,
-                isProxied=resolved.is_proxied,
                 knownHostsEntry=known_hosts_entry,
+                scanFailed=scan_failed,
                 offers=list(offers),
             ).model_dump()
         )
@@ -1908,12 +1908,22 @@ def read_remote_host_key():
     )
 
     if existing:
+        if not offers:
+            # An unreachable host, a DNS failure and a timeout all scan as zero keys, so
+            # calling this CHANGED would report a possible interception every time a
+            # known host happens to be down — crying wolf on the one warning that has to
+            # be believed, down the same code path a real one takes.
+            return offer_response(None, scan_failed=True)
         if existing.matches_any([offer.line for offer in offers]):
             # Already trusted, so whatever the caller saw fail was not the host key.
             return offer_response(None)
         return offer_response(HostKeyIssue.CHANGED, known_hosts_entry=existing.location)
 
-    return offer_response(HostKeyIssue.UNKNOWN, offers=offers)
+    return offer_response(
+        HostKeyIssue.UNKNOWN,
+        offers=offers,
+        scan_failed=not resolved.is_proxied and not offers,
+    )
 
 
 @api.route("/remote/host-key/trust", methods=["POST"])
@@ -1932,10 +1942,10 @@ def trust_remote_host_key():
 
     try:
         trust_request = HostKeyTrustRequest.model_validate(request.json)
-    except ValidationError:
+    except ValidationError as validation_error:
         raise InvalidRequestPayload(
             "A trust request requires a host key target and the fingerprints shown"
-        )
+        ) from validation_error
 
     resolved = resolve_ssh_target(trust_request.target)
     if resolved.is_proxied:
@@ -1944,7 +1954,7 @@ def trust_remote_host_key():
             "be fetched. Accept it in a terminal instead."
         )
 
-    existing = search_known_hosts(resolved.entry_name)
+    existing = search_known_hosts(resolved.entry_name, resolved.known_hosts_files)
     if existing:
         # Refused rather than replaced: an entry that differs is the changed-key case,
         # which only the user can resolve, and one that matches needs nothing.
@@ -1974,7 +1984,13 @@ def trust_remote_host_key():
             "Run the test again and re-check the fingerprint before trusting it."
         )
 
-    append_host_keys([offer.line for offer in offers])
+    # Re-addressed to the name OpenSSH will look up, and written to the file it will
+    # read: with a HostKeyAlias or a custom UserKnownHostsFile the scanned line and the
+    # default path are both wrong, and the append would silently record nothing usable.
+    append_host_keys(
+        [rekey_host_line(offer.line, resolved.entry_name) for offer in offers],
+        resolved.write_target,
+    )
 
     return jsonify(
         StatusMessage(
@@ -2002,15 +2018,7 @@ def test_remote_folder():
     statuses = []
 
     def add_status(status, message, detail=None, host_key=None):
-        # `ConnectionStatusMessage` only where a host-key verdict may ride along, so
-        # the plain `StatusMessage` responses elsewhere don't gain a `hostKey` field.
-        statuses.append(
-            ConnectionStatusMessage(
-                status=status, message=message, detail=detail, hostKey=host_key
-            )
-            if host_key is not None
-            else StatusMessage(status=status, message=message, detail=detail)
-        )
+        statuses.append(connection_status(status, message, detail, host_key))
 
     def has_failures():
         return any(
@@ -2022,12 +2030,7 @@ def test_remote_folder():
         test_ssh_connection(connection)
         add_status(ConnectionTestStates.OK.value, "SSH connection established")
     except RemoteConnectionException as e:
-        add_status(
-            e.status.value,
-            e.message,
-            getattr(e, "detail", None),
-            host_key=getattr(e, "host_key", None),
-        )
+        statuses.append(connection_status_from_exception(e))
         # A verdict on the connection answers the whole request, so it keeps its
         # own status code (422 for rejected credentials or an untrusted host key)
         # rather than being reported as one more line in a 200.
@@ -2045,12 +2048,7 @@ def test_remote_folder():
             # Only the connection's own verdict reaches this: a failure about a
             # single path — including a transport error raised mid-search — is
             # converted and carried back as that path's outcome instead.
-            add_status(
-                e.status.value,
-                e.message,
-                getattr(e, "detail", None),
-                host_key=getattr(e, "host_key", None),
-            )
+            statuses.append(connection_status_from_exception(e))
             if e.is_connection_verdict:
                 return (
                     jsonify([status.model_dump() for status in statuses]),

@@ -521,9 +521,14 @@ class HostKeyOffer(SerializeableModel):
 class HostKeyStatus(SerializeableModel):
     """Why a connection test failed on the host key, and against which target.
 
-    ``host`` is the name the ``known_hosts`` entry is keyed on, which is not
-    necessarily what the user typed: an ``~/.ssh/config`` alias resolves through
-    ``HostName``/``Port``, and ``ssh-keyscan`` reads no config at all.
+    ``host`` is the address the key was scanned from, which is not necessarily what the
+    user typed nor what ``known_hosts`` keys the entry on: an ``~/.ssh/config`` alias
+    resolves through ``HostName``/``Port``, a ``HostKeyAlias`` replaces both, and
+    ``ssh-keyscan`` reads no config at all.
+
+    The two command strings are here rather than rebuilt in the UI because they were
+    once derived in both places, from different halves of the resolution, and rendered
+    together — two different ``ssh-keygen -R`` lines for one failure. One producer.
     """
 
     issue: HostKeyIssue
@@ -534,8 +539,44 @@ class HostKeyStatus(SerializeableModel):
     alias: Optional[str] = None
     # A jump host cannot be scanned, so no key can be offered for one.
     isProxied: bool = False
+    # What `known_hosts` keys the entry on — the HostKeyAlias when one is set.
+    entryName: str = ""
+    # `ssh-keygen -R` for `entryName`, ready to copy.
+    removalCommand: str = ""
+    # The `ssh` command that lets OpenSSH prompt for the key itself: the only remedy
+    # when no key can be offered (proxied host, empty scan, no trust affordance).
+    terminalCommand: str = ""
     # "<file>:<line>" for a changed key, so the user can find the entry to remove.
     knownHostsEntry: Optional[str] = None
+
+
+def connection_status(
+    status,
+    message: str,
+    detail: Optional[str] = None,
+    host_key: Optional["HostKeyStatus"] = None,
+) -> StatusMessage:
+    """One status line for a connection test, widened only when a host key rides along.
+
+    The narrowing matters: ``StatusMessage`` is also the NPE upload response and is
+    spread into every MLIR upload entry, so a ``hostKey`` field on it would change two
+    responses this has nothing to do with.
+    """
+    if host_key is None:
+        return StatusMessage(status=status, message=message, detail=detail)
+    return ConnectionStatusMessage(
+        status=status, message=message, detail=detail, hostKey=host_key
+    )
+
+
+def connection_status_from_exception(error) -> StatusMessage:
+    """A status line for a ``RemoteConnectionException``, host-key verdict included."""
+    return connection_status(
+        error.status,
+        error.message,
+        getattr(error, "detail", None),
+        getattr(error, "host_key", None),
+    )
 
 
 class ConnectionStatusMessage(StatusMessage):
@@ -561,11 +602,23 @@ class HostKeyTarget(SerializeableModel):
     host: str
     port: int = Field(ge=1, le=65535)
     identityFile: Optional[str] = None
+    # Needed because `Match user …` stanzas can set HostName, Port, HostKeyAlias and
+    # ProxyJump: resolving without it answers for a different connection.
+    username: Optional[str] = None
 
     @field_validator("host", mode="before")
     @classmethod
     def _sanitise_host(cls, value: object) -> str:
         return sanitise_remote_host_segment(value)
+
+    @field_validator("username", mode="before")
+    @classmethod
+    def _sanitise_username(cls, value: object) -> Optional[str]:
+        # Reaches `ssh -l` argv, so it gets the same option-injection rejection the
+        # connection's own username does.
+        if value is None or value == "":
+            return None
+        return sanitise_ssh_username(value)
 
     @classmethod
     def from_connection(cls, connection: "RemoteConnection") -> "HostKeyTarget":
@@ -574,22 +627,26 @@ class HostKeyTarget(SerializeableModel):
             host=connection.host,
             port=connection.port,
             identityFile=connection.identityFile,
+            username=connection.username,
         )
 
 
-class HostKeyOfferResponse(SerializeableModel):
+class HostKeyOfferResponse(HostKeyStatus):
     """What the offer endpoint knows about a host before anything is trusted.
 
-    ``issue`` is ``None`` when the resolved target is already known and matches, which
-    means the failure the caller saw was about something else.
+    Extends the status rather than restating its fields so the UI can render the offer's
+    verdict with the same component that renders the test's — the offer may *disagree*
+    (a key accepted in a terminal since the test ran, or an entry found in a file the
+    test's resolution did not reach), and that later answer is the truer one.
+
+    ``issue`` is ``None`` when the resolved target is already known and matches, meaning
+    the failure the caller saw was about something else.
     """
 
-    issue: Optional[HostKeyIssue] = None
-    host: str
-    port: int
-    alias: Optional[str] = None
-    isProxied: bool = False
-    knownHostsEntry: Optional[str] = None
+    issue: Optional[HostKeyIssue] = None  # type: ignore[assignment]
+    # The scan produced nothing, so no judgement about the key was possible — distinct
+    # from "the key disagrees", which is what CHANGED means.
+    scanFailed: bool = False
     offers: List[HostKeyOffer] = Field(default_factory=list)
 
 

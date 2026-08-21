@@ -95,7 +95,6 @@ describe('useHostKey', () => {
             const { result } = renderHook(() => useHostKey());
 
             expect(await result.current.fetchHostKeyOffer(TARGET)).toBeNull();
-            expect(result.current.isHostKeyTrustAvailable).toBe(false);
             expect(postMock).not.toHaveBeenCalled();
         });
 

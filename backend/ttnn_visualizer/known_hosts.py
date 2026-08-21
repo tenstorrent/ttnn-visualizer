@@ -22,9 +22,10 @@ import dataclasses
 import hashlib
 import logging
 import os
+import shlex
 import subprocess
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Sequence, Tuple, Union
 
 from ttnn_visualizer.enums import HostKeyIssue
 from ttnn_visualizer.models import HostKeyOffer, HostKeyStatus, HostKeyTarget
@@ -55,8 +56,11 @@ _RESOLVED_PORT_KEY = "port"
 _RESOLVED_HOST_KEY_ALIAS_KEY = "hostkeyalias"
 _RESOLVED_PROXY_JUMP_KEY = "proxyjump"
 _RESOLVED_PROXY_COMMAND_KEY = "proxycommand"
+_RESOLVED_USER_KNOWN_HOSTS_KEY = "userknownhostsfile"
+_RESOLVED_GLOBAL_KNOWN_HOSTS_KEY = "globalknownhostsfile"
 
-# `ssh -G` and `ssh-keyscan` both answer "none" for an unset ProxyCommand.
+# `ssh -G` spells an unset ProxyCommand, and an intentionally empty known-hosts
+# file list, as the literal string "none".
 _UNSET_PROXY_VALUES = frozenset({"", "none"})
 
 
@@ -66,11 +70,14 @@ class ResolvedSshTarget:
 
     ``entry_name`` is what ``known_hosts`` keys the record on and is not necessarily
     what the user typed: an ``~/.ssh/config`` alias resolves through ``HostName`` and
-    ``Port``, and a non-default port is stored as ``[host]:port``.
+    ``Port``, a ``HostKeyAlias`` replaces both, and a non-default port is stored as
+    ``[host]:port``.
     """
 
     #: The name the user put in the form, kept so the UI can say which host it means.
     requested_host: str
+    #: The username the connection will use, so `ssh -G` applies `Match user` stanzas.
+    username: Optional[str]
     #: The name to scan, after ``~/.ssh/config`` has had its say.
     scan_host: str
     #: The port to scan, likewise.
@@ -79,11 +86,72 @@ class ResolvedSshTarget:
     entry_name: str
     #: Reached through a jump host, so ``ssh-keyscan`` cannot see it at all.
     is_proxied: bool
+    #: Every file OpenSSH will consult, user files first, in its own order.
+    known_hosts_files: Tuple[Path, ...]
+    #: The file to append to — the first ``UserKnownHostsFile``, never a global one.
+    write_target: Path
 
     @property
     def alias(self) -> Optional[str]:
         """The requested host, when config resolved it to something else."""
         return self.requested_host if self.requested_host != self.scan_host else None
+
+    @property
+    def terminal_command(self) -> str:
+        """The ``ssh`` invocation that would let OpenSSH prompt for the key itself.
+
+        The fallback remedy whenever we cannot offer a key: a proxied host, a scan that
+        came back empty, or a dialog with no trust affordance wired in.
+        """
+        target = (
+            f"{self.username}@{self.requested_host}"
+            if self.username
+            else self.requested_host
+        )
+        if self.scan_port != DEFAULT_SSH_PORT:
+            return f"ssh -p {self.scan_port} {target}"
+        return f"ssh {target}"
+
+    @property
+    def removal_command(self) -> str:
+        """``ssh-keygen -R`` for this target's actual ``known_hosts`` key.
+
+        The sole producer: the backend message and the UI both read this, so they cannot
+        show two different commands for one failure — and neither has to re-derive the
+        bracket-quoting or the ``HostKeyAlias`` case.
+        """
+        # Brackets are shell metacharacters, so a bracketed entry is quoted to stay
+        # copyable as-is.
+        if self.entry_name.startswith("["):
+            return f"ssh-keygen -R '{self.entry_name}'"
+        return f"ssh-keygen -R {self.entry_name}"
+
+    @property
+    def wire_fields(self) -> Dict[str, object]:
+        """This target as the fields both wire shapes share.
+
+        Separate from :meth:`describe` because the offer response's ``issue`` is
+        optional — "already trusted" is a real answer — while a status line's never is,
+        so the two cannot be built by the same constructor call. Keeping the *mapping*
+        in one place is the part that matters.
+        """
+        return {
+            "host": self.scan_host,
+            "port": self.scan_port,
+            "alias": self.alias,
+            "isProxied": self.is_proxied,
+            "entryName": self.entry_name,
+            "removalCommand": self.removal_command,
+            "terminalCommand": self.terminal_command,
+        }
+
+    def describe(
+        self, issue: HostKeyIssue, known_hosts_entry: Optional[str] = None
+    ) -> HostKeyStatus:
+        """The status-line shape for this target, for a verdict that always has an issue."""
+        return HostKeyStatus(
+            issue=issue, knownHostsEntry=known_hosts_entry, **self.wire_fields  # type: ignore[arg-type]
+        )
 
 
 def known_hosts_entry_name(host: str, port: int) -> str:
@@ -103,13 +171,17 @@ def resolve_ssh_target(target: HostKeyTarget) -> ResolvedSshTarget:
     """
     if (target.identityFile or "").strip():
         # With `-F os.devnull` the connection reads no config, so resolution is the
-        # identity function and `ssh -G` would only add a way to fail.
+        # identity function and `ssh -G` would only add a way to fail. The default
+        # known-hosts files still apply — `-F` suppresses the config, not the defaults.
         return ResolvedSshTarget(
             requested_host=target.host,
+            username=target.username,
             scan_host=target.host,
             scan_port=target.port,
             entry_name=known_hosts_entry_name(target.host, target.port),
             is_proxied=False,
+            known_hosts_files=(DEFAULT_KNOWN_HOSTS_PATH,),
+            write_target=DEFAULT_KNOWN_HOSTS_PATH,
         )
 
     resolved = _read_ssh_config_resolution(target)
@@ -118,23 +190,31 @@ def resolve_ssh_target(target: HostKeyTarget) -> ResolvedSshTarget:
     # HostKeyAlias exists precisely to decouple the stored key from the address, so it
     # wins over the resolved hostname when the user set one.
     key_alias = resolved.get(_RESOLVED_HOST_KEY_ALIAS_KEY)
+    user_files = _known_hosts_paths(resolved, _RESOLVED_USER_KNOWN_HOSTS_KEY)
+    global_files = _known_hosts_paths(resolved, _RESOLVED_GLOBAL_KNOWN_HOSTS_KEY)
 
     return ResolvedSshTarget(
         requested_host=target.host,
+        username=target.username,
         scan_host=scan_host,
         scan_port=scan_port,
         entry_name=(
             key_alias if key_alias else known_hosts_entry_name(scan_host, scan_port)
         ),
         is_proxied=_is_proxied(resolved),
+        # OpenSSH accepts a host whose key matches an entry in *any* of these, so all of
+        # them have to be searched before calling a host unknown — a host pinned only in
+        # the admin-managed global file would otherwise look new, and appending to the
+        # user's file would then quietly override that pin.
+        known_hosts_files=tuple(user_files + global_files)
+        or (DEFAULT_KNOWN_HOSTS_PATH,),
+        # Only ever a user file: the global ones are the administrator's, and OpenSSH
+        # itself never writes to them.
+        write_target=user_files[0] if user_files else DEFAULT_KNOWN_HOSTS_PATH,
     )
 
 
-def host_key_status(
-    target: HostKeyTarget,
-    issue: HostKeyIssue,
-    known_hosts_entry: Optional[str] = None,
-) -> HostKeyStatus:
+def host_key_status(target: HostKeyTarget, issue: HostKeyIssue) -> HostKeyStatus:
     """Describe a host-key failure against the target it actually concerns.
 
     Called while handling an exception, so resolution is never allowed to raise: a
@@ -147,16 +227,41 @@ def host_key_status(
         logger.warning(
             "Could not resolve %s while reporting a host key failure", target.host
         )
-        return HostKeyStatus(issue=issue, host=target.host, port=target.port)
+        return _unresolved_host_key_status(target, issue)
 
-    return HostKeyStatus(
-        issue=issue,
-        host=resolved.scan_host,
-        port=resolved.scan_port,
-        alias=resolved.alias,
-        isProxied=resolved.is_proxied,
-        knownHostsEntry=known_hosts_entry,
+    # Only looked up for a changed key: it is the one case where the user has to go and
+    # find an entry, and the lookup costs a subprocess. Guarded separately from the
+    # resolution above so a failed lookup costs only the file:line pointer — folding it
+    # into that `except` would throw away a perfectly good resolved target too.
+    known_hosts_entry = None
+    if issue is HostKeyIssue.CHANGED:
+        try:
+            known_hosts_entry = search_known_hosts(
+                resolved.entry_name, resolved.known_hosts_files
+            ).location
+        except Exception:  # noqa: BLE001 - a missing pointer beats a lost verdict
+            logger.warning(
+                "Could not locate the known_hosts entry for %s", resolved.entry_name
+            )
+
+    return resolved.describe(issue, known_hosts_entry)
+
+
+def _unresolved_host_key_status(
+    target: HostKeyTarget, issue: HostKeyIssue
+) -> HostKeyStatus:
+    """A verdict built from the form alone, for when resolution could not run."""
+    fallback = ResolvedSshTarget(
+        requested_host=target.host,
+        username=target.username,
+        scan_host=target.host,
+        scan_port=target.port,
+        entry_name=known_hosts_entry_name(target.host, target.port),
+        is_proxied=False,
+        known_hosts_files=(DEFAULT_KNOWN_HOSTS_PATH,),
+        write_target=DEFAULT_KNOWN_HOSTS_PATH,
     )
+    return fallback.describe(issue)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -181,8 +286,14 @@ class KnownHostsMatch:
         return any(_key_material(line) in recorded for line in key_lines)
 
 
-def search_known_hosts(entry_name: str, path: Optional[Path] = None) -> KnownHostsMatch:
-    """Look up ``entry_name`` via ``ssh-keygen -F``.
+def search_known_hosts(
+    entry_name: str, paths: Optional[Union[Path, Sequence[Path]]] = None
+) -> KnownHostsMatch:
+    """Look up ``entry_name`` across every ``known_hosts`` file OpenSSH would consult.
+
+    Searches all of them because OpenSSH accepts a host whose offered key matches an
+    entry in any one — so deciding "unknown" from the default file alone would call a
+    globally-pinned host new, and trusting it would override that pin.
 
     Shelled out rather than parsed so a hashed ``known_hosts`` matches as OpenSSH
     would. Exit 1 means no entry and exit 255 means no file — both are "nothing
@@ -190,27 +301,42 @@ def search_known_hosts(entry_name: str, path: Optional[Path] = None) -> KnownHos
     ``# Host … found: line N`` comment, which is why it is read here rather than by
     reopening the file.
     """
-    known_hosts = path or DEFAULT_KNOWN_HOSTS_PATH
-    try:
-        result = subprocess.run(
-            ["ssh-keygen", "-f", str(known_hosts), "-F", entry_name],
-            capture_output=True,
-            text=True,
-            timeout=KNOWN_HOSTS_LOOKUP_TIMEOUT,
-        )
-    except (OSError, subprocess.TimeoutExpired):
-        logger.warning("Could not search %s for %s", known_hosts, entry_name)
-        return KnownHostsMatch(lines=[])
+    matches: List[str] = []
+    location: Optional[str] = None
 
-    if result.returncode != 0:
-        return KnownHostsMatch(lines=[])
+    if paths is None:
+        search_paths: Sequence[Path] = (DEFAULT_KNOWN_HOSTS_PATH,)
+    elif isinstance(paths, Path):
+        # Normalised rather than rejected: a bare Path is not iterable, so the
+        # alternative is a TypeError at the first file instead of a search.
+        search_paths = (paths,)
+    else:
+        search_paths = tuple(paths) or (DEFAULT_KNOWN_HOSTS_PATH,)
 
-    lines = _key_lines(result.stdout)
-    if not lines:
-        return KnownHostsMatch(lines=[])
-    return KnownHostsMatch(
-        lines=lines, location=_first_match_location(result.stdout, known_hosts)
-    )
+    for known_hosts in search_paths:
+        try:
+            result = subprocess.run(
+                ["ssh-keygen", "-f", str(known_hosts), "-F", entry_name],
+                capture_output=True,
+                text=True,
+                timeout=KNOWN_HOSTS_LOOKUP_TIMEOUT,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            logger.warning("Could not search %s for %s", known_hosts, entry_name)
+            continue
+
+        if result.returncode != 0:
+            continue
+
+        lines = _key_lines(result.stdout)
+        if not lines:
+            continue
+
+        matches.extend(lines)
+        if location is None:
+            location = _first_match_location(result.stdout, known_hosts)
+
+    return KnownHostsMatch(lines=matches, location=location)
 
 
 def _first_match_location(output: str, known_hosts: Path) -> str:
@@ -276,6 +402,21 @@ def scan_host_keys(host: str, port: int) -> List[HostKeyOffer]:
     return offers
 
 
+def rekey_host_line(known_hosts_line: str, entry_name: str) -> str:
+    """Re-address a scanned line to the name OpenSSH will actually look up.
+
+    ``ssh-keyscan`` keys its output on the address it connected to, but the lookup key
+    is ``entry_name`` — which differs whenever ``HostKeyAlias`` is set. Appending the
+    scanned line unchanged records the key under a name nothing reads: the connection
+    keeps failing, and because the lookup still finds nothing every retry appends
+    another unused copy.
+    """
+    fields = known_hosts_line.split(maxsplit=1)
+    if len(fields) < 2:
+        return known_hosts_line.strip()
+    return f"{entry_name} {fields[1].strip()}"
+
+
 def append_host_keys(lines: List[str], path: Optional[Path] = None) -> None:
     """Append scanned ``known_hosts`` lines, never touching what is already there.
 
@@ -309,6 +450,12 @@ def _read_ssh_config_resolution(target: HostKeyTarget) -> Dict[str, str]:
     argv = ["ssh", "-G"]
     if target.port != DEFAULT_SSH_PORT:
         argv.extend(["-p", str(target.port)])
+    if target.username:
+        # `Match user …` stanzas can set HostName, Port, HostKeyAlias and ProxyJump, so
+        # resolving without the username answers for a different connection than the
+        # one that failed — and getting `proxyjump` wrong means offering to scan a host
+        # that is only reachable through a jump.
+        argv.extend(["-l", target.username])
     argv.append(target.host)
 
     try:
@@ -344,6 +491,29 @@ def _is_proxied(resolved: Dict[str, str]) -> bool:
         (resolved.get(key) or "").strip().lower() not in _UNSET_PROXY_VALUES
         for key in (_RESOLVED_PROXY_JUMP_KEY, _RESOLVED_PROXY_COMMAND_KEY)
     )
+
+
+def _known_hosts_paths(resolved: Dict[str, str], keyword: str) -> List[Path]:
+    """The paths one ``ssh -G`` known-hosts keyword names, in OpenSSH's order.
+
+    ``ssh -G`` prints these already ``~``-expanded and space separated. ``shlex`` rather
+    than ``str.split`` so a quoted path containing a space survives; ``none`` is
+    OpenSSH's way of saying "no file", so it is dropped rather than treated as one.
+    """
+    value = (resolved.get(keyword) or "").strip()
+    if not value:
+        return []
+
+    try:
+        candidates = shlex.split(value)
+    except ValueError:
+        candidates = value.split()
+
+    return [
+        Path(candidate).expanduser()
+        for candidate in candidates
+        if candidate.strip().lower() not in _UNSET_PROXY_VALUES
+    ]
 
 
 def _coerce_port(value: Optional[str], fallback: int) -> int:

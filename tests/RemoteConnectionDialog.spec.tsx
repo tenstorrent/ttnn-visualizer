@@ -78,7 +78,6 @@ vi.mock('../src/hooks/useHostKey', () => ({
     default: () => ({
         fetchHostKeyOffer: fetchHostKeyOfferMock,
         trustHostKey: trustHostKeyMock,
-        isHostKeyTrustAvailable: true,
     }),
 }));
 
@@ -940,6 +939,7 @@ describe('RemoteConnectionDialog host key failures', () => {
                     host: 'aus-wh-05',
                     port: 2222,
                     knownHostsEntry: '/home/u/.ssh/known_hosts:3',
+                    removalCommand: "ssh-keygen -R '[aus-wh-05]:2222'",
                 },
                 'The SSH host key has changed',
             ),
