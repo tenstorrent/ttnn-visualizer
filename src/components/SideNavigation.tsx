@@ -39,6 +39,7 @@ function SideNavigation() {
 
     return (
         <nav
+            aria-label='Main navigation'
             className={classNames('side-navigation', { collapsed: isCollapsed })}
             data-testid={TEST_IDS.SIDE_NAVIGATION}
         >
