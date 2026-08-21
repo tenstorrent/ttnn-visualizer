@@ -12,6 +12,7 @@ import {
     HOST_KEY_CHANGED_TITLE,
     HOST_KEY_COPIED_LABEL,
     HOST_KEY_FETCHING_MESSAGE,
+    HOST_KEY_NO_OFFER_NOTICE,
     HOST_KEY_PROXIED_NOTICE,
     HOST_KEY_STALE_NOTICE,
     HOST_KEY_TRUST_BUTTON_LABEL,
@@ -303,6 +304,21 @@ describe('HostKeyTrustPrompt for an unknown host key', () => {
         // post whatever the form holds now.
         expect(screen.queryByTestId(TEST_IDS.HOST_KEY_TRUST_BUTTON)).not.toBeInTheDocument();
         expect(screen.getByText(HOST_KEY_STALE_NOTICE)).toBeInTheDocument();
+    });
+
+    it('renders nothing when the offer reports the host is already trusted', async () => {
+        // `issue: null` is the endpoint's "already recorded and matching". Falling through
+        // titled it "not recognised" *and* claimed no key could be fetched — two wrong
+        // answers about a host that is fine.
+        renderPrompt({
+            hostKey: UNKNOWN_HOST_KEY,
+            onRequestOffer: vi.fn().mockResolvedValue(offerResponse({ issue: null, offers: [] })),
+            onTrust: vi.fn(),
+        });
+
+        await waitFor(() => expect(screen.queryByTestId(TEST_IDS.HOST_KEY_PROMPT)).not.toBeInTheDocument());
+        expect(screen.queryByText(HOST_KEY_UNKNOWN_TITLE)).not.toBeInTheDocument();
+        expect(screen.queryByText(HOST_KEY_NO_OFFER_NOTICE)).not.toBeInTheDocument();
     });
 
     it('prefers the offer verdict when it disagrees with the test result', async () => {

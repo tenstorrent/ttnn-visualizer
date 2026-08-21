@@ -5,7 +5,7 @@
 import { useEffect, useState } from 'react';
 import { AxiosError } from 'axios';
 import { useQuery } from '@tanstack/react-query';
-import { Button, Callout, Intent } from '@blueprintjs/core';
+import { Button, ButtonVariant, Callout, Intent, Size } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { HostKeyIssue } from '../../definitions/HostKey';
 import {
@@ -95,8 +95,8 @@ function CopyableCommand({ command, testId }: CopyableCommandProps) {
                 icon={hasCopied ? IconNames.TICK : IconNames.DUPLICATE}
                 text={hasCopied ? HOST_KEY_COPIED_LABEL : HOST_KEY_COPY_LABEL}
                 onClick={handleCopy}
-                variant='minimal'
-                size='small'
+                variant={ButtonVariant.MINIMAL}
+                size={Size.SMALL}
             />
         </div>
     );
@@ -170,6 +170,14 @@ function HostKeyTrustPrompt({ hostKey, onRequestOffer, onTrust, isStale = false 
     const knownHostsEntry = offer?.knownHostsEntry ?? hostKey.knownHostsEntry;
     const removalCommand = offer?.removalCommand ?? hostKey.removalCommand;
     const terminalCommand = offer?.terminalCommand ?? hostKey.terminalCommand;
+
+    // `null` is the offer endpoint's "already trusted": the key is recorded and matches,
+    // so whatever the test failed on was not the host key and this block has no remedy to
+    // offer. Falling through would title it "not recognised" *and* claim no key could be
+    // fetched — two wrong answers about a host that is fine.
+    if (offer && !effectiveIssue) {
+        return null;
+    }
 
     if (effectiveIssue === HostKeyIssue.CHANGED) {
         return (
