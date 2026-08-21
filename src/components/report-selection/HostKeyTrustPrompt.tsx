@@ -189,7 +189,7 @@ function HostKeyTrustPrompt({ hostKey, onRequestOffer, onTrust }: HostKeyTrustPr
                     data-testid={TEST_IDS.HOST_KEY_TRUST_BUTTON}
                     text={isTrusting ? HOST_KEY_TRUST_IN_PROGRESS_LABEL : HOST_KEY_TRUST_BUTTON_LABEL}
                     icon={IconNames.CONFIRM}
-                    intent={Intent.PRIMARY}
+                    intent={Intent.SUCCESS}
                     onClick={handleTrust}
                     disabled={isTrusting}
                     loading={isTrusting}
