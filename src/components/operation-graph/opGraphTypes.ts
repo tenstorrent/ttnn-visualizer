@@ -35,6 +35,14 @@ export interface OpGraphSourceOperation {
     deviceOperationCount: number;
 }
 
+// A single device operation expands into one node with no edges, which says
+// nothing the badge hasn't already said — and on a report where most operations
+// decompose into exactly one, the badges are the clutter. #1195
+const MIN_EXPANDABLE_DEVICE_OPERATIONS = 2;
+
+export const isExpandableOperation = (deviceOperationCount: number): boolean =>
+    deviceOperationCount >= MIN_EXPANDABLE_DEVICE_OPERATIONS;
+
 export interface OpGraphSourceOutput {
     /** Already run through `toReadableShape`, so the worker needs no formatters. */
     edgeLabel: string;
@@ -88,6 +96,16 @@ export interface OpGraphDeviceSubgraph {
      */
     entryNodeIdByTensorId: Record<number, string>;
     exitNodeIdByTensorId: Record<number, string>;
+    /**
+     * Used when a boundary tensor is claimed by no drawn frame, which is the
+     * common case on the way out: the operation's own result is registered by the
+     * enclosing `ttnn.` frame rather than by the device operation that computed
+     * it. A single source or sink is then the only place the edge could attach,
+     * so it is a rename rather than a guess. `null` when there is more than one,
+     * where anything but the boundary would be inventing a connection.
+     */
+    entryFallbackNodeId: string | null;
+    exitFallbackNodeId: string | null;
 }
 
 export interface OpGraphBuiltGraph {

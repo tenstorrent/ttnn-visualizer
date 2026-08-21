@@ -12,6 +12,7 @@ import {
     type OpGraphFlowNode,
     OpGraphNodeType,
     type OpGraphSourceOperation,
+    isExpandableOperation,
 } from './opGraphTypes';
 
 interface CandidateEdge {
@@ -56,6 +57,19 @@ export function buildOpGraph(
 
     const subgraphByOperationId = new Map(deviceSubgraphs.map((subgraph) => [subgraph.operationId, subgraph]));
 
+    // Reach past the boundary of an expanded operation to the device operation that
+    // produces or consumes the tensor, so the edge joins the dataflow instead of
+    // stopping at the box. Both fall back to the operation's own node: an endpoint
+    // that resolved to a node the graph doesn't hold would drop the edge silently.
+    const exitNodeIdOf = (operationId: number, tensorId: number): string => {
+        const subgraph = subgraphByOperationId.get(operationId);
+        return subgraph?.exitNodeIdByTensorId[tensorId] ?? subgraph?.exitFallbackNodeId ?? String(operationId);
+    };
+    const entryNodeIdOf = (operationId: number, tensorId: number): string => {
+        const subgraph = subgraphByOperationId.get(operationId);
+        return subgraph?.entryNodeIdByTensorId[tensorId] ?? subgraph?.entryFallbackNodeId ?? String(operationId);
+    };
+
     const kept = new Set<number>();
     const nodes: OpGraphFlowNode[] = [];
     const deviceOpNodes: OpGraphFlowNode[] = [];
@@ -64,7 +78,11 @@ export function buildOpGraph(
         if (connected.has(operation.id) && !(hideDeallocate && isDeallocate(operation.name))) {
             kept.add(operation.id);
             const label = `${operation.id} ${operation.name}`;
-            const collapsedSize = estimateOpNodeSize(label, operation.fileIdentifier);
+            const collapsedSize = estimateOpNodeSize(
+                label,
+                operation.fileIdentifier,
+                isExpandableOperation(operation.deviceOperationCount),
+            );
             const data = {
                 operationId: operation.id,
                 label,
@@ -157,16 +175,10 @@ export function buildOpGraph(
             const pair = `${candidate.source}-${candidate.target}`;
             const parallelIndex = parallelCountByPair.get(pair) ?? 0;
             parallelCountByPair.set(pair, parallelIndex + 1);
-            // Reach past the boundary of an expanded endpoint to the device operation
-            // that actually produces or consumes this tensor, falling back to the
-            // operation itself when it is collapsed or when no frame claims the
-            // tensor — an endpoint that resolved to nothing would drop the edge.
-            const subgraphOfSource = subgraphByOperationId.get(candidate.source);
-            const subgraphOfTarget = subgraphByOperationId.get(candidate.target);
             edges.push({
                 id: `${pair}-${parallelIndex}`,
-                source: subgraphOfSource?.exitNodeIdByTensorId[candidate.tensorId] ?? String(candidate.source),
-                target: subgraphOfTarget?.entryNodeIdByTensorId[candidate.tensorId] ?? String(candidate.target),
+                source: exitNodeIdOf(candidate.source, candidate.tensorId),
+                target: entryNodeIdOf(candidate.target, candidate.tensorId),
                 type: OpGraphEdgeType.OP,
                 label: candidate.label,
                 data: {

@@ -11,6 +11,8 @@ const NODE_MIN_WIDTH = 108;
 const NODE_MAX_WIDTH = 560;
 const NODE_HEIGHT = 32;
 const NODE_HEIGHT_WITH_FILE = 46;
+// The device-operation badge, kept in step with `.op-graph-node-expander`.
+const EXPANDER_WIDTH = 30;
 // Wide enough for an edge to carry its shape label between two ranks without
 // colliding with the neighbouring column.
 const NODE_SEP = 30;
@@ -39,9 +41,20 @@ export interface LayoutPosition {
     y: number;
 }
 
-export function estimateOpNodeSize(label: string, fileIdentifier: string): { width: number; height: number } {
+/**
+ * `hasExpander` widens the box by the badge rather than letting it overhang the
+ * corner: the badge is absolutely positioned so it can't grow the node itself,
+ * and without the reservation it either clips at the boundary or lands on the
+ * label of a node sized to that label alone. #1195
+ */
+export function estimateOpNodeSize(
+    label: string,
+    fileIdentifier: string,
+    hasExpander = false,
+): { width: number; height: number } {
     const widestLine = Math.max(label.length * CHAR_WIDTH, fileIdentifier.length * FILE_CHAR_WIDTH);
-    const width = Math.ceil(Math.min(NODE_MAX_WIDTH, Math.max(NODE_MIN_WIDTH, widestLine + NODE_PADDING_X)));
+    const contentWidth = widestLine + NODE_PADDING_X + (hasExpander ? EXPANDER_WIDTH : 0);
+    const width = Math.ceil(Math.min(NODE_MAX_WIDTH, Math.max(NODE_MIN_WIDTH, contentWidth)));
     return { width, height: fileIdentifier ? NODE_HEIGHT_WITH_FILE : NODE_HEIGHT };
 }
 

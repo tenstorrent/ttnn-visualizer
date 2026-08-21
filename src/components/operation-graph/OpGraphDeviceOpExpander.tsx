@@ -35,7 +35,10 @@ const OpGraphDeviceOpExpander = memo(({ operationId, count, isExpanded }: OpGrap
             onMouseDown={handleMouseDown}
             onClick={handleClick}
         >
-            <span aria-hidden='true'>{isExpanded ? '▾' : '▸'}</span>
+            {/* The arrow names the action rather than the state: down opens the
+                subgraph, up closes it. A chevron that merely rotated to report
+                what is already visible on screen read as "expand further". */}
+            <span aria-hidden='true'>{isExpanded ? '▴' : '▾'}</span>
             {count}
         </button>
     );

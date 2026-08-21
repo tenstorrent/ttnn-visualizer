@@ -254,10 +254,17 @@ export function buildDeviceOperationSubgraph(operation: OperationDescription): O
         }
     }
 
+    const framesWithIncoming = new Set(compressed.map((edge) => edge.target));
+    const framesWithOutgoing = new Set(compressed.map((edge) => edge.source));
+    const sources = displayedFrames.filter((frame) => !framesWithIncoming.has(frame.id));
+    const sinks = displayedFrames.filter((frame) => !framesWithOutgoing.has(frame.id));
+
     return {
         operationId: operation.id,
         entryNodeIdByTensorId,
         exitNodeIdByTensorId,
+        entryFallbackNodeId: sources.length === 1 ? getDeviceNodeId(operation.id, sources[0].id) : null,
+        exitFallbackNodeId: sinks.length === 1 ? getDeviceNodeId(operation.id, sinks[0].id) : null,
         nodes: displayedFrames.map((frame) => ({
             id: getDeviceNodeId(operation.id, frame.id),
             label: formatFrameLabel(frame),

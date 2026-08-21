@@ -5,7 +5,7 @@
 import { Handle, type NodeProps, Position } from '@xyflow/react';
 import { memo } from 'react';
 import OpGraphDeviceOpExpander from './OpGraphDeviceOpExpander';
-import type { OpGraphFlowNode } from './opGraphTypes';
+import { type OpGraphFlowNode, isExpandableOperation } from './opGraphTypes';
 
 const OpGraphNode = memo(({ data }: NodeProps<OpGraphFlowNode>) => (
     <>
@@ -15,7 +15,7 @@ const OpGraphNode = memo(({ data }: NodeProps<OpGraphFlowNode>) => (
         />
         <div className='op-graph-node-label'>{data.label}</div>
         {data.fileIdentifier ? <div className='op-graph-node-file'>{data.fileIdentifier}</div> : null}
-        {data.deviceOperationCount > 0 ? (
+        {isExpandableOperation(data.deviceOperationCount) ? (
             <OpGraphDeviceOpExpander
                 operationId={data.operationId}
                 count={data.deviceOperationCount}
