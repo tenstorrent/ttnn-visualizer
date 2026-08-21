@@ -7,12 +7,12 @@ import enum
 import logging
 import re
 from pathlib import Path
-from typing import Any, Optional, Tuple
+from typing import Any, List, Optional, Tuple
 
 from pydantic import BaseModel, Field, ValidationError, field_validator
 from sqlalchemy import JSON, Column, Integer, String
 from sqlalchemy.ext.mutable import MutableDict
-from ttnn_visualizer.enums import ConnectionTestStates
+from ttnn_visualizer.enums import ConnectionTestStates, HostKeyIssue
 from ttnn_visualizer.extensions import db
 from ttnn_visualizer.utils import SerializeableDataclass, parse_memory_config
 
@@ -504,6 +504,104 @@ class StatusMessage(SerializeableModel):
     status: ConnectionTestStates
     message: str
     detail: Optional[str] = None
+
+
+class HostKeyOffer(SerializeableModel):
+    """One host key ``ssh-keyscan`` offered, with the fingerprint the user compares.
+
+    ``line`` is the ``known_hosts`` line exactly as scanned, so trusting appends what
+    OpenSSH would have written rather than something recomposed from these fields.
+    """
+
+    keyType: str
+    fingerprint: str
+    line: str
+
+
+class HostKeyStatus(SerializeableModel):
+    """Why a connection test failed on the host key, and against which target.
+
+    ``host`` is the name the ``known_hosts`` entry is keyed on, which is not
+    necessarily what the user typed: an ``~/.ssh/config`` alias resolves through
+    ``HostName``/``Port``, and ``ssh-keyscan`` reads no config at all.
+    """
+
+    issue: HostKeyIssue
+    host: str
+    port: int
+    # Only set when the form's host differs from the resolved one, so the UI can say
+    # which name it is really talking about.
+    alias: Optional[str] = None
+    # A jump host cannot be scanned, so no key can be offered for one.
+    isProxied: bool = False
+    # "<file>:<line>" for a changed key, so the user can find the entry to remove.
+    knownHostsEntry: Optional[str] = None
+
+
+class ConnectionStatusMessage(StatusMessage):
+    """A status line that may carry a host-key verdict.
+
+    Deliberately a subclass rather than a field on ``StatusMessage``: that model is
+    also dumped as the NPE upload response and spread into every MLIR upload entry,
+    neither of which has any business gaining a host-key field.
+    """
+
+    hostKey: Optional[HostKeyStatus] = None
+
+
+class HostKeyTarget(SerializeableModel):
+    """Just enough of a connection to decide and record a host key.
+
+    Not a ``RemoteConnection``: that requires ``profilerPath``, which a
+    performance-path-only connection leaves empty, and no report path bears on a host
+    key. ``identityFile`` is here only because its presence decides whether the real
+    connection reads ``~/.ssh/config`` — see ``resolve_ssh_target``.
+    """
+
+    host: str
+    port: int = Field(ge=1, le=65535)
+    identityFile: Optional[str] = None
+
+    @field_validator("host", mode="before")
+    @classmethod
+    def _sanitise_host(cls, value: object) -> str:
+        return sanitise_remote_host_segment(value)
+
+    @classmethod
+    def from_connection(cls, connection: "RemoteConnection") -> "HostKeyTarget":
+        """Narrow a connection to what a host-key decision depends on."""
+        return cls(
+            host=connection.host,
+            port=connection.port,
+            identityFile=connection.identityFile,
+        )
+
+
+class HostKeyOfferResponse(SerializeableModel):
+    """What the offer endpoint knows about a host before anything is trusted.
+
+    ``issue`` is ``None`` when the resolved target is already known and matches, which
+    means the failure the caller saw was about something else.
+    """
+
+    issue: Optional[HostKeyIssue] = None
+    host: str
+    port: int
+    alias: Optional[str] = None
+    isProxied: bool = False
+    knownHostsEntry: Optional[str] = None
+    offers: List[HostKeyOffer] = Field(default_factory=list)
+
+
+class HostKeyTrustRequest(SerializeableModel):
+    """A trust decision, carrying the fingerprints the user actually saw.
+
+    The endpoint re-scans and requires an exact match against these, so a key swapped
+    between the preview and the click is refused rather than silently trusted.
+    """
+
+    target: HostKeyTarget
+    fingerprints: List[str]
 
 
 class ActiveReports(SerializeableModel):

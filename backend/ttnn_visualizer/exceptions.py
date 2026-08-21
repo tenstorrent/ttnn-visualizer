@@ -3,10 +3,15 @@
 # SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 from http import HTTPStatus
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 from flask import jsonify
-from ttnn_visualizer.enums import ConnectionTestStates
+from ttnn_visualizer.enums import ConnectionTestStates, HostKeyIssue
+
+if TYPE_CHECKING:
+    # Only for the annotation: importing models at runtime would make every module
+    # that raises an SSH error pull in SQLAlchemy and the Flask extensions.
+    from ttnn_visualizer.models import HostKeyStatus
 
 
 def error_response(
@@ -113,13 +118,20 @@ class AuthenticationFailedException(RemoteConnectionException):
 
 
 class HostKeyVerificationFailedException(RemoteConnectionException):
-    """Exception for untrusted SSH host keys that should return HTTP 422."""
+    """Exception for untrusted SSH host keys that should return HTTP 422.
+
+    Carries the ``host_key`` verdict so the route can tell the client whether the key
+    is merely unknown — which the user may choose to trust — or has changed, which
+    they have to resolve themselves. Without it the two are one 422 the UI cannot
+    tell apart.
+    """
 
     def __init__(
         self,
         message,
         status: ConnectionTestStates = ConnectionTestStates.FAILED,
         detail: Optional[str] = None,
+        host_key: Optional["HostKeyStatus"] = None,
     ):
         super().__init__(
             message=message,
@@ -127,6 +139,7 @@ class HostKeyVerificationFailedException(RemoteConnectionException):
             http_status_code=HTTPStatus.UNPROCESSABLE_ENTITY,
             detail=detail,
         )
+        self.host_key = host_key
 
 
 class InvalidRequestPayload(Exception):
@@ -196,9 +209,19 @@ class AuthenticationException(SSHException):
 
 
 class HostKeyVerificationException(SSHException):
-    """Raised when SSH rejects an unknown host key (BatchMode cannot prompt)."""
+    """Raised when SSH rejects a host key (BatchMode cannot prompt).
 
-    pass
+    ``issue`` distinguishes a first connection from a key that changed under the user.
+    Defaults to ``UNKNOWN`` because that is the case a caller that does not classify
+    is describing, and it is the conservative default for a *message* — the trust
+    action reads the classification from the offer endpoint, never from here.
+    """
+
+    def __init__(
+        self, message: str, issue: HostKeyIssue = HostKeyIssue.UNKNOWN
+    ) -> None:
+        super().__init__(message)
+        self.issue = issue
 
 
 class NoValidConnectionsError(SSHException):

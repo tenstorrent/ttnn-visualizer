@@ -10,7 +10,7 @@ from typing import Optional
 from unittest.mock import patch
 
 import pytest
-from ttnn_visualizer.enums import ConnectionTestStates
+from ttnn_visualizer.enums import ConnectionTestStates, HostKeyIssue
 from ttnn_visualizer.exceptions import (
     AuthenticationFailedException,
     HostKeyVerificationFailedException,
@@ -39,6 +39,7 @@ from ttnn_visualizer.sftp_operations import (
     find_folders_by_files,
     get_remote_performance_folders,
 )
+from ttnn_visualizer.tests.test_ssh_host_key_errors import CHANGED_HOST_STDERR
 from ttnn_visualizer.views import (
     _apply_requested_performance_name,
     _report_search_status,
@@ -1440,6 +1441,83 @@ class TestConnectionTestReportStatuses:
             "SSH connection established",
             "Host key verification failed for user@host",
         ]
+
+    def test_a_real_unknown_host_key_answers_422_with_its_verdict(self, app, client):
+        """The SSH-test step, exercised through the real `SSHClient.test_connection`.
+
+        The sibling test above injects at the *path search* stage with
+        `test_ssh_connection` stubbed to succeed, so it never covered the step a
+        brand-new host actually fails at. That step used to answer 200, because
+        `HostKeyVerificationException` subclasses `SSHException` and fell into the
+        generic branch, losing the HTTP status the dialog reads.
+        """
+        app.config["SERVER_MODE"] = False
+
+        def run(argv, *args, **kwargs):
+            if "-G" in argv:
+                return subprocess.CompletedProcess(
+                    args=argv,
+                    returncode=0,
+                    stdout="hostname remote.example.com\nport 22\n",
+                    stderr="",
+                )
+            raise subprocess.CalledProcessError(
+                255, argv, output="", stderr="Host key verification failed.\r\n"
+            )
+
+        with patch("subprocess.run", side_effect=run):
+            response = client.post(
+                "/api/remote/test", json=_remote_connection_payload()
+            )
+
+        assert response.status_code == HTTPStatus.UNPROCESSABLE_ENTITY
+
+        verdict = response.get_json()[0]
+        assert verdict["status"] == ConnectionTestStates.FAILED.value
+        assert verdict["hostKey"]["issue"] == HostKeyIssue.UNKNOWN.value
+        assert verdict["hostKey"]["host"] == "remote.example.com"
+        assert verdict["hostKey"]["port"] == 22
+        # The remedy that used to be appended to the host-key advice.
+        assert "key-based authentication" not in verdict["message"]
+
+    def test_a_real_changed_host_key_offers_no_trust(self, app, client):
+        """A changed key must arrive distinguishable, so the UI can withhold the action."""
+        app.config["SERVER_MODE"] = False
+
+        def run(argv, *args, **kwargs):
+            if "-G" in argv:
+                return subprocess.CompletedProcess(
+                    args=argv, returncode=0, stdout="hostname h\nport 22\n", stderr=""
+                )
+            raise subprocess.CalledProcessError(
+                255, argv, output="", stderr=CHANGED_HOST_STDERR
+            )
+
+        with patch("subprocess.run", side_effect=run):
+            response = client.post(
+                "/api/remote/test", json=_remote_connection_payload()
+            )
+
+        assert response.status_code == HTTPStatus.UNPROCESSABLE_ENTITY
+
+        verdict = response.get_json()[0]
+        assert verdict["hostKey"]["issue"] == HostKeyIssue.CHANGED.value
+        assert "ssh-keygen -R" in verdict["message"]
+
+    def test_a_path_status_line_carries_no_host_key_field(self, app, client):
+        """`StatusMessage` must not have grown a `hostKey`.
+
+        It is also the NPE upload response and is spread into every MLIR upload entry,
+        so widening it there would change two responses this feature never touches.
+        """
+        app.config["SERVER_MODE"] = False
+
+        response = self._run_connection_test(
+            client, _remote_connection_payload(), folders_per_path=[["/a"], ["/b"]]
+        )
+
+        assert response.status_code == HTTPStatus.OK
+        assert all("hostKey" not in status for status in response.get_json())
 
     def test_reports_found_counts_are_confirmed(self, app, client):
         app.config["SERVER_MODE"] = False

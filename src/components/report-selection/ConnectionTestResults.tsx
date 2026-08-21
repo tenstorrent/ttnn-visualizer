@@ -6,6 +6,7 @@ import classNames from 'classnames';
 import { ConnectionStatus } from '../../definitions/ConnectionStatus';
 import { CONNECTION_TEST_LEGEND, STALE_CONNECTION_TESTS_CLASS } from '../../definitions/ConnectionDialog';
 import { TEST_IDS } from '../../definitions/TestIds';
+import { HostKeyOfferResponse } from '../../model/HostKey';
 import ConnectionTestMessage from './ConnectionTestMessage';
 
 interface ConnectionTestResultsProps {
@@ -17,6 +18,17 @@ interface ConnectionTestResultsProps {
     tests: readonly ConnectionStatus[];
     /** Marks the run's results as no longer describing what the form now holds. */
     isStale?: boolean;
+    /**
+     * Fetches the keys a host offers, for a run that failed on the host key.
+     *
+     * A callback rather than the connection itself: only the dialog knows which fields a
+     * host-key decision depends on, and this block has no other reason to learn the shape
+     * of a connection. Omitting both callbacks leaves the prompt explanatory, which is how
+     * a dialog that has not opted in stays honest about offering no action.
+     */
+    onRequestHostKeyOffer?: () => Promise<HostKeyOfferResponse | null>;
+    /** Records the keys the user confirmed, then re-runs the test. */
+    onTrustHost?: (fingerprints: readonly string[]) => Promise<void>;
 }
 
 /**
@@ -25,7 +37,14 @@ interface ConnectionTestResultsProps {
  * rather than an unprompted complaint; a name not filled in yet is the latter, so it waits for
  * the run the rest of the results arrive with.
  */
-const ConnectionTestResults = ({ nameStatus, isNameTaken, tests, isStale = false }: ConnectionTestResultsProps) => {
+const ConnectionTestResults = ({
+    nameStatus,
+    isNameTaken,
+    tests,
+    isStale = false,
+    onRequestHostKeyOffer,
+    onTrustHost,
+}: ConnectionTestResultsProps) => {
     if (tests.length === 0 && !isNameTaken) {
         return null;
     }
@@ -52,6 +71,9 @@ const ConnectionTestResults = ({ nameStatus, isNameTaken, tests, isStale = false
                         status={test.status}
                         message={test.message}
                         detail={test.detail}
+                        hostKey={test.hostKey}
+                        onRequestHostKeyOffer={onRequestHostKeyOffer}
+                        onTrustHost={onTrustHost}
                     />
                 ))}
             </div>

@@ -9,17 +9,19 @@ from http import HTTPStatus
 from pathlib import Path
 from typing import List, NoReturn, Optional, Union
 
-from ttnn_visualizer.enums import ConnectionTestStates
+from ttnn_visualizer.enums import ConnectionTestStates, HostKeyIssue
 from ttnn_visualizer.exceptions import (
     AuthenticationException,
     AuthenticationFailedException,
     HostKeyVerificationException,
+    HostKeyVerificationFailedException,
     NoValidConnectionsError,
     RemoteConnectionException,
     RemoteFileReadException,
     SSHException,
 )
-from ttnn_visualizer.models import RemoteConnection
+from ttnn_visualizer.known_hosts import host_key_status
+from ttnn_visualizer.models import HostKeyTarget, RemoteConnection
 from ttnn_visualizer.remote_command import (
     RemoteCommand,
     remote_arg,
@@ -55,26 +57,80 @@ _SSH_CONNECTION_ERROR_FRAGMENTS = (
 )
 
 
-def is_ssh_host_key_verification_error(stderr: str) -> bool:
-    """True when OpenSSH rejected an unknown/untrusted host key."""
+# stderr fragments (lowercase) that mean the key we already trust no longer matches.
+# Checked before the unknown-key fragments because OpenSSH prints "Host key
+# verification failed." for this case too, so matching that first would tell a user
+# whose host key changed under them to accept it — advice for the opposite situation.
+_SSH_HOST_KEY_CHANGED_FRAGMENTS = (
+    "remote host identification has changed",
+    "has changed and you have requested strict checking",
+)
+
+
+def classify_ssh_host_key_error(stderr: str) -> Optional[HostKeyIssue]:
+    """Which host-key failure this stderr describes, or ``None`` if it isn't one.
+
+    Under ``BatchMode`` an unknown host produces only ``Host key verification
+    failed.`` — the "No ED25519 host key is known …" line needs
+    ``StrictHostKeyChecking=yes``, which we never pass, so it appears only when the
+    user's own config asks for it.
+    """
     lowered = (stderr or "").lower()
+    if any(fragment in lowered for fragment in _SSH_HOST_KEY_CHANGED_FRAGMENTS):
+        return HostKeyIssue.CHANGED
     if "host key verification failed" in lowered:
-        return True
+        return HostKeyIssue.UNKNOWN
     # e.g. "No ED25519 host key is known for [host]:port and you have requested strict checking."
-    return "host key is known" in lowered and "strict checking" in lowered
+    if "host key is known" in lowered and "strict checking" in lowered:
+        return HostKeyIssue.UNKNOWN
+    return None
 
 
-def ssh_host_key_failure_message(connection: RemoteConnection) -> str:
-    user_host = f"{connection.username}@{connection.host}"
-    if connection.port != 22:
-        ssh_example = f"ssh -p {connection.port} {user_host}"
-    else:
-        ssh_example = f"ssh {user_host}"
+def is_ssh_host_key_verification_error(stderr: str) -> bool:
+    """True when OpenSSH rejected a host key, whether unknown or changed."""
+    return classify_ssh_host_key_error(stderr) is not None
+
+
+def ssh_host_key_unknown_message(connection: RemoteConnection) -> str:
     return (
         f"SSH host key for {connection.host} (port {connection.port}) is not in "
         "~/.ssh/known_hosts. Remote sync cannot prompt to accept new keys. "
-        f"Run {ssh_example} once in a terminal, accept the host key, then retry."
+        "Review the key's fingerprint and trust the host to continue, or run "
+        f"{_ssh_example_command(connection)} once in a terminal and accept it there."
     )
+
+
+def ssh_host_key_changed_message(connection: RemoteConnection) -> str:
+    """Advice for a key that no longer matches the one already trusted.
+
+    Deliberately offers no way to accept the new key: this is either a rebuilt host or
+    a machine-in-the-middle, and only the user can tell which.
+    """
+    return (
+        f"The SSH host key for {connection.host} (port {connection.port}) has changed "
+        "since it was added to ~/.ssh/known_hosts. This can mean the host was "
+        "rebuilt, or that something is intercepting the connection. Confirm the new "
+        "fingerprint with whoever runs the host, then remove the old entry with "
+        f"{_ssh_keygen_removal_command(connection)} and test again."
+    )
+
+
+def _ssh_example_command(connection: RemoteConnection) -> str:
+    user_host = f"{connection.username}@{connection.host}"
+    if connection.port != 22:
+        return f"ssh -p {connection.port} {user_host}"
+    return f"ssh {user_host}"
+
+
+def _ssh_keygen_removal_command(connection: RemoteConnection) -> str:
+    """``ssh-keygen -R`` for this target, in the form ``known_hosts`` keys entries by.
+
+    A non-default port is stored as ``[host]:port``, and the brackets are shell
+    metacharacters, so the argument is quoted for the command to be copyable as-is.
+    """
+    if connection.port != 22:
+        return f"ssh-keygen -R '[{connection.host}]:{connection.port}'"
+    return f"ssh-keygen -R {connection.host}"
 
 
 def raise_for_ssh_subprocess_error(
@@ -86,8 +142,14 @@ def raise_for_ssh_subprocess_error(
     stay in lockstep. Always raises (``NoReturn``).
     """
     stderr = (e.stderr or "").lower()
-    if is_ssh_host_key_verification_error(stderr):
-        raise HostKeyVerificationException(ssh_host_key_failure_message(connection))
+    host_key_issue = classify_ssh_host_key_error(stderr)
+    if host_key_issue is not None:
+        message = (
+            ssh_host_key_changed_message(connection)
+            if host_key_issue is HostKeyIssue.CHANGED
+            else ssh_host_key_unknown_message(connection)
+        )
+        raise HostKeyVerificationException(message, issue=host_key_issue)
     if any(auth_err in stderr for auth_err in _SSH_AUTH_ERROR_FRAGMENTS):
         raise AuthenticationException(SSH_AUTH_FAILURE_MESSAGE)
     if any(conn_err in stderr for conn_err in _SSH_CONNECTION_ERROR_FRAGMENTS):
@@ -213,6 +275,27 @@ class SSHClient:
                 timeout=10,
             )
             return True
+        except HostKeyVerificationException as host_key_err:
+            # Ahead of the generic SSHException arm below, which this subclasses. Left
+            # to fall through, the advice would be rewrapped as "SSH connection error
+            # … Ensure SSH key-based authentication is properly configured" and lose
+            # the HTTP status the dialog reads to tell a host key from a bad password.
+            logger.info(
+                "SSH host key %s for %s@%s:%s",
+                host_key_err.issue.value,
+                self.connection.username,
+                self.connection.host,
+                self.connection.port,
+            )
+            raise HostKeyVerificationFailedException(
+                message=str(host_key_err),
+                status=ConnectionTestStates.FAILED,
+                detail=getattr(self, "_last_raw_error", None),
+                host_key=host_key_status(
+                    HostKeyTarget.from_connection(self.connection),
+                    host_key_err.issue,
+                ),
+            )
         except AuthenticationException as e:
             # Convert to AuthenticationFailedException for proper HTTP 422 response
             logger.info(

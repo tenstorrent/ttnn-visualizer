@@ -31,6 +31,10 @@ export const TEST_IDS = Object.freeze({
 
     // Connection dialogs
     CONNECTION_TEST_RESULTS: 'connection-test-results',
+    HOST_KEY_PROMPT: 'host-key-prompt',
+    HOST_KEY_TRUST_BUTTON: 'host-key-trust-button',
+    HOST_KEY_FINGERPRINT: 'host-key-fingerprint',
+    HOST_KEY_COPY_COMMAND: 'host-key-copy-command',
 
     // Navigation
     ADD_NEW_CONNECTION: 'add-new-connection',

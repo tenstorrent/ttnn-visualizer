@@ -47,6 +47,7 @@ import getServerConfig from '../../functions/getServerConfig';
 import getSshConfigHostPrefill from '../../functions/getSshConfigHostPrefill';
 import isConnectionSaveable from '../../functions/isConnectionSaveable';
 import useRemoteConnection from '../../hooks/useRemote';
+import useHostKey, { HostKeyTarget } from '../../hooks/useHostKey';
 import useSshConfigHostChoice from '../../hooks/useSshConfigHostChoice';
 import ConnectionTestResults from './ConnectionTestResults';
 import SshConfigHostPicker from './SshConfigHostPicker';
@@ -116,6 +117,7 @@ const RemoteConnectionDialog = ({
     const [connectionTests, setConnectionTests] = useState<ConnectionStatus[]>([]);
     const [hasStaleTestResults, setHasStaleTestResults] = useState(false);
     const { testConnection } = useRemoteConnection();
+    const { fetchHostKeyOffer, trustHostKey } = useHostKey();
     const [isTestingConnection, setIsTestingconnection] = useState(false);
 
     const connectionName = connection.name ?? '';
@@ -178,6 +180,23 @@ const RemoteConnectionDialog = ({
         } finally {
             setIsTestingconnection(false);
         }
+    };
+
+    // This dialog is the only place holding both the form and the test runner, so the
+    // host-key prompt reaches them through here rather than learning the connection shape.
+    const getHostKeyTarget = (): HostKeyTarget => ({
+        host: connection.host ?? '',
+        port: connection.port ?? getServerConfig().SSH_DEFAULT_PORT,
+        identityFile: connection.identityFile,
+    });
+
+    const handleRequestHostKeyOffer = () => fetchHostKeyOffer(getHostKeyTarget());
+
+    const handleTrustHost = async (fingerprints: readonly string[]) => {
+        await trustHostKey(getHostKeyTarget(), fingerprints);
+        // Re-run rather than assume: trusting the key clears one reason the connection
+        // failed, not necessarily the only one, and the save gate reads the results.
+        await testConnectionStatus();
     };
 
     const closeDialog = (resetChanges?: boolean) => {
@@ -401,6 +420,8 @@ const RemoteConnectionDialog = ({
                         isNameTaken={isNameTaken}
                         tests={connectionTests}
                         isStale={hasStaleTestResults}
+                        onRequestHostKeyOffer={handleRequestHostKeyOffer}
+                        onTrustHost={handleTrustHost}
                     />
                 </DialogFooter>
             )}

@@ -32,7 +32,11 @@ from ttnn_visualizer.decorators import (
     refuse_in_direct_report_mode,
     with_instance,
 )
-from ttnn_visualizer.enums import ConnectionTestStates, StackSourceOrigin
+from ttnn_visualizer.enums import (
+    ConnectionTestStates,
+    HostKeyIssue,
+    StackSourceOrigin,
+)
 from ttnn_visualizer.exceptions import (
     DataFormatError,
     InvalidRequestPayload,
@@ -53,6 +57,12 @@ from ttnn_visualizer.file_uploads import (
     validate_files,
 )
 from ttnn_visualizer.instances import get_instances, update_instance
+from ttnn_visualizer.known_hosts import (
+    append_host_keys,
+    resolve_ssh_target,
+    scan_host_keys,
+    search_known_hosts,
+)
 from ttnn_visualizer.local_remote_reports import (
     list_local_synced_performance_folders,
     list_local_synced_profiler_folders,
@@ -65,6 +75,10 @@ from ttnn_visualizer.mlir import (
     upload_and_convert_mlir,
 )
 from ttnn_visualizer.models import (
+    ConnectionStatusMessage,
+    HostKeyOfferResponse,
+    HostKeyTarget,
+    HostKeyTrustRequest,
     Instance,
     MlirServerConnection,
     RemoteConnection,
@@ -1837,6 +1851,139 @@ def list_remote_ssh_config_hosts():
     return jsonify(load_ssh_config_hosts().model_dump(exclude_none=True))
 
 
+def _validated_host_key_target(payload) -> HostKeyTarget:
+    """Validate a host-key request body, or answer 400 through the app handler.
+
+    Deliberately not ``RemoteConnection``: that requires ``profilerPath``, which a
+    connection configured with only a performance path leaves empty, and no report
+    path bears on a host key.
+    """
+    try:
+        return HostKeyTarget.model_validate(payload)
+    except ValidationError:
+        raise InvalidRequestPayload(
+            "A host key request requires a host and a port in range"
+        )
+
+
+@api.route("/remote/host-key", methods=["POST"])
+@local_only
+def read_remote_host_key():
+    """Report what ``~/.ssh/known_hosts`` knows about a host, and what it offers.
+
+    ``@local_only`` because the paired trust endpoint writes to the server's own
+    ``known_hosts``; exposing either under ``SERVER_MODE`` would let an
+    unauthenticated caller pin arbitrary keys and poison every other user of that
+    machine. This half only reads, but it names local SSH config and so is gated with
+    it. POST rather than GET because the body carries ``identityFile``, a local key
+    path that has no business in a query string.
+    """
+    if not request.json:
+        return response_bad_request("Missing host key target")
+
+    target = _validated_host_key_target(request.json)
+    resolved = resolve_ssh_target(target)
+    existing = search_known_hosts(resolved.entry_name)
+
+    def offer_response(issue, offers=(), known_hosts_entry=None):
+        return jsonify(
+            HostKeyOfferResponse(
+                issue=issue,
+                host=resolved.scan_host,
+                port=resolved.scan_port,
+                alias=resolved.alias,
+                isProxied=resolved.is_proxied,
+                knownHostsEntry=known_hosts_entry,
+                offers=list(offers),
+            ).model_dump()
+        )
+
+    # Scanned before the branch below so a key already recorded can be recognised by
+    # its material rather than by the mere presence of an entry — a host that has
+    # rotated to an additional key type is known, not changed.
+    offers = (
+        []
+        if resolved.is_proxied
+        else scan_host_keys(resolved.scan_host, resolved.scan_port)
+    )
+
+    if existing:
+        if existing.matches_any([offer.line for offer in offers]):
+            # Already trusted, so whatever the caller saw fail was not the host key.
+            return offer_response(None)
+        return offer_response(HostKeyIssue.CHANGED, known_hosts_entry=existing.location)
+
+    return offer_response(HostKeyIssue.UNKNOWN, offers=offers)
+
+
+@api.route("/remote/host-key/trust", methods=["POST"])
+@local_only
+def trust_remote_host_key():
+    """Append a host's currently-offered keys to ``~/.ssh/known_hosts``.
+
+    This is trust on first use and nothing stronger: the key is fetched over the same
+    unauthenticated network path as the connection itself, so what makes the decision
+    meaningful is that the user made it with the fingerprint in front of them — not
+    that we verified anything. Hence the two refusals below, which are the difference
+    between reproducing OpenSSH's prompt and quietly disabling verification.
+    """
+    if not request.json:
+        return response_bad_request("Missing host key trust request")
+
+    try:
+        trust_request = HostKeyTrustRequest.model_validate(request.json)
+    except ValidationError:
+        raise InvalidRequestPayload(
+            "A trust request requires a host key target and the fingerprints shown"
+        )
+
+    resolved = resolve_ssh_target(trust_request.target)
+    if resolved.is_proxied:
+        return response_unprocessable_entity(
+            f"{resolved.scan_host} is reached through a jump host, so its key cannot "
+            "be fetched. Accept it in a terminal instead."
+        )
+
+    existing = search_known_hosts(resolved.entry_name)
+    if existing:
+        # Refused rather than replaced: an entry that differs is the changed-key case,
+        # which only the user can resolve, and one that matches needs nothing.
+        return response_unprocessable_entity(
+            f"A host key is already recorded for {resolved.entry_name}. Remove it "
+            "yourself with ssh-keygen -R if you are sure it should change.",
+            detail=existing.location,
+        )
+
+    offers = scan_host_keys(resolved.scan_host, resolved.scan_port)
+    if not offers:
+        return response_unprocessable_entity(
+            f"No host key could be fetched from {resolved.scan_host} on port "
+            f"{resolved.scan_port}."
+        )
+
+    # Re-scanned and compared against what the user was shown, so a key substituted
+    # between the preview and the click is refused instead of silently trusted.
+    offered_fingerprints = {offer.fingerprint for offer in offers}
+    if offered_fingerprints != set(trust_request.fingerprints):
+        logger.warning(
+            "Host key for %s changed between offer and trust; refusing",
+            resolved.entry_name,
+        )
+        return response_unprocessable_entity(
+            f"The keys offered by {resolved.scan_host} changed since they were shown. "
+            "Run the test again and re-check the fingerprint before trusting it."
+        )
+
+    append_host_keys([offer.line for offer in offers])
+
+    return jsonify(
+        StatusMessage(
+            status=ConnectionTestStates.OK,
+            message=f"Trusted {len(offers)} host key(s) for {resolved.entry_name}",
+        ).model_dump()
+    )
+
+
 @api.route("/remote/test", methods=["POST"])
 @local_only
 def test_remote_folder():
@@ -1854,8 +2001,16 @@ def test_remote_folder():
     )
     statuses = []
 
-    def add_status(status, message, detail=None):
-        statuses.append(StatusMessage(status=status, message=message, detail=detail))
+    def add_status(status, message, detail=None, host_key=None):
+        # `ConnectionStatusMessage` only where a host-key verdict may ride along, so
+        # the plain `StatusMessage` responses elsewhere don't gain a `hostKey` field.
+        statuses.append(
+            ConnectionStatusMessage(
+                status=status, message=message, detail=detail, hostKey=host_key
+            )
+            if host_key is not None
+            else StatusMessage(status=status, message=message, detail=detail)
+        )
 
     def has_failures():
         return any(
@@ -1867,7 +2022,12 @@ def test_remote_folder():
         test_ssh_connection(connection)
         add_status(ConnectionTestStates.OK.value, "SSH connection established")
     except RemoteConnectionException as e:
-        add_status(e.status.value, e.message, getattr(e, "detail", None))
+        add_status(
+            e.status.value,
+            e.message,
+            getattr(e, "detail", None),
+            host_key=getattr(e, "host_key", None),
+        )
         # A verdict on the connection answers the whole request, so it keeps its
         # own status code (422 for rejected credentials or an untrusted host key)
         # rather than being reported as one more line in a 200.
@@ -1885,7 +2045,12 @@ def test_remote_folder():
             # Only the connection's own verdict reaches this: a failure about a
             # single path — including a transport error raised mid-search — is
             # converted and carried back as that path's outcome instead.
-            add_status(e.status.value, e.message, getattr(e, "detail", None))
+            add_status(
+                e.status.value,
+                e.message,
+                getattr(e, "detail", None),
+                host_key=getattr(e, "host_key", None),
+            )
             if e.is_connection_verdict:
                 return (
                     jsonify([status.model_dump() for status in statuses]),
