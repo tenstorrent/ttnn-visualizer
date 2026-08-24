@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-@use 'colours' as *;
+@use '../definitions/colours' as *;
 
 // Per-tab identity colours, shared by the navigation rail and the in-page links that lead
 // to the same views, so the two can't drift apart. Keyed by the same class names the

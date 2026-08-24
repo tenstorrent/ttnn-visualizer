@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import 'styles/components/ServerModeBanner.scss';
 import getServerConfig from '../functions/getServerConfig';
 import { TEST_IDS } from '../definitions/TestIds';
@@ -10,6 +10,9 @@ import { TEST_IDS } from '../definitions/TestIds';
 // How close to the top of the viewport the pointer has to come before the banner
 // reveals itself.
 const REVEAL_THRESHOLD_PX = 80;
+
+export const PYPI_PACKAGE_URL = 'https://pypi.org/project/ttnn-visualizer/';
+export const GITHUB_REPOSITORY_URL = 'https://github.com/tenstorrent/ttnn-visualizer';
 
 /**
  * Points hosted visitors at the installable build. Lives beside the navigation rather
@@ -19,6 +22,7 @@ const REVEAL_THRESHOLD_PX = 80;
 function ServerModeBanner() {
     const serverMode = getServerConfig().SERVER_MODE;
     const [isRevealed, setIsRevealed] = useState(false);
+    const isRevealedRef = useRef(false);
 
     useEffect(() => {
         if (!serverMode) {
@@ -26,10 +30,20 @@ function ServerModeBanner() {
         }
 
         const handleMouseMove = (e: MouseEvent) => {
-            setIsRevealed(e.clientY < REVEAL_THRESHOLD_PX);
+            const shouldReveal = e.clientY < REVEAL_THRESHOLD_PX;
+
+            // This runs at pointer rate on `window`, sharing that path with the graph views'
+            // pan/zoom and the chart hover handlers, so it only reaches React on a crossing
+            // of the threshold rather than on every move.
+            if (shouldReveal === isRevealedRef.current) {
+                return;
+            }
+
+            isRevealedRef.current = shouldReveal;
+            setIsRevealed(shouldReveal);
         };
 
-        window.addEventListener('mousemove', handleMouseMove);
+        window.addEventListener('mousemove', handleMouseMove, { passive: true });
         return () => {
             window.removeEventListener('mousemove', handleMouseMove);
         };
@@ -49,7 +63,7 @@ function ServerModeBanner() {
         >
             For full featured application, please install from
             <a
-                href='https://pypi.org/project/ttnn-visualizer/'
+                href={PYPI_PACKAGE_URL}
                 target='_blank'
                 rel='noreferrer'
             >
@@ -57,7 +71,7 @@ function ServerModeBanner() {
             </a>
             or head over to{' '}
             <a
-                href='https://github.com/tenstorrent/ttnn-visualizer'
+                href={GITHUB_REPOSITORY_URL}
                 target='_blank'
                 rel='noreferrer'
             >

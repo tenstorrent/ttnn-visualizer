@@ -20,12 +20,12 @@ const LOGO_WIDTH = 150;
 // Collapsed, the label is the only thing identifying an icon, so it has to reach the
 // tooltip; expanded, the label is already on screen and only a blocked item has
 // something left to say.
-function getTooltipContent(item: ResolvedNavigationItem, isCollapsed: boolean): string {
+function getTooltipContent(item: ResolvedNavigationItem, isCollapsed: boolean): string | null {
     if (item.disabledReason) {
         return item.disabledReason;
     }
 
-    return isCollapsed ? item.label : '';
+    return isCollapsed ? item.label : null;
 }
 
 function SideNavigation() {
@@ -64,7 +64,7 @@ function SideNavigation() {
                     return (
                         <Tooltip
                             key={item.route}
-                            content={tooltipContent}
+                            content={tooltipContent ?? undefined}
                             position={Position.RIGHT}
                             disabled={!tooltipContent}
                             fill

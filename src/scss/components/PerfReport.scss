@@ -11,6 +11,9 @@ $row-pattern-1: linear-gradient(0deg, transparent 50%, rgb(255 255 255 / 5%) 50%
 $row-pattern-2: linear-gradient(45deg, transparent 50%, rgb(255 255 255 / 5%) 50%);
 $header-footer-border: 2px solid colours.$tt-grey-5;
 
+// Narrowest the columns stay readable at; below this the table scrolls horizontally.
+$perf-table-min-width: 1240px;
+
 .perf-report {
     color: #fff;
     overflow: auto;
@@ -45,6 +48,13 @@ $header-footer-border: 2px solid colours.$tt-grey-5;
     .perf-table {
         border-collapse: collapse;
         width: 100%;
+
+        // The floor sits on the table rather than on `.perf-report` so a narrow viewport
+        // scrolls the table inside its own `overflow: auto` container instead of the whole
+        // document. Without it the table tracks the container, and every width change --
+        // collapsing the navigation rail is one, on demand -- re-runs auto table layout
+        // across every unvirtualised row.
+        min-width: $perf-table-min-width;
 
         .skeleton-cell {
             display: block;

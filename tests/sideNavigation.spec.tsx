@@ -5,17 +5,29 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
 import { Mock, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { activePerformanceReportAtom, activeProfilerReportAtom, isNavigationCollapsedAtom } from '../src/store/app';
+import { InitialEntry, useLocation } from 'react-router';
+import {
+    activeMlirJsonAtom,
+    activePerformanceReportAtom,
+    activeProfilerReportAtom,
+    isNavigationCollapsedAtom,
+} from '../src/store/app';
 import { useGetClusterDescription } from '../src/hooks/useAPI';
 import clusterDescription from './data/clusterDescription.json';
 import SideNavigation from '../src/components/SideNavigation';
+import ROUTES from '../src/definitions/Routes';
 import { TEST_IDS } from '../src/definitions/TestIds';
 import getButtonWithText from './helpers/getButtonWithText';
 import { TestProviders } from './helpers/TestProviders';
 import { AtomProviderInitialValues } from './helpers/atomProvider';
 import { ServerConfig } from '../src/definitions/ServerConfig';
 
-afterEach(cleanup);
+afterEach(() => {
+    cleanup();
+    // `import.meta.env.DEV` is stubbed by the MLIR tests; left set it would decide the
+    // reachability of every test that runs after them.
+    vi.unstubAllEnvs();
+});
 
 const getServerConfigMock = vi.hoisted(() => vi.fn((): Partial<ServerConfig> => ({ SERVER_MODE: false })));
 
@@ -27,12 +39,41 @@ vi.mock('../src/functions/getServerConfig', () => ({
     default: getServerConfigMock,
 }));
 
-const renderRail = (initialAtomValues?: AtomProviderInitialValues) =>
+// Reads the real router rather than a `useNavigate` spy, so a wrong route in
+// NAVIGATION_ITEMS fails as loudly as a handler that never fires.
+const LOCATION_PROBE_ID = 'location-probe';
+
+function LocationProbe() {
+    const location = useLocation();
+
+    return (
+        <div
+            data-testid={LOCATION_PROBE_ID}
+            data-pathname={location.pathname}
+            data-background={location.state?.background?.pathname ?? ''}
+        />
+    );
+}
+
+const renderRail = (initialAtomValues?: AtomProviderInitialValues, initialEntries?: InitialEntry[]) =>
     render(
-        <TestProviders initialAtomValues={initialAtomValues}>
+        <TestProviders
+            initialAtomValues={initialAtomValues}
+            initialEntries={initialEntries}
+        >
             <SideNavigation />
+            <LocationProbe />
         </TestProviders>,
     );
+
+const getLocation = () => {
+    const probe = screen.getByTestId(LOCATION_PROBE_ID);
+
+    return {
+        pathname: probe.getAttribute('data-pathname'),
+        background: probe.getAttribute('data-background'),
+    };
+};
 
 const activeReport = { reportName: 'test', path: 'testPath' };
 
@@ -200,5 +241,150 @@ describe('SideNavigation server mode', () => {
         // The filter drops one item, not a category.
         expect(getButtonWithText('reports')).toBeEnabled();
         expect(getButtonWithText('npe')).toBeEnabled();
+    });
+});
+
+describe('SideNavigation navigating', () => {
+    // Every other assertion in this file is about how the rail looks. The rail moved from
+    // `<Link>` markup to `onClick` -> `useNavigate`, so without these an inert handler, a
+    // wrong route in the descriptors, or a dropped `void navigate(...)` ships green.
+    it('navigates to the route the pressed item names', () => {
+        renderRail([[activeProfilerReportAtom, activeReport]]);
+
+        fireEvent.click(getButtonWithText('operations'));
+
+        expect(getLocation().pathname).toBe(ROUTES.OPERATIONS);
+        expect(getLocation().background).toBe('');
+    });
+
+    // A modal route keeps the page beneath it mounted, and react-router resolves that page
+    // from the background location rather than from the path. Lose the state and Topology
+    // stops being an overlay.
+    it('carries the current page as the background when entering a modal item', () => {
+        (useGetClusterDescription as Mock).mockReturnValue({ data: clusterDescription });
+
+        renderRail([[activeProfilerReportAtom, activeReport]], [ROUTES.OPERATIONS]);
+
+        fireEvent.click(getButtonWithText('topology'));
+
+        expect(getLocation().pathname).toBe(ROUTES.CLUSTER);
+        expect(getLocation().background).toBe(ROUTES.OPERATIONS);
+    });
+
+    // Re-entering an open modal would record its own route as the background, leaving the
+    // overlay with itself underneath. The SCSS guard stops the pointer only, so keyboard
+    // users reached this and mouse users didn't.
+    it('ignores a modal item that is already showing', () => {
+        (useGetClusterDescription as Mock).mockReturnValue({ data: clusterDescription });
+
+        renderRail(
+            [[activeProfilerReportAtom, activeReport]],
+            [{ pathname: ROUTES.CLUSTER, state: { background: { pathname: ROUTES.OPERATIONS } } }],
+        );
+
+        fireEvent.click(getButtonWithText('topology'));
+
+        expect(getLocation().pathname).toBe(ROUTES.CLUSTER);
+        expect(getLocation().background).toBe(ROUTES.OPERATIONS);
+    });
+
+    it('leaves a disabled item inert', () => {
+        renderRail([[activeProfilerReportAtom, null]], [ROUTES.HOME]);
+
+        fireEvent.click(getButtonWithText('operations'));
+
+        expect(getLocation().pathname).toBe(ROUTES.HOME);
+    });
+});
+
+describe('SideNavigation active item', () => {
+    // `isActivePath` drives both the per-tab identity colours and, now, the modal re-entry
+    // guard above, so all four of its branches are load-bearing.
+    it('marks the item whose route is the current path', () => {
+        renderRail([[activeProfilerReportAtom, activeReport]], [ROUTES.OPERATIONS]);
+
+        expect(getButtonWithText('operations')).toHaveClass('bp6-active');
+        expect(getButtonWithText('tensors')).not.toHaveClass('bp6-active');
+    });
+
+    // Operation details sit under the Operations route, and the rail has no item of their
+    // own to light up.
+    it('marks the item a nested route belongs to', () => {
+        renderRail([[activeProfilerReportAtom, activeReport]], [`${ROUTES.OPERATIONS}/42`]);
+
+        expect(getButtonWithText('operations')).toHaveClass('bp6-active');
+    });
+
+    // Home is every path's prefix, so the nested match has to exclude it or Reports would
+    // read as active everywhere.
+    it('does not mark Reports active from a nested path', () => {
+        renderRail([[activeProfilerReportAtom, activeReport]], [`${ROUTES.OPERATIONS}/42`]);
+
+        expect(getButtonWithText('reports')).not.toHaveClass('bp6-active');
+    });
+
+    // With a modal open the page underneath is still where the user is, so both items
+    // report active.
+    it('marks both the modal and the page behind it', () => {
+        (useGetClusterDescription as Mock).mockReturnValue({ data: clusterDescription });
+
+        renderRail(
+            [[activeProfilerReportAtom, activeReport]],
+            [{ pathname: ROUTES.CLUSTER, state: { background: { pathname: `${ROUTES.OPERATIONS}/42` } } }],
+        );
+
+        expect(getButtonWithText('topology')).toHaveClass('bp6-active');
+        expect(getButtonWithText('operations')).toHaveClass('bp6-active');
+    });
+});
+
+describe('SideNavigation MLIR reachability', () => {
+    // A dev checkout reaches the MLIR view without a loaded file so the page itself can be
+    // worked on -- which means the disabled branch is unreachable under vitest unless DEV
+    // is stubbed, and the requirement went untested until it was.
+    it('needs an active MLIR file in a production build', () => {
+        vi.stubEnv('DEV', false);
+
+        renderRail([[activeMlirJsonAtom, null]]);
+
+        expect(getButtonWithText('mlir')).toBeDisabled();
+    });
+
+    it('enables MLIR in a production build once a file is active', () => {
+        vi.stubEnv('DEV', false);
+
+        renderRail([[activeMlirJsonAtom, { name: 'test.mlir' }]]);
+
+        expect(getButtonWithText('mlir')).toBeEnabled();
+    });
+
+    it('enables MLIR in a dev checkout with no file', () => {
+        vi.stubEnv('DEV', true);
+
+        renderRail([[activeMlirJsonAtom, null]]);
+
+        expect(getButtonWithText('mlir')).toBeEnabled();
+    });
+});
+
+describe('SideNavigation collapse persistence', () => {
+    // `getOnInit` exists so a user who collapsed the rail doesn't get an expanded first
+    // paint and a reflow of the page beside it. Nothing else would notice the key being
+    // renamed or the option being dropped.
+    it('renders collapsed on first paint when the stored preference says so', () => {
+        localStorage.setItem('navigationCollapsed', 'true');
+
+        renderRail();
+
+        expect(screen.getByTestId(TEST_IDS.SIDE_NAVIGATION)).toHaveClass('collapsed');
+        expect(screen.getByTestId(TEST_IDS.SIDE_NAVIGATION_TOGGLE)).toHaveAttribute('aria-expanded', 'false');
+    });
+
+    it('stores the preference when the rail is collapsed', () => {
+        renderRail();
+
+        fireEvent.click(screen.getByTestId(TEST_IDS.SIDE_NAVIGATION_TOGGLE));
+
+        expect(localStorage.getItem('navigationCollapsed')).toBe('true');
     });
 });

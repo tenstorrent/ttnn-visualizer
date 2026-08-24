@@ -77,6 +77,13 @@ export function useMainNavigationItems(): MainNavigationItems {
 
     const handleNavigate = useCallback(
         (item: ResolvedNavigationItem) => {
+            // Re-entering a modal that is already showing would record the modal's own route
+            // as its background, leaving the overlay with itself underneath. The SCSS guard
+            // only stops the pointer, so the check has to live here to cover Enter/Space too.
+            if (item.isModal && item.isActive) {
+                return;
+            }
+
             // A modal route keeps the page beneath it mounted, which react-router does
             // from the background location rather than from the path.
             void navigate(item.route, item.isModal ? { state: { background: location } } : undefined);

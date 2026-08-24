@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 @use 'styles/definitions/colours' as *;
-@use 'styles/definitions/navigation' as navigation;
+@use 'styles/mixins/navigation' as navigation;
 @use 'styles/definitions/variables' as variables;
 
 .side-navigation {

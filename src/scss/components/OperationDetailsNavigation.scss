@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 @use '../definitions/colours' as *;
-@use '../definitions/navigation' as navigation;
+@use '../mixins/navigation' as navigation;
 
 $loader-width: 32px;
 

@@ -5,7 +5,7 @@
 import '@testing-library/jest-dom/vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import ServerModeBanner from '../src/components/ServerModeBanner';
+import ServerModeBanner, { GITHUB_REPOSITORY_URL, PYPI_PACKAGE_URL } from '../src/components/ServerModeBanner';
 import { ServerConfig } from '../src/definitions/ServerConfig';
 import { TEST_IDS } from '../src/definitions/TestIds';
 
@@ -25,8 +25,16 @@ vi.mock('../src/functions/getServerConfig', () => ({
 // Just inside and just outside the component's reveal threshold.
 const POINTER_NEAR_TOP = 10;
 const POINTER_AWAY_FROM_TOP = 400;
+// The threshold itself, which the component compares with `<`. Pins the boundary so a
+// flip to `<=` can't pass unnoticed.
+const POINTER_ON_THRESHOLD = 80;
 
-afterEach(cleanup);
+afterEach(() => {
+    cleanup();
+    // The listener spies below are installed on `window`, so without this they outlive
+    // their test and stay in place for the rest of the file.
+    vi.restoreAllMocks();
+});
 
 beforeEach(() => {
     getServerConfigMock.mockReturnValue({ SERVER_MODE: false });
@@ -70,14 +78,18 @@ describe('ServerModeBanner', () => {
 
         render(<ServerModeBanner />);
 
-        expect(screen.getByRole('link', { name: 'PyPI' })).toHaveAttribute(
-            'href',
-            'https://pypi.org/project/ttnn-visualizer/',
-        );
-        expect(screen.getByRole('link', { name: 'GitHub' })).toHaveAttribute(
-            'href',
-            'https://github.com/tenstorrent/ttnn-visualizer',
-        );
+        expect(screen.getByRole('link', { name: 'PyPI' })).toHaveAttribute('href', PYPI_PACKAGE_URL);
+        expect(screen.getByRole('link', { name: 'GitHub' })).toHaveAttribute('href', GITHUB_REPOSITORY_URL);
+    });
+
+    it('stays hidden while the pointer is level with the threshold', () => {
+        getServerConfigMock.mockReturnValue({ SERVER_MODE: true });
+
+        render(<ServerModeBanner />);
+
+        fireEvent.mouseMove(window, { clientY: POINTER_ON_THRESHOLD });
+
+        expect(screen.getByTestId(TEST_IDS.SERVER_MODE_BANNER)).toHaveStyle({ transform: 'translateY(-100%)' });
     });
 
     // The listener is on `window`, so an unbalanced pair outlives the component and keeps

@@ -28,7 +28,7 @@ export interface NavigationItem {
     route: string;
     icon: IconName;
     // Drives the per-tab colours in the shared SCSS mixin, so it must match the
-    // selector in scss/definitions/_navigation.scss.
+    // selector in scss/mixins/_navigation.scss.
     className: string;
     requirement: NavRequirement;
     // Opens over the current page rather than replacing it (react-router background state).
