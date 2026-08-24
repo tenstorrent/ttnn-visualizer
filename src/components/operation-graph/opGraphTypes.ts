@@ -31,7 +31,12 @@ export interface OpGraphSourceOperation {
     name: string;
     fileIdentifier: string;
     outputs: OpGraphSourceOutput[];
-    /** Drives the expander badge. Already counted per operation by `fetchOperations`. */
+    /**
+     * Drives the expander badge. Counted by `countDeviceOperations`, which shares a
+     * predicate with the subgraph so the badge cannot promise a number expanding
+     * contradicts. Not `deviceOperationNameList` from `fetchOperations`: that is
+     * built through `isDeviceOperation`, a deliberately narrower predicate.
+     */
     deviceOperationCount: number;
 }
 

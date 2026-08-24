@@ -254,10 +254,25 @@ export function buildDeviceOperationSubgraph(operation: OperationDescription): O
         }
     }
 
+    // A frame that produces no tensor can be neither the exit nor evidence that its
+    // predecessor isn't. `Tensor::deallocate` is drawn — it passes
+    // `isExtendedDeviceOperation` and no spelling of it is in
+    // `DEALLOCATE_OP_NAME_LIST` — and it consumes without producing, so counting it
+    // as a sink gave the operation two while counting it as a successor stopped the
+    // real exit from being one. Either way the single-sink gate below withheld the
+    // exit fallback that the common case depends on, and every outgoing edge
+    // silently went back to stopping at the box. #1195
+    const producingFrameIds = new Set(
+        displayedFrames.filter((frame) => tensorIdsOf(frame.outputs).length > 0).map((frame) => frame.id),
+    );
     const framesWithIncoming = new Set(compressed.map((edge) => edge.target));
-    const framesWithOutgoing = new Set(compressed.map((edge) => edge.source));
+    const framesWithOutgoing = new Set(
+        compressed.filter((edge) => producingFrameIds.has(edge.target)).map((edge) => edge.source),
+    );
     const sources = displayedFrames.filter((frame) => !framesWithIncoming.has(frame.id));
-    const sinks = displayedFrames.filter((frame) => !framesWithOutgoing.has(frame.id));
+    const sinks = displayedFrames.filter(
+        (frame) => producingFrameIds.has(frame.id) && !framesWithOutgoing.has(frame.id),
+    );
 
     return {
         operationId: operation.id,

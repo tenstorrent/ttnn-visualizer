@@ -159,6 +159,41 @@ describe('buildDeviceOperationSubgraph', () => {
             expect(subgraph?.edges[0].label).toBe('T10 [1, 32]');
         });
 
+        // The port of this reduction discards edge identity, where the modal's
+        // version threaded a `skipEdgeId`. That reads like a regression and isn't:
+        // the modal would let one twin justify dropping the other, since arriving
+        // over the sibling edge counted as a longer route. Skipping direct arrivals
+        // by value keeps both, which is the behaviour the group's layout needs.
+        it('keeps both edges when one pair carries two tensors', () => {
+            const subgraph = subgraphOf([
+                frame({ id: 1, name: 'AlphaDeviceOperation', produces: [1, 2] }),
+                frame({ id: 2, name: 'BetaDeviceOperation', consumes: [1, 2] }),
+            ]);
+
+            expect(endpointsOf(subgraph!)).toEqual([
+                [nodeId(1), nodeId(2)],
+                [nodeId(1), nodeId(2)],
+            ]);
+            expect(subgraph?.edges.map((edge) => edge.label)).toEqual(['T1 [1, 32]', 'T2 [1, 32]']);
+            // Distinct ids, so React Flow can render them as two edges at all.
+            expect(new Set(subgraph?.edges.map((edge) => edge.id)).size).toBe(2);
+        });
+
+        // Cycles are a property of the report rather than a bug, and the walk is
+        // seeded with the source so a route back through one cannot be mistaken for
+        // a longer route to it. Nothing here is a shortcut, so nothing is dropped.
+        it('drops nothing when the frames form a cycle', () => {
+            const subgraph = subgraphOf([
+                frame({ id: 1, name: 'AlphaDeviceOperation', consumes: [3], produces: [1] }),
+                frame({ id: 2, name: 'BetaDeviceOperation', consumes: [1], produces: [3] }),
+            ]);
+
+            expect(endpointsOf(subgraph!)).toEqual([
+                [nodeId(1), nodeId(2)],
+                [nodeId(2), nodeId(1)],
+            ]);
+        });
+
         it('drops a shortcut whose endpoints a longer route already joins', () => {
             const subgraph = subgraphOf([
                 frame({ id: 1, name: 'AlphaDeviceOperation', produces: [1, 2] }),
@@ -191,6 +226,23 @@ describe('buildDeviceOperationSubgraph', () => {
 
             expect(subgraph?.entryFallbackNodeId).toBe(nodeId(1));
             expect(subgraph?.exitFallbackNodeId).toBe(nodeId(5));
+        });
+
+        // `Tensor::deallocate` is drawn and consumes without producing. Before the
+        // producing-frame gate it took the exit from the frame that computed the
+        // result — here it became the only sink, so outgoing edges left the
+        // operation from a deallocate; with a second sink present the fallback
+        // collapsed to null instead and they stopped at the box.
+        it('is not thrown off an end by a frame that carries no data', () => {
+            const subgraph = subgraphOf([
+                ...CUMSUM_FRAMES,
+                frame({ id: 6, name: 'Tensor::deallocate', consumes: [31] }),
+            ]);
+
+            expect(subgraph?.exitFallbackNodeId).toBe(nodeId(5));
+            expect(subgraph?.entryFallbackNodeId).toBe(nodeId(1));
+            // Still drawn — the orphan is a separate, cosmetic matter.
+            expect(subgraph?.nodes.map((node) => node.id)).toContain(nodeId(6));
         });
 
         it('offers no fallback when more than one frame could be the end', () => {

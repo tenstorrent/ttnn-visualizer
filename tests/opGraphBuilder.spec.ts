@@ -359,7 +359,10 @@ describe('buildOpGraph', () => {
             const expanded = buildExpanded(CHAIN, [deviceSubgraph({ operationId: 2 })]);
 
             expect(nodeById(expanded, '2').height!).toBeGreaterThan(nodeById(collapsed, '2').height!);
-            expect(nodeById(expanded, '2').width!).toBeGreaterThanOrEqual(nodeById(collapsed, '2').width!);
+            // Strictly wider, and only because the child labels are longer than the
+            // operation's own: `layoutDeviceSubgraph` floors the group at the header
+            // width, so `toBeGreaterThanOrEqual` here could not have failed.
+            expect(nodeById(expanded, '2').width!).toBeGreaterThan(nodeById(collapsed, '2').width!);
         });
     });
 
