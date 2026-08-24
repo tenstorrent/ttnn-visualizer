@@ -14,6 +14,7 @@ import type { NodeChange } from '@xyflow/react';
 import type { OperationDescription } from '../src/model/APIData';
 import type {
     OpGraphBuiltGraph,
+    OpGraphDeviceSubgraph,
     OpGraphFlowEdge,
     OpGraphFlowNode,
 } from '../src/components/operation-graph/opGraphTypes';
@@ -169,7 +170,9 @@ const operation = (id: number, name: string, consumers: number[]): OperationDesc
         id,
         name,
         operationFileIdentifier: `model.py:${id}`,
-        outputs: [{ shape: 'Shape([1, 32])', consumers }],
+        // Tensor ids matter once an operation expands: they are how an edge finds
+        // the device operation at the far end of the boundary.
+        outputs: [{ id: id * 10, shape: 'Shape([1, 32])', consumers }],
         inputs: [],
         arguments: [],
     }) as unknown as OperationDescription;
@@ -267,6 +270,45 @@ const edgeBetween = (edges: OpGraphFlowEdge[], source: string, target: string) =
     const found = edges.find((edge) => edge.source === source && edge.target === target);
     expect(found, `edge ${source} → ${target} missing`).toBeDefined();
     return found as OpGraphFlowEdge;
+};
+
+// By the operations the edge joins, which reads the same whether an end renders
+// collapsed or as a device operation inside an expanded box.
+const edgeJoining = (edges: OpGraphFlowEdge[], source: number, target: number) => {
+    const found = edges.find(
+        (edge) => edge.data?.sourceOperationId === source && edge.data?.targetOperationId === target,
+    );
+    expect(found, `edge ${source} → ${target} missing`).toBeDefined();
+    return found as OpGraphFlowEdge;
+};
+
+// Two device operations named so a filter would match them if children ever
+// entered the match set, entered on the tensor `producerId` handed down and left
+// on the expanded operation's own output tensor.
+const deviceSubgraphFor = (operationId: number, producerId: number): OpGraphDeviceSubgraph => {
+    const head = `dev:${operationId}:1`;
+    const tail = `dev:${operationId}:2`;
+    return {
+        operationId,
+        nodes: [
+            { id: head, label: 'matmul_head_device_op()' },
+            { id: tail, label: 'matmul_tail_device_op()' },
+        ],
+        edges: [{ id: `dev-edge:${operationId}:1-2:9`, source: head, target: tail, label: 'T9 [1, 32]' }],
+        entryNodeIdByTensorId: { [producerId * 10]: head },
+        exitNodeIdByTensorId: { [operationId * 10]: tail },
+        entryFallbackNodeId: head,
+        exitFallbackNodeId: tail,
+    };
+};
+
+// What the worker replies with once a box is open. The view holds no expansion
+// state a test can reach through the stubbed React Flow, and the graph is the
+// whole of what expansion changes for everything downstream of it.
+const rebuildWith = (operations: OperationDescription[], deviceSubgraphs: OpGraphDeviceSubgraph[]) => {
+    act(() => {
+        harness.onBuilt?.(buildOpGraph(sourceFor(operations), { hideDeallocate: true, deviceSubgraphs }));
+    });
 };
 
 const hasClass = (element: { className?: string }, className: string) =>
@@ -970,5 +1012,119 @@ describe('OperationGraphReactFlow critical path rendering', () => {
         expect(vi.mocked(findCriticalPath)).not.toHaveBeenCalled();
         // Still drawn: the point is that the answer was reused, not dropped.
         expect(hasClass(edgeBetween(lastFlowRender().edges, '1', '3'), 'op-graph-edge-critical-path')).toBe(true);
+    });
+});
+
+// Expanding an operation adds nodes to the same flat array React Flow renders, so
+// every feature that walks that array — the perf overlay, the critical path, the
+// filter, the neighbour highlight — sees device operations unless it is told not
+// to. `nodeIndex` is that telling, and these are the four ways it shows.
+describe('OperationGraphReactFlow device operation expansion', () => {
+    // Op 3 is the slow op on the winning branch, so absorbing its children as
+    // zero-weight operations, or losing an edge to a re-targeted endpoint, both
+    // change the answer here rather than only the picture.
+    const expandOperationThree = () => rebuildWith(BRANCHING_OPERATION_LIST, [deviceSubgraphFor(3, 1)]);
+
+    it('does not count device operations as operations on the path', () => {
+        renderGraph(BRANCHING_OPERATION_LIST, BRANCHING_PERF_ROWS);
+        enableCriticalPath();
+        const collapsed = screen.getByLabelText('Critical path summary').textContent ?? '';
+
+        expandOperationThree();
+
+        expect(screen.getByLabelText('Critical path summary').textContent).toBe(collapsed);
+        expect(collapsed).toContain('3 ops');
+        expect(collapsed).toContain(formatDuration(120_000));
+    });
+
+    it('keeps the path running through an operation whose edges moved inside it', () => {
+        renderGraph(BRANCHING_OPERATION_LIST, BRANCHING_PERF_ROWS);
+        enableCriticalPath();
+
+        expandOperationThree();
+
+        const { nodes, edges } = lastFlowRender();
+        expect(hasClass(nodeById(nodes, '3'), 'op-graph-node-critical-path')).toBe(true);
+        expect(hasClass(edgeJoining(edges, 1, 3), 'op-graph-edge-critical-path')).toBe(true);
+        expect(hasClass(edgeJoining(edges, 3, 4), 'op-graph-edge-critical-path')).toBe(true);
+        // The edge did move: it now lands on the device operation that consumes
+        // the tensor, which is why the marks above cannot be found by endpoint.
+        expect(edgeJoining(edges, 1, 3).target).toBe('dev:3:1');
+    });
+
+    it('leaves the device operations off the path it draws', () => {
+        renderGraph(BRANCHING_OPERATION_LIST, BRANCHING_PERF_ROWS);
+        enableCriticalPath();
+
+        expandOperationThree();
+
+        const { nodes, edges } = lastFlowRender();
+        expect(hasClass(nodeById(nodes, 'dev:3:1'), 'op-graph-node-critical-path')).toBe(false);
+        expect(hasClass(edgeBetween(edges, 'dev:3:1', 'dev:3:2'), 'op-graph-edge-critical-path')).toBe(false);
+    });
+
+    it('draws no perf bar on a device operation', () => {
+        renderGraph(BRANCHING_OPERATION_LIST, BRANCHING_PERF_ROWS);
+        enableOverlay();
+
+        expandOperationThree();
+
+        const { nodes } = lastFlowRender();
+        // The operation keeps the duration; there is nothing to attribute to the
+        // frames inside it, and a bar at the default scale would read as "fast".
+        expect(perfScaleOf(nodeById(nodes, '3'))).toBeDefined();
+        expect(perfScaleOf(nodeById(nodes, 'dev:3:1'))).toBeUndefined();
+        expect(perfColorOf(nodeById(nodes, 'dev:3:1'))).toBeUndefined();
+    });
+
+    it('does not let a device operation match the filter', () => {
+        renderGraph(BRANCHING_OPERATION_LIST, BRANCHING_PERF_ROWS);
+        expandOperationThree();
+
+        // Both device operations inside op 3 are named `matmul_*`, so a counter
+        // fed from the rendered nodes would read four.
+        typeFilter('matmul');
+
+        expect(screen.queryByText('no matches')).not.toBeNull();
+    });
+
+    it('keeps the device operations lit when the operation holding them matches', () => {
+        renderGraph(BRANCHING_OPERATION_LIST, BRANCHING_PERF_ROWS);
+        expandOperationThree();
+
+        typeFilter('slow_c');
+
+        // React Flow renders children as siblings, so a child left out of the
+        // match set dims inside a lit parent and reads as a rendering fault.
+        const { nodes } = lastFlowRender();
+        expect(hasClass(nodeById(nodes, '3'), 'op-graph-node-match')).toBe(true);
+        expect(hasClass(nodeById(nodes, 'dev:3:1'), 'op-graph-node-match')).toBe(true);
+        expect(hasClass(nodeById(nodes, '2'), 'op-graph-node-match')).toBe(false);
+    });
+
+    it('highlights the expanded operation as the neighbour, not the device operation', () => {
+        renderGraph(BRANCHING_OPERATION_LIST, BRANCHING_PERF_ROWS);
+        expandOperationThree();
+
+        act(() => {
+            harness.onNodeClick?.(null, nodeById(lastFlowRender().nodes, '1'));
+        });
+
+        const { nodes } = lastFlowRender();
+        expect(hasClass(nodeById(nodes, '3'), 'op-graph-node-output')).toBe(true);
+        expect(hasClass(nodeById(nodes, 'dev:3:1'), 'op-graph-node-output')).toBe(false);
+    });
+
+    it('answers about the operation when a device operation is clicked', () => {
+        renderGraph(BRANCHING_OPERATION_LIST, BRANCHING_PERF_ROWS);
+        expandOperationThree();
+
+        act(() => {
+            harness.onNodeClick?.(null, nodeById(lastFlowRender().nodes, 'dev:3:2'));
+        });
+
+        // A frame has no report of its own, so the click selects the operation
+        // holding it rather than selecting nothing.
+        expect(hasClass(nodeById(lastFlowRender().nodes, '3'), 'op-graph-node-selected')).toBe(true);
     });
 });
