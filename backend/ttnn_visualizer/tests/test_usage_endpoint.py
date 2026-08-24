@@ -70,7 +70,7 @@ def local_mode(app):
     app.config["SERVER_MODE"] = previous
 
 
-def post_events(client, events):
+def _post_events(client, events):
     return client.post(USAGE_ENDPOINT, json={"events": events})
 
 
@@ -78,14 +78,14 @@ def test_hosted_instance_refuses_to_record(app, client, usage_directory):
     """@local_only: the hosted deployment writes no usage log at all."""
     app.config["SERVER_MODE"] = True
 
-    response = post_events(client, [REPORT_LOADED_EVENT])
+    response = _post_events(client, [REPORT_LOADED_EVENT])
 
     assert response.status_code == HTTPStatus.FORBIDDEN
     assert read_usage_lines(usage_directory) == []
 
 
 def test_accepted_batch_appends_one_well_formed_line_per_event(client, usage_directory):
-    response = post_events(client, [REPORT_LOADED_EVENT, VIEW_OPENED_EVENT])
+    response = _post_events(client, [REPORT_LOADED_EVENT, VIEW_OPENED_EVENT])
 
     assert response.status_code == HTTPStatus.NO_CONTENT
 
@@ -109,7 +109,7 @@ def test_accepted_batch_appends_one_well_formed_line_per_event(client, usage_dir
 
 def test_accepted_batch_totals_the_way_the_collector_reads_it(client, usage_directory):
     """Cumulative counts have to come out right, since a decrease reads as a reset."""
-    post_events(client, [VIEW_OPENED_EVENT] * 3)
+    _post_events(client, [VIEW_OPENED_EVENT] * 3)
 
     assert total_usage_events(read_usage_lines(usage_directory)) == 3
 
@@ -179,7 +179,7 @@ def test_accepted_batch_totals_the_way_the_collector_reads_it(client, usage_dire
     ],
 )
 def test_rejected_event_is_refused_and_appends_nothing(client, usage_directory, event):
-    response = post_events(client, [event])
+    response = _post_events(client, [event])
 
     assert response.status_code == HTTPStatus.UNPROCESSABLE_ENTITY
     assert read_usage_lines(usage_directory) == []
@@ -196,7 +196,7 @@ def test_rejected_event_is_refused_and_appends_nothing(client, usage_directory, 
 def test_a_batch_element_that_is_not_an_object_is_refused(
     client, usage_directory, entry
 ):
-    response = post_events(client, [entry])
+    response = _post_events(client, [entry])
 
     assert response.status_code == HTTPStatus.UNPROCESSABLE_ENTITY
     assert read_usage_lines(usage_directory) == []
@@ -204,7 +204,7 @@ def test_a_batch_element_that_is_not_an_object_is_refused(
 
 def test_unknown_top_level_event_keys_are_refused(client, usage_directory):
     """Closed at the envelope level too, so a dropped field cannot pass for a sent one."""
-    response = post_events(
+    response = _post_events(
         client, [{**VIEW_OPENED_EVENT, "run_id": "forged01", "note": "hello"}]
     )
 
@@ -242,7 +242,7 @@ def test_every_client_postable_event_round_trips(client, usage_directory, event)
     """
     details = ACCEPTED_EVENTS[event]
 
-    response = post_events(client, [{"event": event.value, "details": details}])
+    response = _post_events(client, [{"event": event.value, "details": details}])
 
     assert response.status_code == HTTPStatus.NO_CONTENT
 
@@ -256,7 +256,7 @@ def test_every_client_postable_event_round_trips(client, usage_directory, event)
 
 def test_a_batch_shares_one_run_id(client, usage_directory):
     """Session shape is only reconstructable if one flush reads as one flush."""
-    post_events(client, [REPORT_LOADED_EVENT, VIEW_OPENED_EVENT])
+    _post_events(client, [REPORT_LOADED_EVENT, VIEW_OPENED_EVENT])
 
     first, second = (
         parse_usage_line(line) for line in read_usage_lines(usage_directory)
@@ -280,7 +280,7 @@ def test_a_full_batch_of_the_largest_event_fits_the_byte_cap(client, usage_direc
         },
     }
 
-    response = post_events(client, [largest] * MAX_USAGE_BATCH_EVENTS)
+    response = _post_events(client, [largest] * MAX_USAGE_BATCH_EVENTS)
 
     assert response.status_code == HTTPStatus.NO_CONTENT
     assert len(read_usage_lines(usage_directory)) == MAX_USAGE_BATCH_EVENTS
@@ -305,7 +305,7 @@ def test_a_failed_write_does_not_fail_the_request(
     monkeypatch.setattr(usage, "_append_line", failing_append)
 
     with caplog.at_level("WARNING"):
-        response = post_events(client, [REPORT_LOADED_EVENT, VIEW_OPENED_EVENT])
+        response = _post_events(client, [REPORT_LOADED_EVENT, VIEW_OPENED_EVENT])
 
     warnings = [
         record for record in caplog.records if "usage events" in record.getMessage()
@@ -333,7 +333,7 @@ def test_a_log_at_the_cap_accepts_no_further_events(
     The log has to exist and hold something first: an absent or empty one is not over
     any cap, so the guard is deliberately silent until there is something to measure.
     """
-    post_events(client, [VIEW_OPENED_EVENT])
+    _post_events(client, [VIEW_OPENED_EVENT])
     already_written = read_usage_lines(usage_directory)
     assert len(already_written) == 1
 
@@ -341,7 +341,7 @@ def test_a_log_at_the_cap_accepts_no_further_events(
     monkeypatch.setattr(usage, "_bytes_since_size_check", LOG_SIZE_CHECK_INTERVAL_BYTES)
 
     for _ in range(3):
-        response = post_events(client, [REPORT_LOADED_EVENT])
+        response = _post_events(client, [REPORT_LOADED_EVENT])
         # 204 every time: a client that could tell a full log from a written one would
         # have something to back off from, and this is not its business.
         assert response.status_code == HTTPStatus.NO_CONTENT
@@ -358,14 +358,14 @@ def test_a_full_log_is_reported_once_rather_than_per_flush(
     it there is nothing anywhere to distinguish recording having stopped from a user
     having stopped — and with one per flush it would bury the application's own log.
     """
-    post_events(client, [VIEW_OPENED_EVENT])
+    _post_events(client, [VIEW_OPENED_EVENT])
 
     monkeypatch.setattr(usage, "MAX_LOG_BYTES", 0)
     monkeypatch.setattr(usage, "_bytes_since_size_check", LOG_SIZE_CHECK_INTERVAL_BYTES)
 
     with caplog.at_level("WARNING"):
         for _ in range(3):
-            post_events(client, [VIEW_OPENED_EVENT])
+            _post_events(client, [VIEW_OPENED_EVENT])
 
     warnings = [
         record for record in caplog.records if "byte cap" in record.getMessage()
@@ -389,7 +389,7 @@ def test_the_size_check_is_amortised_rather_than_per_request(
     monkeypatch.setattr(Path, "stat", counting_stat)
 
     for _ in range(5):
-        post_events(client, [VIEW_OPENED_EVENT])
+        _post_events(client, [VIEW_OPENED_EVENT])
 
     # Snapshot before reading the log back: `read_usage_lines` stats it too, via
     # `exists()`, and would be counted as a sixth request's check.
@@ -408,7 +408,7 @@ def test_the_topology_overlay_is_a_countable_view(client, usage_directory):
     itself, so a mapping built from the route elements rather than from ``ROUTES`` would
     emit nothing here and the counter would read as "nobody opens topology".
     """
-    response = post_events(
+    response = _post_events(
         client,
         [{"event": UsageEvent.VIEW_OPENED.value, "details": {"view": "topology"}}],
     )
@@ -455,7 +455,7 @@ def test_rejection_never_echoes_the_offending_value(client, event):
     Every rejection branch, not the one that happens to be easiest to reach: each message
     is written by hand, so the next one to grow an f-string is the one nobody tested.
     """
-    response = post_events(client, [event])
+    response = _post_events(client, [event])
 
     assert response.status_code == HTTPStatus.UNPROCESSABLE_ENTITY
     assert SECRET not in response.get_data(as_text=True)
@@ -463,7 +463,7 @@ def test_rejection_never_echoes_the_offending_value(client, event):
 
 def test_mixed_batch_appends_nothing_at_all(client, usage_directory):
     """The case a naive loop passes: partial acceptance is the failure to guard against."""
-    response = post_events(
+    response = _post_events(
         client,
         [
             REPORT_LOADED_EVENT,
@@ -479,7 +479,7 @@ def test_mixed_batch_appends_nothing_at_all(client, usage_directory):
 def test_oversized_batch_is_refused(client, usage_directory):
     events = [VIEW_OPENED_EVENT] * (MAX_USAGE_BATCH_EVENTS + 1)
 
-    response = post_events(client, events)
+    response = _post_events(client, events)
 
     assert response.status_code == HTTPStatus.BAD_REQUEST
     assert read_usage_lines(usage_directory) == []
@@ -487,7 +487,7 @@ def test_oversized_batch_is_refused(client, usage_directory):
 
 def test_batch_at_the_cap_is_accepted(client, usage_directory):
     """Pins the boundary, so the cap cannot drift to off-by-one unnoticed."""
-    response = post_events(client, [VIEW_OPENED_EVENT] * MAX_USAGE_BATCH_EVENTS)
+    response = _post_events(client, [VIEW_OPENED_EVENT] * MAX_USAGE_BATCH_EVENTS)
 
     assert response.status_code == HTTPStatus.NO_CONTENT
     assert len(read_usage_lines(usage_directory)) == MAX_USAGE_BATCH_EVENTS
@@ -561,7 +561,7 @@ def test_switch_off_via_environment_writes_nothing(
     """Answers the same either way: whether a log exists here is not the client's business."""
     monkeypatch.setenv(USAGE_DISABLED_ENV_VAR, "true")
 
-    response = post_events(client, [REPORT_LOADED_EVENT])
+    response = _post_events(client, [REPORT_LOADED_EVENT])
 
     assert response.status_code == HTTPStatus.NO_CONTENT
     assert read_usage_lines(usage_directory) == []
@@ -577,13 +577,13 @@ def test_switch_off_via_environment_writes_nothing(
             id="unparseable_body",
         ),
         pytest.param(
-            lambda client: post_events(
+            lambda client: _post_events(
                 client, [VIEW_OPENED_EVENT] * (MAX_USAGE_BATCH_EVENTS + 1)
             ),
             id="oversized_batch",
         ),
         pytest.param(
-            lambda client: post_events(client, [{"event": "not_an_event"}]),
+            lambda client: _post_events(client, [{"event": "not_an_event"}]),
             id="unknown_event",
         ),
     ],
@@ -611,7 +611,7 @@ def test_switch_off_via_marker_file_writes_nothing(client, usage_directory):
     usage_directory.mkdir(mode=0o700, parents=True, exist_ok=True)
     get_disabled_marker_path().touch()
 
-    response = post_events(client, [REPORT_LOADED_EVENT])
+    response = _post_events(client, [REPORT_LOADED_EVENT])
 
     assert response.status_code == HTTPStatus.NO_CONTENT
     assert read_usage_lines(usage_directory) == []
