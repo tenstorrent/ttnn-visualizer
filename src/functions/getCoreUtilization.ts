@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { TypedPerfTableRow } from '../definitions/PerfTable';
+import { TypedPerfTableRow } from '../model/PerfTable';
 import isValidNumber from './isValidNumber';
 
 function getCoreUtilization(row: TypedPerfTableRow, maxCores: number): number {

@@ -18,7 +18,8 @@ import {
 } from './APIData';
 import { BufferType, StringBufferType } from './BufferType';
 import { DRAM_MEMORY_SIZE } from '../definitions/DRAMMemorySize';
-import { CONDENSED_PLOT_CHUNK_COLOR, PlotDataCustom, PlotDataOverrides } from '../definitions/PlotConfigurations';
+import { CONDENSED_PLOT_CHUNK_COLOR, PlotDataOverrides } from '../definitions/PlotConfigurations';
+import { PlotDataCustom } from './PlotData';
 import getChartData from '../functions/getChartData';
 import { calculateCondensed } from '../functions/calculateCondensed';
 import { L1_DEFAULT_MEMORY_SIZE, L1_NUM_CORES } from '../definitions/L1MemorySize';

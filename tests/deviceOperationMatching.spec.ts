@@ -4,7 +4,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { collapseMultideviceOperations, matchDeviceOperationsToPerf } from '../src/functions/deviceOperationMatching';
-import { PerfTableRow } from '../src/definitions/PerfTable';
+import { PerfTableRow } from '../src/model/PerfTable';
 import { DeviceOperationMapping } from '../src/model/DeviceOperationMapping';
 
 const mapping = (name: string, id: number): DeviceOperationMapping => ({

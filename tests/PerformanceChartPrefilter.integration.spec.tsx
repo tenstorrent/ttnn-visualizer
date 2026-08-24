@@ -8,7 +8,7 @@ import { Mock, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getPlotInstances, resetPlotPropsCapture } from './mocks/plotComponent';
 import Performance from '../src/routes/Performance';
 import { OpType } from '../src/definitions/Performance';
-import { TypedPerfTableRow } from '../src/definitions/PerfTable';
+import { TypedPerfTableRow } from '../src/model/PerfTable';
 import { PERF_CHART_TRANSPARENT } from '../src/definitions/PlotConfigurations';
 import {
     useGetNPEManifest,

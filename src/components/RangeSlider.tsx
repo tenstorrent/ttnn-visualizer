@@ -30,7 +30,7 @@ import {
     usePerformanceReport,
 } from '../hooks/useAPI';
 import { OperationDescription } from '../model/APIData';
-import { PerfTableRow } from '../definitions/PerfTable';
+import { PerfTableRow } from '../model/PerfTable';
 import LoadingSpinner from './LoadingSpinner';
 import createToastNotification from '../functions/createToastNotification';
 import { ToastType } from '../definitions/ToastType';

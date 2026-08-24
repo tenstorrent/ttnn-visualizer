@@ -7,7 +7,8 @@ import { cleanup, fireEvent, render, screen, within } from '@testing-library/rea
 import { useAtomValue } from 'jotai';
 import { Mock, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import PerfTable from '../src/components/performance/PerfTable';
-import { ColumnKeys, TypedPerfTableRow, signpostRowDefaults } from '../src/definitions/PerfTable';
+import { ColumnKeys } from '../src/definitions/PerfTable';
+import { TypedPerfTableRow, signpostRowDefaults } from '../src/model/PerfTable';
 import { PERF_HEURISTIC_FLAG_DEFINITIONS, PerfHeuristicFlag } from '../src/definitions/PerfHeuristics';
 import { OpType } from '../src/definitions/Performance';
 import { TEST_IDS } from '../src/definitions/TestIds';

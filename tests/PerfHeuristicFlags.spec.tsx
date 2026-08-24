@@ -7,7 +7,7 @@ import { cleanup, render, screen, within } from '@testing-library/react';
 import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import PerfHeuristicFlags from '../src/components/performance/PerfHeuristicFlags';
-import { TypedPerfTableRow } from '../src/definitions/PerfTable';
+import { TypedPerfTableRow } from '../src/model/PerfTable';
 import { PERF_HEURISTIC_FLAG_DEFINITIONS, PerfHeuristicFlag } from '../src/definitions/PerfHeuristics';
 import { OpType } from '../src/definitions/Performance';
 import { TEST_IDS } from '../src/definitions/TestIds';

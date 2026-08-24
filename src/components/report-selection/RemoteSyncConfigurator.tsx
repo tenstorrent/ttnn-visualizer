@@ -8,7 +8,7 @@ import { FormGroup } from '@blueprintjs/core';
 import { useQueryClient } from '@tanstack/react-query';
 import { AxiosResponse, HttpStatusCode } from 'axios';
 import { useAtom, useStore } from 'jotai';
-import { RemoteConnection, RemoteFolder } from '../../definitions/RemoteConnection';
+import { RemoteConnection, RemoteFolder } from '../../model/RemoteConnection';
 import { ReportLocation } from '../../definitions/Reports';
 import {
     ACTIVE_MEMORY_REPORT_TOAST_TITLE,

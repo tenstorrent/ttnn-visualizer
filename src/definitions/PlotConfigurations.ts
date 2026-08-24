@@ -2,9 +2,8 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { Annotations, Config, Layout, PlotData, PlotDatum, PlotMouseEvent } from 'plotly.js';
+import { Annotations, Config, Layout } from 'plotly.js';
 import { cssVar } from '../functions/colour';
-import { Tensor } from '../model/APIData';
 
 export const L1RenderConfiguration: PlotConfiguration = {
     height: 110,
@@ -127,27 +126,10 @@ export interface PlotConfiguration {
 
 export const CONDENSED_PLOT_CHUNK_COLOR = '#9c9e9f';
 
-export interface PlotMouseEventCustom extends PlotMouseEvent {
-    points: PlotDatumCustom[];
-}
-
 export interface PlotMarker {
     color: string;
     address: number;
     label?: string;
-}
-
-export interface PlotDatumCustom extends PlotDatum {
-    data: PlotDataCustom;
-}
-
-export interface PlotDataCustom extends PlotData {
-    memoryData: {
-        address: number;
-        size: number;
-        tensor: Tensor | null;
-        colorVariance?: number;
-    };
 }
 
 export interface PlotDataOverrides {

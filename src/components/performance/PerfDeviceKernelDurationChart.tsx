@@ -5,7 +5,7 @@
 import { PlotData } from 'plotly.js';
 import { useMemo } from 'react';
 import { useAtomValue } from 'jotai';
-import { TypedPerfTableRow } from '../../definitions/PerfTable';
+import { TypedPerfTableRow } from '../../model/PerfTable';
 import PerfChart from './PerfChart';
 import { PlotConfiguration, getNsAxisConfig } from '../../definitions/PlotConfigurations';
 import { PERF_CHART_LABELS, PerfChartId } from '../../definitions/PerformanceCharts';

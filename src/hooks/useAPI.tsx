@@ -29,7 +29,7 @@ import { BufferType } from '../model/BufferType';
 import parseMemoryConfig, { memoryConfigPattern } from '../functions/parseMemoryConfig';
 import { MemoryConfig } from '../model/MemoryConfig';
 import getServerConfig from '../functions/getServerConfig';
-import { PerfTableRow } from '../definitions/PerfTable';
+import { PerfTableRow } from '../model/PerfTable';
 import { DeviceOperationMapping } from '../model/DeviceOperationMapping';
 import { matchDeviceOperationsToPerf } from '../functions/deviceOperationMatching';
 import memoiseLatest from '../functions/memoiseLatest';
@@ -84,7 +84,7 @@ import {
 } from '../definitions/NPEData';
 import Endpoints from '../definitions/Endpoints';
 import { ReportFolder, SINGLE_HOST_WORLD_SIZE } from '../definitions/Reports';
-import { RemoteFolder } from '../definitions/RemoteConnection';
+import { RemoteFolder } from '../model/RemoteConnection';
 import createToastNotification from '../functions/createToastNotification';
 import { ToastType } from '../definitions/ToastType';
 import { buildLateDeallocationReports } from '../functions/lateDeallocation';

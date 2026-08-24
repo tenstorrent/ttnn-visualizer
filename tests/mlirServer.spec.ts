@@ -4,7 +4,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { getActiveMlirServer } from '../src/functions/mlirServer';
-import { MlirServerConnection } from '../src/definitions/MlirServer';
+import { MlirServerConnection } from '../src/model/MlirServer';
 
 const serverA: MlirServerConnection = {
     name: 'A',

@@ -20,7 +20,8 @@ import 'styles/components/OperationDetailsComponent.scss';
 import StackTrace from './StackTrace';
 import OperationDetailsNavigation from '../OperationDetailsNavigation';
 import { OperationDetails } from '../../model/OperationDetails';
-import { L1RenderZoomoutConfiguration, PlotMouseEventCustom } from '../../definitions/PlotConfigurations';
+import { L1RenderZoomoutConfiguration } from '../../definitions/PlotConfigurations';
+import { PlotMouseEventCustom } from '../../model/PlotData';
 import {
     isFullStackTraceAtom,
     renderMemoryLayoutAtom,

@@ -16,7 +16,8 @@ import {
     getNameTakenMessage,
 } from '../src/definitions/ConnectionDialog';
 import { ConnectionStatus, ConnectionTestStates } from '../src/definitions/ConnectionStatus';
-import { MLIR_PORT_LABEL, MlirServerConnection } from '../src/definitions/MlirServer';
+import { MLIR_PORT_LABEL } from '../src/definitions/MlirServer';
+import { MlirServerConnection } from '../src/model/MlirServer';
 import { SSH_CONFIG_HOST_CUSTOM, SSH_CONFIG_HOST_SUBLABEL } from '../src/definitions/SshConfigHostPicker';
 import { SSH_HOST_LABEL, SSH_PORT_LABEL, SSH_USERNAME_LABEL } from '../src/definitions/SshConnectionFields';
 import { TEST_IDS } from '../src/definitions/TestIds';

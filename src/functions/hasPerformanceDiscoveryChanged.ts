@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-import { RemoteConnection } from '../definitions/RemoteConnection';
+import { RemoteConnection } from '../model/RemoteConnection';
 
 /**
  * True when an edit changed where performance reports are discovered, which makes

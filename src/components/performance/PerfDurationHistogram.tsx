@@ -5,7 +5,8 @@
 import { useCallback, useMemo } from 'react';
 import { useAtomValue } from 'jotai';
 import { Annotations, ClickAnnotationEvent, PlotData } from 'plotly.js';
-import { Marker, TypedPerfTableRow } from '../../definitions/PerfTable';
+import { Marker } from '../../definitions/PerfTable';
+import { TypedPerfTableRow } from '../../model/PerfTable';
 import {
     DurationHistogramBucketSegment,
     EMPTY_SAMPLES_SUMMARY,

@@ -8,7 +8,8 @@ import { Button, ButtonVariant, FileInput, Icon, IconName, Intent } from '@bluep
 import { IconNames } from '@blueprintjs/icons';
 import useMlirRemote from '../../hooks/useMlirRemote';
 import { ConnectionTestStates } from '../../definitions/ConnectionStatus';
-import { MLIR_SERVER_ACCEPTED_EXTENSIONS, MlirServerConnection } from '../../definitions/MlirServer';
+import { MLIR_SERVER_ACCEPTED_EXTENSIONS } from '../../definitions/MlirServer';
+import { MlirServerConnection } from '../../model/MlirServer';
 import {
     activeMlirJsonAtom,
     mlirFileResultsAtom,

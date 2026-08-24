@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import { screen } from '@testing-library/react';
-import { RemoteConnection } from '../../src/definitions/RemoteConnection';
+import { RemoteConnection } from '../../src/model/RemoteConnection';
 import { ManagedEntity } from '../../src/definitions/ManagedEntity';
 import { getDeleteActionLabel, getEditActionLabel } from '../../src/functions/managedEntityLabels';
 

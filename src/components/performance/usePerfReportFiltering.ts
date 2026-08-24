@@ -4,7 +4,8 @@
 
 import { useCallback, useMemo } from 'react';
 import { DurationBucket } from '../../definitions/PerfDurationHistogram';
-import { ColumnKeys, PerfTableFilters, TypedPerfTableRow } from '../../definitions/PerfTable';
+import { ColumnKeys, PerfTableFilters } from '../../definitions/PerfTable';
+import { TypedPerfTableRow } from '../../model/PerfTable';
 import { OpType } from '../../definitions/Performance';
 import {
     buildLogDecadeBuckets,

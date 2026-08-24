@@ -9,7 +9,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { getPlotInstances, resetPlotPropsCapture } from './mocks/plotComponent';
 import PerfCoreCountUtilizationChart from '../src/components/performance/PerfCoreCountUtilizationChart';
 import { PERF_CHART_LABELS, PerfChartId } from '../src/definitions/PerformanceCharts';
-import { TypedPerfTableRow } from '../src/definitions/PerfTable';
+import { TypedPerfTableRow } from '../src/model/PerfTable';
 import { OpType } from '../src/definitions/Performance';
 import {
     CORE_COUNT_AXIS_TICK_FORMAT,
