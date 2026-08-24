@@ -76,6 +76,10 @@
         .bp6-button {
             @include navigation.nav-button-styles;
 
+            // Reduce horizontal padding so button icons stay in the same position when the rail collapses.
+            padding-left: 12px;
+            padding-right: 12px;
+
             // A corner superscript reads as attached to a compact horizontal button, but a
             // full-width rail button strands it at the far edge, so it sits inline after
             // the label instead. Blueprint already renders it as the label's sibling.
