@@ -139,8 +139,10 @@ function compressToDisplayedEdges(
         const queue: Array<{ frameId: number; tensorId: number | null }> = [{ frameId: start, tensorId: null }];
         const visited = new Set<string>([`${start}:start`]);
 
-        while (queue.length > 0) {
-            const current = queue.shift()!;
+        // Index pointer, not `shift()`: popping the head costs O(queue) and this
+        // walk restarts for every displayed frame.
+        for (let head = 0; head < queue.length; head++) {
+            const current = queue[head];
             for (const hop of hopsByFrameId.get(current.frameId) ?? []) {
                 const tensorId = current.tensorId ?? hop.tensorId;
                 const visitKey = `${hop.to}:${tensorId}`;
@@ -195,8 +197,8 @@ function withoutShortcutEdges(edges: CompressedEdge[]): CompressedEdge[] {
                 queue.push(next);
             }
         }
-        while (queue.length > 0) {
-            const current = queue.shift()!;
+        for (let head = 0; head < queue.length; head++) {
+            const current = queue[head];
             for (const next of targetsBySource.get(current) ?? []) {
                 if (next === target) {
                     return true;
