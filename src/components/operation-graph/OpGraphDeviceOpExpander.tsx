@@ -25,12 +25,18 @@ const OpGraphDeviceOpExpander = memo(({ operationId, count, isExpanded }: OpGrap
         toggleExpansion(operationId);
     };
 
+    // Also the accessible name: `title` only supplies one when the element has no
+    // content, and the count is content — so without this the button announced as
+    // the bare number.
+    const action = isExpanded ? 'Hide device operations' : `Show ${count} device operations`;
+
     return (
         <button
             type='button'
             // `nodrag`/`nopan` keep the button from doubling as a drag or pan surface.
             className='op-graph-node-expander nodrag nopan'
-            title={isExpanded ? 'Hide device operations' : `Show ${count} device operations`}
+            title={action}
+            aria-label={action}
             aria-expanded={isExpanded}
             onMouseDown={handleMouseDown}
             onClick={handleClick}
