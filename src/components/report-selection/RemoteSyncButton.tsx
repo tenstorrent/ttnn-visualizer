@@ -7,7 +7,7 @@ import { useAtomValue } from 'jotai';
 import React from 'react';
 import { IconName, IconNames } from '@blueprintjs/icons';
 import { FileTransferSource } from '../../definitions/FileTransferSource';
-import { fileTransferProgressBySourceAtom } from '../../store/fileTransferRegistry';
+import { fileTransferProgressBySourceAtom } from '../../store/app';
 import { FileProgress, FileStatus } from '../../model/APIData';
 import {
     NEVER_SYNCED_LABEL,

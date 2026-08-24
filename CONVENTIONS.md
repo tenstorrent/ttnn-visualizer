@@ -280,7 +280,7 @@ The alias resolves `styles/` to `src/scss/` so the path inside the import maps 1
 
 Prefer declaring atoms in **`src/store/app.ts`**, organized into commented sections (`// App state`, `// Reports`, `// Operations route`, etc.) — add new atoms to the section that matches their feature area. **Components don't declare module-scope atoms.** If you need component-local state, use `useState`.
 
-When atoms must be co-located with mutators in another `store/` module (e.g. `store/fileTransferRegistry.ts`, to avoid a circular import with `app.ts`), still **re-export the atoms and mutators from `app.ts`**. Call sites **import from `app.ts`**, not from the co-located module — that file exists only to break the cycle; it is not a second public API. Existing direct imports from `fileTransferRegistry` (and similar) are on-touch cleanup, not a pattern to copy.
+When atoms must be co-located with mutators in another `store/` module (e.g. `store/fileTransferRegistry.ts`, to avoid a circular import with `app.ts`), still **re-export the atoms and mutators from `app.ts`**. Call sites **import from `app.ts`**, not from the co-located module — that file exists only to break the cycle; it is not a second public API. The only legitimate direct importers are the co-located module's own unit test and any test that has to `vi.mock` its real specifier.
 
 ### Atom names end with `Atom`
 
@@ -1375,7 +1375,6 @@ These exist in the codebase today and don't yet have a single canonical answer. 
 
 - **`definitions/` still holds some domain-shaped types** (`PerfTable.ts`, `RemoteConnection.ts`, `MlirServer.ts`, `PlotConfigurations.ts`). New types follow the [`definitions/` vs `model/` boundary](#srcdefinitions-vs-srcmodel); leftovers migrate **on-touch**, not in a big-bang move. (#1910)
 - **Two accessors for CSS-custom-property colours.** `GRAPH_COLORS` resolves at module load; `getPerfChartChrome()` re-reads per call. Both are legitimate and both keep the literal in `_base.scss` — pick per [No hex literals in TS/TSX](#no-hex-literals-in-tstsx), and don't add a third mechanism. (#1911)
-- **Direct imports from `store/fileTransferRegistry.ts`.** New call sites import the re-exports from `app.ts`; older ones are on-touch cleanup. (#1912)
 - **`extract_npe_name` is a misnomer** — used by both NPE and MLIR upload handlers. A rename to `extract_uploaded_name` is a tracked follow-up; don't perpetuate the NPE-specific name in new helpers. (#1913)
 - **`errorMessage` vs `statusMessage` in file loaders.** `MlirJsonFileLoader.tsx` and `NPEFileLoader.tsx` overload `errorMessage` with both success and failure text. Rename to `statusMessage` is pending. (#1914)
 - **Upload size cap.** `MAX_CONTENT_LENGTH` is a real, honoured setting but **unset by default**, so out of the box large uploads succeed until they exhaust memory. Choosing a shipped default is tracked separately. (#1915)
