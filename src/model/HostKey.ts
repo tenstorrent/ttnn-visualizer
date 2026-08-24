@@ -15,9 +15,10 @@ export interface HostKeyOffer {
 /**
  * Why a connection test failed on the host key, and against which target.
  *
- * `host` is the name `known_hosts` keys the entry on, which is not necessarily what the
- * user typed: an `~/.ssh/config` alias resolves through `HostName` and `Port`, so `alias`
- * carries the typed name whenever the two differ.
+ * `host` is the name the key is fetched from, which is not necessarily what the user
+ * typed: an `~/.ssh/config` alias resolves through `HostName` and `Port`, so `alias`
+ * carries the typed name whenever the two differ. Nor is it necessarily what the entry is
+ * keyed on — that is `entryName`, which a `HostKeyAlias` decouples from both.
  */
 export interface HostKeyStatus {
     issue: HostKeyIssue;

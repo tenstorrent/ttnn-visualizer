@@ -63,6 +63,13 @@ _RESOLVED_GLOBAL_KNOWN_HOSTS_KEY = "globalknownhostsfile"
 # file list, as the literal string "none".
 _UNSET_PROXY_VALUES = frozenset({"", "none"})
 
+# A `known_hosts` marker keyword prefixes the line and shifts every other field along by
+# one, and `ssh-keygen -F` reports a marker line as a hit like any other — a
+# `@cert-authority *` stanza matches every hostname there is. No marker pins the host's
+# own key, but they do not all mean the same thing: a CA signs host certificates and says
+# nothing about a raw key, while this one forbids a specific key outright.
+_REVOKED_MARKER = "@revoked"
+
 
 @dataclasses.dataclass(frozen=True)
 class ResolvedSshTarget:
@@ -266,12 +273,22 @@ def _unresolved_host_key_status(
 
 @dataclasses.dataclass(frozen=True)
 class KnownHostsMatch:
-    """What ``known_hosts`` already records for one entry name."""
+    """What ``known_hosts`` already records for one entry name.
 
-    #: The recorded key lines, empty when nothing is known for the host.
+    Pins and revocations are kept apart because they are opposite answers: a pin is a key
+    the host may present, a revocation is one it must never present again. A line that is
+    neither — a ``@cert-authority`` stanza whose pattern happens to match this hostname —
+    is recorded as neither, because it says nothing about the host's own key.
+    """
+
+    #: The recorded key lines, empty when nothing is pinned for the host.
     lines: List[str]
-    #: ``"<file>:<line>"`` of the first match, for pointing the user at the entry.
+    #: ``"<file>:<line>"`` of the first pinned line, for pointing the user at the entry.
     location: Optional[str] = None
+    #: ``@revoked`` lines, each naming one key this host must never present again.
+    revoked_lines: List[str] = dataclasses.field(default_factory=list)
+    #: ``"<file>:<line>"`` of the first revocation, likewise.
+    revoked_location: Optional[str] = None
 
     def __bool__(self) -> bool:
         return bool(self.lines)
@@ -284,6 +301,17 @@ class KnownHostsMatch:
         """
         recorded = {_key_material(line) for line in self.lines}
         return any(_key_material(line) in recorded for line in key_lines)
+
+    def revokes_any(self, key_lines: List[str]) -> bool:
+        """Whether any of ``key_lines`` is a key this host is forbidden to present.
+
+        Compared against the keys actually offered rather than answered from the mere
+        presence of a revocation: ``@revoked`` blacklists one key, so a host that has
+        since rotated to another is trustable again and a stale revocation must not
+        block it. Only a match is a refusal.
+        """
+        revoked = {_key_material(line) for line in self.revoked_lines}
+        return any(_key_material(line) in revoked for line in key_lines)
 
 
 def search_known_hosts(
@@ -300,9 +328,16 @@ def search_known_hosts(
     recorded", not errors worth surfacing. The line number is only available from the
     ``# Host … found: line N`` comment, which is why it is read here rather than by
     reopening the file.
+
+    Marker lines come back as hits too, and are classified rather than counted as pins:
+    treating a ``@cert-authority *`` stanza as a recorded host key made every host look
+    like one whose key had changed, since the marker shifts the fields along and the
+    blob then never compares equal.
     """
-    matches: List[str] = []
+    pins: List[str] = []
     location: Optional[str] = None
+    revoked: List[str] = []
+    revoked_location: Optional[str] = None
 
     if paths is None:
         search_paths: Sequence[Path] = (DEFAULT_KNOWN_HOSTS_PATH,)
@@ -328,29 +363,92 @@ def search_known_hosts(
         if result.returncode != 0:
             continue
 
-        lines = _key_lines(result.stdout)
-        if not lines:
+        found = _parse_lookup_output(result.stdout, known_hosts)
+
+        pins.extend(found.lines)
+        revoked.extend(found.revoked_lines)
+        if location is None:
+            location = found.location
+        if revoked_location is None:
+            revoked_location = found.revoked_location
+
+    return KnownHostsMatch(
+        lines=pins,
+        location=location,
+        revoked_lines=revoked,
+        revoked_location=revoked_location,
+    )
+
+
+def _parse_lookup_output(output: str, known_hosts: Path) -> KnownHostsMatch:
+    """Split one ``ssh-keygen -F`` run's stdout into pins and revocations.
+
+    ``-F`` writes a ``# Host … found: line N`` comment immediately before each line it
+    matched, so a line number belongs to the line that follows its comment and is only
+    obtainable by walking the two together.
+    """
+    pins: List[str] = []
+    revoked: List[str] = []
+    location: Optional[str] = None
+    revoked_location: Optional[str] = None
+    found_at: Optional[str] = None
+
+    for raw_line in output.splitlines():
+        line = raw_line.strip()
+        if not line:
             continue
 
-        matches.extend(lines)
-        if location is None:
-            location = _first_match_location(result.stdout, known_hosts)
+        if line.startswith("#"):
+            line_number = _found_line_number(line)
+            if line_number:
+                found_at = f"{known_hosts}:{line_number}"
+            continue
 
-    return KnownHostsMatch(lines=matches, location=location)
+        marker = line.split(maxsplit=1)[0]
+        if marker == _REVOKED_MARKER:
+            revoked.append(line)
+            revoked_location = revoked_location or found_at or str(known_hosts)
+        elif not marker.startswith("@"):
+            pins.append(line)
+            location = location or found_at or str(known_hosts)
+        # Anything else — `@cert-authority`, or a keyword OpenSSH gains later — is left
+        # out of both: it is not this host's key, and guessing at an unrecognised marker
+        # is how a CA came to be read as a pin in the first place.
+
+        # Cleared per line so a match whose comment could not be parsed reports the file
+        # rather than inheriting the previous match's line number.
+        found_at = None
+
+    return KnownHostsMatch(
+        lines=pins,
+        location=location,
+        revoked_lines=revoked,
+        revoked_location=revoked_location,
+    )
 
 
-def _first_match_location(output: str, known_hosts: Path) -> str:
-    for line in output.splitlines():
-        stripped = line.strip()
-        if stripped.startswith("#") and "found: line" in stripped:
-            _, _, line_number = stripped.rpartition("line")
-            return f"{known_hosts}:{line_number.strip()}"
-    return str(known_hosts)
+def _found_line_number(comment: str) -> Optional[str]:
+    """The ``N`` from one ``# Host … found: line N`` comment.
+
+    Only the first field after the number is read because a marker line appends ``CA``
+    or ``REVOKED`` to that comment, and taking the remainder of it wholesale produced
+    pointers spelled ``known_hosts:1 CA``.
+    """
+    _, marker, remainder = comment.partition("found: line")
+    if not marker:
+        return None
+
+    fields = remainder.split()
+    return fields[0] if fields else None
 
 
 def _key_material(known_hosts_line: str) -> str:
     """The type and blob of a ``known_hosts`` line, without its host field."""
     fields = known_hosts_line.split()
+    # A marker shifts every field along by one, so a comparison that skipped this read
+    # the hostname pattern as the key type and never matched anything.
+    if fields and fields[0].startswith("@"):
+        fields = fields[1:]
     if len(fields) < 3:
         return known_hosts_line.strip()
     return f"{fields[1]} {fields[2]}"
@@ -525,10 +623,12 @@ def _coerce_port(value: Optional[str], fallback: int) -> int:
 
 
 def _key_lines(output: str) -> List[str]:
-    """Key lines from ``ssh-keyscan``/``ssh-keygen -F`` output.
+    """Key lines from ``ssh-keyscan`` output.
 
-    Both write their ``#`` banner and "found: line N" comments to *stdout* alongside
-    the keys, so a parser that keeps every non-empty line would treat them as keys.
+    It writes its ``#`` banner comments to *stdout* alongside the keys, so a parser that
+    kept every non-empty line would treat them as keys. ``ssh-keygen -F`` output goes
+    through :func:`_parse_lookup_output` instead, which has marker lines to classify as
+    well as comments to drop.
     """
     return [
         line.strip()

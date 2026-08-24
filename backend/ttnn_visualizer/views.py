@@ -1906,6 +1906,15 @@ def read_remote_host_key():
         if resolved.is_proxied
         else scan_host_keys(resolved.scan_host, resolved.scan_port)
     )
+    offered_lines = [offer.line for offer in offers]
+
+    # Answered before the branch below because a revoked key is neither of the cases it
+    # knows about: it must never be offered for trust, and calling it CHANGED would hand
+    # the user `ssh-keygen -R`, which deletes the very revocation protecting them.
+    if existing.revokes_any(offered_lines):
+        return offer_response(
+            HostKeyIssue.REVOKED, known_hosts_entry=existing.revoked_location
+        )
 
     if existing:
         if not offers:
@@ -1914,7 +1923,7 @@ def read_remote_host_key():
             # known host happens to be down — crying wolf on the one warning that has to
             # be believed, down the same code path a real one takes.
             return offer_response(None, scan_failed=True)
-        if existing.matches_any([offer.line for offer in offers]):
+        if existing.matches_any(offered_lines):
             # Already trusted, so whatever the caller saw fail was not the host key.
             return offer_response(None)
         return offer_response(HostKeyIssue.CHANGED, known_hosts_entry=existing.location)
@@ -1969,6 +1978,21 @@ def trust_remote_host_key():
         return response_unprocessable_entity(
             f"No host key could be fetched from {resolved.scan_host} on port "
             f"{resolved.scan_port}."
+        )
+
+    # A revocation is the one refusal that cannot be talked round: OpenSSH would reject
+    # the key even once appended, so recording it would produce a host the app claims to
+    # have trusted and the connection still cannot reach.
+    if existing.revokes_any([offer.line for offer in offers]):
+        logger.warning(
+            "Host key for %s is revoked in known_hosts; refusing to trust it",
+            resolved.entry_name,
+        )
+        return response_unprocessable_entity(
+            f"The key offered by {resolved.scan_host} is marked @revoked for "
+            f"{resolved.entry_name}, so OpenSSH will refuse it however it is recorded. "
+            "Get a new key from whoever runs the host.",
+            detail=existing.revoked_location,
         )
 
     # Re-scanned and compared against what the user was shown, so a key substituted

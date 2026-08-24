@@ -15,13 +15,17 @@ import {
     HOST_KEY_FETCHING_MESSAGE,
     HOST_KEY_NO_OFFER_NOTICE,
     HOST_KEY_PROXIED_NOTICE,
+    HOST_KEY_REVOKED_NOTICE,
+    HOST_KEY_REVOKED_TITLE,
     HOST_KEY_STALE_NOTICE,
     HOST_KEY_TRUST_BUTTON_LABEL,
     HOST_KEY_TRUST_FAILED_MESSAGE,
     HOST_KEY_TRUST_IN_PROGRESS_LABEL,
     HOST_KEY_TRUST_ON_FIRST_USE_NOTICE,
     HOST_KEY_UNKNOWN_TITLE,
+    getHostKeyTargetLabel,
 } from '../../definitions/ConnectionDialog';
+import { DEFAULT_SSH_PORT } from '../../definitions/RemoteConnection';
 import { TEST_IDS } from '../../definitions/TestIds';
 import { HostKeyOffer, HostKeyOfferResponse, HostKeyStatus } from '../../model/HostKey';
 import copyToClipboard from '../../functions/copyToClipboard';
@@ -54,13 +58,36 @@ const HOST_KEY_OFFER_QUERY_KEY = 'host-key-offer';
  */
 const HOST_KEY_OFFER_STALE_TIME_MS = 30_000;
 
-const getTargetLabel = ({ host, port, alias }: HostKeyStatus): string => {
-    const target = `${host} (port ${port})`;
+/** The target fields a label is built from, shared by a status line and an offer. */
+type HostKeyTarget = Pick<HostKeyStatus, 'host' | 'port' | 'alias' | 'entryName'>;
+
+/**
+ * The `known_hosts` key worth naming alongside the host, or `null` when it adds nothing.
+ *
+ * Withheld for the `[host]:port` spelling because the port is already on the line beside
+ * it, and naming it twice buries the case that matters — a `HostKeyAlias`, where the key
+ * is recorded against a name the label would otherwise never mention.
+ */
+const getRecordedName = ({ host, port, alias, entryName }: HostKeyTarget): string | null => {
+    if (!entryName || entryName === host || entryName === alias) {
+        return null;
+    }
+
+    const portedEntryName = port === DEFAULT_SSH_PORT ? host : `[${host}]:${port}`;
+
+    return entryName === portedEntryName ? null : entryName;
+};
+
+const getTargetLabel = (target: HostKeyTarget): string => {
+    const { host, port, alias } = target;
+    const scanTarget = `${host} (port ${port})`;
 
     // Naming both is the difference between the user recognising the host and wondering
-    // which machine we mean: they typed an alias, and `known_hosts` records the resolved
-    // name, so showing only one of the two always confuses somebody.
-    return alias && alias !== host ? `${alias} → ${target}` : target;
+    // which machine we mean: they typed an alias, and the key is fetched from the name
+    // that resolved from it, so showing only one of the two always confuses somebody.
+    const scanned = alias && alias !== host ? `${alias} → ${scanTarget}` : scanTarget;
+
+    return getHostKeyTargetLabel(scanned, getRecordedName(target));
 };
 
 interface CopyableCommandProps {
@@ -104,7 +131,7 @@ function CopyableCommand({ command, testId }: CopyableCommandProps) {
 
 /**
  * The remedy attached to a host-key failure: a fingerprint plus a decision for an unknown
- * host, and a warning with no action for one whose key changed.
+ * host, and a warning with no action for one whose key changed or has been revoked.
  *
  * Renders nothing under `SERVER_MODE` — the paired endpoints are `@local_only`, and this
  * is the frontend half of that gate.
@@ -167,6 +194,11 @@ function HostKeyTrustPrompt({ hostKey, onRequestOffer, onTrust, isStale = false 
     // test's own resolution never reached. Preferring the earlier verdict would show
     // "not recognised" for a host that is now trusted, with no fingerprint to explain it.
     const effectiveIssue = offer ? offer.issue : hostKey.issue;
+    // Named off the offer for the same reason as the commands below: when the test's own
+    // resolution failed, its status was built from the form alone and carries no
+    // `HostKeyAlias`, so its entry name is a guess while the offer's is the one the key
+    // will actually be recorded under.
+    const targetLabel = getTargetLabel(offer ?? hostKey);
     const knownHostsEntry = offer?.knownHostsEntry ?? hostKey.knownHostsEntry;
     const removalCommand = offer?.removalCommand ?? hostKey.removalCommand;
     const terminalCommand = offer?.terminalCommand ?? hostKey.terminalCommand;
@@ -179,6 +211,27 @@ function HostKeyTrustPrompt({ hostKey, onRequestOffer, onTrust, isStale = false 
         return null;
     }
 
+    // Ahead of the changed-key branch and without its `ssh-keygen -R`: a revoked key is
+    // not one the user can re-accept, and that command would delete the revocation
+    // protecting them rather than resolve anything.
+    if (effectiveIssue === HostKeyIssue.REVOKED) {
+        return (
+            <Callout
+                className='host-key-prompt'
+                data-testid={TEST_IDS.HOST_KEY_PROMPT}
+                intent={Intent.DANGER}
+                icon={IconNames.BAN_CIRCLE}
+                title={HOST_KEY_REVOKED_TITLE}
+            >
+                <p>{targetLabel}</p>
+
+                <p>{HOST_KEY_REVOKED_NOTICE}</p>
+
+                {knownHostsEntry && <p className='host-key-entry'>{knownHostsEntry}</p>}
+            </Callout>
+        );
+    }
+
     if (effectiveIssue === HostKeyIssue.CHANGED) {
         return (
             <Callout
@@ -188,7 +241,7 @@ function HostKeyTrustPrompt({ hostKey, onRequestOffer, onTrust, isStale = false 
                 icon={IconNames.WARNING_SIGN}
                 title={HOST_KEY_CHANGED_TITLE}
             >
-                <p>{getTargetLabel(hostKey)}</p>
+                <p>{targetLabel}</p>
 
                 {knownHostsEntry && <p className='host-key-entry'>{knownHostsEntry}</p>}
 
@@ -217,7 +270,7 @@ function HostKeyTrustPrompt({ hostKey, onRequestOffer, onTrust, isStale = false 
             icon={IconNames.WARNING_SIGN}
             title={HOST_KEY_UNKNOWN_TITLE}
         >
-            <p>{getTargetLabel(hostKey)}</p>
+            <p>{targetLabel}</p>
 
             {hostKey.isProxied && <p>{HOST_KEY_PROXIED_NOTICE}</p>}
 

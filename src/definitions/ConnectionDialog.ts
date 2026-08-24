@@ -19,6 +19,31 @@ export const HOST_KEY_UNKNOWN_TITLE = 'Host key not recognised';
 /** Heading of the block refusing to, because the recorded key no longer matches. */
 export const HOST_KEY_CHANGED_TITLE = 'Host key has changed';
 
+/** Heading of the block refusing to, because the offered key is blacklisted. */
+export const HOST_KEY_REVOKED_TITLE = 'Host key has been revoked';
+
+/**
+ * Says why there is nothing to click, and warns off the obvious wrong move.
+ *
+ * `ssh-keygen -R` is what the changed-key block hands over, and running it here would
+ * delete the revocation rather than resolve it — so the copy has to rule it out rather
+ * than leave the user to reach for the command they were given last time.
+ */
+export const HOST_KEY_REVOKED_NOTICE =
+    'This key is listed as revoked in known_hosts, so OpenSSH will refuse it however it is recorded. ' +
+    'Ask whoever runs the host for its current key rather than removing the revocation.';
+
+/**
+ * The target line of a host-key prompt, naming the `known_hosts` key when it differs.
+ *
+ * `entryName` is the outcome of resolving `~/.ssh/config` and is not derivable from the
+ * rest of the line: a `HostKeyAlias` replaces the hostname outright, so `lab → 10.0.0.5`
+ * can pin its key under `github.com`. That name is the one thing the user has to see
+ * before trusting anything, since it is what the key gets recorded against.
+ */
+export const getHostKeyTargetLabel = (target: string, entryName?: string | null) =>
+    entryName ? `${target} — recorded in known_hosts as ${entryName}` : target;
+
 /**
  * Says plainly what accepting buys and what it does not.
  *

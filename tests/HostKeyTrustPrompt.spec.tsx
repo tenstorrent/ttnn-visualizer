@@ -14,6 +14,8 @@ import {
     HOST_KEY_FETCHING_MESSAGE,
     HOST_KEY_NO_OFFER_NOTICE,
     HOST_KEY_PROXIED_NOTICE,
+    HOST_KEY_REVOKED_NOTICE,
+    HOST_KEY_REVOKED_TITLE,
     HOST_KEY_STALE_NOTICE,
     HOST_KEY_TRUST_BUTTON_LABEL,
     HOST_KEY_TRUST_IN_PROGRESS_LABEL,
@@ -180,15 +182,67 @@ describe('HostKeyTrustPrompt for an unknown host key', () => {
         expect(onRequestOffer).not.toHaveBeenCalled();
     });
 
-    it('names both the alias and the resolved host when they differ', () => {
+    // The backend answers both calls from one resolution, so a fixture that described the
+    // target on only one of them would test a disagreement that cannot happen — and would
+    // pass whichever source the label happened to read.
+    const renderTargetLabel = (target: Partial<HostKeyStatus>) =>
         renderPrompt({
-            hostKey: { ...UNKNOWN_HOST_KEY, host: 'ssh.github.com', port: 443, alias: 'lab' },
-            onRequestOffer: vi.fn().mockResolvedValue(offerResponse()),
+            hostKey: { ...UNKNOWN_HOST_KEY, ...target },
+            onRequestOffer: vi.fn().mockResolvedValue(offerResponse(target)),
             onTrust: vi.fn(),
         });
 
+    it('names both the alias and the resolved host when they differ', async () => {
+        renderTargetLabel({
+            host: 'ssh.github.com',
+            port: 443,
+            alias: 'lab',
+            entryName: '[ssh.github.com]:443',
+        });
+
         // Showing only one of the two leaves the user guessing which machine is meant.
-        expect(screen.getByText('lab → ssh.github.com (port 443)')).toBeInTheDocument();
+        // The entry name is left out: it is only the bracketed spelling of what is already
+        // on the line, and repeating it buries the case where it says something new.
+        await waitFor(() => expect(screen.getByText('lab → ssh.github.com (port 443)')).toBeInTheDocument());
+    });
+
+    it('names the known_hosts entry when a HostKeyAlias decouples it from the host', async () => {
+        // The name the key is *recorded* against is the one the user is really deciding
+        // about, and neither the typed alias nor the scanned host reveals it: this prompt
+        // showed `lab → 10.0.0.5` while Trust pinned the key under `github.com`.
+        renderTargetLabel({ host: '10.0.0.5', port: 22, alias: 'lab', entryName: 'github.com' });
+
+        await waitFor(() =>
+            expect(
+                screen.getByText('lab → 10.0.0.5 (port 22) — recorded in known_hosts as github.com'),
+            ).toBeInTheDocument(),
+        );
+    });
+
+    it('leaves the entry name out when it only restates the host', async () => {
+        renderTargetLabel({ host: 'aus-wh-05', port: 22, entryName: 'aus-wh-05' });
+
+        await waitFor(() => expect(screen.getByText('aus-wh-05 (port 22)')).toBeInTheDocument());
+    });
+
+    it("takes the entry name from the offer when the test's own resolution failed", async () => {
+        // A status built from the form alone cannot know about a `HostKeyAlias`, so its
+        // entry name is a guess while the offer's is what the key will be recorded under.
+        renderPrompt({
+            hostKey: { ...UNKNOWN_HOST_KEY, host: 'lab', port: 22, entryName: 'lab' },
+            onRequestOffer: vi
+                .fn()
+                .mockResolvedValue(
+                    offerResponse({ host: '10.0.0.5', port: 22, alias: 'lab', entryName: 'github.com' }),
+                ),
+            onTrust: vi.fn(),
+        });
+
+        await waitFor(() =>
+            expect(
+                screen.getByText('lab → 10.0.0.5 (port 22) — recorded in known_hosts as github.com'),
+            ).toBeInTheDocument(),
+        );
     });
 
     it('renders read-only when no trust callback is supplied', async () => {
@@ -340,6 +394,55 @@ describe('HostKeyTrustPrompt for an unknown host key', () => {
         await waitFor(() => expect(screen.getByText(HOST_KEY_CHANGED_TITLE)).toBeInTheDocument());
         expect(screen.getByText('/home/u/.ssh/known_hosts:7')).toBeInTheDocument();
         expect(screen.queryByTestId(TEST_IDS.HOST_KEY_TRUST_BUTTON)).not.toBeInTheDocument();
+    });
+});
+
+describe('HostKeyTrustPrompt for a revoked host key', () => {
+    const revokedOffer = () =>
+        offerResponse({
+            issue: HostKeyIssue.REVOKED,
+            offers: [],
+            knownHostsEntry: '/home/u/.ssh/known_hosts:12',
+        });
+
+    it('warns without offering to trust the key or to remove the revocation', async () => {
+        // Only ever reached through the offer: OpenSSH reports a revoked key as plain
+        // "Host key verification failed.", so the test result says `unknown` and the
+        // endpoint's verdict is the one that knows better.
+        renderPrompt({
+            hostKey: UNKNOWN_HOST_KEY,
+            onRequestOffer: vi.fn().mockResolvedValue(revokedOffer()),
+            onTrust: vi.fn(),
+        });
+
+        await waitFor(() => expect(screen.getByText(HOST_KEY_REVOKED_TITLE)).toBeInTheDocument());
+        expect(screen.getByText(HOST_KEY_REVOKED_NOTICE)).toBeInTheDocument();
+        expect(screen.queryByTestId(TEST_IDS.HOST_KEY_TRUST_BUTTON)).not.toBeInTheDocument();
+        expect(screen.queryByText(HOST_KEY_UNKNOWN_TITLE)).not.toBeInTheDocument();
+    });
+
+    it('offers no removal command, which would delete the revocation', async () => {
+        renderPrompt({
+            hostKey: UNKNOWN_HOST_KEY,
+            onRequestOffer: vi.fn().mockResolvedValue(revokedOffer()),
+            onTrust: vi.fn(),
+        });
+
+        await waitFor(() => expect(screen.getByText(HOST_KEY_REVOKED_TITLE)).toBeInTheDocument());
+        // `removalCommand` is on the fixture, so this is the branch declining to render it
+        // rather than the backend declining to supply it.
+        expect(screen.queryByTestId(TEST_IDS.HOST_KEY_COPY_COMMAND)).not.toBeInTheDocument();
+        expect(screen.queryByText("ssh-keygen -R '[aus-wh-05]:45985'")).not.toBeInTheDocument();
+    });
+
+    it('points at the revocation so the user can see it for themselves', async () => {
+        renderPrompt({
+            hostKey: UNKNOWN_HOST_KEY,
+            onRequestOffer: vi.fn().mockResolvedValue(revokedOffer()),
+            onTrust: vi.fn(),
+        });
+
+        await waitFor(() => expect(screen.getByText('/home/u/.ssh/known_hosts:12')).toBeInTheDocument());
     });
 });
 

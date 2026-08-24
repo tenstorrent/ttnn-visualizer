@@ -54,6 +54,20 @@ def _offer_line(blob: str = ED25519_BLOB, entry: str = SCAN_ENTRY) -> str:
     return f"{entry} {key_type} {blob}"
 
 
+# `ssh-keygen -F` stdout as OpenSSH 9.9p2 writes it: a `# Host … found: line N` comment
+# before every matched line, with `CA` or `REVOKED` appended for a marker line and nothing
+# at all for a pin. Kept verbatim rather than paraphrased — the whole failure this guards
+# was a parser that treated OpenSSH's output as tidier than it is.
+_CERT_AUTHORITY_STDOUT = (
+    f"# Host {SCAN_ENTRY} found: line 1 CA\n"
+    f"@cert-authority * ssh-ed25519 {ED25519_BLOB}\n"
+)
+_REVOKED_STDOUT = (
+    f"# Host {SCAN_ENTRY} found: line 5 REVOKED\n"
+    f"@revoked {SCAN_ENTRY} ssh-ed25519 {ED25519_BLOB}\n"
+)
+
+
 def _patch_run(monkeypatch, handler):
     """Route `subprocess.run` in this module by the program being invoked."""
     monkeypatch.setattr("ttnn_visualizer.known_hosts.subprocess.run", handler)
@@ -324,6 +338,60 @@ class TestSearchingKnownHosts:
 
         assert match.matches_any([_offer_line(ED25519_BLOB)]) is True
         assert match.matches_any([_offer_line(ECDSA_BLOB)]) is False
+
+    def test_a_cert_authority_stanza_is_not_a_recorded_host_key(self, monkeypatch):
+        """`@cert-authority *` is reported as a hit for every hostname there is.
+
+        Counting it as a pin made a CA in `known_hosts` — GitHub's, or a corporate one —
+        turn every unknown host into a key that had supposedly changed: #1855's dead end
+        with a man-in-the-middle warning attached.
+        """
+        _patch_run(
+            monkeypatch, lambda *a, **k: _completed(stdout=_CERT_AUTHORITY_STDOUT)
+        )
+
+        match = search_known_hosts(SCAN_ENTRY)
+
+        assert bool(match) is False
+        assert match.lines == []
+        assert match.revoked_lines == []
+
+    def test_a_pin_beside_a_cert_authority_reports_the_pin_and_its_own_line(
+        self, monkeypatch
+    ):
+        """The CA is matched first, so reading the first comment pointed at the wrong line."""
+        stdout = _CERT_AUTHORITY_STDOUT + (
+            f"# Host {SCAN_ENTRY} found: line 4 \n{_offer_line(ED25519_BLOB)}\n"
+        )
+        _patch_run(monkeypatch, lambda *a, **k: _completed(stdout=stdout))
+
+        match = search_known_hosts(SCAN_ENTRY, [Path("/home/u/.ssh/known_hosts")])
+
+        assert match.lines == [_offer_line(ED25519_BLOB)]
+        assert match.location == "/home/u/.ssh/known_hosts:4"
+        assert match.matches_any([_offer_line(ED25519_BLOB)]) is True
+
+    def test_a_revocation_is_recorded_apart_from_the_pins(self, monkeypatch):
+        """A revoked key is neither trusted nor merely changed, so it is kept separate."""
+        _patch_run(monkeypatch, lambda *a, **k: _completed(stdout=_REVOKED_STDOUT))
+
+        match = search_known_hosts(SCAN_ENTRY, [Path("/home/u/.ssh/known_hosts")])
+
+        assert bool(match) is False
+        assert match.revoked_location == "/home/u/.ssh/known_hosts:5"
+        # The marker shifts every field along by one, so this only matches because the
+        # comparison skips it rather than reading the hostname as the key type.
+        assert match.revokes_any([_offer_line(ED25519_BLOB)]) is True
+
+    def test_a_revocation_of_some_other_key_does_not_touch_the_one_offered(
+        self, monkeypatch
+    ):
+        """`@revoked` blacklists one key, so a host that has since rotated is fine."""
+        _patch_run(monkeypatch, lambda *a, **k: _completed(stdout=_REVOKED_STDOUT))
+
+        match = search_known_hosts(SCAN_ENTRY)
+
+        assert match.revokes_any([_offer_line(ECDSA_BLOB)]) is False
 
 
 class TestAppendingHostKeys:
@@ -1013,3 +1081,114 @@ class TestTheChangedKeyEntryIsPopulated:
         assert status.host == "resolved.example"
         assert status.port == 2222
         assert status.knownHostsEntry is None
+
+
+class TestMarkerLinesReachingTheEndpoints:
+    """End to end over the real lookup parse, because that is where #1855 came back.
+
+    `search_known_hosts` is left unstubbed here and `subprocess.run` is answered instead,
+    so these exercise the classification rather than a fixture asserting itself. Every
+    other test in this file stubs the search, which is exactly why a parser that counted
+    `@cert-authority` as a pin passed all of them.
+    """
+
+    @staticmethod
+    def _route(lookup_stdout: str, scan_stdout: str):
+        """Answer `ssh-keygen -F` and `ssh-keyscan` separately, by program name."""
+
+        def run(argv, *args, **kwargs):
+            program = Path(argv[0]).name
+            if program == "ssh-keygen":
+                return _completed(
+                    stdout=lookup_stdout, returncode=0 if lookup_stdout else 1
+                )
+            if program == "ssh-keyscan":
+                return _completed(stdout=scan_stdout)
+            raise AssertionError(f"Unexpected subprocess: {argv}")
+
+        return run
+
+    def test_a_cert_authority_stanza_leaves_an_unknown_host_offerable(
+        self, app, client, monkeypatch, resolved_target
+    ):
+        """The regression: a CA in `known_hosts` must not make every host look changed."""
+        _open_local_gate(app, monkeypatch, resolved=resolved_target)
+        _patch_run(
+            monkeypatch,
+            self._route(_CERT_AUTHORITY_STDOUT, f"{_offer_line(ED25519_BLOB)}\n"),
+        )
+
+        response = client.post(HOST_KEY_ENDPOINT, json=_payload())
+
+        body = response.get_json()
+        assert body["issue"] == HostKeyIssue.UNKNOWN.value
+        assert body["offers"][0]["fingerprint"] == ED25519_FINGERPRINT
+
+    def test_a_cert_authority_stanza_does_not_block_trusting(
+        self, app, client, monkeypatch, resolved_target
+    ):
+        """The other half of the dead end: the trust endpoint refused it as "recorded"."""
+        calls = _open_local_gate(app, monkeypatch, resolved=resolved_target)
+        _patch_run(
+            monkeypatch,
+            self._route(_CERT_AUTHORITY_STDOUT, f"{_offer_line(ED25519_BLOB)}\n"),
+        )
+
+        response = client.post(
+            HOST_KEY_TRUST_ENDPOINT,
+            json={"target": _payload(), "fingerprints": [ED25519_FINGERPRINT]},
+        )
+
+        assert response.status_code == HTTPStatus.OK
+        assert calls["appended"] == [
+            ([_offer_line(ED25519_BLOB)], resolved_target.write_target)
+        ]
+
+    def test_a_revoked_key_is_reported_as_revoked_rather_than_changed(
+        self, app, client, monkeypatch, resolved_target
+    ):
+        """Labelling it CHANGED handed over `ssh-keygen -R`, which deletes the revocation."""
+        _open_local_gate(app, monkeypatch, resolved=resolved_target)
+        _patch_run(
+            monkeypatch, self._route(_REVOKED_STDOUT, f"{_offer_line(ED25519_BLOB)}\n")
+        )
+
+        response = client.post(HOST_KEY_ENDPOINT, json=_payload())
+
+        body = response.get_json()
+        assert body["issue"] == HostKeyIssue.REVOKED.value
+        assert body["offers"] == []
+        assert body["knownHostsEntry"] == "/home/u/.ssh/known_hosts:5"
+
+    def test_a_revoked_key_cannot_be_trusted(
+        self, app, client, monkeypatch, resolved_target
+    ):
+        """Appending it would claim a trust OpenSSH goes on refusing regardless."""
+        calls = _open_local_gate(app, monkeypatch, resolved=resolved_target)
+        _patch_run(
+            monkeypatch, self._route(_REVOKED_STDOUT, f"{_offer_line(ED25519_BLOB)}\n")
+        )
+
+        response = client.post(
+            HOST_KEY_TRUST_ENDPOINT,
+            json={"target": _payload(), "fingerprints": [ED25519_FINGERPRINT]},
+        )
+
+        assert response.status_code == HTTPStatus.UNPROCESSABLE_ENTITY
+        assert "@revoked" in response.get_json()["error"]
+        assert calls["appended"] == []
+
+    def test_a_revocation_of_a_key_no_longer_offered_blocks_nothing(
+        self, app, client, monkeypatch, resolved_target
+    ):
+        """`@revoked` names one key, so the host is trustable again once it has rotated."""
+        _open_local_gate(app, monkeypatch, resolved=resolved_target)
+        _patch_run(
+            monkeypatch, self._route(_REVOKED_STDOUT, f"{_offer_line(ECDSA_BLOB)}\n")
+        )
+
+        response = client.post(HOST_KEY_ENDPOINT, json=_payload())
+
+        body = response.get_json()
+        assert body["issue"] == HostKeyIssue.UNKNOWN.value
+        assert body["offers"][0]["fingerprint"] == ECDSA_FINGERPRINT

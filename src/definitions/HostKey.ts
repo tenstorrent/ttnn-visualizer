@@ -15,4 +15,6 @@
 export enum HostKeyIssue {
     UNKNOWN = 'unknown',
     CHANGED = 'changed',
+    /** The offered key is one `known_hosts` blacklists with `@revoked`. No remedy here. */
+    REVOKED = 'revoked',
 }
