@@ -39,11 +39,13 @@ from ttnn_visualizer.usage import (
     RUN_ID_FIELD,
     USAGE_DISABLED_ENV_VAR,
     DeploymentMode,
+    LaunchMode,
     ReportKind,
     ReportLoadFailureReason,
     UsageEvent,
     UsageView,
     get_deployment_mode,
+    get_launch_mode,
     get_usage_log_path,
     is_recording_enabled,
     record_app_start,
@@ -454,6 +456,7 @@ def test_app_start_carries_the_baseline_fields(usage_directory):
 
     assert fields["event"] == "app_start"
     assert fields["deployment_mode"] == DeploymentMode.LOCAL_UPLOAD.value
+    assert fields["launch_mode"] in {mode.value for mode in LaunchMode}
     assert fields["python_version"].count(".") == 1
     assert fields["version"]
     assert fields["os"]
@@ -471,6 +474,7 @@ def test_disabled_recording_does_not_build_the_app_start_payload(
 
     monkeypatch.setattr(usage, "get_application_version", fail_if_called)
     monkeypatch.setattr(usage, "get_deployment_mode", fail_if_called)
+    monkeypatch.setattr(usage, "get_launch_mode", fail_if_called)
     monkeypatch.setattr(usage, "get_operating_system", fail_if_called)
     monkeypatch.setattr(usage, "get_python_version", fail_if_called)
 
@@ -531,6 +535,32 @@ def test_deployment_mode_falls_back_to_local_upload(monkeypatch):
     monkeypatch.setattr(usage, "is_running_in_container", lambda: False)
 
     assert get_deployment_mode("   ") == DeploymentMode.LOCAL_UPLOAD
+
+
+def test_launch_mode_is_source_for_an_editable_install(monkeypatch):
+    monkeypatch.setattr(
+        usage,
+        "distribution",
+        lambda _name: SimpleNamespace(
+            read_text=lambda _path: '{"dir_info": {"editable": true}}'
+        ),
+    )
+
+    assert get_launch_mode() == LaunchMode.SOURCE
+
+
+def test_launch_mode_is_wheel_for_a_regular_distribution(monkeypatch):
+    monkeypatch.setattr(
+        usage,
+        "distribution",
+        lambda _name: SimpleNamespace(read_text=lambda _path: None),
+    )
+
+    assert get_launch_mode() == LaunchMode.WHEEL
+
+
+def test_launch_mode_is_hosted_in_server_mode():
+    assert get_launch_mode(server_mode=True) == LaunchMode.HOSTED
 
 
 def write_log(directory: Path, lines):
