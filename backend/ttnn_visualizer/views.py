@@ -51,7 +51,7 @@ from ttnn_visualizer.exceptions import (
     response_unprocessable_entity,
 )
 from ttnn_visualizer.file_uploads import (
-    extract_npe_name,
+    extract_uploaded_name,
     resolve_parent_folder_name,
     save_uploaded_files,
     validate_files,
@@ -1539,7 +1539,7 @@ def create_npe_files():
                 message="NPE requires a valid .json or .zst file",
             ).model_dump()
 
-    npe_name = extract_npe_name(files)
+    npe_name = extract_uploaded_name(files)
     target_directory = data_directory / current_app.config["NPE_DIRECTORY_NAME"]
     target_directory.mkdir(parents=True, exist_ok=True)
 

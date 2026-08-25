@@ -106,7 +106,7 @@ def resolve_parent_folder_name(files, folder_name):
     return _extract_folder_name_from_files(files)
 
 
-def extract_npe_name(files):
+def extract_uploaded_name(files):
     if not files:
         return None
 
