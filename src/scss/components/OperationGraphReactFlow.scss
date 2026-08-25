@@ -221,8 +221,10 @@ $minimap-width: 200px;
             color: $tt-white;
         }
 
+        // Extra 1px: the glyph's ink sits low in the em-box, so rotating it
+        // around the box centre leaves the up-pointing triangle high.
         &[aria-expanded='true'] .op-graph-node-expander-icon {
-            transform: rotate(180deg);
+            transform: translateY(1px) rotate(180deg);
         }
     }
 
