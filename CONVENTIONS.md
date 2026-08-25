@@ -568,7 +568,7 @@ try {
 
 ### Emit toasts via `createToastNotification`
 
-`src/functions/createToastNotification.tsx` is the single entry point. It wraps `react-toastify`'s `toast` with the `ToastFileChange` template the rest of the app uses, and it delegates to `toast[type](...)` so the same call site can produce info/success/warning/error toasts.
+`src/functions/createToastNotification.tsx` is the single entry point, and the only module that calls `react-toastify`'s `toast`. The default export wraps the `ToastFileChange` template the rest of the app uses and delegates to `toast[type](...)`, so the same call site can produce info/success/warning/error toasts.
 
 ```ts
 import createToastNotification from '../functions/createToastNotification';
@@ -577,7 +577,22 @@ import { ToastType } from '../definitions/ToastType';
 createToastNotification('MLIR', file.name, ToastType.SUCCESS);
 ```
 
-**Don't.** Importing `toast` from `react-toastify` directly in a component creates two parallel toast pipelines and breaks the visual contract. The `<ToastContainer>` is mounted once in `Layout.tsx`.
+Two named exports cover the cases the template doesn't. Reach for them only when you need what they add — a different toast body, per-toast options, or the toast's `Id`:
+
+- **`createToast(content, options?, type?)`** takes arbitrary content and returns the `Id`, for a toast the app has to address later.
+- **`dismissToast(toastId?)`** closes one toast, or every open toast when called with no argument.
+
+`useBufferFocus` is the case they exist for: its toast persists until dismissed (`autoClose: false`), and its `Id` goes into `activeToastAtom` so selecting a different buffer can dismiss the previous one.
+
+```tsx
+const toastInstance: Id = createToast(<ToastTensorMessage … />, { autoClose: false, onClick: resetToasts });
+
+setActiveToast(toastInstance);
+```
+
+Defaults belong on the `<ToastContainer>` in `Layout.tsx`, which is mounted once; `options` is for per-toast departures from them, not a second place to set defaults.
+
+**Don't.** Importing `toast` from `react-toastify` anywhere else creates two parallel toast pipelines and breaks the visual contract, and `no-restricted-imports` fails the build for it — the wrapper module carries the only override. Importing the *types* (`Id`, `ToastOptions`) at a call site is unrestricted; `activeToastAtom` is typed `Id | null`.
 
 ---
 
@@ -1378,7 +1393,6 @@ These exist in the codebase today and don't yet have a single canonical answer. 
 - **Two accessors for CSS-custom-property colours.** `GRAPH_COLORS` resolves at module load; `getPerfChartChrome()` re-reads per call. Both are legitimate and both keep the literal in `_base.scss` — pick per [No hex literals in TS/TSX](#no-hex-literals-in-tstsx), and don't add a third mechanism. (#1911)
 - **Upload size cap.** `MAX_CONTENT_LENGTH` is a real, honoured setting but **unset by default**, so out of the box large uploads succeed until they exhaust memory. Choosing a shipped default is tracked separately. (#1915)
 - **Default-export vs named-export of components.** Components are predominantly default-exported, hooks and utilities named-exported. Mirror the file you're editing. (#1916)
-- **Raw `toast()` in `useBufferFocus`.** Needs `autoClose: false` and persists the returned `Id` into `activeToastAtom` — capabilities `createToastNotification` doesn't expose. An intentional exception, not a precedent: extend the wrapper if you need richer options. (#1917)
 - **`Config.__new__` lacks a return annotation**, surfacing a mypy `attr-defined` error in `database_migrations.py`. Fix is `def __new__(cls) -> "DefaultConfig":`; tracked as a follow-up. (#1919)
 - **`USAGE_RECORDING_ACTIVE` is a config attribute with no matching variable** — it is fed by `USAGE_RECORDING_DISABLED`, the opposite polarity, so it is named for the state instead. Borrowing the variable's name would make `PRINT_ENV` publish `true` when recording is off. (#1921)
 - **`DEBUG` and `FLASK_DEBUG` are different knobs with confusable names.** `FLASK_DEBUG` feeds the `DEBUG` *config* value (Flask's debug mode); the `DEBUG` *environment variable* raises the root log level and is what `pnpm flask:start-debug` sets. Both are in `.env.sample`. Read the name at the call site rather than assuming. (#1922)

@@ -2,9 +2,10 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { Id, toast } from 'react-toastify';
+import { Id } from 'react-toastify';
 import { useCallback } from 'react';
 import { useAtom } from 'jotai';
+import { createToast, dismissToast } from '../functions/createToastNotification';
 import { getBufferColor, getTensorColor } from '../functions/colorGenerator';
 import isValidNumber from '../functions/isValidNumber';
 import ToastTensorMessage from '../components/operation-details/ToastTensorMessage';
@@ -21,7 +22,7 @@ const useBufferFocus = () => {
         setSelectedAddress(null);
         setSelectedBufferColour(null);
         setActiveToast(null);
-        toast.dismiss();
+        dismissToast();
     }, [setActiveToast, setSelectedAddress, setSelectedBufferColour, setSelectedTensorId]);
 
     const updateBufferFocus = useCallback(
@@ -30,7 +31,7 @@ const useBufferFocus = () => {
             let colour = getTensorColor(tensorId);
 
             if (previousToast) {
-                toast.dismiss(previousToast);
+                dismissToast(previousToast);
             }
 
             if (isValidNumber(address) && !colour) {
@@ -39,7 +40,7 @@ const useBufferFocus = () => {
 
             setSelectedBufferColour(colour ?? null);
 
-            const toastInstance: Id = toast(
+            const toastInstance: Id = createToast(
                 <ToastTensorMessage
                     tensorId={tensorId}
                     address={address}

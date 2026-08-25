@@ -14,7 +14,11 @@ vi.mock('../src/hooks/useLocal', () => ({
     default: () => ({ uploadNpeFile }),
 }));
 
-vi.mock('../src/functions/createToastNotification', () => ({ default: vi.fn() }));
+vi.mock('../src/functions/createToastNotification', async () => {
+    const { toastNotificationModuleMock } = await import('./helpers/mockToastNotification');
+
+    return toastNotificationModuleMock();
+});
 
 afterEach(() => {
     cleanup();

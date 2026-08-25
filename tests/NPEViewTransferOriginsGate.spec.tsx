@@ -44,7 +44,11 @@ vi.mock('../src/components/npe/EmptyChipRenderer', () => ({
 }));
 vi.mock('../src/components/npe/NPEZoneFilterComponent', () => ({ default: () => null }));
 vi.mock('../src/components/GlobalSwitch', () => ({ default: () => null }));
-vi.mock('../src/functions/createToastNotification', () => ({ default: vi.fn() }));
+vi.mock('../src/functions/createToastNotification', async () => {
+    const { toastNotificationModuleMock } = await import('./helpers/mockToastNotification');
+
+    return toastNotificationModuleMock();
+});
 // `useShowActiveTransfers` is deliberately NOT mocked away: it returns a new
 // callback on every scrub, and the whole point of the `showActiveTransfersRef`
 // indirection is to absorb that so the memoized children keep stable props.

@@ -33,10 +33,11 @@ vi.mock('../src/hooks/useMlirRemote', () => ({
     default: () => ({ setActiveMlir, uploadMlirFileToServer }),
 }));
 
-vi.mock('../src/functions/createToastNotification', () => ({
-    default: createToastNotification,
-    ToastType: { SUCCESS: 'success', ERROR: 'error' },
-}));
+vi.mock('../src/functions/createToastNotification', async () => {
+    const { toastNotificationModuleMock } = await import('./helpers/mockToastNotification');
+
+    return toastNotificationModuleMock(createToastNotification);
+});
 
 const GRAPH: GraphBundle = { graphs: [{ id: 'g', nodes: [] }] };
 const SERVER: MlirServerConnection = {
