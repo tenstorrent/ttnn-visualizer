@@ -152,7 +152,7 @@ def _read_source_manifest(source_report: Path) -> dict[int, str]:
     chose, so it is collapsed to a bare basename before it ever reaches a path
     join. Without that, a report carrying `"file": "../../../etc/passwd"` would
     steer the copy below out of the report directory. Same reasoning as
-    `extract_npe_name` in `backend/ttnn_visualizer/file_uploads.py`.
+    `extract_uploaded_name` in `backend/ttnn_visualizer/file_uploads.py`.
     """
     manifest_path = source_report / NPE_FOLDER / NPE_MANIFEST_NAME
     if not manifest_path.is_file():

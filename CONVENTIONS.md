@@ -1376,7 +1376,6 @@ Don't `raise Exception("...")` — there's an existing class for almost every ca
 These exist in the codebase today and don't yet have a single canonical answer. Reviewers should flag new code that goes either direction without considering both. Each entry names the inconsistency, the direction new code takes, and its tracking issue; the rule itself lives in the section above that owns it.
 
 - **Two accessors for CSS-custom-property colours.** `GRAPH_COLORS` resolves at module load; `getPerfChartChrome()` re-reads per call. Both are legitimate and both keep the literal in `_base.scss` — pick per [No hex literals in TS/TSX](#no-hex-literals-in-tstsx), and don't add a third mechanism. (#1911)
-- **`extract_npe_name` is a misnomer** — used by both NPE and MLIR upload handlers. A rename to `extract_uploaded_name` is a tracked follow-up; don't perpetuate the NPE-specific name in new helpers. (#1913)
 - **`errorMessage` vs `statusMessage` in file loaders.** `MlirJsonFileLoader.tsx` and `NPEFileLoader.tsx` overload `errorMessage` with both success and failure text. Rename to `statusMessage` is pending. (#1914)
 - **Upload size cap.** `MAX_CONTENT_LENGTH` is a real, honoured setting but **unset by default**, so out of the box large uploads succeed until they exhaust memory. Choosing a shipped default is tracked separately. (#1915)
 - **Default-export vs named-export of components.** Components are predominantly default-exported, hooks and utilities named-exported. Mirror the file you're editing. (#1916)

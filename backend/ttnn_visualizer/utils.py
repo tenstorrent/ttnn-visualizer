@@ -981,11 +981,11 @@ def get_npe_path(npe_name, current_app, remote_connection=None):
 
 def get_mlir_path(mlir_name, current_app, remote_connection=None, **_kwargs):
     # MLIR uploads are saved as `<MLIR_DIRECTORY_NAME>/<mlir_name>.json`
-    # (the upload endpoint enforces `.json` suffix; `extract_npe_name` strips
-    # it back off when deriving `mlir_name`). Reconstruct the file path the
-    # same way so callers like `_resolve_report_path` get an openable file —
-    # returning just the directory previously caused `get_mlir_json()` to try
-    # `open()` on a directory after any unrelated instance update.
+    # (the upload handler stores the source filename's stem, so `mlir_name`
+    # carries no suffix). Reconstruct the file path the same way so callers
+    # like `_resolve_report_path` get an openable file — returning just the
+    # directory previously caused `get_mlir_json()` to try `open()` on a
+    # directory after any unrelated instance update.
     #
     # MLIR server uploads are stored under
     # REMOTE_DATA_DIRECTORY/<remote_host>/mlir-reports/<name>.json, matching
