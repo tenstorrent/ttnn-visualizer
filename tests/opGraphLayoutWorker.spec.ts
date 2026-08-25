@@ -3,6 +3,7 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { getDeviceNodeId } from '../src/components/operation-graph/opGraphDeviceSubgraph';
 import {
     type OpGraphBuildOptions,
     type OpGraphBuiltGraph,
@@ -64,7 +65,7 @@ const setGraph = (sourceVersion: number): OpGraphWorkerInboundMessage => ({
 const expansionOf = (...operationIds: number[]): OpGraphDeviceSubgraph[] =>
     operationIds.map((operationId) => ({
         operationId,
-        nodes: [{ id: `dev:${operationId}:1`, label: 'HeadDeviceOperation()' }],
+        nodes: [{ id: getDeviceNodeId(operationId, 1), label: 'HeadDeviceOperation()' }],
         edges: [],
         entryNodeIdByTensorId: {},
         exitNodeIdByTensorId: {},

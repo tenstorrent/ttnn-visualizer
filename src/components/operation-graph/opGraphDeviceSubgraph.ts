@@ -14,8 +14,15 @@ import type { OpGraphDeviceSubgraph } from './opGraphTypes';
 const DEVICE_NODE_PREFIX = 'dev';
 const DEVICE_EDGE_PREFIX = 'dev-edge';
 
-const getDeviceNodeId = (operationId: number, frameId: number): string =>
+export const getDeviceNodeId = (operationId: number, frameId: number): string =>
     `${DEVICE_NODE_PREFIX}:${operationId}:${frameId}`;
+
+export const getDeviceEdgeId = (
+    operationId: number,
+    sourceFrameId: number,
+    targetFrameId: number,
+    tensorId: number,
+): string => `${DEVICE_EDGE_PREFIX}:${operationId}:${sourceFrameId}-${targetFrameId}:${tensorId}`;
 
 const formatFrameLabel = (frame: DeviceOperationNode): string => `${frame.params.name}()`;
 
@@ -35,8 +42,29 @@ const formatFrameLabel = (frame: DeviceOperationNode): string => `${frame.params
 const isDisplayedFrame = (frame: DeviceOperationNode): boolean =>
     frame.params.name !== '' && isExtendedDeviceOperation(frame.params.name);
 
-const tensorIdsOf = (nodes: Node[] | undefined): number[] =>
-    (nodes ?? []).filter((node) => node.node_type === NodeType.tensor).map((node) => Number(node.params.tensor_id));
+const tensorRecordOf = (node: Node): { tensorId: number; shape: string | undefined } | null => {
+    if (node.node_type !== NodeType.tensor) {
+        return null;
+    }
+    const tensorId = Number(node.params.tensor_id);
+    // `NaN` is one Map key: unreadable ids would share a bucket, invent edges,
+    // and take the producer×consumer cross-product into a main-thread hang.
+    if (!Number.isFinite(tensorId)) {
+        return null;
+    }
+    return { tensorId, shape: node.params.shape };
+};
+
+const tensorIdsOf = (nodes: Node[] | undefined): number[] => {
+    const tensorIds: number[] = [];
+    for (const node of nodes ?? []) {
+        const recorded = tensorRecordOf(node);
+        if (recorded !== null) {
+            tensorIds.push(recorded.tensorId);
+        }
+    }
+    return tensorIds;
+};
 
 /**
  * How many device operations the graph would draw for this operation. Cheap
@@ -48,7 +76,13 @@ export function countDeviceOperations(operation: OperationDescription): number {
     if (!Array.isArray(operation.processedConnections)) {
         return 0;
     }
-    return operation.processedConnections.filter(isDisplayedFrame).length;
+    let count = 0;
+    for (const frame of operation.processedConnections) {
+        if (isDisplayedFrame(frame)) {
+            count += 1;
+        }
+    }
+    return count;
 }
 
 interface TensorHop {
@@ -72,19 +106,17 @@ function collectTensorHops(frames: DeviceOperationNode[]): {
 
     const record = (frameId: number, tensors: Node[], target: Map<number, number[]>) => {
         for (const tensor of tensors) {
-            if (tensor.node_type !== NodeType.tensor) {
-                // eslint-disable-next-line no-continue
-                continue;
-            }
-            const tensorId = Number(tensor.params.tensor_id);
-            if (tensor.params.shape && !shapeByTensorId.has(tensorId)) {
-                shapeByTensorId.set(tensorId, tensor.params.shape);
-            }
-            const frameIds = target.get(tensorId);
-            if (frameIds === undefined) {
-                target.set(tensorId, [frameId]);
-            } else {
-                frameIds.push(frameId);
+            const recorded = tensorRecordOf(tensor);
+            if (recorded !== null) {
+                if (recorded.shape && !shapeByTensorId.has(recorded.tensorId)) {
+                    shapeByTensorId.set(recorded.tensorId, recorded.shape);
+                }
+                const frameIds = target.get(recorded.tensorId);
+                if (frameIds === undefined) {
+                    target.set(recorded.tensorId, [frameId]);
+                } else {
+                    frameIds.push(frameId);
+                }
             }
         }
     };
@@ -98,15 +130,13 @@ function collectTensorHops(frames: DeviceOperationNode[]): {
     for (const [tensorId, producers] of producersByTensorId) {
         for (const from of producers) {
             for (const to of consumersByTensorId.get(tensorId) ?? []) {
-                if (from === to) {
-                    // eslint-disable-next-line no-continue
-                    continue;
-                }
-                const hops = hopsByFrameId.get(from);
-                if (hops === undefined) {
-                    hopsByFrameId.set(from, [{ to, tensorId }]);
-                } else {
-                    hops.push({ to, tensorId });
+                if (from !== to) {
+                    const hops = hopsByFrameId.get(from);
+                    if (hops === undefined) {
+                        hopsByFrameId.set(from, [{ to, tensorId }]);
+                    } else {
+                        hops.push({ to, tensorId });
+                    }
                 }
             }
         }
@@ -146,23 +176,18 @@ function compressToDisplayedEdges(
             for (const hop of hopsByFrameId.get(current.frameId) ?? []) {
                 const tensorId = current.tensorId ?? hop.tensorId;
                 const visitKey = `${hop.to}:${tensorId}`;
-                if (visited.has(visitKey)) {
-                    // eslint-disable-next-line no-continue
-                    continue;
-                }
-                visited.add(visitKey);
-
-                if (displayedFrameIds.has(hop.to) && hop.to !== start) {
-                    const edgeKey = `${start}->${hop.to}:${tensorId}`;
-                    if (!seen.has(edgeKey)) {
-                        seen.add(edgeKey);
-                        edges.push({ source: start, target: hop.to, tensorId });
+                if (!visited.has(visitKey)) {
+                    visited.add(visitKey);
+                    if (displayedFrameIds.has(hop.to) && hop.to !== start) {
+                        const edgeKey = `${start}->${hop.to}:${tensorId}`;
+                        if (!seen.has(edgeKey)) {
+                            seen.add(edgeKey);
+                            edges.push({ source: start, target: hop.to, tensorId });
+                        }
+                    } else {
+                        queue.push({ frameId: hop.to, tensorId });
                     }
-                    // eslint-disable-next-line no-continue
-                    continue;
                 }
-
-                queue.push({ frameId: hop.to, tensorId });
             }
         }
     }
@@ -186,33 +211,34 @@ function withoutShortcutEdges(edges: CompressedEdge[]): CompressedEdge[] {
         }
     }
 
-    const hasLongerRoute = (source: number, target: number): boolean => {
+    // One BFS per source, not per edge: the compressed graph is the
+    // producer×consumer cross-product, so a walk per edge was O(E·(V+E)).
+    const reachableInTwoOrMoreHops = new Map<number, Set<number>>();
+    for (const [source, firstHops] of targetsBySource) {
+        const firstHopSet = new Set<number>(firstHops);
+        const reachable = new Set<number>();
         const queue: number[] = [];
         const visited = new Set<number>([source]);
-        // Seeded one hop in with the direct arrival skipped, so reaching the
-        // target from here always took at least two hops.
-        for (const next of targetsBySource.get(source) ?? []) {
-            if (next !== target && !visited.has(next)) {
-                visited.add(next);
-                queue.push(next);
-            }
+        for (const firstHop of firstHopSet) {
+            visited.add(firstHop);
+            queue.push(firstHop);
         }
         for (let head = 0; head < queue.length; head++) {
             const current = queue[head];
             for (const next of targetsBySource.get(current) ?? []) {
-                if (next === target) {
-                    return true;
-                }
                 if (!visited.has(next)) {
                     visited.add(next);
+                    reachable.add(next);
                     queue.push(next);
+                } else if (firstHopSet.has(next) && next !== current) {
+                    reachable.add(next);
                 }
             }
         }
-        return false;
-    };
+        reachableInTwoOrMoreHops.set(source, reachable);
+    }
 
-    return edges.filter((edge) => !hasLongerRoute(edge.source, edge.target));
+    return edges.filter((edge) => !reachableInTwoOrMoreHops.get(edge.source)?.has(edge.target));
 }
 
 /**
@@ -256,14 +282,9 @@ export function buildDeviceOperationSubgraph(operation: OperationDescription): O
         }
     }
 
-    // A frame that produces no tensor can be neither the exit nor evidence that its
-    // predecessor isn't. `Tensor::deallocate` is drawn — it passes
-    // `isExtendedDeviceOperation` and no spelling of it is in
-    // `DEALLOCATE_OP_NAME_LIST` — and it consumes without producing, so counting it
-    // as a sink gave the operation two while counting it as a successor stopped the
-    // real exit from being one. Either way the single-sink gate below withheld the
-    // exit fallback that the common case depends on, and every outgoing edge
-    // silently went back to stopping at the box. #1195
+    // A frame that produces no tensor can be neither an end nor evidence that its
+    // neighbour isn't. `Tensor::deallocate` consumes without producing, so treating
+    // it as a source or a sink collapsed the unique-end fallback. #1195
     const producingFrameIds = new Set(
         displayedFrames.filter((frame) => tensorIdsOf(frame.outputs).length > 0).map((frame) => frame.id),
     );
@@ -271,7 +292,9 @@ export function buildDeviceOperationSubgraph(operation: OperationDescription): O
     const framesWithOutgoing = new Set(
         compressed.filter((edge) => producingFrameIds.has(edge.target)).map((edge) => edge.source),
     );
-    const sources = displayedFrames.filter((frame) => !framesWithIncoming.has(frame.id));
+    const sources = displayedFrames.filter(
+        (frame) => producingFrameIds.has(frame.id) && !framesWithIncoming.has(frame.id),
+    );
     const sinks = displayedFrames.filter(
         (frame) => producingFrameIds.has(frame.id) && !framesWithOutgoing.has(frame.id),
     );
@@ -289,7 +312,7 @@ export function buildDeviceOperationSubgraph(operation: OperationDescription): O
         edges: compressed.map((edge) => {
             const shape = shapeByTensorId.get(edge.tensorId);
             return {
-                id: `${DEVICE_EDGE_PREFIX}:${operation.id}:${edge.source}-${edge.target}:${edge.tensorId}`,
+                id: getDeviceEdgeId(operation.id, edge.source, edge.target, edge.tensorId),
                 source: getDeviceNodeId(operation.id, edge.source),
                 target: getDeviceNodeId(operation.id, edge.target),
                 label: shape ? `T${edge.tensorId} ${toReadableShape(shape)}` : `T${edge.tensorId}`,

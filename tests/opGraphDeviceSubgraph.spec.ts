@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 import {
     buildDeviceOperationSubgraph,
     countDeviceOperations,
+    getDeviceNodeId,
 } from '../src/components/operation-graph/opGraphDeviceSubgraph';
 import { type DeviceOperationNode, type Node, NodeType, type OperationDescription } from '../src/model/APIData';
 
@@ -51,7 +52,7 @@ const operationWith = (frames: DeviceOperationNode[]): OperationDescription =>
 
 const subgraphOf = (frames: DeviceOperationNode[]) => buildDeviceOperationSubgraph(operationWith(frames));
 
-const nodeId = (frameId: number) => `dev:${OPERATION_ID}:${frameId}`;
+const nodeId = (frameId: number) => getDeviceNodeId(OPERATION_ID, frameId);
 
 const endpointsOf = (subgraph: NonNullable<ReturnType<typeof buildDeviceOperationSubgraph>>) =>
     subgraph.edges.map((edge) => [edge.source, edge.target]);
@@ -121,12 +122,42 @@ describe('buildDeviceOperationSubgraph', () => {
         it('namespaces a child so it cannot collide with an operation id', () => {
             const subgraph = subgraphOf([frame({ id: 4, name: 'SDPAOperation', produces: [1] })]);
 
-            expect(subgraph?.nodes[0].id).toBe('dev:4:4');
+            expect(subgraph?.nodes[0].id).toBe(getDeviceNodeId(OPERATION_ID, OPERATION_ID));
             expect(subgraph?.nodes[0].id).not.toBe(String(OPERATION_ID));
         });
     });
 
     describe('edges', () => {
+        it('does not join frames that share only an unreadable tensor id', () => {
+            const unreadable = {
+                ...tensor(1),
+                params: { tensor_id: 'nope', shape: 'Shape([1, 32])' },
+            } as unknown as Node;
+            const alpha = frame({ id: 1, name: 'AlphaDeviceOperation' });
+            const beta = frame({ id: 2, name: 'BetaDeviceOperation' });
+            alpha.outputs = [unreadable];
+            beta.inputs = [unreadable];
+
+            const subgraph = subgraphOf([alpha, beta]);
+            expect(subgraph?.edges).toEqual([]);
+            expect(subgraph?.nodes).toHaveLength(2);
+        });
+
+        it('still joins a readable tensor sitting next to an unreadable one', () => {
+            const unreadable = {
+                ...tensor(1),
+                params: { tensor_id: 'nope', shape: 'Shape([1, 32])' },
+            } as unknown as Node;
+            const alpha = frame({ id: 1, name: 'AlphaDeviceOperation', produces: [1] });
+            const beta = frame({ id: 2, name: 'BetaDeviceOperation', consumes: [1] });
+            alpha.outputs = [...(alpha.outputs ?? []), unreadable];
+            beta.inputs = [...(beta.inputs ?? []), unreadable];
+
+            const subgraph = subgraphOf([alpha, beta]);
+            expect(endpointsOf(subgraph!)).toEqual([[nodeId(1), nodeId(2)]]);
+            expect(subgraph?.edges).toHaveLength(1);
+        });
+
         it('joins a producer to the consumer of its tensor', () => {
             const subgraph = subgraphOf(CUMSUM_FRAMES);
 
@@ -159,11 +190,9 @@ describe('buildDeviceOperationSubgraph', () => {
             expect(subgraph?.edges[0].label).toBe('T10 [1, 32]');
         });
 
-        // The port of this reduction discards edge identity, where the modal's
-        // version threaded a `skipEdgeId`. That reads like a regression and isn't:
-        // the modal would let one twin justify dropping the other, since arriving
-        // over the sibling edge counted as a longer route. Skipping direct arrivals
-        // by value keeps both, which is the behaviour the group's layout needs.
+        // The modal keeps both twins too: it skips any direct arrival by value
+        // (`next === to`) before `skipEdgeId` can matter, so arriving over the
+        // sibling never counted as a longer route.
         it('keeps both edges when one pair carries two tensors', () => {
             const subgraph = subgraphOf([
                 frame({ id: 1, name: 'AlphaDeviceOperation', produces: [1, 2] }),
@@ -243,6 +272,17 @@ describe('buildDeviceOperationSubgraph', () => {
             expect(subgraph?.entryFallbackNodeId).toBe(nodeId(1));
             // Still drawn — the orphan is a separate, cosmetic matter.
             expect(subgraph?.nodes.map((node) => node.id)).toContain(nodeId(6));
+        });
+
+        it('is not thrown off a start by a deallocate whose producer is not drawn', () => {
+            const subgraph = subgraphOf([
+                frame({ id: 0, name: 'Tensor::deallocate', consumes: [99] }),
+                ...CUMSUM_FRAMES,
+            ]);
+
+            expect(subgraph?.entryFallbackNodeId).toBe(nodeId(1));
+            expect(subgraph?.exitFallbackNodeId).toBe(nodeId(5));
+            expect(subgraph?.nodes.map((node) => node.id)).toContain(nodeId(0));
         });
 
         it('offers no fallback when more than one frame could be the end', () => {

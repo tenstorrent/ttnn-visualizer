@@ -20,7 +20,7 @@ const RANK_SEP = 80;
 
 // The header carries the operation's own label and file, so it is sized like a
 // collapsed node; the rest is breathing room around the nested subgraph.
-const GROUP_HEADER_HEIGHT = 46;
+const GROUP_HEADER_HEIGHT = NODE_HEIGHT_WITH_FILE;
 const GROUP_PADDING_X = 12;
 const GROUP_PADDING_TOP = GROUP_HEADER_HEIGHT + 8;
 const GROUP_PADDING_BOTTOM = 12;
@@ -53,8 +53,11 @@ export function estimateOpNodeSize(
     hasExpander = false,
 ): { width: number; height: number } {
     const widestLine = Math.max(label.length * CHAR_WIDTH, fileIdentifier.length * FILE_CHAR_WIDTH);
-    const contentWidth = widestLine + NODE_PADDING_X + (hasExpander ? EXPANDER_WIDTH : 0);
-    const width = Math.ceil(Math.min(NODE_MAX_WIDTH, Math.max(NODE_MIN_WIDTH, contentWidth)));
+    // Clamp the label first: folding `EXPANDER_WIDTH` into `contentWidth` before
+    // `NODE_MAX_WIDTH` discarded the badge reservation on any node already at the
+    // cap, which is the overlap the parameter exists to prevent.
+    const labelWidth = Math.min(NODE_MAX_WIDTH, Math.max(NODE_MIN_WIDTH, widestLine + NODE_PADDING_X));
+    const width = Math.ceil(labelWidth + (hasExpander ? EXPANDER_WIDTH : 0));
     return { width, height: fileIdentifier ? NODE_HEIGHT_WITH_FILE : NODE_HEIGHT };
 }
 
@@ -121,14 +124,12 @@ export function layoutDeviceSubgraph(
     let maxY = -Infinity;
     for (const node of nodes) {
         const position = laidOut.get(node.id);
-        if (position === undefined) {
-            // eslint-disable-next-line no-continue
-            continue;
+        if (position !== undefined) {
+            minX = Math.min(minX, position.x);
+            minY = Math.min(minY, position.y);
+            maxX = Math.max(maxX, position.x + node.width);
+            maxY = Math.max(maxY, position.y + node.height);
         }
-        minX = Math.min(minX, position.x);
-        minY = Math.min(minY, position.y);
-        maxX = Math.max(maxX, position.x + node.width);
-        maxY = Math.max(maxY, position.y + node.height);
     }
 
     if (!Number.isFinite(minX)) {

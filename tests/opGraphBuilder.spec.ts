@@ -3,6 +3,7 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import { describe, expect, it } from 'vitest';
+import { getDeviceEdgeId, getDeviceNodeId } from '../src/components/operation-graph/opGraphDeviceSubgraph';
 import { buildOpGraph } from '../src/components/operation-graph/opGraphBuilder';
 import {
     type OpGraphDeviceSubgraph,
@@ -59,15 +60,22 @@ const deviceSubgraph = ({
     exitTensorId,
     hasSingleEnd = true,
 }: SubgraphSpec): OpGraphDeviceSubgraph => {
-    const head = `dev:${operationId}:${HEAD_FRAME_ID}`;
-    const tail = `dev:${operationId}:${TAIL_FRAME_ID}`;
+    const head = getDeviceNodeId(operationId, HEAD_FRAME_ID);
+    const tail = getDeviceNodeId(operationId, TAIL_FRAME_ID);
     return {
         operationId,
         nodes: [
             { id: head, label: 'HeadDeviceOperation()' },
             { id: tail, label: 'TailDeviceOperation()' },
         ],
-        edges: [{ id: `dev-edge:${operationId}:1-2:9`, source: head, target: tail, label: 'T9 [1, 32]' }],
+        edges: [
+            {
+                id: getDeviceEdgeId(operationId, HEAD_FRAME_ID, TAIL_FRAME_ID, 9),
+                source: head,
+                target: tail,
+                label: 'T9 [1, 32]',
+            },
+        ],
         entryNodeIdByTensorId: entryTensorId === undefined ? {} : { [entryTensorId]: head },
         exitNodeIdByTensorId: exitTensorId === undefined ? {} : { [exitTensorId]: tail },
         entryFallbackNodeId: hasSingleEnd ? head : null,
@@ -271,7 +279,10 @@ describe('buildOpGraph', () => {
             const graph = buildExpanded(CHAIN, [deviceSubgraph({ operationId: 2 })]);
 
             const children = graph.nodes.filter((node) => node.type === OpGraphNodeType.DEVICE_OP);
-            expect(children.map((node) => node.id)).toEqual(['dev:2:1', 'dev:2:2']);
+            expect(children.map((node) => node.id)).toEqual([
+                getDeviceNodeId(2, HEAD_FRAME_ID),
+                getDeviceNodeId(2, TAIL_FRAME_ID),
+            ]);
             for (const child of children) {
                 expect(child.parentId).toBe('2');
                 expect(child.extent).toBe('parent');
@@ -294,14 +305,14 @@ describe('buildOpGraph', () => {
             // Op 1's only output tensor, which is what the edge into op 2 carries.
             const graph = buildExpanded(CHAIN, [deviceSubgraph({ operationId: 2, entryTensorId: 100 })]);
 
-            expect(edgeBetweenOperations(graph, 1, 2).target).toBe('dev:2:1');
+            expect(edgeBetweenOperations(graph, 1, 2).target).toBe(getDeviceNodeId(2, HEAD_FRAME_ID));
             expect(edgeBetweenOperations(graph, 1, 2).source).toBe('1');
         });
 
         it('leaves an outgoing edge from the device operation that produced the tensor', () => {
             const graph = buildExpanded(CHAIN, [deviceSubgraph({ operationId: 2, exitTensorId: 200 })]);
 
-            expect(edgeBetweenOperations(graph, 2, 3).source).toBe('dev:2:2');
+            expect(edgeBetweenOperations(graph, 2, 3).source).toBe(getDeviceNodeId(2, TAIL_FRAME_ID));
             expect(edgeBetweenOperations(graph, 2, 3).target).toBe('3');
         });
 
@@ -310,8 +321,8 @@ describe('buildOpGraph', () => {
             // enclosing `ttnn.` frame, so no drawn frame produced that tensor.
             const graph = buildExpanded(CHAIN, [deviceSubgraph({ operationId: 2 })]);
 
-            expect(edgeBetweenOperations(graph, 1, 2).target).toBe('dev:2:1');
-            expect(edgeBetweenOperations(graph, 2, 3).source).toBe('dev:2:2');
+            expect(edgeBetweenOperations(graph, 1, 2).target).toBe(getDeviceNodeId(2, HEAD_FRAME_ID));
+            expect(edgeBetweenOperations(graph, 2, 3).source).toBe(getDeviceNodeId(2, TAIL_FRAME_ID));
         });
 
         it('stops at the boundary rather than guessing between two ends', () => {
@@ -333,8 +344,8 @@ describe('buildOpGraph', () => {
         it('marks an edge inside one operation with that operation at both ends', () => {
             const graph = buildExpanded(CHAIN, [deviceSubgraph({ operationId: 2 })]);
 
-            const internal = graph.edges.find((edge) => edge.source === 'dev:2:1');
-            expect(internal?.target).toBe('dev:2:2');
+            const internal = graph.edges.find((edge) => edge.source === getDeviceNodeId(2, HEAD_FRAME_ID));
+            expect(internal?.target).toBe(getDeviceNodeId(2, TAIL_FRAME_ID));
             // What tells the critical path and the I/O highlight that this is not
             // a relation between two operations.
             expect(internal?.data?.sourceOperationId).toBe(2);

@@ -7,6 +7,7 @@ import { type LayoutInputEdge, estimateOpNodeSize, layoutDeviceSubgraph, layoutO
 import {
     type OpGraphBuildOptions,
     type OpGraphBuiltGraph,
+    type OpGraphDeviceSubgraph,
     OpGraphEdgeType,
     type OpGraphFlowEdge,
     type OpGraphFlowNode,
@@ -55,7 +56,9 @@ export function buildOpGraph(
         connected.add(candidate.target);
     }
 
-    const subgraphByOperationId = new Map(deviceSubgraphs.map((subgraph) => [subgraph.operationId, subgraph]));
+    const subgraphByOperationId = new Map<number, OpGraphDeviceSubgraph>(
+        deviceSubgraphs.map((subgraph) => [subgraph.operationId, subgraph]),
+    );
 
     // Reach past the boundary of an expanded operation to the device operation that
     // produces or consumes the tensor, so the edge joins the dataflow instead of
@@ -100,65 +103,63 @@ export function buildOpGraph(
                     ...collapsedSize,
                     data,
                 });
-                // eslint-disable-next-line no-continue
-                continue;
-            }
+            } else {
+                const childSizeById = new Map<string, { width: number; height: number }>(
+                    subgraph.nodes.map((child) => [child.id, estimateOpNodeSize(child.label, '')]),
+                );
+                const childLayout = layoutDeviceSubgraph(
+                    subgraph.nodes.map((child) => ({ id: child.id, ...childSizeById.get(child.id)! })),
+                    subgraph.edges,
+                    collapsedSize.width,
+                );
 
-            const childSizeById = new Map(
-                subgraph.nodes.map((child) => [child.id, estimateOpNodeSize(child.label, '')]),
-            );
-            const childLayout = layoutDeviceSubgraph(
-                subgraph.nodes.map((child) => ({ id: child.id, ...childSizeById.get(child.id)! })),
-                subgraph.edges,
-                collapsedSize.width,
-            );
-
-            // The operation keeps its node id when expanded. Everything keyed by
-            // node id — the perf style patches, the critical path's node set, focus
-            // and selection — then needs no notion of expansion at all, and the
-            // edges already pointing here stay pointing here. #1195
-            nodes.push({
-                id: String(operation.id),
-                type: OpGraphNodeType.DEVICE_GROUP,
-                position: { x: 0, y: 0 },
-                width: childLayout.width,
-                height: childLayout.height,
-                data,
-            });
-
-            for (const child of subgraph.nodes) {
-                deviceOpNodes.push({
-                    id: child.id,
-                    type: OpGraphNodeType.DEVICE_OP,
-                    parentId: String(operation.id),
-                    extent: 'parent',
-                    position: childLayout.positions.get(child.id) ?? { x: 0, y: 0 },
-                    ...childSizeById.get(child.id)!,
-                    data: {
-                        operationId: operation.id,
-                        label: child.label,
-                        fileIdentifier: '',
-                        filterString: child.label,
-                        deviceOperationCount: 0,
-                    },
+                // The operation keeps its node id when expanded. Everything keyed by
+                // node id — the perf style patches, the critical path's node set, focus
+                // and selection — then needs no notion of expansion at all, and the
+                // edges already pointing here stay pointing here. #1195
+                nodes.push({
+                    id: String(operation.id),
+                    type: OpGraphNodeType.DEVICE_GROUP,
+                    position: { x: 0, y: 0 },
+                    width: childLayout.width,
+                    height: childLayout.height,
+                    data,
                 });
-            }
 
-            for (const edge of subgraph.edges) {
-                deviceOpEdges.push({
-                    id: edge.id,
-                    source: edge.source,
-                    target: edge.target,
-                    type: OpGraphEdgeType.OP,
-                    label: edge.label,
-                    // Both ends are the same operation, which is what marks this as
-                    // internal to it rather than a relation between two operations.
-                    data: {
-                        parallelIndex: 0,
-                        sourceOperationId: operation.id,
-                        targetOperationId: operation.id,
-                    },
-                });
+                for (const child of subgraph.nodes) {
+                    deviceOpNodes.push({
+                        id: child.id,
+                        type: OpGraphNodeType.DEVICE_OP,
+                        parentId: String(operation.id),
+                        extent: 'parent',
+                        position: childLayout.positions.get(child.id) ?? { x: 0, y: 0 },
+                        ...childSizeById.get(child.id)!,
+                        data: {
+                            operationId: operation.id,
+                            label: child.label,
+                            fileIdentifier: '',
+                            filterString: child.label,
+                            deviceOperationCount: 0,
+                        },
+                    });
+                }
+
+                for (const edge of subgraph.edges) {
+                    deviceOpEdges.push({
+                        id: edge.id,
+                        source: edge.source,
+                        target: edge.target,
+                        type: OpGraphEdgeType.OP,
+                        label: edge.label,
+                        // Both ends are the same operation, which is what marks this as
+                        // internal to it rather than a relation between two operations.
+                        data: {
+                            parallelIndex: 0,
+                            sourceOperationId: operation.id,
+                            targetOperationId: operation.id,
+                        },
+                    });
+                }
             }
         }
     }

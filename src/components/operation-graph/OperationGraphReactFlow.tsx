@@ -79,6 +79,33 @@ const EDGE_TYPES = { [OpGraphEdgeType.OP]: OpGraphEdge };
 
 const EDGE_MARKER = { type: MarkerType.ArrowClosed, width: 18, height: 18 } as const;
 
+const sourceOperationIdOf = (edge: OpGraphFlowEdge): number | undefined => edge.data?.sourceOperationId;
+const targetOperationIdOf = (edge: OpGraphFlowEdge): number | undefined => edge.data?.targetOperationId;
+
+const isInternalDeviceEdge = (edge: OpGraphFlowEdge): boolean =>
+    sourceOperationIdOf(edge) === targetOperationIdOf(edge);
+
+const operationNodeIdOf = (operationId: number | undefined): string | null =>
+    operationId === undefined ? null : String(operationId);
+
+const operationBoundaryOf = (edge: OpGraphFlowEdge): { source: string; target: string } | null => {
+    if (isInternalDeviceEdge(edge)) {
+        return null;
+    }
+    const source = operationNodeIdOf(sourceOperationIdOf(edge));
+    const target = operationNodeIdOf(targetOperationIdOf(edge));
+    if (source === null || target === null) {
+        return null;
+    }
+    return { source, target };
+};
+
+const bothEndsMatched = (edge: OpGraphFlowEdge, matchedIds: ReadonlySet<string>): boolean => {
+    const source = operationNodeIdOf(sourceOperationIdOf(edge));
+    const target = operationNodeIdOf(targetOperationIdOf(edge));
+    return source !== null && target !== null && matchedIds.has(source) && matchedIds.has(target);
+};
+
 // A large report only fits at extreme zoom-out; 3 caps zoom-in as vis did.
 const MAX_ZOOM = 3;
 const MIN_ZOOM = 0.02;
@@ -202,6 +229,17 @@ const OperationGraphInner = ({
     // nothing. `null` is a real entry — an operation whose frames produce nothing
     // worth drawing — so misses are distinguished by `undefined`.
     const [deviceSubgraphCache] = useState(() => new Map<number, OpGraphDeviceSubgraph | null>());
+    // Expanding grows a node, which moves every node Dagre packs around it. Held
+    // from the toggle until the rebuilt graph commits, then spent translating the
+    // viewport so the operation stays under the cursor that opened it — otherwise
+    // the graph appears to jump and the user loses their place. Scoped to the
+    // report it was armed for so a swap cannot spend it against a same-id node.
+    const pendingViewportAnchorRef = useRef<{
+        nodeId: string;
+        paneX: number;
+        paneY: number;
+        reportScope: ReportScope;
+    } | null>(null);
     const { setCenter, getNode, getViewport, setViewport } = useReactFlow<OpGraphFlowNode, OpGraphFlowEdge>();
     const flowStore = useStoreApi();
 
@@ -252,11 +290,6 @@ const OperationGraphInner = ({
     // `getNode` reads the React Flow store, a tick behind `setNodes`, so a focus
     // requested mid-build has to wait for the commit.
     const pendingFocusRef = useRef<number | null>(null);
-    // Expanding grows a node, which moves every node Dagre packs around it. Held
-    // from the toggle until the rebuilt graph commits, then spent translating the
-    // viewport so the operation stays under the cursor that opened it — otherwise
-    // the graph appears to jump and the user loses their place. #1195
-    const pendingViewportAnchorRef = useRef<{ nodeId: string; paneX: number; paneY: number } | null>(null);
 
     const sourceOperations = useMemo<OpGraphSourceOperation[]>(
         () =>
@@ -402,7 +435,11 @@ const OperationGraphInner = ({
     // by a tick and would translate against the pre-rebuild position.
     useEffect(() => {
         const anchor = pendingViewportAnchorRef.current;
-        if (anchor === null || nodes.length === 0) {
+        if (anchor === null) {
+            return;
+        }
+        if (nodes.length === 0 || !isSameReportScope(anchor.reportScope, reportScope)) {
+            pendingViewportAnchorRef.current = null;
             return;
         }
         pendingViewportAnchorRef.current = null;
@@ -416,7 +453,7 @@ const OperationGraphInner = ({
             y: anchor.paneY - anchored.position.y * zoom,
             zoom,
         });
-    }, [nodes, getViewport, setViewport]);
+    }, [nodes, reportScope, getViewport, setViewport]);
 
     const toggleOperationExpansion = useCallback(
         (targetOperationId: number) => {
@@ -428,6 +465,7 @@ const OperationGraphInner = ({
                     nodeId,
                     paneX: node.position.x * zoom + x,
                     paneY: node.position.y * zoom + y,
+                    reportScope,
                 };
             }
             setExpandedOperationIds((previous) => {
@@ -439,7 +477,7 @@ const OperationGraphInner = ({
                 return next;
             });
         },
-        [getNode, getViewport],
+        [getNode, getViewport, reportScope],
     );
 
     // Recentre on the operation the URL names. A no-op on first mount, where the
@@ -609,22 +647,19 @@ const OperationGraphInner = ({
         const bySource = new Map<string, OpGraphFlowEdge[]>();
         const byTarget = new Map<string, OpGraphFlowEdge[]>();
         for (const edge of edges) {
-            const sourceId = String(edge.data?.sourceOperationId);
-            const targetId = String(edge.data?.targetOperationId);
-            // Same operation at both ends is an edge inside one expanded operation,
-            // which is not a relation between two of them.
-            if (sourceId !== targetId) {
-                const outgoing = bySource.get(sourceId);
+            const boundary = operationBoundaryOf(edge);
+            if (boundary !== null) {
+                const outgoing = bySource.get(boundary.source);
                 if (outgoing) {
                     outgoing.push(edge);
                 } else {
-                    bySource.set(sourceId, [edge]);
+                    bySource.set(boundary.source, [edge]);
                 }
-                const incoming = byTarget.get(targetId);
+                const incoming = byTarget.get(boundary.target);
                 if (incoming) {
                     incoming.push(edge);
                 } else {
-                    byTarget.set(targetId, [edge]);
+                    byTarget.set(boundary.target, [edge]);
                 }
             }
         }
@@ -643,12 +678,18 @@ const OperationGraphInner = ({
         // The neighbour is marked by its operation node, whether that renders
         // collapsed or as the group around an expanded subgraph.
         for (const edge of edgesBySource.get(selectedId) ?? []) {
-            relationByNodeId.set(String(edge.data?.targetOperationId), NodeRelation.Output);
-            relationByEdgeId.set(edge.id, NodeRelation.Output);
+            const targetId = operationNodeIdOf(targetOperationIdOf(edge));
+            if (targetId !== null) {
+                relationByNodeId.set(targetId, NodeRelation.Output);
+                relationByEdgeId.set(edge.id, NodeRelation.Output);
+            }
         }
         for (const edge of edgesByTarget.get(selectedId) ?? []) {
-            relationByNodeId.set(String(edge.data?.sourceOperationId), NodeRelation.Input);
-            relationByEdgeId.set(edge.id, NodeRelation.Input);
+            const sourceId = operationNodeIdOf(sourceOperationIdOf(edge));
+            if (sourceId !== null) {
+                relationByNodeId.set(sourceId, NodeRelation.Input);
+                relationByEdgeId.set(edge.id, NodeRelation.Input);
+            }
         }
         return { selectedId, relationByNodeId, relationByEdgeId };
     }, [selectedOperationId, edgesBySource, edgesByTarget]);
@@ -692,17 +733,16 @@ const OperationGraphInner = ({
     // to be presented as reaching the node: `findCriticalPath` drops edges whose
     // endpoints it has no node for, and the dependency would go missing. Edge ids
     // are preserved so the returned set still matches what is rendered.
-    const topologyEdges = useMemo(
-        () =>
-            builtEdges
-                .filter((edge) => edge.data?.sourceOperationId !== edge.data?.targetOperationId)
-                .map((edge) => ({
-                    id: edge.id,
-                    source: String(edge.data?.sourceOperationId),
-                    target: String(edge.data?.targetOperationId),
-                })),
-        [builtEdges],
-    );
+    const topologyEdges = useMemo(() => {
+        const topology: Array<{ id: string; source: string; target: string }> = [];
+        for (const edge of builtEdges) {
+            const boundary = operationBoundaryOf(edge);
+            if (boundary !== null) {
+                topology.push({ id: edge.id, ...boundary });
+            }
+        }
+        return topology;
+    }, [builtEdges]);
 
     const criticalPath = useMemo(() => {
         if (!isCriticalPathActive) {
@@ -821,12 +861,7 @@ const OperationGraphInner = ({
             }
             // An edge between two matches stays lit so the matched subset is
             // traceable; a selection edge outranks the filter either way.
-            if (
-                matchedIds &&
-                (relation ||
-                    (matchedIds.has(String(edge.data?.sourceOperationId)) &&
-                        matchedIds.has(String(edge.data?.targetOperationId))))
-            ) {
+            if (matchedIds && (relation || bothEndsMatched(edge, matchedIds))) {
                 classNames.push(MATCHED_EDGE_CLASS);
             }
             return classNames.length > 0 ? { ...edge, className: classNames.join(' ') } : edge;

@@ -11,8 +11,9 @@ import { getDefaultStore } from 'jotai';
 
 import type { NodeChange } from '@xyflow/react';
 
-import type { OperationDescription } from '../src/model/APIData';
+import { type DeviceOperationNode, type Node, NodeType, type OperationDescription } from '../src/model/APIData';
 import type {
+    OpGraphBuildOptions,
     OpGraphBuiltGraph,
     OpGraphDeviceSubgraph,
     OpGraphFlowEdge,
@@ -59,7 +60,7 @@ const flowTransform: { current: [number, number, number] } = { current: [0, 0, 1
 const flowStoreListeners = new Set<(state: { transform: [number, number, number] }) => void>();
 
 vi.mock('@xyflow/react', async () => {
-    const { useState } = await import('react');
+    const { useState, createElement, Fragment } = await import('react');
     const Passthrough = ({ children }: { children?: ReactNode }) => children ?? null;
     // Stable across renders: the real `useReactFlow` returns a stable API object,
     // and an unstable one here would invalidate the callbacks whose stability the
@@ -67,6 +68,8 @@ vi.mock('@xyflow/react', async () => {
     const flowApi = {
         setCenter: () => Promise.resolve(),
         getNode: (id: string) => ({ id, position: { x: 0, y: 0 }, width: 100, height: 40 }),
+        getViewport: () => ({ x: 0, y: 0, zoom: 1 }),
+        setViewport: () => Promise.resolve(),
     };
     // Stable like `flowApi`: the zoom effect lists the store as a dependency, so
     // a fresh object per render would resubscribe on every pass.
@@ -81,6 +84,7 @@ vi.mock('@xyflow/react', async () => {
         ReactFlow: ({
             nodes,
             edges,
+            nodeTypes,
             onNodeClick,
             onNodesChange,
             onNodeMouseEnter,
@@ -89,6 +93,10 @@ vi.mock('@xyflow/react', async () => {
         }: {
             nodes: OpGraphFlowNode[];
             edges: OpGraphFlowEdge[];
+            nodeTypes?: Record<
+                string,
+                (props: { id: string; data: OpGraphFlowNode['data']; type?: string }) => ReactNode
+            >;
             onNodeClick: (event: unknown, node: OpGraphFlowNode) => void;
             onNodesChange: (changes: NodeChange<OpGraphFlowNode>[]) => void;
             onNodeMouseEnter?: (event: unknown, node: OpGraphFlowNode) => void;
@@ -100,7 +108,22 @@ vi.mock('@xyflow/react', async () => {
             harness.onNodesChange = onNodesChange;
             harness.onNodeMouseEnter = onNodeMouseEnter;
             harness.onNodeMouseLeave = onNodeMouseLeave;
-            return children ?? null;
+            return createElement(
+                Fragment,
+                null,
+                nodes.map((node) => {
+                    const NodeComponent = node.type === undefined ? undefined : nodeTypes?.[node.type];
+                    return NodeComponent === undefined
+                        ? null
+                        : createElement(NodeComponent, {
+                              key: node.id,
+                              id: node.id,
+                              data: node.data,
+                              type: node.type,
+                          });
+                }),
+                children ?? null,
+            );
         },
         ReactFlowProvider: Passthrough,
         Background: () => null,
@@ -149,7 +172,11 @@ vi.mock('../src/components/operation-graph/opGraphCriticalPath', async () => {
 /* eslint-disable import/first */
 import { buildOpGraph } from '../src/components/operation-graph/opGraphBuilder';
 import { findCriticalPath } from '../src/components/operation-graph/opGraphCriticalPath';
-import { countDeviceOperations } from '../src/components/operation-graph/opGraphDeviceSubgraph';
+import {
+    countDeviceOperations,
+    getDeviceEdgeId,
+    getDeviceNodeId,
+} from '../src/components/operation-graph/opGraphDeviceSubgraph';
 import OperationGraphReactFlow from '../src/components/operation-graph/OperationGraphReactFlow';
 import {
     PERF_BAR_COLOR_VAR,
@@ -286,15 +313,15 @@ const edgeJoining = (edges: OpGraphFlowEdge[], source: number, target: number) =
 // entered the match set, entered on the tensor `producerId` handed down and left
 // on the expanded operation's own output tensor.
 const deviceSubgraphFor = (operationId: number, producerId: number): OpGraphDeviceSubgraph => {
-    const head = `dev:${operationId}:1`;
-    const tail = `dev:${operationId}:2`;
+    const head = getDeviceNodeId(operationId, 1);
+    const tail = getDeviceNodeId(operationId, 2);
     return {
         operationId,
         nodes: [
             { id: head, label: 'matmul_head_device_op()' },
             { id: tail, label: 'matmul_tail_device_op()' },
         ],
-        edges: [{ id: `dev-edge:${operationId}:1-2:9`, source: head, target: tail, label: 'T9 [1, 32]' }],
+        edges: [{ id: getDeviceEdgeId(operationId, 1, 2, 9), source: head, target: tail, label: 'T9 [1, 32]' }],
         entryNodeIdByTensorId: { [producerId * 10]: head },
         exitNodeIdByTensorId: { [operationId * 10]: tail },
         entryFallbackNodeId: head,
@@ -302,14 +329,44 @@ const deviceSubgraphFor = (operationId: number, producerId: number): OpGraphDevi
     };
 };
 
-// What the worker replies with once a box is open. The view holds no expansion
-// state a test can reach through the stubbed React Flow, and the graph is the
-// whole of what expansion changes for everything downstream of it.
+// What the worker replies with once a box is open. Overlay-invariant tests still
+// inject the graph this way so they don't depend on the click path.
 const rebuildWith = (operations: OperationDescription[], deviceSubgraphs: OpGraphDeviceSubgraph[]) => {
     act(() => {
         harness.onBuilt?.(buildOpGraph(sourceFor(operations), { hideDeallocate: true, deviceSubgraphs }));
     });
 };
+
+const tensorNode = (tensorId: number): Node =>
+    ({
+        id: tensorId,
+        node_type: NodeType.tensor,
+        params: { tensor_id: tensorId, shape: 'Shape([1, 32])' },
+        connections: [],
+        inputs: [],
+        outputs: [],
+        stacking_level: 0,
+    }) as unknown as Node;
+
+const deviceFrames = (...names: string[]): DeviceOperationNode[] =>
+    names.map((name, index) => {
+        const id = index + 1;
+        return {
+            id,
+            node_type: NodeType.function_start,
+            params: { name },
+            inputs: index === 0 ? [] : [tensorNode(index)],
+            outputs: [tensorNode(id)],
+            input_tensors: index === 0 ? [] : [index],
+            connections: [],
+            arguments: [],
+            stack_trace: [],
+            stacking_level: 0,
+        } as unknown as DeviceOperationNode;
+    });
+
+const withDeviceOperations = (op: OperationDescription, names: string[]): OperationDescription =>
+    ({ ...op, processedConnections: deviceFrames(...names) }) as OperationDescription;
 
 const hasClass = (element: { className?: string }, className: string) =>
     (element.className ?? '').split(' ').includes(className);
@@ -1025,6 +1082,33 @@ describe('OperationGraphReactFlow device operation expansion', () => {
     // change the answer here rather than only the picture.
     const expandOperationThree = () => rebuildWith(BRANCHING_OPERATION_LIST, [deviceSubgraphFor(3, 1)]);
 
+    it('rebuilds from a click on the expander and collapses on the second', () => {
+        const names = ['AlphaDeviceOperation', 'BetaDeviceOperation', 'GammaDeviceOperation'];
+        const operations = OPERATION_LIST.map((op) => (op.id === 3 ? withDeviceOperations(op, names) : op));
+        renderGraph(operations);
+        runBuild.mockClear();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Show 3 device operations' }));
+
+        const expandedOptions = runBuild.mock.calls.at(-1)?.[0] as OpGraphBuildOptions;
+        expect(expandedOptions.deviceSubgraphs).toHaveLength(1);
+        expect(expandedOptions.deviceSubgraphs[0].operationId).toBe(3);
+        expect(expandedOptions.deviceSubgraphs[0].nodes).toHaveLength(3);
+
+        act(() => {
+            harness.onBuilt?.(
+                buildOpGraph(sourceFor(operations), {
+                    hideDeallocate: true,
+                    deviceSubgraphs: expandedOptions.deviceSubgraphs,
+                }),
+            );
+        });
+
+        runBuild.mockClear();
+        fireEvent.click(screen.getByRole('button', { name: 'Hide device operations' }));
+        expect(runBuild.mock.calls.at(-1)?.[0]).toEqual(expect.objectContaining({ deviceSubgraphs: [] }));
+    });
+
     it('does not count device operations as operations on the path', () => {
         renderGraph(BRANCHING_OPERATION_LIST, BRANCHING_PERF_ROWS);
         enableCriticalPath();
@@ -1049,7 +1133,7 @@ describe('OperationGraphReactFlow device operation expansion', () => {
         expect(hasClass(edgeJoining(edges, 3, 4), 'op-graph-edge-critical-path')).toBe(true);
         // The edge did move: it now lands on the device operation that consumes
         // the tensor, which is why the marks above cannot be found by endpoint.
-        expect(edgeJoining(edges, 1, 3).target).toBe('dev:3:1');
+        expect(edgeJoining(edges, 1, 3).target).toBe(getDeviceNodeId(3, 1));
     });
 
     it('leaves the device operations off the path it draws', () => {
@@ -1059,8 +1143,10 @@ describe('OperationGraphReactFlow device operation expansion', () => {
         expandOperationThree();
 
         const { nodes, edges } = lastFlowRender();
-        expect(hasClass(nodeById(nodes, 'dev:3:1'), 'op-graph-node-critical-path')).toBe(false);
-        expect(hasClass(edgeBetween(edges, 'dev:3:1', 'dev:3:2'), 'op-graph-edge-critical-path')).toBe(false);
+        expect(hasClass(nodeById(nodes, getDeviceNodeId(3, 1)), 'op-graph-node-critical-path')).toBe(false);
+        expect(
+            hasClass(edgeBetween(edges, getDeviceNodeId(3, 1), getDeviceNodeId(3, 2)), 'op-graph-edge-critical-path'),
+        ).toBe(false);
     });
 
     it('draws no perf bar on a device operation', () => {
@@ -1073,8 +1159,8 @@ describe('OperationGraphReactFlow device operation expansion', () => {
         // The operation keeps the duration; there is nothing to attribute to the
         // frames inside it, and a bar at the default scale would read as "fast".
         expect(perfScaleOf(nodeById(nodes, '3'))).toBeDefined();
-        expect(perfScaleOf(nodeById(nodes, 'dev:3:1'))).toBeUndefined();
-        expect(perfColorOf(nodeById(nodes, 'dev:3:1'))).toBeUndefined();
+        expect(perfScaleOf(nodeById(nodes, getDeviceNodeId(3, 1)))).toBeUndefined();
+        expect(perfColorOf(nodeById(nodes, getDeviceNodeId(3, 1)))).toBeUndefined();
     });
 
     it('does not let a device operation match the filter', () => {
@@ -1098,7 +1184,7 @@ describe('OperationGraphReactFlow device operation expansion', () => {
         // match set dims inside a lit parent and reads as a rendering fault.
         const { nodes } = lastFlowRender();
         expect(hasClass(nodeById(nodes, '3'), 'op-graph-node-match')).toBe(true);
-        expect(hasClass(nodeById(nodes, 'dev:3:1'), 'op-graph-node-match')).toBe(true);
+        expect(hasClass(nodeById(nodes, getDeviceNodeId(3, 1)), 'op-graph-node-match')).toBe(true);
         expect(hasClass(nodeById(nodes, '2'), 'op-graph-node-match')).toBe(false);
     });
 
@@ -1112,7 +1198,7 @@ describe('OperationGraphReactFlow device operation expansion', () => {
 
         const { nodes } = lastFlowRender();
         expect(hasClass(nodeById(nodes, '3'), 'op-graph-node-output')).toBe(true);
-        expect(hasClass(nodeById(nodes, 'dev:3:1'), 'op-graph-node-output')).toBe(false);
+        expect(hasClass(nodeById(nodes, getDeviceNodeId(3, 1)), 'op-graph-node-output')).toBe(false);
     });
 
     it('answers about the operation when a device operation is clicked', () => {
@@ -1120,7 +1206,7 @@ describe('OperationGraphReactFlow device operation expansion', () => {
         expandOperationThree();
 
         act(() => {
-            harness.onNodeClick?.(null, nodeById(lastFlowRender().nodes, 'dev:3:2'));
+            harness.onNodeClick?.(null, nodeById(lastFlowRender().nodes, getDeviceNodeId(3, 2)));
         });
 
         // A frame has no report of its own, so the click selects the operation

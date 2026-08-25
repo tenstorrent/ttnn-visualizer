@@ -51,6 +51,11 @@ describe('estimateOpNodeSize', () => {
         expect(wide).toBeLessThan(1000);
     });
 
+    it('still reserves the expander after the label hits the maximum width', () => {
+        const label = 'x'.repeat(400);
+        expect(estimateOpNodeSize(label, '', true).width).toBeGreaterThan(estimateOpNodeSize(label, '', false).width);
+    });
+
     it('returns an integer width, which dagre and React Flow both position on', () => {
         // 21 chars lands mid-pixel before the ceil.
         expect(Number.isInteger(estimateOpNodeSize('x'.repeat(21), '').width)).toBe(true);
