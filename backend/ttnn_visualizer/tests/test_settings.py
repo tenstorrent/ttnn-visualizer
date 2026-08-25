@@ -57,7 +57,7 @@ DEV_ARGS = {
 }
 
 
-def wsgi_environ(host: str, scheme: str = "http", **headers: str) -> dict:
+def _wsgi_environ(host: str, scheme: str = "http", **headers: str) -> dict:
     return {"wsgi.url_scheme": scheme, "HTTP_HOST": host, **headers}
 
 
@@ -1084,7 +1084,7 @@ def test_an_optional_string_setting_is_still_overridable(key, monkeypatch):
 def test_socketio_accepts_the_origin_the_app_is_served_on(host):
     is_allowed = build_socketio_origin_check(["http://localhost:8000"])
 
-    assert is_allowed(f"http://{host}", wsgi_environ(host))
+    assert is_allowed(f"http://{host}", _wsgi_environ(host))
 
 
 def test_socketio_accepts_a_configured_cross_origin():
@@ -1092,19 +1092,19 @@ def test_socketio_accepts_a_configured_cross_origin():
         ["http://localhost:8000", "http://localhost:5173"]
     )
 
-    assert is_allowed("http://localhost:5173", wsgi_environ("localhost:8000"))
+    assert is_allowed("http://localhost:5173", _wsgi_environ("localhost:8000"))
 
 
 def test_socketio_rejects_an_unrelated_origin():
     is_allowed = build_socketio_origin_check(["http://localhost:8000"])
 
-    assert not is_allowed("http://evil.example", wsgi_environ("0.0.0.0:8000"))
+    assert not is_allowed("http://evil.example", _wsgi_environ("0.0.0.0:8000"))
 
 
 def test_socketio_accepts_an_ipv6_loopback_binding():
     is_allowed = build_socketio_origin_check(["http://localhost:8000"])
 
-    assert is_allowed("http://[::1]:8000", wsgi_environ("[::1]:8000"))
+    assert is_allowed("http://[::1]:8000", _wsgi_environ("[::1]:8000"))
 
 
 def test_socketio_accepts_the_host_it_was_launched_with():
@@ -1112,7 +1112,7 @@ def test_socketio_accepts_the_host_it_was_launched_with():
     # from it must work without also spelling the name out in ALLOWED_ORIGINS.
     is_allowed = build_socketio_origin_check([], bind_host="name.example")
 
-    assert is_allowed("http://name.example:8000", wsgi_environ("name.example:8000"))
+    assert is_allowed("http://name.example:8000", _wsgi_environ("name.example:8000"))
 
 
 # Self-derivation only ever matches a same-origin request, and an IP literal can't be
@@ -1124,7 +1124,7 @@ def test_socketio_accepts_the_host_it_was_launched_with():
 def test_socketio_accepts_being_reached_by_address(host):
     is_allowed = build_socketio_origin_check(["http://localhost:8000"])
 
-    assert is_allowed(f"http://{host}", wsgi_environ(host))
+    assert is_allowed(f"http://{host}", _wsgi_environ(host))
 
 
 # The Host header is attacker-controlled, so a name that merely resolves here must not
@@ -1133,9 +1133,9 @@ def test_socketio_accepts_being_reached_by_address(host):
 @pytest.mark.parametrize(
     "environ",
     [
-        wsgi_environ("attacker.example"),
+        _wsgi_environ("attacker.example"),
         # A proxy is not distinguishable from a forged header without a trust signal.
-        wsgi_environ(
+        _wsgi_environ(
             "127.0.0.1:8000",
             HTTP_X_FORWARDED_PROTO="https",
             HTTP_X_FORWARDED_HOST="attacker.example",
@@ -1154,7 +1154,7 @@ def test_socketio_accepts_a_proxy_origin_once_it_is_configured():
     # Reaching the app under a name it was not launched with — a hosted deployment
     # behind TLS termination, a LAN or container address — is a configuration step.
     is_allowed = build_socketio_origin_check(["https://visualizer.example.com"])
-    environ = wsgi_environ(
+    environ = _wsgi_environ(
         "127.0.0.1:8000",
         HTTP_X_FORWARDED_PROTO="https",
         HTTP_X_FORWARDED_HOST="visualizer.example.com",
@@ -1168,8 +1168,8 @@ def test_socketio_still_accepts_same_origin_when_nothing_is_configured():
     # nothing must not be expressible as one — a callable is always consulted.
     is_allowed = build_socketio_origin_check([])
 
-    assert is_allowed("http://0.0.0.0:8000", wsgi_environ("0.0.0.0:8000"))
-    assert not is_allowed("http://evil.example", wsgi_environ("0.0.0.0:8000"))
+    assert is_allowed("http://0.0.0.0:8000", _wsgi_environ("0.0.0.0:8000"))
+    assert not is_allowed("http://evil.example", _wsgi_environ("0.0.0.0:8000"))
 
 
 # Unit-testing the builder alone leaves the wiring unpinned, and both halves fail open:
@@ -1183,8 +1183,8 @@ def test_socketio_is_wired_with_the_origin_check(app):
     origin_check = socketio.server.eio.cors_allowed_origins
 
     assert callable(origin_check)
-    assert origin_check("http://localhost:8000", wsgi_environ("localhost:8000"))
-    assert not origin_check("http://evil.example", wsgi_environ("localhost:8000"))
+    assert origin_check("http://localhost:8000", _wsgi_environ("localhost:8000"))
+    assert not origin_check("http://evil.example", _wsgi_environ("localhost:8000"))
 
 
 # The HTTP half of the same boundary: flask_cors withholds the header rather than

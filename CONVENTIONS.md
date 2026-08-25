@@ -818,7 +818,7 @@ def _file_path_from_stack_source_request(stack_trace: str) -> Path:
 
 The underscore signals "not part of this module's public API" and excludes the function from `from foo import *` semantics.
 
-This covers helpers in **test modules** too — `_documented_boolean_defaults` in `test_settings.py` — where the prefix also reads as "not a test case". Older test helpers written without it (`wsgi_environ`) are on-touch cleanup; see [Known inconsistencies](#known-inconsistencies).
+This covers helpers in **test modules** too — `_documented_boolean_defaults` in `test_settings.py` — where the prefix also reads as "not a test case". Pytest fixtures are the exception: pytest resolves them by name from the test signature, so they stay unprefixed, as do `unittest` lifecycle methods (`setUp`, `tearDownClass`).
 
 ---
 
@@ -1386,4 +1386,3 @@ These exist in the codebase today and don't yet have a single canonical answer. 
 - **`useQuery<Data, AxiosError>` not universal.** Four hooks in `useAPI.tsx` (`useGetClusterDescription`, `useInstance`, `useReportFolderList`, `usePerfFolderList`) leave both generics implicit. Tighten when you touch them. (#1920)
 - **`USAGE_RECORDING_ACTIVE` is a config attribute with no matching variable** — it is fed by `USAGE_RECORDING_DISABLED`, the opposite polarity, so it is named for the state instead. Borrowing the variable's name would make `PRINT_ENV` publish `true` when recording is off. (#1921)
 - **`DEBUG` and `FLASK_DEBUG` are different knobs with confusable names.** `FLASK_DEBUG` feeds the `DEBUG` *config* value (Flask's debug mode); the `DEBUG` *environment variable* raises the root log level and is what `pnpm flask:start-debug` sets. Both are in `.env.sample`. Read the name at the call site rather than assuming. (#1922)
-- **Underscore prefixes on test-module helpers.** Newer test modules follow the convention (`_documented_boolean_defaults`), plenty of existing ones don't (`wsgi_environ`). Prefix new helpers; rename existing ones only when already editing them. (#1923)
