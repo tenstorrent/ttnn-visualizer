@@ -23,7 +23,6 @@ import { useAtomValue } from 'jotai';
 import ConnectionTestMessage from '../components/report-selection/ConnectionTestMessage';
 import { ConnectionTestStates } from '../definitions/ConnectionStatus';
 import { FileTransferSource } from '../definitions/FileTransferSource';
-import { clearFileTransferProgressForSource, setFileTransferProgressForSource } from '../store/fileTransferRegistry';
 import ProgressBar from '../components/ProgressBar';
 import SearchField from '../components/SearchField';
 import AppVersionStatus from '../components/AppVersionStatus';
@@ -33,7 +32,11 @@ import GlobalSwitch from '../components/GlobalSwitch';
 import useClearSelectedBuffer from '../hooks/useClearSelectedBuffer';
 import MemoryTag from '../components/MemoryTag';
 import { BufferType, BufferTypeLabel } from '../model/BufferType';
-import { fileTransferProgressAtom } from '../store/app';
+import {
+    clearFileTransferProgressForSource,
+    fileTransferProgressAtom,
+    setFileTransferProgressForSource,
+} from '../store/app';
 import { FileProgress, FileStatus } from '../model/APIData';
 import NPEProcessingStatus from '../components/NPEProcessingStatus';
 import PerfOverlayLegend from '../components/perf-overlay/PerfOverlayLegend';

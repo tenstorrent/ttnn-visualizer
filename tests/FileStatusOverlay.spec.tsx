@@ -10,8 +10,7 @@ import { getFileStatusLabel } from '../src/functions/getFileStatusLabel';
 import { FileProgress, FileStatus } from '../src/model/APIData';
 import { ConnectionTestStates } from '../src/definitions/ConnectionStatus';
 import { FileTransferSource } from '../src/definitions/FileTransferSource';
-import { fileTransferRegistryAtom } from '../src/store/fileTransferRegistry';
-import { mlirFileResultsAtom } from '../src/store/app';
+import { fileTransferRegistryAtom, mlirFileResultsAtom } from '../src/store/app';
 import { TestProviders } from './helpers/TestProviders';
 
 function renderOverlay(progress: FileProgress, source: FileTransferSource = FileTransferSource.REMOTE_SYNC) {

@@ -10,7 +10,7 @@ import { FileTransferSource } from '../definitions/FileTransferSource';
 import { MountRemoteFolder, RemoteConnection, RemoteFolder } from '../definitions/RemoteConnection';
 import { REMOTE_SYNC_REQUEST_TIMEOUT_MS } from '../definitions/RemoteSync';
 import { StackSourceOrigin } from '../definitions/StackTrace';
-import { clearFileTransferProgressForSource } from '../store/fileTransferRegistry';
+import { clearFileTransferProgressForSource } from '../store/app';
 import { isSameConnection, remoteConnectionKey } from '../functions/remoteConnection';
 import { beginRemoteSyncRequest, endRemoteSyncRequest } from '../functions/remoteSyncRequest';
 import { normaliseReportFolder } from '../functions/validateReportFolder';
