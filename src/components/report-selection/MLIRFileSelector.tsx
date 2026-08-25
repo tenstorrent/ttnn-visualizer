@@ -7,7 +7,7 @@ import { IconNames } from '@blueprintjs/icons';
 import { ItemRenderer, Select } from '@blueprintjs/select';
 import { useAtom } from 'jotai';
 import { useState } from 'react';
-import { MlirServerConnection } from '../../definitions/MlirServer';
+import { MlirServerConnection } from '../../model/MlirServer';
 import { getActiveMlirServer, isSameMlirServer, mlirServerKey } from '../../functions/mlirServer';
 import { useActivatingReport } from '../../hooks/useActivatingReport';
 import { mlirServersAtom, selectedMlirServerAtom } from '../../store/app';

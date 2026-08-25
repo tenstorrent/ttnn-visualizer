@@ -4,7 +4,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { enrichRowData } from '../src/functions/enrichPerfRowData';
-import { PerfTableRow } from '../src/definitions/PerfTable';
+import { PerfTableRow } from '../src/model/PerfTable';
 import { BufferType } from '../src/model/BufferType';
 import { DeviceOperationLayoutTypes } from '../src/model/APIData';
 import { OpType } from '../src/definitions/Performance';

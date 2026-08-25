@@ -7,7 +7,7 @@ import {
     DurationHistogramData,
     SAMPLE_OPS_PER_BUCKET,
 } from '../definitions/PerfDurationHistogram';
-import { TypedPerfTableRow } from '../definitions/PerfTable';
+import { TypedPerfTableRow } from '../model/PerfTable';
 import {
     BucketableRow,
     buildLogDecadeBuckets,

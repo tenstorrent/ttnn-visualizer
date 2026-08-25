@@ -39,11 +39,13 @@ from ttnn_visualizer.usage import (
     RUN_ID_FIELD,
     USAGE_DISABLED_ENV_VAR,
     DeploymentMode,
+    LaunchMode,
     ReportKind,
     ReportLoadFailureReason,
     UsageEvent,
     UsageView,
     get_deployment_mode,
+    get_launch_mode,
     get_usage_log_path,
     is_recording_enabled,
     record_app_start,
@@ -454,6 +456,7 @@ def test_app_start_carries_the_baseline_fields(usage_directory):
 
     assert fields["event"] == "app_start"
     assert fields["deployment_mode"] == DeploymentMode.LOCAL_UPLOAD.value
+    assert fields["launch_mode"] in {mode.value for mode in LaunchMode}
     assert fields["python_version"].count(".") == 1
     assert fields["version"]
     assert fields["os"]
@@ -471,6 +474,7 @@ def test_disabled_recording_does_not_build_the_app_start_payload(
 
     monkeypatch.setattr(usage, "get_application_version", fail_if_called)
     monkeypatch.setattr(usage, "get_deployment_mode", fail_if_called)
+    monkeypatch.setattr(usage, "get_launch_mode", fail_if_called)
     monkeypatch.setattr(usage, "get_operating_system", fail_if_called)
     monkeypatch.setattr(usage, "get_python_version", fail_if_called)
 
@@ -533,7 +537,33 @@ def test_deployment_mode_falls_back_to_local_upload(monkeypatch):
     assert get_deployment_mode("   ") == DeploymentMode.LOCAL_UPLOAD
 
 
-def write_log(directory: Path, lines):
+def test_launch_mode_is_source_for_an_editable_install(monkeypatch):
+    monkeypatch.setattr(
+        usage,
+        "distribution",
+        lambda _name: SimpleNamespace(
+            read_text=lambda _path: '{"dir_info": {"editable": true}}'
+        ),
+    )
+
+    assert get_launch_mode() == LaunchMode.SOURCE
+
+
+def test_launch_mode_is_wheel_for_a_regular_distribution(monkeypatch):
+    monkeypatch.setattr(
+        usage,
+        "distribution",
+        lambda _name: SimpleNamespace(read_text=lambda _path: None),
+    )
+
+    assert get_launch_mode() == LaunchMode.WHEEL
+
+
+def test_launch_mode_is_hosted_in_server_mode():
+    assert get_launch_mode(server_mode=True) == LaunchMode.HOSTED
+
+
+def _write_log(directory: Path, lines):
     directory.mkdir(mode=0o700, parents=True, exist_ok=True)
     (directory / usage.USAGE_LOG_NAME).write_text(
         "\n".join(lines) + "\n", encoding="utf-8"
@@ -547,7 +577,7 @@ def test_compaction_keeps_cumulative_totals_monotonic(usage_directory, monkeypat
         f"run_id=abc1234{day % 9} deployment_mode=local_upload"
         for day in range(40)
     ]
-    write_log(usage_directory, lines)
+    _write_log(usage_directory, lines)
     before = total_usage_events(lines)
 
     usage.compact_if_needed()
@@ -565,7 +595,7 @@ def test_compaction_does_not_merge_schema_versions(usage_directory, monkeypatch)
         f"schema_version={index % 2 + 1} run_id=aaaaaaa{index}"
         for index in range(8)
     ]
-    write_log(usage_directory, lines)
+    _write_log(usage_directory, lines)
 
     usage.compact_if_needed()
 
@@ -588,7 +618,7 @@ def test_compaction_is_idempotent_on_already_counted_lines(
         "ts=2026-08-01T10:00:02Z event=app_start schema_version=1 run_id=aaaaaaaa",
         "ts=2026-08-01T10:00:03Z event=app_start schema_version=1 run_id=bbbbbbbb",
     ]
-    write_log(usage_directory, lines)
+    _write_log(usage_directory, lines)
 
     usage.compact_if_needed()
 
@@ -604,7 +634,7 @@ def test_compaction_keeps_lines_it_cannot_parse(usage_directory, monkeypatch):
         "ts=2026-08-01T10:00:02Z event=app_start schema_version=1 run_id=cccccccc",
         "ts=2026-08-01T10:00:03Z event=app_start schema_version=1 run_id=dddddddd",
     ]
-    write_log(usage_directory, lines)
+    _write_log(usage_directory, lines)
 
     usage.compact_if_needed()
 
@@ -625,7 +655,7 @@ def test_compaction_does_not_dress_up_a_fragment_as_a_summary(
         "ts=2026-08-01T10:00:02Z event=app_start schema_version=1 run_id=cccccccc",
         "ts=2026-08-01T10:00:03Z event=app_start schema_version=1 run_id=dddddddd",
     ]
-    write_log(usage_directory, lines)
+    _write_log(usage_directory, lines)
 
     usage.compact_if_needed()
 
@@ -667,7 +697,7 @@ def test_compaction_survives_a_log_that_is_not_valid_utf_8(
 
 def test_a_log_under_the_cap_is_left_alone(usage_directory):
     lines = ["ts=2026-08-01T10:00:00Z event=app_start schema_version=1"]
-    write_log(usage_directory, lines)
+    _write_log(usage_directory, lines)
 
     usage.compact_if_needed()
 
@@ -686,7 +716,7 @@ def test_compaction_skips_rewrite_when_nothing_is_summarisable(
         "ts=2026-08-01T10:00:02Z event=app_start schema_version=1 run_id=cccccccc",
         "ts=2026-08-01T10:00:03Z event=app_start schema_version=1 run_id=dddddddd",
     ]
-    write_log(usage_directory, lines)
+    _write_log(usage_directory, lines)
     before = get_usage_log_path().stat()
 
     usage.compact_if_needed()
@@ -704,7 +734,7 @@ def test_the_log_is_not_world_readable(usage_directory, monkeypatch):
 
     # Compaction used to recreate the log at umask permissions and undo 0o600.
     monkeypatch.setattr(usage, "MAX_LOG_BYTES", 0)
-    write_log(
+    _write_log(
         usage_directory,
         [
             "ts=2026-08-01T10:00:00Z event=app_start schema_version=1 run_id=aaaaaaaa",
@@ -713,7 +743,7 @@ def test_the_log_is_not_world_readable(usage_directory, monkeypatch):
             "ts=2026-08-01T10:00:03Z event=app_start schema_version=1 run_id=dddddddd",
         ],
     )
-    # Match the append path's mode so a regression is not masked by write_log's umask.
+    # Match the append path's mode so a regression is not masked by _write_log's umask.
     os.chmod(get_usage_log_path(), 0o600)
 
     usage.compact_if_needed()
@@ -1110,7 +1140,7 @@ def test_compaction_keeps_detail_bearing_events_in_separate_buckets(
         for cycle in range(4)
         for index, (kind, source) in enumerate(combinations)
     ]
-    write_log(usage_directory, lines)
+    _write_log(usage_directory, lines)
 
     usage.compact_if_needed()
 

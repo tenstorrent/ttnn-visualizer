@@ -4,7 +4,8 @@
 
 import type { PlotData } from 'plotly.js';
 import { useMemo } from 'react';
-import { Marker, TypedPerfTableRow } from '../../definitions/PerfTable';
+import { Marker } from '../../definitions/PerfTable';
+import { TypedPerfTableRow } from '../../model/PerfTable';
 import { OnOpCodeClick, PERF_CHART_LABELS, PerfChartId } from '../../definitions/PerformanceCharts';
 import { PerfPieChartLayout } from '../../definitions/PlotConfigurations';
 import { useHandlePerfChartPlotClick } from '../../hooks/useHandlePerfChartPlotClick';

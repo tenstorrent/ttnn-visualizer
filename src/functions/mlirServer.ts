@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-import { MlirServerConnection } from '../definitions/MlirServer';
+import { MlirServerConnection } from '../model/MlirServer';
 
 /** Stable React list key from connection fields (not display formatting). */
 export const mlirServerKey = (server: MlirServerConnection): string =>

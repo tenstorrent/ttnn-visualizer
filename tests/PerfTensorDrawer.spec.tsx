@@ -6,7 +6,7 @@ import '@testing-library/jest-dom/vitest';
 import { cleanup, render, screen } from '@testing-library/react';
 import { Mock, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import PerfTensorDrawer from '../src/components/performance/PerfTensorDrawer';
-import { TypedPerfTableRow } from '../src/definitions/PerfTable';
+import { TypedPerfTableRow } from '../src/model/PerfTable';
 import { OpType } from '../src/definitions/Performance';
 import ROUTES from '../src/definitions/Routes';
 import { TEST_IDS } from '../src/definitions/TestIds';

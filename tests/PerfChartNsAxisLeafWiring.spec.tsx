@@ -11,7 +11,7 @@ import PerfDeviceKernelDurationChart from '../src/components/performance/PerfDev
 import PerfDeviceKernelRuntimeChart from '../src/components/performance/PerfDeviceKernelRuntimeChart';
 import PerfKernelDurationUtilizationChart from '../src/components/performance/PerfKernelDurationUtilizationChart';
 import { PerfChartId } from '../src/definitions/PerformanceCharts';
-import { TypedPerfTableRow } from '../src/definitions/PerfTable';
+import { TypedPerfTableRow } from '../src/model/PerfTable';
 import { OpType } from '../src/definitions/Performance';
 import {
     CORE_COUNT_AXIS_TICK_FORMAT,

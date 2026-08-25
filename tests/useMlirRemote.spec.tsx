@@ -11,22 +11,20 @@ import type { AxiosProgressEvent } from 'axios';
 import useMlirRemote from '../src/hooks/useMlirRemote';
 import axiosInstance from '../src/libs/axiosInstance';
 import { ConnectionTestStates } from '../src/definitions/ConnectionStatus';
-import { MlirServerConnection } from '../src/definitions/MlirServer';
+import { MlirServerConnection } from '../src/model/MlirServer';
 import FileStatusOverlay from '../src/components/FileStatusOverlay';
 import MlirJsonFileLoader from '../src/components/mlir/MlirJsonFileLoader';
 import { FileTransferSource } from '../src/definitions/FileTransferSource';
 import {
     clearAllFileTransferProgress,
     clearFileTransferProgressForSource,
+    fileTransferProgressAtom,
     fileTransferRegistryAtom,
     getInactiveFileTransferProgress,
-    setFileTransferProgressForSource,
-} from '../src/store/fileTransferRegistry';
-import {
-    fileTransferProgressAtom,
     mlirFileResultsAtom,
     mlirFileResultsOpenAtom,
     mlirRetryFilesAtom,
+    setFileTransferProgressForSource,
 } from '../src/store/app';
 import { FileStatus } from '../src/model/APIData';
 

@@ -23,7 +23,8 @@ import {
 import { ItemPredicate, ItemRendererProps, Select } from '@blueprintjs/select';
 import { IconNames } from '@blueprintjs/icons';
 import { DurationBucket, PERF_DURATION_BUCKET_FILTER_PLACEHOLDER } from '../../definitions/PerfDurationHistogram';
-import { ColumnKeys, Columns, TypedPerfTableRow } from '../../definitions/PerfTable';
+import { ColumnKeys, Columns } from '../../definitions/PerfTable';
+import { TypedPerfTableRow } from '../../model/PerfTable';
 import { Signpost } from '../../model/Signpost';
 import { calcHighDispatchOps } from '../../functions/perfFunctions';
 import SearchField from '../SearchField';

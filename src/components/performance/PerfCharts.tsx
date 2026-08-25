@@ -6,7 +6,8 @@ import PerfDurationHistogram from './PerfDurationHistogram';
 import PerfDeviceKernelDurationChart from './PerfDeviceKernelDurationChart';
 import PerfDeviceKernelRuntimeChart from './PerfDeviceKernelRuntimeChart';
 import PerfOpCountVsRuntimeChart from './PerfOpCountVsRuntimeChart';
-import { Marker, TypedPerfTableRow } from '../../definitions/PerfTable';
+import { Marker } from '../../definitions/PerfTable';
+import { TypedPerfTableRow } from '../../model/PerfTable';
 import { OnOpCodeClick, PERF_CHART_GROUP_LABELS, PerfChartGroup } from '../../definitions/PerformanceCharts';
 
 interface PerfChartsProps {

@@ -7,7 +7,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useOpPerfRowScores } from '../src/hooks/useOpPerfRowScores';
 import { useGetDeviceOperationListPerf } from '../src/hooks/useAPI';
 import { DeviceOperationMapping } from '../src/model/DeviceOperationMapping';
-import { PerfTableRow } from '../src/definitions/PerfTable';
+import { PerfTableRow } from '../src/model/PerfTable';
 
 vi.mock('../src/hooks/useAPI', () => ({
     useGetDeviceOperationListPerf: vi.fn(),

@@ -5,8 +5,8 @@
 import { describe, expect, it } from 'vitest';
 import { ConnectionNameSubject } from '../src/definitions/ConnectionDialog';
 import { ConnectionTestStates } from '../src/definitions/ConnectionStatus';
-import { MlirServerConnection } from '../src/definitions/MlirServer';
-import { RemoteConnection } from '../src/definitions/RemoteConnection';
+import { MlirServerConnection } from '../src/model/MlirServer';
+import { RemoteConnection } from '../src/model/RemoteConnection';
 import { getConnectionNameStatus, isConnectionNameTaken } from '../src/functions/connectionName';
 import { isSameMlirServer } from '../src/functions/mlirServer';
 import { isSameConnection } from '../src/functions/remoteConnection';

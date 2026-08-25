@@ -3,6 +3,11 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 export const TEST_IDS = Object.freeze({
+    // App shell navigation
+    SIDE_NAVIGATION: 'side-navigation',
+    SIDE_NAVIGATION_TOGGLE: 'side-navigation-toggle',
+    SERVER_MODE_BANNER: 'server-mode-banner',
+
     // Local folder selector
     LOCAL_FOLDER_SELECTOR_BUTTON: 'local-folder-selector-button',
     LOCAL_SYNC_DISABLED: 'local-sync-disabled',
@@ -31,6 +36,10 @@ export const TEST_IDS = Object.freeze({
 
     // Connection dialogs
     CONNECTION_TEST_RESULTS: 'connection-test-results',
+    HOST_KEY_PROMPT: 'host-key-prompt',
+    HOST_KEY_TRUST_BUTTON: 'host-key-trust-button',
+    HOST_KEY_FINGERPRINT: 'host-key-fingerprint',
+    HOST_KEY_COPY_COMMAND: 'host-key-copy-command',
 
     // Navigation
     ADD_NEW_CONNECTION: 'add-new-connection',

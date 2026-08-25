@@ -12,7 +12,7 @@ import {
     shouldShowFolderLinkStatus,
     sortByFolderLinkState,
 } from '../../functions/folderLinkStatus';
-import { RemoteConnection, RemoteFolder } from '../../definitions/RemoteConnection';
+import { RemoteConnection, RemoteFolder } from '../../model/RemoteConnection';
 import { TEST_IDS } from '../../definitions/TestIds';
 import { getReportId } from '../../functions/reportLinks';
 import { getRankedReportLabel } from '../../functions/reportRank';

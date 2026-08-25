@@ -10,13 +10,8 @@ import { Fragment, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router';
 import 'styles/components/PerfReport.scss';
 import { OpType, PATTERN_COUNT } from '../../definitions/Performance';
-import {
-    ColumnDefinition,
-    ColumnKeys,
-    PerfTableFilters,
-    TypedPerfTableRow,
-    comparisonKeys,
-} from '../../definitions/PerfTable';
+import { ColumnDefinition, ColumnKeys, PerfTableFilters, comparisonKeys } from '../../definitions/PerfTable';
+import { TypedPerfTableRow } from '../../model/PerfTable';
 import ROUTES from '../../definitions/Routes';
 import { TEST_IDS } from '../../definitions/TestIds';
 import isValidNumber from '../../functions/isValidNumber';

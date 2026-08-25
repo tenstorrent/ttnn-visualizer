@@ -4,7 +4,7 @@
 
 import { CanceledError } from 'axios';
 import { describe, expect, it } from 'vitest';
-import { RemoteFolder } from '../src/definitions/RemoteConnection';
+import { RemoteFolder } from '../src/model/RemoteConnection';
 import getRemoteSyncFailureAction from '../src/functions/getRemoteSyncFailureAction';
 import { RemoteSyncFailureAction } from '../src/definitions/RemoteSync';
 

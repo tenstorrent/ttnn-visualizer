@@ -29,7 +29,7 @@ import { BufferType } from '../model/BufferType';
 import parseMemoryConfig, { memoryConfigPattern } from '../functions/parseMemoryConfig';
 import { MemoryConfig } from '../model/MemoryConfig';
 import getServerConfig from '../functions/getServerConfig';
-import { PerfTableRow } from '../definitions/PerfTable';
+import { PerfTableRow } from '../model/PerfTable';
 import { DeviceOperationMapping } from '../model/DeviceOperationMapping';
 import { matchDeviceOperationsToPerf } from '../functions/deviceOperationMatching';
 import memoiseLatest from '../functions/memoiseLatest';
@@ -84,7 +84,7 @@ import {
 } from '../definitions/NPEData';
 import Endpoints from '../definitions/Endpoints';
 import { ReportFolder, SINGLE_HOST_WORLD_SIZE } from '../definitions/Reports';
-import { RemoteFolder } from '../definitions/RemoteConnection';
+import { RemoteFolder } from '../model/RemoteConnection';
 import createToastNotification from '../functions/createToastNotification';
 import { ToastType } from '../definitions/ToastType';
 import { buildLateDeallocationReports } from '../functions/lateDeallocation';
@@ -542,11 +542,17 @@ const fetchClusterDescription = async (): Promise<ClusterModel> => {
 export const useGetClusterDescription = () => {
     const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
 
-    return useQuery({
+    return useQuery<ClusterModel | null, AxiosError>({
         queryFn: () => fetchClusterDescription(),
         queryKey: ['get-cluster-description', activeProfilerReport?.path],
-        initialData: null,
         retry: false,
+        // The descriptor lives beside the memory report, so without one the request can
+        // only 404. The navigation reads this to decide whether Topology is reachable and
+        // is mounted before any report is chosen.
+        enabled: !!activeProfilerReport?.path,
+        // Report-bound: the key carries the report path, so switching reports refetches and
+        // nothing else can change the answer for a given one.
+        staleTime: Infinity,
     });
 };
 
@@ -748,7 +754,7 @@ export const useOperationDetails = (operationId: number | null) => {
 
     const fetchDetails = useCallback(() => fetchOperationDetails(operationId), [operationId]);
 
-    const operationDetails = useQuery<OperationDetailsData>({
+    const operationDetails = useQuery<OperationDetailsData, AxiosError>({
         queryFn: () => fetchDetails(),
         queryKey: ['get-operation-detail', operationId, activeProfilerReport?.path],
         retry: 2,
@@ -1215,11 +1221,10 @@ const useViewPerformanceReportParams = (): PerformanceReportParams => {
     );
 };
 
-const useLinkedPerformanceReportParams = (): PerformanceReportParams => {
-    const tracingMode = useAtomValue(tracingModeAtom);
-
-    return useMemo(() => getLinkedPerformanceReportParams(tracingMode), [tracingMode]);
-};
+// Every filter is pinned, so this is a constant rather than a hook. Held at module
+// scope for a stable identity; the query key is hashed structurally, so this is for
+// readers rather than for React Query.
+const LINKED_PERFORMANCE_REPORT_PARAMS: PerformanceReportParams = Object.freeze(getLinkedPerformanceReportParams());
 
 const usePerformanceReportQuery = (name: string | null, params: PerformanceReportParams) => {
     const location = useAtomValue(performanceReportLocationAtom);
@@ -1252,25 +1257,14 @@ export const usePerformanceReport = (name: string | null) => {
  * it must not move when the user changes how they are viewing the performance
  * tab (#1812).
  *
- * `tracingMode` is the one view control still followed, and so a deliberate
- * carve-out from #1812, which names it alongside the three pinned here. It only
- * reorders rows, and for a trace-captured run the traced order is the one that
- * lines up with the memory report — pinning it would leave those reports
- * permanently unlinkable, which is a worse failure than the one it would fix.
- * Resolving against both orders and keeping whichever aligns would close the
- * gap properly; it needs #1800's shared run id to be worth the second fetch.
- *
- * So a Tracing mode toggle can still flip the badge, and that outcome is not
- * transient: `ReportLinkStatus` writes it to `reportLinksAtom`, which is backed by
- * localStorage, so an `UNLINKED` reached this way keeps badging the pair as failed
- * in the report pickers afterwards. #1812 stays open on that residual until the
- * both-orders resolution lands.
+ * No performance-tab control moves this, tracing mode included — see
+ * `LINKED_PERFORMANCE_REPORT_FILTERS` for why that toggle cannot change the row
+ * order the match runs against once devices are merged.
  */
 export const useLinkedPerformanceReport = () => {
     const name = useAtomValue(activePerformanceReportFolderNameAtom);
-    const params = useLinkedPerformanceReportParams();
 
-    return usePerformanceReportQuery(name, params);
+    return usePerformanceReportQuery(name, LINKED_PERFORMANCE_REPORT_PARAMS);
 };
 
 export const usePerformanceComparisonReport = () => {
@@ -1311,7 +1305,7 @@ export const useInstance = () => {
     const activeNpe = useAtomValue(activeNpeOpTraceAtom);
     const activeMlirJson = useAtomValue(activeMlirJsonAtom);
 
-    return useQuery({
+    return useQuery<Instance | null, AxiosError>({
         queryFn: () => fetchInstance(),
         queryKey: [
             'fetch-instance',
@@ -1413,7 +1407,7 @@ export const deleteProfiler = async (report: string) => {
 };
 
 export const useReportFolderList = () => {
-    return useQuery({
+    return useQuery<ReportFolder[] | null, AxiosError>({
         queryFn: () => fetchReportFolderList(),
         queryKey: [PROFILER_FOLDER_QUERY_KEY],
         initialData: null,
@@ -1435,7 +1429,7 @@ export const deletePerformance = async (report: string) => {
 };
 
 export const usePerfFolderList = () => {
-    return useQuery({
+    return useQuery<ReportFolder[] | null, AxiosError>({
         queryFn: () => fetchPerfFolderList(),
         queryKey: [PERFORMANCE_FOLDER_QUERY_KEY],
         initialData: null,

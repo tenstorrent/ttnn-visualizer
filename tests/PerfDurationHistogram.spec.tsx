@@ -28,7 +28,8 @@ import { PERF_CHART_TABLE_FILTER_HINT, PerfChartId } from '../src/definitions/Pe
 import { PERF_CHART_TRANSPARENT } from '../src/definitions/PlotConfigurations';
 import { formatDurationBucketRange } from '../src/functions/formatDurationBucketRange';
 import { TEST_IDS } from '../src/definitions/TestIds';
-import { MarkerColours, TypedPerfTableRow } from '../src/definitions/PerfTable';
+import { MarkerColours } from '../src/definitions/PerfTable';
+import { TypedPerfTableRow } from '../src/model/PerfTable';
 import { durationBucketFilterListAtom, perfSelectedTabAtom } from '../src/store/app';
 import { AtomProviderInitialValues } from './helpers/atomProvider';
 import { setUpScrollResetMocks } from './helpers/mockScrollReset';

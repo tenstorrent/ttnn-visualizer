@@ -47,7 +47,7 @@ _ENDPOINTS = _REPOSITORY_ROOT / "src" / "definitions" / "Endpoints.ts"
 # process runs on, and only the server can know them. Named here so that adding a
 # client-facing enum without a TypeScript copy fails
 # :func:`test_every_client_facing_enum_is_paired`, rather than going unnoticed.
-_SERVER_ONLY_ENUMS = frozenset({"DeploymentMode", "OperatingSystem"})
+_SERVER_ONLY_ENUMS = frozenset({"DeploymentMode", "LaunchMode", "OperatingSystem"})
 
 _PAIRED_ENUMS: Dict[str, Type[Enum]] = {
     "UsageEvent": UsageEvent,

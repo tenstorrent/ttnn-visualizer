@@ -4,7 +4,8 @@
 
 import { useAtomValue } from 'jotai';
 import PerfCoreCountUtilizationChart from './PerfCoreCountUtilizationChart';
-import { Marker, TypedPerfTableRow } from '../../definitions/PerfTable';
+import { Marker } from '../../definitions/PerfTable';
+import { TypedPerfTableRow } from '../../model/PerfTable';
 import PerfOperationTypesChart from './PerfOperationTypesChart';
 import SkeletalChart from './SkeletalChart';
 import PerfOperationKernelUtilizationChart from './PerfOperationKernelUtilizationChart';

@@ -7,7 +7,7 @@ import { IconNames } from '@blueprintjs/icons';
 import { useAtom } from 'jotai';
 import { useNavigate } from 'react-router';
 import 'styles/components/PerfTensorDrawer.scss';
-import { TypedPerfTableRow } from '../../definitions/PerfTable';
+import { TypedPerfTableRow } from '../../model/PerfTable';
 import ROUTES from '../../definitions/Routes';
 import { TEST_IDS } from '../../definitions/TestIds';
 import { StackTraceLanguage } from '../../definitions/StackTrace';

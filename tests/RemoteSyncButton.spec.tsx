@@ -8,13 +8,13 @@ import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import RemoteSyncButton from '../src/components/report-selection/RemoteSyncButton';
 import { FileTransferSource } from '../src/definitions/FileTransferSource';
-import { RemoteFolder } from '../src/definitions/RemoteConnection';
+import { RemoteFolder } from '../src/model/RemoteConnection';
 import { TEST_IDS } from '../src/definitions/TestIds';
 import {
     clearAllFileTransferProgress,
     fileTransferRegistryAtom,
     getInactiveFileTransferProgress,
-} from '../src/store/fileTransferRegistry';
+} from '../src/store/app';
 import { FileStatus } from '../src/model/APIData';
 import { TestProviders } from './helpers/TestProviders';
 

@@ -26,7 +26,8 @@ import FolderLinkStatusIcon from './FolderLinkStatusIcon';
 import SelectRowActions from './SelectRowActions';
 
 interface LocalFolderPickerProps {
-    items: ReportFolder[];
+    /** `null` while the folder list query is still loading — the component renders disabled. */
+    items: ReportFolder[] | null;
     value: string | null;
     handleSelect: (folder: ReportFolder) => void;
     handleDelete?: (folder: ReportFolder) => void;

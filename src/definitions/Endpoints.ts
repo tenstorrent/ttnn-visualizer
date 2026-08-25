@@ -22,6 +22,7 @@ enum Endpoints {
     PERFORMANCE_RESULTS_REPORT = '/api/performance/perf-results/report',
     PROFILER = '/api/profiler',
     REMOTE = '/api/remote',
+    REMOTE_HOST_KEY = '/api/remote/host-key',
     REMOTE_PROFILER_REPORTS = '/api/remote/profiler-reports',
     REMOTE_PERFORMANCE_REPORTS = '/api/remote/performance-reports',
     REMOTE_LOCAL_PROFILER_REPORTS = '/api/remote/local-profiler-reports',

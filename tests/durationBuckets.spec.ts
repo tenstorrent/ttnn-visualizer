@@ -4,7 +4,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { OpType } from '../src/definitions/Performance';
-import { TypedPerfTableRow } from '../src/definitions/PerfTable';
+import { TypedPerfTableRow } from '../src/model/PerfTable';
 import {
     buildLogDecadeBuckets,
     findBucketForDuration,
