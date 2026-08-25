@@ -1,0 +1,170 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
+
+@use 'styles/definitions/colours' as *;
+@use 'styles/mixins/navigation' as navigation;
+@use 'styles/definitions/variables' as variables;
+
+.side-navigation {
+    position: sticky;
+    top: 0;
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    height: 100vh;
+    width: variables.$side-nav-width-expanded;
+    padding: 15px 8px;
+
+    // The fixed footer info bar crosses the foot of the rail, so the last item clears it.
+    padding-bottom: variables.$app-status-bar-height + 15px;
+
+    // Sits back from the page the way the footer info bar does, so the rail reads as app
+    // chrome rather than as part of the report content beside it.
+    background-color: $tt-black;
+
+    // Subtler than the page-level rules: the fill already separates the two, so a bright
+    // edge would only compete with the item colours.
+    border-right: 1px solid $tt-grey-3;
+
+    // The rail itself never scrolls; only the item list scrolls. The collapse control sits
+    // at the foot: in the item list's flow when collapsed, and as a tab on the rail's
+    // right edge when expanded.
+    //
+    // The width is switched rather than transitioned, deliberately: the rail is a flex
+    // sibling of `main`, so every frame of an animation reflows the page beside it —
+    // re-running Plotly's responsive replot, three `ResizeObserver` consumers and the
+    // virtualised lists' measurement cache. Snapping costs one reflow instead of a dozen.
+    overflow: hidden;
+
+    .side-navigation-header {
+        display: flex;
+        align-items: flex-start;
+        justify-content: center;
+        min-height: 48px;
+
+        .logo-link {
+            display: flex;
+            flex-direction: column;
+            flex: 1 1 auto;
+            min-width: 0;
+            color: inherit;
+            text-decoration: none;
+
+            .visualizer-title {
+                font-size: 14px;
+                white-space: nowrap;
+                font-weight: 700;
+
+                // Indents towards the wordmark, clear of the lockup's leading logo mark.
+                // Held short of true alignment on purpose: the row's remaining width is
+                // ~158px and the name sets ~110px, so a deeper indent clips its tail on
+                // whichever font the platform resolves.
+                margin-left: 40px;
+            }
+        }
+    }
+
+    .side-navigation-items {
+        display: flex;
+        flex-direction: column;
+        gap: 3px; // avoids focus ring overlap
+        flex: 1;
+        overflow: hidden auto;
+
+        .bp6-button {
+            @include navigation.nav-button-styles;
+
+            // Reduce horizontal padding so button icons stay in the same position when the rail collapses.
+            padding-left: 12px;
+            padding-right: 12px;
+
+            // A full-width rail button would strand a corner superscript at the far edge,
+            // so the badge sits inline after the label and is nudged up into superscript
+            // position. Blueprint renders it inside `.bp6-button-text`, after the label
+            // text -- which is why the collapsed rule that hides that span takes the badge
+            // with it. The shared mixin supplies appearance and leaves placement here.
+            small {
+                position: relative;
+                background-color: $tt-black;
+                padding: 2px 4px;
+                top: -5px;
+                right: -3px;
+            }
+        }
+    }
+
+    // Separated from the items so the control doesn't read as one more destination in the
+    // list it sits under.
+    .side-navigation-footer {
+        flex: 0 0 auto;
+        padding-top: 8px;
+        position: relative;
+
+        .side-navigation-toggle {
+            font-size: 14px;
+            background-color: $tt-grey-3;
+            position: absolute;
+            top: -20px;
+            right: -8px;
+            border-radius: 5px 0 0 5px;
+
+            &:hover,
+            &:focus {
+                background-color: $tt-grey-4;
+            }
+        }
+    }
+
+    &.collapsed {
+        width: variables.$side-nav-width-collapsed;
+
+        .visualizer-title {
+            display: none;
+        }
+
+        // The narrow rail fits the lockup's leading mark and nothing else, so the link is
+        // clipped to it rather than swapping in a second asset that could drift from it.
+        // The logo is a home link here as it is expanded — it does not expand the rail.
+        .side-navigation-header {
+            .logo-link {
+                // The mark's own width within the lockup.
+                flex: 0 0 27px;
+                overflow: hidden;
+            }
+        }
+
+        // `display: none` takes the label out of the accessibility tree as well as off the
+        // screen, so the collapsed rail's accessible names come from the `aria-label` each
+        // button carries -- do not remove that prop as redundant. Hiding rather than
+        // unrendering keeps the markup identical across both states, and takes the inline
+        // badge with it, which has nowhere to go beside a bare icon.
+        .bp6-button-text {
+            display: none;
+        }
+
+        .bp6-icon {
+            margin-right: 0;
+        }
+
+        .bp6-button {
+            justify-content: center;
+        }
+
+        .side-navigation-footer {
+            border-top: 1px solid $tt-grey-3;
+
+            .side-navigation-toggle {
+                position: static;
+                background-color: transparent;
+                border-radius: 4px; // default blueprint button radius, so the hover ring is visible
+
+                &:hover,
+                &:focus {
+                    background-color: $tt-grey-4;
+                }
+            }
+        }
+    }
+}

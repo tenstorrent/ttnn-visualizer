@@ -43,7 +43,8 @@ const BOOLEAN_FALSE_VALUES = new Set<string>(['false', '0']);
 // Accepts both shapes the two branches below supply: a real boolean from the JSON the
 // backend inlines, and a string from a Vite env var — where `!!value` made the
 // `VITE_SERVER_MODE=false` that `.env.sample` documents truthy. Anything else — a missing
-// key, a spelling neither side recognises — is off.
+// key, a spelling neither side recognises — is off, which is the local posture and the
+// only safe answer a dev checkout can default to.
 export function isFlagEnabled(value: unknown): boolean {
     if (typeof value === 'boolean') {
         return value;
