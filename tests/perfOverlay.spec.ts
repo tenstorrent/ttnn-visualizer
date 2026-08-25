@@ -5,7 +5,7 @@
 import { describe, expect, it } from 'vitest';
 import { aggregatePerfByOp, getRankComparator, perfColorScale, scoreOps } from '../src/functions/perfOverlay';
 import { PERF_BINS } from '../src/definitions/GraphColors';
-import { TypedPerfTableRow } from '../src/definitions/PerfTable';
+import { TypedPerfTableRow } from '../src/model/PerfTable';
 
 /* eslint-disable camelcase -- `device_time` matches the API wire shape (snake_case) */
 const row = (id: number | null, device_time: number | null): TypedPerfTableRow =>

@@ -15,13 +15,14 @@ import { ReportScope } from '../definitions/ReportScope';
 import { REPORT_LINKS_STORAGE_KEY } from '../definitions/ReportLinks';
 import { getReportId } from '../functions/reportLinks';
 import { ReportLink } from '../model/ReportLinks';
-import { ColumnKeys, TypedPerfTableRow } from '../definitions/PerfTable';
+import { ColumnKeys } from '../definitions/PerfTable';
+import { TypedPerfTableRow } from '../model/PerfTable';
 import { DurationBucket } from '../definitions/PerfDurationHistogram';
 import { BufferType } from '../model/BufferType';
 import { StackedGroupBy } from '../definitions/StackedPerfTable';
 import { SortingOptions } from '../definitions/SortingOptions';
 import { DEFAULT_TOP_N_COUNT, TopNAnnotationMode } from '../definitions/TopNAnnotations';
-import { MlirServerConnection } from '../definitions/MlirServer';
+import { MlirServerConnection } from '../model/MlirServer';
 import { MlirFileResult, MlirLoadedReport } from '../model/MLIRJsonModel';
 import { aggregateFileTransferProgress, fileTransferRegistryAtom } from './fileTransferRegistry';
 

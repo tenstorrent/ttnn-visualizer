@@ -21,7 +21,7 @@ import {
     selectedMlirServerAtom,
 } from '../src/store/app';
 import { GraphBundle, MlirFileResult } from '../src/model/MLIRJsonModel';
-import { MlirServerConnection } from '../src/definitions/MlirServer';
+import { MlirServerConnection } from '../src/model/MlirServer';
 
 const setActiveMlir = vi.fn();
 const uploadMlirFileToServer = vi.fn();

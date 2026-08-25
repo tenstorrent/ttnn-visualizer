@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 import buildDurationHistogram from '../src/functions/buildDurationHistogram';
 import { SAMPLE_OPS_PER_BUCKET } from '../src/definitions/PerfDurationHistogram';
 import { OpType } from '../src/definitions/Performance';
-import { TypedPerfTableRow } from '../src/definitions/PerfTable';
+import { TypedPerfTableRow } from '../src/model/PerfTable';
 
 const row = (overrides: Partial<TypedPerfTableRow>): TypedPerfTableRow =>
     ({

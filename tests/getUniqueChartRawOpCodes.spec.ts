@@ -4,7 +4,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { getUniqueChartRawOpCodes } from '../src/functions/getUniqueChartRawOpCodes';
-import { TypedPerfTableRow } from '../src/definitions/PerfTable';
+import { TypedPerfTableRow } from '../src/model/PerfTable';
 
 const row = (rawOpCode: string | null | undefined): TypedPerfTableRow =>
     ({ raw_op_code: rawOpCode }) as unknown as TypedPerfTableRow;

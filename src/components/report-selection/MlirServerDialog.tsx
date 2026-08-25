@@ -7,7 +7,8 @@ import { IconNames } from '@blueprintjs/icons';
 import { useState } from 'react';
 import { ConnectionNameSubject, SAVE_BLOCKED_TOOLTIP, getNameFieldLabel } from '../../definitions/ConnectionDialog';
 import { ConnectionStatus, ConnectionTestStates } from '../../definitions/ConnectionStatus';
-import { MLIR_PORT_LABEL, MlirServerConnection } from '../../definitions/MlirServer';
+import { MLIR_PORT_LABEL } from '../../definitions/MlirServer';
+import { MlirServerConnection } from '../../model/MlirServer';
 import { SSH_CONFIG_HOST_ADD_SERVER_LABEL } from '../../definitions/SshConfigHostPicker';
 import {
     SSH_HOST_LABEL,

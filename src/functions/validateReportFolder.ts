@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { RemoteFolder } from '../definitions/RemoteConnection';
+import { RemoteFolder } from '../model/RemoteConnection';
 import { ReportFolder } from '../definitions/Reports';
 import createToastNotification from './createToastNotification';
 import { ToastType } from '../definitions/ToastType';

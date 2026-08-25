@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import { describe, expect, it } from 'vitest';
-import { RemoteConnection } from '../src/definitions/RemoteConnection';
+import { RemoteConnection } from '../src/model/RemoteConnection';
 import hasPerformanceDiscoveryChanged from '../src/functions/hasPerformanceDiscoveryChanged';
 
 const connection = (overrides: Partial<RemoteConnection> = {}): RemoteConnection => ({

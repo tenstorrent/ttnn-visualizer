@@ -13,9 +13,9 @@ import {
     NEVER_SYNCED_LABEL,
     REPORT_OUTDATED_LABEL,
     REPORT_UP_TO_DATE_LABEL,
-    RemoteFolder,
     SYNC_DATE_FORMATTER,
 } from '../../definitions/RemoteConnection';
+import { RemoteFolder } from '../../model/RemoteConnection';
 import { TEST_IDS } from '../../definitions/TestIds';
 import { getUTCFromEpoch } from '../../functions/formatting';
 

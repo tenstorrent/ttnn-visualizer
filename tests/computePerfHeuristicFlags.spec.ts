@@ -3,7 +3,8 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import { describe, expect, it } from 'vitest';
-import { BoundType, TypedPerfTableRow } from '../src/definitions/PerfTable';
+import { BoundType } from '../src/definitions/PerfTable';
+import { TypedPerfTableRow } from '../src/model/PerfTable';
 import { PerfHeuristicFlag } from '../src/definitions/PerfHeuristics';
 import { OpType } from '../src/definitions/Performance';
 import { annotatePerfHeuristicFlags } from '../src/functions/computePerfHeuristicFlags';

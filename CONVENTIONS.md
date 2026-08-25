@@ -644,7 +644,9 @@ No `@with_instance`, because the log is machine-scoped rather than report-scoped
 
 Rule of thumb: **if it mirrors a backend response (or a persisted domain record), it's a model.** If it's a constant, mapping, or enum used purely on the frontend, it's a definition.
 
-**Scope.** This split is mandatory for **new modules and files you touch**. The tree still has older domain-shaped types under `definitions/` (e.g. parts of `PerfTable.ts`, `RemoteConnection.ts`, `MlirServer.ts`, `PlotConfigurations.ts`); migrate them when you edit those areas, don't treat every leftover as a reason to ignore the rule. See [Known inconsistencies](#known-inconsistencies).
+**Same basename on both sides.** Where a feature owns both configuration and a record, the two halves keep the same filename in their respective directories rather than one file straddling the line — `definitions/PerfTable.ts` (`ColumnKeys`, `Columns`, `BoundType`) beside `model/PerfTable.ts` (`PerfTableRow`, `TypedPerfTableRow`); likewise `RemoteConnection.ts`, `MlirServer.ts`, and `ReportLinks.ts`. `definitions/PlotConfigurations.ts` keeps the layout and colour configs; the plotly types carrying a `Tensor` live in `model/PlotData.ts`.
+
+**Scope.** This split is mandatory everywhere, not just in new code.
 
 ### `src/routes/`
 
@@ -1373,7 +1375,6 @@ Don't `raise Exception("...")` — there's an existing class for almost every ca
 
 These exist in the codebase today and don't yet have a single canonical answer. Reviewers should flag new code that goes either direction without considering both. Each entry names the inconsistency, the direction new code takes, and its tracking issue; the rule itself lives in the section above that owns it.
 
-- **`definitions/` still holds some domain-shaped types** (`PerfTable.ts`, `RemoteConnection.ts`, `MlirServer.ts`, `PlotConfigurations.ts`). New types follow the [`definitions/` vs `model/` boundary](#srcdefinitions-vs-srcmodel); leftovers migrate **on-touch**, not in a big-bang move. (#1910)
 - **Two accessors for CSS-custom-property colours.** `GRAPH_COLORS` resolves at module load; `getPerfChartChrome()` re-reads per call. Both are legitimate and both keep the literal in `_base.scss` — pick per [No hex literals in TS/TSX](#no-hex-literals-in-tstsx), and don't add a third mechanism. (#1911)
 - **`extract_npe_name` is a misnomer** — used by both NPE and MLIR upload handlers. A rename to `extract_uploaded_name` is a tracked follow-up; don't perpetuate the NPE-specific name in new helpers. (#1913)
 - **`errorMessage` vs `statusMessage` in file loaders.** `MlirJsonFileLoader.tsx` and `NPEFileLoader.tsx` overload `errorMessage` with both success and failure text. Rename to `statusMessage` is pending. (#1914)

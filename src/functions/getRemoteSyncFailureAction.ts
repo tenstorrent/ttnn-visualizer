@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import axios from 'axios';
-import { RemoteFolder } from '../definitions/RemoteConnection';
+import { RemoteFolder } from '../model/RemoteConnection';
 import { RemoteSyncFailureAction } from '../definitions/RemoteSync';
 
 /**

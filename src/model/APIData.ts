@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { RemoteConnection, RemoteFolder } from '../definitions/RemoteConnection';
+import { RemoteConnection, RemoteFolder } from './RemoteConnection';
 import { ReportLocation } from '../definitions/Reports';
 import { BufferMemoryLayout, MemoryConfig } from './MemoryConfig';
 import { BufferType, StringBufferType } from './BufferType';

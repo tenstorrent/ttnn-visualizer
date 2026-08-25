@@ -23,8 +23,8 @@ import {
     MULTIHOST_GROUP_LABEL,
     REMOTE_MEMORY_PATH_LABEL,
     REMOTE_PERFORMANCE_PATH_LABEL,
-    RemoteConnection,
 } from '../../definitions/RemoteConnection';
+import { RemoteConnection } from '../../model/RemoteConnection';
 import { SSH_CONFIG_HOST_ADD_CONNECTION_LABEL } from '../../definitions/SshConfigHostPicker';
 import {
     REMOTE_MEMORY_PATH_ERROR_ID,

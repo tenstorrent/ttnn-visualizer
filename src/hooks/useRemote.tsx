@@ -7,7 +7,7 @@ import { useCallback } from 'react';
 import { ConnectionTestStates } from '../definitions/ConnectionStatus';
 import Endpoints from '../definitions/Endpoints';
 import { FileTransferSource } from '../definitions/FileTransferSource';
-import { MountRemoteFolder, RemoteConnection, RemoteFolder } from '../definitions/RemoteConnection';
+import { MountRemoteFolder, RemoteConnection, RemoteFolder } from '../model/RemoteConnection';
 import { REMOTE_SYNC_REQUEST_TIMEOUT_MS } from '../definitions/RemoteSync';
 import { StackSourceOrigin } from '../definitions/StackTrace';
 import { clearFileTransferProgressForSource } from '../store/app';

@@ -19,7 +19,7 @@
  */
 import { DurationBucket } from '../definitions/PerfDurationHistogram';
 import { OpType } from '../definitions/Performance';
-import { TypedPerfTableRow } from '../definitions/PerfTable';
+import { TypedPerfTableRow } from '../model/PerfTable';
 import { formatDurationBucketRange } from './formatDurationBucketRange';
 
 /** Log base for bucket edges: buckets span [10^n, 10^(n+1)), so each is ten times its lower bound. */

@@ -6,7 +6,8 @@ import { getBufferColor, getTensorColor } from './colorGenerator';
 import { formatMemorySize, getMemoryAddress } from './math';
 import { toReadableShape, toReadableType } from './formatting';
 import { Chunk, ColoredChunk, DecoratedBufferChunk, Tensor } from '../model/APIData';
-import { PlotDataCustom, PlotDataOverrides } from '../definitions/PlotConfigurations';
+import { PlotDataOverrides } from '../definitions/PlotConfigurations';
+import { PlotDataCustom } from '../model/PlotData';
 import { LATE_DEALLOC_OPPORTUNITY_TEXT } from '../definitions/LateDeallocation';
 import { TensorMemoryLayout } from '../model/MemoryConfig';
 

@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-import { RemoteFolder } from '../definitions/RemoteConnection';
+import { RemoteFolder } from '../model/RemoteConnection';
 
 /**
  * Merge a fresh folder list onto cached rows. Prefer the update's lastSynced when the

@@ -16,12 +16,8 @@ import { ConnectionStatus, ConnectionTestStates } from '../src/definitions/Conne
 import Endpoints from '../src/definitions/Endpoints';
 import { ACTIVE_PERFORMANCE_REPORT_TOAST_TITLE } from '../src/definitions/notifyActiveReport';
 import { CONFIRM_DELETE_LABEL } from '../src/definitions/ManagedEntity';
-import {
-    FETCH_REMOTE_FOLDERS_LABEL,
-    REMOTE_MEMORY_PATH_LABEL,
-    RemoteConnection,
-    RemoteFolder,
-} from '../src/definitions/RemoteConnection';
+import { FETCH_REMOTE_FOLDERS_LABEL, REMOTE_MEMORY_PATH_LABEL } from '../src/definitions/RemoteConnection';
+import { RemoteConnection, RemoteFolder } from '../src/model/RemoteConnection';
 import { SSH_HOST_LABEL, SSH_USERNAME_LABEL } from '../src/definitions/SshConnectionFields';
 import { TEST_IDS } from '../src/definitions/TestIds';
 import {

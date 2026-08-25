@@ -11,11 +11,8 @@ import RemoteConnectionSelector from '../src/components/report-selection/RemoteC
 import { ConnectionNameSubject, getNameFieldLabel } from '../src/definitions/ConnectionDialog';
 import { ConnectionStatus, ConnectionTestStates } from '../src/definitions/ConnectionStatus';
 import { CANCEL_DELETE_LABEL, CONFIRM_DELETE_LABEL } from '../src/definitions/ManagedEntity';
-import {
-    FETCH_REMOTE_FOLDERS_LABEL,
-    REMOTE_MEMORY_PATH_LABEL,
-    RemoteConnection,
-} from '../src/definitions/RemoteConnection';
+import { FETCH_REMOTE_FOLDERS_LABEL, REMOTE_MEMORY_PATH_LABEL } from '../src/definitions/RemoteConnection';
+import { RemoteConnection } from '../src/model/RemoteConnection';
 import { REMOTE_PATH_NOT_ABSOLUTE_ERROR, SSH_HOST_LABEL } from '../src/definitions/SshConnectionFields';
 import { TEST_IDS } from '../src/definitions/TestIds';
 import {

@@ -10,7 +10,7 @@ import MLIRFileSelector from '../src/components/report-selection/MLIRFileSelecto
 import { ConnectionNameSubject, getNameFieldLabel, getNameTakenMessage } from '../src/definitions/ConnectionDialog';
 import { ConnectionStatus, ConnectionTestStates } from '../src/definitions/ConnectionStatus';
 import { CANCEL_DELETE_LABEL, CONFIRM_DELETE_LABEL, ManagedEntity } from '../src/definitions/ManagedEntity';
-import { MlirServerConnection } from '../src/definitions/MlirServer';
+import { MlirServerConnection } from '../src/model/MlirServer';
 import { SSH_HOST_LABEL, SSH_USERNAME_LABEL } from '../src/definitions/SshConnectionFields';
 import { TEST_IDS } from '../src/definitions/TestIds';
 import { getDeleteActionLabel, getEditActionLabel } from '../src/functions/managedEntityLabels';

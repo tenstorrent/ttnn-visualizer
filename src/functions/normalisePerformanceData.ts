@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { OpType } from '../definitions/Performance';
-import { TypedPerfTableRow } from '../definitions/PerfTable';
+import { TypedPerfTableRow } from '../model/PerfTable';
 
 const MISSING_OP_STRING = 'MISSING';
 const PLACEHOLDER: TypedPerfTableRow = {

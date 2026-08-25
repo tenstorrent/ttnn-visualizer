@@ -16,13 +16,10 @@ import {
     getNameTakenMessage,
 } from '../src/definitions/ConnectionDialog';
 import { ConnectionStatus, ConnectionTestStates } from '../src/definitions/ConnectionStatus';
+import { REMOTE_MEMORY_PATH_LABEL, REMOTE_PERFORMANCE_PATH_LABEL } from '../src/definitions/RemoteConnection';
+import { RemoteConnection } from '../src/model/RemoteConnection';
 import { HostKeyIssue } from '../src/definitions/HostKey';
 import { HostKeyStatus } from '../src/model/HostKey';
-import {
-    REMOTE_MEMORY_PATH_LABEL,
-    REMOTE_PERFORMANCE_PATH_LABEL,
-    RemoteConnection,
-} from '../src/definitions/RemoteConnection';
 import { SSH_CONFIG_HOST_CUSTOM, SSH_CONFIG_HOST_SUBLABEL } from '../src/definitions/SshConfigHostPicker';
 import {
     REMOTE_PATH_NOT_ABSOLUTE_ERROR,

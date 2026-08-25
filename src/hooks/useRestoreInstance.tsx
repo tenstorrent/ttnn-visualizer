@@ -16,7 +16,7 @@ import {
 import { useInstance, useReportFolderList } from './useAPI';
 import useRemoteConnection from './useRemote';
 import { ReportLocation } from '../definitions/Reports';
-import type { RemoteFolder } from '../definitions/RemoteConnection';
+import type { RemoteFolder } from '../model/RemoteConnection';
 import { useResetMemoryListStates } from './useRestoreScrollPosition';
 
 const useRestoreInstance = () => {

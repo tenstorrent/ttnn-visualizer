@@ -8,12 +8,8 @@ import { MemoryLegendElement } from './MemoryLegendElement';
 import MemoryPlotRenderer from './MemoryPlotRenderer';
 import { isEqual } from '../../functions/math';
 import { DRAM_MEMORY_SIZE } from '../../definitions/DRAMMemorySize';
-import {
-    DRAMRenderConfiguration,
-    MAX_LEGEND_LENGTH,
-    PlotDataCustom,
-    PlotMouseEventCustom,
-} from '../../definitions/PlotConfigurations';
+import { DRAMRenderConfiguration, MAX_LEGEND_LENGTH } from '../../definitions/PlotConfigurations';
+import { PlotDataCustom, PlotMouseEventCustom } from '../../model/PlotData';
 import { FragmentationEntry } from '../../model/APIData';
 import { BufferType } from '../../model/BufferType';
 import { OperationDetails } from '../../model/OperationDetails';

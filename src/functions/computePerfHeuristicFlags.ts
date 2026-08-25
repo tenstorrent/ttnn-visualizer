@@ -2,7 +2,8 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-import { BoundType, TypedPerfTableRow } from '../definitions/PerfTable';
+import { BoundType } from '../definitions/PerfTable';
+import { TypedPerfTableRow } from '../model/PerfTable';
 import { PERF_HEURISTIC_THRESHOLDS, PerfHeuristicFlag } from '../definitions/PerfHeuristics';
 import { OpType } from '../definitions/Performance';
 import getCoreUtilization from './getCoreUtilization';

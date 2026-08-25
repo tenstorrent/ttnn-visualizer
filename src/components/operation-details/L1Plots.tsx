@@ -20,8 +20,8 @@ import {
     L1_SMALL_MARKER_COLOR,
     L1_START_MARKER_COLOR,
     MAX_LEGEND_LENGTH,
-    PlotMouseEventCustom,
 } from '../../definitions/PlotConfigurations';
+import { PlotMouseEventCustom } from '../../model/PlotData';
 import { BufferType } from '../../model/BufferType';
 import { FragmentationEntry, MarkerType } from '../../model/APIData';
 import { MemoryLegendGroup } from './MemoryLegendGroup';

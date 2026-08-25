@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import { describe, expect, it } from 'vitest';
-import { RemoteFolder } from '../src/definitions/RemoteConnection';
+import { RemoteFolder } from '../src/model/RemoteConnection';
 import mergeRemoteFolders from '../src/functions/mergeRemoteFolders';
 
 const baseFolder = (overrides: Partial<RemoteFolder> = {}): RemoteFolder => ({

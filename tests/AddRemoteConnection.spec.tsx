@@ -14,7 +14,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import AddRemoteConnection from '../src/components/report-selection/AddRemoteConnection';
 import { ConnectionNameSubject, getNameFieldLabel, getNameTakenMessage } from '../src/definitions/ConnectionDialog';
 import { ConnectionStatus, ConnectionTestStates } from '../src/definitions/ConnectionStatus';
-import { RemoteConnection } from '../src/definitions/RemoteConnection';
+import { RemoteConnection } from '../src/model/RemoteConnection';
 import { SSH_HOST_LABEL } from '../src/definitions/SshConnectionFields';
 import getButtonWithText from './helpers/getButtonWithText';
 import { SshConfigHostsQueryResult, noSshConfigResult } from './helpers/sshConfigFixtures';
