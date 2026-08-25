@@ -3,6 +3,7 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 @use '../definitions/colours' as *;
+@use '../definitions/variables' as *;
 
 .connection-test-message {
     display: inline-flex;
@@ -35,7 +36,7 @@
         padding: 8px;
 
         // Stops large errors overflowing the container
-        max-width: 415px;
+        max-width: $connection-detail-width;
         max-height: 200px;
         overflow: scroll;
     }

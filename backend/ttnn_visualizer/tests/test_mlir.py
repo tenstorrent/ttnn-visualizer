@@ -27,6 +27,11 @@ from ttnn_visualizer.mlir import (
     _normalise_convert_response,
     is_supported_mlir_server_file,
     relabel_graph_ids,
+)
+from ttnn_visualizer.mlir import (
+    test_mlir_server_connection as run_mlir_server_connection_test,  # Aliased: pytest collects any imported name starting with `test_` as a test.
+)
+from ttnn_visualizer.mlir import (
     upload_and_convert_mlir,
 )
 from ttnn_visualizer.models import (
@@ -36,6 +41,7 @@ from ttnn_visualizer.models import (
     ReportLocation,
     StatusMessage,
 )
+from ttnn_visualizer.ssh_client import SSHClient
 
 # Model Explorer HTTP port on the remote host's loopback — not SSH (see ``mlir_http_port``).
 MLIR_HTTP_PORT = 8080
@@ -848,3 +854,53 @@ def test_upload_endpoint_traversal_filename_stays_in_mlir_dir(app, client, make_
             ), f"File escaped MLIR directory: {path.resolve()}"
 
     assert (mlir_root / "escape.json").is_file()
+
+
+class TestMlirHostKeyVerdicts:
+    """The MLIR connection test shares `SSHClient`, so it shares the host-key verdict."""
+
+    @staticmethod
+    def _connection():
+        return MlirServerConnection(
+            name="mlir", username="alice", host="work-gpu", sshPort=22, port=8080
+        )
+
+    def test_a_host_key_failure_carries_its_verdict(self, monkeypatch):
+        from ttnn_visualizer.enums import HostKeyIssue
+        from ttnn_visualizer.exceptions import HostKeyVerificationFailedException
+        from ttnn_visualizer.known_hosts import host_key_status
+        from ttnn_visualizer.models import HostKeyTarget
+
+        status = host_key_status(
+            HostKeyTarget(host="work-gpu", port=22), HostKeyIssue.UNKNOWN
+        )
+
+        def refuse(self):
+            raise HostKeyVerificationFailedException(
+                message="host key not trusted", host_key=status
+            )
+
+        monkeypatch.setattr(SSHClient, "test_connection", refuse)
+
+        statuses = run_mlir_server_connection_test(self._connection())
+
+        assert len(statuses) == 1
+        assert (
+            statuses[0].model_dump()["hostKey"]["issue"] == HostKeyIssue.UNKNOWN.value
+        )
+
+    def test_a_non_host_key_failure_carries_no_host_key_field(self, monkeypatch):
+        """The narrow model stays narrow: only a host-key verdict widens the line."""
+        from ttnn_visualizer.enums import ConnectionTestStates
+        from ttnn_visualizer.exceptions import RemoteConnectionException
+
+        def refuse(self):
+            raise RemoteConnectionException(
+                message="unreachable", status=ConnectionTestStates.FAILED
+            )
+
+        monkeypatch.setattr(SSHClient, "test_connection", refuse)
+
+        statuses = run_mlir_server_connection_test(self._connection())
+
+        assert "hostKey" not in statuses[0].model_dump()
