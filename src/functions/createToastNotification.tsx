@@ -19,12 +19,7 @@ export function dismissToast(toastId?: Id) {
     toast.dismiss(toastId);
 }
 
-export default function createToastNotification(
-    message: string,
-    fileName: string,
-    type?: ToastType,
-    options?: ToastOptions,
-): Id {
+export default function createToastNotification(message: string, fileName: string, type?: ToastType): Id {
     const template = (
         <ToastFileChange
             message={message}
@@ -32,5 +27,5 @@ export default function createToastNotification(
         />
     );
 
-    return createToast(template, options, type);
+    return createToast(template, undefined, type);
 }

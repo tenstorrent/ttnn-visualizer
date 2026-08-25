@@ -181,7 +181,7 @@ Applies on touch to views that draw data-proportional visuals (NPE chip cluster 
 ### Errors and toasts
 
 - Funnel error-string extraction through **`getResponseError(error, fallback?)`** (`src/functions/getResponseError.ts`). Don't reach into `error.response.data.error` ad-hoc — the helper handles AxiosError, Error, and string fallbacks consistently.
-- Emit toasts via **`createToastNotification(message, fileName, ToastType.X)`** (`src/functions/createToastNotification.tsx`; `ToastType` lives in `src/definitions/ToastType.ts`). For a toast needing its own body, per-toast options, or the `Id` to dismiss it later, the same module exports **`createToast(content, options?, type?)`** and **`dismissToast(toastId?)`** — `useBufferFocus` is the case they exist for. That module is the only one that may import `toast` from `react-toastify` — `no-restricted-imports` enforces it — though importing its *types* elsewhere is unrestricted. Defaults belong on the `<ToastContainer>`, mounted once in `Layout.tsx`.
+- Emit toasts via **`createToastNotification(message, fileName, ToastType.X)`** (`src/functions/createToastNotification.tsx`; `ToastType` lives in `src/definitions/ToastType.ts`); the same module exports **`createToast`** and **`dismissToast`** for a custom body or a toast you must dismiss later. Only that module may import `toast` from `react-toastify` — `no-restricted-imports` enforces it. [Signatures and the `<ToastContainer>` rule](./CONVENTIONS.md#emit-toasts-via-createtoastnotification).
 
 ### Usage recording (frontend)
 
