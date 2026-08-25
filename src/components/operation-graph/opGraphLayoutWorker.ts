@@ -36,12 +36,18 @@ let operations: OpGraphSourceOperation[] = [];
 //
 // Expanded ids are sorted so the key describes the set rather than the order it
 // was clicked in: opening A then B is the same graph as opening B then A.
-const cacheKeyOf = (version: number, hideDeallocate: boolean, deviceSubgraphs: OpGraphDeviceSubgraph[]): string => {
+const cacheKeyOf = (
+    version: number,
+    hideDeallocate: boolean,
+    deviceSubgraphs: OpGraphDeviceSubgraph[],
+    expandedBlockIds: readonly string[],
+): string => {
     const expanded = deviceSubgraphs
         .map((subgraph) => subgraph.operationId)
         .sort((left, right) => left - right)
         .join(',');
-    return `${version}:${hideDeallocate}:${expanded}`;
+    const blocks = [...expandedBlockIds].sort().join(',');
+    return `${version}:${hideDeallocate}:${expanded}:${blocks}`;
 };
 
 const postError = (requestId: number, error: unknown): void => {
@@ -68,7 +74,12 @@ const drainPendingBuild = (): void => {
         return;
     }
 
-    const cacheKey = cacheKeyOf(request.sourceVersion, request.hideDeallocate, request.deviceSubgraphs);
+    const cacheKey = cacheKeyOf(
+        request.sourceVersion,
+        request.hideDeallocate,
+        request.deviceSubgraphs,
+        request.expandedBlockIds ?? [],
+    );
     const cached = layoutCache.get(cacheKey);
     if (cached) {
         touchLruCache(layoutCache, cacheKey, cached, LAYOUT_CACHE_LIMIT);
@@ -85,6 +96,7 @@ const drainPendingBuild = (): void => {
         const graph = buildOpGraph(operations, {
             hideDeallocate: request.hideDeallocate,
             deviceSubgraphs: request.deviceSubgraphs,
+            expandedBlockIds: request.expandedBlockIds,
         });
         touchLruCache(layoutCache, cacheKey, graph, LAYOUT_CACHE_LIMIT);
         postMessage({
@@ -116,6 +128,7 @@ onmessage = (event: MessageEvent<OpGraphWorkerInboundMessage>) => {
         sourceVersion: message.sourceVersion,
         hideDeallocate: message.hideDeallocate,
         deviceSubgraphs: message.deviceSubgraphs,
+        expandedBlockIds: message.expandedBlockIds,
     };
 
     if (!isDrainScheduled) {

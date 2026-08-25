@@ -491,7 +491,11 @@ describe('OperationGraphReactFlow rebuild triggers', () => {
         fireEvent.click(screen.getByLabelText('Hide deallocate ops'));
 
         expect(runBuild).toHaveBeenCalledTimes(1);
-        expect(runBuild).toHaveBeenLastCalledWith({ hideDeallocate: false, deviceSubgraphs: [] });
+        expect(runBuild).toHaveBeenLastCalledWith({
+            hideDeallocate: false,
+            deviceSubgraphs: [],
+            expandedBlockIds: [],
+        });
     });
 
     it('relayouts when the report changes', () => {

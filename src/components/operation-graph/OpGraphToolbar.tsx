@@ -73,6 +73,12 @@ interface OpGraphToolbarProps {
     linkedOpCount: number;
     totalOpCount: number;
     isDisabled: boolean;
+    hiddenMatchCount?: number;
+    hasBlocks?: boolean;
+    areAllBlocksExpanded?: boolean;
+    areAllBlocksCollapsed?: boolean;
+    onExpandAllBlocks?: () => void;
+    onCollapseAllBlocks?: () => void;
 }
 
 const OpGraphToolbar = memo(
@@ -101,6 +107,12 @@ const OpGraphToolbar = memo(
         linkedOpCount,
         totalOpCount,
         isDisabled,
+        hiddenMatchCount = 0,
+        hasBlocks = false,
+        areAllBlocksExpanded = false,
+        areAllBlocksCollapsed = true,
+        onExpandAllBlocks,
+        onCollapseAllBlocks,
     }: OpGraphToolbarProps) => (
         <div className='op-graph-toolbar'>
             <GraphOpFilter
@@ -114,6 +126,7 @@ const OpGraphToolbar = memo(
                 currentMatchIndex={currentMatchIndex}
                 onPrev={onPrevMatch}
                 onNext={onNextMatch}
+                hiddenMatchCount={hiddenMatchCount}
                 isDisabled={isDisabled}
             />
 
@@ -168,6 +181,25 @@ const OpGraphToolbar = memo(
                         }
                     />
                 </Tooltip>
+
+                {hasBlocks ? (
+                    <>
+                        <Button
+                            variant={ButtonVariant.OUTLINED}
+                            disabled={isDisabled || areAllBlocksExpanded}
+                            onClick={onExpandAllBlocks}
+                        >
+                            Expand all blocks
+                        </Button>
+                        <Button
+                            variant={ButtonVariant.OUTLINED}
+                            disabled={isDisabled || areAllBlocksCollapsed}
+                            onClick={onCollapseAllBlocks}
+                        >
+                            Collapse all blocks
+                        </Button>
+                    </>
+                ) : null}
 
                 <Switch
                     className='op-graph-toolbar-switch'

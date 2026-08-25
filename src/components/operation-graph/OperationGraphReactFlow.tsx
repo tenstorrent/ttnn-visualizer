@@ -40,6 +40,7 @@ import type { GraphOpFilterHandle } from '../GraphOpFilter';
 import LoadingSpinner from '../LoadingSpinner';
 import PerfOverlayLegend from '../perf-overlay/PerfOverlayLegend';
 import CriticalPathAnnotation from './CriticalPathAnnotation';
+import OpGraphBlockNode from './OpGraphBlockNode';
 import OpGraphDeviceGroupNode from './OpGraphDeviceGroupNode';
 import OpGraphDeviceOpNode from './OpGraphDeviceOpNode';
 import OpGraphEdge from './OpGraphEdge';
@@ -47,7 +48,7 @@ import OpGraphInfoPanel from './OpGraphInfoPanel';
 import OpGraphNode from './OpGraphNode';
 import OpGraphToolbar from './OpGraphToolbar';
 import { buildDeviceOperationSubgraph, countDeviceOperations } from './opGraphDeviceSubgraph';
-import { OpGraphExpansionContext } from './opGraphExpansionContext';
+import { OpGraphBlockExpansionContext, OpGraphExpansionContext } from './opGraphExpansionContext';
 import {
     PERF_BAR_ZOOM_VAR,
     buildOpGraphPerfOverlay,
@@ -58,6 +59,7 @@ import {
 import { EMPTY_CRITICAL_PATH, findCriticalPath } from './opGraphCriticalPath';
 import { useOpGraphLayoutWorker } from './useOpGraphLayoutWorker';
 import {
+    type OpGraphBlockSummary,
     type OpGraphBuildOptions,
     type OpGraphBuiltGraph,
     type OpGraphDeviceSubgraph,
@@ -74,6 +76,7 @@ const NODE_TYPES = {
     [OpGraphNodeType.OP]: OpGraphNode,
     [OpGraphNodeType.DEVICE_GROUP]: OpGraphDeviceGroupNode,
     [OpGraphNodeType.DEVICE_OP]: OpGraphDeviceOpNode,
+    [OpGraphNodeType.BLOCK]: OpGraphBlockNode,
 };
 const EDGE_TYPES = { [OpGraphEdgeType.OP]: OpGraphEdge };
 
@@ -85,26 +88,43 @@ const targetOperationIdOf = (edge: OpGraphFlowEdge): number | undefined => edge.
 const isInternalDeviceEdge = (edge: OpGraphFlowEdge): boolean =>
     sourceOperationIdOf(edge) === targetOperationIdOf(edge);
 
-const operationNodeIdOf = (operationId: number | undefined): string | null =>
-    operationId === undefined ? null : String(operationId);
+const operationNodeIdOf = (
+    operationId: number | undefined,
+    nodeIdByOperationId: ReadonlyMap<number, string>,
+): string | null => {
+    if (operationId === undefined) {
+        return null;
+    }
+    return nodeIdByOperationId.get(operationId) ?? String(operationId);
+};
 
-const operationBoundaryOf = (edge: OpGraphFlowEdge): { source: string; target: string } | null => {
+const operationBoundaryOf = (
+    edge: OpGraphFlowEdge,
+    nodeIdByOperationId: ReadonlyMap<number, string>,
+): { source: string; target: string } | null => {
     if (isInternalDeviceEdge(edge)) {
         return null;
     }
-    const source = operationNodeIdOf(sourceOperationIdOf(edge));
-    const target = operationNodeIdOf(targetOperationIdOf(edge));
+    const source = operationNodeIdOf(sourceOperationIdOf(edge), nodeIdByOperationId);
+    const target = operationNodeIdOf(targetOperationIdOf(edge), nodeIdByOperationId);
     if (source === null || target === null) {
         return null;
     }
     return { source, target };
 };
 
-const bothEndsMatched = (edge: OpGraphFlowEdge, matchedIds: ReadonlySet<string>): boolean => {
-    const source = operationNodeIdOf(sourceOperationIdOf(edge));
-    const target = operationNodeIdOf(targetOperationIdOf(edge));
+const bothEndsMatched = (
+    edge: OpGraphFlowEdge,
+    matchedIds: ReadonlySet<string>,
+    nodeIdByOperationId: ReadonlyMap<number, string>,
+): boolean => {
+    const source = operationNodeIdOf(sourceOperationIdOf(edge), nodeIdByOperationId);
+    const target = operationNodeIdOf(targetOperationIdOf(edge), nodeIdByOperationId);
     return source !== null && target !== null && matchedIds.has(source) && matchedIds.has(target);
 };
+
+const tensorBytes = (tensors: { size: number | null }[]): number =>
+    tensors.reduce((total, tensor) => total + (tensor.size ?? 0), 0);
 
 // A large report only fits at extreme zoom-out; 3 caps zoom-in as vis did.
 const MAX_ZOOM = 3;
@@ -123,15 +143,27 @@ const FILTER_MODE_STORAGE_KEY = 'opGraphFilterMode';
 interface OpGraphMatches {
     ids: Set<string>;
     operationIdsInOrder: number[];
+    hiddenMatchCount: number;
+    buriedCountById: Map<string, number>;
 }
 
 // Shared so an idle filter yields one stable identity instead of a fresh empty
 // set per render, which would invalidate every memo downstream.
-const EMPTY_MATCHES: OpGraphMatches = { ids: new Set<string>(), operationIdsInOrder: [] };
+const EMPTY_MATCHES: OpGraphMatches = {
+    ids: new Set<string>(),
+    operationIdsInOrder: [],
+    hiddenMatchCount: 0,
+    buriedCountById: new Map<string, number>(),
+};
 
 // Same reason: resetting expansion to a fresh set would rebuild the graph even
 // when nothing was expanded to begin with.
 const NOTHING_EXPANDED: ReadonlySet<number> = new Set<number>();
+const NOTHING_EXPANDED_BLOCKS: ReadonlySet<string> = new Set<string>();
+const NO_BLOCKS: OpGraphBlockSummary[] = [];
+const NO_DEVICE_SUBGRAPHS: OpGraphDeviceSubgraph[] = [];
+const EMPTY_NODE_ID_BY_OP = new Map<number, string>();
+const EMPTY_BLOCK_IDS: string[] = [];
 
 const SELECTED_NODE_CLASS = 'op-graph-node-selected';
 
@@ -198,6 +230,9 @@ const OperationGraphInner = ({
     // reading position in one graph, and the MLIR view scopes its own namespace
     // expansion the same way. #1195
     const [expandedOperationIds, setExpandedOperationIds] = useState<ReadonlySet<number>>(NOTHING_EXPANDED);
+    const [expandedBlockIds, setExpandedBlockIds] = useState<ReadonlySet<string>>(NOTHING_EXPANDED_BLOCKS);
+    const [detectedBlocks, setDetectedBlocks] = useState<OpGraphBlockSummary[]>(NO_BLOCKS);
+    const [nodeIdByOperationId, setNodeIdByOperationId] = useState<ReadonlyMap<number, string>>(EMPTY_NODE_ID_BY_OP);
     const [isPerfOverlayEnabled, setIsPerfOverlayEnabled] = useState(false);
     const [criticalPathScope, setCriticalPathScope] = useAtom(criticalPathScopeAtom);
     const [perfHover, setPerfHover] = useState<PerfHover | null>(null);
@@ -236,10 +271,12 @@ const OperationGraphInner = ({
     // report it was armed for so a swap cannot spend it against a same-id node.
     const pendingViewportAnchorRef = useRef<{
         nodeId: string;
+        fallbackNodeId: string;
         paneX: number;
         paneY: number;
         reportScope: ReportScope;
     } | null>(null);
+    const [revealedOperationId, setRevealedOperationId] = useState<number | null>(null);
     const { setCenter, getNode, getViewport, setViewport } = useReactFlow<OpGraphFlowNode, OpGraphFlowEdge>();
     const flowStore = useStoreApi();
 
@@ -265,6 +302,10 @@ const OperationGraphInner = ({
         // Operation ids restart per report, so a surviving expansion would open
         // whichever unrelated operation now answers to that id.
         setExpandedOperationIds(NOTHING_EXPANDED);
+        setExpandedBlockIds(NOTHING_EXPANDED_BLOCKS);
+        setDetectedBlocks(NO_BLOCKS);
+        setNodeIdByOperationId(EMPTY_NODE_ID_BY_OP);
+        setRevealedOperationId(null);
         deviceSubgraphCache.clear();
     }
 
@@ -306,6 +347,9 @@ const OperationGraphInner = ({
                 // than from `deviceOperationNameList`, which the details panel uses
                 // and which screens out the `Tensor::` frames the graph draws.
                 deviceOperationCount: countDeviceOperations(operation),
+                inputShapes: operation.inputs.map((tensor) => toReadableShape(tensor.shape)),
+                durationSeconds: operation.duration,
+                memoryDeltaBytes: tensorBytes(operation.outputs) - tensorBytes(operation.inputs),
             })),
         [operationList],
     );
@@ -321,21 +365,35 @@ const OperationGraphInner = ({
     // Only the expanded operations are assembled: one operation's frame stream
     // runs to thousands of nodes, so deriving all of them up front would pay for
     // the ones nobody opens.
+    const collapsedMemberIds = useMemo(() => {
+        const memberIds = new Set<number>();
+        for (const block of detectedBlocks) {
+            if (!expandedBlockIds.has(block.instanceId)) {
+                for (const memberOpId of block.operationIds) {
+                    memberIds.add(memberOpId);
+                }
+            }
+        }
+        return memberIds;
+    }, [detectedBlocks, expandedBlockIds]);
+
     const deviceSubgraphs = useMemo<OpGraphDeviceSubgraph[]>(() => {
         const assembled: OpGraphDeviceSubgraph[] = [];
         for (const expandedOperationId of expandedOperationIds) {
-            let subgraph = deviceSubgraphCache.get(expandedOperationId);
-            if (subgraph === undefined) {
-                const operation = operationById.get(expandedOperationId);
-                subgraph = operation === undefined ? null : buildDeviceOperationSubgraph(operation);
-                deviceSubgraphCache.set(expandedOperationId, subgraph);
-            }
-            if (subgraph !== null) {
-                assembled.push(subgraph);
+            if (!collapsedMemberIds.has(expandedOperationId)) {
+                let subgraph = deviceSubgraphCache.get(expandedOperationId);
+                if (subgraph === undefined) {
+                    const operation = operationById.get(expandedOperationId);
+                    subgraph = operation === undefined ? null : buildDeviceOperationSubgraph(operation);
+                    deviceSubgraphCache.set(expandedOperationId, subgraph);
+                }
+                if (subgraph !== null) {
+                    assembled.push(subgraph);
+                }
             }
         }
-        return assembled;
-    }, [expandedOperationIds, operationById, deviceSubgraphCache]);
+        return assembled.length === 0 ? NO_DEVICE_SUBGRAPHS : assembled;
+    }, [expandedOperationIds, collapsedMemberIds, operationById, deviceSubgraphCache]);
 
     // React Flow reports selection by node id; the panel and the toolbar work in
     // operation ids.
@@ -366,15 +424,28 @@ const OperationGraphInner = ({
             // over, and a child has no duration, no name worth matching and no
             // place in the operation sequence. Leaving them out is what keeps them
             // from being scored as zero-cost operations. #1195
-            setNodeIndex(
-                graph.nodes
-                    .filter((node) => node.type !== OpGraphNodeType.DEVICE_OP)
-                    .map((node) => ({
+            const indexEntries: OpGraphNodeIndexEntry[] = [];
+            const renderedByOpId = new Map<number, string>();
+            for (const node of graph.nodes) {
+                if (node.type !== OpGraphNodeType.DEVICE_OP) {
+                    indexEntries.push({
                         id: node.id,
                         operationId: node.data.operationId,
                         name: node.data.filterString,
-                    })),
-            );
+                        memberNames: node.data.memberNames,
+                    });
+                    if (node.data.memberOperationIds !== undefined) {
+                        for (const memberId of node.data.memberOperationIds) {
+                            renderedByOpId.set(memberId, node.id);
+                        }
+                    } else {
+                        renderedByOpId.set(node.data.operationId, node.id);
+                    }
+                }
+            }
+            setNodeIndex(indexEntries);
+            setNodeIdByOperationId(renderedByOpId);
+            setDetectedBlocks(graph.blocks && graph.blocks.length > 0 ? graph.blocks : NO_BLOCKS);
 
             // An op can drop out between builds (isolated, or filtered as a
             // deallocate), so selection falls back rather than point at nothing.
@@ -398,8 +469,12 @@ const OperationGraphInner = ({
     // The only inputs that change the node set or the layout geometry, and so the
     // only ones that may trigger a rebuild.
     const buildOptions = useMemo<OpGraphBuildOptions>(
-        () => ({ hideDeallocate, deviceSubgraphs }),
-        [hideDeallocate, deviceSubgraphs],
+        () => ({
+            hideDeallocate,
+            deviceSubgraphs,
+            expandedBlockIds: expandedBlockIds.size === 0 ? EMPTY_BLOCK_IDS : [...expandedBlockIds],
+        }),
+        [hideDeallocate, deviceSubgraphs, expandedBlockIds],
     );
 
     // `sourceOperations` isn't read here — it's the signal that the worker holds a
@@ -410,7 +485,7 @@ const OperationGraphInner = ({
 
     const focusOperation = useCallback(
         (id: number) => {
-            const node = getNode(String(id));
+            const node = getNode(nodeIdByOperationId.get(id) ?? String(id));
             if (!node) {
                 return;
             }
@@ -419,7 +494,7 @@ const OperationGraphInner = ({
                 duration: FOCUS_DURATION_MS,
             });
         },
-        [getNode, setCenter],
+        [getNode, setCenter, nodeIdByOperationId],
     );
 
     useEffect(() => {
@@ -443,7 +518,8 @@ const OperationGraphInner = ({
             return;
         }
         pendingViewportAnchorRef.current = null;
-        const anchored = nodes.find((node) => node.id === anchor.nodeId);
+        const anchored =
+            nodes.find((node) => node.id === anchor.nodeId) ?? nodes.find((node) => node.id === anchor.fallbackNodeId);
         if (anchored === undefined) {
             return;
         }
@@ -463,6 +539,7 @@ const OperationGraphInner = ({
                 const { x, y, zoom } = getViewport();
                 pendingViewportAnchorRef.current = {
                     nodeId,
+                    fallbackNodeId: nodeId,
                     paneX: node.position.x * zoom + x,
                     paneY: node.position.y * zoom + y,
                     reportScope,
@@ -479,6 +556,79 @@ const OperationGraphInner = ({
         },
         [getNode, getViewport, reportScope],
     );
+
+    const armViewportAnchor = useCallback(
+        (nodeId: string, fallbackNodeId: string) => {
+            const node = getNode(nodeId) ?? getNode(fallbackNodeId);
+            if (!node) {
+                return;
+            }
+            const { x, y, zoom } = getViewport();
+            pendingViewportAnchorRef.current = {
+                nodeId,
+                fallbackNodeId,
+                paneX: node.position.x * zoom + x,
+                paneY: node.position.y * zoom + y,
+                reportScope,
+            };
+        },
+        [getNode, getViewport, reportScope],
+    );
+
+    const toggleBlockExpansion = useCallback(
+        (instanceId: string) => {
+            const block = detectedBlocks.find((entry) => entry.instanceId === instanceId);
+            const firstOpId = block?.operationIds[0];
+            armViewportAnchor(instanceId, firstOpId === undefined ? instanceId : String(firstOpId));
+            setExpandedBlockIds((previous) => {
+                const next = new Set(previous);
+                if (next.delete(instanceId)) {
+                    if (block !== undefined) {
+                        setExpandedOperationIds((expandedOps) => {
+                            const remaining = new Set(expandedOps);
+                            for (const memberOpId of block.operationIds) {
+                                remaining.delete(memberOpId);
+                            }
+                            return remaining;
+                        });
+                    }
+                } else {
+                    next.add(instanceId);
+                }
+                return next;
+            });
+        },
+        [armViewportAnchor, detectedBlocks],
+    );
+
+    const expandAllBlocks = useCallback(() => {
+        setExpandedBlockIds(new Set(detectedBlocks.map((block) => block.instanceId)));
+    }, [detectedBlocks]);
+
+    const collapseAllBlocks = useCallback(() => {
+        setExpandedBlockIds(NOTHING_EXPANDED_BLOCKS);
+        const collapsedMembers = new Set(detectedBlocks.flatMap((block) => block.operationIds));
+        setExpandedOperationIds((previous) => {
+            const next = new Set(previous);
+            for (const memberOpId of collapsedMembers) {
+                next.delete(memberOpId);
+            }
+            return next;
+        });
+    }, [detectedBlocks]);
+
+    const handleHideDeallocateChange = useCallback((next: boolean) => {
+        setHideDeallocate(next);
+        setExpandedBlockIds(NOTHING_EXPANDED_BLOCKS);
+    }, []);
+
+    if (operationId !== undefined && revealedOperationId !== operationId && detectedBlocks.length > 0) {
+        setRevealedOperationId(operationId);
+        const buried = detectedBlocks.find((block) => block.operationIds.includes(operationId));
+        if (buried !== undefined && !expandedBlockIds.has(buried.instanceId)) {
+            setExpandedBlockIds(new Set([...expandedBlockIds, buried.instanceId]));
+        }
+    }
 
     // Recentre on the operation the URL names. A no-op on first mount, where the
     // graph hasn't been laid out yet and `onBuilt`'s pending focus does the work.
@@ -592,13 +742,28 @@ const OperationGraphInner = ({
         }
         const ids = new Set<string>();
         const operationIdsInOrder: number[] = [];
+        const buriedCountById = new Map<string, number>();
+        let hiddenMatchCount = 0;
         for (const entry of nodeIndex) {
             if (filterMatcher.test(entry.name)) {
                 ids.add(entry.id);
                 operationIdsInOrder.push(entry.operationId);
+            } else {
+                let buried = 0;
+                for (const memberName of entry.memberNames ?? []) {
+                    if (filterMatcher.test(memberName)) {
+                        buried += 1;
+                    }
+                }
+                if (buried > 0) {
+                    ids.add(entry.id);
+                    operationIdsInOrder.push(entry.operationId);
+                    buriedCountById.set(entry.id, buried);
+                    hiddenMatchCount += buried;
+                }
             }
         }
-        return { ids, operationIdsInOrder };
+        return { ids, operationIdsInOrder, hiddenMatchCount, buriedCountById };
     }, [nodeIndex, filterMatcher]);
 
     // A query that matches nothing leaves the canvas alone rather than dimming
@@ -647,7 +812,7 @@ const OperationGraphInner = ({
         const bySource = new Map<string, OpGraphFlowEdge[]>();
         const byTarget = new Map<string, OpGraphFlowEdge[]>();
         for (const edge of edges) {
-            const boundary = operationBoundaryOf(edge);
+            const boundary = operationBoundaryOf(edge, nodeIdByOperationId);
             if (boundary !== null) {
                 const outgoing = bySource.get(boundary.source);
                 if (outgoing) {
@@ -664,13 +829,13 @@ const OperationGraphInner = ({
             }
         }
         return { edgesBySource: bySource, edgesByTarget: byTarget };
-    }, [edges]);
+    }, [edges, nodeIdByOperationId]);
 
     const highlight = useMemo(() => {
         if (selectedOperationId === null) {
             return null;
         }
-        const selectedId = String(selectedOperationId);
+        const selectedId = operationNodeIdOf(selectedOperationId, nodeIdByOperationId) ?? String(selectedOperationId);
         const relationByNodeId = new Map<string, NodeRelation>();
         const relationByEdgeId = new Map<string, NodeRelation>();
         // Outputs first: a neighbour on both sides of a cycle reads as an input,
@@ -678,21 +843,21 @@ const OperationGraphInner = ({
         // The neighbour is marked by its operation node, whether that renders
         // collapsed or as the group around an expanded subgraph.
         for (const edge of edgesBySource.get(selectedId) ?? []) {
-            const targetId = operationNodeIdOf(targetOperationIdOf(edge));
+            const targetId = operationNodeIdOf(targetOperationIdOf(edge), nodeIdByOperationId);
             if (targetId !== null) {
                 relationByNodeId.set(targetId, NodeRelation.Output);
                 relationByEdgeId.set(edge.id, NodeRelation.Output);
             }
         }
         for (const edge of edgesByTarget.get(selectedId) ?? []) {
-            const sourceId = operationNodeIdOf(sourceOperationIdOf(edge));
+            const sourceId = operationNodeIdOf(sourceOperationIdOf(edge), nodeIdByOperationId);
             if (sourceId !== null) {
                 relationByNodeId.set(sourceId, NodeRelation.Input);
                 relationByEdgeId.set(edge.id, NodeRelation.Input);
             }
         }
         return { selectedId, relationByNodeId, relationByEdgeId };
-    }, [selectedOperationId, edgesBySource, edgesByTarget]);
+    }, [selectedOperationId, edgesBySource, edgesByTarget, nodeIdByOperationId]);
 
     const graphOperationIds = useMemo(() => nodeIndex.map((entry) => entry.operationId), [nodeIndex]);
 
@@ -736,13 +901,13 @@ const OperationGraphInner = ({
     const topologyEdges = useMemo(() => {
         const topology: Array<{ id: string; source: string; target: string }> = [];
         for (const edge of builtEdges) {
-            const boundary = operationBoundaryOf(edge);
+            const boundary = operationBoundaryOf(edge, nodeIdByOperationId);
             if (boundary !== null) {
                 topology.push({ id: edge.id, ...boundary });
             }
         }
         return topology;
-    }, [builtEdges]);
+    }, [builtEdges, nodeIdByOperationId]);
 
     const criticalPath = useMemo(() => {
         if (!isCriticalPathActive) {
@@ -816,7 +981,13 @@ const OperationGraphInner = ({
             // Custom properties only, so perf stacks with selection, the
             // highlight and the inherited filter dim instead of displacing any.
             const perfStyle = perfStyleByNodeId?.get(node.id);
-            if (className === undefined && perfStyle === undefined) {
+            const buriedMatchCount = matches.buriedCountById.get(node.id) ?? 0;
+            const nextData =
+                buriedMatchCount > 0 && node.data.buriedMatchCount !== buriedMatchCount
+                    ? { ...node.data, buriedMatchCount }
+                    : node.data;
+
+            if (className === undefined && perfStyle === undefined && nextData === node.data) {
                 return node;
             }
 
@@ -826,12 +997,18 @@ const OperationGraphInner = ({
             // scores change — so an untouched node hits the cache and keeps the
             // object it was given.
             const cached = styledNodeCache.get(node);
-            if (cached !== undefined && cached.className === className && cached.perfStyle === perfStyle) {
+            if (
+                cached !== undefined &&
+                cached.className === className &&
+                cached.perfStyle === perfStyle &&
+                cached.styled.data.buriedMatchCount === nextData.buriedMatchCount
+            ) {
                 return cached.styled;
             }
 
             const styled = {
                 ...node,
+                data: nextData,
                 ...(perfStyle ? { style: { ...node.style, ...perfStyle } } : {}),
                 ...(className === undefined ? {} : { className }),
                 // Selection is mirrored into React Flow's own flag so its keyboard
@@ -844,7 +1021,15 @@ const OperationGraphInner = ({
             styledNodeCache.set(node, { className, perfStyle, styled });
             return styled;
         });
-    }, [nodes, highlight, matchedIds, perfStyleByNodeId, criticalPathNodeIds, styledNodeCache]);
+    }, [
+        nodes,
+        highlight,
+        matchedIds,
+        matches.buriedCountById,
+        perfStyleByNodeId,
+        criticalPathNodeIds,
+        styledNodeCache,
+    ]);
 
     const styledEdges = useMemo(() => {
         if (!highlight && !matchedIds && !criticalPathEdgeIds) {
@@ -861,18 +1046,27 @@ const OperationGraphInner = ({
             }
             // An edge between two matches stays lit so the matched subset is
             // traceable; a selection edge outranks the filter either way.
-            if (matchedIds && (relation || bothEndsMatched(edge, matchedIds))) {
+            if (matchedIds && (relation || bothEndsMatched(edge, matchedIds, nodeIdByOperationId))) {
                 classNames.push(MATCHED_EDGE_CLASS);
             }
             return classNames.length > 0 ? { ...edge, className: classNames.join(' ') } : edge;
         });
-    }, [edges, highlight, matchedIds, criticalPathEdgeIds]);
+    }, [edges, highlight, matchedIds, criticalPathEdgeIds, nodeIdByOperationId]);
 
     const handleNodeClick = useCallback(
         (_event: ReactMouseEvent, node: OpGraphFlowNode) => {
             selectOperation(node.data.operationId);
         },
         [selectOperation],
+    );
+
+    const handleNodeDoubleClick = useCallback(
+        (_event: ReactMouseEvent, node: OpGraphFlowNode) => {
+            if (node.data.blockInstanceId !== undefined) {
+                toggleBlockExpansion(node.data.blockInstanceId);
+            }
+        },
+        [toggleBlockExpansion],
     );
 
     const handlePaneClick = useCallback(() => {
@@ -982,7 +1176,18 @@ const OperationGraphInner = ({
                 nextOperationId={nextOperationId}
                 onGoToOperation={selectOperation}
                 hideDeallocate={hideDeallocate}
-                onHideDeallocateChange={setHideDeallocate}
+                onHideDeallocateChange={handleHideDeallocateChange}
+                hiddenMatchCount={matches.hiddenMatchCount}
+                hasBlocks={detectedBlocks.length > 0}
+                areAllBlocksExpanded={
+                    detectedBlocks.length > 0 && detectedBlocks.every((block) => expandedBlockIds.has(block.instanceId))
+                }
+                areAllBlocksCollapsed={
+                    detectedBlocks.length === 0 ||
+                    detectedBlocks.every((block) => !expandedBlockIds.has(block.instanceId))
+                }
+                onExpandAllBlocks={expandAllBlocks}
+                onCollapseAllBlocks={collapseAllBlocks}
                 isPerfOverlayActive={isPerfOverlayActive}
                 onPerfOverlayChange={handlePerfOverlayChange}
                 isCriticalPathActive={isCriticalPathActive}
@@ -993,40 +1198,43 @@ const OperationGraphInner = ({
                 isDisabled={isBuilding}
             />
             <OpGraphExpansionContext.Provider value={toggleOperationExpansion}>
-                <ReactFlow<OpGraphFlowNode, OpGraphFlowEdge>
-                    nodes={styledNodes}
-                    edges={styledEdges}
-                    nodeTypes={NODE_TYPES}
-                    edgeTypes={EDGE_TYPES}
-                    onNodesChange={handleNodesChange}
-                    onEdgesChange={onEdgesChange}
-                    onNodeClick={handleNodeClick}
-                    onPaneClick={handlePaneClick}
-                    onNodeMouseEnter={isPerfOverlayActive ? handleNodeMouseEnter : undefined}
-                    // Always attached so any exit clears a hover the overlay left
-                    // behind; clearing a null hover bails out of the render.
-                    onNodeMouseLeave={handleNodeMouseLeave}
-                    minZoom={MIN_ZOOM}
-                    maxZoom={MAX_ZOOM}
-                    nodesConnectable={false}
-                    selectNodesOnDrag={false}
-                    // The graph is a read-only view of a report, but React Flow's
-                    // stock delete key still reaches `onNodesChange`, so a selected
-                    // node can be removed until the next relayout puts it back.
-                    deleteKeyCode={null}
-                    proOptions={{ hideAttribution: true }}
-                >
-                    <Background />
-                    <Controls />
-                    {/* Docked left rather than in React Flow's default corner: the
+                <OpGraphBlockExpansionContext.Provider value={toggleBlockExpansion}>
+                    <ReactFlow<OpGraphFlowNode, OpGraphFlowEdge>
+                        nodes={styledNodes}
+                        edges={styledEdges}
+                        nodeTypes={NODE_TYPES}
+                        edgeTypes={EDGE_TYPES}
+                        onNodesChange={handleNodesChange}
+                        onEdgesChange={onEdgesChange}
+                        onNodeClick={handleNodeClick}
+                        onNodeDoubleClick={handleNodeDoubleClick}
+                        onPaneClick={handlePaneClick}
+                        onNodeMouseEnter={isPerfOverlayActive ? handleNodeMouseEnter : undefined}
+                        // Always attached so any exit clears a hover the overlay left
+                        // behind; clearing a null hover bails out of the render.
+                        onNodeMouseLeave={handleNodeMouseLeave}
+                        minZoom={MIN_ZOOM}
+                        maxZoom={MAX_ZOOM}
+                        nodesConnectable={false}
+                        selectNodesOnDrag={false}
+                        // The graph is a read-only view of a report, but React Flow's
+                        // stock delete key still reaches `onNodesChange`, so a selected
+                        // node can be removed until the next relayout puts it back.
+                        deleteKeyCode={null}
+                        proOptions={{ hideAttribution: true }}
+                    >
+                        <Background />
+                        <Controls />
+                        {/* Docked left rather than in React Flow's default corner: the
                         panel is a full-height right column, and `onBuilt` always
                         resolves a selection, so a right-docked minimap would be
                         hidden in every state the user lands in. */}
-                    <MiniMap
-                        pannable
-                        position='bottom-left'
-                    />
-                </ReactFlow>
+                        <MiniMap
+                            pannable
+                            position='bottom-left'
+                        />
+                    </ReactFlow>
+                </OpGraphBlockExpansionContext.Provider>
             </OpGraphExpansionContext.Provider>
             <div className='op-graph-bottom-band'>
                 {isCriticalPathActive && hasCriticalPath && !isBuilding ? (

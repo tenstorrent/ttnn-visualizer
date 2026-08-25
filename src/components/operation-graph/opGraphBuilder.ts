@@ -3,8 +3,16 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import { DEALLOCATE_OP_NAME_LIST } from '../../definitions/Deallocate';
-import { type LayoutInputEdge, estimateOpNodeSize, layoutDeviceSubgraph, layoutOpGraph } from './opGraphLayout';
 import {
+    type LayoutInputEdge,
+    estimateBlockNodeSize,
+    estimateOpNodeSize,
+    layoutDeviceSubgraph,
+    layoutOpGraph,
+} from './opGraphLayout';
+import { detectRepeatBlocks, sumOptional } from './opGraphRepeatBlocks';
+import {
+    type OpGraphBlockSummary,
     type OpGraphBuildOptions,
     type OpGraphBuiltGraph,
     type OpGraphDeviceSubgraph,
@@ -42,9 +50,11 @@ function collectCandidateEdges(operations: OpGraphSourceOperation[]): CandidateE
     return candidates;
 }
 
+const BLOCK_META_WIDTH_SAMPLE = '00 ops · 00.00 s · 00.00 MiB';
+
 export function buildOpGraph(
     operations: OpGraphSourceOperation[],
-    { hideDeallocate, deviceSubgraphs }: OpGraphBuildOptions,
+    { hideDeallocate, deviceSubgraphs, expandedBlockIds = [] }: OpGraphBuildOptions,
 ): OpGraphBuiltGraph {
     const candidates = collectCandidateEdges(operations);
 
@@ -73,13 +83,70 @@ export function buildOpGraph(
         return subgraph?.entryNodeIdByTensorId[tensorId] ?? subgraph?.entryFallbackNodeId ?? String(operationId);
     };
 
+    const keptOperations: OpGraphSourceOperation[] = [];
     const kept = new Set<number>();
-    const nodes: OpGraphFlowNode[] = [];
-    const deviceOpNodes: OpGraphFlowNode[] = [];
-    const deviceOpEdges: OpGraphFlowEdge[] = [];
     for (const operation of operations) {
         if (connected.has(operation.id) && !(hideDeallocate && isDeallocate(operation.name))) {
             kept.add(operation.id);
+            keptOperations.push(operation);
+        }
+    }
+
+    const operationById = new Map<number, OpGraphSourceOperation>(
+        keptOperations.map((operation) => [operation.id, operation]),
+    );
+    const detectedBlocks = detectRepeatBlocks(keptOperations);
+    const expandedBlocks = new Set<string>(expandedBlockIds);
+    const collapsedInstanceByOpId = new Map<string, (typeof detectedBlocks)[number]>();
+    for (const instance of detectedBlocks) {
+        if (!expandedBlocks.has(instance.instanceId)) {
+            for (const operationId of instance.operationIds) {
+                collapsedInstanceByOpId.set(String(operationId), instance);
+            }
+        }
+    }
+
+    const renderedNodeIdOf = (operationId: number): string =>
+        collapsedInstanceByOpId.get(String(operationId))?.instanceId ?? String(operationId);
+
+    const nodes: OpGraphFlowNode[] = [];
+    const deviceOpNodes: OpGraphFlowNode[] = [];
+    const deviceOpEdges: OpGraphFlowEdge[] = [];
+    const emittedBlockIds = new Set<string>();
+
+    for (const operation of keptOperations) {
+        const collapsedInstance = collapsedInstanceByOpId.get(String(operation.id));
+        if (collapsedInstance !== undefined) {
+            if (!emittedBlockIds.has(collapsedInstance.instanceId)) {
+                emittedBlockIds.add(collapsedInstance.instanceId);
+                const members = collapsedInstance.operationIds
+                    .map((id) => operationById.get(id))
+                    .filter((member): member is OpGraphSourceOperation => member !== undefined);
+                const opCount = collapsedInstance.operationIds.length;
+                const durationSeconds = sumOptional(members.map((member) => member.durationSeconds));
+                const memoryDeltaBytes = sumOptional(members.map((member) => member.memoryDeltaBytes));
+                const size = estimateBlockNodeSize(collapsedInstance.label, BLOCK_META_WIDTH_SAMPLE);
+                nodes.push({
+                    id: collapsedInstance.instanceId,
+                    type: OpGraphNodeType.BLOCK,
+                    position: { x: 0, y: 0 },
+                    ...size,
+                    data: {
+                        operationId: collapsedInstance.operationIds[0],
+                        label: collapsedInstance.label,
+                        fileIdentifier: '',
+                        filterString: collapsedInstance.label,
+                        deviceOperationCount: 0,
+                        blockInstanceId: collapsedInstance.instanceId,
+                        memberNames: members.map((member) => member.name),
+                        memberOperationIds: collapsedInstance.operationIds,
+                        opCount,
+                        durationSeconds,
+                        memoryDeltaBytes,
+                    },
+                });
+            }
+        } else {
             const label = `${operation.id} ${operation.name}`;
             const collapsedSize = estimateOpNodeSize(
                 label,
@@ -173,22 +240,28 @@ export function buildOpGraph(
     const layoutEdges: LayoutInputEdge[] = [];
     for (const candidate of candidates) {
         if (kept.has(candidate.source) && kept.has(candidate.target)) {
-            const pair = `${candidate.source}-${candidate.target}`;
-            const parallelIndex = parallelCountByPair.get(pair) ?? 0;
-            parallelCountByPair.set(pair, parallelIndex + 1);
-            edges.push({
-                id: `${pair}-${parallelIndex}`,
-                source: exitNodeIdOf(candidate.source, candidate.tensorId),
-                target: entryNodeIdOf(candidate.target, candidate.tensorId),
-                type: OpGraphEdgeType.OP,
-                label: candidate.label,
-                data: {
-                    parallelIndex,
-                    sourceOperationId: candidate.source,
-                    targetOperationId: candidate.target,
-                },
-            });
-            layoutEdges.push({ source: String(candidate.source), target: String(candidate.target) });
+            const renderedSource = renderedNodeIdOf(candidate.source);
+            const renderedTarget = renderedNodeIdOf(candidate.target);
+            if (renderedSource !== renderedTarget) {
+                const pair = `${candidate.source}-${candidate.target}`;
+                const parallelIndex = parallelCountByPair.get(pair) ?? 0;
+                parallelCountByPair.set(pair, parallelIndex + 1);
+                const sourceIsCollapsed = collapsedInstanceByOpId.has(String(candidate.source));
+                const targetIsCollapsed = collapsedInstanceByOpId.has(String(candidate.target));
+                edges.push({
+                    id: `${pair}-${parallelIndex}`,
+                    source: sourceIsCollapsed ? renderedSource : exitNodeIdOf(candidate.source, candidate.tensorId),
+                    target: targetIsCollapsed ? renderedTarget : entryNodeIdOf(candidate.target, candidate.tensorId),
+                    type: OpGraphEdgeType.OP,
+                    label: candidate.label,
+                    data: {
+                        parallelIndex,
+                        sourceOperationId: candidate.source,
+                        targetOperationId: candidate.target,
+                    },
+                });
+                layoutEdges.push({ source: renderedSource, target: renderedTarget });
+            }
         }
     }
 
@@ -196,6 +269,12 @@ export function buildOpGraph(
         nodes.map((node) => ({ id: node.id, width: node.width ?? 0, height: node.height ?? 0 })),
         layoutEdges,
     );
+
+    const blocks: OpGraphBlockSummary[] = detectedBlocks.map((instance) => ({
+        instanceId: instance.instanceId,
+        operationIds: instance.operationIds,
+        label: instance.label,
+    }));
 
     return {
         // Children last: React Flow resolves `parentId` against the nodes it has
@@ -205,5 +284,6 @@ export function buildOpGraph(
             ...deviceOpNodes,
         ],
         edges: [...edges, ...deviceOpEdges],
+        blocks,
     };
 }
