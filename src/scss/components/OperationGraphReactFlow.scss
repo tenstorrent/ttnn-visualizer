@@ -220,6 +220,15 @@ $minimap-width: 200px;
             background-color: $tt-black;
             color: $tt-white;
         }
+
+        &[aria-expanded='true'] .op-graph-node-expander-icon {
+            transform: rotate(180deg);
+        }
+    }
+
+    .op-graph-node-expander-icon {
+        display: inline-block;
+        line-height: 1;
     }
 
     // Inside the box: the node reserves the width for it (`estimateOpNodeSize`),
