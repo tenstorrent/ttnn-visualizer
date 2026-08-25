@@ -1,0 +1,37 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
+
+@use 'styles/definitions/colours' as *;
+@use 'styles/definitions/variables' as variables;
+
+.server-mode-banner {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: variables.$z-index-2-interactive;
+    height: 25px;
+    color: $tt-white;
+
+    // Carries its own backdrop: it used to reveal itself inside the dark navbar, and now
+    // slides over whatever report content happens to be beneath it.
+    background-color: $tt-black;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 300ms ease-out 50ms;
+    gap: 7px;
+
+    // Hidden by default. Off-screen rather than `display: none` so the links stay
+    // focusable -- which is only safe because focusing one also reveals the banner.
+    transform: translateY(-100%);
+
+    // The pointer path is `mousemove` near the top of the viewport; `:focus-within` is the
+    // keyboard equivalent. Without it a tab into these links would move focus to a control
+    // the user cannot see.
+    &.revealed,
+    &:focus-within {
+        transform: translateY(0);
+    }
+}

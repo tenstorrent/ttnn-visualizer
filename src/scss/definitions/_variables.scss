@@ -13,12 +13,6 @@ $monospace-font: monospace;
 $bp-large: 1300px;
 $bp-medium: 1100px;
 
-// Nav-specific breakpoints — kick in earlier than the page-level ones because
-// the navbar has many siblings that need to start shrinking before the rest
-// of the layout reflows.
-$bp-nav-large: 1370px;
-$bp-nav-medium: 1180px;
-
 // Colours
 // TODO: Temporary placing of these here - reconcile with usage in _blueprintjs.scss
 $dark-button-background-base: $tt-grey-2;
@@ -61,9 +55,13 @@ $legend-marker-slot: 25px;
 // MLIR pickers line up regardless of how long the label they display happens to be.
 $report-select-width: 250px;
 
+// Vertical navigation rail. Collapsed keeps a Blueprint icon button centred with no
+// room for its label.
+$side-nav-width-expanded: 180px;
+$side-nav-width-collapsed: 56px;
+
 // Fixed app chrome that every viewport-height view subtracts. The status bar is
 // `.app-footer`'s closed `min-height`; it grows when opened.
-$app-navbar-height: 92px;
 $app-status-bar-height: 34px;
 
 // `main`'s own padding and the trailing gutter that clears the fixed data bar,
@@ -77,12 +75,14 @@ $data-padding-bottom: 20px;
 // bottom-left chrome out from it, so it is owned here rather than copied into each.
 $reactflow-panel-origin-left: 12px;
 
-// MLIR takes the status bar plus its own slack. Its title and loader rows are
-// flex-laid inside `.mlir-page`, so the graph reclaims them when absent.
-$mlir-footer-clearance: 40px;
-$mlir-page-height: calc(100vh - #{$app-navbar-height} - #{$mlir-footer-clearance});
-
 // Width the connection dialogs' results block must stay inside: the Blueprint dialog
 // footer is narrower than the dialog, and both the error detail and the host-key prompt
 // have to fit it.
 $connection-detail-width: 415px;
+
+// Fixed app chrome at the foot of the MLIR page: the footer info bar. The navigation is
+// a vertical rail, so nothing sits above the page to offset against. The title and
+// (optional) loader rows sit inside `.mlir-page` and are laid out by flex, so the graph
+// reclaims their space when absent — the footer is the only remaining structural offset.
+$mlir-footer-clearance: $app-status-bar-height + 6px;
+$mlir-page-height: calc(100vh - #{$mlir-footer-clearance});
