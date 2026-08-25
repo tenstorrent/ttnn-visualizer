@@ -7,4 +7,7 @@ exclude =
     build,
     dist
 max-complexity = 10
-max-line-length = 79
+# Black owns line length (pyproject.toml [tool.black] line-length). Kept in
+# sync so a standalone flake8 or pre-commit run agrees with the formatter;
+# E501 stays ignored above for the strings and comments black cannot split.
+max-line-length = 88
