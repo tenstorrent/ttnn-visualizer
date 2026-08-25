@@ -109,6 +109,12 @@ $pt-intent-text-colors: (
 // so they escape into the root one and land on top of our overlay scale ($z-index-3-overlay
 // is 10) -- an active segmented control then paints over a full-screen overlay covering the
 // page. Isolating the group keeps the border ordering intact and keeps the numbers local.
+//
+// The constraint this buys: a popover rendered inline (`usePortal={false}`) must not live
+// inside a button or control group, because the new stacking context traps it under the
+// group's own siblings. Nothing in the app does that today -- every inline popover sits
+// outside a group -- but it is the failure this rule would cause, and it has no obvious
+// symptom at the call site.
 .bp6-button-group,
 .bp6-control-group {
     isolation: isolate;

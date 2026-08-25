@@ -80,9 +80,10 @@
             padding-left: 12px;
             padding-right: 12px;
 
-            // A corner superscript reads as attached to a compact horizontal button, but a
-            // full-width rail button strands it at the far edge, so it sits inline after
-            // the label instead. Blueprint already renders it as the label's sibling.
+            // A full-width rail button would strand a corner superscript at the far edge,
+            // so the badge sits inline after the label and is nudged up into superscript
+            // position. Blueprint already renders it as the label's sibling; the shared
+            // mixin supplies its appearance and leaves placement here.
             small {
                 position: relative;
                 background-color: $tt-black;
@@ -133,8 +134,11 @@
             }
         }
 
-        // Hidden rather than unrendered so the button keeps its accessible name. Takes the
-        // inline badge with it, which has nowhere to go beside a bare icon.
+        // `display: none` takes the label out of the accessibility tree as well as off the
+        // screen, so the collapsed rail's accessible names come from the `aria-label` each
+        // button carries -- do not remove that prop as redundant. Hiding rather than
+        // unrendering keeps the markup identical across both states, and takes the inline
+        // badge with it, which has nowhere to go beside a bare icon.
         .bp6-button-text {
             display: none;
         }

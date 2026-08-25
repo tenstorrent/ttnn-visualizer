@@ -209,12 +209,24 @@ describe('SideNavigation collapsing', () => {
         expect(screen.getByAltText('tenstorrent').closest('a')).toHaveAttribute('href', '/');
     });
 
-    it('keeps every item reachable by name while collapsed', () => {
+    // The collapsed rail hides the label with `display: none`, which takes it out of the
+    // accessibility tree as well, so `aria-label` is the *only* thing naming these buttons.
+    // Asserting on the accessible name can't show that: vitest.config.ts doesn't enable
+    // `test.css`, so the label text nodes are present in jsdom either way and satisfy the
+    // name computation on their own -- a name query passes with `aria-label` deleted. Hence
+    // the assertion on the attribute itself.
+    it("names every item with aria-label, the collapsed rail's only source of names", () => {
         renderRail([[isNavigationCollapsedAtom, true]]);
 
-        // The icon-only rail is unusable if collapsing costs the buttons their accessible
-        // names, so the labels have to survive as `aria-label` rather than as text nodes.
         expect(screen.getByTestId(TEST_IDS.SIDE_NAVIGATION)).toHaveClass('collapsed');
+        expect(getButtonWithText('reports')).toHaveAttribute('aria-label', 'Reports');
+        expect(getButtonWithText('npe')).toHaveAttribute('aria-label', 'NPE');
+        expect(getButtonWithText('operations')).toHaveAttribute('aria-label', 'Operations');
+    });
+
+    it('keeps every item reachable while collapsed', () => {
+        renderRail([[isNavigationCollapsedAtom, true]]);
+
         expect(getButtonWithText('reports')).toBeEnabled();
         expect(getButtonWithText('npe')).toBeEnabled();
         expect(getButtonWithText('operations')).toBeDisabled();
@@ -386,5 +398,34 @@ describe('SideNavigation collapse persistence', () => {
         fireEvent.click(screen.getByTestId(TEST_IDS.SIDE_NAVIGATION_TOGGLE));
 
         expect(localStorage.getItem('navigationCollapsed')).toBe('true');
+    });
+});
+
+describe('SideNavigation assistive technology', () => {
+    // Blueprint 6.6.1's button emits only `aria-disabled` -- never `aria-pressed` or
+    // `aria-current` -- so `active` reaches the DOM as a class and a colour and nothing
+    // else. Without this attribute the current view is unannounced.
+    it('reports the current view with aria-current', () => {
+        renderRail([[activeProfilerReportAtom, activeReport]], [ROUTES.OPERATIONS]);
+
+        expect(getButtonWithText('operations')).toHaveAttribute('aria-current', 'page');
+    });
+
+    it('leaves aria-current off items that are not current', () => {
+        renderRail([[activeProfilerReportAtom, activeReport]], [ROUTES.OPERATIONS]);
+
+        expect(getButtonWithText('tensors')).not.toHaveAttribute('aria-current');
+    });
+
+    // `aria-expanded` on its own says something is expanded without saying what, so the
+    // toggle points at the region whose width it controls.
+    it('ties the toggle to the region it expands', () => {
+        renderRail();
+
+        const toggle = screen.getByTestId(TEST_IDS.SIDE_NAVIGATION_TOGGLE);
+        const controlled = toggle.getAttribute('aria-controls');
+
+        expect(controlled).toBeTruthy();
+        expect(document.getElementById(controlled as string)).toContainElement(getButtonWithText('reports'));
     });
 });

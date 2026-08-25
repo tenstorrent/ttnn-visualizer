@@ -93,14 +93,13 @@
         }
     }
 
+    // Appearance only. Where the badge sits depends on the shape of the button it hangs
+    // off, so placement belongs to the consumer rather than to the shared mixin.
     small {
         font-size: 11px;
-        position: absolute;
         border-radius: 4px;
         padding-left: 4px;
         padding-right: 4px;
         background-color: $tt-grey-2;
-        right: 0;
-        top: 0;
     }
 }

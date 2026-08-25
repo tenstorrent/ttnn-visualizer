@@ -10,23 +10,15 @@ import { Link } from 'react-router';
 import 'styles/components/SideNavigation.scss';
 import ROUTES from '../definitions/Routes';
 import { TEST_IDS } from '../definitions/TestIds';
-import { ResolvedNavigationItem, useMainNavigationItems } from '../hooks/useMainNavigationItems';
+import { useMainNavigationItems } from '../hooks/useMainNavigationItems';
+import getNavigationTooltip from '../functions/getNavigationTooltip';
 import { isNavigationCollapsedAtom } from '../store/app';
 
 const TENSTORRENT_LOGO_SRC =
     'https://docs.tenstorrent.com/tt-tm-assets/Logo/Standard%20Lockup/svg/tt_logo_color-orange-whitetext.svg';
 const LOGO_WIDTH = 150;
-
-// Collapsed, the label is the only thing identifying an icon, so it has to reach the
-// tooltip; expanded, the label is already on screen and only a blocked item has
-// something left to say.
-function getTooltipContent(item: ResolvedNavigationItem, isCollapsed: boolean): string | null {
-    if (item.disabledReason) {
-        return item.disabledReason;
-    }
-
-    return isCollapsed ? item.label : null;
-}
+// Ties the collapse toggle's `aria-expanded` to the region it actually expands.
+const NAVIGATION_ITEMS_ID = 'side-navigation-items';
 
 function SideNavigation() {
     const { items, handleNavigate } = useMainNavigationItems();
@@ -57,9 +49,12 @@ function SideNavigation() {
                 </Link>
             </div>
 
-            <div className='side-navigation-items'>
+            <div
+                className='side-navigation-items'
+                id={NAVIGATION_ITEMS_ID}
+            >
                 {items.map((item) => {
-                    const tooltipContent = getTooltipContent(item, isCollapsed);
+                    const tooltipContent = getNavigationTooltip(item, isCollapsed);
 
                     return (
                         <Tooltip
@@ -72,6 +67,9 @@ function SideNavigation() {
                             <Button
                                 text={item.label}
                                 aria-label={item.label}
+                                // Blueprint emits only `aria-disabled` for `active`, so
+                                // without this the current view is conveyed by colour alone.
+                                aria-current={item.isActive ? 'page' : undefined}
                                 onClick={() => handleNavigate(item)}
                                 active={item.isActive}
                                 icon={item.icon}
@@ -103,6 +101,7 @@ function SideNavigation() {
                             {...tooltipTargetProps}
                             aria-label={toggleLabel}
                             aria-expanded={!isCollapsed}
+                            aria-controls={NAVIGATION_ITEMS_ID}
                             onClick={handleToggleCollapsed}
                             icon={isCollapsed ? IconNames.MENU_OPEN : IconNames.MENU_CLOSED}
                             variant={ButtonVariant.MINIMAL}
