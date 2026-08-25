@@ -14,11 +14,17 @@ import {
 } from '../src/components/operation-graph/opGraphTypes';
 
 const OPERATIONS: OpGraphSourceOperation[] = [
-    { id: 1, name: 'matmul', fileIdentifier: 'model.py:1', outputs: [{ edgeLabel: '[1, 32]', consumers: [2] }] },
-    { id: 2, name: 'add', fileIdentifier: 'model.py:2', outputs: [] },
+    {
+        id: 1,
+        name: 'matmul',
+        fileIdentifier: 'model.py:1',
+        outputs: [{ edgeLabel: '[1, 32]', consumers: [2], tensorId: 10 }],
+        deviceOperationCount: 0,
+    },
+    { id: 2, name: 'add', fileIdentifier: 'model.py:2', outputs: [], deviceOperationCount: 0 },
 ];
 
-const BUILD_OPTIONS: OpGraphBuildOptions = { hideDeallocate: true };
+const BUILD_OPTIONS: OpGraphBuildOptions = { hideDeallocate: true, deviceSubgraphs: [] };
 
 // Matches `BUILD_SPINNER_DELAY_MS` in the hook. Duplicated rather than exported,
 // so a change to the delay has to be a deliberate change to this expectation.

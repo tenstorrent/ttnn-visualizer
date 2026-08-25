@@ -10,7 +10,7 @@ import type { OpGraphFlowEdge } from './opGraphTypes';
 // real report; undisplaced, the twin hides under the first and loses its label.
 const PARALLEL_EDGE_BOW_PX = 80;
 
-// Below this the 11px label draws under 8px, past reading, and a report's ~500
+// Below this the 10px label draws under 7px, past reading, and a report's ~500
 // of them still cost a text layout and repaint on every pan frame. Selecting a
 // zoom that hides them is how a whole-graph overview stays interactive.
 const EDGE_LABEL_MIN_ZOOM = 0.7;

@@ -40,10 +40,14 @@ import type { GraphOpFilterHandle } from '../GraphOpFilter';
 import LoadingSpinner from '../LoadingSpinner';
 import PerfOverlayLegend from '../perf-overlay/PerfOverlayLegend';
 import CriticalPathAnnotation from './CriticalPathAnnotation';
+import OpGraphDeviceGroupNode from './OpGraphDeviceGroupNode';
+import OpGraphDeviceOpNode from './OpGraphDeviceOpNode';
 import OpGraphEdge from './OpGraphEdge';
 import OpGraphInfoPanel from './OpGraphInfoPanel';
 import OpGraphNode from './OpGraphNode';
 import OpGraphToolbar from './OpGraphToolbar';
+import { buildDeviceOperationSubgraph, countDeviceOperations } from './opGraphDeviceSubgraph';
+import { OpGraphExpansionContext } from './opGraphExpansionContext';
 import {
     PERF_BAR_ZOOM_VAR,
     buildOpGraphPerfOverlay,
@@ -56,6 +60,7 @@ import { useOpGraphLayoutWorker } from './useOpGraphLayoutWorker';
 import {
     type OpGraphBuildOptions,
     type OpGraphBuiltGraph,
+    type OpGraphDeviceSubgraph,
     OpGraphEdgeType,
     type OpGraphFlowEdge,
     type OpGraphFlowNode,
@@ -65,10 +70,41 @@ import {
 } from './opGraphTypes';
 import 'styles/components/OperationGraphReactFlow.scss';
 
-const NODE_TYPES = { [OpGraphNodeType.OP]: OpGraphNode };
+const NODE_TYPES = {
+    [OpGraphNodeType.OP]: OpGraphNode,
+    [OpGraphNodeType.DEVICE_GROUP]: OpGraphDeviceGroupNode,
+    [OpGraphNodeType.DEVICE_OP]: OpGraphDeviceOpNode,
+};
 const EDGE_TYPES = { [OpGraphEdgeType.OP]: OpGraphEdge };
 
 const EDGE_MARKER = { type: MarkerType.ArrowClosed, width: 18, height: 18 } as const;
+
+const sourceOperationIdOf = (edge: OpGraphFlowEdge): number | undefined => edge.data?.sourceOperationId;
+const targetOperationIdOf = (edge: OpGraphFlowEdge): number | undefined => edge.data?.targetOperationId;
+
+const isInternalDeviceEdge = (edge: OpGraphFlowEdge): boolean =>
+    sourceOperationIdOf(edge) === targetOperationIdOf(edge);
+
+const operationNodeIdOf = (operationId: number | undefined): string | null =>
+    operationId === undefined ? null : String(operationId);
+
+const operationBoundaryOf = (edge: OpGraphFlowEdge): { source: string; target: string } | null => {
+    if (isInternalDeviceEdge(edge)) {
+        return null;
+    }
+    const source = operationNodeIdOf(sourceOperationIdOf(edge));
+    const target = operationNodeIdOf(targetOperationIdOf(edge));
+    if (source === null || target === null) {
+        return null;
+    }
+    return { source, target };
+};
+
+const bothEndsMatched = (edge: OpGraphFlowEdge, matchedIds: ReadonlySet<string>): boolean => {
+    const source = operationNodeIdOf(sourceOperationIdOf(edge));
+    const target = operationNodeIdOf(targetOperationIdOf(edge));
+    return source !== null && target !== null && matchedIds.has(source) && matchedIds.has(target);
+};
 
 // A large report only fits at extreme zoom-out; 3 caps zoom-in as vis did.
 const MAX_ZOOM = 3;
@@ -92,6 +128,10 @@ interface OpGraphMatches {
 // Shared so an idle filter yields one stable identity instead of a fresh empty
 // set per render, which would invalidate every memo downstream.
 const EMPTY_MATCHES: OpGraphMatches = { ids: new Set<string>(), operationIdsInOrder: [] };
+
+// Same reason: resetting expansion to a fresh set would rebuild the graph even
+// when nothing was expanded to begin with.
+const NOTHING_EXPANDED: ReadonlySet<number> = new Set<number>();
 
 const SELECTED_NODE_CLASS = 'op-graph-node-selected';
 
@@ -154,6 +194,10 @@ const OperationGraphInner = ({
     // selecting an edge doesn't pay for a traversal. #1613
     const [builtEdges, setBuiltEdges] = useState<OpGraphFlowEdge[]>([]);
     const [hideDeallocate, setHideDeallocate] = useState(true);
+    // Local like the perf overlay rather than an atom: expansion describes a
+    // reading position in one graph, and the MLIR view scopes its own namespace
+    // expansion the same way. #1195
+    const [expandedOperationIds, setExpandedOperationIds] = useState<ReadonlySet<number>>(NOTHING_EXPANDED);
     const [isPerfOverlayEnabled, setIsPerfOverlayEnabled] = useState(false);
     const [criticalPathScope, setCriticalPathScope] = useAtom(criticalPathScopeAtom);
     const [perfHover, setPerfHover] = useState<PerfHover | null>(null);
@@ -181,7 +225,22 @@ const OperationGraphInner = ({
     // A singleton for the component's lifetime rather than a ref, since the
     // styling pass reads it during render and never replaces it.
     const [styledNodeCache] = useState(() => new WeakMap<OpGraphFlowNode, StyledNodeCacheEntry>());
-    const { setCenter, getNode } = useReactFlow<OpGraphFlowNode, OpGraphFlowEdge>();
+    // Subgraphs are derived on expansion, so a collapse and a second look costs
+    // nothing. `null` is a real entry — an operation whose frames produce nothing
+    // worth drawing — so misses are distinguished by `undefined`.
+    const [deviceSubgraphCache] = useState(() => new Map<number, OpGraphDeviceSubgraph | null>());
+    // Expanding grows a node, which moves every node Dagre packs around it. Held
+    // from the toggle until the rebuilt graph commits, then spent translating the
+    // viewport so the operation stays under the cursor that opened it — otherwise
+    // the graph appears to jump and the user loses their place. Scoped to the
+    // report it was armed for so a swap cannot spend it against a same-id node.
+    const pendingViewportAnchorRef = useRef<{
+        nodeId: string;
+        paneX: number;
+        paneY: number;
+        reportScope: ReportScope;
+    } | null>(null);
+    const { setCenter, getNode, getViewport, setViewport } = useReactFlow<OpGraphFlowNode, OpGraphFlowEdge>();
     const flowStore = useStoreApi();
 
     // Path, not the `ReportFolder` object: a rebuilt-but-equivalent object would
@@ -203,6 +262,10 @@ const OperationGraphInner = ({
         setOverlayReportScope(reportScope);
         setIsPerfOverlayEnabled(false);
         setPerfHover(null);
+        // Operation ids restart per report, so a surviving expansion would open
+        // whichever unrelated operation now answers to that id.
+        setExpandedOperationIds(NOTHING_EXPANDED);
+        deviceSubgraphCache.clear();
     }
 
     // The atom carries the scope it was enabled for, so a swap invalidates the
@@ -237,10 +300,42 @@ const OperationGraphInner = ({
                 outputs: operation.outputs.map((tensor) => ({
                     edgeLabel: toReadableShape(tensor.shape),
                     consumers: tensor.consumers,
+                    tensorId: tensor.id,
                 })),
+                // Counted with the same predicate the subgraph is built from rather
+                // than from `deviceOperationNameList`, which the details panel uses
+                // and which screens out the `Tensor::` frames the graph draws.
+                deviceOperationCount: countDeviceOperations(operation),
             })),
         [operationList],
     );
+
+    const operationById = useMemo(() => {
+        const byId = new Map<number, OperationDescription>();
+        for (const operation of operationList) {
+            byId.set(operation.id, operation);
+        }
+        return byId;
+    }, [operationList]);
+
+    // Only the expanded operations are assembled: one operation's frame stream
+    // runs to thousands of nodes, so deriving all of them up front would pay for
+    // the ones nobody opens.
+    const deviceSubgraphs = useMemo<OpGraphDeviceSubgraph[]>(() => {
+        const assembled: OpGraphDeviceSubgraph[] = [];
+        for (const expandedOperationId of expandedOperationIds) {
+            let subgraph = deviceSubgraphCache.get(expandedOperationId);
+            if (subgraph === undefined) {
+                const operation = operationById.get(expandedOperationId);
+                subgraph = operation === undefined ? null : buildDeviceOperationSubgraph(operation);
+                deviceSubgraphCache.set(expandedOperationId, subgraph);
+            }
+            if (subgraph !== null) {
+                assembled.push(subgraph);
+            }
+        }
+        return assembled;
+    }, [expandedOperationIds, operationById, deviceSubgraphCache]);
 
     // React Flow reports selection by node id; the panel and the toolbar work in
     // operation ids.
@@ -266,12 +361,19 @@ const OperationGraphInner = ({
             setNodes(graph.nodes);
             setEdges(edgesForBuild);
             setBuiltEdges(edgesForBuild);
+            // Device operations are deliberately absent: the index is what the perf
+            // ramp, the critical path DAG, the filter and prev/next are computed
+            // over, and a child has no duration, no name worth matching and no
+            // place in the operation sequence. Leaving them out is what keeps them
+            // from being scored as zero-cost operations. #1195
             setNodeIndex(
-                graph.nodes.map((node) => ({
-                    id: node.id,
-                    operationId: node.data.operationId,
-                    name: node.data.filterString,
-                })),
+                graph.nodes
+                    .filter((node) => node.type !== OpGraphNodeType.DEVICE_OP)
+                    .map((node) => ({
+                        id: node.id,
+                        operationId: node.data.operationId,
+                        name: node.data.filterString,
+                    })),
             );
 
             // An op can drop out between builds (isolated, or filtered as a
@@ -282,16 +384,23 @@ const OperationGraphInner = ({
             if (target !== desired) {
                 setSelectedOperationId(target);
             }
-            pendingFocusRef.current = target;
+            // An expand or collapse has an anchor waiting, and recentring on the
+            // selection would overrule it — the two would fight for the viewport.
+            if (pendingViewportAnchorRef.current === null) {
+                pendingFocusRef.current = target;
+            }
         },
         [setNodes, setEdges],
     );
 
     const { runBuild, isBuilding } = useOpGraphLayoutWorker(sourceOperations, onBuilt);
 
-    // The only input that changes the node set or the layout geometry, and so the
-    // only one that may trigger a rebuild.
-    const buildOptions = useMemo<OpGraphBuildOptions>(() => ({ hideDeallocate }), [hideDeallocate]);
+    // The only inputs that change the node set or the layout geometry, and so the
+    // only ones that may trigger a rebuild.
+    const buildOptions = useMemo<OpGraphBuildOptions>(
+        () => ({ hideDeallocate, deviceSubgraphs }),
+        [hideDeallocate, deviceSubgraphs],
+    );
 
     // `sourceOperations` isn't read here — it's the signal that the worker holds a
     // new report and the current build is stale.
@@ -321,6 +430,55 @@ const OperationGraphInner = ({
         pendingFocusRef.current = null;
         focusOperation(target);
     }, [nodes, focusOperation]);
+
+    // Read from the committed array rather than `getNode`, which trails `setNodes`
+    // by a tick and would translate against the pre-rebuild position.
+    useEffect(() => {
+        const anchor = pendingViewportAnchorRef.current;
+        if (anchor === null) {
+            return;
+        }
+        if (nodes.length === 0 || !isSameReportScope(anchor.reportScope, reportScope)) {
+            pendingViewportAnchorRef.current = null;
+            return;
+        }
+        pendingViewportAnchorRef.current = null;
+        const anchored = nodes.find((node) => node.id === anchor.nodeId);
+        if (anchored === undefined) {
+            return;
+        }
+        const { zoom } = getViewport();
+        void setViewport({
+            x: anchor.paneX - anchored.position.x * zoom,
+            y: anchor.paneY - anchored.position.y * zoom,
+            zoom,
+        });
+    }, [nodes, reportScope, getViewport, setViewport]);
+
+    const toggleOperationExpansion = useCallback(
+        (targetOperationId: number) => {
+            const nodeId = String(targetOperationId);
+            const node = getNode(nodeId);
+            if (node) {
+                const { x, y, zoom } = getViewport();
+                pendingViewportAnchorRef.current = {
+                    nodeId,
+                    paneX: node.position.x * zoom + x,
+                    paneY: node.position.y * zoom + y,
+                    reportScope,
+                };
+            }
+            setExpandedOperationIds((previous) => {
+                const next = new Set(previous);
+                // A failed delete means it wasn't expanded, so this is the expand.
+                if (!next.delete(targetOperationId)) {
+                    next.add(targetOperationId);
+                }
+                return next;
+            });
+        },
+        [getNode, getViewport, reportScope],
+    );
 
     // Recentre on the operation the URL names. A no-op on first mount, where the
     // graph hasn't been laid out yet and `onBuilt`'s pending focus does the work.
@@ -482,21 +640,27 @@ const OperationGraphInner = ({
     const goToPreviousMatch = useCallback(() => goToMatch(-1), [goToMatch]);
     const goToNextMatch = useCallback(() => goToMatch(1), [goToMatch]);
 
+    // Keyed by the operations an edge joins, not by its endpoints: an edge into an
+    // expanded operation renders onto one of its device operations, and keying by
+    // that would hide it from the operation's own neighbourhood.
     const { edgesBySource, edgesByTarget } = useMemo(() => {
         const bySource = new Map<string, OpGraphFlowEdge[]>();
         const byTarget = new Map<string, OpGraphFlowEdge[]>();
         for (const edge of edges) {
-            const outgoing = bySource.get(edge.source);
-            if (outgoing) {
-                outgoing.push(edge);
-            } else {
-                bySource.set(edge.source, [edge]);
-            }
-            const incoming = byTarget.get(edge.target);
-            if (incoming) {
-                incoming.push(edge);
-            } else {
-                byTarget.set(edge.target, [edge]);
+            const boundary = operationBoundaryOf(edge);
+            if (boundary !== null) {
+                const outgoing = bySource.get(boundary.source);
+                if (outgoing) {
+                    outgoing.push(edge);
+                } else {
+                    bySource.set(boundary.source, [edge]);
+                }
+                const incoming = byTarget.get(boundary.target);
+                if (incoming) {
+                    incoming.push(edge);
+                } else {
+                    byTarget.set(boundary.target, [edge]);
+                }
             }
         }
         return { edgesBySource: bySource, edgesByTarget: byTarget };
@@ -511,13 +675,21 @@ const OperationGraphInner = ({
         const relationByEdgeId = new Map<string, NodeRelation>();
         // Outputs first: a neighbour on both sides of a cycle reads as an input,
         // matching vis's precedence.
+        // The neighbour is marked by its operation node, whether that renders
+        // collapsed or as the group around an expanded subgraph.
         for (const edge of edgesBySource.get(selectedId) ?? []) {
-            relationByNodeId.set(edge.target, NodeRelation.Output);
-            relationByEdgeId.set(edge.id, NodeRelation.Output);
+            const targetId = operationNodeIdOf(targetOperationIdOf(edge));
+            if (targetId !== null) {
+                relationByNodeId.set(targetId, NodeRelation.Output);
+                relationByEdgeId.set(edge.id, NodeRelation.Output);
+            }
         }
         for (const edge of edgesByTarget.get(selectedId) ?? []) {
-            relationByNodeId.set(edge.source, NodeRelation.Input);
-            relationByEdgeId.set(edge.id, NodeRelation.Input);
+            const sourceId = operationNodeIdOf(sourceOperationIdOf(edge));
+            if (sourceId !== null) {
+                relationByNodeId.set(sourceId, NodeRelation.Input);
+                relationByEdgeId.set(edge.id, NodeRelation.Input);
+            }
         }
         return { selectedId, relationByNodeId, relationByEdgeId };
     }, [selectedOperationId, edgesBySource, edgesByTarget]);
@@ -557,6 +729,21 @@ const OperationGraphInner = ({
 
     const isCriticalPathActive = isCriticalPathEnabled && perfOverlay.status === PerfOverlayStatus.READY;
 
+    // The path runs over operations, so an edge rendering into an expanded node has
+    // to be presented as reaching the node: `findCriticalPath` drops edges whose
+    // endpoints it has no node for, and the dependency would go missing. Edge ids
+    // are preserved so the returned set still matches what is rendered.
+    const topologyEdges = useMemo(() => {
+        const topology: Array<{ id: string; source: string; target: string }> = [];
+        for (const edge of builtEdges) {
+            const boundary = operationBoundaryOf(edge);
+            if (boundary !== null) {
+                topology.push({ id: edge.id, ...boundary });
+            }
+        }
+        return topology;
+    }, [builtEdges]);
+
     const criticalPath = useMemo(() => {
         if (!isCriticalPathActive) {
             return EMPTY_CRITICAL_PATH;
@@ -565,8 +752,8 @@ const OperationGraphInner = ({
         for (const [opId, aggregate] of perfOverlay.aggregatesByOpId) {
             deviceTimeNsByOpId.set(opId, aggregate.deviceTimeNs);
         }
-        return findCriticalPath(nodeIndex, builtEdges, deviceTimeNsByOpId);
-    }, [isCriticalPathActive, perfOverlay, nodeIndex, builtEdges]);
+        return findCriticalPath(nodeIndex, topologyEdges, deviceTimeNsByOpId);
+    }, [isCriticalPathActive, perfOverlay, nodeIndex, topologyEdges]);
 
     useEffect(() => {
         if (criticalPath.hasCycle) {
@@ -610,8 +797,16 @@ const OperationGraphInner = ({
                 }
             }
             // Selection outranks the filter: the anchor stays lit even while a
-            // search dims everything around it.
-            if (matchedIds && (isSelected || matchedIds.has(node.id))) {
+            // search dims everything around it. A device operation follows the
+            // operation holding it — React Flow renders children as siblings, so
+            // without this they would dim inside a lit parent and read as a
+            // rendering fault rather than as "these didn't match".
+            if (
+                matchedIds &&
+                (isSelected ||
+                    matchedIds.has(node.id) ||
+                    (node.type === OpGraphNodeType.DEVICE_OP && matchedIds.has(String(node.data.operationId))))
+            ) {
                 classNames.push(MATCHED_NODE_CLASS);
             }
             if (criticalPathNodeIds?.has(node.id)) {
@@ -666,7 +861,7 @@ const OperationGraphInner = ({
             }
             // An edge between two matches stays lit so the matched subset is
             // traceable; a selection edge outranks the filter either way.
-            if (matchedIds && (relation || (matchedIds.has(edge.source) && matchedIds.has(edge.target)))) {
+            if (matchedIds && (relation || bothEndsMatched(edge, matchedIds))) {
                 classNames.push(MATCHED_EDGE_CLASS);
             }
             return classNames.length > 0 ? { ...edge, className: classNames.join(' ') } : edge;
@@ -797,40 +992,42 @@ const OperationGraphInner = ({
                 totalOpCount={perfOverlay.totalOpCount}
                 isDisabled={isBuilding}
             />
-            <ReactFlow<OpGraphFlowNode, OpGraphFlowEdge>
-                nodes={styledNodes}
-                edges={styledEdges}
-                nodeTypes={NODE_TYPES}
-                edgeTypes={EDGE_TYPES}
-                onNodesChange={handleNodesChange}
-                onEdgesChange={onEdgesChange}
-                onNodeClick={handleNodeClick}
-                onPaneClick={handlePaneClick}
-                onNodeMouseEnter={isPerfOverlayActive ? handleNodeMouseEnter : undefined}
-                // Always attached so any exit clears a hover the overlay left
-                // behind; clearing a null hover bails out of the render.
-                onNodeMouseLeave={handleNodeMouseLeave}
-                minZoom={MIN_ZOOM}
-                maxZoom={MAX_ZOOM}
-                nodesConnectable={false}
-                selectNodesOnDrag={false}
-                // The graph is a read-only view of a report, but React Flow's
-                // stock delete key still reaches `onNodesChange`, so a selected
-                // node can be removed until the next relayout puts it back.
-                deleteKeyCode={null}
-                proOptions={{ hideAttribution: true }}
-            >
-                <Background />
-                <Controls />
-                {/* Docked left rather than in React Flow's default corner: the
-                    panel is a full-height right column, and `onBuilt` always
-                    resolves a selection, so a right-docked minimap would be
-                    hidden in every state the user lands in. */}
-                <MiniMap
-                    pannable
-                    position='bottom-left'
-                />
-            </ReactFlow>
+            <OpGraphExpansionContext.Provider value={toggleOperationExpansion}>
+                <ReactFlow<OpGraphFlowNode, OpGraphFlowEdge>
+                    nodes={styledNodes}
+                    edges={styledEdges}
+                    nodeTypes={NODE_TYPES}
+                    edgeTypes={EDGE_TYPES}
+                    onNodesChange={handleNodesChange}
+                    onEdgesChange={onEdgesChange}
+                    onNodeClick={handleNodeClick}
+                    onPaneClick={handlePaneClick}
+                    onNodeMouseEnter={isPerfOverlayActive ? handleNodeMouseEnter : undefined}
+                    // Always attached so any exit clears a hover the overlay left
+                    // behind; clearing a null hover bails out of the render.
+                    onNodeMouseLeave={handleNodeMouseLeave}
+                    minZoom={MIN_ZOOM}
+                    maxZoom={MAX_ZOOM}
+                    nodesConnectable={false}
+                    selectNodesOnDrag={false}
+                    // The graph is a read-only view of a report, but React Flow's
+                    // stock delete key still reaches `onNodesChange`, so a selected
+                    // node can be removed until the next relayout puts it back.
+                    deleteKeyCode={null}
+                    proOptions={{ hideAttribution: true }}
+                >
+                    <Background />
+                    <Controls />
+                    {/* Docked left rather than in React Flow's default corner: the
+                        panel is a full-height right column, and `onBuilt` always
+                        resolves a selection, so a right-docked minimap would be
+                        hidden in every state the user lands in. */}
+                    <MiniMap
+                        pannable
+                        position='bottom-left'
+                    />
+                </ReactFlow>
+            </OpGraphExpansionContext.Provider>
             <div className='op-graph-bottom-band'>
                 {isCriticalPathActive && hasCriticalPath && !isBuilding ? (
                     <CriticalPathAnnotation

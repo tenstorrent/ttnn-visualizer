@@ -3,9 +3,11 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { getDeviceNodeId } from '../src/components/operation-graph/opGraphDeviceSubgraph';
 import {
     type OpGraphBuildOptions,
     type OpGraphBuiltGraph,
+    type OpGraphDeviceSubgraph,
     type OpGraphSourceOperation,
     type OpGraphWorkerInboundMessage,
     OpGraphWorkerMessageType,
@@ -21,8 +23,14 @@ const buildOpGraph = vi.hoisted(() =>
 vi.mock('../src/components/operation-graph/opGraphBuilder', () => ({ buildOpGraph }));
 
 const OPERATIONS: OpGraphSourceOperation[] = [
-    { id: 1, name: 'matmul', fileIdentifier: 'model.py:1', outputs: [{ edgeLabel: '[1, 32]', consumers: [2] }] },
-    { id: 2, name: 'add', fileIdentifier: 'model.py:2', outputs: [] },
+    {
+        id: 1,
+        name: 'matmul',
+        fileIdentifier: 'model.py:1',
+        outputs: [{ edgeLabel: '[1, 32]', consumers: [2], tensorId: 10 }],
+        deviceOperationCount: 0,
+    },
+    { id: 2, name: 'add', fileIdentifier: 'model.py:2', outputs: [], deviceOperationCount: 0 },
 ];
 
 const posted: OpGraphWorkerOutboundMessage[] = [];
@@ -52,11 +60,30 @@ const setGraph = (sourceVersion: number): OpGraphWorkerInboundMessage => ({
     operations: OPERATIONS,
 });
 
-const build = (requestId: number, hideDeallocate: boolean, sourceVersion = 1): OpGraphWorkerInboundMessage => ({
+// Only `operationId` reaches the cache key, so the rest of the payload is the
+// minimum that satisfies the type.
+const expansionOf = (...operationIds: number[]): OpGraphDeviceSubgraph[] =>
+    operationIds.map((operationId) => ({
+        operationId,
+        nodes: [{ id: getDeviceNodeId(operationId, 1), label: 'HeadDeviceOperation()' }],
+        edges: [],
+        entryNodeIdByTensorId: {},
+        exitNodeIdByTensorId: {},
+        entryFallbackNodeId: null,
+        exitFallbackNodeId: null,
+    }));
+
+const build = (
+    requestId: number,
+    hideDeallocate: boolean,
+    sourceVersion = 1,
+    deviceSubgraphs: OpGraphDeviceSubgraph[] = [],
+): OpGraphWorkerInboundMessage => ({
     type: OpGraphWorkerMessageType.BUILD,
     sourceVersion,
     requestId,
     hideDeallocate,
+    deviceSubgraphs,
 });
 
 const builtReplies = () => posted.filter((message) => message.type === OpGraphWorkerMessageType.BUILT);
@@ -164,6 +191,66 @@ describe('opGraphLayoutWorker', () => {
             const replies = builtReplies();
             expect(replies).toHaveLength(3);
             expect(replies[2].graph).toBe(replies[0].graph);
+        });
+
+        // The rest of the request is identical when an operation is expanded, so a
+        // key blind to the expansion answers the toggle with the collapsed graph
+        // and the box never opens.
+        it('does not serve a collapsed layout to an expanded graph', async () => {
+            const send = await loadWorker();
+            send(setGraph(1));
+
+            send(build(1, true));
+            drain();
+            send(build(2, true, 1, expansionOf(2)));
+            drain();
+
+            expect(buildOpGraph).toHaveBeenCalledTimes(2);
+            const replies = builtReplies();
+            expect(replies[1].graph).not.toBe(replies[0].graph);
+        });
+
+        it('tells one expanded set from another', async () => {
+            const send = await loadWorker();
+            send(setGraph(1));
+
+            send(build(1, true, 1, expansionOf(2)));
+            drain();
+            send(build(2, true, 1, expansionOf(2, 5)));
+            drain();
+
+            expect(buildOpGraph).toHaveBeenCalledTimes(2);
+        });
+
+        it('serves a collapse back to a set it has already laid out', async () => {
+            const send = await loadWorker();
+            send(setGraph(1));
+
+            send(build(1, true, 1, expansionOf(2)));
+            drain();
+            send(build(2, true, 1, expansionOf(5)));
+            drain();
+            send(build(3, true, 1, expansionOf(2)));
+            drain();
+
+            expect(buildOpGraph).toHaveBeenCalledTimes(2);
+            const replies = builtReplies();
+            expect(replies[2].graph).toBe(replies[0].graph);
+        });
+
+        it('does not lay out again because two expansions arrived in a different order', async () => {
+            const send = await loadWorker();
+            send(setGraph(1));
+
+            // The view holds the expanded set in a `Set`, whose iteration order
+            // follows insertion, so the same two open boxes reach the worker in
+            // whichever order they were opened.
+            send(build(1, true, 1, expansionOf(2, 5)));
+            drain();
+            send(build(2, true, 1, expansionOf(5, 2)));
+            drain();
+
+            expect(buildOpGraph).toHaveBeenCalledTimes(1);
         });
 
         it('does not serve one report\u2019s layout for another', async () => {
