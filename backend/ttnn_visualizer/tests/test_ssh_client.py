@@ -11,16 +11,28 @@ its ProxyJump, IdentityFile and friends; a set identity file must isolate the ru
 import os
 import shlex
 import subprocess
+from http import HTTPStatus
 from unittest.mock import patch
 
 import pytest
 from pydantic import ValidationError
+from ttnn_visualizer.enums import HostKeyIssue
+from ttnn_visualizer.exceptions import (
+    AuthenticationFailedException,
+    HostKeyVerificationFailedException,
+)
+from ttnn_visualizer.known_hosts import resolve_ssh_target
 from ttnn_visualizer.models import (
     MAX_REMOTE_PATH_LENGTH,
+    HostKeyTarget,
     MlirServerConnection,
     RemoteConnection,
 )
 from ttnn_visualizer.ssh_client import SSHClient
+from ttnn_visualizer.tests.test_ssh_host_key_errors import (
+    CHANGED_HOST_STDERR,
+    UNKNOWN_HOST_STDERR,
+)
 
 
 def _connection(**overrides) -> RemoteConnection:
@@ -270,3 +282,101 @@ def test_mlir_server_connection_still_converts_to_a_remote_connection():
 
     assert remote.profilerPath == ""
     assert remote.host == "work-gpu"
+
+
+class TestHostKeyFailuresAreTheConnectionsVerdict:
+    """The regression behind #1855.
+
+    ``HostKeyVerificationException`` subclasses ``SSHException``, and
+    ``test_connection`` had no arm for it, so a host-key failure on the SSH-test step —
+    the step a brand-new host actually fails at — fell through to the generic branch. It
+    became a ``RemoteConnectionException`` with no HTTP status, so ``/api/remote/test``
+    answered 200, and the advice arrived wrapped in "Ensure SSH key-based authentication
+    is properly configured": the wrong remedy, appended to the right one.
+    """
+
+    @staticmethod
+    def _failing_client(stderr: str) -> SSHClient:
+        """A client whose connection attempt fails on the host key.
+
+        Only the connection itself is made to fail. The `ssh -G` that resolution runs is
+        answered normally, because patching it away too would test a path where the
+        resolver is broken rather than the one where the host key is.
+        """
+        client = SSHClient(_connection(port=45985))
+
+        def run(argv, *args, **kwargs):
+            if "-G" in argv:
+                return subprocess.CompletedProcess(
+                    args=argv,
+                    returncode=0,
+                    stdout="hostname work-gpu\nport 45985\n",
+                    stderr="",
+                )
+            if argv and argv[0] == "ssh-keygen":
+                # The changed-key path looks up the offending entry; "not found".
+                return subprocess.CompletedProcess(
+                    args=argv, returncode=1, stdout="", stderr=""
+                )
+            raise subprocess.CalledProcessError(255, argv, output="", stderr=stderr)
+
+        patch("subprocess.run", side_effect=run).start()
+        return client
+
+    def test_an_unknown_host_key_carries_a_422_and_its_own_advice(self):
+        client = self._failing_client(UNKNOWN_HOST_STDERR)
+
+        try:
+            with pytest.raises(HostKeyVerificationFailedException) as excinfo:
+                client.test_connection()
+        finally:
+            patch.stopall()
+
+        error = excinfo.value
+        assert error.is_connection_verdict is True
+        assert error.http_status == HTTPStatus.UNPROCESSABLE_ENTITY
+        assert error.host_key is not None
+        assert error.host_key.issue == HostKeyIssue.UNKNOWN.value
+        # The two ways the old message was wrong: the wrong remedy, and the doubled
+        # full stop where one message was appended to the other.
+        assert "key-based authentication" not in error.message
+        assert ".." not in error.message
+
+    def test_a_changed_host_key_is_classified_as_changed(self):
+        """Both stderrs used to produce a byte-identical "accept the host key" message."""
+        client = self._failing_client(CHANGED_HOST_STDERR)
+
+        try:
+            with pytest.raises(HostKeyVerificationFailedException) as excinfo:
+                client.test_connection()
+        finally:
+            patch.stopall()
+
+        error = excinfo.value
+        assert error.host_key is not None
+        assert error.host_key.issue == HostKeyIssue.CHANGED.value
+        assert "ssh-keygen -R" in error.message
+        assert "accept" not in error.message.lower()
+
+    def test_an_auth_failure_is_still_reported_as_one(self):
+        """The new arm sits above the generic branch; it must not shadow auth failures."""
+        client = self._failing_client("Permission denied (publickey).")
+
+        try:
+            with pytest.raises(AuthenticationFailedException):
+                client.test_connection()
+        finally:
+            patch.stopall()
+
+    def test_the_ssh_config_resolution_mirrors_the_identity_file_decision(self):
+        """`resolve_ssh_target` must make the same `-F` choice the connection does.
+
+        With an identity file the connection reads no config, so resolution has to stay
+        literal — otherwise the key is recorded under a name it will never look up.
+        """
+        with_identity = resolve_ssh_target(
+            HostKeyTarget(host="work-gpu", port=22, identityFile="/home/u/.ssh/id")
+        )
+
+        assert with_identity.scan_host == "work-gpu"
+        assert with_identity.alias is None

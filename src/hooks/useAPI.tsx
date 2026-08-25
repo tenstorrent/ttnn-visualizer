@@ -542,11 +542,17 @@ const fetchClusterDescription = async (): Promise<ClusterModel> => {
 export const useGetClusterDescription = () => {
     const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
 
-    return useQuery({
+    return useQuery<ClusterModel | null, AxiosError>({
         queryFn: () => fetchClusterDescription(),
         queryKey: ['get-cluster-description', activeProfilerReport?.path],
-        initialData: null,
         retry: false,
+        // The descriptor lives beside the memory report, so without one the request can
+        // only 404. The navigation reads this to decide whether Topology is reachable and
+        // is mounted before any report is chosen.
+        enabled: !!activeProfilerReport?.path,
+        // Report-bound: the key carries the report path, so switching reports refetches and
+        // nothing else can change the answer for a given one.
+        staleTime: Infinity,
     });
 };
 
@@ -748,7 +754,7 @@ export const useOperationDetails = (operationId: number | null) => {
 
     const fetchDetails = useCallback(() => fetchOperationDetails(operationId), [operationId]);
 
-    const operationDetails = useQuery<OperationDetailsData>({
+    const operationDetails = useQuery<OperationDetailsData, AxiosError>({
         queryFn: () => fetchDetails(),
         queryKey: ['get-operation-detail', operationId, activeProfilerReport?.path],
         retry: 2,
@@ -1299,7 +1305,7 @@ export const useInstance = () => {
     const activeNpe = useAtomValue(activeNpeOpTraceAtom);
     const activeMlirJson = useAtomValue(activeMlirJsonAtom);
 
-    return useQuery({
+    return useQuery<Instance | null, AxiosError>({
         queryFn: () => fetchInstance(),
         queryKey: [
             'fetch-instance',
@@ -1401,7 +1407,7 @@ export const deleteProfiler = async (report: string) => {
 };
 
 export const useReportFolderList = () => {
-    return useQuery({
+    return useQuery<ReportFolder[] | null, AxiosError>({
         queryFn: () => fetchReportFolderList(),
         queryKey: [PROFILER_FOLDER_QUERY_KEY],
         initialData: null,
@@ -1423,7 +1429,7 @@ export const deletePerformance = async (report: string) => {
 };
 
 export const usePerfFolderList = () => {
-    return useQuery({
+    return useQuery<ReportFolder[] | null, AxiosError>({
         queryFn: () => fetchPerfFolderList(),
         queryKey: [PERFORMANCE_FOLDER_QUERY_KEY],
         initialData: null,

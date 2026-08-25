@@ -39,7 +39,13 @@ from ttnn_visualizer.exceptions import (
     RemoteConnectionException,
     SSHException,
 )
-from ttnn_visualizer.models import MlirServerConnection, RemoteConnection, StatusMessage
+from ttnn_visualizer.models import (
+    MlirServerConnection,
+    RemoteConnection,
+    StatusMessage,
+    connection_status,
+    connection_status_from_exception,
+)
 from ttnn_visualizer.remote_command import RemoteCommand, remote_arg
 from ttnn_visualizer.ssh_client import SSHClient
 
@@ -124,8 +130,8 @@ def test_mlir_server_connection(
     http_port = connection.port
     statuses: List[StatusMessage] = []
 
-    def add_status(status, message, detail=None):
-        statuses.append(StatusMessage(status=status, message=message, detail=detail))
+    def add_status(status, message, detail=None, host_key=None):
+        statuses.append(connection_status(status, message, detail, host_key))
 
     # One client for both the SSH test and the curl probe — the base ssh command
     # is built once and reused (each call still spawns its own ssh subprocess).
@@ -142,7 +148,7 @@ def test_mlir_server_connection(
         add_status(ConnectionTestStates.FAILED, e.message, getattr(e, "detail", None))
         return statuses
     except RemoteConnectionException as e:
-        add_status(e.status, e.message, getattr(e, "detail", None))
+        statuses.append(connection_status_from_exception(e))
         return statuses
 
     curl_cmd = (
