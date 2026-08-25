@@ -2,11 +2,29 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { ToastOptions, toast } from 'react-toastify';
+import { Id, ToastContent, ToastOptions, toast } from 'react-toastify';
 import ToastFileChange from '../components/ToastFileChange';
 import { ToastType } from '../definitions/ToastType';
 
-export default function createToastNotification(message: string, fileName: string, type?: ToastType) {
+// Everything below is the only code allowed to call `react-toastify`'s `toast`, so every
+// toast in the app shares the single `<ToastContainer>` mounted in `Layout.tsx`. Defaults
+// belong on that container -- `options` is for a toast's departures from them, such as the
+// `autoClose: false` a toast that must survive until dismissed needs.
+export function createToast(content: ToastContent, options?: ToastOptions, type?: ToastType): Id {
+    return type ? toast[type](content, options) : toast(content, options);
+}
+
+// Omitting `toastId` dismisses every open toast, matching `toast.dismiss()`.
+export function dismissToast(toastId?: Id) {
+    toast.dismiss(toastId);
+}
+
+export default function createToastNotification(
+    message: string,
+    fileName: string,
+    type?: ToastType,
+    options?: ToastOptions,
+): Id {
     const template = (
         <ToastFileChange
             message={message}
@@ -14,12 +32,5 @@ export default function createToastNotification(message: string, fileName: strin
         />
     );
 
-    // Moved args to the ToastContainer level but keeping this here in the short term in case we need to restore any (e.g. because bugs)
-    const args: ToastOptions = {};
-
-    if (type) {
-        toast[type](template, args);
-    } else {
-        toast(template, args);
-    }
+    return createToast(template, options, type);
 }

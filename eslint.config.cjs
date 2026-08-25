@@ -146,6 +146,23 @@ module.exports = defineConfig([
             'import/prefer-default-export': 'off',
             'max-classes-per-file': 'off',
             'no-plusplus': 'off',
+            // `src/functions/createToastNotification.tsx` is the only module that may call
+            // `toast`, so every toast shares the one `<ToastContainer>` in `Layout.tsx`.
+            // Types are unrestricted -- `activeToastAtom` is typed `Id | null`.
+            'no-restricted-imports': [
+                'error',
+                {
+                    paths: [
+                        {
+                            name: 'react-toastify',
+                            importNames: ['toast'],
+                            message:
+                                'Emit toasts through src/functions/createToastNotification: createToastNotification for the file-change template, createToast/dismissToast for custom content.',
+                        },
+                    ],
+                },
+            ],
+
             'no-restricted-syntax': [
                 'error',
                 {
@@ -232,6 +249,14 @@ module.exports = defineConfig([
                     argsIgnorePattern: '^_',
                 },
             ],
+        },
+    },
+    {
+        // The toast wrapper is the one place the restriction above exists to funnel into.
+        files: ['src/functions/createToastNotification.tsx'],
+
+        rules: {
+            'no-restricted-imports': 'off',
         },
     },
     {
