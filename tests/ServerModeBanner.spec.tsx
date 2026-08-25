@@ -5,6 +5,7 @@
 import '@testing-library/jest-dom/vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { MockInstance } from 'vitest';
 import ServerModeBanner, { GITHUB_REPOSITORY_URL, PYPI_PACKAGE_URL } from '../src/components/ServerModeBanner';
 import { ServerConfig } from '../src/definitions/ServerConfig';
 import { TEST_IDS } from '../src/definitions/TestIds';
@@ -47,12 +48,29 @@ describe('ServerModeBanner', () => {
         expect(screen.queryByTestId(TEST_IDS.SERVER_MODE_BANNER)).not.toBeInTheDocument();
     });
 
+    // Asserts on the recorded event types rather than a full argument list: the component
+    // registers the listener with an options object, and a `toHaveBeenCalledWith(type, fn)`
+    // matcher silently stops matching that three-argument call -- so the negative assertion
+    // would pass even in server mode.
+    const registeredEventTypes = (spy: MockInstance<typeof window.addEventListener>) =>
+        spy.mock.calls.map(([type]) => type);
+
     it('attaches no pointer listener in a local deployment', () => {
         const addEventListener = vi.spyOn(window, 'addEventListener');
 
         render(<ServerModeBanner />);
 
-        expect(addEventListener).not.toHaveBeenCalledWith('mousemove', expect.any(Function));
+        expect(registeredEventTypes(addEventListener)).not.toContain('mousemove');
+    });
+
+    // The positive half of the pair, so the assertion above can't go vacuous unnoticed.
+    it('attaches the pointer listener in server mode', () => {
+        getServerConfigMock.mockReturnValue({ SERVER_MODE: true });
+        const addEventListener = vi.spyOn(window, 'addEventListener');
+
+        render(<ServerModeBanner />);
+
+        expect(registeredEventTypes(addEventListener)).toContain('mousemove');
     });
 
     it('starts hidden and reveals itself as the pointer approaches the top', () => {
@@ -62,15 +80,19 @@ describe('ServerModeBanner', () => {
 
         const banner = screen.getByTestId(TEST_IDS.SERVER_MODE_BANNER);
 
-        expect(banner).toHaveStyle({ transform: 'translateY(-100%)' });
+        // Structural, not visual: vitest.config.ts does not enable `test.css`, so no
+        // stylesheet applies in jsdom and the transform itself is unobservable. The
+        // stylesheet also reveals the banner on `:focus-within`, which is CSS-only and
+        // therefore likewise out of reach here.
+        expect(banner).not.toHaveClass('revealed');
 
         fireEvent.mouseMove(window, { clientY: POINTER_NEAR_TOP });
 
-        expect(banner).toHaveStyle({ transform: 'translateY(0)' });
+        expect(banner).toHaveClass('revealed');
 
         fireEvent.mouseMove(window, { clientY: POINTER_AWAY_FROM_TOP });
 
-        expect(banner).toHaveStyle({ transform: 'translateY(-100%)' });
+        expect(banner).not.toHaveClass('revealed');
     });
 
     it('names both install routes', () => {
@@ -89,7 +111,7 @@ describe('ServerModeBanner', () => {
 
         fireEvent.mouseMove(window, { clientY: POINTER_ON_THRESHOLD });
 
-        expect(screen.getByTestId(TEST_IDS.SERVER_MODE_BANNER)).toHaveStyle({ transform: 'translateY(-100%)' });
+        expect(screen.getByTestId(TEST_IDS.SERVER_MODE_BANNER)).not.toHaveClass('revealed');
     });
 
     // The listener is on `window`, so an unbalanced pair outlives the component and keeps

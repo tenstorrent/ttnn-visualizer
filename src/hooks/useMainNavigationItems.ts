@@ -15,7 +15,12 @@ export interface ResolvedNavigationItem extends NavigationItem {
     isDisabled: boolean;
     // Null rather than an empty string so a caller can't render a blank tooltip.
     disabledReason: string | null;
+    // Paints the item as the user's current location, including the page behind an open
+    // modal -- so more than one item can be active at a time.
     isActive: boolean;
+    // The one item matching the actual pathname. Separate from `isActive` because a
+    // navigation must expose a single current page to assistive technology.
+    isCurrentPage: boolean;
 }
 
 export interface MainNavigationItems {
@@ -53,15 +58,24 @@ export function useMainNavigationItems(): MainNavigationItems {
         }
     };
 
-    const isActivePath = (path: string): boolean => {
-        const backgroundPath = location.state?.background?.pathname;
-        const isNestedMatch = (candidate: string) => candidate.includes(path) && path !== ROUTES.HOME;
+    const isNestedMatch = (candidate: string, path: string) => candidate.includes(path) && path !== ROUTES.HOME;
 
-        if (location.pathname === path || isNestedMatch(location.pathname)) {
+    // The page the browser is actually on. Exactly one item can match: no route in ROUTES
+    // is a substring of another, and HOME is excluded from the nested match.
+    const isCurrentPath = (path: string): boolean =>
+        location.pathname === path || isNestedMatch(location.pathname, path);
+
+    // Also counts the page behind an open modal, which is what the identity colours want --
+    // the user is still on that page. Two items can match at once, so this must not drive
+    // `aria-current`; see `isCurrentPage`.
+    const isActivePath = (path: string): boolean => {
+        if (isCurrentPath(path)) {
             return true;
         }
 
-        return !!backgroundPath && (backgroundPath === path || isNestedMatch(backgroundPath));
+        const backgroundPath = location.state?.background?.pathname;
+
+        return !!backgroundPath && (backgroundPath === path || isNestedMatch(backgroundPath, path));
     };
 
     const items = NAVIGATION_ITEMS.filter((item) => !(item.hiddenInServerMode && serverMode)).map((item) => {
@@ -72,6 +86,7 @@ export function useMainNavigationItems(): MainNavigationItems {
             isDisabled,
             disabledReason: isDisabled ? NAV_DISABLED_REASON[item.requirement] : null,
             isActive: isActivePath(item.route),
+            isCurrentPage: isCurrentPath(item.route),
         };
     });
 

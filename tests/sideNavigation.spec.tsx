@@ -417,6 +417,26 @@ describe('SideNavigation assistive technology', () => {
         expect(getButtonWithText('tensors')).not.toHaveAttribute('aria-current');
     });
 
+    // The visual active state deliberately covers both the modal and the page behind it,
+    // but a navigation must expose exactly one current page -- so `aria-current` follows
+    // the real pathname while the identity colours follow both.
+    it('names only one current page while a modal is open', () => {
+        (useGetClusterDescription as Mock).mockReturnValue({ data: clusterDescription });
+
+        renderRail(
+            [[activeProfilerReportAtom, activeReport]],
+            [{ pathname: ROUTES.CLUSTER, state: { background: { pathname: `${ROUTES.OPERATIONS}/42` } } }],
+        );
+
+        expect(document.querySelectorAll('[aria-current="page"]')).toHaveLength(1);
+        expect(getButtonWithText('topology')).toHaveAttribute('aria-current', 'page');
+        expect(getButtonWithText('operations')).not.toHaveAttribute('aria-current');
+
+        // Both still paint as active.
+        expect(getButtonWithText('topology')).toHaveClass('bp6-active');
+        expect(getButtonWithText('operations')).toHaveClass('bp6-active');
+    });
+
     // `aria-expanded` on its own says something is expanded without saying what, so the
     // toggle points at the region whose width it controls.
     it('ties the toggle to the region it expands', () => {

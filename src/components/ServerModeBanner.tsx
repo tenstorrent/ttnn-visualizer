@@ -3,6 +3,7 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import { useEffect, useRef, useState } from 'react';
+import classNames from 'classnames';
 import 'styles/components/ServerModeBanner.scss';
 import getServerConfig from '../functions/getServerConfig';
 import { TEST_IDS } from '../definitions/TestIds';
@@ -54,12 +55,13 @@ function ServerModeBanner() {
     }
 
     return (
+        // Both transform values live in the stylesheet rather than an inline style, so the
+        // `:focus-within` rule there can also reveal the banner. An inline style would
+        // outrank it, leaving the links focusable while off-screen with no keyboard way to
+        // bring them into view.
         <div
-            className='server-mode-banner'
+            className={classNames('server-mode-banner', { revealed: isRevealed })}
             data-testid={TEST_IDS.SERVER_MODE_BANNER}
-            style={{
-                transform: isRevealed ? 'translateY(0)' : 'translateY(-100%)',
-            }}
         >
             For full featured application, please install from
             <a

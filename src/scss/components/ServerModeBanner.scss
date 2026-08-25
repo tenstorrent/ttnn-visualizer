@@ -22,4 +22,16 @@
     justify-content: center;
     transition: transform 300ms ease-out 50ms;
     gap: 7px;
+
+    // Hidden by default. Off-screen rather than `display: none` so the links stay
+    // focusable -- which is only safe because focusing one also reveals the banner.
+    transform: translateY(-100%);
+
+    // The pointer path is `mousemove` near the top of the viewport; `:focus-within` is the
+    // keyboard equivalent. Without it a tab into these links would move focus to a control
+    // the user cannot see.
+    &.revealed,
+    &:focus-within {
+        transform: translateY(0);
+    }
 }

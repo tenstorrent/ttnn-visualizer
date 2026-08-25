@@ -69,7 +69,10 @@ function SideNavigation() {
                                 aria-label={item.label}
                                 // Blueprint emits only `aria-disabled` for `active`, so
                                 // without this the current view is conveyed by colour alone.
-                                aria-current={item.isActive ? 'page' : undefined}
+                                // Keyed off `isCurrentPage`, not `isActive`: with a modal
+                                // open both it and the page behind it are active, and only
+                                // one item may be the current page.
+                                aria-current={item.isCurrentPage ? 'page' : undefined}
                                 onClick={() => handleNavigate(item)}
                                 active={item.isActive}
                                 icon={item.icon}
