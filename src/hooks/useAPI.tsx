@@ -542,10 +542,7 @@ const fetchClusterDescription = async (): Promise<ClusterModel> => {
 export const useGetClusterDescription = () => {
     const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
 
-    // No `initialData` sentinel: it would count as fresh under `staleTime: Infinity` and
-    // the descriptor would never be fetched at all. Both callers test the value for
-    // presence, so an unfetched query reading `undefined` says the same thing `null` did.
-    return useQuery<ClusterModel, AxiosError>({
+    return useQuery<ClusterModel | null, AxiosError>({
         queryFn: () => fetchClusterDescription(),
         queryKey: ['get-cluster-description', activeProfilerReport?.path],
         retry: false,
@@ -757,7 +754,7 @@ export const useOperationDetails = (operationId: number | null) => {
 
     const fetchDetails = useCallback(() => fetchOperationDetails(operationId), [operationId]);
 
-    const operationDetails = useQuery<OperationDetailsData>({
+    const operationDetails = useQuery<OperationDetailsData, AxiosError>({
         queryFn: () => fetchDetails(),
         queryKey: ['get-operation-detail', operationId, activeProfilerReport?.path],
         retry: 2,
@@ -1308,7 +1305,7 @@ export const useInstance = () => {
     const activeNpe = useAtomValue(activeNpeOpTraceAtom);
     const activeMlirJson = useAtomValue(activeMlirJsonAtom);
 
-    return useQuery({
+    return useQuery<Instance | null, AxiosError>({
         queryFn: () => fetchInstance(),
         queryKey: [
             'fetch-instance',
@@ -1410,7 +1407,7 @@ export const deleteProfiler = async (report: string) => {
 };
 
 export const useReportFolderList = () => {
-    return useQuery({
+    return useQuery<ReportFolder[] | null, AxiosError>({
         queryFn: () => fetchReportFolderList(),
         queryKey: [PROFILER_FOLDER_QUERY_KEY],
         initialData: null,
@@ -1432,7 +1429,7 @@ export const deletePerformance = async (report: string) => {
 };
 
 export const usePerfFolderList = () => {
-    return useQuery({
+    return useQuery<ReportFolder[] | null, AxiosError>({
         queryFn: () => fetchPerfFolderList(),
         queryKey: [PERFORMANCE_FOLDER_QUERY_KEY],
         initialData: null,
