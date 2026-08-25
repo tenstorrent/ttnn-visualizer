@@ -22,12 +22,11 @@ $minimap-width: 200px;
     position: relative;
     width: 100%;
 
-    // Fills the band between the navbar and the status bar, less `main`'s top
-    // padding. The negative margin drops the trailing page padding — `main`'s
-    // bottom gutter plus `.data-padding`'s — which here would only add a scrollbar.
-    height: calc(
-        100vh - #{variables.$app-navbar-height} - #{variables.$main-padding} - #{variables.$app-status-bar-height}
-    );
+    // Fills the viewport down to the status bar, less `main`'s top padding. The
+    // navigation is a vertical rail, so nothing sits above the page to offset against.
+    // The negative margin drops the trailing page padding — `main`'s bottom gutter plus
+    // `.data-padding`'s — which here would only add a scrollbar.
+    height: calc(100vh - #{variables.$main-padding} - #{variables.$app-status-bar-height});
     margin-bottom: -(variables.$main-padding-bottom + variables.$data-padding-bottom);
 
     .operation-graph-react-flow-loader {

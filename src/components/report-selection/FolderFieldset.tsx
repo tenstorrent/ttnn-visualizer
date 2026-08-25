@@ -37,7 +37,7 @@ const FolderFieldset = ({
             <Icon
                 className='legend-icon'
                 icon={icon}
-                size={90}
+                size={80}
             />
 
             <div className='folder-picker-wrapper'>{children}</div>
