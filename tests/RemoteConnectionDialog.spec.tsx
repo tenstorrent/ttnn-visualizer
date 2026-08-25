@@ -16,6 +16,8 @@ import {
     getNameTakenMessage,
 } from '../src/definitions/ConnectionDialog';
 import { ConnectionStatus, ConnectionTestStates } from '../src/definitions/ConnectionStatus';
+import { HostKeyIssue } from '../src/definitions/HostKey';
+import { HostKeyStatus } from '../src/model/HostKey';
 import {
     REMOTE_MEMORY_PATH_LABEL,
     REMOTE_PERFORMANCE_PATH_LABEL,
@@ -31,6 +33,7 @@ import {
 } from '../src/definitions/SshConnectionFields';
 import { TEST_IDS } from '../src/definitions/TestIds';
 import getButtonWithText from './helpers/getButtonWithText';
+import { QueryProvider } from './helpers/queryClientProvider';
 import { MULTIHOST_CHECKBOX_NAME } from './helpers/multihostCheckbox';
 import { SshConfigHostsQueryResult, noSshConfigResult, sshConfigHostsResult } from './helpers/sshConfigFixtures';
 import { ExistingTarget, describeSshConfigPrefillContract } from './helpers/sshConfigPrefillContract';
@@ -52,6 +55,11 @@ const useSshConfigHostsMock = vi.hoisted(() => vi.fn<(enabled?: boolean) => SshC
 
 const testConnectionMock = vi.hoisted(() => vi.fn<() => Promise<ConnectionStatus[]>>());
 
+const { fetchHostKeyOfferMock, trustHostKeyMock } = vi.hoisted(() => ({
+    fetchHostKeyOfferMock: vi.fn(),
+    trustHostKeyMock: vi.fn(),
+}));
+
 vi.mock('../src/functions/getServerConfig', () => ({
     default: getServerConfigMock,
 }));
@@ -66,6 +74,13 @@ vi.mock('../src/hooks/useRemote', () => ({
     }),
 }));
 
+vi.mock('../src/hooks/useHostKey', () => ({
+    default: () => ({
+        fetchHostKeyOffer: fetchHostKeyOfferMock,
+        trustHostKey: trustHostKeyMock,
+    }),
+}));
+
 afterEach(() => {
     cleanup();
 });
@@ -77,6 +92,8 @@ beforeEach(() => {
     useSshConfigHostsMock.mockReturnValue(noSshConfigResult());
     testConnectionMock.mockClear();
     testConnectionMock.mockResolvedValue([]);
+    fetchHostKeyOfferMock.mockClear();
+    trustHostKeyMock.mockClear();
 });
 
 describe('RemoteConnectionDialog defaults', () => {
@@ -814,6 +831,162 @@ describe('RemoteConnectionDialog connection test error handling', () => {
         fireEvent.click(getButtonWithText('Run tests'));
 
         await waitFor(() => expect(screen.getByText('SSH authentication failed')).toBeInTheDocument());
+    });
+});
+
+describe('RemoteConnectionDialog host key failures', () => {
+    const FINGERPRINT = 'SHA256:+DiY3wvvV6TuJJhbpZisF/zLDA0zPMSvHdkr4UvCOqU';
+
+    const hostKeyFailure = (hostKey: HostKeyStatus, message = 'SSH host key is not in ~/.ssh/known_hosts') => ({
+        isAxiosError: true,
+        response: {
+            status: 422,
+            data: [{ status: ConnectionTestStates.FAILED, message, hostKey }],
+        },
+    });
+
+    const renderDialog = () =>
+        render(
+            <RemoteConnectionDialog
+                open
+                onClose={vi.fn()}
+                onAddConnection={vi.fn()}
+            />,
+            { wrapper: QueryProvider },
+        );
+
+    it('offers the fingerprint and a trust action for an unknown key', async () => {
+        testConnectionMock.mockRejectedValue(
+            hostKeyFailure({ issue: HostKeyIssue.UNKNOWN, host: 'aus-wh-05', port: 2222 }),
+        );
+        fetchHostKeyOfferMock.mockResolvedValue({
+            issue: HostKeyIssue.UNKNOWN,
+            host: 'aus-wh-05',
+            port: 2222,
+            offers: [{ keyType: 'ssh-ed25519', fingerprint: FINGERPRINT, line: 'line' }],
+        });
+
+        renderDialog();
+        fireEvent.click(getButtonWithText('Run tests'));
+
+        await waitFor(() => expect(screen.getByText(FINGERPRINT)).toBeInTheDocument());
+        expect(screen.getByTestId(TEST_IDS.HOST_KEY_TRUST_BUTTON)).toBeInTheDocument();
+        // Still a FAILED line, so the connection cannot be saved on the strength of it.
+        expect(getButtonWithText('Add connection')).toBeDisabled();
+    });
+
+    it('re-runs the test after trusting, so the save gate sees a fresh result', async () => {
+        testConnectionMock.mockRejectedValueOnce(
+            hostKeyFailure({ issue: HostKeyIssue.UNKNOWN, host: 'aus-wh-05', port: 2222 }),
+        );
+        fetchHostKeyOfferMock.mockResolvedValue({
+            issue: HostKeyIssue.UNKNOWN,
+            host: 'aus-wh-05',
+            port: 2222,
+            offers: [{ keyType: 'ssh-ed25519', fingerprint: FINGERPRINT, line: 'line' }],
+        });
+        trustHostKeyMock.mockResolvedValue(undefined);
+        testConnectionMock.mockResolvedValue([
+            { status: ConnectionTestStates.OK, message: 'SSH connection established' },
+        ]);
+
+        renderDialog();
+        fireEvent.click(getButtonWithText('Run tests'));
+
+        await waitFor(() => expect(screen.getByTestId(TEST_IDS.HOST_KEY_TRUST_BUTTON)).toBeInTheDocument());
+        fireEvent.click(screen.getByTestId(TEST_IDS.HOST_KEY_TRUST_BUTTON));
+
+        await waitFor(() => expect(trustHostKeyMock).toHaveBeenCalled());
+        // Trusting clears one reason the test failed, not necessarily the only one, so the
+        // verdict has to come from a real re-run rather than from assuming success.
+        await waitFor(() => expect(screen.getByText('SSH connection established')).toBeInTheDocument());
+        expect(testConnectionMock).toHaveBeenCalledTimes(2);
+    });
+
+    it('trusts against the host and port the form holds', async () => {
+        testConnectionMock.mockRejectedValue(
+            hostKeyFailure({ issue: HostKeyIssue.UNKNOWN, host: 'resolved.example', port: 2222 }),
+        );
+        fetchHostKeyOfferMock.mockResolvedValue({
+            issue: HostKeyIssue.UNKNOWN,
+            host: 'resolved.example',
+            port: 2222,
+            offers: [{ keyType: 'ssh-ed25519', fingerprint: FINGERPRINT, line: 'line' }],
+        });
+        trustHostKeyMock.mockResolvedValue(undefined);
+
+        renderDialog();
+        fireEvent.change(screen.getByLabelText(SSH_HOST_LABEL), { target: { value: 'lab' } });
+        fireEvent.click(getButtonWithText('Run tests'));
+
+        await waitFor(() => expect(screen.getByTestId(TEST_IDS.HOST_KEY_TRUST_BUTTON)).toBeInTheDocument());
+        fireEvent.click(screen.getByTestId(TEST_IDS.HOST_KEY_TRUST_BUTTON));
+
+        // The alias the user typed, not the resolved name on the verdict: the backend has
+        // to redo the same resolution the connection will, and needs identityFile for it.
+        await waitFor(() =>
+            expect(trustHostKeyMock).toHaveBeenCalledWith(expect.objectContaining({ host: 'lab', port: 2222 }), [
+                FINGERPRINT,
+            ]),
+        );
+    });
+
+    it('withholds the trust action when the key has changed', async () => {
+        testConnectionMock.mockRejectedValue(
+            hostKeyFailure(
+                {
+                    issue: HostKeyIssue.CHANGED,
+                    host: 'aus-wh-05',
+                    port: 2222,
+                    knownHostsEntry: '/home/u/.ssh/known_hosts:3',
+                    removalCommand: "ssh-keygen -R '[aus-wh-05]:2222'",
+                },
+                'The SSH host key has changed',
+            ),
+        );
+
+        renderDialog();
+        fireEvent.click(getButtonWithText('Run tests'));
+
+        await waitFor(() => expect(screen.getByText('The SSH host key has changed')).toBeInTheDocument());
+        expect(screen.queryByTestId(TEST_IDS.HOST_KEY_TRUST_BUTTON)).not.toBeInTheDocument();
+        expect(screen.getByText("ssh-keygen -R '[aus-wh-05]:2222'")).toBeInTheDocument();
+        expect(fetchHostKeyOfferMock).not.toHaveBeenCalled();
+    });
+
+    it('hides the trust affordance under SERVER_MODE', async () => {
+        getServerConfigMock.mockReturnValue({ ...SERVER_CONFIG, SERVER_MODE: true });
+        testConnectionMock.mockRejectedValue(
+            hostKeyFailure({ issue: HostKeyIssue.UNKNOWN, host: 'aus-wh-05', port: 2222 }),
+        );
+
+        renderDialog();
+        fireEvent.click(getButtonWithText('Run tests'));
+
+        await waitFor(() => expect(screen.getByText('SSH host key is not in ~/.ssh/known_hosts')).toBeInTheDocument());
+        expect(screen.queryByTestId(TEST_IDS.HOST_KEY_PROMPT)).not.toBeInTheDocument();
+    });
+
+    it('ignores a malformed host key payload rather than rendering a broken prompt', async () => {
+        testConnectionMock.mockRejectedValue({
+            isAxiosError: true,
+            response: {
+                status: 422,
+                data: [
+                    {
+                        status: ConnectionTestStates.FAILED,
+                        message: 'SSH connection failed',
+                        hostKey: { issue: 'nonsense' },
+                    },
+                ],
+            },
+        });
+
+        renderDialog();
+        fireEvent.click(getButtonWithText('Run tests'));
+
+        await waitFor(() => expect(screen.getByText('SSH connection failed')).toBeInTheDocument());
+        expect(screen.queryByTestId(TEST_IDS.HOST_KEY_PROMPT)).not.toBeInTheDocument();
     });
 });
 

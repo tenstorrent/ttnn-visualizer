@@ -12,6 +12,7 @@ import GraphView from './GraphView';
 import Performance from './Performance';
 import NPE from './NPE';
 import ROUTES from '../definitions/Routes';
+import { NAVIGATION_ITEMS, NavRequirement } from '../definitions/NavigationItems';
 import MLIR from './MLIR';
 
 // Allows us to keep absolute paths in ROUTES while using relative paths in route objects
@@ -71,20 +72,19 @@ interface RouteRequirements {
     needsPerformanceReport?: boolean;
 }
 
-export const RouteRequirements: Record<string, RouteRequirements> = {
-    [ROUTES.OPERATIONS]: {
-        needsProfilerReport: true,
-    },
-    [ROUTES.TENSORS]: {
-        needsProfilerReport: true,
-    },
-    [ROUTES.BUFFERS]: {
-        needsProfilerReport: true,
-    },
-    [ROUTES.GRAPHTREE]: {
-        needsProfilerReport: true,
-    },
-    [ROUTES.PERFORMANCE]: {
-        needsPerformanceReport: true,
-    },
+// The instance-backed half of a navigation requirement. Only the two report requirements
+// have one: cluster data and MLIR files are resolved in the client, so there is nothing
+// here for the route guard to redirect on.
+const INSTANCE_GUARD_BY_REQUIREMENT: Partial<Record<NavRequirement, RouteRequirements>> = {
+    [NavRequirement.PROFILER_REPORT]: { needsProfilerReport: true },
+    [NavRequirement.PERFORMANCE_REPORT]: { needsPerformanceReport: true },
 };
+
+// Derived from the navigation descriptors so "which report does this route need" is stated
+// once. Hand-maintaining a second copy drifts silently in both directions: an item the rail
+// offers that this guard bounces back to Home, or one greyed out for a reachable route.
+export const RouteRequirements: Record<string, RouteRequirements> = Object.fromEntries(
+    NAVIGATION_ITEMS.map((item) => [item.route, INSTANCE_GUARD_BY_REQUIREMENT[item.requirement]] as const).filter(
+        (entry): entry is [string, RouteRequirements] => entry[1] !== undefined,
+    ),
+);

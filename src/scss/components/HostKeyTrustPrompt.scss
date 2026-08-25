@@ -1,0 +1,66 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
+
+@use '../definitions/colours' as *;
+@use '../definitions/variables' as *;
+
+.host-key-prompt {
+    max-width: $connection-detail-width;
+    margin-top: 6px;
+
+    p {
+        margin-bottom: 6px;
+        line-height: 1.4;
+    }
+
+    .host-key-notice,
+    .host-key-entry {
+        font-size: 12px;
+        color: $tt-grey-6;
+    }
+
+    .host-key-error {
+        color: $tt-red;
+    }
+
+    .host-key-offers {
+        list-style: none;
+        margin: 0 0 6px;
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+
+        li {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+    }
+
+    .host-key-type {
+        font-size: 12px;
+        color: $tt-grey-5;
+    }
+
+    // Wraps rather than scrolling like `.connection-status-detail`: a fingerprint is
+    // compared character by character against one read from elsewhere, and a partly
+    // scrolled-out one invites confirming only the half that is visible. The same goes
+    // for a command that has to be copied whole.
+    .host-key-fingerprint,
+    .host-key-command code {
+        font-size: 12px;
+        background-color: $tt-grey-2;
+        border-radius: 4px;
+        padding: 4px 6px;
+        overflow-wrap: anywhere;
+    }
+
+    .host-key-command {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin-bottom: 6px;
+    }
+}

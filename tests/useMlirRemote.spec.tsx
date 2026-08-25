@@ -18,15 +18,13 @@ import { FileTransferSource } from '../src/definitions/FileTransferSource';
 import {
     clearAllFileTransferProgress,
     clearFileTransferProgressForSource,
+    fileTransferProgressAtom,
     fileTransferRegistryAtom,
     getInactiveFileTransferProgress,
-    setFileTransferProgressForSource,
-} from '../src/store/fileTransferRegistry';
-import {
-    fileTransferProgressAtom,
     mlirFileResultsAtom,
     mlirFileResultsOpenAtom,
     mlirRetryFilesAtom,
+    setFileTransferProgressForSource,
 } from '../src/store/app';
 import { FileStatus } from '../src/model/APIData';
 

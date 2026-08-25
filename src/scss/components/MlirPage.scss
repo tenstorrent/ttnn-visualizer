@@ -15,8 +15,8 @@
     }
 }
 
-// Once a graph is present, claim the space below the fixed app chrome (navbar +
-// footer bar) and let children span the width, so the title/loader take natural
+// Once a graph is present, claim the space left by the fixed footer bar and let
+// children span the width, so the title/loader take natural
 // height and the canvas flexes to fill the rest. The initial upload screen has
 // no graph, so it stays content-sized instead of reserving the full viewport.
 .mlir-page-graph {

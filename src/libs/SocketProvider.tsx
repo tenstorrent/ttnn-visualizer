@@ -7,7 +7,7 @@ import { ReactNode, createContext, useEffect } from 'react';
 import { Socket, io } from 'socket.io-client';
 import { getOrCreateInstanceId } from './axiosInstance';
 import { FileTransferSource } from '../definitions/FileTransferSource';
-import { clearStaleRemoteSyncOnReconnect, setFileTransferProgressForSource } from '../store/fileTransferRegistry';
+import { clearStaleRemoteSyncOnReconnect, setFileTransferProgressForSource } from '../store/app';
 import getServerConfig from '../functions/getServerConfig';
 
 type SocketContextType = Socket | null;

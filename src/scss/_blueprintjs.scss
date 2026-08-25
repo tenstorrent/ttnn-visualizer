@@ -103,6 +103,23 @@ $pt-intent-text-colors: (
     $pt-dark-elevation-shadow-1: none
 );
 
+// Blueprint raises an intent-coloured button or input inside a group to z-index 10-16 so
+// its border paints over the neighbour it shares an edge with. Those values only ever need
+// to beat siblings in the same group, but Blueprint sets them without a stacking context,
+// so they escape into the root one and land on top of our overlay scale ($z-index-3-overlay
+// is 10) -- an active segmented control then paints over a full-screen overlay covering the
+// page. Isolating the group keeps the border ordering intact and keeps the numbers local.
+//
+// The constraint this buys: a popover rendered inline (`usePortal={false}`) must not live
+// inside a button or control group, because the new stacking context traps it under the
+// group's own siblings. Nothing in the app does that today -- every inline popover sits
+// outside a group -- but it is the failure this rule would cause, and it has no obvious
+// symptom at the call site.
+.bp6-button-group,
+.bp6-control-group {
+    isolation: isolate;
+}
+
 // Overrides for BlueprintJS which cannot be done via SASS variables
 .bp6-dark {
     // $dark-hover-text-color in blueprint.js cannot currently be overridden, but also this colour applies to all intents

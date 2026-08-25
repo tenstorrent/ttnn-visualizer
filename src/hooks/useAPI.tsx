@@ -545,8 +545,14 @@ export const useGetClusterDescription = () => {
     return useQuery<ClusterModel | null, AxiosError>({
         queryFn: () => fetchClusterDescription(),
         queryKey: ['get-cluster-description', activeProfilerReport?.path],
-        initialData: null,
         retry: false,
+        // The descriptor lives beside the memory report, so without one the request can
+        // only 404. The navigation reads this to decide whether Topology is reachable and
+        // is mounted before any report is chosen.
+        enabled: !!activeProfilerReport?.path,
+        // Report-bound: the key carries the report path, so switching reports refetches and
+        // nothing else can change the answer for a given one.
+        staleTime: Infinity,
     });
 };
 
