@@ -48,7 +48,7 @@ interface MlirJsonFileLoaderProps {
 }
 
 const MlirJsonFileLoader = ({ server = null, disabled = false }: MlirJsonFileLoaderProps) => {
-    const [errorMessage, setErrorMessage] = useState<string | null>(null);
+    const [statusMessage, setStatusMessage] = useState<string | null>(null);
     const { uploadMlirFileToServer } = useMlirRemote();
     const mlirJsonFileName = useAtomValue(activeMlirJsonAtom);
     const [mlirFileResults, setMlirFileResults] = useAtom(mlirFileResultsAtom);
@@ -120,7 +120,7 @@ const MlirJsonFileLoader = ({ server = null, disabled = false }: MlirJsonFileLoa
         // outcomes and the active-file choice are handled in the results
         // overlay driven by `mlirFileResultsAtom`.
         setUploadStatus(ConnectionTestStates.IDLE);
-        setErrorMessage(null);
+        setStatusMessage(null);
 
         const { files } = event.target;
         const selectedFiles = Array.from(files);
@@ -159,7 +159,7 @@ const MlirJsonFileLoader = ({ server = null, disabled = false }: MlirJsonFileLoa
                     setMlirFileResults(null);
                     setMlirRetryFiles(null);
                     setUploadStatus(ConnectionTestStates.FAILED);
-                    setErrorMessage('Upload failed');
+                    setStatusMessage('Upload failed');
                     return;
                 }
 
@@ -182,7 +182,7 @@ const MlirJsonFileLoader = ({ server = null, disabled = false }: MlirJsonFileLoa
             setMlirFileResults(null);
             setMlirRetryFiles(null);
             setUploadStatus(ConnectionTestStates.FAILED);
-            setErrorMessage(getResponseError(err, server ? 'Unable to upload MLIR file' : 'Unable to load MLIR file'));
+            setStatusMessage(getResponseError(err, server ? 'Unable to upload MLIR file' : 'Unable to load MLIR file'));
         }
     };
 
@@ -218,7 +218,7 @@ const MlirJsonFileLoader = ({ server = null, disabled = false }: MlirJsonFileLoa
                             intent={INTENT_MAP[uploadStatus]}
                         />
 
-                        <span className='connection-status-text'>{errorMessage}</span>
+                        <span className='connection-status-text'>{statusMessage}</span>
                     </>
                 ) : null}
             </div>

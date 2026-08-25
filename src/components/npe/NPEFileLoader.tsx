@@ -34,14 +34,14 @@ const INTENT_MAP: Record<ConnectionTestStates, Intent> = {
 };
 
 const NPEFileLoader = () => {
-    const [errorMessage, setErrorMessage] = useState<string | null>(null);
+    const [statusMessage, setStatusMessage] = useState<string | null>(null);
     const { uploadNpeFile } = useLocalConnection();
     const queryClient = useQueryClient();
     const [npeFileName, setActiveNpe] = useAtom(activeNpeOpTraceAtom);
     const [uploadStatus, setUploadStatus] = useState<ConnectionTestStates>(ConnectionTestStates.IDLE);
 
     const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
-        setErrorMessage('Uploading...');
+        setStatusMessage('Uploading...');
         setUploadStatus(ConnectionTestStates.PROGRESS);
 
         if (!event.target.files) {
@@ -55,7 +55,7 @@ const NPEFileLoader = () => {
 
             if (response?.data?.status !== ConnectionTestStates.OK) {
                 setUploadStatus(ConnectionTestStates.FAILED);
-                setErrorMessage(response?.data?.message ?? 'Upload failed');
+                setStatusMessage(response?.data?.message ?? 'Upload failed');
             } else {
                 const fileName = file.name;
                 // Re-uploading a same-named file reuses the NPE query keys, and the
@@ -68,11 +68,11 @@ const NPEFileLoader = () => {
                 setActiveNpe(sanitiseFileName(fileName));
                 createToastNotification('Active NPE', fileName, ToastType.SUCCESS);
                 setUploadStatus(ConnectionTestStates.OK);
-                setErrorMessage(`${fileName} uploaded successfully`);
+                setStatusMessage(`${fileName} uploaded successfully`);
             }
         } catch (err: unknown) {
             setUploadStatus(ConnectionTestStates.FAILED);
-            setErrorMessage(getResponseError(err, 'Unable to upload file'));
+            setStatusMessage(getResponseError(err, 'Unable to upload file'));
         }
     };
 
@@ -93,7 +93,7 @@ const NPEFileLoader = () => {
                                 intent={INTENT_MAP[uploadStatus]}
                             />
 
-                            <span className='message'>{errorMessage}</span>
+                            <span className='message'>{statusMessage}</span>
                         </>
                     ) : null}
                 </div>
