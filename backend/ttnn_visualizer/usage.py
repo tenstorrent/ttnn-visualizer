@@ -354,6 +354,27 @@ def describe_opt_out() -> str:
     )
 
 
+def describe_opt_in() -> str:
+    """The sentence for an operator who wants recording on and hasn't got it.
+
+    The inverse of :func:`describe_opt_out`, and here for the same reason: the marker
+    path and the variable are written once, so the two directions can't drift into
+    naming different controls.
+
+    Deliberately state-neutral. It is emitted from the settings override loop, which
+    cannot know whether an opt-out is in effect — and claiming recording is already on
+    is exactly the failure this wording replaces, because an operator with
+    ``USAGE_RECORDING_DISABLED=true`` set would have been reassured while recording was
+    off. Names only the two *local* opt-outs: under ``SERVER_MODE`` recording is off by
+    design and neither of these turns it on.
+    """
+    return (
+        f"Recording is on by default, and stays off while an opt-out is in effect: "
+        f"clear them with {USAGE_DISABLED_ENV_VAR}=false and by removing "
+        f"{get_disabled_marker_path()}."
+    )
+
+
 def _as_bool(value: Any) -> bool:
     """Coerce a config value that may arrive as a string via ``settings_override``.
 

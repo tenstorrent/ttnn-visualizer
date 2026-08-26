@@ -20,6 +20,7 @@ import sys
 from pathlib import Path
 
 import pytest
+from ttnn_visualizer import usage
 from ttnn_visualizer.settings import (
     _ENV_ALIASES,
     _ENV_NAME_UNREAD,
@@ -651,12 +652,13 @@ def test_asking_to_switch_recording_off_by_the_published_name_says_what_to_set(
     assert config.USAGE_RECORDING_ACTIVE is True
 
 
-def test_asking_to_record_by_the_published_name_is_not_told_to_switch_it_off(
+def test_asking_to_record_by_the_published_name_names_the_inverse_value(
     usage_directory, monkeypatch, caplog
 ):
-    # The other direction of the same guard. Recording is already the default, so there
-    # is nothing to set — and advice naming ``USAGE_RECORDING_DISABLED=true`` here would
-    # talk an operator into the opposite of what they asked for.
+    # The other direction of the same guard, and it needs the *value* for the same
+    # reason the opt-out branch does: advice naming ``USAGE_RECORDING_DISABLED=true``
+    # here would talk an operator into the opposite of what they asked for, and naming
+    # the bare variable leaves them to guess the polarity that started all this.
     monkeypatch.setenv("USAGE_RECORDING_ACTIVE", "true")
 
     with caplog.at_level(logging.WARNING):
@@ -666,8 +668,51 @@ def test_asking_to_record_by_the_published_name_is_not_told_to_switch_it_off(
     (warning,) = _settings_warnings(caplog)
 
     assert "USAGE_RECORDING_ACTIVE" in warning
+    assert f"{USAGE_DISABLED_ENV_VAR}=false" in warning
     assert f"{USAGE_DISABLED_ENV_VAR}=true" not in warning
     assert config.USAGE_RECORDING_ACTIVE is True
+
+
+def test_asking_to_record_while_an_opt_out_is_in_effect_does_not_claim_it_is_on(
+    usage_directory, monkeypatch, caplog
+):
+    # #1937 review. The remedy runs inside the override loop, which cannot see the
+    # marker file or the posture, so it must not assert the current state: this branch
+    # used to answer "Recording is already on by default" to an operator whose opt-out
+    # was in effect and whose recording was therefore off. Reassuring someone that the
+    # privacy switch is one way while it is the other is the failure class this whole
+    # warning exists to remove, so it is pinned rather than left to the wording.
+    #
+    # Set after ``usage_directory``, which delenvs the variable — which is also why the
+    # tests around this one could not have caught it.
+    monkeypatch.setenv("USAGE_RECORDING_ACTIVE", "true")
+    monkeypatch.setenv(USAGE_DISABLED_ENV_VAR, "true")
+
+    with caplog.at_level(logging.WARNING):
+        config = DevelopmentConfig()
+        config.override_with_env_variables()
+
+    (warning,) = _settings_warnings(caplog)
+
+    # The state the message must not contradict.
+    assert config.USAGE_RECORDING_ACTIVE is False
+    assert "already on" not in warning
+
+    # Still actionable: both local opt-outs are named, because clearing only the
+    # variable leaves the marker file switching recording off.
+    assert f"{USAGE_DISABLED_ENV_VAR}=false" in warning
+    assert str(usage.get_disabled_marker_path()) in warning
+
+
+def test_the_two_opt_out_directions_name_the_same_controls():
+    # ``describe_opt_out`` and ``describe_opt_in`` are inverses, so a control added to
+    # one and forgotten in the other would leave an operator able to switch recording
+    # off by a route they are never told how to undo.
+    marker = str(usage.get_disabled_marker_path())
+
+    for sentence in (usage.describe_opt_out(), usage.describe_opt_in()):
+        assert USAGE_DISABLED_ENV_VAR in sentence
+        assert marker in sentence
 
 
 def test_an_unrecognised_published_name_value_is_read_as_a_botched_opt_out(

@@ -12,6 +12,7 @@ from dotenv import load_dotenv
 from sqlalchemy.pool import NullPool
 from ttnn_visualizer.usage import (
     USAGE_DISABLED_ENV_VAR,
+    describe_opt_in,
     describe_opt_out,
     is_recording_enabled,
 )
@@ -334,12 +335,11 @@ def _usage_recording_remedy(env_value: str) -> str:
     # likelier to be a botched opt-out than a botched opt-in, and that is the same
     # reading ``_is_recording_disabled_by_environment`` gives its own typos.
     if parse_bool(env_value) is True:
-        # Nothing to set, and naming ``USAGE_RECORDING_DISABLED`` here would invite
-        # exactly the inverted value the other branch exists to prevent.
-        return (
-            f"Recording is already on by default; {USAGE_DISABLED_ENV_VAR} is the only "
-            f"switch, and it is an opt-out."
-        )
+        # Must name the inverse *value*, and must not assert that recording is on: this
+        # runs inside the override loop with no view of the marker file or the posture,
+        # and an operator who already has an opt-out in effect would otherwise be told
+        # recording was on while it was off (#1937 review).
+        return describe_opt_in()
 
     return describe_opt_out()
 
