@@ -346,6 +346,23 @@ def test_the_documented_defaults_match_the_code_defaults():
         ), env_name
 
 
+def test_no_published_setting_name_is_documented_as_a_variable():
+    # `.env.sample` is the other place an operator reads variable names off, so a line
+    # here would hand out the very name `_ENV_NAME_UNREAD` exists to warn about — and
+    # every operator who uncommented it would land on the warning.
+    #
+    # The generic pin above cannot see this. ``_documented_boolean_defaults`` keeps a
+    # line whose attribute answers ``getattr`` with a ``bool``, and the descriptor does
+    # exactly that (``getattr(DefaultConfig, "USAGE_RECORDING_ACTIVE") is True``), so a
+    # ``# USAGE_RECORDING_ACTIVE=true`` line would be accepted as a documented boolean
+    # and silently pass. The same shape as the gap in ``test_usage.py``, where
+    # ``USAGE_RECORDING_DISABLED`` needs its own pin for the opposite reason: no
+    # attribute of that name exists at all.
+    documented = {env_name for env_name, _, _ in _documented_boolean_defaults()}
+
+    assert not documented & set(_ENV_NAME_UNREAD)
+
+
 def test_the_documented_defaults_survive_being_set_explicitly(monkeypatch):
     # The other half: uncommenting the line must not invert the setting on the way
     # through the override. Uncommenting ``SERVER_MODE=false`` used to enable server
@@ -632,22 +649,14 @@ def _settings_warnings(caplog, naming):
 def test_asking_to_switch_recording_off_by_the_published_name_says_what_to_set(
     usage_directory, monkeypatch, caplog
 ):
-    # #1921. ``PRINT_ENV`` publishes ``USAGE_RECORDING_ACTIVE=True`` in the same
-    # ``KEY=value`` form as ``SERVER_MODE`` and ``BASE_PATH``, which are variables, so
-    # copying that line into a ``.env`` at the opposite value is the mistake an operator
-    # actually makes — and this one is the privacy opt-out, so failing silently means
-    # recording against someone who believes they switched it off.
-    #
-    # The message must carry the *value*, not just the variable: naming
-    # ``USAGE_RECORDING_DISABLED`` alone reads as a rename, and an operator carrying
-    # their ``false`` across lands on ``USAGE_RECORDING_DISABLED=false`` — a recognised
-    # boolean that leaves recording on and warns about nothing. Asserting on the name
-    # alone would let that regression back in, which is what the first version did.
+    # #1921, and the reason the assertion is on the *value*: naming the variable alone
+    # reads as a rename and lands the operator on ``USAGE_RECORDING_DISABLED=false``, a
+    # silent no-op. The first version of this test asserted on the name and let exactly
+    # that ship.
     #
     # ``usage_directory`` because ``USAGE_RECORDING_ACTIVE`` resolves through
-    # ``is_recording_enabled``, which reads the real ``USAGE_RECORDING_DISABLED`` and
-    # stats the marker file under the developer's home: without it this test fails for
-    # anyone who has actually opted out.
+    # ``is_recording_enabled``, which reads the real variable and stats the marker file
+    # under the developer's home: without it this fails for anyone who has opted out.
     monkeypatch.setenv("USAGE_RECORDING_ACTIVE", "false")
 
     with caplog.at_level(logging.WARNING):
@@ -689,12 +698,9 @@ def test_asking_to_record_by_the_published_name_names_the_inverse_value(
 def test_asking_to_record_while_an_opt_out_is_in_effect_does_not_claim_it_is_on(
     usage_directory, monkeypatch, caplog
 ):
-    # #1937 review. The remedy runs inside the override loop, which cannot see the
-    # marker file or the posture, so it must not assert the current state: this branch
-    # used to answer "Recording is already on by default" to an operator whose opt-out
-    # was in effect and whose recording was therefore off. Reassuring someone that the
-    # privacy switch is one way while it is the other is the failure class this whole
-    # warning exists to remove, so it is pinned rather than left to the wording.
+    # #1937 review. This branch used to answer "Recording is already on by default" to
+    # an operator whose opt-out was in effect, so recording was off. Pinned rather than
+    # left to the wording, because the state-neutrality rule has been broken twice.
     #
     # Set after ``usage_directory``, which delenvs the variable — which is also why the
     # tests around this one could not have caught it.
@@ -722,9 +728,7 @@ def test_asking_to_record_under_server_mode_does_not_promise_the_local_controls_
 ):
     # #1937 review, second round. ``is_recording_enabled`` returns False on the posture
     # *before* it consults either opt-out, so advice naming only the local pair sends a
-    # hosted operator round a loop neither control can end. The hosted operator is
-    # exactly the reader who sees ``USAGE_RECORDING_ACTIVE=False`` in the ``PRINT_ENV``
-    # dump and tries to flip it, and this was the one posture no test covered.
+    # hosted operator round a loop neither control can end. The posture no test covered.
     monkeypatch.setenv("USAGE_RECORDING_ACTIVE", "true")
     monkeypatch.setenv("SERVER_MODE", "true")
 

@@ -318,16 +318,12 @@ _ENV_ALIASES: Mapping[str, str] = {"DEBUG": "FLASK_DEBUG"}
 def _usage_recording_remedy(env_value: str) -> str:
     """What to tell an operator who set ``USAGE_RECORDING_ACTIVE``.
 
-    Guarded on the value because the two directions need opposite advice, and naming
-    the variable alone is not enough: ``USAGE_RECORDING_DISABLED`` is the *opposite*
-    polarity, so "set that instead" reads as a rename and an operator carrying their
-    ``false`` across lands on ``USAGE_RECORDING_DISABLED=false`` — a recognised boolean
-    that leaves recording on and warns about nothing. That turns one loud failure into
-    a loud step followed by a silent one, on the setting where silence is most
-    expensive.
-
-    The opt-out sentence comes from :func:`usage.describe_opt_out`, which owns it for
-    the launch banner too, so the value and the marker path can't drift apart.
+    Value-dependent because the two directions need opposite advice, and each names a
+    *value* rather than a bare variable — the polarity is inverted, so "set
+    ``USAGE_RECORDING_DISABLED`` instead" reads as a rename and lands the operator on a
+    silent no-op. Both sentences come from ``usage`` so the marker path is written
+    once. Full argument: CONVENTIONS.md, "The loop walks the MRO and skips derived
+    settings".
     """
     # Only a recognised *true* is read as asking to record. Recording is already the
     # default, so nobody sets this variable to get it — an unrecognised value is far
@@ -344,17 +340,12 @@ def _usage_recording_remedy(env_value: str) -> str:
     return describe_opt_out()
 
 
-# Descriptor-backed settings whose own name reaches nothing, mapped to the advice for an
-# operator who set one. ``USAGE_RECORDING_ACTIVE`` is the only one: it resolves from
-# ``USAGE_RECORDING_DISABLED``, the opposite polarity, so it is named for the state
-# ``PRINT_ENV`` publishes rather than for a variable (#1921). ``PRINT_ENV`` prints it as
-# ``KEY=value`` alongside settings that *are* variables, so copying that line into a
-# ``.env`` is the obvious mistake to make, and the loop skips descriptors before it ever
-# reads the environment — without this it is the one unreachable name nothing reports.
-# The value is a callable rather than a variable name because a name alone cannot carry
-# the polarity; see :func:`_usage_recording_remedy`.
-# ``ALLOWED_ORIGINS`` is the other descriptor and is deliberately absent: it reads
-# ``os.getenv("ALLOWED_ORIGINS")`` itself, so a value set for it is honoured.
+# Descriptor-backed settings whose own name reaches nothing, mapped to the advice for
+# an operator who set one (#1921). ``ALLOWED_ORIGINS`` is the other descriptor and is
+# deliberately absent: it reads ``os.getenv("ALLOWED_ORIGINS")`` itself, so its silence
+# is correct. Values are callables because a bare variable name cannot carry the
+# polarity — see :func:`_usage_recording_remedy`. Why any of this: CONVENTIONS.md,
+# "The loop walks the MRO and skips derived settings".
 _ENV_NAME_UNREAD: Mapping[str, Callable[[str], str]] = {
     "USAGE_RECORDING_ACTIVE": _usage_recording_remedy,
 }
@@ -693,13 +684,12 @@ class DefaultConfig(object):
         """Say so when a variable names a setting whose own name configures nothing.
 
         The counterpart to :meth:`_report_ignored_skip` for the descriptors the loop
-        skips before it reads the environment at all. Says what to set and at which
-        value, because the mistake this catches is a reasonable one: the operator read
-        the name off the ``PRINT_ENV`` dump, where it is printed in the same
-        ``KEY=value`` form as the settings that really are variables. A distinct
-        message from the skip one, which says the value is derived or fixed in code —
-        untrue here, and it would leave the operator no way forward. The registry
-        supplies the advice, so it can depend on the value the operator set.
+        skips before it reads the environment at all. The mistake it catches is a
+        reasonable one: ``PRINT_ENV`` prints these attributes in the same ``KEY=value``
+        form as the settings that really are variables, so the operator copies a line
+        out of the dump. Its own message rather than the skip one, which says the value
+        is derived or fixed in code — untrue here, and it would leave them no way
+        forward.
 
         Looks the key up before touching the environment, so the descriptors that read
         their own variable (``ALLOWED_ORIGINS``) and the plain methods the loop also
