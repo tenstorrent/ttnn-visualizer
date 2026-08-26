@@ -520,6 +520,26 @@ $minimap-width: 200px;
         border-bottom: 1px solid rgba($tt-white, 0.06);
     }
 
+    .op-graph-panel-stats {
+        display: grid;
+        grid-template-columns: auto 1fr;
+        gap: 2px 12px;
+        margin: 0;
+        padding: 8px 12px;
+        border-bottom: 1px solid rgba($tt-white, 0.06);
+        font-size: 12px;
+
+        dt {
+            color: $tt-grey-6;
+        }
+
+        dd {
+            margin: 0;
+            color: $tt-grey-7;
+            font-variant-numeric: tabular-nums;
+        }
+    }
+
     .op-graph-panel-section {
         border-bottom: 1px solid rgba($tt-white, 0.06);
 

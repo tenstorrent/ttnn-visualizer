@@ -11,6 +11,7 @@ import { NodeRelation } from '../../definitions/NodeRelation';
 import ROUTES from '../../definitions/Routes';
 import { StackTraceLanguage } from '../../definitions/StackTrace';
 import { toReadableShape, toReadableType } from '../../functions/formatting';
+import { formatMemorySize, formatSize } from '../../functions/math';
 import { extractOperationSourceData } from '../../functions/stackTraceSource';
 import type { OperationDescription, Tensor } from '../../model/APIData';
 import { BufferTypeLabel } from '../../model/BufferType';
@@ -19,6 +20,8 @@ import MemoryConfigRow from '../MemoryConfigRow';
 import MemoryTag from '../MemoryTag';
 import SourceFileButton from '../operation-details/SourceFileButton';
 import PerfOverlayOpMetric from '../perf-overlay/PerfOverlayOpMetric';
+import { sumOptional } from './opGraphRepeatBlocks';
+import type { OpGraphBlockSummary } from './opGraphTypes';
 
 interface ConnectedOpGroup {
     key: string;
@@ -68,6 +71,63 @@ const getConnectedOpGroups = (
     });
 
     return Array.from(groupsByKey.values());
+};
+
+const tensorBytes = (tensors: { size: number | null }[]): number =>
+    tensors.reduce((total, tensor) => total + (tensor.size ?? 0), 0);
+
+const uniqueNameCounts = (names: readonly string[]): Array<{ name: string; count: number }> => {
+    const counts: Array<{ name: string; count: number }> = [];
+    const indexByName = new Map<string, number>();
+    for (const name of names) {
+        const existing = indexByName.get(name);
+        if (existing === undefined) {
+            indexByName.set(name, counts.length);
+            counts.push({ name, count: 1 });
+        } else {
+            counts[existing].count += 1;
+        }
+    }
+    return counts;
+};
+
+const withExternalEndpoints = (tensor: Tensor, memberIds: ReadonlySet<number>, direction: NodeRelation): Tensor => {
+    if (direction === NodeRelation.Input) {
+        const producers = tensor.producers ?? [];
+        const producerNames = tensor.producerNames ?? [];
+        const keep = producers
+            .map((id, index) => ({ id, name: producerNames[index] ?? '' }))
+            .filter((entry) => !memberIds.has(entry.id));
+        return { ...tensor, producers: keep.map((entry) => entry.id), producerNames: keep.map((entry) => entry.name) };
+    }
+    const consumers = tensor.consumers ?? [];
+    const consumerNames = tensor.consumerNames ?? [];
+    const keep = consumers
+        .map((id, index) => ({ id, name: consumerNames[index] ?? '' }))
+        .filter((entry) => !memberIds.has(entry.id));
+    return { ...tensor, consumers: keep.map((entry) => entry.id), consumerNames: keep.map((entry) => entry.name) };
+};
+
+const getBlockBoundaryTensors = (
+    members: OperationDescription[],
+    memberIds: ReadonlySet<number>,
+    direction: NodeRelation,
+): Tensor[] => {
+    const tensors: Tensor[] = [];
+    const seenIds = new Set<number>();
+    for (const member of members) {
+        const list = (direction === NodeRelation.Input ? member.inputs : member.outputs) ?? [];
+        for (const tensor of list) {
+            if (!seenIds.has(tensor.id)) {
+                const counterparts = (direction === NodeRelation.Input ? tensor.producers : tensor.consumers) ?? [];
+                if (counterparts.length === 0 || counterparts.some((id) => !memberIds.has(id))) {
+                    seenIds.add(tensor.id);
+                    tensors.push(withExternalEndpoints(tensor, memberIds, direction));
+                }
+            }
+        }
+    }
+    return tensors;
 };
 
 interface TensorDetailsProps {
@@ -169,6 +229,152 @@ const ConnectedOpGroupList = ({ groups, keyPrefix, onLocate }: ConnectedOpGroupL
     </div>
 );
 
+interface OpGraphBlockPanelProps {
+    block: OpGraphBlockSummary;
+    operationList: OperationDescription[];
+    operationNamesById: Map<number, string>;
+    onLocateOperation: (operationId: number) => void;
+    isPerfOverlayActive: boolean;
+    perfDeviceTimeNs?: number;
+}
+
+const OpGraphBlockPanel = ({
+    block,
+    operationList,
+    operationNamesById,
+    onLocateOperation,
+    isPerfOverlayActive,
+    perfDeviceTimeNs,
+}: OpGraphBlockPanelProps) => {
+    const memberIds = useMemo(() => new Set(block.operationIds), [block.operationIds]);
+    const members = useMemo(
+        () =>
+            block.operationIds
+                .map((id) => operationList.find((operation) => operation.id === id))
+                .filter((operation): operation is OperationDescription => operation !== undefined),
+        [block.operationIds, operationList],
+    );
+    const inputGroups = useMemo(
+        () =>
+            getConnectedOpGroups(
+                getBlockBoundaryTensors(members, memberIds, NodeRelation.Input),
+                NodeRelation.Input,
+                operationNamesById,
+            ),
+        [members, memberIds, operationNamesById],
+    );
+    const outputGroups = useMemo(
+        () =>
+            getConnectedOpGroups(
+                getBlockBoundaryTensors(members, memberIds, NodeRelation.Output),
+                NodeRelation.Output,
+                operationNamesById,
+            ),
+        [members, memberIds, operationNamesById],
+    );
+    const typeCounts = useMemo(() => uniqueNameCounts(members.map((member) => member.name)), [members]);
+    const durationSeconds = sumOptional(members.map((member) => member.duration));
+    const memoryDeltaBytes = sumOptional(
+        members.map((member) => tensorBytes(member.outputs) - tensorBytes(member.inputs)),
+    );
+    const firstOpId = block.operationIds[0];
+    const lastOpId = block.operationIds[block.operationIds.length - 1];
+    const inputCount = inputGroups.reduce((total, group) => total + group.tensors.length, 0);
+    const outputCount = outputGroups.reduce((total, group) => total + group.tensors.length, 0);
+    const locateId = firstOpId;
+
+    return (
+        <aside
+            className='op-graph-panel'
+            aria-label='Selected block details'
+        >
+            <header className='op-graph-panel-header'>
+                <div className='op-graph-panel-titles'>
+                    <h2 className='op-graph-panel-label'>{block.label}</h2>
+                    <p className='op-graph-panel-id'>
+                        {`ops ${firstOpId}–${lastOpId} · instance ${block.instanceIndex + 1} of ${block.instanceCount}`}
+                    </p>
+                </div>
+                {locateId !== undefined && (
+                    <div className='op-graph-panel-actions'>
+                        <Tooltip
+                            content='Recenter'
+                            compact
+                        >
+                            <Button
+                                icon={IconNames.LOCATE}
+                                size={Size.SMALL}
+                                variant={ButtonVariant.MINIMAL}
+                                onClick={() => onLocateOperation(locateId)}
+                                aria-label={`Recenter on ${block.label}`}
+                            />
+                        </Tooltip>
+                    </div>
+                )}
+            </header>
+
+            <dl className='op-graph-panel-stats'>
+                <dt>Operations</dt>
+                <dd>{block.operationIds.length}</dd>
+                {durationSeconds > 0 ? (
+                    <>
+                        <dt>Python duration</dt>
+                        <dd>{`${formatSize(durationSeconds, 2)} s`}</dd>
+                    </>
+                ) : null}
+                {memoryDeltaBytes !== 0 ? (
+                    <>
+                        <dt>Memory delta</dt>
+                        <dd>
+                            {`${memoryDeltaBytes > 0 ? '+' : '-'}${formatMemorySize(Math.abs(memoryDeltaBytes), 0)}`}
+                        </dd>
+                    </>
+                ) : null}
+            </dl>
+
+            {isPerfOverlayActive ? <PerfOverlayOpMetric perfDeviceTimeNs={perfDeviceTimeNs} /> : null}
+
+            <PanelSection
+                title='Operation types'
+                count={typeCounts.length}
+                emptyHint='No operations in this instance.'
+            >
+                <ul className='op-graph-panel-device-ops'>
+                    {typeCounts.map((entry) => (
+                        <li key={entry.name}>{entry.count > 1 ? `${entry.name} × ${entry.count}` : entry.name}</li>
+                    ))}
+                </ul>
+            </PanelSection>
+
+            <PanelSection
+                title='Inputs'
+                count={inputCount}
+                emptyHint='No tensors enter this instance.'
+                modifierClass='op-graph-panel-inputs'
+            >
+                <ConnectedOpGroupList
+                    groups={inputGroups}
+                    keyPrefix={`block-input-${block.instanceId}`}
+                    onLocate={onLocateOperation}
+                />
+            </PanelSection>
+
+            <PanelSection
+                title='Outputs'
+                count={outputCount}
+                emptyHint='No tensors leave this instance.'
+                modifierClass='op-graph-panel-outputs'
+            >
+                <ConnectedOpGroupList
+                    groups={outputGroups}
+                    keyPrefix={`block-output-${block.instanceId}`}
+                    onLocate={onLocateOperation}
+                />
+            </PanelSection>
+        </aside>
+    );
+};
+
 interface OpGraphInfoPanelProps {
     operationId: number;
     operationList: OperationDescription[];
@@ -177,6 +383,7 @@ interface OpGraphInfoPanelProps {
     isPerfOverlayActive: boolean;
     perfDeviceTimeNs?: number;
     perfColor?: string;
+    block?: OpGraphBlockSummary | null;
 }
 
 // Node drag re-renders the graph every pointer frame, and re-rendering each
@@ -190,6 +397,7 @@ const OpGraphInfoPanel = memo(
         isPerfOverlayActive,
         perfDeviceTimeNs,
         perfColor,
+        block = null,
     }: OpGraphInfoPanelProps) => {
         const navigate = useNavigate();
         const operation = operationList.find((op) => op.id === operationId);
@@ -205,6 +413,19 @@ const OpGraphInfoPanel = memo(
         );
 
         const deviceOperationNames = operation?.deviceOperationNameList ?? [];
+
+        if (block !== null) {
+            return (
+                <OpGraphBlockPanel
+                    block={block}
+                    operationList={operationList}
+                    operationNamesById={operationNamesById}
+                    onLocateOperation={onLocateOperation}
+                    isPerfOverlayActive={isPerfOverlayActive}
+                    perfDeviceTimeNs={perfDeviceTimeNs}
+                />
+            );
+        }
 
         return (
             <aside

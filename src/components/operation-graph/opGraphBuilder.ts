@@ -274,6 +274,9 @@ export function buildOpGraph(
         instanceId: instance.instanceId,
         operationIds: instance.operationIds,
         label: instance.label,
+        patternLabel: instance.patternLabel,
+        instanceIndex: instance.instanceIndex,
+        instanceCount: instance.instanceCount,
     }));
 
     return {

@@ -130,6 +130,9 @@ export interface OpGraphBlockSummary {
     instanceId: string;
     operationIds: number[];
     label: string;
+    patternLabel: string;
+    instanceIndex: number;
+    instanceCount: number;
 }
 
 export interface OpGraphBuiltGraph {

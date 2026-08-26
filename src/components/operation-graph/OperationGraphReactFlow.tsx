@@ -1156,10 +1156,39 @@ const OperationGraphInner = ({
         [isPerfOverlayActive, perfHover, perfOverlay],
     );
 
+    const selectedBlock = useMemo(() => {
+        if (selectedOperationId === null) {
+            return null;
+        }
+        return (
+            detectedBlocks.find(
+                (block) => !expandedBlockIds.has(block.instanceId) && block.operationIds.includes(selectedOperationId),
+            ) ?? null
+        );
+    }, [selectedOperationId, detectedBlocks, expandedBlockIds]);
+
     const selectedPerfAggregate =
         selectedOperationId === null ? undefined : perfOverlay.aggregatesByOpId.get(selectedOperationId);
     const selectedPerfScore =
         selectedOperationId === null ? undefined : perfOverlay.scoreByOpId.get(selectedOperationId);
+    const selectedPerfDeviceTimeNs = useMemo(() => {
+        if (!isPerfOverlayActive) {
+            return undefined;
+        }
+        if (selectedBlock === null) {
+            return selectedPerfAggregate?.deviceTimeNs;
+        }
+        let totalNs = 0;
+        let found = false;
+        for (const memberId of selectedBlock.operationIds) {
+            const aggregate = perfOverlay.aggregatesByOpId.get(memberId);
+            if (aggregate !== undefined) {
+                totalNs += aggregate.deviceTimeNs;
+                found = true;
+            }
+        }
+        return found ? totalNs : undefined;
+    }, [isPerfOverlayActive, selectedBlock, selectedPerfAggregate, perfOverlay]);
 
     // Closed mid-build so the panel can't describe an operation the graph being
     // laid out is about to drop.
@@ -1293,8 +1322,13 @@ const OperationGraphInner = ({
                     operationNamesById={operationNamesById}
                     onLocateOperation={focusOperation}
                     isPerfOverlayActive={isPerfOverlayActive}
-                    perfDeviceTimeNs={selectedPerfAggregate?.deviceTimeNs}
-                    perfColor={selectedPerfScore ? perfColorScale(selectedPerfScore.t) : undefined}
+                    perfDeviceTimeNs={selectedPerfDeviceTimeNs}
+                    perfColor={
+                        selectedBlock === null && selectedPerfScore !== undefined
+                            ? perfColorScale(selectedPerfScore.t)
+                            : undefined
+                    }
+                    block={selectedBlock}
                 />
             ) : null}
         </div>
