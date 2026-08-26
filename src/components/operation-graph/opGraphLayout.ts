@@ -11,9 +11,11 @@ const NODE_MIN_WIDTH = 108;
 const NODE_MAX_WIDTH = 560;
 const NODE_HEIGHT = 32;
 const NODE_HEIGHT_WITH_FILE = 46;
-const BLOCK_NODE_HEIGHT = 56;
+const BLOCK_NODE_HEIGHT = 58;
 // The device-operation badge, kept in step with `.op-graph-node-expander`.
-const EXPANDER_WIDTH = 30;
+const EXPANDER_WIDTH = 32;
+// Pill chip (`▾ 336`) is wider than the device-op badge.
+const BLOCK_EXPANDER_WIDTH = 52;
 // Wide enough for an edge to carry its shape label between two ranks without
 // colliding with the neighbouring column.
 const NODE_SEP = 30;
@@ -65,7 +67,7 @@ export function estimateOpNodeSize(
 export function estimateBlockNodeSize(label: string, meta: string): { width: number; height: number } {
     const widestLine = Math.max(label.length * CHAR_WIDTH, meta.length * FILE_CHAR_WIDTH);
     const labelWidth = Math.min(NODE_MAX_WIDTH, Math.max(NODE_MIN_WIDTH, widestLine + NODE_PADDING_X));
-    return { width: Math.ceil(labelWidth + EXPANDER_WIDTH), height: BLOCK_NODE_HEIGHT };
+    return { width: Math.ceil(labelWidth + BLOCK_EXPANDER_WIDTH), height: BLOCK_NODE_HEIGHT };
 }
 
 function runDagre(nodes: LayoutInputNode[], edges: LayoutInputEdge[], ranker: string): Map<string, LayoutPosition> {

@@ -165,6 +165,24 @@ const NO_DEVICE_SUBGRAPHS: OpGraphDeviceSubgraph[] = [];
 const EMPTY_NODE_ID_BY_OP = new Map<number, string>();
 const EMPTY_BLOCK_IDS: string[] = [];
 
+const areSameBlockSummaries = (left: OpGraphBlockSummary[], right: OpGraphBlockSummary[]): boolean => {
+    if (left === right) {
+        return true;
+    }
+    if (left.length !== right.length) {
+        return false;
+    }
+    return left.every((block, index) => {
+        const other = right[index];
+        return (
+            block.instanceId === other.instanceId &&
+            block.label === other.label &&
+            block.operationIds.length === other.operationIds.length &&
+            block.operationIds.every((id, idIndex) => id === other.operationIds[idIndex])
+        );
+    });
+};
+
 const SELECTED_NODE_CLASS = 'op-graph-node-selected';
 
 // Filter dimming is a container rule with an exemption for the matched set,
@@ -445,7 +463,10 @@ const OperationGraphInner = ({
             }
             setNodeIndex(indexEntries);
             setNodeIdByOperationId(renderedByOpId);
-            setDetectedBlocks(graph.blocks && graph.blocks.length > 0 ? graph.blocks : NO_BLOCKS);
+            // A new array with the same detections rebuilds `deviceSubgraphs` and
+            // `runBuild` loops; each pass restarts the focus tween toward op 0.
+            const nextBlocks = graph.blocks && graph.blocks.length > 0 ? graph.blocks : NO_BLOCKS;
+            setDetectedBlocks((previous) => (areSameBlockSummaries(previous, nextBlocks) ? previous : nextBlocks));
 
             // An op can drop out between builds (isolated, or filtered as a
             // deallocate), so selection falls back rather than point at nothing.

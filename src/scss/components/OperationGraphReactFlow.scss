@@ -117,7 +117,18 @@ $minimap-width: 200px;
     }
 
     .react-flow__node-blockNode {
-        border: 2px dashed var(--graph-group);
+        // 4px dash + matching inset ring: at 0.1–0.3 zoom a 2px grey dash
+        // collapses to the same hairline the ops already have.
+        border: 4px dashed var(--graph-block-border);
+        border-radius: 8px;
+        background-color: var(--graph-block);
+        box-shadow: inset 0 0 0 2px var(--graph-block-border);
+
+        &.op-graph-node-selected {
+            border-style: solid;
+            border-color: var(--graph-selected);
+            box-shadow: 0 0 0 3px var(--graph-selected);
+        }
     }
 
     // The MLIR graph's group: a translucent field inside a dashed border. That is
@@ -208,23 +219,19 @@ $minimap-width: 200px;
         display: inline-flex;
         gap: 2px;
         align-items: center;
-        padding: 1px 4px;
-
-        // Separates the chip from the expanded group's dark field, where a
-        // borderless dark chip disappears. Invisible on a light collapsed node,
-        // which needs no help.
-        border: 1px solid rgba($tt-white, 0.14);
+        padding: 2px 5px;
+        border: 1px solid $tt-grey-2;
         border-radius: 3px;
-        background-color: rgba($tt-black, 0.88);
-        color: $tt-grey-7;
+        background-color: $tt-black;
+        color: $tt-white;
         font-family: inherit;
-        font-size: 10px;
-        font-weight: 600;
-        line-height: 1.4;
+        font-size: 11px;
+        font-weight: 700;
+        line-height: 1.3;
         cursor: pointer;
 
         &:hover {
-            background-color: $tt-black;
+            background-color: $tt-grey-2;
             color: $tt-white;
         }
 
@@ -249,6 +256,22 @@ $minimap-width: 200px;
         position: absolute;
         top: 3px;
         right: 3px;
+    }
+
+    // Pill + the block ink, so `▾ 336` is not the same black chip as a
+    // device-op expander sitting on a grey op.
+    .react-flow__node-blockNode > .op-graph-node-expander {
+        top: 6px;
+        right: 6px;
+        padding: 3px 8px;
+        border: 2px solid $tt-white;
+        border-radius: 999px;
+        background-color: var(--graph-block-border);
+        font-size: 12px;
+
+        &:hover {
+            background-color: var(--graph-selected);
+        }
     }
 
     .op-graph-node-buried-badge {
