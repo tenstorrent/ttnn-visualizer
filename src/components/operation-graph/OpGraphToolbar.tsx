@@ -182,25 +182,6 @@ const OpGraphToolbar = memo(
                     />
                 </Tooltip>
 
-                {hasBlocks ? (
-                    <>
-                        <Button
-                            variant={ButtonVariant.OUTLINED}
-                            disabled={isDisabled || areAllBlocksExpanded}
-                            onClick={onExpandAllBlocks}
-                        >
-                            Expand all blocks
-                        </Button>
-                        <Button
-                            variant={ButtonVariant.OUTLINED}
-                            disabled={isDisabled || areAllBlocksCollapsed}
-                            onClick={onCollapseAllBlocks}
-                        >
-                            Collapse all blocks
-                        </Button>
-                    </>
-                ) : null}
-
                 <Switch
                     className='op-graph-toolbar-switch'
                     checked={hideDeallocate}
@@ -233,6 +214,28 @@ const OpGraphToolbar = memo(
                     isDisabled={isDisabled}
                 />
             </div>
+
+            {hasBlocks ? (
+                <div className='op-graph-toolbar-row'>
+                    <span className='op-graph-toolbar-group-label'>Repeats</span>
+                    <Button
+                        variant={ButtonVariant.OUTLINED}
+                        disabled={isDisabled || areAllBlocksExpanded}
+                        onClick={onExpandAllBlocks}
+                        aria-label='Unroll all repeats'
+                    >
+                        Unroll
+                    </Button>
+                    <Button
+                        variant={ButtonVariant.OUTLINED}
+                        disabled={isDisabled || areAllBlocksCollapsed}
+                        onClick={onCollapseAllBlocks}
+                        aria-label='Fold all repeats'
+                    >
+                        Fold
+                    </Button>
+                </div>
+            ) : null}
         </div>
     ),
 );

@@ -21,7 +21,7 @@ const OpGraphBlockExpander = memo(({ instanceId, opCount, isExpanded }: OpGraphB
         toggleBlock(instanceId);
     };
 
-    const action = isExpanded ? 'Collapse repeated block' : `Expand ${opCount} operations`;
+    const action = isExpanded ? `Fold ${opCount} operations` : `Unroll ${opCount} operations`;
 
     return (
         <button
