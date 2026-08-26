@@ -22,6 +22,7 @@ from pathlib import Path
 import pytest
 from ttnn_visualizer.settings import (
     _ENV_ALIASES,
+    _ENV_NAME_UNREAD,
     _ENV_OVERRIDE_CONSTANTS,
     _ENV_OVERRIDE_DERIVED,
     _ENV_OVERRIDE_SKIP,
@@ -42,6 +43,7 @@ from ttnn_visualizer.tests.fixture_settings import (
     PINNED_ENV_SETTINGS,
     pinned_settings_sample,
 )
+from ttnn_visualizer.usage import USAGE_DISABLED_ENV_VAR
 from ttnn_visualizer.utils import (
     FALSE_VALUES,
     TRUE_VALUES,
@@ -555,6 +557,11 @@ def test_every_registry_is_keyed_the_way_it_is_looked_up():
     assert not _STRICT_BOOLEANS & aliased
     assert not _ENV_OVERRIDE_SKIP & aliased
 
+    # ``_report_unread_name`` deliberately reads the attribute name rather than going
+    # through ``_env_name_for``: an entry here whose variable were aliased would have it
+    # report a name nobody set.
+    assert not set(_ENV_NAME_UNREAD) & aliased
+
 
 def test_every_strict_boolean_names_a_real_boolean_setting():
     # A dead entry here downgrades a refusal to a warning, which for ``SERVER_MODE``
@@ -571,6 +578,145 @@ def test_every_env_alias_names_a_real_setting():
     # An alias pointing at a name that is also an attribute would have the loop write
     # one setting from another's variable.
     assert not set(_ENV_ALIASES.values()) & set(vars(DefaultConfig))
+
+
+def test_every_unread_name_is_a_descriptor_backed_setting():
+    # The registry only fires for names the loop reaches through its descriptor branch,
+    # so a dead entry after a rename stops the warning without failing anything else —
+    # and silence is exactly the state this registry exists to end.
+    for key in _ENV_NAME_UNREAD:
+        assert hasattr(vars(DefaultConfig).get(key), "__get__"), key
+
+
+def test_every_unread_remedy_names_no_other_setting(usage_directory):
+    # The warning tells an operator what to set instead, so advice naming another config
+    # attribute would send them at a name the loop treats as a different setting. Both
+    # polarities, because the remedy is value-dependent. Mirrors the second half of
+    # ``test_every_env_alias_names_a_real_setting``.
+    attributes = set(vars(DefaultConfig))
+
+    for key, remedy in _ENV_NAME_UNREAD.items():
+        for value in ("false", "true"):
+            advice = remedy(value)
+
+            assert advice, (key, value)
+            assert not attributes & set(re.findall(r"[A-Z][A-Z0-9_]{2,}", advice)), (
+                key,
+                value,
+            )
+
+
+def _settings_warnings(caplog):
+    """The records this module emitted, so an assertion can't pass on someone else's."""
+    return [
+        record.getMessage()
+        for record in caplog.records
+        if record.name == "ttnn_visualizer.settings"
+    ]
+
+
+def test_asking_to_switch_recording_off_by_the_published_name_says_what_to_set(
+    usage_directory, monkeypatch, caplog
+):
+    # #1921. ``PRINT_ENV`` publishes ``USAGE_RECORDING_ACTIVE=True`` in the same
+    # ``KEY=value`` form as ``SERVER_MODE`` and ``BASE_PATH``, which are variables, so
+    # copying that line into a ``.env`` at the opposite value is the mistake an operator
+    # actually makes — and this one is the privacy opt-out, so failing silently means
+    # recording against someone who believes they switched it off.
+    #
+    # The message must carry the *value*, not just the variable: naming
+    # ``USAGE_RECORDING_DISABLED`` alone reads as a rename, and an operator carrying
+    # their ``false`` across lands on ``USAGE_RECORDING_DISABLED=false`` — a recognised
+    # boolean that leaves recording on and warns about nothing. Asserting on the name
+    # alone would let that regression back in, which is what the first version did.
+    #
+    # ``usage_directory`` because ``USAGE_RECORDING_ACTIVE`` resolves through
+    # ``is_recording_enabled``, which reads the real ``USAGE_RECORDING_DISABLED`` and
+    # stats the marker file under the developer's home: without it this test fails for
+    # anyone who has actually opted out.
+    monkeypatch.setenv("USAGE_RECORDING_ACTIVE", "false")
+
+    with caplog.at_level(logging.WARNING):
+        config = DevelopmentConfig()
+        config.override_with_env_variables()
+
+    # Exactly one, because the MRO walk visits every class declaring the attribute and
+    # a subclass redeclaration would otherwise double the warning unnoticed.
+    (warning,) = _settings_warnings(caplog)
+
+    assert "USAGE_RECORDING_ACTIVE" in warning
+    assert f"{USAGE_DISABLED_ENV_VAR}=true" in warning
+
+    # The symptom the warning exists to explain: the value the operator set did nothing.
+    assert config.USAGE_RECORDING_ACTIVE is True
+
+
+def test_asking_to_record_by_the_published_name_is_not_told_to_switch_it_off(
+    usage_directory, monkeypatch, caplog
+):
+    # The other direction of the same guard. Recording is already the default, so there
+    # is nothing to set — and advice naming ``USAGE_RECORDING_DISABLED=true`` here would
+    # talk an operator into the opposite of what they asked for.
+    monkeypatch.setenv("USAGE_RECORDING_ACTIVE", "true")
+
+    with caplog.at_level(logging.WARNING):
+        config = DevelopmentConfig()
+        config.override_with_env_variables()
+
+    (warning,) = _settings_warnings(caplog)
+
+    assert "USAGE_RECORDING_ACTIVE" in warning
+    assert f"{USAGE_DISABLED_ENV_VAR}=true" not in warning
+    assert config.USAGE_RECORDING_ACTIVE is True
+
+
+def test_an_unrecognised_published_name_value_is_read_as_a_botched_opt_out(
+    usage_directory, monkeypatch, caplog
+):
+    # Nobody sets this variable to ask for the default, so an unreadable value is far
+    # likelier to be a fumbled opt-out than a fumbled opt-in — the same reading
+    # ``_is_recording_disabled_by_environment`` gives its own typos. Advice, not
+    # behaviour: unlike that function, this one still records.
+    monkeypatch.setenv("USAGE_RECORDING_ACTIVE", "Ture")
+
+    with caplog.at_level(logging.WARNING):
+        DevelopmentConfig().override_with_env_variables()
+
+    (warning,) = _settings_warnings(caplog)
+
+    assert f"{USAGE_DISABLED_ENV_VAR}=true" in warning
+
+
+def test_the_published_name_left_unset_says_nothing(
+    usage_directory, monkeypatch, caplog
+):
+    # The silence branch. Without it every launch warns ``USAGE_RECORDING_ACTIVE=None``,
+    # and the whole suite stays green — verified by deleting the guard — so the change
+    # meant to make one warning trustworthy would instead emit a false one on every boot.
+    monkeypatch.delenv("USAGE_RECORDING_ACTIVE", raising=False)
+
+    with caplog.at_level(logging.WARNING):
+        DevelopmentConfig().override_with_env_variables()
+
+    assert not [
+        message
+        for message in _settings_warnings(caplog)
+        if "USAGE_RECORDING" in message
+    ]
+
+
+def test_a_descriptor_that_reads_its_own_variable_is_not_reported(monkeypatch, caplog):
+    # The regression the registry must not cause. ``ALLOWED_ORIGINS`` is skipped by the
+    # same branch but reads ``os.getenv("ALLOWED_ORIGINS")`` inside its own ``__get__``,
+    # so its variable is honoured and warning about it would be false.
+    monkeypatch.setenv("ALLOWED_ORIGINS", "http://example.test")
+
+    with caplog.at_level(logging.WARNING):
+        config = DevelopmentConfig()
+        config.override_with_env_variables()
+
+    assert config.ALLOWED_ORIGINS == ["http://example.test"]
+    assert "ALLOWED_ORIGINS" not in caplog.text
 
 
 def test_a_setting_with_no_coercible_type_is_reported_and_discarded(
@@ -714,6 +860,12 @@ def test_every_app_under_test_is_built_from_the_shared_baseline():
     )
 
 
+# Descriptor-backed settings that read their own variable, so the loop's silence about
+# them is correct and ``_ENV_NAME_UNREAD`` must not name them. Test-local: production
+# only needs to know which descriptors to warn about, not which ones to stay quiet on.
+_SELF_READING_DESCRIPTORS = frozenset({"ALLOWED_ORIGINS"})
+
+
 def test_the_settings_inventory_is_pinned():
     # Forces a classification for every setting rather than only catching the entries
     # someone remembered to list. A new attribute lands in neither set and fails here,
@@ -726,6 +878,26 @@ def test_the_settings_inventory_is_pinned():
 
     assert set(declared) == _OVERRIDABLE_SETTINGS | _ENV_OVERRIDE_SKIP
     assert not (_OVERRIDABLE_SETTINGS & _ENV_OVERRIDE_SKIP)
+
+
+def test_the_descriptor_inventory_is_pinned():
+    # The half the inventory above excludes by construction, and #1921 is what it cost:
+    # descriptor-backed settings sat outside every classification, so the one whose name
+    # configures nothing was silently inert with the suite green. A new descriptor now
+    # has to be classified as reporting its name or reading it.
+    #
+    # ``callable`` is what separates the two config descriptors from the plain methods
+    # that also answer ``hasattr(value, "__get__")``: ``_UsageRecordingActive`` and
+    # ``_AllowedOrigins`` define only ``__get__``, while ``to_dict`` and the two loop
+    # methods are functions.
+    descriptors = {
+        key
+        for key, value in vars(DefaultConfig).items()
+        if not key.startswith("_") and hasattr(value, "__get__") and not callable(value)
+    }
+
+    assert descriptors == set(_ENV_NAME_UNREAD) | _SELF_READING_DESCRIPTORS
+    assert not (set(_ENV_NAME_UNREAD) & _SELF_READING_DESCRIPTORS)
 
 
 def test_the_three_skip_rationales_stay_disjoint():

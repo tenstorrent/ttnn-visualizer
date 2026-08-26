@@ -10,7 +10,11 @@ from typing import Any, Callable, List, Mapping, Optional, Set
 
 from dotenv import load_dotenv
 from sqlalchemy.pool import NullPool
-from ttnn_visualizer.usage import is_recording_enabled
+from ttnn_visualizer.usage import (
+    USAGE_DISABLED_ENV_VAR,
+    describe_opt_out,
+    is_recording_enabled,
+)
 from ttnn_visualizer.utils import (
     FALSE_VALUES,
     TRUE_VALUES,
@@ -310,6 +314,51 @@ _STRICT_BOOLEANS = frozenset({"SERVER_MODE"})
 # suppress the catch-all error handler — for anyone who only wanted verbose logs.
 _ENV_ALIASES: Mapping[str, str] = {"DEBUG": "FLASK_DEBUG"}
 
+
+def _usage_recording_remedy(env_value: str) -> str:
+    """What to tell an operator who set ``USAGE_RECORDING_ACTIVE``.
+
+    Guarded on the value because the two directions need opposite advice, and naming
+    the variable alone is not enough: ``USAGE_RECORDING_DISABLED`` is the *opposite*
+    polarity, so "set that instead" reads as a rename and an operator carrying their
+    ``false`` across lands on ``USAGE_RECORDING_DISABLED=false`` — a recognised boolean
+    that leaves recording on and warns about nothing. That turns one loud failure into
+    a loud step followed by a silent one, on the setting where silence is most
+    expensive.
+
+    The opt-out sentence comes from :func:`usage.describe_opt_out`, which owns it for
+    the launch banner too, so the value and the marker path can't drift apart.
+    """
+    # Only a recognised *true* is read as asking to record. Recording is already the
+    # default, so nobody sets this variable to get it — an unrecognised value is far
+    # likelier to be a botched opt-out than a botched opt-in, and that is the same
+    # reading ``_is_recording_disabled_by_environment`` gives its own typos.
+    if parse_bool(env_value) is True:
+        # Nothing to set, and naming ``USAGE_RECORDING_DISABLED`` here would invite
+        # exactly the inverted value the other branch exists to prevent.
+        return (
+            f"Recording is already on by default; {USAGE_DISABLED_ENV_VAR} is the only "
+            f"switch, and it is an opt-out."
+        )
+
+    return describe_opt_out()
+
+
+# Descriptor-backed settings whose own name reaches nothing, mapped to the advice for an
+# operator who set one. ``USAGE_RECORDING_ACTIVE`` is the only one: it resolves from
+# ``USAGE_RECORDING_DISABLED``, the opposite polarity, so it is named for the state
+# ``PRINT_ENV`` publishes rather than for a variable (#1921). ``PRINT_ENV`` prints it as
+# ``KEY=value`` alongside settings that *are* variables, so copying that line into a
+# ``.env`` is the obvious mistake to make, and the loop skips descriptors before it ever
+# reads the environment — without this it is the one unreachable name nothing reports.
+# The value is a callable rather than a variable name because a name alone cannot carry
+# the polarity; see :func:`_usage_recording_remedy`.
+# ``ALLOWED_ORIGINS`` is the other descriptor and is deliberately absent: it reads
+# ``os.getenv("ALLOWED_ORIGINS")`` itself, so a value set for it is honoured.
+_ENV_NAME_UNREAD: Mapping[str, Callable[[str], str]] = {
+    "USAGE_RECORDING_ACTIVE": _usage_recording_remedy,
+}
+
 # The override loop leaves three different kinds of attribute alone, and they have
 # three different lifetimes — a maintainer adding a setting needs to know which rule
 # applies, so they are named separately and unioned at the point of use rather than
@@ -596,10 +645,14 @@ class DefaultConfig(object):
         """
         for cls in reversed(type(self).__mro__):
             for key, value in cls.__dict__.items():
+                if key.startswith("_"):
+                    continue
+
                 # Descriptors (and methods) resolve their own value on read; assigning
                 # the raw environment string over one would shadow it with an unparsed
-                # value.
-                if key.startswith("_") or hasattr(value, "__get__"):
+                # value. Reported first for the one whose name configures nothing.
+                if hasattr(value, "__get__"):
+                    self._report_unread_name(key)
                     continue
 
                 env_value = os.getenv(_env_name_for(key))
@@ -633,6 +686,42 @@ class DefaultConfig(object):
             "is not configurable. Keeping the value the application computed.",
             _env_name_for(key),
             env_value,
+        )
+
+    @staticmethod
+    def _report_unread_name(key: str) -> None:
+        """Say so when a variable names a setting whose own name configures nothing.
+
+        The counterpart to :meth:`_report_ignored_skip` for the descriptors the loop
+        skips before it reads the environment at all. Says what to set and at which
+        value, because the mistake this catches is a reasonable one: the operator read
+        the name off the ``PRINT_ENV`` dump, where it is printed in the same
+        ``KEY=value`` form as the settings that really are variables. A distinct
+        message from the skip one, which says the value is derived or fixed in code —
+        untrue here, and it would leave the operator no way forward. The registry
+        supplies the advice, so it can depend on the value the operator set.
+
+        Looks the key up before touching the environment, so the descriptors that read
+        their own variable (``ALLOWED_ORIGINS``) and the plain methods the loop also
+        skips cost nothing and stay silent.
+        """
+        remedy = _ENV_NAME_UNREAD.get(key)
+        if remedy is None:
+            return
+
+        # The attribute name, not :func:`_env_name_for` — a setting here has no alias
+        # by definition, and ``test_every_registry_is_keyed_the_way_it_is_looked_up``
+        # pins that.
+        env_value = os.getenv(key)
+        if env_value is None:
+            return
+
+        logger.warning(
+            "Ignoring %s=%r: it is the name of a published setting, not a variable the "
+            "application reads. %s",
+            key,
+            env_value,
+            remedy(env_value),
         )
 
     def recompute_derived_settings(self) -> None:
