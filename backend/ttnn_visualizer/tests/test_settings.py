@@ -589,30 +589,43 @@ def test_every_unread_name_is_a_descriptor_backed_setting():
         assert hasattr(vars(DefaultConfig).get(key), "__get__"), key
 
 
-def test_every_unread_remedy_names_no_other_setting(usage_directory):
-    # The warning tells an operator what to set instead, so advice naming another config
-    # attribute would send them at a name the loop treats as a different setting. Both
-    # polarities, because the remedy is value-dependent. Mirrors the second half of
-    # ``test_every_env_alias_names_a_real_setting``.
-    attributes = set(vars(DefaultConfig))
-
+def test_every_unread_remedy_sends_the_operator_somewhere_that_works(usage_directory):
+    # Both polarities, because the remedy is value-dependent.
+    #
+    # This deliberately does not ban naming other config attributes, which is what it
+    # asserted first. The hazard is advice that *directs* an operator at a name the
+    # loop treats as a different setting — not advice that mentions one as context, and
+    # the posture is exactly the context this advice has to carry (a hosted operator
+    # told to clear the local pair would be sent round a loop neither control ends).
+    # The two assertions below are the invariant that ban was reaching for, and the
+    # first is one it never made at all: advice reading "contact your administrator"
+    # would have passed it.
     for key, remedy in _ENV_NAME_UNREAD.items():
         for value in ("false", "true"):
             advice = remedy(value)
 
-            assert advice, (key, value)
-            assert not attributes & set(re.findall(r"[A-Z][A-Z0-9_]{2,}", advice)), (
-                key,
-                value,
-            )
+            # Names the variable that actually configures this setting.
+            assert USAGE_DISABLED_ENV_VAR in advice, (key, value)
+
+            # Never echoes the inert name back as something to set — that is the whole
+            # footgun, and repeating it in the fix would be the cruellest version of it.
+            assert key not in advice, (key, value)
 
 
-def _settings_warnings(caplog):
-    """The records this module emitted, so an assertion can't pass on someone else's."""
+def _settings_warnings(caplog, naming):
+    """The warnings this module emitted about ``naming``.
+
+    Scoped to one setting, not merely to the logger: the override loop warns about
+    whatever else the developer happens to have exported, and callers here assert an
+    exact count. Filtering by logger alone made four of these tests fail under an
+    unrelated ``SQLALCHEMY_DATABASE_URI`` — the environment-dependence the rest of this
+    module is careful to avoid.
+    """
     return [
-        record.getMessage()
+        message
         for record in caplog.records
         if record.name == "ttnn_visualizer.settings"
+        and naming in (message := record.getMessage())
     ]
 
 
@@ -643,7 +656,7 @@ def test_asking_to_switch_recording_off_by_the_published_name_says_what_to_set(
 
     # Exactly one, because the MRO walk visits every class declaring the attribute and
     # a subclass redeclaration would otherwise double the warning unnoticed.
-    (warning,) = _settings_warnings(caplog)
+    (warning,) = _settings_warnings(caplog, "USAGE_RECORDING_ACTIVE")
 
     assert "USAGE_RECORDING_ACTIVE" in warning
     assert f"{USAGE_DISABLED_ENV_VAR}=true" in warning
@@ -665,7 +678,7 @@ def test_asking_to_record_by_the_published_name_names_the_inverse_value(
         config = DevelopmentConfig()
         config.override_with_env_variables()
 
-    (warning,) = _settings_warnings(caplog)
+    (warning,) = _settings_warnings(caplog, "USAGE_RECORDING_ACTIVE")
 
     assert "USAGE_RECORDING_ACTIVE" in warning
     assert f"{USAGE_DISABLED_ENV_VAR}=false" in warning
@@ -692,7 +705,7 @@ def test_asking_to_record_while_an_opt_out_is_in_effect_does_not_claim_it_is_on(
         config = DevelopmentConfig()
         config.override_with_env_variables()
 
-    (warning,) = _settings_warnings(caplog)
+    (warning,) = _settings_warnings(caplog, "USAGE_RECORDING_ACTIVE")
 
     # The state the message must not contradict.
     assert config.USAGE_RECORDING_ACTIVE is False
@@ -702,6 +715,29 @@ def test_asking_to_record_while_an_opt_out_is_in_effect_does_not_claim_it_is_on(
     # variable leaves the marker file switching recording off.
     assert f"{USAGE_DISABLED_ENV_VAR}=false" in warning
     assert str(usage.get_disabled_marker_path()) in warning
+
+
+def test_asking_to_record_under_server_mode_does_not_promise_the_local_controls_work(
+    usage_directory, monkeypatch, caplog
+):
+    # #1937 review, second round. ``is_recording_enabled`` returns False on the posture
+    # *before* it consults either opt-out, so advice naming only the local pair sends a
+    # hosted operator round a loop neither control can end. The hosted operator is
+    # exactly the reader who sees ``USAGE_RECORDING_ACTIVE=False`` in the ``PRINT_ENV``
+    # dump and tries to flip it, and this was the one posture no test covered.
+    monkeypatch.setenv("USAGE_RECORDING_ACTIVE", "true")
+    monkeypatch.setenv("SERVER_MODE", "true")
+
+    with caplog.at_level(logging.WARNING):
+        config = DevelopmentConfig()
+        config.override_with_env_variables()
+
+    (warning,) = _settings_warnings(caplog, "USAGE_RECORDING_ACTIVE")
+
+    assert config.USAGE_RECORDING_ACTIVE is False
+
+    # The claim that must not be made: that clearing the local pair is sufficient.
+    assert "SERVER_MODE" in warning
 
 
 def test_the_two_opt_out_directions_name_the_same_controls():
@@ -727,7 +763,7 @@ def test_an_unrecognised_published_name_value_is_read_as_a_botched_opt_out(
     with caplog.at_level(logging.WARNING):
         DevelopmentConfig().override_with_env_variables()
 
-    (warning,) = _settings_warnings(caplog)
+    (warning,) = _settings_warnings(caplog, "USAGE_RECORDING_ACTIVE")
 
     assert f"{USAGE_DISABLED_ENV_VAR}=true" in warning
 
@@ -743,11 +779,7 @@ def test_the_published_name_left_unset_says_nothing(
     with caplog.at_level(logging.WARNING):
         DevelopmentConfig().override_with_env_variables()
 
-    assert not [
-        message
-        for message in _settings_warnings(caplog)
-        if "USAGE_RECORDING" in message
-    ]
+    assert not _settings_warnings(caplog, "USAGE_RECORDING_ACTIVE")
 
 
 def test_a_descriptor_that_reads_its_own_variable_is_not_reported(monkeypatch, caplog):

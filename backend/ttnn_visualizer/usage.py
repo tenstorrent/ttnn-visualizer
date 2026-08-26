@@ -361,17 +361,19 @@ def describe_opt_in() -> str:
     path and the variable are written once, so the two directions can't drift into
     naming different controls.
 
-    Deliberately state-neutral. It is emitted from the settings override loop, which
-    cannot know whether an opt-out is in effect — and claiming recording is already on
-    is exactly the failure this wording replaces, because an operator with
-    ``USAGE_RECORDING_DISABLED=true`` set would have been reassured while recording was
-    off. Names only the two *local* opt-outs: under ``SERVER_MODE`` recording is off by
-    design and neither of these turns it on.
+    Asserts no current state, and names every switch rather than only the local pair.
+    It is emitted from the settings override loop, which sees neither the marker file
+    nor a posture applied outside the environment, so any sentence that claimed
+    recording was on — or that clearing these two would turn it on — would be wrong for
+    somebody. Both wordings have already been that: "recording is already on" misled an
+    operator whose opt-out was in effect, and naming only the local pair sent a hosted
+    operator round a loop neither control could end (#1937 review, twice).
     """
     return (
-        f"Recording is on by default, and stays off while an opt-out is in effect: "
-        f"clear them with {USAGE_DISABLED_ENV_VAR}=false and by removing "
-        f"{get_disabled_marker_path()}."
+        "Recording is on by default on a local install. "
+        f"{USAGE_DISABLED_ENV_VAR}=false and removing {get_disabled_marker_path()} "
+        f"clear the two local opt-outs; under SERVER_MODE recording is off whatever "
+        f"those say."
     )
 
 
