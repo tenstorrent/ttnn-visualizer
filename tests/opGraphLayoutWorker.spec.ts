@@ -78,12 +78,14 @@ const build = (
     hideDeallocate: boolean,
     sourceVersion = 1,
     deviceSubgraphs: OpGraphDeviceSubgraph[] = [],
+    expandedBlockIds: readonly string[] = [],
 ): OpGraphWorkerInboundMessage => ({
     type: OpGraphWorkerMessageType.BUILD,
     sourceVersion,
     requestId,
     hideDeallocate,
     deviceSubgraphs,
+    expandedBlockIds,
 });
 
 const builtReplies = () => posted.filter((message) => message.type === OpGraphWorkerMessageType.BUILT);
@@ -251,6 +253,60 @@ describe('opGraphLayoutWorker', () => {
             drain();
 
             expect(buildOpGraph).toHaveBeenCalledTimes(1);
+        });
+
+        it('does not serve a folded layout to an unrolled graph', async () => {
+            const send = await loadWorker();
+            send(setGraph(1));
+
+            send(build(1, true));
+            drain();
+            send(build(2, true, 1, [], ['block:0:2']));
+            drain();
+
+            expect(buildOpGraph).toHaveBeenCalledTimes(2);
+            const replies = builtReplies();
+            expect(replies[1].graph).not.toBe(replies[0].graph);
+        });
+
+        it('tells one unrolled set from another', async () => {
+            const send = await loadWorker();
+            send(setGraph(1));
+
+            send(build(1, true, 1, [], ['block:0:2']));
+            drain();
+            send(build(2, true, 1, [], ['block:0:2', 'block:0:4']));
+            drain();
+
+            expect(buildOpGraph).toHaveBeenCalledTimes(2);
+        });
+
+        it('does not lay out again because two block ids arrived in a different order', async () => {
+            const send = await loadWorker();
+            send(setGraph(1));
+
+            send(build(1, true, 1, [], ['block:0:2', 'block:0:4']));
+            drain();
+            send(build(2, true, 1, [], ['block:0:4', 'block:0:2']));
+            drain();
+
+            expect(buildOpGraph).toHaveBeenCalledTimes(1);
+        });
+
+        it('serves a fold back to a set it has already laid out', async () => {
+            const send = await loadWorker();
+            send(setGraph(1));
+
+            send(build(1, true, 1, [], ['block:0:2']));
+            drain();
+            send(build(2, true, 1, [], ['block:0:4']));
+            drain();
+            send(build(3, true, 1, [], ['block:0:2']));
+            drain();
+
+            expect(buildOpGraph).toHaveBeenCalledTimes(2);
+            const replies = builtReplies();
+            expect(replies[2].graph).toBe(replies[0].graph);
         });
 
         it('does not serve one report\u2019s layout for another', async () => {

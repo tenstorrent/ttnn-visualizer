@@ -16,6 +16,8 @@ interface OperationSpec {
     name?: string;
     outputs?: { label?: string; consumers: number[]; tensorId?: number }[];
     deviceOperationCount?: number;
+    durationSeconds?: number;
+    memoryDeltaBytes?: number;
 }
 
 const operation = ({
@@ -23,6 +25,8 @@ const operation = ({
     name = `ttnn.op${id}`,
     outputs = [],
     deviceOperationCount = 0,
+    durationSeconds,
+    memoryDeltaBytes,
 }: OperationSpec): OpGraphSourceOperation => ({
     id,
     name,
@@ -33,6 +37,8 @@ const operation = ({
         tensorId: tensorId + index,
     })),
     deviceOperationCount,
+    durationSeconds,
+    memoryDeltaBytes,
 });
 
 const build = (operations: OpGraphSourceOperation[], hideDeallocate: boolean) =>
@@ -396,6 +402,121 @@ describe('buildOpGraph', () => {
             const none = build([operation({ id: 1, outputs: [{ consumers: [2] }] })], false).nodes[0];
 
             expect(single.width).toBe(none.width);
+        });
+    });
+
+    describe('repeat blocks', () => {
+        const REPEAT_CHAIN = [
+            operation({ id: 1, name: 'prefix', outputs: [{ consumers: [2] }] }),
+            operation({
+                id: 2,
+                name: 'layer_a',
+                outputs: [{ consumers: [3] }],
+                durationSeconds: 1.5,
+                memoryDeltaBytes: 1024,
+            }),
+            operation({
+                id: 3,
+                name: 'layer_b',
+                outputs: [{ consumers: [4] }],
+                durationSeconds: 0.5,
+                memoryDeltaBytes: 256,
+            }),
+            operation({ id: 4, name: 'layer_a', outputs: [{ consumers: [5] }] }),
+            operation({ id: 5, name: 'layer_b', outputs: [{ consumers: [6] }] }),
+            operation({ id: 6, name: 'suffix' }),
+        ];
+
+        const FIRST_BLOCK_ID = 'block:0:2';
+        const SECOND_BLOCK_ID = 'block:0:4';
+
+        const typesOf = (graph: ReturnType<typeof buildOpGraph>) =>
+            graph.nodes.map((node) => ({ id: node.id, type: node.type, operationId: node.data.operationId }));
+
+        it('replaces each collapsed copy with a block node and hides the members', () => {
+            const graph = build(REPEAT_CHAIN, false);
+
+            expect(typesOf(graph)).toEqual([
+                { id: '1', type: OpGraphNodeType.OP, operationId: 1 },
+                { id: FIRST_BLOCK_ID, type: OpGraphNodeType.BLOCK, operationId: 2 },
+                { id: SECOND_BLOCK_ID, type: OpGraphNodeType.BLOCK, operationId: 4 },
+                { id: '6', type: OpGraphNodeType.OP, operationId: 6 },
+            ]);
+            expect(graph.blocks?.map((block) => block.instanceId)).toEqual([FIRST_BLOCK_ID, SECOND_BLOCK_ID]);
+        });
+
+        it('sums duration and memory onto the collapsed node', () => {
+            const graph = build(REPEAT_CHAIN, false);
+            const first = nodeById(graph, FIRST_BLOCK_ID);
+
+            expect(first.data.opCount).toBe(2);
+            expect(first.data.durationSeconds).toBe(2);
+            expect(first.data.memoryDeltaBytes).toBe(1280);
+            expect(first.data.memberNames).toEqual(['layer_a', 'layer_b']);
+            expect(first.data.memberOperationIds).toEqual([2, 3]);
+        });
+
+        it('reroutes crossing edges onto the block and drops edges inside it', () => {
+            const graph = build(REPEAT_CHAIN, false);
+
+            expect(edgeBetweenOperations(graph, 1, 2).source).toBe('1');
+            expect(edgeBetweenOperations(graph, 1, 2).target).toBe(FIRST_BLOCK_ID);
+            expect(edgeBetweenOperations(graph, 3, 4).source).toBe(FIRST_BLOCK_ID);
+            expect(edgeBetweenOperations(graph, 3, 4).target).toBe(SECOND_BLOCK_ID);
+            expect(edgeBetweenOperations(graph, 5, 6).source).toBe(SECOND_BLOCK_ID);
+            expect(
+                graph.edges.find((edge) => edge.data?.sourceOperationId === 2 && edge.data?.targetOperationId === 3),
+            ).toBeUndefined();
+        });
+
+        it('restores the members when that instance is unrolled', () => {
+            const graph = buildOpGraph(REPEAT_CHAIN, {
+                hideDeallocate: false,
+                deviceSubgraphs: [],
+                expandedBlockIds: [FIRST_BLOCK_ID],
+            });
+
+            expect(typesOf(graph)).toEqual([
+                { id: '1', type: OpGraphNodeType.OP, operationId: 1 },
+                { id: '2', type: OpGraphNodeType.OP, operationId: 2 },
+                { id: '3', type: OpGraphNodeType.OP, operationId: 3 },
+                { id: SECOND_BLOCK_ID, type: OpGraphNodeType.BLOCK, operationId: 4 },
+                { id: '6', type: OpGraphNodeType.OP, operationId: 6 },
+            ]);
+            expect(edgeBetweenOperations(graph, 1, 2).target).toBe('2');
+            expect(edgeBetweenOperations(graph, 3, 4).target).toBe(SECOND_BLOCK_ID);
+        });
+
+        it('does not expand device operations for a member still inside a collapsed block', () => {
+            const graph = buildOpGraph(REPEAT_CHAIN, {
+                hideDeallocate: false,
+                deviceSubgraphs: [deviceSubgraph({ operationId: 2 })],
+            });
+
+            expect(graph.nodes.some((node) => node.type === OpGraphNodeType.DEVICE_GROUP)).toBe(false);
+            expect(graph.nodes.some((node) => node.type === OpGraphNodeType.DEVICE_OP)).toBe(false);
+            expect(nodeById(graph, FIRST_BLOCK_ID).type).toBe(OpGraphNodeType.BLOCK);
+        });
+
+        it('detects a repeat that only becomes contiguous once deallocate ops are hidden', () => {
+            const withDeallocate = [
+                operation({ id: 1, name: 'layer_a', outputs: [{ consumers: [2] }] }),
+                operation({ id: 2, name: 'layer_b', outputs: [{ consumers: [3] }] }),
+                operation({
+                    id: 3,
+                    name: 'ttnn.deallocate',
+                    outputs: [{ consumers: [4] }],
+                }),
+                operation({ id: 4, name: 'layer_a', outputs: [{ consumers: [5] }] }),
+                operation({ id: 5, name: 'layer_b', outputs: [{ consumers: [6] }] }),
+                operation({ id: 6, name: 'suffix' }),
+            ];
+
+            expect(build(withDeallocate, false).nodes.every((node) => node.type === OpGraphNodeType.OP)).toBe(true);
+
+            const hidden = build(withDeallocate, true);
+            expect(hidden.nodes.filter((node) => node.type === OpGraphNodeType.BLOCK)).toHaveLength(2);
+            expect(hidden.nodes.some((node) => node.data.filterString === 'ttnn.deallocate')).toBe(false);
         });
     });
 });

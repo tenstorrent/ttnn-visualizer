@@ -1218,3 +1218,136 @@ describe('OperationGraphReactFlow device operation expansion', () => {
         expect(hasClass(nodeById(lastFlowRender().nodes, '3'), 'op-graph-node-selected')).toBe(true);
     });
 });
+
+describe('OperationGraphReactFlow repeat blocks', () => {
+    // prefix → (layer_a → layer_b) × 2 → suffix. Two instances of one pattern.
+    const REPEAT_OPERATION_LIST: OperationDescription[] = [
+        operation(1, 'prefix', [2]),
+        operation(2, 'layer_a', [3]),
+        operation(3, 'layer_b', [4]),
+        operation(4, 'layer_a', [5]),
+        operation(5, 'layer_b', [6]),
+        operation(6, 'suffix', []),
+    ];
+
+    const FIRST_BLOCK_ID = 'block:0:2';
+    const SECOND_BLOCK_ID = 'block:0:4';
+
+    const deliver = (operations: OperationDescription[], options: Partial<OpGraphBuildOptions> = {}) => {
+        act(() => {
+            harness.onBuilt?.(
+                buildOpGraph(sourceFor(operations), {
+                    hideDeallocate: true,
+                    deviceSubgraphs: [],
+                    ...options,
+                }),
+            );
+        });
+    };
+
+    it('collapses repeats on first layout and offers Unroll / Fold', () => {
+        renderGraph(REPEAT_OPERATION_LIST);
+
+        expect(lastFlowRender().nodes.map((node) => node.id)).toEqual(['1', FIRST_BLOCK_ID, SECOND_BLOCK_ID, '6']);
+        expect(screen.getByRole('button', { name: 'Unroll all repeats' })).toBeEnabled();
+        expect(screen.getByRole('button', { name: 'Fold all repeats' })).toBeDisabled();
+        expect(screen.getAllByRole('button', { name: 'Unroll 2 operations' })).toHaveLength(2);
+    });
+
+    it('does not show the Repeats row when nothing was detected', () => {
+        renderGraph();
+
+        expect(screen.queryByRole('button', { name: 'Unroll all repeats' })).toBeNull();
+    });
+
+    it('unrolls every instance from the toolbar and folds them back', () => {
+        renderGraph(REPEAT_OPERATION_LIST);
+        runBuild.mockClear();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Unroll all repeats' }));
+        const unrolled = runBuild.mock.calls.at(-1)?.[0] as OpGraphBuildOptions;
+        expect(unrolled.expandedBlockIds).toEqual(expect.arrayContaining([FIRST_BLOCK_ID, SECOND_BLOCK_ID]));
+        expect(unrolled.expandedBlockIds).toHaveLength(2);
+
+        deliver(REPEAT_OPERATION_LIST, { expandedBlockIds: unrolled.expandedBlockIds });
+        expect(lastFlowRender().nodes.map((node) => node.id)).toEqual(['1', '2', '3', '4', '5', '6']);
+        expect(screen.getByRole('button', { name: 'Unroll all repeats' })).toBeDisabled();
+        expect(screen.getByRole('button', { name: 'Fold all repeats' })).toBeEnabled();
+
+        runBuild.mockClear();
+        fireEvent.click(screen.getByRole('button', { name: 'Fold all repeats' }));
+        expect(runBuild.mock.calls.at(-1)?.[0]).toEqual(expect.objectContaining({ expandedBlockIds: [] }));
+    });
+
+    it('unrolls one instance from its chip', () => {
+        renderGraph(REPEAT_OPERATION_LIST);
+        runBuild.mockClear();
+
+        fireEvent.click(screen.getAllByRole('button', { name: 'Unroll 2 operations' })[0]);
+        expect(runBuild.mock.calls.at(-1)?.[0]).toEqual(
+            expect.objectContaining({ expandedBlockIds: [FIRST_BLOCK_ID] }),
+        );
+    });
+
+    it('counts buried filter matches on the collapsed node and in the counter', () => {
+        renderGraph(REPEAT_OPERATION_LIST);
+        typeFilter('layer_a');
+
+        expect(screen.getByText('2 matches (+2 inside)')).toBeInTheDocument();
+        expect(screen.getAllByTitle('1 filter match inside')).toHaveLength(2);
+        expect(screen.getAllByText('+1')).toHaveLength(2);
+    });
+
+    it('opens the block panel instead of the first member when a collapsed block is selected', () => {
+        renderGraph(REPEAT_OPERATION_LIST);
+
+        act(() => {
+            harness.onNodeClick?.(null, nodeById(lastFlowRender().nodes, FIRST_BLOCK_ID));
+        });
+
+        const panel = screen.getByLabelText('Selected block details');
+        expect(panel).toHaveTextContent('Block A × 2');
+        expect(panel).toHaveTextContent('ops 2–3 · instance 1 of 2');
+        expect(screen.queryByRole('button', { name: /Memory Details/ })).toBeNull();
+        expect(screen.queryByLabelText('Selected operation details')).toBeNull();
+    });
+
+    it('does not rebuild when the worker repeats the same block detections', () => {
+        const operations = REPEAT_OPERATION_LIST.map((op) =>
+            op.id === 1 ? withDeviceOperations(op, ['AlphaDeviceOperation', 'BetaDeviceOperation']) : op,
+        );
+        renderGraph(operations);
+        fireEvent.click(screen.getByRole('button', { name: 'Show 2 device operations' }));
+        const expandedOptions = runBuild.mock.calls.at(-1)?.[0] as OpGraphBuildOptions;
+
+        deliver(operations, { deviceSubgraphs: expandedOptions.deviceSubgraphs });
+        runBuild.mockClear();
+        deliver(operations, { deviceSubgraphs: expandedOptions.deviceSubgraphs });
+
+        expect(runBuild).not.toHaveBeenCalled();
+    });
+
+    it('drops a member device-op expansion when that instance is folded', () => {
+        const operations = REPEAT_OPERATION_LIST.map((op) =>
+            op.id === 2
+                ? withDeviceOperations(op, ['AlphaDeviceOperation', 'BetaDeviceOperation', 'GammaDeviceOperation'])
+                : op,
+        );
+        renderGraph(operations);
+
+        fireEvent.click(screen.getByRole('button', { name: 'Unroll all repeats' }));
+        const unrolled = runBuild.mock.calls.at(-1)?.[0] as OpGraphBuildOptions;
+        deliver(operations, { expandedBlockIds: unrolled.expandedBlockIds });
+
+        fireEvent.click(screen.getByRole('button', { name: 'Show 3 device operations' }));
+        const withSubgraph = runBuild.mock.calls.at(-1)?.[0] as OpGraphBuildOptions;
+        expect(withSubgraph.deviceSubgraphs).toHaveLength(1);
+        expect(withSubgraph.deviceSubgraphs[0].operationId).toBe(2);
+
+        runBuild.mockClear();
+        fireEvent.click(screen.getByRole('button', { name: 'Fold all repeats' }));
+        expect(runBuild.mock.calls.at(-1)?.[0]).toEqual(
+            expect.objectContaining({ deviceSubgraphs: [], expandedBlockIds: [] }),
+        );
+    });
+});
