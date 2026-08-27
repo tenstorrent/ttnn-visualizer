@@ -14,6 +14,7 @@ interface RenderToolbarOptions {
     status: PerfOverlayStatus;
     onPerfOverlayChange?: (next: boolean) => void;
     onCriticalPathChange?: (next: boolean) => void;
+    onFocusUnrelatedEdgesChange?: (next: boolean) => void;
     isDisabled?: boolean;
 }
 
@@ -21,6 +22,7 @@ const renderToolbar = ({
     status,
     onPerfOverlayChange = vi.fn(),
     onCriticalPathChange = vi.fn(),
+    onFocusUnrelatedEdgesChange = vi.fn(),
     isDisabled = false,
 }: RenderToolbarOptions) => {
     render(
@@ -41,6 +43,8 @@ const renderToolbar = ({
             onGoToOperation={vi.fn()}
             hideDeallocate
             onHideDeallocateChange={vi.fn()}
+            focusUnrelatedEdges={false}
+            onFocusUnrelatedEdgesChange={onFocusUnrelatedEdgesChange}
             isPerfOverlayActive={false}
             onPerfOverlayChange={onPerfOverlayChange}
             isCriticalPathActive={false}
@@ -145,6 +149,23 @@ describe('critical path switch', () => {
 
         expect(onCriticalPathChange).toHaveBeenCalledWith(true);
         expect(onPerfOverlayChange).not.toHaveBeenCalled();
+    });
+});
+
+describe('dim unrelated edges switch', () => {
+    it('turns on when toggled', () => {
+        const onFocusUnrelatedEdgesChange = vi.fn();
+        renderToolbar({ status: PerfOverlayStatus.READY, onFocusUnrelatedEdgesChange });
+
+        fireEvent.click(switchNamed(/^Dim unrelated edges/).input);
+
+        expect(onFocusUnrelatedEdgesChange).toHaveBeenCalledWith(true);
+    });
+
+    it('is disabled while the graph is being laid out', () => {
+        renderToolbar({ status: PerfOverlayStatus.READY, isDisabled: true });
+
+        expect(switchNamed(/^Dim unrelated edges/).input).toBeDisabled();
     });
 });
 

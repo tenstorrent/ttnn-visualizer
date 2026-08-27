@@ -208,6 +208,7 @@ const EDGE_CLASS_BY_RELATION: Record<NodeRelation, string> = {
 const CRITICAL_PATH_CLASS = 'op-graph-critical-path';
 const CRITICAL_PATH_NODE_CLASS = 'op-graph-node-critical-path';
 const CRITICAL_PATH_EDGE_CLASS = 'op-graph-edge-critical-path';
+const FOCUS_EDGES_CLASS = 'op-graph-focus-edges';
 
 interface OperationGraphReactFlowProps {
     operationList: OperationDescription[];
@@ -244,6 +245,7 @@ const OperationGraphInner = ({
     // selecting an edge doesn't pay for a traversal. #1613
     const [builtEdges, setBuiltEdges] = useState<OpGraphFlowEdge[]>([]);
     const [hideDeallocate, setHideDeallocate] = useState(true);
+    const [focusUnrelatedEdges, setFocusUnrelatedEdges] = useState(false);
     // Local like the perf overlay rather than an atom: expansion describes a
     // reading position in one graph, and the MLIR view scopes its own namespace
     // expansion the same way. #1195
@@ -1223,6 +1225,7 @@ const OperationGraphInner = ({
         'operation-graph-react-flow',
         ...(matchedIds ? [FILTERING_CLASS] : []),
         ...(hasCriticalPath ? [CRITICAL_PATH_CLASS] : []),
+        ...(focusUnrelatedEdges && highlight !== null ? [FOCUS_EDGES_CLASS] : []),
     ].join(' ');
 
     return (
@@ -1252,6 +1255,8 @@ const OperationGraphInner = ({
                 onGoToOperation={selectOperation}
                 hideDeallocate={hideDeallocate}
                 onHideDeallocateChange={handleHideDeallocateChange}
+                focusUnrelatedEdges={focusUnrelatedEdges}
+                onFocusUnrelatedEdgesChange={setFocusUnrelatedEdges}
                 hiddenMatchCount={matches.hiddenMatchCount}
                 hasBlocks={detectedBlocks.length > 0}
                 areAllBlocksExpanded={

@@ -65,6 +65,8 @@ interface OpGraphToolbarProps {
     onGoToOperation: (operationId: number) => void;
     hideDeallocate: boolean;
     onHideDeallocateChange: (next: boolean) => void;
+    focusUnrelatedEdges: boolean;
+    onFocusUnrelatedEdgesChange: (next: boolean) => void;
     isPerfOverlayActive: boolean;
     onPerfOverlayChange: (next: boolean) => void;
     isCriticalPathActive: boolean;
@@ -99,6 +101,8 @@ const OpGraphToolbar = memo(
         onGoToOperation,
         hideDeallocate,
         onHideDeallocateChange,
+        focusUnrelatedEdges,
+        onFocusUnrelatedEdgesChange,
         isPerfOverlayActive,
         onPerfOverlayChange,
         isCriticalPathActive,
@@ -189,6 +193,16 @@ const OpGraphToolbar = memo(
                         onHideDeallocateChange(event.currentTarget.checked)
                     }
                     label='Hide deallocate ops'
+                    disabled={isDisabled}
+                />
+
+                <Switch
+                    className='op-graph-toolbar-switch'
+                    checked={focusUnrelatedEdges}
+                    onChange={(event: FormEvent<HTMLInputElement>) =>
+                        onFocusUnrelatedEdgesChange(event.currentTarget.checked)
+                    }
+                    label='Dim unrelated edges'
                     disabled={isDisabled}
                 />
 

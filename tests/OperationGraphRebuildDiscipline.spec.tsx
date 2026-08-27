@@ -40,6 +40,7 @@ const harness: {
     // a test can only see by reading the prop React Flow was actually handed.
     onNodeMouseEnter: ((event: unknown, node: OpGraphFlowNode) => void) | undefined;
     onNodeMouseLeave: (() => void) | undefined;
+    onPaneClick: (() => void) | null;
 } = {
     onBuilt: null,
     setNodes: null,
@@ -49,6 +50,7 @@ const harness: {
     onNodesChange: null,
     onNodeMouseEnter: undefined,
     onNodeMouseLeave: undefined,
+    onPaneClick: null,
 };
 
 // What `useNodesState` hands the view as its change applier. Stable, because the
@@ -92,6 +94,7 @@ vi.mock('@xyflow/react', async () => {
             onNodesChange,
             onNodeMouseEnter,
             onNodeMouseLeave,
+            onPaneClick,
             children,
         }: {
             nodes: OpGraphFlowNode[];
@@ -105,6 +108,7 @@ vi.mock('@xyflow/react', async () => {
             onNodesChange: (changes: NodeChange<OpGraphFlowNode>[]) => void;
             onNodeMouseEnter?: (event: unknown, node: OpGraphFlowNode) => void;
             onNodeMouseLeave?: () => void;
+            onPaneClick?: () => void;
             children?: ReactNode;
         }) => {
             flowRenders.push({ nodes, edges });
@@ -113,6 +117,7 @@ vi.mock('@xyflow/react', async () => {
             harness.onNodesChange = onNodesChange;
             harness.onNodeMouseEnter = onNodeMouseEnter;
             harness.onNodeMouseLeave = onNodeMouseLeave;
+            harness.onPaneClick = onPaneClick ?? null;
             return createElement(
                 Fragment,
                 null,
@@ -427,6 +432,7 @@ beforeEach(() => {
     harness.onNodesChange = null;
     harness.onNodeMouseEnter = undefined;
     harness.onNodeMouseLeave = undefined;
+    harness.onPaneClick = null;
     flowTransform.current = [0, 0, 1];
     flowStoreListeners.clear();
     sessionStorage.clear();
@@ -1084,6 +1090,29 @@ describe('OperationGraphReactFlow critical path rendering', () => {
         expect(vi.mocked(findCriticalPath)).not.toHaveBeenCalled();
         // Still drawn: the point is that the answer was reused, not dropped.
         expect(hasClass(edgeBetween(lastFlowRender().edges, '1', '3'), 'op-graph-edge-critical-path')).toBe(true);
+    });
+});
+
+describe('OperationGraphReactFlow dim unrelated edges', () => {
+    it('flags the container so the stylesheet can dim edges off the selection', () => {
+        const { container } = renderGraph();
+        expect(container.querySelector('.op-graph-focus-edges')).toBeNull();
+
+        fireEvent.click(screen.getByLabelText('Dim unrelated edges'));
+
+        expect(container.querySelector('.op-graph-focus-edges')).not.toBeNull();
+    });
+
+    it('drops the flag when nothing is selected', () => {
+        const { container } = renderGraph();
+        fireEvent.click(screen.getByLabelText('Dim unrelated edges'));
+        expect(container.querySelector('.op-graph-focus-edges')).not.toBeNull();
+
+        act(() => {
+            harness.onPaneClick?.();
+        });
+
+        expect(container.querySelector('.op-graph-focus-edges')).toBeNull();
     });
 });
 
