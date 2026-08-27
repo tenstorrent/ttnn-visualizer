@@ -695,15 +695,33 @@ def test_pick_mesh_descriptor_rank_out_of_range(tmp_path):
     assert err == "rank_out_of_range"
 
 
-def test_pick_cluster_descriptor_prefers_unsuffixed_file(tmp_path):
+def test_pick_cluster_descriptor_ranked_set_outranks_a_stale_unsuffixed_file(tmp_path):
+    # tt-metal reuses the output directory and writes each descriptor only
+    # `if not path.exists()`, so a world-1 import followed by a world-2 import into
+    # the same directory leaves the unsuffixed file beside the ranked pair. Serving
+    # that leftover for every rank reproduced #1939 bounded by the world size, so
+    # the ranked set wins and its bound applies. #1947
     (tmp_path / "cluster_descriptor.yaml").write_text("chips: []\n", encoding="utf-8")
     (tmp_path / "cluster_descriptor_1_of_2.yaml").write_text(
         "chips: [1]\n", encoding="utf-8"
     )
+    (tmp_path / "cluster_descriptor_2_of_2.yaml").write_text(
+        "chips: [2]\n", encoding="utf-8"
+    )
+
+    path, err = pick_cluster_descriptor_path(tmp_path, logical_rank=0)
+    assert err is None
+    assert path is not None and path.name == "cluster_descriptor_1_of_2.yaml"
+
     path, err = pick_cluster_descriptor_path(tmp_path, logical_rank=1)
     assert err is None
-    assert path is not None
-    assert path.name == "cluster_descriptor.yaml"
+    assert path is not None and path.name == "cluster_descriptor_2_of_2.yaml"
+
+    # The probe stops at the world bound instead of walking to its cap.
+    for rank in (2, 3, 31):
+        path, err = pick_cluster_descriptor_path(tmp_path, logical_rank=rank)
+        assert path is None, f"rank {rank} resolved to {path}"
+        assert err == "rank_out_of_range"
 
 
 def test_pick_cluster_descriptor_single_file_answers_rank_zero_only(tmp_path):
@@ -723,18 +741,20 @@ def test_pick_cluster_descriptor_single_file_answers_rank_zero_only(tmp_path):
         assert err == "rank_out_of_range", f"rank {rank} returned {err!r}"
 
 
-def test_pick_mesh_descriptor_single_file_answers_rank_zero_only(tmp_path):
+def test_pick_mesh_descriptor_single_file_serves_every_rank(tmp_path):
+    # Deliberately unlike the cluster rule: one unsuffixed mesh mapping covers the
+    # whole world, either reused as a legacy single doc or holding one `chips:`
+    # document per rank that the frontend selects from. Applying the cluster
+    # rank-0-only rule here left later hosts with no mesh data. #1947
     (tmp_path / "physical_chip_mesh_coordinate_mapping.yaml").write_text(
         "chips: []\n", encoding="utf-8"
     )
 
-    path, err = pick_mesh_descriptor_path(tmp_path, logical_rank=0)
-    assert err is None
-    assert path is not None
-
-    path, err = pick_mesh_descriptor_path(tmp_path, logical_rank=1)
-    assert path is None
-    assert err == "rank_out_of_range"
+    for rank in (0, 1, 5, 31):
+        path, err = pick_mesh_descriptor_path(tmp_path, logical_rank=rank)
+        assert err is None, f"rank {rank} returned {err!r}"
+        assert path is not None
+        assert path.name == "physical_chip_mesh_coordinate_mapping.yaml"
 
 
 def test_pick_cluster_descriptor_ranked_files(tmp_path):

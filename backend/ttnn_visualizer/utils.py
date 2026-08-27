@@ -114,22 +114,29 @@ def _pick_single_or_ranked_report_path(
     ranked_basename_for: Callable[[int, int], str],
     malformed_label: str,
     logical_rank: int = 0,
+    single_is_one_rank: bool = False,
 ) -> tuple[Optional[Path], Optional[str]]:
     """
-    Prefer ``single_basename`` when present; otherwise pick the ranked file for
-    ``logical_rank``. Returns ``(path, None)`` or ``(None, error)`` where error
-    is ``rank_out_of_range``, ``missing_rank_file``, or ``None`` when absent.
+    Pick the descriptor file for ``logical_rank``. Returns ``(path, None)`` or
+    ``(None, error)`` where error is ``rank_out_of_range``, ``missing_rank_file``,
+    or ``None`` when nothing is present.
 
-    An unsuffixed file with no ranked siblings answers rank 0 only: world size is
-    encoded in the ranked filenames, so a report that ships one unsuffixed
-    descriptor is a single host whatever chips it lists. See ``logical_rank``
-    handling below and #1939.
+    ``single_is_one_rank`` declares that an unsuffixed file describes exactly one
+    rank. A consistent ranked set then outranks it, and with no ranked set it
+    answers rank 0 only. Cluster descriptors set it: world size lives in the
+    ranked filenames, so serving one unsuffixed descriptor for every rank made the
+    topology probe read a single host as a whole world and clone it once per
+    probed rank. #1939
+
+    Left ``False`` for mesh mappings, where one unsuffixed file legitimately
+    covers every rank — reused as a legacy single doc, or holding one ``chips:``
+    document per rank that the frontend selects from by rank. #1947
     """
     if not report_dir.is_dir():
         return None, None
     single = report_dir / single_basename
     single_exists = single.is_file()
-    if single_exists and logical_rank == 0:
+    if single_exists and not single_is_one_rank:
         return single, None
 
     ranked_names = ranked_report_basenames(
@@ -137,18 +144,21 @@ def _pick_single_or_ranked_report_path(
         ranked_re,
         malformed_label,
     )
-    if single_exists:
-        # Ranked siblings present: the unsuffixed file keeps precedence over them
-        # for every rank, as it always has.
-        if ranked_names:
-            return single, None
-        # Otherwise this is the only descriptor in the report. Serving it for
-        # rank 1..N too made the topology probe read a single host as a whole
-        # world and clone it once per probed rank. #1939
-        return None, "rank_out_of_range"
     if not ranked_names:
+        if single_exists:
+            # The only descriptor in the report, and it stands for a single rank.
+            if logical_rank == 0:
+                return single, None
+            return None, "rank_out_of_range"
         return None, None
 
+    # A consistent ranked set is authoritative even when an unsuffixed file sits
+    # beside it. That pairing is reachable from the producer rather than exotic:
+    # `import_report` reuses the output directory and writes each descriptor only
+    # `if not path.exists()`, so a world-1 import followed by a world-N import into
+    # the same directory leaves both. Serving the stale unsuffixed file for every
+    # rank reproduced #1939, bounded by the ranked world size rather than the
+    # probe cap. #1947
     parsed0 = parse_ranked_basename(ranked_names[0], ranked_re)
     if not parsed0:
         return None, None
@@ -1057,6 +1067,8 @@ def pick_cluster_descriptor_path(
         ),
         malformed_label="cluster_descriptor_<n>_of_<world>.yaml with 1 <= n <= world",
         logical_rank=logical_rank,
+        # One unsuffixed cluster descriptor is one host. Mesh mappings differ. #1939
+        single_is_one_rank=True,
     )
 
 
