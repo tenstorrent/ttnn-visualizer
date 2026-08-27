@@ -282,6 +282,20 @@ async def assert_unreachable_routes_answer(page: Page) -> None:
             raise AssertionError(f"{route} answered {response.status}: {body}")
         print(f"✅ {route} answered {response.status}")
 
+    # A 200 carrying mislabelled columns is exactly how #1941 shipped, so the
+    # device log gets a shape check on top of its status.
+    device_log = await (
+        await page.request.get(
+            f"{BASE_URL}/api/performance/device-log", params={"instanceId": instance_id}
+        )
+    ).json()
+    if not isinstance(device_log, list) or not device_log:
+        raise AssertionError(f"/api/performance/device-log returned {device_log!r}")
+    missing = {"zone_name", "run_host_ID", "type"} - set(device_log[0])
+    if missing:
+        raise AssertionError(f"/api/performance/device-log is missing keys: {missing}")
+    print("✅ /api/performance/device-log returned named columns")
+
 
 async def exercise_performance_tab(page: Page) -> None:
     """Open the Performance view and follow its NPE timeline link.

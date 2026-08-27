@@ -150,20 +150,23 @@ class NPEQueries:
 
 class DeviceLogProfilerQueries:
     DEVICE_LOG_FILE = "profile_log_device.csv"
-    DEVICE_LOG_COLUMNS = [
+    # Read from the file's own header, so a producer that adds columns (the
+    # profiler gained "trace id" and "trace id counter") still parses. These are
+    # the names every known capture emits; anything beyond them passes through.
+    REQUIRED_DEVICE_LOG_COLUMNS = [
         "PCIe slot",
         "core_x",
         "core_y",
         "RISC processor type",
         "timer_id",
         "time[cycles since reset]",
-        "stat value",
-        "run ID",
+        "data",
         "run host ID",
         "zone name",
-        "zone phase",
+        "type",
         "source line",
         "source file",
+        "meta data",
     ]
 
     def __init__(self, instance: Instance):
@@ -189,10 +192,29 @@ class DeviceLogProfilerQueries:
 
         self.runner.__enter__()
 
-        self.runner.df.columns = self.DEVICE_LOG_COLUMNS
+        # Every field after the first carries a leading space in the header.
         self.runner.df.columns = self.runner.df.columns.str.strip()
+        self._require_columns(self.runner.df)
 
         return self
+
+    def _require_columns(self, df: pd.DataFrame) -> None:
+        """Refuse a capture whose header is missing a column we name.
+
+        Serving a short row is how #1941 went unnoticed: the header used to be
+        overwritten positionally, so a file with the right column *count* was
+        relabelled rather than rejected.
+        """
+        missing = [
+            column
+            for column in self.REQUIRED_DEVICE_LOG_COLUMNS
+            if column not in df.columns
+        ]
+        if missing:
+            raise DataFormatError(
+                f"{self.DEVICE_LOG_FILE} is missing expected columns: "
+                f"{', '.join(missing)}"
+            )
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         """
@@ -252,9 +274,7 @@ class DeviceLogProfilerQueries:
             raise RuntimeError(
                 "DeviceLogProfilerQueries must be used as a context manager"
             )
-        return self.runner.execute_query(
-            columns=self.DEVICE_LOG_COLUMNS, as_dict=as_dict, limit=limit
-        )
+        return self.runner.execute_query(columns=None, as_dict=as_dict, limit=limit)
 
     @staticmethod
     def get_raw_csv(instance: Instance):

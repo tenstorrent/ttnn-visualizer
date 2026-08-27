@@ -218,6 +218,11 @@ def _stack_source_request_params():
     return file_path, source_file_id, None
 
 
+# A single zone matches 200k+ rows on a real capture (~76 MB of JSON), and the
+# device-log routes aren't `@local_only`, so an unbounded response is reachable by
+# anyone under SERVER_MODE.
+DEVICE_LOG_ROW_LIMIT = 100
+
 _DEFAULT_RANK = 0
 # `int()` is arbitrary-precision, so an unbounded parse lets a value too large for
 # SQLite's int64 binding reach the driver, where it raises OverflowError as an
@@ -1151,9 +1156,13 @@ def get_performance_data_list(instance: Instance):
 @api.route("/performance/device-log", methods=["GET"])
 @with_instance
 def get_performance_data(instance: Instance):
-    with DeviceLogProfilerQueries(instance) as csv:
-        result = csv.get_all_entries(as_dict=True, limit=100)
-        return Response(orjson.dumps(result), mimetype="application/json")
+    try:
+        with DeviceLogProfilerQueries(instance) as csv:
+            result = csv.get_all_entries(as_dict=True, limit=DEVICE_LOG_ROW_LIMIT)
+    except DataFormatError as error:
+        return response_unprocessable_entity(str(error))
+
+    return Response(orjson.dumps(result), mimetype="application/json")
 
 
 @api.route("/performance/perf-results", methods=["GET"])
@@ -1365,9 +1374,15 @@ def get_npe_timeline(instance: Instance):
 @api.route("/performance/device-log/zone/<zone>", methods=["GET"])
 @with_instance
 def get_zone_statistics(zone, instance: Instance):
-    with DeviceLogProfilerQueries(instance) as csv:
-        result = csv.query_zone_statistics(zone_name=zone, as_dict=True)
-        return Response(orjson.dumps(result), mimetype="application/json")
+    try:
+        with DeviceLogProfilerQueries(instance) as csv:
+            result = csv.query_zone_statistics(
+                zone_name=zone, as_dict=True, limit=DEVICE_LOG_ROW_LIMIT
+            )
+    except DataFormatError as error:
+        return response_unprocessable_entity(str(error))
+
+    return Response(orjson.dumps(result), mimetype="application/json")
 
 
 @api.route("/devices", methods=["GET"])
