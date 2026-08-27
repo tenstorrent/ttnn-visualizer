@@ -4,6 +4,7 @@
 
 import { PerfTableRow } from '../model/PerfTable';
 import { DeviceOperationMapping } from '../model/DeviceOperationMapping';
+import { OpType } from '../definitions/Performance';
 
 /**
  * TODO: remove once memory and performance reports carry a shared run id (#1800)
@@ -72,6 +73,17 @@ const alignToPerfRows = (
 };
 
 /**
+ * @description Drop the signpost rows a model emits with `signpost()`. They are
+ * markers rather than operations, so the memory report has no device operation
+ * to pair them with, and they are their own op type rather than a host op — so
+ * the pinned `hideHostOps` filter leaves them in place. Alignment is positional,
+ * so one signpost anywhere but the tail shifts every later row out of position
+ * and fails the whole report. See #1943.
+ */
+const alignableRowsOf = (perfRows: PerfTableRow[]): PerfTableRow[] =>
+    perfRows.filter((perfRow) => perfRow.op_type !== OpType.SIGNPOST);
+
+/**
  * @description Match a memory report's device operations against a performance
  * report's rows, returning the mappings when the two sequences describe the same
  * run and [] when they don't (the report-link UNLINKED signal).
@@ -85,7 +97,8 @@ export const matchDeviceOperationsToPerf = (
     perfRows: PerfTableRow[],
     numDevices: number,
 ): DeviceOperationMapping[] => {
-    const directMatch = alignToPerfRows(deviceOperations, perfRows);
+    const alignableRows = alignableRowsOf(perfRows);
+    const directMatch = alignToPerfRows(deviceOperations, alignableRows);
 
     if (directMatch.length > 0) {
         return directMatch;
@@ -97,5 +110,5 @@ export const matchDeviceOperationsToPerf = (
         return [];
     }
 
-    return alignToPerfRows(collapseMultideviceOperations(deviceOperations, numDevices), perfRows);
+    return alignToPerfRows(collapseMultideviceOperations(deviceOperations, numDevices), alignableRows);
 };
