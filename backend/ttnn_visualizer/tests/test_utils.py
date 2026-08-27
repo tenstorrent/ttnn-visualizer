@@ -706,6 +706,37 @@ def test_pick_cluster_descriptor_prefers_unsuffixed_file(tmp_path):
     assert path.name == "cluster_descriptor.yaml"
 
 
+def test_pick_cluster_descriptor_single_file_answers_rank_zero_only(tmp_path):
+    # A report shipping one unsuffixed descriptor is a single host. Answering
+    # rank 1..N with the same file made the topology probe clone that host once
+    # per probed rank (#1939), so every rank past 0 is out of range.
+    (tmp_path / "cluster_descriptor.yaml").write_text("chips: []\n", encoding="utf-8")
+
+    path, err = pick_cluster_descriptor_path(tmp_path, logical_rank=0)
+    assert err is None
+    assert path is not None
+    assert path.name == "cluster_descriptor.yaml"
+
+    for rank in (1, 2, 31, 99):
+        path, err = pick_cluster_descriptor_path(tmp_path, logical_rank=rank)
+        assert path is None, f"rank {rank} should not resolve to a file"
+        assert err == "rank_out_of_range", f"rank {rank} returned {err!r}"
+
+
+def test_pick_mesh_descriptor_single_file_answers_rank_zero_only(tmp_path):
+    (tmp_path / "physical_chip_mesh_coordinate_mapping.yaml").write_text(
+        "chips: []\n", encoding="utf-8"
+    )
+
+    path, err = pick_mesh_descriptor_path(tmp_path, logical_rank=0)
+    assert err is None
+    assert path is not None
+
+    path, err = pick_mesh_descriptor_path(tmp_path, logical_rank=1)
+    assert path is None
+    assert err == "rank_out_of_range"
+
+
 def test_pick_cluster_descriptor_ranked_files(tmp_path):
     (tmp_path / "cluster_descriptor_2_of_2.yaml").write_text(
         "chips: [2]\n", encoding="utf-8"

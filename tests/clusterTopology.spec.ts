@@ -376,8 +376,47 @@ describe('looksLikeRankedDescriptor', () => {
             chip_unique_ids: { 0: 1234 },
         } as unknown as ClusterModel;
         // An empty remote-connections array means there are no cross-host links,
-        // which we treat as single-host (galaxy can't trigger a 32-rank probe).
+        // which we treat as single-host. Note this does not cover every galaxy:
+        // a UBB with scale-out links populates the field — see the UBB case below.
         expect(looksLikeRankedDescriptor(desc)).toBe(false);
+    });
+
+    it('cannot tell a single UBB from a rank slice, so the backend gates the probe (#1939)', () => {
+        // Shape of test_ttnn_moe_aug26_2217: one unsuffixed descriptor, 32 Blackhole
+        // chips on a single `ubb_blackhole` board, no mesh coords, and remote-eth
+        // links to fabric chips that are not in this capture.
+        // Unique ids are stand-ins: the real ones are 64-bit and exceed
+        // Number.MAX_SAFE_INTEGER, so they arrive here already rounded by
+        // JSON.parse. Only the off-capture property matters for this test.
+        const ubb = {
+            ...baseDescriptor,
+            arch: Object.fromEntries(Array.from({ length: 32 }, (_, chip) => [chip, 'blackhole'])),
+            boards: [
+                {
+                    board_id: 4892798423057,
+                    board_type: 'ubb_blackhole',
+                    chips: Array.from({ length: 32 }, (_, chip) => chip),
+                },
+            ],
+            chip_unique_ids: Object.fromEntries(Array.from({ length: 32 }, (_, chip) => [chip, 1000 + chip])),
+            ethernet_connections_to_remote_devices: [
+                [
+                    { chip: 25, chan: 9 },
+                    // Off-capture: absent from `chip_unique_ids` above.
+                    { remote_chip_id: 9001, chan: 9 },
+                ],
+            ],
+        } as unknown as ClusterModel;
+
+        // Deliberately true. A genuine rank-0 slice also points its remotes at
+        // chips it does not own, so no property of a lone descriptor separates
+        // the two — see the two-host case at the top of this file, where rank 0's
+        // remote id 200 is likewise absent from its own chip_unique_ids.
+        expect(looksLikeRankedDescriptor(ubb)).toBe(true);
+        // World size lives in the ranked filenames instead, so the backend answers
+        // rank 1+ with `rank_out_of_range` when the unsuffixed file is the only
+        // descriptor and the probe stops after rank 0. Covered by
+        // `test_pick_cluster_descriptor_single_file_answers_rank_zero_only`.
     });
 
     it('returns false when chip_unique_ids is missing or empty', () => {

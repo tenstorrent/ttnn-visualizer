@@ -119,11 +119,17 @@ def _pick_single_or_ranked_report_path(
     Prefer ``single_basename`` when present; otherwise pick the ranked file for
     ``logical_rank``. Returns ``(path, None)`` or ``(None, error)`` where error
     is ``rank_out_of_range``, ``missing_rank_file``, or ``None`` when absent.
+
+    An unsuffixed file with no ranked siblings answers rank 0 only: world size is
+    encoded in the ranked filenames, so a report that ships one unsuffixed
+    descriptor is a single host whatever chips it lists. See ``logical_rank``
+    handling below and #1939.
     """
     if not report_dir.is_dir():
         return None, None
     single = report_dir / single_basename
-    if single.is_file():
+    single_exists = single.is_file()
+    if single_exists and logical_rank == 0:
         return single, None
 
     ranked_names = ranked_report_basenames(
@@ -131,6 +137,15 @@ def _pick_single_or_ranked_report_path(
         ranked_re,
         malformed_label,
     )
+    if single_exists:
+        # Ranked siblings present: the unsuffixed file keeps precedence over them
+        # for every rank, as it always has.
+        if ranked_names:
+            return single, None
+        # Otherwise this is the only descriptor in the report. Serving it for
+        # rank 1..N too made the topology probe read a single host as a whole
+        # world and clone it once per probed rank. #1939
+        return None, "rank_out_of_range"
     if not ranked_names:
         return None, None
 
