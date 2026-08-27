@@ -10,7 +10,11 @@ from typing import Any, Callable, List, Mapping, Optional, Set
 
 from dotenv import load_dotenv
 from sqlalchemy.pool import NullPool
-from ttnn_visualizer.usage import is_recording_enabled
+from ttnn_visualizer.usage import (
+    describe_opt_in,
+    describe_opt_out,
+    is_recording_enabled,
+)
 from ttnn_visualizer.utils import (
     FALSE_VALUES,
     TRUE_VALUES,
@@ -310,6 +314,42 @@ _STRICT_BOOLEANS = frozenset({"SERVER_MODE"})
 # suppress the catch-all error handler — for anyone who only wanted verbose logs.
 _ENV_ALIASES: Mapping[str, str] = {"DEBUG": "FLASK_DEBUG"}
 
+
+def _usage_recording_remedy(env_value: str) -> str:
+    """What to tell an operator who set ``USAGE_RECORDING_ACTIVE``.
+
+    Value-dependent because the two directions need opposite advice, and each names a
+    *value* rather than a bare variable — the polarity is inverted, so "set
+    ``USAGE_RECORDING_DISABLED`` instead" reads as a rename and lands the operator on a
+    silent no-op. Both sentences come from ``usage`` so the marker path is written
+    once. Full argument: CONVENTIONS.md, "The loop walks the MRO and skips derived
+    settings".
+    """
+    # Only a recognised *true* is read as asking to record. Recording is already the
+    # default, so nobody sets this variable to get it — an unrecognised value is far
+    # likelier to be a botched opt-out than a botched opt-in, and that is the same
+    # reading ``_is_recording_disabled_by_environment`` gives its own typos.
+    if parse_bool(env_value) is True:
+        # Must name the inverse *value*, and must assert nothing about the current
+        # state. The posture is readable here, but the marker file is not consulted and
+        # a ``settings_override`` posture never reaches the environment, so a sentence
+        # that describes the state would be wrong for somebody — see the docstring on
+        # ``describe_opt_in``, which has been wrong twice for exactly that reason.
+        return describe_opt_in()
+
+    return describe_opt_out()
+
+
+# Descriptor-backed settings whose own name reaches nothing, mapped to the advice for
+# an operator who set one (#1921). ``ALLOWED_ORIGINS`` is the other descriptor and is
+# deliberately absent: it reads ``os.getenv("ALLOWED_ORIGINS")`` itself, so its silence
+# is correct. Values are callables because a bare variable name cannot carry the
+# polarity — see :func:`_usage_recording_remedy`. Why any of this: CONVENTIONS.md,
+# "The loop walks the MRO and skips derived settings".
+_ENV_NAME_UNREAD: Mapping[str, Callable[[str], str]] = {
+    "USAGE_RECORDING_ACTIVE": _usage_recording_remedy,
+}
+
 # The override loop leaves three different kinds of attribute alone, and they have
 # three different lifetimes — a maintainer adding a setting needs to know which rule
 # applies, so they are named separately and unioned at the point of use rather than
@@ -596,10 +636,14 @@ class DefaultConfig(object):
         """
         for cls in reversed(type(self).__mro__):
             for key, value in cls.__dict__.items():
+                if key.startswith("_"):
+                    continue
+
                 # Descriptors (and methods) resolve their own value on read; assigning
                 # the raw environment string over one would shadow it with an unparsed
-                # value.
-                if key.startswith("_") or hasattr(value, "__get__"):
+                # value. Reported first for the one whose name configures nothing.
+                if hasattr(value, "__get__"):
+                    self._report_unread_name(key)
                     continue
 
                 env_value = os.getenv(_env_name_for(key))
@@ -633,6 +677,41 @@ class DefaultConfig(object):
             "is not configurable. Keeping the value the application computed.",
             _env_name_for(key),
             env_value,
+        )
+
+    @staticmethod
+    def _report_unread_name(key: str) -> None:
+        """Say so when a variable names a setting whose own name configures nothing.
+
+        The counterpart to :meth:`_report_ignored_skip` for the descriptors the loop
+        skips before it reads the environment at all. The mistake it catches is a
+        reasonable one: ``PRINT_ENV`` prints these attributes in the same ``KEY=value``
+        form as the settings that really are variables, so the operator copies a line
+        out of the dump. Its own message rather than the skip one, which says the value
+        is derived or fixed in code — untrue here, and it would leave them no way
+        forward.
+
+        Looks the key up before touching the environment, so the descriptors that read
+        their own variable (``ALLOWED_ORIGINS``) and the plain methods the loop also
+        skips cost nothing and stay silent.
+        """
+        remedy = _ENV_NAME_UNREAD.get(key)
+        if remedy is None:
+            return
+
+        # The attribute name, not :func:`_env_name_for` — a setting here has no alias
+        # by definition, and ``test_every_registry_is_keyed_the_way_it_is_looked_up``
+        # pins that.
+        env_value = os.getenv(key)
+        if env_value is None:
+            return
+
+        logger.warning(
+            "Ignoring %s=%r: it is the name of a published setting, not a variable the "
+            "application reads. %s",
+            key,
+            env_value,
+            remedy(env_value),
         )
 
     def recompute_derived_settings(self) -> None:
