@@ -44,7 +44,7 @@ from ttnn_visualizer.tests.fixture_settings import (
     PINNED_ENV_SETTINGS,
     pinned_settings_sample,
 )
-from ttnn_visualizer.usage import USAGE_DISABLED_ENV_VAR
+from ttnn_visualizer.usage import DISABLED_MARKER_NAME, USAGE_DISABLED_ENV_VAR
 from ttnn_visualizer.utils import (
     FALSE_VALUES,
     TRUE_VALUES,
@@ -629,6 +629,16 @@ def test_every_unread_remedy_sends_the_operator_somewhere_that_works(usage_direc
             assert key not in advice, (key, value)
 
 
+def _raise_no_home():
+    """What ``Path.home()`` does when HOME is unset and the uid is absent from passwd.
+
+    Stands in for the arbitrary-uid container, which is awkward to produce in-process:
+    ``expanduser`` consults ``pwd`` before it gives up, so delenv alone is not enough on
+    a developer machine.
+    """
+    raise RuntimeError("Could not determine home directory.")
+
+
 def _settings_warnings(caplog, naming):
     """The warnings this module emitted about ``naming``.
 
@@ -721,6 +731,65 @@ def test_asking_to_record_while_an_opt_out_is_in_effect_does_not_claim_it_is_on(
     # variable leaves the marker file switching recording off.
     assert f"{USAGE_DISABLED_ENV_VAR}=false" in warning
     assert str(usage.get_disabled_marker_path()) in warning
+
+
+def test_asking_to_record_while_the_marker_file_is_in_effect_does_not_claim_it_is_on(
+    usage_directory, monkeypatch, caplog
+):
+    # #1937 review. The sibling above pins the *variable* opt-out; this pins the marker
+    # file, which is the one ``describe_opt_in`` leads with and the reason the rule
+    # exists at all: the override loop cannot see it, so a sentence inferring the state
+    # from the environment alone gets this case wrong and nothing catches it.
+    usage.get_disabled_marker_path().parent.mkdir(parents=True, exist_ok=True)
+    usage.get_disabled_marker_path().touch()
+    monkeypatch.setenv("USAGE_RECORDING_ACTIVE", "true")
+
+    with caplog.at_level(logging.WARNING):
+        config = DevelopmentConfig()
+        config.override_with_env_variables()
+
+    (warning,) = _settings_warnings(caplog, "USAGE_RECORDING_ACTIVE")
+
+    # The state the message must not contradict — reached by a control the loop never
+    # consulted.
+    assert config.USAGE_RECORDING_ACTIVE is False
+    assert "already on" not in warning
+
+    # Still actionable: the marker is what is switching recording off here, so the
+    # advice has to name it rather than only the variable.
+    assert str(usage.get_disabled_marker_path()) in warning
+    assert f"{USAGE_DISABLED_ENV_VAR}=false" in warning
+
+
+def test_the_advice_survives_a_home_directory_that_cannot_be_resolved(
+    tmp_path, monkeypatch, caplog
+):
+    # #1937 review. ``describe_opt_*`` resolve ``Path.home()``, which raises
+    # ``RuntimeError`` when HOME is unset and the uid is absent from passwd — the
+    # arbitrary-uid container pattern. Building the advice eagerly inside the override
+    # loop therefore turned a variable that configures *nothing* into a failure to
+    # start. The marker clause drops; the variable is still named.
+    #
+    # ``APP_DATA_DIRECTORY`` is what makes the posture reachable: it short-circuits the
+    # other ``Path.home()`` consumer (``get_app_data_directory``), so before this branch
+    # such a container started fine and a stray ``USAGE_RECORDING_ACTIVE`` was inert.
+    monkeypatch.setenv("APP_DATA_DIRECTORY", str(tmp_path / "app"))
+
+    # No ``usage_directory``: the override it installs is exactly what would hide this.
+    monkeypatch.setattr(usage, "USAGE_DIRECTORY", None)
+    monkeypatch.delenv(USAGE_DISABLED_ENV_VAR, raising=False)
+    monkeypatch.setattr(Path, "home", staticmethod(_raise_no_home))
+    monkeypatch.setenv("USAGE_RECORDING_ACTIVE", "false")
+
+    with caplog.at_level(logging.WARNING):
+        # The regression: this raised ``RuntimeError`` out of ``logger.warning``.
+        DevelopmentConfig().override_with_env_variables()
+
+    (warning,) = _settings_warnings(caplog, "USAGE_RECORDING_ACTIVE")
+
+    # The variable is the only control left, and it is still named.
+    assert f"{USAGE_DISABLED_ENV_VAR}=true" in warning
+    assert DISABLED_MARKER_NAME not in warning
 
 
 def test_asking_to_record_under_server_mode_does_not_promise_the_local_controls_work(
