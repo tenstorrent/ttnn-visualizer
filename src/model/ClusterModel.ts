@@ -86,6 +86,11 @@ export interface ClusterModel {
     chip_to_bus_id: Record<ChipId, number>;
     chip_unique_ids: Record<ChipId, number>;
     boards: ClusterBoard[];
+
+    // Slot each chip occupies within its board group, 1-based. A 32-chip UBB
+    // repeats 1..8 four times, one run per group. Only a layout fallback: mesh
+    // coordinates are authoritative when the report carries them. #1948
+    asic_locations?: Record<ChipId, number>;
 }
 
 export interface MeshData {

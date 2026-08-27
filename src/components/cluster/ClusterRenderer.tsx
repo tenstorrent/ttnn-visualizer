@@ -13,6 +13,7 @@ import { useGetClusterTopology } from '../../hooks/useAPI';
 import { getChipDesign } from '../../functions/getChipDesign';
 import {
     FALLBACK_PER_HOST_COLS,
+    getAsicLocationGroups,
     hostHasMeshCoords,
     sortHostsByConnectionProximity,
 } from '../../functions/clusterTopology';
@@ -47,6 +48,10 @@ const CLUSTER_CHIP_SIZE_SMALL = 150;
 // stays in sync). Used as a fallback when no mesh coords are present, or as
 // a user-selectable alternative to the literal mesh layout. #1510
 const FALLBACK_HOST_GUTTER_ROWS = 1;
+// Blank row between board groups in the condensed fallback, so a group-to-group
+// link visibly crosses a boundary and chips either side of one are not drawn
+// touching. #1948
+const FALLBACK_GROUP_GUTTER_ROWS = 1;
 // Top padding gives outward-edge curves from the topmost host room to arc
 // without colliding with the cluster panel chrome.
 const FALLBACK_TOP_PAD_ROWS = 2;
@@ -219,6 +224,21 @@ function buildClusterRenderModel(
 
         let usedFallback = false;
 
+        // Fallback tier between mesh coords and raw id order: group the chips by
+        // board slot so the grid can separate groups. `null` keeps id order. #1948
+        const fallbackGroups = useMeshCoords ? null : getAsicLocationGroups(host.descriptor, chipIdsForHost);
+        const fallbackRowsPerGroup = fallbackGroups ? Math.ceil(fallbackGroups[0].length / FALLBACK_PER_HOST_COLS) : 0;
+        const fallbackPositionByChip = new Map<number, readonly [number, number]>();
+        fallbackGroups?.forEach((group, groupIndex) => {
+            const groupTop = groupIndex * (fallbackRowsPerGroup + FALLBACK_GROUP_GUTTER_ROWS);
+            group.forEach((groupedChipId, slotIndex) => {
+                fallbackPositionByChip.set(groupedChipId, [
+                    slotIndex % FALLBACK_PER_HOST_COLS,
+                    groupTop + Math.floor(slotIndex / FALLBACK_PER_HOST_COLS),
+                ]);
+            });
+        });
+
         // Plain `for` to keep mutable counters out of a closure (no-loop-func).
         for (let localIndex = 0; localIndex < chipIdsForHost.length; localIndex += 1) {
             const chipId = chipIdsForHost[localIndex];
@@ -229,8 +249,14 @@ function buildClusterRenderModel(
                 [x, y] = meshCoord;
             } else {
                 usedFallback = true;
-                x = localIndex % FALLBACK_PER_HOST_COLS;
-                y = nextHostOffsetY + Math.floor(localIndex / FALLBACK_PER_HOST_COLS);
+                const grouped = fallbackPositionByChip.get(chipId);
+                if (grouped) {
+                    [x] = grouped;
+                    y = nextHostOffsetY + grouped[1];
+                } else {
+                    x = localIndex % FALLBACK_PER_HOST_COLS;
+                    y = nextHostOffsetY + Math.floor(localIndex / FALLBACK_PER_HOST_COLS);
+                }
             }
             totalCols = Math.max(totalCols, x + 1);
             totalRows = Math.max(totalRows, y + 1);
@@ -249,7 +275,12 @@ function buildClusterRenderModel(
         }
 
         if (usedFallback) {
-            const hostRows = Math.ceil(chipIdsForHost.length / FALLBACK_PER_HOST_COLS);
+            // Grouped layouts are taller by one gutter row per boundary; the last
+            // group does not get a trailing one.
+            const hostRows = fallbackGroups
+                ? fallbackGroups.length * (fallbackRowsPerGroup + FALLBACK_GROUP_GUTTER_ROWS) -
+                  FALLBACK_GROUP_GUTTER_ROWS
+                : Math.ceil(chipIdsForHost.length / FALLBACK_PER_HOST_COLS);
             nextHostOffsetY += hostRows + FALLBACK_HOST_GUTTER_ROWS;
         }
     }
@@ -837,6 +868,11 @@ function ClusterRenderer() {
                         />
                     </Tooltip>
                 </ButtonGroup>
+                {!isMeshAvailable && (
+                    <Tooltip content='This report carries no mesh coordinates, so chips are tiled by board slot rather than placed at their physical positions. Links are accurate; positions are not.'>
+                        <span className='cluster-view-layout-note'>Positions not to scale</span>
+                    </Tooltip>
+                )}
                 {isMultiHost && isMeshAvailable && (
                     <Tooltip content='Switch between honouring the report mesh coordinates and a condensed 4-wide grid'>
                         <Switch

@@ -18,6 +18,50 @@ import {
 export const FALLBACK_PER_HOST_COLS = 4;
 
 /**
+ * @description Chip ids split into board groups using `asic_locations`, each
+ * group ordered by slot, or `null` when the field carries no grouping.
+ *
+ * A layout fallback only, one tier below mesh coordinates and one above raw id
+ * order. Without it the condensed grid tiled chips by id, which on a 32-chip UBB
+ * drew 41% of the links between non-adjacent cells and made 12 unconnected pairs
+ * look adjacent. Grouping lets the renderer put a gutter between board groups so
+ * the group-to-group links read as such. #1948
+ *
+ * Requires the slots to repeat in equal consecutive runs that each cover every
+ * slot exactly once. Anything else is not a grouping we can trust: a descriptor
+ * that gives every chip the same slot, or a distinct slot per chip, returns
+ * `null` and the caller keeps id order.
+ */
+export const getAsicLocationGroups = (descriptor: ClusterModel, chipIds: number[]): number[][] | null => {
+    const locations = descriptor.asic_locations;
+    if (!locations || chipIds.length === 0) {
+        return null;
+    }
+
+    const slots = chipIds.map((id) => locations[id]);
+    if (slots.some((slot) => typeof slot !== 'number' || !Number.isFinite(slot))) {
+        return null;
+    }
+
+    const groupSize = new Set(slots).size;
+    // One slot for every chip carries no grouping; one slot shared by all of them
+    // is not a position either.
+    if (groupSize <= 1 || groupSize >= chipIds.length || chipIds.length % groupSize !== 0) {
+        return null;
+    }
+
+    const groups: number[][] = [];
+    for (let start = 0; start < chipIds.length; start += groupSize) {
+        const run = chipIds.slice(start, start + groupSize);
+        if (new Set(run.map((id) => locations[id])).size !== groupSize) {
+            return null;
+        }
+        groups.push([...run].sort((a, b) => locations[a] - locations[b]));
+    }
+    return groups;
+};
+
+/**
  * Stitch per-rank cluster descriptors and mesh-coordinate mappings into a unified
  * topology. Pure; single-host reports pass a 1-element array. #1510
  */
