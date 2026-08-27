@@ -342,13 +342,16 @@ describe('pickMeshDocForRank', () => {
 
 describe('chip unique id precision', () => {
     it('resolves inter-host links between uids that collide as doubles (#1950)', () => {
-        // Chip 9 of test_ttnn_moe_aug26_2217 and its successor. Both exceed 2^53,
-        // and as JS numbers they round to the same double — keyed by string they
-        // stay distinct and each link resolves to its own owner.
+        // Chip 9 of test_ttnn_moe_aug26_2217 and its successor. Both exceed 2^53 and
+        // round to the same double, so a number-keyed owner index holds one entry for
+        // the pair — whichever host was indexed last.
         const first = '5313998941933517939';
         const second = '5313998941933517940';
         expect(Number(first)).toBe(Number(second));
 
+        // Both hosts must declare the link, so both directions are looked up. A
+        // one-sided fixture passes even with number keys: the surviving entry
+        // happens to be the one that side needs.
         const topology = stitchClusterTopology([
             {
                 rank: 0,
@@ -365,17 +368,26 @@ describe('chip unique id precision', () => {
             },
             {
                 rank: 1,
-                descriptor: makeDescriptor({ chip_unique_ids: { 0: second } }),
+                descriptor: makeDescriptor({
+                    chip_unique_ids: { 0: second },
+                    ethernet_connections_to_remote_devices: [
+                        [
+                            { chip: 0, chan: 2 },
+                            { remote_chip_id: first, chan: 1 },
+                        ],
+                    ],
+                }),
                 meshDescriptor: null,
             },
         ]);
 
-        expect(topology.unresolvedRemoteCount).toBe(0);
+        // Number keys collapse both ids onto rank 1, so rank 1's own entry resolves
+        // to itself and emits a second, bogus link with both endpoints on one host.
         expect(topology.interHostLinks).toHaveLength(1);
+        expect(topology.unresolvedRemoteCount).toBe(0);
         const [link] = topology.interHostLinks;
-        expect(link.a.chipUniqueId).toBe(first);
-        expect(link.b.chipUniqueId).toBe(second);
-        expect(link.b.rank).toBe(1);
+        expect(link.a).toEqual({ rank: 0, chip: 0, chan: 1, chipUniqueId: first });
+        expect(link.b).toEqual({ rank: 1, chip: 0, chan: 2, chipUniqueId: second });
     });
 });
 
@@ -538,9 +550,8 @@ describe('looksLikeRankedDescriptor', () => {
         // Shape of test_ttnn_moe_aug26_2217: one unsuffixed descriptor, 32 Blackhole
         // chips on a single `ubb_blackhole` board, no mesh coords, and remote-eth
         // links to fabric chips that are not in this capture.
-        // Unique ids are stand-ins: the real ones are 64-bit and exceed
-        // Number.MAX_SAFE_INTEGER, so they arrive here already rounded by
-        // JSON.parse. Only the off-capture property matters for this test.
+        // Unique ids are short stand-ins; the real ones are 64-bit and arrive as
+        // strings (#1950). Only the off-capture property matters for this test.
         const ubb = {
             ...baseDescriptor,
             arch: Object.fromEntries(Array.from({ length: 32 }, (_, chip) => [chip, 'blackhole'])),

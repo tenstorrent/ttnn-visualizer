@@ -56,7 +56,7 @@ const twoHostTopology = (arch: Record<number, string>): ClusterTopology =>
             rank,
             descriptor: {
                 arch,
-                chip_unique_ids: { 0: `100${rank}` },
+                chip_unique_ids: { 0: String(100 + rank) },
                 chips_with_mmio: [{ 0: 0 }],
                 ethernet_connections: [],
             },
