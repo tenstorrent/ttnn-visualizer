@@ -5,7 +5,8 @@
 import { describe, expect, it } from 'vitest';
 import { MathFidelity } from '../src/definitions/MathFidelity';
 import { evaluateFidelity, getCellColour } from '../src/functions/perfFunctions';
-import { ColumnKeys, TypedPerfTableRow } from '../src/definitions/PerfTable';
+import { ColumnKeys } from '../src/definitions/PerfTable';
+import { TypedPerfTableRow } from '../src/model/PerfTable';
 import { OpType } from '../src/definitions/Performance';
 import golden from './data/perfReportColourContract.json';
 

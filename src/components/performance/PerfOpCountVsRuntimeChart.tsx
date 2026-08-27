@@ -5,7 +5,8 @@
 import { useMemo } from 'react';
 import { PlotData } from 'plotly.js';
 import { useAtomValue } from 'jotai';
-import { Marker, TypedPerfTableRow } from '../../definitions/PerfTable';
+import { Marker } from '../../definitions/PerfTable';
+import { TypedPerfTableRow } from '../../model/PerfTable';
 import { PlotConfiguration } from '../../definitions/PlotConfigurations';
 import { OnOpCodeClick, PERF_CHART_LABELS, PerfChartId } from '../../definitions/PerformanceCharts';
 import { useHandlePerfChartPlotClick } from '../../hooks/useHandlePerfChartPlotClick';

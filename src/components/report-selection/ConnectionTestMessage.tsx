@@ -5,9 +5,18 @@
 import { Icon, Intent } from '@blueprintjs/core';
 import { IconName, IconNames } from '@blueprintjs/icons';
 import { ConnectionStatus, ConnectionTestStates } from '../../definitions/ConnectionStatus';
+import { HostKeyOfferResponse, isHostKeyStatus } from '../../model/HostKey';
+import HostKeyTrustPrompt from './HostKeyTrustPrompt';
 import 'styles/components/ConnectionTestMessage.scss';
 
-type ConnectionTestMessageProps = ConnectionStatus;
+interface ConnectionTestMessageProps extends ConnectionStatus {
+    /** Fetches the offered keys for a host-key failure. Omitted ⇒ read-only prompt. */
+    onRequestHostKeyOffer?: () => Promise<HostKeyOfferResponse | null>;
+    /** Records the keys the user confirmed. Omitted ⇒ no trust button. */
+    onTrustHost?: (fingerprints: readonly string[]) => Promise<void>;
+    /** The form has moved on since this result, so a host-key offer no longer fits it. */
+    isStale?: boolean;
+}
 
 const ICON_MAP: Record<ConnectionTestStates, IconName> = {
     [ConnectionTestStates.IDLE]: IconNames.DOT,
@@ -25,7 +34,15 @@ const INTENT_MAP: Record<ConnectionTestStates, Intent> = {
     [ConnectionTestStates.WARNING]: Intent.WARNING,
 };
 
-function ConnectionTestMessage({ status, message, detail }: ConnectionTestMessageProps) {
+function ConnectionTestMessage({
+    status,
+    message,
+    detail,
+    hostKey,
+    onRequestHostKeyOffer,
+    onTrustHost,
+    isStale,
+}: ConnectionTestMessageProps) {
     return (
         <div className={`connection-test-message status-${ConnectionTestStates[status].toLowerCase()}`}>
             <Icon
@@ -38,6 +55,18 @@ function ConnectionTestMessage({ status, message, detail }: ConnectionTestMessag
             <div className='connection-status-content'>
                 <span className='connection-status-text'>{message}</span>
                 {detail && <code className='connection-status-detail'>{detail}</code>}
+
+                {/* Shape-checked rather than truthiness-checked: this decides whether a
+                    trust affordance appears at all, so a malformed payload renders
+                    nothing rather than a button pointing at an undefined host. */}
+                {isHostKeyStatus(hostKey) && (
+                    <HostKeyTrustPrompt
+                        hostKey={hostKey}
+                        onRequestOffer={onRequestHostKeyOffer}
+                        onTrust={onTrustHost}
+                        isStale={isStale}
+                    />
+                )}
             </div>
         </div>
     );

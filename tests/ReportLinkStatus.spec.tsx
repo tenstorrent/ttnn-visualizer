@@ -118,26 +118,20 @@ describe('ReportLinkStatus', () => {
         });
     });
 
-    // Link resolution still follows tracing mode (#1812). This atom is backed by
-    // localStorage, so an UNLINKED recorded under the traced row order would keep
-    // badging the pair as a failed link after the toggle went away.
-    it('does not persist an UNLINKED reached with tracing mode on', async () => {
+    // Link resolution pins tracing mode off (#1812), so a verdict reached with the
+    // toggle on describes the reports just as one reached with it off does. This
+    // used to be suppressed, on the since-disproved premise that the toggle changed
+    // the row order the match ran against. Kept as the guard against that carve-out
+    // being reintroduced: it is the only case that would fail if `ReportLinkStatus`
+    // started reading `tracingModeAtom` again.
+    it('persists an UNLINKED reached with tracing mode on', async () => {
         matchState.result = ReportLinkMatchResult.UNLINKED;
-        renderWithReports({ tracingMode: true });
-
-        await waitFor(() => {
-            expect(JSON.parse(screen.getByTestId('report-links').textContent ?? '[]')).toEqual([]);
-        });
-    });
-
-    it('still persists a LINKED reached with tracing mode on, which holds under either order', async () => {
-        matchState.result = ReportLinkMatchResult.LINKED;
         renderWithReports({ tracingMode: true });
 
         await waitFor(() => {
             const links = JSON.parse(screen.getByTestId('report-links').textContent ?? '[]');
             expect(links).toHaveLength(1);
-            expect(links[0]).toMatchObject({ status: ReportPairLinkStatus.LINKED });
+            expect(links[0]).toMatchObject({ status: ReportPairLinkStatus.UNLINKED });
         });
     });
 });

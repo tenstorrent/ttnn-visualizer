@@ -102,12 +102,16 @@ describe('perf overlay bar encoding', () => {
 });
 
 describe('perf overlay bar containing block', () => {
+    // The rule is shared with the expanded operation's group node, so the selector
+    // is a list and `.react-flow__node-opNode` is matched with its trailing comma.
+    const OP_NODE_RULE = '.react-flow__node-opNode,';
+
     it('anchors the bar to the node it annotates', () => {
         // Every geometry assertion above is relative to this. Declared rather than
         // inherited from `@xyflow/react`'s `.react-flow__node`, which this rule
         // outranks, so a vendor change cannot take the containing block away and
         // anchor every bar to the canvas — which *is* relative — instead.
-        expect(ruleBody('.react-flow__node-opNode {')).toMatch(/position:\s*absolute/);
+        expect(ruleBody(OP_NODE_RULE)).toMatch(/position:\s*absolute/);
     });
 
     it('does not take the node out of the layout React Flow put it in', () => {
@@ -116,6 +120,6 @@ describe('perf overlay bar containing block', () => {
         // while the edge SVG keeps drawing at the store's coordinates, and every
         // arrow detaches from its node. Only reproducible with layout, which jsdom
         // has none of, so it is pinned as a declaration. #1880
-        expect(ruleBody('.react-flow__node-opNode {')).not.toMatch(/position:\s*(relative|static)/);
+        expect(ruleBody(OP_NODE_RULE)).not.toMatch(/position:\s*(relative|static)/);
     });
 });

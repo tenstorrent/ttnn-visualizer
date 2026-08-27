@@ -16,11 +16,14 @@ import {
     getNameTakenMessage,
 } from '../src/definitions/ConnectionDialog';
 import { ConnectionStatus, ConnectionTestStates } from '../src/definitions/ConnectionStatus';
-import { MLIR_PORT_LABEL, MlirServerConnection } from '../src/definitions/MlirServer';
+import { MLIR_PORT_LABEL } from '../src/definitions/MlirServer';
+import { MlirServerConnection } from '../src/model/MlirServer';
 import { SSH_CONFIG_HOST_CUSTOM, SSH_CONFIG_HOST_SUBLABEL } from '../src/definitions/SshConfigHostPicker';
 import { SSH_HOST_LABEL, SSH_PORT_LABEL, SSH_USERNAME_LABEL } from '../src/definitions/SshConnectionFields';
+import { HostKeyIssue } from '../src/definitions/HostKey';
 import { TEST_IDS } from '../src/definitions/TestIds';
 import getButtonWithText from './helpers/getButtonWithText';
+import { QueryProvider } from './helpers/queryClientProvider';
 import { SshConfigHostsQueryResult, noSshConfigResult, sshConfigHostsResult } from './helpers/sshConfigFixtures';
 import { ExistingTarget, describeSshConfigPrefillContract } from './helpers/sshConfigPrefillContract';
 
@@ -41,6 +44,11 @@ const useSshConfigHostsMock = vi.hoisted(() => vi.fn<(enabled?: boolean) => SshC
 
 const testMlirServerConnectionMock = vi.hoisted(() => vi.fn<() => Promise<ConnectionStatus[]>>());
 
+const { fetchHostKeyOfferMock, trustHostKeyMock } = vi.hoisted(() => ({
+    fetchHostKeyOfferMock: vi.fn(),
+    trustHostKeyMock: vi.fn(),
+}));
+
 vi.mock('../src/functions/getServerConfig', () => ({
     default: getServerConfigMock,
 }));
@@ -52,6 +60,13 @@ vi.mock('../src/hooks/useSshConfigHosts', () => ({
 vi.mock('../src/hooks/useMlirRemote', () => ({
     default: () => ({
         testMlirServerConnection: testMlirServerConnectionMock,
+    }),
+}));
+
+vi.mock('../src/hooks/useHostKey', () => ({
+    default: () => ({
+        fetchHostKeyOffer: fetchHostKeyOfferMock,
+        trustHostKey: trustHostKeyMock,
     }),
 }));
 
@@ -276,5 +291,87 @@ describe('MlirServerDialog SSH config prefill specifics', () => {
 
         expect(screen.getByLabelText(SSH_PORT_LABEL)).toHaveValue('2222');
         expect(mlirPort).toHaveValue(portBeforePrefill);
+    });
+});
+
+describe('MlirServerDialog host key failures', () => {
+    const FINGERPRINT = 'SHA256:+DiY3wvvV6TuJJhbpZisF/zLDA0zPMSvHdkr4UvCOqU';
+
+    const hostKeyFailure = () => [
+        {
+            status: ConnectionTestStates.FAILED,
+            message: 'SSH host key is not in known_hosts',
+            hostKey: {
+                issue: HostKeyIssue.UNKNOWN,
+                host: 'aus-wh-05',
+                port: 22,
+                entryName: 'aus-wh-05',
+                removalCommand: 'ssh-keygen -R aus-wh-05',
+                terminalCommand: 'ssh user@aus-wh-05',
+            },
+        },
+    ];
+
+    beforeEach(() => {
+        fetchHostKeyOfferMock.mockReset();
+        trustHostKeyMock.mockReset();
+    });
+
+    it('offers the fingerprint and a trust action, like the remote dialog', async () => {
+        // Before the callbacks were wired through, this rendered an empty callout beside a
+        // message telling the user to review a fingerprint it never showed.
+        testMlirServerConnectionMock.mockResolvedValue(hostKeyFailure());
+        fetchHostKeyOfferMock.mockResolvedValue({
+            issue: HostKeyIssue.UNKNOWN,
+            host: 'aus-wh-05',
+            port: 22,
+            offers: [{ keyType: 'ssh-ed25519', fingerprint: FINGERPRINT, line: 'line' }],
+        });
+
+        render(
+            <MlirServerDialog
+                open
+                onClose={vi.fn()}
+                onAddServer={vi.fn()}
+            />,
+            { wrapper: QueryProvider },
+        );
+
+        fillTestableTarget();
+        fireEvent.click(getButtonWithText('Run test'));
+
+        await waitFor(() => expect(screen.getByText(FINGERPRINT)).toBeInTheDocument());
+        expect(screen.getByTestId(TEST_IDS.HOST_KEY_TRUST_BUTTON)).toBeInTheDocument();
+    });
+
+    it('trusts against the SSH port, not the Model Explorer HTTP port', async () => {
+        testMlirServerConnectionMock.mockResolvedValue(hostKeyFailure());
+        fetchHostKeyOfferMock.mockResolvedValue({
+            issue: HostKeyIssue.UNKNOWN,
+            host: 'aus-wh-05',
+            port: 22,
+            offers: [{ keyType: 'ssh-ed25519', fingerprint: FINGERPRINT, line: 'line' }],
+        });
+        trustHostKeyMock.mockResolvedValue(undefined);
+
+        render(
+            <MlirServerDialog
+                open
+                onClose={vi.fn()}
+                onAddServer={vi.fn()}
+            />,
+            { wrapper: QueryProvider },
+        );
+
+        fillTestableTarget();
+        fireEvent.click(getButtonWithText('Run test'));
+
+        await waitFor(() => expect(screen.getByTestId(TEST_IDS.HOST_KEY_TRUST_BUTTON)).toBeInTheDocument());
+        fireEvent.click(screen.getByTestId(TEST_IDS.HOST_KEY_TRUST_BUTTON));
+
+        // `port` on this model is the HTTP port; the host key belongs to the SSH hop.
+        await waitFor(() =>
+            expect(trustHostKeyMock).toHaveBeenCalledWith(expect.objectContaining({ port: 2222 }), [FINGERPRINT]),
+        );
     });
 });

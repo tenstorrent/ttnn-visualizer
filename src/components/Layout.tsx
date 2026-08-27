@@ -3,12 +3,13 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { useEffect } from 'react';
-import { Link, useLocation } from 'react-router';
+import { useLocation } from 'react-router';
 import { Helmet } from 'react-helmet-async';
 import { Theme, ToastContainer, ToastPosition, cssTransition } from 'react-toastify';
 import 'styles/components/ToastOverrides.scss';
 
-import MainNavigation from './MainNavigation';
+import SideNavigation from './SideNavigation';
+import ServerModeBanner from './ServerModeBanner';
 import ROUTES from '../definitions/Routes';
 import FooterInfobar from './FooterInfobar';
 import ClusterRenderer from './cluster/ClusterRenderer';
@@ -48,30 +49,18 @@ function Layout() {
                 />
             </Helmet>
 
-            <header className='app-header'>
-                <nav className='nav-container'>
-                    <Link
-                        to={ROUTES.HOME}
-                        className='title'
-                    >
-                        <h1>
-                            <img
-                                width={250}
-                                alt='tenstorrent'
-                                src='https://docs.tenstorrent.com/tt-tm-assets/Logo/Standard%20Lockup/svg/tt_logo_color-orange-whitetext.svg'
-                            />
-                            <span className='visualizer-title'>TT-NN Visualizer</span>
-                        </h1>
-                    </Link>
+            <ServerModeBanner />
 
-                    <MainNavigation />
-                </nav>
-            </header>
+            {/* Wraps only the chrome that shares space with the page: the fixed footer and
+                the overlays below must stay outside so the flex shell can't reposition them. */}
+            <div className='app-shell'>
+                <SideNavigation />
 
-            <main>
-                <ModalAwareOutlet />
-                {location.pathname === ROUTES.CLUSTER && state?.background && <ClusterRenderer />}
-            </main>
+                <main>
+                    <ModalAwareOutlet />
+                    {location.pathname === ROUTES.CLUSTER && state?.background && <ClusterRenderer />}
+                </main>
+            </div>
 
             <FooterInfobar />
 

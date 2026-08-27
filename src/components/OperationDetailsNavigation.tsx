@@ -75,7 +75,7 @@ function OperationDetailsNavigation({ operationId, isLoading }: OperationDetails
     }, [navigateToPreviousOperation, navigateToNextOperation, previousOperation, nextOperation]);
 
     return (
-        <nav className='operation-details-navigation navbar'>
+        <nav className='operation-details-navigation'>
             <ButtonGroup className='button-group'>
                 <Button
                     icon={IconNames.Graph}

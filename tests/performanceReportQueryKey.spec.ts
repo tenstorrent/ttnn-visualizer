@@ -42,10 +42,10 @@ const defaultViewParams: PerformanceReportParams = {
 // Composed through the same function the hook uses, not by spreading the pinned
 // filters here — a local copy of that composition would let these key-equality
 // assertions keep passing after the hook changed which filters it pins.
-const linkedParams = (overrides: Partial<PerformanceReportParams> = {}): PerformanceReportParams => ({
-    ...getLinkedPerformanceReportParams(false),
-    ...overrides,
-});
+//
+// Takes no overrides deliberately. Every filter is pinned now, so an override
+// could only bypass the pin under test and assert against its own value instead.
+const linkedParams = (): PerformanceReportParams => getLinkedPerformanceReportParams();
 
 describe('getPerformanceReportQueryKey', () => {
     it('names the report and every filter the backend varies rows on', () => {
@@ -80,15 +80,6 @@ describe('getPerformanceReportQueryKey', () => {
         expect(reportKey(defaultViewParams)).toEqual(reportKey(linkedParams()));
     });
 
-    // Documents the residual #1812 gap rather than a fix: tracing mode is the one
-    // named filter still followed, so it can still move link status. See the note on
-    // the matching case in `useLinkedPerformanceReport.spec.tsx`.
-    it('keeps sharing the link key when only tracing mode changes', () => {
-        const params = { tracingMode: true };
-
-        expect(reportKey({ ...defaultViewParams, ...params })).toEqual(reportKey(linkedParams(params)));
-    });
-
     it('holds the link key still when the tab changes its stacked grouping', () => {
         // Grouping cannot change `report`, but it is part of the key — following
         // it would blank the link report on every switch.
@@ -114,11 +105,16 @@ describe('getPerformanceReportQueryKey', () => {
         );
     });
 
+    // Divergence is the cost of pinning, not a bug: each of these forks the link
+    // query onto a second `perf-results/report` build for the session (#1886).
+    // Tracing mode is here because the link key pins it — before #1812 was closed
+    // both sides followed the atom, so a toggle moved them together.
     it.each([
         ['merge devices off', { mergeDevices: false }],
         ['host ops shown', { hideHostOps: false }],
         ['a signpost range', { startSignpost: SIGNPOST }],
         ['a different stacked grouping', { groupBy: StackedGroupBy.MEMORY }],
+        ['tracing mode on', { tracingMode: true }],
     ])('diverges from the link key with %s', (_label, overrides) => {
         expect(reportKey({ ...defaultViewParams, ...overrides })).not.toEqual(reportKey(linkedParams()));
     });

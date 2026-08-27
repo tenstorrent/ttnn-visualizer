@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-import { RemoteConnection } from '../definitions/RemoteConnection';
+import { RemoteConnection } from '../model/RemoteConnection';
 
 /**
  * Connection identity as the app has always treated it: name, host and port. Paths and the

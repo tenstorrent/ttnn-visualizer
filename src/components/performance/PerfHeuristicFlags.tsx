@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import { Intent, Tag, Tooltip } from '@blueprintjs/core';
-import { TypedPerfTableRow } from '../../definitions/PerfTable';
+import { TypedPerfTableRow } from '../../model/PerfTable';
 import { PERF_HEURISTIC_FLAG_DEFINITIONS, PerfHeuristicFlagIntent } from '../../definitions/PerfHeuristics';
 import { TEST_IDS } from '../../definitions/TestIds';
 

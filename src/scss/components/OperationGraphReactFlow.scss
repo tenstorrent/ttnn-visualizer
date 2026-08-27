@@ -22,12 +22,11 @@ $minimap-width: 200px;
     position: relative;
     width: 100%;
 
-    // Fills the band between the navbar and the status bar, less `main`'s top
-    // padding. The negative margin drops the trailing page padding — `main`'s
-    // bottom gutter plus `.data-padding`'s — which here would only add a scrollbar.
-    height: calc(
-        100vh - #{variables.$app-navbar-height} - #{variables.$main-padding} - #{variables.$app-status-bar-height}
-    );
+    // Fills the viewport down to the status bar, less `main`'s top padding. The
+    // navigation is a vertical rail, so nothing sits above the page to offset against.
+    // The negative margin drops the trailing page padding — `main`'s bottom gutter plus
+    // `.data-padding`'s — which here would only add a scrollbar.
+    height: calc(100vh - #{variables.$main-padding} - #{variables.$app-status-bar-height});
     margin-bottom: -(variables.$main-padding-bottom + variables.$data-padding-bottom);
 
     .operation-graph-react-flow-loader {
@@ -40,7 +39,13 @@ $minimap-width: 200px;
         background-color: rgba($tt-black, 0.4);
     }
 
-    .react-flow__node-opNode {
+    // React Flow derives a node's class from its registered type, so an expanded
+    // operation lands on a different selector than a collapsed one while needing
+    // all the same chrome: the fill, the selection ring, the I/O highlight and the
+    // perf bar all belong to the operation, not to whether it is showing its
+    // device operations. #1195
+    .react-flow__node-opNode,
+    .react-flow__node-deviceGroupNode {
         display: flex;
         flex-direction: column;
         gap: 2px;
@@ -70,14 +75,6 @@ $minimap-width: 200px;
             box-shadow: 0 0 0 3px var(--graph-selected);
         }
 
-        &.op-graph-node-input {
-            background-color: var(--graph-input-node);
-        }
-
-        &.op-graph-node-output {
-            background-color: var(--graph-output-node);
-        }
-
         // Magnitude goes on an inset bar: the fill belongs to the I/O highlight
         // and the border to selection. Absolute so it cannot resize the node and
         // turn every overlay toggle into a relayout. #1880
@@ -103,6 +100,147 @@ $minimap-width: 200px;
             background-color: var(--op-graph-perf-color, transparent);
             border-radius: 0 2px 0 1px;
         }
+    }
+
+    // A collapsed operation is a filled box, so the I/O relation reads as its
+    // fill. An expanded one is a field its device operations sit on, where the
+    // same fill would bury them — see the group's border highlight below.
+    .react-flow__node-opNode.op-graph-node-input {
+        background-color: var(--graph-input-node);
+    }
+
+    .react-flow__node-opNode.op-graph-node-output {
+        background-color: var(--graph-output-node);
+    }
+
+    // The MLIR graph's group: a translucent field inside a dashed border. That is
+    // what lets the device operations read as the light nodes they are over there,
+    // rather than as pale boxes on the pale fill of a collapsed operation. Content
+    // stacks from the top, and the header owns the padding the box gives up.
+    .react-flow__node-deviceGroupNode {
+        justify-content: flex-start;
+        padding: 0;
+        border: 2px dashed var(--graph-group);
+        border-radius: 16px;
+        background-color: rgba($tt-white, 0.07);
+        color: $tt-grey-7;
+
+        // Draggable since it is expanded, and the only thing that says so.
+        cursor: grab;
+
+        &:active {
+            cursor: grabbing;
+        }
+
+        // Restated because the `border` shorthand above resets the colour the
+        // shared rule sets, and selection would fall back to the glow alone.
+        &.op-graph-node-selected {
+            border-color: var(--graph-selected);
+        }
+
+        // Solid, because a dashed border in the highlight colour reads as another
+        // group rather than as a relation to the selected operation.
+        &.op-graph-node-input {
+            border-style: solid;
+            border-color: var(--graph-input-node);
+        }
+
+        &.op-graph-node-output {
+            border-style: solid;
+            border-color: var(--graph-output-node);
+        }
+
+        .op-graph-node-file {
+            color: $tt-grey-5;
+        }
+
+        // Square is right against a 3px corner but juts out of a 16px one.
+        &::after {
+            border-bottom-left-radius: 14px;
+        }
+    }
+
+    .op-graph-group-header {
+        display: flex;
+        gap: 6px;
+        align-items: center;
+        justify-content: space-between;
+        padding: 4px 6px 4px 12px;
+        border-bottom: 1px solid rgba($tt-white, 0.14);
+    }
+
+    // `min-width: 0` so the label ellipsises inside the flex row instead of
+    // pushing the expander out of the header.
+    .op-graph-group-heading {
+        min-width: 0;
+    }
+
+    // Deliberately the MLIR graph's op node — same fill token, 1px border and 6px
+    // radius — so the two node graphs in the app read as one visual language
+    // rather than this view inventing a third.
+    .react-flow__node-deviceOpNode {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        box-sizing: border-box;
+        padding: 4px 10px;
+        border: 1px solid $tt-grey-5;
+        border-radius: 6px;
+        background-color: var(--graph-op-node);
+        color: $tt-black;
+        font-size: 12px;
+        line-height: 1.2;
+        text-align: center;
+        cursor: pointer;
+    }
+
+    // Dark on a light node, like the MLIR group's header chip: the badge is the
+    // only affordance saying an operation has anything to open, so it has to hold
+    // its own against the node's fill and the perf bar drawn over it.
+    .op-graph-node-expander {
+        display: inline-flex;
+        gap: 2px;
+        align-items: center;
+        padding: 1px 4px;
+
+        // Separates the chip from the expanded group's dark field, where a
+        // borderless dark chip disappears. Invisible on a light collapsed node,
+        // which needs no help.
+        border: 1px solid rgba($tt-white, 0.14);
+        border-radius: 3px;
+        background-color: rgba($tt-black, 0.88);
+        color: $tt-grey-7;
+        font-family: inherit;
+        font-size: 10px;
+        font-weight: 600;
+        line-height: 1.4;
+        cursor: pointer;
+
+        &:hover {
+            background-color: $tt-black;
+            color: $tt-white;
+        }
+
+        // Extra 1px: the glyph's ink sits low in the em-box, so rotating it
+        // around the box centre leaves the up-pointing triangle high.
+        &[aria-expanded='true'] .op-graph-node-expander-icon {
+            transform: translateY(1px) rotate(180deg);
+        }
+    }
+
+    .op-graph-node-expander-icon {
+        display: inline-block;
+        line-height: 1;
+    }
+
+    // Inside the box: the node reserves the width for it (`estimateOpNodeSize`),
+    // and a badge hung off the corner was clipped by the boundary and easy to
+    // miss. Absolute so it can't become a flex item and grow the node past the
+    // height the layout measured.
+    .react-flow__node-opNode > .op-graph-node-expander {
+        position: absolute;
+        top: 3px;
+        right: 3px;
     }
 
     // On the bottom band beside the minimap, reading against the nodes it
@@ -152,12 +290,19 @@ $minimap-width: 200px;
     }
 
     // Painted in the edge SVG, not as a div: a real report carries ~500 labels.
+    //
+    // Monospace at the MLIR graph's size and grey, so a column of shapes lines up
+    // digit for digit instead of reading as a warning. The halo MLIR has no need
+    // for stays: its labels only ever sit on the dark canvas, while these cross
+    // light operation nodes and the interior of an expanded one, and it is what
+    // lets one fill work on all three.
     .op-graph-edge-label {
-        fill: $tt-yellow-tint-1;
-        font-size: 11px;
+        fill: $tt-grey-7;
+        font-family: monospace;
+        font-size: 10px;
         paint-order: stroke;
         stroke: $tt-black;
-        stroke-width: 3px;
+        stroke-width: 2px;
         text-anchor: middle;
         pointer-events: none;
     }
@@ -211,7 +356,8 @@ $minimap-width: 200px;
     // Outline, not border or fill: selection owns the border and the I/O
     // highlight the fill, so the path stacks with either. Offset clears the 3px
     // selection ring, which an outline would otherwise paint over.
-    .react-flow__node-opNode.op-graph-node-critical-path {
+    .react-flow__node-opNode.op-graph-node-critical-path,
+    .react-flow__node-deviceGroupNode.op-graph-node-critical-path {
         outline: 2px solid var(--graph-critical-path-edge);
         outline-offset: 4px;
     }

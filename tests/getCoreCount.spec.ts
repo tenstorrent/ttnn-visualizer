@@ -4,7 +4,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { DeviceArchitecture } from '../src/definitions/DeviceArchitecture';
-import { TypedPerfTableRow } from '../src/definitions/PerfTable';
+import { TypedPerfTableRow } from '../src/model/PerfTable';
 import { OpType } from '../src/definitions/Performance';
 import getCoreCount, { DEFAULT_MAX_CORES, resolveMaxCores } from '../src/functions/getCoreCount';
 

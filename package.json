@@ -1,7 +1,7 @@
 {
   "name": "ttnn-visualizer",
   "private": true,
-  "version": "0.99.0",
+  "version": "0.100.0",
   "type": "module",
   "description": "A tool for visualizing the Tenstorrent Neural Network model (TT-NN)",
   "repository": {
@@ -32,6 +32,7 @@
     "flask:start": "uv run python -m ttnn_visualizer.app",
     "flask:test": "uv run pytest",
     "format": "prettier --write \"src/**/*.{js,jsx,ts,tsx,scss,css,json,md}\"",
+    "wheel:start": "uv pip install --reinstall \"$(ls -t dist/*.whl | head -n 1)\" && uv run --no-project ttnn-visualizer",
     "lint:fix": "eslint . --fix --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "lint:licenses:fix": "pnpm licenses ls --json | node scripts/check-missing-dep-licenses.mjs --fix=true",
     "lint:licenses": "pnpm licenses ls --json | node ./scripts/check-missing-dep-licenses.mjs",

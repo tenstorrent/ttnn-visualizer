@@ -13,6 +13,73 @@ export const STALE_CONNECTION_TESTS_CLASS = 'stale-connection-tests';
 /** Both halves of the save gate, since either one alone can be what's blocking it. */
 export const SAVE_BLOCKED_TOOLTIP = 'Enter a unique name and pass the connection tests before saving';
 
+/** Heading of the block offering to record a host's key. */
+export const HOST_KEY_UNKNOWN_TITLE = 'Host key not recognised';
+
+/** Heading of the block refusing to, because the recorded key no longer matches. */
+export const HOST_KEY_CHANGED_TITLE = 'Host key has changed';
+
+/** Heading of the block refusing to, because the offered key is blacklisted. */
+export const HOST_KEY_REVOKED_TITLE = 'Host key has been revoked';
+
+/**
+ * Says why there is nothing to click, and warns off the obvious wrong move.
+ *
+ * `ssh-keygen -R` is what the changed-key block hands over, and running it here would
+ * delete the revocation rather than resolve it — so the copy has to rule it out rather
+ * than leave the user to reach for the command they were given last time.
+ */
+export const HOST_KEY_REVOKED_NOTICE =
+    'This key is listed as revoked in known_hosts, so OpenSSH will refuse it however it is recorded. ' +
+    'Ask whoever runs the host for its current key rather than removing the revocation.';
+
+/**
+ * The target line of a host-key prompt, naming the `known_hosts` key when it differs.
+ *
+ * `entryName` is the outcome of resolving `~/.ssh/config` and is not derivable from the
+ * rest of the line: a `HostKeyAlias` replaces the hostname outright, so `lab → 10.0.0.5`
+ * can pin its key under `github.com`. That name is the one thing the user has to see
+ * before trusting anything, since it is what the key gets recorded against.
+ */
+export const getHostKeyTargetLabel = (target: string, entryName?: string | null) =>
+    entryName ? `${target} — recorded in known_hosts as ${entryName}` : target;
+
+/**
+ * Says plainly what accepting buys and what it does not.
+ *
+ * The key is fetched over the same unauthenticated path as the connection, so trusting it
+ * proves nothing about the host. What makes the decision meaningful is that the user makes
+ * it with the fingerprint in front of them, and the copy has to say so rather than imply
+ * the app checked something.
+ */
+export const HOST_KEY_TRUST_ON_FIRST_USE_NOTICE =
+    'This key was fetched over the same unverified connection, so it cannot confirm the host is genuine. ' +
+    'Compare the fingerprint against one you obtained another way before trusting it.';
+
+export const HOST_KEY_FETCHING_MESSAGE = 'Fetching the host key…';
+
+export const HOST_KEY_COPY_LABEL = 'Copy';
+
+export const HOST_KEY_COPIED_LABEL = 'Copied';
+
+/** Shown when the form has moved on, so the fingerprints describe the previous target. */
+export const HOST_KEY_STALE_NOTICE =
+    'These fingerprints were fetched for the connection as it was last tested. Run the tests again before trusting the host.';
+
+export const HOST_KEY_TRUST_BUTTON_LABEL = 'Trust this host';
+
+export const HOST_KEY_TRUST_FAILED_MESSAGE = 'The host key could not be trusted.';
+
+export const HOST_KEY_TRUST_IN_PROGRESS_LABEL = 'Trusting…';
+
+/** Shown when the host is reached through a jump host, which cannot be scanned. */
+export const HOST_KEY_PROXIED_NOTICE =
+    'This host is reached through a jump host, so its key cannot be fetched directly. ' +
+    'Connect once in a terminal and accept the key there.';
+
+/** Shown when the scan came back with nothing, so there is no fingerprint to show. */
+export const HOST_KEY_NO_OFFER_NOTICE = 'No host key could be fetched. Check the host and port, then try again.';
+
 /** The noun a dialog uses for what it saves, as it reads at the start of a sentence. */
 export enum ConnectionNameSubject {
     CONNECTION = 'Connection',

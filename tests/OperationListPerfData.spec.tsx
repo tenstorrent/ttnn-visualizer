@@ -16,7 +16,7 @@ import OperationListPerfData from '../src/components/OperationListPerfData';
 import { useGetDeviceOperationListPerfByOpId } from '../src/hooks/useAPI';
 import { DeviceOperationMapping } from '../src/model/DeviceOperationMapping';
 import { OperationDescription } from '../src/model/APIData';
-import { PerfTableRow } from '../src/definitions/PerfTable';
+import { PerfTableRow } from '../src/model/PerfTable';
 
 vi.mock('../src/hooks/useAPI', () => ({
     useGetDeviceOperationListPerfByOpId: vi.fn(),

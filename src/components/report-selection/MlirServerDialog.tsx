@@ -7,7 +7,8 @@ import { IconNames } from '@blueprintjs/icons';
 import { useState } from 'react';
 import { ConnectionNameSubject, SAVE_BLOCKED_TOOLTIP, getNameFieldLabel } from '../../definitions/ConnectionDialog';
 import { ConnectionStatus, ConnectionTestStates } from '../../definitions/ConnectionStatus';
-import { MLIR_PORT_LABEL, MlirServerConnection } from '../../definitions/MlirServer';
+import { MLIR_PORT_LABEL } from '../../definitions/MlirServer';
+import { MlirServerConnection } from '../../model/MlirServer';
 import { SSH_CONFIG_HOST_ADD_SERVER_LABEL } from '../../definitions/SshConfigHostPicker';
 import {
     SSH_HOST_LABEL,
@@ -26,6 +27,7 @@ import getServerConfig from '../../functions/getServerConfig';
 import getSshConfigHostPrefill from '../../functions/getSshConfigHostPrefill';
 import isConnectionSaveable from '../../functions/isConnectionSaveable';
 import useMlirRemote from '../../hooks/useMlirRemote';
+import useHostKey, { HostKeyTarget } from '../../hooks/useHostKey';
 import useSshConfigHostChoice from '../../hooks/useSshConfigHostChoice';
 import ConnectionTestResults from './ConnectionTestResults';
 import SshConfigHostPicker from './SshConfigHostPicker';
@@ -80,6 +82,7 @@ const MlirServerDialog = ({
     onClose,
 }: MlirServerDialogProps) => {
     const { testMlirServerConnection } = useMlirRemote();
+    const { fetchHostKeyOffer, trustHostKey } = useHostKey();
     const [connection, setConnection] = useState<MlirServerConnection>(() => server ?? getDefaultServer());
     const isAddingServer = !server;
     const { selectedHost, selectHost, selectCustom, resetSelection, isAwaitingHostChoice } = useSshConfigHostChoice({
@@ -120,6 +123,22 @@ const MlirServerDialog = ({
     };
 
     const updateName = (name: string) => setConnection({ ...connection, name });
+
+    // `sshPort`, not `port`: `port` is the Model Explorer HTTP port, and the host key
+    // belongs to the SSH connection this dialog tunnels through.
+    const getHostKeyTarget = (): HostKeyTarget => ({
+        host: connection.host,
+        port: connection.sshPort,
+        identityFile: connection.identityFile,
+        username: connection.username,
+    });
+
+    const handleRequestHostKeyOffer = () => fetchHostKeyOffer(getHostKeyTarget());
+
+    const handleTrustHost = async (fingerprints: readonly string[]) => {
+        await trustHostKey(getHostKeyTarget(), fingerprints);
+        await testConnectionStatus();
+    };
 
     const testConnectionStatus = async () => {
         setIsTestingConnection(true);
@@ -317,6 +336,8 @@ const MlirServerDialog = ({
                         isNameTaken={isNameTaken}
                         tests={connectionTests}
                         isStale={hasStaleTestResults}
+                        onRequestHostKeyOffer={handleRequestHostKeyOffer}
+                        onTrustHost={handleTrustHost}
                     />
                 </DialogFooter>
             )}

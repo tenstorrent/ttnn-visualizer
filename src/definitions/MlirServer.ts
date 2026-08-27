@@ -4,15 +4,6 @@
 
 export { DEFAULT_SSH_PORT } from './RemoteConnection';
 
-export interface MlirServerConnection {
-    name: string;
-    username: string;
-    host: string;
-    sshPort: number;
-    port: number;
-    identityFile?: string; // Optional path to SSH private key.
-}
-
 export const MLIR_UPLOAD_PATH = '/apipost/v1/upload';
 
 /** Accessible name of the MLIR server's own port field, as opposed to the SSH port beside it. */

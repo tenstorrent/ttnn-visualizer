@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { RemoteFolder } from '../definitions/RemoteConnection';
+import { RemoteFolder } from '../model/RemoteConnection';
 
 const isRemoteFolderOutdated = (folder: RemoteFolder) => {
     const { lastSynced, lastModified } = folder;

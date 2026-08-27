@@ -34,7 +34,11 @@ vi.mock('../src/components/npe/NPEMetadata', () => ({ default: () => null }));
 vi.mock('../src/components/npe/EmptyChipRenderer', () => ({ EmptyChipRenderer: () => null }));
 vi.mock('../src/components/npe/NPEZoneFilterComponent', () => ({ default: () => null }));
 vi.mock('../src/components/GlobalSwitch', () => ({ default: () => null }));
-vi.mock('../src/functions/createToastNotification', () => ({ default: vi.fn() }));
+vi.mock('../src/functions/createToastNotification', async () => {
+    const { toastNotificationModuleMock } = await import('./helpers/mockToastNotification');
+
+    return toastNotificationModuleMock();
+});
 vi.mock('../src/components/npe/useNPEHandlers', () => ({
     useSelectedTransferGrouping: () => ({ transferListSelectionRendering: new Map(), groupedTransfersByNoCID: {} }),
     useShowActiveTransfers: () => vi.fn(),

@@ -8,7 +8,7 @@ PR #1467 Copilot review (round 2) flagged that upload paths used
 `file.filename` verbatim when constructing the destination path, allowing a
 crafted multipart filename like `"../etc/passwd.json"` or `"/etc/passwd.json"`
 to escape `target_directory`. These tests pin the hardening (`Path(...).name`
-in `construct_dest_path` and `extract_npe_name`) so a future refactor can't
+in `construct_dest_path` and `extract_uploaded_name`) so a future refactor can't
 silently undo it.
 """
 
@@ -22,7 +22,7 @@ from ttnn_visualizer.enums import ConnectionTestStates
 from ttnn_visualizer.exceptions import DataFormatError
 from ttnn_visualizer.file_uploads import (
     construct_dest_path,
-    extract_npe_name,
+    extract_uploaded_name,
     resolve_parent_folder_name,
     validate_files,
 )
@@ -212,31 +212,31 @@ def test_construct_dest_path_folder_branch_allows_intermediate_dotdot(app, tmp_p
         assert resolved.parent.parent == tmp_path.resolve()
 
 
-# ---- extract_npe_name: feeds the DB; rebuilt into a read path later --------
+# ---- extract_uploaded_name: feeds the DB; rebuilt into a read path later ---
 
 
-def test_extract_npe_name_strips_traversal_from_db_name():
+def test_extract_uploaded_name_strips_traversal_from_db_name():
     """`mlir_name` is rebuilt by `get_mlir_path` — must not contain `..`."""
-    name = extract_npe_name([_faux_file("../etc/passwd.json")])
+    name = extract_uploaded_name([_faux_file("../etc/passwd.json")])
     assert name == "passwd"
     assert ".." not in name
     assert "/" not in name
 
 
-def test_extract_npe_name_strips_absolute_path_from_db_name():
-    name = extract_npe_name([_faux_file("/etc/passwd.json")])
+def test_extract_uploaded_name_strips_absolute_path_from_db_name():
+    name = extract_uploaded_name([_faux_file("/etc/passwd.json")])
     assert name == "passwd"
     assert "/" not in name
 
 
-def test_extract_npe_name_preserves_legitimate_basename():
+def test_extract_uploaded_name_preserves_legitimate_basename():
     """Plain filenames must produce the same DB name they always did."""
-    assert extract_npe_name([_faux_file("my-model.json")]) == "my-model"
-    assert extract_npe_name([_faux_file("my-trace.npeviz.zst")]) == "my-trace"
+    assert extract_uploaded_name([_faux_file("my-model.json")]) == "my-model"
+    assert extract_uploaded_name([_faux_file("my-trace.npeviz.zst")]) == "my-trace"
 
 
-def test_extract_npe_name_handles_empty_input():
-    assert extract_npe_name([]) is None
+def test_extract_uploaded_name_handles_empty_input():
+    assert extract_uploaded_name([]) is None
 
 
 # ---- resolve_parent_folder_name: keeps both upload handlers aligned --------

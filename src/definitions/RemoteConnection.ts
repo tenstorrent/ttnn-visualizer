@@ -2,42 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { HttpStatusCode } from 'axios';
-
 export const DEFAULT_SSH_PORT = 22;
-
-export interface RemoteConnection {
-    name: string;
-    username: string;
-    host: string;
-    port: number;
-    profilerPath: string;
-    performancePath?: string;
-    identityFile?: string; // Optional path to SSH private key.
-    // Performance reports sit in per-rank subdirectories of performancePath.
-    multihostPerformance?: boolean;
-}
-
-export interface RemoteFolder {
-    reportName: string;
-    remotePath: string;
-    lastModified: number;
-    lastSynced?: number | null;
-    // Name this report occupies on local disk once synced, and its rank. Both are
-    // decided by the server, which is the side that writes the folder.
-    syncedName?: string;
-    rank?: number | null;
-}
-
-export interface SyncRemoteFolder {
-    status: HttpStatusCode;
-    message: string;
-}
-
-export interface MountRemoteFolder {
-    status: HttpStatusCode;
-    message: string;
-}
 
 export const SYNC_DATE_FORMATTER = new Intl.DateTimeFormat('en-US', {
     dateStyle: 'long',

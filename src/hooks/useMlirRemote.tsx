@@ -9,11 +9,11 @@ import {
     clearFileTransferProgressForSource,
     getInactiveFileTransferProgress,
     setFileTransferProgressForSource,
-} from '../store/fileTransferRegistry';
+} from '../store/app';
 import { FileStatus } from '../model/APIData';
 import Endpoints from '../definitions/Endpoints';
 import { ConnectionStatus, ConnectionTestStates } from '../definitions/ConnectionStatus';
-import { MlirServerConnection } from '../definitions/MlirServer';
+import { MlirServerConnection } from '../model/MlirServer';
 import { GraphBundle } from '../model/MLIRJsonModel';
 import getResponseError from '../functions/getResponseError';
 

@@ -15,13 +15,14 @@ import { ReportScope } from '../definitions/ReportScope';
 import { REPORT_LINKS_STORAGE_KEY } from '../definitions/ReportLinks';
 import { getReportId } from '../functions/reportLinks';
 import { ReportLink } from '../model/ReportLinks';
-import { ColumnKeys, TypedPerfTableRow } from '../definitions/PerfTable';
+import { ColumnKeys } from '../definitions/PerfTable';
+import { TypedPerfTableRow } from '../model/PerfTable';
 import { DurationBucket } from '../definitions/PerfDurationHistogram';
 import { BufferType } from '../model/BufferType';
 import { StackedGroupBy } from '../definitions/StackedPerfTable';
 import { SortingOptions } from '../definitions/SortingOptions';
 import { DEFAULT_TOP_N_COUNT, TopNAnnotationMode } from '../definitions/TopNAnnotations';
-import { MlirServerConnection } from '../definitions/MlirServer';
+import { MlirServerConnection } from '../model/MlirServer';
 import { MlirFileResult, MlirLoadedReport } from '../model/MLIRJsonModel';
 import { aggregateFileTransferProgress, fileTransferRegistryAtom } from './fileTransferRegistry';
 
@@ -50,6 +51,15 @@ export const showHexAtom = atomWithStorage('showHex', false); // Used in Buffers
 export const showMemoryRegionsAtom = atomWithStorage('showMemoryRegions', true); // Used in Buffers and Operation Details
 export const renderMemoryLayoutAtom = atomWithStorage('renderMemoryLayout', false); // Used in Buffers and Operation Details
 
+// App shell / navigation
+// Persisted because a rail width is a stable preference rather than session state.
+// `getOnInit` because this one drives the app shell's layout: without it a user who
+// collapsed the rail renders it expanded first and the page beside it reflows on every
+// load.
+export const isNavigationCollapsedAtom = atomWithStorage('navigationCollapsed', false, undefined, {
+    getOnInit: true,
+});
+
 // Reports (excluding NPE/MLIR)
 export const profilerReportLocationAtom = atom<ReportLocation | null>(null);
 export const activeProfilerReportAtom = atom<ReportFolder | null>(null);
@@ -76,7 +86,6 @@ export const isActivatingReportAtom = atom(false);
 export const reportLinksAtom = atomWithStorage<ReportLink[]>(REPORT_LINKS_STORAGE_KEY, []);
 export const performanceRangeAtom = atom<NumberRange | null>(null);
 export const selectedPerformanceRangeAtom = atom<NumberRange | null>(null);
-export const hasClusterDescriptionAtom = atom(false);
 
 // Operations route
 export const shouldCollapseAllOperationsAtom = atom(false);

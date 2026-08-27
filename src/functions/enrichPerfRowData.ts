@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-import { PerfTableRow, TypedPerfTableRow } from '../definitions/PerfTable';
+import { PerfTableRow, TypedPerfTableRow } from '../model/PerfTable';
 import { HIGH_DISPATCH_THRESHOLD_US } from '../definitions/Performance';
 import { BufferType } from '../model/BufferType';
 import { DeviceOperationLayoutTypes } from '../model/APIData';

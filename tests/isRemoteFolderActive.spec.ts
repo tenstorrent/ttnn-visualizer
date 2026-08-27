@@ -5,7 +5,7 @@
 import { describe, expect, it } from 'vitest';
 
 import isRemoteFolderActive from '../src/functions/isRemoteFolderActive';
-import { RemoteFolder } from '../src/definitions/RemoteConnection';
+import { RemoteFolder } from '../src/model/RemoteConnection';
 import { ReportFolder } from '../src/definitions/Reports';
 
 const PERFORMANCE_PATH = '/tt-metal/generated/profiler/ttrun';

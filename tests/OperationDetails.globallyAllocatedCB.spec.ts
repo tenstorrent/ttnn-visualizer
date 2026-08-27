@@ -5,7 +5,7 @@
 import { describe, expect, it } from 'vitest';
 import { OperationDetails } from '../src/model/OperationDetails';
 import { Node, NodeType, OperationDetailsData } from '../src/model/APIData';
-import { PlotDataCustom } from '../src/definitions/PlotConfigurations';
+import { PlotDataCustom } from '../src/model/PlotData';
 
 let nextId = 0;
 function mkNode<T extends Partial<Node>>(node: T): Node {

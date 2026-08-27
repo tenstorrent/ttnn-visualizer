@@ -2,7 +2,8 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { ColumnKeys, PerfTableFilters, TypedPerfTableRow, signpostRowDefaults } from '../definitions/PerfTable';
+import { ColumnKeys, PerfTableFilters } from '../definitions/PerfTable';
+import { TypedPerfTableRow, signpostRowDefaults } from '../model/PerfTable';
 import { DeviceOperationLayoutTypes } from '../model/APIData';
 import { BufferType } from '../model/BufferType';
 import { Signpost } from '../model/Signpost';

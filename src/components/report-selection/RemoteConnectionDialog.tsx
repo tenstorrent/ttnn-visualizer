@@ -23,8 +23,8 @@ import {
     MULTIHOST_GROUP_LABEL,
     REMOTE_MEMORY_PATH_LABEL,
     REMOTE_PERFORMANCE_PATH_LABEL,
-    RemoteConnection,
 } from '../../definitions/RemoteConnection';
+import { RemoteConnection } from '../../model/RemoteConnection';
 import { SSH_CONFIG_HOST_ADD_CONNECTION_LABEL } from '../../definitions/SshConfigHostPicker';
 import {
     REMOTE_MEMORY_PATH_ERROR_ID,
@@ -47,6 +47,7 @@ import getServerConfig from '../../functions/getServerConfig';
 import getSshConfigHostPrefill from '../../functions/getSshConfigHostPrefill';
 import isConnectionSaveable from '../../functions/isConnectionSaveable';
 import useRemoteConnection from '../../hooks/useRemote';
+import useHostKey, { HostKeyTarget } from '../../hooks/useHostKey';
 import useSshConfigHostChoice from '../../hooks/useSshConfigHostChoice';
 import ConnectionTestResults from './ConnectionTestResults';
 import SshConfigHostPicker from './SshConfigHostPicker';
@@ -116,6 +117,7 @@ const RemoteConnectionDialog = ({
     const [connectionTests, setConnectionTests] = useState<ConnectionStatus[]>([]);
     const [hasStaleTestResults, setHasStaleTestResults] = useState(false);
     const { testConnection } = useRemoteConnection();
+    const { fetchHostKeyOffer, trustHostKey } = useHostKey();
     const [isTestingConnection, setIsTestingconnection] = useState(false);
 
     const connectionName = connection.name ?? '';
@@ -178,6 +180,26 @@ const RemoteConnectionDialog = ({
         } finally {
             setIsTestingconnection(false);
         }
+    };
+
+    // This dialog is the only place holding both the form and the test runner, so the
+    // host-key prompt reaches them through here rather than learning the connection shape.
+    // `connection` is a Partial, so host and port are narrowed even though
+    // getDefaultConnection seeds both — the backend rejects an empty host anyway.
+    const getHostKeyTarget = (): HostKeyTarget => ({
+        host: connection.host ?? '',
+        port: connection.port ?? getServerConfig().SSH_DEFAULT_PORT,
+        identityFile: connection.identityFile,
+        username: connection.username,
+    });
+
+    const handleRequestHostKeyOffer = () => fetchHostKeyOffer(getHostKeyTarget());
+
+    const handleTrustHost = async (fingerprints: readonly string[]) => {
+        await trustHostKey(getHostKeyTarget(), fingerprints);
+        // Re-run rather than assume: trusting the key clears one reason the connection
+        // failed, not necessarily the only one, and the save gate reads the results.
+        await testConnectionStatus();
     };
 
     const closeDialog = (resetChanges?: boolean) => {
@@ -401,6 +423,8 @@ const RemoteConnectionDialog = ({
                         isNameTaken={isNameTaken}
                         tests={connectionTests}
                         isStale={hasStaleTestResults}
+                        onRequestHostKeyOffer={handleRequestHostKeyOffer}
+                        onTrustHost={handleTrustHost}
                     />
                 </DialogFooter>
             )}

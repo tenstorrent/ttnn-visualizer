@@ -21,7 +21,7 @@ import {
     selectedMlirServerAtom,
 } from '../src/store/app';
 import { GraphBundle, MlirFileResult } from '../src/model/MLIRJsonModel';
-import { MlirServerConnection } from '../src/definitions/MlirServer';
+import { MlirServerConnection } from '../src/model/MlirServer';
 
 const setActiveMlir = vi.fn();
 const uploadMlirFileToServer = vi.fn();
@@ -33,10 +33,11 @@ vi.mock('../src/hooks/useMlirRemote', () => ({
     default: () => ({ setActiveMlir, uploadMlirFileToServer }),
 }));
 
-vi.mock('../src/functions/createToastNotification', () => ({
-    default: createToastNotification,
-    ToastType: { SUCCESS: 'success', ERROR: 'error' },
-}));
+vi.mock('../src/functions/createToastNotification', async () => {
+    const { toastNotificationModuleMock } = await import('./helpers/mockToastNotification');
+
+    return toastNotificationModuleMock(createToastNotification);
+});
 
 const GRAPH: GraphBundle = { graphs: [{ id: 'g', nodes: [] }] };
 const SERVER: MlirServerConnection = {

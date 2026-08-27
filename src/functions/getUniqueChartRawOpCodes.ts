@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-import { TypedPerfTableRow } from '../definitions/PerfTable';
+import { TypedPerfTableRow } from '../model/PerfTable';
 
 /** Unique non-null raw op codes for chart traces — matches table filter null handling. */
 export function getUniqueChartRawOpCodes(rows: TypedPerfTableRow[]): string[] {

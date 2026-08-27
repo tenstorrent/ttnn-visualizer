@@ -30,7 +30,8 @@ import {
     selectedPerformanceRangeAtom,
 } from '../store/app';
 import PerformanceChartsTab from '../components/performance/PerformanceChartsTab';
-import { Marker, MarkerColours, TypedPerfTableRow } from '../definitions/PerfTable';
+import { Marker, MarkerColours } from '../definitions/PerfTable';
+import { TypedPerfTableRow } from '../model/PerfTable';
 import { L1PressureStatus } from '../model/L1Pressure';
 import { annotatePerfHeuristicFlags } from '../functions/computePerfHeuristicFlags';
 import { resolveMaxCores } from '../functions/getCoreCount';
