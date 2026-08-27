@@ -34,6 +34,7 @@ const harness: {
     setNodes: ((updater: (previous: OpGraphFlowNode[]) => OpGraphFlowNode[]) => void) | null;
     setEdges: ((updater: (previous: OpGraphFlowEdge[]) => OpGraphFlowEdge[]) => void) | null;
     onNodeClick: ((event: unknown, node: OpGraphFlowNode) => void) | null;
+    onNodeDoubleClick: ((event: unknown, node: OpGraphFlowNode) => void) | null;
     onNodesChange: ((changes: NodeChange<OpGraphFlowNode>[]) => void) | null;
     // Left as `undefined` by the view when the overlay is off, which is the gating
     // a test can only see by reading the prop React Flow was actually handed.
@@ -44,6 +45,7 @@ const harness: {
     setNodes: null,
     setEdges: null,
     onNodeClick: null,
+    onNodeDoubleClick: null,
     onNodesChange: null,
     onNodeMouseEnter: undefined,
     onNodeMouseLeave: undefined,
@@ -86,6 +88,7 @@ vi.mock('@xyflow/react', async () => {
             edges,
             nodeTypes,
             onNodeClick,
+            onNodeDoubleClick,
             onNodesChange,
             onNodeMouseEnter,
             onNodeMouseLeave,
@@ -98,6 +101,7 @@ vi.mock('@xyflow/react', async () => {
                 (props: { id: string; data: OpGraphFlowNode['data']; type?: string }) => ReactNode
             >;
             onNodeClick: (event: unknown, node: OpGraphFlowNode) => void;
+            onNodeDoubleClick?: (event: unknown, node: OpGraphFlowNode) => void;
             onNodesChange: (changes: NodeChange<OpGraphFlowNode>[]) => void;
             onNodeMouseEnter?: (event: unknown, node: OpGraphFlowNode) => void;
             onNodeMouseLeave?: () => void;
@@ -105,6 +109,7 @@ vi.mock('@xyflow/react', async () => {
         }) => {
             flowRenders.push({ nodes, edges });
             harness.onNodeClick = onNodeClick;
+            harness.onNodeDoubleClick = onNodeDoubleClick ?? null;
             harness.onNodesChange = onNodesChange;
             harness.onNodeMouseEnter = onNodeMouseEnter;
             harness.onNodeMouseLeave = onNodeMouseLeave;
@@ -413,6 +418,7 @@ beforeEach(() => {
     harness.setNodes = null;
     harness.setEdges = null;
     harness.onNodeClick = null;
+    harness.onNodeDoubleClick = null;
     harness.onNodesChange = null;
     harness.onNodeMouseEnter = undefined;
     harness.onNodeMouseLeave = undefined;
@@ -1306,7 +1312,7 @@ describe('OperationGraphReactFlow repeat blocks', () => {
         });
 
         const panel = screen.getByLabelText('Selected block details');
-        expect(panel).toHaveTextContent('Block A × 2');
+        expect(panel).toHaveTextContent('model × 2');
         expect(panel).toHaveTextContent('ops 2–3 · instance 1 of 2');
         expect(screen.queryByRole('button', { name: /Memory Details/ })).toBeNull();
         expect(screen.queryByLabelText('Selected operation details')).toBeNull();
@@ -1349,5 +1355,97 @@ describe('OperationGraphReactFlow repeat blocks', () => {
         expect(runBuild.mock.calls.at(-1)?.[0]).toEqual(
             expect.objectContaining({ deviceSubgraphs: [], expandedBlockIds: [] }),
         );
+    });
+
+    it('folds that instance when an unrolled member is double-clicked', () => {
+        renderGraph(REPEAT_OPERATION_LIST);
+        fireEvent.click(screen.getAllByRole('button', { name: 'Unroll 2 operations' })[0]);
+        const unrolled = runBuild.mock.calls.at(-1)?.[0] as OpGraphBuildOptions;
+        deliver(REPEAT_OPERATION_LIST, { expandedBlockIds: unrolled.expandedBlockIds });
+
+        runBuild.mockClear();
+        act(() => {
+            harness.onNodeDoubleClick?.(null, nodeById(lastFlowRender().nodes, '3'));
+        });
+
+        expect(runBuild.mock.calls.at(-1)?.[0]).toEqual(expect.objectContaining({ expandedBlockIds: [] }));
+    });
+
+    it('folds every instance and drops member device-op expansion when deallocate hiding changes', () => {
+        const operations = REPEAT_OPERATION_LIST.map((op) =>
+            op.id === 2
+                ? withDeviceOperations(op, ['AlphaDeviceOperation', 'BetaDeviceOperation', 'GammaDeviceOperation'])
+                : op,
+        );
+        renderGraph(operations);
+
+        fireEvent.click(screen.getByRole('button', { name: 'Unroll all repeats' }));
+        const unrolled = runBuild.mock.calls.at(-1)?.[0] as OpGraphBuildOptions;
+        deliver(operations, { expandedBlockIds: unrolled.expandedBlockIds });
+
+        fireEvent.click(screen.getByRole('button', { name: 'Show 3 device operations' }));
+        expect((runBuild.mock.calls.at(-1)?.[0] as OpGraphBuildOptions).deviceSubgraphs).toHaveLength(1);
+
+        runBuild.mockClear();
+        fireEvent.click(screen.getByLabelText('Hide deallocate ops'));
+
+        expect(runBuild.mock.calls.at(-1)?.[0]).toEqual(
+            expect.objectContaining({ hideDeallocate: false, deviceSubgraphs: [], expandedBlockIds: [] }),
+        );
+    });
+
+    it('unrolls the instance that contains the operation the URL names', () => {
+        const { rerender } = renderGraph(REPEAT_OPERATION_LIST);
+        runBuild.mockClear();
+
+        rerender(
+            <MemoryRouter>
+                <OperationGraphReactFlow
+                    operationList={REPEAT_OPERATION_LIST}
+                    operationId={3}
+                />
+            </MemoryRouter>,
+        );
+
+        expect(runBuild.mock.calls.at(-1)?.[0]).toEqual(
+            expect.objectContaining({ expandedBlockIds: [FIRST_BLOCK_ID] }),
+        );
+    });
+
+    it('forgets unrolled instances when the profiler report changes', () => {
+        renderGraph(REPEAT_OPERATION_LIST);
+        fireEvent.click(screen.getByRole('button', { name: 'Unroll all repeats' }));
+        expect((runBuild.mock.calls.at(-1)?.[0] as OpGraphBuildOptions).expandedBlockIds).toHaveLength(2);
+
+        runBuild.mockClear();
+        act(() => {
+            getDefaultStore().set(activeProfilerReportAtom, {
+                path: '/reports/resnet50',
+                reportName: 'resnet50',
+            } as ReportFolder);
+        });
+
+        expect(runBuild.mock.calls.at(-1)?.[0]).toEqual(expect.objectContaining({ expandedBlockIds: [] }));
+    });
+
+    it('keeps the selection on a folded block when the selected op is a non-first member', () => {
+        renderGraph(REPEAT_OPERATION_LIST);
+        fireEvent.click(screen.getAllByRole('button', { name: 'Unroll 2 operations' })[0]);
+        const unrolled = runBuild.mock.calls.at(-1)?.[0] as OpGraphBuildOptions;
+        deliver(REPEAT_OPERATION_LIST, { expandedBlockIds: unrolled.expandedBlockIds });
+
+        act(() => {
+            harness.onNodeClick?.(null, nodeById(lastFlowRender().nodes, '3'));
+        });
+        expect(screen.getByLabelText('Selected operation details')).toHaveTextContent('layer_b');
+
+        act(() => {
+            harness.onNodeDoubleClick?.(null, nodeById(lastFlowRender().nodes, '3'));
+        });
+        deliver(REPEAT_OPERATION_LIST, { expandedBlockIds: [] });
+
+        expect(screen.getByLabelText('Selected block details')).toHaveTextContent('model × 2');
+        expect(hasClass(nodeById(lastFlowRender().nodes, FIRST_BLOCK_ID), 'op-graph-node-selected')).toBe(true);
+        expect(hasClass(nodeById(lastFlowRender().nodes, '1'), 'op-graph-node-selected')).toBe(false);
     });
 });

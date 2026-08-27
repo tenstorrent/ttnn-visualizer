@@ -451,6 +451,7 @@ const OperationGraphInner = ({
                         operationId: node.data.operationId,
                         name: node.data.filterString,
                         memberNames: node.data.memberNames,
+                        memberOperationIds: node.data.memberOperationIds,
                     });
                     if (node.data.memberOperationIds !== undefined) {
                         for (const memberId of node.data.memberOperationIds) {
@@ -471,7 +472,13 @@ const OperationGraphInner = ({
             // An op can drop out between builds (isolated, or filtered as a
             // deallocate), so selection falls back rather than point at nothing.
             const desired = selectedOperationIdRef.current;
-            const isPresent = desired !== null && graph.nodes.some((node) => node.data.operationId === desired);
+            const isPresent =
+                desired !== null &&
+                graph.nodes.some(
+                    (node) =>
+                        node.data.operationId === desired ||
+                        (node.data.memberOperationIds !== undefined && node.data.memberOperationIds.includes(desired)),
+                );
             const target = isPresent ? desired : (graph.nodes[0]?.data.operationId ?? null);
             if (target !== desired) {
                 setSelectedOperationId(target);
@@ -641,6 +648,7 @@ const OperationGraphInner = ({
     const handleHideDeallocateChange = useCallback((next: boolean) => {
         setHideDeallocate(next);
         setExpandedBlockIds(NOTHING_EXPANDED_BLOCKS);
+        setExpandedOperationIds(NOTHING_EXPANDED);
     }, []);
 
     if (operationId !== undefined && revealedOperationId !== operationId && detectedBlocks.length > 0) {
@@ -880,7 +888,17 @@ const OperationGraphInner = ({
         return { selectedId, relationByNodeId, relationByEdgeId };
     }, [selectedOperationId, edgesBySource, edgesByTarget, nodeIdByOperationId]);
 
-    const graphOperationIds = useMemo(() => nodeIndex.map((entry) => entry.operationId), [nodeIndex]);
+    const graphOperationIds = useMemo(() => {
+        const ids: number[] = [];
+        for (const entry of nodeIndex) {
+            if (entry.memberOperationIds !== undefined) {
+                ids.push(...entry.memberOperationIds);
+            } else {
+                ids.push(entry.operationId);
+            }
+        }
+        return ids;
+    }, [nodeIndex]);
 
     const perfOverlay = useMemo(
         () => buildOpGraphPerfOverlay(perfRows, isPerfReportLoaded, graphOperationIds),
@@ -963,8 +981,8 @@ const OperationGraphInner = ({
     // Built once per score change so the styling pass reuses these identities
     // instead of allocating one per node on every drag frame.
     const perfStyleByNodeId = useMemo(
-        () => buildPerfNodeStyleByNodeId(perfOverlay, isPerfOverlayActive),
-        [isPerfOverlayActive, perfOverlay],
+        () => buildPerfNodeStyleByNodeId(perfOverlay, isPerfOverlayActive, nodeIndex),
+        [isPerfOverlayActive, perfOverlay, nodeIndex],
     );
 
     const styledNodes = useMemo(() => {
@@ -1085,9 +1103,16 @@ const OperationGraphInner = ({
         (_event: ReactMouseEvent, node: OpGraphFlowNode) => {
             if (node.data.blockInstanceId !== undefined) {
                 toggleBlockExpansion(node.data.blockInstanceId);
+                return;
+            }
+            const instance = detectedBlocks.find(
+                (block) => expandedBlockIds.has(block.instanceId) && block.operationIds.includes(node.data.operationId),
+            );
+            if (instance !== undefined) {
+                toggleBlockExpansion(instance.instanceId);
             }
         },
-        [toggleBlockExpansion],
+        [detectedBlocks, expandedBlockIds, toggleBlockExpansion],
     );
 
     const handlePaneClick = useCallback(() => {
@@ -1289,7 +1314,7 @@ const OperationGraphInner = ({
             <div className='op-graph-bottom-band'>
                 {isCriticalPathActive && hasCriticalPath && !isBuilding ? (
                     <CriticalPathAnnotation
-                        opCount={criticalPath.opIds.length}
+                        opCount={criticalPath.opCount}
                         totalNs={criticalPath.totalNs}
                         measuredNs={perfOverlay.totalNs}
                         isPartial={criticalPath.hasCycle}
@@ -1318,7 +1343,7 @@ const OperationGraphInner = ({
             {isPanelOpen ? (
                 <OpGraphInfoPanel
                     operationId={selectedOperationId}
-                    operationList={operationList}
+                    operationById={operationById}
                     operationNamesById={operationNamesById}
                     onLocateOperation={focusOperation}
                     isPerfOverlayActive={isPerfOverlayActive}

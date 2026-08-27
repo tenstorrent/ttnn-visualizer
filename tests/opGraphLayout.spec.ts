@@ -8,6 +8,7 @@ import {
     type LayoutInputNode,
     estimateBlockNodeSize,
     estimateOpNodeSize,
+    formatBlockMeta,
     layoutOpGraph,
 } from '../src/components/operation-graph/opGraphLayout';
 
@@ -84,9 +85,22 @@ describe('estimateBlockNodeSize', () => {
         );
     });
 
-    it('reserves the fold chip after the label hits the maximum width', () => {
+    it('reserves a wider chip than the device-op badge after the label hits the cap', () => {
         const label = 'x'.repeat(400);
-        expect(estimateBlockNodeSize(label, '2 ops').width).toBeGreaterThan(estimateOpNodeSize(label, '2 ops').width);
+        expect(estimateBlockNodeSize(label, '2 ops').width).toBeGreaterThan(
+            estimateOpNodeSize(label, '2 ops', true).width,
+        );
+    });
+});
+
+describe('formatBlockMeta', () => {
+    it('omits duration and memory when they are zero', () => {
+        expect(formatBlockMeta(3, 0, 0)).toBe('3 ops');
+    });
+
+    it('includes a signed memory delta when it is not zero', () => {
+        expect(formatBlockMeta(2, 1.5, 1024)).toContain('+');
+        expect(formatBlockMeta(2, 1.5, -1024)).toContain('-');
     });
 });
 

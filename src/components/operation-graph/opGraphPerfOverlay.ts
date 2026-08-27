@@ -139,17 +139,54 @@ export const buildOpGraphPerfOverlay = (
 export const buildPerfNodeStyleByNodeId = (
     overlay: OpGraphPerfOverlay,
     isActive: boolean,
+    nodes?: readonly { id: string; operationId: number; memberOperationIds?: number[] }[],
 ): Map<string, CSSProperties> | null => {
     if (!isActive) {
         return null;
     }
+    const tOfNs = (ns: number): number | null => {
+        if (ns <= 0) {
+            return null;
+        }
+        if (overlay.minNs === overlay.maxNs) {
+            return 0;
+        }
+        const logMin = Math.log10(overlay.minNs);
+        const range = Math.log10(overlay.maxNs) - logMin;
+        return Math.min(1, Math.max(0, (Math.log10(ns) - logMin) / range));
+    };
+
     const styleByNodeId = new Map<string, CSSProperties>();
-    for (const [opId, score] of overlay.scoreByOpId) {
-        // `CSSProperties` has no index signature for custom properties.
-        styleByNodeId.set(String(opId), {
-            [PERF_BAR_SCALE_VAR]: score.t,
-            [PERF_BAR_COLOR_VAR]: perfColorScale(score.t),
-        } as CSSProperties);
+    if (nodes === undefined) {
+        for (const [opId, score] of overlay.scoreByOpId) {
+            styleByNodeId.set(String(opId), {
+                [PERF_BAR_SCALE_VAR]: score.t,
+                [PERF_BAR_COLOR_VAR]: perfColorScale(score.t),
+            } as CSSProperties);
+        }
+        return styleByNodeId;
+    }
+
+    for (const node of nodes) {
+        const memberIds = node.memberOperationIds ?? [node.operationId];
+        let ns = 0;
+        let hasRow = false;
+        for (const operationId of memberIds) {
+            const aggregate = overlay.aggregatesByOpId.get(operationId);
+            if (aggregate !== undefined) {
+                ns += aggregate.deviceTimeNs;
+                hasRow = true;
+            }
+        }
+        if (hasRow) {
+            const t = tOfNs(ns);
+            if (t !== null) {
+                styleByNodeId.set(node.id, {
+                    [PERF_BAR_SCALE_VAR]: t,
+                    [PERF_BAR_COLOR_VAR]: perfColorScale(t),
+                } as CSSProperties);
+            }
+        }
     }
     return styleByNodeId;
 };

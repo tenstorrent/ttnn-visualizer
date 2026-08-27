@@ -126,6 +126,16 @@ export interface OpGraphDeviceSubgraph {
     exitFallbackNodeId: string | null;
 }
 
+export interface RepeatBlockInstance {
+    instanceId: string;
+    patternId: string;
+    label: string;
+    patternLabel: string;
+    operationIds: number[];
+    instanceIndex: number;
+    instanceCount: number;
+}
+
 export interface OpGraphBlockSummary {
     instanceId: string;
     operationIds: number[];
@@ -149,6 +159,7 @@ export interface OpGraphNodeIndexEntry {
     operationId: number;
     name: string;
     memberNames?: string[];
+    memberOperationIds?: number[];
 }
 
 export interface OpGraphBuildOptions {
@@ -157,6 +168,8 @@ export interface OpGraphBuildOptions {
     deviceSubgraphs: OpGraphDeviceSubgraph[];
     /** Empty means every detected instance is collapsed. #1583 */
     expandedBlockIds?: readonly string[];
+    /** Worker-only: detection is invariant under fold / device-op expand. */
+    detectedBlocks?: RepeatBlockInstance[];
 }
 
 export type OpGraphWorkerInboundMessage =

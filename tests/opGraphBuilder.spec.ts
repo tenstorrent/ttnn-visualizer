@@ -487,6 +487,44 @@ describe('buildOpGraph', () => {
             expect(edgeBetweenOperations(graph, 3, 4).target).toBe(SECOND_BLOCK_ID);
         });
 
+        it('draws one unlabelled edge between a folded pair, regardless of tensor count', () => {
+            const twoTensors = [
+                operation({
+                    id: 1,
+                    name: 'layer_a',
+                    outputs: [
+                        { label: '[1, 32]', consumers: [2, 3] },
+                        { label: '[1, 64]', consumers: [3] },
+                    ],
+                }),
+                operation({
+                    id: 2,
+                    name: 'layer_b',
+                    outputs: [{ consumers: [3] }],
+                }),
+                operation({
+                    id: 3,
+                    name: 'layer_a',
+                    outputs: [
+                        { label: '[1, 32]', consumers: [4, 5] },
+                        { label: '[1, 64]', consumers: [5] },
+                    ],
+                }),
+                operation({
+                    id: 4,
+                    name: 'layer_b',
+                    outputs: [{ consumers: [5] }],
+                }),
+                operation({ id: 5, name: 'suffix' }),
+            ];
+            const graph = build(twoTensors, false);
+            const between = graph.edges.filter((edge) => edge.source === 'block:0:1' && edge.target === 'block:0:3');
+
+            expect(between).toHaveLength(1);
+            expect(between[0].label).toBeUndefined();
+            expect(between[0].data?.parallelIndex).toBe(0);
+        });
+
         it('does not expand device operations for a member still inside a collapsed block', () => {
             const graph = buildOpGraph(REPEAT_CHAIN, {
                 hideDeallocate: false,

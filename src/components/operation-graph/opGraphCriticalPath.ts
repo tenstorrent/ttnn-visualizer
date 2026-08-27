@@ -5,6 +5,7 @@
 interface CriticalPathNode {
     id: string;
     operationId: number;
+    memberOperationIds?: number[];
 }
 
 interface CriticalPathEdge {
@@ -20,6 +21,8 @@ const UNKNOWN_OP_ID = -1;
 export interface CriticalPath {
     /** Source to sink. */
     opIds: number[];
+    /** Member ops along the path; a folded block counts every member. */
+    opCount: number;
     nodeIds: ReadonlySet<string>;
     edgeIds: ReadonlySet<string>;
     totalNs: number;
@@ -32,6 +35,7 @@ export interface CriticalPath {
 
 export const EMPTY_CRITICAL_PATH: CriticalPath = {
     opIds: [],
+    opCount: 0,
     nodeIds: new Set<string>(),
     edgeIds: new Set<string>(),
     totalNs: 0,
@@ -84,7 +88,18 @@ export const findCriticalPath = (
         }
     }
 
-    const weightOf = (nodeId: string) => deviceTimeNsByOpId.get(opIdByNodeId.get(nodeId) ?? UNKNOWN_OP_ID) ?? 0;
+    const membersByNodeId = new Map<string, number[]>();
+    for (const node of nodes) {
+        membersByNodeId.set(node.id, node.memberOperationIds ?? [node.operationId]);
+    }
+
+    const weightOf = (nodeId: string) => {
+        let total = 0;
+        for (const operationId of membersByNodeId.get(nodeId) ?? []) {
+            total += deviceTimeNsByOpId.get(operationId) ?? 0;
+        }
+        return total;
+    };
 
     const costByNodeId = new Map<string, number>();
     const opCountByNodeId = new Map<string, number>();
@@ -92,7 +107,7 @@ export const findCriticalPath = (
     const predecessorEdgeByNodeId = new Map<string, string>();
     for (const node of nodes) {
         costByNodeId.set(node.id, weightOf(node.id));
-        opCountByNodeId.set(node.id, 1);
+        opCountByNodeId.set(node.id, membersByNodeId.get(node.id)?.length ?? 1);
     }
 
     const byOpId = (left: string, right: string) =>
@@ -110,7 +125,7 @@ export const findCriticalPath = (
 
         for (const edge of outgoingByNodeId.get(nodeId) ?? []) {
             const candidateCost = nodeCost + weightOf(edge.target);
-            const candidateOpCount = nodeOpCount + 1;
+            const candidateOpCount = nodeOpCount + (membersByNodeId.get(edge.target)?.length ?? 1);
             const currentPredecessor = predecessorByNodeId.get(edge.target);
             const isBetter = isPreferredChain(
                 candidateCost - (costByNodeId.get(edge.target) ?? 0),
@@ -169,6 +184,7 @@ export const findCriticalPath = (
 
     return {
         opIds,
+        opCount: opCountByNodeId.get(endNodeId) ?? opIds.length,
         nodeIds,
         edgeIds,
         totalNs: costByNodeId.get(endNodeId) ?? 0,

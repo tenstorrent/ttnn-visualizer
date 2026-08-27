@@ -3,7 +3,14 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import { describe, expect, it } from 'vitest';
-import { detectRepeatBlocks, sumOptional } from '../src/components/operation-graph/opGraphRepeatBlocks';
+import {
+    MAX_DETECT_OPS,
+    MIN_REPEAT_COUNT,
+    MIN_REPEAT_WINDOW,
+    detectRepeatBlocks,
+    formatRepeatPatternLabel,
+    sumOptional,
+} from '../src/components/operation-graph/opGraphRepeatBlocks';
 import type { OpGraphSourceOperation } from '../src/components/operation-graph/opGraphTypes';
 
 interface OperationSpec {
@@ -12,6 +19,7 @@ interface OperationSpec {
     consumers?: number[];
     inputShapes?: string[];
     edgeLabel?: string;
+    fileIdentifier?: string;
 }
 
 const op = ({
@@ -20,16 +28,19 @@ const op = ({
     consumers = [],
     inputShapes,
     edgeLabel = '[1, 32]',
+    fileIdentifier = `model.py:${id}`,
 }: OperationSpec): OpGraphSourceOperation => ({
     id,
     name,
-    fileIdentifier: `model.py:${id}`,
-    outputs: consumers.length === 0 ? [] : [{ edgeLabel, consumers, tensorId: id * 100 }],
+    fileIdentifier,
+    outputs: [{ edgeLabel, consumers, tensorId: id * 100 }],
     deviceOperationCount: 0,
     inputShapes,
 });
 
-const chain = (specs: { id: number; name: string; inputShapes?: string[] }[]): OpGraphSourceOperation[] =>
+const chain = (
+    specs: { id: number; name: string; inputShapes?: string[]; fileIdentifier?: string }[],
+): OpGraphSourceOperation[] =>
     specs.map((spec, index) =>
         op({
             ...spec,
@@ -52,15 +63,19 @@ describe('detectRepeatBlocks', () => {
         ).toEqual([]);
     });
 
-    it('does not collapse a 1-op run, including two identical neighbours', () => {
+    it('does not collapse a 1-op run of identical neighbours', () => {
         expect(
             detectRepeatBlocks(
                 chain([
-                    { id: 1, name: 'a' },
-                    { id: 2, name: 'a' },
+                    { id: 1, name: 'prefix' },
+                    { id: 2, name: 'add' },
+                    { id: 3, name: 'add' },
+                    { id: 4, name: 'suffix' },
                 ]),
             ),
         ).toEqual([]);
+        expect(MIN_REPEAT_WINDOW).toBe(2);
+        expect(MIN_REPEAT_COUNT).toBe(2);
     });
 
     it('collapses two contiguous copies of a 2-op window', () => {
@@ -79,8 +94,8 @@ describe('detectRepeatBlocks', () => {
             [2, 3],
             [4, 5],
         ]);
-        expect(instances[0].label).toBe('Block A × 2');
-        expect(instances[0].patternLabel).toBe('Block A');
+        expect(instances[0].label).toBe('model × 2');
+        expect(instances[0].patternLabel).toBe('model');
         expect(instances.map((instance) => instance.instanceIndex)).toEqual([0, 1]);
         expect(instances[0].instanceCount).toBe(2);
         expect(instances[0].patternId).toBe(instances[1].patternId);
@@ -102,8 +117,7 @@ describe('detectRepeatBlocks', () => {
         ).toEqual([]);
     });
 
-    it('prefers the longest matching window over more copies of a shorter one', () => {
-        // Suffix so the last copy still emits the same outgoing tensor the fingerprint keys on.
+    it('takes the smallest window that repeats, extended maximally', () => {
         const instances = detectRepeatBlocks(
             chain([
                 { id: 1, name: 'a' },
@@ -119,13 +133,38 @@ describe('detectRepeatBlocks', () => {
         );
 
         expect(idsOf(instances)).toEqual([
-            [1, 2, 3, 4],
-            [5, 6, 7, 8],
+            [1, 2],
+            [3, 4],
+            [5, 6],
+            [7, 8],
         ]);
-        expect(instances[0].label).toBe('Block A × 2');
+        expect(instances[0].label).toBe('model × 4');
     });
 
-    it('still takes three copies when no longer window matches', () => {
+    it('reports per-layer copies rather than two half-model blocks', () => {
+        const layer = (start: number): { id: number; name: string }[] => [
+            { id: start, name: 'attn' },
+            { id: start + 1, name: 'mlp' },
+            { id: start + 2, name: 'norm' },
+        ];
+        const instances = detectRepeatBlocks(
+            chain([
+                ...layer(1),
+                ...layer(4),
+                ...layer(7),
+                ...layer(10),
+                ...layer(13),
+                ...layer(16),
+                { id: 19, name: 'suffix' },
+            ]),
+        );
+
+        expect(instances).toHaveLength(6);
+        expect(instances[0].label).toBe('model × 6');
+        expect(instances[0].operationIds).toHaveLength(3);
+    });
+
+    it('does not join the last copy when its leaving tensors differ', () => {
         const instances = detectRepeatBlocks(
             chain([
                 { id: 1, name: 'a' },
@@ -134,17 +173,29 @@ describe('detectRepeatBlocks', () => {
                 { id: 4, name: 'b' },
                 { id: 5, name: 'a' },
                 { id: 6, name: 'b' },
-                { id: 7, name: 'suffix' },
             ]),
         );
 
         expect(idsOf(instances)).toEqual([
             [1, 2],
             [3, 4],
-            [5, 6],
         ]);
-        expect(instances[0].label).toBe('Block A × 3');
-        expect(instances[0].instanceCount).toBe(3);
+        expect(instances[0].label).toBe('model × 2');
+    });
+
+    it("still matches when a dropped op sits on the first copy's outgoing edge", () => {
+        const instances = detectRepeatBlocks([
+            op({ id: 1, name: 'layer_a', consumers: [2] }),
+            op({ id: 2, name: 'layer_b', consumers: [99] }),
+            op({ id: 4, name: 'layer_a', consumers: [5] }),
+            op({ id: 5, name: 'layer_b', consumers: [6] }),
+            op({ id: 6, name: 'suffix' }),
+        ]);
+
+        expect(idsOf(instances)).toEqual([
+            [1, 2],
+            [4, 5],
+        ]);
     });
 
     it('assigns a new letter to a second pattern', () => {
@@ -163,17 +214,35 @@ describe('detectRepeatBlocks', () => {
         );
 
         expect(instances.map((instance) => instance.patternLabel)).toEqual([
-            'Block A',
-            'Block A',
-            'Block B',
-            'Block B',
+            'model',
+            'model',
+            'model · B',
+            'model · B',
         ]);
-        expect(instances[2].label).toBe('Block B × 2');
+        expect(instances[2].label).toBe('model · B × 2');
         expect(instances[2].patternId).not.toBe(instances[0].patternId);
     });
 
+    it('reuses the letter when the same pattern recurs after a gap', () => {
+        const instances = detectRepeatBlocks(
+            chain([
+                { id: 1, name: 'a' },
+                { id: 2, name: 'b' },
+                { id: 3, name: 'a' },
+                { id: 4, name: 'b' },
+                { id: 5, name: 'other' },
+                { id: 6, name: 'a' },
+                { id: 7, name: 'b' },
+                { id: 8, name: 'a' },
+                { id: 9, name: 'b' },
+                { id: 10, name: 'suffix' },
+            ]),
+        );
+
+        expect(instances.map((instance) => instance.patternLabel)).toEqual(['model', 'model', 'model', 'model']);
+    });
+
     it('does not treat matching fingerprints as a repeat when the internal edges differ', () => {
-        // Same names and output labels, but only the first copy connects a → b.
         const operations = [
             op({ id: 1, name: 'a', consumers: [2] }),
             op({ id: 2, name: 'b', consumers: [3] }),
@@ -193,9 +262,101 @@ describe('detectRepeatBlocks', () => {
                     { id: 2, name: 'b' },
                     { id: 3, name: 'a', inputShapes: ['[1, 64]'] },
                     { id: 4, name: 'b' },
+                    { id: 5, name: 'suffix' },
                 ]),
             ),
         ).toEqual([]);
+    });
+
+    it('names a pattern from distinct member files and keeps that name across a gap', () => {
+        const instances = detectRepeatBlocks(
+            chain([
+                { id: 1, name: 'q', fileIdentifier: 'attention.py:1' },
+                { id: 2, name: 'ff', fileIdentifier: 'mlp.py:1' },
+                { id: 3, name: 'q', fileIdentifier: 'attention.py:2' },
+                { id: 4, name: 'ff', fileIdentifier: 'mlp.py:2' },
+                { id: 5, name: 'other', fileIdentifier: 'other.py:1' },
+                { id: 6, name: 'q', fileIdentifier: 'attention.py:3' },
+                { id: 7, name: 'ff', fileIdentifier: 'mlp.py:3' },
+                { id: 8, name: 'q', fileIdentifier: 'attention.py:4' },
+                { id: 9, name: 'ff', fileIdentifier: 'mlp.py:4' },
+                { id: 10, name: 'suffix', fileIdentifier: 'tail.py:1' },
+            ]),
+        );
+
+        expect(instances.map((instance) => instance.patternLabel)).toEqual([
+            'attention + mlp',
+            'attention + mlp',
+            'attention + mlp',
+            'attention + mlp',
+        ]);
+        expect(instances[0].label).toBe('attention + mlp × 2');
+    });
+
+    it('returns nothing above MAX_DETECT_OPS rather than scanning', () => {
+        const operations = Array.from({ length: MAX_DETECT_OPS + 1 }, (_, index) =>
+            op({
+                id: index + 1,
+                name: index % 2 === 0 ? 'a' : 'b',
+                consumers: index < MAX_DETECT_OPS ? [index + 2] : [],
+            }),
+        );
+
+        expect(detectRepeatBlocks(operations)).toEqual([]);
+    });
+});
+
+describe('formatRepeatPatternLabel', () => {
+    it('joins unique file stems and drops lazy_weight when anything else remains', () => {
+        expect(
+            formatRepeatPatternLabel([
+                op({ id: 1, name: 'ttnn.from_torch', fileIdentifier: 'lazy_weight.py:315' }),
+                op({ id: 2, name: 'ttnn.layer_norm', fileIdentifier: 'norm.py:86' }),
+                op({ id: 3, name: 'ttnn.linear', fileIdentifier: 'attention.py:193' }),
+                op({ id: 4, name: 'ttnn.add', fileIdentifier: 'encoder.py:72' }),
+                op({ id: 5, name: 'ttnn.gelu', fileIdentifier: 'mlp.py:112' }),
+                op({ id: 6, name: 'ttnn.add', fileIdentifier: 'encoder.py:78' }),
+            ]),
+        ).toBe('norm + attention + encoder + mlp');
+    });
+
+    it('keeps a plumbing-only window instead of inventing a name', () => {
+        expect(
+            formatRepeatPatternLabel([
+                op({ id: 1, name: 'ttnn.as_tensor', fileIdentifier: 'lazy_weight.py:10' }),
+                op({ id: 2, name: 'ttnn.from_torch', fileIdentifier: 'lazy_weight.py:11' }),
+            ]),
+        ).toBe('lazy_weight');
+    });
+
+    it('uses the single user file when every member shares it', () => {
+        expect(
+            formatRepeatPatternLabel([
+                op({ id: 1, name: 'ttnn.as_tensor', fileIdentifier: 'tt_routed_expert.py:132' }),
+                op({ id: 2, name: 'ttnn.squeeze', fileIdentifier: 'tt_routed_expert.py:163' }),
+            ]),
+        ).toBe('tt_routed_expert');
+    });
+
+    it('falls back to short op names when no file identifier is present', () => {
+        expect(
+            formatRepeatPatternLabel([
+                op({ id: 1, name: 'ttnn.matmul', fileIdentifier: '' }),
+                op({ id: 2, name: 'ttnn.add', fileIdentifier: '' }),
+            ]),
+        ).toBe('matmul + add');
+    });
+
+    it('caps a long file list', () => {
+        expect(
+            formatRepeatPatternLabel([
+                op({ id: 1, name: 'a', fileIdentifier: 'one.py:1' }),
+                op({ id: 2, name: 'b', fileIdentifier: 'two.py:1' }),
+                op({ id: 3, name: 'c', fileIdentifier: 'three.py:1' }),
+                op({ id: 4, name: 'd', fileIdentifier: 'four.py:1' }),
+                op({ id: 5, name: 'e', fileIdentifier: 'five.py:1' }),
+            ]),
+        ).toBe('one + two + three + four + …');
     });
 });
 

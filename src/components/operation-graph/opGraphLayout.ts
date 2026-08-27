@@ -3,6 +3,7 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import dagre from '@dagrejs/dagre';
+import { formatMemorySize, formatSize } from '../../functions/math';
 
 const CHAR_WIDTH = 6.8;
 const FILE_CHAR_WIDTH = 6.2;
@@ -62,6 +63,18 @@ export function estimateOpNodeSize(
     const labelWidth = Math.min(NODE_MAX_WIDTH, Math.max(NODE_MIN_WIDTH, widestLine + NODE_PADDING_X));
     const width = Math.ceil(labelWidth + (hasExpander ? EXPANDER_WIDTH : 0));
     return { width, height: fileIdentifier ? NODE_HEIGHT_WITH_FILE : NODE_HEIGHT };
+}
+
+export function formatBlockMeta(opCount: number, durationSeconds: number, memoryDeltaBytes: number): string {
+    const parts = [`${opCount} ops`];
+    if (durationSeconds > 0) {
+        parts.push(`${formatSize(durationSeconds, 2)} s`);
+    }
+    if (memoryDeltaBytes !== 0) {
+        const sign = memoryDeltaBytes > 0 ? '+' : '-';
+        parts.push(`${sign}${formatMemorySize(Math.abs(memoryDeltaBytes), 0)}`);
+    }
+    return parts.join(' · ');
 }
 
 export function estimateBlockNodeSize(label: string, meta: string): { width: number; height: number } {

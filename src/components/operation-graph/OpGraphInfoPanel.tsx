@@ -231,7 +231,7 @@ const ConnectedOpGroupList = ({ groups, keyPrefix, onLocate }: ConnectedOpGroupL
 
 interface OpGraphBlockPanelProps {
     block: OpGraphBlockSummary;
-    operationList: OperationDescription[];
+    operationById: Map<number, OperationDescription>;
     operationNamesById: Map<number, string>;
     onLocateOperation: (operationId: number) => void;
     isPerfOverlayActive: boolean;
@@ -240,7 +240,7 @@ interface OpGraphBlockPanelProps {
 
 const OpGraphBlockPanel = ({
     block,
-    operationList,
+    operationById,
     operationNamesById,
     onLocateOperation,
     isPerfOverlayActive,
@@ -250,9 +250,9 @@ const OpGraphBlockPanel = ({
     const members = useMemo(
         () =>
             block.operationIds
-                .map((id) => operationList.find((operation) => operation.id === id))
+                .map((id) => operationById.get(id))
                 .filter((operation): operation is OperationDescription => operation !== undefined),
-        [block.operationIds, operationList],
+        [block.operationIds, operationById],
     );
     const inputGroups = useMemo(
         () =>
@@ -377,7 +377,7 @@ const OpGraphBlockPanel = ({
 
 interface OpGraphInfoPanelProps {
     operationId: number;
-    operationList: OperationDescription[];
+    operationById: Map<number, OperationDescription>;
     operationNamesById: Map<number, string>;
     onLocateOperation: (operationId: number) => void;
     isPerfOverlayActive: boolean;
@@ -391,7 +391,7 @@ interface OpGraphInfoPanelProps {
 const OpGraphInfoPanel = memo(
     ({
         operationId,
-        operationList,
+        operationById,
         operationNamesById,
         onLocateOperation,
         isPerfOverlayActive,
@@ -400,7 +400,7 @@ const OpGraphInfoPanel = memo(
         block = null,
     }: OpGraphInfoPanelProps) => {
         const navigate = useNavigate();
-        const operation = operationList.find((op) => op.id === operationId);
+        const operation = operationById.get(operationId);
         const operationSourceData = operation ? extractOperationSourceData(operation) : null;
 
         const inputGroups = useMemo(
@@ -418,7 +418,7 @@ const OpGraphInfoPanel = memo(
             return (
                 <OpGraphBlockPanel
                     block={block}
-                    operationList={operationList}
+                    operationById={operationById}
                     operationNamesById={operationNamesById}
                     onLocateOperation={onLocateOperation}
                     isPerfOverlayActive={isPerfOverlayActive}

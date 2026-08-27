@@ -3,7 +3,8 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import { touchLruCache } from '../../functions/touchLruCache';
-import { buildOpGraph } from './opGraphBuilder';
+import { buildOpGraph, getKeptOperations } from './opGraphBuilder';
+import { detectRepeatBlocks } from './opGraphRepeatBlocks';
 import {
     type OpGraphBuildOptions,
     type OpGraphBuiltGraph,
@@ -11,6 +12,7 @@ import {
     type OpGraphSourceOperation,
     type OpGraphWorkerInboundMessage,
     OpGraphWorkerMessageType,
+    type RepeatBlockInstance,
 } from './opGraphTypes';
 
 // The op-range slider drives builds from Blueprint's continuous `onChange`, so
@@ -29,6 +31,7 @@ const layoutCache = new Map<string, OpGraphBuiltGraph>();
 
 let sourceVersion = -1;
 let operations: OpGraphSourceOperation[] = [];
+const detectionByDeallocate = new Map<boolean, RepeatBlockInstance[]>();
 
 // Keyed on the source version as well as the options. The `SET_GRAPH` clear is
 // what frees the previous report's graphs, but keying on the version too means a
@@ -48,6 +51,16 @@ const cacheKeyOf = (
         .join(',');
     const blocks = [...expandedBlockIds].sort().join(',');
     return `${version}:${hideDeallocate}:${expanded}:${blocks}`;
+};
+
+const detectedBlocksOf = (hideDeallocate: boolean): RepeatBlockInstance[] => {
+    const cached = detectionByDeallocate.get(hideDeallocate);
+    if (cached !== undefined) {
+        return cached;
+    }
+    const blocks = detectRepeatBlocks(getKeptOperations(operations, hideDeallocate));
+    detectionByDeallocate.set(hideDeallocate, blocks);
+    return blocks;
 };
 
 const postError = (requestId: number, error: unknown): void => {
@@ -97,6 +110,7 @@ const drainPendingBuild = (): void => {
             hideDeallocate: request.hideDeallocate,
             deviceSubgraphs: request.deviceSubgraphs,
             expandedBlockIds: request.expandedBlockIds,
+            detectedBlocks: detectedBlocksOf(request.hideDeallocate),
         });
         touchLruCache(layoutCache, cacheKey, graph, LAYOUT_CACHE_LIMIT);
         postMessage({
@@ -117,6 +131,7 @@ onmessage = (event: MessageEvent<OpGraphWorkerInboundMessage>) => {
         sourceVersion = message.sourceVersion;
         operations = message.operations;
         layoutCache.clear();
+        detectionByDeallocate.clear();
         // A build queued against the previous source is moot; the view reissues
         // one for the new source as part of the same change.
         pendingBuild = null;

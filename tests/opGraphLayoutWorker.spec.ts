@@ -20,7 +20,10 @@ const buildOpGraph = vi.hoisted(() =>
     vi.fn<(operations: OpGraphSourceOperation[], options: OpGraphBuildOptions) => OpGraphBuiltGraph>(),
 );
 
-vi.mock('../src/components/operation-graph/opGraphBuilder', () => ({ buildOpGraph }));
+vi.mock('../src/components/operation-graph/opGraphBuilder', () => ({
+    buildOpGraph,
+    getKeptOperations: (operations: OpGraphSourceOperation[]) => operations,
+}));
 
 const OPERATIONS: OpGraphSourceOperation[] = [
     {
@@ -291,6 +294,18 @@ describe('opGraphLayoutWorker', () => {
             drain();
 
             expect(buildOpGraph).toHaveBeenCalledTimes(1);
+        });
+
+        it('reuses the same detection across fold and unroll', async () => {
+            const send = await loadWorker();
+            send(setGraph(1));
+
+            send(build(1, true));
+            drain();
+            send(build(2, true, 1, [], ['block:0:2']));
+            drain();
+
+            expect(buildOpGraph.mock.calls[0][1].detectedBlocks).toBe(buildOpGraph.mock.calls[1][1].detectedBlocks);
         });
 
         it('serves a fold back to a set it has already laid out', async () => {

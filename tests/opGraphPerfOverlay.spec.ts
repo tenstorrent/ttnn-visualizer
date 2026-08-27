@@ -173,6 +173,18 @@ describe('buildPerfNodeStyleByNodeId', () => {
         expect(customProps(styleByNodeId?.get('1'))[PERF_BAR_SCALE_VAR]).toBe(0);
     });
 
+    it('keys a folded block by its node id using the summed member times', () => {
+        const blockOverlay = buildOpGraphPerfOverlay(rows([1, 10], [2, 1_000], [3, 1_000]), true, [1, 2, 3]);
+        const styleByNodeId = buildPerfNodeStyleByNodeId(blockOverlay, true, [
+            { id: '1', operationId: 1 },
+            { id: 'block:0:2', operationId: 2, memberOperationIds: [2, 3] },
+        ]);
+
+        expect(styleByNodeId?.has('block:0:2')).toBe(true);
+        expect(styleByNodeId?.has('2')).toBe(false);
+        expect(customProps(styleByNodeId?.get('block:0:2'))[PERF_BAR_SCALE_VAR]).toBe(1);
+    });
+
     it('colours the bar with the same ramp the side panel swatch uses', () => {
         // The panel swatch is `perfColorScale(score.t)` too, so a divergence
         // shows up as a node and its own detail panel disagreeing.

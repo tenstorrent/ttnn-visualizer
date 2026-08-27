@@ -7,6 +7,7 @@ import {
     type LayoutInputEdge,
     estimateBlockNodeSize,
     estimateOpNodeSize,
+    formatBlockMeta,
     layoutDeviceSubgraph,
     layoutOpGraph,
 } from './opGraphLayout';
@@ -21,6 +22,7 @@ import {
     type OpGraphFlowNode,
     OpGraphNodeType,
     type OpGraphSourceOperation,
+    type RepeatBlockInstance,
     isExpandableOperation,
 } from './opGraphTypes';
 
@@ -50,21 +52,28 @@ function collectCandidateEdges(operations: OpGraphSourceOperation[]): CandidateE
     return candidates;
 }
 
-const BLOCK_META_WIDTH_SAMPLE = '00 ops · 00.00 s · 00.00 MiB';
-
-export function buildOpGraph(
+export function getKeptOperations(
     operations: OpGraphSourceOperation[],
-    { hideDeallocate, deviceSubgraphs, expandedBlockIds = [] }: OpGraphBuildOptions,
-): OpGraphBuiltGraph {
-    const candidates = collectCandidateEdges(operations);
-
+    hideDeallocate: boolean,
+): OpGraphSourceOperation[] {
     // Connectivity is decided before the deallocate filter so hiding deallocate
     // ops cannot drop their neighbours or pull in ops that were always isolated.
+    const candidates = collectCandidateEdges(operations);
     const connected = new Set<number>();
     for (const candidate of candidates) {
         connected.add(candidate.source);
         connected.add(candidate.target);
     }
+    return operations.filter(
+        (operation) => connected.has(operation.id) && !(hideDeallocate && isDeallocate(operation.name)),
+    );
+}
+
+export function buildOpGraph(
+    operations: OpGraphSourceOperation[],
+    { hideDeallocate, deviceSubgraphs, expandedBlockIds = [], detectedBlocks: providedBlocks }: OpGraphBuildOptions,
+): OpGraphBuiltGraph {
+    const candidates = collectCandidateEdges(operations);
 
     const subgraphByOperationId = new Map<number, OpGraphDeviceSubgraph>(
         deviceSubgraphs.map((subgraph) => [subgraph.operationId, subgraph]),
@@ -83,31 +92,25 @@ export function buildOpGraph(
         return subgraph?.entryNodeIdByTensorId[tensorId] ?? subgraph?.entryFallbackNodeId ?? String(operationId);
     };
 
-    const keptOperations: OpGraphSourceOperation[] = [];
-    const kept = new Set<number>();
-    for (const operation of operations) {
-        if (connected.has(operation.id) && !(hideDeallocate && isDeallocate(operation.name))) {
-            kept.add(operation.id);
-            keptOperations.push(operation);
-        }
-    }
+    const keptOperations = getKeptOperations(operations, hideDeallocate);
+    const kept = new Set<number>(keptOperations.map((operation) => operation.id));
 
     const operationById = new Map<number, OpGraphSourceOperation>(
         keptOperations.map((operation) => [operation.id, operation]),
     );
-    const detectedBlocks = detectRepeatBlocks(keptOperations);
+    const detectedBlocks = providedBlocks ?? detectRepeatBlocks(keptOperations);
     const expandedBlocks = new Set<string>(expandedBlockIds);
-    const collapsedInstanceByOpId = new Map<string, (typeof detectedBlocks)[number]>();
+    const collapsedInstanceByOpId = new Map<number, RepeatBlockInstance>();
     for (const instance of detectedBlocks) {
         if (!expandedBlocks.has(instance.instanceId)) {
             for (const operationId of instance.operationIds) {
-                collapsedInstanceByOpId.set(String(operationId), instance);
+                collapsedInstanceByOpId.set(operationId, instance);
             }
         }
     }
 
     const renderedNodeIdOf = (operationId: number): string =>
-        collapsedInstanceByOpId.get(String(operationId))?.instanceId ?? String(operationId);
+        collapsedInstanceByOpId.get(operationId)?.instanceId ?? String(operationId);
 
     const nodes: OpGraphFlowNode[] = [];
     const deviceOpNodes: OpGraphFlowNode[] = [];
@@ -115,7 +118,7 @@ export function buildOpGraph(
     const emittedBlockIds = new Set<string>();
 
     for (const operation of keptOperations) {
-        const collapsedInstance = collapsedInstanceByOpId.get(String(operation.id));
+        const collapsedInstance = collapsedInstanceByOpId.get(operation.id);
         if (collapsedInstance !== undefined) {
             if (!emittedBlockIds.has(collapsedInstance.instanceId)) {
                 emittedBlockIds.add(collapsedInstance.instanceId);
@@ -125,7 +128,8 @@ export function buildOpGraph(
                 const opCount = collapsedInstance.operationIds.length;
                 const durationSeconds = sumOptional(members.map((member) => member.durationSeconds));
                 const memoryDeltaBytes = sumOptional(members.map((member) => member.memoryDeltaBytes));
-                const size = estimateBlockNodeSize(collapsedInstance.label, BLOCK_META_WIDTH_SAMPLE);
+                const meta = formatBlockMeta(opCount, durationSeconds, memoryDeltaBytes);
+                const size = estimateBlockNodeSize(collapsedInstance.label, meta);
                 nodes.push({
                     id: collapsedInstance.instanceId,
                     type: OpGraphNodeType.BLOCK,
@@ -134,7 +138,7 @@ export function buildOpGraph(
                     data: {
                         operationId: collapsedInstance.operationIds[0],
                         label: collapsedInstance.label,
-                        fileIdentifier: '',
+                        fileIdentifier: meta,
                         filterString: collapsedInstance.label,
                         deviceOperationCount: 0,
                         blockInstanceId: collapsedInstance.instanceId,
@@ -232,6 +236,7 @@ export function buildOpGraph(
     }
 
     const parallelCountByPair = new Map<string, number>();
+    const layoutPairSeen = new Set<string>();
     const edges: OpGraphFlowEdge[] = [];
     // Ranking is between operations, so an edge that renders into an expanded node
     // still has to be handed to Dagre as reaching the node itself. Dagre drops edges
@@ -243,24 +248,34 @@ export function buildOpGraph(
             const renderedSource = renderedNodeIdOf(candidate.source);
             const renderedTarget = renderedNodeIdOf(candidate.target);
             if (renderedSource !== renderedTarget) {
-                const pair = `${candidate.source}-${candidate.target}`;
-                const parallelIndex = parallelCountByPair.get(pair) ?? 0;
-                parallelCountByPair.set(pair, parallelIndex + 1);
-                const sourceIsCollapsed = collapsedInstanceByOpId.has(String(candidate.source));
-                const targetIsCollapsed = collapsedInstanceByOpId.has(String(candidate.target));
-                edges.push({
-                    id: `${pair}-${parallelIndex}`,
-                    source: sourceIsCollapsed ? renderedSource : exitNodeIdOf(candidate.source, candidate.tensorId),
-                    target: targetIsCollapsed ? renderedTarget : entryNodeIdOf(candidate.target, candidate.tensorId),
-                    type: OpGraphEdgeType.OP,
-                    label: candidate.label,
-                    data: {
-                        parallelIndex,
-                        sourceOperationId: candidate.source,
-                        targetOperationId: candidate.target,
-                    },
-                });
-                layoutEdges.push({ source: renderedSource, target: renderedTarget });
+                const pair = `${renderedSource}->${renderedTarget}`;
+                const sourceIsCollapsed = collapsedInstanceByOpId.has(candidate.source);
+                const targetIsCollapsed = collapsedInstanceByOpId.has(candidate.target);
+                // A folded block's boundary is the pair, not the tensors: N shapes
+                // between the same two nodes are one dependency drawn N times.
+                const isCollapsedBoundary = sourceIsCollapsed || targetIsCollapsed;
+                if (!(isCollapsedBoundary && layoutPairSeen.has(pair))) {
+                    const parallelIndex = parallelCountByPair.get(pair) ?? 0;
+                    parallelCountByPair.set(pair, parallelIndex + 1);
+                    edges.push({
+                        id: `${candidate.source}-${candidate.target}-${parallelIndex}`,
+                        source: sourceIsCollapsed ? renderedSource : exitNodeIdOf(candidate.source, candidate.tensorId),
+                        target: targetIsCollapsed
+                            ? renderedTarget
+                            : entryNodeIdOf(candidate.target, candidate.tensorId),
+                        type: OpGraphEdgeType.OP,
+                        label: isCollapsedBoundary ? undefined : candidate.label,
+                        data: {
+                            parallelIndex,
+                            sourceOperationId: candidate.source,
+                            targetOperationId: candidate.target,
+                        },
+                    });
+                    if (!layoutPairSeen.has(pair)) {
+                        layoutPairSeen.add(pair);
+                        layoutEdges.push({ source: renderedSource, target: renderedTarget });
+                    }
+                }
             }
         }
     }

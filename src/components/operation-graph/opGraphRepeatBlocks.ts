@@ -4,23 +4,27 @@
 
 /* eslint-disable no-continue -- window scan skips consumed spans instead of nesting four levels */
 
-import type { OpGraphSourceOperation } from './opGraphTypes';
+import type { OpGraphSourceOperation, RepeatBlockInstance } from './opGraphTypes';
 
 export const MIN_REPEAT_WINDOW = 2;
 export const MIN_REPEAT_COUNT = 2;
+// A repeated subgraph is a layer, not half the graph. Descending from ⌊N/2⌋
+// made the no-repeat case — the common one — O(N³) and folded 12 layers into
+// two half-model blocks. #1583
+export const MAX_REPEAT_WINDOW = 64;
+// 4k–8k op graphs are real (#1809). Past this the scan is skipped rather than
+// competing with Dagre; the main-thread fallback calls the same detector.
+export const MAX_DETECT_OPS = 10_000;
+// Consumer not in the kept list still counts as a leaving edge so hide-deallocate
+// cannot erase the first copy's outgoing tensor and miss the run.
+const OUTSIDE_KEPT = -1;
+// Weight-dump helpers share one file and drown the modules that identify the
+// layer. Keep them only when every member is plumbing.
+const PLUMBING_FILE_STEMS = new Set(['lazy_weight']);
+const MAX_PATTERN_NAME_PARTS = 4;
 
-export interface RepeatBlockInstance {
-    instanceId: string;
-    patternId: string;
-    label: string;
-    patternLabel: string;
-    operationIds: number[];
-    instanceIndex: number;
-    instanceCount: number;
-}
-
-interface InternalEdge {
-    target: number;
+interface OutgoingEdge {
+    targetIndex: number;
     label: string;
 }
 
@@ -30,20 +34,41 @@ const fingerprintOf = (operation: OpGraphSourceOperation): string => {
     return `${operation.name}|${inputs}|${outputs}`;
 };
 
-const windowKey = (fingerprints: string[], start: number, length: number): string =>
-    fingerprints.slice(start, start + length).join(';');
+const internFingerprints = (fingerprints: readonly string[]): number[] => {
+    const idByFingerprint = new Map<string, number>();
+    const ids: number[] = [];
+    for (const fingerprint of fingerprints) {
+        let id = idByFingerprint.get(fingerprint);
+        if (id === undefined) {
+            id = idByFingerprint.size + 1;
+            idByFingerprint.set(fingerprint, id);
+        }
+        ids.push(id);
+    }
+    return ids;
+};
 
-const internalEdgeSignature = (
-    operationIds: number[],
-    edgesBySource: ReadonlyMap<number, readonly InternalEdge[]>,
-): string => {
-    const indexById = new Map<number, number>(operationIds.map((id, index) => [id, index]));
+const idsEqual = (ids: readonly number[], left: number, right: number, length: number): boolean => {
+    for (let offset = 0; offset < length; offset++) {
+        if (ids[left + offset] !== ids[right + offset]) {
+            return false;
+        }
+    }
+    return true;
+};
+
+// Internal edges as `i->j:label`; edges that leave the window as `i->out:label`.
+// The out-edges are what keep a terminal copy from joining when its last op no
+// longer feeds the next copy — fingerprint equality only sees output labels.
+const windowStructure = (start: number, length: number, outgoing: readonly (readonly OutgoingEdge[])[]): string => {
+    const end = start + length;
     const parts: string[] = [];
-    for (let index = 0; index < operationIds.length; index++) {
-        for (const edge of edgesBySource.get(operationIds[index]) ?? []) {
-            const targetIndex = indexById.get(edge.target);
-            if (targetIndex !== undefined) {
-                parts.push(`${index}->${targetIndex}:${edge.label}`);
+    for (let offset = 0; offset < length; offset++) {
+        for (const edge of outgoing[start + offset]) {
+            if (edge.targetIndex >= start && edge.targetIndex < end) {
+                parts.push(`${offset}->${edge.targetIndex - start}:${edge.label}`);
+            } else {
+                parts.push(`${offset}->out:${edge.label}`);
             }
         }
     }
@@ -61,6 +86,98 @@ const blockLetter = (index: number): string => {
     return label;
 };
 
+const fileStemOf = (fileIdentifier: string): string => {
+    if (!fileIdentifier) {
+        return '';
+    }
+    const withoutLine = fileIdentifier.replace(/:\d+$/, '');
+    const base = withoutLine.split('/').pop() ?? withoutLine;
+    return base.replace(/\.py$/i, '');
+};
+
+const uniqueFileStems = (operations: readonly OpGraphSourceOperation[], dropPlumbing: boolean): string[] => {
+    const stems: string[] = [];
+    const seen = new Set<string>();
+    for (const operation of operations) {
+        const stem = fileStemOf(operation.fileIdentifier);
+        if (!stem || seen.has(stem) || (dropPlumbing && PLUMBING_FILE_STEMS.has(stem))) {
+            continue;
+        }
+        seen.add(stem);
+        stems.push(stem);
+    }
+    return stems;
+};
+
+const shortOperationName = (name: string): string => {
+    const trimmed = name.trim();
+    if (!trimmed) {
+        return '';
+    }
+    const parts = trimmed.split(/::|\./);
+    return parts[parts.length - 1] || trimmed;
+};
+
+const uniqueShortOpNames = (operations: readonly OpGraphSourceOperation[]): string[] => {
+    const names: string[] = [];
+    const seen = new Set<string>();
+    for (const operation of operations) {
+        const short = shortOperationName(operation.name);
+        if (!short || seen.has(short)) {
+            continue;
+        }
+        seen.add(short);
+        names.push(short);
+    }
+    return names;
+};
+
+const joinCapped = (parts: readonly string[]): string => {
+    if (parts.length <= MAX_PATTERN_NAME_PARTS) {
+        return parts.join(' + ');
+    }
+    return `${parts.slice(0, MAX_PATTERN_NAME_PARTS).join(' + ')} + …`;
+};
+
+export function formatRepeatPatternLabel(members: readonly OpGraphSourceOperation[]): string {
+    const withoutPlumbing = uniqueFileStems(members, true);
+    if (withoutPlumbing.length > 0) {
+        return joinCapped(withoutPlumbing);
+    }
+    const allStems = uniqueFileStems(members, false);
+    if (allStems.length > 0) {
+        return joinCapped(allStems);
+    }
+    return joinCapped(uniqueShortOpNames(members));
+}
+
+const labelForPattern = (
+    patternId: string,
+    members: readonly OpGraphSourceOperation[],
+    labelByPatternId: Map<string, string>,
+    collisionCountBySummary: Map<string, number>,
+    anonymousCount: { value: number },
+): string => {
+    const existing = labelByPatternId.get(patternId);
+    if (existing !== undefined) {
+        return existing;
+    }
+
+    const summary = formatRepeatPatternLabel(members);
+    if (!summary) {
+        const label = `Block ${blockLetter(anonymousCount.value)}`;
+        anonymousCount.value += 1;
+        labelByPatternId.set(patternId, label);
+        return label;
+    }
+
+    const prior = collisionCountBySummary.get(summary) ?? 0;
+    collisionCountBySummary.set(summary, prior + 1);
+    const label = prior === 0 ? summary : `${summary} · ${blockLetter(prior)}`;
+    labelByPatternId.set(patternId, label);
+    return label;
+};
+
 const isRangeConsumed = (consumed: Uint8Array, start: number, length: number): boolean => {
     for (let offset = 0; offset < length; offset++) {
         if (consumed[start + offset]) {
@@ -75,35 +192,34 @@ const markConsumed = (consumed: Uint8Array, start: number, length: number): void
 };
 
 /**
- * Longest contiguous, structurally equal windows first. A 1-op run is the
- * common "same name twice" case and is too noisy to collapse.
+ * Smallest window that repeats, extended as far as it matches. A 1-op run is
+ * the common "same name twice" case and is too noisy to collapse.
  */
 export function detectRepeatBlocks(keptOperations: readonly OpGraphSourceOperation[]): RepeatBlockInstance[] {
     const count = keptOperations.length;
-    if (count < MIN_REPEAT_WINDOW * MIN_REPEAT_COUNT) {
+    if (count < MIN_REPEAT_WINDOW * MIN_REPEAT_COUNT || count > MAX_DETECT_OPS) {
         return [];
     }
 
     const fingerprints = keptOperations.map(fingerprintOf);
+    const ids = internFingerprints(fingerprints);
     const operationIds = keptOperations.map((operation) => operation.id);
-    const keptIds = new Set<number>(operationIds);
-    const edgesBySource = new Map<number, InternalEdge[]>();
-    for (const operation of keptOperations) {
-        const outgoing: InternalEdge[] = [];
-        for (const output of operation.outputs) {
+    const indexById = new Map<number, number>(operationIds.map((id, index) => [id, index]));
+    const outgoing: OutgoingEdge[][] = operationIds.map(() => []);
+    for (let sourceIndex = 0; sourceIndex < count; sourceIndex++) {
+        for (const output of keptOperations[sourceIndex].outputs) {
             for (const consumer of output.consumers) {
-                if (keptIds.has(consumer)) {
-                    outgoing.push({ target: consumer, label: output.edgeLabel });
-                }
+                const targetIndex = indexById.get(consumer) ?? OUTSIDE_KEPT;
+                outgoing[sourceIndex].push({ targetIndex, label: output.edgeLabel });
             }
         }
-        edgesBySource.set(operation.id, outgoing);
     }
 
     const consumed = new Uint8Array(count);
     const runs: { start: number; length: number; repeatCount: number }[] = [];
+    const maxLength = Math.min(MAX_REPEAT_WINDOW, Math.floor(count / MIN_REPEAT_COUNT));
 
-    for (let length = Math.floor(count / MIN_REPEAT_COUNT); length >= MIN_REPEAT_WINDOW; length--) {
+    for (let length = MIN_REPEAT_WINDOW; length <= maxLength; length++) {
         let start = 0;
         while (start <= count - length * MIN_REPEAT_COUNT) {
             if (consumed[start] || isRangeConsumed(consumed, start, length)) {
@@ -111,52 +227,65 @@ export function detectRepeatBlocks(keptOperations: readonly OpGraphSourceOperati
                 continue;
             }
 
-            const key = windowKey(fingerprints, start, length);
-            const structure = internalEdgeSignature(operationIds.slice(start, start + length), edgesBySource);
-            let repeatCount = 1;
+            const nextStart = start + length;
+            if (isRangeConsumed(consumed, nextStart, length) || !idsEqual(ids, start, nextStart, length)) {
+                start += 1;
+                continue;
+            }
+
+            const structure = windowStructure(start, length, outgoing);
+            if (windowStructure(nextStart, length, outgoing) !== structure) {
+                start += 1;
+                continue;
+            }
+
+            let repeatCount = 2;
             while (start + (repeatCount + 1) * length <= count) {
-                const nextStart = start + repeatCount * length;
-                if (isRangeConsumed(consumed, nextStart, length)) {
+                const following = start + repeatCount * length;
+                if (isRangeConsumed(consumed, following, length)) {
                     break;
                 }
-                if (windowKey(fingerprints, nextStart, length) !== key) {
+                if (!idsEqual(ids, start, following, length)) {
                     break;
                 }
-                const nextIds = operationIds.slice(nextStart, nextStart + length);
-                if (internalEdgeSignature(nextIds, edgesBySource) !== structure) {
+                if (windowStructure(following, length, outgoing) !== structure) {
                     break;
                 }
                 repeatCount += 1;
             }
 
-            if (repeatCount >= MIN_REPEAT_COUNT) {
-                const span = repeatCount * length;
-                runs.push({ start, length, repeatCount });
-                markConsumed(consumed, start, span);
-                start += span;
-                continue;
-            }
-
-            start += 1;
+            const span = repeatCount * length;
+            runs.push({ start, length, repeatCount });
+            markConsumed(consumed, start, span);
+            start += span;
         }
     }
 
     runs.sort((left, right) => left.start - right.start);
 
+    const labelByPatternId = new Map<string, string>();
+    const collisionCountBySummary = new Map<string, number>();
+    const anonymousCount = { value: 0 };
     const instances: RepeatBlockInstance[] = [];
-    runs.forEach((run, patternIndex) => {
-        const patternLabel = `Block ${blockLetter(patternIndex)}`;
-        const firstIds = operationIds.slice(run.start, run.start + run.length);
-        const patternId = `${windowKey(fingerprints, run.start, run.length)}#${internalEdgeSignature(firstIds, edgesBySource)}`;
+    runs.forEach((run, runIndex) => {
+        const patternId = `${ids.slice(run.start, run.start + run.length).join(',')}#${windowStructure(run.start, run.length, outgoing)}`;
+        const members = keptOperations.slice(run.start, run.start + run.length);
+        const patternLabel = labelForPattern(
+            patternId,
+            members,
+            labelByPatternId,
+            collisionCountBySummary,
+            anonymousCount,
+        );
         for (let instanceIndex = 0; instanceIndex < run.repeatCount; instanceIndex++) {
             const instanceStart = run.start + instanceIndex * run.length;
-            const ids = operationIds.slice(instanceStart, instanceStart + run.length);
+            const memberIds = operationIds.slice(instanceStart, instanceStart + run.length);
             instances.push({
-                instanceId: `block:${patternIndex}:${ids[0]}`,
+                instanceId: `block:${runIndex}:${memberIds[0]}`,
                 patternId,
                 label: `${patternLabel} × ${run.repeatCount}`,
                 patternLabel,
-                operationIds: ids,
+                operationIds: memberIds,
                 instanceIndex,
                 instanceCount: run.repeatCount,
             });
