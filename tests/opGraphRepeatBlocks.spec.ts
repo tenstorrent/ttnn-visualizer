@@ -94,8 +94,8 @@ describe('detectRepeatBlocks', () => {
             [2, 3],
             [4, 5],
         ]);
-        expect(instances[0].label).toBe('model × 2');
-        expect(instances[0].patternLabel).toBe('model');
+        expect(instances[0].label).toBe('layer_a + layer_b × 2');
+        expect(instances[0].patternLabel).toBe('layer_a + layer_b');
         expect(instances.map((instance) => instance.instanceIndex)).toEqual([0, 1]);
         expect(instances[0].instanceCount).toBe(2);
         expect(instances[0].patternId).toBe(instances[1].patternId);
@@ -138,7 +138,7 @@ describe('detectRepeatBlocks', () => {
             [5, 6],
             [7, 8],
         ]);
-        expect(instances[0].label).toBe('model × 4');
+        expect(instances[0].label).toBe('a + b × 4');
     });
 
     it('reports per-layer copies rather than two half-model blocks', () => {
@@ -160,7 +160,7 @@ describe('detectRepeatBlocks', () => {
         );
 
         expect(instances).toHaveLength(6);
-        expect(instances[0].label).toBe('model × 6');
+        expect(instances[0].label).toBe('attn + mlp + norm × 6');
         expect(instances[0].operationIds).toHaveLength(3);
     });
 
@@ -180,7 +180,7 @@ describe('detectRepeatBlocks', () => {
             [1, 2],
             [3, 4],
         ]);
-        expect(instances[0].label).toBe('model × 2');
+        expect(instances[0].label).toBe('a + b × 2');
     });
 
     it("still matches when a dropped op sits on the first copy's outgoing edge", () => {
@@ -198,7 +198,7 @@ describe('detectRepeatBlocks', () => {
         ]);
     });
 
-    it('assigns a new letter to a second pattern', () => {
+    it('names a second pattern from its own ops', () => {
         const instances = detectRepeatBlocks(
             chain([
                 { id: 1, name: 'a' },
@@ -213,13 +213,8 @@ describe('detectRepeatBlocks', () => {
             ]),
         );
 
-        expect(instances.map((instance) => instance.patternLabel)).toEqual([
-            'model',
-            'model',
-            'model · B',
-            'model · B',
-        ]);
-        expect(instances[2].label).toBe('model · B × 2');
+        expect(instances.map((instance) => instance.patternLabel)).toEqual(['a + b', 'a + b', 'c + d', 'c + d']);
+        expect(instances[2].label).toBe('c + d × 2');
         expect(instances[2].patternId).not.toBe(instances[0].patternId);
     });
 
@@ -239,7 +234,7 @@ describe('detectRepeatBlocks', () => {
             ]),
         );
 
-        expect(instances.map((instance) => instance.patternLabel)).toEqual(['model', 'model', 'model', 'model']);
+        expect(instances.map((instance) => instance.patternLabel)).toEqual(['a + b', 'a + b', 'a + b', 'a + b']);
     });
 
     it('does not treat matching fingerprints as a repeat when the internal edges differ', () => {
@@ -320,22 +315,44 @@ describe('formatRepeatPatternLabel', () => {
         ).toBe('norm + attention + encoder + mlp');
     });
 
-    it('keeps a plumbing-only window instead of inventing a name', () => {
+    it('names a plumbing-only window from its ops', () => {
         expect(
             formatRepeatPatternLabel([
                 op({ id: 1, name: 'ttnn.as_tensor', fileIdentifier: 'lazy_weight.py:10' }),
                 op({ id: 2, name: 'ttnn.from_torch', fileIdentifier: 'lazy_weight.py:11' }),
             ]),
-        ).toBe('lazy_weight');
+        ).toBe('as_tensor + from_torch');
     });
 
-    it('uses the single user file when every member shares it', () => {
+    it('keeps a module file that is not most of the graph', () => {
+        const members = [
+            op({ id: 1, name: 'ttnn.as_tensor', fileIdentifier: 'tt_routed_expert.py:132' }),
+            op({ id: 2, name: 'ttnn.squeeze', fileIdentifier: 'tt_routed_expert.py:163' }),
+        ];
         expect(
-            formatRepeatPatternLabel([
-                op({ id: 1, name: 'ttnn.as_tensor', fileIdentifier: 'tt_routed_expert.py:132' }),
-                op({ id: 2, name: 'ttnn.squeeze', fileIdentifier: 'tt_routed_expert.py:163' }),
+            formatRepeatPatternLabel(members, [
+                ...members,
+                op({ id: 10, name: 'ttnn.matmul', fileIdentifier: 'tt_moe.py:1' }),
+                op({ id: 11, name: 'ttnn.add', fileIdentifier: 'tt_moe_gate_prefill.py:1' }),
             ]),
         ).toBe('tt_routed_expert');
+    });
+
+    it('names from ops when the only file is the whole model', () => {
+        const members = [
+            op({ id: 1, name: 'ttnn.add_', fileIdentifier: 'ttnn_functional_resnet50.py:260' }),
+            op({ id: 2, name: 'ttnn.conv2d', fileIdentifier: 'ttnn_functional_resnet50.py:196' }),
+            op({ id: 3, name: 'ttnn.conv2d', fileIdentifier: 'ttnn_functional_resnet50.py:196' }),
+            op({ id: 4, name: 'ttnn.conv2d', fileIdentifier: 'ttnn_functional_resnet50.py:196' }),
+        ];
+        const rest = Array.from({ length: 20 }, (_, index) =>
+            op({
+                id: 10 + index,
+                name: 'ttnn.conv2d',
+                fileIdentifier: 'ttnn_functional_resnet50.py:100',
+            }),
+        );
+        expect(formatRepeatPatternLabel(members, [...members, ...rest])).toBe('add_ + conv2d');
     });
 
     it('falls back to short op names when no file identifier is present', () => {

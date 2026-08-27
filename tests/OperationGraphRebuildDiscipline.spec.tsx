@@ -197,11 +197,16 @@ import type { ReportFolder } from '../src/definitions/Reports';
 
 const FILTER_DEBOUNCE_MS = 120;
 
-const operation = (id: number, name: string, consumers: number[]): OperationDescription =>
+const operation = (
+    id: number,
+    name: string,
+    consumers: number[],
+    fileIdentifier = `model.py:${id}`,
+): OperationDescription =>
     ({
         id,
         name,
-        operationFileIdentifier: `model.py:${id}`,
+        operationFileIdentifier: fileIdentifier,
         // Tensor ids matter once an operation expands: they are how an edge finds
         // the device operation at the far end of the boundary.
         outputs: [{ id: id * 10, shape: 'Shape([1, 32])', consumers }],
@@ -1295,8 +1300,24 @@ describe('OperationGraphReactFlow repeat blocks', () => {
         );
     });
 
-    it('counts buried filter matches on the collapsed node and in the counter', () => {
+    it('counts a folded block as a visible match when the query hits its label', () => {
         renderGraph(REPEAT_OPERATION_LIST);
+        typeFilter('layer_a');
+
+        expect(screen.getByText('2 matches')).toBeInTheDocument();
+        expect(screen.queryByText(/\+2 inside/)).toBeNull();
+    });
+
+    it('counts buried filter matches when the query hits a member but not the label', () => {
+        const operations: OperationDescription[] = [
+            operation(1, 'prefix', [2]),
+            operation(2, 'layer_a', [3], 'attention.py:1'),
+            operation(3, 'layer_b', [4], 'mlp.py:1'),
+            operation(4, 'layer_a', [5], 'attention.py:2'),
+            operation(5, 'layer_b', [6], 'mlp.py:2'),
+            operation(6, 'suffix', []),
+        ];
+        renderGraph(operations);
         typeFilter('layer_a');
 
         expect(screen.getByText('2 matches (+2 inside)')).toBeInTheDocument();
@@ -1312,7 +1333,7 @@ describe('OperationGraphReactFlow repeat blocks', () => {
         });
 
         const panel = screen.getByLabelText('Selected block details');
-        expect(panel).toHaveTextContent('model × 2');
+        expect(panel).toHaveTextContent('layer_a + layer_b × 2');
         expect(panel).toHaveTextContent('ops 2–3 · instance 1 of 2');
         expect(screen.queryByRole('button', { name: /Memory Details/ })).toBeNull();
         expect(screen.queryByLabelText('Selected operation details')).toBeNull();
@@ -1444,7 +1465,7 @@ describe('OperationGraphReactFlow repeat blocks', () => {
         });
         deliver(REPEAT_OPERATION_LIST, { expandedBlockIds: [] });
 
-        expect(screen.getByLabelText('Selected block details')).toHaveTextContent('model × 2');
+        expect(screen.getByLabelText('Selected block details')).toHaveTextContent('layer_a + layer_b × 2');
         expect(hasClass(nodeById(lastFlowRender().nodes, FIRST_BLOCK_ID), 'op-graph-node-selected')).toBe(true);
         expect(hasClass(nodeById(lastFlowRender().nodes, '1'), 'op-graph-node-selected')).toBe(false);
     });

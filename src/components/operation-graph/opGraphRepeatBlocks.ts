@@ -22,6 +22,9 @@ const OUTSIDE_KEPT = -1;
 // layer. Keep them only when every member is plumbing.
 const PLUMBING_FILE_STEMS = new Set(['lazy_weight']);
 const MAX_PATTERN_NAME_PARTS = 4;
+// A file on most of the graph is the model (ttnn_functional_resnet50), not the
+// tile. Drop it and name from ops. Module files stay under this.
+const GLOBAL_FILE_FRACTION = 0.75;
 
 interface OutgoingEdge {
     targetIndex: number;
@@ -139,21 +142,45 @@ const joinCapped = (parts: readonly string[]): string => {
     return `${parts.slice(0, MAX_PATTERN_NAME_PARTS).join(' + ')} + …`;
 };
 
-export function formatRepeatPatternLabel(members: readonly OpGraphSourceOperation[]): string {
-    const withoutPlumbing = uniqueFileStems(members, true);
-    if (withoutPlumbing.length > 0) {
-        return joinCapped(withoutPlumbing);
+const globalFileStems = (operations: readonly OpGraphSourceOperation[]): Set<string> => {
+    const counts = new Map<string, number>();
+    for (const operation of operations) {
+        const stem = fileStemOf(operation.fileIdentifier);
+        if (!stem || PLUMBING_FILE_STEMS.has(stem)) {
+            continue;
+        }
+        counts.set(stem, (counts.get(stem) ?? 0) + 1);
     }
-    const allStems = uniqueFileStems(members, false);
-    if (allStems.length > 0) {
-        return joinCapped(allStems);
+    const threshold = operations.length * GLOBAL_FILE_FRACTION;
+    const stems = new Set<string>();
+    for (const [stem, count] of counts) {
+        if (count > threshold) {
+            stems.add(stem);
+        }
     }
-    return joinCapped(uniqueShortOpNames(members));
+    return stems;
+};
+
+export function formatRepeatPatternLabel(
+    members: readonly OpGraphSourceOperation[],
+    graphOperations: readonly OpGraphSourceOperation[] = members,
+): string {
+    const globalStems = globalFileStems(graphOperations);
+    const moduleStems = uniqueFileStems(members, true).filter((stem) => !globalStems.has(stem));
+    if (moduleStems.length > 0) {
+        return joinCapped(moduleStems);
+    }
+    const opNames = uniqueShortOpNames(members);
+    if (opNames.length > 0) {
+        return joinCapped(opNames);
+    }
+    return joinCapped(uniqueFileStems(members, false));
 }
 
 const labelForPattern = (
     patternId: string,
     members: readonly OpGraphSourceOperation[],
+    graphOperations: readonly OpGraphSourceOperation[],
     labelByPatternId: Map<string, string>,
     collisionCountBySummary: Map<string, number>,
     anonymousCount: { value: number },
@@ -163,7 +190,7 @@ const labelForPattern = (
         return existing;
     }
 
-    const summary = formatRepeatPatternLabel(members);
+    const summary = formatRepeatPatternLabel(members, graphOperations);
     if (!summary) {
         const label = `Block ${blockLetter(anonymousCount.value)}`;
         anonymousCount.value += 1;
@@ -273,6 +300,7 @@ export function detectRepeatBlocks(keptOperations: readonly OpGraphSourceOperati
         const patternLabel = labelForPattern(
             patternId,
             members,
+            keptOperations,
             labelByPatternId,
             collisionCountBySummary,
             anonymousCount,
