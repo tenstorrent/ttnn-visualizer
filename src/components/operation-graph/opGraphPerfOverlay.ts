@@ -131,6 +131,71 @@ export const buildOpGraphPerfOverlay = (
     };
 };
 
+interface RenderedPerfNode {
+    id: string;
+    operationId: number;
+    memberOperationIds?: number[];
+}
+
+/**
+ * Device time per rendered node, a folded block summing its members. Nodes with
+ * no linked row — or only zero-duration ones — are absent rather than zero, so
+ * they neither take a bar nor drag the scale's floor down to nothing.
+ */
+const sumNsByRenderedNode = (overlay: OpGraphPerfOverlay, nodes: readonly RenderedPerfNode[]): Map<string, number> => {
+    const nsByNodeId = new Map<string, number>();
+    for (const node of nodes) {
+        const memberIds = node.memberOperationIds ?? [node.operationId];
+        let ns = 0;
+        for (const operationId of memberIds) {
+            ns += overlay.aggregatesByOpId.get(operationId)?.deviceTimeNs ?? 0;
+        }
+        if (ns > 0) {
+            nsByNodeId.set(node.id, ns);
+        }
+    }
+    return nsByNodeId;
+};
+
+/**
+ * The duration range the node bars are actually drawn against, which the legend
+ * is the key for. A folded block's bar stands for the sum of its members, so
+ * that sum — not the per-operation range on the overlay — is what the ramp has
+ * to span: scored against the per-operation range a block outruns the slowest
+ * single op and every block clamped to 1, and when the member rows all shared a
+ * duration `minNs === maxNs` forced every block to 0. #1944
+ */
+const spanOfTotals = (
+    nsByNodeId: Map<string, number>,
+    fallback: { minNs: number; maxNs: number },
+): { minNs: number; maxNs: number } => {
+    if (nsByNodeId.size === 0) {
+        return fallback;
+    }
+    let minNs = Infinity;
+    let maxNs = -Infinity;
+    for (const ns of nsByNodeId.values()) {
+        if (ns < minNs) {
+            minNs = ns;
+        }
+        if (ns > maxNs) {
+            maxNs = ns;
+        }
+    }
+    return { minNs, maxNs };
+};
+
+export const getRenderedPerfRange = (
+    overlay: OpGraphPerfOverlay,
+    nodes?: readonly RenderedPerfNode[],
+): { minNs: number; maxNs: number } => {
+    const perOperationRange = { minNs: overlay.minNs, maxNs: overlay.maxNs };
+    if (nodes === undefined) {
+        return perOperationRange;
+    }
+    return spanOfTotals(sumNsByRenderedNode(overlay, nodes), perOperationRange);
+};
+
 /**
  * Style patch by node id, or `null` when the overlay is off so the caller can
  * skip the styling pass. Custom properties only: `className` already carries
@@ -139,22 +204,11 @@ export const buildOpGraphPerfOverlay = (
 export const buildPerfNodeStyleByNodeId = (
     overlay: OpGraphPerfOverlay,
     isActive: boolean,
-    nodes?: readonly { id: string; operationId: number; memberOperationIds?: number[] }[],
+    nodes?: readonly RenderedPerfNode[],
 ): Map<string, CSSProperties> | null => {
     if (!isActive) {
         return null;
     }
-    const tOfNs = (ns: number): number | null => {
-        if (ns <= 0) {
-            return null;
-        }
-        if (overlay.minNs === overlay.maxNs) {
-            return 0;
-        }
-        const logMin = Math.log10(overlay.minNs);
-        const range = Math.log10(overlay.maxNs) - logMin;
-        return Math.min(1, Math.max(0, (Math.log10(ns) - logMin) / range));
-    };
 
     const styleByNodeId = new Map<string, CSSProperties>();
     if (nodes === undefined) {
@@ -167,26 +221,19 @@ export const buildPerfNodeStyleByNodeId = (
         return styleByNodeId;
     }
 
-    for (const node of nodes) {
-        const memberIds = node.memberOperationIds ?? [node.operationId];
-        let ns = 0;
-        let hasRow = false;
-        for (const operationId of memberIds) {
-            const aggregate = overlay.aggregatesByOpId.get(operationId);
-            if (aggregate !== undefined) {
-                ns += aggregate.deviceTimeNs;
-                hasRow = true;
-            }
-        }
-        if (hasRow) {
-            const t = tOfNs(ns);
-            if (t !== null) {
-                styleByNodeId.set(node.id, {
-                    [PERF_BAR_SCALE_VAR]: t,
-                    [PERF_BAR_COLOR_VAR]: perfColorScale(t),
-                } as CSSProperties);
-            }
-        }
+    const nsByNodeId = sumNsByRenderedNode(overlay, nodes);
+    const { minNs, maxNs } = spanOfTotals(nsByNodeId, { minNs: overlay.minNs, maxNs: overlay.maxNs });
+    const logMin = Math.log10(minNs);
+    const range = Math.log10(maxNs) - logMin;
+
+    for (const [nodeId, ns] of nsByNodeId) {
+        // As in `scoreOps`: one distinct total across the graph carries no
+        // ranking signal, so nothing is heated rather than everything.
+        const t = minNs === maxNs ? 0 : Math.min(1, Math.max(0, (Math.log10(ns) - logMin) / range));
+        styleByNodeId.set(nodeId, {
+            [PERF_BAR_SCALE_VAR]: t,
+            [PERF_BAR_COLOR_VAR]: perfColorScale(t),
+        } as CSSProperties);
     }
     return styleByNodeId;
 };

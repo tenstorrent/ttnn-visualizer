@@ -11,6 +11,7 @@ import {
     buildOpGraphPerfOverlay,
     buildPerfNodeStyleByNodeId,
     getPerfHoverLabel,
+    getRenderedPerfRange,
 } from '../src/components/operation-graph/opGraphPerfOverlay';
 import { NO_PERF_DATA_LABEL, PerfOverlayStatus } from '../src/definitions/PerfOverlayStatus';
 import { formatDuration } from '../src/functions/formatting';
@@ -185,12 +186,69 @@ describe('buildPerfNodeStyleByNodeId', () => {
         expect(customProps(styleByNodeId?.get('block:0:2'))[PERF_BAR_SCALE_VAR]).toBe(1);
     });
 
+    it('ranks folded blocks against each other rather than clamping them all hot (#1944)', () => {
+        // Both blocks outrun the slowest single op, so scoring their totals
+        // against the per-operation range pinned each of them to 1 and a slow
+        // layer was indistinguishable from a fast one.
+        const blockOverlay = buildOpGraphPerfOverlay(
+            rows([1, 100], [2, 100], [3, 100], [4, 100], [5, 100], [6, 100], [7, 100], [8, 100], [9, 100]),
+            true,
+            [1, 2, 3, 4, 5, 6, 7, 8, 9],
+        );
+        const styleByNodeId = buildPerfNodeStyleByNodeId(blockOverlay, true, [
+            { id: 'block:0:1', operationId: 1, memberOperationIds: [1, 2, 3] },
+            { id: 'block:1:4', operationId: 4, memberOperationIds: [4, 5, 6, 7, 8, 9] },
+        ]);
+
+        const small = customProps(styleByNodeId?.get('block:0:1'))[PERF_BAR_SCALE_VAR] as number;
+        const large = customProps(styleByNodeId?.get('block:1:4'))[PERF_BAR_SCALE_VAR] as number;
+        expect(small).toBe(0);
+        expect(large).toBe(1);
+    });
+
+    it('still separates a block from an ordinary node when every row shares a duration (#1944)', () => {
+        // The per-operation range collapses to a point here, which used to force
+        // `t = 0` on everything — including a block worth three times any node.
+        const blockOverlay = buildOpGraphPerfOverlay(rows([1, 100], [2, 100], [3, 100], [4, 100]), true, [1, 2, 3, 4]);
+        const styleByNodeId = buildPerfNodeStyleByNodeId(blockOverlay, true, [
+            { id: '1', operationId: 1 },
+            { id: 'block:0:2', operationId: 2, memberOperationIds: [2, 3, 4] },
+        ]);
+
+        expect(customProps(styleByNodeId?.get('1'))[PERF_BAR_SCALE_VAR]).toBe(0);
+        expect(customProps(styleByNodeId?.get('block:0:2'))[PERF_BAR_SCALE_VAR]).toBe(1);
+    });
+
     it('colours the bar with the same ramp the side panel swatch uses', () => {
         // The panel swatch is `perfColorScale(score.t)` too, so a divergence
         // shows up as a node and its own detail panel disagreeing.
         const styleByNodeId = buildPerfNodeStyleByNodeId(overlay, true);
 
         expect(customProps(styleByNodeId?.get('2'))[PERF_BAR_COLOR_VAR]).toBe(perfColorScale(1));
+    });
+});
+
+describe('getRenderedPerfRange', () => {
+    it('spans the summed block totals the bars are drawn against, which the legend keys (#1944)', () => {
+        const overlay = buildOpGraphPerfOverlay(rows([1, 100], [2, 100], [3, 100]), true, [1, 2, 3]);
+
+        const range = getRenderedPerfRange(overlay, [
+            { id: '1', operationId: 1 },
+            { id: 'block:0:2', operationId: 2, memberOperationIds: [2, 3] },
+        ]);
+
+        expect(range.minNs).toBe(100 * 1_000);
+        expect(range.maxNs).toBe(200 * 1_000);
+    });
+
+    it('falls back to the per-operation range when nothing is rendered with a row', () => {
+        const overlay = buildOpGraphPerfOverlay(rows([1, 10], [2, 1_000]), true, [1, 2]);
+
+        expect(getRenderedPerfRange(overlay)).toEqual({ minNs: overlay.minNs, maxNs: overlay.maxNs });
+        expect(getRenderedPerfRange(overlay, [{ id: '9', operationId: 9 }])).toEqual({
+            minNs: overlay.minNs,
+            maxNs: overlay.maxNs,
+        });
     });
 });
 

@@ -55,8 +55,10 @@ import {
     buildPerfNodeStyleByNodeId,
     getPerfHoverLabel,
     getQuantisedPerfZoom,
+    getRenderedPerfRange,
 } from './opGraphPerfOverlay';
 import { EMPTY_CRITICAL_PATH, findCriticalPath } from './opGraphCriticalPath';
+import { getAdjacentOperationIds } from './opGraphNavigation';
 import { useOpGraphLayoutWorker } from './useOpGraphLayoutWorker';
 import {
     type OpGraphBlockSummary,
@@ -801,16 +803,10 @@ const OperationGraphInner = ({
     // every node to 18%, which reads as a rendering fault.
     const matchedIds = matches.ids.size > 0 ? matches.ids : null;
 
-    const { previousOperationId, nextOperationId } = useMemo(() => {
-        const position = nodeIndex.findIndex((entry) => entry.operationId === selectedOperationId);
-        if (position === -1) {
-            return { previousOperationId: null, nextOperationId: nodeIndex[0]?.operationId ?? null };
-        }
-        return {
-            previousOperationId: nodeIndex[position - 1]?.operationId ?? null,
-            nextOperationId: nodeIndex[position + 1]?.operationId ?? null,
-        };
-    }, [nodeIndex, selectedOperationId]);
+    const { previousOperationId, nextOperationId } = useMemo(
+        () => getAdjacentOperationIds(nodeIndex, selectedOperationId),
+        [nodeIndex, selectedOperationId],
+    );
 
     // Stepping matches only moves the viewport. Selection is the user's anchor —
     // and the reason a node stays lit while everything around it fades — so a
@@ -986,6 +982,10 @@ const OperationGraphInner = ({
         () => buildPerfNodeStyleByNodeId(perfOverlay, isPerfOverlayActive, nodeIndex),
         [isPerfOverlayActive, perfOverlay, nodeIndex],
     );
+
+    // The legend is the key for the node bars, so it reads the range those bars
+    // are drawn against rather than the overlay's per-operation one. #1944
+    const renderedPerfRange = useMemo(() => getRenderedPerfRange(perfOverlay, nodeIndex), [perfOverlay, nodeIndex]);
 
     const styledNodes = useMemo(() => {
         if (!highlight && !matchedIds && !perfStyleByNodeId && !criticalPathNodeIds) {
@@ -1327,8 +1327,8 @@ const OperationGraphInner = ({
                 ) : null}
                 {isPerfOverlayActive && !isBuilding ? (
                     <PerfOverlayLegend
-                        minNs={perfOverlay.minNs}
-                        maxNs={perfOverlay.maxNs}
+                        minNs={renderedPerfRange.minNs}
+                        maxNs={renderedPerfRange.maxNs}
                     />
                 ) : null}
             </div>
