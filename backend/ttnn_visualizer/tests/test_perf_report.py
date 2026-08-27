@@ -184,5 +184,67 @@ class TestPerfReportKernelDurationSchemaCompatibility(unittest.TestCase):
             self.assertEqual(report[0][key], value)
 
 
+class TestPerfReportSignpostOpType(unittest.TestCase):
+    """A signpost row must reach the report as ``op_type == "signpost"``.
+
+    The frontend drops exactly that value before it aligns device operations to
+    perf rows (#1943), so this spelling is a contract rather than an incidental
+    detail. `TestPerfReportKernelDurations.test_signpost_rows_have_no_kernel_durations`
+    cannot stand in for it: it filters for the value and loops the result, and
+    the n300-llama fixture contains no signpost rows at all, so it holds
+    vacuously. Driven from a synthetic CSV so it does not depend on a fixture
+    happening to carry one.
+    """
+
+    def test_signpost_row_reaches_the_report_with_its_op_type(self):
+        raw_csv = "\n".join(
+            [
+                "OP TYPE,OP CODE,DEVICE KERNEL DURATION [ns]",
+                "signpost,tt_forward_START,",
+                "tt_dnn_device,Matmul,1200",
+                "",
+            ]
+        )
+
+        def _fake_generate_perf_report(*args, **kwargs):
+            output_csv_path = args[8]
+
+            def row(row_id, op_code):
+                values = ["" for _ in REPORT_HEADER]
+                values[REPORT_HEADER.index("id")] = row_id
+                values[REPORT_HEADER.index("op_code")] = op_code
+                values[REPORT_HEADER.index("raw_op_code")] = op_code
+                return ",".join(values)
+
+            with open(
+                output_csv_path, "w", encoding="utf-8", newline=""
+            ) as output_file:
+                output_file.write(",".join(REPORT_HEADER) + "\n")
+                # Ids are row numbers in the raw CSV, which the report indexes
+                # back into as `id - 2`.
+                output_file.write(row("2", "tt_forward_START") + "\n")
+                output_file.write(row("3", "Matmul") + "\n")
+
+        instance = Instance(instance_id="test", performance_path="/tmp")
+
+        with (
+            mock.patch(
+                "ttnn_visualizer.csv_queries.OpsPerformanceQueries.get_raw_csv",
+                return_value=raw_csv,
+            ),
+            mock.patch(
+                "ttnn_visualizer.csv_queries.perf_report.generate_perf_report",
+                side_effect=_fake_generate_perf_report,
+            ),
+        ):
+            report = OpsPerformanceReportQueries.generate_report(instance)["report"]
+
+        op_types = {row["raw_op_code"]: row["op_type"] for row in report}
+        self.assertEqual(op_types.get("tt_forward_START"), "signpost")
+        # The device row alongside it must not be tarred with the same value, or
+        # the frontend filter would drop real operations.
+        self.assertEqual(op_types.get("Matmul"), "tt_dnn_device")
+
+
 if __name__ == "__main__":
     unittest.main()
