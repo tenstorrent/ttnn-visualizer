@@ -3,6 +3,7 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { RemoteConnection, RemoteFolder } from './RemoteConnection';
+import { DeviceLogEntryType } from '../definitions/Performance';
 import { ReportLocation } from '../definitions/Reports';
 import { BufferMemoryLayout, MemoryConfig } from './MemoryConfig';
 import { BufferType, StringBufferType } from './BufferType';
@@ -475,18 +476,28 @@ export interface DeviceInfo {
     worker_l1_size: number;
 }
 
+/**
+ * A row of `profile_log_device.csv`, as `GET /api/performance/device-log` serves
+ * it. The backend reads the CSV header by name and passes every column through,
+ * so which optional keys are present depends on the tt-metal that wrote the
+ * capture — `run_ID` only appears in older ones, the trace pair only in newer.
+ * Spaces in the column names become underscores. See #1941.
+ */
 export interface PerformanceLog {
     PCIe_slot: number;
     RISC_processor_type: string; // Can we scope this down to a specific set of values?
     core_x: number;
     core_y: number;
-    run_ID: number;
+    data: number;
     run_host_ID: number;
     source_file: string;
     source_line: number;
-    stat_value: number;
     'time[cycles_since_reset]': number;
     timer_id: number;
+    type: DeviceLogEntryType;
     zone_name: string;
-    zone_phase: 'begin' | 'end';
+    meta_data?: string;
+    run_ID?: number;
+    trace_id?: number;
+    trace_id_counter?: number;
 }

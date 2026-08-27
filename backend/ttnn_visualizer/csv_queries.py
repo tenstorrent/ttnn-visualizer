@@ -39,14 +39,22 @@ CSVQueryResult = Union[
 
 
 class LocalCSVQueryRunner:
-    def __init__(self, file_path: Union[str, Path], offset: int = 0):
+    def __init__(
+        self,
+        file_path: Union[str, Path],
+        offset: int = 0,
+        max_rows: Optional[int] = None,
+    ):
         self.file_path = file_path
         self.offset = offset
+        # Only safe when the caller wants the first N rows of the file. A query
+        # that filters must see every row, or it silently answers from a prefix.
+        self.max_rows = max_rows
         self.df: Optional[pd.DataFrame] = None
 
     def __enter__(self):
         # Load the CSV file
-        self.df = pd.read_csv(self.file_path, skiprows=self.offset)
+        self.df = pd.read_csv(self.file_path, skiprows=self.offset, nrows=self.max_rows)
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
@@ -150,31 +158,27 @@ class NPEQueries:
 
 class DeviceLogProfilerQueries:
     DEVICE_LOG_FILE = "profile_log_device.csv"
-    # Read from the file's own header, so a producer that adds columns (the
-    # profiler gained "trace id" and "trace id counter") still parses. These are
-    # the names every known capture emits; anything beyond them passes through.
+    # Only the columns a query reads. Everything else in the file is passed
+    # through untouched, because which columns exist varies by producer and
+    # gating on them rejects captures that work fine: the segformer demo reports
+    # have no "meta data", the smoke fixture has no "run ID", and a current
+    # tt-metal adds "trace id" / "trace id counter" that none of the others have.
     REQUIRED_DEVICE_LOG_COLUMNS = [
-        "PCIe slot",
-        "core_x",
-        "core_y",
-        "RISC processor type",
-        "timer_id",
-        "time[cycles since reset]",
-        "data",
-        "run host ID",
-        "zone name",
-        "type",
-        "source line",
-        "source file",
-        "meta data",
+        "timer_id",  # query_by_timer_id
+        "zone name",  # query_zone_statistics
+        "run host ID",  # the join key back to ops_perf_results (#1941)
     ]
 
-    def __init__(self, instance: Instance):
-        """
-        Initialize the profiler with a instance object.
-        The instance determines whether to use a local or remote runner.
+    def __init__(self, instance: Instance, max_rows: Optional[int] = None):
+        """Read the device log for ``instance``.
+
+        ``max_rows`` stops `pd.read_csv` short. A real capture is ~724k rows and
+        ~288 MB parsed, so a route that only ever serves the first N rows should
+        pass it. A route that filters must not: `query_zone_statistics` has to
+        see the whole file to know what matched.
         """
         self.instance = instance
+        self.max_rows = max_rows
         self.runner: Optional[LocalCSVQueryRunner] = None
 
     def __enter__(self):
@@ -188,6 +192,7 @@ class DeviceLogProfilerQueries:
                 self.DEVICE_LOG_FILE
             ),
             offset=1,  # Skip the first line for device log files
+            max_rows=self.max_rows,
         )
 
         self.runner.__enter__()

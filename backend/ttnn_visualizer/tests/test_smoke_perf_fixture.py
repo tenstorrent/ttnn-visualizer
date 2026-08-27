@@ -97,10 +97,13 @@ def test_device_log_preamble_parses(client, fixture_instance):
 
 
 def test_device_log_rows_have_the_expected_field_count():
-    """A ragged row would fail `pd.read_csv`; this names the line that caused it.
+    """Pandas does not complain about a ragged row, so something has to.
 
-    Column *naming* is pinned by the test below. What this one catches is a
-    regeneration that let a comma into `source file` or `meta data`.
+    A short row is silently NaN-padded; a long one promotes the first column to
+    an index and shifts every value. Either way a stray comma in `source file`
+    or `meta data` corrupts the data with no parse error, so a regeneration that
+    introduced one would surface as wrong numbers rather than a failure. Column
+    *naming* is pinned by the test below.
     """
     lines = DEVICE_LOG.read_text(encoding="utf-8").splitlines()
 

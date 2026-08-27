@@ -51,6 +51,20 @@ LEGACY_ROWS = [
     "1,1,2,TRISC,18954,14595968860000,0,1025,TRISC-FW,ZONE_START,21,trisc.cc,",
 ]
 
+# The shape the committed demo reports have: 13 columns again, but a different
+# 13 — `run ID` is present and `meta data` is absent, the mirror image of the
+# fixture above. Requiring every column both of the others happen to have is what
+# broke these; only the columns a query reads may gate the response.
+DEMO_REPORT_HEADER = (
+    "PCIe slot, core_x, core_y, RISC processor type, timer_id,"
+    " time[cycles since reset], data, run ID, run host ID,  zone name, type,"
+    " source line, source file"
+)
+DEMO_REPORT_ROWS = [
+    "1,1,1,BRISC,18952,14595968859092,0,1024,1025,BRISC-FW,ZONE_START,433,brisc.cc",
+    "1,1,1,BRISC,18953,14595968859500,0,1024,1025,BRISC-FW,ZONE_END,433,brisc.cc",
+]
+
 
 def _write_device_log(directory: Path, header: str, rows: list[str]) -> Instance:
     """Write a device log and return an instance mounted on its directory."""
@@ -78,8 +92,10 @@ def test_modern_fifteen_column_capture_parses(tmp_path):
     assert "trace_id" in first and "trace_id_counter" in first
     assert "meta_data" in first
 
-    # The names the hardcoded list invented. Their presence would mean the
-    # header is being overwritten again.
+    # `stat value` and `zone phase` were the old list's names for `data` and
+    # `type`; `run ID` is a real column, but only in older captures like the
+    # segformer demos, never in this one. Any of the three appearing here would
+    # mean the header is being overwritten again.
     assert "stat_value" not in first
     assert "run_ID" not in first
     assert "zone_phase" not in first
@@ -101,6 +117,26 @@ def test_thirteen_column_capture_is_not_relabelled(tmp_path):
     assert first["run_host_ID"] == 1025
     assert first["source_line"] == 433
     assert first["source_file"] == "brisc.cc"
+
+
+def test_demo_report_shape_still_parses(tmp_path):
+    """The shipped demo reports must keep working.
+
+    `demo-reports/segformer_{encoder,decoder}*.zip` have no `meta data` column.
+    Gating on the union of every column seen in the wild answered 422 for them —
+    still dead, just with a different status code than #1941 reported.
+    """
+    instance = _write_device_log(tmp_path, DEMO_REPORT_HEADER, DEMO_REPORT_ROWS)
+
+    with DeviceLogProfilerQueries(instance) as csv:
+        entries = csv.get_all_entries(as_dict=True)
+
+    first = entries[0]
+    assert first["zone_name"] == "BRISC-FW"
+    assert first["run_host_ID"] == 1025
+    # `run ID` is a real column here, not one the old hardcoded list invented.
+    assert first["run_ID"] == 1024
+    assert "meta_data" not in first
 
 
 def test_zone_query_matches_real_zone_names(tmp_path):

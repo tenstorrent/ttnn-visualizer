@@ -90,8 +90,17 @@ SPA_PERFORMANCE_ROUTES = (
 # Performance routes #1859 lists that no SPA code path calls, so no
 # browser-driven walk can reach them. Asserted directly instead of silently
 # left uncovered — see `assert_unreachable_routes_answer`.
+DEVICE_LOG_ROUTE = "/api/performance/device-log"
+
+# `execute_query` maps spaces in the CSV header to underscores, so these are the
+# JSON forms of the columns `REQUIRED_DEVICE_LOG_COLUMNS` guarantees, plus `type`
+# — whose value is what distinguishes a by-name read from the positional one that
+# served `type` under the key `zone_name` (#1941).
+DEVICE_LOG_REQUIRED_KEYS = ("zone_name", "run_host_ID", "type")
+DEVICE_LOG_ENTRY_TYPES = {"ZONE_START", "ZONE_END", "TS_DATA"}
+
 UNREACHABLE_PERFORMANCE_ROUTES = (
-    "/api/performance/device-log",
+    DEVICE_LOG_ROUTE,
     "/api/performance/device-log/raw",
     "/api/performance/perf-results",
     "/api/performance/perf-results/raw",
@@ -282,19 +291,34 @@ async def assert_unreachable_routes_answer(page: Page) -> None:
             raise AssertionError(f"{route} answered {response.status}: {body}")
         print(f"✅ {route} answered {response.status}")
 
-    # A 200 carrying mislabelled columns is exactly how #1941 shipped, so the
-    # device log gets a shape check on top of its status.
-    device_log = await (
-        await page.request.get(
-            f"{BASE_URL}/api/performance/device-log", params={"instanceId": instance_id}
-        )
-    ).json()
-    if not isinstance(device_log, list) or not device_log:
-        raise AssertionError(f"/api/performance/device-log returned {device_log!r}")
-    missing = {"zone_name", "run_host_ID", "type"} - set(device_log[0])
+        # A 200 carrying mislabelled columns is exactly how #1941 shipped, so the
+        # device log gets a shape check on top of its status.
+        if route == DEVICE_LOG_ROUTE:
+            await assert_device_log_columns_are_named(response)
+
+
+async def assert_device_log_columns_are_named(response) -> None:
+    """The device log's JSON keys must be the capture's own column names.
+
+    Key *presence* alone is too weak: the positional overwrite also produced a
+    `zone_name` key, it just carried `type`'s value. So the entry type is checked
+    by value — under the old read it would be a zone name like `BRISC-FW`.
+    """
+    rows = await response.json()
+    if not isinstance(rows, list) or not rows:
+        raise AssertionError(f"{DEVICE_LOG_ROUTE} returned {rows!r}")
+
+    missing = set(DEVICE_LOG_REQUIRED_KEYS) - set(rows[0])
     if missing:
-        raise AssertionError(f"/api/performance/device-log is missing keys: {missing}")
-    print("✅ /api/performance/device-log returned named columns")
+        raise AssertionError(f"{DEVICE_LOG_ROUTE} is missing keys: {missing}")
+
+    entry_type = rows[0]["type"]
+    if entry_type not in DEVICE_LOG_ENTRY_TYPES:
+        raise AssertionError(
+            f"{DEVICE_LOG_ROUTE} served {entry_type!r} as `type` — "
+            "the header is being read positionally again"
+        )
+    print(f"✅ {DEVICE_LOG_ROUTE} returned named columns")
 
 
 async def exercise_performance_tab(page: Page) -> None:

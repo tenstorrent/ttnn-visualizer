@@ -218,9 +218,11 @@ def _stack_source_request_params():
     return file_path, source_file_id, None
 
 
-# A single zone matches 200k+ rows on a real capture (~76 MB of JSON), and the
-# device-log routes aren't `@local_only`, so an unbounded response is reachable by
-# anyone under SERVER_MODE.
+# A single zone matches 200k+ rows on a real capture (~76 MB of JSON), and none of
+# the device-log routes are `@local_only`, so an unbounded response is reachable by
+# anyone under SERVER_MODE. This caps the two query routes; `/device-log/raw` still
+# streams the whole file, so the exposure is reduced rather than closed.
+# Imported by the route tests, so it stays public.
 DEVICE_LOG_ROW_LIMIT = 100
 
 _DEFAULT_RANK = 0
@@ -1157,7 +1159,8 @@ def get_performance_data_list(instance: Instance):
 @with_instance
 def get_performance_data(instance: Instance):
     try:
-        with DeviceLogProfilerQueries(instance) as csv:
+        # Only ever the first N rows, so the parse can stop there too.
+        with DeviceLogProfilerQueries(instance, max_rows=DEVICE_LOG_ROW_LIMIT) as csv:
             result = csv.get_all_entries(as_dict=True, limit=DEVICE_LOG_ROW_LIMIT)
     except DataFormatError as error:
         return response_unprocessable_entity(str(error))
@@ -1375,14 +1378,22 @@ def get_npe_timeline(instance: Instance):
 @with_instance
 def get_zone_statistics(zone, instance: Instance):
     try:
+        # No `max_rows`: the filter has to see every row to know what matched.
         with DeviceLogProfilerQueries(instance) as csv:
-            result = csv.query_zone_statistics(
-                zone_name=zone, as_dict=True, limit=DEVICE_LOG_ROW_LIMIT
+            # One past the cap, so a truncated answer can be told from a whole one.
+            rows = csv.query_zone_statistics(
+                zone_name=zone, as_dict=True, limit=DEVICE_LOG_ROW_LIMIT + 1
             )
     except DataFormatError as error:
         return response_unprocessable_entity(str(error))
 
-    return Response(orjson.dumps(result), mimetype="application/json")
+    truncated = len(rows) > DEVICE_LOG_ROW_LIMIT
+    payload = {
+        "zone": zone,
+        "rows": rows[:DEVICE_LOG_ROW_LIMIT],
+        "truncated": truncated,
+    }
+    return Response(orjson.dumps(payload), mimetype="application/json")
 
 
 @api.route("/devices", methods=["GET"])
