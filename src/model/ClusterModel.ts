@@ -67,7 +67,8 @@ export type ClusterBoard = [
 // `chip_unique_id`, which must be resolved against the union of `chip_unique_ids` across ranks.
 export type RemoteEthernetConnectionRaw = [
     { chip: ChipId; chan: EthChannel },
-    { remote_chip_id: number; chan: EthChannel },
+    // String, not number: 64-bit and would be rounded by `JSON.parse`. #1950
+    { remote_chip_id: string; chan: EthChannel },
 ];
 
 export interface ClusterModel {
@@ -84,7 +85,8 @@ export interface ClusterModel {
     ethernet_connections_to_remote_devices?: RemoteEthernetConnectionRaw[];
     chip_to_boardtype: Record<ChipId, string>;
     chip_to_bus_id: Record<ChipId, number>;
-    chip_unique_ids: Record<ChipId, number>;
+    // Strings for the same reason as `remote_chip_id` above. #1950
+    chip_unique_ids: Record<ChipId, string>;
     boards: ClusterBoard[];
 
     // Slot each chip occupies within its board group, 1-based. A 32-chip UBB
@@ -130,8 +132,8 @@ export interface IntraHostEthernetLink {
 // Produced by joining `ethernet_connections_to_remote_devices.remote_chip_id` against
 // the union of `chip_unique_ids` across all hosts.
 export interface InterHostEthernetLink {
-    a: { rank: number; chip: ChipId; chan: EthChannel; chipUniqueId: number };
-    b: { rank: number; chip: ChipId; chan: EthChannel; chipUniqueId: number };
+    a: { rank: number; chip: ChipId; chan: EthChannel; chipUniqueId: string };
+    b: { rank: number; chip: ChipId; chan: EthChannel; chipUniqueId: string };
 }
 
 export interface ClusterTopology {

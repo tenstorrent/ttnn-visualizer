@@ -24,6 +24,7 @@ from ttnn_visualizer.utils import (
     read_profiler_report_name,
     require_tcp_port,
     str_to_bool,
+    stringify_chip_unique_ids,
 )
 
 # The vocabulary is narrow on purpose — it has to agree with the SPA's
@@ -704,6 +705,45 @@ def test_pick_cluster_descriptor_prefers_unsuffixed_file(tmp_path):
     assert err is None
     assert path is not None
     assert path.name == "cluster_descriptor.yaml"
+
+
+def test_stringify_chip_unique_ids_preserves_64_bit_values():
+    # 5313998941933517939 is chip 9 of test_ttnn_moe_aug26_2217. As a JSON number
+    # the browser rounds it to ...518000; as a string it survives. #1950
+    exact = 5313998941933517939
+    assert exact > 2**53
+    descriptor = {
+        "chip_unique_ids": {9: exact, 10: exact + 1},
+        "ethernet_connections_to_remote_devices": [
+            [{"chip": 25, "chan": 9}, {"remote_chip_id": exact + 2, "chan": 9}],
+        ],
+    }
+
+    result = stringify_chip_unique_ids(descriptor)
+
+    assert result["chip_unique_ids"] == {9: str(exact), 10: str(exact + 1)}
+    # Adjacent values stay distinct; as doubles they would collapse together.
+    assert float(exact) == float(exact + 1)
+    remote = result["ethernet_connections_to_remote_devices"][0][1]
+    assert remote["remote_chip_id"] == str(exact + 2)
+    # The local endpoint is untouched.
+    assert result["ethernet_connections_to_remote_devices"][0][0] == {
+        "chip": 25,
+        "chan": 9,
+    }
+
+
+def test_stringify_chip_unique_ids_tolerates_missing_and_odd_shapes():
+    assert stringify_chip_unique_ids(None) is None
+    assert stringify_chip_unique_ids("not a mapping") == "not a mapping"
+    # A descriptor without either field passes through unchanged.
+    assert stringify_chip_unique_ids({"arch": {0: "blackhole"}}) == {
+        "arch": {0: "blackhole"}
+    }
+    # Remote entries that are not endpoint pairs are left alone rather than raising.
+    assert stringify_chip_unique_ids(
+        {"ethernet_connections_to_remote_devices": ["unexpected", []]}
+    ) == {"ethernet_connections_to_remote_devices": ["unexpected", []]}
 
 
 def test_pick_cluster_descriptor_single_file_answers_rank_zero_only(tmp_path):

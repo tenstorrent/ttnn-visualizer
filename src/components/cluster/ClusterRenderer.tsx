@@ -86,7 +86,7 @@ interface LinkSegment {
 interface RenderChip extends ClusterChip {
     key: string;
     rank: number;
-    chipUniqueId?: number;
+    chipUniqueId?: string;
 }
 
 // `mesh`: honour the report's `physical_chip_mesh_coordinate_mapping_*.yaml`
