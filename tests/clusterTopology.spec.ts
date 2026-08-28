@@ -4,9 +4,10 @@
 
 import { describe, expect, it } from 'vitest';
 import {
-    FALLBACK_PER_HOST_COLS,
+    type CondensedHostLayout,
     PerRankInput,
     getAsicLocationGroups,
+    getCondensedHostLayout,
     hostHasMeshCoords,
     hostHasTwoDimensionalMesh,
     looksLikeRankedDescriptor,
@@ -416,31 +417,69 @@ describe('getAsicLocationGroups', () => {
             ),
         );
 
-        const groups = getAsicLocationGroups(withLocations(locations), chipIds);
-        expect(groups).toHaveLength(4);
+        const descriptor = withLocations(locations);
+        expect(getAsicLocationGroups(descriptor, chipIds)).toHaveLength(4);
 
-        const gutterRows = 1;
-        const rowsPerGroup = Math.ceil(groups![0].length / FALLBACK_PER_HOST_COLS);
-        const position = new Map<number, [number, number]>();
-        groups!.forEach((group, groupIndex) => {
-            group.forEach((chip, slot) => {
-                position.set(chip, [
-                    slot % FALLBACK_PER_HOST_COLS,
-                    groupIndex * (rowsPerGroup + gutterRows) + Math.floor(slot / FALLBACK_PER_HOST_COLS),
-                ]);
-            });
-        });
-
-        const isAdjacent = (a: number, b: number): boolean => {
-            const [pa, pb] = [position.get(a)!, position.get(b)!];
-            return Math.abs(pa[0] - pb[0]) + Math.abs(pa[1] - pb[1]) === 1;
+        // Against the renderer's own layout, not a copy of it: re-deriving the
+        // geometry here meant a change to the gutter, or a regression in the
+        // layout itself, left this green.
+        const unconnectedNeighboursOf = (layout: CondensedHostLayout): string[] => {
+            const isAdjacent = (a: number, b: number): boolean => {
+                const [pa, pb] = [layout.positionByChip.get(a)!, layout.positionByChip.get(b)!];
+                return Math.abs(pa[0] - pb[0]) + Math.abs(pa[1] - pb[1]) === 1;
+            };
+            return chipIds
+                .flatMap((a) => chipIds.filter((b) => b > a).map((b) => [a, b] as const))
+                .filter(([a, b]) => isAdjacent(a, b) && !links.has(`${a}-${b}`))
+                .map(([a, b]) => `${a}-${b}`);
         };
-        const unconnectedNeighbours = chipIds
-            .flatMap((a) => chipIds.filter((b) => b > a).map((b) => [a, b] as const))
-            .filter(([a, b]) => isAdjacent(a, b) && !links.has(`${a}-${b}`))
-            .map(([a, b]) => `${a}-${b}`);
 
-        expect(unconnectedNeighbours).toEqual([]);
+        const grouped = getCondensedHostLayout(descriptor, chipIds);
+        expect(grouped.isGrouped).toBe(true);
+        expect(unconnectedNeighboursOf(grouped)).toEqual([]);
+
+        // Negative control: without slots the same descriptor tiles in id order,
+        // which is the arrangement #1948 reported. Without this, a property that
+        // holds trivially is indistinguishable from one the grouping earned.
+        const ungrouped = getCondensedHostLayout({} as unknown as ClusterModel, chipIds);
+        expect(ungrouped.isGrouped).toBe(false);
+        expect(unconnectedNeighboursOf(ungrouped)).toHaveLength(12);
+    });
+
+    it('does not merely reproduce id order when the slots say otherwise', () => {
+        // The 32-chip fixture uses `chip % 8 + 1`, so slot order equals id order
+        // there and a naive chunk(chipIds, 8) would satisfy it. Reversing the
+        // slots within each board separates the two.
+        const chipIds = Array.from({ length: 16 }, (_, chip) => chip);
+        const locations = Object.fromEntries(chipIds.map((chip) => [chip, 8 - (chip % 8)]));
+
+        const layout = getCondensedHostLayout(withLocations(locations), chipIds);
+
+        expect(layout.isGrouped).toBe(true);
+        // Chip 0 holds slot 8, so it is last in its group rather than first.
+        expect(layout.positionByChip.get(0)).toEqual([3, 1]);
+        expect(layout.positionByChip.get(7)).toEqual([0, 0]);
+    });
+
+    it('lays a slotless host out in id order, four wide, with no gutter', () => {
+        const layout = getCondensedHostLayout({} as unknown as ClusterModel, [0, 1, 2, 3, 4, 5]);
+
+        expect(layout.isGrouped).toBe(false);
+        expect(layout.positionByChip.get(0)).toEqual([0, 0]);
+        expect(layout.positionByChip.get(4)).toEqual([0, 1]);
+        expect(layout.rows).toBe(2);
+    });
+
+    it('adds one gutter row between groups and none after the last', () => {
+        const chipIds = Array.from({ length: 16 }, (_, chip) => chip);
+        const locations = Object.fromEntries(chipIds.map((chip) => [chip, (chip % 8) + 1]));
+
+        const layout = getCondensedHostLayout(withLocations(locations), chipIds);
+
+        // Two groups of eight: two rows each, one blank row between them.
+        expect(layout.positionByChip.get(7)).toEqual([3, 1]);
+        expect(layout.positionByChip.get(8)).toEqual([0, 3]);
+        expect(layout.rows).toBe(5);
     });
 
     it('returns null when the field is absent, unparseable or the chip list is empty', () => {

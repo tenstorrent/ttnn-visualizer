@@ -13,7 +13,7 @@ import { useGetClusterTopology } from '../../hooks/useAPI';
 import { getChipDesign } from '../../functions/getChipDesign';
 import {
     FALLBACK_PER_HOST_COLS,
-    getAsicLocationGroups,
+    getCondensedHostLayout,
     hostHasMeshCoords,
     sortHostsByConnectionProximity,
 } from '../../functions/clusterTopology';
@@ -48,10 +48,6 @@ const CLUSTER_CHIP_SIZE_SMALL = 150;
 // stays in sync). Used as a fallback when no mesh coords are present, or as
 // a user-selectable alternative to the literal mesh layout. #1510
 const FALLBACK_HOST_GUTTER_ROWS = 1;
-// Blank row between board groups in the condensed fallback, so a group-to-group
-// link visibly crosses a boundary and chips either side of one are not drawn
-// touching. #1948
-const FALLBACK_GROUP_GUTTER_ROWS = 1;
 // Top padding gives outward-edge curves from the topmost host room to arc
 // without colliding with the cluster panel chrome.
 const FALLBACK_TOP_PAD_ROWS = 2;
@@ -114,6 +110,8 @@ interface ClusterRenderModel {
     layoutMode: ClusterLayoutMode;
     // Mesh layout is viable for this topology (drives the UI toggle's visibility).
     isMeshAvailable: boolean;
+    /** True when at least one host's condensed layout fell through to chip id order. */
+    anyHostFellToIdOrder: boolean;
 }
 
 type ClusterRenderResult = { status: 'ready'; model: ClusterRenderModel } | { status: 'unsupported' };
@@ -200,6 +198,10 @@ function buildClusterRenderModel(
 
     const renderChips: RenderChip[] = [];
     let nextHostOffsetY = useMeshCoords ? 0 : FALLBACK_TOP_PAD_ROWS;
+    // Which condensed tier the layout actually reached. The caveat copy has to name
+    // the tier it got: board-slot grouping needs the descriptor to support it, and
+    // plenty of reports — the 2-chip n300 among them — fall through to chip id order.
+    let anyHostFellToIdOrder = false;
     let totalCols = 0;
     let totalRows = 0;
 
@@ -224,20 +226,12 @@ function buildClusterRenderModel(
 
         let usedFallback = false;
 
-        // Fallback tier between mesh coords and raw id order: group the chips by
-        // board slot so the grid can separate groups. `null` keeps id order. #1948
-        const fallbackGroups = useMeshCoords ? null : getAsicLocationGroups(host.descriptor, chipIdsForHost);
-        const fallbackRowsPerGroup = fallbackGroups ? Math.ceil(fallbackGroups[0].length / FALLBACK_PER_HOST_COLS) : 0;
-        const fallbackPositionByChip = new Map<number, readonly [number, number]>();
-        fallbackGroups?.forEach((group, groupIndex) => {
-            const groupTop = groupIndex * (fallbackRowsPerGroup + FALLBACK_GROUP_GUTTER_ROWS);
-            group.forEach((groupedChipId, slotIndex) => {
-                fallbackPositionByChip.set(groupedChipId, [
-                    slotIndex % FALLBACK_PER_HOST_COLS,
-                    groupTop + Math.floor(slotIndex / FALLBACK_PER_HOST_COLS),
-                ]);
-            });
-        });
+        // Fallback tier between mesh coords and raw id order: board slots when the
+        // descriptor supports them, id order when it does not. #1948
+        const condensed = useMeshCoords ? null : getCondensedHostLayout(host.descriptor, chipIdsForHost);
+        if (condensed && !condensed.isGrouped) {
+            anyHostFellToIdOrder = true;
+        }
 
         // Plain `for` to keep mutable counters out of a closure (no-loop-func).
         for (let localIndex = 0; localIndex < chipIdsForHost.length; localIndex += 1) {
@@ -249,14 +243,12 @@ function buildClusterRenderModel(
                 [x, y] = meshCoord;
             } else {
                 usedFallback = true;
-                const grouped = fallbackPositionByChip.get(chipId);
-                if (grouped) {
-                    [x] = grouped;
-                    y = nextHostOffsetY + grouped[1];
-                } else {
-                    x = localIndex % FALLBACK_PER_HOST_COLS;
-                    y = nextHostOffsetY + Math.floor(localIndex / FALLBACK_PER_HOST_COLS);
-                }
+                const placed = condensed?.positionByChip.get(chipId) ?? [
+                    localIndex % FALLBACK_PER_HOST_COLS,
+                    Math.floor(localIndex / FALLBACK_PER_HOST_COLS),
+                ];
+                [x] = placed;
+                y = nextHostOffsetY + placed[1];
             }
             totalCols = Math.max(totalCols, x + 1);
             totalRows = Math.max(totalRows, y + 1);
@@ -275,12 +267,7 @@ function buildClusterRenderModel(
         }
 
         if (usedFallback) {
-            // Grouped layouts are taller by one gutter row per boundary; the last
-            // group does not get a trailing one.
-            const hostRows = fallbackGroups
-                ? fallbackGroups.length * (fallbackRowsPerGroup + FALLBACK_GROUP_GUTTER_ROWS) -
-                  FALLBACK_GROUP_GUTTER_ROWS
-                : Math.ceil(chipIdsForHost.length / FALLBACK_PER_HOST_COLS);
+            const hostRows = condensed?.rows ?? Math.ceil(chipIdsForHost.length / FALLBACK_PER_HOST_COLS);
             nextHostOffsetY += hostRows + FALLBACK_HOST_GUTTER_ROWS;
         }
     }
@@ -643,6 +630,7 @@ function buildClusterRenderModel(
             svgPad: Math.round(stride),
             layoutMode,
             isMeshAvailable,
+            anyHostFellToIdOrder,
         },
     };
 }
@@ -830,7 +818,15 @@ function ClusterRenderer() {
         worldSize,
         layoutMode: activeLayoutMode,
         isMeshAvailable,
+        anyHostFellToIdOrder,
     } = renderResult.model;
+
+    // Named per tier: board-slot grouping needs the descriptor to carry slots that
+    // repeat in equal runs, and reports that miss that — the 2-chip n300 among them
+    // — get chip id order instead. Claiming a slot-driven layout on those was wrong.
+    const condensedCaveat = anyHostFellToIdOrder
+        ? 'Chips are tiled in id order, not placed at their physical positions: this report carries no usable board-slot information. Links are accurate; positions carry no physical meaning.'
+        : 'Chips are tiled by board slot rather than placed at their physical positions. Links are accurate; positions carry no physical meaning.';
 
     const isChipActive = (key: string) => {
         if (hoveredChip === null) {
@@ -868,9 +864,19 @@ function ClusterRenderer() {
                         />
                     </Tooltip>
                 </ButtonGroup>
-                {!isMeshAvailable && (
-                    <Tooltip content='This report carries no mesh coordinates, so chips are tiled by board slot rather than placed at their physical positions. Links are accurate; positions are not.'>
-                        <span className='cluster-view-layout-note'>Positions not to scale</span>
+                {activeLayoutMode === 'condensed' && (
+                    <Tooltip content={condensedCaveat}>
+                        {/* The accessible name is the whole caveat, not the three
+                            visible words: the tooltip is hover-only, so without
+                            this a screen reader gets the summary and never the
+                            sentence that explains it. */}
+                        <span
+                            className='cluster-view-layout-note'
+                            role='note'
+                            aria-label={condensedCaveat}
+                        >
+                            Positions not physical
+                        </span>
                     </Tooltip>
                 )}
                 {isMultiHost && isMeshAvailable && (
