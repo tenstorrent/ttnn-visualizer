@@ -99,7 +99,7 @@ def write_device_log(directory: Path, header: str, rows: list[str]) -> Path:
     return path
 
 
-def drop_column(header: str, rows: list[str], column: str) -> tuple[str, list[str]]:
+def _drop_column(header: str, rows: list[str], column: str) -> tuple[str, list[str]]:
     """Remove one named column from a header and the matching field from rows."""
     names = [name.strip() for name in header.split(",")]
     index = names.index(column)
@@ -114,7 +114,9 @@ def drop_column(header: str, rows: list[str], column: str) -> tuple[str, list[st
     return ", ".join(names), trimmed
 
 
-def _write_device_log(directory: Path, header: str, rows: list[str]) -> Instance:
+def _instance_with_device_log(
+    directory: Path, header: str, rows: list[str]
+) -> Instance:
     """Write a device log and return an instance mounted on its directory."""
     write_device_log(directory, header, rows)
     return Instance(instance_id="pytest-device-log", performance_path=str(directory))
@@ -122,7 +124,7 @@ def _write_device_log(directory: Path, header: str, rows: list[str]) -> Instance
 
 def test_modern_fifteen_column_capture_parses(tmp_path):
     """The reported regression: 15 columns used to raise a `ValueError`."""
-    instance = _write_device_log(tmp_path, MODERN_HEADER, MODERN_ROWS)
+    instance = _instance_with_device_log(tmp_path, MODERN_HEADER, MODERN_ROWS)
 
     with DeviceLogProfilerQueries(instance) as csv:
         entries = csv.get_all_entries(as_dict=True)
@@ -155,7 +157,7 @@ def test_thirteen_column_capture_is_not_relabelled(tmp_path):
     `run host ID` is the join key back to `ops_perf_results`, and it used to be
     served as `run ID` while `zone name` carried the real `run host ID`.
     """
-    instance = _write_device_log(tmp_path, LEGACY_HEADER, LEGACY_ROWS)
+    instance = _instance_with_device_log(tmp_path, LEGACY_HEADER, LEGACY_ROWS)
 
     with DeviceLogProfilerQueries(instance) as csv:
         entries = csv.get_all_entries(as_dict=True)
@@ -174,7 +176,7 @@ def test_demo_report_shape_still_parses(tmp_path):
     Gating on the union of every column seen in the wild answered 422 for them —
     still dead, just with a different status code than #1941 reported.
     """
-    instance = _write_device_log(tmp_path, DEMO_REPORT_HEADER, DEMO_REPORT_ROWS)
+    instance = _instance_with_device_log(tmp_path, DEMO_REPORT_HEADER, DEMO_REPORT_ROWS)
 
     with DeviceLogProfilerQueries(instance) as csv:
         entries = csv.get_all_entries(as_dict=True)
@@ -196,7 +198,7 @@ def test_pre_rename_vocabulary_is_served_under_its_own_names(tmp_path):
     `REQUIRED_DEVICE_LOG_COLUMNS` to `data` or `type` a deliberate edit, but it
     cannot show what that edit costs: this is the case that answers 422.
     """
-    instance = _write_device_log(tmp_path, PRE_RENAME_HEADER, PRE_RENAME_ROWS)
+    instance = _instance_with_device_log(tmp_path, PRE_RENAME_HEADER, PRE_RENAME_ROWS)
 
     with DeviceLogProfilerQueries(instance) as csv:
         entries = csv.get_all_entries(as_dict=True)
@@ -220,7 +222,7 @@ def test_pre_rename_vocabulary_is_served_under_its_own_names(tmp_path):
 
 def test_zone_query_matches_real_zone_names(tmp_path):
     """What the mislabelling broke in practice: the zone filter matched `type`."""
-    instance = _write_device_log(tmp_path, MODERN_HEADER, MODERN_ROWS)
+    instance = _instance_with_device_log(tmp_path, MODERN_HEADER, MODERN_ROWS)
 
     with DeviceLogProfilerQueries(instance) as csv:
         matched = csv.query_zone_statistics("BRISC-FW", as_dict=True)
@@ -233,7 +235,7 @@ def test_zone_query_matches_real_zone_names(tmp_path):
 
 def test_zone_query_honours_its_limit(tmp_path):
     """The route caps its response; an uncapped zone is 200k+ rows on a capture."""
-    instance = _write_device_log(tmp_path, MODERN_HEADER, MODERN_ROWS)
+    instance = _instance_with_device_log(tmp_path, MODERN_HEADER, MODERN_ROWS)
 
     with DeviceLogProfilerQueries(instance) as csv:
         limited = csv.query_zone_statistics("BRISC-FW", as_dict=True, limit=1)
@@ -243,7 +245,7 @@ def test_zone_query_honours_its_limit(tmp_path):
 
 def test_stream_mode_validates_columns_without_holding_rows(tmp_path):
     """#1946: `stream=True` loads the header, and the header only."""
-    instance = _write_device_log(tmp_path, MODERN_HEADER, MODERN_ROWS)
+    instance = _instance_with_device_log(tmp_path, MODERN_HEADER, MODERN_ROWS)
 
     with DeviceLogProfilerQueries(instance, stream=True) as csv:
         # The columns are there to validate against, but none of the rows.
@@ -260,7 +262,7 @@ def test_stream_mode_refuses_a_query_that_would_answer_from_the_header(tmp_path)
     That is the #1941 failure mode again -- a 200 carrying nothing -- so it has
     to raise rather than answer.
     """
-    instance = _write_device_log(tmp_path, MODERN_HEADER, MODERN_ROWS)
+    instance = _instance_with_device_log(tmp_path, MODERN_HEADER, MODERN_ROWS)
 
     with DeviceLogProfilerQueries(instance, stream=True) as csv:
         with pytest.raises(RuntimeError, match="execute_filtered_query"):
@@ -270,7 +272,7 @@ def test_stream_mode_refuses_a_query_that_would_answer_from_the_header(tmp_path)
 def test_chunked_filter_matches_across_chunk_boundaries(tmp_path):
     """A match must not depend on where the chunk boundary happens to fall."""
     rows = [MODERN_ROWS[0]] * 5 + [MODERN_ROWS[2]] * 5 + [MODERN_ROWS[0]] * 5
-    instance = _write_device_log(tmp_path, MODERN_HEADER, rows)
+    instance = _instance_with_device_log(tmp_path, MODERN_HEADER, rows)
 
     with DeviceLogProfilerQueries(instance, stream=True) as csv:
         # Two rows per chunk, so both zones straddle several boundaries.
@@ -307,8 +309,8 @@ def test_every_required_column_is_refused_by_name(tmp_path, column):
     the gate unpinned: dropping `run host ID` -- the join key #1941 is about --
     from `REQUIRED_DEVICE_LOG_COLUMNS` used to leave the suite green.
     """
-    header, rows = drop_column(MODERN_HEADER, MODERN_ROWS, column)
-    instance = _write_device_log(tmp_path, header, rows)
+    header, rows = _drop_column(MODERN_HEADER, MODERN_ROWS, column)
+    instance = _instance_with_device_log(tmp_path, header, rows)
 
     with pytest.raises(DataFormatError, match=column):
         with DeviceLogProfilerQueries(instance):
@@ -334,7 +336,7 @@ def test_a_capture_that_cannot_be_parsed_is_a_data_error(tmp_path):
 
     ragged = tmp_path / "ragged"
     ragged.mkdir()
-    instance = _write_device_log(
+    instance = _instance_with_device_log(
         ragged, MODERN_HEADER, [*MODERN_ROWS, MODERN_ROWS[0] + ",extra,fields"]
     )
     with pytest.raises(DataFormatError, match="could not be parsed"):
@@ -347,7 +349,7 @@ def test_timer_id_query_matches_the_column_it_filters(tmp_path):
 
     The column is required on this method's behalf, so it has to work.
     """
-    instance = _write_device_log(tmp_path, MODERN_HEADER, MODERN_ROWS)
+    instance = _instance_with_device_log(tmp_path, MODERN_HEADER, MODERN_ROWS)
 
     with DeviceLogProfilerQueries(instance) as csv:
         matched = csv.query_by_timer_id(18952, as_dict=True)
