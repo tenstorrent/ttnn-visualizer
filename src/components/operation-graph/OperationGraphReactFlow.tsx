@@ -58,7 +58,7 @@ import {
     getRenderedPerfRange,
 } from './opGraphPerfOverlay';
 import { EMPTY_CRITICAL_PATH, findCriticalPath } from './opGraphCriticalPath';
-import { REVEALED_NODE_CLASS, REVEAL_HIGHLIGHT_MS, revealPanShift } from './opGraphRevealPan';
+import { REVEALED_NODE_CLASS, revealPanShift } from './opGraphRevealPan';
 import { getAdjacentOperationIds } from './opGraphNavigation';
 import { useOpGraphLayoutWorker } from './useOpGraphLayoutWorker';
 import {
@@ -308,7 +308,6 @@ const OperationGraphInner = ({
     // put them outside it. #1944
     const pendingRevealRef = useRef<{ nodeIds: Set<string>; reportScope: ReportScope } | null>(null);
     const [revealedNodeIds, setRevealedNodeIds] = useState<Set<string> | null>(null);
-    const revealTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const [revealedOperationId, setRevealedOperationId] = useState<number | null>(null);
     const { setCenter, getNode, getViewport, setViewport } = useReactFlow<OpGraphFlowNode, OpGraphFlowEdge>();
     const flowStore = useStoreApi();
@@ -563,6 +562,9 @@ const OperationGraphInner = ({
         if (nodes.length === 0 || staleScope) {
             pendingViewportAnchorRef.current = null;
             pendingRevealRef.current = null;
+            if (staleScope) {
+                setRevealedNodeIds(null);
+            }
             return;
         }
         pendingViewportAnchorRef.current = null;
@@ -602,29 +604,15 @@ const OperationGraphInner = ({
                 viewport = { ...viewport, x: viewport.x + dx, y: viewport.y + dy };
             }
 
+            // No timer: the ring pulses for attention and then rests faint, and the
+            // faint state is worth keeping — it is the answer to "which ones did I
+            // just open", which stays useful for as long as they are open. The next
+            // toggle replaces the set, so only one group is ever marked.
             setRevealedNodeIds(reveal.nodeIds);
-            if (revealTimerRef.current !== null) {
-                clearTimeout(revealTimerRef.current);
-            }
-            revealTimerRef.current = setTimeout(() => {
-                revealTimerRef.current = null;
-                setRevealedNodeIds(null);
-            }, REVEAL_HIGHLIGHT_MS);
         }
 
         void setViewport(viewport, { duration: FOCUS_DURATION_MS });
     }, [nodes, reportScope, getViewport, setViewport]);
-
-    // A report swap or unmount while the highlight is up would otherwise leave the
-    // timer to fire against a graph it was never armed for.
-    useEffect(
-        () => () => {
-            if (revealTimerRef.current !== null) {
-                clearTimeout(revealTimerRef.current);
-            }
-        },
-        [],
-    );
 
     const toggleOperationExpansion = useCallback(
         (targetOperationId: number) => {
@@ -732,6 +720,8 @@ const OperationGraphInner = ({
         setHideDeallocate(next);
         setExpandedBlockIds(NOTHING_EXPANDED_BLOCKS);
         setExpandedOperationIds(NOTHING_EXPANDED);
+        // Nothing is open any more, so nothing was "just opened".
+        setRevealedNodeIds(null);
     }, []);
 
     if (operationId !== undefined && revealedOperationId !== operationId && detectedBlocks.length > 0) {

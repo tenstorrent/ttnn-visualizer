@@ -403,26 +403,29 @@ $minimap-width: 200px;
 
     // What a structural toggle just produced. Its own channel again — box-shadow,
     // since selection owns the border, the I/O highlight the fill and the critical
-    // path the outline — so a revealed node that is also selected shows both. Two
-    // pulses then hold, long enough to catch the eye without becoming decoration;
-    // the class is removed on a timer. #1944
+    // path the outline — so a revealed node that is also selected shows both.
+    //
+    // Three slow pulses to catch the eye, then it rests on the rule's own faint
+    // ring, which is where the animation leaves it. That resting state is not a
+    // leftover: it marks the group you last opened for as long as it is open, and
+    // is faint enough not to compete with selection. #1944
     .react-flow__node.op-graph-node-revealed {
-        animation: op-graph-reveal 0.65s ease-out 2;
-        box-shadow: 0 0 0 3px rgb(116 197 223 / 55%);
+        animation: op-graph-reveal 0.9s ease-out 3;
+        box-shadow: 0 0 0 2px rgb(116 197 223 / 32%);
         z-index: 3;
     }
 
     @keyframes op-graph-reveal {
         0% {
-            box-shadow: 0 0 0 2px rgb(116 197 223 / 90%);
+            box-shadow: 0 0 0 2px rgb(116 197 223 / 95%);
         }
 
-        50% {
-            box-shadow: 0 0 0 9px rgb(116 197 223 / 0%);
+        45% {
+            box-shadow: 0 0 0 10px rgb(116 197 223 / 0%);
         }
 
         100% {
-            box-shadow: 0 0 0 3px rgb(116 197 223 / 55%);
+            box-shadow: 0 0 0 2px rgb(116 197 223 / 32%);
         }
     }
 

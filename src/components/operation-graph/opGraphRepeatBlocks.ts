@@ -165,12 +165,20 @@ export function formatRepeatPatternLabel(
     members: readonly OpGraphSourceOperation[],
     graphOperations: readonly OpGraphSourceOperation[] = members,
 ): string {
+    const opNames = uniqueShortOpNames(members);
+    // One operation type is named by that operation, not by the file it came from.
+    // A module stem earns the label when it *summarises* several distinct
+    // operations — `norm + attention + encoder + mlp` beats listing eight op
+    // names. When there is only one, the stem says where the operation lives
+    // while the name says what it is, and the name is what the node is for.
+    if (opNames.length === 1) {
+        return opNames[0];
+    }
     const globalStems = globalFileStems(graphOperations);
     const moduleStems = uniqueFileStems(members, true).filter((stem) => !globalStems.has(stem));
     if (moduleStems.length > 0) {
         return joinCapped(moduleStems);
     }
-    const opNames = uniqueShortOpNames(members);
     if (opNames.length > 0) {
         return joinCapped(opNames);
     }

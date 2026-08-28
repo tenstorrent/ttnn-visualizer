@@ -3,11 +3,13 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 // Marks the nodes a structural toggle just produced, so an expand or fold is
-// visibly *something appearing* rather than the graph rearranging itself. Cleared
-// on a timer: it answers "where did it go", which stops being a question once the
-// user has seen the answer. #1944
+// visibly *something appearing* rather than the graph rearranging itself.
+//
+// Held rather than timed out: the ring pulses for attention and then rests faint,
+// and the faint state answers "which ones did I just open", which stays useful for
+// as long as they are open. The next toggle replaces the set, so exactly one group
+// is ever marked. #1944
 export const REVEALED_NODE_CLASS = 'op-graph-node-revealed';
-export const REVEAL_HIGHLIGHT_MS = 2600;
 // Keeps a revealed node off the very edge of the pane, where it reads as clipped.
 const REVEAL_MARGIN_PX = 48;
 

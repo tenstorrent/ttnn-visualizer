@@ -324,6 +324,35 @@ describe('formatRepeatPatternLabel', () => {
         ).toBe('as_tensor + from_torch');
     });
 
+    it('names a single-operation-type block from the operation, not its file', () => {
+        // Reported from the DeepSeek MoE graph: a block of two `ttnn.squeeze`
+        // rendered as `tt_routed_expert`, which says where they live rather than
+        // what the node is. The file only earns the label when it stands in for
+        // several distinct operations.
+        const members = [
+            op({ id: 35, name: 'ttnn.squeeze', fileIdentifier: 'tt_routed_expert.py:165' }),
+            op({ id: 36, name: 'ttnn.squeeze', fileIdentifier: 'tt_routed_expert.py:165' }),
+        ];
+        expect(
+            formatRepeatPatternLabel(members, [
+                ...members,
+                op({ id: 10, name: 'ttnn.matmul', fileIdentifier: 'tt_moe.py:1' }),
+            ]),
+        ).toBe('squeeze');
+    });
+
+    it('still prefers the module when the block spans several operation types', () => {
+        // The counterpart, and why the rule is narrow: four distinct operations
+        // across four module files read better as the modules.
+        const members = [
+            op({ id: 1, name: 'ttnn.layer_norm', fileIdentifier: 'norm.py:86' }),
+            op({ id: 2, name: 'ttnn.linear', fileIdentifier: 'attention.py:193' }),
+            op({ id: 3, name: 'ttnn.add', fileIdentifier: 'encoder.py:72' }),
+            op({ id: 4, name: 'ttnn.gelu', fileIdentifier: 'mlp.py:112' }),
+        ];
+        expect(formatRepeatPatternLabel(members)).toBe('norm + attention + encoder + mlp');
+    });
+
     it('keeps a module file that is not most of the graph', () => {
         const members = [
             op({ id: 1, name: 'ttnn.as_tensor', fileIdentifier: 'tt_routed_expert.py:132' }),
