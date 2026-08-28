@@ -291,13 +291,21 @@ export function detectRepeatBlocks(keptOperations: readonly OpGraphSourceOperati
     for (let length = MIN_REPEAT_WINDOW; length <= maxLength; length++) {
         let start = 0;
         while (start <= count - length * MIN_REPEAT_COUNT) {
-            if (consumed[start] || isRangeConsumed(consumed, start, length)) {
+            const nextStart = start + length;
+            // O(1) and necessary for the window to repeat at all, so it goes ahead
+            // of the two O(length) consumed walks rather than behind them. The
+            // while condition keeps `nextStart` in bounds. Same control flow —
+            // every rejected `start` still advances by one.
+            if (consumed[start] || ids[start] !== ids[nextStart]) {
                 start += 1;
                 continue;
             }
 
-            const nextStart = start + length;
-            if (isRangeConsumed(consumed, nextStart, length) || !idsEqual(ids, start, nextStart, length)) {
+            if (
+                isRangeConsumed(consumed, start, length) ||
+                isRangeConsumed(consumed, nextStart, length) ||
+                !idsEqual(ids, start, nextStart, length)
+            ) {
                 start += 1;
                 continue;
             }
