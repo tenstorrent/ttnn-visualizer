@@ -60,6 +60,7 @@ import {
 import { EMPTY_CRITICAL_PATH, findCriticalPath } from './opGraphCriticalPath';
 import { REVEALED_NODE_CLASS, revealPanShift } from './opGraphRevealPan';
 import { buildPositionByOperationId, getAdjacentOperationIds } from './opGraphNavigation';
+import { tensorBytes } from '../../functions/math';
 import { useOpGraphLayoutWorker } from './useOpGraphLayoutWorker';
 import {
     type OpGraphBlockSummary,
@@ -125,9 +126,6 @@ const bothEndsMatched = (
     const target = operationNodeIdOf(targetOperationIdOf(edge), nodeIdByOperationId);
     return source !== null && target !== null && matchedIds.has(source) && matchedIds.has(target);
 };
-
-const tensorBytes = (tensors: { size: number | null }[]): number =>
-    tensors.reduce((total, tensor) => total + (tensor.size ?? 0), 0);
 
 // A large report only fits at extreme zoom-out; 3 caps zoom-in as vis did.
 const MAX_ZOOM = 3;

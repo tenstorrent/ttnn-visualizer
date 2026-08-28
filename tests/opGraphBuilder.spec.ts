@@ -4,6 +4,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { getDeviceEdgeId, getDeviceNodeId } from '../src/components/operation-graph/opGraphDeviceSubgraph';
+import { formatBlockMeta } from '../src/components/operation-graph/opGraphBlockMeta';
 import { buildOpGraph } from '../src/components/operation-graph/opGraphBuilder';
 import {
     type OpGraphDeviceSubgraph,
@@ -443,6 +444,26 @@ describe('buildOpGraph', () => {
                 { id: '6', type: OpGraphNodeType.OP, operationId: 6 },
             ]);
             expect(graph.blocks?.map((block) => block.instanceId)).toEqual([FIRST_BLOCK_ID, SECOND_BLOCK_ID]);
+        });
+
+        it('gives the node and the block summary the same sums', () => {
+            // The node's meta line and the panel's stats rows are on screen at the
+            // same time; they were derived twice, by independent paths, so drift
+            // would have shown as the two disagreeing about one block.
+            const graph = build(REPEAT_CHAIN, false);
+            const node = nodeById(graph, FIRST_BLOCK_ID);
+            const summary = graph.blocks?.find((block) => block.instanceId === FIRST_BLOCK_ID);
+
+            expect(summary).toBeDefined();
+            expect(summary?.durationSeconds).toBe(2);
+            expect(summary?.memoryDeltaBytes).toBe(1280);
+            expect(node.data.fileIdentifier).toBe(
+                formatBlockMeta(
+                    summary?.operationIds.length ?? 0,
+                    summary?.durationSeconds ?? 0,
+                    summary?.memoryDeltaBytes ?? 0,
+                ),
+            );
         });
 
         it('sums duration and memory onto the collapsed node', () => {

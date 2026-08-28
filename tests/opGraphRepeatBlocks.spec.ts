@@ -9,7 +9,6 @@ import {
     MIN_REPEAT_WINDOW,
     detectRepeatBlocks,
     formatRepeatPatternLabel,
-    sumOptional,
 } from '../src/components/operation-graph/opGraphRepeatBlocks';
 import type { OpGraphSourceOperation } from '../src/components/operation-graph/opGraphTypes';
 
@@ -441,12 +440,5 @@ describe('formatRepeatPatternLabel', () => {
                 op({ id: 5, name: 'e', fileIdentifier: 'five.py:1' }),
             ]),
         ).toBe('one + two + three + four + …');
-    });
-});
-
-describe('sumOptional', () => {
-    it('adds finite numbers and skips the rest', () => {
-        expect(sumOptional([1, undefined, 2.5, Number.NaN, Number.POSITIVE_INFINITY])).toBe(3.5);
-        expect(sumOptional([])).toBe(0);
     });
 });

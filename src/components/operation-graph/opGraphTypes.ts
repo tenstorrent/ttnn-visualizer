@@ -143,6 +143,11 @@ export interface OpGraphBlockSummary {
     patternLabel: string;
     instanceIndex: number;
     instanceCount: number;
+    // Summed once here rather than re-derived by the panel: the node's meta line
+    // and the panel's stats are on screen together, so two derivations show up as
+    // the two of them disagreeing about one block. #1944
+    durationSeconds: number;
+    memoryDeltaBytes: number;
 }
 
 export interface OpGraphBuiltGraph {

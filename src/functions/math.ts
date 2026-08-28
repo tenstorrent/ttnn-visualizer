@@ -225,3 +225,22 @@ export const getMemoryAddress = (address: number | null, showHex: boolean): stri
 
     return showHex ? toHex(address) : address.toString();
 };
+
+/**
+ * @description Sum values that may be absent or non-finite, treating both as
+ * nothing rather than propagating NaN. Report fields are optional per row, so a
+ * plain reduce poisons the total for the whole set.
+ */
+export const sumOptional = (values: readonly (number | undefined)[]): number => {
+    let total = 0;
+    for (const value of values) {
+        if (value !== undefined && Number.isFinite(value)) {
+            total += value;
+        }
+    }
+    return total;
+};
+
+/** @description Total bytes across tensors, counting an unknown size as zero. */
+export const tensorBytes = (tensors: readonly { size: number | null }[]): number =>
+    tensors.reduce((total, tensor) => total + (tensor.size ?? 0), 0);

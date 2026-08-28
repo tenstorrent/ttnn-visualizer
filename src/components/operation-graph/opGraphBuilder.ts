@@ -7,11 +7,12 @@ import {
     type LayoutInputEdge,
     estimateBlockNodeSize,
     estimateOpNodeSize,
-    formatBlockMeta,
     layoutDeviceSubgraph,
     layoutOpGraph,
 } from './opGraphLayout';
-import { detectRepeatBlocks, sumOptional } from './opGraphRepeatBlocks';
+import { detectRepeatBlocks } from './opGraphRepeatBlocks';
+import { formatBlockMeta } from './opGraphBlockMeta';
+import { sumOptional } from '../../functions/math';
 import {
     type OpGraphBlockSummary,
     type OpGraphBuildOptions,
@@ -288,14 +289,21 @@ export function buildOpGraph(
         layoutEdges,
     );
 
-    const blocks: OpGraphBlockSummary[] = detectedBlocks.map((instance) => ({
-        instanceId: instance.instanceId,
-        operationIds: instance.operationIds,
-        label: instance.label,
-        patternLabel: instance.patternLabel,
-        instanceIndex: instance.instanceIndex,
-        instanceCount: instance.instanceCount,
-    }));
+    const blocks: OpGraphBlockSummary[] = detectedBlocks.map((instance) => {
+        const members = instance.operationIds
+            .map((id) => operationById.get(id))
+            .filter((member): member is OpGraphSourceOperation => member !== undefined);
+        return {
+            instanceId: instance.instanceId,
+            operationIds: instance.operationIds,
+            label: instance.label,
+            patternLabel: instance.patternLabel,
+            instanceIndex: instance.instanceIndex,
+            instanceCount: instance.instanceCount,
+            durationSeconds: sumOptional(members.map((member) => member.durationSeconds)),
+            memoryDeltaBytes: sumOptional(members.map((member) => member.memoryDeltaBytes)),
+        };
+    });
 
     return {
         // Children last: React Flow resolves `parentId` against the nodes it has

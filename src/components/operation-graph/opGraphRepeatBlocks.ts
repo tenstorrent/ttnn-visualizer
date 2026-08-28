@@ -364,13 +364,3 @@ export function detectRepeatBlocks(keptOperations: readonly OpGraphSourceOperati
 
     return instances;
 }
-
-export function sumOptional(values: readonly (number | undefined)[]): number {
-    let total = 0;
-    for (const value of values) {
-        if (value !== undefined && Number.isFinite(value)) {
-            total += value;
-        }
-    }
-    return total;
-}

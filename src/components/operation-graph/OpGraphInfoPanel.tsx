@@ -20,7 +20,6 @@ import MemoryConfigRow from '../MemoryConfigRow';
 import MemoryTag from '../MemoryTag';
 import SourceFileButton from '../operation-details/SourceFileButton';
 import PerfOverlayOpMetric from '../perf-overlay/PerfOverlayOpMetric';
-import { sumOptional } from './opGraphRepeatBlocks';
 import type { OpGraphBlockSummary } from './opGraphTypes';
 
 interface ConnectedOpGroup {
@@ -72,9 +71,6 @@ const getConnectedOpGroups = (
 
     return Array.from(groupsByKey.values());
 };
-
-const tensorBytes = (tensors: { size: number | null }[]): number =>
-    tensors.reduce((total, tensor) => total + (tensor.size ?? 0), 0);
 
 const uniqueNameCounts = (names: readonly string[]): Array<{ name: string; count: number }> => {
     const counts: Array<{ name: string; count: number }> = [];
@@ -273,10 +269,9 @@ const OpGraphBlockPanel = ({
         [members, memberIds, operationNamesById],
     );
     const typeCounts = useMemo(() => uniqueNameCounts(members.map((member) => member.name)), [members]);
-    const durationSeconds = sumOptional(members.map((member) => member.duration));
-    const memoryDeltaBytes = sumOptional(
-        members.map((member) => tensorBytes(member.outputs) - tensorBytes(member.inputs)),
-    );
+    // Carried on the summary, not re-derived: the node's meta line is on screen at
+    // the same time and is formatted from these same two numbers.
+    const { durationSeconds, memoryDeltaBytes } = block;
     const firstOpId = block.operationIds[0];
     const lastOpId = block.operationIds[block.operationIds.length - 1];
     const inputCount = inputGroups.reduce((total, group) => total + group.tensors.length, 0);

@@ -59,6 +59,8 @@ describe('op graph panel heading tooltips', () => {
             patternLabel: label,
             instanceIndex: 1,
             instanceCount: 11,
+            durationSeconds: 0,
+            memoryDeltaBytes: 0,
         });
 
         expect(screen.getByRole('heading', { level: 2 })).toHaveAttribute('title', label);
