@@ -65,8 +65,8 @@ interface OpGraphToolbarProps {
     onGoToOperation: (operationId: number) => void;
     hideDeallocate: boolean;
     onHideDeallocateChange: (next: boolean) => void;
-    focusUnrelatedEdges: boolean;
-    onFocusUnrelatedEdgesChange: (next: boolean) => void;
+    isDimUnrelatedEdges: boolean;
+    onDimUnrelatedEdgesChange: (next: boolean) => void;
     isPerfOverlayActive: boolean;
     onPerfOverlayChange: (next: boolean) => void;
     isCriticalPathActive: boolean;
@@ -76,11 +76,14 @@ interface OpGraphToolbarProps {
     totalOpCount: number;
     isDisabled: boolean;
     hiddenMatchCount?: number;
-    hasBlocks?: boolean;
-    areAllBlocksExpanded?: boolean;
-    areAllBlocksCollapsed?: boolean;
-    onExpandAllBlocks?: () => void;
-    onCollapseAllBlocks?: () => void;
+    // Required, though the sole caller supplies them anyway: optional handlers let
+    // `disabled={isDisabled || areAllBlocksExpanded}` render an enabled button whose
+    // onClick is undefined — a silent no-op the type system should be catching.
+    hasBlocks: boolean;
+    areAllBlocksExpanded: boolean;
+    areAllBlocksCollapsed: boolean;
+    onExpandAllBlocks: () => void;
+    onCollapseAllBlocks: () => void;
 }
 
 const OpGraphToolbar = memo(
@@ -101,8 +104,8 @@ const OpGraphToolbar = memo(
         onGoToOperation,
         hideDeallocate,
         onHideDeallocateChange,
-        focusUnrelatedEdges,
-        onFocusUnrelatedEdgesChange,
+        isDimUnrelatedEdges,
+        onDimUnrelatedEdgesChange,
         isPerfOverlayActive,
         onPerfOverlayChange,
         isCriticalPathActive,
@@ -112,9 +115,9 @@ const OpGraphToolbar = memo(
         totalOpCount,
         isDisabled,
         hiddenMatchCount = 0,
-        hasBlocks = false,
-        areAllBlocksExpanded = false,
-        areAllBlocksCollapsed = true,
+        hasBlocks,
+        areAllBlocksExpanded,
+        areAllBlocksCollapsed,
         onExpandAllBlocks,
         onCollapseAllBlocks,
     }: OpGraphToolbarProps) => (
@@ -198,9 +201,9 @@ const OpGraphToolbar = memo(
 
                 <Switch
                     className='op-graph-toolbar-switch'
-                    checked={focusUnrelatedEdges}
+                    checked={isDimUnrelatedEdges}
                     onChange={(event: FormEvent<HTMLInputElement>) =>
-                        onFocusUnrelatedEdgesChange(event.currentTarget.checked)
+                        onDimUnrelatedEdgesChange(event.currentTarget.checked)
                     }
                     label='Dim unrelated edges'
                     disabled={isDisabled}

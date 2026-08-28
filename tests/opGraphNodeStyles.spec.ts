@@ -96,7 +96,7 @@ describe('op graph critical path styling', () => {
     });
 
     it('shares the off-path dim with dim-unrelated-edges', () => {
-        expect(STYLESHEET).toContain('&.op-graph-focus-edges:not(.op-graph-filtering)');
+        expect(STYLESHEET).toContain('&.op-graph-dim-unrelated-edges:not(.op-graph-filtering)');
         expect(ruleBody(OFF_PATH_DIM_SELECTOR)).toMatch(/opacity:\s*0\.35/);
     });
 

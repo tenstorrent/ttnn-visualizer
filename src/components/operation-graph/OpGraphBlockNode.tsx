@@ -29,7 +29,7 @@ const OpGraphBlockNode = memo(({ data }: NodeProps<OpGraphFlowNode>) => {
             >
                 {data.label}
             </div>
-            <div className='op-graph-node-file'>{data.fileIdentifier}</div>
+            <div className='op-graph-node-meta'>{data.metaLine}</div>
             <OpGraphBlockExpander
                 instanceId={instanceId}
                 opCount={opCount}

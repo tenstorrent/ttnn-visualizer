@@ -142,15 +142,17 @@ export function buildOpGraph(
                     data: {
                         operationId: collapsedInstance.operationIds[0],
                         label: collapsedInstance.label,
-                        fileIdentifier: meta,
+                        // Not `fileIdentifier`: a block has no source file, and the
+                        // stats line was being smuggled through the field that names
+                        // one. The sums it is formatted from live on the summary.
+                        fileIdentifier: '',
+                        metaLine: meta,
                         filterString: collapsedInstance.label,
                         deviceOperationCount: 0,
                         blockInstanceId: collapsedInstance.instanceId,
                         memberNames: members.map((member) => member.name),
                         memberOperationIds: collapsedInstance.operationIds,
                         opCount,
-                        durationSeconds,
-                        memoryDeltaBytes,
                     },
                 });
             }

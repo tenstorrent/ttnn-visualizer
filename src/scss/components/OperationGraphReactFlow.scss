@@ -327,7 +327,8 @@ $minimap-width: 200px;
         white-space: nowrap;
     }
 
-    .op-graph-node-file {
+    .op-graph-node-file,
+    .op-graph-node-meta {
         overflow: hidden;
         color: $tt-grey-2;
         font-size: 11px;
@@ -395,7 +396,7 @@ $minimap-width: 200px;
     // inputs and outputs would fade half of them. Critical path and "dim
     // unrelated edges" ask for the same fade, so they share the rule.
     &.op-graph-critical-path:not(.op-graph-filtering),
-    &.op-graph-focus-edges:not(.op-graph-filtering) {
+    &.op-graph-dim-unrelated-edges:not(.op-graph-filtering) {
         .react-flow__edge:not(.op-graph-edge-critical-path, .op-graph-edge-input, .op-graph-edge-output) {
             opacity: 0.35;
         }

@@ -457,7 +457,7 @@ describe('buildOpGraph', () => {
             expect(summary).toBeDefined();
             expect(summary?.durationSeconds).toBe(2);
             expect(summary?.memoryDeltaBytes).toBe(1280);
-            expect(node.data.fileIdentifier).toBe(
+            expect(node.data.metaLine).toBe(
                 formatBlockMeta(
                     summary?.operationIds.length ?? 0,
                     summary?.durationSeconds ?? 0,
@@ -471,8 +471,10 @@ describe('buildOpGraph', () => {
             const first = nodeById(graph, FIRST_BLOCK_ID);
 
             expect(first.data.opCount).toBe(2);
-            expect(first.data.durationSeconds).toBe(2);
-            expect(first.data.memoryDeltaBytes).toBe(1280);
+            // The sums themselves are asserted on the block summary, which is now
+            // the single place they are derived; the node carries the formatted line.
+            expect(first.data.metaLine).toBe(formatBlockMeta(2, 2, 1280));
+            expect(first.data.fileIdentifier).toBe('');
             expect(first.data.memberNames).toEqual(['layer_a', 'layer_b']);
             expect(first.data.memberOperationIds).toEqual([2, 3]);
         });

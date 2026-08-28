@@ -77,8 +77,8 @@ export type OpGraphNodeData = {
     memberNames?: string[];
     memberOperationIds?: number[];
     opCount?: number;
-    durationSeconds?: number;
-    memoryDeltaBytes?: number;
+    /** A block's stats line. Its sums live on `OpGraphBlockSummary`. */
+    metaLine?: string;
     buriedMatchCount?: number;
 };
 

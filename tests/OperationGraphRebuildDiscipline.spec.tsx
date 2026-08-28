@@ -1096,23 +1096,23 @@ describe('OperationGraphReactFlow critical path rendering', () => {
 describe('OperationGraphReactFlow dim unrelated edges', () => {
     it('flags the container so the stylesheet can dim edges off the selection', () => {
         const { container } = renderGraph();
-        expect(container.querySelector('.op-graph-focus-edges')).toBeNull();
+        expect(container.querySelector('.op-graph-dim-unrelated-edges')).toBeNull();
 
         fireEvent.click(screen.getByLabelText('Dim unrelated edges'));
 
-        expect(container.querySelector('.op-graph-focus-edges')).not.toBeNull();
+        expect(container.querySelector('.op-graph-dim-unrelated-edges')).not.toBeNull();
     });
 
     it('drops the flag when nothing is selected', () => {
         const { container } = renderGraph();
         fireEvent.click(screen.getByLabelText('Dim unrelated edges'));
-        expect(container.querySelector('.op-graph-focus-edges')).not.toBeNull();
+        expect(container.querySelector('.op-graph-dim-unrelated-edges')).not.toBeNull();
 
         act(() => {
             harness.onPaneClick?.();
         });
 
-        expect(container.querySelector('.op-graph-focus-edges')).toBeNull();
+        expect(container.querySelector('.op-graph-dim-unrelated-edges')).toBeNull();
     });
 });
 
