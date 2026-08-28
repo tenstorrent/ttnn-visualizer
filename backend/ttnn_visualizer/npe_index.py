@@ -42,7 +42,9 @@ _BUILD_LOCK = threading.Lock()
 INDEX_SUFFIX = ".npeidx.sqlite"
 
 # Bump when the schema or build logic changes so stale caches are rebuilt.
-INDEX_VERSION = 4
+# 5: carries `soc_descriptor` in meta, so a report-supplied SoC descriptor
+#    survives the windowed path as well as the whole-file one. #1776
+INDEX_VERSION = 5
 
 _TRANSFER_INSERT_BATCH = 5000
 
@@ -241,6 +243,9 @@ def _write_index(
                 ("source_mtime_ns", str(source_mtime_ns)),
                 ("n_timesteps", str(len(timesteps))),
                 ("common_info", orjson.dumps(obj.get("common_info", {}))),
+                # Optional; `null` when the report supplies none. Stored rather than
+                # derived because the windowed path never re-reads the source JSON.
+                ("soc_descriptor", orjson.dumps(obj.get("soc_descriptor"))),
                 ("chips", orjson.dumps(obj.get("chips", {}))),
                 ("zones", orjson.dumps(obj.get("zones", []))),
             ],
@@ -359,6 +364,9 @@ def read_summary(db_path: Path) -> dict:
 
     return {
         "common_info": orjson.loads(meta["common_info"]),
+        # `.get` rather than `[...]`: an index written before this key existed is
+        # still readable, and a rebuild is only triggered by INDEX_VERSION.
+        "soc_descriptor": orjson.loads(meta.get("soc_descriptor") or b"null"),
         "chips": orjson.loads(meta["chips"]),
         "zones": orjson.loads(meta["zones"]),
         "n_timesteps": int(meta["n_timesteps"]),
