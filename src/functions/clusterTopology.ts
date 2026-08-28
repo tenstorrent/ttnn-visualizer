@@ -151,10 +151,17 @@ export const hostHasTwoDimensionalMesh = (host: ClusterHost): boolean => {
 };
 
 /**
- * True iff this descriptor looks like a per-rank slice of a multi-host report.
+ * True iff this descriptor *might* be a per-rank slice of a multi-host report.
  * Requires BOTH `ethernet_connections_to_remote_devices` and `chip_unique_ids`
- * to be non-empty — single-host reports omit these and a more permissive check
- * would trigger spurious world-size probes against the unranked descriptor.
+ * to be non-empty.
+ *
+ * It is a hint, not a decision. The premise that single-host reports omit these
+ * fields is false: a UBB with scale-out links populates both while describing one
+ * host, and this check cannot separate it from a genuine rank-0 slice — which is
+ * the mechanism behind #1939, where a lone descriptor was cloned once per probed
+ * rank. What bounds the probe is the backend, which answers 400 for any rank a
+ * report's descriptor family cannot cover, so a false positive here costs one
+ * rejected request rather than a fabricated host.
  */
 export const looksLikeRankedDescriptor = (descriptor: ClusterModel): boolean => {
     const remoteConnections = descriptor.ethernet_connections_to_remote_devices;

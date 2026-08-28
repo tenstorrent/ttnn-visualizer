@@ -146,3 +146,34 @@ def test_mesh_descriptor_returns_empty_chips_shape_when_yaml_has_no_dict_docs(
         assert response.status_code == 200
         data = response.get_json()
         assert data == {"chips": {}}
+
+
+def test_cluster_descriptor_rejects_a_rank_a_lone_descriptor_cannot_answer(app, client):
+    """
+    The fix for #1939 only reaches the frontend as an HTTP status: the probe loop
+    stops when a rank 400s. Nothing asserted that mapping, so remapping
+    ``rank_out_of_range`` to 200 or 500 would have passed the suite while
+    restoring the 32-host clone.
+    """
+    instance_id = "test-cluster-lone-descriptor-rank"
+    with tempfile.TemporaryDirectory() as tmp:
+        report_dir = Path(tmp)
+        (report_dir / "cluster_descriptor.yaml").write_text(
+            "chips: []\n", encoding="utf-8"
+        )
+        _register_profiler_instance_with_dir(app, instance_id, report_dir)
+
+        # Rank 0 is the one host this report describes.
+        rank_zero = client.get(
+            "/api/cluster-descriptor",
+            query_string={"instanceId": instance_id, "rank": 0},
+        )
+        assert rank_zero.status_code == 200
+
+        # Every rank past it is out of range, not another copy of the same host.
+        for rank in (1, 2, 31):
+            response = client.get(
+                "/api/cluster-descriptor",
+                query_string={"instanceId": instance_id, "rank": rank},
+            )
+            assert response.status_code == 400, f"rank {rank}"

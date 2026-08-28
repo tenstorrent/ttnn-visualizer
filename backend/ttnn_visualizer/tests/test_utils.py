@@ -10,12 +10,14 @@ import pytest
 from ttnn_visualizer.models import RemoteConnection
 from ttnn_visualizer.utils import (
     FALSE_VALUES,
+    MAX_RANKED_WORLD_SIZE,
     TRUE_VALUES,
     find_gunicorn_path,
     get_app_data_directory,
     get_mlir_path,
     get_report_data_directory,
     is_running_in_container,
+    is_valid_profiler_ranked_entry,
     parse_bool,
     pick_cluster_descriptor_path,
     pick_mesh_descriptor_path,
@@ -891,3 +893,46 @@ def test_pick_cluster_descriptor_ranked_files(tmp_path):
     assert err is None
     assert path is not None
     assert path.name == "cluster_descriptor_2_of_2.yaml"
+
+
+def test_ranked_world_size_is_bounded_against_a_hostile_filename(tmp_path):
+    """
+    ``world_size`` is parsed straight out of a filename, and the local upload path
+    preserves client basenames. Completeness used to be decided by comparing
+    against ``set(range(1, world_size + 1))``, so an 11-digit world size asked for
+    a multi-terabyte allocation inside the shared Flask process. #1947
+    """
+    assert is_valid_profiler_ranked_entry(1, MAX_RANKED_WORLD_SIZE) is True
+    assert is_valid_profiler_ranked_entry(1, MAX_RANKED_WORLD_SIZE + 1) is False
+    assert is_valid_profiler_ranked_entry(1, 99_999_999_999) is False
+
+    # End to end: an over-cap name is skipped, so a usable unsuffixed descriptor
+    # still answers rather than the request dying on the allocation.
+    (tmp_path / "cluster_descriptor.yaml").write_text("chips: []\n", encoding="utf-8")
+    (tmp_path / "cluster_descriptor_1_of_99999999999.yaml").write_text(
+        "chips: [1]\n", encoding="utf-8"
+    )
+
+    path, err = pick_cluster_descriptor_path(tmp_path, logical_rank=0)
+
+    assert err is None
+    assert path is not None
+    assert path.name == "cluster_descriptor.yaml"
+
+
+def test_ranked_family_completeness_counts_rather_than_enumerating(tmp_path):
+    # The count settles completeness because the indices are unique and already
+    # bounded to 1..world; an incomplete family must not outrank the unsuffixed file.
+    (tmp_path / "cluster_descriptor.yaml").write_text("chips: []\n", encoding="utf-8")
+    (tmp_path / "cluster_descriptor_1_of_3.yaml").write_text(
+        "chips: [1]\n", encoding="utf-8"
+    )
+    (tmp_path / "cluster_descriptor_2_of_3.yaml").write_text(
+        "chips: [2]\n", encoding="utf-8"
+    )
+
+    path, err = pick_cluster_descriptor_path(tmp_path, logical_rank=0)
+
+    assert err is None
+    assert path is not None
+    assert path.name == "cluster_descriptor.yaml"

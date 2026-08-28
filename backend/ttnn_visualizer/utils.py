@@ -54,9 +54,17 @@ def parse_ranked_profiler_config_basename(
     return parse_ranked_basename(filename, PROFILER_CONFIG_RANKED_RE)
 
 
+# A world size is parsed straight out of a filename, and filenames on the local
+# upload path are client-controlled. Anything past this is not a run we could
+# render anyway — the largest cluster the app has seen is in the hundreds — and
+# without a bound an 11-digit name asks for a multi-terabyte allocation in the
+# shared Flask process. Well above _MAX_RANK's use as a query-param bound.
+MAX_RANKED_WORLD_SIZE = 4096
+
+
 def is_valid_profiler_ranked_entry(index_one_based: int, world: int) -> bool:
     """True when the filename indices match TTNN output (1..world inclusive)."""
-    return 1 <= index_one_based <= world
+    return 1 <= world <= MAX_RANKED_WORLD_SIZE and 1 <= index_one_based <= world
 
 
 def ranked_report_basenames(
@@ -124,16 +132,18 @@ def _ranked_family(
     )
     if not names:
         return [], 0, False
-    parsed = parse_ranked_basename(names[0], ranked_re)
-    if not parsed:
+    # Parsed once per name: this ran the regex three times per filename, and the
+    # hoist is also what removes the `type: ignore[index]` the comprehension needed.
+    parsed = [parse_ranked_basename(name, ranked_re) for name in names]
+    if not parsed[0]:
         return [], 0, False
-    _, world_size = parsed
-    indices = {
-        parse_ranked_basename(name, ranked_re)[0]  # type: ignore[index]
-        for name in names
-        if parse_ranked_basename(name, ranked_re)
-    }
-    return names, world_size, indices == set(range(1, world_size + 1))
+    _, world_size = parsed[0]
+    indices = {entry[0] for entry in parsed if entry}
+    # Counted, not compared against `set(range(1, world_size + 1))`: the indices are
+    # already unique and `ranked_report_basenames` has bounded them to 1..world, so
+    # the count settles completeness without allocating a set sized by a number that
+    # came out of a filename.
+    return names, world_size, len(indices) == world_size
 
 
 def _newest_mtime_ns(paths: Iterable[Path]) -> int:
