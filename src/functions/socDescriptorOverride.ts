@@ -75,8 +75,10 @@ export const parseSocDescriptorOverride = (raw: unknown, reportedArch?: string):
         ...gridProblems(raw.grid),
         ...coordinateProblems('functional_workers', raw.functional_workers),
         // `dram` is nested one level deeper than the rest: a bank per channel.
-        ...(Array.isArray(raw.dram)
-            ? raw.dram.flatMap((channel, index) => coordinateProblems(`dram[${index}]`, channel))
+        // Optional on the same terms as `eth` / `pcie`, so `grid` and
+        // `functional_workers` are the only two a producer must write.
+        ...(Array.isArray(raw.dram ?? [])
+            ? ((raw.dram ?? []) as unknown[]).flatMap((channel, index) => coordinateProblems(`dram[${index}]`, channel))
             : ['`dram` must be an array of channels']),
         ...coordinateProblems('eth', raw.eth ?? []),
         ...coordinateProblems('pcie', raw.pcie ?? []),
@@ -106,6 +108,7 @@ export const parseSocDescriptorOverride = (raw: unknown, reportedArch?: string):
             ...raw,
             arch_name: (raw.arch_name ?? reportedArch ?? 'unknown') as DeviceArchitecture,
             arc: raw.arc ?? [],
+            dram: raw.dram ?? [],
             eth: raw.eth ?? [],
             pcie: raw.pcie ?? [],
             router_only: raw.router_only ?? [],

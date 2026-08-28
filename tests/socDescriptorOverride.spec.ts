@@ -88,6 +88,22 @@ describe('parseSocDescriptorOverride', () => {
         expect(result.design.router_only).toEqual([]);
     });
 
+    it('needs only grid and functional_workers, defaulting every node list', () => {
+        // The minimum a producer has to write. `dram` is optional on the same
+        // terms as `eth` / `pcie` rather than uniquely required.
+        const result = parseSocDescriptorOverride({
+            grid: { x_size: 4, y_size: 4 },
+            functional_workers: ['1-1', '2-1'],
+        });
+
+        expect(result.status).toBe('valid');
+        if (result.status !== 'valid') {
+            return;
+        }
+        expect(result.design.dram).toEqual([]);
+        expect(result.design.eth).toEqual([]);
+    });
+
     it('reports a malformed grid rather than rendering an empty one', () => {
         const result = parseSocDescriptorOverride({
             grid: { x_size: 0, y_size: 'eight' },
