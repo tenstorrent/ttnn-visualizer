@@ -302,18 +302,30 @@ const NPEView = ({
         return () => window.removeEventListener('resize', handleResize);
     }, []);
 
-    const { architecture, cores, dram, eth, pcie } = useNodeType(npeData.common_info.arch as DeviceArchitecture);
+    const { architecture, cores, dram, eth, pcie, overrideProblems } = useNodeType(
+        npeData.common_info.arch as DeviceArchitecture,
+        npeData.soc_descriptor,
+    );
     const width = architecture?.grid?.x_size || 10;
     const height = architecture?.grid?.y_size || 12;
 
     useEffect(() => {
+        // A descriptor that was supplied and rejected is its own failure, distinct from
+        // an arch nobody shipped a descriptor for. Naming the problems is the point:
+        // the alternative is the empty grid #1776 was filed about. Reported as an
+        // ERROR rather than a WARNING because the report asked to be rendered a
+        // specific way and could not be.
+        if (overrideProblems) {
+            createToastNotification('Unusable SoC descriptor in report', overrideProblems.join('; '), ToastType.ERROR);
+            return;
+        }
         // `architecture === null` rather than probing a field: `arch_name` is declared required
         // on `ChipDesign` and only read as absent because the unresolved case used to return an
         // empty stand-in. Now the same predicate holds here as everywhere else. #1772
         if (architecture === null) {
             createToastNotification(`Unsupported architecture`, npeData.common_info.arch, ToastType.WARNING);
         }
-    }, [architecture, npeData.common_info.arch]);
+    }, [architecture, npeData.common_info.arch, overrideProblems]);
 
     useEffect(() => {
         resetRouteColors();
