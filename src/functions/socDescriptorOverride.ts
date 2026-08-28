@@ -21,31 +21,87 @@ export type SocDescriptorOverride =
 /** Node lists are `"x-y"` coordinate strings, as the baked descriptors write them. */
 const COORDINATE = /^\d+-\d+$/;
 
+/**
+ * Renderer-safe ceilings. `EmptyChipRenderer` materialises one element per cell,
+ * so the grid is a direct multiplier on DOM size: a report asking for
+ * 1,000,000 x 1,000,000 would hang the tab before anything drew. The largest real
+ * part is ~17 x 12, so these leave roughly two orders of magnitude of headroom
+ * while keeping a nonsense value from reaching React. #1776
+ */
+const MAX_GRID_AXIS = 256;
+const MAX_GRID_CELLS = 16_384;
+
+interface GridExtent {
+    xSize: number;
+    ySize: number;
+}
+
 const isRecord = (value: unknown): value is Record<string, unknown> =>
     typeof value === 'object' && value !== null && !Array.isArray(value);
 
-const coordinateProblems = (label: string, value: unknown): string[] => {
+/**
+ * Problems with one node list, including any coordinate outside `extent`.
+ *
+ * The bounds check is the difference between rejecting a descriptor and rendering
+ * an empty grid from it: `EmptyChipRenderer` walks x < width and y < height and
+ * looks each cell up by coordinate, so a worker at `99-99` on a 4x4 grid is never
+ * visited and silently disappears — the exact failure this validation exists to
+ * prevent. `extent` is null only when `grid` itself failed, where a bound would
+ * be meaningless and the grid problem is already reported.
+ */
+const coordinateProblems = (label: string, value: unknown, extent: GridExtent | null): string[] => {
     if (!Array.isArray(value)) {
         return [`\`${label}\` must be an array of "x-y" coordinates`];
     }
-    const bad = value.filter((entry) => typeof entry !== 'string' || !COORDINATE.test(entry));
-    if (bad.length === 0) {
+
+    const malformed = value.filter((entry) => typeof entry !== 'string' || !COORDINATE.test(entry));
+    if (malformed.length > 0) {
+        const count = malformed.length === 1 ? '1 entry that is' : `${malformed.length} entries that are`;
+        return [`\`${label}\` has ${count} not an "x-y" coordinate`];
+    }
+
+    if (extent === null) {
         return [];
     }
-    const count = bad.length === 1 ? '1 entry that is' : `${bad.length} entries that are`;
-    return [`\`${label}\` has ${count} not an "x-y" coordinate`];
+
+    const outside = (value as string[]).filter((entry) => {
+        const [x, y] = entry.split('-').map(Number);
+        return x >= extent.xSize || y >= extent.ySize;
+    });
+    if (outside.length === 0) {
+        return [];
+    }
+    const shown = outside.slice(0, 3).join(', ');
+    const rest = outside.length > 3 ? `, and ${outside.length - 3} more` : '';
+    return [`\`${label}\` has coordinates outside the ${extent.xSize}x${extent.ySize} grid: ${shown}${rest}`];
 };
 
 const gridProblems = (grid: unknown): string[] => {
     if (!isRecord(grid)) {
         return ['`grid` must be an object with `x_size` and `y_size`'];
     }
-    return (['x_size', 'y_size'] as const).flatMap((axis) => {
+
+    const problems = (['x_size', 'y_size'] as const).flatMap((axis) => {
         const size = grid[axis];
-        return typeof size === 'number' && Number.isInteger(size) && size > 0
-            ? []
-            : [`\`grid.${axis}\` must be a positive integer`];
+        if (typeof size !== 'number' || !Number.isInteger(size) || size <= 0) {
+            return [`\`grid.${axis}\` must be a positive integer`];
+        }
+        return size > MAX_GRID_AXIS ? [`\`grid.${axis}\` is ${size}, above the ${MAX_GRID_AXIS} limit`] : [];
     });
+    if (problems.length > 0) {
+        return problems;
+    }
+
+    const cells = (grid.x_size as number) * (grid.y_size as number);
+    return cells > MAX_GRID_CELLS ? [`\`grid\` asks for ${cells} cells, above the ${MAX_GRID_CELLS} limit`] : [];
+};
+
+/** The extent to bounds-check against, or null when `grid` is unusable. */
+const gridExtent = (grid: unknown): GridExtent | null => {
+    if (!isRecord(grid) || gridProblems(grid).length > 0) {
+        return null;
+    }
+    return { xSize: grid.x_size as number, ySize: grid.y_size as number };
 };
 
 /**
@@ -71,19 +127,22 @@ export const parseSocDescriptorOverride = (raw: unknown, reportedArch?: string):
         return { status: 'invalid', problems: ['the descriptor must be an object'] };
     }
 
+    const extent = gridExtent(raw.grid);
     const problems = [
         ...gridProblems(raw.grid),
-        ...coordinateProblems('functional_workers', raw.functional_workers),
+        ...coordinateProblems('functional_workers', raw.functional_workers, extent),
         // `dram` is nested one level deeper than the rest: a bank per channel.
         // Optional on the same terms as `eth` / `pcie`, so `grid` and
         // `functional_workers` are the only two a producer must write.
         ...(Array.isArray(raw.dram ?? [])
-            ? ((raw.dram ?? []) as unknown[]).flatMap((channel, index) => coordinateProblems(`dram[${index}]`, channel))
+            ? ((raw.dram ?? []) as unknown[]).flatMap((channel, index) =>
+                  coordinateProblems(`dram[${index}]`, channel, extent),
+              )
             : ['`dram` must be an array of channels']),
-        ...coordinateProblems('eth', raw.eth ?? []),
-        ...coordinateProblems('pcie', raw.pcie ?? []),
-        ...coordinateProblems('arc', raw.arc ?? []),
-        ...coordinateProblems('router_only', raw.router_only ?? []),
+        ...coordinateProblems('eth', raw.eth ?? [], extent),
+        ...coordinateProblems('pcie', raw.pcie ?? [], extent),
+        ...coordinateProblems('arc', raw.arc ?? [], extent),
+        ...coordinateProblems('router_only', raw.router_only ?? [], extent),
     ];
 
     if (Array.isArray(raw.functional_workers) && raw.functional_workers.length === 0) {

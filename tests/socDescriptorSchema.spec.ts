@@ -80,6 +80,32 @@ const cases: { label: string; descriptor: unknown; accepted: boolean }[] = [
         descriptor: { grid: { x_size: 4, y_size: 4 }, functional_workers: ['1-1'], eth: ['9'] },
         accepted: false,
     },
+    {
+        label: 'grid axis above the cap',
+        descriptor: { grid: { x_size: 1000, y_size: 4 }, functional_workers: ['1-1'] },
+        accepted: false,
+    },
+];
+
+/**
+ * Rules draft-07 cannot express, so the schema accepts these and the runtime
+ * validator rejects them. Listed rather than omitted: the asymmetry is the
+ * contract — passing the schema is necessary, not sufficient — and a producer
+ * reading only the schema needs to know these two exist.
+ */
+const runtimeOnly: { label: string; descriptor: unknown }[] = [
+    {
+        label: 'worker outside the grid',
+        descriptor: { grid: { x_size: 4, y_size: 4 }, functional_workers: ['99-99'] },
+    },
+    {
+        label: 'dram bank outside the grid',
+        descriptor: { grid: { x_size: 4, y_size: 4 }, functional_workers: ['1-1'], dram: [['0-40']] },
+    },
+    {
+        label: 'cell count above the cap while both axes are under it',
+        descriptor: { grid: { x_size: 200, y_size: 200 }, functional_workers: ['1-1'] },
+    },
 ];
 
 describe('npe-soc-descriptor.schema.json', () => {
@@ -89,6 +115,22 @@ describe('npe-soc-descriptor.schema.json', () => {
 
         expect(schemaSays, `schema: ${JSON.stringify(validate.errors)}`).toBe(accepted);
         expect(runtimeSays, 'runtime validator').toBe(accepted);
+    });
+
+    it.each(runtimeOnly)('$label: schema cannot catch it, the validator does', ({ descriptor }) => {
+        expect(validate(descriptor), 'schema is expected to accept this').toBe(true);
+        expect(parseSocDescriptorOverride(descriptor).status).toBe('invalid');
+    });
+
+    it('never rejects something the runtime validator would accept', () => {
+        // The direction that matters: a producer building to the schema must not be
+        // turned away for a reason the schema never mentioned. The reverse is
+        // allowed and covered above.
+        for (const { descriptor } of [...cases, ...runtimeOnly]) {
+            if (parseSocDescriptorOverride(descriptor).status === 'valid') {
+                expect(validate(descriptor), `${JSON.stringify(descriptor)}`).toBe(true);
+            }
+        }
     });
 
     it('is a valid draft-07 schema that ajv will compile', () => {

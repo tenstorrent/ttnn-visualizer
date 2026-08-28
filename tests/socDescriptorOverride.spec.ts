@@ -150,6 +150,87 @@ describe('parseSocDescriptorOverride', () => {
         expect(result.problems.join(' ')).toContain('no grid to render');
     });
 
+    it('rejects a coordinate outside the grid, which would render nothing (#1776)', () => {
+        // `EmptyChipRenderer` walks x < width and y < height and looks each cell up
+        // by coordinate, so a worker the grid never reaches silently disappears —
+        // an empty topology from a descriptor that passed validation.
+        const result = parseSocDescriptorOverride({
+            grid: { x_size: 4, y_size: 4 },
+            functional_workers: ['1-1', '99-99'],
+        });
+
+        expect(result.status).toBe('invalid');
+        if (result.status !== 'invalid') {
+            return;
+        }
+        expect(result.problems.join(' ')).toContain('outside the 4x4 grid');
+        expect(result.problems.join(' ')).toContain('99-99');
+    });
+
+    it('bounds-checks every node list, not just the workers', () => {
+        const result = parseSocDescriptorOverride({
+            grid: { x_size: 4, y_size: 4 },
+            functional_workers: ['1-1'],
+            dram: [['0-0'], ['0-40']],
+            eth: ['40-0'],
+        });
+
+        expect(result.status).toBe('invalid');
+        if (result.status !== 'invalid') {
+            return;
+        }
+        expect(result.problems.join(' ')).toContain('dram[1]');
+        expect(result.problems.join(' ')).toContain('`eth`');
+    });
+
+    it('names only the first few offenders, then counts the rest', () => {
+        const result = parseSocDescriptorOverride({
+            grid: { x_size: 2, y_size: 2 },
+            functional_workers: ['5-5', '6-6', '7-7', '8-8', '9-9'],
+        });
+
+        expect(result.status).toBe('invalid');
+        if (result.status !== 'invalid') {
+            return;
+        }
+        expect(result.problems.join(' ')).toContain('and 2 more');
+    });
+
+    it('refuses a grid too large for the renderer to materialise', () => {
+        // One element per cell, so the grid is a direct multiplier on DOM size.
+        const perAxis = parseSocDescriptorOverride({
+            grid: { x_size: 1_000_000, y_size: 1_000_000 },
+            functional_workers: ['1-1'],
+        });
+        expect(perAxis.status).toBe('invalid');
+
+        // Both axes under the per-axis cap, but the product is not.
+        const byArea = parseSocDescriptorOverride({
+            grid: { x_size: 200, y_size: 200 },
+            functional_workers: ['1-1'],
+        });
+        expect(byArea.status).toBe('invalid');
+        if (byArea.status !== 'invalid') {
+            return;
+        }
+        expect(byArea.problems.join(' ')).toContain('40000 cells');
+    });
+
+    it('does not bounds-check against a grid that is itself invalid', () => {
+        // The grid problem is already reported; adding "outside the 0x0 grid" for
+        // every node would bury it.
+        const result = parseSocDescriptorOverride({
+            grid: { x_size: 0, y_size: 0 },
+            functional_workers: ['1-1', '2-2'],
+        });
+
+        expect(result.status).toBe('invalid');
+        if (result.status !== 'invalid') {
+            return;
+        }
+        expect(result.problems.join(' ')).not.toContain('outside');
+    });
+
     it('reports a descriptor that is not an object at all', () => {
         for (const raw of ['a string', 42, ['an', 'array'], true]) {
             const result = parseSocDescriptorOverride(raw);
