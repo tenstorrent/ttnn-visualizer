@@ -20,8 +20,13 @@ const buildOpGraph = vi.hoisted(() =>
     vi.fn<(operations: OpGraphSourceOperation[], options: OpGraphBuildOptions) => OpGraphBuiltGraph>(),
 );
 
+// `collectCandidateEdges` is counted, not stubbed away: the worker is supposed to
+// run it once per source and share the result between detection and the build.
+const collectCandidateEdges = vi.fn(() => []);
+
 vi.mock('../src/components/operation-graph/opGraphBuilder', () => ({
     buildOpGraph,
+    collectCandidateEdges,
     getKeptOperations: (operations: OpGraphSourceOperation[]) => operations,
 }));
 
@@ -98,6 +103,7 @@ const drain = () => vi.advanceTimersByTime(0);
 beforeEach(() => {
     posted.length = 0;
     buildOpGraph.mockReset();
+    collectCandidateEdges.mockClear();
     // A fresh object per layout, so object identity distinguishes a cache hit
     // from a rebuild that happens to produce an equal graph.
     buildOpGraph.mockImplementation(() => ({ nodes: [], edges: [] }));
@@ -322,6 +328,43 @@ describe('opGraphLayoutWorker', () => {
             expect(buildOpGraph).toHaveBeenCalledTimes(2);
             const replies = builtReplies();
             expect(replies[2].graph).toBe(replies[0].graph);
+        });
+
+        it('does not reuse one report’s detection for another', async () => {
+            // The detection cache was keyed on `hideDeallocate` alone and relied
+            // entirely on the SET_GRAPH clear. If that clear is ever moved or
+            // missed, report B folds using report A’s instances, whose member op
+            // ids exist in B but mean unrelated operations.
+            const send = await loadWorker();
+            send(setGraph(1));
+            send(build(1, true));
+            drain();
+
+            send(setGraph(2));
+            send(build(2, true, 2));
+            drain();
+
+            expect(buildOpGraph.mock.calls[1][1].detectedBlocks).not.toBe(buildOpGraph.mock.calls[0][1].detectedBlocks);
+        });
+
+        it('collects candidate edges once per source, not once per build', async () => {
+            // An ops x outputs x consumers walk that detection and the build both
+            // need; it ran two to three times per build before.
+            const send = await loadWorker();
+            send(setGraph(1));
+
+            send(build(1, true));
+            drain();
+            send(build(2, true, 1, [], ['block:0:2']));
+            drain();
+
+            expect(collectCandidateEdges).toHaveBeenCalledTimes(1);
+
+            send(setGraph(2));
+            send(build(3, true, 2));
+            drain();
+
+            expect(collectCandidateEdges).toHaveBeenCalledTimes(2);
         });
 
         it('does not serve one report\u2019s layout for another', async () => {

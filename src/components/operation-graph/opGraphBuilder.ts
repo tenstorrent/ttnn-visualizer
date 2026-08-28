@@ -26,7 +26,7 @@ import {
     isExpandableOperation,
 } from './opGraphTypes';
 
-interface CandidateEdge {
+export interface CandidateEdge {
     source: number;
     target: number;
     label: string;
@@ -35,7 +35,7 @@ interface CandidateEdge {
 
 const isDeallocate = (name: string): boolean => DEALLOCATE_OP_NAME_LIST.includes(name.toLowerCase());
 
-function collectCandidateEdges(operations: OpGraphSourceOperation[]): CandidateEdge[] {
+export function collectCandidateEdges(operations: OpGraphSourceOperation[]): CandidateEdge[] {
     const candidates: CandidateEdge[] = [];
     for (const operation of operations) {
         for (const output of operation.outputs) {
@@ -55,10 +55,13 @@ function collectCandidateEdges(operations: OpGraphSourceOperation[]): CandidateE
 export function getKeptOperations(
     operations: OpGraphSourceOperation[],
     hideDeallocate: boolean,
-): OpGraphSourceOperation[] {
     // Connectivity is decided before the deallocate filter so hiding deallocate
     // ops cannot drop their neighbours or pull in ops that were always isolated.
-    const candidates = collectCandidateEdges(operations);
+    // Callers that already hold the candidate pass supply it: this is an
+    // ops x outputs x consumers walk on the build hot path, and `buildOpGraph` and
+    // the worker's detection step both used to pay for it again here.
+    candidates: readonly CandidateEdge[] = collectCandidateEdges(operations),
+): OpGraphSourceOperation[] {
     const connected = new Set<number>();
     for (const candidate of candidates) {
         connected.add(candidate.source);
@@ -92,7 +95,7 @@ export function buildOpGraph(
         return subgraph?.entryNodeIdByTensorId[tensorId] ?? subgraph?.entryFallbackNodeId ?? String(operationId);
     };
 
-    const keptOperations = getKeptOperations(operations, hideDeallocate);
+    const keptOperations = getKeptOperations(operations, hideDeallocate, candidates);
     const kept = new Set<number>(keptOperations.map((operation) => operation.id));
 
     const operationById = new Map<number, OpGraphSourceOperation>(
