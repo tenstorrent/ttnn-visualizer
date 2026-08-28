@@ -401,6 +401,39 @@ $minimap-width: 200px;
         }
     }
 
+    // What a structural toggle just produced. Its own channel again — box-shadow,
+    // since selection owns the border, the I/O highlight the fill and the critical
+    // path the outline — so a revealed node that is also selected shows both. Two
+    // pulses then hold, long enough to catch the eye without becoming decoration;
+    // the class is removed on a timer. #1944
+    .react-flow__node.op-graph-node-revealed {
+        animation: op-graph-reveal 0.65s ease-out 2;
+        box-shadow: 0 0 0 3px rgb(116 197 223 / 55%);
+        z-index: 3;
+    }
+
+    @keyframes op-graph-reveal {
+        0% {
+            box-shadow: 0 0 0 2px rgb(116 197 223 / 90%);
+        }
+
+        50% {
+            box-shadow: 0 0 0 9px rgb(116 197 223 / 0%);
+        }
+
+        100% {
+            box-shadow: 0 0 0 3px rgb(116 197 223 / 55%);
+        }
+    }
+
+    // Reduced motion still needs the *answer* to "where did it go", so the ring
+    // stays and only the pulse goes.
+    @media (prefers-reduced-motion: reduce) {
+        .react-flow__node.op-graph-node-revealed {
+            animation: none;
+        }
+    }
+
     // Outline, not border or fill: selection owns the border and the I/O
     // highlight the fill, so the path stacks with either. Offset clears the 3px
     // selection ring, which an outline would otherwise paint over.

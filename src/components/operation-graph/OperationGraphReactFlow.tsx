@@ -58,6 +58,7 @@ import {
     getRenderedPerfRange,
 } from './opGraphPerfOverlay';
 import { EMPTY_CRITICAL_PATH, findCriticalPath } from './opGraphCriticalPath';
+import { REVEALED_NODE_CLASS, REVEAL_HIGHLIGHT_MS, revealPanShift } from './opGraphRevealPan';
 import { getAdjacentOperationIds } from './opGraphNavigation';
 import { useOpGraphLayoutWorker } from './useOpGraphLayoutWorker';
 import {
@@ -207,6 +208,10 @@ const EDGE_CLASS_BY_RELATION: Record<NodeRelation, string> = {
 
 // Off-path edges dim from the container for the same identity reason as the
 // filter above; only the path itself gets per-element classes. #1613
+// Marks the nodes a structural toggle just produced, so an expand or fold is
+// visibly *something appearing* rather than the graph rearranging itself. Cleared
+// on a timer: it answers "where did it go", which stops being a question once the
+// user has seen the answer. #1944
 const CRITICAL_PATH_CLASS = 'op-graph-critical-path';
 const CRITICAL_PATH_NODE_CLASS = 'op-graph-node-critical-path';
 const CRITICAL_PATH_EDGE_CLASS = 'op-graph-edge-critical-path';
@@ -298,6 +303,12 @@ const OperationGraphInner = ({
         paneY: number;
         reportScope: ReportScope;
     } | null>(null);
+    // Armed by a toggle and spent once the rebuilt graph commits, alongside the
+    // anchor above: which nodes to light up, and to pan into view if the rebuild
+    // put them outside it. #1944
+    const pendingRevealRef = useRef<{ nodeIds: Set<string>; reportScope: ReportScope } | null>(null);
+    const [revealedNodeIds, setRevealedNodeIds] = useState<Set<string> | null>(null);
+    const revealTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const [revealedOperationId, setRevealedOperationId] = useState<number | null>(null);
     const { setCenter, getNode, getViewport, setViewport } = useReactFlow<OpGraphFlowNode, OpGraphFlowEdge>();
     const flowStore = useStoreApi();
@@ -542,26 +553,78 @@ const OperationGraphInner = ({
     // by a tick and would translate against the pre-rebuild position.
     useEffect(() => {
         const anchor = pendingViewportAnchorRef.current;
-        if (anchor === null) {
+        const reveal = pendingRevealRef.current;
+        if (anchor === null && reveal === null) {
             return;
         }
-        if (nodes.length === 0 || !isSameReportScope(anchor.reportScope, reportScope)) {
+        const staleScope =
+            (anchor !== null && !isSameReportScope(anchor.reportScope, reportScope)) ||
+            (reveal !== null && !isSameReportScope(reveal.reportScope, reportScope));
+        if (nodes.length === 0 || staleScope) {
             pendingViewportAnchorRef.current = null;
+            pendingRevealRef.current = null;
             return;
         }
         pendingViewportAnchorRef.current = null;
-        const anchored =
-            nodes.find((node) => node.id === anchor.nodeId) ?? nodes.find((node) => node.id === anchor.fallbackNodeId);
-        if (anchored === undefined) {
-            return;
+        pendingRevealRef.current = null;
+
+        let viewport = getViewport();
+        if (anchor !== null) {
+            const anchored =
+                nodes.find((node) => node.id === anchor.nodeId) ??
+                nodes.find((node) => node.id === anchor.fallbackNodeId);
+            if (anchored !== undefined) {
+                viewport = {
+                    zoom: viewport.zoom,
+                    x: anchor.paneX - anchored.position.x * viewport.zoom,
+                    y: anchor.paneY - anchored.position.y * viewport.zoom,
+                };
+            }
         }
-        const { zoom } = getViewport();
-        void setViewport({
-            x: anchor.paneX - anchored.position.x * zoom,
-            y: anchor.paneY - anchored.position.y * zoom,
-            zoom,
-        });
+
+        if (reveal !== null) {
+            // The anchor pins one node; the rest of the revealed set can still land
+            // outside the pane, which is the "I opened one and can't see it" half of
+            // the report. Pan by the minimum that brings the whole set in. #1944
+            const revealed = nodes.filter((node) => reveal.nodeIds.has(node.id));
+            const pane = containerRef.current?.getBoundingClientRect();
+            if (revealed.length > 0 && pane !== undefined) {
+                const bounds = revealed.reduce(
+                    (acc, node) => ({
+                        minX: Math.min(acc.minX, node.position.x),
+                        minY: Math.min(acc.minY, node.position.y),
+                        maxX: Math.max(acc.maxX, node.position.x + (node.width ?? node.measured?.width ?? 0)),
+                        maxY: Math.max(acc.maxY, node.position.y + (node.height ?? node.measured?.height ?? 0)),
+                    }),
+                    { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity },
+                );
+                const { dx, dy } = revealPanShift(bounds, viewport, pane);
+                viewport = { ...viewport, x: viewport.x + dx, y: viewport.y + dy };
+            }
+
+            setRevealedNodeIds(reveal.nodeIds);
+            if (revealTimerRef.current !== null) {
+                clearTimeout(revealTimerRef.current);
+            }
+            revealTimerRef.current = setTimeout(() => {
+                revealTimerRef.current = null;
+                setRevealedNodeIds(null);
+            }, REVEAL_HIGHLIGHT_MS);
+        }
+
+        void setViewport(viewport, { duration: FOCUS_DURATION_MS });
     }, [nodes, reportScope, getViewport, setViewport]);
+
+    // A report swap or unmount while the highlight is up would otherwise leave the
+    // timer to fire against a graph it was never armed for.
+    useEffect(
+        () => () => {
+            if (revealTimerRef.current !== null) {
+                clearTimeout(revealTimerRef.current);
+            }
+        },
+        [],
+    );
 
     const toggleOperationExpansion = useCallback(
         (targetOperationId: number) => {
@@ -585,6 +648,9 @@ const OperationGraphInner = ({
                 }
                 return next;
             });
+            // Both directions: folding shrinks the node back and is just as easy to
+            // lose track of as expanding.
+            pendingRevealRef.current = { nodeIds: new Set([nodeId]), reportScope };
         },
         [getNode, getViewport, reportScope],
     );
@@ -612,6 +678,19 @@ const OperationGraphInner = ({
             const block = detectedBlocks.find((entry) => entry.instanceId === instanceId);
             const firstOpId = block?.operationIds[0];
             armViewportAnchor(instanceId, firstOpId === undefined ? instanceId : String(firstOpId));
+            // Highlight what this toggle *produces*: the member operations when
+            // unrolling, the block itself when folding. Folding needs it most — a
+            // double-click on a member replaces the very node the user clicked, which
+            // is the "I'm going to click op 49, where has it gone" report. #1944
+            const isUnrolling = !expandedBlockIds.has(instanceId);
+            pendingRevealRef.current = {
+                nodeIds: new Set(
+                    isUnrolling && block !== undefined
+                        ? block.operationIds.map((memberId) => String(memberId))
+                        : [instanceId],
+                ),
+                reportScope,
+            };
             setExpandedBlockIds((previous) => {
                 const next = new Set(previous);
                 if (next.delete(instanceId)) {
@@ -630,7 +709,7 @@ const OperationGraphInner = ({
                 return next;
             });
         },
-        [armViewportAnchor, detectedBlocks],
+        [armViewportAnchor, detectedBlocks, expandedBlockIds, reportScope],
     );
 
     const expandAllBlocks = useCallback(() => {
@@ -988,7 +1067,7 @@ const OperationGraphInner = ({
     const renderedPerfRange = useMemo(() => getRenderedPerfRange(perfOverlay, nodeIndex), [perfOverlay, nodeIndex]);
 
     const styledNodes = useMemo(() => {
-        if (!highlight && !matchedIds && !perfStyleByNodeId && !criticalPathNodeIds) {
+        if (!highlight && !matchedIds && !perfStyleByNodeId && !criticalPathNodeIds && !revealedNodeIds) {
             return nodes;
         }
         return nodes.map((node) => {
@@ -1017,6 +1096,9 @@ const OperationGraphInner = ({
             }
             if (criticalPathNodeIds?.has(node.id)) {
                 classNames.push(CRITICAL_PATH_NODE_CLASS);
+            }
+            if (revealedNodeIds?.has(node.id)) {
+                classNames.push(REVEALED_NODE_CLASS);
             }
             const className = classNames.length > 0 ? classNames.join(' ') : undefined;
             // Custom properties only, so perf stacks with selection, the
@@ -1070,6 +1152,7 @@ const OperationGraphInner = ({
         perfStyleByNodeId,
         criticalPathNodeIds,
         styledNodeCache,
+        revealedNodeIds,
     ]);
 
     const styledEdges = useMemo(() => {
