@@ -20,7 +20,15 @@ const OpGraphBlockNode = memo(({ data }: NodeProps<OpGraphFlowNode>) => {
                 type='target'
                 position={Position.Top}
             />
-            <div className='op-graph-node-label'>{data.label}</div>
+            {/* The label is capped at `NODE_MAX_WIDTH` and ellipsised, and a block
+                naming several modules can outrun it. The native tooltip is the only
+                place the whole name is readable, on the node or in the panel. */}
+            <div
+                className='op-graph-node-label'
+                title={data.label}
+            >
+                {data.label}
+            </div>
             <div className='op-graph-node-file'>{data.fileIdentifier}</div>
             <OpGraphBlockExpander
                 instanceId={instanceId}

@@ -290,7 +290,12 @@ const OpGraphBlockPanel = ({
         >
             <header className='op-graph-panel-header'>
                 <div className='op-graph-panel-titles'>
-                    <h2 className='op-graph-panel-label'>{block.label}</h2>
+                    <h2
+                        className='op-graph-panel-label'
+                        title={block.label}
+                    >
+                        {block.label}
+                    </h2>
                     <p className='op-graph-panel-id'>
                         {`ops ${firstOpId}–${lastOpId} · instance ${block.instanceIndex + 1} of ${block.instanceCount}`}
                     </p>
@@ -434,7 +439,10 @@ const OpGraphInfoPanel = memo(
             >
                 <header className='op-graph-panel-header'>
                     <div className='op-graph-panel-titles'>
-                        <h2 className='op-graph-panel-label'>
+                        <h2
+                            className='op-graph-panel-label'
+                            title={`${operationId} ${operation?.name ?? ''}`.trim()}
+                        >
                             {operationId} {operation?.name}
                         </h2>
                         <p
