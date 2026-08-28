@@ -8,9 +8,14 @@ import type { OpGraphSourceOperation, RepeatBlockInstance } from './opGraphTypes
 
 export const MIN_REPEAT_WINDOW = 2;
 export const MIN_REPEAT_COUNT = 2;
-// A repeated subgraph is a layer, not half the graph. Descending from ⌊N/2⌋
-// made the no-repeat case — the common one — O(N³) and folded 12 layers into
-// two half-model blocks. #1583
+// A repeated subgraph is a layer, not half the graph. Descending from ⌊N/2⌋ made
+// the no-repeat case — the common one — O(N³) and folded 12 layers into two
+// half-model blocks.
+//
+// This is an unmet part of #1583, which asks for no bound: a tile of more than 64
+// kept ops never folds, and a transformer layer can exceed that. Tracked in #1956
+// — the scan is ~10x faster than when 64 was chosen, so what is left to settle is
+// the half-model-block case rather than the time.
 export const MAX_REPEAT_WINDOW = 64;
 // 4k–8k op graphs are real (#1809). Past this the scan is skipped rather than
 // competing with Dagre; the main-thread fallback calls the same detector.
