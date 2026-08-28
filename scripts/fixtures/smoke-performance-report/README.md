@@ -41,8 +41,12 @@ seconds rather than waiting on the Playwright matrix.
   break inside that library without any signal here.
 - **The first two lines of `profile_log_device.csv` are verbatim.** Line 1 is
   what `/api/performance/device-log/meta` regex-parses for `ARCH:` and
-  `CHIP_FREQ[MHz]:`; `LocalCSVQueryRunner` reads the file with `skiprows=1` and
-  then overwrites the header positionally, so the row shape is what counts.
+  `CHIP_FREQ[MHz]:`. Line 2 is the header, which `DeviceLogProfilerQueries` reads
+  **by name** after stripping whitespace, checking it against
+  `REQUIRED_DEVICE_LOG_COLUMNS`; extra columns pass through. This file keeps its
+  13-column shape deliberately — a current tt-metal emits 15, and having both
+  shapes covered is what stops the reader regressing to a positional read
+  (#1941).
 - **`npe_viz/manifest.json` is generated from the retained rows.**
   `PerfTable` only renders the NPE launch button when a manifest entry's
   `global_call_count` matches a report row's, and the smoke test clicks that
