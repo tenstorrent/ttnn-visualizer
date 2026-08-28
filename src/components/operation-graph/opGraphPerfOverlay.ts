@@ -4,6 +4,8 @@
 
 import type { CSSProperties } from 'react';
 
+import { type MemberBearingNode, memberOperationIdsOf, sumDeviceTimeNs } from './opGraphMemberTime';
+
 import { NO_PERF_DATA_LABEL, PerfOverlayStatus } from '../../definitions/PerfOverlayStatus';
 import { formatDuration } from '../../functions/formatting';
 import {
@@ -131,10 +133,8 @@ export const buildOpGraphPerfOverlay = (
     };
 };
 
-interface RenderedPerfNode {
+interface RenderedPerfNode extends MemberBearingNode {
     id: string;
-    operationId: number;
-    memberOperationIds?: number[];
 }
 
 /**
@@ -144,12 +144,9 @@ interface RenderedPerfNode {
  */
 const sumNsByRenderedNode = (overlay: OpGraphPerfOverlay, nodes: readonly RenderedPerfNode[]): Map<string, number> => {
     const nsByNodeId = new Map<string, number>();
+    const deviceTimeNsOf = (operationId: number) => overlay.aggregatesByOpId.get(operationId)?.deviceTimeNs;
     for (const node of nodes) {
-        const memberIds = node.memberOperationIds ?? [node.operationId];
-        let ns = 0;
-        for (const operationId of memberIds) {
-            ns += overlay.aggregatesByOpId.get(operationId)?.deviceTimeNs ?? 0;
-        }
+        const ns = sumDeviceTimeNs(memberOperationIdsOf(node), deviceTimeNsOf);
         if (ns > 0) {
             nsByNodeId.set(node.id, ns);
         }
@@ -185,57 +182,55 @@ const spanOfTotals = (
     return { minNs, maxNs };
 };
 
-export const getRenderedPerfRange = (
-    overlay: OpGraphPerfOverlay,
-    nodes?: readonly RenderedPerfNode[],
-): { minNs: number; maxNs: number } => {
-    const perOperationRange = { minNs: overlay.minNs, maxNs: overlay.maxNs };
-    if (nodes === undefined) {
-        return perOperationRange;
+/**
+ * Position on the log ramp, matching `scoreOps`. One distinct duration across the
+ * graph carries no ranking signal, so nothing is heated rather than everything.
+ */
+const logScore = (ns: number, minNs: number, maxNs: number): number => {
+    if (minNs === maxNs) {
+        return 0;
     }
-    return spanOfTotals(sumNsByRenderedNode(overlay, nodes), perOperationRange);
+    const logMin = Math.log10(minNs);
+    return Math.min(1, Math.max(0, (Math.log10(ns) - logMin) / (Math.log10(maxNs) - logMin)));
 };
+
+export interface RenderedPerfStyling {
+    styleByNodeId: Map<string, CSSProperties>;
+    /**
+     * The range the node bars are actually drawn against, which the legend is the
+     * key for. Returned alongside the styles because both come from one pass over
+     * the node set — they were two, from two memos with the same dependencies.
+     */
+    minNs: number;
+    maxNs: number;
+}
 
 /**
  * Style patch by node id, or `null` when the overlay is off so the caller can
  * skip the styling pass. Custom properties only: `className` already carries
  * selection and the I/O highlight, and the filter dim is inherited.
  */
-export const buildPerfNodeStyleByNodeId = (
+export const buildRenderedPerfStyling = (
     overlay: OpGraphPerfOverlay,
     isActive: boolean,
-    nodes?: readonly RenderedPerfNode[],
-): Map<string, CSSProperties> | null => {
+    nodes: readonly RenderedPerfNode[],
+): RenderedPerfStyling | null => {
     if (!isActive) {
         return null;
     }
 
-    const styleByNodeId = new Map<string, CSSProperties>();
-    if (nodes === undefined) {
-        for (const [opId, score] of overlay.scoreByOpId) {
-            styleByNodeId.set(String(opId), {
-                [PERF_BAR_SCALE_VAR]: score.t,
-                [PERF_BAR_COLOR_VAR]: perfColorScale(score.t),
-            } as CSSProperties);
-        }
-        return styleByNodeId;
-    }
-
     const nsByNodeId = sumNsByRenderedNode(overlay, nodes);
     const { minNs, maxNs } = spanOfTotals(nsByNodeId, { minNs: overlay.minNs, maxNs: overlay.maxNs });
-    const logMin = Math.log10(minNs);
-    const range = Math.log10(maxNs) - logMin;
 
+    const styleByNodeId = new Map<string, CSSProperties>();
     for (const [nodeId, ns] of nsByNodeId) {
-        // As in `scoreOps`: one distinct total across the graph carries no
-        // ranking signal, so nothing is heated rather than everything.
-        const t = minNs === maxNs ? 0 : Math.min(1, Math.max(0, (Math.log10(ns) - logMin) / range));
+        const t = logScore(ns, minNs, maxNs);
         styleByNodeId.set(nodeId, {
             [PERF_BAR_SCALE_VAR]: t,
             [PERF_BAR_COLOR_VAR]: perfColorScale(t),
         } as CSSProperties);
     }
-    return styleByNodeId;
+    return { styleByNodeId, minNs, maxNs };
 };
 
 /** Duration, rank among the linked ops, and share of their total. #1610 */

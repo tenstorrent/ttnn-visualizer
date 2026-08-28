@@ -2,6 +2,8 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
+import { memberOperationIdsOf, sumDeviceTimeNs } from './opGraphMemberTime';
+
 interface CriticalPathNode {
     id: string;
     operationId: number;
@@ -88,26 +90,23 @@ export const findCriticalPath = (
         }
     }
 
-    const membersByNodeId = new Map<string, number[]>();
-    for (const node of nodes) {
-        membersByNodeId.set(node.id, node.memberOperationIds ?? [node.operationId]);
-    }
-
-    const weightOf = (nodeId: string) => {
-        let total = 0;
-        for (const operationId of membersByNodeId.get(nodeId) ?? []) {
-            total += deviceTimeNsByOpId.get(operationId) ?? 0;
-        }
-        return total;
-    };
-
+    // A node's own weight and member count, kept apart from the running chain
+    // totals below because relaxation overwrites those. `weightOf` used to be
+    // called from inside the edge loop, so a node's member sum was recomputed once
+    // per incoming edge rather than once per node.
+    const weightByNodeId = new Map<string, number>();
+    const memberCountByNodeId = new Map<string, number>();
     const costByNodeId = new Map<string, number>();
     const opCountByNodeId = new Map<string, number>();
     const predecessorByNodeId = new Map<string, string>();
     const predecessorEdgeByNodeId = new Map<string, string>();
     for (const node of nodes) {
-        costByNodeId.set(node.id, weightOf(node.id));
-        opCountByNodeId.set(node.id, membersByNodeId.get(node.id)?.length ?? 1);
+        const members = memberOperationIdsOf(node);
+        const weight = sumDeviceTimeNs(members, (operationId) => deviceTimeNsByOpId.get(operationId));
+        weightByNodeId.set(node.id, weight);
+        memberCountByNodeId.set(node.id, members.length);
+        costByNodeId.set(node.id, weight);
+        opCountByNodeId.set(node.id, members.length);
     }
 
     const byOpId = (left: string, right: string) =>
@@ -124,8 +123,8 @@ export const findCriticalPath = (
         const nodeOpCount = opCountByNodeId.get(nodeId) ?? 1;
 
         for (const edge of outgoingByNodeId.get(nodeId) ?? []) {
-            const candidateCost = nodeCost + weightOf(edge.target);
-            const candidateOpCount = nodeOpCount + (membersByNodeId.get(edge.target)?.length ?? 1);
+            const candidateCost = nodeCost + (weightByNodeId.get(edge.target) ?? 0);
+            const candidateOpCount = nodeOpCount + (memberCountByNodeId.get(edge.target) ?? 1);
             const currentPredecessor = predecessorByNodeId.get(edge.target);
             const isBetter = isPreferredChain(
                 candidateCost - (costByNodeId.get(edge.target) ?? 0),

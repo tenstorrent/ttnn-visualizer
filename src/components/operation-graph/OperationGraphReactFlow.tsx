@@ -52,10 +52,9 @@ import { OpGraphBlockExpansionContext, OpGraphExpansionContext } from './opGraph
 import {
     PERF_BAR_ZOOM_VAR,
     buildOpGraphPerfOverlay,
-    buildPerfNodeStyleByNodeId,
+    buildRenderedPerfStyling,
     getPerfHoverLabel,
     getQuantisedPerfZoom,
-    getRenderedPerfRange,
 } from './opGraphPerfOverlay';
 import { EMPTY_CRITICAL_PATH, findCriticalPath } from './opGraphCriticalPath';
 import { REVEALED_NODE_CLASS, revealPanShift } from './opGraphRevealPan';
@@ -1065,15 +1064,15 @@ const OperationGraphInner = ({
     const criticalPathEdgeIds = hasCriticalPath ? criticalPath.edgeIds : null;
 
     // Built once per score change so the styling pass reuses these identities
-    // instead of allocating one per node on every drag frame.
-    const perfStyleByNodeId = useMemo(
-        () => buildPerfNodeStyleByNodeId(perfOverlay, isPerfOverlayActive, nodeIndex),
+    // instead of allocating one per node on every drag frame. The legend is the
+    // key for these same bars, so its range comes out of the same pass rather than
+    // a second walk of the whole node set — and neither runs with the overlay off,
+    // when the legend is not rendered at all. #1944
+    const renderedPerfStyling = useMemo(
+        () => buildRenderedPerfStyling(perfOverlay, isPerfOverlayActive, nodeIndex),
         [isPerfOverlayActive, perfOverlay, nodeIndex],
     );
-
-    // The legend is the key for the node bars, so it reads the range those bars
-    // are drawn against rather than the overlay's per-operation one. #1944
-    const renderedPerfRange = useMemo(() => getRenderedPerfRange(perfOverlay, nodeIndex), [perfOverlay, nodeIndex]);
+    const perfStyleByNodeId = renderedPerfStyling?.styleByNodeId ?? null;
 
     const styledNodes = useMemo(() => {
         if (!highlight && !matchedIds && !perfStyleByNodeId && !criticalPathNodeIds && !revealedNodeIds) {
@@ -1414,8 +1413,8 @@ const OperationGraphInner = ({
                 ) : null}
                 {isPerfOverlayActive && !isBuilding ? (
                     <PerfOverlayLegend
-                        minNs={renderedPerfRange.minNs}
-                        maxNs={renderedPerfRange.maxNs}
+                        minNs={renderedPerfStyling?.minNs ?? perfOverlay.minNs}
+                        maxNs={renderedPerfStyling?.maxNs ?? perfOverlay.maxNs}
                     />
                 ) : null}
             </div>

@@ -140,3 +140,17 @@ describe('op graph critical path styling', () => {
         expect(outlineOffset).toBeGreaterThan(ringWidth);
     });
 });
+
+describe('block meta line styling', () => {
+    it('shares the file line’s declarations so moving off fileIdentifier changed nothing visible', () => {
+        // A block has no source file, so its stats line moved off `fileIdentifier`
+        // and onto `metaLine` with a class of its own. The two must stay styled
+        // together or that rename becomes a visual change. #1944
+        const body = ruleBody('.op-graph-node-file,\n    .op-graph-node-meta');
+
+        expect(body).toMatch(/text-overflow:\s*ellipsis/);
+        expect(body).toMatch(/white-space:\s*nowrap/);
+        expect(body).toMatch(/overflow:\s*hidden/);
+        expect(body).toMatch(/font-size:\s*11px/);
+    });
+});

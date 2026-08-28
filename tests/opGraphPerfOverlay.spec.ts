@@ -9,9 +9,8 @@ import {
     PERF_BAR_COLOR_VAR,
     PERF_BAR_SCALE_VAR,
     buildOpGraphPerfOverlay,
-    buildPerfNodeStyleByNodeId,
+    buildRenderedPerfStyling,
     getPerfHoverLabel,
-    getRenderedPerfRange,
 } from '../src/components/operation-graph/opGraphPerfOverlay';
 import { NO_PERF_DATA_LABEL, PerfOverlayStatus } from '../src/definitions/PerfOverlayStatus';
 import { formatDuration } from '../src/functions/formatting';
@@ -133,8 +132,17 @@ describe('buildOpGraphPerfOverlay ranking', () => {
     });
 });
 
-describe('buildPerfNodeStyleByNodeId', () => {
+describe('buildRenderedPerfStyling', () => {
     const overlay = buildOpGraphPerfOverlay(rows([1, 10], [2, 1_000]), true, [1, 2, 3]);
+
+    // The graph always renders one node per unfolded op, so these stand in for what
+    // the component actually passes. The no-nodes overload this spec used to lean
+    // on was unreachable in production. #1944
+    const PLAIN_NODES = [
+        { id: '1', operationId: 1 },
+        { id: '2', operationId: 2 },
+        { id: '3', operationId: 3 },
+    ];
 
     // `CSSProperties` has no index signature for custom properties.
     const customProps = (style: CSSProperties | undefined): Record<string, unknown> =>
@@ -143,19 +151,19 @@ describe('buildPerfNodeStyleByNodeId', () => {
     it('produces nothing at all when the overlay is off', () => {
         // `null`, not an empty map, so the styling pass can return the node
         // array by identity instead of rebuilding it.
-        expect(buildPerfNodeStyleByNodeId(overlay, false)).toBeNull();
+        expect(buildRenderedPerfStyling(overlay, false, PLAIN_NODES)).toBeNull();
     });
 
     it('writes only the two custom properties, leaving fill and border alone', () => {
         // Background is the I/O highlight and border/box-shadow are selection,
         // so perf must not reach for a single standard property. #1880
-        const style = buildPerfNodeStyleByNodeId(overlay, true)?.get('2');
+        const style = buildRenderedPerfStyling(overlay, true, PLAIN_NODES)?.styleByNodeId.get('2');
 
         expect(Object.keys(style ?? {})).toEqual([PERF_BAR_SCALE_VAR, PERF_BAR_COLOR_VAR]);
     });
 
     it('keys by node id so the styling pass can look up without a conversion', () => {
-        const styleByNodeId = buildPerfNodeStyleByNodeId(overlay, true);
+        const styleByNodeId = buildRenderedPerfStyling(overlay, true, PLAIN_NODES)?.styleByNodeId;
 
         expect(styleByNodeId?.has('1')).toBe(true);
         expect(styleByNodeId?.has('2')).toBe(true);
@@ -164,11 +172,11 @@ describe('buildPerfNodeStyleByNodeId', () => {
     it('skips an op with no perf row, leaving its bar transparent', () => {
         // Op 3 is on the canvas but absent from the report, so the CSS fallback
         // paints nothing — which is what separates it from the fastest op.
-        expect(buildPerfNodeStyleByNodeId(overlay, true)?.has('3')).toBe(false);
+        expect(buildRenderedPerfStyling(overlay, true, PLAIN_NODES)?.styleByNodeId.has('3')).toBe(false);
     });
 
     it('puts the slowest visible op at the hot end of the ramp', () => {
-        const styleByNodeId = buildPerfNodeStyleByNodeId(overlay, true);
+        const styleByNodeId = buildRenderedPerfStyling(overlay, true, PLAIN_NODES)?.styleByNodeId;
 
         expect(customProps(styleByNodeId?.get('2'))[PERF_BAR_SCALE_VAR]).toBe(1);
         expect(customProps(styleByNodeId?.get('1'))[PERF_BAR_SCALE_VAR]).toBe(0);
@@ -176,12 +184,12 @@ describe('buildPerfNodeStyleByNodeId', () => {
 
     it('keys a folded block by its node id using the summed member times', () => {
         const blockOverlay = buildOpGraphPerfOverlay(rows([1, 10], [2, 1_000], [3, 1_000]), true, [1, 2, 3]);
-        const styleByNodeId = buildPerfNodeStyleByNodeId(blockOverlay, true, [
+        const { styleByNodeId } = buildRenderedPerfStyling(blockOverlay, true, [
             { id: '1', operationId: 1 },
             { id: 'block:0:2', operationId: 2, memberOperationIds: [2, 3] },
-        ]);
+        ])!;
 
-        expect(styleByNodeId?.has('block:0:2')).toBe(true);
+        expect(styleByNodeId.has('block:0:2')).toBe(true);
         expect(styleByNodeId?.has('2')).toBe(false);
         expect(customProps(styleByNodeId?.get('block:0:2'))[PERF_BAR_SCALE_VAR]).toBe(1);
     });
@@ -195,10 +203,10 @@ describe('buildPerfNodeStyleByNodeId', () => {
             true,
             [1, 2, 3, 4, 5, 6, 7, 8, 9],
         );
-        const styleByNodeId = buildPerfNodeStyleByNodeId(blockOverlay, true, [
+        const { styleByNodeId } = buildRenderedPerfStyling(blockOverlay, true, [
             { id: 'block:0:1', operationId: 1, memberOperationIds: [1, 2, 3] },
             { id: 'block:1:4', operationId: 4, memberOperationIds: [4, 5, 6, 7, 8, 9] },
-        ]);
+        ])!;
 
         const small = customProps(styleByNodeId?.get('block:0:1'))[PERF_BAR_SCALE_VAR] as number;
         const large = customProps(styleByNodeId?.get('block:1:4'))[PERF_BAR_SCALE_VAR] as number;
@@ -210,45 +218,50 @@ describe('buildPerfNodeStyleByNodeId', () => {
         // The per-operation range collapses to a point here, which used to force
         // `t = 0` on everything — including a block worth three times any node.
         const blockOverlay = buildOpGraphPerfOverlay(rows([1, 100], [2, 100], [3, 100], [4, 100]), true, [1, 2, 3, 4]);
-        const styleByNodeId = buildPerfNodeStyleByNodeId(blockOverlay, true, [
+        const { styleByNodeId } = buildRenderedPerfStyling(blockOverlay, true, [
             { id: '1', operationId: 1 },
             { id: 'block:0:2', operationId: 2, memberOperationIds: [2, 3, 4] },
-        ]);
+        ])!;
 
-        expect(customProps(styleByNodeId?.get('1'))[PERF_BAR_SCALE_VAR]).toBe(0);
+        expect(customProps(styleByNodeId.get('1'))[PERF_BAR_SCALE_VAR]).toBe(0);
         expect(customProps(styleByNodeId?.get('block:0:2'))[PERF_BAR_SCALE_VAR]).toBe(1);
     });
 
     it('colours the bar with the same ramp the side panel swatch uses', () => {
         // The panel swatch is `perfColorScale(score.t)` too, so a divergence
         // shows up as a node and its own detail panel disagreeing.
-        const styleByNodeId = buildPerfNodeStyleByNodeId(overlay, true);
+        const styleByNodeId = buildRenderedPerfStyling(overlay, true, PLAIN_NODES)?.styleByNodeId;
 
         expect(customProps(styleByNodeId?.get('2'))[PERF_BAR_COLOR_VAR]).toBe(perfColorScale(1));
     });
 });
 
-describe('getRenderedPerfRange', () => {
+describe('buildRenderedPerfStyling range', () => {
     it('spans the summed block totals the bars are drawn against, which the legend keys (#1944)', () => {
         const overlay = buildOpGraphPerfOverlay(rows([1, 100], [2, 100], [3, 100]), true, [1, 2, 3]);
 
-        const range = getRenderedPerfRange(overlay, [
+        const styling = buildRenderedPerfStyling(overlay, true, [
             { id: '1', operationId: 1 },
             { id: 'block:0:2', operationId: 2, memberOperationIds: [2, 3] },
-        ]);
+        ])!;
 
-        expect(range.minNs).toBe(100 * 1_000);
-        expect(range.maxNs).toBe(200 * 1_000);
+        expect(styling.minNs).toBe(100 * 1_000);
+        expect(styling.maxNs).toBe(200 * 1_000);
     });
 
-    it('falls back to the per-operation range when nothing is rendered with a row', () => {
+    it('falls back to the per-operation range when nothing rendered carries a row', () => {
         const overlay = buildOpGraphPerfOverlay(rows([1, 10], [2, 1_000]), true, [1, 2]);
 
-        expect(getRenderedPerfRange(overlay)).toEqual({ minNs: overlay.minNs, maxNs: overlay.maxNs });
-        expect(getRenderedPerfRange(overlay, [{ id: '9', operationId: 9 }])).toEqual({
-            minNs: overlay.minNs,
-            maxNs: overlay.maxNs,
-        });
+        const styling = buildRenderedPerfStyling(overlay, true, [{ id: '9', operationId: 9 }])!;
+
+        expect(styling.minNs).toBe(overlay.minNs);
+        expect(styling.maxNs).toBe(overlay.maxNs);
+    });
+
+    it('does no work at all while the overlay is off, when the legend is not rendered', () => {
+        const overlay = buildOpGraphPerfOverlay(rows([1, 10], [2, 1_000]), true, [1, 2]);
+
+        expect(buildRenderedPerfStyling(overlay, false, [{ id: '1', operationId: 1 }])).toBeNull();
     });
 });
 
