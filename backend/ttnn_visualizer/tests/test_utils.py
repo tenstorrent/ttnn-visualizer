@@ -2,6 +2,7 @@
 #
 # SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
+import os
 from pathlib import Path
 from unittest.mock import mock_open, patch
 
@@ -693,6 +694,128 @@ def test_pick_mesh_descriptor_rank_out_of_range(tmp_path):
     path, err = pick_mesh_descriptor_path(tmp_path, logical_rank=2)
     assert path is None
     assert err == "rank_out_of_range"
+
+
+def _write(path: Path, text: str, mtime_ns: int | None = None) -> Path:
+    path.write_text(text, encoding="utf-8")
+    if mtime_ns is not None:
+        os.utime(path, ns=(mtime_ns, mtime_ns))
+    return path
+
+
+# The producer reuses the output directory and writes each descriptor only
+# `if not path.exists()`, so the import that runs first owns its filenames and a
+# later import of a different world size adds the other family. Which family is
+# stale therefore depends on import order, and both orders are reachable. #1947
+OLD_NS = 1_600_000_000_000_000_000
+NEW_NS = 1_700_000_000_000_000_000
+
+
+def _cluster_families(tmp_path, single_ns, ranked_ns, world=2):
+    _write(tmp_path / "cluster_descriptor.yaml", "chips: []\n", single_ns)
+    for index in range(1, world + 1):
+        _write(
+            tmp_path / f"cluster_descriptor_{index}_of_{world}.yaml",
+            f"chips: [{index}]\n",
+            ranked_ns,
+        )
+
+
+def _mesh_families(tmp_path, single_ns, ranked_ns, world=2):
+    _write(
+        tmp_path / "physical_chip_mesh_coordinate_mapping.yaml",
+        "chips: []\n",
+        single_ns,
+    )
+    for index in range(1, world + 1):
+        _write(
+            tmp_path / f"physical_chip_mesh_coordinate_mapping_{index}_of_{world}.yaml",
+            f"chips: [{index}]\n",
+            ranked_ns,
+        )
+
+
+def test_ranked_family_wins_when_it_is_the_newer_import(tmp_path):
+    # world-1 imported first, then world-2: the unsuffixed file is the leftover.
+    _cluster_families(tmp_path, single_ns=OLD_NS, ranked_ns=NEW_NS)
+
+    for rank, expected in (
+        (0, "cluster_descriptor_1_of_2.yaml"),
+        (1, "cluster_descriptor_2_of_2.yaml"),
+    ):
+        path, err = pick_cluster_descriptor_path(tmp_path, logical_rank=rank)
+        assert err is None
+        assert path is not None and path.name == expected
+
+    path, err = pick_cluster_descriptor_path(tmp_path, logical_rank=2)
+    assert path is None and err == "rank_out_of_range"
+
+
+def test_unsuffixed_wins_when_it_is_the_newer_import(tmp_path):
+    # The reverse order, which the producer permits just as readily: world-2
+    # imported first, then world-1, so the ranked family is the leftover.
+    _cluster_families(tmp_path, single_ns=NEW_NS, ranked_ns=OLD_NS)
+
+    path, err = pick_cluster_descriptor_path(tmp_path, logical_rank=0)
+    assert err is None
+    assert path is not None and path.name == "cluster_descriptor.yaml"
+
+    # One host, so nothing past rank 0 — not the stale ranked family's world.
+    path, err = pick_cluster_descriptor_path(tmp_path, logical_rank=1)
+    assert path is None and err == "rank_out_of_range"
+
+
+def test_a_partial_ranked_family_does_not_mask_an_unsuffixed_descriptor(tmp_path):
+    # `ranked_report_basenames` calls a lone `_1_of_2` a consistent group, which
+    # made rank 1 fail with `missing_rank_file` while a usable descriptor sat
+    # beside it. An incomplete family is not eligible to win, whatever its mtime.
+    _write(tmp_path / "cluster_descriptor.yaml", "chips: []\n", OLD_NS)
+    _write(tmp_path / "cluster_descriptor_1_of_2.yaml", "chips: [1]\n", NEW_NS)
+
+    path, err = pick_cluster_descriptor_path(tmp_path, logical_rank=0)
+    assert err is None
+    assert path is not None and path.name == "cluster_descriptor.yaml"
+
+    path, err = pick_cluster_descriptor_path(tmp_path, logical_rank=1)
+    assert path is None and err == "rank_out_of_range"
+
+
+def test_a_partial_ranked_family_is_still_used_when_it_is_all_there_is(tmp_path):
+    # Completeness governs precedence, not usability: with no unsuffixed file to
+    # defer to, rank 0 is still serviceable and only the absent rank errors.
+    _write(tmp_path / "cluster_descriptor_1_of_2.yaml", "chips: [1]\n")
+
+    path, err = pick_cluster_descriptor_path(tmp_path, logical_rank=0)
+    assert err is None
+    assert path is not None and path.name == "cluster_descriptor_1_of_2.yaml"
+
+    path, err = pick_cluster_descriptor_path(tmp_path, logical_rank=1)
+    assert path is None and err == "missing_rank_file"
+
+
+@pytest.mark.parametrize(
+    "single_ns,ranked_ns,expect_ranked",
+    [(OLD_NS, NEW_NS, True), (NEW_NS, OLD_NS, False)],
+)
+def test_cluster_and_mesh_choose_the_same_generation(
+    tmp_path, single_ns, ranked_ns, expect_ranked
+):
+    # The failure this guards: cluster selecting the current ranked descriptors
+    # while mesh returned the stale unsuffixed mapping, which then overrode
+    # `descriptor.chips` for every host. Family selection is shared, so the two
+    # cannot disagree; only the per-rank rule differs. #1947
+    _cluster_families(tmp_path, single_ns, ranked_ns)
+    _mesh_families(tmp_path, single_ns, ranked_ns)
+
+    cluster, cluster_err = pick_cluster_descriptor_path(tmp_path, logical_rank=0)
+    mesh, mesh_err = pick_mesh_descriptor_path(tmp_path, logical_rank=0)
+
+    assert cluster_err is None and mesh_err is None
+    assert cluster is not None and mesh is not None
+    assert ("_1_of_2" in cluster.name) is expect_ranked
+    assert (
+        "_1_of_2" in mesh.name
+    ) is expect_ranked, "mesh chose a different generation"
 
 
 def test_pick_cluster_descriptor_ranked_set_outranks_a_stale_unsuffixed_file(tmp_path):
