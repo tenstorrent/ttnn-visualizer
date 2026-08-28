@@ -10,9 +10,9 @@ capture that happened to total 13 was worse, because it was silently relabelled
 — `type` served as `zone name`, so a zone query matched `ZONE_START` and
 returned nothing for a real zone name, with HTTP 200 either way.
 
-Both shapes are built here from literals rather than from the committed fixture,
-so the 15-column case stays covered even though no 15-column capture is checked
-in. See #1941.
+Every shape is built here from literals rather than from the committed fixture,
+so the 15-column and pre-rename cases stay covered even though no capture of
+either is checked in. See #1941.
 """
 
 from pathlib import Path
@@ -65,6 +65,25 @@ DEMO_REPORT_HEADER = (
 DEMO_REPORT_ROWS = [
     "1,1,1,BRISC,18952,14595968859092,0,1024,1025,BRISC-FW,ZONE_START,433,brisc.cc",
     "1,1,1,BRISC,18953,14595968859500,0,1024,1025,BRISC-FW,ZONE_END,433,brisc.cc",
+]
+
+# What tt-metal wrote before it renamed the columns: `stat value` and `zone
+# phase` where the three shapes above have `data` and `type`, and no `meta data`.
+# Thirteen columns again, so the count-based shapes above cannot stand in for it
+# — this is the naming axis, and the half of #1941 that failed silently.
+#
+# Not hypothetical: this is verbatim the hardcoded list of 13 that 270c0b9b
+# removed, which was itself copied from a capture of this era, and 2024 captures
+# with this header are still around. Its zone boundaries are spelled
+# `begin`/`end`, not the `ZONE_START`/`ZONE_END` the renamed column uses.
+PRE_RENAME_HEADER = (
+    "PCIe slot, core_x, core_y, RISC processor type, timer_id,"
+    " time[cycles since reset], stat value, run ID, run host ID,  zone name,"
+    " zone phase, source line, source file"
+)
+PRE_RENAME_ROWS = [
+    "0,1,1,BRISC,924,11464554183483,0,0,480,BRISC-FW,begin,396,brisc.cc",
+    "0,1,1,BRISC,66460,11464555014278,0,0,480,BRISC-FW,end,396,brisc.cc",
 ]
 
 
@@ -120,10 +139,11 @@ def test_modern_fifteen_column_capture_parses(tmp_path):
     assert "trace_id" in first and "trace_id_counter" in first
     assert "meta_data" in first
 
-    # `stat value` and `zone phase` were the old list's names for `data` and
-    # `type`; `run ID` is a real column, but only in older captures like the
-    # segformer demos, never in this one. Any of the three appearing here would
-    # mean the header is being overwritten again.
+    # `stat value`, `zone phase` and `run ID` are all real columns, just not
+    # this capture's: the first two are pre-rename names for `data` and `type`
+    # (see `PRE_RENAME_HEADER`), and `run ID` appears in older captures like the
+    # segformer demos. Any of the three appearing here would mean the header is
+    # being overwritten from a hardcoded list again.
     assert "stat_value" not in first
     assert "run_ID" not in first
     assert "zone_phase" not in first
@@ -164,6 +184,37 @@ def test_demo_report_shape_still_parses(tmp_path):
     assert first["run_host_ID"] == 1025
     # `run ID` is a real column here, not one the old hardcoded list invented.
     assert first["run_ID"] == 1024
+    assert "meta_data" not in first
+
+
+def test_pre_rename_vocabulary_is_served_under_its_own_names(tmp_path):
+    """A capture from before tt-metal's rename must parse as what it says.
+
+    The other three fixtures differ from each other by column *count*; this one
+    differs by column *names*, which is the axis the silent half of #1941 turned
+    on. `test_the_required_column_list_is_pinned` already makes widening
+    `REQUIRED_DEVICE_LOG_COLUMNS` to `data` or `type` a deliberate edit, but it
+    cannot show what that edit costs: this is the case that answers 422.
+    """
+    instance = _write_device_log(tmp_path, PRE_RENAME_HEADER, PRE_RENAME_ROWS)
+
+    with DeviceLogProfilerQueries(instance) as csv:
+        entries = csv.get_all_entries(as_dict=True)
+
+    assert len(entries) == len(PRE_RENAME_ROWS)
+
+    first = entries[0]
+    # The three the gate requires are the three that survive the rename.
+    assert first["timer_id"] == 924
+    assert first["zone_name"] == "BRISC-FW"
+    assert first["run_host_ID"] == 480
+
+    # Served as themselves, not silently relabelled to the post-rename names.
+    assert first["stat_value"] == 0
+    assert first["zone_phase"] == "begin"
+    assert entries[1]["zone_phase"] == "end"
+    assert "data" not in first
+    assert "type" not in first
     assert "meta_data" not in first
 
 

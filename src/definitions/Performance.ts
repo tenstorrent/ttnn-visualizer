@@ -24,6 +24,14 @@ export enum DeviceLogEntryType {
     TS_DATA = 'TS_DATA',
 }
 
+// What `type` was called before tt-metal renamed it, in captures old enough to
+// predate the rename. Not the same vocabulary: the 2024 captures spell the two
+// zone boundaries `begin`/`end`, and have no `TS_DATA` counterpart at all.
+export enum DeviceLogZonePhase {
+    BEGIN = 'begin',
+    END = 'end',
+}
+
 export const PATTERN_COUNT = 3; // Number of row patterns defined in PerfReport.scss
 
 export const HIGH_DISPATCH_THRESHOLD_US = 6.5; // Threshold for flagging high dispatch latency ops
