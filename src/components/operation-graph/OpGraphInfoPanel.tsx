@@ -348,9 +348,11 @@ interface OpGraphInfoPanelProps {
     block?: OpGraphBlockSummary | null;
 }
 
+type OpGraphOperationPanelProps = Omit<OpGraphInfoPanelProps, 'block'>;
+
 // Node drag re-renders the graph every pointer frame, and re-rendering each
 // tensor's memory-config table with it stutters. Every prop must be stable.
-const OpGraphInfoPanel = memo(
+const OpGraphOperationPanel = memo(
     ({
         operationId,
         operationById,
@@ -359,8 +361,7 @@ const OpGraphInfoPanel = memo(
         isPerfOverlayActive,
         perfDeviceTimeNs,
         perfColor,
-        block = null,
-    }: OpGraphInfoPanelProps) => {
+    }: OpGraphOperationPanelProps) => {
         const navigate = useNavigate();
         const operation = operationById.get(operationId);
         const operationSourceData = operation ? extractOperationSourceData(operation) : null;
@@ -375,19 +376,6 @@ const OpGraphInfoPanel = memo(
         );
 
         const deviceOperationNames = operation?.deviceOperationNameList ?? [];
-
-        if (block !== null) {
-            return (
-                <OpGraphBlockPanel
-                    block={block}
-                    operationById={operationById}
-                    operationNamesById={operationNamesById}
-                    onLocateOperation={onLocateOperation}
-                    isPerfOverlayActive={isPerfOverlayActive}
-                    perfDeviceTimeNs={perfDeviceTimeNs}
-                />
-            );
-        }
 
         return (
             <aside
@@ -494,6 +482,30 @@ const OpGraphInfoPanel = memo(
             </aside>
         );
     },
+);
+
+OpGraphOperationPanel.displayName = 'OpGraphOperationPanel';
+
+/**
+ * @description Picks the panel for what is selected. A dispatcher rather than one
+ * component with an early return: hooks run before a return, so selecting a block
+ * used to pay for the operation panel's source extraction and both connected-group
+ * memos and then discard them — on a component whose own contract is that it
+ * re-renders per drag frame.
+ */
+const OpGraphInfoPanel = memo(({ block = null, ...operationProps }: OpGraphInfoPanelProps) =>
+    block !== null ? (
+        <OpGraphBlockPanel
+            block={block}
+            operationById={operationProps.operationById}
+            operationNamesById={operationProps.operationNamesById}
+            onLocateOperation={operationProps.onLocateOperation}
+            isPerfOverlayActive={operationProps.isPerfOverlayActive}
+            perfDeviceTimeNs={operationProps.perfDeviceTimeNs}
+        />
+    ) : (
+        <OpGraphOperationPanel {...operationProps} />
+    ),
 );
 
 OpGraphInfoPanel.displayName = 'OpGraphInfoPanel';
