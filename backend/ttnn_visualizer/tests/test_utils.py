@@ -716,6 +716,9 @@ def test_stringify_chip_unique_ids_preserves_64_bit_values():
         "chip_unique_ids": {9: exact, 10: exact + 1},
         "ethernet_connections_to_remote_devices": [
             [{"chip": 25, "chan": 9}, {"remote_chip_id": exact + 2, "chan": 9}],
+            # Reversed, so the key-carrying endpoint is at index 0. The rule is
+            # "any endpoint dict carrying remote_chip_id", not "the second one".
+            [{"remote_chip_id": exact + 3, "chan": 1}, {"chip": 26, "chan": 1}],
         ],
     }
 
@@ -724,13 +727,12 @@ def test_stringify_chip_unique_ids_preserves_64_bit_values():
     assert result["chip_unique_ids"] == {9: str(exact), 10: str(exact + 1)}
     # Adjacent values stay distinct; as doubles they would collapse together.
     assert float(exact) == float(exact + 1)
-    remote = result["ethernet_connections_to_remote_devices"][0][1]
-    assert remote["remote_chip_id"] == str(exact + 2)
-    # The local endpoint is untouched.
-    assert result["ethernet_connections_to_remote_devices"][0][0] == {
-        "chip": 25,
-        "chan": 9,
-    }
+    pairs = result["ethernet_connections_to_remote_devices"]
+    assert pairs[0][1]["remote_chip_id"] == str(exact + 2)
+    assert pairs[1][0]["remote_chip_id"] == str(exact + 3)
+    # Endpoints without the key are untouched, whichever side they sit on.
+    assert pairs[0][0] == {"chip": 25, "chan": 9}
+    assert pairs[1][1] == {"chip": 26, "chan": 1}
 
 
 def test_stringify_chip_unique_ids_tolerates_missing_and_odd_shapes():

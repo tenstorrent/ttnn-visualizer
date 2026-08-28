@@ -612,7 +612,7 @@ describe('sortHostsByConnectionProximity', () => {
     // 8-chip host with cross-host links rooted in `bottomRow` (true) → rank's
     // mean local-y skews toward 1; `false` → skews toward 0 (chips 0-3, top
     // row in the 4-wide × 2-row local grid).
-    const makeHost = (rank: number, chipUniqueIds: Record<number, number>): ClusterHost => ({
+    const makeHost = (rank: number, chipUniqueIds: Record<number, string>): ClusterHost => ({
         rank,
         descriptor: {
             arch: {},
@@ -626,7 +626,8 @@ describe('sortHostsByConnectionProximity', () => {
         } as unknown as ClusterModel,
         meshChips: {},
     });
-    const eightChips = (offset: number) => Object.fromEntries([0, 1, 2, 3, 4, 5, 6, 7].map((id) => [id, offset + id]));
+    const eightChips = (offset: number) =>
+        Object.fromEntries([0, 1, 2, 3, 4, 5, 6, 7].map((id) => [id, String(offset + id)]));
 
     const link = (rankA: number, chipA: number, rankB: number, chipB: number): InterHostEthernetLink => ({
         a: { rank: rankA, chip: chipA, chan: 0, chipUniqueId: '0' },
