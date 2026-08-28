@@ -16,8 +16,10 @@ in. See #1941.
 """
 
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
+from ttnn_visualizer import csv_queries
 from ttnn_visualizer.csv_queries import DeviceLogProfilerQueries
 from ttnn_visualizer.exceptions import DataFormatError
 from ttnn_visualizer.models import Instance
@@ -66,10 +68,36 @@ DEMO_REPORT_ROWS = [
 ]
 
 
-def _write_device_log(directory: Path, header: str, rows: list[str]) -> Instance:
-    """Write a device log and return an instance mounted on its directory."""
+def write_device_log(directory: Path, header: str, rows: list[str]) -> Path:
+    """Write the layout the reader expects: preamble line, header, rows.
+
+    Shared with `test_device_log_routes.py`, which mounts the same file on an
+    instance row rather than an `Instance`. The preamble is what `offset=1`
+    skips, so it is part of the contract under test.
+    """
     path = directory / DeviceLogProfilerQueries.DEVICE_LOG_FILE
     path.write_text("\n".join([PREAMBLE, header, *rows]) + "\n", encoding="utf-8")
+    return path
+
+
+def drop_column(header: str, rows: list[str], column: str) -> tuple[str, list[str]]:
+    """Remove one named column from a header and the matching field from rows."""
+    names = [name.strip() for name in header.split(",")]
+    index = names.index(column)
+    del names[index]
+
+    trimmed = []
+    for row in rows:
+        fields = row.split(",")
+        del fields[index]
+        trimmed.append(",".join(fields))
+
+    return ", ".join(names), trimmed
+
+
+def _write_device_log(directory: Path, header: str, rows: list[str]) -> Instance:
+    """Write a device log and return an instance mounted on its directory."""
+    write_device_log(directory, header, rows)
     return Instance(instance_id="pytest-device-log", performance_path=str(directory))
 
 
@@ -162,14 +190,116 @@ def test_zone_query_honours_its_limit(tmp_path):
     assert len(limited) == 1
 
 
-def test_missing_column_is_refused_by_name(tmp_path):
-    """A short header must fail loudly rather than serve a shifted row."""
-    header = LEGACY_HEADER.replace(" zone name,", "")
-    rows = [
-        row.replace("BRISC-FW,", "").replace("TRISC-FW,", "") for row in LEGACY_ROWS
+def test_stream_mode_validates_columns_without_holding_rows(tmp_path):
+    """#1946: `stream=True` loads the header, and the header only."""
+    instance = _write_device_log(tmp_path, MODERN_HEADER, MODERN_ROWS)
+
+    with DeviceLogProfilerQueries(instance, stream=True) as csv:
+        # The columns are there to validate against, but none of the rows.
+        assert "zone name" in csv.runner.df.columns
+        assert len(csv.runner.df) == 0
+
+        # The filter still sees every row, because it reads them in chunks.
+        assert len(csv.query_zone_statistics("BRISC-FW", as_dict=True)) == 2
+
+
+def test_stream_mode_refuses_a_query_that_would_answer_from_the_header(tmp_path):
+    """A resident-frame query on a streaming runner would silently return [].
+
+    That is the #1941 failure mode again -- a 200 carrying nothing -- so it has
+    to raise rather than answer.
+    """
+    instance = _write_device_log(tmp_path, MODERN_HEADER, MODERN_ROWS)
+
+    with DeviceLogProfilerQueries(instance, stream=True) as csv:
+        with pytest.raises(RuntimeError, match="execute_filtered_query"):
+            csv.get_all_entries(as_dict=True)
+
+
+def test_chunked_filter_matches_across_chunk_boundaries(tmp_path):
+    """A match must not depend on where the chunk boundary happens to fall."""
+    rows = [MODERN_ROWS[0]] * 5 + [MODERN_ROWS[2]] * 5 + [MODERN_ROWS[0]] * 5
+    instance = _write_device_log(tmp_path, MODERN_HEADER, rows)
+
+    with DeviceLogProfilerQueries(instance, stream=True) as csv:
+        # Two rows per chunk, so both zones straddle several boundaries.
+        with patch.object(csv_queries, "CSV_CHUNK_SIZE", 2):
+            brisc = csv.query_zone_statistics("BRISC-FW", as_dict=True)
+            trisc = csv.query_zone_statistics("TRISC-FW", as_dict=True)
+            capped = csv.query_zone_statistics("BRISC-FW", as_dict=True, limit=3)
+
+    assert len(brisc) == 10
+    assert len(trisc) == 5
+    # The limit is honoured exactly, not rounded up to a chunk.
+    assert len(capped) == 3
+
+
+def test_the_required_column_list_is_pinned():
+    """The refusal test parametrises over this list, so it cannot police it.
+
+    Dropping an entry would delete the case that covers it and leave the suite
+    green -- `run host ID`, the join key #1941 is about, went unguarded exactly
+    that way. Removing a column from the gate should be a deliberate edit here.
+    """
+    assert DeviceLogProfilerQueries.REQUIRED_DEVICE_LOG_COLUMNS == [
+        "timer_id",
+        "zone name",
+        "run host ID",
     ]
+
+
+@pytest.mark.parametrize("column", DeviceLogProfilerQueries.REQUIRED_DEVICE_LOG_COLUMNS)
+def test_every_required_column_is_refused_by_name(tmp_path, column):
+    """A short header must fail loudly rather than serve a shifted row.
+
+    Parametrised over the whole list because a single case leaves the rest of
+    the gate unpinned: dropping `run host ID` -- the join key #1941 is about --
+    from `REQUIRED_DEVICE_LOG_COLUMNS` used to leave the suite green.
+    """
+    header, rows = drop_column(MODERN_HEADER, MODERN_ROWS, column)
     instance = _write_device_log(tmp_path, header, rows)
 
-    with pytest.raises(DataFormatError, match="zone name"):
+    with pytest.raises(DataFormatError, match=column):
         with DeviceLogProfilerQueries(instance):
             pass
+
+
+def test_a_capture_that_cannot_be_parsed_is_a_data_error(tmp_path):
+    """A header-only or ragged capture is bad data, not a server fault.
+
+    `pd.read_csv` raises `EmptyDataError` / `ParserError` for these; uncaught
+    they reach the catch-all as a 500 with a traceback the caller can trigger
+    at will. See #1946.
+    """
+    empty = tmp_path / "empty"
+    empty.mkdir()
+    (empty / DeviceLogProfilerQueries.DEVICE_LOG_FILE).write_text(
+        PREAMBLE + "\n", encoding="utf-8"
+    )
+    instance = Instance(instance_id="pytest-device-log", performance_path=str(empty))
+    with pytest.raises(DataFormatError, match="could not be parsed"):
+        with DeviceLogProfilerQueries(instance):
+            pass
+
+    ragged = tmp_path / "ragged"
+    ragged.mkdir()
+    instance = _write_device_log(
+        ragged, MODERN_HEADER, [*MODERN_ROWS, MODERN_ROWS[0] + ",extra,fields"]
+    )
+    with pytest.raises(DataFormatError, match="could not be parsed"):
+        with DeviceLogProfilerQueries(instance) as csv:
+            csv.get_all_entries(as_dict=True)
+
+
+def test_timer_id_query_matches_the_column_it_filters(tmp_path):
+    """`timer_id` parses as int64, so a `str` argument matched nothing.
+
+    The column is required on this method's behalf, so it has to work.
+    """
+    instance = _write_device_log(tmp_path, MODERN_HEADER, MODERN_ROWS)
+
+    with DeviceLogProfilerQueries(instance) as csv:
+        matched = csv.query_by_timer_id(18952, as_dict=True)
+
+    assert len(matched) == 1
+    assert matched[0]["zone_name"] == "BRISC-FW"

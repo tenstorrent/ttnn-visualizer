@@ -93,10 +93,12 @@ SPA_PERFORMANCE_ROUTES = (
 DEVICE_LOG_ROUTE = "/api/performance/device-log"
 
 # `execute_query` maps spaces in the CSV header to underscores, so these are the
-# JSON forms of the columns `REQUIRED_DEVICE_LOG_COLUMNS` guarantees, plus `type`
+# JSON forms of every column `REQUIRED_DEVICE_LOG_COLUMNS` guarantees, plus `type`
 # — whose value is what distinguishes a by-name read from the positional one that
 # served `type` under the key `zone_name` (#1941).
-DEVICE_LOG_REQUIRED_KEYS = ("zone_name", "run_host_ID", "type")
+DEVICE_LOG_REQUIRED_KEYS = ("timer_id", "zone_name", "run_host_ID", "type")
+# Copied rather than imported: this script does not import `ttnn_visualizer`.
+# The owner is `DeviceLogProfilerQueries.DEVICE_LOG_ENTRY_TYPES`.
 DEVICE_LOG_ENTRY_TYPES = {"ZONE_START", "ZONE_END", "TS_DATA"}
 
 UNREACHABLE_PERFORMANCE_ROUTES = (

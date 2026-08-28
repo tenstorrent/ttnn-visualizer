@@ -221,7 +221,7 @@ def _stack_source_request_params():
 # A single zone matches 200k+ rows on a real capture (~76 MB of JSON), and none of
 # the device-log routes are `@local_only`, so an unbounded response is reachable by
 # anyone under SERVER_MODE. This caps the two query routes; `/device-log/raw` still
-# streams the whole file, so the exposure is reduced rather than closed.
+# reads the whole file into memory, so the exposure is reduced rather than closed.
 # Imported by the route tests, so it stays public.
 DEVICE_LOG_ROW_LIMIT = 100
 
@@ -1378,8 +1378,10 @@ def get_npe_timeline(instance: Instance):
 @with_instance
 def get_zone_statistics(zone, instance: Instance):
     try:
-        # No `max_rows`: the filter has to see every row to know what matched.
-        with DeviceLogProfilerQueries(instance) as csv:
+        # `stream`, not `max_rows`: the filter has to see every row to know
+        # what matched, but it walks them in chunks instead of holding the
+        # whole ~288 MB capture to answer with 100 rows.
+        with DeviceLogProfilerQueries(instance, stream=True) as csv:
             # One past the cap, so a truncated answer can be told from a whole one.
             rows = csv.query_zone_statistics(
                 zone_name=zone, as_dict=True, limit=DEVICE_LOG_ROW_LIMIT + 1

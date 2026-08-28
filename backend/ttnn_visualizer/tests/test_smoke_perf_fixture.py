@@ -139,7 +139,8 @@ def test_device_log_columns_are_read_by_name():
     assert (
         "BRISC-FW" in zone_names
     ), f"`zone name` is serving another column: {zone_names}"
-    assert {entry["type"] for entry in entries} <= {"ZONE_START", "ZONE_END", "TS_DATA"}
+    entry_types = {entry["type"] for entry in entries}
+    assert entry_types <= DeviceLogProfilerQueries.DEVICE_LOG_ENTRY_TYPES, entry_types
 
 
 def test_manifest_matches_its_schema():

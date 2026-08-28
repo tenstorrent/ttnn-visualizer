@@ -481,7 +481,15 @@ export interface DeviceInfo {
  * it. The backend reads the CSV header by name and passes every column through,
  * so which optional keys are present depends on the tt-metal that wrote the
  * capture — `run_ID` only appears in older ones, the trace pair only in newer.
- * Spaces in the column names become underscores. See #1941.
+ * Spaces in the column names become underscores.
+ *
+ * The required members below are present in every capture shape seen so far,
+ * but only `timer_id`, `zone_name` and `run_host_ID` are actually enforced:
+ * `REQUIRED_DEVICE_LOG_COLUMNS` deliberately gates on as little as possible,
+ * because gating on the union of known columns rejected the shipped demo
+ * reports. Widening the gate to match this interface would trade a wrong
+ * answer for a 422 on the next tt-metal rename — which is the drift #1941 was
+ * about. See #1941.
  */
 export interface PerformanceLog {
     PCIe_slot: number;
@@ -496,8 +504,11 @@ export interface PerformanceLog {
     timer_id: number;
     type: DeviceLogEntryType;
     zone_name: string;
-    meta_data?: string;
-    run_ID?: number;
-    trace_id?: number;
-    trace_id_counter?: number;
+    // Present-but-empty cells arrive as `null`, not as an absent key:
+    // `execute_query` maps every NaN to `None`. Narrowing on key presence
+    // alone is not enough. See #1941.
+    meta_data?: string | null;
+    run_ID?: number | null;
+    trace_id?: number | null;
+    trace_id_counter?: number | null;
 }
