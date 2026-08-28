@@ -12,6 +12,7 @@ import ROUTES from '../../definitions/Routes';
 import { StackTraceLanguage } from '../../definitions/StackTrace';
 import { toReadableShape, toReadableType } from '../../functions/formatting';
 import { formatMemorySize, formatSize } from '../../functions/math';
+import { getBlockBoundaryTensors } from './opGraphBlockBoundary';
 import { extractOperationSourceData } from '../../functions/stackTraceSource';
 import type { OperationDescription, Tensor } from '../../model/APIData';
 import { BufferTypeLabel } from '../../model/BufferType';
@@ -85,45 +86,6 @@ const uniqueNameCounts = (names: readonly string[]): Array<{ name: string; count
         }
     }
     return counts;
-};
-
-const withExternalEndpoints = (tensor: Tensor, memberIds: ReadonlySet<number>, direction: NodeRelation): Tensor => {
-    if (direction === NodeRelation.Input) {
-        const producers = tensor.producers ?? [];
-        const producerNames = tensor.producerNames ?? [];
-        const keep = producers
-            .map((id, index) => ({ id, name: producerNames[index] ?? '' }))
-            .filter((entry) => !memberIds.has(entry.id));
-        return { ...tensor, producers: keep.map((entry) => entry.id), producerNames: keep.map((entry) => entry.name) };
-    }
-    const consumers = tensor.consumers ?? [];
-    const consumerNames = tensor.consumerNames ?? [];
-    const keep = consumers
-        .map((id, index) => ({ id, name: consumerNames[index] ?? '' }))
-        .filter((entry) => !memberIds.has(entry.id));
-    return { ...tensor, consumers: keep.map((entry) => entry.id), consumerNames: keep.map((entry) => entry.name) };
-};
-
-const getBlockBoundaryTensors = (
-    members: OperationDescription[],
-    memberIds: ReadonlySet<number>,
-    direction: NodeRelation,
-): Tensor[] => {
-    const tensors: Tensor[] = [];
-    const seenIds = new Set<number>();
-    for (const member of members) {
-        const list = (direction === NodeRelation.Input ? member.inputs : member.outputs) ?? [];
-        for (const tensor of list) {
-            if (!seenIds.has(tensor.id)) {
-                const counterparts = (direction === NodeRelation.Input ? tensor.producers : tensor.consumers) ?? [];
-                if (counterparts.length === 0 || counterparts.some((id) => !memberIds.has(id))) {
-                    seenIds.add(tensor.id);
-                    tensors.push(withExternalEndpoints(tensor, memberIds, direction));
-                }
-            }
-        }
-    }
-    return tensors;
 };
 
 interface TensorDetailsProps {

@@ -18,6 +18,7 @@ import type {
     OpGraphDeviceSubgraph,
     OpGraphFlowEdge,
     OpGraphFlowNode,
+    OpGraphSourceOperation,
 } from '../src/components/operation-graph/opGraphTypes';
 
 // A layout is the most expensive thing this view can do, and every cheap
@@ -41,8 +42,13 @@ const harness: {
     onNodeMouseEnter: ((event: unknown, node: OpGraphFlowNode) => void) | undefined;
     onNodeMouseLeave: (() => void) | undefined;
     onPaneClick: (() => void) | null;
+    // What the view actually derived from `operationList`. Builds run against this
+    // rather than a reimplementation, so a field the mapping stops carrying fails
+    // here instead of silently changing what detection fingerprints on.
+    sourceOperations: OpGraphSourceOperation[] | null;
 } = {
     onBuilt: null,
+    sourceOperations: null,
     setNodes: null,
     setEdges: null,
     onNodeClick: null,
@@ -61,6 +67,16 @@ const applyNodeChanges = vi.fn();
 // the store publishes, so a `subscribe` that never invoked its callback left both
 // the initial write and the subscription itself impossible to falsify.
 const flowTransform: { current: [number, number, number] } = { current: [0, 0, 1] };
+
+// Real spies rather than inert stubs: the viewport anchor is the mechanism this
+// branch extends, and it was unobservable. `knownNodeIds` is populated by every
+// delivered graph so `getNode` can tell a live id from a stale one. Hoisted
+// because the `@xyflow/react` factory below is, and it reads them eagerly.
+const { setCenter, setViewport, knownNodeIds } = vi.hoisted(() => ({
+    setCenter: vi.fn(() => Promise.resolve()),
+    setViewport: vi.fn(() => Promise.resolve()),
+    knownNodeIds: new Set<string>(),
+}));
 const flowStoreListeners = new Set<(state: { transform: [number, number, number] }) => void>();
 
 vi.mock('@xyflow/react', async () => {
@@ -70,10 +86,15 @@ vi.mock('@xyflow/react', async () => {
     // and an unstable one here would invalidate the callbacks whose stability the
     // rebuild effect depends on, quietly weakening every assertion below.
     const flowApi = {
-        setCenter: () => Promise.resolve(),
-        getNode: (id: string) => ({ id, position: { x: 0, y: 0 }, width: 100, height: 40 }),
+        setCenter,
+        // `undefined` for an id the graph does not hold, which is the whole point
+        // of the `nodeId ?? fallbackNodeId` fallback: the anchor id flips between a
+        // block id and its first member id across a fold, and a getNode that
+        // answered for any id at all made that fallback unfalsifiable.
+        getNode: (id: string) =>
+            knownNodeIds.has(id) ? { id, position: { x: 0, y: 0 }, width: 100, height: 40 } : undefined,
         getViewport: () => ({ x: 0, y: 0, zoom: 1 }),
-        setViewport: () => Promise.resolve(),
+        setViewport,
     };
     // Stable like `flowApi`: the zoom effect lists the store as a dependency, so
     // a fresh object per render would resubscribe on every pass.
@@ -161,8 +182,15 @@ vi.mock('@xyflow/react', async () => {
 });
 
 vi.mock('../src/components/operation-graph/useOpGraphLayoutWorker', () => ({
-    useOpGraphLayoutWorker: (_operations: unknown, onBuilt: (graph: OpGraphBuiltGraph) => void) => {
-        harness.onBuilt = onBuilt;
+    useOpGraphLayoutWorker: (operations: OpGraphSourceOperation[], onBuilt: (graph: OpGraphBuiltGraph) => void) => {
+        harness.sourceOperations = operations;
+        harness.onBuilt = (graph) => {
+            knownNodeIds.clear();
+            for (const node of graph.nodes) {
+                knownNodeIds.add(node.id);
+            }
+            onBuilt(graph);
+        };
         return { runBuild, isBuilding: false };
     },
 }));
@@ -255,7 +283,12 @@ const renderGraph = (operations = OPERATION_LIST, perfRows?: PerfOverlaySource[]
     // The worker is stubbed, so the view only receives a graph when a test says
     // so; this is the reply the mount's own `runBuild` would have produced.
     act(() => {
-        harness.onBuilt?.(buildOpGraph(sourceFor(operations), { hideDeallocate: true, deviceSubgraphs: [] }));
+        harness.onBuilt?.(
+            buildOpGraph(harness.sourceOperations ?? sourceFor(operations), {
+                hideDeallocate: true,
+                deviceSubgraphs: [],
+            }),
+        );
     });
     return view;
 };
@@ -348,7 +381,12 @@ const deviceSubgraphFor = (operationId: number, producerId: number): OpGraphDevi
 // inject the graph this way so they don't depend on the click path.
 const rebuildWith = (operations: OperationDescription[], deviceSubgraphs: OpGraphDeviceSubgraph[]) => {
     act(() => {
-        harness.onBuilt?.(buildOpGraph(sourceFor(operations), { hideDeallocate: true, deviceSubgraphs }));
+        harness.onBuilt?.(
+            buildOpGraph(harness.sourceOperations ?? sourceFor(operations), {
+                hideDeallocate: true,
+                deviceSubgraphs,
+            }),
+        );
     });
 };
 
@@ -425,6 +463,10 @@ beforeEach(() => {
     vi.mocked(findCriticalPath).mockClear();
     flowRenders.length = 0;
     harness.onBuilt = null;
+    harness.sourceOperations = null;
+    setCenter.mockClear();
+    setViewport.mockClear();
+    knownNodeIds.clear();
     harness.setNodes = null;
     harness.setEdges = null;
     harness.onNodeClick = null;
@@ -1276,7 +1318,7 @@ describe('OperationGraphReactFlow repeat blocks', () => {
     const deliver = (operations: OperationDescription[], options: Partial<OpGraphBuildOptions> = {}) => {
         act(() => {
             harness.onBuilt?.(
-                buildOpGraph(sourceFor(operations), {
+                buildOpGraph(harness.sourceOperations ?? sourceFor(operations), {
                     hideDeallocate: true,
                     deviceSubgraphs: [],
                     ...options,
@@ -1284,6 +1326,39 @@ describe('OperationGraphReactFlow repeat blocks', () => {
             );
         });
     };
+
+    it('hands the worker every field detection fingerprints on', () => {
+        // The fixture used to reimplement this mapping and drop three of its
+        // fields, `inputShapes` among them — so every folding assertion in this
+        // file ran against a source shape production never emits, and deleting
+        // `inputShapes` from the real mapping would have over-folded live graphs
+        // with the suite green.
+        renderGraph(REPEAT_OPERATION_LIST);
+
+        const mapped = harness.sourceOperations;
+        expect(mapped).not.toBeNull();
+        expect(mapped).toHaveLength(REPEAT_OPERATION_LIST.length);
+        for (const mappedOperation of mapped ?? []) {
+            expect(mappedOperation.inputShapes).toBeDefined();
+            expect(mappedOperation).toHaveProperty('durationSeconds');
+            expect(mappedOperation).toHaveProperty('memoryDeltaBytes');
+        }
+    });
+
+    it('holds the viewport on an unroll instead of recentring on the selection', () => {
+        // The anchor and the selection tween fight for the viewport; the anchor
+        // has to win, or the graph jumps to whatever the selection fell back to.
+        // Both stubs were inert, so neither half of this was observable. #1944
+        renderGraph(REPEAT_OPERATION_LIST);
+        setCenter.mockClear();
+        setViewport.mockClear();
+
+        fireEvent.click(screen.getAllByRole('button', { name: 'Unroll 2 operations' })[0]);
+        deliver(REPEAT_OPERATION_LIST, { expandedBlockIds: [FIRST_BLOCK_ID] });
+
+        expect(setViewport).toHaveBeenCalledTimes(1);
+        expect(setCenter).not.toHaveBeenCalled();
+    });
 
     it('collapses repeats on first layout and offers Unroll / Fold', () => {
         renderGraph(REPEAT_OPERATION_LIST);
