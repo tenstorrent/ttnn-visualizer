@@ -164,6 +164,22 @@ const EMPTY_MATCHES: OpGraphMatches = {
 const NOTHING_EXPANDED: ReadonlySet<number> = new Set<number>();
 const NOTHING_EXPANDED_BLOCKS: ReadonlySet<string> = new Set<string>();
 const NO_BLOCKS: OpGraphBlockSummary[] = [];
+
+// Folding a block makes its members' device-op expansions unreachable, so they are
+// dropped with it. Shared by the three places that fold: one block, all blocks, and
+// the deallocate filter (which re-runs detection and invalidates every instance).
+const withoutBlockMembers = (
+    expandedOperationIds: ReadonlySet<number>,
+    blocks: readonly OpGraphBlockSummary[],
+): Set<number> => {
+    const remaining = new Set(expandedOperationIds);
+    for (const block of blocks) {
+        for (const memberOpId of block.operationIds) {
+            remaining.delete(memberOpId);
+        }
+    }
+    return remaining;
+};
 const NO_DEVICE_SUBGRAPHS: OpGraphDeviceSubgraph[] = [];
 const EMPTY_NODE_ID_BY_OP = new Map<number, string>();
 const EMPTY_BLOCK_IDS: string[] = [];
@@ -394,9 +410,6 @@ const OperationGraphInner = ({
         return byId;
     }, [operationList]);
 
-    // Only the expanded operations are assembled: one operation's frame stream
-    // runs to thousands of nodes, so deriving all of them up front would pay for
-    // the ones nobody opens.
     const collapsedMemberIds = useMemo(() => {
         const memberIds = new Set<number>();
         for (const block of detectedBlocks) {
@@ -409,6 +422,9 @@ const OperationGraphInner = ({
         return memberIds;
     }, [detectedBlocks, expandedBlockIds]);
 
+    // Only the expanded operations are assembled: one operation's frame stream
+    // runs to thousands of nodes, so deriving all of them up front would pay for
+    // the ones nobody opens.
     const deviceSubgraphs = useMemo<OpGraphDeviceSubgraph[]>(() => {
         const assembled: OpGraphDeviceSubgraph[] = [];
         for (const expandedOperationId of expandedOperationIds) {
@@ -614,35 +630,6 @@ const OperationGraphInner = ({
         void setViewport(viewport, { duration: FOCUS_DURATION_MS });
     }, [nodes, reportScope, getViewport, setViewport]);
 
-    const toggleOperationExpansion = useCallback(
-        (targetOperationId: number) => {
-            const nodeId = String(targetOperationId);
-            const node = getNode(nodeId);
-            if (node) {
-                const { x, y, zoom } = getViewport();
-                pendingViewportAnchorRef.current = {
-                    nodeId,
-                    fallbackNodeId: nodeId,
-                    paneX: node.position.x * zoom + x,
-                    paneY: node.position.y * zoom + y,
-                    reportScope,
-                };
-            }
-            setExpandedOperationIds((previous) => {
-                const next = new Set(previous);
-                // A failed delete means it wasn't expanded, so this is the expand.
-                if (!next.delete(targetOperationId)) {
-                    next.add(targetOperationId);
-                }
-                return next;
-            });
-            // Both directions: folding shrinks the node back and is just as easy to
-            // lose track of as expanding.
-            pendingRevealRef.current = { nodeIds: new Set([nodeId]), reportScope };
-        },
-        [getNode, getViewport, reportScope],
-    );
-
     const armViewportAnchor = useCallback(
         (nodeId: string, fallbackNodeId: string) => {
             const node = getNode(nodeId) ?? getNode(fallbackNodeId);
@@ -659,6 +646,27 @@ const OperationGraphInner = ({
             };
         },
         [getNode, getViewport, reportScope],
+    );
+
+    const toggleOperationExpansion = useCallback(
+        (targetOperationId: number) => {
+            const nodeId = String(targetOperationId);
+            // An op node is its own fallback: unlike a block toggle, the anchor id
+            // does not flip to a member.
+            armViewportAnchor(nodeId, nodeId);
+            setExpandedOperationIds((previous) => {
+                const next = new Set(previous);
+                // A failed delete means it wasn't expanded, so this is the expand.
+                if (!next.delete(targetOperationId)) {
+                    next.add(targetOperationId);
+                }
+                return next;
+            });
+            // Both directions: folding shrinks the node back and is just as easy to
+            // lose track of as expanding.
+            pendingRevealRef.current = { nodeIds: new Set([nodeId]), reportScope };
+        },
+        [armViewportAnchor, reportScope],
     );
 
     const toggleBlockExpansion = useCallback(
@@ -679,23 +687,20 @@ const OperationGraphInner = ({
                 ),
                 reportScope,
             };
+            // Siblings rather than nested: a state updater must be pure, and
+            // `isUnrolling` already decides the branch outside it.
             setExpandedBlockIds((previous) => {
                 const next = new Set(previous);
-                if (next.delete(instanceId)) {
-                    if (block !== undefined) {
-                        setExpandedOperationIds((expandedOps) => {
-                            const remaining = new Set(expandedOps);
-                            for (const memberOpId of block.operationIds) {
-                                remaining.delete(memberOpId);
-                            }
-                            return remaining;
-                        });
-                    }
-                } else {
+                if (isUnrolling) {
                     next.add(instanceId);
+                } else {
+                    next.delete(instanceId);
                 }
                 return next;
             });
+            if (!isUnrolling && block !== undefined) {
+                setExpandedOperationIds((previous) => withoutBlockMembers(previous, [block]));
+            }
         },
         [armViewportAnchor, detectedBlocks, expandedBlockIds, reportScope],
     );
@@ -706,23 +711,22 @@ const OperationGraphInner = ({
 
     const collapseAllBlocks = useCallback(() => {
         setExpandedBlockIds(NOTHING_EXPANDED_BLOCKS);
-        const collapsedMembers = new Set(detectedBlocks.flatMap((block) => block.operationIds));
-        setExpandedOperationIds((previous) => {
-            const next = new Set(previous);
-            for (const memberOpId of collapsedMembers) {
-                next.delete(memberOpId);
-            }
-            return next;
-        });
+        setExpandedOperationIds((previous) => withoutBlockMembers(previous, detectedBlocks));
     }, [detectedBlocks]);
 
-    const handleHideDeallocateChange = useCallback((next: boolean) => {
-        setHideDeallocate(next);
-        setExpandedBlockIds(NOTHING_EXPANDED_BLOCKS);
-        setExpandedOperationIds(NOTHING_EXPANDED);
-        // Nothing is open any more, so nothing was "just opened".
-        setRevealedNodeIds(null);
-    }, []);
+    const handleHideDeallocateChange = useCallback(
+        (next: boolean) => {
+            setHideDeallocate(next);
+            setExpandedBlockIds(NOTHING_EXPANDED_BLOCKS);
+            // Only block members: detection re-runs on this filter so every instance
+            // folds, but an expansion on an op belonging to no block is untouched by
+            // that and was kept before this feature existed.
+            setExpandedOperationIds((previous) => withoutBlockMembers(previous, detectedBlocks));
+            // Nothing is folded open any more, so nothing was "just opened".
+            setRevealedNodeIds(null);
+        },
+        [detectedBlocks],
+    );
 
     if (operationId !== undefined && revealedOperationId !== operationId && detectedBlocks.length > 0) {
         setRevealedOperationId(operationId);
