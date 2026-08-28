@@ -59,7 +59,7 @@ import {
 } from './opGraphPerfOverlay';
 import { EMPTY_CRITICAL_PATH, findCriticalPath } from './opGraphCriticalPath';
 import { REVEALED_NODE_CLASS, revealPanShift } from './opGraphRevealPan';
-import { getAdjacentOperationIds } from './opGraphNavigation';
+import { buildPositionByOperationId, getAdjacentOperationIds } from './opGraphNavigation';
 import { useOpGraphLayoutWorker } from './useOpGraphLayoutWorker';
 import {
     type OpGraphBlockSummary,
@@ -422,6 +422,21 @@ const OperationGraphInner = ({
         return memberIds;
     }, [detectedBlocks, expandedBlockIds]);
 
+    // "Which block owns this op?" was four separate linear scans, two of them inside
+    // per-render memos. Instances are disjoint, and first-wins matches the `find`
+    // these replace.
+    const blockByMemberOperationId = useMemo(() => {
+        const byOperationId = new Map<number, OpGraphBlockSummary>();
+        for (const block of detectedBlocks) {
+            for (const memberOpId of block.operationIds) {
+                if (!byOperationId.has(memberOpId)) {
+                    byOperationId.set(memberOpId, block);
+                }
+            }
+        }
+        return byOperationId;
+    }, [detectedBlocks]);
+
     // Only the expanded operations are assembled: one operation's frame stream
     // runs to thousands of nodes, so deriving all of them up front would pay for
     // the ones nobody opens.
@@ -452,6 +467,8 @@ const OperationGraphInner = ({
         }
         return idsByNodeId;
     }, [nodeIndex]);
+
+    const positionByOperationId = useMemo(() => buildPositionByOperationId(nodeIndex), [nodeIndex]);
 
     const operationNamesById = useMemo(() => {
         const namesById = new Map<number, string>();
@@ -730,7 +747,7 @@ const OperationGraphInner = ({
 
     if (operationId !== undefined && revealedOperationId !== operationId && detectedBlocks.length > 0) {
         setRevealedOperationId(operationId);
-        const buried = detectedBlocks.find((block) => block.operationIds.includes(operationId));
+        const buried = blockByMemberOperationId.get(operationId);
         if (buried !== undefined && !expandedBlockIds.has(buried.instanceId)) {
             setExpandedBlockIds(new Set([...expandedBlockIds, buried.instanceId]));
         }
@@ -877,8 +894,8 @@ const OperationGraphInner = ({
     const matchedIds = matches.ids.size > 0 ? matches.ids : null;
 
     const { previousOperationId, nextOperationId } = useMemo(
-        () => getAdjacentOperationIds(nodeIndex, selectedOperationId),
-        [nodeIndex, selectedOperationId],
+        () => getAdjacentOperationIds(nodeIndex, selectedOperationId, positionByOperationId),
+        [nodeIndex, selectedOperationId, positionByOperationId],
     );
 
     // Stepping matches only moves the viewport. Selection is the user's anchor —
@@ -1184,14 +1201,12 @@ const OperationGraphInner = ({
                 toggleBlockExpansion(node.data.blockInstanceId);
                 return;
             }
-            const instance = detectedBlocks.find(
-                (block) => expandedBlockIds.has(block.instanceId) && block.operationIds.includes(node.data.operationId),
-            );
-            if (instance !== undefined) {
+            const instance = blockByMemberOperationId.get(node.data.operationId);
+            if (instance !== undefined && expandedBlockIds.has(instance.instanceId)) {
                 toggleBlockExpansion(instance.instanceId);
             }
         },
-        [detectedBlocks, expandedBlockIds, toggleBlockExpansion],
+        [blockByMemberOperationId, expandedBlockIds, toggleBlockExpansion],
     );
 
     const handlePaneClick = useCallback(() => {
@@ -1264,12 +1279,9 @@ const OperationGraphInner = ({
         if (selectedOperationId === null) {
             return null;
         }
-        return (
-            detectedBlocks.find(
-                (block) => !expandedBlockIds.has(block.instanceId) && block.operationIds.includes(selectedOperationId),
-            ) ?? null
-        );
-    }, [selectedOperationId, detectedBlocks, expandedBlockIds]);
+        const owner = blockByMemberOperationId.get(selectedOperationId);
+        return owner !== undefined && !expandedBlockIds.has(owner.instanceId) ? owner : null;
+    }, [selectedOperationId, blockByMemberOperationId, expandedBlockIds]);
 
     const selectedPerfAggregate =
         selectedOperationId === null ? undefined : perfOverlay.aggregatesByOpId.get(selectedOperationId);
