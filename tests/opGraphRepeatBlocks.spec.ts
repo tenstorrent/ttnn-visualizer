@@ -353,6 +353,44 @@ describe('formatRepeatPatternLabel', () => {
         expect(formatRepeatPatternLabel(members)).toBe('norm + attention + encoder + mlp');
     });
 
+    it('drops the framework-and-model prefix the module stems all share', () => {
+        // Reported from the SentenceBERT graph: three module files whose names are
+        // 60% one repeated prefix, clipped by the node it had to fit in.
+        const members = [
+            op({ id: 187, name: 'ttnn.layer_norm', fileIdentifier: 'ttnn_sentencebert_self_attention.py:31' }),
+            op({ id: 188, name: 'ttnn.matmul', fileIdentifier: 'ttnn_sentencebert_self_output.py:44' }),
+            op({ id: 189, name: 'ttnn.linear', fileIdentifier: 'ttnn_sentencebert_intermediate.py:19' }),
+        ];
+        expect(formatRepeatPatternLabel(members)).toBe('self_attention + self_output + intermediate');
+    });
+
+    it('leaves every stem a segment of its own when one is a prefix of the rest', () => {
+        const members = [
+            op({ id: 1, name: 'ttnn.linear', fileIdentifier: 'tt_llama_attention.py:1' }),
+            op({ id: 2, name: 'ttnn.gelu', fileIdentifier: 'tt_llama_mlp.py:2' }),
+            op({ id: 3, name: 'ttnn.add', fileIdentifier: 'tt_llama.py:3' }),
+        ];
+        // `tt` is shared but stripping it would leave `tt_llama` as the empty
+        // string, so the prefix stays.
+        expect(formatRepeatPatternLabel(members)).toBe('llama_attention + llama_mlp + llama');
+    });
+
+    it('keeps a shared prefix when stripping it would leave initials', () => {
+        const members = [
+            op({ id: 1, name: 'ttnn.linear', fileIdentifier: 'mlp_up.py:1' }),
+            op({ id: 2, name: 'ttnn.gelu', fileIdentifier: 'mlp_down.py:2' }),
+        ];
+        expect(formatRepeatPatternLabel(members)).toBe('mlp_up + mlp_down');
+    });
+
+    it('leaves stems that share no leading segment alone', () => {
+        const members = [
+            op({ id: 1, name: 'ttnn.layer_norm', fileIdentifier: 'norm.py:86' }),
+            op({ id: 2, name: 'ttnn.linear', fileIdentifier: 'attention.py:193' }),
+        ];
+        expect(formatRepeatPatternLabel(members)).toBe('norm + attention');
+    });
+
     it('keeps a module file that is not most of the graph', () => {
         const members = [
             op({ id: 1, name: 'ttnn.as_tensor', fileIdentifier: 'tt_routed_expert.py:132' }),

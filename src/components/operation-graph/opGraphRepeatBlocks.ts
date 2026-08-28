@@ -135,6 +135,40 @@ const uniqueShortOpNames = (operations: readonly OpGraphSourceOperation[]): stri
     return names;
 };
 
+// Module files from one model share a framework-and-model prefix: the four
+// SentenceBERT files behind one block named it in 124 characters, 72 of which were
+// `ttnn_sentencebert_` four times over, so the node showed three of the four parts
+// and clipped the rest. A prefix every part carries is context, not distinction.
+// #1944
+const MIN_DISTINGUISHING_STEM_LENGTH = 3;
+
+// `> index + 1` leaves every stem at least one segment of its own, so a set where
+// one stem is a prefix of the others keeps that stem whole.
+const isSegmentShared = (segmented: readonly string[][], index: number): boolean =>
+    segmented.every((segments) => segments.length > index + 1 && segments[index] === segmented[0][index]);
+
+const dropSharedStemPrefix = (stems: readonly string[]): string[] => {
+    if (stems.length < 2) {
+        return [...stems];
+    }
+    const segmented = stems.map((stem) => stem.split('_'));
+    let shared = 0;
+    while (isSegmentShared(segmented, shared)) {
+        shared += 1;
+    }
+    if (shared === 0) {
+        return [...stems];
+    }
+    const trimmed = segmented.map((segments) => segments.slice(shared).join('_'));
+    // A remainder of a letter or two names nothing on its own — `mlp_up + mlp_down`
+    // is worth its length in a way `up + down` is not — so keep the prefix rather
+    // than reduce the label to initials.
+    if (trimmed.some((stem) => stem.length < MIN_DISTINGUISHING_STEM_LENGTH)) {
+        return [...stems];
+    }
+    return trimmed;
+};
+
 const joinCapped = (parts: readonly string[]): string => {
     if (parts.length <= MAX_PATTERN_NAME_PARTS) {
         return parts.join(' + ');
@@ -177,12 +211,12 @@ export function formatRepeatPatternLabel(
     const globalStems = globalFileStems(graphOperations);
     const moduleStems = uniqueFileStems(members, true).filter((stem) => !globalStems.has(stem));
     if (moduleStems.length > 0) {
-        return joinCapped(moduleStems);
+        return joinCapped(dropSharedStemPrefix(moduleStems));
     }
     if (opNames.length > 0) {
         return joinCapped(opNames);
     }
-    return joinCapped(uniqueFileStems(members, false));
+    return joinCapped(dropSharedStemPrefix(uniqueFileStems(members, false)));
 }
 
 const labelForPattern = (
