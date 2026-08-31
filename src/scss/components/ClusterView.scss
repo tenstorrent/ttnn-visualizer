@@ -58,6 +58,16 @@ $mmio-fill: rgba(colours.$tt-yellow, 0.18);
             // Drop Blueprint Switch's default bottom margin for vertical alignment.
             margin: 0;
         }
+
+        // Shown when the report has no mesh coordinates, so the tiling is not a
+        // physical arrangement. Muted: a caveat, not a control. #1948
+        .cluster-view-layout-note {
+            font-size: 12px;
+            font-style: italic;
+            white-space: nowrap;
+            cursor: help;
+            opacity: 0.65;
+        }
     }
 }
 

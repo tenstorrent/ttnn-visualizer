@@ -4,7 +4,10 @@
 
 import { describe, expect, it } from 'vitest';
 import {
+    type CondensedHostLayout,
     PerRankInput,
+    getAsicLocationGroups,
+    getCondensedHostLayout,
     hostHasMeshCoords,
     hostHasTwoDimensionalMesh,
     looksLikeRankedDescriptor,
@@ -335,6 +338,156 @@ describe('pickMeshDocForRank', () => {
     it('coerces a single-doc payload missing `chips` to an empty MeshData', () => {
         const fallback = pickMeshDocForRank({} as unknown as MeshData, 0);
         expect(fallback).toEqual({ chips: {} });
+    });
+});
+
+describe('getAsicLocationGroups', () => {
+    const withLocations = (locations: Record<number, number>) =>
+        ({ asic_locations: locations }) as unknown as ClusterModel;
+
+    it('splits a 32-chip UBB into four groups of eight, ordered by slot (#1948)', () => {
+        // Shape of test_ttnn_moe_aug26_2217: slots cycle 1..8 four times.
+        const locations = Object.fromEntries(Array.from({ length: 32 }, (_, chip) => [chip, (chip % 8) + 1]));
+        const chipIds = Array.from({ length: 32 }, (_, chip) => chip);
+
+        const groups = getAsicLocationGroups(withLocations(locations), chipIds);
+
+        expect(groups).toHaveLength(4);
+        expect(groups?.[0]).toEqual([0, 1, 2, 3, 4, 5, 6, 7]);
+        expect(groups?.[3]).toEqual([24, 25, 26, 27, 28, 29, 30, 31]);
+    });
+
+    it('orders each group by slot rather than by chip id', () => {
+        // Slots deliberately reversed within each group of two.
+        const groups = getAsicLocationGroups(withLocations({ 0: 2, 1: 1, 2: 2, 3: 1 }), [0, 1, 2, 3]);
+
+        expect(groups).toEqual([
+            [1, 0],
+            [3, 2],
+        ]);
+    });
+
+    it('returns null when every chip claims the same slot', () => {
+        // Shape of multihost_poc_jun24_2321: eight chips, one distinct slot. Grouping
+        // on the distinct count would have split it into eight groups of one.
+        const locations = Object.fromEntries(Array.from({ length: 8 }, (_, chip) => [chip, 0]));
+
+        expect(
+            getAsicLocationGroups(
+                withLocations(locations),
+                Array.from({ length: 8 }, (_, c) => c),
+            ),
+        ).toBeNull();
+    });
+
+    it('returns null when every chip has its own slot, which is no grouping', () => {
+        expect(getAsicLocationGroups(withLocations({ 0: 1, 1: 2, 2: 3 }), [0, 1, 2])).toBeNull();
+    });
+
+    it('returns null when a run repeats a slot instead of covering each once', () => {
+        // Two distinct slots over four chips divides evenly, but the first run is
+        // (1, 1) rather than (1, 2), so the chips are not one slot per group.
+        expect(getAsicLocationGroups(withLocations({ 0: 1, 1: 1, 2: 1, 3: 2 }), [0, 1, 2, 3])).toBeNull();
+    });
+
+    it('groups so that no two chips drawn adjacent are unconnected (#1948)', () => {
+        // Synthetic 32-chip UBB with the real link deltas: +1 along a row of four,
+        // +4 between the two rows of a group, +8 to the next group and +24 wrapping
+        // the group ring. Tiling by chip id drew 12 unconnected pairs as neighbours.
+        const chipIds = Array.from({ length: 32 }, (_, chip) => chip);
+        const locations = Object.fromEntries(chipIds.map((chip) => [chip, (chip % 8) + 1]));
+        // +1 stays inside a row of four, +4 inside a group of eight; +8 and +24
+        // reach the next group and wrap the ring.
+        const isLinked = (chip: number, delta: number): boolean => {
+            const other = chip + delta;
+            if (other >= 32) {
+                return false;
+            }
+            if (delta === 1) {
+                return Math.floor(chip / 4) === Math.floor(other / 4);
+            }
+            if (delta === 4) {
+                return Math.floor(chip / 8) === Math.floor(other / 8);
+            }
+            return true;
+        };
+        const links = new Set(
+            chipIds.flatMap((chip) =>
+                [1, 4, 8, 24].filter((delta) => isLinked(chip, delta)).map((delta) => `${chip}-${chip + delta}`),
+            ),
+        );
+
+        const descriptor = withLocations(locations);
+        expect(getAsicLocationGroups(descriptor, chipIds)).toHaveLength(4);
+
+        // Against the renderer's own layout, not a copy of it: re-deriving the
+        // geometry here meant a change to the gutter, or a regression in the
+        // layout itself, left this green.
+        const unconnectedNeighboursOf = (layout: CondensedHostLayout): string[] => {
+            const isAdjacent = (a: number, b: number): boolean => {
+                const [pa, pb] = [layout.positionByChip.get(a)!, layout.positionByChip.get(b)!];
+                return Math.abs(pa[0] - pb[0]) + Math.abs(pa[1] - pb[1]) === 1;
+            };
+            return chipIds
+                .flatMap((a) => chipIds.filter((b) => b > a).map((b) => [a, b] as const))
+                .filter(([a, b]) => isAdjacent(a, b) && !links.has(`${a}-${b}`))
+                .map(([a, b]) => `${a}-${b}`);
+        };
+
+        const grouped = getCondensedHostLayout(descriptor, chipIds);
+        expect(grouped.isGrouped).toBe(true);
+        expect(unconnectedNeighboursOf(grouped)).toEqual([]);
+
+        // Negative control: without slots the same descriptor tiles in id order,
+        // which is the arrangement #1948 reported. Without this, a property that
+        // holds trivially is indistinguishable from one the grouping earned.
+        const ungrouped = getCondensedHostLayout({} as unknown as ClusterModel, chipIds);
+        expect(ungrouped.isGrouped).toBe(false);
+        expect(unconnectedNeighboursOf(ungrouped)).toHaveLength(12);
+    });
+
+    it('does not merely reproduce id order when the slots say otherwise', () => {
+        // The 32-chip fixture uses `chip % 8 + 1`, so slot order equals id order
+        // there and a naive chunk(chipIds, 8) would satisfy it. Reversing the
+        // slots within each board separates the two.
+        const chipIds = Array.from({ length: 16 }, (_, chip) => chip);
+        const locations = Object.fromEntries(chipIds.map((chip) => [chip, 8 - (chip % 8)]));
+
+        const layout = getCondensedHostLayout(withLocations(locations), chipIds);
+
+        expect(layout.isGrouped).toBe(true);
+        // Chip 0 holds slot 8, so it is last in its group rather than first.
+        expect(layout.positionByChip.get(0)).toEqual([3, 1]);
+        expect(layout.positionByChip.get(7)).toEqual([0, 0]);
+    });
+
+    it('lays a slotless host out in id order, four wide, with no gutter', () => {
+        const layout = getCondensedHostLayout({} as unknown as ClusterModel, [0, 1, 2, 3, 4, 5]);
+
+        expect(layout.isGrouped).toBe(false);
+        expect(layout.positionByChip.get(0)).toEqual([0, 0]);
+        expect(layout.positionByChip.get(4)).toEqual([0, 1]);
+        expect(layout.rows).toBe(2);
+    });
+
+    it('adds one gutter row between groups and none after the last', () => {
+        const chipIds = Array.from({ length: 16 }, (_, chip) => chip);
+        const locations = Object.fromEntries(chipIds.map((chip) => [chip, (chip % 8) + 1]));
+
+        const layout = getCondensedHostLayout(withLocations(locations), chipIds);
+
+        // Two groups of eight: two rows each, one blank row between them.
+        expect(layout.positionByChip.get(7)).toEqual([3, 1]);
+        expect(layout.positionByChip.get(8)).toEqual([0, 3]);
+        expect(layout.rows).toBe(5);
+    });
+
+    it('returns null when the field is absent, unparseable or the chip list is empty', () => {
+        expect(getAsicLocationGroups({} as unknown as ClusterModel, [0, 1])).toBeNull();
+        expect(
+            getAsicLocationGroups({ asic_locations: { 0: 'a', 1: 'b' } } as unknown as ClusterModel, [0, 1]),
+        ).toBeNull();
+        expect(getAsicLocationGroups(withLocations({ 0: 1 }), [])).toBeNull();
     });
 });
 
