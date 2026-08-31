@@ -109,6 +109,61 @@ def test_read_summary_is_columnar(tmp_path):
     assert timesteps["avg_link_demand"][1] == pytest.approx(12.345)
 
 
+# Shape of a Quasar-32 emulation part: the case the override exists for, and the
+# one that reaches the frontend through this index rather than the whole-file
+# path, because uploads take the windowed route locally. #1776
+SOC_DESCRIPTOR = {
+    "arch_name": "QUASAR",
+    "grid": {"x_size": 10, "y_size": 8},
+    "functional_workers": ["2-2", "3-2", "4-2"],
+    "dram": [["2-7"], ["4-0"]],
+    "router_only": ["0-2"],
+    "arc": [],
+    "pcie": [],
+    "eth": [],
+    "worker_l1_size": 4194304,
+}
+
+
+def test_soc_descriptor_round_trips_through_the_index(tmp_path):
+    """A report-supplied SoC descriptor must survive `ensure_index` unchanged.
+
+    Frontend parser tests cannot reach this: the descriptor is JSON-encoded into a
+    `meta` row and decoded back out, so a regression here would drop the field for
+    every uploaded report while every frontend test still passed. #1776
+    """
+    obj = _make_npe_object()
+    obj["soc_descriptor"] = SOC_DESCRIPTOR
+    npe_path = _write_npe(tmp_path, obj)
+
+    summary = read_summary(ensure_index(npe_path))
+
+    assert summary["soc_descriptor"] == SOC_DESCRIPTOR
+
+
+def test_soc_descriptor_round_trips_from_a_compressed_report(tmp_path):
+    # The format uploads actually arrive in.
+    obj = _make_npe_object()
+    obj["soc_descriptor"] = SOC_DESCRIPTOR
+    npe_path = _write_npe_zst(tmp_path, obj)
+
+    summary = read_summary(ensure_index(npe_path))
+
+    assert summary["soc_descriptor"]["grid"] == {"x_size": 10, "y_size": 8}
+    assert summary["soc_descriptor"]["functional_workers"] == ["2-2", "3-2", "4-2"]
+
+
+def test_summary_reports_no_soc_descriptor_when_the_report_has_none(tmp_path):
+    # `None`, not a missing key: the frontend treats absent as "fall back to the
+    # baked lookup", and a KeyError here would be a 500 for every legacy report.
+    npe_path = _write_npe(tmp_path, _make_npe_object())
+
+    summary = read_summary(ensure_index(npe_path))
+
+    assert "soc_descriptor" in summary
+    assert summary["soc_descriptor"] is None
+
+
 def test_summary_max_link_demand_values(tmp_path):
     # Values, not just array lengths: idle step 0 has no link_demand and no source
     # scalar → derived None; active steps derive the worst-link scalar from

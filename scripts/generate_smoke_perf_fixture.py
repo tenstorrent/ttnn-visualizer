@@ -13,8 +13,9 @@ parses byte-for-byte:
 
 * `profile_log_device.csv` keeps its first line verbatim, because
   `/api/performance/device-log/meta` regex-parses `ARCH:` / `CHIP_FREQ[MHz]:`
-  straight off it, and its header line verbatim, because `LocalCSVQueryRunner`
-  reads the file with `skiprows=1`.
+  straight off it, and its header line verbatim, because
+  `DeviceLogProfilerQueries` reads the header by name and checks it against
+  `REQUIRED_DEVICE_LOG_COLUMNS` (#1941).
 * `ops_perf_results.csv` keeps every column. The report endpoint hands the file
   to the pinned external `tt-perf-report`, which reaches into far more columns
   than this repo names, so rows are trimmed and columns never are.

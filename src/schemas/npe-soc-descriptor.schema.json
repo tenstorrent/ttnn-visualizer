@@ -1,0 +1,111 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "$id": "https://github.com/tenstorrent/ttnn-visualizer/blob/dev/src/schemas/npe-soc-descriptor.schema.json",
+    "title": "NPE report SoC descriptor",
+    "description": "Optional `soc_descriptor` carried at the top level of an NPE report, alongside `common_info`. TTNN Visualizer prefers it over its own baked arch-*.json lookup, so a device whose descriptor cannot be bundled into the app renders its real topology. Absent means fall back to the baked lookup keyed on `common_info.arch`; present but invalid is reported to the user rather than silently ignored. See tenstorrent/ttnn-visualizer#1776. Two rules cannot be expressed in draft-07 and are enforced by the consumer at runtime instead: every coordinate must fall inside `grid` (x < x_size, y < y_size), and the total cell count must not exceed 16384. A descriptor can therefore pass this schema and still be rejected; the schema is a necessary condition, not a sufficient one.",
+    "type": "object",
+    "required": [
+        "grid",
+        "functional_workers"
+    ],
+    "additionalProperties": true,
+    "properties": {
+        "grid": {
+            "description": "Extent of the node grid. Both axes are the full physical extent, not the worker extent. Capped at 256 per axis, and 16384 cells in total (runtime-only), because the renderer materialises one element per cell.",
+            "type": "object",
+            "required": [
+                "x_size",
+                "y_size"
+            ],
+            "properties": {
+                "x_size": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 256
+                },
+                "y_size": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 256
+                }
+            }
+        },
+        "functional_workers": {
+            "description": "Tensix worker cores. The only node list that must be populated: without it there is no grid to draw.",
+            "type": "array",
+            "minItems": 1,
+            "items": {
+                "$ref": "#/definitions/coordinate"
+            }
+        },
+        "dram": {
+            "description": "DRAM banks, grouped one array per channel. Omit or leave empty on a part with no DRAM.",
+            "type": "array",
+            "items": {
+                "type": "array",
+                "items": {
+                    "$ref": "#/definitions/coordinate"
+                }
+            }
+        },
+        "eth": {
+            "description": "Ethernet nodes. Omit or leave empty on a part with none.",
+            "type": "array",
+            "items": {
+                "$ref": "#/definitions/coordinate"
+            }
+        },
+        "pcie": {
+            "description": "PCIe nodes. Omit or leave empty on a part with none.",
+            "type": "array",
+            "items": {
+                "$ref": "#/definitions/coordinate"
+            }
+        },
+        "arc": {
+            "description": "ARC nodes. Omit or leave empty on a part with none.",
+            "type": "array",
+            "items": {
+                "$ref": "#/definitions/coordinate"
+            }
+        },
+        "router_only": {
+            "description": "Nodes that route but do not compute.",
+            "type": "array",
+            "items": {
+                "$ref": "#/definitions/coordinate"
+            }
+        },
+        "arch_name": {
+            "description": "Label for this part, displayed as-is. Free-form on purpose: the point of an override is an architecture the app does not recognise. Defaults to `common_info.arch` when omitted, never to a baked architecture.",
+            "type": "string",
+            "minLength": 1
+        },
+        "harvested_workers": {
+            "description": "Workers disabled by harvesting. Carried through; not currently rendered differently.",
+            "type": "array",
+            "items": {
+                "$ref": "#/definitions/coordinate"
+            }
+        },
+        "worker_l1_size": {
+            "type": "integer",
+            "minimum": 0
+        },
+        "dram_bank_size": {
+            "type": "integer",
+            "minimum": 0
+        },
+        "eth_l1_size": {
+            "type": "integer",
+            "minimum": 0
+        }
+    },
+    "definitions": {
+        "coordinate": {
+            "description": "Node location as \"x-y\", both zero-based, matching the `functional_workers` spelling in tt-metal's soc_descriptors YAML. Note the order: x first, unlike the [y, x] pairs the renderer works in internally.",
+            "type": "string",
+            "pattern": "^[0-9]+-[0-9]+$"
+        }
+    }
+}

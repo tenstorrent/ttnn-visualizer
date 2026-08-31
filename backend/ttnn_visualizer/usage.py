@@ -341,6 +341,25 @@ def get_disabled_marker_path() -> Path:
     return get_usage_directory() / DISABLED_MARKER_NAME
 
 
+def _nameable_marker_path() -> Optional[Path]:
+    """The marker path when it can be resolved, ``None`` when it cannot.
+
+    ``get_disabled_marker_path`` resolves ``Path.home()``, which raises ``RuntimeError``
+    when ``HOME`` is unset and the uid is absent from passwd — the arbitrary-uid
+    container pattern the note beside ``USAGE_DIRECTORY`` describes. The two sentences
+    below are *advice*, so a path they cannot name is a clause to drop rather than a
+    reason to raise: the settings override loop builds one while ``Config()`` is being
+    constructed, and an exception there stops the app over a variable that configures
+    nothing (#1937 review). Dropping the clause is also the truthful thing to say —
+    without a resolvable home there is no directory for the marker to live in, so the
+    environment variable really is the only control left.
+    """
+    try:
+        return get_disabled_marker_path()
+    except RuntimeError:
+        return None
+
+
 def describe_opt_out() -> str:
     """The sentence telling an operator how to switch recording off.
 
@@ -348,9 +367,47 @@ def describe_opt_out() -> str:
     warning — from the same two ingredients, and they have to agree. The rename that
     introduced this helper had to edit both in lockstep, which is the drift it prevents.
     """
+    marker = _nameable_marker_path()
+    if marker is None:
+        return f"Switch it off with {USAGE_DISABLED_ENV_VAR}=true."
+
+    return f"Switch it off with {USAGE_DISABLED_ENV_VAR}=true or by creating {marker}."
+
+
+def describe_opt_in() -> str:
+    """The sentence for an operator who wants recording on and hasn't got it.
+
+    The inverse of :func:`describe_opt_out`, and here for the same reason: the marker
+    path and the variable are written once, so the two directions can't drift into
+    naming different controls.
+
+    Asserts no current state, and names every switch rather than only the local pair.
+    It is emitted from the settings override loop, which sees neither the marker file
+    nor a posture applied outside the environment, so any sentence that claimed
+    recording was on — or that clearing these two would turn it on — would be wrong for
+    somebody. Both wordings have already been that: "recording is already on" misled an
+    operator whose opt-out was in effect, and naming only the local pair sent a hosted
+    operator round a loop neither control could end (#1937 review, twice).
+
+    ``SERVER_MODE`` is named as a fact to explain the silence, and explicitly *not* as
+    a control to change: it gates every ``@local_only`` endpoint, so an operator
+    clearing it to chase the telemetry would open those instead.
+    """
+    marker = _nameable_marker_path()
+    if marker is None:
+        local = f"{USAGE_DISABLED_ENV_VAR}=false clears the local opt-out"
+        regardless = "whatever it says"
+    else:
+        local = (
+            f"{USAGE_DISABLED_ENV_VAR}=false and removing {marker} "
+            "clear the two local opt-outs"
+        )
+        regardless = "whatever those say"
+
     return (
-        f"Switch it off with {USAGE_DISABLED_ENV_VAR}=true or by creating "
-        f"{get_disabled_marker_path()}."
+        "Recording is on by default on a local install. "
+        f"{local}; under SERVER_MODE recording is off {regardless}, by design — "
+        "SERVER_MODE gates the local-only endpoints and is not the control to change."
     )
 
 

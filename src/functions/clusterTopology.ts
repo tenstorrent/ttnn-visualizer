@@ -61,6 +61,55 @@ export const getAsicLocationGroups = (descriptor: ClusterModel, chipIds: number[
     return groups;
 };
 
+// Blank row between board groups, so a group-to-group link reads as crossing a
+// boundary rather than as another intra-group hop. Lives beside
+// `FALLBACK_PER_HOST_COLS` so the renderer and the adjacency heuristic below stay
+// in lockstep. #1948
+export const FALLBACK_GROUP_GUTTER_ROWS = 1;
+
+export interface CondensedHostLayout {
+    /** Local grid position per chip, `[x, y]`, y relative to the host's own top. */
+    positionByChip: Map<number, readonly [number, number]>;
+    /** Rows the host occupies, gutters between groups included. */
+    rows: number;
+    /** Whether board slots drove the layout, or it fell through to chip id order. */
+    isGrouped: boolean;
+}
+
+/**
+ * @description One host's condensed placement: chips tiled `FALLBACK_PER_HOST_COLS`
+ * wide, grouped by board slot when the descriptor supports it and in id order when
+ * it does not.
+ *
+ * The two cases are one computation — ungrouped is the grouped case with a single
+ * group, where `groupTop` is 0, the slot index is the local index, and
+ * `1 * (rows + gutter) - gutter` is `ceil(n / cols)`. They were two
+ * implementations, as were the two row-count formulas beside them.
+ */
+export const getCondensedHostLayout = (descriptor: ClusterModel, chipIds: number[]): CondensedHostLayout => {
+    const slotGroups = getAsicLocationGroups(descriptor, chipIds);
+    const groups = slotGroups ?? [chipIds];
+    const rowsPerGroup = Math.ceil(groups[0].length / FALLBACK_PER_HOST_COLS);
+
+    const positionByChip = new Map<number, readonly [number, number]>();
+    groups.forEach((group, groupIndex) => {
+        const groupTop = groupIndex * (rowsPerGroup + FALLBACK_GROUP_GUTTER_ROWS);
+        group.forEach((chipId, slotIndex) => {
+            positionByChip.set(chipId, [
+                slotIndex % FALLBACK_PER_HOST_COLS,
+                groupTop + Math.floor(slotIndex / FALLBACK_PER_HOST_COLS),
+            ]);
+        });
+    });
+
+    return {
+        positionByChip,
+        // The last group gets no trailing gutter.
+        rows: groups.length * (rowsPerGroup + FALLBACK_GROUP_GUTTER_ROWS) - FALLBACK_GROUP_GUTTER_ROWS,
+        isGrouped: slotGroups !== null,
+    };
+};
+
 /**
  * Stitch per-rank cluster descriptors and mesh-coordinate mappings into a unified
  * topology. Pure; single-host reports pass a 1-element array. #1510
@@ -195,10 +244,17 @@ export const hostHasTwoDimensionalMesh = (host: ClusterHost): boolean => {
 };
 
 /**
- * True iff this descriptor looks like a per-rank slice of a multi-host report.
+ * True iff this descriptor *might* be a per-rank slice of a multi-host report.
  * Requires BOTH `ethernet_connections_to_remote_devices` and `chip_unique_ids`
- * to be non-empty — single-host reports omit these and a more permissive check
- * would trigger spurious world-size probes against the unranked descriptor.
+ * to be non-empty.
+ *
+ * It is a hint, not a decision. The premise that single-host reports omit these
+ * fields is false: a UBB with scale-out links populates both while describing one
+ * host, and this check cannot separate it from a genuine rank-0 slice — which is
+ * the mechanism behind #1939, where a lone descriptor was cloned once per probed
+ * rank. What bounds the probe is the backend, which answers 400 for any rank a
+ * report's descriptor family cannot cover, so a false positive here costs one
+ * rejected request rather than a fabricated host.
  */
 export const looksLikeRankedDescriptor = (descriptor: ClusterModel): boolean => {
     const remoteConnections = descriptor.ethernet_connections_to_remote_devices;
