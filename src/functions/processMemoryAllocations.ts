@@ -9,7 +9,9 @@ import { AllocationDetails, CBAllocationSummary, CBDeviceFanout, CBPressureSnaps
 import { getCoresInRangeList } from './math';
 
 // Keeps a graph with no device dimension accumulating into one bucket. #1844
-const SINGLE_DEVICE_KEY = 'single';
+// Exported so the L1 legend's own collapse buckets absent ids identically — the
+// two must not disagree about how many devices a CB spans. #1879
+export const SINGLE_DEVICE_KEY = 'single';
 
 export function processMemoryAllocations(
     graph: Node[],

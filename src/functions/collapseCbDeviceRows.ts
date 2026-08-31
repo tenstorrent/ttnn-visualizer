@@ -1,0 +1,73 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
+
+import type { CircularBuffer } from '../model/APIData';
+import { SINGLE_DEVICE_KEY } from './processMemoryAllocations';
+
+/**
+ * @description Normalise a graph node's `device_id` for use as a number.
+ * `undefined` for a capture with no device dimension, or a value that is not a
+ * finite number — the field is absent in older captures and emitted as a string
+ * by at least one other. #1844
+ */
+export const normaliseDeviceId = (deviceId: number | string | undefined): number | undefined => {
+    if (deviceId === undefined || deviceId === null || deviceId === '') {
+        return undefined;
+    }
+    const asNumber = Number(deviceId);
+    return Number.isFinite(asNumber) ? asNumber : undefined;
+};
+
+export interface CollapsedCircularBuffer extends CircularBuffer {
+    /** Devices this row stands for. 1 when the capture carries no device dimension. */
+    deviceCount: number;
+}
+
+/**
+ * @description Collapse one device operation's circular buffers so a mesh op's
+ * fan-out is a single row carrying a device count, instead of the same CB listed
+ * once per device. #1879
+ *
+ * The identity and repeat scheme mirrors `processMemoryAllocations`, which already
+ * does this for the per-DeviceOp legend and the pressure modal (#1844) — the three
+ * surfaces are on screen together and must not disagree about how many devices a CB
+ * spans. Op scoping is implicit here because `cbList` is already per operation.
+ *
+ * A second allocation of the same CB *on one device* is a real allocation rather
+ * than fan-out, so it keeps its own row: keying on the device's repeat count pairs
+ * it with the other devices' repeats instead of letting it collapse onto the first.
+ * The first occurrence in graph order is the row the rest fold onto.
+ */
+export const collapseCbDeviceRows = (cbList: readonly CircularBuffer[]): CollapsedCircularBuffer[] => {
+    const repeatsByDevice = new Map<string, number>();
+    const slotOrder: string[] = [];
+    const bySlot = new Map<string, { circularBuffer: CircularBuffer; deviceKeys: Set<string> }>();
+
+    for (const circularBuffer of cbList) {
+        const identity = [
+            circularBuffer.address,
+            circularBuffer.size,
+            circularBuffer.core_range_set,
+            circularBuffer.globallyAllocated === true,
+        ].join('|');
+        const deviceKey = String(circularBuffer.device_id ?? SINGLE_DEVICE_KEY);
+        const repeatKey = `${identity}|${deviceKey}`;
+        const repeat = (repeatsByDevice.get(repeatKey) ?? 0) + 1;
+        repeatsByDevice.set(repeatKey, repeat);
+
+        const slot = `${identity}|${repeat}`;
+        const existing = bySlot.get(slot);
+        if (existing) {
+            existing.deviceKeys.add(deviceKey);
+        } else {
+            bySlot.set(slot, { circularBuffer, deviceKeys: new Set([deviceKey]) });
+            slotOrder.push(slot);
+        }
+    }
+
+    return slotOrder.map((slot) => {
+        const entry = bySlot.get(slot);
+        return { ...(entry?.circularBuffer as CircularBuffer), deviceCount: entry?.deviceKeys.size ?? 1 };
+    });
+};

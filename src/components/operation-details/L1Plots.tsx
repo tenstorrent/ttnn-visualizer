@@ -27,6 +27,7 @@ import { FragmentationEntry, MarkerType } from '../../model/APIData';
 import { MemoryLegendGroup } from './MemoryLegendGroup';
 import { useGetL1SmallMarker, useGetL1StartMarker } from '../../hooks/useAPI';
 import useScrollShade from '../../hooks/useScrollShade';
+import { collapseCbDeviceRows } from '../../functions/collapseCbDeviceRows';
 
 interface L1PlotsProps {
     operationDetails: OperationDetails;
@@ -105,15 +106,19 @@ function L1Plots({
 
     const memoryReportWithCB: FragmentationEntry[] = [
         ...memoryReport,
+        // Collapsed per device op: a mesh op emits the same CB once per device, which
+        // put 32 identical unlabelled rows in this legend interleaved with the
+        // fragmentation entries. One row now carries the device count. #1879
         ...operationDetails.deviceOperations
             .map((op) =>
-                op.cbList.map(
+                collapseCbDeviceRows(op.cbList).map(
                     (cb) =>
                         ({
                             ...cb,
                             markerType: MarkerType.CB,
                             colorVariance: op.id,
                             globallyAllocated: cb.globallyAllocated,
+                            deviceCount: cb.deviceCount,
                         }) as FragmentationEntry,
                 ),
             )
@@ -318,6 +323,7 @@ function L1Plots({
                             colorVariance={chunk.colorVariance}
                             userL1ZoomRange={userL1ZoomRange}
                             isGloballyAllocated={chunk.globallyAllocated === true}
+                            deviceCount={chunk.deviceCount}
                         />
                     ))}
 
