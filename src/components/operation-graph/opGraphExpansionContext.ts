@@ -13,3 +13,5 @@ import { createContext } from 'react';
  * is a wiring mistake, not a reason to blank the canvas.
  */
 export const OpGraphExpansionContext = createContext<(operationId: number) => void>(() => {});
+
+export const OpGraphBlockExpansionContext = createContext<(instanceId: string) => void>(() => {});

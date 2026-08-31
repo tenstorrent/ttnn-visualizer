@@ -22,6 +22,7 @@ describe('findCriticalPath', () => {
         const path = findCriticalPath(nodes(1, 2, 3), edges([1, 2], [2, 3]), weights([1, 100], [2, 200], [3, 300]));
 
         expect(path.opIds).toEqual([1, 2, 3]);
+        expect(path.opCount).toBe(3);
         expect(path.totalNs).toBe(600);
         expect([...path.edgeIds]).toEqual(expect.arrayContaining([edgeId(1, 2), edgeId(2, 3)]));
         expect(path.hasCycle).toBe(false);
@@ -169,5 +170,25 @@ describe('findCriticalPath', () => {
         expect(path.edgeIds.size).toBe(0);
         expect(path.totalNs).toBe(0);
         expect(path.hasCycle).toBe(false);
+        expect(path.opCount).toBe(0);
+    });
+
+    it('weights a folded block by the sum of its members', () => {
+        const path = findCriticalPath(
+            [
+                { id: '1', operationId: 1 },
+                { id: 'block:0:2', operationId: 2, memberOperationIds: [2, 3, 4] },
+                { id: '5', operationId: 5 },
+            ],
+            [
+                { id: '1-2-0', source: '1', target: 'block:0:2' },
+                { id: '2-5-0', source: 'block:0:2', target: '5' },
+            ],
+            weights([1, 10], [2, 100], [3, 100], [4, 100], [5, 10]),
+        );
+
+        expect(path.nodeIds.has('block:0:2')).toBe(true);
+        expect(path.totalNs).toBe(320);
+        expect(path.opCount).toBe(5);
     });
 });

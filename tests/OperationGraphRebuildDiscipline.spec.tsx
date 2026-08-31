@@ -18,6 +18,7 @@ import type {
     OpGraphDeviceSubgraph,
     OpGraphFlowEdge,
     OpGraphFlowNode,
+    OpGraphSourceOperation,
 } from '../src/components/operation-graph/opGraphTypes';
 
 // A layout is the most expensive thing this view can do, and every cheap
@@ -34,19 +35,28 @@ const harness: {
     setNodes: ((updater: (previous: OpGraphFlowNode[]) => OpGraphFlowNode[]) => void) | null;
     setEdges: ((updater: (previous: OpGraphFlowEdge[]) => OpGraphFlowEdge[]) => void) | null;
     onNodeClick: ((event: unknown, node: OpGraphFlowNode) => void) | null;
+    onNodeDoubleClick: ((event: unknown, node: OpGraphFlowNode) => void) | null;
     onNodesChange: ((changes: NodeChange<OpGraphFlowNode>[]) => void) | null;
     // Left as `undefined` by the view when the overlay is off, which is the gating
     // a test can only see by reading the prop React Flow was actually handed.
     onNodeMouseEnter: ((event: unknown, node: OpGraphFlowNode) => void) | undefined;
     onNodeMouseLeave: (() => void) | undefined;
+    onPaneClick: (() => void) | null;
+    // What the view actually derived from `operationList`. Builds run against this
+    // rather than a reimplementation, so a field the mapping stops carrying fails
+    // here instead of silently changing what detection fingerprints on.
+    sourceOperations: OpGraphSourceOperation[] | null;
 } = {
     onBuilt: null,
+    sourceOperations: null,
     setNodes: null,
     setEdges: null,
     onNodeClick: null,
+    onNodeDoubleClick: null,
     onNodesChange: null,
     onNodeMouseEnter: undefined,
     onNodeMouseLeave: undefined,
+    onPaneClick: null,
 };
 
 // What `useNodesState` hands the view as its change applier. Stable, because the
@@ -57,6 +67,16 @@ const applyNodeChanges = vi.fn();
 // the store publishes, so a `subscribe` that never invoked its callback left both
 // the initial write and the subscription itself impossible to falsify.
 const flowTransform: { current: [number, number, number] } = { current: [0, 0, 1] };
+
+// Real spies rather than inert stubs: the viewport anchor is the mechanism this
+// branch extends, and it was unobservable. `knownNodeIds` is populated by every
+// delivered graph so `getNode` can tell a live id from a stale one. Hoisted
+// because the `@xyflow/react` factory below is, and it reads them eagerly.
+const { setCenter, setViewport, knownNodeIds } = vi.hoisted(() => ({
+    setCenter: vi.fn(() => Promise.resolve()),
+    setViewport: vi.fn(() => Promise.resolve()),
+    knownNodeIds: new Set<string>(),
+}));
 const flowStoreListeners = new Set<(state: { transform: [number, number, number] }) => void>();
 
 vi.mock('@xyflow/react', async () => {
@@ -66,10 +86,15 @@ vi.mock('@xyflow/react', async () => {
     // and an unstable one here would invalidate the callbacks whose stability the
     // rebuild effect depends on, quietly weakening every assertion below.
     const flowApi = {
-        setCenter: () => Promise.resolve(),
-        getNode: (id: string) => ({ id, position: { x: 0, y: 0 }, width: 100, height: 40 }),
+        setCenter,
+        // `undefined` for an id the graph does not hold, which is the whole point
+        // of the `nodeId ?? fallbackNodeId` fallback: the anchor id flips between a
+        // block id and its first member id across a fold, and a getNode that
+        // answered for any id at all made that fallback unfalsifiable.
+        getNode: (id: string) =>
+            knownNodeIds.has(id) ? { id, position: { x: 0, y: 0 }, width: 100, height: 40 } : undefined,
         getViewport: () => ({ x: 0, y: 0, zoom: 1 }),
-        setViewport: () => Promise.resolve(),
+        setViewport,
     };
     // Stable like `flowApi`: the zoom effect lists the store as a dependency, so
     // a fresh object per render would resubscribe on every pass.
@@ -86,9 +111,11 @@ vi.mock('@xyflow/react', async () => {
             edges,
             nodeTypes,
             onNodeClick,
+            onNodeDoubleClick,
             onNodesChange,
             onNodeMouseEnter,
             onNodeMouseLeave,
+            onPaneClick,
             children,
         }: {
             nodes: OpGraphFlowNode[];
@@ -98,16 +125,20 @@ vi.mock('@xyflow/react', async () => {
                 (props: { id: string; data: OpGraphFlowNode['data']; type?: string }) => ReactNode
             >;
             onNodeClick: (event: unknown, node: OpGraphFlowNode) => void;
+            onNodeDoubleClick?: (event: unknown, node: OpGraphFlowNode) => void;
             onNodesChange: (changes: NodeChange<OpGraphFlowNode>[]) => void;
             onNodeMouseEnter?: (event: unknown, node: OpGraphFlowNode) => void;
             onNodeMouseLeave?: () => void;
+            onPaneClick?: () => void;
             children?: ReactNode;
         }) => {
             flowRenders.push({ nodes, edges });
             harness.onNodeClick = onNodeClick;
+            harness.onNodeDoubleClick = onNodeDoubleClick ?? null;
             harness.onNodesChange = onNodesChange;
             harness.onNodeMouseEnter = onNodeMouseEnter;
             harness.onNodeMouseLeave = onNodeMouseLeave;
+            harness.onPaneClick = onPaneClick ?? null;
             return createElement(
                 Fragment,
                 null,
@@ -151,8 +182,15 @@ vi.mock('@xyflow/react', async () => {
 });
 
 vi.mock('../src/components/operation-graph/useOpGraphLayoutWorker', () => ({
-    useOpGraphLayoutWorker: (_operations: unknown, onBuilt: (graph: OpGraphBuiltGraph) => void) => {
-        harness.onBuilt = onBuilt;
+    useOpGraphLayoutWorker: (operations: OpGraphSourceOperation[], onBuilt: (graph: OpGraphBuiltGraph) => void) => {
+        harness.sourceOperations = operations;
+        harness.onBuilt = (graph) => {
+            knownNodeIds.clear();
+            for (const node of graph.nodes) {
+                knownNodeIds.add(node.id);
+            }
+            onBuilt(graph);
+        };
         return { runBuild, isBuilding: false };
     },
 }));
@@ -192,11 +230,16 @@ import type { ReportFolder } from '../src/definitions/Reports';
 
 const FILTER_DEBOUNCE_MS = 120;
 
-const operation = (id: number, name: string, consumers: number[]): OperationDescription =>
+const operation = (
+    id: number,
+    name: string,
+    consumers: number[],
+    fileIdentifier = `model.py:${id}`,
+): OperationDescription =>
     ({
         id,
         name,
-        operationFileIdentifier: `model.py:${id}`,
+        operationFileIdentifier: fileIdentifier,
         // Tensor ids matter once an operation expands: they are how an edge finds
         // the device operation at the far end of the boundary.
         outputs: [{ id: id * 10, shape: 'Shape([1, 32])', consumers }],
@@ -240,7 +283,12 @@ const renderGraph = (operations = OPERATION_LIST, perfRows?: PerfOverlaySource[]
     // The worker is stubbed, so the view only receives a graph when a test says
     // so; this is the reply the mount's own `runBuild` would have produced.
     act(() => {
-        harness.onBuilt?.(buildOpGraph(sourceFor(operations), { hideDeallocate: true, deviceSubgraphs: [] }));
+        harness.onBuilt?.(
+            buildOpGraph(harness.sourceOperations ?? sourceFor(operations), {
+                hideDeallocate: true,
+                deviceSubgraphs: [],
+            }),
+        );
     });
     return view;
 };
@@ -333,7 +381,12 @@ const deviceSubgraphFor = (operationId: number, producerId: number): OpGraphDevi
 // inject the graph this way so they don't depend on the click path.
 const rebuildWith = (operations: OperationDescription[], deviceSubgraphs: OpGraphDeviceSubgraph[]) => {
     act(() => {
-        harness.onBuilt?.(buildOpGraph(sourceFor(operations), { hideDeallocate: true, deviceSubgraphs }));
+        harness.onBuilt?.(
+            buildOpGraph(harness.sourceOperations ?? sourceFor(operations), {
+                hideDeallocate: true,
+                deviceSubgraphs,
+            }),
+        );
     });
 };
 
@@ -410,12 +463,18 @@ beforeEach(() => {
     vi.mocked(findCriticalPath).mockClear();
     flowRenders.length = 0;
     harness.onBuilt = null;
+    harness.sourceOperations = null;
+    setCenter.mockClear();
+    setViewport.mockClear();
+    knownNodeIds.clear();
     harness.setNodes = null;
     harness.setEdges = null;
     harness.onNodeClick = null;
+    harness.onNodeDoubleClick = null;
     harness.onNodesChange = null;
     harness.onNodeMouseEnter = undefined;
     harness.onNodeMouseLeave = undefined;
+    harness.onPaneClick = null;
     flowTransform.current = [0, 0, 1];
     flowStoreListeners.clear();
     sessionStorage.clear();
@@ -491,7 +550,11 @@ describe('OperationGraphReactFlow rebuild triggers', () => {
         fireEvent.click(screen.getByLabelText('Hide deallocate ops'));
 
         expect(runBuild).toHaveBeenCalledTimes(1);
-        expect(runBuild).toHaveBeenLastCalledWith({ hideDeallocate: false, deviceSubgraphs: [] });
+        expect(runBuild).toHaveBeenLastCalledWith({
+            hideDeallocate: false,
+            deviceSubgraphs: [],
+            expandedBlockIds: [],
+        });
     });
 
     it('relayouts when the report changes', () => {
@@ -1072,6 +1135,29 @@ describe('OperationGraphReactFlow critical path rendering', () => {
     });
 });
 
+describe('OperationGraphReactFlow dim unrelated edges', () => {
+    it('flags the container so the stylesheet can dim edges off the selection', () => {
+        const { container } = renderGraph();
+        expect(container.querySelector('.op-graph-dim-unrelated-edges')).toBeNull();
+
+        fireEvent.click(screen.getByLabelText('Dim unrelated edges'));
+
+        expect(container.querySelector('.op-graph-dim-unrelated-edges')).not.toBeNull();
+    });
+
+    it('drops the flag when nothing is selected', () => {
+        const { container } = renderGraph();
+        fireEvent.click(screen.getByLabelText('Dim unrelated edges'));
+        expect(container.querySelector('.op-graph-dim-unrelated-edges')).not.toBeNull();
+
+        act(() => {
+            harness.onPaneClick?.();
+        });
+
+        expect(container.querySelector('.op-graph-dim-unrelated-edges')).toBeNull();
+    });
+});
+
 // Expanding an operation adds nodes to the same flat array React Flow renders, so
 // every feature that walks that array — the perf overlay, the critical path, the
 // filter, the neighbour highlight — sees device operations unless it is told not
@@ -1212,5 +1298,279 @@ describe('OperationGraphReactFlow device operation expansion', () => {
         // A frame has no report of its own, so the click selects the operation
         // holding it rather than selecting nothing.
         expect(hasClass(nodeById(lastFlowRender().nodes, '3'), 'op-graph-node-selected')).toBe(true);
+    });
+});
+
+describe('OperationGraphReactFlow repeat blocks', () => {
+    // prefix → (layer_a → layer_b) × 2 → suffix. Two instances of one pattern.
+    const REPEAT_OPERATION_LIST: OperationDescription[] = [
+        operation(1, 'prefix', [2]),
+        operation(2, 'layer_a', [3]),
+        operation(3, 'layer_b', [4]),
+        operation(4, 'layer_a', [5]),
+        operation(5, 'layer_b', [6]),
+        operation(6, 'suffix', []),
+    ];
+
+    const FIRST_BLOCK_ID = 'block:0:2';
+    const SECOND_BLOCK_ID = 'block:0:4';
+
+    const deliver = (operations: OperationDescription[], options: Partial<OpGraphBuildOptions> = {}) => {
+        act(() => {
+            harness.onBuilt?.(
+                buildOpGraph(harness.sourceOperations ?? sourceFor(operations), {
+                    hideDeallocate: true,
+                    deviceSubgraphs: [],
+                    ...options,
+                }),
+            );
+        });
+    };
+
+    it('hands the worker every field detection fingerprints on', () => {
+        // The fixture used to reimplement this mapping and drop three of its
+        // fields, `inputShapes` among them — so every folding assertion in this
+        // file ran against a source shape production never emits, and deleting
+        // `inputShapes` from the real mapping would have over-folded live graphs
+        // with the suite green.
+        renderGraph(REPEAT_OPERATION_LIST);
+
+        const mapped = harness.sourceOperations;
+        expect(mapped).not.toBeNull();
+        expect(mapped).toHaveLength(REPEAT_OPERATION_LIST.length);
+        for (const mappedOperation of mapped ?? []) {
+            expect(mappedOperation.inputShapes).toBeDefined();
+            expect(mappedOperation).toHaveProperty('durationSeconds');
+            expect(mappedOperation).toHaveProperty('memoryDeltaBytes');
+        }
+    });
+
+    it('holds the viewport on an unroll instead of recentring on the selection', () => {
+        // The anchor and the selection tween fight for the viewport; the anchor
+        // has to win, or the graph jumps to whatever the selection fell back to.
+        // Both stubs were inert, so neither half of this was observable. #1944
+        renderGraph(REPEAT_OPERATION_LIST);
+        setCenter.mockClear();
+        setViewport.mockClear();
+
+        fireEvent.click(screen.getAllByRole('button', { name: 'Unroll 2 operations' })[0]);
+        deliver(REPEAT_OPERATION_LIST, { expandedBlockIds: [FIRST_BLOCK_ID] });
+
+        expect(setViewport).toHaveBeenCalledTimes(1);
+        expect(setCenter).not.toHaveBeenCalled();
+    });
+
+    it('collapses repeats on first layout and offers Unroll / Fold', () => {
+        renderGraph(REPEAT_OPERATION_LIST);
+
+        expect(lastFlowRender().nodes.map((node) => node.id)).toEqual(['1', FIRST_BLOCK_ID, SECOND_BLOCK_ID, '6']);
+        expect(screen.getByRole('button', { name: 'Unroll all repeats' })).toBeEnabled();
+        expect(screen.getByRole('button', { name: 'Fold all repeats' })).toBeDisabled();
+        expect(screen.getAllByRole('button', { name: 'Unroll 2 operations' })).toHaveLength(2);
+    });
+
+    it('does not show the Repeats row when nothing was detected', () => {
+        renderGraph();
+
+        expect(screen.queryByRole('button', { name: 'Unroll all repeats' })).toBeNull();
+    });
+
+    it('unrolls every instance from the toolbar and folds them back', () => {
+        renderGraph(REPEAT_OPERATION_LIST);
+        runBuild.mockClear();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Unroll all repeats' }));
+        const unrolled = runBuild.mock.calls.at(-1)?.[0] as OpGraphBuildOptions;
+        expect(unrolled.expandedBlockIds).toEqual(expect.arrayContaining([FIRST_BLOCK_ID, SECOND_BLOCK_ID]));
+        expect(unrolled.expandedBlockIds).toHaveLength(2);
+
+        deliver(REPEAT_OPERATION_LIST, { expandedBlockIds: unrolled.expandedBlockIds });
+        expect(lastFlowRender().nodes.map((node) => node.id)).toEqual(['1', '2', '3', '4', '5', '6']);
+        expect(screen.getByRole('button', { name: 'Unroll all repeats' })).toBeDisabled();
+        expect(screen.getByRole('button', { name: 'Fold all repeats' })).toBeEnabled();
+
+        runBuild.mockClear();
+        fireEvent.click(screen.getByRole('button', { name: 'Fold all repeats' }));
+        expect(runBuild.mock.calls.at(-1)?.[0]).toEqual(expect.objectContaining({ expandedBlockIds: [] }));
+    });
+
+    it('unrolls one instance from its chip', () => {
+        renderGraph(REPEAT_OPERATION_LIST);
+        runBuild.mockClear();
+
+        fireEvent.click(screen.getAllByRole('button', { name: 'Unroll 2 operations' })[0]);
+        expect(runBuild.mock.calls.at(-1)?.[0]).toEqual(
+            expect.objectContaining({ expandedBlockIds: [FIRST_BLOCK_ID] }),
+        );
+    });
+
+    it('counts a folded block as a visible match when the query hits its label', () => {
+        renderGraph(REPEAT_OPERATION_LIST);
+        typeFilter('layer_a');
+
+        expect(screen.getByText('2 matches')).toBeInTheDocument();
+        expect(screen.queryByText(/\+2 inside/)).toBeNull();
+    });
+
+    it('counts buried filter matches when the query hits a member but not the label', () => {
+        const operations: OperationDescription[] = [
+            operation(1, 'prefix', [2]),
+            operation(2, 'layer_a', [3], 'attention.py:1'),
+            operation(3, 'layer_b', [4], 'mlp.py:1'),
+            operation(4, 'layer_a', [5], 'attention.py:2'),
+            operation(5, 'layer_b', [6], 'mlp.py:2'),
+            operation(6, 'suffix', []),
+        ];
+        renderGraph(operations);
+        typeFilter('layer_a');
+
+        expect(screen.getByText('2 matches (+2 inside)')).toBeInTheDocument();
+        expect(screen.getAllByTitle('1 filter match inside')).toHaveLength(2);
+        expect(screen.getAllByText('+1')).toHaveLength(2);
+    });
+
+    it('opens the block panel instead of the first member when a collapsed block is selected', () => {
+        renderGraph(REPEAT_OPERATION_LIST);
+
+        act(() => {
+            harness.onNodeClick?.(null, nodeById(lastFlowRender().nodes, FIRST_BLOCK_ID));
+        });
+
+        const panel = screen.getByLabelText('Selected block details');
+        expect(panel).toHaveTextContent('layer_a + layer_b × 2');
+        expect(panel).toHaveTextContent('ops 2–3 · instance 1 of 2');
+        expect(screen.queryByRole('button', { name: /Memory Details/ })).toBeNull();
+        expect(screen.queryByLabelText('Selected operation details')).toBeNull();
+    });
+
+    it('does not rebuild when the worker repeats the same block detections', () => {
+        const operations = REPEAT_OPERATION_LIST.map((op) =>
+            op.id === 1 ? withDeviceOperations(op, ['AlphaDeviceOperation', 'BetaDeviceOperation']) : op,
+        );
+        renderGraph(operations);
+        fireEvent.click(screen.getByRole('button', { name: 'Show 2 device operations' }));
+        const expandedOptions = runBuild.mock.calls.at(-1)?.[0] as OpGraphBuildOptions;
+
+        deliver(operations, { deviceSubgraphs: expandedOptions.deviceSubgraphs });
+        runBuild.mockClear();
+        deliver(operations, { deviceSubgraphs: expandedOptions.deviceSubgraphs });
+
+        expect(runBuild).not.toHaveBeenCalled();
+    });
+
+    it('drops a member device-op expansion when that instance is folded', () => {
+        const operations = REPEAT_OPERATION_LIST.map((op) =>
+            op.id === 2
+                ? withDeviceOperations(op, ['AlphaDeviceOperation', 'BetaDeviceOperation', 'GammaDeviceOperation'])
+                : op,
+        );
+        renderGraph(operations);
+
+        fireEvent.click(screen.getByRole('button', { name: 'Unroll all repeats' }));
+        const unrolled = runBuild.mock.calls.at(-1)?.[0] as OpGraphBuildOptions;
+        deliver(operations, { expandedBlockIds: unrolled.expandedBlockIds });
+
+        fireEvent.click(screen.getByRole('button', { name: 'Show 3 device operations' }));
+        const withSubgraph = runBuild.mock.calls.at(-1)?.[0] as OpGraphBuildOptions;
+        expect(withSubgraph.deviceSubgraphs).toHaveLength(1);
+        expect(withSubgraph.deviceSubgraphs[0].operationId).toBe(2);
+
+        runBuild.mockClear();
+        fireEvent.click(screen.getByRole('button', { name: 'Fold all repeats' }));
+        expect(runBuild.mock.calls.at(-1)?.[0]).toEqual(
+            expect.objectContaining({ deviceSubgraphs: [], expandedBlockIds: [] }),
+        );
+    });
+
+    it('folds that instance when an unrolled member is double-clicked', () => {
+        renderGraph(REPEAT_OPERATION_LIST);
+        fireEvent.click(screen.getAllByRole('button', { name: 'Unroll 2 operations' })[0]);
+        const unrolled = runBuild.mock.calls.at(-1)?.[0] as OpGraphBuildOptions;
+        deliver(REPEAT_OPERATION_LIST, { expandedBlockIds: unrolled.expandedBlockIds });
+
+        runBuild.mockClear();
+        act(() => {
+            harness.onNodeDoubleClick?.(null, nodeById(lastFlowRender().nodes, '3'));
+        });
+
+        expect(runBuild.mock.calls.at(-1)?.[0]).toEqual(expect.objectContaining({ expandedBlockIds: [] }));
+    });
+
+    it('folds every instance and drops member device-op expansion when deallocate hiding changes', () => {
+        const operations = REPEAT_OPERATION_LIST.map((op) =>
+            op.id === 2
+                ? withDeviceOperations(op, ['AlphaDeviceOperation', 'BetaDeviceOperation', 'GammaDeviceOperation'])
+                : op,
+        );
+        renderGraph(operations);
+
+        fireEvent.click(screen.getByRole('button', { name: 'Unroll all repeats' }));
+        const unrolled = runBuild.mock.calls.at(-1)?.[0] as OpGraphBuildOptions;
+        deliver(operations, { expandedBlockIds: unrolled.expandedBlockIds });
+
+        fireEvent.click(screen.getByRole('button', { name: 'Show 3 device operations' }));
+        expect((runBuild.mock.calls.at(-1)?.[0] as OpGraphBuildOptions).deviceSubgraphs).toHaveLength(1);
+
+        runBuild.mockClear();
+        fireEvent.click(screen.getByLabelText('Hide deallocate ops'));
+
+        expect(runBuild.mock.calls.at(-1)?.[0]).toEqual(
+            expect.objectContaining({ hideDeallocate: false, deviceSubgraphs: [], expandedBlockIds: [] }),
+        );
+    });
+
+    it('unrolls the instance that contains the operation the URL names', () => {
+        const { rerender } = renderGraph(REPEAT_OPERATION_LIST);
+        runBuild.mockClear();
+
+        rerender(
+            <MemoryRouter>
+                <OperationGraphReactFlow
+                    operationList={REPEAT_OPERATION_LIST}
+                    operationId={3}
+                />
+            </MemoryRouter>,
+        );
+
+        expect(runBuild.mock.calls.at(-1)?.[0]).toEqual(
+            expect.objectContaining({ expandedBlockIds: [FIRST_BLOCK_ID] }),
+        );
+    });
+
+    it('forgets unrolled instances when the profiler report changes', () => {
+        renderGraph(REPEAT_OPERATION_LIST);
+        fireEvent.click(screen.getByRole('button', { name: 'Unroll all repeats' }));
+        expect((runBuild.mock.calls.at(-1)?.[0] as OpGraphBuildOptions).expandedBlockIds).toHaveLength(2);
+
+        runBuild.mockClear();
+        act(() => {
+            getDefaultStore().set(activeProfilerReportAtom, {
+                path: '/reports/resnet50',
+                reportName: 'resnet50',
+            } as ReportFolder);
+        });
+
+        expect(runBuild.mock.calls.at(-1)?.[0]).toEqual(expect.objectContaining({ expandedBlockIds: [] }));
+    });
+
+    it('keeps the selection on a folded block when the selected op is a non-first member', () => {
+        renderGraph(REPEAT_OPERATION_LIST);
+        fireEvent.click(screen.getAllByRole('button', { name: 'Unroll 2 operations' })[0]);
+        const unrolled = runBuild.mock.calls.at(-1)?.[0] as OpGraphBuildOptions;
+        deliver(REPEAT_OPERATION_LIST, { expandedBlockIds: unrolled.expandedBlockIds });
+
+        act(() => {
+            harness.onNodeClick?.(null, nodeById(lastFlowRender().nodes, '3'));
+        });
+        expect(screen.getByLabelText('Selected operation details')).toHaveTextContent('layer_b');
+
+        act(() => {
+            harness.onNodeDoubleClick?.(null, nodeById(lastFlowRender().nodes, '3'));
+        });
+        deliver(REPEAT_OPERATION_LIST, { expandedBlockIds: [] });
+
+        expect(screen.getByLabelText('Selected block details')).toHaveTextContent('layer_a + layer_b × 2');
+        expect(hasClass(nodeById(lastFlowRender().nodes, FIRST_BLOCK_ID), 'op-graph-node-selected')).toBe(true);
+        expect(hasClass(nodeById(lastFlowRender().nodes, '1'), 'op-graph-node-selected')).toBe(false);
     });
 });

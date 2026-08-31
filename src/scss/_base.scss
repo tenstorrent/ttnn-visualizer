@@ -27,6 +27,11 @@
      * the colour legend (see GRAPH_COLORS). */
     --graph-op-node: #f5f5f5;
     --graph-group: #7d7d7d;
+
+    /* Cool tint + ink so a collapsed block does not read as another grey op.
+     * `--graph-group` is mid-grey on `--graph-normal` and vanishes at graph zoom. */
+    --graph-block: #{$tt-blue-tint-2};
+    --graph-block-border: #{$tt-blue};
     --graph-section-group: #9b59b6;
     --graph-selected: #{$tt-blue-accent};
 

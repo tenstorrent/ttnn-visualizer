@@ -11,6 +11,8 @@ export enum OpGraphNodeType {
     DEVICE_GROUP = 'deviceGroupNode',
     /** One device operation, parented to the operation it belongs to. */
     DEVICE_OP = 'deviceOpNode',
+    /** A collapsed repeat-window instance. #1583 */
+    BLOCK = 'blockNode',
 }
 
 export enum OpGraphEdgeType {
@@ -38,6 +40,10 @@ export interface OpGraphSourceOperation {
      * built through `isDeviceOperation`, a deliberately narrower predicate.
      */
     deviceOperationCount: number;
+    /** Fingerprint inputs for repeat detection. Absent in older test fixtures. */
+    inputShapes?: string[];
+    durationSeconds?: number;
+    memoryDeltaBytes?: number;
 }
 
 // A single device operation expands into one node with no edges, which says
@@ -67,6 +73,13 @@ export type OpGraphNodeData = {
     /** 0 when the operation decomposes into nothing the graph would draw. */
     deviceOperationCount: number;
     highlight?: NodeRelation;
+    blockInstanceId?: string;
+    memberNames?: string[];
+    memberOperationIds?: number[];
+    opCount?: number;
+    /** A block's stats line. Its sums live on `OpGraphBlockSummary`. */
+    metaLine?: string;
+    buriedMatchCount?: number;
 };
 
 export type OpGraphEdgeData = {
@@ -113,9 +126,34 @@ export interface OpGraphDeviceSubgraph {
     exitFallbackNodeId: string | null;
 }
 
+export interface RepeatBlockInstance {
+    instanceId: string;
+    patternId: string;
+    label: string;
+    patternLabel: string;
+    operationIds: number[];
+    instanceIndex: number;
+    instanceCount: number;
+}
+
+export interface OpGraphBlockSummary {
+    instanceId: string;
+    operationIds: number[];
+    label: string;
+    patternLabel: string;
+    instanceIndex: number;
+    instanceCount: number;
+    // Summed once here rather than re-derived by the panel: the node's meta line
+    // and the panel's stats are on screen together, so two derivations show up as
+    // the two of them disagreeing about one block. #1944
+    durationSeconds: number;
+    memoryDeltaBytes: number;
+}
+
 export interface OpGraphBuiltGraph {
     nodes: OpGraphFlowNode[];
     edges: OpGraphFlowEdge[];
+    blocks?: OpGraphBlockSummary[];
 }
 
 // Rebuilt only when the worker delivers a graph, in canvas order. The filter and
@@ -125,12 +163,18 @@ export interface OpGraphNodeIndexEntry {
     id: string;
     operationId: number;
     name: string;
+    memberNames?: string[];
+    memberOperationIds?: number[];
 }
 
 export interface OpGraphBuildOptions {
     hideDeallocate: boolean;
     /** Only the expanded operations, so a collapsed graph carries no payload. */
     deviceSubgraphs: OpGraphDeviceSubgraph[];
+    /** Empty means every detected instance is collapsed. #1583 */
+    expandedBlockIds?: readonly string[];
+    /** Worker-only: detection is invariant under fold / device-op expand. */
+    detectedBlocks?: RepeatBlockInstance[];
 }
 
 export type OpGraphWorkerInboundMessage =

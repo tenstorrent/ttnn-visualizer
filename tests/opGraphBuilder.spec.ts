@@ -4,6 +4,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { getDeviceEdgeId, getDeviceNodeId } from '../src/components/operation-graph/opGraphDeviceSubgraph';
+import { formatBlockMeta } from '../src/components/operation-graph/opGraphBlockMeta';
 import { buildOpGraph } from '../src/components/operation-graph/opGraphBuilder';
 import {
     type OpGraphDeviceSubgraph,
@@ -16,6 +17,8 @@ interface OperationSpec {
     name?: string;
     outputs?: { label?: string; consumers: number[]; tensorId?: number }[];
     deviceOperationCount?: number;
+    durationSeconds?: number;
+    memoryDeltaBytes?: number;
 }
 
 const operation = ({
@@ -23,6 +26,8 @@ const operation = ({
     name = `ttnn.op${id}`,
     outputs = [],
     deviceOperationCount = 0,
+    durationSeconds,
+    memoryDeltaBytes,
 }: OperationSpec): OpGraphSourceOperation => ({
     id,
     name,
@@ -33,6 +38,8 @@ const operation = ({
         tensorId: tensorId + index,
     })),
     deviceOperationCount,
+    durationSeconds,
+    memoryDeltaBytes,
 });
 
 const build = (operations: OpGraphSourceOperation[], hideDeallocate: boolean) =>
@@ -396,6 +403,181 @@ describe('buildOpGraph', () => {
             const none = build([operation({ id: 1, outputs: [{ consumers: [2] }] })], false).nodes[0];
 
             expect(single.width).toBe(none.width);
+        });
+    });
+
+    describe('repeat blocks', () => {
+        const REPEAT_CHAIN = [
+            operation({ id: 1, name: 'prefix', outputs: [{ consumers: [2] }] }),
+            operation({
+                id: 2,
+                name: 'layer_a',
+                outputs: [{ consumers: [3] }],
+                durationSeconds: 1.5,
+                memoryDeltaBytes: 1024,
+            }),
+            operation({
+                id: 3,
+                name: 'layer_b',
+                outputs: [{ consumers: [4] }],
+                durationSeconds: 0.5,
+                memoryDeltaBytes: 256,
+            }),
+            operation({ id: 4, name: 'layer_a', outputs: [{ consumers: [5] }] }),
+            operation({ id: 5, name: 'layer_b', outputs: [{ consumers: [6] }] }),
+            operation({ id: 6, name: 'suffix' }),
+        ];
+
+        const FIRST_BLOCK_ID = 'block:0:2';
+        const SECOND_BLOCK_ID = 'block:0:4';
+
+        const typesOf = (graph: ReturnType<typeof buildOpGraph>) =>
+            graph.nodes.map((node) => ({ id: node.id, type: node.type, operationId: node.data.operationId }));
+
+        it('replaces each collapsed copy with a block node and hides the members', () => {
+            const graph = build(REPEAT_CHAIN, false);
+
+            expect(typesOf(graph)).toEqual([
+                { id: '1', type: OpGraphNodeType.OP, operationId: 1 },
+                { id: FIRST_BLOCK_ID, type: OpGraphNodeType.BLOCK, operationId: 2 },
+                { id: SECOND_BLOCK_ID, type: OpGraphNodeType.BLOCK, operationId: 4 },
+                { id: '6', type: OpGraphNodeType.OP, operationId: 6 },
+            ]);
+            expect(graph.blocks?.map((block) => block.instanceId)).toEqual([FIRST_BLOCK_ID, SECOND_BLOCK_ID]);
+        });
+
+        it('gives the node and the block summary the same sums', () => {
+            // The node's meta line and the panel's stats rows are on screen at the
+            // same time; they were derived twice, by independent paths, so drift
+            // would have shown as the two disagreeing about one block.
+            const graph = build(REPEAT_CHAIN, false);
+            const node = nodeById(graph, FIRST_BLOCK_ID);
+            const summary = graph.blocks?.find((block) => block.instanceId === FIRST_BLOCK_ID);
+
+            expect(summary).toBeDefined();
+            expect(summary?.durationSeconds).toBe(2);
+            expect(summary?.memoryDeltaBytes).toBe(1280);
+            expect(node.data.metaLine).toBe(
+                formatBlockMeta(
+                    summary?.operationIds.length ?? 0,
+                    summary?.durationSeconds ?? 0,
+                    summary?.memoryDeltaBytes ?? 0,
+                ),
+            );
+        });
+
+        it('sums duration and memory onto the collapsed node', () => {
+            const graph = build(REPEAT_CHAIN, false);
+            const first = nodeById(graph, FIRST_BLOCK_ID);
+
+            expect(first.data.opCount).toBe(2);
+            // The sums themselves are asserted on the block summary, which is now
+            // the single place they are derived; the node carries the formatted line.
+            expect(first.data.metaLine).toBe(formatBlockMeta(2, 2, 1280));
+            expect(first.data.fileIdentifier).toBe('');
+            expect(first.data.memberNames).toEqual(['layer_a', 'layer_b']);
+            expect(first.data.memberOperationIds).toEqual([2, 3]);
+        });
+
+        it('reroutes crossing edges onto the block and drops edges inside it', () => {
+            const graph = build(REPEAT_CHAIN, false);
+
+            expect(edgeBetweenOperations(graph, 1, 2).source).toBe('1');
+            expect(edgeBetweenOperations(graph, 1, 2).target).toBe(FIRST_BLOCK_ID);
+            expect(edgeBetweenOperations(graph, 3, 4).source).toBe(FIRST_BLOCK_ID);
+            expect(edgeBetweenOperations(graph, 3, 4).target).toBe(SECOND_BLOCK_ID);
+            expect(edgeBetweenOperations(graph, 5, 6).source).toBe(SECOND_BLOCK_ID);
+            expect(
+                graph.edges.find((edge) => edge.data?.sourceOperationId === 2 && edge.data?.targetOperationId === 3),
+            ).toBeUndefined();
+        });
+
+        it('restores the members when that instance is unrolled', () => {
+            const graph = buildOpGraph(REPEAT_CHAIN, {
+                hideDeallocate: false,
+                deviceSubgraphs: [],
+                expandedBlockIds: [FIRST_BLOCK_ID],
+            });
+
+            expect(typesOf(graph)).toEqual([
+                { id: '1', type: OpGraphNodeType.OP, operationId: 1 },
+                { id: '2', type: OpGraphNodeType.OP, operationId: 2 },
+                { id: '3', type: OpGraphNodeType.OP, operationId: 3 },
+                { id: SECOND_BLOCK_ID, type: OpGraphNodeType.BLOCK, operationId: 4 },
+                { id: '6', type: OpGraphNodeType.OP, operationId: 6 },
+            ]);
+            expect(edgeBetweenOperations(graph, 1, 2).target).toBe('2');
+            expect(edgeBetweenOperations(graph, 3, 4).target).toBe(SECOND_BLOCK_ID);
+        });
+
+        it('draws one unlabelled edge between a folded pair, regardless of tensor count', () => {
+            const twoTensors = [
+                operation({
+                    id: 1,
+                    name: 'layer_a',
+                    outputs: [
+                        { label: '[1, 32]', consumers: [2, 3] },
+                        { label: '[1, 64]', consumers: [3] },
+                    ],
+                }),
+                operation({
+                    id: 2,
+                    name: 'layer_b',
+                    outputs: [{ consumers: [3] }],
+                }),
+                operation({
+                    id: 3,
+                    name: 'layer_a',
+                    outputs: [
+                        { label: '[1, 32]', consumers: [4, 5] },
+                        { label: '[1, 64]', consumers: [5] },
+                    ],
+                }),
+                operation({
+                    id: 4,
+                    name: 'layer_b',
+                    outputs: [{ consumers: [5] }],
+                }),
+                operation({ id: 5, name: 'suffix' }),
+            ];
+            const graph = build(twoTensors, false);
+            const between = graph.edges.filter((edge) => edge.source === 'block:0:1' && edge.target === 'block:0:3');
+
+            expect(between).toHaveLength(1);
+            expect(between[0].label).toBeUndefined();
+            expect(between[0].data?.parallelIndex).toBe(0);
+        });
+
+        it('does not expand device operations for a member still inside a collapsed block', () => {
+            const graph = buildOpGraph(REPEAT_CHAIN, {
+                hideDeallocate: false,
+                deviceSubgraphs: [deviceSubgraph({ operationId: 2 })],
+            });
+
+            expect(graph.nodes.some((node) => node.type === OpGraphNodeType.DEVICE_GROUP)).toBe(false);
+            expect(graph.nodes.some((node) => node.type === OpGraphNodeType.DEVICE_OP)).toBe(false);
+            expect(nodeById(graph, FIRST_BLOCK_ID).type).toBe(OpGraphNodeType.BLOCK);
+        });
+
+        it('detects a repeat that only becomes contiguous once deallocate ops are hidden', () => {
+            const withDeallocate = [
+                operation({ id: 1, name: 'layer_a', outputs: [{ consumers: [2] }] }),
+                operation({ id: 2, name: 'layer_b', outputs: [{ consumers: [3] }] }),
+                operation({
+                    id: 3,
+                    name: 'ttnn.deallocate',
+                    outputs: [{ consumers: [4] }],
+                }),
+                operation({ id: 4, name: 'layer_a', outputs: [{ consumers: [5] }] }),
+                operation({ id: 5, name: 'layer_b', outputs: [{ consumers: [6] }] }),
+                operation({ id: 6, name: 'suffix' }),
+            ];
+
+            expect(build(withDeallocate, false).nodes.every((node) => node.type === OpGraphNodeType.OP)).toBe(true);
+
+            const hidden = build(withDeallocate, true);
+            expect(hidden.nodes.filter((node) => node.type === OpGraphNodeType.BLOCK)).toHaveLength(2);
+            expect(hidden.nodes.some((node) => node.data.filterString === 'ttnn.deallocate')).toBe(false);
         });
     });
 });

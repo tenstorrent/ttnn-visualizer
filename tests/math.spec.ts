@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import { describe, expect, it } from 'vitest';
-import { nsToUs } from '../src/functions/math';
+import { nsToUs, sumOptional, tensorBytes } from '../src/functions/math';
 
 describe('nsToUs', () => {
     it('converts a nanosecond string to microseconds', () => {
@@ -25,5 +25,19 @@ describe('nsToUs', () => {
     it('returns null for non-numeric input instead of propagating NaN', () => {
         expect(nsToUs('   ')).toBeNull();
         expect(nsToUs('n/a')).toBeNull();
+    });
+});
+
+describe('sumOptional', () => {
+    it('adds finite numbers and skips the rest', () => {
+        expect(sumOptional([1, undefined, 2.5, Number.NaN, Number.POSITIVE_INFINITY])).toBe(3.5);
+        expect(sumOptional([])).toBe(0);
+    });
+});
+
+describe('tensorBytes', () => {
+    it('totals tensor sizes and counts an unknown size as zero', () => {
+        expect(tensorBytes([{ size: 512 }, { size: null }, { size: 1536 }])).toBe(2048);
+        expect(tensorBytes([])).toBe(0);
     });
 });

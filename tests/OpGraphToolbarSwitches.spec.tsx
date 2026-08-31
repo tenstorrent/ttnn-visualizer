@@ -14,14 +14,26 @@ interface RenderToolbarOptions {
     status: PerfOverlayStatus;
     onPerfOverlayChange?: (next: boolean) => void;
     onCriticalPathChange?: (next: boolean) => void;
+    onDimUnrelatedEdgesChange?: (next: boolean) => void;
     isDisabled?: boolean;
+    hasBlocks?: boolean;
+    areAllBlocksExpanded?: boolean;
+    areAllBlocksCollapsed?: boolean;
+    onExpandAllBlocks?: () => void;
+    onCollapseAllBlocks?: () => void;
 }
 
 const renderToolbar = ({
     status,
     onPerfOverlayChange = vi.fn(),
     onCriticalPathChange = vi.fn(),
+    onDimUnrelatedEdgesChange = vi.fn(),
     isDisabled = false,
+    hasBlocks = false,
+    areAllBlocksExpanded = false,
+    areAllBlocksCollapsed = true,
+    onExpandAllBlocks = vi.fn(),
+    onCollapseAllBlocks = vi.fn(),
 }: RenderToolbarOptions) => {
     render(
         <OpGraphToolbar
@@ -41,6 +53,8 @@ const renderToolbar = ({
             onGoToOperation={vi.fn()}
             hideDeallocate
             onHideDeallocateChange={vi.fn()}
+            isDimUnrelatedEdges={false}
+            onDimUnrelatedEdgesChange={onDimUnrelatedEdgesChange}
             isPerfOverlayActive={false}
             onPerfOverlayChange={onPerfOverlayChange}
             isCriticalPathActive={false}
@@ -49,6 +63,11 @@ const renderToolbar = ({
             linkedOpCount={180}
             totalOpCount={302}
             isDisabled={isDisabled}
+            hasBlocks={hasBlocks}
+            areAllBlocksExpanded={areAllBlocksExpanded}
+            areAllBlocksCollapsed={areAllBlocksCollapsed}
+            onExpandAllBlocks={onExpandAllBlocks}
+            onCollapseAllBlocks={onCollapseAllBlocks}
         />,
     );
 };
@@ -148,6 +167,23 @@ describe('critical path switch', () => {
     });
 });
 
+describe('dim unrelated edges switch', () => {
+    it('turns on when toggled', () => {
+        const onDimUnrelatedEdgesChange = vi.fn();
+        renderToolbar({ status: PerfOverlayStatus.READY, onDimUnrelatedEdgesChange });
+
+        fireEvent.click(switchNamed(/^Dim unrelated edges/).input);
+
+        expect(onDimUnrelatedEdgesChange).toHaveBeenCalledWith(true);
+    });
+
+    it('is disabled while the graph is being laid out', () => {
+        renderToolbar({ status: PerfOverlayStatus.READY, isDisabled: true });
+
+        expect(switchNamed(/^Dim unrelated edges/).input).toBeDisabled();
+    });
+});
+
 describe('switch tooltips', () => {
     // Disabled is when the tooltip matters most, so "reachable while disabled"
     // is the property worth holding — not today's markup.
@@ -173,5 +209,62 @@ describe('switch tooltips', () => {
         fireEvent.mouseEnter(criticalPathSwitch().label);
 
         await waitFor(() => expect(screen.getByText(CRITICAL_PATH_TOOLTIP[status])).toBeInTheDocument());
+    });
+});
+
+// Each Repeats button has two independent disable reasons; only the
+// all-expanded / all-collapsed one was covered. Mid-build is the one that matters,
+// where an unroll would be queued against a node set about to be replaced. #1944
+describe('repeats controls', () => {
+    const repeatsButtons = () => ({
+        unroll: screen.getByRole('button', { name: 'Unroll all repeats' }),
+        fold: screen.getByRole('button', { name: 'Fold all repeats' }),
+    });
+
+    it('stays out of the toolbar when the report has no repeats', () => {
+        renderToolbar({ status: PerfOverlayStatus.READY, hasBlocks: false });
+
+        expect(screen.queryByRole('button', { name: 'Unroll all repeats' })).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: 'Fold all repeats' })).not.toBeInTheDocument();
+    });
+
+    it('offers both directions when some blocks are unrolled and some are not', () => {
+        renderToolbar({
+            status: PerfOverlayStatus.READY,
+            hasBlocks: true,
+            areAllBlocksExpanded: false,
+            areAllBlocksCollapsed: false,
+        });
+
+        const { unroll, fold } = repeatsButtons();
+        expect(unroll).toBeEnabled();
+        expect(fold).toBeEnabled();
+    });
+
+    it('disables both mid-build, whatever the fold state', () => {
+        renderToolbar({
+            status: PerfOverlayStatus.READY,
+            isDisabled: true,
+            hasBlocks: true,
+            areAllBlocksExpanded: false,
+            areAllBlocksCollapsed: false,
+        });
+
+        const { unroll, fold } = repeatsButtons();
+        expect(unroll).toBeDisabled();
+        expect(fold).toBeDisabled();
+    });
+
+    it('disables only the direction that would do nothing', () => {
+        renderToolbar({
+            status: PerfOverlayStatus.READY,
+            hasBlocks: true,
+            areAllBlocksExpanded: true,
+            areAllBlocksCollapsed: false,
+        });
+
+        const { unroll, fold } = repeatsButtons();
+        expect(unroll).toBeDisabled();
+        expect(fold).toBeEnabled();
     });
 });

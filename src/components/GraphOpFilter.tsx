@@ -20,15 +20,14 @@ interface GraphOpFilterProps {
     // True only when in regex mode and the current query fails to compile —
     // drives the danger-intent input styling and the counter text.
     isRegexInvalid: boolean;
-    // What prev/next steps through. In MLIR a collapsed anchor standing in for
-    // buried descendants counts as one.
+    // What prev/next steps through. A collapsed MLIR namespace or folded repeat
+    // block standing in for buried matches counts as one.
     matchCount: number;
     // 0-based cursor within `matchCount`, or null when no match is focused.
     currentMatchIndex: number | null;
     onPrev: () => void;
     onNext: () => void;
-    // Matches hidden inside collapsed namespaces, which drives the "+K inside"
-    // suffix. Only MLIR has a hierarchy deep enough to bury one.
+    // Matches hidden inside collapsed namespaces or folded repeat blocks.
     hiddenMatchCount?: number;
     isDisabled?: boolean;
 }
@@ -81,8 +80,8 @@ const GraphOpFilterInner = forwardRef<GraphOpFilterHandle, GraphOpFilterProps>(
         const isRegexMode = mode === GraphFilterMode.REGEX;
         const hiddenSuffix = hiddenMatchCount > 0 ? ` (+${hiddenMatchCount} inside)` : '';
         // A cursor left over from a wider match set would render an impossible
-        // ratio like "5 / 2" after the query narrows — or, in MLIR, after an
-        // expand/collapse changed which reps are visible.
+        // ratio like "5 / 2" after the query narrows — or after an expand/fold
+        // changed which reps are visible.
         const activeMatchIndex =
             currentMatchIndex !== null && currentMatchIndex < matchCount ? currentMatchIndex : null;
         let counterText: string | null = null;
