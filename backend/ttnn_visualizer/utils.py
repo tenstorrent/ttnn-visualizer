@@ -54,9 +54,17 @@ def parse_ranked_profiler_config_basename(
     return parse_ranked_basename(filename, PROFILER_CONFIG_RANKED_RE)
 
 
+# A world size is parsed straight out of a filename, and filenames on the local
+# upload path are client-controlled. Anything past this is not a run we could
+# render anyway — the largest cluster the app has seen is in the hundreds — and
+# without a bound an 11-digit name asks for a multi-terabyte allocation in the
+# shared Flask process. Well above _MAX_RANK's use as a query-param bound.
+MAX_RANKED_WORLD_SIZE = 4096
+
+
 def is_valid_profiler_ranked_entry(index_one_based: int, world: int) -> bool:
     """True when the filename indices match TTNN output (1..world inclusive)."""
-    return 1 <= index_one_based <= world
+    return 1 <= world <= MAX_RANKED_WORLD_SIZE and 1 <= index_one_based <= world
 
 
 def ranked_report_basenames(
@@ -106,6 +114,73 @@ def ranked_profiler_config_basenames(file_names: Iterable[str]) -> List[str]:
     )
 
 
+def _ranked_family(
+    report_dir: Path, ranked_re: Pattern[str], malformed_label: str
+) -> tuple[List[str], int, bool]:
+    """
+    The ranked files in ``report_dir``: their names, world size, and completeness.
+
+    ``ranked_report_basenames`` calls any non-empty same-world group consistent, so
+    a lone ``_1_of_2`` left behind by an earlier import looks like a family. It is
+    reported as incomplete here instead, because such a group must not outrank a
+    usable unsuffixed descriptor. #1947
+    """
+    names = ranked_report_basenames(
+        (p.name for p in report_dir.iterdir() if p.is_file()),
+        ranked_re,
+        malformed_label,
+    )
+    if not names:
+        return [], 0, False
+    # Parsed once per name: this ran the regex three times per filename, and the
+    # hoist is also what removes the `type: ignore[index]` the comprehension needed.
+    parsed = [parse_ranked_basename(name, ranked_re) for name in names]
+    if not parsed[0]:
+        return [], 0, False
+    _, world_size = parsed[0]
+    indices = {entry[0] for entry in parsed if entry}
+    # Counted, not compared against `set(range(1, world_size + 1))`: the indices are
+    # already unique and `ranked_report_basenames` has bounded them to 1..world, so
+    # the count settles completeness without allocating a set sized by a number that
+    # came out of a filename.
+    return names, world_size, len(indices) == world_size
+
+
+def _newest_mtime_ns(paths: Iterable[Path]) -> int:
+    """Newest mtime among ``paths``; -1 when none of them can be stat'd."""
+    stamps = []
+    for path in paths:
+        try:
+            stamps.append(path.stat().st_mtime_ns)
+        except OSError:
+            continue
+    return max(stamps) if stamps else -1
+
+
+def _prefer_ranked_family(
+    report_dir: Path, single: Path, ranked_names: List[str], ranked_is_complete: bool
+) -> bool:
+    """
+    Whether the ranked family wins over an unsuffixed descriptor beside it.
+
+    Both can exist: ``import_report`` reuses the output directory and writes each
+    descriptor only ``if not path.exists()``, so whichever import ran first owns
+    its filenames and the other import adds the second family. Which one is stale
+    therefore depends on import order, and both orders are reachable — a world-1
+    import then a world-N one leaves the unsuffixed file stale, and the reverse
+    leaves the ranked family stale.
+
+    Nothing in the filenames records that, so recency decides, and only a complete
+    family is eligible to win. Ties go to the ranked family, which carries per-rank
+    detail. Note that mtimes do not survive every copy — an archive extract can
+    flatten them all — in which case the tie-break is what applies. #1947
+    """
+    if not ranked_is_complete:
+        return False
+    ranked_mtime = _newest_mtime_ns(report_dir / name for name in ranked_names)
+    return ranked_mtime >= _newest_mtime_ns([single])
+
+
 def _pick_single_or_ranked_report_path(
     report_dir: Path,
     *,
@@ -114,36 +189,60 @@ def _pick_single_or_ranked_report_path(
     ranked_basename_for: Callable[[int, int], str],
     malformed_label: str,
     logical_rank: int = 0,
+    single_is_one_rank: bool = False,
 ) -> tuple[Optional[Path], Optional[str]]:
     """
-    Prefer ``single_basename`` when present; otherwise pick the ranked file for
-    ``logical_rank``. Returns ``(path, None)`` or ``(None, error)`` where error
-    is ``rank_out_of_range``, ``missing_rank_file``, or ``None`` when absent.
+    Pick the descriptor file for ``logical_rank``. Returns ``(path, None)`` or
+    ``(None, error)`` where error is ``rank_out_of_range``, ``missing_rank_file``,
+    or ``None`` when nothing is present.
+
+    ``single_is_one_rank`` declares that an unsuffixed file describes exactly one
+    rank. A consistent ranked set then outranks it, and with no ranked set it
+    answers rank 0 only. Cluster descriptors set it: world size lives in the
+    ranked filenames, so serving one unsuffixed descriptor for every rank made the
+    topology probe read a single host as a whole world and clone it once per
+    probed rank. #1939
+
+    Left ``False`` for mesh mappings, where one unsuffixed file legitimately
+    covers every rank — reused as a legacy single doc, or holding one ``chips:``
+    document per rank that the frontend selects from by rank. #1947
+
+    Which *family* is used — the unsuffixed file or the ranked set — is decided
+    identically for both, so cluster and mesh cannot end up reading different
+    generations of the same report. Only the per-rank question above differs.
     """
     if not report_dir.is_dir():
         return None, None
+
     single = report_dir / single_basename
-    if single.is_file():
-        return single, None
-
-    ranked_names = ranked_report_basenames(
-        (p.name for p in report_dir.iterdir() if p.is_file()),
-        ranked_re,
-        malformed_label,
+    single_exists = single.is_file()
+    ranked_names, world_size, ranked_is_complete = _ranked_family(
+        report_dir, ranked_re, malformed_label
     )
-    if not ranked_names:
-        return None, None
 
-    parsed0 = parse_ranked_basename(ranked_names[0], ranked_re)
-    if not parsed0:
-        return None, None
-    _, world_size = parsed0
+    if single_exists and ranked_names:
+        use_ranked = _prefer_ranked_family(
+            report_dir, single, ranked_names, ranked_is_complete
+        )
+    else:
+        use_ranked = bool(ranked_names)
+
+    if not use_ranked:
+        if not single_exists:
+            return None, None
+        # A whole-world mapping answers every rank; a single-host descriptor
+        # answers rank 0 and nothing beyond it.
+        if single_is_one_rank and logical_rank != 0:
+            return None, "rank_out_of_range"
+        return single, None
 
     if logical_rank < 0 or logical_rank >= world_size:
         return None, "rank_out_of_range"
 
     path = report_dir / ranked_basename_for(logical_rank + 1, world_size)
     if not path.is_file():
+        # Only reachable for an incomplete family that had no unsuffixed file to
+        # defer to, or a file removed since the directory was listed.
         return None, "missing_rank_file"
     return path, None
 
@@ -1042,6 +1141,8 @@ def pick_cluster_descriptor_path(
         ),
         malformed_label="cluster_descriptor_<n>_of_<world>.yaml with 1 <= n <= world",
         logical_rank=logical_rank,
+        # One unsuffixed cluster descriptor is one host. Mesh mappings differ. #1939
+        single_is_one_rank=True,
     )
 
 
