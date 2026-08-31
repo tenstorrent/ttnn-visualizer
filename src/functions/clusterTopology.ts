@@ -145,7 +145,7 @@ export function stitchClusterTopology(perRankInputs: PerRankInput[]): ClusterTop
 
     // Build a global index from chip_unique_id -> (rank, local chip id) so we can
     // resolve `remote_chip_id` entries against any host's chip_unique_ids map.
-    const uniqueIdToOwner = new Map<number, { rank: number; chip: number }>();
+    const uniqueIdToOwner = new Map<string, { rank: number; chip: number }>();
     for (const host of hosts) {
         for (const [chipIdStr, uniqueId] of Object.entries(host.descriptor.chip_unique_ids ?? {})) {
             uniqueIdToOwner.set(uniqueId, { rank: host.rank, chip: parseInt(chipIdStr, 10) });

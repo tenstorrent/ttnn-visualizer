@@ -1128,6 +1128,42 @@ def get_mlir_path(mlir_name, current_app, remote_connection=None, **_kwargs):
     return str(fallback_path)
 
 
+def stringify_chip_unique_ids(cluster_descriptor: Any) -> Any:
+    """
+    Render 64-bit chip unique ids as strings so they survive the JSON boundary.
+
+    Python ints are arbitrary precision and JSON has no integer limit, but these
+    ids exceed 2**53, so the browser's ``JSON.parse`` rounds them to the nearest
+    double. That corrupts the displayed id and, worse, lets two distinct ids
+    collide in the frontend's unique-id-to-owner index, resolving an inter-host
+    link to the wrong chip. Nothing does arithmetic on them, so a string is an
+    exact substitution. #1950
+
+    Mutates and returns ``cluster_descriptor``; a non-dict passes through.
+    """
+    if not isinstance(cluster_descriptor, dict):
+        return cluster_descriptor
+
+    unique_ids = cluster_descriptor.get("chip_unique_ids")
+    if isinstance(unique_ids, dict):
+        cluster_descriptor["chip_unique_ids"] = {
+            chip: str(unique_id) for chip, unique_id in unique_ids.items()
+        }
+
+    remote_connections = cluster_descriptor.get(
+        "ethernet_connections_to_remote_devices"
+    )
+    if isinstance(remote_connections, list):
+        for connection in remote_connections:
+            if not isinstance(connection, list):
+                continue
+            for endpoint in connection:
+                if isinstance(endpoint, dict) and "remote_chip_id" in endpoint:
+                    endpoint["remote_chip_id"] = str(endpoint["remote_chip_id"])
+
+    return cluster_descriptor
+
+
 def pick_cluster_descriptor_path(
     report_dir: Path, logical_rank: int = 0
 ) -> tuple[Optional[Path], Optional[str]]:

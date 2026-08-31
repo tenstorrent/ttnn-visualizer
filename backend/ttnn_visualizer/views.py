@@ -151,6 +151,7 @@ from ttnn_visualizer.utils import (
     read_profiler_config_api_payload,
     read_profiler_report_name,
     str_to_bool,
+    stringify_chip_unique_ids,
     timer,
 )
 
@@ -1744,7 +1745,8 @@ def get_cluster_descriptor(instance: Instance):
     try:
         with open(path, "r", encoding="utf-8") as cluster_desc_file:
             cluster_desc = yaml.safe_load(cluster_desc_file)
-        return jsonify(cluster_desc), HTTPStatus.OK
+        # Chip unique ids are 64-bit; the browser would round them on parse. #1950
+        return jsonify(stringify_chip_unique_ids(cluster_desc)), HTTPStatus.OK
 
     except yaml.YAMLError as e:
         return response_bad_request(f"Failed to parse YAML: {str(e)}")
