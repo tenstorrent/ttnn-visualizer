@@ -40,9 +40,9 @@ To run a test with custom input data, you can use the following command with sui
 pytest --disable-warnings --input-path="path/to/input.json" path/to/test_file.py::test_function[param]
 ```
 
-The final output should be a folder within `${TT_METAL_HOME}/generated/ttnn/reports/` which should include at least a `db.sqlite` file (config.json is optional for the visualizer). The report will be created automatically when running TT-Metal model demos and tests with `pytest`, when `enable_logging` and `enable_graph_report` are `true` **and `report_name` has a value**.
+The final output should be a folder within `${TT_METAL_HOME}/generated/ttnn/reports/` which should include at least a `db.sqlite` file (config.json is optional for the visualizer). The report is created automatically when running TT-Metal model demos and tests with `pytest`, provided `enable_logging` is `true`, `report_name` has a value, and `enable_graph_report` is `true`. (`enable_comparison_mode` also triggers generation, but it is not a substitute — see the table above.)
 
-Important: `report_name` is the option that fails silently. With it unset you get no report and no error — not an empty folder, nothing at all. Only tests collected under `tests/ttnn/` derive a name from the test id for you (in `tests/ttnn/conftest.py`); model demos under `models/` do not, so set `report_name` explicitly for those.
+Important: every one of those conditions fails silently. With any of them unset you get no report and no error, and not even an empty folder. `report_name` is the one most often missed — always set it explicitly, for tests as well as model demos.
 
 <img width="909" alt="Memory report files" src="https://github.com/user-attachments/assets/ab31892a-2779-4fe1-9ad5-0f35f8329f9a" />
 
