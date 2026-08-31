@@ -65,6 +65,29 @@
         white-space: nowrap;
     }
 
+    // `min-width: 0` and the clip keep this cell's contents inside its own track:
+    // the device-operations view caps it at `$legend-tensor-column`, and without
+    // these the multipliers below would spill into the buffer-type column rather
+    // than truncate. Matches what #1897 asks of these labels. #1879
+    .legend-description {
+        display: flex;
+        min-width: 0;
+        align-items: center;
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+    }
+
+    // Sits in the left-aligned description cell, ahead of any tensor label. Dimmed
+    // because it qualifies the size rather than naming the row, and never shrinks —
+    // if the cell runs out of room the tensor identifier truncates instead, since
+    // the multiplier is the shorter and less recoverable of the two. #1879
+    .legend-multipliers {
+        flex: 0 0 auto;
+        margin-right: 8px;
+        color: $tt-grey-5;
+    }
+
     .legend-marker-swatch {
         width: 15px;
         height: 15px;
