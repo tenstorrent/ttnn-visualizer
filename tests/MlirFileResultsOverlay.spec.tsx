@@ -552,6 +552,83 @@ describe('MlirFileResultsOverlay', () => {
 });
 
 describe('MlirJsonFileLoader clearSplitPeers', () => {
+    it('records only failed files from a mixed server conversion batch', async () => {
+        uploadMlirFileToServer.mockResolvedValueOnce({
+            data: {
+                results: [
+                    {
+                        filename: 'valid.mlir',
+                        name: 'valid',
+                        status: ConnectionTestStates.OK,
+                        graph: GRAPH,
+                    },
+                    {
+                        filename: 'invalid.mlir',
+                        name: null,
+                        status: ConnectionTestStates.FAILED,
+                        message: 'Conversion failed',
+                        graph: null,
+                    },
+                ],
+            },
+        });
+        const { container } = render(
+            <MemoryRouter>
+                <MlirJsonFileLoader server={SERVER} />
+            </MemoryRouter>,
+        );
+
+        fireEvent.change(container.querySelector('input[type="file"]') as HTMLInputElement, {
+            target: {
+                files: [new File(['module {}'], 'valid.mlir'), new File(['invalid'], 'invalid.mlir')],
+            },
+        });
+
+        await waitFor(() =>
+            expect(recordReportLoadFailed).toHaveBeenCalledWith(ReportKind.MLIR, ReportLoadFailureReason.OTHER),
+        );
+        expect(recordReportLoadFailed).toHaveBeenCalledTimes(1);
+        expect(recordReportLoaded).not.toHaveBeenCalled();
+    });
+
+    it('records every selected file when the server returns no results', async () => {
+        uploadMlirFileToServer.mockResolvedValueOnce({ data: { results: [] } });
+        const { container } = render(
+            <MemoryRouter>
+                <MlirJsonFileLoader server={SERVER} />
+            </MemoryRouter>,
+        );
+
+        fireEvent.change(container.querySelector('input[type="file"]') as HTMLInputElement, {
+            target: {
+                files: [new File(['a'], 'a.mlir'), new File(['b'], 'b.mlir')],
+            },
+        });
+
+        await waitFor(() => expect(recordReportLoadFailed).toHaveBeenCalledTimes(2));
+        expect(recordReportLoaded).not.toHaveBeenCalled();
+    });
+
+    it('records every selected file when the server upload rejects', async () => {
+        uploadMlirFileToServer.mockRejectedValueOnce(new Error('upload failed'));
+        const { container } = render(
+            <MemoryRouter>
+                <MlirJsonFileLoader server={SERVER} />
+            </MemoryRouter>,
+        );
+
+        fireEvent.change(container.querySelector('input[type="file"]') as HTMLInputElement, {
+            target: {
+                files: [new File(['a'], 'a.mlir'), new File(['b'], 'b.mlir')],
+            },
+        });
+
+        await waitFor(() => expect(recordReportLoadFailed).toHaveBeenCalledTimes(2));
+        expect(recordReportLoadFailed).toHaveBeenNthCalledWith(1, ReportKind.MLIR, ReportLoadFailureReason.OTHER);
+        expect(recordReportLoadFailed).toHaveBeenNthCalledWith(2, ReportKind.MLIR, ReportLoadFailureReason.OTHER);
+        expect(recordReportLoaded).not.toHaveBeenCalled();
+    });
+
     it('records invalid local JSON as a parse failure', async () => {
         const { container } = render(
             <MemoryRouter>

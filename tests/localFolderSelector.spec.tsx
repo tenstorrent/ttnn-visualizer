@@ -287,6 +287,47 @@ it('updates the instance when a performance report is selected and creates toast
     expect(recordReportLoaded).toHaveBeenCalledTimes(1);
 });
 
+it('records a failed profiler selection without reporting a successful load', async () => {
+    mockUpdateInstance.mockRejectedValueOnce(new Error('update failed'));
+    render(
+        <TestProviders>
+            <LocalFolderSelector />
+        </TestProviders>,
+    );
+
+    getAllButtonsWithText(SELECT_REPORT_TEXT)[0].click();
+    await waitFor(testForPortal, WAIT_FOR_OPTIONS);
+    screen.getByText(mockProfilerFolderList[0].reportName).click();
+
+    await waitFor(
+        () => expect(recordReportLoadFailed).toHaveBeenCalledWith(ReportKind.PROFILER, ReportLoadFailureReason.OTHER),
+        WAIT_FOR_OPTIONS,
+    );
+    expect(recordReportLoadFailed).toHaveBeenCalledTimes(1);
+    expect(recordReportLoaded).not.toHaveBeenCalled();
+});
+
+it('records a failed performance selection without reporting a successful load', async () => {
+    mockUpdateInstance.mockRejectedValueOnce(new Error('update failed'));
+    render(
+        <TestProviders>
+            <LocalFolderSelector />
+        </TestProviders>,
+    );
+
+    getAllButtonsWithText(SELECT_REPORT_TEXT)[1].click();
+    await waitFor(testForPortal, WAIT_FOR_OPTIONS);
+    screen.getByText(new RegExp(mockPerformanceReportFolders[0].path, 'i')).click();
+
+    await waitFor(
+        () =>
+            expect(recordReportLoadFailed).toHaveBeenCalledWith(ReportKind.PERFORMANCE, ReportLoadFailureReason.OTHER),
+        WAIT_FOR_OPTIONS,
+    );
+    expect(recordReportLoadFailed).toHaveBeenCalledTimes(1);
+    expect(recordReportLoaded).not.toHaveBeenCalled();
+});
+
 it('handles invalid memory report upload', async () => {
     render(
         <TestProviders>

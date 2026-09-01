@@ -100,6 +100,8 @@ const NPE = () => {
 
     const npeData = useMemo(() => demoData || loadedData || loadedTimeline, [demoData, loadedData, loadedTimeline]);
 
+    // Demos are hosted-only. Keep their source wired for vocabulary parity, but
+    // recordUsage intentionally drops the event because SERVER_MODE records nothing.
     const isDemoEnabled = isServerMode;
     // Prefer RQ isLoading (isPending && isFetching) over bare isFetching so a
     // background refetch cannot pin the spinner after data is already present.

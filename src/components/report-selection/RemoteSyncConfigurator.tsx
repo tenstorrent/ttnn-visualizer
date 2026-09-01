@@ -60,6 +60,13 @@ import {
 
 const UNEXPECTED_MOUNT_STATUS_MESSAGE = 'Remote report could not be mounted';
 
+interface RemoteReportActions {
+    mount: (connection: RemoteConnection, folder: RemoteFolder) => Promise<AxiosResponse>;
+    activateWithToast: (folder: RemoteFolder) => void;
+    applySelection: (folder: RemoteFolder) => void;
+    kind: ReportKind;
+}
+
 const RemoteSyncConfigurator = () => {
     const remote = useRemoteConnection();
     const { setPersistentSelectedConnection, setPersistentSavedConnectionList } = remote;
@@ -426,6 +433,19 @@ const RemoteSyncConfigurator = () => {
         );
     };
 
+    const profilerReportActions: RemoteReportActions = {
+        mount: (connection, report) => remote.mountRemoteFolder(connection, report),
+        activateWithToast: updateReportSelection,
+        applySelection: applyProfilerReportSelection,
+        kind: ReportKind.PROFILER,
+    };
+    const performanceReportActions: RemoteReportActions = {
+        mount: (connection, report) => remote.mountRemoteFolder(connection, undefined, report),
+        activateWithToast: updatePerformanceSelection,
+        applySelection: applyPerformanceReportSelection,
+        kind: ReportKind.PERFORMANCE,
+    };
+
     const mountLocalFolderOnSyncFailure = async (
         selectedReport: RemoteFolder,
         err: unknown,
@@ -488,15 +508,7 @@ const RemoteSyncConfigurator = () => {
 
     const mountAndActivateFolder = async (
         folder: RemoteFolder,
-        {
-            mount,
-            activateWithToast,
-            kind,
-        }: {
-            mount: (connection: RemoteConnection, folder: RemoteFolder) => Promise<AxiosResponse>;
-            activateWithToast: (folder: RemoteFolder) => void;
-            kind: ReportKind;
-        },
+        { mount, activateWithToast, kind }: Pick<RemoteReportActions, 'mount' | 'activateWithToast' | 'kind'>,
     ) => {
         const connection = selectedConnection;
         if (!connection) {
@@ -617,11 +629,8 @@ const RemoteSyncConfigurator = () => {
             sync: (connection, report) => remote.syncRemoteFolder(connection, report),
             getSaved: remote.persistentState.getSavedReportFolders,
             updateSaved: updateSavedReportFolders,
-            mount: (connection, report) => remote.mountRemoteFolder(connection, report),
-            activateWithToast: updateReportSelection,
-            applySelection: applyProfilerReportSelection,
             getActivePath: () => jotaiStore.get(activeProfilerReportAtom)?.path,
-            kind: ReportKind.PROFILER,
+            ...profilerReportActions,
         });
 
     const syncSelectedPerfReportFolder = (folder?: RemoteFolder) =>
@@ -631,11 +640,8 @@ const RemoteSyncConfigurator = () => {
             sync: (connection, report) => remote.syncRemoteFolder(connection, undefined, report),
             getSaved: remote.persistentState.getSavedPerformanceFolders,
             updateSaved: updateSavedPerformanceFolders,
-            mount: (connection, report) => remote.mountRemoteFolder(connection, undefined, report),
-            activateWithToast: updatePerformanceSelection,
-            applySelection: applyPerformanceReportSelection,
             getActivePath: () => jotaiStore.get(activePerformanceReportAtom)?.path,
-            kind: ReportKind.PERFORMANCE,
+            ...performanceReportActions,
         });
 
     /**
@@ -654,10 +660,7 @@ const RemoteSyncConfigurator = () => {
         }: {
             setSelected: (folder: RemoteFolder) => void;
             syncFolder: (folder: RemoteFolder) => Promise<void>;
-            mount: (connection: RemoteConnection, folder: RemoteFolder) => Promise<AxiosResponse>;
-            activateWithToast: (folder: RemoteFolder) => void;
-            kind: ReportKind;
-        },
+        } & Pick<RemoteReportActions, 'mount' | 'activateWithToast' | 'kind'>,
     ) => {
         setSelected(folder);
 
@@ -821,9 +824,7 @@ const RemoteSyncConfigurator = () => {
                         selectAndActivateFolder(folder, {
                             setSelected: setSelectedReportFolder,
                             syncFolder: syncSelectedReportFolder,
-                            mount: (connection, report) => remote.mountRemoteFolder(connection, report),
-                            activateWithToast: updateReportSelection,
-                            kind: ReportKind.PROFILER,
+                            ...profilerReportActions,
                         })
                     }
                     type='profiler'
@@ -856,9 +857,7 @@ const RemoteSyncConfigurator = () => {
                         selectAndActivateFolder(folder, {
                             setSelected: setSelectedPerformanceFolder,
                             syncFolder: syncSelectedPerfReportFolder,
-                            mount: (connection, report) => remote.mountRemoteFolder(connection, undefined, report),
-                            activateWithToast: updatePerformanceSelection,
-                            kind: ReportKind.PERFORMANCE,
+                            ...performanceReportActions,
                         })
                     }
                     type='performance'

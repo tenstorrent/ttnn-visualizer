@@ -13,6 +13,21 @@ import { activeNpeOpTraceAtom } from '../src/store/app';
 import { TEST_IDS } from '../src/definitions/TestIds';
 import { ReportKind, ReportLoadFailureReason, ReportSource } from '../src/definitions/UsageEvent';
 
+interface MockNpeWindowedViewProps {
+    loadAttemptId: number | null;
+    onInitialLoadSuccess: (attemptId: number) => void;
+    onInitialLoadFailure: (attemptId: number, errorCode: number, error?: unknown) => void;
+}
+
+interface MockNpeFileLoaderProps {
+    onUploadAccepted: (fileName: string) => void;
+}
+
+interface MockNpeDemoSelectProps {
+    setDemoData: (data: typeof minimalValidNpeData) => void;
+    onDemoSelected: () => void;
+}
+
 // Mutable holders shared with the hoisted mock factories so each case can flip
 // SERVER_MODE / route params and inspect how useNpe was gated.
 const h = vi.hoisted(() => ({
@@ -21,11 +36,7 @@ const h = vi.hoisted(() => ({
     serverMode: true as boolean,
     params: {} as { filepath?: string },
     useNpeArgs: [] as (string | null)[],
-    windowedProps: null as {
-        loadAttemptId: number | null;
-        onInitialLoadSuccess: (attemptId: number) => void;
-        onInitialLoadFailure: (attemptId: number, errorCode: number, error?: unknown) => void;
-    } | null,
+    windowedProps: null as MockNpeWindowedViewProps | null,
 }));
 
 const { mockUseNpe, mockUseNPETimelineFile, recordReportLoaded, recordReportLoadFailed } = vi.hoisted(() => ({
@@ -68,7 +79,7 @@ vi.mock('../src/components/npe/NPEViewComponent', () => ({
     default: () => <div data-testid={TEST_IDS.NPE_VIEW} />,
 }));
 vi.mock('../src/components/npe/NPEFileLoader', () => ({
-    default: ({ onUploadAccepted }: { onUploadAccepted: (fileName: string) => void }) => (
+    default: ({ onUploadAccepted }: MockNpeFileLoaderProps) => (
         <button
             onClick={() => {
                 onUploadAccepted('trace.json');
@@ -80,13 +91,7 @@ vi.mock('../src/components/npe/NPEFileLoader', () => ({
     ),
 }));
 vi.mock('../src/components/npe/NPEDemoSelect', () => ({
-    default: ({
-        setDemoData,
-        onDemoSelected,
-    }: {
-        setDemoData: (data: typeof minimalValidNpeData) => void;
-        onDemoSelected: () => void;
-    }) => (
+    default: ({ setDemoData, onDemoSelected }: MockNpeDemoSelectProps) => (
         <button
             onClick={() => {
                 onDemoSelected();

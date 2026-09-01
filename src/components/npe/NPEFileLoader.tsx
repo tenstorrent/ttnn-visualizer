@@ -4,7 +4,7 @@
 
 import React, { useState } from 'react';
 import { useAtom } from 'jotai';
-import { type Query, useQueryClient } from '@tanstack/react-query';
+import { type QueryFilters, useQueryClient } from '@tanstack/react-query';
 import { FileInput, FormGroup, Icon, IconName, Intent } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import useLocalConnection from '../../hooks/useLocal';
@@ -36,7 +36,9 @@ const INTENT_MAP: Record<ConnectionTestStates, Intent> = {
 };
 
 const NPE_QUERY_KEYS = new Set<string>([NPE_SUMMARY_QUERY_KEY, NPE_WINDOW_QUERY_KEY, NPE_QUERY_KEY]);
-const isNpeQuery = (query: Query): boolean => NPE_QUERY_KEYS.has(String(query.queryKey[0]));
+const NPE_QUERY_FILTER: QueryFilters<readonly unknown[]> = {
+    predicate: (query) => NPE_QUERY_KEYS.has(String(query.queryKey[0])),
+};
 
 interface NPEFileLoaderProps {
     onUploadAccepted: (fileName: string) => void;
@@ -72,8 +74,8 @@ const NPEFileLoader = ({ onUploadAccepted }: NPEFileLoaderProps) => {
                 // windowed hooks are staleTime: Infinity — drop the cached summary /
                 // windows so the freshly-rebuilt server index is refetched instead of
                 // serving the previous report's data.
-                await queryClient.cancelQueries({ predicate: isNpeQuery });
-                queryClient.removeQueries({ predicate: isNpeQuery });
+                await queryClient.cancelQueries(NPE_QUERY_FILTER);
+                queryClient.removeQueries(NPE_QUERY_FILTER);
                 const sanitisedFileName = sanitiseFileName(fileName);
                 onUploadAccepted(sanitisedFileName);
                 setActiveNpe(sanitisedFileName);
