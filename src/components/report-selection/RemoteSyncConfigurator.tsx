@@ -6,7 +6,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { FormGroup } from '@blueprintjs/core';
 import { useQueryClient } from '@tanstack/react-query';
-import { AxiosResponse, HttpStatusCode } from 'axios';
+import axios, { AxiosResponse, HttpStatusCode } from 'axios';
 import { useAtom, useStore } from 'jotai';
 import { RemoteConnection, RemoteFolder } from '../../model/RemoteConnection';
 import { ReportLocation } from '../../definitions/Reports';
@@ -51,6 +51,14 @@ import { clearReportCaches, updateInstance, useReportMetadata } from '../../hook
 import { ActiveReport } from '../../model/APIData';
 import { DBVersionValidation } from '../../definitions/Versions';
 import { evaluateDbVersion } from '../../functions/compareDbVersion';
+import { ReportKind, ReportLoadFailureReason, ReportSource } from '../../definitions/UsageEvent';
+import {
+    getReportLoadFailureReason,
+    recordReportLoadFailed,
+    recordReportLoaded,
+} from '../../functions/reportLoadUsage';
+
+const UNEXPECTED_MOUNT_STATUS_MESSAGE = 'Remote report could not be mounted';
 
 const RemoteSyncConfigurator = () => {
     const remote = useRemoteConnection();
@@ -386,6 +394,7 @@ const RemoteSyncConfigurator = () => {
             reportName: folder.reportName,
             syncedName: folder.syncedName,
         });
+        recordReportLoaded(ReportKind.PROFILER, ReportSource.REMOTE_SYNC);
     };
 
     const applyPerformanceReportSelection = (folder: RemoteFolder) => {
@@ -396,6 +405,7 @@ const RemoteSyncConfigurator = () => {
             reportName: folder.reportName,
             syncedName: folder.syncedName,
         });
+        recordReportLoaded(ReportKind.PERFORMANCE, ReportSource.REMOTE_SYNC);
     };
 
     const updateReportSelection = (folder: RemoteFolder) => {
@@ -421,11 +431,13 @@ const RemoteSyncConfigurator = () => {
         err: unknown,
         mount: (connection: RemoteConnection) => Promise<AxiosResponse>,
         applySelection: (folder: RemoteFolder) => void,
+        kind: ReportKind,
     ) => {
         const connection = selectedConnection;
 
         if (!connection) {
             notifyFolderSyncError(err);
+            recordReportLoadFailed(kind, getReportLoadFailureReason(err));
             return;
         }
 
@@ -442,8 +454,12 @@ const RemoteSyncConfigurator = () => {
 
                 return;
             }
-        } catch {
+            recordReportLoadFailed(kind, ReportLoadFailureReason.OTHER);
+        } catch (mountError: unknown) {
             // Mount itself failed; surface the original sync error below.
+            if (!axios.isCancel(mountError)) {
+                recordReportLoadFailed(kind, getReportLoadFailureReason(mountError));
+            }
         }
 
         notifyFolderSyncError(err);
@@ -453,6 +469,7 @@ const RemoteSyncConfigurator = () => {
         err: unknown,
         selectedReport: RemoteFolder | undefined,
         mountLocalFallback: (folder: RemoteFolder, err: unknown) => Promise<void>,
+        kind: ReportKind,
     ) => {
         const failureAction = getRemoteSyncFailureAction(err, selectedReport);
 
@@ -466,6 +483,7 @@ const RemoteSyncConfigurator = () => {
         }
 
         notifyFolderSyncError(err);
+        recordReportLoadFailed(kind, getReportLoadFailureReason(err));
     };
 
     const mountAndActivateFolder = async (
@@ -473,13 +491,16 @@ const RemoteSyncConfigurator = () => {
         {
             mount,
             activateWithToast,
+            kind,
         }: {
             mount: (connection: RemoteConnection, folder: RemoteFolder) => Promise<AxiosResponse>;
             activateWithToast: (folder: RemoteFolder) => void;
+            kind: ReportKind;
         },
     ) => {
         const connection = selectedConnection;
         if (!connection) {
+            recordReportLoadFailed(kind, ReportLoadFailureReason.OTHER);
             return;
         }
 
@@ -493,9 +514,16 @@ const RemoteSyncConfigurator = () => {
                     if (hasBeenNormalised(folder)) {
                         createDataIntegrityWarning(folder);
                     }
+                } else {
+                    const mountError = new Error(UNEXPECTED_MOUNT_STATUS_MESSAGE);
+                    notifyRemoteFolderMountError(mountError);
+                    recordReportLoadFailed(kind, ReportLoadFailureReason.OTHER);
                 }
             } catch (err: unknown) {
                 notifyRemoteFolderMountError(err);
+                if (!axios.isCancel(err)) {
+                    recordReportLoadFailed(kind, getReportLoadFailureReason(err));
+                }
             }
         });
     };
@@ -510,6 +538,7 @@ const RemoteSyncConfigurator = () => {
         activateWithToast,
         applySelection,
         getActivePath,
+        kind,
     }: {
         selected: RemoteFolder | undefined;
         setSyncing: (syncing: boolean) => void;
@@ -520,6 +549,7 @@ const RemoteSyncConfigurator = () => {
         activateWithToast: (folder: RemoteFolder) => void;
         applySelection: (folder: RemoteFolder) => void;
         getActivePath: () => string | null | undefined;
+        kind: ReportKind;
     }) => {
         setSyncing(true);
 
@@ -550,18 +580,29 @@ const RemoteSyncConfigurator = () => {
                 updateSaved(connection, updatedFolders);
 
                 if (updatedFolder && shouldActivateAfterSync()) {
-                    await mountAndActivateFolder(updatedFolder, { mount, activateWithToast });
+                    await mountAndActivateFolder(updatedFolder, { mount, activateWithToast, kind });
                 }
             } catch (err: unknown) {
-                await handleSyncFailure(err, selected, async (report, syncErr) => {
-                    if (!shouldActivateAfterSync()) {
-                        notifyFolderSyncError(syncErr);
-                        return;
-                    }
-                    await withActivatingReport(() =>
-                        mountLocalFolderOnSyncFailure(report, syncErr, (conn) => mount(conn, report), applySelection),
-                    );
-                });
+                await handleSyncFailure(
+                    err,
+                    selected,
+                    async (report, syncErr) => {
+                        if (!shouldActivateAfterSync()) {
+                            notifyFolderSyncError(syncErr);
+                            return;
+                        }
+                        await withActivatingReport(() =>
+                            mountLocalFolderOnSyncFailure(
+                                report,
+                                syncErr,
+                                (conn) => mount(conn, report),
+                                applySelection,
+                                kind,
+                            ),
+                        );
+                    },
+                    kind,
+                );
             }
         } finally {
             // REMOTE_SYNC registry clear is owned by syncRemoteFolder's finally.
@@ -580,6 +621,7 @@ const RemoteSyncConfigurator = () => {
             activateWithToast: updateReportSelection,
             applySelection: applyProfilerReportSelection,
             getActivePath: () => jotaiStore.get(activeProfilerReportAtom)?.path,
+            kind: ReportKind.PROFILER,
         });
 
     const syncSelectedPerfReportFolder = (folder?: RemoteFolder) =>
@@ -593,6 +635,7 @@ const RemoteSyncConfigurator = () => {
             activateWithToast: updatePerformanceSelection,
             applySelection: applyPerformanceReportSelection,
             getActivePath: () => jotaiStore.get(activePerformanceReportAtom)?.path,
+            kind: ReportKind.PERFORMANCE,
         });
 
     /**
@@ -607,11 +650,13 @@ const RemoteSyncConfigurator = () => {
             syncFolder,
             mount,
             activateWithToast,
+            kind,
         }: {
             setSelected: (folder: RemoteFolder) => void;
             syncFolder: (folder: RemoteFolder) => Promise<void>;
             mount: (connection: RemoteConnection, folder: RemoteFolder) => Promise<AxiosResponse>;
             activateWithToast: (folder: RemoteFolder) => void;
+            kind: ReportKind;
         },
     ) => {
         setSelected(folder);
@@ -621,7 +666,7 @@ const RemoteSyncConfigurator = () => {
             return;
         }
 
-        await mountAndActivateFolder(folder, { mount, activateWithToast });
+        await mountAndActivateFolder(folder, { mount, activateWithToast, kind });
     };
 
     const isProfilerRemote = profilerReportLocation === ReportLocation.REMOTE;
@@ -778,6 +823,7 @@ const RemoteSyncConfigurator = () => {
                             syncFolder: syncSelectedReportFolder,
                             mount: (connection, report) => remote.mountRemoteFolder(connection, report),
                             activateWithToast: updateReportSelection,
+                            kind: ReportKind.PROFILER,
                         })
                     }
                     type='profiler'
@@ -812,6 +858,7 @@ const RemoteSyncConfigurator = () => {
                             syncFolder: syncSelectedPerfReportFolder,
                             mount: (connection, report) => remote.mountRemoteFolder(connection, undefined, report),
                             activateWithToast: updatePerformanceSelection,
+                            kind: ReportKind.PERFORMANCE,
                         })
                     }
                     type='performance'

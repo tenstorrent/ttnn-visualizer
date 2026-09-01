@@ -5,7 +5,7 @@
 import '@testing-library/jest-dom/vitest';
 import { Classes } from '@blueprintjs/core';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { AxiosResponse } from 'axios';
+import { AxiosResponse, CanceledError } from 'axios';
 import { useAtomValue } from 'jotai';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import RemoteSyncConfigurator from '../src/components/report-selection/RemoteSyncConfigurator';
@@ -53,6 +53,7 @@ import {
 import { SshConfigHostsQueryResult, noSshConfigResult } from './helpers/sshConfigFixtures';
 import testForPortal from './helpers/testForPortal';
 import { TestProviders } from './helpers/TestProviders';
+import { ReportKind, ReportLoadFailureReason, ReportSource } from '../src/definitions/UsageEvent';
 
 // Scrub the markup after each test
 afterEach(() => {
@@ -80,14 +81,21 @@ const IsActivatingReportProbe = () => {
     return <span data-testid={IS_ACTIVATING_REPORT_PROBE_TEST_ID}>{isActivatingReport ? 'true' : 'false'}</span>;
 };
 
-const { mockUseReportFolderList, mockUsePerfFolderList, mockUseInstance, mockUseReportMetadata } = vi.hoisted(() => {
-    return {
-        mockUseReportFolderList: vi.fn(),
-        mockUsePerfFolderList: vi.fn(),
-        mockUseInstance: vi.fn(),
-        mockUseReportMetadata: vi.fn(),
-    };
-});
+const {
+    mockUseReportFolderList,
+    mockUsePerfFolderList,
+    mockUseInstance,
+    mockUseReportMetadata,
+    recordReportLoaded,
+    recordReportLoadFailed,
+} = vi.hoisted(() => ({
+    mockUseReportFolderList: vi.fn(),
+    mockUsePerfFolderList: vi.fn(),
+    mockUseInstance: vi.fn(),
+    mockUseReportMetadata: vi.fn(),
+    recordReportLoaded: vi.fn(),
+    recordReportLoadFailed: vi.fn(),
+}));
 
 const useSshConfigHostsMock = vi.hoisted(() => vi.fn<(enabled?: boolean) => SshConfigHostsQueryResult>());
 
@@ -113,6 +121,12 @@ vi.mock('../src/libs/axiosInstance', () => ({
         // "axiosInstance.get is not a function" swallowed by a query's error state.
         get: vi.fn(),
     },
+}));
+
+vi.mock('../src/functions/reportLoadUsage', () => ({
+    getReportLoadFailureReason: () => ReportLoadFailureReason.OTHER,
+    recordReportLoaded,
+    recordReportLoadFailed,
 }));
 
 // The edit dialog renders SshConfigHostPicker; without this it would issue a real request from
@@ -698,6 +712,8 @@ it('disables remote report selectors while mount is confirming the active report
         });
         expect(screen.getByTestId(TEST_IDS.REMOTE_SYNC_BUTTON)).toHaveProperty(HTML_DISABLED, false);
     }, WAIT_FOR_OPTIONS);
+    expect(recordReportLoaded).toHaveBeenCalledWith(ReportKind.PERFORMANCE, ReportSource.REMOTE_SYNC);
+    expect(recordReportLoaded).toHaveBeenCalledTimes(1);
 });
 
 it('re-enables remote report selectors when mount fails', async () => {
@@ -745,6 +761,39 @@ it('re-enables remote report selectors when mount fails', async () => {
         const enabledButtons = selectButtons.filter((btn) => !btn.hasAttribute(HTML_DISABLED));
         expect(enabledButtons.length).toBeGreaterThan(0);
     }, WAIT_FOR_OPTIONS);
+    expect(recordReportLoadFailed).toHaveBeenCalledWith(ReportKind.PERFORMANCE, ReportLoadFailureReason.OTHER);
+    expect(recordReportLoadFailed).toHaveBeenCalledTimes(1);
+});
+
+it('does not record a cancelled remote mount as a load failure', async () => {
+    const axiosInstance = await import('../src/libs/axiosInstance');
+    const mockPost = vi.mocked(axiosInstance.default.post);
+    const selectedReport: RemoteFolder = {
+        ...mockRemotePerformanceFolderList[0],
+        lastSynced: mockRemotePerformanceFolderList[0].lastModified + 1000,
+    };
+
+    mockPost.mockImplementation((url: string) =>
+        url.includes('/api/remote/use')
+            ? Promise.reject(new CanceledError())
+            : mockRemoteFolderApis(url, selectedReport),
+    );
+    setupConnection(remoteConnection);
+
+    render(
+        <TestProviders>
+            <RemoteSyncConfigurator />
+        </TestProviders>,
+    );
+    await selectPerformanceFolder(selectedReport.remotePath);
+    await waitFor(() => {
+        const enabledButtons = screen
+            .queryAllByTestId(TEST_IDS.REMOTE_FOLDER_SELECTOR_BUTTON)
+            .filter((button) => !button.hasAttribute(HTML_DISABLED));
+        expect(enabledButtons.length).toBeGreaterThan(0);
+    }, WAIT_FOR_OPTIONS);
+
+    expect(recordReportLoadFailed).not.toHaveBeenCalled();
 });
 
 it('mounts a previously synced outdated performance folder on selection without syncing', async () => {
@@ -775,6 +824,7 @@ it('mounts a previously synced outdated performance folder on selection without 
 
     expect(mockPost.mock.calls.some(([url]) => String(url).includes('/api/remote/sync'))).toBe(false);
     expect(mockPost.mock.calls.some(([url]) => String(url).includes('/api/remote/use'))).toBe(true);
+    expect(recordReportLoaded).toHaveBeenCalledWith(ReportKind.PERFORMANCE, ReportSource.REMOTE_SYNC);
 });
 
 it('mounts a previously synced outdated memory folder on selection without syncing', async () => {
@@ -811,6 +861,7 @@ it('mounts a previously synced outdated memory folder on selection without synci
 
     expect(mockPost.mock.calls.some(([url]) => String(url).includes('/api/remote/sync'))).toBe(false);
     expect(mockPost.mock.calls.some(([url]) => String(url).includes('/api/remote/use'))).toBe(true);
+    expect(recordReportLoaded).toHaveBeenCalledWith(ReportKind.PROFILER, ReportSource.REMOTE_SYNC);
 });
 
 it('does not activate remote report when a local report is chosen mid-sync', async () => {
@@ -975,6 +1026,9 @@ it('falls back to the local copy when never-synced select sync fails', async () 
 
     expect(mockPost.mock.calls.some(([url]) => String(url).includes('/api/remote/sync'))).toBe(true);
     expect(mockPost.mock.calls.some(([url]) => String(url).includes('/api/remote/use'))).toBe(true);
+    expect(recordReportLoaded).toHaveBeenCalledWith(ReportKind.PERFORMANCE, ReportSource.REMOTE_SYNC);
+    expect(recordReportLoadFailed).not.toHaveBeenCalled();
+    expect(recordReportLoaded).toHaveBeenCalledTimes(1);
 });
 
 it('mounts the local copy and warns when Sync fails for a previously synced folder', async () => {
@@ -1072,6 +1126,8 @@ it('shows Folder sync error when Sync and local mount both fail', async () => {
         expect(screen.getByText(FOLDER_SYNC_ERROR_TOAST_TITLE)).not.toBeNull();
         expect(screen.queryByText(FOLDER_SYNC_LOCAL_FALLBACK_TOAST_TITLE)).toBeNull();
     }, WAIT_FOR_OPTIONS);
+    expect(recordReportLoadFailed).toHaveBeenCalledWith(ReportKind.PERFORMANCE, ReportLoadFailureReason.OTHER);
+    expect(recordReportLoadFailed).toHaveBeenCalledTimes(1);
 });
 
 it('loads local synced reports when Fetch remote list fails but local list has folders', async () => {

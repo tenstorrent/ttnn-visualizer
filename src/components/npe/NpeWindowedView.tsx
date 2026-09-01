@@ -12,17 +12,27 @@ import { TEST_IDS } from '../../definitions/TestIds';
 import { NpeSummary } from '../../model/NPEModel';
 import NPEProcessingStatus from '../NPEProcessingStatus';
 import NPEView from './NPEViewComponent';
+import { validateNpeVersion } from '../../functions/validateNpeData';
 
 interface NpeWindowedViewProps {
     fileName: string | null;
+    loadAttemptId: number | null;
+    onInitialLoadSuccess: (attemptId: number) => void;
+    onInitialLoadFailure: (attemptId: number, errorCode: NPEValidationError, error?: unknown) => void;
 }
 
 // #861 PoC container: drives the selected timestep, fetches only that step's
 // window, and feeds an assembled NPEData into the unchanged NPEView. Scrubbing
 // updates `selectedTimestep`, which refetches the next window.
-const NpeWindowedView = ({ fileName }: NpeWindowedViewProps) => {
+const NpeWindowedView = ({
+    fileName,
+    loadAttemptId,
+    onInitialLoadSuccess,
+    onInitialLoadFailure,
+}: NpeWindowedViewProps) => {
     const [selectedTimestep, setSelectedTimestep] = useState(0);
     const initialisedSummary = useRef<NpeSummary | null>(null);
+    const settledLoadAttemptIdRef = useRef<number | null>(null);
     const {
         data: summary,
         isLoading: isLoadingSummary,
@@ -48,7 +58,14 @@ const NpeWindowedView = ({ fileName }: NpeWindowedViewProps) => {
     // Stable per-step aggregate skeleton for the timeline, built once per summary
     // so scrubbing neither rebuilds ~54k step objects nor churns the timeline's
     // O(n_timesteps) heat-bar memo.
-    const baseTimestepData = useMemo(() => (summary ? buildTimestepSkeleton(summary) : null), [summary]);
+    const versionError = useMemo(
+        () => (summary ? validateNpeVersion(summary.common_info?.version) : NPEValidationError.OK),
+        [summary],
+    );
+    const baseTimestepData = useMemo(
+        () => (summary && versionError === NPEValidationError.OK ? buildTimestepSkeleton(summary) : null),
+        [summary, versionError],
+    );
 
     // Assemble at `selectedTimestep` (not `npeWindow.t`) so an in-flight seek keeps
     // the previous frame on the rendered step instead of flashing empty.
@@ -59,6 +76,40 @@ const NpeWindowedView = ({ fileName }: NpeWindowedViewProps) => {
                 : null,
         [summary, npeWindow, baseTimestepData, selectedTimestep],
     );
+    useEffect(() => {
+        if (loadAttemptId === null || settledLoadAttemptIdRef.current === loadAttemptId) {
+            return;
+        }
+
+        if (isSummaryError) {
+            settledLoadAttemptIdRef.current = loadAttemptId;
+            onInitialLoadFailure(loadAttemptId, NPEValidationError.DEFAULT, summaryError);
+        } else if (summary && summary.n_timesteps === 0) {
+            settledLoadAttemptIdRef.current = loadAttemptId;
+            onInitialLoadFailure(loadAttemptId, NPEValidationError.EMPTY_NPE_TRACE);
+        } else if (versionError !== NPEValidationError.OK) {
+            settledLoadAttemptIdRef.current = loadAttemptId;
+            onInitialLoadFailure(loadAttemptId, versionError);
+        } else if (isWindowError && !isLoadingSummary && !npeData) {
+            settledLoadAttemptIdRef.current = loadAttemptId;
+            onInitialLoadFailure(loadAttemptId, NPEValidationError.DEFAULT, windowError);
+        } else if (npeData) {
+            settledLoadAttemptIdRef.current = loadAttemptId;
+            onInitialLoadSuccess(loadAttemptId);
+        }
+    }, [
+        isLoadingSummary,
+        isSummaryError,
+        isWindowError,
+        loadAttemptId,
+        npeData,
+        onInitialLoadFailure,
+        onInitialLoadSuccess,
+        summary,
+        summaryError,
+        versionError,
+        windowError,
+    ]);
 
     if (!fileName) {
         return null;
@@ -81,6 +132,15 @@ const NpeWindowedView = ({ fileName }: NpeWindowedViewProps) => {
         content = (
             <NPEProcessingStatus
                 errorCode={NPEValidationError.EMPTY_NPE_TRACE}
+                dataVersion={summary.common_info?.version ?? null}
+                hasUploadedFile
+                isLoading={false}
+            />
+        );
+    } else if (summary && versionError !== NPEValidationError.OK) {
+        content = (
+            <NPEProcessingStatus
+                errorCode={versionError}
                 dataVersion={summary.common_info?.version ?? null}
                 hasUploadedFile
                 isLoading={false}

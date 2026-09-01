@@ -12,9 +12,11 @@ import type { GraphBundle } from '../src/model/MLIRJsonModel';
 
 const mockResetMemoryListStates = vi.fn();
 
-const { mockUseInstance, mockUseReportFolderList } = vi.hoisted(() => ({
+const { mockUseInstance, mockUseReportFolderList, recordReportLoaded, recordReportLoadFailed } = vi.hoisted(() => ({
     mockUseInstance: vi.fn(),
     mockUseReportFolderList: vi.fn(),
+    recordReportLoaded: vi.fn(),
+    recordReportLoadFailed: vi.fn(),
 }));
 
 vi.mock('../src/hooks/useAPI', () => ({
@@ -29,6 +31,11 @@ vi.mock('../src/hooks/useRemote', () => ({
             getSavedReportFolders: () => [],
         },
     }),
+}));
+
+vi.mock('../src/functions/reportLoadUsage', () => ({
+    recordReportLoaded,
+    recordReportLoadFailed,
 }));
 
 vi.mock('../src/hooks/useRestoreScrollPosition', async () => {
@@ -103,6 +110,33 @@ it('does not reset memory list state during initial instance hydration', async (
     });
 
     expect(mockResetMemoryListStates).toHaveBeenCalledTimes(0);
+});
+
+it('does not record restored reports as user-initiated loads', async () => {
+    mockUseInstance.mockReturnValue({
+        data: {
+            active_report: {
+                profiler_name: 'restored-profiler',
+                profiler_location: 'local',
+                performance_name: 'restored-performance',
+                performance_location: 'local',
+                npe_name: 'restored-npe',
+                mlir_name: 'restored-mlir',
+            },
+            remote_profiler_folder: null,
+        },
+        isLoading: false,
+    });
+
+    render(
+        <TestProviders>
+            <HookHarness />
+        </TestProviders>,
+    );
+
+    await waitFor(() => expect(screen.getByText('restored')).toBeTruthy());
+    expect(recordReportLoaded).not.toHaveBeenCalled();
+    expect(recordReportLoadFailed).not.toHaveBeenCalled();
 });
 
 it('resets memory list state on first report change after null baseline', async () => {

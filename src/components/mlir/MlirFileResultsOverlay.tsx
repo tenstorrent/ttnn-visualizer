@@ -29,6 +29,12 @@ import getResponseError from '../../functions/getResponseError';
 import { getActiveMlirServer } from '../../functions/mlirServer';
 import { MlirFileResult, MlirLoadedReport } from '../../model/MLIRJsonModel';
 import mapConvertedMlirServerResult from '../../functions/mapConvertedMlirServerResult';
+import { ReportKind, ReportLoadFailureReason, ReportSource } from '../../definitions/UsageEvent';
+import {
+    getReportLoadFailureReason,
+    recordReportLoadFailed,
+    recordReportLoaded,
+} from '../../functions/reportLoadUsage';
 import 'styles/components/MlirFileResultsOverlay.scss';
 
 const MAX_MLIR_FILE_SELECTION = 2;
@@ -173,11 +179,13 @@ const MlirFileResultsOverlay = () => {
                 return;
             }
 
+            const mappedResult = mapConvertedMlirServerResult(retried, result.host ?? null);
+            if (mappedResult.status === ConnectionTestStates.FAILED) {
+                recordReportLoadFailed(ReportKind.MLIR, ReportLoadFailureReason.OTHER);
+            }
             setResults(
                 (current) =>
-                    current?.map((entry, entryIndex) =>
-                        entryIndex === index ? mapConvertedMlirServerResult(retried, entry.host ?? null) : entry,
-                    ) ?? current,
+                    current?.map((entry, entryIndex) => (entryIndex === index ? mappedResult : entry)) ?? current,
             );
         } catch (err: unknown) {
             // Skip writeback for user-triggered aborts (close, unmount, or per-row cancel).
@@ -206,6 +214,7 @@ const MlirFileResultsOverlay = () => {
                     ) ?? current,
             );
             createToastNotification('MLIR', message, ToastType.ERROR);
+            recordReportLoadFailed(ReportKind.MLIR, getReportLoadFailureReason(err));
         } finally {
             // Only delete the controller if it matches the one we stored for this retry.
             // Prevents a stale (completed) retry's finally block from evicting a new controller
@@ -250,8 +259,6 @@ const MlirFileResultsOverlay = () => {
             // the same peer name while staying on the MLIR route.
             setSplitViewEpoch((epoch) => epoch + 1);
         }
-        setMlirLoadedReports(loadedReports);
-
         // Local JSON loads live only in memory; only server uploads are stored
         // on disk and can be recorded as the instance's active MLIR so a reload
         // restores them. Persist index 0 only.
@@ -260,9 +267,13 @@ const MlirFileResultsOverlay = () => {
                 await setActiveMlir(primary.name, primary.host);
             } catch (err: unknown) {
                 createToastNotification('MLIR', getResponseError(err, 'Unable to set active MLIR'), ToastType.ERROR);
+                selectedResults.forEach(() => recordReportLoadFailed(ReportKind.MLIR, getReportLoadFailureReason(err)));
                 return;
             }
         }
+
+        setMlirLoadedReports(loadedReports);
+        selectedResults.forEach(() => recordReportLoaded(ReportKind.MLIR, ReportSource.UPLOAD));
 
         const toastDetail = comparison ? `${primary.filename} / ${comparison.filename}` : primary.filename;
         createToastNotification('MLIR', toastDetail, ToastType.SUCCESS);

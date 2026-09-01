@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import '@testing-library/jest-dom/vitest';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { AxiosError, HttpStatusCode } from 'axios';
 import { getDefaultStore } from 'jotai';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -11,6 +11,7 @@ import { TestProviders } from './helpers/TestProviders';
 import { minimalValidNpeData } from './helpers/npeFixtures';
 import { activeNpeOpTraceAtom } from '../src/store/app';
 import { TEST_IDS } from '../src/definitions/TestIds';
+import { ReportKind, ReportLoadFailureReason, ReportSource } from '../src/definitions/UsageEvent';
 
 // Mutable holders shared with the hoisted mock factories so each case can flip
 // SERVER_MODE / route params and inspect how useNpe was gated.
@@ -20,11 +21,18 @@ const h = vi.hoisted(() => ({
     serverMode: true as boolean,
     params: {} as { filepath?: string },
     useNpeArgs: [] as (string | null)[],
+    windowedProps: null as {
+        loadAttemptId: number | null;
+        onInitialLoadSuccess: (attemptId: number) => void;
+        onInitialLoadFailure: (attemptId: number, errorCode: number, error?: unknown) => void;
+    } | null,
 }));
 
-const { mockUseNpe, mockUseNPETimelineFile } = vi.hoisted(() => ({
+const { mockUseNpe, mockUseNPETimelineFile, recordReportLoaded, recordReportLoadFailed } = vi.hoisted(() => ({
     mockUseNpe: vi.fn(),
     mockUseNPETimelineFile: vi.fn(),
+    recordReportLoaded: vi.fn(),
+    recordReportLoadFailed: vi.fn(),
 }));
 
 vi.mock('../src/functions/getServerConfig', () => ({ default: () => ({ SERVER_MODE: h.serverMode }) }));
@@ -51,13 +59,49 @@ vi.mock('../src/hooks/useAPI', async () => {
     };
 });
 vi.mock('../src/components/npe/NpeWindowedView', () => ({
-    default: () => <div data-testid={TEST_IDS.NPE_WINDOWED_VIEW} />,
+    default: (props: NonNullable<typeof h.windowedProps>) => {
+        h.windowedProps = props;
+        return <div data-testid={TEST_IDS.NPE_WINDOWED_VIEW} />;
+    },
 }));
 vi.mock('../src/components/npe/NPEViewComponent', () => ({
     default: () => <div data-testid={TEST_IDS.NPE_VIEW} />,
 }));
-vi.mock('../src/components/npe/NPEFileLoader', () => ({ default: () => null }));
-vi.mock('../src/components/npe/NPEDemoSelect', () => ({ default: () => null }));
+vi.mock('../src/components/npe/NPEFileLoader', () => ({
+    default: ({ onUploadAccepted }: { onUploadAccepted: (fileName: string) => void }) => (
+        <button
+            onClick={() => {
+                onUploadAccepted('trace.json');
+                getDefaultStore().set(activeNpeOpTraceAtom, 'trace.json');
+            }}
+        >
+            accept-npe-upload
+        </button>
+    ),
+}));
+vi.mock('../src/components/npe/NPEDemoSelect', () => ({
+    default: ({
+        setDemoData,
+        onDemoSelected,
+    }: {
+        setDemoData: (data: typeof minimalValidNpeData) => void;
+        onDemoSelected: () => void;
+    }) => (
+        <button
+            onClick={() => {
+                onDemoSelected();
+                setDemoData(minimalValidNpeData);
+            }}
+        >
+            select-npe-demo
+        </button>
+    ),
+}));
+vi.mock('../src/functions/reportLoadUsage', () => ({
+    getNpeReportLoadFailureReason: () => ReportLoadFailureReason.PARSE_ERROR,
+    recordReportLoaded,
+    recordReportLoadFailed,
+}));
 
 // Import after vi.mock so the route under test sees the stubs.
 // eslint-disable-next-line import/first
@@ -97,6 +141,7 @@ beforeEach(() => {
     h.serverMode = true;
     h.params = {};
     h.useNpeArgs = [];
+    h.windowedProps = null;
     mockUseNpe.mockReturnValue(settledNpe);
     mockUseNPETimelineFile.mockReturnValue(idleTimeline);
 });
@@ -145,6 +190,65 @@ describe('NPE route windowed-view gate', () => {
         h.serverMode = false;
         renderRoute(null);
         expect(screen.queryByTestId(TEST_IDS.NPE_WINDOWED_VIEW)).toBeNull();
+    });
+});
+
+describe('NPE report-load recording', () => {
+    it('does not count an active report restored without a user load attempt', () => {
+        renderRoute();
+
+        expect(screen.getByTestId(TEST_IDS.NPE_VIEW)).toBeInTheDocument();
+        expect(recordReportLoaded).not.toHaveBeenCalled();
+        expect(recordReportLoadFailed).not.toHaveBeenCalled();
+    });
+
+    it('ignores stale windowed completions and counts only the latest upload attempt', async () => {
+        h.serverMode = false;
+        renderRoute();
+
+        fireEvent.click(screen.getByRole('button', { name: 'accept-npe-upload' }));
+        await waitFor(() => expect(h.windowedProps?.loadAttemptId).toBe(1));
+        const staleAttemptId = h.windowedProps?.loadAttemptId;
+
+        fireEvent.click(screen.getByRole('button', { name: 'accept-npe-upload' }));
+        await waitFor(() => expect(h.windowedProps?.loadAttemptId).toBe(2));
+
+        h.windowedProps?.onInitialLoadSuccess(staleAttemptId ?? -1);
+        expect(recordReportLoaded).not.toHaveBeenCalled();
+
+        h.windowedProps?.onInitialLoadSuccess(2);
+        expect(recordReportLoaded).toHaveBeenCalledWith(ReportKind.NPE, ReportSource.UPLOAD);
+        h.windowedProps?.onInitialLoadSuccess(2);
+        h.windowedProps?.onInitialLoadFailure(2, 1);
+        expect(recordReportLoaded).toHaveBeenCalledTimes(1);
+        expect(recordReportLoadFailed).not.toHaveBeenCalled();
+    });
+
+    it('records a validated demo using the demo source', async () => {
+        renderRoute(null);
+
+        fireEvent.click(screen.getByRole('button', { name: 'select-npe-demo' }));
+
+        await waitFor(() => expect(recordReportLoaded).toHaveBeenCalledWith(ReportKind.NPE, ReportSource.DEMO));
+        expect(recordReportLoaded).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not validate a hosted upload against stale demo data', async () => {
+        renderRoute(null);
+        fireEvent.click(screen.getByRole('button', { name: 'select-npe-demo' }));
+        await waitFor(() => expect(recordReportLoaded).toHaveBeenCalledTimes(1));
+        recordReportLoaded.mockClear();
+
+        mockUseNpe.mockReturnValue({
+            data: { malformed: true },
+            isLoading: false,
+            error: null,
+        });
+        fireEvent.click(screen.getByRole('button', { name: 'accept-npe-upload' }));
+
+        await waitFor(() => expect(recordReportLoadFailed).toHaveBeenCalledTimes(1));
+        expect(recordReportLoadFailed).toHaveBeenCalledWith(ReportKind.NPE, ReportLoadFailureReason.PARSE_ERROR);
+        expect(recordReportLoaded).not.toHaveBeenCalled();
     });
 });
 

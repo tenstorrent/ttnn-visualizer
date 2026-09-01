@@ -25,6 +25,7 @@ import { getDeleteActionLabel } from '../src/functions/managedEntityLabels';
 import { isActivatingReportAtom } from '../src/store/app';
 import testForPortal from './helpers/testForPortal';
 import createMockFile, { MOCK_FOLDER } from './helpers/createMockFile';
+import { ReportKind, ReportLoadFailureReason, ReportSource } from '../src/definitions/UsageEvent';
 
 // Scrub the markup after each test
 const WAIT_FOR_OPTIONS = { timeout: 1000 };
@@ -35,11 +36,20 @@ const mockPerfFolderList = [...mockPerformanceReportFolders];
 
 // The folder list is the mocked query's only source of truth, so deleting has to remove from it
 // for anything downstream of the delete to be observable.
-const { mockUpdateInstance, mockDeleteProfiler, mockDeletePerformance, mockProfilerFolders } = vi.hoisted(() => ({
+const {
+    mockUpdateInstance,
+    mockDeleteProfiler,
+    mockDeletePerformance,
+    mockProfilerFolders,
+    recordReportLoaded,
+    recordReportLoadFailed,
+} = vi.hoisted(() => ({
     mockUpdateInstance: vi.fn(),
     mockDeleteProfiler: vi.fn(),
     mockDeletePerformance: vi.fn(),
     mockProfilerFolders: [] as { path: string; reportName: string }[],
+    recordReportLoaded: vi.fn(),
+    recordReportLoadFailed: vi.fn(),
 }));
 
 vi.mock('../src/hooks/useLocal', async () => {
@@ -83,6 +93,12 @@ vi.mock('../src/hooks/useAPI', async () => {
     };
 });
 
+vi.mock('../src/functions/reportLoadUsage', () => ({
+    getReportLoadFailureReason: () => ReportLoadFailureReason.OTHER,
+    recordReportLoaded,
+    recordReportLoadFailed,
+}));
+
 const defaultUpdateInstance = (updates: {
     active_report?: { profiler_name?: string | { path: string }; performance_name?: string | { path: string } };
 }) => {
@@ -113,6 +129,8 @@ afterEach(() => {
 });
 
 beforeEach(() => {
+    recordReportLoaded.mockClear();
+    recordReportLoadFailed.mockClear();
     // Restore both lists in place: the mock factories closed over these array references.
     mockProfilerFolders.splice(0, mockProfilerFolders.length, ...mockProfilerFolderList);
     mockPerfFolderList.splice(0, mockPerfFolderList.length, ...mockPerformanceReportFolders);
@@ -239,6 +257,8 @@ it('updates the instance when a profiler report is selected and creates toast me
 
     expect(getAllButtonsWithText(reportName)).toHaveLength(1);
     expect(getAllButtonsWithText(SELECT_REPORT_TEXT)).toHaveLength(1);
+    expect(recordReportLoaded).toHaveBeenCalledWith(ReportKind.PROFILER, ReportSource.LOCAL_TT_METAL);
+    expect(recordReportLoaded).toHaveBeenCalledTimes(1);
 });
 
 it('updates the instance when a performance report is selected and creates toast message', async () => {
@@ -263,6 +283,8 @@ it('updates the instance when a performance report is selected and creates toast
 
     expect(getAllButtonsWithText(path)).toHaveLength(1);
     expect(getAllButtonsWithText(SELECT_REPORT_TEXT)).toHaveLength(1);
+    expect(recordReportLoaded).toHaveBeenCalledWith(ReportKind.PERFORMANCE, ReportSource.LOCAL_TT_METAL);
+    expect(recordReportLoaded).toHaveBeenCalledTimes(1);
 });
 
 it('handles invalid memory report upload', async () => {
@@ -288,6 +310,21 @@ it('handles invalid memory report upload', async () => {
     );
 
     expect(getAllButtonsWithText(SELECT_REPORT_TEXT)).toHaveLength(2);
+    expect(recordReportLoadFailed).toHaveBeenCalledWith(ReportKind.PROFILER, ReportLoadFailureReason.MISSING_FILE);
+    expect(recordReportLoadFailed).toHaveBeenCalledTimes(1);
+});
+
+it('does not record cancelling a local file picker as a failed load', () => {
+    render(
+        <TestProviders>
+            <LocalFolderSelector />
+        </TestProviders>,
+    );
+
+    fireEvent.change(screen.getByTestId(TEST_IDS.LOCAL_PROFILER_UPLOAD), { target: { files: [] } });
+    fireEvent.change(screen.getByTestId(TEST_IDS.LOCAL_PERFORMANCE_UPLOAD), { target: { files: [] } });
+
+    expect(recordReportLoadFailed).not.toHaveBeenCalled();
 });
 
 it('handles valid memory report upload', async () => {
@@ -318,6 +355,8 @@ it('handles valid memory report upload', async () => {
     const { reportName } = mockProfilerFolderList[0];
     expect(getAllButtonsWithText(reportName)).toHaveLength(1);
     expect(getAllButtonsWithText(SELECT_REPORT_TEXT)).toHaveLength(1);
+    expect(recordReportLoaded).toHaveBeenCalledWith(ReportKind.PROFILER, ReportSource.UPLOAD);
+    expect(recordReportLoaded).toHaveBeenCalledTimes(1);
 });
 
 it('handles invalid performance report upload', async () => {
@@ -341,6 +380,8 @@ it('handles invalid performance report upload', async () => {
             ),
         WAIT_FOR_OPTIONS,
     );
+    expect(recordReportLoadFailed).toHaveBeenCalledWith(ReportKind.PERFORMANCE, ReportLoadFailureReason.MISSING_FILE);
+    expect(recordReportLoadFailed).toHaveBeenCalledTimes(1);
 });
 
 it('handles valid performance report upload', async () => {
@@ -379,6 +420,8 @@ it('handles valid performance report upload', async () => {
 
     expect(getAllButtonsWithText(MOCK_FOLDER)).toHaveLength(1);
     expect(getAllButtonsWithText(SELECT_REPORT_TEXT)).toHaveLength(1);
+    expect(recordReportLoaded).toHaveBeenCalledWith(ReportKind.PERFORMANCE, ReportSource.UPLOAD);
+    expect(recordReportLoaded).toHaveBeenCalledTimes(1);
 });
 
 it('handles valid performance report upload without tracy', async () => {

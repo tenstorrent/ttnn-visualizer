@@ -51,6 +51,12 @@ import {
 import { TEST_IDS } from '../../definitions/TestIds';
 import { DBVersionValidation } from '../../definitions/Versions';
 import { evaluateDbVersion } from '../../functions/compareDbVersion';
+import { ReportKind, ReportLoadFailureReason, ReportSource } from '../../definitions/UsageEvent';
+import {
+    getReportLoadFailureReason,
+    recordReportLoadFailed,
+    recordReportLoaded,
+} from '../../functions/reportLoadUsage';
 
 const ICON_MAP: Record<ConnectionTestStates, IconName> = {
     [ConnectionTestStates.IDLE]: IconNames.DOT,
@@ -166,7 +172,7 @@ const LocalFolderOptions = () => {
         useReportLinkBadgeIds();
 
     const handleReportDirectoryOpen = async (e: ChangeEvent<HTMLInputElement>) => {
-        if (!e.target.files) {
+        if (!e.target.files?.length) {
             return;
         }
 
@@ -175,6 +181,7 @@ const LocalFolderOptions = () => {
 
         if (!checkRequiredReportFiles(files)) {
             setProfilerFolder(invalidReportStatus);
+            recordReportLoadFailed(ReportKind.PROFILER, ReportLoadFailureReason.MISSING_FILE);
             return;
         }
 
@@ -200,9 +207,11 @@ const LocalFolderOptions = () => {
             createToastNotification(ACTIVE_MEMORY_REPORT_TOAST_TITLE, updatedReport.reportName, ToastType.SUCCESS);
             setProfilerReportLocation(ReportLocation.LOCAL);
             setProfilerFolder(connectionOkStatus);
+            recordReportLoaded(ReportKind.PROFILER, ReportSource.UPLOAD);
         } catch (err: unknown) {
             const message = getResponseError(err, 'Unable to upload selected directory');
             setProfilerFolder({ status: ConnectionTestStates.FAILED, message });
+            recordReportLoadFailed(ReportKind.PROFILER, getReportLoadFailureReason(err));
         } finally {
             clearReportCaches(queryClient);
             setIsUploadingReport(false);
@@ -210,7 +219,7 @@ const LocalFolderOptions = () => {
     };
 
     const handlePerformanceDirectoryOpen = async (e: ChangeEvent<HTMLInputElement>) => {
-        if (!e.target.files) {
+        if (!e.target.files?.length) {
             return;
         }
 
@@ -219,6 +228,7 @@ const LocalFolderOptions = () => {
 
         if (!checkRequiredPerformanceFiles(files)) {
             setPerformanceFolder(invalidProfilerStatus);
+            recordReportLoadFailed(ReportKind.PERFORMANCE, ReportLoadFailureReason.MISSING_FILE);
             return;
         }
 
@@ -230,6 +240,7 @@ const LocalFolderOptions = () => {
 
             if (response?.data?.status !== ConnectionTestStates.OK) {
                 setPerformanceFolder(directoryErrorStatus);
+                recordReportLoadFailed(ReportKind.PERFORMANCE, ReportLoadFailureReason.MISSING_FILE);
             } else {
                 const fileName = getFolderName(files);
                 setPerformanceDataUploadLabel(`${files.length} files uploaded`);
@@ -237,10 +248,12 @@ const LocalFolderOptions = () => {
                 setActivePerformanceReport({ path: fileName, reportName: fileName });
                 createToastNotification(ACTIVE_PERFORMANCE_REPORT_TOAST_TITLE, fileName, ToastType.SUCCESS);
                 setPerformanceFolder(connectionOkStatus);
+                recordReportLoaded(ReportKind.PERFORMANCE, ReportSource.UPLOAD);
             }
         } catch (err: unknown) {
             const message = getResponseError(err, 'Unable to upload selected directory');
             setPerformanceFolder({ status: ConnectionTestStates.FAILED, message });
+            recordReportLoadFailed(ReportKind.PERFORMANCE, getReportLoadFailureReason(err));
         } finally {
             clearReportCaches(queryClient);
             setIsPerformanceUploading(false);
@@ -248,20 +261,26 @@ const LocalFolderOptions = () => {
     };
 
     const handleSelectProfiler = async (folder: ReportFolder) => {
-        await withActivatingReport(async () => {
-            // Backend handles updating only the specific parts of active_report
-            await updateInstance({
-                active_report: { profiler_name: folder.path, profiler_location: ReportLocation.LOCAL },
+        try {
+            await withActivatingReport(async () => {
+                // Backend handles updating only the specific parts of active_report
+                await updateInstance({
+                    active_report: { profiler_name: folder.path, profiler_location: ReportLocation.LOCAL },
+                });
+
+                if (hasBeenNormalised(folder)) {
+                    createDataIntegrityWarning(folder);
+                }
+
+                createToastNotification(ACTIVE_MEMORY_REPORT_TOAST_TITLE, folder.reportName ?? '', ToastType.SUCCESS);
+                setActiveProfilerReport(folder);
+                setProfilerReportLocation(ReportLocation.LOCAL);
+                recordReportLoaded(ReportKind.PROFILER, ReportSource.LOCAL_TT_METAL);
             });
-
-            if (hasBeenNormalised(folder)) {
-                createDataIntegrityWarning(folder);
-            }
-
-            createToastNotification(ACTIVE_MEMORY_REPORT_TOAST_TITLE, folder.reportName ?? '', ToastType.SUCCESS);
-            setActiveProfilerReport(folder);
-            setProfilerReportLocation(ReportLocation.LOCAL);
-        });
+        } catch (err: unknown) {
+            recordReportLoadFailed(ReportKind.PROFILER, getReportLoadFailureReason(err));
+            throw err;
+        }
     };
 
     const deleteReport = async (folder: ReportFolder, options: DeleteReportOptions) => {
@@ -296,16 +315,22 @@ const LocalFolderOptions = () => {
         });
 
     const handleSelectPerformance = async (folder: ReportFolder) => {
-        await withActivatingReport(async () => {
-            // Backend handles updating only the specific parts of active_report
-            await updateInstance({
-                active_report: { performance_name: folder.path, performance_location: ReportLocation.LOCAL },
-            });
+        try {
+            await withActivatingReport(async () => {
+                // Backend handles updating only the specific parts of active_report
+                await updateInstance({
+                    active_report: { performance_name: folder.path, performance_location: ReportLocation.LOCAL },
+                });
 
-            createToastNotification(ACTIVE_PERFORMANCE_REPORT_TOAST_TITLE, folder.reportName, ToastType.SUCCESS);
-            setActivePerformanceReport(folder);
-            setPerformanceReportLocation(ReportLocation.LOCAL);
-        });
+                createToastNotification(ACTIVE_PERFORMANCE_REPORT_TOAST_TITLE, folder.reportName, ToastType.SUCCESS);
+                setActivePerformanceReport(folder);
+                setPerformanceReportLocation(ReportLocation.LOCAL);
+                recordReportLoaded(ReportKind.PERFORMANCE, ReportSource.LOCAL_TT_METAL);
+            });
+        } catch (err: unknown) {
+            recordReportLoadFailed(ReportKind.PERFORMANCE, getReportLoadFailureReason(err));
+            throw err;
+        }
     };
 
     const handleDeletePerformance = (folder: ReportFolder) =>

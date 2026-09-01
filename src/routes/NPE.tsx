@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { useAtomValue } from 'jotai';
 import { useParams } from 'react-router';
@@ -18,6 +18,17 @@ import NPEDemoSelect, { NPEDemoData } from '../components/npe/NPEDemoSelect';
 import { NPEValidationError } from '../definitions/NPEData';
 import { getNpeValidationErrorFromFetch } from '../functions/getNpeValidationErrorFromFetch';
 import { validateNpeData } from '../functions/validateNpeData';
+import { ReportKind, ReportSource } from '../definitions/UsageEvent';
+import {
+    getNpeReportLoadFailureReason,
+    recordReportLoadFailed,
+    recordReportLoaded,
+} from '../functions/reportLoadUsage';
+
+interface NpeLoadAttempt {
+    id: number;
+    source: ReportSource;
+}
 
 const NPE = () => {
     const { filepath } = useParams<{ filepath?: string }>();
@@ -48,6 +59,44 @@ const NPE = () => {
     } = useNPETimelineFile(filepath);
     const [demoData, setDemoData] = useState<NPEData | null>(null);
     const [selectedDemo, setSelectedDemo] = useState<NPEDemoData | null>(null);
+    const nextLoadAttemptIdRef = useRef(0);
+    const pendingLoadAttemptRef = useRef<NpeLoadAttempt | null>(null);
+    const [pendingLoadAttemptId, setPendingLoadAttemptId] = useState<number | null>(null);
+
+    const beginLoadAttempt = useCallback((source: ReportSource) => {
+        nextLoadAttemptIdRef.current += 1;
+        const attempt = { id: nextLoadAttemptIdRef.current, source };
+        pendingLoadAttemptRef.current = attempt;
+        setPendingLoadAttemptId(attempt.id);
+    }, []);
+
+    const completeLoadAttempt = useCallback((attemptId: number) => {
+        const attempt = pendingLoadAttemptRef.current;
+        if (!attempt || attempt.id !== attemptId) {
+            return;
+        }
+
+        pendingLoadAttemptRef.current = null;
+        setPendingLoadAttemptId(null);
+        recordReportLoaded(ReportKind.NPE, attempt.source);
+    }, []);
+
+    const failLoadAttempt = useCallback((attemptId: number, errorCode: NPEValidationError, error: unknown = null) => {
+        const attempt = pendingLoadAttemptRef.current;
+        if (!attempt || attempt.id !== attemptId) {
+            return;
+        }
+
+        pendingLoadAttemptRef.current = null;
+        setPendingLoadAttemptId(null);
+        recordReportLoadFailed(ReportKind.NPE, getNpeReportLoadFailureReason(errorCode, error));
+    }, []);
+    const handleUploadAccepted = useCallback(() => {
+        setSelectedDemo(null);
+        setDemoData(null);
+        beginLoadAttempt(ReportSource.UPLOAD);
+    }, [beginLoadAttempt]);
+    const handleDemoSelected = useCallback(() => beginLoadAttempt(ReportSource.DEMO), [beginLoadAttempt]);
 
     const npeData = useMemo(() => demoData || loadedData || loadedTimeline, [demoData, loadedData, loadedTimeline]);
 
@@ -79,6 +128,27 @@ const NPE = () => {
 
     const canShowView = !isLoading && errorCode === NPEValidationError.OK && npeData != null;
 
+    useEffect(() => {
+        if (isWindowedView || pendingLoadAttemptId === null || isLoading) {
+            return;
+        }
+
+        if (canShowView) {
+            completeLoadAttempt(pendingLoadAttemptId);
+        } else if (errorCode !== NPEValidationError.OK) {
+            failLoadAttempt(pendingLoadAttemptId, errorCode, fetchError);
+        }
+    }, [
+        canShowView,
+        completeLoadAttempt,
+        errorCode,
+        failLoadAttempt,
+        fetchError,
+        isLoading,
+        isWindowedView,
+        pendingLoadAttemptId,
+    ]);
+
     let mainContent;
     if (isWindowedView) {
         // key on the report so a report switch fully remounts: resets the
@@ -88,6 +158,9 @@ const NPE = () => {
             <NpeWindowedView
                 key={npeFileName}
                 fileName={npeFileName}
+                loadAttemptId={pendingLoadAttemptId}
+                onInitialLoadSuccess={completeLoadAttempt}
+                onInitialLoadFailure={failLoadAttempt}
             />
         );
     } else if (canShowView) {
@@ -115,7 +188,7 @@ const NPE = () => {
 
             <h1 className='page-title'>NOC performance estimator</h1>
             <div className='inline-loaders'>
-                {!filepath && <NPEFileLoader />}
+                {!filepath && <NPEFileLoader onUploadAccepted={handleUploadAccepted} />}
 
                 {isDemoEnabled && (
                     <>
@@ -123,6 +196,7 @@ const NPE = () => {
                             selectedDemo={selectedDemo}
                             setSelectedDemo={setSelectedDemo}
                             setDemoData={setDemoData}
+                            onDemoSelected={handleDemoSelected}
                         />
                         <br />
                     </>
