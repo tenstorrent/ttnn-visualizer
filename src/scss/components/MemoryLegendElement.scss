@@ -65,16 +65,24 @@
         white-space: nowrap;
     }
 
-    // `min-width: 0` and the clip keep this cell's contents inside its own track:
-    // the device-operations view caps it at `$legend-tensor-column`, and without
-    // these the multipliers below would spill into the buffer-type column rather
-    // than truncate. Matches what #1897 asks of these labels. #1879
+    // `min-width: 0` and the clip keep this cell's contents inside its own track: the
+    // device-operations view caps it at `$legend-tensor-column`, and without these the
+    // multipliers below would spill into the buffer-type column. Matches what #1897
+    // asks of these labels. #1879
     .legend-description {
         display: flex;
         min-width: 0;
         align-items: center;
         overflow: hidden;
         white-space: nowrap;
+    }
+
+    // The ellipsis has to live on this rather than on the flex container: bare text
+    // inside a flex parent is an anonymous flex item and never receives
+    // `text-overflow`, which is why the tensor identifier used to clip mid-glyph.
+    .legend-description-text {
+        min-width: 0;
+        overflow: hidden;
         text-overflow: ellipsis;
     }
 

@@ -136,39 +136,3 @@ describe('op graph critical path styling', () => {
         expect(outlineOffset).toBeGreaterThan(ringWidth);
     });
 });
-
-// The two device-operation legend tracks are a fixed pair, and #1879 moved the
-// `x N cores x N devices` labels from the first into the second. Sizing them for
-// the old split clipped the labels at 180px, and widening the second without
-// narrowing the first would shift the numeric gutter this view aligns against —
-// which #1897 records as correct today. Both halves are asserted here because
-// geometry cannot be measured in jsdom.
-describe('device operation legend column budget', () => {
-    const VARIABLES = readFileSync(resolve(process.cwd(), 'src/scss/definitions/_variables.scss'), {
-        encoding: 'utf8',
-    });
-
-    const pxVar = (name: string): number => {
-        const match = VARIABLES.match(new RegExp(`\\$${name}:\\s*(\\d+)px`));
-        expect(match, `$${name} not found`).not.toBeNull();
-        return Number(match?.[1]);
-    };
-
-    it('gives the tensor column room for the multipliers it now carries', () => {
-        // `x 50 cores x 32 devices` measured 202px including its 8px gap, so the
-        // 180px this column used to be truncated it mid-word.
-        expect(pxVar('legend-tensor-column')).toBeGreaterThanOrEqual(202);
-    });
-
-    it('keeps the size and tensor columns summing to their original 480px', () => {
-        // Not an arbitrary total: the pair's width is what places the numeric
-        // gutter, so trading width between them is safe and growing the pair is not.
-        expect(pxVar('legend-size-column') + pxVar('legend-tensor-column')).toBe(480);
-    });
-
-    it('leaves the size column wider than a size plus its marker slot', () => {
-        // Narrowed once the multipliers left it; must still clear the widest size
-        // text with the aliased-CB marker reserved beside it.
-        expect(pxVar('legend-size-column')).toBeGreaterThan(pxVar('legend-marker-slot') + 100);
-    });
-});

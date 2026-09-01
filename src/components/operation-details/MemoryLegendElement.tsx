@@ -213,13 +213,18 @@ export const MemoryLegendElement = ({
                     whole string, so the size drifts left and stops lining up with the
                     plain sizes above and below it. #1879 */}
                 {multiplierLabels && <span className='legend-multipliers monospace'>{multiplierLabels}</span>}
+                {/* Wrapped rather than left as bare text: an unwrapped child of a flex
+                    container becomes an anonymous flex item, which cannot receive
+                    `text-overflow`, so this clipped mid-glyph instead of ellipsising. */}
                 {!isMultiDeviceBuffer && !chunk.empty && derivedTensor && (
-                    <>
+                    <span className='legend-description-text'>
                         {derivedTensor.operationIdentifier} {derivedTensor.operationIdentifier && ':'} Tensor{' '}
                         {derivedTensor.id}
-                    </>
+                    </span>
                 )}
-                {!isMultiDeviceBuffer && chunk.empty && emptyChunkLabel}
+                {!isMultiDeviceBuffer && chunk.empty && (
+                    <span className='legend-description-text'>{emptyChunkLabel}</span>
+                )}
             </div>
             {(bufferType || layout) && (
                 <div className='extra-info-slot'>

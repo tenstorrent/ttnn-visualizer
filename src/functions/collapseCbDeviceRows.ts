@@ -3,21 +3,9 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import type { CircularBuffer } from '../model/APIData';
-import { SINGLE_DEVICE_KEY } from './processMemoryAllocations';
+import { cbDeviceKey, createCbSlotKeys } from './cbDeviceSlots';
 
-/**
- * @description Normalise a graph node's `device_id` for use as a number.
- * `undefined` for a capture with no device dimension, or a value that is not a
- * finite number — the field is absent in older captures and emitted as a string
- * by at least one other. #1844
- */
-export const normaliseDeviceId = (deviceId: number | string | undefined): number | undefined => {
-    if (deviceId === undefined || deviceId === null || deviceId === '') {
-        return undefined;
-    }
-    const asNumber = Number(deviceId);
-    return Number.isFinite(asNumber) ? asNumber : undefined;
-};
+export { normaliseDeviceId } from './cbDeviceSlots';
 
 export interface CollapsedCircularBuffer extends CircularBuffer {
     /** Devices this row stands for. 1 when the capture carries no device dimension. */
@@ -40,7 +28,7 @@ export interface CollapsedCircularBuffer extends CircularBuffer {
  * The first occurrence in graph order is the row the rest fold onto.
  */
 export const collapseCbDeviceRows = (cbList: readonly CircularBuffer[]): CollapsedCircularBuffer[] => {
-    const repeatsByDevice = new Map<string, number>();
+    const slotKeyOf = createCbSlotKeys();
     const slotOrder: string[] = [];
     const bySlot = new Map<string, { circularBuffer: CircularBuffer; deviceKeys: Set<string> }>();
 
@@ -51,12 +39,8 @@ export const collapseCbDeviceRows = (cbList: readonly CircularBuffer[]): Collaps
             circularBuffer.core_range_set,
             circularBuffer.globallyAllocated === true,
         ].join('|');
-        const deviceKey = String(circularBuffer.device_id ?? SINGLE_DEVICE_KEY);
-        const repeatKey = `${identity}|${deviceKey}`;
-        const repeat = (repeatsByDevice.get(repeatKey) ?? 0) + 1;
-        repeatsByDevice.set(repeatKey, repeat);
-
-        const slot = `${identity}|${repeat}`;
+        const deviceKey = cbDeviceKey(circularBuffer.device_id);
+        const slot = slotKeyOf(identity, deviceKey);
         const existing = bySlot.get(slot);
         if (existing) {
             existing.deviceKeys.add(deviceKey);

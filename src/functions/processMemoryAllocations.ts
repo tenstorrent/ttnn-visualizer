@@ -6,12 +6,13 @@ import { DeviceOperationNode, Node, NodeType } from '../model/APIData';
 import { L1_NUM_CORES } from '../definitions/L1MemorySize';
 import { StringBufferType } from '../model/BufferType';
 import { AllocationDetails, CBAllocationSummary, CBDeviceFanout, CBPressureSnapshot } from '../model/MemoryAllocations';
+import { cbDeviceKey, createCbSlotKeys } from './cbDeviceSlots';
 import { getCoresInRangeList } from './math';
 
-// Keeps a graph with no device dimension accumulating into one bucket. #1844
-// Exported so the L1 legend's own collapse buckets absent ids identically — the
-// two must not disagree about how many devices a CB spans. #1879
-export const SINGLE_DEVICE_KEY = 'single';
+// Re-exported for callers that already import it from here. The device and repeat
+// bookkeeping this shares with `collapseCbDeviceRows` now lives in `cbDeviceSlots`,
+// so the two cannot disagree about a CB's device count. #1879
+export { SINGLE_DEVICE_KEY } from './cbDeviceSlots';
 
 export function processMemoryAllocations(
     graph: Node[],
@@ -39,7 +40,7 @@ export function processMemoryAllocations(
     let liveCBByIdentity = new Map<string, { summary: CBAllocationSummary; deviceKeys: Set<string> }>();
     // How many times each device has already allocated a given CB, so the key
     // above can separate repeats.
-    let cbRepeatsByDevice = new Map<string, number>();
+    let cbSlotKeyOf = createCbSlotKeys();
     const cbPressureByOpId = new Map<number, CBPressureSnapshot>();
     const cbFanout: CBDeviceFanout = {
         deviceCountByNodeId: new Map<number, number>(),
@@ -49,7 +50,7 @@ export function processMemoryAllocations(
     const resetLiveCBs = () => {
         liveCBs = [];
         liveCBByIdentity = new Map();
-        cbRepeatsByDevice = new Map();
+        cbSlotKeyOf = createCbSlotKeys();
     };
 
     const snapshotCBPressure = (opId: number) => {
@@ -127,7 +128,7 @@ export function processMemoryAllocations(
             // forward-compat with future tt-metal emit changes. #1651
             const rawGlobalFlag = node.params.globally_allocated as unknown;
             const globallyAllocated = rawGlobalFlag === '1' || rawGlobalFlag === 1;
-            const deviceKey = String(node.params.device_id ?? SINGLE_DEVICE_KEY);
+            const deviceKey = cbDeviceKey(node.params.device_id);
             if (!globallyAllocated) {
                 if (cores.length === 0) {
                     unattributedByDevice.set(deviceKey, (unattributedByDevice.get(deviceKey) ?? 0) + size);
@@ -156,10 +157,7 @@ export function processMemoryAllocations(
             // count gives it one, and pairs it with the other devices' repeats
             // instead of letting it displace the first allocation as the row
             // they all collapse onto.
-            const repeatKey = `${identity}|${deviceKey}`;
-            const repeat = (cbRepeatsByDevice.get(repeatKey) ?? 0) + 1;
-            cbRepeatsByDevice.set(repeatKey, repeat);
-            const identitySlot = `${identity}|${repeat}`;
+            const identitySlot = cbSlotKeyOf(identity, deviceKey);
             const existing = liveCBByIdentity.get(identitySlot);
             if (existing) {
                 existing.deviceKeys.add(deviceKey);
