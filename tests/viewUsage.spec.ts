@@ -31,6 +31,13 @@ describe('usage view route mapping', () => {
     });
 
     it.each([
+        [`${ROUTES.OPERATIONS}/`, UsageView.OPERATIONS],
+        [ROUTES.TENSORS.toUpperCase(), UsageView.TENSORS],
+    ])('matches static pathname %s the same way React Router does', (pathname, expected) => {
+        expect(getUsageView(pathname)).toBe(expected);
+    });
+
+    it.each([
         [`${ROUTES.OPERATIONS}/42`, UsageView.OPERATION_DETAILS],
         [`${ROUTES.GRAPHTREE}/42`, UsageView.GRAPH],
         [`${ROUTES.NPE}/trace.json`, UsageView.NPE],

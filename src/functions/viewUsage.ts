@@ -38,16 +38,14 @@ export const USAGE_VIEW_BY_ROUTE = Object.freeze({
     [ROUTES.CLUSTER]: { view: UsageView.TOPOLOGY },
 }) satisfies Readonly<Record<RoutePath, RouteUsageDefinition | null>>;
 
-const ROUTE_USAGE_DEFINITIONS = Object.values(USAGE_VIEW_BY_ROUTE) as (RouteUsageDefinition | null)[];
+const ROUTE_USAGE_ENTRIES = Object.entries(USAGE_VIEW_BY_ROUTE) as [RoutePath, RouteUsageDefinition | null][];
 
 export function getUsageView(pathname: string): UsageView | null {
-    const exactDefinition = USAGE_VIEW_BY_ROUTE[pathname as RoutePath];
+    for (const [route, definition] of ROUTE_USAGE_ENTRIES) {
+        if (matchPath({ path: route, end: true }, pathname)) {
+            return definition?.view ?? null;
+        }
 
-    if (exactDefinition !== undefined) {
-        return exactDefinition?.view ?? null;
-    }
-
-    for (const definition of ROUTE_USAGE_DEFINITIONS) {
         if (
             definition?.nestedView &&
             definition.pattern &&
