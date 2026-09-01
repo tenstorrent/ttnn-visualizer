@@ -62,6 +62,9 @@ export enum ReportLoadFailureReason {
  *
  * `styleguide` is excluded and stays excluded: counting a development surface would
  * pollute reach.
+ *
+ * `OPERATION_DETAILS` is owned by `view_opened`. A future `drilldown_opened` event must
+ * exclude it, or one navigation would be counted as two different actions.
  */
 export enum UsageView {
     REPORTS = 'reports',

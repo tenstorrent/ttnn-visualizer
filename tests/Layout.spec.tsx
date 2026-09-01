@@ -9,6 +9,7 @@ import type { ComponentType } from 'react';
 import { HelmetProvider } from 'react-helmet-async';
 import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { UsageEvent, UsageView } from '../src/definitions/UsageEvent';
 
 /**
  * Covers the shell's wiring and the one structural invariant it asserts about itself.
@@ -26,8 +27,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const teardown = vi.hoisted(() => vi.fn());
 const initUsageRecording = vi.hoisted(() => vi.fn(() => teardown));
+const recordUsage = vi.hoisted(() => vi.fn());
 
-vi.mock('../src/functions/recordUsage', () => ({ initUsageRecording }));
+vi.mock('../src/functions/recordUsage', () => ({ default: recordUsage, initUsageRecording }));
 
 vi.mock('../src/components/SideNavigation', () => ({ default: () => <div data-testid='stub-side-navigation' /> }));
 vi.mock('../src/components/ServerModeBanner', () => ({ default: () => <div data-testid='stub-server-mode-banner' /> }));
@@ -65,6 +67,18 @@ describe('Layout usage recording wiring', () => {
         renderLayout(Layout);
 
         expect(initUsageRecording).toHaveBeenCalled();
+    });
+
+    it('records the initial route once under StrictMode', async () => {
+        const { default: Layout } = await import('../src/components/Layout');
+
+        renderLayout(Layout);
+
+        expect(recordUsage).toHaveBeenCalledTimes(1);
+        expect(recordUsage).toHaveBeenCalledWith({
+            event: UsageEvent.VIEW_OPENED,
+            details: { view: UsageView.REPORTS },
+        });
     });
 
     it('balances every start with a teardown, including StrictMode remount', async () => {

@@ -10,6 +10,7 @@ import ROUTES from '../definitions/Routes';
 import { activeMlirJsonAtom, activePerformanceReportAtom, activeProfilerReportAtom } from '../store/app';
 import { useGetClusterDescription } from './useAPI';
 import getServerConfig from '../functions/getServerConfig';
+import { getModalBackground } from '../functions/modalRoute';
 
 export interface ResolvedNavigationItem extends NavigationItem {
     isDisabled: boolean;
@@ -73,7 +74,7 @@ export function useMainNavigationItems(): MainNavigationItems {
             return true;
         }
 
-        const backgroundPath = location.state?.background?.pathname;
+        const backgroundPath = getModalBackground(location)?.pathname;
 
         return !!backgroundPath && (backgroundPath === path || isNestedMatch(backgroundPath, path));
     };

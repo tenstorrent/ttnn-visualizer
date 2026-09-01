@@ -483,7 +483,7 @@ describe('recordUsage gating', () => {
         const { recordUsage, flushUsage, initUsageRecording, post } = await loadRecorder();
         const teardown = startRecording(initUsageRecording);
 
-        recordUsage(REPORT_LOADED);
+        recordUsage(VIEW_OPENED);
         flushUsage();
         window.dispatchEvent(new Event('pagehide'));
         vi.advanceTimersByTime(FLUSH_INTERVAL_MS);

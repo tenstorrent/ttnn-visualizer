@@ -18,6 +18,8 @@ import FeedbackButton from './FeedbackButton';
 import FileStatusOverlay from './FileStatusOverlay';
 import MlirFileResultsOverlay from './mlir/MlirFileResultsOverlay';
 import { initUsageRecording } from '../functions/recordUsage';
+import useRecordViewOpened from '../hooks/useRecordViewOpened';
+import { isModalOpen } from '../functions/modalRoute';
 
 const BounceIn = cssTransition({
     enter: `Toastify--animate Toastify__bounce-enter`,
@@ -29,12 +31,14 @@ const BounceIn = cssTransition({
 
 function Layout() {
     const location = useLocation();
-    const state = location.state as { background?: Location };
+    const isTopologyOpen = isModalOpen(location, ROUTES.CLUSTER);
 
     // Starts the usage flush lifecycle; it records nothing on its own. Here rather than at
     // module scope so importing the sender has no side effect, and so the listeners are
     // owned the way every other listener in this app is.
     useEffect(() => initUsageRecording(), []);
+
+    useRecordViewOpened();
 
     return (
         <>
@@ -58,7 +62,7 @@ function Layout() {
 
                 <main>
                     <ModalAwareOutlet />
-                    {location.pathname === ROUTES.CLUSTER && state?.background && <ClusterRenderer />}
+                    {isTopologyOpen && <ClusterRenderer />}
                 </main>
             </div>
 

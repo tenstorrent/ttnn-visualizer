@@ -4,11 +4,11 @@
 
 import { useLocation, useRoutes } from 'react-router';
 import { routeObjectList } from '../routes/routeObjectList';
+import { getModalBackground } from '../functions/modalRoute';
 
 export function ModalAwareOutlet() {
     const location = useLocation();
-    const state = location.state as { background?: Location };
-    const backgroundLocation = state?.background;
+    const backgroundLocation = getModalBackground(location);
 
     return useRoutes(routeObjectList, backgroundLocation || location);
 }
