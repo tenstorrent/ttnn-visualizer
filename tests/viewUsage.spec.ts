@@ -22,11 +22,9 @@ describe('usage view route mapping', () => {
     });
 
     it('uses every parameterised pattern in a route definition', () => {
-        const patterns = Object.values(USAGE_VIEW_BY_ROUTE)
-            .filter((definition): definition is { view: UsageView; pattern: string } =>
-                Boolean(definition && 'pattern' in definition),
-            )
-            .map((definition) => definition.pattern);
+        const patterns = Object.values(USAGE_VIEW_BY_ROUTE).flatMap((definition) =>
+            definition && 'pattern' in definition ? [definition.pattern] : [],
+        );
 
         expect(Object.values(ROUTE_PATTERNS).every((pattern) => patterns.includes(pattern))).toBe(true);
     });
