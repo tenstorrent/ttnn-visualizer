@@ -790,25 +790,25 @@ class ProductionConfig(DefaultConfig):
     TESTING = False
 
 
-class Config:
-    _instance = None
+class _ConfigFactory:
+    _instance: Optional[DefaultConfig] = None
 
-    def __new__(cls):
-        if cls._instance is None:
-            cls._instance = super(Config, cls).__new__(cls)
-            cls._instance = cls._determine_config()
-            cls._instance.override_with_env_variables()
-        return cls._instance
+    def __call__(self) -> DefaultConfig:
+        if self._instance is None:
+            self._instance = self._determine_config()
+            self._instance.override_with_env_variables()
+        return self._instance
 
     @staticmethod
-    def _determine_config():
-        # Determine the environment
+    def _determine_config() -> DefaultConfig:
         flask_env = os.getenv("FLASK_ENV", "development").lower()
 
-        # Choose the correct configuration class based on FLASK_ENV
         if flask_env == "production":
             return ProductionConfig()
         elif flask_env == "testing":
             return TestingConfig()
         else:
             return DevelopmentConfig()
+
+
+Config = _ConfigFactory()

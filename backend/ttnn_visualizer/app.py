@@ -16,7 +16,6 @@ import webbrowser
 from http import HTTPStatus
 from os import environ
 from pathlib import Path
-from typing import cast
 from urllib.error import URLError
 from urllib.request import urlopen
 
@@ -133,7 +132,7 @@ def create_app(settings_override=None):
 
     flask_env = environ.get("FLASK_ENV", "development")
 
-    config = cast(DefaultConfig, Config())
+    config = Config()
 
     app = Flask(
         __name__,
@@ -494,7 +493,7 @@ def _config_after_cli_env(args: argparse.Namespace) -> DefaultConfig:
     )
 
     _apply_cli_env_overrides(args)
-    return cast(DefaultConfig, Config())
+    return Config()
 
 
 def main():
