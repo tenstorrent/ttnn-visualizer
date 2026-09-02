@@ -753,7 +753,7 @@ $minimap-width: 200px;
             color: $tt-grey-7;
             text-align: left;
             vertical-align: top;
-            word-break: break-word;
+            overflow-wrap: anywhere;
         }
     }
 }

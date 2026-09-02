@@ -38,7 +38,6 @@ module.exports = defineConfig([
             parserOptions: {
                 projectService: {
                     allowDefaultProject: [
-                        '.stylelintrc.cjs',
                         'eslint.config.cjs',
                         'scripts/check-spdx.mjs',
                         'scripts/release.mjs',
@@ -279,6 +278,26 @@ module.exports = defineConfig([
             '@typescript-eslint/no-require-imports': 'off',
             'import/newline-after-import': 'off',
             'import/no-unresolved': 'off',
+            'prettier/prettier': 'warn',
+        },
+    },
+    {
+        files: ['stylelint.config.mjs'],
+
+        languageOptions: {
+            globals: {
+                ...globals.node,
+            },
+
+            ecmaVersion: 'latest',
+            sourceType: 'module',
+        },
+
+        plugins: {
+            prettier: fixupPluginRules(prettier),
+        },
+
+        rules: {
             'prettier/prettier': 'warn',
         },
     },
