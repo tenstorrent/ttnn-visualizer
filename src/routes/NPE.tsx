@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { useAtomValue } from 'jotai';
 import { useParams } from 'react-router';
@@ -18,6 +18,8 @@ import NPEDemoSelect, { NPEDemoData } from '../components/npe/NPEDemoSelect';
 import { NPEValidationError } from '../definitions/NPEData';
 import { getNpeValidationErrorFromFetch } from '../functions/getNpeValidationErrorFromFetch';
 import { validateNpeData } from '../functions/validateNpeData';
+import { ReportSource } from '../definitions/UsageEvent';
+import useNpeLoadAttempt from '../hooks/useNpeLoadAttempt';
 
 const NPE = () => {
     const { filepath } = useParams<{ filepath?: string }>();
@@ -48,9 +50,21 @@ const NPE = () => {
     } = useNPETimelineFile(filepath);
     const [demoData, setDemoData] = useState<NPEData | null>(null);
     const [selectedDemo, setSelectedDemo] = useState<NPEDemoData | null>(null);
+    const { begin: beginLoadAttempt, controller: loadAttempt } = useNpeLoadAttempt();
+    const handleUploadAccepted = useCallback(() => {
+        setSelectedDemo(null);
+        setDemoData(null);
+        beginLoadAttempt(ReportSource.UPLOAD);
+    }, [beginLoadAttempt]);
+    const handleDemoSelected = useCallback(() => beginLoadAttempt(ReportSource.DEMO), [beginLoadAttempt]);
 
     const npeData = useMemo(() => demoData || loadedData || loadedTimeline, [demoData, loadedData, loadedTimeline]);
 
+    // Demos are hosted-only. Keep their source wired for vocabulary parity, but
+    // recordUsage drops the event under SERVER_MODE. The non-windowed settle
+    // effect below is retained for that hosted path and for #1802; local uploads
+    // record via NpeWindowedView, so this effect emits nothing where recording
+    // is enabled.
     const isDemoEnabled = isServerMode;
     // Prefer RQ isLoading (isPending && isFetching) over bare isFetching so a
     // background refetch cannot pin the spinner after data is already present.
@@ -79,6 +93,35 @@ const NPE = () => {
 
     const canShowView = !isLoading && errorCode === NPEValidationError.OK && npeData != null;
 
+    useEffect(() => {
+        if (isWindowedView || loadAttempt.id === null || isLoading) {
+            return;
+        }
+
+        // Nothing has settled yet — do not treat a pending attempt as a parse
+        // error because npeData is still empty (e.g. between beginLoadAttempt
+        // and the atom write that enables a query).
+        if (!isNpeQueryEnabled && !isTimelineQueryEnabled && demoData == null) {
+            return;
+        }
+
+        if (canShowView) {
+            loadAttempt.complete(loadAttempt.id);
+        } else if (errorCode !== NPEValidationError.OK) {
+            loadAttempt.fail(loadAttempt.id, errorCode, fetchError);
+        }
+    }, [
+        canShowView,
+        demoData,
+        errorCode,
+        fetchError,
+        isLoading,
+        isNpeQueryEnabled,
+        isTimelineQueryEnabled,
+        isWindowedView,
+        loadAttempt,
+    ]);
+
     let mainContent;
     if (isWindowedView) {
         // key on the report so a report switch fully remounts: resets the
@@ -88,6 +131,7 @@ const NPE = () => {
             <NpeWindowedView
                 key={npeFileName}
                 fileName={npeFileName}
+                loadAttempt={loadAttempt}
             />
         );
     } else if (canShowView) {
@@ -115,7 +159,7 @@ const NPE = () => {
 
             <h1 className='page-title'>NOC performance estimator</h1>
             <div className='inline-loaders'>
-                {!filepath && <NPEFileLoader />}
+                {!filepath && <NPEFileLoader onUploadAccepted={handleUploadAccepted} />}
 
                 {isDemoEnabled && (
                     <>
@@ -123,6 +167,7 @@ const NPE = () => {
                             selectedDemo={selectedDemo}
                             setSelectedDemo={setSelectedDemo}
                             setDemoData={setDemoData}
+                            onDemoSelected={handleDemoSelected}
                         />
                         <br />
                     </>

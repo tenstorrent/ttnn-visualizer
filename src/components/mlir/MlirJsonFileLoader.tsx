@@ -23,6 +23,9 @@ import sanitiseFileName from '../../functions/sanitiseFileName';
 import mapConvertedMlirServerResult from '../../functions/mapConvertedMlirServerResult';
 import relabelMlirGraphIds from '../../functions/relabelMlirGraphIds';
 import uniqueMlirName from '../../functions/uniqueMlirName';
+import { ReportKind, ReportLoadFailureReason } from '../../definitions/UsageEvent';
+import { getReportLoadFailureReason, recordReportLoadFailed } from '../../functions/reportLoadUsage';
+import { MLIRValidationError, MLIR_LOAD_FAILURE_REASON_BY_VALIDATION_ERROR } from '../../definitions/MLIRData';
 import 'styles/components/FileLoader.scss';
 
 const ICON_MAP: Record<ConnectionTestStates, IconName> = {
@@ -95,6 +98,10 @@ const MlirJsonFileLoader = ({ server = null, disabled = false }: MlirJsonFileLoa
                         persisted: false,
                     };
                 } catch {
+                    recordReportLoadFailed(
+                        ReportKind.MLIR,
+                        MLIR_LOAD_FAILURE_REASON_BY_VALIDATION_ERROR[MLIRValidationError.INVALID_JSON],
+                    );
                     return {
                         filename: file.name,
                         name: null,
@@ -160,6 +167,7 @@ const MlirJsonFileLoader = ({ server = null, disabled = false }: MlirJsonFileLoa
                     setMlirRetryFiles(null);
                     setUploadStatus(ConnectionTestStates.FAILED);
                     setStatusMessage('Upload failed');
+                    selectedFiles.forEach(() => recordReportLoadFailed(ReportKind.MLIR, ReportLoadFailureReason.OTHER));
                     return;
                 }
 
@@ -167,6 +175,11 @@ const MlirJsonFileLoader = ({ server = null, disabled = false }: MlirJsonFileLoa
                 // failed conversion. Clear retained File blobs after all-
                 // success batches to avoid unnecessary memory retention.
                 const hasRetryableFailures = results.some((result) => result.status === ConnectionTestStates.FAILED);
+                results.forEach((result) => {
+                    if (result.status === ConnectionTestStates.FAILED) {
+                        recordReportLoadFailed(ReportKind.MLIR, ReportLoadFailureReason.OTHER);
+                    }
+                });
                 if (!hasRetryableFailures) {
                     setMlirRetryFiles(null);
                 }
@@ -183,6 +196,7 @@ const MlirJsonFileLoader = ({ server = null, disabled = false }: MlirJsonFileLoa
             setMlirRetryFiles(null);
             setUploadStatus(ConnectionTestStates.FAILED);
             setStatusMessage(getResponseError(err, server ? 'Unable to upload MLIR file' : 'Unable to load MLIR file'));
+            selectedFiles.forEach(() => recordReportLoadFailed(ReportKind.MLIR, getReportLoadFailureReason(err)));
         }
     };
 

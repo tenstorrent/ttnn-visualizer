@@ -6,6 +6,20 @@ import { MIN_SUPPORTED_VERSION, NPEValidationError } from '../definitions/NPEDat
 import { NPEData } from '../model/NPEModel';
 import { semverParse } from './semverParse';
 
+export const validateNpeVersion = (dataVersion: unknown): NPEValidationError => {
+    const parsedVersion = typeof dataVersion === 'string' ? semverParse(dataVersion) : null;
+
+    if (!parsedVersion) {
+        return NPEValidationError.INVALID_NPE_VERSION;
+    }
+
+    const minSupportedVersion = semverParse(MIN_SUPPORTED_VERSION);
+
+    return minSupportedVersion && parsedVersion.major === minSupportedVersion.major
+        ? NPEValidationError.OK
+        : NPEValidationError.INVALID_NPE_VERSION;
+};
+
 export const validateNpeData = (data: unknown): NPEValidationError => {
     if (typeof data !== 'object' || data === null) {
         return NPEValidationError.INVALID_NPE_DATA;
@@ -33,17 +47,5 @@ export const validateNpeData = (data: unknown): NPEValidationError => {
         return NPEValidationError.EMPTY_NPE_TRACE;
     }
 
-    const parsedVersion = dataVersion ? semverParse(dataVersion) : null;
-
-    if (!parsedVersion) {
-        return NPEValidationError.INVALID_NPE_VERSION;
-    }
-
-    const minSupportedVersion = semverParse(MIN_SUPPORTED_VERSION);
-
-    if (!minSupportedVersion || parsedVersion.major !== minSupportedVersion.major) {
-        return NPEValidationError.INVALID_NPE_VERSION;
-    }
-
-    return NPEValidationError.OK;
+    return validateNpeVersion(dataVersion);
 };

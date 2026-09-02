@@ -21,8 +21,10 @@ import {
     ACTIVE_PERFORMANCE_REPORT_TOAST_TITLE,
     MEMORY_REPORT_DELETED_TOAST_TITLE,
     MEMORY_REPORT_DELETE_FAILED_TOAST_TITLE,
+    MEMORY_REPORT_LOAD_FAILED_TOAST_TITLE,
     PERFORMANCE_REPORT_DELETED_TOAST_TITLE,
     PERFORMANCE_REPORT_DELETE_FAILED_TOAST_TITLE,
+    PERFORMANCE_REPORT_LOAD_FAILED_TOAST_TITLE,
 } from '../../definitions/notifyActiveReport';
 import createToastNotification from '../../functions/createToastNotification';
 import { ToastType } from '../../definitions/ToastType';
@@ -51,6 +53,12 @@ import {
 import { TEST_IDS } from '../../definitions/TestIds';
 import { DBVersionValidation } from '../../definitions/Versions';
 import { evaluateDbVersion } from '../../functions/compareDbVersion';
+import { ReportKind, ReportLoadFailureReason, ReportSource } from '../../definitions/UsageEvent';
+import {
+    getReportLoadFailureReason,
+    recordReportLoadFailed,
+    recordReportLoaded,
+} from '../../functions/reportLoadUsage';
 
 const ICON_MAP: Record<ConnectionTestStates, IconName> = {
     [ConnectionTestStates.IDLE]: IconNames.DOT,
@@ -165,8 +173,18 @@ const LocalFolderOptions = () => {
     const { linkedPerfIds, unlinkedPerfIds, linkedProfilerReportIds, unlinkedProfilerReportIds } =
         useReportLinkBadgeIds();
 
+    const activateLocalReport = async (kind: ReportKind, failedTitle: string, action: () => Promise<void>) => {
+        try {
+            await withActivatingReport(action);
+            recordReportLoaded(kind, ReportSource.LOCAL_TT_METAL);
+        } catch (err: unknown) {
+            createToastNotification(failedTitle, getResponseError(err), ToastType.ERROR);
+            recordReportLoadFailed(kind, getReportLoadFailureReason(err));
+        }
+    };
+
     const handleReportDirectoryOpen = async (e: ChangeEvent<HTMLInputElement>) => {
-        if (!e.target.files) {
+        if (!e.target.files?.length) {
             return;
         }
 
@@ -175,6 +193,7 @@ const LocalFolderOptions = () => {
 
         if (!checkRequiredReportFiles(files)) {
             setProfilerFolder(invalidReportStatus);
+            recordReportLoadFailed(ReportKind.PROFILER, ReportLoadFailureReason.MISSING_FILE);
             return;
         }
 
@@ -183,6 +202,12 @@ const LocalFolderOptions = () => {
 
         try {
             const response = await uploadLocalFolder(files);
+
+            if (response?.data?.status != null && response.data.status !== ConnectionTestStates.OK) {
+                setProfilerFolder(invalidReportStatus);
+                recordReportLoadFailed(ReportKind.PROFILER, ReportLoadFailureReason.MISSING_FILE);
+                return;
+            }
 
             setProfilerUploadLabel(`${files.length} files uploaded`);
             response.data = normaliseReportFolder(response.data);
@@ -200,9 +225,11 @@ const LocalFolderOptions = () => {
             createToastNotification(ACTIVE_MEMORY_REPORT_TOAST_TITLE, updatedReport.reportName, ToastType.SUCCESS);
             setProfilerReportLocation(ReportLocation.LOCAL);
             setProfilerFolder(connectionOkStatus);
+            recordReportLoaded(ReportKind.PROFILER, ReportSource.UPLOAD);
         } catch (err: unknown) {
             const message = getResponseError(err, 'Unable to upload selected directory');
             setProfilerFolder({ status: ConnectionTestStates.FAILED, message });
+            recordReportLoadFailed(ReportKind.PROFILER, getReportLoadFailureReason(err));
         } finally {
             clearReportCaches(queryClient);
             setIsUploadingReport(false);
@@ -210,7 +237,7 @@ const LocalFolderOptions = () => {
     };
 
     const handlePerformanceDirectoryOpen = async (e: ChangeEvent<HTMLInputElement>) => {
-        if (!e.target.files) {
+        if (!e.target.files?.length) {
             return;
         }
 
@@ -219,6 +246,7 @@ const LocalFolderOptions = () => {
 
         if (!checkRequiredPerformanceFiles(files)) {
             setPerformanceFolder(invalidProfilerStatus);
+            recordReportLoadFailed(ReportKind.PERFORMANCE, ReportLoadFailureReason.MISSING_FILE);
             return;
         }
 
@@ -230,6 +258,7 @@ const LocalFolderOptions = () => {
 
             if (response?.data?.status !== ConnectionTestStates.OK) {
                 setPerformanceFolder(directoryErrorStatus);
+                recordReportLoadFailed(ReportKind.PERFORMANCE, ReportLoadFailureReason.MISSING_FILE);
             } else {
                 const fileName = getFolderName(files);
                 setPerformanceDataUploadLabel(`${files.length} files uploaded`);
@@ -237,10 +266,12 @@ const LocalFolderOptions = () => {
                 setActivePerformanceReport({ path: fileName, reportName: fileName });
                 createToastNotification(ACTIVE_PERFORMANCE_REPORT_TOAST_TITLE, fileName, ToastType.SUCCESS);
                 setPerformanceFolder(connectionOkStatus);
+                recordReportLoaded(ReportKind.PERFORMANCE, ReportSource.UPLOAD);
             }
         } catch (err: unknown) {
             const message = getResponseError(err, 'Unable to upload selected directory');
             setPerformanceFolder({ status: ConnectionTestStates.FAILED, message });
+            recordReportLoadFailed(ReportKind.PERFORMANCE, getReportLoadFailureReason(err));
         } finally {
             clearReportCaches(queryClient);
             setIsPerformanceUploading(false);
@@ -248,7 +279,7 @@ const LocalFolderOptions = () => {
     };
 
     const handleSelectProfiler = async (folder: ReportFolder) => {
-        await withActivatingReport(async () => {
+        await activateLocalReport(ReportKind.PROFILER, MEMORY_REPORT_LOAD_FAILED_TOAST_TITLE, async () => {
             // Backend handles updating only the specific parts of active_report
             await updateInstance({
                 active_report: { profiler_name: folder.path, profiler_location: ReportLocation.LOCAL },
@@ -296,7 +327,7 @@ const LocalFolderOptions = () => {
         });
 
     const handleSelectPerformance = async (folder: ReportFolder) => {
-        await withActivatingReport(async () => {
+        await activateLocalReport(ReportKind.PERFORMANCE, PERFORMANCE_REPORT_LOAD_FAILED_TOAST_TITLE, async () => {
             // Backend handles updating only the specific parts of active_report
             await updateInstance({
                 active_report: { performance_name: folder.path, performance_location: ReportLocation.LOCAL },

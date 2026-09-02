@@ -2,6 +2,8 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
+import { ReportLoadFailureReason } from './UsageEvent';
+
 export const MIN_SUPPORTED_VERSION = '1.0.0';
 export const LEGACY_VISUALIZER_VERSION = '0.32.3'; // Version of the visualizer that supports pre-version data format
 
@@ -19,6 +21,15 @@ export enum NPEValidationError {
     INVALID_NPE_DATA,
     EMPTY_NPE_TRACE,
 }
+
+export const NPE_LOAD_FAILURE_REASON_BY_VALIDATION_ERROR: Record<NPEValidationError, ReportLoadFailureReason | null> = {
+    [NPEValidationError.OK]: null,
+    [NPEValidationError.DEFAULT]: null,
+    [NPEValidationError.INVALID_NPE_VERSION]: ReportLoadFailureReason.UNSUPPORTED_VERSION,
+    [NPEValidationError.INVALID_JSON]: ReportLoadFailureReason.PARSE_ERROR,
+    [NPEValidationError.INVALID_NPE_DATA]: ReportLoadFailureReason.PARSE_ERROR,
+    [NPEValidationError.EMPTY_NPE_TRACE]: ReportLoadFailureReason.OTHER,
+};
 
 /** Discriminant on synthetic client 422 bodies — parse vs shape must not share one UI label. */
 export enum NpeClientErrorKind {

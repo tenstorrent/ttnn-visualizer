@@ -4,7 +4,7 @@
 
 import React, { useState } from 'react';
 import { useAtom } from 'jotai';
-import { useQueryClient } from '@tanstack/react-query';
+import { type QueryFilters, useQueryClient } from '@tanstack/react-query';
 import { FileInput, FormGroup, Icon, IconName, Intent } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import useLocalConnection from '../../hooks/useLocal';
@@ -15,6 +15,8 @@ import createToastNotification from '../../functions/createToastNotification';
 import { ToastType } from '../../definitions/ToastType';
 import getResponseError from '../../functions/getResponseError';
 import sanitiseFileName from '../../functions/sanitiseFileName';
+import { ReportKind, ReportLoadFailureReason } from '../../definitions/UsageEvent';
+import { getReportLoadFailureReason, recordReportLoadFailed } from '../../functions/reportLoadUsage';
 import 'styles/components/FileLoader.scss';
 
 const ICON_MAP: Record<ConnectionTestStates, IconName> = {
@@ -33,7 +35,16 @@ const INTENT_MAP: Record<ConnectionTestStates, Intent> = {
     [ConnectionTestStates.WARNING]: Intent.WARNING,
 };
 
-const NPEFileLoader = () => {
+const NPE_QUERY_KEYS = new Set<string>([NPE_SUMMARY_QUERY_KEY, NPE_WINDOW_QUERY_KEY, NPE_QUERY_KEY]);
+const NPE_QUERY_FILTER: QueryFilters<readonly unknown[]> = {
+    predicate: (query) => NPE_QUERY_KEYS.has(String(query.queryKey[0])),
+};
+
+interface NPEFileLoaderProps {
+    onUploadAccepted: () => void;
+}
+
+const NPEFileLoader = ({ onUploadAccepted }: NPEFileLoaderProps) => {
     const [statusMessage, setStatusMessage] = useState<string | null>(null);
     const { uploadNpeFile } = useLocalConnection();
     const queryClient = useQueryClient();
@@ -41,12 +52,12 @@ const NPEFileLoader = () => {
     const [uploadStatus, setUploadStatus] = useState<ConnectionTestStates>(ConnectionTestStates.IDLE);
 
     const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
-        setStatusMessage('Uploading...');
-        setUploadStatus(ConnectionTestStates.PROGRESS);
-
-        if (!event.target.files) {
+        if (!event.target.files?.length) {
             return;
         }
+
+        setStatusMessage('Uploading...');
+        setUploadStatus(ConnectionTestStates.PROGRESS);
 
         const file = event.target.files?.[0];
 
@@ -56,16 +67,18 @@ const NPEFileLoader = () => {
             if (response?.data?.status !== ConnectionTestStates.OK) {
                 setUploadStatus(ConnectionTestStates.FAILED);
                 setStatusMessage(response?.data?.message ?? 'Upload failed');
+                recordReportLoadFailed(ReportKind.NPE, ReportLoadFailureReason.OTHER);
             } else {
                 const fileName = file.name;
                 // Re-uploading a same-named file reuses the NPE query keys, and the
                 // windowed hooks are staleTime: Infinity — drop the cached summary /
                 // windows so the freshly-rebuilt server index is refetched instead of
                 // serving the previous report's data.
-                queryClient.removeQueries({ queryKey: [NPE_SUMMARY_QUERY_KEY] });
-                queryClient.removeQueries({ queryKey: [NPE_WINDOW_QUERY_KEY] });
-                queryClient.removeQueries({ queryKey: [NPE_QUERY_KEY] });
-                setActiveNpe(sanitiseFileName(fileName));
+                await queryClient.cancelQueries(NPE_QUERY_FILTER);
+                queryClient.removeQueries(NPE_QUERY_FILTER);
+                const sanitisedFileName = sanitiseFileName(fileName);
+                onUploadAccepted();
+                setActiveNpe(sanitisedFileName);
                 createToastNotification('Active NPE', fileName, ToastType.SUCCESS);
                 setUploadStatus(ConnectionTestStates.OK);
                 setStatusMessage(`${fileName} uploaded successfully`);
@@ -73,6 +86,7 @@ const NPEFileLoader = () => {
         } catch (err: unknown) {
             setUploadStatus(ConnectionTestStates.FAILED);
             setStatusMessage(getResponseError(err, 'Unable to upload file'));
+            recordReportLoadFailed(ReportKind.NPE, getReportLoadFailureReason(err));
         }
     };
 
