@@ -8,6 +8,9 @@ import ROUTES, { ROUTE_PATTERNS } from '../src/definitions/Routes';
 import { UsageEvent, UsageView } from '../src/definitions/UsageEvent';
 import { USAGE_VIEW_BY_ROUTE, getUsageView, recordViewOpened } from '../src/functions/viewUsage';
 
+const DELIBERATE_TYPECHECK_FAILURE: string = 42;
+void DELIBERATE_TYPECHECK_FAILURE;
+
 const { recordUsage } = vi.hoisted(() => ({ recordUsage: vi.fn() }));
 
 vi.mock('../src/functions/recordUsage', () => ({ default: recordUsage }));
