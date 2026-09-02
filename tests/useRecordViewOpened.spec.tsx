@@ -9,6 +9,8 @@ import { type Location, MemoryRouter, useLocation, useNavigate } from 'react-rou
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ROUTES from '../src/definitions/Routes';
 import { UsageView } from '../src/definitions/UsageEvent';
+import { modalNavigationState } from '../src/functions/modalRoute';
+import { resetRememberedViewPathname } from '../src/functions/viewUsage';
 import useRecordViewOpened from '../src/hooks/useRecordViewOpened';
 
 const { recordViewOpened } = vi.hoisted(() => ({ recordViewOpened: vi.fn() }));
@@ -47,9 +49,21 @@ function NavigationHarness() {
             </button>
             <button
                 type='button'
-                onClick={() => navigate(ROUTES.CLUSTER, { state: { background: location } })}
+                onClick={() => navigate(ROUTES.CLUSTER, modalNavigationState(location))}
             >
                 Open topology
+            </button>
+            <button
+                type='button'
+                onClick={() => navigate(ROUTES.STYLEGUIDE)}
+            >
+                Open styleguide
+            </button>
+            <button
+                type='button'
+                onClick={() => navigate('/does-not-exist')}
+            >
+                Open unknown
             </button>
             <button
                 type='button'
@@ -84,6 +98,7 @@ const renderRecorder = (initialEntry: string) =>
 
 describe('useRecordViewOpened', () => {
     beforeEach(() => {
+        resetRememberedViewPathname();
         recordViewOpened.mockClear();
     });
 
@@ -180,6 +195,28 @@ describe('useRecordViewOpened', () => {
         recordViewOpened.mockClear();
 
         fireEvent.click(screen.getByRole('button', { name: 'Change query' }));
+
+        expect(recordViewOpened).not.toHaveBeenCalled();
+    });
+
+    it('does not record excluded or unknown routes', () => {
+        renderRecorder(ROUTES.STYLEGUIDE);
+
+        expect(recordViewOpened).not.toHaveBeenCalled();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Open unknown' }));
+
+        expect(recordViewOpened).not.toHaveBeenCalled();
+    });
+
+    it('does not re-record the same pathname after the recorder remounts', () => {
+        const { unmount } = renderRecorder(ROUTES.HOME);
+
+        expect(recordViewOpened).toHaveBeenCalledTimes(1);
+
+        unmount();
+        recordViewOpened.mockClear();
+        renderRecorder(ROUTES.HOME);
 
         expect(recordViewOpened).not.toHaveBeenCalled();
     });

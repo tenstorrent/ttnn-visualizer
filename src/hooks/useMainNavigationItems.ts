@@ -10,7 +10,7 @@ import ROUTES from '../definitions/Routes';
 import { activeMlirJsonAtom, activePerformanceReportAtom, activeProfilerReportAtom } from '../store/app';
 import { useGetClusterDescription } from './useAPI';
 import getServerConfig from '../functions/getServerConfig';
-import { getModalBackground } from '../functions/modalRoute';
+import { getModalBackground, modalNavigationState } from '../functions/modalRoute';
 
 export interface ResolvedNavigationItem extends NavigationItem {
     isDisabled: boolean;
@@ -102,7 +102,7 @@ export function useMainNavigationItems(): MainNavigationItems {
 
             // A modal route keeps the page beneath it mounted, which react-router does
             // from the background location rather than from the path.
-            void navigate(item.route, item.isModal ? { state: { background: location } } : undefined);
+            void navigate(item.route, item.isModal ? modalNavigationState(location) : undefined);
         },
         [navigate, location],
     );
