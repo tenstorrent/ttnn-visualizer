@@ -216,6 +216,9 @@ export type NpeTimestepColumns = {
 
 export interface NpeSummary {
     common_info: CommonInfo;
+    // Carried through the index so the windowed path resolves the same descriptor
+    // the whole-file path does. `null` when the report supplied none. See #1776.
+    soc_descriptor?: unknown;
     chips: NPEData['chips'];
     zones?: NPERootZone[];
     n_timesteps: number;
@@ -238,6 +241,11 @@ export interface NPEData {
     chips: {
         [key: device_id]: ClusterCoordinates;
     };
+    // Optional report-supplied SoC descriptor, taking precedence over the baked
+    // lookup keyed on `common_info.arch`. Typed `unknown` on purpose: it arrives
+    // from a file we do not control, so `parseSocDescriptorOverride` validates it
+    // rather than a cast asserting the shape. See #1776.
+    soc_descriptor?: unknown;
 }
 
 export interface NPERootZone {

@@ -61,6 +61,7 @@ import {
 } from '../store/app';
 import { DeviceArchitecture } from '../definitions/DeviceArchitecture';
 import { getChipDesign } from '../functions/getChipDesign';
+import { parseSocDescriptorOverride } from '../functions/socDescriptorOverride';
 import { NPEData, NPEManifestEntry, NpeSummary, NpeWindow } from '../model/NPEModel';
 import { GraphBundle } from '../model/MLIRJsonModel';
 import { ChipDesign, ClusterModel, ClusterTopology, MeshData, MeshDescriptorResponse } from '../model/ClusterModel';
@@ -1317,22 +1318,44 @@ export const useInstance = () => {
     });
 };
 
-export const useArchitecture = (arch: DeviceArchitecture): ChipDesign | null => {
-    const design = getChipDesign(arch);
+export interface ResolvedArchitecture {
+    design: ChipDesign | null;
+    /** Populated only when a report supplied a descriptor that failed validation. */
+    overrideProblems: string[] | null;
+}
+
+/**
+ * Resolve the chip design for `arch`, preferring a report-supplied descriptor.
+ *
+ * A valid override wins outright, so an arch with no baked entry renders its real
+ * topology instead of toasting "Unsupported". A malformed one does *not* silently
+ * fall back: it is reported, because a descriptor that was offered and rejected is
+ * a different problem from one that was never there. See #1776.
+ */
+export const useArchitecture = (arch: DeviceArchitecture, socDescriptor?: unknown): ResolvedArchitecture => {
+    const override = useMemo(() => parseSocDescriptorOverride(socDescriptor, arch), [socDescriptor, arch]);
+    const baked = getChipDesign(arch);
+    const design = override.status === 'valid' ? override.design : baked;
+    const overrideProblems = override.status === 'invalid' ? override.problems : null;
 
     // Reported from an effect rather than the hook body, which runs on every render:
     // `useNodeType` is a consumer and NPE playback re-renders per interval tick, so an
     // inline warn emits a line per frame for the length of the run. #1772
     useEffect(() => {
+        if (overrideProblems) {
+            // eslint-disable-next-line no-console
+            console.error(`Unusable SoC descriptor in report: ${overrideProblems.join('; ')}`);
+            return;
+        }
         if (design === null) {
             // Still worth surfacing: unlike Cluster, these callers have no degraded mode and
             // silently lose every core-type overlay when the arch doesn't resolve.
             // eslint-disable-next-line no-console
             console.error(`Unsupported arch: ${arch}`);
         }
-    }, [arch, design]);
+    }, [arch, design, overrideProblems]);
 
-    return design;
+    return { design, overrideProblems };
 };
 
 export const useGetTensorSizesById = (tensorIdList: number[]): { id: number; size: number }[] => {
@@ -1351,8 +1374,8 @@ export const useGetTensorSizesById = (tensorIdList: number[]): { id: number; siz
         })
         .filter((item) => item !== null) as { id: number; size: number }[];
 };
-export const useNodeType = (arch: DeviceArchitecture) => {
-    const architecture = useArchitecture(arch);
+export const useNodeType = (arch: DeviceArchitecture, socDescriptor?: unknown) => {
+    const { design: architecture, overrideProblems } = useArchitecture(arch, socDescriptor);
     const cores = useMemo(() => {
         return architecture?.functional_workers?.map((loc) => {
             return loc
@@ -1389,7 +1412,7 @@ export const useNodeType = (arch: DeviceArchitecture) => {
         });
     }, [architecture]);
 
-    return { architecture, cores, dram, eth, pcie };
+    return { architecture, cores, dram, eth, pcie, overrideProblems };
 };
 
 export const PROFILER_FOLDER_QUERY_KEY = 'fetch-profiler-folder-list';

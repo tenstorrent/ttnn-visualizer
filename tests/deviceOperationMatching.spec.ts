@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { collapseMultideviceOperations, matchDeviceOperationsToPerf } from '../src/functions/deviceOperationMatching';
 import { PerfTableRow } from '../src/model/PerfTable';
 import { DeviceOperationMapping } from '../src/model/DeviceOperationMapping';
+import { OpType } from '../src/definitions/Performance';
 
 const mapping = (name: string, id: number): DeviceOperationMapping => ({
     name,
@@ -13,10 +14,17 @@ const mapping = (name: string, id: number): DeviceOperationMapping => ({
     operationName: `ttnn.${name.toLowerCase()}`,
 });
 
-const perfRow = (rawOpCode: string, id: number): PerfTableRow =>
-    ({ id: String(id), raw_op_code: rawOpCode, device_time: '1' }) as unknown as PerfTableRow;
+// Rows carry an `op_type` because the model has it non-nullable and the backend
+// always writes one. Defaulting it here is what makes every other case in this
+// file pin that a real device row is *retained* by the signpost filter, rather
+// than only exercising it against a shape the backend never emits.
+const perfRow = (rawOpCode: string, id: number, opType: OpType | null = OpType.DEVICE_OP): PerfTableRow =>
+    ({ id: String(id), raw_op_code: rawOpCode, device_time: '1', op_type: opType }) as unknown as PerfTableRow;
 
 const perfRowsFor = (names: string[]): PerfTableRow[] => names.map((name, index) => perfRow(name, index));
+
+/** A row for a `signpost()` marker, which no device operation corresponds to. */
+const signpostRow = (label: string, id: number): PerfTableRow => perfRow(label, id, OpType.SIGNPOST);
 
 /** Each op recorded once per device, as `numDevices` consecutive entries. */
 const duplicatedPerDevice = (names: string[], numDevices: number): DeviceOperationMapping[] =>
@@ -47,6 +55,54 @@ describe('matchDeviceOperationsToPerf', () => {
         // The collapse heuristic alone keeps only the twice-seen `Pad` key, so
         // this report only links via the direct pass.
         expect(collapseMultideviceOperations(deviceOperations, 2)).toHaveLength(1);
+    });
+
+    it('links a report whose perf rows carry signposts (#1943)', () => {
+        // Shape of test_ttnn_moe_aug26_2217: a model that calls `signpost()` gets
+        // marker rows leading, interleaved and trailing. Only the leading and
+        // interleaved ones shift the alignment, but all are dropped.
+        const deviceOperations = [mapping('Alpha', 1), mapping('Beta', 2), mapping('Gamma', 3)];
+        const perfRows = [
+            signpostRow('tt_forward_START', 0),
+            perfRow('Alpha', 1),
+            signpostRow('phase_start', 2),
+            perfRow('Beta', 3),
+            perfRow('Gamma', 4),
+            signpostRow('phase_end', 5),
+            signpostRow('tt_forward_END', 6),
+        ];
+
+        const matched = matchDeviceOperationsToPerf(deviceOperations, perfRows, 1);
+
+        expect(matched).toHaveLength(3);
+        // The ids are the rows' own, so consumers still join against the unfiltered report.
+        expect(matched.map((deviceOperation) => deviceOperation.perfData?.id)).toEqual(['1', '3', '4']);
+    });
+
+    it('ignores signposts on the collapsed fallback too', () => {
+        const deviceOperations = duplicatedPerDevice(['Alpha', 'Beta'], 32);
+        const perfRows = [signpostRow('MoE_START', 0), perfRow('Alpha', 1), perfRow('Beta', 2)];
+
+        const matched = matchDeviceOperationsToPerf(deviceOperations, perfRows, 32);
+
+        expect(matched.map((deviceOperation) => deviceOperation.perfData?.id)).toEqual(['1', '2']);
+    });
+
+    it('keeps a row whose op type the backend could not resolve', () => {
+        // `set_op_type_from_results` writes `op_type = None` when a row id falls
+        // outside the ops perf CSV, so null reaches the frontend as a real shape
+        // and must pass the filter rather than being mistaken for a marker.
+        const deviceOperations = [mapping('Alpha', 1), mapping('Beta', 2)];
+        const perfRows = [perfRow('Alpha', 0, null), perfRow('Beta', 1, null)];
+
+        expect(matchDeviceOperationsToPerf(deviceOperations, perfRows, 1)).toHaveLength(2);
+    });
+
+    it('still rejects a report that disagrees once its signposts are dropped', () => {
+        const deviceOperations = [mapping('Alpha', 1), mapping('Beta', 2)];
+        const perfRows = [signpostRow('start', 0), perfRow('Alpha', 1), perfRow('Gamma', 2)];
+
+        expect(matchDeviceOperationsToPerf(deviceOperations, perfRows, 1)).toEqual([]);
     });
 
     it('falls back to collapsing when the report records each device op once per device', () => {

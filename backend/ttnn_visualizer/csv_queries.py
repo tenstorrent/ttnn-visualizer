@@ -36,18 +36,65 @@ CSVQueryResult = Union[
     List[List[CSVCell]],
     List[Dict[str, CSVCell]],
 ]
+# Filter values are compared against the column's parsed dtype, so an int64
+# column needs an int: `timer_id == "5"` matches nothing. `None` means isna().
+CSVFilters = Dict[str, Optional[Union[str, int]]]
+
+# Rows per chunk when filtering a file rather than holding it. Large enough that
+# the per-chunk overhead stays negligible, small enough that a ~288 MB capture
+# never lands in memory whole.
+CSV_CHUNK_SIZE = 50_000
 
 
 class LocalCSVQueryRunner:
-    def __init__(self, file_path: Union[str, Path], offset: int = 0):
+    def __init__(
+        self,
+        file_path: Union[str, Path],
+        offset: int = 0,
+        max_rows: Optional[int] = None,
+        stream: bool = False,
+        strip_columns: bool = False,
+    ):
         self.file_path = file_path
         self.offset = offset
+        # Only safe when the caller wants the first N rows of the file. A query
+        # that filters must see every row, or it silently answers from a prefix.
+        self.max_rows = max_rows
+        # Load the header only and leave the rows to `execute_filtered_query`.
+        # A filter still has to see every row, but it does not have to hold them
+        # all at once, and the device-log routes are not `@local_only`.
+        self.stream = stream
+        # Device log headers carry a leading space on every field after the
+        # first. Stripping here keeps `self.df` and every chunk consistent.
+        self.strip_columns = strip_columns
         self.df: Optional[pd.DataFrame] = None
 
     def __enter__(self):
         # Load the CSV file
-        self.df = pd.read_csv(self.file_path, skiprows=self.offset)
+        try:
+            self.df = pd.read_csv(
+                self.file_path,
+                skiprows=self.offset,
+                nrows=0 if self.stream else self.max_rows,
+            )
+        except (pd.errors.EmptyDataError, pd.errors.ParserError) as error:
+            raise self._unparseable(error) from error
+
+        if self.strip_columns:
+            self.df.columns = self.df.columns.str.strip()
         return self
+
+    def _unparseable(self, error: Exception) -> DataFormatError:
+        """A truncated or ragged file is the caller's data, not a server fault.
+
+        `pd.read_csv` raises `EmptyDataError` for a header-only capture and
+        `ParserError` for a ragged one. Left to propagate they reach the
+        catch-all as a 500 with a traceback, which is both the wrong status and
+        a log the caller controls. See #1946.
+        """
+        return DataFormatError(
+            f"{Path(self.file_path).name} could not be parsed: {error}"
+        )
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.df = None
@@ -62,7 +109,7 @@ class LocalCSVQueryRunner:
     def execute_query(
         self,
         columns: Optional[List[str]] = None,
-        filters: Optional[Dict[str, Union[str, None]]] = None,
+        filters: Optional[CSVFilters] = None,
         as_dict: bool = False,
         limit: Optional[int] = None,
     ) -> CSVQueryResult:
@@ -79,14 +126,12 @@ class LocalCSVQueryRunner:
                 "DataFrame is not loaded. Ensure the runner is used within a context."
             )
 
-        # Apply filters if provided
-        df_filtered = self.df
-        if filters:
-            for col, value in filters.items():
-                if value is None:
-                    df_filtered = df_filtered[df_filtered[col].isna()]
-                else:
-                    df_filtered = df_filtered[df_filtered[col] == value]
+        if self.stream:
+            raise RuntimeError(
+                "This runner holds only the header. Use execute_filtered_query()."
+            )
+
+        df_filtered = self._apply_filters(self.df, filters)
 
         # Select specified columns
         if columns:
@@ -98,7 +143,75 @@ class LocalCSVQueryRunner:
         if limit is not None:
             result_df = result_df.head(limit)
 
-        # Replace NaN with None in the query results
+        return self._as_result(result_df, as_dict)
+
+    def execute_filtered_query(
+        self,
+        filters: CSVFilters,
+        columns: Optional[List[str]] = None,
+        as_dict: bool = False,
+        limit: Optional[int] = None,
+    ) -> CSVQueryResult:
+        """Filter the file a chunk at a time, holding only what matched.
+
+        `execute_query` filters a frame that is already resident, so its peak
+        cost is the whole file plus a copy of every matching row -- on a real
+        capture, ~288 MB plus a 200k-row copy to answer with 100 rows. This
+        reads `CSV_CHUNK_SIZE` rows at a time and stops as soon as `limit` rows
+        have matched, so a zone that matches early never pays for the rest of
+        the file. Without a `limit` it still reaches EOF, but only the matches
+        accumulate. See #1946.
+        """
+        frames: List[pd.DataFrame] = []
+        collected = 0
+
+        try:
+            chunks = pd.read_csv(
+                self.file_path, skiprows=self.offset, chunksize=CSV_CHUNK_SIZE
+            )
+            for chunk in chunks:
+                if self.strip_columns:
+                    chunk.columns = chunk.columns.str.strip()
+
+                matched = self._apply_filters(chunk, filters)
+                if limit is not None:
+                    matched = matched.head(limit - collected)
+
+                if not matched.empty:
+                    frames.append(matched)
+                    collected += len(matched)
+
+                if limit is not None and collected >= limit:
+                    break
+        except (pd.errors.EmptyDataError, pd.errors.ParserError) as error:
+            raise self._unparseable(error) from error
+
+        if not frames:
+            return []
+
+        result_df = pd.concat(frames)
+        if columns:
+            result_df = result_df[columns]
+
+        return self._as_result(result_df, as_dict)
+
+    @staticmethod
+    def _apply_filters(df: pd.DataFrame, filters: Optional[CSVFilters]) -> pd.DataFrame:
+        """Narrow `df` to the rows matching every column-value pair."""
+        if not filters:
+            return df
+
+        for col, value in filters.items():
+            if value is None:
+                df = df[df[col].isna()]
+            else:
+                df = df[df[col] == value]
+
+        return df
+
+    @staticmethod
+    def _as_result(result_df: pd.DataFrame, as_dict: bool) -> CSVQueryResult:
+        """Sanitize NaN to None and shape the rows for the caller."""
         sanitized_df = result_df.applymap(lambda x: None if pd.isna(x) else x)
 
         if as_dict:
@@ -150,28 +263,48 @@ class NPEQueries:
 
 class DeviceLogProfilerQueries:
     DEVICE_LOG_FILE = "profile_log_device.csv"
-    DEVICE_LOG_COLUMNS = [
-        "PCIe slot",
-        "core_x",
-        "core_y",
-        "RISC processor type",
-        "timer_id",
-        "time[cycles since reset]",
-        "stat value",
-        "run ID",
+    # Only the columns something downstream depends on. Everything else in the
+    # file is passed through untouched, because which columns exist varies by
+    # producer and gating on them rejects captures that work fine: the segformer
+    # demo reports have no "meta data", the smoke fixture has no "run ID", and a
+    # current tt-metal adds "trace id" / "trace id counter" that none of the
+    # others have.
+    REQUIRED_DEVICE_LOG_COLUMNS = [
+        "timer_id",  # query_by_timer_id filters on it
+        "zone name",  # query_zone_statistics filters on it
+        # No query here reads this one. It is the join key back to
+        # `ops_perf_results` (#1941), and `PerformanceLog` declares it required,
+        # so a capture without it would be served to a client expecting it.
         "run host ID",
-        "zone name",
-        "zone phase",
-        "source line",
-        "source file",
     ]
 
-    def __init__(self, instance: Instance):
-        """
-        Initialize the profiler with a instance object.
-        The instance determines whether to use a local or remote runner.
+    # The `type` column's vocabulary, as tt-metal writes it. Deliberately not
+    # required -- older captures predate the column -- but pinned here so the
+    # fixture tests have one list to check against rather than a copy each.
+    # `scripts/smoke_test.py` keeps its own copy because it does not import
+    # this package.
+    DEVICE_LOG_ENTRY_TYPES = frozenset({"ZONE_START", "ZONE_END", "TS_DATA"})
+
+    def __init__(
+        self,
+        instance: Instance,
+        max_rows: Optional[int] = None,
+        stream: bool = False,
+    ):
+        """Read the device log for ``instance``.
+
+        ``max_rows`` stops `pd.read_csv` short. A real capture is ~724k rows and
+        ~288 MB parsed, so a route that only ever serves the first N rows should
+        pass it. A route that filters must not: `query_zone_statistics` has to
+        see the whole file to know what matched.
+
+        ``stream`` is what such a route passes instead. The header is loaded so
+        the columns can still be validated, and `query_zone_statistics` walks
+        the rows in chunks rather than holding them. See #1946.
         """
         self.instance = instance
+        self.max_rows = max_rows
+        self.stream = stream
         self.runner: Optional[LocalCSVQueryRunner] = None
 
     def __enter__(self):
@@ -185,14 +318,35 @@ class DeviceLogProfilerQueries:
                 self.DEVICE_LOG_FILE
             ),
             offset=1,  # Skip the first line for device log files
+            max_rows=self.max_rows,
+            stream=self.stream,
+            # Every field after the first carries a leading space in the header.
+            strip_columns=True,
         )
 
         self.runner.__enter__()
 
-        self.runner.df.columns = self.DEVICE_LOG_COLUMNS
-        self.runner.df.columns = self.runner.df.columns.str.strip()
+        self._require_columns(self.runner.df)
 
         return self
+
+    def _require_columns(self, df: pd.DataFrame) -> None:
+        """Refuse a capture whose header is missing a column we name.
+
+        Serving a short row is how #1941 went unnoticed: the header used to be
+        overwritten positionally, so a file with the right column *count* was
+        relabelled rather than rejected.
+        """
+        missing = [
+            column
+            for column in self.REQUIRED_DEVICE_LOG_COLUMNS
+            if column not in df.columns
+        ]
+        if missing:
+            raise DataFormatError(
+                f"{self.DEVICE_LOG_FILE} is missing expected columns: "
+                f"{', '.join(missing)}"
+            )
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         """
@@ -201,9 +355,11 @@ class DeviceLogProfilerQueries:
         if self.runner:
             self.runner.__exit__(exc_type, exc_val, exc_tb)
 
-    def query_by_timer_id(self, timer_id: str, as_dict: bool = False) -> CSVQueryResult:
-        """
-        Example query: Filter rows by a specific timer_id and optionally return results as dictionaries.
+    def query_by_timer_id(self, timer_id: int, as_dict: bool = False) -> CSVQueryResult:
+        """Filter rows by a specific timer_id.
+
+        `timer_id` is an int64 column, so this takes an `int`: comparing it
+        against a `str` silently matched nothing.
         """
         if self.runner is None:
             raise RuntimeError(
@@ -225,8 +381,9 @@ class DeviceLogProfilerQueries:
             raise RuntimeError(
                 "DeviceLogProfilerQueries must be used as a context manager"
             )
-        return self.runner.execute_query(
-            columns=[],
+        # Chunked: a single zone matches 200k+ rows on a real capture, and the
+        # route is reachable by anyone under SERVER_MODE.
+        return self.runner.execute_filtered_query(
             filters={"zone name": zone_name},
             as_dict=as_dict,
             limit=limit,
@@ -252,9 +409,7 @@ class DeviceLogProfilerQueries:
             raise RuntimeError(
                 "DeviceLogProfilerQueries must be used as a context manager"
             )
-        return self.runner.execute_query(
-            columns=self.DEVICE_LOG_COLUMNS, as_dict=as_dict, limit=limit
-        )
+        return self.runner.execute_query(columns=None, as_dict=as_dict, limit=limit)
 
     @staticmethod
     def get_raw_csv(instance: Instance):

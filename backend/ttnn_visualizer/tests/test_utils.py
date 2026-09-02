@@ -2,6 +2,7 @@
 #
 # SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
+import os
 from pathlib import Path
 from unittest.mock import mock_open, patch
 
@@ -9,12 +10,14 @@ import pytest
 from ttnn_visualizer.models import RemoteConnection
 from ttnn_visualizer.utils import (
     FALSE_VALUES,
+    MAX_RANKED_WORLD_SIZE,
     TRUE_VALUES,
     find_gunicorn_path,
     get_app_data_directory,
     get_mlir_path,
     get_report_data_directory,
     is_running_in_container,
+    is_valid_profiler_ranked_entry,
     parse_bool,
     pick_cluster_descriptor_path,
     pick_mesh_descriptor_path,
@@ -24,6 +27,7 @@ from ttnn_visualizer.utils import (
     read_profiler_report_name,
     require_tcp_port,
     str_to_bool,
+    stringify_chip_unique_ids,
 )
 
 # The vocabulary is narrow on purpose — it has to agree with the SPA's
@@ -695,15 +699,229 @@ def test_pick_mesh_descriptor_rank_out_of_range(tmp_path):
     assert err == "rank_out_of_range"
 
 
-def test_pick_cluster_descriptor_prefers_unsuffixed_file(tmp_path):
+def _write(path: Path, text: str, mtime_ns: int | None = None) -> Path:
+    path.write_text(text, encoding="utf-8")
+    if mtime_ns is not None:
+        os.utime(path, ns=(mtime_ns, mtime_ns))
+    return path
+
+
+# The producer reuses the output directory and writes each descriptor only
+# `if not path.exists()`, so the import that runs first owns its filenames and a
+# later import of a different world size adds the other family. Which family is
+# stale therefore depends on import order, and both orders are reachable. #1947
+OLD_NS = 1_600_000_000_000_000_000
+NEW_NS = 1_700_000_000_000_000_000
+
+
+def _cluster_families(tmp_path, single_ns, ranked_ns, world=2):
+    _write(tmp_path / "cluster_descriptor.yaml", "chips: []\n", single_ns)
+    for index in range(1, world + 1):
+        _write(
+            tmp_path / f"cluster_descriptor_{index}_of_{world}.yaml",
+            f"chips: [{index}]\n",
+            ranked_ns,
+        )
+
+
+def _mesh_families(tmp_path, single_ns, ranked_ns, world=2):
+    _write(
+        tmp_path / "physical_chip_mesh_coordinate_mapping.yaml",
+        "chips: []\n",
+        single_ns,
+    )
+    for index in range(1, world + 1):
+        _write(
+            tmp_path / f"physical_chip_mesh_coordinate_mapping_{index}_of_{world}.yaml",
+            f"chips: [{index}]\n",
+            ranked_ns,
+        )
+
+
+def test_ranked_family_wins_when_it_is_the_newer_import(tmp_path):
+    # world-1 imported first, then world-2: the unsuffixed file is the leftover.
+    _cluster_families(tmp_path, single_ns=OLD_NS, ranked_ns=NEW_NS)
+
+    for rank, expected in (
+        (0, "cluster_descriptor_1_of_2.yaml"),
+        (1, "cluster_descriptor_2_of_2.yaml"),
+    ):
+        path, err = pick_cluster_descriptor_path(tmp_path, logical_rank=rank)
+        assert err is None
+        assert path is not None and path.name == expected
+
+    path, err = pick_cluster_descriptor_path(tmp_path, logical_rank=2)
+    assert path is None and err == "rank_out_of_range"
+
+
+def test_unsuffixed_wins_when_it_is_the_newer_import(tmp_path):
+    # The reverse order, which the producer permits just as readily: world-2
+    # imported first, then world-1, so the ranked family is the leftover.
+    _cluster_families(tmp_path, single_ns=NEW_NS, ranked_ns=OLD_NS)
+
+    path, err = pick_cluster_descriptor_path(tmp_path, logical_rank=0)
+    assert err is None
+    assert path is not None and path.name == "cluster_descriptor.yaml"
+
+    # One host, so nothing past rank 0 — not the stale ranked family's world.
+    path, err = pick_cluster_descriptor_path(tmp_path, logical_rank=1)
+    assert path is None and err == "rank_out_of_range"
+
+
+def test_a_partial_ranked_family_does_not_mask_an_unsuffixed_descriptor(tmp_path):
+    # `ranked_report_basenames` calls a lone `_1_of_2` a consistent group, which
+    # made rank 1 fail with `missing_rank_file` while a usable descriptor sat
+    # beside it. An incomplete family is not eligible to win, whatever its mtime.
+    _write(tmp_path / "cluster_descriptor.yaml", "chips: []\n", OLD_NS)
+    _write(tmp_path / "cluster_descriptor_1_of_2.yaml", "chips: [1]\n", NEW_NS)
+
+    path, err = pick_cluster_descriptor_path(tmp_path, logical_rank=0)
+    assert err is None
+    assert path is not None and path.name == "cluster_descriptor.yaml"
+
+    path, err = pick_cluster_descriptor_path(tmp_path, logical_rank=1)
+    assert path is None and err == "rank_out_of_range"
+
+
+def test_a_partial_ranked_family_is_still_used_when_it_is_all_there_is(tmp_path):
+    # Completeness governs precedence, not usability: with no unsuffixed file to
+    # defer to, rank 0 is still serviceable and only the absent rank errors.
+    _write(tmp_path / "cluster_descriptor_1_of_2.yaml", "chips: [1]\n")
+
+    path, err = pick_cluster_descriptor_path(tmp_path, logical_rank=0)
+    assert err is None
+    assert path is not None and path.name == "cluster_descriptor_1_of_2.yaml"
+
+    path, err = pick_cluster_descriptor_path(tmp_path, logical_rank=1)
+    assert path is None and err == "missing_rank_file"
+
+
+@pytest.mark.parametrize(
+    "single_ns,ranked_ns,expect_ranked",
+    [(OLD_NS, NEW_NS, True), (NEW_NS, OLD_NS, False)],
+)
+def test_cluster_and_mesh_choose_the_same_generation(
+    tmp_path, single_ns, ranked_ns, expect_ranked
+):
+    # The failure this guards: cluster selecting the current ranked descriptors
+    # while mesh returned the stale unsuffixed mapping, which then overrode
+    # `descriptor.chips` for every host. Family selection is shared, so the two
+    # cannot disagree; only the per-rank rule differs. #1947
+    _cluster_families(tmp_path, single_ns, ranked_ns)
+    _mesh_families(tmp_path, single_ns, ranked_ns)
+
+    cluster, cluster_err = pick_cluster_descriptor_path(tmp_path, logical_rank=0)
+    mesh, mesh_err = pick_mesh_descriptor_path(tmp_path, logical_rank=0)
+
+    assert cluster_err is None and mesh_err is None
+    assert cluster is not None and mesh is not None
+    assert ("_1_of_2" in cluster.name) is expect_ranked
+    assert (
+        "_1_of_2" in mesh.name
+    ) is expect_ranked, "mesh chose a different generation"
+
+
+def test_pick_cluster_descriptor_ranked_set_outranks_a_stale_unsuffixed_file(tmp_path):
+    # tt-metal reuses the output directory and writes each descriptor only
+    # `if not path.exists()`, so a world-1 import followed by a world-2 import into
+    # the same directory leaves the unsuffixed file beside the ranked pair. Serving
+    # that leftover for every rank reproduced #1939 bounded by the world size, so
+    # the ranked set wins and its bound applies. #1947
     (tmp_path / "cluster_descriptor.yaml").write_text("chips: []\n", encoding="utf-8")
     (tmp_path / "cluster_descriptor_1_of_2.yaml").write_text(
         "chips: [1]\n", encoding="utf-8"
     )
+    (tmp_path / "cluster_descriptor_2_of_2.yaml").write_text(
+        "chips: [2]\n", encoding="utf-8"
+    )
+
+    path, err = pick_cluster_descriptor_path(tmp_path, logical_rank=0)
+    assert err is None
+    assert path is not None and path.name == "cluster_descriptor_1_of_2.yaml"
+
     path, err = pick_cluster_descriptor_path(tmp_path, logical_rank=1)
+    assert err is None
+    assert path is not None and path.name == "cluster_descriptor_2_of_2.yaml"
+
+    # The probe stops at the world bound instead of walking to its cap.
+    for rank in (2, 3, 31):
+        path, err = pick_cluster_descriptor_path(tmp_path, logical_rank=rank)
+        assert path is None, f"rank {rank} resolved to {path}"
+        assert err == "rank_out_of_range"
+
+
+def test_stringify_chip_unique_ids_preserves_64_bit_values():
+    # 5313998941933517939 is chip 9 of test_ttnn_moe_aug26_2217. As a JSON number
+    # the browser rounds it to ...518000; as a string it survives. #1950
+    exact = 5313998941933517939
+    assert exact > 2**53
+    descriptor = {
+        "chip_unique_ids": {9: exact, 10: exact + 1},
+        "ethernet_connections_to_remote_devices": [
+            [{"chip": 25, "chan": 9}, {"remote_chip_id": exact + 2, "chan": 9}],
+            # Reversed, so the key-carrying endpoint is at index 0. The rule is
+            # "any endpoint dict carrying remote_chip_id", not "the second one".
+            [{"remote_chip_id": exact + 3, "chan": 1}, {"chip": 26, "chan": 1}],
+        ],
+    }
+
+    result = stringify_chip_unique_ids(descriptor)
+
+    assert result["chip_unique_ids"] == {9: str(exact), 10: str(exact + 1)}
+    # Adjacent values stay distinct; as doubles they would collapse together.
+    assert float(exact) == float(exact + 1)
+    pairs = result["ethernet_connections_to_remote_devices"]
+    assert pairs[0][1]["remote_chip_id"] == str(exact + 2)
+    assert pairs[1][0]["remote_chip_id"] == str(exact + 3)
+    # Endpoints without the key are untouched, whichever side they sit on.
+    assert pairs[0][0] == {"chip": 25, "chan": 9}
+    assert pairs[1][1] == {"chip": 26, "chan": 1}
+
+
+def test_stringify_chip_unique_ids_tolerates_missing_and_odd_shapes():
+    assert stringify_chip_unique_ids(None) is None
+    assert stringify_chip_unique_ids("not a mapping") == "not a mapping"
+    # A descriptor without either field passes through unchanged.
+    assert stringify_chip_unique_ids({"arch": {0: "blackhole"}}) == {
+        "arch": {0: "blackhole"}
+    }
+    # Remote entries that are not endpoint pairs are left alone rather than raising.
+    assert stringify_chip_unique_ids(
+        {"ethernet_connections_to_remote_devices": ["unexpected", []]}
+    ) == {"ethernet_connections_to_remote_devices": ["unexpected", []]}
+
+
+def test_pick_cluster_descriptor_single_file_answers_rank_zero_only(tmp_path):
+    # A report shipping one unsuffixed descriptor is a single host. Answering
+    # rank 1..N with the same file made the topology probe clone that host once
+    # per probed rank (#1939), so every rank past 0 is out of range.
+    (tmp_path / "cluster_descriptor.yaml").write_text("chips: []\n", encoding="utf-8")
+
+    path, err = pick_cluster_descriptor_path(tmp_path, logical_rank=0)
     assert err is None
     assert path is not None
     assert path.name == "cluster_descriptor.yaml"
+
+    for rank in (1, 2, 31, 99):
+        path, err = pick_cluster_descriptor_path(tmp_path, logical_rank=rank)
+        assert path is None, f"rank {rank} should not resolve to a file"
+        assert err == "rank_out_of_range", f"rank {rank} returned {err!r}"
+
+
+def test_pick_mesh_descriptor_single_file_serves_every_rank(tmp_path):
+    # Deliberately unlike the cluster rule: one unsuffixed mesh mapping covers the
+    # whole world, either reused as a legacy single doc or holding one `chips:`
+    # document per rank that the frontend selects from. Applying the cluster
+    # rank-0-only rule here left later hosts with no mesh data. #1947
+    (tmp_path / "physical_chip_mesh_coordinate_mapping.yaml").write_text(
+        "chips: []\n", encoding="utf-8"
+    )
+
+    for rank in (0, 1, 5, 31):
+        path, err = pick_mesh_descriptor_path(tmp_path, logical_rank=rank)
+        assert err is None, f"rank {rank} returned {err!r}"
+        assert path is not None
+        assert path.name == "physical_chip_mesh_coordinate_mapping.yaml"
 
 
 def test_pick_cluster_descriptor_ranked_files(tmp_path):
@@ -717,3 +935,46 @@ def test_pick_cluster_descriptor_ranked_files(tmp_path):
     assert err is None
     assert path is not None
     assert path.name == "cluster_descriptor_2_of_2.yaml"
+
+
+def test_ranked_world_size_is_bounded_against_a_hostile_filename(tmp_path):
+    """
+    ``world_size`` is parsed straight out of a filename, and the local upload path
+    preserves client basenames. Completeness used to be decided by comparing
+    against ``set(range(1, world_size + 1))``, so an 11-digit world size asked for
+    a multi-terabyte allocation inside the shared Flask process. #1947
+    """
+    assert is_valid_profiler_ranked_entry(1, MAX_RANKED_WORLD_SIZE) is True
+    assert is_valid_profiler_ranked_entry(1, MAX_RANKED_WORLD_SIZE + 1) is False
+    assert is_valid_profiler_ranked_entry(1, 99_999_999_999) is False
+
+    # End to end: an over-cap name is skipped, so a usable unsuffixed descriptor
+    # still answers rather than the request dying on the allocation.
+    (tmp_path / "cluster_descriptor.yaml").write_text("chips: []\n", encoding="utf-8")
+    (tmp_path / "cluster_descriptor_1_of_99999999999.yaml").write_text(
+        "chips: [1]\n", encoding="utf-8"
+    )
+
+    path, err = pick_cluster_descriptor_path(tmp_path, logical_rank=0)
+
+    assert err is None
+    assert path is not None
+    assert path.name == "cluster_descriptor.yaml"
+
+
+def test_ranked_family_completeness_counts_rather_than_enumerating(tmp_path):
+    # The count settles completeness because the indices are unique and already
+    # bounded to 1..world; an incomplete family must not outrank the unsuffixed file.
+    (tmp_path / "cluster_descriptor.yaml").write_text("chips: []\n", encoding="utf-8")
+    (tmp_path / "cluster_descriptor_1_of_3.yaml").write_text(
+        "chips: [1]\n", encoding="utf-8"
+    )
+    (tmp_path / "cluster_descriptor_2_of_3.yaml").write_text(
+        "chips: [2]\n", encoding="utf-8"
+    )
+
+    path, err = pick_cluster_descriptor_path(tmp_path, logical_rank=0)
+
+    assert err is None
+    assert path is not None
+    assert path.name == "cluster_descriptor.yaml"

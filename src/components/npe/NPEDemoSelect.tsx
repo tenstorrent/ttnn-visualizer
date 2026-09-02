@@ -37,9 +37,10 @@ interface NPEDemoSelectProps {
     selectedDemo: NPEDemoData | null;
     setSelectedDemo: (demo: NPEDemoData | null) => void;
     setDemoData: (data: NPEData | null) => void;
+    onDemoSelected: () => void;
 }
 
-const NPEDemoSelect = ({ selectedDemo, setSelectedDemo, setDemoData }: NPEDemoSelectProps) => {
+const NPEDemoSelect = ({ selectedDemo, setSelectedDemo, setDemoData, onDemoSelected }: NPEDemoSelectProps) => {
     const renderItem: ItemRenderer<NPEDemoData> = (item, { handleClick, modifiers }) => (
         <div
             className='folder-picker-menu-item'
@@ -68,6 +69,7 @@ const NPEDemoSelect = ({ selectedDemo, setSelectedDemo, setDemoData }: NPEDemoSe
                 />
             }
             onItemSelect={(item) => {
+                onDemoSelected();
                 setSelectedDemo(item);
                 setDemoData(item.data);
             }}

@@ -211,3 +211,43 @@ describe('MemoryLegendElement globally_allocated marker (#1651)', () => {
         );
     });
 });
+
+// The size cell is `text-align: right`, so a cell holding "8 KiB x 32 devices"
+// right-aligns the whole string and the size drifts left — measured on op 104 of
+// the MoE report as three distinct size right-edges (417 / 451 / 468 at 1900px)
+// where the buffer rows all sat at 417. Keeping the multipliers out of that cell
+// is what restores one edge for every row. #1879
+describe('MemoryLegendElement multiplier placement', () => {
+    const cbChunk = { address: 111616, size: 8192 };
+
+    it('keeps the size cell numeric so it can right-align with plain sizes', () => {
+        const container = renderLegendElement(cbChunk, { numCores: 46, deviceCount: 32 });
+
+        const sizeCell = container.querySelector('.format-numbers.monospace.nowrap');
+        expect(sizeCell).toBeInTheDocument();
+        expect(sizeCell?.textContent).toBe('8 KiB');
+        expect(sizeCell?.textContent).not.toContain('devices');
+        expect(sizeCell?.textContent).not.toContain('cores');
+    });
+
+    it('puts both multipliers in the left-aligned description cell', () => {
+        const container = renderLegendElement(cbChunk, { numCores: 46, deviceCount: 32 });
+
+        const multipliers = container.querySelector('.legend-description .legend-multipliers');
+        expect(multipliers).toBeInTheDocument();
+        expect(multipliers?.textContent).toBe('x 46 cores x 32 devices');
+    });
+
+    it('renders no multiplier span at all when neither applies', () => {
+        // An empty span would still take the description cell's leading gap.
+        const container = renderLegendElement(cbChunk);
+
+        expect(container.querySelector('.legend-multipliers')).not.toBeInTheDocument();
+    });
+
+    it('carries the device count alone when core count does not apply', () => {
+        const container = renderLegendElement(cbChunk, { deviceCount: 32 });
+
+        expect(container.querySelector('.legend-multipliers')?.textContent).toBe('x 32 devices');
+    });
+});

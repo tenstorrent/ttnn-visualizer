@@ -45,7 +45,8 @@ $minimap-width: 200px;
     // perf bar all belong to the operation, not to whether it is showing its
     // device operations. #1195
     .react-flow__node-opNode,
-    .react-flow__node-deviceGroupNode {
+    .react-flow__node-deviceGroupNode,
+    .react-flow__node-blockNode {
         display: flex;
         flex-direction: column;
         gap: 2px;
@@ -105,12 +106,29 @@ $minimap-width: 200px;
     // A collapsed operation is a filled box, so the I/O relation reads as its
     // fill. An expanded one is a field its device operations sit on, where the
     // same fill would bury them — see the group's border highlight below.
-    .react-flow__node-opNode.op-graph-node-input {
+    .react-flow__node-opNode.op-graph-node-input,
+    .react-flow__node-blockNode.op-graph-node-input {
         background-color: var(--graph-input-node);
     }
 
-    .react-flow__node-opNode.op-graph-node-output {
+    .react-flow__node-opNode.op-graph-node-output,
+    .react-flow__node-blockNode.op-graph-node-output {
         background-color: var(--graph-output-node);
+    }
+
+    .react-flow__node-blockNode {
+        // 4px dash + matching inset ring: at 0.1–0.3 zoom a 2px grey dash
+        // collapses to the same hairline the ops already have.
+        border: 4px dashed var(--graph-block-border);
+        border-radius: 8px;
+        background-color: var(--graph-block);
+        box-shadow: inset 0 0 0 2px var(--graph-block-border);
+
+        &.op-graph-node-selected {
+            border-style: solid;
+            border-color: var(--graph-selected);
+            box-shadow: 0 0 0 3px var(--graph-selected);
+        }
     }
 
     // The MLIR graph's group: a translucent field inside a dashed border. That is
@@ -201,23 +219,19 @@ $minimap-width: 200px;
         display: inline-flex;
         gap: 2px;
         align-items: center;
-        padding: 1px 4px;
-
-        // Separates the chip from the expanded group's dark field, where a
-        // borderless dark chip disappears. Invisible on a light collapsed node,
-        // which needs no help.
-        border: 1px solid rgba($tt-white, 0.14);
+        padding: 2px 5px;
+        border: 1px solid $tt-grey-2;
         border-radius: 3px;
-        background-color: rgba($tt-black, 0.88);
-        color: $tt-grey-7;
+        background-color: $tt-black;
+        color: $tt-white;
         font-family: inherit;
-        font-size: 10px;
-        font-weight: 600;
-        line-height: 1.4;
+        font-size: 11px;
+        font-weight: 700;
+        line-height: 1.3;
         cursor: pointer;
 
         &:hover {
-            background-color: $tt-black;
+            background-color: $tt-grey-2;
             color: $tt-white;
         }
 
@@ -237,10 +251,42 @@ $minimap-width: 200px;
     // and a badge hung off the corner was clipped by the boundary and easy to
     // miss. Absolute so it can't become a flex item and grow the node past the
     // height the layout measured.
-    .react-flow__node-opNode > .op-graph-node-expander {
+    .react-flow__node-opNode > .op-graph-node-expander,
+    .react-flow__node-blockNode > .op-graph-node-expander {
         position: absolute;
         top: 3px;
         right: 3px;
+    }
+
+    // Pill + the block ink, so `▾ 336` is not the same black chip as a
+    // device-op expander sitting on a grey op.
+    .react-flow__node-blockNode > .op-graph-node-expander {
+        top: 6px;
+        right: 6px;
+        padding: 3px 8px;
+        border: 2px solid $tt-white;
+        border-radius: 999px;
+        background-color: var(--graph-block-border);
+        font-size: 12px;
+
+        &:hover {
+            background-color: var(--graph-selected);
+        }
+    }
+
+    .op-graph-node-buried-badge {
+        position: absolute;
+        top: 3px;
+        left: 3px;
+        padding: 1px 5px;
+        border-radius: 8px;
+        background: $tt-yellow;
+        color: $tt-black;
+        font-size: 10px;
+        font-weight: 600;
+        line-height: 1.1;
+        pointer-events: none;
+        user-select: none;
     }
 
     // On the bottom band beside the minimap, reading against the nodes it
@@ -281,7 +327,8 @@ $minimap-width: 200px;
         white-space: nowrap;
     }
 
-    .op-graph-node-file {
+    .op-graph-node-file,
+    .op-graph-node-meta {
         overflow: hidden;
         color: $tt-grey-2;
         font-size: 11px;
@@ -346,10 +393,48 @@ $minimap-width: 200px;
     // Skipped while a search runs: the filter dim is the narrower intent and
     // would otherwise lose to this rule's extra `:not()` specificity. The
     // selected node's own edges are exempt too, or clicking a node to inspect its
-    // inputs and outputs would fade half of them.
-    &.op-graph-critical-path:not(.op-graph-filtering) {
+    // inputs and outputs would fade half of them. Critical path and "dim
+    // unrelated edges" ask for the same fade, so they share the rule.
+    &.op-graph-critical-path:not(.op-graph-filtering),
+    &.op-graph-dim-unrelated-edges:not(.op-graph-filtering) {
         .react-flow__edge:not(.op-graph-edge-critical-path, .op-graph-edge-input, .op-graph-edge-output) {
             opacity: 0.35;
+        }
+    }
+
+    // What a structural toggle just produced. Its own channel again — box-shadow,
+    // since selection owns the border, the I/O highlight the fill and the critical
+    // path the outline — so a revealed node that is also selected shows both.
+    //
+    // Three slow pulses to catch the eye, then it rests on the rule's own faint
+    // ring, which is where the animation leaves it. That resting state is not a
+    // leftover: it marks the group you last opened for as long as it is open, and
+    // is faint enough not to compete with selection. #1944
+    .react-flow__node.op-graph-node-revealed {
+        animation: op-graph-reveal 0.9s ease-out 3;
+        box-shadow: 0 0 0 2px rgb(116 197 223 / 32%);
+        z-index: 3;
+    }
+
+    @keyframes op-graph-reveal {
+        0% {
+            box-shadow: 0 0 0 2px rgb(116 197 223 / 95%);
+        }
+
+        45% {
+            box-shadow: 0 0 0 10px rgb(116 197 223 / 0%);
+        }
+
+        100% {
+            box-shadow: 0 0 0 2px rgb(116 197 223 / 32%);
+        }
+    }
+
+    // Reduced motion still needs the *answer* to "where did it go", so the ring
+    // stays and only the pulse goes.
+    @media (prefers-reduced-motion: reduce) {
+        .react-flow__node.op-graph-node-revealed {
+            animation: none;
         }
     }
 
@@ -472,6 +557,26 @@ $minimap-width: 200px;
         gap: 6px;
         padding: 8px 12px;
         border-bottom: 1px solid rgba($tt-white, 0.06);
+    }
+
+    .op-graph-panel-stats {
+        display: grid;
+        grid-template-columns: auto 1fr;
+        gap: 2px 12px;
+        margin: 0;
+        padding: 8px 12px;
+        border-bottom: 1px solid rgba($tt-white, 0.06);
+        font-size: 12px;
+
+        dt {
+            color: $tt-grey-6;
+        }
+
+        dd {
+            margin: 0;
+            color: $tt-grey-7;
+            font-variant-numeric: tabular-nums;
+        }
     }
 
     .op-graph-panel-section {

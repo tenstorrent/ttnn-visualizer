@@ -20,7 +20,11 @@ import json
 from pathlib import Path
 
 import pytest
-from ttnn_visualizer.csv_queries import NPEQueries, OpsPerformanceReportQueries
+from ttnn_visualizer.csv_queries import (
+    DeviceLogProfilerQueries,
+    NPEQueries,
+    OpsPerformanceReportQueries,
+)
 from ttnn_visualizer.extensions import db
 from ttnn_visualizer.models import Instance, InstanceTable
 from ttnn_visualizer.utils import is_valid_performance_report_dir
@@ -93,7 +97,14 @@ def test_device_log_preamble_parses(client, fixture_instance):
 
 
 def test_device_log_rows_have_the_expected_field_count():
-    """`LocalCSVQueryRunner` renames columns positionally, so the count is load-bearing."""
+    """Pandas does not complain about a ragged row, so something has to.
+
+    A short row is silently NaN-padded; a long one promotes the first column to
+    an index and shifts every value. Either way a stray comma in `source file`
+    or `meta data` corrupts the data with no parse error, so a regeneration that
+    introduced one would surface as wrong numbers rather than a failure. Column
+    *naming* is pinned by the test below.
+    """
     lines = DEVICE_LOG.read_text(encoding="utf-8").splitlines()
 
     assert len(lines) > 2, "Device log has no data rows"
@@ -105,6 +116,31 @@ def test_device_log_rows_have_the_expected_field_count():
         assert (
             len(line.split(",")) == expected_fields
         ), f"Device log line {row_number} has the wrong field count"
+
+
+def test_device_log_columns_are_read_by_name():
+    """The fixture has 13 columns, which is what hid #1941 for so long.
+
+    A hardcoded 13-name list overwrote the header positionally, so this file's
+    count matched and every name from `data` onward shifted by one — `type` was
+    served as `zone name`, so a zone query returned nothing for a real zone and
+    rows for `ZONE_START`. Both answered 200, so the smoke test never noticed.
+    """
+    instance = Instance(
+        instance_id="pytest-smoke-fixture-columns", performance_path=str(FIXTURE_DIR)
+    )
+
+    with DeviceLogProfilerQueries(instance) as csv:
+        entries = csv.get_all_entries(as_dict=True)
+
+    assert entries, "Fixture device log has no data rows"
+
+    zone_names = {entry["zone_name"] for entry in entries}
+    assert (
+        "BRISC-FW" in zone_names
+    ), f"`zone name` is serving another column: {zone_names}"
+    entry_types = {entry["type"] for entry in entries}
+    assert entry_types <= DeviceLogProfilerQueries.DEVICE_LOG_ENTRY_TYPES, entry_types
 
 
 def test_manifest_matches_its_schema():

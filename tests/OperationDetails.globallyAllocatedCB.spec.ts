@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { OperationDetails } from '../src/model/OperationDetails';
 import { Node, NodeType, OperationDetailsData } from '../src/model/APIData';
 import { PlotDataCustom } from '../src/model/PlotData';
+import { collapseCbDeviceRows } from '../src/functions/collapseCbDeviceRows';
 
 let nextId = 0;
 function mkNode<T extends Partial<Node>>(node: T): Node {
@@ -42,7 +43,7 @@ const resolveGloballyAllocatedFlag = (options: { globallyAllocated?: boolean; ra
 const cbAllocate = (
     address: number,
     size: number,
-    options: { globallyAllocated?: boolean; rawFlag?: string | number } = {},
+    options: { globallyAllocated?: boolean; rawFlag?: string | number; deviceId?: number | string } = {},
 ) =>
     mkNode({
         node_type: NodeType.circular_buffer_allocate,
@@ -51,6 +52,7 @@ const cbAllocate = (
             size: String(size),
             address: String(address),
             globally_allocated: resolveGloballyAllocatedFlag(options),
+            ...(options.deviceId === undefined ? {} : { device_id: options.deviceId }),
         },
     } as unknown as Partial<Node>);
 
@@ -212,5 +214,53 @@ describe('OperationDetails.memoryData() CB trace split (#1652)', () => {
         const top = (data.cbChartData[0] as Partial<PlotDataCustom>).memoryData!;
         expect(top.address).toBe(0x1000);
         expect(top.address + top.size).toBeLessThan(0xff000);
+    });
+});
+
+// Deleting the `device_id` line from the cbList push left every other suite green
+// while the collapse silently fell into its "no device id -> keep the rows" branch,
+// so the feature was dead with no failing test. This covers the plumbing itself. #1879
+describe('OperationDetails circular_buffer_allocate device plumbing (#1879)', () => {
+    it('stamps device_id onto every cbList entry', () => {
+        const op = buildOperationDetails([
+            functionStart('matmul'),
+            ...[0, 1, 2, 3, 4, 5, 6, 7].map((deviceId) => cbAllocate(0x1000, 1024, { deviceId })),
+            functionEnd('matmul'),
+        ]);
+
+        const [matmul] = op.deviceOperations;
+        expect(matmul.cbList).toHaveLength(8);
+        expect(matmul.cbList.map((cb) => cb.device_id)).toEqual([0, 1, 2, 3, 4, 5, 6, 7]);
+    });
+
+    it('feeds the collapse, so one mesh CB becomes one row for eight devices', () => {
+        // The end of the plumbing: without device_id on the entries this collapses
+        // to eight rows of one device rather than one row of eight.
+        const op = buildOperationDetails([
+            functionStart('matmul'),
+            ...[0, 1, 2, 3, 4, 5, 6, 7].map((deviceId) => cbAllocate(0x1000, 1024, { deviceId })),
+            functionEnd('matmul'),
+        ]);
+
+        const collapsed = collapseCbDeviceRows(op.deviceOperations[0].cbList);
+
+        expect(collapsed).toHaveLength(1);
+        expect(collapsed[0].deviceCount).toBe(8);
+    });
+
+    it('normalises a string device id, which at least one capture emits', () => {
+        const op = buildOperationDetails([
+            functionStart('matmul'),
+            cbAllocate(0x1000, 1024, { deviceId: '3' }),
+            functionEnd('matmul'),
+        ]);
+
+        expect(op.deviceOperations[0].cbList[0].device_id).toBe(3);
+    });
+
+    it('leaves device_id undefined when the capture has no device dimension', () => {
+        const op = buildOperationDetails([functionStart('matmul'), cbAllocate(0x1000, 1024), functionEnd('matmul')]);
+
+        expect(op.deviceOperations[0].cbList[0].device_id).toBeUndefined();
     });
 });

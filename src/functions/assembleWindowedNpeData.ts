@@ -66,6 +66,9 @@ const assembleWindowedNpeData = (
 
     return {
         common_info: summary.common_info,
+        // Without this the override would work on the whole-file path only, and
+        // uploads take the windowed one locally. #1776
+        soc_descriptor: summary.soc_descriptor,
         chips: summary.chips,
         zones: summary.zones?.length ? summary.zones : undefined,
         noc_transfers: window.transfers,

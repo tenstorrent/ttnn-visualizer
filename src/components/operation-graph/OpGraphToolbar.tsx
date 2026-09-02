@@ -65,6 +65,8 @@ interface OpGraphToolbarProps {
     onGoToOperation: (operationId: number) => void;
     hideDeallocate: boolean;
     onHideDeallocateChange: (next: boolean) => void;
+    isDimUnrelatedEdges: boolean;
+    onDimUnrelatedEdgesChange: (next: boolean) => void;
     isPerfOverlayActive: boolean;
     onPerfOverlayChange: (next: boolean) => void;
     isCriticalPathActive: boolean;
@@ -73,6 +75,15 @@ interface OpGraphToolbarProps {
     linkedOpCount: number;
     totalOpCount: number;
     isDisabled: boolean;
+    hiddenMatchCount?: number;
+    // Required, though the sole caller supplies them anyway: optional handlers let
+    // `disabled={isDisabled || areAllBlocksExpanded}` render an enabled button whose
+    // onClick is undefined — a silent no-op the type system should be catching.
+    hasBlocks: boolean;
+    areAllBlocksExpanded: boolean;
+    areAllBlocksCollapsed: boolean;
+    onExpandAllBlocks: () => void;
+    onCollapseAllBlocks: () => void;
 }
 
 const OpGraphToolbar = memo(
@@ -93,6 +104,8 @@ const OpGraphToolbar = memo(
         onGoToOperation,
         hideDeallocate,
         onHideDeallocateChange,
+        isDimUnrelatedEdges,
+        onDimUnrelatedEdgesChange,
         isPerfOverlayActive,
         onPerfOverlayChange,
         isCriticalPathActive,
@@ -101,6 +114,12 @@ const OpGraphToolbar = memo(
         linkedOpCount,
         totalOpCount,
         isDisabled,
+        hiddenMatchCount = 0,
+        hasBlocks,
+        areAllBlocksExpanded,
+        areAllBlocksCollapsed,
+        onExpandAllBlocks,
+        onCollapseAllBlocks,
     }: OpGraphToolbarProps) => (
         <div className='op-graph-toolbar'>
             <GraphOpFilter
@@ -114,6 +133,7 @@ const OpGraphToolbar = memo(
                 currentMatchIndex={currentMatchIndex}
                 onPrev={onPrevMatch}
                 onNext={onNextMatch}
+                hiddenMatchCount={hiddenMatchCount}
                 isDisabled={isDisabled}
             />
 
@@ -179,6 +199,16 @@ const OpGraphToolbar = memo(
                     disabled={isDisabled}
                 />
 
+                <Switch
+                    className='op-graph-toolbar-switch'
+                    checked={isDimUnrelatedEdges}
+                    onChange={(event: FormEvent<HTMLInputElement>) =>
+                        onDimUnrelatedEdgesChange(event.currentTarget.checked)
+                    }
+                    label='Dim unrelated edges'
+                    disabled={isDisabled}
+                />
+
                 <PerfGatedSwitch
                     tooltipByStatus={PERF_OVERLAY_TOOLTIP}
                     label={
@@ -201,6 +231,28 @@ const OpGraphToolbar = memo(
                     isDisabled={isDisabled}
                 />
             </div>
+
+            {hasBlocks ? (
+                <div className='op-graph-toolbar-row'>
+                    <span className='op-graph-toolbar-group-label'>Repeats</span>
+                    <Button
+                        variant={ButtonVariant.OUTLINED}
+                        disabled={isDisabled || areAllBlocksExpanded}
+                        onClick={onExpandAllBlocks}
+                        aria-label='Unroll all repeats'
+                    >
+                        Unroll
+                    </Button>
+                    <Button
+                        variant={ButtonVariant.OUTLINED}
+                        disabled={isDisabled || areAllBlocksCollapsed}
+                        onClick={onCollapseAllBlocks}
+                        aria-label='Fold all repeats'
+                    >
+                        Fold
+                    </Button>
+                </div>
+            ) : null}
         </div>
     ),
 );

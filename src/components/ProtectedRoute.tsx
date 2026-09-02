@@ -22,7 +22,7 @@ const ProtectedRoute = ({ children }: ProtectedRouteProps) => {
     const needsProfiler = currentRoute?.needsProfilerReport ?? false;
     const needsPerformance = currentRoute?.needsPerformanceReport ?? false;
 
-    if (isLoading && !hasRestoredInstance) {
+    if (!hasRestoredInstance && (isLoading || Boolean(instance))) {
         return (
             <div className='instance-loader'>
                 <LoadingSpinner />

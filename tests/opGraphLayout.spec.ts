@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 import {
     type LayoutInputEdge,
     type LayoutInputNode,
+    estimateBlockNodeSize,
     estimateOpNodeSize,
     layoutOpGraph,
 } from '../src/components/operation-graph/opGraphLayout';
@@ -73,6 +74,21 @@ describe('estimateOpNodeSize', () => {
 
     it('keeps the height independent of how long either line is', () => {
         expect(estimateOpNodeSize(LONG, LONG).height).toBe(estimateOpNodeSize('op', 'a.py:1').height);
+    });
+});
+
+describe('estimateBlockNodeSize', () => {
+    it('is taller than an op node so the meta line has a row of its own', () => {
+        expect(estimateBlockNodeSize('Block A × 2', '2 ops').height).toBeGreaterThan(
+            estimateOpNodeSize('Block A × 2', '2 ops').height,
+        );
+    });
+
+    it('reserves a wider chip than the device-op badge after the label hits the cap', () => {
+        const label = 'x'.repeat(400);
+        expect(estimateBlockNodeSize(label, '2 ops').width).toBeGreaterThan(
+            estimateOpNodeSize(label, '2 ops', true).width,
+        );
     });
 });
 

@@ -33,7 +33,7 @@ const twoChipTopology = (
                 rank: 0,
                 descriptor: {
                     arch,
-                    chip_unique_ids: { 0: 100, 1: 101 },
+                    chip_unique_ids: { 0: '100', 1: '101' },
                     chips_with_mmio: [{ 0: 0 }],
                     ethernet_connections: [],
                 },
@@ -56,7 +56,7 @@ const twoHostTopology = (arch: Record<number, string>): ClusterTopology =>
             rank,
             descriptor: {
                 arch,
-                chip_unique_ids: { 0: 100 + rank },
+                chip_unique_ids: { 0: String(100 + rank) },
                 chips_with_mmio: [{ 0: 0 }],
                 ethernet_connections: [],
             },
@@ -65,8 +65,8 @@ const twoHostTopology = (arch: Record<number, string>): ClusterTopology =>
         intraHostLinks: [],
         interHostLinks: [
             {
-                a: { rank: 0, chip: 0, chan: 4, chipUniqueId: 100 },
-                b: { rank: 1, chip: 0, chan: 4, chipUniqueId: 101 },
+                a: { rank: 0, chip: 0, chan: 4, chipUniqueId: '100' },
+                b: { rank: 1, chip: 0, chan: 4, chipUniqueId: '101' },
             },
         ],
     }) as unknown as ClusterTopology;

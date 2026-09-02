@@ -3,6 +3,7 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { RemoteConnection, RemoteFolder } from './RemoteConnection';
+import { DeviceLogEntryType, DeviceLogZonePhase } from '../definitions/Performance';
 import { ReportLocation } from '../definitions/Reports';
 import { BufferMemoryLayout, MemoryConfig } from './MemoryConfig';
 import { BufferType, StringBufferType } from './BufferType';
@@ -208,6 +209,9 @@ export interface FragmentationEntry extends Chunk {
     largestEmpty?: boolean;
     // Mirrors `CircularBuffer.globallyAllocated` for the legend renderer. #1652
     globallyAllocated?: boolean;
+    // How many devices a collapsed CB row stands for, so the legend can say so
+    // rather than repeating the row once per device. #1879
+    deviceCount?: number;
 }
 
 // export interface ReportMetaData {
@@ -475,18 +479,47 @@ export interface DeviceInfo {
     worker_l1_size: number;
 }
 
+/**
+ * A row of `profile_log_device.csv`, as `GET /api/performance/device-log` serves
+ * it. The backend reads the CSV header by name and passes every column through,
+ * so which keys are present depends on the tt-metal that wrote the capture:
+ * `run_ID` only appears in older ones, the trace pair only in newer, and
+ * captures old enough to predate tt-metal's column rename carry `stat_value`
+ * and `zone_phase` where newer ones carry `data` and `type`. Those two pairs
+ * are mutually exclusive, so neither is guaranteed. Spaces in the column names
+ * become underscores.
+ *
+ * Only `timer_id`, `zone_name` and `run_host_ID` are required, and they are the
+ * three `REQUIRED_DEVICE_LOG_COLUMNS` enforces: the gate deliberately asks for
+ * as little as possible, because gating on the union of known columns rejected
+ * the shipped demo reports. Widening it to the optional keys below would trade a
+ * wrong answer for a 422 on captures that are merely older — which is the drift
+ * #1941 was about. See #1941.
+ */
 export interface PerformanceLog {
     PCIe_slot: number;
     RISC_processor_type: string; // Can we scope this down to a specific set of values?
     core_x: number;
     core_y: number;
-    run_ID: number;
     run_host_ID: number;
     source_file: string;
     source_line: number;
-    stat_value: number;
     'time[cycles_since_reset]': number;
     timer_id: number;
     zone_name: string;
-    zone_phase: 'begin' | 'end';
+    // Present-but-empty cells arrive as `null`, not as an absent key:
+    // `execute_query` maps every NaN to `None`. Narrowing on key presence
+    // alone is not enough. See #1941.
+    meta_data?: string | null;
+    run_ID?: number | null;
+    trace_id?: number | null;
+    trace_id_counter?: number | null;
+    // Post-rename captures carry this pair...
+    data?: number | null;
+    type?: DeviceLogEntryType | null;
+    // ...and pre-rename ones carry these two instead. A consumer that reads
+    // either pair has to handle the other shape, so narrow on the key rather
+    // than assuming the capture is current.
+    stat_value?: number | null;
+    zone_phase?: DeviceLogZonePhase | null;
 }

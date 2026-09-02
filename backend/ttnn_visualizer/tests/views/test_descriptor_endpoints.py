@@ -146,3 +146,73 @@ def test_mesh_descriptor_returns_empty_chips_shape_when_yaml_has_no_dict_docs(
         assert response.status_code == 200
         data = response.get_json()
         assert data == {"chips": {}}
+
+
+def test_cluster_descriptor_rejects_a_rank_a_lone_descriptor_cannot_answer(app, client):
+    """
+    The fix for #1939 only reaches the frontend as an HTTP status: the probe loop
+    stops when a rank 400s. Nothing asserted that mapping, so remapping
+    ``rank_out_of_range`` to 200 or 500 would have passed the suite while
+    restoring the 32-host clone.
+    """
+    instance_id = "test-cluster-lone-descriptor-rank"
+    with tempfile.TemporaryDirectory() as tmp:
+        report_dir = Path(tmp)
+        (report_dir / "cluster_descriptor.yaml").write_text(
+            "chips: []\n", encoding="utf-8"
+        )
+        _register_profiler_instance_with_dir(app, instance_id, report_dir)
+
+        # Rank 0 is the one host this report describes.
+        rank_zero = client.get(
+            "/api/cluster-descriptor",
+            query_string={"instanceId": instance_id, "rank": 0},
+        )
+        assert rank_zero.status_code == 200
+
+        # Every rank past it is out of range, not another copy of the same host.
+        for rank in (1, 2, 31):
+            response = client.get(
+                "/api/cluster-descriptor",
+                query_string={"instanceId": instance_id, "rank": rank},
+            )
+            assert response.status_code == 400, f"rank {rank}"
+
+
+def test_cluster_descriptor_quotes_chip_unique_ids_on_the_wire(app, client):
+    """
+    The frontend types `chip_unique_ids` as `Record<ChipId, string>` and relies on
+    the values arriving quoted: a 64-bit uid sent as a JSON number is rounded by
+    `JSON.parse` before any frontend code runs (#1950).
+
+    Asserted on the raw response bytes, not `get_json()` — Python's `json.loads`
+    is lossless, so a decoded value proves nothing about what went over the wire.
+    Without this, deleting `stringify_chip_unique_ids` from the view leaves the
+    whole suite green.
+    """
+    instance_id = "test-cluster-uid-wire"
+    exact = 5313998941933517939
+    assert exact > 2**53
+    with tempfile.TemporaryDirectory() as tmp:
+        report_dir = Path(tmp)
+        (report_dir / "cluster_descriptor.yaml").write_text(
+            "chips:\n  9: [0, 0, 0, 0]\n"
+            f"chip_unique_ids:\n  9: {exact}\n"
+            "ethernet_connections_to_remote_devices:\n"
+            f"  - - {{chip: 25, chan: 9}}\n    - {{remote_chip_id: {exact + 2}, chan: 9}}\n",
+            encoding="utf-8",
+        )
+        _register_profiler_instance_with_dir(app, instance_id, report_dir)
+
+        response = client.get(
+            "/api/cluster-descriptor",
+            query_string={"instanceId": instance_id},
+        )
+
+        assert response.status_code == 200
+        body = response.data.decode("utf-8")
+        assert f'"{exact}"' in body
+        # The bare number would round in the browser, so it must not appear
+        # unquoted anywhere in the payload.
+        assert f"{exact}," not in body.replace(f'"{exact}"', "")
+        assert f'"{exact + 2}"' in body

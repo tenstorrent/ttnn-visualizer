@@ -4,6 +4,8 @@
 
 import type { CSSProperties } from 'react';
 
+import { type MemberBearingNode, memberOperationIdsOf, sumDeviceTimeNs } from './opGraphMemberTime';
+
 import { NO_PERF_DATA_LABEL, PerfOverlayStatus } from '../../definitions/PerfOverlayStatus';
 import { formatDuration } from '../../functions/formatting';
 import {
@@ -131,27 +133,104 @@ export const buildOpGraphPerfOverlay = (
     };
 };
 
+interface RenderedPerfNode extends MemberBearingNode {
+    id: string;
+}
+
+/**
+ * Device time per rendered node, a folded block summing its members. Nodes with
+ * no linked row — or only zero-duration ones — are absent rather than zero, so
+ * they neither take a bar nor drag the scale's floor down to nothing.
+ */
+const sumNsByRenderedNode = (overlay: OpGraphPerfOverlay, nodes: readonly RenderedPerfNode[]): Map<string, number> => {
+    const nsByNodeId = new Map<string, number>();
+    const deviceTimeNsOf = (operationId: number) => overlay.aggregatesByOpId.get(operationId)?.deviceTimeNs;
+    for (const node of nodes) {
+        const ns = sumDeviceTimeNs(memberOperationIdsOf(node), deviceTimeNsOf);
+        if (ns > 0) {
+            nsByNodeId.set(node.id, ns);
+        }
+    }
+    return nsByNodeId;
+};
+
+/**
+ * The duration range the node bars are actually drawn against, which the legend
+ * is the key for. A folded block's bar stands for the sum of its members, so
+ * that sum — not the per-operation range on the overlay — is what the ramp has
+ * to span: scored against the per-operation range a block outruns the slowest
+ * single op and every block clamped to 1, and when the member rows all shared a
+ * duration `minNs === maxNs` forced every block to 0. #1944
+ */
+const spanOfTotals = (
+    nsByNodeId: Map<string, number>,
+    fallback: { minNs: number; maxNs: number },
+): { minNs: number; maxNs: number } => {
+    if (nsByNodeId.size === 0) {
+        return fallback;
+    }
+    let minNs = Infinity;
+    let maxNs = -Infinity;
+    for (const ns of nsByNodeId.values()) {
+        if (ns < minNs) {
+            minNs = ns;
+        }
+        if (ns > maxNs) {
+            maxNs = ns;
+        }
+    }
+    return { minNs, maxNs };
+};
+
+/**
+ * Position on the log ramp, matching `scoreOps`. One distinct duration across the
+ * graph carries no ranking signal, so nothing is heated rather than everything.
+ */
+const logScore = (ns: number, minNs: number, maxNs: number): number => {
+    if (minNs === maxNs) {
+        return 0;
+    }
+    const logMin = Math.log10(minNs);
+    return Math.min(1, Math.max(0, (Math.log10(ns) - logMin) / (Math.log10(maxNs) - logMin)));
+};
+
+export interface RenderedPerfStyling {
+    styleByNodeId: Map<string, CSSProperties>;
+    /**
+     * The range the node bars are actually drawn against, which the legend is the
+     * key for. Returned alongside the styles because both come from one pass over
+     * the node set — they were two, from two memos with the same dependencies.
+     */
+    minNs: number;
+    maxNs: number;
+}
+
 /**
  * Style patch by node id, or `null` when the overlay is off so the caller can
  * skip the styling pass. Custom properties only: `className` already carries
  * selection and the I/O highlight, and the filter dim is inherited.
  */
-export const buildPerfNodeStyleByNodeId = (
+export const buildRenderedPerfStyling = (
     overlay: OpGraphPerfOverlay,
     isActive: boolean,
-): Map<string, CSSProperties> | null => {
+    nodes: readonly RenderedPerfNode[],
+): RenderedPerfStyling | null => {
     if (!isActive) {
         return null;
     }
+
+    const nsByNodeId = sumNsByRenderedNode(overlay, nodes);
+    const { minNs, maxNs } = spanOfTotals(nsByNodeId, { minNs: overlay.minNs, maxNs: overlay.maxNs });
+
     const styleByNodeId = new Map<string, CSSProperties>();
-    for (const [opId, score] of overlay.scoreByOpId) {
-        // `CSSProperties` has no index signature for custom properties.
-        styleByNodeId.set(String(opId), {
-            [PERF_BAR_SCALE_VAR]: score.t,
-            [PERF_BAR_COLOR_VAR]: perfColorScale(score.t),
+    for (const [nodeId, ns] of nsByNodeId) {
+        const t = logScore(ns, minNs, maxNs);
+        styleByNodeId.set(nodeId, {
+            [PERF_BAR_SCALE_VAR]: t,
+            [PERF_BAR_COLOR_VAR]: perfColorScale(t),
         } as CSSProperties);
     }
-    return styleByNodeId;
+    return { styleByNodeId, minNs, maxNs };
 };
 
 /** Duration, rank among the linked ops, and share of their total. #1610 */

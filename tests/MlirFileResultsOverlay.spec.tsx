@@ -22,11 +22,14 @@ import {
 } from '../src/store/app';
 import { GraphBundle, MlirFileResult } from '../src/model/MLIRJsonModel';
 import { MlirServerConnection } from '../src/model/MlirServer';
+import { ReportKind, ReportLoadFailureReason, ReportSource } from '../src/definitions/UsageEvent';
 
 const setActiveMlir = vi.fn();
 const uploadMlirFileToServer = vi.fn();
-const { createToastNotification } = vi.hoisted(() => ({
+const { createToastNotification, recordReportLoaded, recordReportLoadFailed } = vi.hoisted(() => ({
     createToastNotification: vi.fn(),
+    recordReportLoaded: vi.fn(),
+    recordReportLoadFailed: vi.fn(),
 }));
 
 vi.mock('../src/hooks/useMlirRemote', () => ({
@@ -37,6 +40,12 @@ vi.mock('../src/functions/createToastNotification', async () => {
     const { toastNotificationModuleMock } = await import('./helpers/mockToastNotification');
 
     return toastNotificationModuleMock(createToastNotification);
+});
+
+vi.mock('../src/functions/reportLoadUsage', async (importOriginal) => {
+    const { reportLoadUsageSpiesMock } = await import('./helpers/mockReportLoadUsage');
+
+    return reportLoadUsageSpiesMock(importOriginal, recordReportLoaded, recordReportLoadFailed);
 });
 
 const GRAPH: GraphBundle = { graphs: [{ id: 'g', nodes: [] }] };
@@ -129,9 +138,43 @@ describe('MlirFileResultsOverlay', () => {
         });
         expect(getDefaultStore().get(activeMlirJsonAtom)).toBe('a');
         expect(setActiveMlir).toHaveBeenCalledWith('a', 'worker-01');
+        expect(recordReportLoaded).toHaveBeenCalledWith(ReportKind.MLIR, ReportSource.UPLOAD);
         // The overlay closes but the results are retained so it can be reopened.
         expect(getDefaultStore().get(mlirFileResultsOpenAtom)).toBe(false);
         expect(getDefaultStore().get(mlirFileResultsAtom)).not.toBeNull();
+    });
+
+    it('ignores a second View click while persistence is in flight', async () => {
+        let finishPersistence!: () => void;
+        setActiveMlir.mockImplementationOnce(
+            () =>
+                new Promise<void>((resolve) => {
+                    finishPersistence = resolve;
+                }),
+        );
+        renderOverlay([
+            {
+                filename: 'a.mlir',
+                host: 'worker-01',
+                name: 'a',
+                status: ConnectionTestStates.OK,
+                graph: GRAPH,
+                persisted: true,
+            },
+        ]);
+
+        fireEvent.click(screen.getByText('a.mlir'));
+        const viewButton = screen.getByRole('button', { name: /view/i });
+        fireEvent.click(viewButton);
+        fireEvent.click(viewButton);
+
+        expect(viewButton).toBeDisabled();
+        expect(setActiveMlir).toHaveBeenCalledTimes(1);
+        expect(recordReportLoaded).not.toHaveBeenCalled();
+
+        finishPersistence();
+
+        await waitFor(() => expect(recordReportLoaded).toHaveBeenCalledTimes(1));
     });
 
     it('reopens the results overlay via the loader button after it has been closed', async () => {
@@ -169,6 +212,7 @@ describe('MlirFileResultsOverlay', () => {
             expect(getDefaultStore().get(mlirLoadedReportsAtom)).toEqual([{ name: 'a', data: GRAPH }]);
         });
         expect(setActiveMlir).not.toHaveBeenCalled();
+        expect(recordReportLoaded).toHaveBeenCalledWith(ReportKind.MLIR, ReportSource.UPLOAD);
     });
 
     it('allows selecting up to two successful files and ignores a third', async () => {
@@ -234,6 +278,7 @@ describe('MlirFileResultsOverlay', () => {
         // Persist index 0 only — peer is session-scoped.
         expect(setActiveMlir).toHaveBeenCalledTimes(1);
         expect(setActiveMlir).toHaveBeenCalledWith('a', 'worker-01');
+        expect(recordReportLoaded).toHaveBeenCalledTimes(2);
         expect(createToastNotification).toHaveBeenCalledWith('MLIR', 'a.mlir / b.mlir', 'success');
     });
 
@@ -256,7 +301,7 @@ describe('MlirFileResultsOverlay', () => {
         });
     });
 
-    it('does not show a success toast when persisting active MLIR fails', async () => {
+    it('still loads converted graphs when persisting active MLIR fails', async () => {
         setActiveMlir.mockRejectedValueOnce(new Error('persist failed'));
         renderOverlay([
             {
@@ -275,8 +320,44 @@ describe('MlirFileResultsOverlay', () => {
         await waitFor(() => {
             expect(setActiveMlir).toHaveBeenCalledWith('a', 'worker-01');
         });
-        expect(createToastNotification).toHaveBeenCalledTimes(1);
+        expect(createToastNotification).toHaveBeenCalledTimes(2);
         expect(createToastNotification).toHaveBeenCalledWith('MLIR', 'persist failed', 'error');
+        expect(recordReportLoadFailed).not.toHaveBeenCalled();
+        expect(recordReportLoaded).toHaveBeenCalledWith(ReportKind.MLIR, ReportSource.UPLOAD);
+        expect(getDefaultStore().get(mlirLoadedReportsAtom)).toEqual([{ name: 'a', data: GRAPH }]);
+    });
+
+    it('records one load per selected report when split-view persistence fails', async () => {
+        setActiveMlir.mockRejectedValueOnce(new Error('persist failed'));
+        renderOverlay([
+            {
+                filename: 'a.mlir',
+                host: 'worker-01',
+                name: 'a',
+                status: ConnectionTestStates.OK,
+                graph: GRAPH,
+                persisted: true,
+            },
+            {
+                filename: 'b.mlir',
+                host: 'worker-01',
+                name: 'b',
+                status: ConnectionTestStates.OK,
+                graph: GRAPH,
+                persisted: true,
+            },
+        ]);
+
+        fireEvent.click(screen.getByText('a.mlir'));
+        fireEvent.click(screen.getByText('b.mlir'));
+        fireEvent.click(screen.getByRole('button', { name: /view/i }));
+
+        await waitFor(() => expect(recordReportLoaded).toHaveBeenCalledTimes(2));
+        expect(recordReportLoadFailed).not.toHaveBeenCalled();
+        expect(getDefaultStore().get(mlirLoadedReportsAtom)).toEqual([
+            { name: 'a', data: GRAPH },
+            { name: 'b', data: GRAPH },
+        ]);
     });
 
     it('retries conversion for a failed server file', async () => {
@@ -507,6 +588,101 @@ describe('MlirFileResultsOverlay', () => {
 });
 
 describe('MlirJsonFileLoader clearSplitPeers', () => {
+    it('records only failed files from a mixed server conversion batch', async () => {
+        uploadMlirFileToServer.mockResolvedValueOnce({
+            data: {
+                results: [
+                    {
+                        filename: 'valid.mlir',
+                        name: 'valid',
+                        status: ConnectionTestStates.OK,
+                        graph: GRAPH,
+                    },
+                    {
+                        filename: 'invalid.mlir',
+                        name: null,
+                        status: ConnectionTestStates.FAILED,
+                        message: 'Conversion failed',
+                        graph: null,
+                    },
+                ],
+            },
+        });
+        const { container } = render(
+            <MemoryRouter>
+                <MlirJsonFileLoader server={SERVER} />
+            </MemoryRouter>,
+        );
+
+        fireEvent.change(container.querySelector('input[type="file"]') as HTMLInputElement, {
+            target: {
+                files: [new File(['module {}'], 'valid.mlir'), new File(['invalid'], 'invalid.mlir')],
+            },
+        });
+
+        await waitFor(() =>
+            expect(recordReportLoadFailed).toHaveBeenCalledWith(ReportKind.MLIR, ReportLoadFailureReason.OTHER),
+        );
+        expect(recordReportLoadFailed).toHaveBeenCalledTimes(1);
+        expect(recordReportLoaded).not.toHaveBeenCalled();
+    });
+
+    it('records every selected file when the server returns no results', async () => {
+        uploadMlirFileToServer.mockResolvedValueOnce({ data: { results: [] } });
+        const { container } = render(
+            <MemoryRouter>
+                <MlirJsonFileLoader server={SERVER} />
+            </MemoryRouter>,
+        );
+
+        fireEvent.change(container.querySelector('input[type="file"]') as HTMLInputElement, {
+            target: {
+                files: [new File(['a'], 'a.mlir'), new File(['b'], 'b.mlir')],
+            },
+        });
+
+        await waitFor(() => expect(recordReportLoadFailed).toHaveBeenCalledTimes(2));
+        expect(recordReportLoaded).not.toHaveBeenCalled();
+    });
+
+    it('records every selected file when the server upload rejects', async () => {
+        uploadMlirFileToServer.mockRejectedValueOnce(new Error('upload failed'));
+        const { container } = render(
+            <MemoryRouter>
+                <MlirJsonFileLoader server={SERVER} />
+            </MemoryRouter>,
+        );
+
+        fireEvent.change(container.querySelector('input[type="file"]') as HTMLInputElement, {
+            target: {
+                files: [new File(['a'], 'a.mlir'), new File(['b'], 'b.mlir')],
+            },
+        });
+
+        await waitFor(() => expect(recordReportLoadFailed).toHaveBeenCalledTimes(2));
+        expect(recordReportLoadFailed).toHaveBeenNthCalledWith(1, ReportKind.MLIR, ReportLoadFailureReason.OTHER);
+        expect(recordReportLoadFailed).toHaveBeenNthCalledWith(2, ReportKind.MLIR, ReportLoadFailureReason.OTHER);
+        expect(recordReportLoaded).not.toHaveBeenCalled();
+    });
+
+    it('records invalid local JSON as a parse failure', async () => {
+        const { container } = render(
+            <MemoryRouter>
+                <MlirJsonFileLoader />
+            </MemoryRouter>,
+        );
+        const file = new File(['not json'], 'invalid.json', { type: 'application/json' });
+        file.text = () => Promise.resolve('not json');
+
+        fireEvent.change(container.querySelector('input[type="file"]') as HTMLInputElement, {
+            target: { files: [file] },
+        });
+
+        await waitFor(() =>
+            expect(recordReportLoadFailed).toHaveBeenCalledWith(ReportKind.MLIR, ReportLoadFailureReason.PARSE_ERROR),
+        );
+    });
+
     it('drops loaded split peers when a new local results batch starts', async () => {
         getDefaultStore().set(mlirLoadedReportsAtom, [
             { name: 'primary', data: GRAPH },

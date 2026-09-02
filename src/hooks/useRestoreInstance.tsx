@@ -23,7 +23,7 @@ const useRestoreInstance = () => {
     const store = useStore();
     const { data: instance, isLoading } = useInstance();
     const remote = useRemoteConnection();
-    const { data: reports } = useReportFolderList();
+    const { data: reports, isError: isReportFolderListError } = useReportFolderList();
     const { resetMemoryListStates } = useResetMemoryListStates();
 
     const [hasRestoredInstance, setHasRestoredInstance] = useState<boolean>(false);
@@ -38,7 +38,7 @@ const useRestoreInstance = () => {
     const previousProfilerPathRef = useRef<string | null | undefined>(undefined);
 
     useEffect(() => {
-        if (!instance || reports === null || hasRestoredInstance) {
+        if (!instance || (reports === null && !isReportFolderListError) || hasRestoredInstance) {
             return;
         }
 
@@ -104,6 +104,7 @@ const useRestoreInstance = () => {
         setActiveMlirJson,
         instance,
         hasRestoredInstance,
+        isReportFolderListError,
         reports,
         remote.persistentState,
         store,

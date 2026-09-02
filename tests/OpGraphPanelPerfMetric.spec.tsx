@@ -38,7 +38,7 @@ const renderPanel = ({ isPerfOverlayActive, perfDeviceTimeNs, perfColor }: Rende
         <MemoryRouter>
             <OpGraphInfoPanel
                 operationId={OPERATION.id}
-                operationList={[OPERATION]}
+                operationById={new Map<number, OperationDescription>([[OPERATION.id, OPERATION]])}
                 operationNamesById={new Map<number, string>([[OPERATION.id, OPERATION.name]])}
                 onLocateOperation={vi.fn()}
                 isPerfOverlayActive={isPerfOverlayActive}

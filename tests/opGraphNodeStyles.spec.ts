@@ -95,6 +95,11 @@ describe('op graph critical path styling', () => {
         expect(STYLESHEET).toContain(OFF_PATH_DIM_SELECTOR);
     });
 
+    it('shares the off-path dim with dim-unrelated-edges', () => {
+        expect(STYLESHEET).toContain('&.op-graph-dim-unrelated-edges:not(.op-graph-filtering)');
+        expect(ruleBody(OFF_PATH_DIM_SELECTOR)).toMatch(/opacity:\s*0\.35/);
+    });
+
     it('exempts the selected node′s own edges from the off-path dim', () => {
         // Clicking a node to read its inputs and outputs would otherwise fade
         // whichever of them sit off the path. Read out of the `:not()` arguments
@@ -105,8 +110,7 @@ describe('op graph critical path styling', () => {
             .map((selector) => selector.trim());
 
         // The path's own edges first: dropping this member dims the feature's
-        // central visual to 0.35 along with everything it was meant to stand out
-        // from.
+        // central visual along with everything it was meant to stand out from.
         expect(exclusions).toContain('.op-graph-edge-critical-path');
         expect(exclusions).toContain('.op-graph-edge-input');
         expect(exclusions).toContain('.op-graph-edge-output');
@@ -134,5 +138,19 @@ describe('op graph critical path styling', () => {
 
         expect(ringWidth).toBeGreaterThan(0);
         expect(outlineOffset).toBeGreaterThan(ringWidth);
+    });
+});
+
+describe('block meta line styling', () => {
+    it('shares the file line’s declarations so moving off fileIdentifier changed nothing visible', () => {
+        // A block has no source file, so its stats line moved off `fileIdentifier`
+        // and onto `metaLine` with a class of its own. The two must stay styled
+        // together or that rename becomes a visual change. #1944
+        const body = ruleBody('.op-graph-node-file,\n    .op-graph-node-meta');
+
+        expect(body).toMatch(/text-overflow:\s*ellipsis/);
+        expect(body).toMatch(/white-space:\s*nowrap/);
+        expect(body).toMatch(/overflow:\s*hidden/);
+        expect(body).toMatch(/font-size:\s*11px/);
     });
 });

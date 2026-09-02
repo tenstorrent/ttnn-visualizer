@@ -44,6 +44,7 @@ export enum ReportSource {
 }
 
 export enum ReportLoadFailureReason {
+    // NPE-only today: profiler/performance incompatible DB versions still load.
     UNSUPPORTED_VERSION = 'unsupported_version',
     MISSING_FILE = 'missing_file',
     PARSE_ERROR = 'parse_error',
@@ -62,6 +63,11 @@ export enum ReportLoadFailureReason {
  *
  * `styleguide` is excluded and stays excluded: counting a development surface would
  * pollute reach.
+ *
+ * `OPERATION_DETAILS` is owned by `view_opened`. A future `drilldown_opened` event must
+ * exclude it, or one navigation would be counted as two different actions. It counts
+ * once per operation viewed rather than once per visit to the surface, so its total is
+ * not comparable to the other nine and should be read per-session or deduplicated.
  */
 export enum UsageView {
     REPORTS = 'reports',

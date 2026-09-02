@@ -4,7 +4,10 @@
 
 import { describe, expect, it } from 'vitest';
 import {
+    type CondensedHostLayout,
     PerRankInput,
+    getAsicLocationGroups,
+    getCondensedHostLayout,
     hostHasMeshCoords,
     hostHasTwoDimensionalMesh,
     looksLikeRankedDescriptor,
@@ -38,7 +41,7 @@ describe('stitchClusterTopology', () => {
                         { chip: 1, chan: 2 },
                     ],
                 ],
-                chip_unique_ids: { 0: 100, 1: 101 },
+                chip_unique_ids: { 0: '100', 1: '101' },
             }),
             meshDescriptor: { 0: [0, 0, 0, 0], 1: [0, 1, 0, 0] },
         };
@@ -60,11 +63,11 @@ describe('stitchClusterTopology', () => {
         const rank0: PerRankInput = {
             rank: 0,
             descriptor: makeDescriptor({
-                chip_unique_ids: { 0: 100, 1: 101 },
+                chip_unique_ids: { 0: '100', 1: '101' },
                 ethernet_connections_to_remote_devices: [
                     [
                         { chip: 1, chan: 9 },
-                        { remote_chip_id: 200, chan: 10 },
+                        { remote_chip_id: '200', chan: 10 },
                     ],
                 ],
             }),
@@ -73,11 +76,11 @@ describe('stitchClusterTopology', () => {
         const rank1: PerRankInput = {
             rank: 1,
             descriptor: makeDescriptor({
-                chip_unique_ids: { 0: 200, 1: 201 },
+                chip_unique_ids: { 0: '200', 1: '201' },
                 ethernet_connections_to_remote_devices: [
                     [
                         { chip: 0, chan: 10 },
-                        { remote_chip_id: 101, chan: 9 },
+                        { remote_chip_id: '101', chan: 9 },
                     ],
                 ],
             }),
@@ -92,8 +95,8 @@ describe('stitchClusterTopology', () => {
 
         const [link] = topology.interHostLinks;
         // Canonical ordering puts (rank0, chip1, chan9) first (lex-smaller key).
-        expect(link.a).toEqual({ rank: 0, chip: 1, chan: 9, chipUniqueId: 101 });
-        expect(link.b).toEqual({ rank: 1, chip: 0, chan: 10, chipUniqueId: 200 });
+        expect(link.a).toEqual({ rank: 0, chip: 1, chan: 9, chipUniqueId: '101' });
+        expect(link.b).toEqual({ rank: 1, chip: 0, chan: 10, chipUniqueId: '200' });
         expect(topology.unresolvedRemoteCount).toBe(0);
     });
 
@@ -101,16 +104,16 @@ describe('stitchClusterTopology', () => {
         const rank0: PerRankInput = {
             rank: 0,
             descriptor: makeDescriptor({
-                chip_unique_ids: { 0: 100 },
+                chip_unique_ids: { 0: '100' },
                 ethernet_connections_to_remote_devices: [
                     // First entry resolves via rank1; second references a uid no host advertises.
                     [
                         { chip: 0, chan: 1 },
-                        { remote_chip_id: 200, chan: 2 },
+                        { remote_chip_id: '200', chan: 2 },
                     ],
                     [
                         { chip: 0, chan: 3 },
-                        { remote_chip_id: 999, chan: 4 },
+                        { remote_chip_id: '999', chan: 4 },
                     ],
                 ],
             }),
@@ -119,7 +122,7 @@ describe('stitchClusterTopology', () => {
         const rank1: PerRankInput = {
             rank: 1,
             descriptor: makeDescriptor({
-                chip_unique_ids: { 0: 200 },
+                chip_unique_ids: { 0: '200' },
                 ethernet_connections_to_remote_devices: [],
             }),
             meshDescriptor: null,
@@ -145,7 +148,7 @@ describe('stitchClusterTopology', () => {
                         { chip: 2, chan: 4 },
                     ],
                 ],
-                chip_unique_ids: { 0: 1, 1: 2, 2: 3 },
+                chip_unique_ids: { 0: '1', 1: '2', 2: '3' },
             }),
             meshDescriptor: null,
         };
@@ -158,7 +161,7 @@ describe('stitchClusterTopology', () => {
                         { chip: 1, chan: 6 },
                     ],
                 ],
-                chip_unique_ids: { 0: 100, 1: 101 },
+                chip_unique_ids: { 0: '100', 1: '101' },
             }),
             meshDescriptor: null,
         };
@@ -173,12 +176,12 @@ describe('stitchClusterTopology', () => {
     it('sorts hosts by rank regardless of input order', () => {
         const rank1: PerRankInput = {
             rank: 1,
-            descriptor: makeDescriptor({ chip_unique_ids: { 0: 200 } }),
+            descriptor: makeDescriptor({ chip_unique_ids: { 0: '200' } }),
             meshDescriptor: null,
         };
         const rank0: PerRankInput = {
             rank: 0,
-            descriptor: makeDescriptor({ chip_unique_ids: { 0: 100 } }),
+            descriptor: makeDescriptor({ chip_unique_ids: { 0: '100' } }),
             meshDescriptor: null,
         };
 
@@ -190,7 +193,7 @@ describe('stitchClusterTopology', () => {
     it('preserves mesh coordinates per host', () => {
         const rank0: PerRankInput = {
             rank: 0,
-            descriptor: makeDescriptor({ chip_unique_ids: { 0: 100, 1: 101 } }),
+            descriptor: makeDescriptor({ chip_unique_ids: { 0: '100', 1: '101' } }),
             meshDescriptor: { 0: [0, 0, 0, 0], 1: [0, 1, 0, 0] },
         };
 
@@ -202,7 +205,7 @@ describe('stitchClusterTopology', () => {
     it('defaults meshChips to an empty object when mesh descriptor was unavailable', () => {
         const rank0: PerRankInput = {
             rank: 0,
-            descriptor: makeDescriptor({ chip_unique_ids: { 0: 100 } }),
+            descriptor: makeDescriptor({ chip_unique_ids: { 0: '100' } }),
             meshDescriptor: null,
         };
 
@@ -215,60 +218,60 @@ describe('stitchClusterTopology', () => {
         // Simplified slice: each rank has 8 chips with unique ids in disjoint ranges, four inter-host
         // links between them. Each link appears on both hosts' `_to_remote_devices` list — the
         // stitcher must dedupe to 4 canonical entries.
-        const rank0UniqueIds: Record<number, number> = {
-            0: 1430,
-            1: 1431,
-            2: 1432,
-            3: 1433,
-            4: 1434,
-            5: 1435,
-            6: 1436,
-            7: 1437,
+        const rank0UniqueIds: Record<number, string> = {
+            0: '1430',
+            1: '1431',
+            2: '1432',
+            3: '1433',
+            4: '1434',
+            5: '1435',
+            6: '1436',
+            7: '1437',
         };
-        const rank1UniqueIds: Record<number, number> = {
-            0: 1440,
-            1: 1441,
-            2: 1442,
-            3: 1443,
-            4: 1444,
-            5: 1445,
-            6: 1446,
-            7: 1447,
+        const rank1UniqueIds: Record<number, string> = {
+            0: '1440',
+            1: '1441',
+            2: '1442',
+            3: '1443',
+            4: '1444',
+            5: '1445',
+            6: '1446',
+            7: '1447',
         };
         const rank0Remotes: ClusterModel['ethernet_connections_to_remote_devices'] = [
             [
                 { chip: 1, chan: 9 },
-                { remote_chip_id: 1440, chan: 10 },
+                { remote_chip_id: '1440', chan: 10 },
             ],
             [
                 { chip: 7, chan: 10 },
-                { remote_chip_id: 1442, chan: 9 },
+                { remote_chip_id: '1442', chan: 9 },
             ],
             [
                 { chip: 5, chan: 10 },
-                { remote_chip_id: 1444, chan: 9 },
+                { remote_chip_id: '1444', chan: 9 },
             ],
             [
                 { chip: 2, chan: 11 },
-                { remote_chip_id: 1446, chan: 8 },
+                { remote_chip_id: '1446', chan: 8 },
             ],
         ];
         const rank1Remotes: ClusterModel['ethernet_connections_to_remote_devices'] = [
             [
                 { chip: 0, chan: 10 },
-                { remote_chip_id: 1431, chan: 9 },
+                { remote_chip_id: '1431', chan: 9 },
             ],
             [
                 { chip: 2, chan: 9 },
-                { remote_chip_id: 1437, chan: 10 },
+                { remote_chip_id: '1437', chan: 10 },
             ],
             [
                 { chip: 4, chan: 9 },
-                { remote_chip_id: 1435, chan: 10 },
+                { remote_chip_id: '1435', chan: 10 },
             ],
             [
                 { chip: 6, chan: 8 },
-                { remote_chip_id: 1432, chan: 11 },
+                { remote_chip_id: '1432', chan: 11 },
             ],
         ];
 
@@ -338,6 +341,207 @@ describe('pickMeshDocForRank', () => {
     });
 });
 
+describe('chip unique id precision', () => {
+    it('resolves inter-host links between uids that collide as doubles (#1950)', () => {
+        // Chip 9 of test_ttnn_moe_aug26_2217 and its successor. Both exceed 2^53 and
+        // round to the same double, so a number-keyed owner index holds one entry for
+        // the pair — whichever host was indexed last.
+        const first = '5313998941933517939';
+        const second = '5313998941933517940';
+        expect(Number(first)).toBe(Number(second));
+
+        // Both hosts must declare the link, so both directions are looked up. A
+        // one-sided fixture passes even with number keys: the surviving entry
+        // happens to be the one that side needs.
+        const topology = stitchClusterTopology([
+            {
+                rank: 0,
+                descriptor: makeDescriptor({
+                    chip_unique_ids: { 0: first },
+                    ethernet_connections_to_remote_devices: [
+                        [
+                            { chip: 0, chan: 1 },
+                            { remote_chip_id: second, chan: 2 },
+                        ],
+                    ],
+                }),
+                meshDescriptor: null,
+            },
+            {
+                rank: 1,
+                descriptor: makeDescriptor({
+                    chip_unique_ids: { 0: second },
+                    ethernet_connections_to_remote_devices: [
+                        [
+                            { chip: 0, chan: 2 },
+                            { remote_chip_id: first, chan: 1 },
+                        ],
+                    ],
+                }),
+                meshDescriptor: null,
+            },
+        ]);
+
+        // Number keys collapse both ids onto rank 1, so rank 1's own entry resolves
+        // to itself and emits a second, bogus link with both endpoints on one host.
+        expect(topology.interHostLinks).toHaveLength(1);
+        expect(topology.unresolvedRemoteCount).toBe(0);
+        const [link] = topology.interHostLinks;
+        expect(link.a).toEqual({ rank: 0, chip: 0, chan: 1, chipUniqueId: first });
+        expect(link.b).toEqual({ rank: 1, chip: 0, chan: 2, chipUniqueId: second });
+    });
+});
+
+describe('getAsicLocationGroups', () => {
+    const withLocations = (locations: Record<number, number>) =>
+        ({ asic_locations: locations }) as unknown as ClusterModel;
+
+    it('splits a 32-chip UBB into four groups of eight, ordered by slot (#1948)', () => {
+        // Shape of test_ttnn_moe_aug26_2217: slots cycle 1..8 four times.
+        const locations = Object.fromEntries(Array.from({ length: 32 }, (_, chip) => [chip, (chip % 8) + 1]));
+        const chipIds = Array.from({ length: 32 }, (_, chip) => chip);
+
+        const groups = getAsicLocationGroups(withLocations(locations), chipIds);
+
+        expect(groups).toHaveLength(4);
+        expect(groups?.[0]).toEqual([0, 1, 2, 3, 4, 5, 6, 7]);
+        expect(groups?.[3]).toEqual([24, 25, 26, 27, 28, 29, 30, 31]);
+    });
+
+    it('orders each group by slot rather than by chip id', () => {
+        // Slots deliberately reversed within each group of two.
+        const groups = getAsicLocationGroups(withLocations({ 0: 2, 1: 1, 2: 2, 3: 1 }), [0, 1, 2, 3]);
+
+        expect(groups).toEqual([
+            [1, 0],
+            [3, 2],
+        ]);
+    });
+
+    it('returns null when every chip claims the same slot', () => {
+        // Shape of multihost_poc_jun24_2321: eight chips, one distinct slot. Grouping
+        // on the distinct count would have split it into eight groups of one.
+        const locations = Object.fromEntries(Array.from({ length: 8 }, (_, chip) => [chip, 0]));
+
+        expect(
+            getAsicLocationGroups(
+                withLocations(locations),
+                Array.from({ length: 8 }, (_, c) => c),
+            ),
+        ).toBeNull();
+    });
+
+    it('returns null when every chip has its own slot, which is no grouping', () => {
+        expect(getAsicLocationGroups(withLocations({ 0: 1, 1: 2, 2: 3 }), [0, 1, 2])).toBeNull();
+    });
+
+    it('returns null when a run repeats a slot instead of covering each once', () => {
+        // Two distinct slots over four chips divides evenly, but the first run is
+        // (1, 1) rather than (1, 2), so the chips are not one slot per group.
+        expect(getAsicLocationGroups(withLocations({ 0: 1, 1: 1, 2: 1, 3: 2 }), [0, 1, 2, 3])).toBeNull();
+    });
+
+    it('groups so that no two chips drawn adjacent are unconnected (#1948)', () => {
+        // Synthetic 32-chip UBB with the real link deltas: +1 along a row of four,
+        // +4 between the two rows of a group, +8 to the next group and +24 wrapping
+        // the group ring. Tiling by chip id drew 12 unconnected pairs as neighbours.
+        const chipIds = Array.from({ length: 32 }, (_, chip) => chip);
+        const locations = Object.fromEntries(chipIds.map((chip) => [chip, (chip % 8) + 1]));
+        // +1 stays inside a row of four, +4 inside a group of eight; +8 and +24
+        // reach the next group and wrap the ring.
+        const isLinked = (chip: number, delta: number): boolean => {
+            const other = chip + delta;
+            if (other >= 32) {
+                return false;
+            }
+            if (delta === 1) {
+                return Math.floor(chip / 4) === Math.floor(other / 4);
+            }
+            if (delta === 4) {
+                return Math.floor(chip / 8) === Math.floor(other / 8);
+            }
+            return true;
+        };
+        const links = new Set(
+            chipIds.flatMap((chip) =>
+                [1, 4, 8, 24].filter((delta) => isLinked(chip, delta)).map((delta) => `${chip}-${chip + delta}`),
+            ),
+        );
+
+        const descriptor = withLocations(locations);
+        expect(getAsicLocationGroups(descriptor, chipIds)).toHaveLength(4);
+
+        // Against the renderer's own layout, not a copy of it: re-deriving the
+        // geometry here meant a change to the gutter, or a regression in the
+        // layout itself, left this green.
+        const unconnectedNeighboursOf = (layout: CondensedHostLayout): string[] => {
+            const isAdjacent = (a: number, b: number): boolean => {
+                const [pa, pb] = [layout.positionByChip.get(a)!, layout.positionByChip.get(b)!];
+                return Math.abs(pa[0] - pb[0]) + Math.abs(pa[1] - pb[1]) === 1;
+            };
+            return chipIds
+                .flatMap((a) => chipIds.filter((b) => b > a).map((b) => [a, b] as const))
+                .filter(([a, b]) => isAdjacent(a, b) && !links.has(`${a}-${b}`))
+                .map(([a, b]) => `${a}-${b}`);
+        };
+
+        const grouped = getCondensedHostLayout(descriptor, chipIds);
+        expect(grouped.isGrouped).toBe(true);
+        expect(unconnectedNeighboursOf(grouped)).toEqual([]);
+
+        // Negative control: without slots the same descriptor tiles in id order,
+        // which is the arrangement #1948 reported. Without this, a property that
+        // holds trivially is indistinguishable from one the grouping earned.
+        const ungrouped = getCondensedHostLayout({} as unknown as ClusterModel, chipIds);
+        expect(ungrouped.isGrouped).toBe(false);
+        expect(unconnectedNeighboursOf(ungrouped)).toHaveLength(12);
+    });
+
+    it('does not merely reproduce id order when the slots say otherwise', () => {
+        // The 32-chip fixture uses `chip % 8 + 1`, so slot order equals id order
+        // there and a naive chunk(chipIds, 8) would satisfy it. Reversing the
+        // slots within each board separates the two.
+        const chipIds = Array.from({ length: 16 }, (_, chip) => chip);
+        const locations = Object.fromEntries(chipIds.map((chip) => [chip, 8 - (chip % 8)]));
+
+        const layout = getCondensedHostLayout(withLocations(locations), chipIds);
+
+        expect(layout.isGrouped).toBe(true);
+        // Chip 0 holds slot 8, so it is last in its group rather than first.
+        expect(layout.positionByChip.get(0)).toEqual([3, 1]);
+        expect(layout.positionByChip.get(7)).toEqual([0, 0]);
+    });
+
+    it('lays a slotless host out in id order, four wide, with no gutter', () => {
+        const layout = getCondensedHostLayout({} as unknown as ClusterModel, [0, 1, 2, 3, 4, 5]);
+
+        expect(layout.isGrouped).toBe(false);
+        expect(layout.positionByChip.get(0)).toEqual([0, 0]);
+        expect(layout.positionByChip.get(4)).toEqual([0, 1]);
+        expect(layout.rows).toBe(2);
+    });
+
+    it('adds one gutter row between groups and none after the last', () => {
+        const chipIds = Array.from({ length: 16 }, (_, chip) => chip);
+        const locations = Object.fromEntries(chipIds.map((chip) => [chip, (chip % 8) + 1]));
+
+        const layout = getCondensedHostLayout(withLocations(locations), chipIds);
+
+        // Two groups of eight: two rows each, one blank row between them.
+        expect(layout.positionByChip.get(7)).toEqual([3, 1]);
+        expect(layout.positionByChip.get(8)).toEqual([0, 3]);
+        expect(layout.rows).toBe(5);
+    });
+
+    it('returns null when the field is absent, unparseable or the chip list is empty', () => {
+        expect(getAsicLocationGroups({} as unknown as ClusterModel, [0, 1])).toBeNull();
+        expect(
+            getAsicLocationGroups({ asic_locations: { 0: 'a', 1: 'b' } } as unknown as ClusterModel, [0, 1]),
+        ).toBeNull();
+        expect(getAsicLocationGroups(withLocations({ 0: 1 }), [])).toBeNull();
+    });
+});
+
 describe('looksLikeRankedDescriptor', () => {
     const baseDescriptor = {
         arch: {},
@@ -356,10 +560,10 @@ describe('looksLikeRankedDescriptor', () => {
             ethernet_connections_to_remote_devices: [
                 [
                     { chip: 0, chan: 9 },
-                    { remote_chip_id: 42, chan: 10 },
+                    { remote_chip_id: '42', chan: 10 },
                 ],
             ],
-            chip_unique_ids: { 0: 1234 },
+            chip_unique_ids: { 0: '1234' },
         } as unknown as ClusterModel;
 
         expect(looksLikeRankedDescriptor(ranked)).toBe(true);
@@ -373,11 +577,49 @@ describe('looksLikeRankedDescriptor', () => {
         const desc = {
             ...baseDescriptor,
             ethernet_connections_to_remote_devices: [],
-            chip_unique_ids: { 0: 1234 },
+            chip_unique_ids: { 0: '1234' },
         } as unknown as ClusterModel;
         // An empty remote-connections array means there are no cross-host links,
-        // which we treat as single-host (galaxy can't trigger a 32-rank probe).
+        // which we treat as single-host. Note this does not cover every galaxy:
+        // a UBB with scale-out links populates the field — see the UBB case below.
         expect(looksLikeRankedDescriptor(desc)).toBe(false);
+    });
+
+    it('cannot tell a single UBB from a rank slice, so the backend gates the probe (#1939)', () => {
+        // Shape of test_ttnn_moe_aug26_2217: one unsuffixed descriptor, 32 Blackhole
+        // chips on a single `ubb_blackhole` board, no mesh coords, and remote-eth
+        // links to fabric chips that are not in this capture.
+        // Unique ids are short stand-ins; the real ones are 64-bit and arrive as
+        // strings (#1950). Only the off-capture property matters for this test.
+        const ubb = {
+            ...baseDescriptor,
+            arch: Object.fromEntries(Array.from({ length: 32 }, (_, chip) => [chip, 'blackhole'])),
+            boards: [
+                {
+                    board_id: 4892798423057,
+                    board_type: 'ubb_blackhole',
+                    chips: Array.from({ length: 32 }, (_, chip) => chip),
+                },
+            ],
+            chip_unique_ids: Object.fromEntries(Array.from({ length: 32 }, (_, chip) => [chip, String(1000 + chip)])),
+            ethernet_connections_to_remote_devices: [
+                [
+                    { chip: 25, chan: 9 },
+                    // Off-capture: absent from `chip_unique_ids` above.
+                    { remote_chip_id: '9001', chan: 9 },
+                ],
+            ],
+        } as unknown as ClusterModel;
+
+        // Deliberately true. A genuine rank-0 slice also points its remotes at
+        // chips it does not own, so no property of a lone descriptor separates
+        // the two — see the two-host case at the top of this file, where rank 0's
+        // remote id 200 is likewise absent from its own chip_unique_ids.
+        expect(looksLikeRankedDescriptor(ubb)).toBe(true);
+        // World size lives in the ranked filenames instead, so the backend answers
+        // rank 1+ with `rank_out_of_range` when the unsuffixed file is the only
+        // descriptor and the probe stops after rank 0. Covered by
+        // `test_pick_cluster_descriptor_single_file_answers_rank_zero_only`.
     });
 
     it('returns false when chip_unique_ids is missing or empty', () => {
@@ -386,7 +628,7 @@ describe('looksLikeRankedDescriptor', () => {
             ethernet_connections_to_remote_devices: [
                 [
                     { chip: 0, chan: 9 },
-                    { remote_chip_id: 42, chan: 10 },
+                    { remote_chip_id: '42', chan: 10 },
                 ],
             ],
             chip_unique_ids: {},
@@ -409,7 +651,7 @@ describe('sortHostsByConnectionProximity', () => {
     // 8-chip host with cross-host links rooted in `bottomRow` (true) → rank's
     // mean local-y skews toward 1; `false` → skews toward 0 (chips 0-3, top
     // row in the 4-wide × 2-row local grid).
-    const makeHost = (rank: number, chipUniqueIds: Record<number, number>): ClusterHost => ({
+    const makeHost = (rank: number, chipUniqueIds: Record<number, string>): ClusterHost => ({
         rank,
         descriptor: {
             arch: {},
@@ -423,11 +665,12 @@ describe('sortHostsByConnectionProximity', () => {
         } as unknown as ClusterModel,
         meshChips: {},
     });
-    const eightChips = (offset: number) => Object.fromEntries([0, 1, 2, 3, 4, 5, 6, 7].map((id) => [id, offset + id]));
+    const eightChips = (offset: number) =>
+        Object.fromEntries([0, 1, 2, 3, 4, 5, 6, 7].map((id) => [id, String(offset + id)]));
 
     const link = (rankA: number, chipA: number, rankB: number, chipB: number): InterHostEthernetLink => ({
-        a: { rank: rankA, chip: chipA, chan: 0, chipUniqueId: 0 },
-        b: { rank: rankB, chip: chipB, chan: 0, chipUniqueId: 0 },
+        a: { rank: rankA, chip: chipA, chan: 0, chipUniqueId: '0' },
+        b: { rank: rankB, chip: chipB, chan: 0, chipUniqueId: '0' },
     });
 
     it('places the host whose connection chips sit in its BOTTOM row on top', () => {

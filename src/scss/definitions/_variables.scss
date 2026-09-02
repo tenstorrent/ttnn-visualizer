@@ -40,11 +40,16 @@ $active-transfer-width: 380px;
 // Device-operation memory legend columns. Definite widths, because the cells are
 // `nowrap` and each row is its own grid — a share-based track takes its minimum
 // from the row's own text and so resolves differently per row. Sized to the
-// widest observed content plus headroom; the size column overflows by 11px on a
-// 3-digit core count beside the aliased-CB icon, absorbed by the column gap.
-$legend-size-column: 300px;
+// widest observed content plus headroom.
+//
+// The size column held `40.13 KiB x 50 cores x 32 devices` until the multipliers
+// moved to the tensor column (#1879), which left it three times wider than the
+// size alone needs and the tensor column 22px short of the labels it inherited.
+// 80px moves across; the pair still totals 480px, so the numeric gutter this view
+// aligns against does not shift. #1897 tracks the wider alignment problem.
+$legend-size-column: 220px;
 $legend-address-column: 90px;
-$legend-tensor-column: 180px;
+$legend-tensor-column: 260px;
 $legend-buffer-type-column: 130px;
 $legend-shape-column: 170px;
 

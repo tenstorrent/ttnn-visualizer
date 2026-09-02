@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-import { useEffect, useRef, useState } from 'react';
+import { MouseEvent, useEffect, useRef, useState } from 'react';
 import { useAtom, useAtomValue, useSetAtom } from 'jotai';
 import { useLocation, useNavigate } from 'react-router';
 import axios from 'axios';
@@ -29,6 +29,12 @@ import getResponseError from '../../functions/getResponseError';
 import { getActiveMlirServer } from '../../functions/mlirServer';
 import { MlirFileResult, MlirLoadedReport } from '../../model/MLIRJsonModel';
 import mapConvertedMlirServerResult from '../../functions/mapConvertedMlirServerResult';
+import { ReportKind, ReportLoadFailureReason, ReportSource } from '../../definitions/UsageEvent';
+import {
+    getReportLoadFailureReason,
+    recordReportLoadFailed,
+    recordReportLoaded,
+} from '../../functions/reportLoadUsage';
 import 'styles/components/MlirFileResultsOverlay.scss';
 
 const MAX_MLIR_FILE_SELECTION = 2;
@@ -56,6 +62,7 @@ const MlirFileResultsOverlay = () => {
     const [retryingIndices, setRetryingIndices] = useState<Set<number>>(new Set<number>());
     const retrySessionRef = useRef(0);
     const retryAbortControllersRef = useRef<Map<number, AbortController>>(new Map<number, AbortController>());
+    const [isViewing, setIsViewing] = useState(false);
 
     // Abort all in-flight retries on unmount to prevent setResults writebacks
     // on unmounted tree. Complements the axios.isCancel guard in the catch block.
@@ -173,11 +180,13 @@ const MlirFileResultsOverlay = () => {
                 return;
             }
 
+            const mappedResult = mapConvertedMlirServerResult(retried, result.host ?? null);
+            if (mappedResult.status === ConnectionTestStates.FAILED) {
+                recordReportLoadFailed(ReportKind.MLIR, ReportLoadFailureReason.OTHER);
+            }
             setResults(
                 (current) =>
-                    current?.map((entry, entryIndex) =>
-                        entryIndex === index ? mapConvertedMlirServerResult(retried, entry.host ?? null) : entry,
-                    ) ?? current,
+                    current?.map((entry, entryIndex) => (entryIndex === index ? mappedResult : entry)) ?? current,
             );
         } catch (err: unknown) {
             // Skip writeback for user-triggered aborts (close, unmount, or per-row cancel).
@@ -206,6 +215,7 @@ const MlirFileResultsOverlay = () => {
                     ) ?? current,
             );
             createToastNotification('MLIR', message, ToastType.ERROR);
+            recordReportLoadFailed(ReportKind.MLIR, getReportLoadFailureReason(err));
         } finally {
             // Only delete the controller if it matches the one we stored for this retry.
             // Prevents a stale (completed) retry's finally block from evicting a new controller
@@ -224,8 +234,8 @@ const MlirFileResultsOverlay = () => {
         }
     };
 
-    const handleView = async () => {
-        if (!results || selectedIndices.length === 0) {
+    const handleView = async (event: MouseEvent<HTMLElement>) => {
+        if (isViewing || !results || selectedIndices.length === 0) {
             return;
         }
 
@@ -240,6 +250,10 @@ const MlirFileResultsOverlay = () => {
             return;
         }
 
+        // State does not commit between the two click events of a double-click.
+        event.currentTarget.setAttribute('disabled', '');
+        setIsViewing(true);
+
         const [primary, comparison] = selectedResults;
         // Server graphs are relabelled on the backend; local JSON at load time.
         // Index 0 is the instance-persisted report; optional peer is for split.
@@ -250,8 +264,6 @@ const MlirFileResultsOverlay = () => {
             // the same peer name while staying on the MLIR route.
             setSplitViewEpoch((epoch) => epoch + 1);
         }
-        setMlirLoadedReports(loadedReports);
-
         // Local JSON loads live only in memory; only server uploads are stored
         // on disk and can be recorded as the instance's active MLIR so a reload
         // restores them. Persist index 0 only.
@@ -260,9 +272,11 @@ const MlirFileResultsOverlay = () => {
                 await setActiveMlir(primary.name, primary.host);
             } catch (err: unknown) {
                 createToastNotification('MLIR', getResponseError(err, 'Unable to set active MLIR'), ToastType.ERROR);
-                return;
             }
         }
+
+        setMlirLoadedReports(loadedReports);
+        selectedResults.forEach(() => recordReportLoaded(ReportKind.MLIR, ReportSource.UPLOAD));
 
         const toastDetail = comparison ? `${primary.filename} / ${comparison.filename}` : primary.filename;
         createToastNotification('MLIR', toastDetail, ToastType.SUCCESS);
@@ -271,6 +285,7 @@ const MlirFileResultsOverlay = () => {
         if (location.pathname !== ROUTES.MLIR) {
             void navigate(ROUTES.MLIR);
         }
+        setIsViewing(false);
     };
 
     return (
@@ -316,7 +331,7 @@ const MlirFileResultsOverlay = () => {
             <div className={Classes.DIALOG_FOOTER_ACTIONS}>
                 <Button
                     intent={Intent.PRIMARY}
-                    disabled={selectedIndices.length === 0}
+                    disabled={selectedIndices.length === 0 || isViewing}
                     onClick={handleView}
                 >
                     View

@@ -2,9 +2,12 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
+import { memberOperationIdsOf, sumDeviceTimeNs } from './opGraphMemberTime';
+
 interface CriticalPathNode {
     id: string;
     operationId: number;
+    memberOperationIds?: number[];
 }
 
 interface CriticalPathEdge {
@@ -20,6 +23,8 @@ const UNKNOWN_OP_ID = -1;
 export interface CriticalPath {
     /** Source to sink. */
     opIds: number[];
+    /** Member ops along the path; a folded block counts every member. */
+    opCount: number;
     nodeIds: ReadonlySet<string>;
     edgeIds: ReadonlySet<string>;
     totalNs: number;
@@ -32,6 +37,7 @@ export interface CriticalPath {
 
 export const EMPTY_CRITICAL_PATH: CriticalPath = {
     opIds: [],
+    opCount: 0,
     nodeIds: new Set<string>(),
     edgeIds: new Set<string>(),
     totalNs: 0,
@@ -84,15 +90,23 @@ export const findCriticalPath = (
         }
     }
 
-    const weightOf = (nodeId: string) => deviceTimeNsByOpId.get(opIdByNodeId.get(nodeId) ?? UNKNOWN_OP_ID) ?? 0;
-
+    // A node's own weight and member count, kept apart from the running chain
+    // totals below because relaxation overwrites those. `weightOf` used to be
+    // called from inside the edge loop, so a node's member sum was recomputed once
+    // per incoming edge rather than once per node.
+    const weightByNodeId = new Map<string, number>();
+    const memberCountByNodeId = new Map<string, number>();
     const costByNodeId = new Map<string, number>();
     const opCountByNodeId = new Map<string, number>();
     const predecessorByNodeId = new Map<string, string>();
     const predecessorEdgeByNodeId = new Map<string, string>();
     for (const node of nodes) {
-        costByNodeId.set(node.id, weightOf(node.id));
-        opCountByNodeId.set(node.id, 1);
+        const members = memberOperationIdsOf(node);
+        const weight = sumDeviceTimeNs(members, (operationId) => deviceTimeNsByOpId.get(operationId));
+        weightByNodeId.set(node.id, weight);
+        memberCountByNodeId.set(node.id, members.length);
+        costByNodeId.set(node.id, weight);
+        opCountByNodeId.set(node.id, members.length);
     }
 
     const byOpId = (left: string, right: string) =>
@@ -109,8 +123,8 @@ export const findCriticalPath = (
         const nodeOpCount = opCountByNodeId.get(nodeId) ?? 1;
 
         for (const edge of outgoingByNodeId.get(nodeId) ?? []) {
-            const candidateCost = nodeCost + weightOf(edge.target);
-            const candidateOpCount = nodeOpCount + 1;
+            const candidateCost = nodeCost + (weightByNodeId.get(edge.target) ?? 0);
+            const candidateOpCount = nodeOpCount + (memberCountByNodeId.get(edge.target) ?? 1);
             const currentPredecessor = predecessorByNodeId.get(edge.target);
             const isBetter = isPreferredChain(
                 candidateCost - (costByNodeId.get(edge.target) ?? 0),
@@ -169,6 +183,7 @@ export const findCriticalPath = (
 
     return {
         opIds,
+        opCount: opCountByNodeId.get(endNodeId) ?? opIds.length,
         nodeIds,
         edgeIds,
         totalNs: costByNodeId.get(endNodeId) ?? 0,
