@@ -209,6 +209,9 @@ export interface FragmentationEntry extends Chunk {
     largestEmpty?: boolean;
     // Mirrors `CircularBuffer.globallyAllocated` for the legend renderer. #1652
     globallyAllocated?: boolean;
+    // How many devices a collapsed CB row stands for, so the legend can say so
+    // rather than repeating the row once per device. #1879
+    deviceCount?: number;
 }
 
 // export interface ReportMetaData {

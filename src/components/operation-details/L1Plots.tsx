@@ -27,6 +27,7 @@ import { FragmentationEntry, MarkerType } from '../../model/APIData';
 import { MemoryLegendGroup } from './MemoryLegendGroup';
 import { useGetL1SmallMarker, useGetL1StartMarker } from '../../hooks/useAPI';
 import useScrollShade from '../../hooks/useScrollShade';
+import { collapseCbDeviceRows } from '../../functions/collapseCbDeviceRows';
 
 interface L1PlotsProps {
     operationDetails: OperationDetails;
@@ -103,22 +104,34 @@ function L1Plots({
     const groupedMemoryReport = getGroupedMemoryReport(BufferType.L1);
     const isLengthyLegend = memoryReport.length > MAX_LEGEND_LENGTH;
 
-    const memoryReportWithCB: FragmentationEntry[] = [
-        ...memoryReport,
-        ...operationDetails.deviceOperations
-            .map((op) =>
-                op.cbList.map(
+    // Only the collapse is memoised, not the concatenation and sort around it. The
+    // collapse is the part that allocates per CB per device operation (a Map, a Set
+    // per slot, two joined identity strings), and this component re-renders on
+    // `selectedAddressAtom` — every legend click — plus the region toggle and the
+    // scroll shades, none of which change CB data.
+    //
+    // The sort stays outside deliberately: `[...].sort()` mutates in place, and a
+    // `useMemo` wrapping it cannot be preserved by the compiler
+    // (`react-hooks/preserve-manual-memoization`), which is an error here. `toSorted`
+    // would fix that but needs an es2023 lib target. #1879
+    const collapsedCbEntries: FragmentationEntry[] = useMemo(
+        () =>
+            operationDetails.deviceOperations.flatMap((op) =>
+                collapseCbDeviceRows(op.cbList).map(
                     (cb) =>
                         ({
                             ...cb,
                             markerType: MarkerType.CB,
                             colorVariance: op.id,
-                            globallyAllocated: cb.globallyAllocated,
                         }) as FragmentationEntry,
                 ),
-            )
-            .flat(),
-    ].sort((a, b) => a.address - b.address);
+            ),
+        [operationDetails.deviceOperations],
+    );
+
+    const memoryReportWithCB: FragmentationEntry[] = [...memoryReport, ...collapsedCbEntries].sort(
+        (a, b) => a.address - b.address,
+    );
 
     // keeping for now, to make sure nothing breaks
     // const bufferZoomRangeStart = Math.min(...bufferMemory.map((chunk) => chunk.address));
@@ -318,6 +331,7 @@ function L1Plots({
                             colorVariance={chunk.colorVariance}
                             userL1ZoomRange={userL1ZoomRange}
                             isGloballyAllocated={chunk.globallyAllocated === true}
+                            deviceCount={chunk.deviceCount}
                         />
                     ))}
 

@@ -86,8 +86,11 @@ export const MemoryLegendElement = ({
 
     const derivedTensor = operationDetails.getTensorForAddress(chunk.address);
     const isPerCoreBuffer = bufferType !== StringBufferType.DRAM && bufferType !== StringBufferType.SYSTEM_MEMORY;
-    const numCoresLabel = isPerCoreBuffer && numCores && numCores > 0 ? ` ${getCoreCountLabel(numCores)}` : '';
-    const deviceCountLabel = deviceCount > 1 ? ` ${getDeviceCountLabel(deviceCount)}` : '';
+    const numCoresLabel = isPerCoreBuffer && numCores && numCores > 0 ? getCoreCountLabel(numCores) : '';
+    const deviceCountLabel = deviceCount > 1 ? getDeviceCountLabel(deviceCount) : '';
+    // Joined so the cell renders nothing at all when neither applies, rather than an
+    // empty span that would still take the description cell's leading gap.
+    const multiplierLabels = [numCoresLabel, deviceCountLabel].filter(Boolean).join(' ');
 
     const resolvedColour =
         chunk.tensorId || derivedTensor
@@ -170,8 +173,6 @@ export const MemoryLegendElement = ({
                 ) : (
                     <>
                         {formatMemorySize(chunk.size, 2)}
-                        {numCoresLabel}
-                        {deviceCountLabel}
                         {isGloballyAllocated && (
                             <Tooltip
                                 content={
@@ -206,14 +207,24 @@ export const MemoryLegendElement = ({
                     </>
                 )}
             </div>
-            <div>
+            <div className='legend-description'>
+                {/* The multipliers live here rather than beside the size, which is
+                    right-aligned: a cell holding "8 KiB x 32 devices" right-aligns the
+                    whole string, so the size drifts left and stops lining up with the
+                    plain sizes above and below it. #1879 */}
+                {multiplierLabels && <span className='legend-multipliers monospace'>{multiplierLabels}</span>}
+                {/* Wrapped rather than left as bare text: an unwrapped child of a flex
+                    container becomes an anonymous flex item, which cannot receive
+                    `text-overflow`, so this clipped mid-glyph instead of ellipsising. */}
                 {!isMultiDeviceBuffer && !chunk.empty && derivedTensor && (
-                    <>
+                    <span className='legend-description-text'>
                         {derivedTensor.operationIdentifier} {derivedTensor.operationIdentifier && ':'} Tensor{' '}
                         {derivedTensor.id}
-                    </>
+                    </span>
                 )}
-                {!isMultiDeviceBuffer && chunk.empty && emptyChunkLabel}
+                {!isMultiDeviceBuffer && chunk.empty && (
+                    <span className='legend-description-text'>{emptyChunkLabel}</span>
+                )}
             </div>
             {(bufferType || layout) && (
                 <div className='extra-info-slot'>

@@ -24,6 +24,7 @@ import getChartData from '../functions/getChartData';
 import { calculateCondensed } from '../functions/calculateCondensed';
 import { L1_DEFAULT_MEMORY_SIZE, L1_NUM_CORES } from '../definitions/L1MemorySize';
 import { TensorDeallocationReport } from './BufferSummary';
+import { normaliseDeviceId } from '../functions/collapseCbDeviceRows';
 
 export interface OperationDetailsOptions {
     renderPattern: boolean;
@@ -262,6 +263,11 @@ export class OperationDetails implements Partial<OperationDetailsData> {
                                 num_cores: getCoresInRange(node.params.core_range_set),
                                 colorVariance: deviceOp.id,
                                 globallyAllocated,
+                                // Normalised here rather than read as a number: absent in
+                                // older captures and emitted as a string by at least one
+                                // other. Without it every device's copy of a CB became its
+                                // own legend row. #1844 / #1879
+                                device_id: normaliseDeviceId(node.params.device_id),
                             });
                         }
                     }
