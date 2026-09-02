@@ -7,8 +7,10 @@ import { cleanup, render, screen } from '@testing-library/react';
 import { StrictMode } from 'react';
 import type { ComponentType } from 'react';
 import { HelmetProvider } from 'react-helmet-async';
-import { MemoryRouter } from 'react-router';
+import { type InitialEntry, MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import ROUTES from '../src/definitions/Routes';
+import { UsageEvent, UsageView } from '../src/definitions/UsageEvent';
 
 /**
  * Covers the shell's wiring and the one structural invariant it asserts about itself.
@@ -26,23 +28,31 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const teardown = vi.hoisted(() => vi.fn());
 const initUsageRecording = vi.hoisted(() => vi.fn(() => teardown));
+const recordUsage = vi.hoisted(() => vi.fn());
 
-vi.mock('../src/functions/recordUsage', () => ({ initUsageRecording }));
+vi.mock('../src/functions/recordUsage', () => ({ default: recordUsage, initUsageRecording }));
 
 vi.mock('../src/components/SideNavigation', () => ({ default: () => <div data-testid='stub-side-navigation' /> }));
 vi.mock('../src/components/ServerModeBanner', () => ({ default: () => <div data-testid='stub-server-mode-banner' /> }));
 vi.mock('../src/components/FooterInfobar', () => ({ default: () => <div data-testid='stub-footer-infobar' /> }));
 vi.mock('../src/components/FeedbackButton', () => ({ default: () => null }));
 vi.mock('../src/components/FileStatusOverlay', () => ({ default: () => null }));
-vi.mock('../src/components/cluster/ClusterRenderer', () => ({ default: () => null }));
+vi.mock('../src/components/cluster/ClusterRenderer', () => ({
+    default: () => <div data-testid='stub-cluster-renderer' />,
+}));
 vi.mock('../src/components/mlir/MlirFileResultsOverlay', () => ({ default: () => null }));
 vi.mock('../src/libs/ModalAwareOutlet', () => ({ ModalAwareOutlet: () => null }));
 
-function renderLayout(Layout: ComponentType) {
+async function resetViewOpenedMemory() {
+    const { resetRememberedViewPathname } = await import('../src/functions/viewUsage');
+    resetRememberedViewPathname();
+}
+
+function renderLayout(Layout: ComponentType, initialEntries: InitialEntry[] = ['/']) {
     return render(
         <StrictMode>
             <HelmetProvider>
-                <MemoryRouter>
+                <MemoryRouter initialEntries={initialEntries}>
                     <Layout />
                 </MemoryRouter>
             </HelmetProvider>
@@ -51,7 +61,8 @@ function renderLayout(Layout: ComponentType) {
 }
 
 describe('Layout usage recording wiring', () => {
-    beforeEach(() => {
+    beforeEach(async () => {
+        await resetViewOpenedMemory();
         vi.clearAllMocks();
     });
 
@@ -65,6 +76,18 @@ describe('Layout usage recording wiring', () => {
         renderLayout(Layout);
 
         expect(initUsageRecording).toHaveBeenCalled();
+    });
+
+    it('records the initial route once under StrictMode', async () => {
+        const { default: Layout } = await import('../src/components/Layout');
+
+        renderLayout(Layout);
+
+        expect(recordUsage).toHaveBeenCalledTimes(1);
+        expect(recordUsage).toHaveBeenCalledWith({
+            event: UsageEvent.VIEW_OPENED,
+            details: { view: UsageView.REPORTS },
+        });
     });
 
     it('balances every start with a teardown, including StrictMode remount', async () => {
@@ -86,7 +109,8 @@ describe('Layout usage recording wiring', () => {
 });
 
 describe('Layout shell placement', () => {
-    beforeEach(() => {
+    beforeEach(async () => {
+        await resetViewOpenedMemory();
         vi.clearAllMocks();
     });
 
@@ -124,5 +148,37 @@ describe('Layout shell placement', () => {
         const shell = await renderShell();
 
         expect(shell).not.toContainElement(screen.getByTestId('stub-footer-infobar'));
+    });
+});
+
+describe('Layout topology overlay', () => {
+    beforeEach(async () => {
+        await resetViewOpenedMemory();
+        vi.clearAllMocks();
+    });
+
+    afterEach(() => {
+        cleanup();
+    });
+
+    it('does not render the overlay for a topology pathname with no background', async () => {
+        const { default: Layout } = await import('../src/components/Layout');
+
+        renderLayout(Layout, [ROUTES.CLUSTER]);
+
+        expect(screen.queryByTestId('stub-cluster-renderer')).not.toBeInTheDocument();
+    });
+
+    it('renders the overlay when topology is opened over a background view', async () => {
+        const { default: Layout } = await import('../src/components/Layout');
+
+        renderLayout(Layout, [
+            {
+                pathname: ROUTES.CLUSTER,
+                state: { background: { pathname: ROUTES.OPERATIONS, key: 'bg', search: '', hash: '', state: null } },
+            },
+        ]);
+
+        expect(screen.getByTestId('stub-cluster-renderer')).toBeInTheDocument();
     });
 });

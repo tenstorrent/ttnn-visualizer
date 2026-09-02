@@ -275,9 +275,11 @@ class UsageView(str, Enum):
     and ``BUFFERS`` deliberately differ in name from their paths (``/graphtree``,
     ``/buffer-summary``) because the enum names the surface, not the URL.
 
-    ``OPERATION_DETAILS`` is a real route and so belongs here, but it is also a
-    Tier 3 drill-down target. Whichever issue adds ``drilldown_opened`` has to
-    decide which event owns it, or the same click is counted twice.
+    ``OPERATION_DETAILS`` is a real route and is owned by ``view_opened``. A future
+    ``drilldown_opened`` event must exclude it, or one navigation would be counted
+    as two different actions. It counts once per operation viewed rather than once
+    per visit to the surface, so its total is not comparable to the other nine and
+    should be read per-session or deduplicated.
     """
 
     REPORTS = "reports"

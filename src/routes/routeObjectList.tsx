@@ -11,7 +11,7 @@ import Styleguide from './Styleguide';
 import GraphView from './GraphView';
 import Performance from './Performance';
 import NPE from './NPE';
-import ROUTES from '../definitions/Routes';
+import ROUTES, { ROUTE_PATTERNS } from '../definitions/Routes';
 import { NAVIGATION_ITEMS, NavRequirement } from '../definitions/NavigationItems';
 import MLIR from './MLIR';
 
@@ -30,7 +30,7 @@ export const routeObjectList = [
         element: <Operations />,
     },
     {
-        path: stripFirstSlash(`${ROUTES.OPERATIONS}/:operationId`),
+        path: stripFirstSlash(ROUTE_PATTERNS.OPERATION_DETAILS),
         element: <OperationDetails />,
     },
     {
@@ -46,7 +46,7 @@ export const routeObjectList = [
         element: <Styleguide />,
     },
     {
-        path: stripFirstSlash(`${ROUTES.GRAPHTREE}/:operationId?`),
+        path: stripFirstSlash(ROUTE_PATTERNS.GRAPHTREE),
         element: <GraphView />,
     },
     {
@@ -54,11 +54,11 @@ export const routeObjectList = [
         element: <Performance />,
     },
     {
-        path: stripFirstSlash(`${ROUTES.NPE}/:filepath?`),
+        path: stripFirstSlash(ROUTE_PATTERNS.NPE),
         element: <NPE />,
     },
     {
-        path: stripFirstSlash(`${ROUTES.MLIR}/:filepath?`),
+        path: stripFirstSlash(ROUTE_PATTERNS.MLIR),
         element: <MLIR />,
     },
     {
