@@ -12,11 +12,14 @@ import { minimalValidNpeData } from './helpers/npeFixtures';
 import { activeNpeOpTraceAtom } from '../src/store/app';
 import { TEST_IDS } from '../src/definitions/TestIds';
 import { ReportKind, ReportLoadFailureReason, ReportSource } from '../src/definitions/UsageEvent';
+import { NPEValidationError } from '../src/definitions/NPEData';
 
 interface MockNpeWindowedViewProps {
-    loadAttemptId: number | null;
-    onInitialLoadSuccess: (attemptId: number) => void;
-    onInitialLoadFailure: (attemptId: number, errorCode: number, error?: unknown) => void;
+    loadAttempt: {
+        id: number | null;
+        complete: (attemptId: number) => void;
+        fail: (attemptId: number, errorCode: NPEValidationError, error?: unknown) => void;
+    };
 }
 
 interface MockNpeFileLoaderProps {
@@ -216,19 +219,19 @@ describe('NPE report-load recording', () => {
         renderRoute();
 
         fireEvent.click(screen.getByRole('button', { name: 'accept-npe-upload' }));
-        await waitFor(() => expect(h.windowedProps?.loadAttemptId).toBe(1));
-        const staleAttemptId = h.windowedProps?.loadAttemptId;
+        await waitFor(() => expect(h.windowedProps?.loadAttempt.id).toBe(1));
+        const staleAttemptId = h.windowedProps?.loadAttempt.id;
 
         fireEvent.click(screen.getByRole('button', { name: 'accept-npe-upload' }));
-        await waitFor(() => expect(h.windowedProps?.loadAttemptId).toBe(2));
+        await waitFor(() => expect(h.windowedProps?.loadAttempt.id).toBe(2));
 
-        h.windowedProps?.onInitialLoadSuccess(staleAttemptId ?? -1);
+        h.windowedProps?.loadAttempt.complete(staleAttemptId ?? -1);
         expect(recordReportLoaded).not.toHaveBeenCalled();
 
-        h.windowedProps?.onInitialLoadSuccess(2);
+        h.windowedProps?.loadAttempt.complete(2);
         expect(recordReportLoaded).toHaveBeenCalledWith(ReportKind.NPE, ReportSource.UPLOAD);
-        h.windowedProps?.onInitialLoadSuccess(2);
-        h.windowedProps?.onInitialLoadFailure(2, 1);
+        h.windowedProps?.loadAttempt.complete(2);
+        h.windowedProps?.loadAttempt.fail(2, NPEValidationError.DEFAULT);
         expect(recordReportLoaded).toHaveBeenCalledTimes(1);
         expect(recordReportLoadFailed).not.toHaveBeenCalled();
     });

@@ -5,14 +5,12 @@
 import { AxiosError, CanceledError, HttpStatusCode } from 'axios';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
-    getNpeReportLoadFailureReason,
     getReportLoadFailureReason,
     recordReportLoadFailed,
     recordReportLoadFailure,
     recordReportLoaded,
 } from '../src/functions/reportLoadUsage';
 import { ReportKind, ReportLoadFailureReason, ReportSource, UsageEvent } from '../src/definitions/UsageEvent';
-import { NPEValidationError } from '../src/definitions/NPEData';
 
 const { recordUsage } = vi.hoisted(() => ({ recordUsage: vi.fn() }));
 
@@ -47,7 +45,7 @@ describe('report-load usage payloads', () => {
 
     it('records only the bounded kind and reason for a failed load', () => {
         const error = getAxiosError(HttpStatusCode.InternalServerError, { error: 'private response message' });
-        recordReportLoadFailed(ReportKind.NPE, getNpeReportLoadFailureReason(NPEValidationError.DEFAULT, error));
+        recordReportLoadFailed(ReportKind.NPE, getReportLoadFailureReason(error));
 
         expect(recordUsage).toHaveBeenCalledWith({
             event: UsageEvent.REPORT_LOAD_FAILED,
@@ -75,38 +73,11 @@ describe('getReportLoadFailureReason', () => {
         ).toBe(ReportLoadFailureReason.OTHER);
     });
 
-    it('accepts an explicit 422 classification from a caller that knows its contract', () => {
-        expect(
-            getReportLoadFailureReason(getAxiosError(HttpStatusCode.UnprocessableEntity), {
-                unprocessableEntityReason: ReportLoadFailureReason.PARSE_ERROR,
-            }),
-        ).toBe(ReportLoadFailureReason.PARSE_ERROR);
-    });
-
     it('uses the bounded fallback for transport and unknown failures', () => {
         expect(getReportLoadFailureReason(new Error('private response message'))).toBe(ReportLoadFailureReason.OTHER);
         expect(getReportLoadFailureReason(getAxiosError(HttpStatusCode.InternalServerError))).toBe(
             ReportLoadFailureReason.OTHER,
         );
-    });
-});
-
-describe('getNpeReportLoadFailureReason', () => {
-    it.each([
-        [NPEValidationError.INVALID_NPE_VERSION, ReportLoadFailureReason.UNSUPPORTED_VERSION],
-        [NPEValidationError.INVALID_JSON, ReportLoadFailureReason.PARSE_ERROR],
-        [NPEValidationError.INVALID_NPE_DATA, ReportLoadFailureReason.PARSE_ERROR],
-    ])('maps validation error %i to %s', (validationError, expected) => {
-        expect(getNpeReportLoadFailureReason(validationError)).toBe(expected);
-    });
-
-    it('uses the HTTP failure when validation has no more specific reason', () => {
-        expect(
-            getNpeReportLoadFailureReason(
-                NPEValidationError.DEFAULT,
-                getAxiosError(HttpStatusCode.NotFound, { error: 'private response message' }),
-            ),
-        ).toBe(ReportLoadFailureReason.MISSING_FILE);
     });
 });
 

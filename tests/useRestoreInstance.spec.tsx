@@ -9,6 +9,8 @@ import { TestProviders } from './helpers/TestProviders';
 import useRestoreInstance from '../src/hooks/useRestoreInstance';
 import { activeProfilerReportAtom, mlirLoadedReportsAtom } from '../src/store/app';
 import type { GraphBundle } from '../src/model/MLIRJsonModel';
+import ProtectedRoute from '../src/components/ProtectedRoute';
+import ROUTES from '../src/definitions/Routes';
 
 const mockResetMemoryListStates = vi.fn();
 
@@ -137,6 +139,82 @@ it('does not record restored reports as user-initiated loads', async () => {
     await waitFor(() => expect(screen.getByText('restored')).toBeTruthy());
     expect(recordReportLoaded).not.toHaveBeenCalled();
     expect(recordReportLoadFailed).not.toHaveBeenCalled();
+});
+
+it('keeps report selection unavailable until instance restoration has settled', async () => {
+    mockUseReportFolderList.mockReturnValue({ data: null });
+    mockUseInstance.mockReturnValue({
+        data: {
+            active_report: {
+                profiler_name: 'restored-profiler',
+                profiler_location: 'local',
+                performance_name: null,
+                performance_location: null,
+                npe_name: null,
+            },
+            remote_profiler_folder: null,
+        },
+        isLoading: false,
+    });
+
+    const getProtectedSelection = () => (
+        <TestProviders>
+            <ProtectedRoute>
+                <button type='button'>choose-report</button>
+            </ProtectedRoute>
+        </TestProviders>
+    );
+    const { rerender } = render(getProtectedSelection());
+
+    expect(screen.queryByRole('button', { name: 'choose-report' })).toBeNull();
+    expect(screen.getByText('Initializing instance...')).toBeTruthy();
+
+    mockUseReportFolderList.mockReturnValue({ data: [] });
+    rerender(getProtectedSelection());
+
+    await waitFor(() => expect(screen.getByRole('button', { name: 'choose-report' })).toBeTruthy());
+    expect(recordReportLoaded).not.toHaveBeenCalled();
+    expect(recordReportLoadFailed).not.toHaveBeenCalled();
+});
+
+it('shows restoration progress before evaluating report-required redirects', () => {
+    mockUseReportFolderList.mockReturnValue({ data: null });
+    mockUseInstance.mockReturnValue({
+        data: {
+            active_report: {
+                profiler_name: null,
+                profiler_location: null,
+                performance_name: null,
+                performance_location: null,
+                npe_name: null,
+            },
+            remote_profiler_folder: null,
+        },
+        isLoading: false,
+    });
+
+    render(
+        <TestProviders initialEntries={[ROUTES.OPERATIONS]}>
+            <ProtectedRoute>
+                <div>operations</div>
+            </ProtectedRoute>
+        </TestProviders>,
+    );
+
+    expect(screen.getByText('Initializing instance...')).toBeTruthy();
+    expect(screen.queryByText('operations')).toBeNull();
+});
+
+it('restores the instance when the report list is unavailable', async () => {
+    mockUseReportFolderList.mockReturnValue({ data: null, isError: true });
+
+    render(
+        <TestProviders>
+            <HookHarness />
+        </TestProviders>,
+    );
+
+    await waitFor(() => expect(screen.getByText('restored')).toBeTruthy());
 });
 
 it('resets memory list state on first report change after null baseline', async () => {

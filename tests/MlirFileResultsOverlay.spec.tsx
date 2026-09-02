@@ -144,6 +144,39 @@ describe('MlirFileResultsOverlay', () => {
         expect(getDefaultStore().get(mlirFileResultsAtom)).not.toBeNull();
     });
 
+    it('ignores a second View click while persistence is in flight', async () => {
+        let finishPersistence!: () => void;
+        setActiveMlir.mockImplementationOnce(
+            () =>
+                new Promise<void>((resolve) => {
+                    finishPersistence = resolve;
+                }),
+        );
+        renderOverlay([
+            {
+                filename: 'a.mlir',
+                host: 'worker-01',
+                name: 'a',
+                status: ConnectionTestStates.OK,
+                graph: GRAPH,
+                persisted: true,
+            },
+        ]);
+
+        fireEvent.click(screen.getByText('a.mlir'));
+        const viewButton = screen.getByRole('button', { name: /view/i });
+        fireEvent.click(viewButton);
+        fireEvent.click(viewButton);
+
+        expect(viewButton).toBeDisabled();
+        expect(setActiveMlir).toHaveBeenCalledTimes(1);
+        expect(recordReportLoaded).not.toHaveBeenCalled();
+
+        finishPersistence();
+
+        await waitFor(() => expect(recordReportLoaded).toHaveBeenCalledTimes(1));
+    });
+
     it('reopens the results overlay via the loader button after it has been closed', async () => {
         getDefaultStore().set(mlirFileResultsAtom, [
             { filename: 'a.json', name: 'a', status: ConnectionTestStates.OK, graph: GRAPH, persisted: false },

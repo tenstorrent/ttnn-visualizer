@@ -13,26 +13,19 @@ import { NpeSummary } from '../../model/NPEModel';
 import NPEProcessingStatus from '../NPEProcessingStatus';
 import NPEView from './NPEViewComponent';
 import { validateNpeVersion } from '../../functions/validateNpeData';
+import type { NpeLoadAttemptController } from '../../hooks/useNpeLoadAttempt';
 
 interface NpeWindowedViewProps {
     fileName: string | null;
-    loadAttemptId: number | null;
-    onInitialLoadSuccess: (attemptId: number) => void;
-    onInitialLoadFailure: (attemptId: number, errorCode: NPEValidationError, error?: unknown) => void;
+    loadAttempt: NpeLoadAttemptController;
 }
 
 // #861 PoC container: drives the selected timestep, fetches only that step's
 // window, and feeds an assembled NPEData into the unchanged NPEView. Scrubbing
 // updates `selectedTimestep`, which refetches the next window.
-const NpeWindowedView = ({
-    fileName,
-    loadAttemptId,
-    onInitialLoadSuccess,
-    onInitialLoadFailure,
-}: NpeWindowedViewProps) => {
+const NpeWindowedView = ({ fileName, loadAttempt }: NpeWindowedViewProps) => {
     const [selectedTimestep, setSelectedTimestep] = useState(0);
     const initialisedSummary = useRef<NpeSummary | null>(null);
-    const settledLoadAttemptIdRef = useRef<number | null>(null);
     const {
         data: summary,
         isLoading: isLoadingSummary,
@@ -77,34 +70,27 @@ const NpeWindowedView = ({
         [summary, npeWindow, baseTimestepData, selectedTimestep],
     );
     useEffect(() => {
-        if (loadAttemptId === null || settledLoadAttemptIdRef.current === loadAttemptId) {
+        if (loadAttempt.id === null) {
             return;
         }
 
         if (isSummaryError) {
-            settledLoadAttemptIdRef.current = loadAttemptId;
-            onInitialLoadFailure(loadAttemptId, NPEValidationError.DEFAULT, summaryError);
+            loadAttempt.fail(loadAttempt.id, NPEValidationError.DEFAULT, summaryError);
         } else if (summary && summary.n_timesteps === 0) {
-            settledLoadAttemptIdRef.current = loadAttemptId;
-            onInitialLoadFailure(loadAttemptId, NPEValidationError.EMPTY_NPE_TRACE);
+            loadAttempt.fail(loadAttempt.id, NPEValidationError.EMPTY_NPE_TRACE);
         } else if (versionError !== NPEValidationError.OK) {
-            settledLoadAttemptIdRef.current = loadAttemptId;
-            onInitialLoadFailure(loadAttemptId, versionError);
+            loadAttempt.fail(loadAttempt.id, versionError);
         } else if (isWindowError && !isLoadingSummary && !npeData) {
-            settledLoadAttemptIdRef.current = loadAttemptId;
-            onInitialLoadFailure(loadAttemptId, NPEValidationError.DEFAULT, windowError);
+            loadAttempt.fail(loadAttempt.id, NPEValidationError.DEFAULT, windowError);
         } else if (npeData) {
-            settledLoadAttemptIdRef.current = loadAttemptId;
-            onInitialLoadSuccess(loadAttemptId);
+            loadAttempt.complete(loadAttempt.id);
         }
     }, [
         isLoadingSummary,
         isSummaryError,
         isWindowError,
-        loadAttemptId,
+        loadAttempt,
         npeData,
-        onInitialLoadFailure,
-        onInitialLoadSuccess,
         summary,
         summaryError,
         versionError,

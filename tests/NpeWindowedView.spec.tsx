@@ -64,9 +64,11 @@ const onInitialLoadFailure = vi.fn();
 const windowedView = (loadAttemptId: number | null = null) => (
     <NpeWindowedView
         fileName='trace.json'
-        loadAttemptId={loadAttemptId}
-        onInitialLoadSuccess={onInitialLoadSuccess}
-        onInitialLoadFailure={onInitialLoadFailure}
+        loadAttempt={{
+            id: loadAttemptId,
+            complete: onInitialLoadSuccess,
+            fail: onInitialLoadFailure,
+        }}
     />
 );
 
@@ -145,7 +147,6 @@ describe('NpeWindowedView', () => {
         render(windowedView(7));
 
         await waitFor(() => expect(onInitialLoadSuccess).toHaveBeenCalledWith(7));
-        expect(onInitialLoadSuccess).toHaveBeenCalledTimes(1);
         expect(onInitialLoadFailure).not.toHaveBeenCalled();
     });
 

@@ -25,6 +25,7 @@ import relabelMlirGraphIds from '../../functions/relabelMlirGraphIds';
 import uniqueMlirName from '../../functions/uniqueMlirName';
 import { ReportKind, ReportLoadFailureReason } from '../../definitions/UsageEvent';
 import { getReportLoadFailureReason, recordReportLoadFailed } from '../../functions/reportLoadUsage';
+import { MLIRValidationError, MLIR_LOAD_FAILURE_REASON_BY_VALIDATION_ERROR } from '../../definitions/MLIRData';
 import 'styles/components/FileLoader.scss';
 
 const ICON_MAP: Record<ConnectionTestStates, IconName> = {
@@ -97,7 +98,10 @@ const MlirJsonFileLoader = ({ server = null, disabled = false }: MlirJsonFileLoa
                         persisted: false,
                     };
                 } catch {
-                    recordReportLoadFailed(ReportKind.MLIR, ReportLoadFailureReason.PARSE_ERROR);
+                    recordReportLoadFailed(
+                        ReportKind.MLIR,
+                        MLIR_LOAD_FAILURE_REASON_BY_VALIDATION_ERROR[MLIRValidationError.INVALID_JSON],
+                    );
                     return {
                         filename: file.name,
                         name: null,

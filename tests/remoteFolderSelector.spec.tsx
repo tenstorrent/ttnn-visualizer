@@ -54,6 +54,7 @@ import { SshConfigHostsQueryResult, noSshConfigResult } from './helpers/sshConfi
 import testForPortal from './helpers/testForPortal';
 import { TestProviders } from './helpers/TestProviders';
 import { ReportKind, ReportLoadFailureReason, ReportSource } from '../src/definitions/UsageEvent';
+import { RemoteFolderType } from '../src/definitions/Reports';
 
 // Scrub the markup after each test
 afterEach(() => {
@@ -152,7 +153,7 @@ it('shows a loading spinner on the remote folder selector button when loading', 
                 remoteFolderList={mockRemoteProfilerFolderList as RemoteFolder[]}
                 loading
                 onSelectFolder={() => undefined}
-                type='profiler'
+                type={ReportKind.PROFILER}
             />
         </TestProviders>,
     );
@@ -1589,7 +1590,7 @@ const mockRemoteFolderApis = (url: string, selectedReport: RemoteFolder) => {
     return Promise.resolve({ data: [] } as AxiosResponse);
 };
 
-const selectRemoteFolder = async (type: 'profiler' | 'performance', remotePath: string) => {
+const selectRemoteFolder = async (type: RemoteFolderType, remotePath: string) => {
     const fetchButton = getButtonWithText(FETCH_REMOTE_FOLDERS);
     fetchButton.click();
 
@@ -1603,7 +1604,7 @@ const selectRemoteFolder = async (type: 'profiler' | 'performance', remotePath: 
     const enabledButtons = selectButtons.filter((btn) => !btn.hasAttribute(HTML_DISABLED));
     // Layout is [profiler, performance]. Default fixture has empty profilerPath so only
     // performance is enabled; when both paths exist both buttons enable.
-    const button = type === 'performance' ? enabledButtons[enabledButtons.length - 1] : selectButtons[0];
+    const button = type === ReportKind.PERFORMANCE ? enabledButtons[enabledButtons.length - 1] : selectButtons[0];
     expect(button).toBeDefined();
     expect(button).toHaveProperty(HTML_DISABLED, false);
     button!.click();
@@ -1613,8 +1614,8 @@ const selectRemoteFolder = async (type: 'profiler' | 'performance', remotePath: 
     screen.getByText(remotePath).click();
 };
 
-const selectProfilerFolder = (remotePath: string) => selectRemoteFolder('profiler', remotePath);
-const selectPerformanceFolder = (remotePath: string) => selectRemoteFolder('performance', remotePath);
+const selectProfilerFolder = (remotePath: string) => selectRemoteFolder(ReportKind.PROFILER, remotePath);
+const selectPerformanceFolder = (remotePath: string) => selectRemoteFolder(ReportKind.PERFORMANCE, remotePath);
 
 const MULTIHOST_ROOT = '/tt-metal/generated/profiler/ttrun';
 
@@ -1657,7 +1658,7 @@ const renderPerformanceSelector = async (
             <RemoteFolderSelector
                 remoteFolderList={folderList}
                 onSelectFolder={onSelectFolder}
-                type='performance'
+                type={ReportKind.PERFORMANCE}
             />
         </TestProviders>,
     );
@@ -1696,7 +1697,7 @@ it('names the selected rank on the collapsed button', () => {
                 remoteFolderList={multihostFolders}
                 remoteFolder={rankFolder(1)}
                 onSelectFolder={() => undefined}
-                type='performance'
+                type={ReportKind.PERFORMANCE}
             />
         </TestProviders>,
     );

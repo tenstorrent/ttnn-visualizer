@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-import { useEffect, useRef, useState } from 'react';
+import { MouseEvent, useEffect, useRef, useState } from 'react';
 import { useAtom, useAtomValue, useSetAtom } from 'jotai';
 import { useLocation, useNavigate } from 'react-router';
 import axios from 'axios';
@@ -62,6 +62,7 @@ const MlirFileResultsOverlay = () => {
     const [retryingIndices, setRetryingIndices] = useState<Set<number>>(new Set<number>());
     const retrySessionRef = useRef(0);
     const retryAbortControllersRef = useRef<Map<number, AbortController>>(new Map<number, AbortController>());
+    const [isViewing, setIsViewing] = useState(false);
 
     // Abort all in-flight retries on unmount to prevent setResults writebacks
     // on unmounted tree. Complements the axios.isCancel guard in the catch block.
@@ -233,8 +234,8 @@ const MlirFileResultsOverlay = () => {
         }
     };
 
-    const handleView = async () => {
-        if (!results || selectedIndices.length === 0) {
+    const handleView = async (event: MouseEvent<HTMLElement>) => {
+        if (isViewing || !results || selectedIndices.length === 0) {
             return;
         }
 
@@ -248,6 +249,10 @@ const MlirFileResultsOverlay = () => {
         if (selectedResults.length === 0 || selectedResults.length !== selectedIndices.length) {
             return;
         }
+
+        // State does not commit between the two click events of a double-click.
+        event.currentTarget.setAttribute('disabled', '');
+        setIsViewing(true);
 
         const [primary, comparison] = selectedResults;
         // Server graphs are relabelled on the backend; local JSON at load time.
@@ -280,6 +285,7 @@ const MlirFileResultsOverlay = () => {
         if (location.pathname !== ROUTES.MLIR) {
             void navigate(ROUTES.MLIR);
         }
+        setIsViewing(false);
     };
 
     return (
@@ -325,7 +331,7 @@ const MlirFileResultsOverlay = () => {
             <div className={Classes.DIALOG_FOOTER_ACTIONS}>
                 <Button
                     intent={Intent.PRIMARY}
-                    disabled={selectedIndices.length === 0}
+                    disabled={selectedIndices.length === 0 || isViewing}
                     onClick={handleView}
                 >
                     View

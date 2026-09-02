@@ -2,10 +2,14 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
+import { ReportKind } from './UsageEvent';
+
 export enum ReportLocation {
     LOCAL = 'local',
     REMOTE = 'remote',
 }
+
+export type RemoteFolderType = ReportKind.PROFILER | ReportKind.PERFORMANCE;
 
 // A report's `world_size` is the number of ranks it spans. Anything above this
 // is a multi-host capture, which the API currently scopes to rank 0. #1842

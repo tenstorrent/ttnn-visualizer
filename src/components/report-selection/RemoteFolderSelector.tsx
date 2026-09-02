@@ -19,11 +19,11 @@ import { getRankedReportLabel } from '../../functions/reportRank';
 import useRemoteConnection from '../../hooks/useRemote';
 import HighlightedText from '../HighlightedText';
 import FolderLinkStatusIcon from './FolderLinkStatusIcon';
-
-type FolderTypes = 'performance' | 'profiler';
+import { ReportKind } from '../../definitions/UsageEvent';
+import { RemoteFolderType } from '../../definitions/Reports';
 
 interface RemoteFolderRendererOptions {
-    type: FolderTypes;
+    type: RemoteFolderType;
     selectedFolder?: RemoteFolder;
     connection?: RemoteConnection;
     showReportName?: boolean;
@@ -87,7 +87,7 @@ interface RemoteFolderSelectorProps {
     fallbackLabel?: string;
     icon?: IconName;
     onSelectFolder: (folder: RemoteFolder) => void;
-    type: FolderTypes;
+    type: RemoteFolderType;
     showReportName?: boolean;
     linkedIds?: Set<string> | null;
     unlinkedIds?: Set<string> | null;
@@ -176,7 +176,7 @@ const getRemoteFolderLabel = (folder: RemoteFolder): string => getRankedReportLa
 
 const formatRemoteFolderPath = (
     folder: RemoteFolder,
-    type: FolderTypes,
+    type: RemoteFolderType,
     selectedConnection?: RemoteConnection,
 ): string => {
     if (!folder || !selectedConnection) {
@@ -187,9 +187,9 @@ const formatRemoteFolderPath = (
         return getRemoteFolderLabel(folder);
     }
 
-    const paths: Record<FolderTypes, string | undefined> = {
-        profiler: selectedConnection.profilerPath,
-        performance: selectedConnection.performancePath,
+    const paths: Record<RemoteFolderType, string | undefined> = {
+        [ReportKind.PROFILER]: selectedConnection.profilerPath,
+        [ReportKind.PERFORMANCE]: selectedConnection.performancePath,
     };
 
     const pathToReplace = paths?.[type] ?? '';
@@ -200,7 +200,7 @@ const formatRemoteFolderPath = (
 };
 
 const filterFolders =
-    (type: FolderTypes, connection?: RemoteConnection): ItemPredicate<RemoteFolder> =>
+    (type: RemoteFolderType, connection?: RemoteConnection): ItemPredicate<RemoteFolder> =>
     (query, folder) => {
         const normalisedQuery = query.toLowerCase();
 
