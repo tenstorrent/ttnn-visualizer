@@ -5,7 +5,7 @@
 import '@testing-library/jest-dom/vitest';
 import { Classes } from '@blueprintjs/core';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { AxiosResponse, CanceledError } from 'axios';
+import { AxiosError, AxiosResponse, CanceledError, HttpStatusCode } from 'axios';
 import { useAtomValue } from 'jotai';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import RemoteSyncConfigurator from '../src/components/report-selection/RemoteSyncConfigurator';
@@ -123,11 +123,11 @@ vi.mock('../src/libs/axiosInstance', () => ({
     },
 }));
 
-vi.mock('../src/functions/reportLoadUsage', () => ({
-    getReportLoadFailureReason: () => ReportLoadFailureReason.OTHER,
-    recordReportLoaded,
-    recordReportLoadFailed,
-}));
+vi.mock('../src/functions/reportLoadUsage', async (importOriginal) => {
+    const { reportLoadUsageSpiesMock } = await import('./helpers/mockReportLoadUsage');
+
+    return reportLoadUsageSpiesMock(importOriginal, recordReportLoaded, recordReportLoadFailed);
+});
 
 // The edit dialog renders SshConfigHostPicker; without this it would issue a real request from
 // jsdom, and the picker would be absent because the query failed rather than because of a fixture.
@@ -1128,6 +1128,53 @@ it('shows Folder sync error when Sync and local mount both fail', async () => {
     }, WAIT_FOR_OPTIONS);
     expect(recordReportLoadFailed).toHaveBeenCalledWith(ReportKind.PERFORMANCE, ReportLoadFailureReason.OTHER);
     expect(recordReportLoadFailed).toHaveBeenCalledTimes(1);
+});
+
+it('classifies a 404 remote mount as missing_file without recording the body', async () => {
+    const axiosInstance = await import('../src/libs/axiosInstance');
+    const mockPost = vi.mocked(axiosInstance.default.post);
+    const error = new AxiosError('gone');
+    error.status = HttpStatusCode.NotFound;
+    error.response = {
+        status: HttpStatusCode.NotFound,
+        data: { error: 'private response message' },
+        statusText: '',
+        headers: {},
+        config: error.config!,
+    };
+
+    const selectedReport: RemoteFolder = {
+        ...mockRemotePerformanceFolderList[0],
+        lastSynced: mockRemotePerformanceFolderList[0].lastModified + 1000,
+    };
+
+    mockPost.mockImplementation((url: string) => {
+        if (url.includes('/api/remote/use')) {
+            return Promise.reject(error);
+        }
+
+        return mockRemoteFolderApis(url, selectedReport);
+    });
+
+    setupConnection(remoteConnection);
+
+    render(
+        <TestProviders>
+            <RemoteSyncConfigurator />
+        </TestProviders>,
+    );
+
+    await selectPerformanceFolder(selectedReport.remotePath);
+
+    await waitFor(
+        () =>
+            expect(recordReportLoadFailed).toHaveBeenCalledWith(
+                ReportKind.PERFORMANCE,
+                ReportLoadFailureReason.MISSING_FILE,
+            ),
+        WAIT_FOR_OPTIONS,
+    );
+    expect(JSON.stringify(recordReportLoadFailed.mock.calls)).not.toContain('private response message');
 });
 
 it('loads local synced reports when Fetch remote list fails but local list has folders', async () => {

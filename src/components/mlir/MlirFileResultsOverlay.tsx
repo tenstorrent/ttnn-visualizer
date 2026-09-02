@@ -267,8 +267,6 @@ const MlirFileResultsOverlay = () => {
                 await setActiveMlir(primary.name, primary.host);
             } catch (err: unknown) {
                 createToastNotification('MLIR', getResponseError(err, 'Unable to set active MLIR'), ToastType.ERROR);
-                selectedResults.forEach(() => recordReportLoadFailed(ReportKind.MLIR, getReportLoadFailureReason(err)));
-                return;
             }
         }
 

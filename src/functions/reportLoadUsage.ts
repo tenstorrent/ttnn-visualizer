@@ -19,6 +19,15 @@ export function recordReportLoadFailed(kind: ReportKind, reason: ReportLoadFailu
     recordUsage({ event: UsageEvent.REPORT_LOAD_FAILED, details: { kind, reason_class: reason } });
 }
 
+/** Classify and record a failure, skipping axios cancels so abort is not a load failure. */
+export function recordReportLoadFailure(kind: ReportKind, error: unknown): void {
+    if (axios.isCancel(error)) {
+        return;
+    }
+
+    recordReportLoadFailed(kind, getReportLoadFailureReason(error));
+}
+
 export function getReportLoadFailureReason(
     error: unknown,
     options: ReportLoadFailureOptions = {},

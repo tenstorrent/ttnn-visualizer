@@ -3,6 +3,7 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { AxiosError, HttpStatusCode } from 'axios';
 import { cleanup, fireEvent, render, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import NPEFileLoader from '../src/components/npe/NPEFileLoader';
@@ -16,10 +17,11 @@ vi.mock('../src/hooks/useLocal', () => ({
     default: () => ({ uploadNpeFile }),
 }));
 
-vi.mock('../src/functions/reportLoadUsage', () => ({
-    getReportLoadFailureReason: () => ReportLoadFailureReason.OTHER,
-    recordReportLoadFailed,
-}));
+vi.mock('../src/functions/reportLoadUsage', async (importOriginal) => {
+    const { reportLoadUsageSpiesMock } = await import('./helpers/mockReportLoadUsage');
+
+    return reportLoadUsageSpiesMock(importOriginal, vi.fn(), recordReportLoadFailed);
+});
 
 vi.mock('../src/functions/createToastNotification', async () => {
     const { toastNotificationModuleMock } = await import('./helpers/mockToastNotification');
@@ -75,7 +77,7 @@ describe('NPEFileLoader re-upload cache-bust', () => {
         expect(client.getQueryData(['npe-window', 'old-report', 0])).toBeUndefined();
         expect(client.getQueryData(['fetch-npe', 'old-report'])).toBeUndefined();
         expect(client.getQueryData(['unrelated-query'])).toEqual({});
-        expect(onUploadAccepted).toHaveBeenCalledWith('report.npeviz');
+        expect(onUploadAccepted).toHaveBeenCalledTimes(1);
     });
 
     it('does not bust caches when the upload fails', async () => {
@@ -88,5 +90,27 @@ describe('NPEFileLoader re-upload cache-bust', () => {
         await waitFor(() => expect(uploadNpeFile).toHaveBeenCalled());
         expect(removeQueries).not.toHaveBeenCalled();
         expect(recordReportLoadFailed).toHaveBeenCalledWith(ReportKind.NPE, ReportLoadFailureReason.OTHER);
+    });
+
+    it('classifies an upload 404 as missing_file without recording the body', async () => {
+        const error = new AxiosError('gone');
+        error.status = HttpStatusCode.NotFound;
+        error.response = {
+            status: HttpStatusCode.NotFound,
+            data: { error: 'private response message' },
+            statusText: '',
+            headers: {},
+            config: error.config!,
+        };
+        uploadNpeFile.mockRejectedValue(error);
+        const { container } = renderLoader();
+
+        const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+        fireEvent.change(input, { target: { files: [new File(['x'], 'report.npeviz.zst')] } });
+
+        await waitFor(() =>
+            expect(recordReportLoadFailed).toHaveBeenCalledWith(ReportKind.NPE, ReportLoadFailureReason.MISSING_FILE),
+        );
+        expect(JSON.stringify(recordReportLoadFailed.mock.calls)).not.toContain('private response message');
     });
 });

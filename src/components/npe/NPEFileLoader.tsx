@@ -41,7 +41,7 @@ const NPE_QUERY_FILTER: QueryFilters<readonly unknown[]> = {
 };
 
 interface NPEFileLoaderProps {
-    onUploadAccepted: (fileName: string) => void;
+    onUploadAccepted: () => void;
 }
 
 const NPEFileLoader = ({ onUploadAccepted }: NPEFileLoaderProps) => {
@@ -77,7 +77,7 @@ const NPEFileLoader = ({ onUploadAccepted }: NPEFileLoaderProps) => {
                 await queryClient.cancelQueries(NPE_QUERY_FILTER);
                 queryClient.removeQueries(NPE_QUERY_FILTER);
                 const sanitisedFileName = sanitiseFileName(fileName);
-                onUploadAccepted(sanitisedFileName);
+                onUploadAccepted();
                 setActiveNpe(sanitisedFileName);
                 createToastNotification('Active NPE', fileName, ToastType.SUCCESS);
                 setUploadStatus(ConnectionTestStates.OK);

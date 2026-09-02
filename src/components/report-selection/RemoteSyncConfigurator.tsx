@@ -6,7 +6,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { FormGroup } from '@blueprintjs/core';
 import { useQueryClient } from '@tanstack/react-query';
-import axios, { AxiosResponse, HttpStatusCode } from 'axios';
+import { AxiosResponse, HttpStatusCode } from 'axios';
 import { useAtom, useStore } from 'jotai';
 import { RemoteConnection, RemoteFolder } from '../../model/RemoteConnection';
 import { ReportLocation } from '../../definitions/Reports';
@@ -25,8 +25,9 @@ import isRemoteFolderOutdated from '../../functions/isRemoteFolderOutdated';
 import mergeRemoteFolders from '../../functions/mergeRemoteFolders';
 import { isSameConnection } from '../../functions/remoteConnection';
 import notifyFolderSyncError, {
+    notifyAndRecordFolderSyncError,
+    notifyAndRecordRemoteFolderMountError,
     notifyFolderListSyncError,
-    notifyRemoteFolderMountError,
 } from '../../functions/notifyFolderSyncError';
 import notifyFolderSyncLocalFallback, {
     notifyLocalSyncedReportsListFallback,
@@ -52,13 +53,7 @@ import { ActiveReport } from '../../model/APIData';
 import { DBVersionValidation } from '../../definitions/Versions';
 import { evaluateDbVersion } from '../../functions/compareDbVersion';
 import { ReportKind, ReportLoadFailureReason, ReportSource } from '../../definitions/UsageEvent';
-import {
-    getReportLoadFailureReason,
-    recordReportLoadFailed,
-    recordReportLoaded,
-} from '../../functions/reportLoadUsage';
-
-const UNEXPECTED_MOUNT_STATUS_MESSAGE = 'Remote report could not be mounted';
+import { recordReportLoadFailed, recordReportLoadFailure, recordReportLoaded } from '../../functions/reportLoadUsage';
 
 interface RemoteReportActions {
     mount: (connection: RemoteConnection, folder: RemoteFolder) => Promise<AxiosResponse>;
@@ -456,8 +451,7 @@ const RemoteSyncConfigurator = () => {
         const connection = selectedConnection;
 
         if (!connection) {
-            notifyFolderSyncError(err);
-            recordReportLoadFailed(kind, getReportLoadFailureReason(err));
+            notifyAndRecordFolderSyncError(kind, err);
             return;
         }
 
@@ -474,12 +468,8 @@ const RemoteSyncConfigurator = () => {
 
                 return;
             }
-            recordReportLoadFailed(kind, ReportLoadFailureReason.OTHER);
         } catch (mountError: unknown) {
-            // Mount itself failed; surface the original sync error below.
-            if (!axios.isCancel(mountError)) {
-                recordReportLoadFailed(kind, getReportLoadFailureReason(mountError));
-            }
+            recordReportLoadFailure(kind, mountError);
         }
 
         notifyFolderSyncError(err);
@@ -502,8 +492,7 @@ const RemoteSyncConfigurator = () => {
             return;
         }
 
-        notifyFolderSyncError(err);
-        recordReportLoadFailed(kind, getReportLoadFailureReason(err));
+        notifyAndRecordFolderSyncError(kind, err);
     };
 
     const mountAndActivateFolder = async (
@@ -526,16 +515,9 @@ const RemoteSyncConfigurator = () => {
                     if (hasBeenNormalised(folder)) {
                         createDataIntegrityWarning(folder);
                     }
-                } else {
-                    const mountError = new Error(UNEXPECTED_MOUNT_STATUS_MESSAGE);
-                    notifyRemoteFolderMountError(mountError);
-                    recordReportLoadFailed(kind, ReportLoadFailureReason.OTHER);
                 }
             } catch (err: unknown) {
-                notifyRemoteFolderMountError(err);
-                if (!axios.isCancel(err)) {
-                    recordReportLoadFailed(kind, getReportLoadFailureReason(err));
-                }
+                notifyAndRecordRemoteFolderMountError(kind, err);
             }
         });
     };

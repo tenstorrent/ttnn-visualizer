@@ -233,7 +233,13 @@ class ReportSource(str, Enum):
 
 
 class ReportLoadFailureReason(str, Enum):
-    """Why a report failed to load, coarsely enough to never carry a message body."""
+    """Why a report failed to load, coarsely enough to never carry a message body.
+
+    ``unsupported_version`` is NPE-only today. NPE refuses an out-of-range format
+    version and never shows the report. Profiler and performance reports still
+    activate on an incompatible DB major version: they toast a warning and count
+    as ``report_loaded``, because the UI continues to show them.
+    """
 
     UNSUPPORTED_VERSION = "unsupported_version"
     MISSING_FILE = "missing_file"

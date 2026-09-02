@@ -101,7 +101,10 @@ const NPE = () => {
     const npeData = useMemo(() => demoData || loadedData || loadedTimeline, [demoData, loadedData, loadedTimeline]);
 
     // Demos are hosted-only. Keep their source wired for vocabulary parity, but
-    // recordUsage intentionally drops the event because SERVER_MODE records nothing.
+    // recordUsage drops the event under SERVER_MODE. The non-windowed settle
+    // effect below is retained for that hosted path and for #1802; local uploads
+    // record via NpeWindowedView, so this effect emits nothing where recording
+    // is enabled.
     const isDemoEnabled = isServerMode;
     // Prefer RQ isLoading (isPending && isFetching) over bare isFetching so a
     // background refetch cannot pin the spinner after data is already present.
@@ -135,6 +138,13 @@ const NPE = () => {
             return;
         }
 
+        // Nothing has settled yet — do not treat a pending attempt as a parse
+        // error because npeData is still empty (e.g. between beginLoadAttempt
+        // and the atom write that enables a query).
+        if (!isNpeQueryEnabled && !isTimelineQueryEnabled && demoData == null) {
+            return;
+        }
+
         if (canShowView) {
             completeLoadAttempt(pendingLoadAttemptId);
         } else if (errorCode !== NPEValidationError.OK) {
@@ -143,10 +153,13 @@ const NPE = () => {
     }, [
         canShowView,
         completeLoadAttempt,
+        demoData,
         errorCode,
         failLoadAttempt,
         fetchError,
         isLoading,
+        isNpeQueryEnabled,
+        isTimelineQueryEnabled,
         isWindowedView,
         pendingLoadAttemptId,
     ]);

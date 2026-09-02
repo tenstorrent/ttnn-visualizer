@@ -42,11 +42,11 @@ vi.mock('../src/functions/createToastNotification', async () => {
     return toastNotificationModuleMock(createToastNotification);
 });
 
-vi.mock('../src/functions/reportLoadUsage', () => ({
-    getReportLoadFailureReason: () => ReportLoadFailureReason.OTHER,
-    recordReportLoaded,
-    recordReportLoadFailed,
-}));
+vi.mock('../src/functions/reportLoadUsage', async (importOriginal) => {
+    const { reportLoadUsageSpiesMock } = await import('./helpers/mockReportLoadUsage');
+
+    return reportLoadUsageSpiesMock(importOriginal, recordReportLoaded, recordReportLoadFailed);
+});
 
 const GRAPH: GraphBundle = { graphs: [{ id: 'g', nodes: [] }] };
 const SERVER: MlirServerConnection = {
@@ -268,7 +268,7 @@ describe('MlirFileResultsOverlay', () => {
         });
     });
 
-    it('does not show a success toast when persisting active MLIR fails', async () => {
+    it('still loads converted graphs when persisting active MLIR fails', async () => {
         setActiveMlir.mockRejectedValueOnce(new Error('persist failed'));
         renderOverlay([
             {
@@ -287,14 +287,14 @@ describe('MlirFileResultsOverlay', () => {
         await waitFor(() => {
             expect(setActiveMlir).toHaveBeenCalledWith('a', 'worker-01');
         });
-        expect(createToastNotification).toHaveBeenCalledTimes(1);
+        expect(createToastNotification).toHaveBeenCalledTimes(2);
         expect(createToastNotification).toHaveBeenCalledWith('MLIR', 'persist failed', 'error');
-        expect(recordReportLoadFailed).toHaveBeenCalledWith(ReportKind.MLIR, ReportLoadFailureReason.OTHER);
-        expect(recordReportLoaded).not.toHaveBeenCalled();
-        expect(getDefaultStore().get(mlirLoadedReportsAtom)).toEqual([]);
+        expect(recordReportLoadFailed).not.toHaveBeenCalled();
+        expect(recordReportLoaded).toHaveBeenCalledWith(ReportKind.MLIR, ReportSource.UPLOAD);
+        expect(getDefaultStore().get(mlirLoadedReportsAtom)).toEqual([{ name: 'a', data: GRAPH }]);
     });
 
-    it('records one failure per selected report when split-view persistence fails', async () => {
+    it('records one load per selected report when split-view persistence fails', async () => {
         setActiveMlir.mockRejectedValueOnce(new Error('persist failed'));
         renderOverlay([
             {
@@ -319,9 +319,12 @@ describe('MlirFileResultsOverlay', () => {
         fireEvent.click(screen.getByText('b.mlir'));
         fireEvent.click(screen.getByRole('button', { name: /view/i }));
 
-        await waitFor(() => expect(recordReportLoadFailed).toHaveBeenCalledTimes(2));
-        expect(recordReportLoaded).not.toHaveBeenCalled();
-        expect(getDefaultStore().get(mlirLoadedReportsAtom)).toEqual([]);
+        await waitFor(() => expect(recordReportLoaded).toHaveBeenCalledTimes(2));
+        expect(recordReportLoadFailed).not.toHaveBeenCalled();
+        expect(getDefaultStore().get(mlirLoadedReportsAtom)).toEqual([
+            { name: 'a', data: GRAPH },
+            { name: 'b', data: GRAPH },
+        ]);
     });
 
     it('retries conversion for a failed server file', async () => {

@@ -5,7 +5,7 @@
 import '@testing-library/jest-dom/vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { AxiosError, HttpStatusCode } from 'axios';
-import { getDefaultStore } from 'jotai';
+import { getDefaultStore, useSetAtom } from 'jotai';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TestProviders } from './helpers/TestProviders';
 import { minimalValidNpeData } from './helpers/npeFixtures';
@@ -20,7 +20,7 @@ interface MockNpeWindowedViewProps {
 }
 
 interface MockNpeFileLoaderProps {
-    onUploadAccepted: (fileName: string) => void;
+    onUploadAccepted: () => void;
 }
 
 interface MockNpeDemoSelectProps {
@@ -79,16 +79,20 @@ vi.mock('../src/components/npe/NPEViewComponent', () => ({
     default: () => <div data-testid={TEST_IDS.NPE_VIEW} />,
 }));
 vi.mock('../src/components/npe/NPEFileLoader', () => ({
-    default: ({ onUploadAccepted }: MockNpeFileLoaderProps) => (
-        <button
-            onClick={() => {
-                onUploadAccepted('trace.json');
-                getDefaultStore().set(activeNpeOpTraceAtom, 'trace.json');
-            }}
-        >
-            accept-npe-upload
-        </button>
-    ),
+    default: function MockNpeFileLoader({ onUploadAccepted }: MockNpeFileLoaderProps) {
+        const setActiveNpe = useSetAtom(activeNpeOpTraceAtom);
+
+        return (
+            <button
+                onClick={() => {
+                    onUploadAccepted();
+                    setActiveNpe('trace.json');
+                }}
+            >
+                accept-npe-upload
+            </button>
+        );
+    },
 }));
 vi.mock('../src/components/npe/NPEDemoSelect', () => ({
     default: ({ setDemoData, onDemoSelected }: MockNpeDemoSelectProps) => (
@@ -102,11 +106,11 @@ vi.mock('../src/components/npe/NPEDemoSelect', () => ({
         </button>
     ),
 }));
-vi.mock('../src/functions/reportLoadUsage', () => ({
-    getNpeReportLoadFailureReason: () => ReportLoadFailureReason.PARSE_ERROR,
-    recordReportLoaded,
-    recordReportLoadFailed,
-}));
+vi.mock('../src/functions/reportLoadUsage', async (importOriginal) => {
+    const { reportLoadUsageSpiesMock } = await import('./helpers/mockReportLoadUsage');
+
+    return reportLoadUsageSpiesMock(importOriginal, recordReportLoaded, recordReportLoadFailed);
+});
 
 // Import after vi.mock so the route under test sees the stubs.
 // eslint-disable-next-line import/first
@@ -254,6 +258,21 @@ describe('NPE report-load recording', () => {
         await waitFor(() => expect(recordReportLoadFailed).toHaveBeenCalledTimes(1));
         expect(recordReportLoadFailed).toHaveBeenCalledWith(ReportKind.NPE, ReportLoadFailureReason.PARSE_ERROR);
         expect(recordReportLoaded).not.toHaveBeenCalled();
+    });
+
+    it('classifies a hosted NPE fetch 404 as missing_file', async () => {
+        renderRoute(null);
+        mockUseNpe.mockReturnValue({
+            data: undefined,
+            isLoading: false,
+            error: makeHttpError(HttpStatusCode.NotFound, 'not found'),
+        });
+        fireEvent.click(screen.getByRole('button', { name: 'accept-npe-upload' }));
+
+        await waitFor(() =>
+            expect(recordReportLoadFailed).toHaveBeenCalledWith(ReportKind.NPE, ReportLoadFailureReason.MISSING_FILE),
+        );
+        expect(recordReportLoadFailed).toHaveBeenCalledTimes(1);
     });
 });
 
