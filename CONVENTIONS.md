@@ -925,9 +925,9 @@ Flags `dangerouslySetInnerHTML` (XSS risk). Configured as **warn** so existing, 
 
 See `StackTrace.tsx`, `SourceFileOverlay.tsx`, and `DeviceOperationsFullRender.tsx` for the established pattern. Prefer safer alternatives when hljs (or similar trusted escaping) isn't in play.
 
-#### `.cjs` config files
+#### JavaScript config files
 
-`eslint.config.cjs` and `.stylelintrc.cjs` are linted via a dedicated flat-config block (`files: ['**/*.cjs']`) with CommonJS-appropriate rule relaxations (`@typescript-eslint/no-require-imports` off, etc.). CI includes changed `.cjs` files in the frontend lint step (`.github/workflows/lint-and-test.yml`).
+`eslint.config.cjs` is linted via a dedicated flat-config block (`files: ['**/*.cjs']`) with CommonJS-appropriate rule relaxations (`@typescript-eslint/no-require-imports` off, etc.). The ESM `stylelint.config.mjs` has its own block. CI includes changed `.cjs` and `.mjs` files in the frontend lint step (`.github/workflows/lint-and-test.yml`).
 
 ---
 
