@@ -12,8 +12,12 @@
         color: $color;
     }
 
-    .bp6-icon.bp6-icon-#{$icon} {
-        color: $color;
+    // Match Blueprint's dark-theme button specificity so its default grey icon
+    // cannot override the product colour on in-page navigation buttons.
+    &.bp6-button:not(.bp6-disabled) {
+        .bp6-icon.bp6-icon-#{$icon} {
+            color: $color;
+        }
     }
 
     &.bp6-outlined:not(.bp6-disabled) {
