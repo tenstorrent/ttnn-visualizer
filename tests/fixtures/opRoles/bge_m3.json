@@ -1,0 +1,3777 @@
+{
+"report": "bge_m3_aug19_1645",
+"operations": [
+{
+"id": 1,
+"name": "ttnn.ne"
+},
+{
+"id": 2,
+"name": "ttnn.to_layout"
+},
+{
+"id": 3,
+"name": "ttnn.typecast"
+},
+{
+"id": 4,
+"name": "ttnn.cumsum"
+},
+{
+"id": 5,
+"name": "ttnn.multiply"
+},
+{
+"id": 6,
+"name": "ttnn.add"
+},
+{
+"id": 7,
+"name": "ttnn.typecast"
+},
+{
+"id": 8,
+"name": "ttnn.to_layout"
+},
+{
+"id": 9,
+"name": "ttnn.eq"
+},
+{
+"id": 10,
+"name": "ttnn.to_layout"
+},
+{
+"id": 11,
+"name": "ttnn.unsqueeze"
+},
+{
+"id": 12,
+"name": "ttnn.unsqueeze"
+},
+{
+"id": 13,
+"name": "ttnn.where"
+},
+{
+"id": 14,
+"name": "ttnn.typecast"
+},
+{
+"id": 15,
+"name": "ttnn.from_torch"
+},
+{
+"id": 16,
+"name": "ttnn.from_torch"
+},
+{
+"id": 17,
+"name": "ttnn.from_torch"
+},
+{
+"id": 18,
+"name": "ttnn.embedding"
+},
+{
+"id": 19,
+"name": "ttnn.embedding"
+},
+{
+"id": 20,
+"name": "ttnn.embedding"
+},
+{
+"id": 21,
+"name": "ttnn.add"
+},
+{
+"id": 22,
+"name": "ttnn.add"
+},
+{
+"id": 23,
+"name": "ttnn.deallocate"
+},
+{
+"id": 24,
+"name": "ttnn.deallocate"
+},
+{
+"id": 25,
+"name": "ttnn.deallocate"
+},
+{
+"id": 26,
+"name": "ttnn.deallocate"
+},
+{
+"id": 27,
+"name": "ttnn.unsqueeze"
+},
+{
+"id": 28,
+"name": "ttnn.from_torch"
+},
+{
+"id": 29,
+"name": "ttnn.from_torch"
+},
+{
+"id": 30,
+"name": "ttnn.layer_norm"
+},
+{
+"id": 31,
+"name": "ttnn.from_torch"
+},
+{
+"id": 32,
+"name": "ttnn.from_torch"
+},
+{
+"id": 33,
+"name": "ttnn.from_torch"
+},
+{
+"id": 34,
+"name": "ttnn.from_torch"
+},
+{
+"id": 35,
+"name": "ttnn.linear"
+},
+{
+"id": 36,
+"name": "ttnn.experimental.nlp_create_qkv_heads"
+},
+{
+"id": 37,
+"name": "ttnn.deallocate"
+},
+{
+"id": 38,
+"name": "ttnn.typecast"
+},
+{
+"id": 39,
+"name": "ttnn.deallocate"
+},
+{
+"id": 40,
+"name": "ttnn.typecast"
+},
+{
+"id": 41,
+"name": "ttnn.deallocate"
+},
+{
+"id": 42,
+"name": "ttnn.typecast"
+},
+{
+"id": 43,
+"name": "ttnn.deallocate"
+},
+{
+"id": 44,
+"name": "ttnn.expand"
+},
+{
+"id": 45,
+"name": "ttnn.transformer.scaled_dot_product_attention"
+},
+{
+"id": 46,
+"name": "ttnn.deallocate"
+},
+{
+"id": 47,
+"name": "ttnn.deallocate"
+},
+{
+"id": 48,
+"name": "ttnn.deallocate"
+},
+{
+"id": 49,
+"name": "ttnn.experimental.nlp_concat_heads"
+},
+{
+"id": 50,
+"name": "ttnn.linear"
+},
+{
+"id": 51,
+"name": "ttnn.deallocate"
+},
+{
+"id": 52,
+"name": "ttnn.add"
+},
+{
+"id": 53,
+"name": "ttnn.from_torch"
+},
+{
+"id": 54,
+"name": "ttnn.from_torch"
+},
+{
+"id": 55,
+"name": "ttnn.layer_norm"
+},
+{
+"id": 56,
+"name": "ttnn.from_torch"
+},
+{
+"id": 57,
+"name": "ttnn.from_torch"
+},
+{
+"id": 58,
+"name": "ttnn.from_torch"
+},
+{
+"id": 59,
+"name": "ttnn.from_torch"
+},
+{
+"id": 60,
+"name": "ttnn.linear"
+},
+{
+"id": 61,
+"name": "ttnn.gelu"
+},
+{
+"id": 62,
+"name": "ttnn.deallocate"
+},
+{
+"id": 63,
+"name": "ttnn.linear"
+},
+{
+"id": 64,
+"name": "ttnn.deallocate"
+},
+{
+"id": 65,
+"name": "ttnn.add"
+},
+{
+"id": 66,
+"name": "ttnn.from_torch"
+},
+{
+"id": 67,
+"name": "ttnn.from_torch"
+},
+{
+"id": 68,
+"name": "ttnn.layer_norm"
+},
+{
+"id": 69,
+"name": "ttnn.from_torch"
+},
+{
+"id": 70,
+"name": "ttnn.from_torch"
+},
+{
+"id": 71,
+"name": "ttnn.from_torch"
+},
+{
+"id": 72,
+"name": "ttnn.from_torch"
+},
+{
+"id": 73,
+"name": "ttnn.linear"
+},
+{
+"id": 74,
+"name": "ttnn.experimental.nlp_create_qkv_heads"
+},
+{
+"id": 75,
+"name": "ttnn.deallocate"
+},
+{
+"id": 76,
+"name": "ttnn.typecast"
+},
+{
+"id": 77,
+"name": "ttnn.deallocate"
+},
+{
+"id": 78,
+"name": "ttnn.typecast"
+},
+{
+"id": 79,
+"name": "ttnn.deallocate"
+},
+{
+"id": 80,
+"name": "ttnn.typecast"
+},
+{
+"id": 81,
+"name": "ttnn.deallocate"
+},
+{
+"id": 82,
+"name": "ttnn.expand"
+},
+{
+"id": 83,
+"name": "ttnn.transformer.scaled_dot_product_attention"
+},
+{
+"id": 84,
+"name": "ttnn.deallocate"
+},
+{
+"id": 85,
+"name": "ttnn.deallocate"
+},
+{
+"id": 86,
+"name": "ttnn.deallocate"
+},
+{
+"id": 87,
+"name": "ttnn.experimental.nlp_concat_heads"
+},
+{
+"id": 88,
+"name": "ttnn.linear"
+},
+{
+"id": 89,
+"name": "ttnn.deallocate"
+},
+{
+"id": 90,
+"name": "ttnn.add"
+},
+{
+"id": 91,
+"name": "ttnn.from_torch"
+},
+{
+"id": 92,
+"name": "ttnn.from_torch"
+},
+{
+"id": 93,
+"name": "ttnn.layer_norm"
+},
+{
+"id": 94,
+"name": "ttnn.from_torch"
+},
+{
+"id": 95,
+"name": "ttnn.from_torch"
+},
+{
+"id": 96,
+"name": "ttnn.from_torch"
+},
+{
+"id": 97,
+"name": "ttnn.from_torch"
+},
+{
+"id": 98,
+"name": "ttnn.linear"
+},
+{
+"id": 99,
+"name": "ttnn.gelu"
+},
+{
+"id": 100,
+"name": "ttnn.deallocate"
+},
+{
+"id": 101,
+"name": "ttnn.linear"
+},
+{
+"id": 102,
+"name": "ttnn.deallocate"
+},
+{
+"id": 103,
+"name": "ttnn.add"
+},
+{
+"id": 104,
+"name": "ttnn.from_torch"
+},
+{
+"id": 105,
+"name": "ttnn.from_torch"
+},
+{
+"id": 106,
+"name": "ttnn.layer_norm"
+},
+{
+"id": 107,
+"name": "ttnn.from_torch"
+},
+{
+"id": 108,
+"name": "ttnn.from_torch"
+},
+{
+"id": 109,
+"name": "ttnn.from_torch"
+},
+{
+"id": 110,
+"name": "ttnn.from_torch"
+},
+{
+"id": 111,
+"name": "ttnn.linear"
+},
+{
+"id": 112,
+"name": "ttnn.experimental.nlp_create_qkv_heads"
+},
+{
+"id": 113,
+"name": "ttnn.deallocate"
+},
+{
+"id": 114,
+"name": "ttnn.typecast"
+},
+{
+"id": 115,
+"name": "ttnn.deallocate"
+},
+{
+"id": 116,
+"name": "ttnn.typecast"
+},
+{
+"id": 117,
+"name": "ttnn.deallocate"
+},
+{
+"id": 118,
+"name": "ttnn.typecast"
+},
+{
+"id": 119,
+"name": "ttnn.deallocate"
+},
+{
+"id": 120,
+"name": "ttnn.expand"
+},
+{
+"id": 121,
+"name": "ttnn.transformer.scaled_dot_product_attention"
+},
+{
+"id": 122,
+"name": "ttnn.deallocate"
+},
+{
+"id": 123,
+"name": "ttnn.deallocate"
+},
+{
+"id": 124,
+"name": "ttnn.deallocate"
+},
+{
+"id": 125,
+"name": "ttnn.experimental.nlp_concat_heads"
+},
+{
+"id": 126,
+"name": "ttnn.linear"
+},
+{
+"id": 127,
+"name": "ttnn.deallocate"
+},
+{
+"id": 128,
+"name": "ttnn.add"
+},
+{
+"id": 129,
+"name": "ttnn.from_torch"
+},
+{
+"id": 130,
+"name": "ttnn.from_torch"
+},
+{
+"id": 131,
+"name": "ttnn.layer_norm"
+},
+{
+"id": 132,
+"name": "ttnn.from_torch"
+},
+{
+"id": 133,
+"name": "ttnn.from_torch"
+},
+{
+"id": 134,
+"name": "ttnn.from_torch"
+},
+{
+"id": 135,
+"name": "ttnn.from_torch"
+},
+{
+"id": 136,
+"name": "ttnn.linear"
+},
+{
+"id": 137,
+"name": "ttnn.gelu"
+},
+{
+"id": 138,
+"name": "ttnn.deallocate"
+},
+{
+"id": 139,
+"name": "ttnn.linear"
+},
+{
+"id": 140,
+"name": "ttnn.deallocate"
+},
+{
+"id": 141,
+"name": "ttnn.add"
+},
+{
+"id": 142,
+"name": "ttnn.from_torch"
+},
+{
+"id": 143,
+"name": "ttnn.from_torch"
+},
+{
+"id": 144,
+"name": "ttnn.layer_norm"
+},
+{
+"id": 145,
+"name": "ttnn.from_torch"
+},
+{
+"id": 146,
+"name": "ttnn.from_torch"
+},
+{
+"id": 147,
+"name": "ttnn.from_torch"
+},
+{
+"id": 148,
+"name": "ttnn.from_torch"
+},
+{
+"id": 149,
+"name": "ttnn.linear"
+},
+{
+"id": 150,
+"name": "ttnn.experimental.nlp_create_qkv_heads"
+},
+{
+"id": 151,
+"name": "ttnn.deallocate"
+},
+{
+"id": 152,
+"name": "ttnn.typecast"
+},
+{
+"id": 153,
+"name": "ttnn.deallocate"
+},
+{
+"id": 154,
+"name": "ttnn.typecast"
+},
+{
+"id": 155,
+"name": "ttnn.deallocate"
+},
+{
+"id": 156,
+"name": "ttnn.typecast"
+},
+{
+"id": 157,
+"name": "ttnn.deallocate"
+},
+{
+"id": 158,
+"name": "ttnn.expand"
+},
+{
+"id": 159,
+"name": "ttnn.transformer.scaled_dot_product_attention"
+},
+{
+"id": 160,
+"name": "ttnn.deallocate"
+},
+{
+"id": 161,
+"name": "ttnn.deallocate"
+},
+{
+"id": 162,
+"name": "ttnn.deallocate"
+},
+{
+"id": 163,
+"name": "ttnn.experimental.nlp_concat_heads"
+},
+{
+"id": 164,
+"name": "ttnn.linear"
+},
+{
+"id": 165,
+"name": "ttnn.deallocate"
+},
+{
+"id": 166,
+"name": "ttnn.add"
+},
+{
+"id": 167,
+"name": "ttnn.from_torch"
+},
+{
+"id": 168,
+"name": "ttnn.from_torch"
+},
+{
+"id": 169,
+"name": "ttnn.layer_norm"
+},
+{
+"id": 170,
+"name": "ttnn.from_torch"
+},
+{
+"id": 171,
+"name": "ttnn.from_torch"
+},
+{
+"id": 172,
+"name": "ttnn.from_torch"
+},
+{
+"id": 173,
+"name": "ttnn.from_torch"
+},
+{
+"id": 174,
+"name": "ttnn.linear"
+},
+{
+"id": 175,
+"name": "ttnn.gelu"
+},
+{
+"id": 176,
+"name": "ttnn.deallocate"
+},
+{
+"id": 177,
+"name": "ttnn.linear"
+},
+{
+"id": 178,
+"name": "ttnn.deallocate"
+},
+{
+"id": 179,
+"name": "ttnn.add"
+},
+{
+"id": 180,
+"name": "ttnn.from_torch"
+},
+{
+"id": 181,
+"name": "ttnn.from_torch"
+},
+{
+"id": 182,
+"name": "ttnn.layer_norm"
+},
+{
+"id": 183,
+"name": "ttnn.from_torch"
+},
+{
+"id": 184,
+"name": "ttnn.from_torch"
+},
+{
+"id": 185,
+"name": "ttnn.from_torch"
+},
+{
+"id": 186,
+"name": "ttnn.from_torch"
+},
+{
+"id": 187,
+"name": "ttnn.linear"
+},
+{
+"id": 188,
+"name": "ttnn.experimental.nlp_create_qkv_heads"
+},
+{
+"id": 189,
+"name": "ttnn.deallocate"
+},
+{
+"id": 190,
+"name": "ttnn.typecast"
+},
+{
+"id": 191,
+"name": "ttnn.deallocate"
+},
+{
+"id": 192,
+"name": "ttnn.typecast"
+},
+{
+"id": 193,
+"name": "ttnn.deallocate"
+},
+{
+"id": 194,
+"name": "ttnn.typecast"
+},
+{
+"id": 195,
+"name": "ttnn.deallocate"
+},
+{
+"id": 196,
+"name": "ttnn.expand"
+},
+{
+"id": 197,
+"name": "ttnn.transformer.scaled_dot_product_attention"
+},
+{
+"id": 198,
+"name": "ttnn.deallocate"
+},
+{
+"id": 199,
+"name": "ttnn.deallocate"
+},
+{
+"id": 200,
+"name": "ttnn.deallocate"
+},
+{
+"id": 201,
+"name": "ttnn.experimental.nlp_concat_heads"
+},
+{
+"id": 202,
+"name": "ttnn.linear"
+},
+{
+"id": 203,
+"name": "ttnn.deallocate"
+},
+{
+"id": 204,
+"name": "ttnn.add"
+},
+{
+"id": 205,
+"name": "ttnn.from_torch"
+},
+{
+"id": 206,
+"name": "ttnn.from_torch"
+},
+{
+"id": 207,
+"name": "ttnn.layer_norm"
+},
+{
+"id": 208,
+"name": "ttnn.from_torch"
+},
+{
+"id": 209,
+"name": "ttnn.from_torch"
+},
+{
+"id": 210,
+"name": "ttnn.from_torch"
+},
+{
+"id": 211,
+"name": "ttnn.from_torch"
+},
+{
+"id": 212,
+"name": "ttnn.linear"
+},
+{
+"id": 213,
+"name": "ttnn.gelu"
+},
+{
+"id": 214,
+"name": "ttnn.deallocate"
+},
+{
+"id": 215,
+"name": "ttnn.linear"
+},
+{
+"id": 216,
+"name": "ttnn.deallocate"
+},
+{
+"id": 217,
+"name": "ttnn.add"
+},
+{
+"id": 218,
+"name": "ttnn.from_torch"
+},
+{
+"id": 219,
+"name": "ttnn.from_torch"
+},
+{
+"id": 220,
+"name": "ttnn.layer_norm"
+},
+{
+"id": 221,
+"name": "ttnn.from_torch"
+},
+{
+"id": 222,
+"name": "ttnn.from_torch"
+},
+{
+"id": 223,
+"name": "ttnn.from_torch"
+},
+{
+"id": 224,
+"name": "ttnn.from_torch"
+},
+{
+"id": 225,
+"name": "ttnn.linear"
+},
+{
+"id": 226,
+"name": "ttnn.experimental.nlp_create_qkv_heads"
+},
+{
+"id": 227,
+"name": "ttnn.deallocate"
+},
+{
+"id": 228,
+"name": "ttnn.typecast"
+},
+{
+"id": 229,
+"name": "ttnn.deallocate"
+},
+{
+"id": 230,
+"name": "ttnn.typecast"
+},
+{
+"id": 231,
+"name": "ttnn.deallocate"
+},
+{
+"id": 232,
+"name": "ttnn.typecast"
+},
+{
+"id": 233,
+"name": "ttnn.deallocate"
+},
+{
+"id": 234,
+"name": "ttnn.expand"
+},
+{
+"id": 235,
+"name": "ttnn.transformer.scaled_dot_product_attention"
+},
+{
+"id": 236,
+"name": "ttnn.deallocate"
+},
+{
+"id": 237,
+"name": "ttnn.deallocate"
+},
+{
+"id": 238,
+"name": "ttnn.deallocate"
+},
+{
+"id": 239,
+"name": "ttnn.experimental.nlp_concat_heads"
+},
+{
+"id": 240,
+"name": "ttnn.linear"
+},
+{
+"id": 241,
+"name": "ttnn.deallocate"
+},
+{
+"id": 242,
+"name": "ttnn.add"
+},
+{
+"id": 243,
+"name": "ttnn.from_torch"
+},
+{
+"id": 244,
+"name": "ttnn.from_torch"
+},
+{
+"id": 245,
+"name": "ttnn.layer_norm"
+},
+{
+"id": 246,
+"name": "ttnn.from_torch"
+},
+{
+"id": 247,
+"name": "ttnn.from_torch"
+},
+{
+"id": 248,
+"name": "ttnn.from_torch"
+},
+{
+"id": 249,
+"name": "ttnn.from_torch"
+},
+{
+"id": 250,
+"name": "ttnn.linear"
+},
+{
+"id": 251,
+"name": "ttnn.gelu"
+},
+{
+"id": 252,
+"name": "ttnn.deallocate"
+},
+{
+"id": 253,
+"name": "ttnn.linear"
+},
+{
+"id": 254,
+"name": "ttnn.deallocate"
+},
+{
+"id": 255,
+"name": "ttnn.add"
+},
+{
+"id": 256,
+"name": "ttnn.from_torch"
+},
+{
+"id": 257,
+"name": "ttnn.from_torch"
+},
+{
+"id": 258,
+"name": "ttnn.layer_norm"
+},
+{
+"id": 259,
+"name": "ttnn.from_torch"
+},
+{
+"id": 260,
+"name": "ttnn.from_torch"
+},
+{
+"id": 261,
+"name": "ttnn.from_torch"
+},
+{
+"id": 262,
+"name": "ttnn.from_torch"
+},
+{
+"id": 263,
+"name": "ttnn.linear"
+},
+{
+"id": 264,
+"name": "ttnn.experimental.nlp_create_qkv_heads"
+},
+{
+"id": 265,
+"name": "ttnn.deallocate"
+},
+{
+"id": 266,
+"name": "ttnn.typecast"
+},
+{
+"id": 267,
+"name": "ttnn.deallocate"
+},
+{
+"id": 268,
+"name": "ttnn.typecast"
+},
+{
+"id": 269,
+"name": "ttnn.deallocate"
+},
+{
+"id": 270,
+"name": "ttnn.typecast"
+},
+{
+"id": 271,
+"name": "ttnn.deallocate"
+},
+{
+"id": 272,
+"name": "ttnn.expand"
+},
+{
+"id": 273,
+"name": "ttnn.transformer.scaled_dot_product_attention"
+},
+{
+"id": 274,
+"name": "ttnn.deallocate"
+},
+{
+"id": 275,
+"name": "ttnn.deallocate"
+},
+{
+"id": 276,
+"name": "ttnn.deallocate"
+},
+{
+"id": 277,
+"name": "ttnn.experimental.nlp_concat_heads"
+},
+{
+"id": 278,
+"name": "ttnn.linear"
+},
+{
+"id": 279,
+"name": "ttnn.deallocate"
+},
+{
+"id": 280,
+"name": "ttnn.add"
+},
+{
+"id": 281,
+"name": "ttnn.from_torch"
+},
+{
+"id": 282,
+"name": "ttnn.from_torch"
+},
+{
+"id": 283,
+"name": "ttnn.layer_norm"
+},
+{
+"id": 284,
+"name": "ttnn.from_torch"
+},
+{
+"id": 285,
+"name": "ttnn.from_torch"
+},
+{
+"id": 286,
+"name": "ttnn.from_torch"
+},
+{
+"id": 287,
+"name": "ttnn.from_torch"
+},
+{
+"id": 288,
+"name": "ttnn.linear"
+},
+{
+"id": 289,
+"name": "ttnn.gelu"
+},
+{
+"id": 290,
+"name": "ttnn.deallocate"
+},
+{
+"id": 291,
+"name": "ttnn.linear"
+},
+{
+"id": 292,
+"name": "ttnn.deallocate"
+},
+{
+"id": 293,
+"name": "ttnn.add"
+},
+{
+"id": 294,
+"name": "ttnn.from_torch"
+},
+{
+"id": 295,
+"name": "ttnn.from_torch"
+},
+{
+"id": 296,
+"name": "ttnn.layer_norm"
+},
+{
+"id": 297,
+"name": "ttnn.from_torch"
+},
+{
+"id": 298,
+"name": "ttnn.from_torch"
+},
+{
+"id": 299,
+"name": "ttnn.from_torch"
+},
+{
+"id": 300,
+"name": "ttnn.from_torch"
+},
+{
+"id": 301,
+"name": "ttnn.linear"
+},
+{
+"id": 302,
+"name": "ttnn.experimental.nlp_create_qkv_heads"
+},
+{
+"id": 303,
+"name": "ttnn.deallocate"
+},
+{
+"id": 304,
+"name": "ttnn.typecast"
+},
+{
+"id": 305,
+"name": "ttnn.deallocate"
+},
+{
+"id": 306,
+"name": "ttnn.typecast"
+},
+{
+"id": 307,
+"name": "ttnn.deallocate"
+},
+{
+"id": 308,
+"name": "ttnn.typecast"
+},
+{
+"id": 309,
+"name": "ttnn.deallocate"
+},
+{
+"id": 310,
+"name": "ttnn.expand"
+},
+{
+"id": 311,
+"name": "ttnn.transformer.scaled_dot_product_attention"
+},
+{
+"id": 312,
+"name": "ttnn.deallocate"
+},
+{
+"id": 313,
+"name": "ttnn.deallocate"
+},
+{
+"id": 314,
+"name": "ttnn.deallocate"
+},
+{
+"id": 315,
+"name": "ttnn.experimental.nlp_concat_heads"
+},
+{
+"id": 316,
+"name": "ttnn.linear"
+},
+{
+"id": 317,
+"name": "ttnn.deallocate"
+},
+{
+"id": 318,
+"name": "ttnn.add"
+},
+{
+"id": 319,
+"name": "ttnn.from_torch"
+},
+{
+"id": 320,
+"name": "ttnn.from_torch"
+},
+{
+"id": 321,
+"name": "ttnn.layer_norm"
+},
+{
+"id": 322,
+"name": "ttnn.from_torch"
+},
+{
+"id": 323,
+"name": "ttnn.from_torch"
+},
+{
+"id": 324,
+"name": "ttnn.from_torch"
+},
+{
+"id": 325,
+"name": "ttnn.from_torch"
+},
+{
+"id": 326,
+"name": "ttnn.linear"
+},
+{
+"id": 327,
+"name": "ttnn.gelu"
+},
+{
+"id": 328,
+"name": "ttnn.deallocate"
+},
+{
+"id": 329,
+"name": "ttnn.linear"
+},
+{
+"id": 330,
+"name": "ttnn.deallocate"
+},
+{
+"id": 331,
+"name": "ttnn.add"
+},
+{
+"id": 332,
+"name": "ttnn.from_torch"
+},
+{
+"id": 333,
+"name": "ttnn.from_torch"
+},
+{
+"id": 334,
+"name": "ttnn.layer_norm"
+},
+{
+"id": 335,
+"name": "ttnn.from_torch"
+},
+{
+"id": 336,
+"name": "ttnn.from_torch"
+},
+{
+"id": 337,
+"name": "ttnn.from_torch"
+},
+{
+"id": 338,
+"name": "ttnn.from_torch"
+},
+{
+"id": 339,
+"name": "ttnn.linear"
+},
+{
+"id": 340,
+"name": "ttnn.experimental.nlp_create_qkv_heads"
+},
+{
+"id": 341,
+"name": "ttnn.deallocate"
+},
+{
+"id": 342,
+"name": "ttnn.typecast"
+},
+{
+"id": 343,
+"name": "ttnn.deallocate"
+},
+{
+"id": 344,
+"name": "ttnn.typecast"
+},
+{
+"id": 345,
+"name": "ttnn.deallocate"
+},
+{
+"id": 346,
+"name": "ttnn.typecast"
+},
+{
+"id": 347,
+"name": "ttnn.deallocate"
+},
+{
+"id": 348,
+"name": "ttnn.expand"
+},
+{
+"id": 349,
+"name": "ttnn.transformer.scaled_dot_product_attention"
+},
+{
+"id": 350,
+"name": "ttnn.deallocate"
+},
+{
+"id": 351,
+"name": "ttnn.deallocate"
+},
+{
+"id": 352,
+"name": "ttnn.deallocate"
+},
+{
+"id": 353,
+"name": "ttnn.experimental.nlp_concat_heads"
+},
+{
+"id": 354,
+"name": "ttnn.linear"
+},
+{
+"id": 355,
+"name": "ttnn.deallocate"
+},
+{
+"id": 356,
+"name": "ttnn.add"
+},
+{
+"id": 357,
+"name": "ttnn.from_torch"
+},
+{
+"id": 358,
+"name": "ttnn.from_torch"
+},
+{
+"id": 359,
+"name": "ttnn.layer_norm"
+},
+{
+"id": 360,
+"name": "ttnn.from_torch"
+},
+{
+"id": 361,
+"name": "ttnn.from_torch"
+},
+{
+"id": 362,
+"name": "ttnn.from_torch"
+},
+{
+"id": 363,
+"name": "ttnn.from_torch"
+},
+{
+"id": 364,
+"name": "ttnn.linear"
+},
+{
+"id": 365,
+"name": "ttnn.gelu"
+},
+{
+"id": 366,
+"name": "ttnn.deallocate"
+},
+{
+"id": 367,
+"name": "ttnn.linear"
+},
+{
+"id": 368,
+"name": "ttnn.deallocate"
+},
+{
+"id": 369,
+"name": "ttnn.add"
+},
+{
+"id": 370,
+"name": "ttnn.from_torch"
+},
+{
+"id": 371,
+"name": "ttnn.from_torch"
+},
+{
+"id": 372,
+"name": "ttnn.layer_norm"
+},
+{
+"id": 373,
+"name": "ttnn.from_torch"
+},
+{
+"id": 374,
+"name": "ttnn.from_torch"
+},
+{
+"id": 375,
+"name": "ttnn.from_torch"
+},
+{
+"id": 376,
+"name": "ttnn.from_torch"
+},
+{
+"id": 377,
+"name": "ttnn.linear"
+},
+{
+"id": 378,
+"name": "ttnn.experimental.nlp_create_qkv_heads"
+},
+{
+"id": 379,
+"name": "ttnn.deallocate"
+},
+{
+"id": 380,
+"name": "ttnn.typecast"
+},
+{
+"id": 381,
+"name": "ttnn.deallocate"
+},
+{
+"id": 382,
+"name": "ttnn.typecast"
+},
+{
+"id": 383,
+"name": "ttnn.deallocate"
+},
+{
+"id": 384,
+"name": "ttnn.typecast"
+},
+{
+"id": 385,
+"name": "ttnn.deallocate"
+},
+{
+"id": 386,
+"name": "ttnn.expand"
+},
+{
+"id": 387,
+"name": "ttnn.transformer.scaled_dot_product_attention"
+},
+{
+"id": 388,
+"name": "ttnn.deallocate"
+},
+{
+"id": 389,
+"name": "ttnn.deallocate"
+},
+{
+"id": 390,
+"name": "ttnn.deallocate"
+},
+{
+"id": 391,
+"name": "ttnn.experimental.nlp_concat_heads"
+},
+{
+"id": 392,
+"name": "ttnn.linear"
+},
+{
+"id": 393,
+"name": "ttnn.deallocate"
+},
+{
+"id": 394,
+"name": "ttnn.add"
+},
+{
+"id": 395,
+"name": "ttnn.from_torch"
+},
+{
+"id": 396,
+"name": "ttnn.from_torch"
+},
+{
+"id": 397,
+"name": "ttnn.layer_norm"
+},
+{
+"id": 398,
+"name": "ttnn.from_torch"
+},
+{
+"id": 399,
+"name": "ttnn.from_torch"
+},
+{
+"id": 400,
+"name": "ttnn.from_torch"
+},
+{
+"id": 401,
+"name": "ttnn.from_torch"
+},
+{
+"id": 402,
+"name": "ttnn.linear"
+},
+{
+"id": 403,
+"name": "ttnn.gelu"
+},
+{
+"id": 404,
+"name": "ttnn.deallocate"
+},
+{
+"id": 405,
+"name": "ttnn.linear"
+},
+{
+"id": 406,
+"name": "ttnn.deallocate"
+},
+{
+"id": 407,
+"name": "ttnn.add"
+},
+{
+"id": 408,
+"name": "ttnn.from_torch"
+},
+{
+"id": 409,
+"name": "ttnn.from_torch"
+},
+{
+"id": 410,
+"name": "ttnn.layer_norm"
+},
+{
+"id": 411,
+"name": "ttnn.from_torch"
+},
+{
+"id": 412,
+"name": "ttnn.from_torch"
+},
+{
+"id": 413,
+"name": "ttnn.from_torch"
+},
+{
+"id": 414,
+"name": "ttnn.from_torch"
+},
+{
+"id": 415,
+"name": "ttnn.linear"
+},
+{
+"id": 416,
+"name": "ttnn.experimental.nlp_create_qkv_heads"
+},
+{
+"id": 417,
+"name": "ttnn.deallocate"
+},
+{
+"id": 418,
+"name": "ttnn.typecast"
+},
+{
+"id": 419,
+"name": "ttnn.deallocate"
+},
+{
+"id": 420,
+"name": "ttnn.typecast"
+},
+{
+"id": 421,
+"name": "ttnn.deallocate"
+},
+{
+"id": 422,
+"name": "ttnn.typecast"
+},
+{
+"id": 423,
+"name": "ttnn.deallocate"
+},
+{
+"id": 424,
+"name": "ttnn.expand"
+},
+{
+"id": 425,
+"name": "ttnn.transformer.scaled_dot_product_attention"
+},
+{
+"id": 426,
+"name": "ttnn.deallocate"
+},
+{
+"id": 427,
+"name": "ttnn.deallocate"
+},
+{
+"id": 428,
+"name": "ttnn.deallocate"
+},
+{
+"id": 429,
+"name": "ttnn.experimental.nlp_concat_heads"
+},
+{
+"id": 430,
+"name": "ttnn.linear"
+},
+{
+"id": 431,
+"name": "ttnn.deallocate"
+},
+{
+"id": 432,
+"name": "ttnn.add"
+},
+{
+"id": 433,
+"name": "ttnn.from_torch"
+},
+{
+"id": 434,
+"name": "ttnn.from_torch"
+},
+{
+"id": 435,
+"name": "ttnn.layer_norm"
+},
+{
+"id": 436,
+"name": "ttnn.from_torch"
+},
+{
+"id": 437,
+"name": "ttnn.from_torch"
+},
+{
+"id": 438,
+"name": "ttnn.from_torch"
+},
+{
+"id": 439,
+"name": "ttnn.from_torch"
+},
+{
+"id": 440,
+"name": "ttnn.linear"
+},
+{
+"id": 441,
+"name": "ttnn.gelu"
+},
+{
+"id": 442,
+"name": "ttnn.deallocate"
+},
+{
+"id": 443,
+"name": "ttnn.linear"
+},
+{
+"id": 444,
+"name": "ttnn.deallocate"
+},
+{
+"id": 445,
+"name": "ttnn.add"
+},
+{
+"id": 446,
+"name": "ttnn.from_torch"
+},
+{
+"id": 447,
+"name": "ttnn.from_torch"
+},
+{
+"id": 448,
+"name": "ttnn.layer_norm"
+},
+{
+"id": 449,
+"name": "ttnn.from_torch"
+},
+{
+"id": 450,
+"name": "ttnn.from_torch"
+},
+{
+"id": 451,
+"name": "ttnn.from_torch"
+},
+{
+"id": 452,
+"name": "ttnn.from_torch"
+},
+{
+"id": 453,
+"name": "ttnn.linear"
+},
+{
+"id": 454,
+"name": "ttnn.experimental.nlp_create_qkv_heads"
+},
+{
+"id": 455,
+"name": "ttnn.deallocate"
+},
+{
+"id": 456,
+"name": "ttnn.typecast"
+},
+{
+"id": 457,
+"name": "ttnn.deallocate"
+},
+{
+"id": 458,
+"name": "ttnn.typecast"
+},
+{
+"id": 459,
+"name": "ttnn.deallocate"
+},
+{
+"id": 460,
+"name": "ttnn.typecast"
+},
+{
+"id": 461,
+"name": "ttnn.deallocate"
+},
+{
+"id": 462,
+"name": "ttnn.expand"
+},
+{
+"id": 463,
+"name": "ttnn.transformer.scaled_dot_product_attention"
+},
+{
+"id": 464,
+"name": "ttnn.deallocate"
+},
+{
+"id": 465,
+"name": "ttnn.deallocate"
+},
+{
+"id": 466,
+"name": "ttnn.deallocate"
+},
+{
+"id": 467,
+"name": "ttnn.experimental.nlp_concat_heads"
+},
+{
+"id": 468,
+"name": "ttnn.linear"
+},
+{
+"id": 469,
+"name": "ttnn.deallocate"
+},
+{
+"id": 470,
+"name": "ttnn.add"
+},
+{
+"id": 471,
+"name": "ttnn.from_torch"
+},
+{
+"id": 472,
+"name": "ttnn.from_torch"
+},
+{
+"id": 473,
+"name": "ttnn.layer_norm"
+},
+{
+"id": 474,
+"name": "ttnn.from_torch"
+},
+{
+"id": 475,
+"name": "ttnn.from_torch"
+},
+{
+"id": 476,
+"name": "ttnn.from_torch"
+},
+{
+"id": 477,
+"name": "ttnn.from_torch"
+},
+{
+"id": 478,
+"name": "ttnn.linear"
+},
+{
+"id": 479,
+"name": "ttnn.gelu"
+},
+{
+"id": 480,
+"name": "ttnn.deallocate"
+},
+{
+"id": 481,
+"name": "ttnn.linear"
+},
+{
+"id": 482,
+"name": "ttnn.deallocate"
+},
+{
+"id": 483,
+"name": "ttnn.add"
+},
+{
+"id": 484,
+"name": "ttnn.from_torch"
+},
+{
+"id": 485,
+"name": "ttnn.from_torch"
+},
+{
+"id": 486,
+"name": "ttnn.layer_norm"
+},
+{
+"id": 487,
+"name": "ttnn.from_torch"
+},
+{
+"id": 488,
+"name": "ttnn.from_torch"
+},
+{
+"id": 489,
+"name": "ttnn.from_torch"
+},
+{
+"id": 490,
+"name": "ttnn.from_torch"
+},
+{
+"id": 491,
+"name": "ttnn.linear"
+},
+{
+"id": 492,
+"name": "ttnn.experimental.nlp_create_qkv_heads"
+},
+{
+"id": 493,
+"name": "ttnn.deallocate"
+},
+{
+"id": 494,
+"name": "ttnn.typecast"
+},
+{
+"id": 495,
+"name": "ttnn.deallocate"
+},
+{
+"id": 496,
+"name": "ttnn.typecast"
+},
+{
+"id": 497,
+"name": "ttnn.deallocate"
+},
+{
+"id": 498,
+"name": "ttnn.typecast"
+},
+{
+"id": 499,
+"name": "ttnn.deallocate"
+},
+{
+"id": 500,
+"name": "ttnn.expand"
+},
+{
+"id": 501,
+"name": "ttnn.transformer.scaled_dot_product_attention"
+},
+{
+"id": 502,
+"name": "ttnn.deallocate"
+},
+{
+"id": 503,
+"name": "ttnn.deallocate"
+},
+{
+"id": 504,
+"name": "ttnn.deallocate"
+},
+{
+"id": 505,
+"name": "ttnn.experimental.nlp_concat_heads"
+},
+{
+"id": 506,
+"name": "ttnn.linear"
+},
+{
+"id": 507,
+"name": "ttnn.deallocate"
+},
+{
+"id": 508,
+"name": "ttnn.add"
+},
+{
+"id": 509,
+"name": "ttnn.from_torch"
+},
+{
+"id": 510,
+"name": "ttnn.from_torch"
+},
+{
+"id": 511,
+"name": "ttnn.layer_norm"
+},
+{
+"id": 512,
+"name": "ttnn.from_torch"
+},
+{
+"id": 513,
+"name": "ttnn.from_torch"
+},
+{
+"id": 514,
+"name": "ttnn.from_torch"
+},
+{
+"id": 515,
+"name": "ttnn.from_torch"
+},
+{
+"id": 516,
+"name": "ttnn.linear"
+},
+{
+"id": 517,
+"name": "ttnn.gelu"
+},
+{
+"id": 518,
+"name": "ttnn.deallocate"
+},
+{
+"id": 519,
+"name": "ttnn.linear"
+},
+{
+"id": 520,
+"name": "ttnn.deallocate"
+},
+{
+"id": 521,
+"name": "ttnn.add"
+},
+{
+"id": 522,
+"name": "ttnn.from_torch"
+},
+{
+"id": 523,
+"name": "ttnn.from_torch"
+},
+{
+"id": 524,
+"name": "ttnn.layer_norm"
+},
+{
+"id": 525,
+"name": "ttnn.from_torch"
+},
+{
+"id": 526,
+"name": "ttnn.from_torch"
+},
+{
+"id": 527,
+"name": "ttnn.from_torch"
+},
+{
+"id": 528,
+"name": "ttnn.from_torch"
+},
+{
+"id": 529,
+"name": "ttnn.linear"
+},
+{
+"id": 530,
+"name": "ttnn.experimental.nlp_create_qkv_heads"
+},
+{
+"id": 531,
+"name": "ttnn.deallocate"
+},
+{
+"id": 532,
+"name": "ttnn.typecast"
+},
+{
+"id": 533,
+"name": "ttnn.deallocate"
+},
+{
+"id": 534,
+"name": "ttnn.typecast"
+},
+{
+"id": 535,
+"name": "ttnn.deallocate"
+},
+{
+"id": 536,
+"name": "ttnn.typecast"
+},
+{
+"id": 537,
+"name": "ttnn.deallocate"
+},
+{
+"id": 538,
+"name": "ttnn.expand"
+},
+{
+"id": 539,
+"name": "ttnn.transformer.scaled_dot_product_attention"
+},
+{
+"id": 540,
+"name": "ttnn.deallocate"
+},
+{
+"id": 541,
+"name": "ttnn.deallocate"
+},
+{
+"id": 542,
+"name": "ttnn.deallocate"
+},
+{
+"id": 543,
+"name": "ttnn.experimental.nlp_concat_heads"
+},
+{
+"id": 544,
+"name": "ttnn.linear"
+},
+{
+"id": 545,
+"name": "ttnn.deallocate"
+},
+{
+"id": 546,
+"name": "ttnn.add"
+},
+{
+"id": 547,
+"name": "ttnn.from_torch"
+},
+{
+"id": 548,
+"name": "ttnn.from_torch"
+},
+{
+"id": 549,
+"name": "ttnn.layer_norm"
+},
+{
+"id": 550,
+"name": "ttnn.from_torch"
+},
+{
+"id": 551,
+"name": "ttnn.from_torch"
+},
+{
+"id": 552,
+"name": "ttnn.from_torch"
+},
+{
+"id": 553,
+"name": "ttnn.from_torch"
+},
+{
+"id": 554,
+"name": "ttnn.linear"
+},
+{
+"id": 555,
+"name": "ttnn.gelu"
+},
+{
+"id": 556,
+"name": "ttnn.deallocate"
+},
+{
+"id": 557,
+"name": "ttnn.linear"
+},
+{
+"id": 558,
+"name": "ttnn.deallocate"
+},
+{
+"id": 559,
+"name": "ttnn.add"
+},
+{
+"id": 560,
+"name": "ttnn.from_torch"
+},
+{
+"id": 561,
+"name": "ttnn.from_torch"
+},
+{
+"id": 562,
+"name": "ttnn.layer_norm"
+},
+{
+"id": 563,
+"name": "ttnn.from_torch"
+},
+{
+"id": 564,
+"name": "ttnn.from_torch"
+},
+{
+"id": 565,
+"name": "ttnn.from_torch"
+},
+{
+"id": 566,
+"name": "ttnn.from_torch"
+},
+{
+"id": 567,
+"name": "ttnn.linear"
+},
+{
+"id": 568,
+"name": "ttnn.experimental.nlp_create_qkv_heads"
+},
+{
+"id": 569,
+"name": "ttnn.deallocate"
+},
+{
+"id": 570,
+"name": "ttnn.typecast"
+},
+{
+"id": 571,
+"name": "ttnn.deallocate"
+},
+{
+"id": 572,
+"name": "ttnn.typecast"
+},
+{
+"id": 573,
+"name": "ttnn.deallocate"
+},
+{
+"id": 574,
+"name": "ttnn.typecast"
+},
+{
+"id": 575,
+"name": "ttnn.deallocate"
+},
+{
+"id": 576,
+"name": "ttnn.expand"
+},
+{
+"id": 577,
+"name": "ttnn.transformer.scaled_dot_product_attention"
+},
+{
+"id": 578,
+"name": "ttnn.deallocate"
+},
+{
+"id": 579,
+"name": "ttnn.deallocate"
+},
+{
+"id": 580,
+"name": "ttnn.deallocate"
+},
+{
+"id": 581,
+"name": "ttnn.experimental.nlp_concat_heads"
+},
+{
+"id": 582,
+"name": "ttnn.linear"
+},
+{
+"id": 583,
+"name": "ttnn.deallocate"
+},
+{
+"id": 584,
+"name": "ttnn.add"
+},
+{
+"id": 585,
+"name": "ttnn.from_torch"
+},
+{
+"id": 586,
+"name": "ttnn.from_torch"
+},
+{
+"id": 587,
+"name": "ttnn.layer_norm"
+},
+{
+"id": 588,
+"name": "ttnn.from_torch"
+},
+{
+"id": 589,
+"name": "ttnn.from_torch"
+},
+{
+"id": 590,
+"name": "ttnn.from_torch"
+},
+{
+"id": 591,
+"name": "ttnn.from_torch"
+},
+{
+"id": 592,
+"name": "ttnn.linear"
+},
+{
+"id": 593,
+"name": "ttnn.gelu"
+},
+{
+"id": 594,
+"name": "ttnn.deallocate"
+},
+{
+"id": 595,
+"name": "ttnn.linear"
+},
+{
+"id": 596,
+"name": "ttnn.deallocate"
+},
+{
+"id": 597,
+"name": "ttnn.add"
+},
+{
+"id": 598,
+"name": "ttnn.from_torch"
+},
+{
+"id": 599,
+"name": "ttnn.from_torch"
+},
+{
+"id": 600,
+"name": "ttnn.layer_norm"
+},
+{
+"id": 601,
+"name": "ttnn.from_torch"
+},
+{
+"id": 602,
+"name": "ttnn.from_torch"
+},
+{
+"id": 603,
+"name": "ttnn.from_torch"
+},
+{
+"id": 604,
+"name": "ttnn.from_torch"
+},
+{
+"id": 605,
+"name": "ttnn.linear"
+},
+{
+"id": 606,
+"name": "ttnn.experimental.nlp_create_qkv_heads"
+},
+{
+"id": 607,
+"name": "ttnn.deallocate"
+},
+{
+"id": 608,
+"name": "ttnn.typecast"
+},
+{
+"id": 609,
+"name": "ttnn.deallocate"
+},
+{
+"id": 610,
+"name": "ttnn.typecast"
+},
+{
+"id": 611,
+"name": "ttnn.deallocate"
+},
+{
+"id": 612,
+"name": "ttnn.typecast"
+},
+{
+"id": 613,
+"name": "ttnn.deallocate"
+},
+{
+"id": 614,
+"name": "ttnn.expand"
+},
+{
+"id": 615,
+"name": "ttnn.transformer.scaled_dot_product_attention"
+},
+{
+"id": 616,
+"name": "ttnn.deallocate"
+},
+{
+"id": 617,
+"name": "ttnn.deallocate"
+},
+{
+"id": 618,
+"name": "ttnn.deallocate"
+},
+{
+"id": 619,
+"name": "ttnn.experimental.nlp_concat_heads"
+},
+{
+"id": 620,
+"name": "ttnn.linear"
+},
+{
+"id": 621,
+"name": "ttnn.deallocate"
+},
+{
+"id": 622,
+"name": "ttnn.add"
+},
+{
+"id": 623,
+"name": "ttnn.from_torch"
+},
+{
+"id": 624,
+"name": "ttnn.from_torch"
+},
+{
+"id": 625,
+"name": "ttnn.layer_norm"
+},
+{
+"id": 626,
+"name": "ttnn.from_torch"
+},
+{
+"id": 627,
+"name": "ttnn.from_torch"
+},
+{
+"id": 628,
+"name": "ttnn.from_torch"
+},
+{
+"id": 629,
+"name": "ttnn.from_torch"
+},
+{
+"id": 630,
+"name": "ttnn.linear"
+},
+{
+"id": 631,
+"name": "ttnn.gelu"
+},
+{
+"id": 632,
+"name": "ttnn.deallocate"
+},
+{
+"id": 633,
+"name": "ttnn.linear"
+},
+{
+"id": 634,
+"name": "ttnn.deallocate"
+},
+{
+"id": 635,
+"name": "ttnn.add"
+},
+{
+"id": 636,
+"name": "ttnn.from_torch"
+},
+{
+"id": 637,
+"name": "ttnn.from_torch"
+},
+{
+"id": 638,
+"name": "ttnn.layer_norm"
+},
+{
+"id": 639,
+"name": "ttnn.from_torch"
+},
+{
+"id": 640,
+"name": "ttnn.from_torch"
+},
+{
+"id": 641,
+"name": "ttnn.from_torch"
+},
+{
+"id": 642,
+"name": "ttnn.from_torch"
+},
+{
+"id": 643,
+"name": "ttnn.linear"
+},
+{
+"id": 644,
+"name": "ttnn.experimental.nlp_create_qkv_heads"
+},
+{
+"id": 645,
+"name": "ttnn.deallocate"
+},
+{
+"id": 646,
+"name": "ttnn.typecast"
+},
+{
+"id": 647,
+"name": "ttnn.deallocate"
+},
+{
+"id": 648,
+"name": "ttnn.typecast"
+},
+{
+"id": 649,
+"name": "ttnn.deallocate"
+},
+{
+"id": 650,
+"name": "ttnn.typecast"
+},
+{
+"id": 651,
+"name": "ttnn.deallocate"
+},
+{
+"id": 652,
+"name": "ttnn.expand"
+},
+{
+"id": 653,
+"name": "ttnn.transformer.scaled_dot_product_attention"
+},
+{
+"id": 654,
+"name": "ttnn.deallocate"
+},
+{
+"id": 655,
+"name": "ttnn.deallocate"
+},
+{
+"id": 656,
+"name": "ttnn.deallocate"
+},
+{
+"id": 657,
+"name": "ttnn.experimental.nlp_concat_heads"
+},
+{
+"id": 658,
+"name": "ttnn.linear"
+},
+{
+"id": 659,
+"name": "ttnn.deallocate"
+},
+{
+"id": 660,
+"name": "ttnn.add"
+},
+{
+"id": 661,
+"name": "ttnn.from_torch"
+},
+{
+"id": 662,
+"name": "ttnn.from_torch"
+},
+{
+"id": 663,
+"name": "ttnn.layer_norm"
+},
+{
+"id": 664,
+"name": "ttnn.from_torch"
+},
+{
+"id": 665,
+"name": "ttnn.from_torch"
+},
+{
+"id": 666,
+"name": "ttnn.from_torch"
+},
+{
+"id": 667,
+"name": "ttnn.from_torch"
+},
+{
+"id": 668,
+"name": "ttnn.linear"
+},
+{
+"id": 669,
+"name": "ttnn.gelu"
+},
+{
+"id": 670,
+"name": "ttnn.deallocate"
+},
+{
+"id": 671,
+"name": "ttnn.linear"
+},
+{
+"id": 672,
+"name": "ttnn.deallocate"
+},
+{
+"id": 673,
+"name": "ttnn.add"
+},
+{
+"id": 674,
+"name": "ttnn.from_torch"
+},
+{
+"id": 675,
+"name": "ttnn.from_torch"
+},
+{
+"id": 676,
+"name": "ttnn.layer_norm"
+},
+{
+"id": 677,
+"name": "ttnn.from_torch"
+},
+{
+"id": 678,
+"name": "ttnn.from_torch"
+},
+{
+"id": 679,
+"name": "ttnn.from_torch"
+},
+{
+"id": 680,
+"name": "ttnn.from_torch"
+},
+{
+"id": 681,
+"name": "ttnn.linear"
+},
+{
+"id": 682,
+"name": "ttnn.experimental.nlp_create_qkv_heads"
+},
+{
+"id": 683,
+"name": "ttnn.deallocate"
+},
+{
+"id": 684,
+"name": "ttnn.typecast"
+},
+{
+"id": 685,
+"name": "ttnn.deallocate"
+},
+{
+"id": 686,
+"name": "ttnn.typecast"
+},
+{
+"id": 687,
+"name": "ttnn.deallocate"
+},
+{
+"id": 688,
+"name": "ttnn.typecast"
+},
+{
+"id": 689,
+"name": "ttnn.deallocate"
+},
+{
+"id": 690,
+"name": "ttnn.expand"
+},
+{
+"id": 691,
+"name": "ttnn.transformer.scaled_dot_product_attention"
+},
+{
+"id": 692,
+"name": "ttnn.deallocate"
+},
+{
+"id": 693,
+"name": "ttnn.deallocate"
+},
+{
+"id": 694,
+"name": "ttnn.deallocate"
+},
+{
+"id": 695,
+"name": "ttnn.experimental.nlp_concat_heads"
+},
+{
+"id": 696,
+"name": "ttnn.linear"
+},
+{
+"id": 697,
+"name": "ttnn.deallocate"
+},
+{
+"id": 698,
+"name": "ttnn.add"
+},
+{
+"id": 699,
+"name": "ttnn.from_torch"
+},
+{
+"id": 700,
+"name": "ttnn.from_torch"
+},
+{
+"id": 701,
+"name": "ttnn.layer_norm"
+},
+{
+"id": 702,
+"name": "ttnn.from_torch"
+},
+{
+"id": 703,
+"name": "ttnn.from_torch"
+},
+{
+"id": 704,
+"name": "ttnn.from_torch"
+},
+{
+"id": 705,
+"name": "ttnn.from_torch"
+},
+{
+"id": 706,
+"name": "ttnn.linear"
+},
+{
+"id": 707,
+"name": "ttnn.gelu"
+},
+{
+"id": 708,
+"name": "ttnn.deallocate"
+},
+{
+"id": 709,
+"name": "ttnn.linear"
+},
+{
+"id": 710,
+"name": "ttnn.deallocate"
+},
+{
+"id": 711,
+"name": "ttnn.add"
+},
+{
+"id": 712,
+"name": "ttnn.from_torch"
+},
+{
+"id": 713,
+"name": "ttnn.from_torch"
+},
+{
+"id": 714,
+"name": "ttnn.layer_norm"
+},
+{
+"id": 715,
+"name": "ttnn.from_torch"
+},
+{
+"id": 716,
+"name": "ttnn.from_torch"
+},
+{
+"id": 717,
+"name": "ttnn.from_torch"
+},
+{
+"id": 718,
+"name": "ttnn.from_torch"
+},
+{
+"id": 719,
+"name": "ttnn.linear"
+},
+{
+"id": 720,
+"name": "ttnn.experimental.nlp_create_qkv_heads"
+},
+{
+"id": 721,
+"name": "ttnn.deallocate"
+},
+{
+"id": 722,
+"name": "ttnn.typecast"
+},
+{
+"id": 723,
+"name": "ttnn.deallocate"
+},
+{
+"id": 724,
+"name": "ttnn.typecast"
+},
+{
+"id": 725,
+"name": "ttnn.deallocate"
+},
+{
+"id": 726,
+"name": "ttnn.typecast"
+},
+{
+"id": 727,
+"name": "ttnn.deallocate"
+},
+{
+"id": 728,
+"name": "ttnn.expand"
+},
+{
+"id": 729,
+"name": "ttnn.transformer.scaled_dot_product_attention"
+},
+{
+"id": 730,
+"name": "ttnn.deallocate"
+},
+{
+"id": 731,
+"name": "ttnn.deallocate"
+},
+{
+"id": 732,
+"name": "ttnn.deallocate"
+},
+{
+"id": 733,
+"name": "ttnn.experimental.nlp_concat_heads"
+},
+{
+"id": 734,
+"name": "ttnn.linear"
+},
+{
+"id": 735,
+"name": "ttnn.deallocate"
+},
+{
+"id": 736,
+"name": "ttnn.add"
+},
+{
+"id": 737,
+"name": "ttnn.from_torch"
+},
+{
+"id": 738,
+"name": "ttnn.from_torch"
+},
+{
+"id": 739,
+"name": "ttnn.layer_norm"
+},
+{
+"id": 740,
+"name": "ttnn.from_torch"
+},
+{
+"id": 741,
+"name": "ttnn.from_torch"
+},
+{
+"id": 742,
+"name": "ttnn.from_torch"
+},
+{
+"id": 743,
+"name": "ttnn.from_torch"
+},
+{
+"id": 744,
+"name": "ttnn.linear"
+},
+{
+"id": 745,
+"name": "ttnn.gelu"
+},
+{
+"id": 746,
+"name": "ttnn.deallocate"
+},
+{
+"id": 747,
+"name": "ttnn.linear"
+},
+{
+"id": 748,
+"name": "ttnn.deallocate"
+},
+{
+"id": 749,
+"name": "ttnn.add"
+},
+{
+"id": 750,
+"name": "ttnn.from_torch"
+},
+{
+"id": 751,
+"name": "ttnn.from_torch"
+},
+{
+"id": 752,
+"name": "ttnn.layer_norm"
+},
+{
+"id": 753,
+"name": "ttnn.from_torch"
+},
+{
+"id": 754,
+"name": "ttnn.from_torch"
+},
+{
+"id": 755,
+"name": "ttnn.from_torch"
+},
+{
+"id": 756,
+"name": "ttnn.from_torch"
+},
+{
+"id": 757,
+"name": "ttnn.linear"
+},
+{
+"id": 758,
+"name": "ttnn.experimental.nlp_create_qkv_heads"
+},
+{
+"id": 759,
+"name": "ttnn.deallocate"
+},
+{
+"id": 760,
+"name": "ttnn.typecast"
+},
+{
+"id": 761,
+"name": "ttnn.deallocate"
+},
+{
+"id": 762,
+"name": "ttnn.typecast"
+},
+{
+"id": 763,
+"name": "ttnn.deallocate"
+},
+{
+"id": 764,
+"name": "ttnn.typecast"
+},
+{
+"id": 765,
+"name": "ttnn.deallocate"
+},
+{
+"id": 766,
+"name": "ttnn.expand"
+},
+{
+"id": 767,
+"name": "ttnn.transformer.scaled_dot_product_attention"
+},
+{
+"id": 768,
+"name": "ttnn.deallocate"
+},
+{
+"id": 769,
+"name": "ttnn.deallocate"
+},
+{
+"id": 770,
+"name": "ttnn.deallocate"
+},
+{
+"id": 771,
+"name": "ttnn.experimental.nlp_concat_heads"
+},
+{
+"id": 772,
+"name": "ttnn.linear"
+},
+{
+"id": 773,
+"name": "ttnn.deallocate"
+},
+{
+"id": 774,
+"name": "ttnn.add"
+},
+{
+"id": 775,
+"name": "ttnn.from_torch"
+},
+{
+"id": 776,
+"name": "ttnn.from_torch"
+},
+{
+"id": 777,
+"name": "ttnn.layer_norm"
+},
+{
+"id": 778,
+"name": "ttnn.from_torch"
+},
+{
+"id": 779,
+"name": "ttnn.from_torch"
+},
+{
+"id": 780,
+"name": "ttnn.from_torch"
+},
+{
+"id": 781,
+"name": "ttnn.from_torch"
+},
+{
+"id": 782,
+"name": "ttnn.linear"
+},
+{
+"id": 783,
+"name": "ttnn.gelu"
+},
+{
+"id": 784,
+"name": "ttnn.deallocate"
+},
+{
+"id": 785,
+"name": "ttnn.linear"
+},
+{
+"id": 786,
+"name": "ttnn.deallocate"
+},
+{
+"id": 787,
+"name": "ttnn.add"
+},
+{
+"id": 788,
+"name": "ttnn.from_torch"
+},
+{
+"id": 789,
+"name": "ttnn.from_torch"
+},
+{
+"id": 790,
+"name": "ttnn.layer_norm"
+},
+{
+"id": 791,
+"name": "ttnn.from_torch"
+},
+{
+"id": 792,
+"name": "ttnn.from_torch"
+},
+{
+"id": 793,
+"name": "ttnn.from_torch"
+},
+{
+"id": 794,
+"name": "ttnn.from_torch"
+},
+{
+"id": 795,
+"name": "ttnn.linear"
+},
+{
+"id": 796,
+"name": "ttnn.experimental.nlp_create_qkv_heads"
+},
+{
+"id": 797,
+"name": "ttnn.deallocate"
+},
+{
+"id": 798,
+"name": "ttnn.typecast"
+},
+{
+"id": 799,
+"name": "ttnn.deallocate"
+},
+{
+"id": 800,
+"name": "ttnn.typecast"
+},
+{
+"id": 801,
+"name": "ttnn.deallocate"
+},
+{
+"id": 802,
+"name": "ttnn.typecast"
+},
+{
+"id": 803,
+"name": "ttnn.deallocate"
+},
+{
+"id": 804,
+"name": "ttnn.expand"
+},
+{
+"id": 805,
+"name": "ttnn.transformer.scaled_dot_product_attention"
+},
+{
+"id": 806,
+"name": "ttnn.deallocate"
+},
+{
+"id": 807,
+"name": "ttnn.deallocate"
+},
+{
+"id": 808,
+"name": "ttnn.deallocate"
+},
+{
+"id": 809,
+"name": "ttnn.experimental.nlp_concat_heads"
+},
+{
+"id": 810,
+"name": "ttnn.linear"
+},
+{
+"id": 811,
+"name": "ttnn.deallocate"
+},
+{
+"id": 812,
+"name": "ttnn.add"
+},
+{
+"id": 813,
+"name": "ttnn.from_torch"
+},
+{
+"id": 814,
+"name": "ttnn.from_torch"
+},
+{
+"id": 815,
+"name": "ttnn.layer_norm"
+},
+{
+"id": 816,
+"name": "ttnn.from_torch"
+},
+{
+"id": 817,
+"name": "ttnn.from_torch"
+},
+{
+"id": 818,
+"name": "ttnn.from_torch"
+},
+{
+"id": 819,
+"name": "ttnn.from_torch"
+},
+{
+"id": 820,
+"name": "ttnn.linear"
+},
+{
+"id": 821,
+"name": "ttnn.gelu"
+},
+{
+"id": 822,
+"name": "ttnn.deallocate"
+},
+{
+"id": 823,
+"name": "ttnn.linear"
+},
+{
+"id": 824,
+"name": "ttnn.deallocate"
+},
+{
+"id": 825,
+"name": "ttnn.add"
+},
+{
+"id": 826,
+"name": "ttnn.from_torch"
+},
+{
+"id": 827,
+"name": "ttnn.from_torch"
+},
+{
+"id": 828,
+"name": "ttnn.layer_norm"
+},
+{
+"id": 829,
+"name": "ttnn.from_torch"
+},
+{
+"id": 830,
+"name": "ttnn.from_torch"
+},
+{
+"id": 831,
+"name": "ttnn.from_torch"
+},
+{
+"id": 832,
+"name": "ttnn.from_torch"
+},
+{
+"id": 833,
+"name": "ttnn.linear"
+},
+{
+"id": 834,
+"name": "ttnn.experimental.nlp_create_qkv_heads"
+},
+{
+"id": 835,
+"name": "ttnn.deallocate"
+},
+{
+"id": 836,
+"name": "ttnn.typecast"
+},
+{
+"id": 837,
+"name": "ttnn.deallocate"
+},
+{
+"id": 838,
+"name": "ttnn.typecast"
+},
+{
+"id": 839,
+"name": "ttnn.deallocate"
+},
+{
+"id": 840,
+"name": "ttnn.typecast"
+},
+{
+"id": 841,
+"name": "ttnn.deallocate"
+},
+{
+"id": 842,
+"name": "ttnn.expand"
+},
+{
+"id": 843,
+"name": "ttnn.transformer.scaled_dot_product_attention"
+},
+{
+"id": 844,
+"name": "ttnn.deallocate"
+},
+{
+"id": 845,
+"name": "ttnn.deallocate"
+},
+{
+"id": 846,
+"name": "ttnn.deallocate"
+},
+{
+"id": 847,
+"name": "ttnn.experimental.nlp_concat_heads"
+},
+{
+"id": 848,
+"name": "ttnn.linear"
+},
+{
+"id": 849,
+"name": "ttnn.deallocate"
+},
+{
+"id": 850,
+"name": "ttnn.add"
+},
+{
+"id": 851,
+"name": "ttnn.from_torch"
+},
+{
+"id": 852,
+"name": "ttnn.from_torch"
+},
+{
+"id": 853,
+"name": "ttnn.layer_norm"
+},
+{
+"id": 854,
+"name": "ttnn.from_torch"
+},
+{
+"id": 855,
+"name": "ttnn.from_torch"
+},
+{
+"id": 856,
+"name": "ttnn.from_torch"
+},
+{
+"id": 857,
+"name": "ttnn.from_torch"
+},
+{
+"id": 858,
+"name": "ttnn.linear"
+},
+{
+"id": 859,
+"name": "ttnn.gelu"
+},
+{
+"id": 860,
+"name": "ttnn.deallocate"
+},
+{
+"id": 861,
+"name": "ttnn.linear"
+},
+{
+"id": 862,
+"name": "ttnn.deallocate"
+},
+{
+"id": 863,
+"name": "ttnn.add"
+},
+{
+"id": 864,
+"name": "ttnn.from_torch"
+},
+{
+"id": 865,
+"name": "ttnn.from_torch"
+},
+{
+"id": 866,
+"name": "ttnn.layer_norm"
+},
+{
+"id": 867,
+"name": "ttnn.from_torch"
+},
+{
+"id": 868,
+"name": "ttnn.from_torch"
+},
+{
+"id": 869,
+"name": "ttnn.from_torch"
+},
+{
+"id": 870,
+"name": "ttnn.from_torch"
+},
+{
+"id": 871,
+"name": "ttnn.linear"
+},
+{
+"id": 872,
+"name": "ttnn.experimental.nlp_create_qkv_heads"
+},
+{
+"id": 873,
+"name": "ttnn.deallocate"
+},
+{
+"id": 874,
+"name": "ttnn.typecast"
+},
+{
+"id": 875,
+"name": "ttnn.deallocate"
+},
+{
+"id": 876,
+"name": "ttnn.typecast"
+},
+{
+"id": 877,
+"name": "ttnn.deallocate"
+},
+{
+"id": 878,
+"name": "ttnn.typecast"
+},
+{
+"id": 879,
+"name": "ttnn.deallocate"
+},
+{
+"id": 880,
+"name": "ttnn.expand"
+},
+{
+"id": 881,
+"name": "ttnn.transformer.scaled_dot_product_attention"
+},
+{
+"id": 882,
+"name": "ttnn.deallocate"
+},
+{
+"id": 883,
+"name": "ttnn.deallocate"
+},
+{
+"id": 884,
+"name": "ttnn.deallocate"
+},
+{
+"id": 885,
+"name": "ttnn.experimental.nlp_concat_heads"
+},
+{
+"id": 886,
+"name": "ttnn.linear"
+},
+{
+"id": 887,
+"name": "ttnn.deallocate"
+},
+{
+"id": 888,
+"name": "ttnn.add"
+},
+{
+"id": 889,
+"name": "ttnn.from_torch"
+},
+{
+"id": 890,
+"name": "ttnn.from_torch"
+},
+{
+"id": 891,
+"name": "ttnn.layer_norm"
+},
+{
+"id": 892,
+"name": "ttnn.from_torch"
+},
+{
+"id": 893,
+"name": "ttnn.from_torch"
+},
+{
+"id": 894,
+"name": "ttnn.from_torch"
+},
+{
+"id": 895,
+"name": "ttnn.from_torch"
+},
+{
+"id": 896,
+"name": "ttnn.linear"
+},
+{
+"id": 897,
+"name": "ttnn.gelu"
+},
+{
+"id": 898,
+"name": "ttnn.deallocate"
+},
+{
+"id": 899,
+"name": "ttnn.linear"
+},
+{
+"id": 900,
+"name": "ttnn.deallocate"
+},
+{
+"id": 901,
+"name": "ttnn.add"
+},
+{
+"id": 902,
+"name": "ttnn.from_torch"
+},
+{
+"id": 903,
+"name": "ttnn.from_torch"
+},
+{
+"id": 904,
+"name": "ttnn.layer_norm"
+},
+{
+"id": 905,
+"name": "ttnn.from_torch"
+},
+{
+"id": 906,
+"name": "ttnn.from_torch"
+},
+{
+"id": 907,
+"name": "ttnn.from_torch"
+},
+{
+"id": 908,
+"name": "ttnn.from_torch"
+},
+{
+"id": 909,
+"name": "ttnn.linear"
+},
+{
+"id": 910,
+"name": "ttnn.experimental.nlp_create_qkv_heads"
+},
+{
+"id": 911,
+"name": "ttnn.deallocate"
+},
+{
+"id": 912,
+"name": "ttnn.typecast"
+},
+{
+"id": 913,
+"name": "ttnn.deallocate"
+},
+{
+"id": 914,
+"name": "ttnn.typecast"
+},
+{
+"id": 915,
+"name": "ttnn.deallocate"
+},
+{
+"id": 916,
+"name": "ttnn.typecast"
+},
+{
+"id": 917,
+"name": "ttnn.deallocate"
+},
+{
+"id": 918,
+"name": "ttnn.expand"
+},
+{
+"id": 919,
+"name": "ttnn.transformer.scaled_dot_product_attention"
+},
+{
+"id": 920,
+"name": "ttnn.deallocate"
+},
+{
+"id": 921,
+"name": "ttnn.deallocate"
+},
+{
+"id": 922,
+"name": "ttnn.deallocate"
+},
+{
+"id": 923,
+"name": "ttnn.experimental.nlp_concat_heads"
+},
+{
+"id": 924,
+"name": "ttnn.linear"
+},
+{
+"id": 925,
+"name": "ttnn.deallocate"
+},
+{
+"id": 926,
+"name": "ttnn.add"
+},
+{
+"id": 927,
+"name": "ttnn.from_torch"
+},
+{
+"id": 928,
+"name": "ttnn.from_torch"
+},
+{
+"id": 929,
+"name": "ttnn.layer_norm"
+},
+{
+"id": 930,
+"name": "ttnn.from_torch"
+},
+{
+"id": 931,
+"name": "ttnn.from_torch"
+},
+{
+"id": 932,
+"name": "ttnn.from_torch"
+},
+{
+"id": 933,
+"name": "ttnn.from_torch"
+},
+{
+"id": 934,
+"name": "ttnn.linear"
+},
+{
+"id": 935,
+"name": "ttnn.gelu"
+},
+{
+"id": 936,
+"name": "ttnn.deallocate"
+},
+{
+"id": 937,
+"name": "ttnn.linear"
+},
+{
+"id": 938,
+"name": "ttnn.deallocate"
+},
+{
+"id": 939,
+"name": "ttnn.add"
+},
+{
+"id": 940,
+"name": "ttnn.from_torch"
+},
+{
+"id": 941,
+"name": "ttnn.from_torch"
+},
+{
+"id": 942,
+"name": "ttnn.layer_norm"
+},
+{
+"id": 943,
+"name": "ttnn.to_torch"
+}
+]
+}

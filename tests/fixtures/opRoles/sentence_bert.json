@@ -1,0 +1,1629 @@
+{
+"report": "sentence_bert_aug19_1726",
+"operations": [
+{
+"id": 1,
+"name": "ttnn.to_device"
+},
+{
+"id": 2,
+"name": "ttnn.to_device"
+},
+{
+"id": 3,
+"name": "ttnn.to_device"
+},
+{
+"id": 4,
+"name": "ttnn.to_device"
+},
+{
+"id": 5,
+"name": "ttnn.to_device"
+},
+{
+"id": 6,
+"name": "ttnn.to_device"
+},
+{
+"id": 7,
+"name": "ttnn.to_device"
+},
+{
+"id": 8,
+"name": "ttnn.to_device"
+},
+{
+"id": 9,
+"name": "ttnn.to_device"
+},
+{
+"id": 10,
+"name": "ttnn.to_device"
+},
+{
+"id": 11,
+"name": "ttnn.to_device"
+},
+{
+"id": 12,
+"name": "ttnn.to_device"
+},
+{
+"id": 13,
+"name": "ttnn.to_device"
+},
+{
+"id": 14,
+"name": "ttnn.to_device"
+},
+{
+"id": 15,
+"name": "ttnn.to_device"
+},
+{
+"id": 16,
+"name": "ttnn.to_device"
+},
+{
+"id": 17,
+"name": "ttnn.to_device"
+},
+{
+"id": 18,
+"name": "ttnn.to_device"
+},
+{
+"id": 19,
+"name": "ttnn.to_device"
+},
+{
+"id": 20,
+"name": "ttnn.to_device"
+},
+{
+"id": 21,
+"name": "ttnn.to_device"
+},
+{
+"id": 22,
+"name": "ttnn.to_device"
+},
+{
+"id": 23,
+"name": "ttnn.to_device"
+},
+{
+"id": 24,
+"name": "ttnn.to_device"
+},
+{
+"id": 25,
+"name": "ttnn.to_device"
+},
+{
+"id": 26,
+"name": "ttnn.to_device"
+},
+{
+"id": 27,
+"name": "ttnn.to_device"
+},
+{
+"id": 28,
+"name": "ttnn.to_device"
+},
+{
+"id": 29,
+"name": "ttnn.to_device"
+},
+{
+"id": 30,
+"name": "ttnn.to_device"
+},
+{
+"id": 31,
+"name": "ttnn.to_device"
+},
+{
+"id": 32,
+"name": "ttnn.to_device"
+},
+{
+"id": 33,
+"name": "ttnn.to_device"
+},
+{
+"id": 34,
+"name": "ttnn.to_device"
+},
+{
+"id": 35,
+"name": "ttnn.to_device"
+},
+{
+"id": 36,
+"name": "ttnn.to_device"
+},
+{
+"id": 37,
+"name": "ttnn.to_device"
+},
+{
+"id": 38,
+"name": "ttnn.to_device"
+},
+{
+"id": 39,
+"name": "ttnn.to_device"
+},
+{
+"id": 40,
+"name": "ttnn.to_device"
+},
+{
+"id": 41,
+"name": "ttnn.to_device"
+},
+{
+"id": 42,
+"name": "ttnn.to_device"
+},
+{
+"id": 43,
+"name": "ttnn.to_device"
+},
+{
+"id": 44,
+"name": "ttnn.to_device"
+},
+{
+"id": 45,
+"name": "ttnn.to_device"
+},
+{
+"id": 46,
+"name": "ttnn.to_device"
+},
+{
+"id": 47,
+"name": "ttnn.to_device"
+},
+{
+"id": 48,
+"name": "ttnn.to_device"
+},
+{
+"id": 49,
+"name": "ttnn.to_device"
+},
+{
+"id": 50,
+"name": "ttnn.to_device"
+},
+{
+"id": 51,
+"name": "ttnn.to_device"
+},
+{
+"id": 52,
+"name": "ttnn.to_device"
+},
+{
+"id": 53,
+"name": "ttnn.to_device"
+},
+{
+"id": 54,
+"name": "ttnn.to_device"
+},
+{
+"id": 55,
+"name": "ttnn.to_device"
+},
+{
+"id": 56,
+"name": "ttnn.to_device"
+},
+{
+"id": 57,
+"name": "ttnn.to_device"
+},
+{
+"id": 58,
+"name": "ttnn.to_device"
+},
+{
+"id": 59,
+"name": "ttnn.to_device"
+},
+{
+"id": 60,
+"name": "ttnn.to_device"
+},
+{
+"id": 61,
+"name": "ttnn.to_device"
+},
+{
+"id": 62,
+"name": "ttnn.to_device"
+},
+{
+"id": 63,
+"name": "ttnn.to_device"
+},
+{
+"id": 64,
+"name": "ttnn.to_device"
+},
+{
+"id": 65,
+"name": "ttnn.to_device"
+},
+{
+"id": 66,
+"name": "ttnn.to_device"
+},
+{
+"id": 67,
+"name": "ttnn.to_device"
+},
+{
+"id": 68,
+"name": "ttnn.to_device"
+},
+{
+"id": 69,
+"name": "ttnn.to_device"
+},
+{
+"id": 70,
+"name": "ttnn.to_device"
+},
+{
+"id": 71,
+"name": "ttnn.to_device"
+},
+{
+"id": 72,
+"name": "ttnn.to_device"
+},
+{
+"id": 73,
+"name": "ttnn.to_device"
+},
+{
+"id": 74,
+"name": "ttnn.to_device"
+},
+{
+"id": 75,
+"name": "ttnn.to_device"
+},
+{
+"id": 76,
+"name": "ttnn.to_device"
+},
+{
+"id": 77,
+"name": "ttnn.to_device"
+},
+{
+"id": 78,
+"name": "ttnn.to_device"
+},
+{
+"id": 79,
+"name": "ttnn.to_device"
+},
+{
+"id": 80,
+"name": "ttnn.to_device"
+},
+{
+"id": 81,
+"name": "ttnn.to_device"
+},
+{
+"id": 82,
+"name": "ttnn.to_device"
+},
+{
+"id": 83,
+"name": "ttnn.to_device"
+},
+{
+"id": 84,
+"name": "ttnn.to_device"
+},
+{
+"id": 85,
+"name": "ttnn.to_device"
+},
+{
+"id": 86,
+"name": "ttnn.to_device"
+},
+{
+"id": 87,
+"name": "ttnn.to_device"
+},
+{
+"id": 88,
+"name": "ttnn.to_device"
+},
+{
+"id": 89,
+"name": "ttnn.to_device"
+},
+{
+"id": 90,
+"name": "ttnn.to_device"
+},
+{
+"id": 91,
+"name": "ttnn.to_device"
+},
+{
+"id": 92,
+"name": "ttnn.to_device"
+},
+{
+"id": 93,
+"name": "ttnn.to_device"
+},
+{
+"id": 94,
+"name": "ttnn.to_device"
+},
+{
+"id": 95,
+"name": "ttnn.to_device"
+},
+{
+"id": 96,
+"name": "ttnn.to_device"
+},
+{
+"id": 97,
+"name": "ttnn.to_device"
+},
+{
+"id": 98,
+"name": "ttnn.to_device"
+},
+{
+"id": 99,
+"name": "ttnn.to_device"
+},
+{
+"id": 100,
+"name": "ttnn.to_device"
+},
+{
+"id": 101,
+"name": "ttnn.to_device"
+},
+{
+"id": 102,
+"name": "ttnn.to_device"
+},
+{
+"id": 103,
+"name": "ttnn.to_device"
+},
+{
+"id": 104,
+"name": "ttnn.to_device"
+},
+{
+"id": 105,
+"name": "ttnn.to_device"
+},
+{
+"id": 106,
+"name": "ttnn.to_device"
+},
+{
+"id": 107,
+"name": "ttnn.to_device"
+},
+{
+"id": 108,
+"name": "ttnn.to_device"
+},
+{
+"id": 109,
+"name": "ttnn.to_device"
+},
+{
+"id": 110,
+"name": "ttnn.to_device"
+},
+{
+"id": 111,
+"name": "ttnn.to_device"
+},
+{
+"id": 112,
+"name": "ttnn.to_device"
+},
+{
+"id": 113,
+"name": "ttnn.to_device"
+},
+{
+"id": 114,
+"name": "ttnn.to_device"
+},
+{
+"id": 115,
+"name": "ttnn.to_device"
+},
+{
+"id": 116,
+"name": "ttnn.to_device"
+},
+{
+"id": 117,
+"name": "ttnn.to_device"
+},
+{
+"id": 118,
+"name": "ttnn.to_device"
+},
+{
+"id": 119,
+"name": "ttnn.to_device"
+},
+{
+"id": 120,
+"name": "ttnn.to_device"
+},
+{
+"id": 121,
+"name": "ttnn.to_device"
+},
+{
+"id": 122,
+"name": "ttnn.to_device"
+},
+{
+"id": 123,
+"name": "ttnn.to_device"
+},
+{
+"id": 124,
+"name": "ttnn.to_device"
+},
+{
+"id": 125,
+"name": "ttnn.to_device"
+},
+{
+"id": 126,
+"name": "ttnn.to_device"
+},
+{
+"id": 127,
+"name": "ttnn.to_device"
+},
+{
+"id": 128,
+"name": "ttnn.to_device"
+},
+{
+"id": 129,
+"name": "ttnn.to_device"
+},
+{
+"id": 130,
+"name": "ttnn.to_device"
+},
+{
+"id": 131,
+"name": "ttnn.to_device"
+},
+{
+"id": 132,
+"name": "ttnn.to_device"
+},
+{
+"id": 133,
+"name": "ttnn.to_device"
+},
+{
+"id": 134,
+"name": "ttnn.to_device"
+},
+{
+"id": 135,
+"name": "ttnn.to_device"
+},
+{
+"id": 136,
+"name": "ttnn.to_device"
+},
+{
+"id": 137,
+"name": "ttnn.to_device"
+},
+{
+"id": 138,
+"name": "ttnn.to_device"
+},
+{
+"id": 139,
+"name": "ttnn.to_device"
+},
+{
+"id": 140,
+"name": "ttnn.to_device"
+},
+{
+"id": 141,
+"name": "ttnn.to_device"
+},
+{
+"id": 142,
+"name": "ttnn.to_device"
+},
+{
+"id": 143,
+"name": "ttnn.to_device"
+},
+{
+"id": 144,
+"name": "ttnn.to_device"
+},
+{
+"id": 145,
+"name": "ttnn.to_device"
+},
+{
+"id": 146,
+"name": "ttnn.to_device"
+},
+{
+"id": 147,
+"name": "ttnn.to_device"
+},
+{
+"id": 148,
+"name": "ttnn.to_device"
+},
+{
+"id": 149,
+"name": "ttnn.to_device"
+},
+{
+"id": 150,
+"name": "ttnn.to_device"
+},
+{
+"id": 151,
+"name": "ttnn.to_device"
+},
+{
+"id": 152,
+"name": "ttnn.from_torch"
+},
+{
+"id": 153,
+"name": "ttnn.from_torch"
+},
+{
+"id": 154,
+"name": "ttnn.from_torch"
+},
+{
+"id": 155,
+"name": "ttnn.from_torch"
+},
+{
+"id": 156,
+"name": "ttnn.from_torch"
+},
+{
+"id": 157,
+"name": "ttnn.embedding"
+},
+{
+"id": 158,
+"name": "ttnn.embedding"
+},
+{
+"id": 159,
+"name": "ttnn.embedding"
+},
+{
+"id": 160,
+"name": "ttnn.add"
+},
+{
+"id": 161,
+"name": "ttnn.add"
+},
+{
+"id": 162,
+"name": "ttnn.deallocate"
+},
+{
+"id": 163,
+"name": "ttnn.deallocate"
+},
+{
+"id": 164,
+"name": "ttnn.deallocate"
+},
+{
+"id": 165,
+"name": "ttnn.unsqueeze"
+},
+{
+"id": 166,
+"name": "ttnn.to_memory_config"
+},
+{
+"id": 167,
+"name": "ttnn.layer_norm"
+},
+{
+"id": 168,
+"name": "ttnn.linear"
+},
+{
+"id": 169,
+"name": "ttnn.experimental.split_query_key_value_and_split_heads"
+},
+{
+"id": 170,
+"name": "ttnn.deallocate"
+},
+{
+"id": 171,
+"name": "ttnn.matmul"
+},
+{
+"id": 172,
+"name": "ttnn.deallocate"
+},
+{
+"id": 173,
+"name": "ttnn.deallocate"
+},
+{
+"id": 174,
+"name": "ttnn.transformer.attention_softmax_"
+},
+{
+"id": 175,
+"name": "ttnn.matmul"
+},
+{
+"id": 176,
+"name": "ttnn.deallocate"
+},
+{
+"id": 177,
+"name": "ttnn.deallocate"
+},
+{
+"id": 178,
+"name": "ttnn.experimental.nlp_concat_heads"
+},
+{
+"id": 179,
+"name": "ttnn.linear"
+},
+{
+"id": 180,
+"name": "ttnn.reshard"
+},
+{
+"id": 181,
+"name": "ttnn.layer_norm"
+},
+{
+"id": 182,
+"name": "ttnn.deallocate"
+},
+{
+"id": 183,
+"name": "ttnn.linear"
+},
+{
+"id": 184,
+"name": "ttnn.linear"
+},
+{
+"id": 185,
+"name": "ttnn.reshard"
+},
+{
+"id": 186,
+"name": "ttnn.layer_norm"
+},
+{
+"id": 187,
+"name": "ttnn.linear"
+},
+{
+"id": 188,
+"name": "ttnn.experimental.split_query_key_value_and_split_heads"
+},
+{
+"id": 189,
+"name": "ttnn.deallocate"
+},
+{
+"id": 190,
+"name": "ttnn.matmul"
+},
+{
+"id": 191,
+"name": "ttnn.deallocate"
+},
+{
+"id": 192,
+"name": "ttnn.deallocate"
+},
+{
+"id": 193,
+"name": "ttnn.transformer.attention_softmax_"
+},
+{
+"id": 194,
+"name": "ttnn.matmul"
+},
+{
+"id": 195,
+"name": "ttnn.deallocate"
+},
+{
+"id": 196,
+"name": "ttnn.deallocate"
+},
+{
+"id": 197,
+"name": "ttnn.experimental.nlp_concat_heads"
+},
+{
+"id": 198,
+"name": "ttnn.linear"
+},
+{
+"id": 199,
+"name": "ttnn.reshard"
+},
+{
+"id": 200,
+"name": "ttnn.layer_norm"
+},
+{
+"id": 201,
+"name": "ttnn.deallocate"
+},
+{
+"id": 202,
+"name": "ttnn.linear"
+},
+{
+"id": 203,
+"name": "ttnn.linear"
+},
+{
+"id": 204,
+"name": "ttnn.reshard"
+},
+{
+"id": 205,
+"name": "ttnn.layer_norm"
+},
+{
+"id": 206,
+"name": "ttnn.linear"
+},
+{
+"id": 207,
+"name": "ttnn.experimental.split_query_key_value_and_split_heads"
+},
+{
+"id": 208,
+"name": "ttnn.deallocate"
+},
+{
+"id": 209,
+"name": "ttnn.matmul"
+},
+{
+"id": 210,
+"name": "ttnn.deallocate"
+},
+{
+"id": 211,
+"name": "ttnn.deallocate"
+},
+{
+"id": 212,
+"name": "ttnn.transformer.attention_softmax_"
+},
+{
+"id": 213,
+"name": "ttnn.matmul"
+},
+{
+"id": 214,
+"name": "ttnn.deallocate"
+},
+{
+"id": 215,
+"name": "ttnn.deallocate"
+},
+{
+"id": 216,
+"name": "ttnn.experimental.nlp_concat_heads"
+},
+{
+"id": 217,
+"name": "ttnn.linear"
+},
+{
+"id": 218,
+"name": "ttnn.reshard"
+},
+{
+"id": 219,
+"name": "ttnn.layer_norm"
+},
+{
+"id": 220,
+"name": "ttnn.deallocate"
+},
+{
+"id": 221,
+"name": "ttnn.linear"
+},
+{
+"id": 222,
+"name": "ttnn.linear"
+},
+{
+"id": 223,
+"name": "ttnn.reshard"
+},
+{
+"id": 224,
+"name": "ttnn.layer_norm"
+},
+{
+"id": 225,
+"name": "ttnn.linear"
+},
+{
+"id": 226,
+"name": "ttnn.experimental.split_query_key_value_and_split_heads"
+},
+{
+"id": 227,
+"name": "ttnn.deallocate"
+},
+{
+"id": 228,
+"name": "ttnn.matmul"
+},
+{
+"id": 229,
+"name": "ttnn.deallocate"
+},
+{
+"id": 230,
+"name": "ttnn.deallocate"
+},
+{
+"id": 231,
+"name": "ttnn.transformer.attention_softmax_"
+},
+{
+"id": 232,
+"name": "ttnn.matmul"
+},
+{
+"id": 233,
+"name": "ttnn.deallocate"
+},
+{
+"id": 234,
+"name": "ttnn.deallocate"
+},
+{
+"id": 235,
+"name": "ttnn.experimental.nlp_concat_heads"
+},
+{
+"id": 236,
+"name": "ttnn.linear"
+},
+{
+"id": 237,
+"name": "ttnn.reshard"
+},
+{
+"id": 238,
+"name": "ttnn.layer_norm"
+},
+{
+"id": 239,
+"name": "ttnn.deallocate"
+},
+{
+"id": 240,
+"name": "ttnn.linear"
+},
+{
+"id": 241,
+"name": "ttnn.linear"
+},
+{
+"id": 242,
+"name": "ttnn.reshard"
+},
+{
+"id": 243,
+"name": "ttnn.layer_norm"
+},
+{
+"id": 244,
+"name": "ttnn.linear"
+},
+{
+"id": 245,
+"name": "ttnn.experimental.split_query_key_value_and_split_heads"
+},
+{
+"id": 246,
+"name": "ttnn.deallocate"
+},
+{
+"id": 247,
+"name": "ttnn.matmul"
+},
+{
+"id": 248,
+"name": "ttnn.deallocate"
+},
+{
+"id": 249,
+"name": "ttnn.deallocate"
+},
+{
+"id": 250,
+"name": "ttnn.transformer.attention_softmax_"
+},
+{
+"id": 251,
+"name": "ttnn.matmul"
+},
+{
+"id": 252,
+"name": "ttnn.deallocate"
+},
+{
+"id": 253,
+"name": "ttnn.deallocate"
+},
+{
+"id": 254,
+"name": "ttnn.experimental.nlp_concat_heads"
+},
+{
+"id": 255,
+"name": "ttnn.linear"
+},
+{
+"id": 256,
+"name": "ttnn.reshard"
+},
+{
+"id": 257,
+"name": "ttnn.layer_norm"
+},
+{
+"id": 258,
+"name": "ttnn.deallocate"
+},
+{
+"id": 259,
+"name": "ttnn.linear"
+},
+{
+"id": 260,
+"name": "ttnn.linear"
+},
+{
+"id": 261,
+"name": "ttnn.reshard"
+},
+{
+"id": 262,
+"name": "ttnn.layer_norm"
+},
+{
+"id": 263,
+"name": "ttnn.linear"
+},
+{
+"id": 264,
+"name": "ttnn.experimental.split_query_key_value_and_split_heads"
+},
+{
+"id": 265,
+"name": "ttnn.deallocate"
+},
+{
+"id": 266,
+"name": "ttnn.matmul"
+},
+{
+"id": 267,
+"name": "ttnn.deallocate"
+},
+{
+"id": 268,
+"name": "ttnn.deallocate"
+},
+{
+"id": 269,
+"name": "ttnn.transformer.attention_softmax_"
+},
+{
+"id": 270,
+"name": "ttnn.matmul"
+},
+{
+"id": 271,
+"name": "ttnn.deallocate"
+},
+{
+"id": 272,
+"name": "ttnn.deallocate"
+},
+{
+"id": 273,
+"name": "ttnn.experimental.nlp_concat_heads"
+},
+{
+"id": 274,
+"name": "ttnn.linear"
+},
+{
+"id": 275,
+"name": "ttnn.reshard"
+},
+{
+"id": 276,
+"name": "ttnn.layer_norm"
+},
+{
+"id": 277,
+"name": "ttnn.deallocate"
+},
+{
+"id": 278,
+"name": "ttnn.linear"
+},
+{
+"id": 279,
+"name": "ttnn.linear"
+},
+{
+"id": 280,
+"name": "ttnn.reshard"
+},
+{
+"id": 281,
+"name": "ttnn.layer_norm"
+},
+{
+"id": 282,
+"name": "ttnn.linear"
+},
+{
+"id": 283,
+"name": "ttnn.experimental.split_query_key_value_and_split_heads"
+},
+{
+"id": 284,
+"name": "ttnn.deallocate"
+},
+{
+"id": 285,
+"name": "ttnn.matmul"
+},
+{
+"id": 286,
+"name": "ttnn.deallocate"
+},
+{
+"id": 287,
+"name": "ttnn.deallocate"
+},
+{
+"id": 288,
+"name": "ttnn.transformer.attention_softmax_"
+},
+{
+"id": 289,
+"name": "ttnn.matmul"
+},
+{
+"id": 290,
+"name": "ttnn.deallocate"
+},
+{
+"id": 291,
+"name": "ttnn.deallocate"
+},
+{
+"id": 292,
+"name": "ttnn.experimental.nlp_concat_heads"
+},
+{
+"id": 293,
+"name": "ttnn.linear"
+},
+{
+"id": 294,
+"name": "ttnn.reshard"
+},
+{
+"id": 295,
+"name": "ttnn.layer_norm"
+},
+{
+"id": 296,
+"name": "ttnn.deallocate"
+},
+{
+"id": 297,
+"name": "ttnn.linear"
+},
+{
+"id": 298,
+"name": "ttnn.linear"
+},
+{
+"id": 299,
+"name": "ttnn.reshard"
+},
+{
+"id": 300,
+"name": "ttnn.layer_norm"
+},
+{
+"id": 301,
+"name": "ttnn.linear"
+},
+{
+"id": 302,
+"name": "ttnn.experimental.split_query_key_value_and_split_heads"
+},
+{
+"id": 303,
+"name": "ttnn.deallocate"
+},
+{
+"id": 304,
+"name": "ttnn.matmul"
+},
+{
+"id": 305,
+"name": "ttnn.deallocate"
+},
+{
+"id": 306,
+"name": "ttnn.deallocate"
+},
+{
+"id": 307,
+"name": "ttnn.transformer.attention_softmax_"
+},
+{
+"id": 308,
+"name": "ttnn.matmul"
+},
+{
+"id": 309,
+"name": "ttnn.deallocate"
+},
+{
+"id": 310,
+"name": "ttnn.deallocate"
+},
+{
+"id": 311,
+"name": "ttnn.experimental.nlp_concat_heads"
+},
+{
+"id": 312,
+"name": "ttnn.linear"
+},
+{
+"id": 313,
+"name": "ttnn.reshard"
+},
+{
+"id": 314,
+"name": "ttnn.layer_norm"
+},
+{
+"id": 315,
+"name": "ttnn.deallocate"
+},
+{
+"id": 316,
+"name": "ttnn.linear"
+},
+{
+"id": 317,
+"name": "ttnn.linear"
+},
+{
+"id": 318,
+"name": "ttnn.reshard"
+},
+{
+"id": 319,
+"name": "ttnn.layer_norm"
+},
+{
+"id": 320,
+"name": "ttnn.linear"
+},
+{
+"id": 321,
+"name": "ttnn.experimental.split_query_key_value_and_split_heads"
+},
+{
+"id": 322,
+"name": "ttnn.deallocate"
+},
+{
+"id": 323,
+"name": "ttnn.matmul"
+},
+{
+"id": 324,
+"name": "ttnn.deallocate"
+},
+{
+"id": 325,
+"name": "ttnn.deallocate"
+},
+{
+"id": 326,
+"name": "ttnn.transformer.attention_softmax_"
+},
+{
+"id": 327,
+"name": "ttnn.matmul"
+},
+{
+"id": 328,
+"name": "ttnn.deallocate"
+},
+{
+"id": 329,
+"name": "ttnn.deallocate"
+},
+{
+"id": 330,
+"name": "ttnn.experimental.nlp_concat_heads"
+},
+{
+"id": 331,
+"name": "ttnn.linear"
+},
+{
+"id": 332,
+"name": "ttnn.reshard"
+},
+{
+"id": 333,
+"name": "ttnn.layer_norm"
+},
+{
+"id": 334,
+"name": "ttnn.deallocate"
+},
+{
+"id": 335,
+"name": "ttnn.linear"
+},
+{
+"id": 336,
+"name": "ttnn.linear"
+},
+{
+"id": 337,
+"name": "ttnn.reshard"
+},
+{
+"id": 338,
+"name": "ttnn.layer_norm"
+},
+{
+"id": 339,
+"name": "ttnn.linear"
+},
+{
+"id": 340,
+"name": "ttnn.experimental.split_query_key_value_and_split_heads"
+},
+{
+"id": 341,
+"name": "ttnn.deallocate"
+},
+{
+"id": 342,
+"name": "ttnn.matmul"
+},
+{
+"id": 343,
+"name": "ttnn.deallocate"
+},
+{
+"id": 344,
+"name": "ttnn.deallocate"
+},
+{
+"id": 345,
+"name": "ttnn.transformer.attention_softmax_"
+},
+{
+"id": 346,
+"name": "ttnn.matmul"
+},
+{
+"id": 347,
+"name": "ttnn.deallocate"
+},
+{
+"id": 348,
+"name": "ttnn.deallocate"
+},
+{
+"id": 349,
+"name": "ttnn.experimental.nlp_concat_heads"
+},
+{
+"id": 350,
+"name": "ttnn.linear"
+},
+{
+"id": 351,
+"name": "ttnn.reshard"
+},
+{
+"id": 352,
+"name": "ttnn.layer_norm"
+},
+{
+"id": 353,
+"name": "ttnn.deallocate"
+},
+{
+"id": 354,
+"name": "ttnn.linear"
+},
+{
+"id": 355,
+"name": "ttnn.linear"
+},
+{
+"id": 356,
+"name": "ttnn.reshard"
+},
+{
+"id": 357,
+"name": "ttnn.layer_norm"
+},
+{
+"id": 358,
+"name": "ttnn.linear"
+},
+{
+"id": 359,
+"name": "ttnn.experimental.split_query_key_value_and_split_heads"
+},
+{
+"id": 360,
+"name": "ttnn.deallocate"
+},
+{
+"id": 361,
+"name": "ttnn.matmul"
+},
+{
+"id": 362,
+"name": "ttnn.deallocate"
+},
+{
+"id": 363,
+"name": "ttnn.deallocate"
+},
+{
+"id": 364,
+"name": "ttnn.transformer.attention_softmax_"
+},
+{
+"id": 365,
+"name": "ttnn.matmul"
+},
+{
+"id": 366,
+"name": "ttnn.deallocate"
+},
+{
+"id": 367,
+"name": "ttnn.deallocate"
+},
+{
+"id": 368,
+"name": "ttnn.experimental.nlp_concat_heads"
+},
+{
+"id": 369,
+"name": "ttnn.linear"
+},
+{
+"id": 370,
+"name": "ttnn.reshard"
+},
+{
+"id": 371,
+"name": "ttnn.layer_norm"
+},
+{
+"id": 372,
+"name": "ttnn.deallocate"
+},
+{
+"id": 373,
+"name": "ttnn.linear"
+},
+{
+"id": 374,
+"name": "ttnn.linear"
+},
+{
+"id": 375,
+"name": "ttnn.reshard"
+},
+{
+"id": 376,
+"name": "ttnn.layer_norm"
+},
+{
+"id": 377,
+"name": "ttnn.linear"
+},
+{
+"id": 378,
+"name": "ttnn.experimental.split_query_key_value_and_split_heads"
+},
+{
+"id": 379,
+"name": "ttnn.deallocate"
+},
+{
+"id": 380,
+"name": "ttnn.matmul"
+},
+{
+"id": 381,
+"name": "ttnn.deallocate"
+},
+{
+"id": 382,
+"name": "ttnn.deallocate"
+},
+{
+"id": 383,
+"name": "ttnn.transformer.attention_softmax_"
+},
+{
+"id": 384,
+"name": "ttnn.matmul"
+},
+{
+"id": 385,
+"name": "ttnn.deallocate"
+},
+{
+"id": 386,
+"name": "ttnn.deallocate"
+},
+{
+"id": 387,
+"name": "ttnn.experimental.nlp_concat_heads"
+},
+{
+"id": 388,
+"name": "ttnn.linear"
+},
+{
+"id": 389,
+"name": "ttnn.reshard"
+},
+{
+"id": 390,
+"name": "ttnn.layer_norm"
+},
+{
+"id": 391,
+"name": "ttnn.deallocate"
+},
+{
+"id": 392,
+"name": "ttnn.linear"
+},
+{
+"id": 393,
+"name": "ttnn.linear"
+},
+{
+"id": 394,
+"name": "ttnn.reshard"
+},
+{
+"id": 395,
+"name": "ttnn.layer_norm"
+},
+{
+"id": 396,
+"name": "ttnn.deallocate"
+},
+{
+"id": 397,
+"name": "ttnn.sharded_to_interleaved"
+},
+{
+"id": 398,
+"name": "ttnn.squeeze"
+},
+{
+"id": 399,
+"name": "ttnn.unsqueeze"
+},
+{
+"id": 400,
+"name": "ttnn.repeat"
+},
+{
+"id": 401,
+"name": "ttnn.multiply"
+},
+{
+"id": 402,
+"name": "ttnn.sum"
+},
+{
+"id": 403,
+"name": "ttnn.sum"
+},
+{
+"id": 404,
+"name": "ttnn.clamp"
+},
+{
+"id": 405,
+"name": "ttnn.div"
+},
+{
+"id": 406,
+"name": "ttnn.to_torch"
+}
+]
+}

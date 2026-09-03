@@ -1,0 +1,501 @@
+{
+"report": "test_ttnn_moe_aug26_2217",
+"operations": [
+{
+"id": 1,
+"name": "ttnn.as_tensor"
+},
+{
+"id": 2,
+"name": "ttnn.as_tensor"
+},
+{
+"id": 3,
+"name": "ttnn.to_torch"
+},
+{
+"id": 4,
+"name": "ttnn.to_torch"
+},
+{
+"id": 5,
+"name": "ttnn.to_torch"
+},
+{
+"id": 6,
+"name": "ttnn.from_torch"
+},
+{
+"id": 7,
+"name": "ttnn.from_torch"
+},
+{
+"id": 8,
+"name": "ttnn.from_torch"
+},
+{
+"id": 9,
+"name": "ttnn.from_torch"
+},
+{
+"id": 10,
+"name": "ttnn.squeeze"
+},
+{
+"id": 11,
+"name": "ttnn.squeeze"
+},
+{
+"id": 12,
+"name": "ttnn.as_tensor"
+},
+{
+"id": 13,
+"name": "ttnn.as_tensor"
+},
+{
+"id": 14,
+"name": "ttnn.as_tensor"
+},
+{
+"id": 15,
+"name": "ttnn.squeeze"
+},
+{
+"id": 16,
+"name": "ttnn.squeeze"
+},
+{
+"id": 17,
+"name": "ttnn.squeeze"
+},
+{
+"id": 18,
+"name": "ttnn.squeeze"
+},
+{
+"id": 19,
+"name": "ttnn.squeeze"
+},
+{
+"id": 20,
+"name": "ttnn.squeeze"
+},
+{
+"id": 21,
+"name": "ttnn.as_tensor"
+},
+{
+"id": 22,
+"name": "ttnn.as_tensor"
+},
+{
+"id": 23,
+"name": "ttnn.as_tensor"
+},
+{
+"id": 24,
+"name": "ttnn.squeeze"
+},
+{
+"id": 25,
+"name": "ttnn.squeeze"
+},
+{
+"id": 26,
+"name": "ttnn.squeeze"
+},
+{
+"id": 27,
+"name": "ttnn.squeeze"
+},
+{
+"id": 28,
+"name": "ttnn.squeeze"
+},
+{
+"id": 29,
+"name": "ttnn.squeeze"
+},
+{
+"id": 30,
+"name": "ttnn.as_tensor"
+},
+{
+"id": 31,
+"name": "ttnn.as_tensor"
+},
+{
+"id": 32,
+"name": "ttnn.as_tensor"
+},
+{
+"id": 33,
+"name": "ttnn.squeeze"
+},
+{
+"id": 34,
+"name": "ttnn.squeeze"
+},
+{
+"id": 35,
+"name": "ttnn.squeeze"
+},
+{
+"id": 36,
+"name": "ttnn.squeeze"
+},
+{
+"id": 37,
+"name": "ttnn.squeeze"
+},
+{
+"id": 38,
+"name": "ttnn.squeeze"
+},
+{
+"id": 39,
+"name": "ttnn.as_tensor"
+},
+{
+"id": 40,
+"name": "ttnn.as_tensor"
+},
+{
+"id": 41,
+"name": "ttnn.as_tensor"
+},
+{
+"id": 42,
+"name": "ttnn.squeeze"
+},
+{
+"id": 43,
+"name": "ttnn.squeeze"
+},
+{
+"id": 44,
+"name": "ttnn.squeeze"
+},
+{
+"id": 45,
+"name": "ttnn.squeeze"
+},
+{
+"id": 46,
+"name": "ttnn.squeeze"
+},
+{
+"id": 47,
+"name": "ttnn.squeeze"
+},
+{
+"id": 48,
+"name": "ttnn.as_tensor"
+},
+{
+"id": 49,
+"name": "ttnn.as_tensor"
+},
+{
+"id": 50,
+"name": "ttnn.as_tensor"
+},
+{
+"id": 51,
+"name": "ttnn.squeeze"
+},
+{
+"id": 52,
+"name": "ttnn.squeeze"
+},
+{
+"id": 53,
+"name": "ttnn.squeeze"
+},
+{
+"id": 54,
+"name": "ttnn.squeeze"
+},
+{
+"id": 55,
+"name": "ttnn.squeeze"
+},
+{
+"id": 56,
+"name": "ttnn.squeeze"
+},
+{
+"id": 57,
+"name": "ttnn.as_tensor"
+},
+{
+"id": 58,
+"name": "ttnn.as_tensor"
+},
+{
+"id": 59,
+"name": "ttnn.as_tensor"
+},
+{
+"id": 60,
+"name": "ttnn.squeeze"
+},
+{
+"id": 61,
+"name": "ttnn.squeeze"
+},
+{
+"id": 62,
+"name": "ttnn.squeeze"
+},
+{
+"id": 63,
+"name": "ttnn.squeeze"
+},
+{
+"id": 64,
+"name": "ttnn.squeeze"
+},
+{
+"id": 65,
+"name": "ttnn.squeeze"
+},
+{
+"id": 66,
+"name": "ttnn.as_tensor"
+},
+{
+"id": 67,
+"name": "ttnn.as_tensor"
+},
+{
+"id": 68,
+"name": "ttnn.as_tensor"
+},
+{
+"id": 69,
+"name": "ttnn.squeeze"
+},
+{
+"id": 70,
+"name": "ttnn.squeeze"
+},
+{
+"id": 71,
+"name": "ttnn.squeeze"
+},
+{
+"id": 72,
+"name": "ttnn.squeeze"
+},
+{
+"id": 73,
+"name": "ttnn.squeeze"
+},
+{
+"id": 74,
+"name": "ttnn.squeeze"
+},
+{
+"id": 75,
+"name": "ttnn.as_tensor"
+},
+{
+"id": 76,
+"name": "ttnn.as_tensor"
+},
+{
+"id": 77,
+"name": "ttnn.as_tensor"
+},
+{
+"id": 78,
+"name": "ttnn.squeeze"
+},
+{
+"id": 79,
+"name": "ttnn.squeeze"
+},
+{
+"id": 80,
+"name": "ttnn.squeeze"
+},
+{
+"id": 81,
+"name": "ttnn.squeeze"
+},
+{
+"id": 82,
+"name": "ttnn.squeeze"
+},
+{
+"id": 83,
+"name": "ttnn.squeeze"
+},
+{
+"id": 84,
+"name": "ttnn.as_tensor"
+},
+{
+"id": 85,
+"name": "ttnn.as_tensor"
+},
+{
+"id": 86,
+"name": "ttnn.as_tensor"
+},
+{
+"id": 87,
+"name": "ttnn.from_torch"
+},
+{
+"id": 88,
+"name": "ttnn.view"
+},
+{
+"id": 89,
+"name": "ttnn.matmul"
+},
+{
+"id": 90,
+"name": "ttnn.experimental.all_reduce_async"
+},
+{
+"id": 91,
+"name": "ttnn.experimental.deepseek_prefill.moe_grouped_topk"
+},
+{
+"id": 92,
+"name": "ttnn.experimental.deepseek_prefill.masked_bincount"
+},
+{
+"id": 93,
+"name": "ttnn.experimental.deepseek_prefill.offset_cumsum"
+},
+{
+"id": 94,
+"name": "ttnn.deallocate"
+},
+{
+"id": 95,
+"name": "ttnn.to_layout"
+},
+{
+"id": 96,
+"name": "ttnn.to_layout"
+},
+{
+"id": 97,
+"name": "ttnn.reshape"
+},
+{
+"id": 98,
+"name": "ttnn.reshape"
+},
+{
+"id": 99,
+"name": "ttnn.experimental.all_gather_async"
+},
+{
+"id": 100,
+"name": "ttnn.matmul"
+},
+{
+"id": 101,
+"name": "ttnn.matmul"
+},
+{
+"id": 102,
+"name": "ttnn.multiply_"
+},
+{
+"id": 103,
+"name": "ttnn.deallocate"
+},
+{
+"id": 104,
+"name": "ttnn.matmul"
+},
+{
+"id": 105,
+"name": "ttnn.deallocate"
+},
+{
+"id": 106,
+"name": "ttnn.from_torch"
+},
+{
+"id": 107,
+"name": "ttnn.experimental.reduce_scatter_minimal_async"
+},
+{
+"id": 108,
+"name": "ttnn.experimental.deepseek_prefill.dispatch"
+},
+{
+"id": 109,
+"name": "ttnn.deallocate"
+},
+{
+"id": 110,
+"name": "ttnn.to_memory_config"
+},
+{
+"id": 111,
+"name": "ttnn.to_memory_config"
+},
+{
+"id": 112,
+"name": "ttnn.squeeze"
+},
+{
+"id": 113,
+"name": "ttnn.squeeze"
+},
+{
+"id": 114,
+"name": "ttnn.experimental.deepseek_prefill.unified_routed_expert_moe"
+},
+{
+"id": 115,
+"name": "ttnn.deallocate"
+},
+{
+"id": 116,
+"name": "ttnn.unsqueeze"
+},
+{
+"id": 117,
+"name": "ttnn.unsqueeze"
+},
+{
+"id": 118,
+"name": "ttnn.experimental.deepseek_prefill.combine"
+},
+{
+"id": 119,
+"name": "ttnn.unsqueeze"
+},
+{
+"id": 120,
+"name": "ttnn.unsqueeze"
+},
+{
+"id": 121,
+"name": "ttnn.experimental.deepseek_prefill.post_combine_reduce"
+},
+{
+"id": 122,
+"name": "ttnn.reduce_scatter"
+},
+{
+"id": 123,
+"name": "ttnn.squeeze"
+},
+{
+"id": 124,
+"name": "ttnn.add"
+}
+]
+}

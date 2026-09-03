@@ -1,0 +1,1357 @@
+{
+"report": "resnet50_aug06_1521",
+"operations": [
+{
+"id": 1,
+"name": "ttnn.experimental.quasar.to_device"
+},
+{
+"id": 2,
+"name": "ttnn.experimental.quasar.to_device"
+},
+{
+"id": 3,
+"name": "ttnn.from_torch"
+},
+{
+"id": 4,
+"name": "ttnn.from_torch"
+},
+{
+"id": 5,
+"name": "ttnn.experimental.quasar.fold"
+},
+{
+"id": 6,
+"name": "ttnn.experimental.quasar.reshape"
+},
+{
+"id": 7,
+"name": "ttnn.deallocate"
+},
+{
+"id": 8,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 9,
+"name": "ttnn.from_device"
+},
+{
+"id": 10,
+"name": "ttnn.to_torch"
+},
+{
+"id": 11,
+"name": "ttnn.deallocate"
+},
+{
+"id": 12,
+"name": "ttnn.from_torch"
+},
+{
+"id": 13,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 14,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 15,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 16,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 17,
+"name": "ttnn.deallocate"
+},
+{
+"id": 18,
+"name": "ttnn.experimental.quasar.reallocate"
+},
+{
+"id": 19,
+"name": "ttnn.experimental.quasar.add_"
+},
+{
+"id": 20,
+"name": "ttnn.deallocate"
+},
+{
+"id": 21,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 22,
+"name": "ttnn.experimental.quasar.reallocate"
+},
+{
+"id": 23,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 24,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 25,
+"name": "ttnn.experimental.quasar.add_"
+},
+{
+"id": 26,
+"name": "ttnn.deallocate"
+},
+{
+"id": 27,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 28,
+"name": "ttnn.experimental.quasar.reallocate"
+},
+{
+"id": 29,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 30,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 31,
+"name": "ttnn.experimental.quasar.add_"
+},
+{
+"id": 32,
+"name": "ttnn.deallocate"
+},
+{
+"id": 33,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 34,
+"name": "ttnn.experimental.quasar.reallocate"
+},
+{
+"id": 35,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 36,
+"name": "ttnn.deallocate"
+},
+{
+"id": 37,
+"name": "ttnn.experimental.quasar.reallocate"
+},
+{
+"id": 38,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 39,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 40,
+"name": "ttnn.experimental.quasar.add_"
+},
+{
+"id": 41,
+"name": "ttnn.deallocate"
+},
+{
+"id": 42,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 43,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 44,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 45,
+"name": "ttnn.experimental.quasar.add_"
+},
+{
+"id": 46,
+"name": "ttnn.deallocate"
+},
+{
+"id": 47,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 48,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 49,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 50,
+"name": "ttnn.experimental.quasar.add_"
+},
+{
+"id": 51,
+"name": "ttnn.deallocate"
+},
+{
+"id": 52,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 53,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 54,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 55,
+"name": "ttnn.experimental.quasar.add_"
+},
+{
+"id": 56,
+"name": "ttnn.deallocate"
+},
+{
+"id": 57,
+"name": "ttnn.experimental.quasar.to_memory_config"
+},
+{
+"id": 58,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 59,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 60,
+"name": "ttnn.deallocate"
+},
+{
+"id": 61,
+"name": "ttnn.experimental.quasar.reallocate"
+},
+{
+"id": 62,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 63,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 64,
+"name": "ttnn.experimental.quasar.add_"
+},
+{
+"id": 65,
+"name": "ttnn.deallocate"
+},
+{
+"id": 66,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 67,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 68,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 69,
+"name": "ttnn.experimental.quasar.add_"
+},
+{
+"id": 70,
+"name": "ttnn.deallocate"
+},
+{
+"id": 71,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 72,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 73,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 74,
+"name": "ttnn.experimental.quasar.add_"
+},
+{
+"id": 75,
+"name": "ttnn.deallocate"
+},
+{
+"id": 76,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 77,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 78,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 79,
+"name": "ttnn.experimental.quasar.add_"
+},
+{
+"id": 80,
+"name": "ttnn.deallocate"
+},
+{
+"id": 81,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 82,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 83,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 84,
+"name": "ttnn.experimental.quasar.add_"
+},
+{
+"id": 85,
+"name": "ttnn.deallocate"
+},
+{
+"id": 86,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 87,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 88,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 89,
+"name": "ttnn.experimental.quasar.add_"
+},
+{
+"id": 90,
+"name": "ttnn.deallocate"
+},
+{
+"id": 91,
+"name": "ttnn.experimental.quasar.to_memory_config"
+},
+{
+"id": 92,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 93,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 94,
+"name": "ttnn.deallocate"
+},
+{
+"id": 95,
+"name": "ttnn.experimental.quasar.reallocate"
+},
+{
+"id": 96,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 97,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 98,
+"name": "ttnn.experimental.quasar.add_"
+},
+{
+"id": 99,
+"name": "ttnn.deallocate"
+},
+{
+"id": 100,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 101,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 102,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 103,
+"name": "ttnn.experimental.quasar.add_"
+},
+{
+"id": 104,
+"name": "ttnn.deallocate"
+},
+{
+"id": 105,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 106,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 107,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 108,
+"name": "ttnn.experimental.quasar.add_"
+},
+{
+"id": 109,
+"name": "ttnn.deallocate"
+},
+{
+"id": 110,
+"name": "ttnn.experimental.quasar.to_memory_config"
+},
+{
+"id": 111,
+"name": "ttnn.experimental.quasar.avg_pool2d"
+},
+{
+"id": 112,
+"name": "ttnn.experimental.quasar.to_memory_config"
+},
+{
+"id": 113,
+"name": "ttnn.experimental.quasar.linear"
+},
+{
+"id": 114,
+"name": "ttnn.experimental.quasar.untilize_with_unpadding"
+},
+{
+"id": 115,
+"name": "ttnn.experimental.quasar.reshape"
+},
+{
+"id": 116,
+"name": "ttnn.experimental.quasar.fold"
+},
+{
+"id": 117,
+"name": "ttnn.experimental.quasar.reshape"
+},
+{
+"id": 118,
+"name": "ttnn.deallocate"
+},
+{
+"id": 119,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 120,
+"name": "ttnn.from_device"
+},
+{
+"id": 121,
+"name": "ttnn.to_torch"
+},
+{
+"id": 122,
+"name": "ttnn.deallocate"
+},
+{
+"id": 123,
+"name": "ttnn.from_torch"
+},
+{
+"id": 124,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 125,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 126,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 127,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 128,
+"name": "ttnn.deallocate"
+},
+{
+"id": 129,
+"name": "ttnn.experimental.quasar.reallocate"
+},
+{
+"id": 130,
+"name": "ttnn.experimental.quasar.add_"
+},
+{
+"id": 131,
+"name": "ttnn.deallocate"
+},
+{
+"id": 132,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 133,
+"name": "ttnn.experimental.quasar.reallocate"
+},
+{
+"id": 134,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 135,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 136,
+"name": "ttnn.experimental.quasar.add_"
+},
+{
+"id": 137,
+"name": "ttnn.deallocate"
+},
+{
+"id": 138,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 139,
+"name": "ttnn.experimental.quasar.reallocate"
+},
+{
+"id": 140,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 141,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 142,
+"name": "ttnn.experimental.quasar.add_"
+},
+{
+"id": 143,
+"name": "ttnn.deallocate"
+},
+{
+"id": 144,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 145,
+"name": "ttnn.experimental.quasar.reallocate"
+},
+{
+"id": 146,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 147,
+"name": "ttnn.deallocate"
+},
+{
+"id": 148,
+"name": "ttnn.experimental.quasar.reallocate"
+},
+{
+"id": 149,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 150,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 151,
+"name": "ttnn.experimental.quasar.add_"
+},
+{
+"id": 152,
+"name": "ttnn.deallocate"
+},
+{
+"id": 153,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 154,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 155,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 156,
+"name": "ttnn.experimental.quasar.add_"
+},
+{
+"id": 157,
+"name": "ttnn.deallocate"
+},
+{
+"id": 158,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 159,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 160,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 161,
+"name": "ttnn.experimental.quasar.add_"
+},
+{
+"id": 162,
+"name": "ttnn.deallocate"
+},
+{
+"id": 163,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 164,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 165,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 166,
+"name": "ttnn.experimental.quasar.add_"
+},
+{
+"id": 167,
+"name": "ttnn.deallocate"
+},
+{
+"id": 168,
+"name": "ttnn.experimental.quasar.to_memory_config"
+},
+{
+"id": 169,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 170,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 171,
+"name": "ttnn.deallocate"
+},
+{
+"id": 172,
+"name": "ttnn.experimental.quasar.reallocate"
+},
+{
+"id": 173,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 174,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 175,
+"name": "ttnn.experimental.quasar.add_"
+},
+{
+"id": 176,
+"name": "ttnn.deallocate"
+},
+{
+"id": 177,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 178,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 179,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 180,
+"name": "ttnn.experimental.quasar.add_"
+},
+{
+"id": 181,
+"name": "ttnn.deallocate"
+},
+{
+"id": 182,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 183,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 184,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 185,
+"name": "ttnn.experimental.quasar.add_"
+},
+{
+"id": 186,
+"name": "ttnn.deallocate"
+},
+{
+"id": 187,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 188,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 189,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 190,
+"name": "ttnn.experimental.quasar.add_"
+},
+{
+"id": 191,
+"name": "ttnn.deallocate"
+},
+{
+"id": 192,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 193,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 194,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 195,
+"name": "ttnn.experimental.quasar.add_"
+},
+{
+"id": 196,
+"name": "ttnn.deallocate"
+},
+{
+"id": 197,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 198,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 199,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 200,
+"name": "ttnn.experimental.quasar.add_"
+},
+{
+"id": 201,
+"name": "ttnn.deallocate"
+},
+{
+"id": 202,
+"name": "ttnn.experimental.quasar.to_memory_config"
+},
+{
+"id": 203,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 204,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 205,
+"name": "ttnn.deallocate"
+},
+{
+"id": 206,
+"name": "ttnn.experimental.quasar.reallocate"
+},
+{
+"id": 207,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 208,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 209,
+"name": "ttnn.experimental.quasar.add_"
+},
+{
+"id": 210,
+"name": "ttnn.deallocate"
+},
+{
+"id": 211,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 212,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 213,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 214,
+"name": "ttnn.experimental.quasar.add_"
+},
+{
+"id": 215,
+"name": "ttnn.deallocate"
+},
+{
+"id": 216,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 217,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 218,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 219,
+"name": "ttnn.experimental.quasar.add_"
+},
+{
+"id": 220,
+"name": "ttnn.deallocate"
+},
+{
+"id": 221,
+"name": "ttnn.experimental.quasar.to_memory_config"
+},
+{
+"id": 222,
+"name": "ttnn.experimental.quasar.avg_pool2d"
+},
+{
+"id": 223,
+"name": "ttnn.experimental.quasar.to_memory_config"
+},
+{
+"id": 224,
+"name": "ttnn.experimental.quasar.linear"
+},
+{
+"id": 225,
+"name": "ttnn.experimental.quasar.untilize_with_unpadding"
+},
+{
+"id": 226,
+"name": "ttnn.experimental.quasar.reshape"
+},
+{
+"id": 227,
+"name": "ttnn.experimental.quasar.fold"
+},
+{
+"id": 228,
+"name": "ttnn.experimental.quasar.reshape"
+},
+{
+"id": 229,
+"name": "ttnn.deallocate"
+},
+{
+"id": 230,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 231,
+"name": "ttnn.from_device"
+},
+{
+"id": 232,
+"name": "ttnn.to_torch"
+},
+{
+"id": 233,
+"name": "ttnn.deallocate"
+},
+{
+"id": 234,
+"name": "ttnn.from_torch"
+},
+{
+"id": 235,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 236,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 237,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 238,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 239,
+"name": "ttnn.deallocate"
+},
+{
+"id": 240,
+"name": "ttnn.experimental.quasar.reallocate"
+},
+{
+"id": 241,
+"name": "ttnn.experimental.quasar.add_"
+},
+{
+"id": 242,
+"name": "ttnn.deallocate"
+},
+{
+"id": 243,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 244,
+"name": "ttnn.experimental.quasar.reallocate"
+},
+{
+"id": 245,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 246,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 247,
+"name": "ttnn.experimental.quasar.add_"
+},
+{
+"id": 248,
+"name": "ttnn.deallocate"
+},
+{
+"id": 249,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 250,
+"name": "ttnn.experimental.quasar.reallocate"
+},
+{
+"id": 251,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 252,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 253,
+"name": "ttnn.experimental.quasar.add_"
+},
+{
+"id": 254,
+"name": "ttnn.deallocate"
+},
+{
+"id": 255,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 256,
+"name": "ttnn.experimental.quasar.reallocate"
+},
+{
+"id": 257,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 258,
+"name": "ttnn.deallocate"
+},
+{
+"id": 259,
+"name": "ttnn.experimental.quasar.reallocate"
+},
+{
+"id": 260,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 261,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 262,
+"name": "ttnn.experimental.quasar.add_"
+},
+{
+"id": 263,
+"name": "ttnn.deallocate"
+},
+{
+"id": 264,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 265,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 266,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 267,
+"name": "ttnn.experimental.quasar.add_"
+},
+{
+"id": 268,
+"name": "ttnn.deallocate"
+},
+{
+"id": 269,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 270,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 271,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 272,
+"name": "ttnn.experimental.quasar.add_"
+},
+{
+"id": 273,
+"name": "ttnn.deallocate"
+},
+{
+"id": 274,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 275,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 276,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 277,
+"name": "ttnn.experimental.quasar.add_"
+},
+{
+"id": 278,
+"name": "ttnn.deallocate"
+},
+{
+"id": 279,
+"name": "ttnn.experimental.quasar.to_memory_config"
+},
+{
+"id": 280,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 281,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 282,
+"name": "ttnn.deallocate"
+},
+{
+"id": 283,
+"name": "ttnn.experimental.quasar.reallocate"
+},
+{
+"id": 284,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 285,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 286,
+"name": "ttnn.experimental.quasar.add_"
+},
+{
+"id": 287,
+"name": "ttnn.deallocate"
+},
+{
+"id": 288,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 289,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 290,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 291,
+"name": "ttnn.experimental.quasar.add_"
+},
+{
+"id": 292,
+"name": "ttnn.deallocate"
+},
+{
+"id": 293,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 294,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 295,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 296,
+"name": "ttnn.experimental.quasar.add_"
+},
+{
+"id": 297,
+"name": "ttnn.deallocate"
+},
+{
+"id": 298,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 299,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 300,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 301,
+"name": "ttnn.experimental.quasar.add_"
+},
+{
+"id": 302,
+"name": "ttnn.deallocate"
+},
+{
+"id": 303,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 304,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 305,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 306,
+"name": "ttnn.experimental.quasar.add_"
+},
+{
+"id": 307,
+"name": "ttnn.deallocate"
+},
+{
+"id": 308,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 309,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 310,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 311,
+"name": "ttnn.experimental.quasar.add_"
+},
+{
+"id": 312,
+"name": "ttnn.deallocate"
+},
+{
+"id": 313,
+"name": "ttnn.experimental.quasar.to_memory_config"
+},
+{
+"id": 314,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 315,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 316,
+"name": "ttnn.deallocate"
+},
+{
+"id": 317,
+"name": "ttnn.experimental.quasar.reallocate"
+},
+{
+"id": 318,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 319,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 320,
+"name": "ttnn.experimental.quasar.add_"
+},
+{
+"id": 321,
+"name": "ttnn.deallocate"
+},
+{
+"id": 322,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 323,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 324,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 325,
+"name": "ttnn.experimental.quasar.add_"
+},
+{
+"id": 326,
+"name": "ttnn.deallocate"
+},
+{
+"id": 327,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 328,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 329,
+"name": "ttnn.experimental.quasar.conv2d"
+},
+{
+"id": 330,
+"name": "ttnn.experimental.quasar.add_"
+},
+{
+"id": 331,
+"name": "ttnn.deallocate"
+},
+{
+"id": 332,
+"name": "ttnn.experimental.quasar.to_memory_config"
+},
+{
+"id": 333,
+"name": "ttnn.experimental.quasar.avg_pool2d"
+},
+{
+"id": 334,
+"name": "ttnn.experimental.quasar.to_memory_config"
+},
+{
+"id": 335,
+"name": "ttnn.experimental.quasar.linear"
+},
+{
+"id": 336,
+"name": "ttnn.experimental.quasar.untilize_with_unpadding"
+},
+{
+"id": 337,
+"name": "ttnn.experimental.quasar.reshape"
+},
+{
+"id": 338,
+"name": "ttnn.to_torch"
+}
+]
+}
