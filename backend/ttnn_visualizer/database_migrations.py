@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import cast
 
 from alembic import command
 from alembic.config import Config as AlembicConfig
@@ -73,9 +72,9 @@ def _cli_main() -> None:
 
     logging.basicConfig(level=logging.INFO)
 
-    from ttnn_visualizer.settings import Config, DefaultConfig
+    from ttnn_visualizer.settings import Config
 
-    uri = cast(DefaultConfig, Config()).SQLALCHEMY_DATABASE_URI
+    uri = Config().SQLALCHEMY_DATABASE_URI
     logger.info("Applying Alembic migrations (target: head).")
     run_alembic_migrations(uri)
     logger.info("Migrations finished.")
