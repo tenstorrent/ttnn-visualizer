@@ -74,7 +74,21 @@ describe('detectLayerBlocks', () => {
         expect(pair[0].operationIds).toEqual([2, 3]);
     });
 
-    it('reports nothing for a graph whose names carry no roles', () => {
-        expect(detectLayerBlocks(asSource(moe.operations))).toHaveLength(0);
+    it('offers the expert routing in a mixture-of-experts report as a foldable block', () => {
+        // Previously asserted to yield nothing, on a mis-read of the vocabulary: the
+        // routing ops each appear once and sat under the frequency cutoff. #1976
+        const moeBlocks = detectLayerBlocks(asSource(moe.operations));
+
+        expect(moeBlocks.map((block) => block.patternLabel)).toContain('Expert routing');
+    });
+
+    it('reports nothing for a graph of pure plumbing', () => {
+        expect(
+            detectLayerBlocks([
+                operation(1, 'ttnn.from_torch'),
+                operation(2, 'ttnn.to_device'),
+                operation(3, 'ttnn.add'),
+            ]),
+        ).toHaveLength(0);
     });
 });

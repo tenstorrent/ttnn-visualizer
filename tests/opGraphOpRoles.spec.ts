@@ -110,13 +110,120 @@ describe('detectOpRoleGroups', () => {
         });
     });
 
-    describe('a report whose vocabulary carries no roles (test_ttnn_moe)', () => {
-        it('reports nothing rather than guessing', () => {
-            // Documented negative case. This capture has `add` delimiters but no anchor
-            // of any kind — no topk, no softmax, no expert ops — so partitioning finds
-            // spans and correctly declines to name them. Ancestry (#1953) is the only
-            // signal for this report, and claiming coverage here would be false. #1976
-            expect(detectOpRoleGroups(moe.operations)).toHaveLength(0);
+    describe('a mixture-of-experts report (test_ttnn_moe)', () => {
+        it('names the expert routing metal named for it', () => {
+            // This was written up as the known-negative case on the claim that the
+            // capture carried no anchors. That was wrong: every routing op appears
+            // exactly once, so all of them sat below the frequency cutoff used to read
+            // the vocabulary. `ttnn.experimental.deepseek_prefill.*` names the router,
+            // the dispatch, the combine and the expert FFN outright. #1976
+            const groups = detectOpRoleGroups(moe.operations);
+
+            expect(groups.map((group) => group.role)).toContain(OpSemanticRole.MOE);
+            expect(groups.find((group) => group.role === OpSemanticRole.MOE)?.anchorName).toBe('moe_grouped_topk');
+        });
+
+        it('still declines to name a span that holds only plumbing', () => {
+            // The real negative case, stated as data rather than as a claim about a
+            // report: transfers and reshapes carry no role and must not acquire one.
+            const groups = detectOpRoleGroups([
+                operation(1, 'ttnn.from_torch'),
+                operation(2, 'ttnn.to_device'),
+                operation(3, 'ttnn.squeeze'),
+                operation(4, 'ttnn.add'),
+                operation(5, 'ttnn.reshape'),
+            ]);
+
+            expect(groups).toHaveLength(0);
+        });
+    });
+
+    describe('families ttnn ships as variants', () => {
+        it('matches the decode-phase attention op, not just the prefill one', () => {
+            // `scaled_dot_product_attention_decode` is what an autoregressive trace
+            // emits, and an exact-leaf table missed every decode report. #1976
+            const groups = detectOpRoleGroups([
+                operation(1, 'ttnn.transformer.scaled_dot_product_attention_decode'),
+                operation(2, 'ttnn.layer_norm'),
+            ]);
+
+            expect(groups[0].role).toBe(OpSemanticRole.ATTENTION);
+            expect(groups[0].confidence).toBe(OpRoleConfidence.HIGH);
+        });
+
+        it('matches the per-model qkv head variants', () => {
+            for (const variant of [
+                'nlp_create_qkv_heads_decode',
+                'nlp_create_qkv_heads_vit',
+                'nlp_create_qkv_heads_falcon7b',
+                'nlp_create_qkv_heads_segformer',
+            ]) {
+                const groups = detectOpRoleGroups([
+                    operation(1, `ttnn.experimental.${variant}`),
+                    operation(2, 'ttnn.layer_norm'),
+                ]);
+
+                expect(groups[0]?.role).toBe(OpSemanticRole.ATTENTION);
+            }
+        });
+
+        it('treats the distributed norm spellings as boundaries', () => {
+            // A multi-device transformer emits these instead of `layer_norm`. Without
+            // them the graph finds no norm and falls through to the residual add,
+            // shattering every layer — and multi-device is this tool's whole point.
+            const groups = detectOpRoleGroups([
+                operation(1, 'ttnn.transformer.scaled_dot_product_attention'),
+                operation(2, 'ttnn.add'),
+                operation(3, 'ttnn.layer_norm_post_all_gather'),
+                operation(4, 'ttnn.gelu'),
+                operation(5, 'ttnn.rms_norm_post_all_gather'),
+            ]);
+
+            expect(groups.map((group) => group.operationIds)).toEqual([
+                [1, 2, 3],
+                [4, 5],
+            ]);
+        });
+
+        it('recognises the gated activations, swiglu included', () => {
+            for (const activation of ['swiglu', 'geglu', 'reglu', 'glu', 'gelu_tanh']) {
+                const groups = detectOpRoleGroups([
+                    operation(1, `ttnn.${activation}`),
+                    operation(2, 'ttnn.layer_norm'),
+                ]);
+
+                expect(groups[0]?.role).toBe(OpSemanticRole.FEED_FORWARD);
+            }
+        });
+    });
+
+    describe("where metal's taxonomy must not be adopted wholesale", () => {
+        it('does not cut a block on softmax, which ttnn files under normalization', () => {
+            // `operations/normalization/softmax` answers "what kind of maths is this",
+            // not "where does a layer end". Using it as a delimiter would halve every
+            // attention block, since the softmax sits inside one. #1976
+            const groups = detectOpRoleGroups([
+                operation(1, 'ttnn.experimental.nlp_create_qkv_heads'),
+                operation(2, 'ttnn.scale_mask_softmax_in_place'),
+                operation(3, 'ttnn.experimental.nlp_concat_heads'),
+                operation(4, 'ttnn.layer_norm'),
+            ]);
+
+            expect(groups).toHaveLength(1);
+            expect(groups[0].operationIds).toEqual([1, 2, 3, 4]);
+            expect(groups[0].role).toBe(OpSemanticRole.ATTENTION);
+        });
+
+        it('ranks expert routing above the activation inside it', () => {
+            // An expert block contains a feed-forward activation, so the generic
+            // evidence must not outrank the specific.
+            const groups = detectOpRoleGroups([
+                operation(1, 'ttnn.experimental.deepseek_prefill.moe_grouped_topk'),
+                operation(2, 'ttnn.silu'),
+                operation(3, 'ttnn.layer_norm'),
+            ]);
+
+            expect(groups[0].role).toBe(OpSemanticRole.MOE);
         });
     });
 
