@@ -33,18 +33,16 @@ jobs:
             git fetch origin ${{ github.base_ref }} --depth=1
             # Get changed files, filter for .ts, .tsx, .cjs, and .mjs, exclude deleted files, output as space-separated string
             CHANGED_FILES=$(git diff --name-only --diff-filter=d origin/${{ github.base_ref }} | awk '/\.(ts|tsx|cjs|mjs)$/ { print }' | tr '\n' ' ' | xargs)
-            CHANGED_SCSS=$(git diff --name-only --diff-filter=d origin/${{ github.base_ref }} | awk '/\.scss$/ { print }' | tr '\n' ' ' | xargs)
             echo "changed=$CHANGED_FILES" >> $GITHUB_OUTPUT
-            echo "changed_scss=$CHANGED_SCSS" >> $GITHUB_OUTPUT
 
       - name: Lint changed TypeScript/JavaScript
         if: ${{ steps.pr_changes.outputs.changed != '' }}
         run: pnpm lint ${{ steps.pr_changes.outputs.changed }} --report-unused-disable-directives --max-warnings 0 --no-warn-ignored
         background: true
 
-      - name: Lint changed SCSS
+      - name: Lint styles
         if: ${{ steps.pr_changes.outputs.changed_scss != '' }}
-        run: pnpm exec stylelint ${{ steps.pr_changes.outputs.changed_scss }}
+        run: pnpm lint:scss
         background: true
 
       - name: Run frontend tests
