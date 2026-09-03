@@ -40,9 +40,10 @@ from ttnn_visualizer.settings import (
 )
 from ttnn_visualizer.usage import (
     RUN_ID_ENV_VAR,
-    USAGE_DISABLED_ENV_VAR,
     compact_if_needed,
     describe_opt_out,
+    describe_unrecognised_usage_disabled_value,
+    get_recording_disabled_reason,
     get_unrecognised_usage_disabled_value,
     get_usage_log_path,
     is_recording_enabled,
@@ -434,17 +435,15 @@ def _record_launch(config):
     # identifier, even if recording is switched on part-way through the session.
     os.environ[RUN_ID_ENV_VAR] = start_run()
 
-    if not is_recording_enabled(config.SERVER_MODE):
-        print(f"📊 Recording usage has been DISABLED by the user")
-
+    disabled_reason = get_recording_disabled_reason(config.SERVER_MODE)
+    if disabled_reason is not None:
         unrecognised_value = get_unrecognised_usage_disabled_value()
         if unrecognised_value is not None:
             print(
-                f"⚠️  {USAGE_DISABLED_ENV_VAR}={unrecognised_value!r} is not a recognised "
-                "boolean. Because this variable is an opt-out, recording will be switched "
-                "off; use true/1 to disable or false/0 to keep recording enabled."
+                f"⚠️  {describe_unrecognised_usage_disabled_value(unrecognised_value)}"
             )
 
+        print(f"📊 Event logging is DISABLED: {disabled_reason}.")
         return
 
     compact_if_needed()

@@ -57,9 +57,11 @@ from enum import Enum
 from importlib.metadata import PackageNotFoundError, distribution
 from importlib.metadata import version as distribution_version
 from pathlib import Path
-from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple, Type
+from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple, Type
 
 from ttnn_visualizer.utils import (
+    FALSE_VALUES,
+    TRUE_VALUES,
     is_running_in_container,
     parse_bool,
     read_version_from_package_json,
@@ -470,6 +472,36 @@ def get_unrecognised_usage_disabled_value() -> Optional[str]:
     return value
 
 
+def describe_unrecognised_usage_disabled_value(value: str) -> str:
+    """Explain an invalid opt-out using the canonical boolean vocabulary."""
+
+    def _words_before_digits(values: Iterable[str]) -> str:
+        return "/".join(sorted(values, key=lambda token: token.isdigit()))
+
+    disabled_values = _words_before_digits(TRUE_VALUES)
+    enabled_values = _words_before_digits(FALSE_VALUES)
+    return (
+        f"{USAGE_DISABLED_ENV_VAR}={value!r} is not a recognised boolean. "
+        "Because this variable is an opt-out, event logging will be disabled; "
+        f"use {disabled_values} to disable or {enabled_values} to keep it enabled."
+    )
+
+
+def get_recording_disabled_reason(server_mode: Any = False) -> Optional[str]:
+    """Why event logging is disabled, or ``None`` when it is enabled."""
+    if _as_bool(server_mode):
+        return "SERVER_MODE is enabled"
+
+    if _is_recording_disabled_by_environment():
+        return f"{USAGE_DISABLED_ENV_VAR} requests the opt-out"
+
+    marker = get_disabled_marker_path()
+    if marker.exists():
+        return f"the marker file exists at {marker}"
+
+    return None
+
+
 def is_recording_enabled(server_mode: Any = False) -> bool:
     """Whether usage may be written at all.
 
@@ -482,15 +514,9 @@ def is_recording_enabled(server_mode: Any = False) -> bool:
     The file half of the off switch exists because an environment variable is
     per-shell, and so easy to set in one terminal and lose in the next.
     """
-    if _as_bool(server_mode):
-        return False
-
-    if _is_recording_disabled_by_environment():
-        return False
-
     # Deliberately does not create the directory: a disabled install should leave
     # nothing behind under the user's home.
-    return not get_disabled_marker_path().exists()
+    return get_recording_disabled_reason(server_mode) is None
 
 
 def get_run_id() -> str:

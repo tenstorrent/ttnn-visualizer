@@ -271,8 +271,47 @@ def test_record_launch_reports_an_unrecognised_disable_value_with_its_outcome(
     output = capsys.readouterr().out
 
     assert f"{USAGE_DISABLED_ENV_VAR}='yes' is not a recognised boolean" in output
-    assert "recording will be switched off" in output
-    assert "Recording usage has been DISABLED" in output
+    assert "event logging will be disabled" in output
+    assert (
+        f"Event logging is DISABLED: {USAGE_DISABLED_ENV_VAR} requests the opt-out"
+        in output
+    )
+    assert read_usage_lines(usage_directory) == []
+
+
+def test_record_launch_reports_a_recognised_environment_opt_out(
+    usage_directory, monkeypatch, capsys
+):
+    from ttnn_visualizer.app import _record_launch
+
+    monkeypatch.setenv(USAGE_DISABLED_ENV_VAR, "true")
+
+    _record_launch(SimpleNamespace(SERVER_MODE=False, TT_METAL_HOME=None))
+
+    output = capsys.readouterr().out
+
+    assert "not a recognised boolean" not in output
+    assert (
+        f"Event logging is DISABLED: {USAGE_DISABLED_ENV_VAR} requests the opt-out"
+        in output
+    )
+    assert read_usage_lines(usage_directory) == []
+
+
+def test_record_launch_reports_the_marker_file_opt_out(
+    usage_directory, monkeypatch, capsys
+):
+    from ttnn_visualizer.app import _record_launch
+
+    usage_directory.mkdir(parents=True)
+    marker = usage.get_disabled_marker_path()
+    marker.touch()
+
+    _record_launch(SimpleNamespace(SERVER_MODE=False, TT_METAL_HOME=None))
+
+    output = capsys.readouterr().out
+
+    assert f"Event logging is DISABLED: the marker file exists at {marker}" in output
     assert read_usage_lines(usage_directory) == []
 
 
@@ -401,6 +440,17 @@ def test_the_run_id_is_inherited_when_it_is_safe(usage_directory, monkeypatch):
     assert (
         parse_usage_line(read_usage_lines(usage_directory)[0])["run_id"] == "abc12345"
     )
+
+
+def test_start_run_generates_a_fresh_safe_identifier_each_time():
+    first = usage.start_run()
+    second = usage.start_run()
+
+    assert first != second
+    assert len(first) == usage.RUN_ID_LENGTH
+    assert len(second) == usage.RUN_ID_LENGTH
+    assert usage._is_safe_value(first)
+    assert usage._is_safe_value(second)
 
 
 def test_concurrent_subprocess_writers_never_truncate_a_line(usage_directory):
@@ -764,14 +814,21 @@ def test_record_launch_replaces_an_inherited_id_and_exports_the_new_one(
     assert parse_usage_line(lines[0])["event"] == "app_start"
     assert recorded_run_id != inherited_run_id
     assert os.environ[RUN_ID_ENV_VAR] == recorded_run_id
+    assert usage.get_run_id() == recorded_run_id
 
 
-def test_record_launch_records_nothing_in_server_mode(usage_directory, monkeypatch):
+def test_record_launch_reports_server_mode_and_records_nothing(
+    usage_directory, monkeypatch, capsys
+):
     from ttnn_visualizer.app import _record_launch
 
     monkeypatch.setenv(RUN_ID_ENV_VAR, "")
     _record_launch(SimpleNamespace(SERVER_MODE=True, TT_METAL_HOME=None))
 
+    output = capsys.readouterr().out
+
+    assert "Event logging is DISABLED: SERVER_MODE is enabled" in output
+    assert "by the user" not in output
     assert read_usage_lines(usage_directory) == []
     # The run id is still exported so workers agree on one if it is switched on later.
     assert os.environ[RUN_ID_ENV_VAR]
