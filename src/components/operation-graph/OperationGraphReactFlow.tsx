@@ -73,6 +73,7 @@ import {
     OpGraphNodeType,
     type OpGraphSourceOperation,
 } from './opGraphTypes';
+import { OpGraphGrouping } from './opGraphTypes';
 import 'styles/components/OperationGraphReactFlow.scss';
 
 const NODE_TYPES = {
@@ -285,6 +286,9 @@ const OperationGraphInner = ({
     // describes the graph; it does not get to decide how the graph opens. #1977
     const [expandedBlockIds, setExpandedBlockIds] = useState<ReadonlySet<string> | null>(null);
     const [detectedBlocks, setDetectedBlocks] = useState<OpGraphBlockSummary[]>(NO_BLOCKS);
+    // A view preference like `hideDeallocate`, so it survives a report change: someone
+    // comparing two reports by layer does not want the mode reset under them. #1976
+    const [grouping, setGrouping] = useState<OpGraphGrouping>(OpGraphGrouping.REPEATS);
     const [nodeIdByOperationId, setNodeIdByOperationId] = useState<ReadonlyMap<number, string>>(EMPTY_NODE_ID_BY_OP);
     const [isPerfOverlayEnabled, setIsPerfOverlayEnabled] = useState(false);
     const [criticalPathScope, setCriticalPathScope] = useAtom(criticalPathScopeAtom);
@@ -563,8 +567,9 @@ const OperationGraphInner = ({
             hideDeallocate,
             deviceSubgraphs,
             expandedBlockIds: foldDecisionToOption(expandedBlockIds),
+            grouping,
         }),
-        [hideDeallocate, deviceSubgraphs, expandedBlockIds],
+        [hideDeallocate, deviceSubgraphs, expandedBlockIds, grouping],
     );
 
     // `sourceOperations` isn't read here — it's the signal that the worker holds a
@@ -748,6 +753,22 @@ const OperationGraphInner = ({
         setExpandedBlockIds(NOTHING_EXPANDED_BLOCKS);
         setExpandedOperationIds((previous) => withoutBlockMembers(previous, detectedBlocks));
     }, [detectedBlocks]);
+
+    const handleGroupingChange = useCallback(
+        (next: OpGraphGrouping) => {
+            setGrouping(next);
+            // Applied, not just armed. #1977 is about how a report *opens* — nobody
+            // asked for a grouping then. Clicking one is the ask, so leaving the graph
+            // unrolled made the control look broken: both modes rendered identically
+            // and the difference only appeared after a separate Fold. An empty set
+            // folds whatever this mode detects, and the other mode's instance ids are
+            // discarded with it rather than naming blocks that no longer exist. #1976
+            setExpandedBlockIds(NOTHING_EXPANDED_BLOCKS);
+            setExpandedOperationIds((previous) => withoutBlockMembers(previous, detectedBlocks));
+            setRevealedNodeIds(null);
+        },
+        [detectedBlocks],
+    );
 
     const handleHideDeallocateChange = useCallback(
         (next: boolean) => {
@@ -1366,6 +1387,9 @@ const OperationGraphInner = ({
                 onDimUnrelatedEdgesChange={setIsDimUnrelatedEdges}
                 hiddenMatchCount={matches.hiddenMatchCount}
                 hasBlocks={detectedBlocks.length > 0}
+                grouping={grouping}
+                onGroupingChange={handleGroupingChange}
+                groupingBlockCount={detectedBlocks.length}
                 areAllBlocksExpanded={
                     detectedBlocks.length > 0 && detectedBlocks.every((block) => isBlockExpanded(block.instanceId))
                 }

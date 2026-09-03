@@ -167,6 +167,18 @@ export interface OpGraphNodeIndexEntry {
     memberOperationIds?: number[];
 }
 
+/**
+ * Which detector supplies the foldable blocks. Mutually exclusive per build, so a
+ * region cannot carry two competing identities — the reconciliation question #1953
+ * records. #1976
+ */
+export enum OpGraphGrouping {
+    /** Strict repeated subgraphs. #1583 */
+    REPEATS = 'repeats',
+    /** Semantic spans named by their op roles. #1976 */
+    LAYERS = 'layers',
+}
+
 export interface OpGraphBuildOptions {
     hideDeallocate: boolean;
     /** Only the expanded operations, so a collapsed graph carries no payload. */
@@ -178,6 +190,8 @@ export interface OpGraphBuildOptions {
      * #1583 / #1977
      */
     expandedBlockIds?: readonly string[];
+    /** Defaults to `REPEATS`, which is what shipped first. #1976 */
+    grouping?: OpGraphGrouping;
     /** Worker-only: detection is invariant under fold / device-op expand. */
     detectedBlocks?: RepeatBlockInstance[];
 }

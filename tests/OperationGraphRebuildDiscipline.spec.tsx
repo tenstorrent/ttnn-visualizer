@@ -20,6 +20,7 @@ import type {
     OpGraphFlowNode,
     OpGraphSourceOperation,
 } from '../src/components/operation-graph/opGraphTypes';
+import { OpGraphGrouping } from '../src/components/operation-graph/opGraphTypes';
 
 // A layout is the most expensive thing this view can do, and every cheap
 // interaction — typing, selecting, stepping matches — is one dependency array away
@@ -554,6 +555,7 @@ describe('OperationGraphReactFlow rebuild triggers', () => {
             hideDeallocate: false,
             deviceSubgraphs: [],
             expandedBlockIds: undefined,
+            grouping: OpGraphGrouping.REPEATS,
         });
     });
 
@@ -1593,6 +1595,79 @@ describe('OperationGraphReactFlow repeat blocks', () => {
         });
 
         expect(runBuild.mock.calls.at(-1)?.[0]).toEqual(expect.objectContaining({ expandedBlockIds: undefined }));
+    });
+
+    // No repeated subgraph anywhere in this chain, but two spans whose op names say
+    // exactly what they are. It is the case repetition structurally cannot reach. #1976
+    const LAYER_OPERATION_LIST: OperationDescription[] = [
+        operation(1, 'ttnn.linear', [2]),
+        operation(2, 'ttnn.transformer.scaled_dot_product_attention', [3]),
+        operation(3, 'ttnn.layer_norm', [4]),
+        operation(4, 'ttnn.linear', [5]),
+        operation(5, 'ttnn.gelu', [6]),
+        operation(6, 'ttnn.layer_norm', []),
+    ];
+
+    it('finds nothing to fold by repetition in a graph with no repeats', () => {
+        renderGraph(LAYER_OPERATION_LIST);
+
+        expect(screen.getByText('no repeats detected')).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: 'Fold all repeats' })).toBeNull();
+    });
+
+    it('asks the worker for layer grouping when the mode changes', () => {
+        renderGraph(LAYER_OPERATION_LIST);
+        runBuild.mockClear();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Group by layers' }));
+
+        expect(runBuild.mock.calls.at(-1)?.[0]).toEqual(expect.objectContaining({ grouping: OpGraphGrouping.LAYERS }));
+    });
+
+    it('folds semantic spans the repeat scan could not see', () => {
+        renderGraph(LAYER_OPERATION_LIST);
+        fireEvent.click(screen.getByRole('button', { name: 'Group by layers' }));
+        deliver(LAYER_OPERATION_LIST, { grouping: OpGraphGrouping.LAYERS, expandedBlockIds: [] });
+
+        expect(lastFlowRender().nodes.map((node) => node.id)).toEqual(['layer:attention:1', 'layer:feedForward:4']);
+        expect(screen.getByRole('button', { name: 'Group by layers' })).toHaveAttribute('aria-pressed', 'true');
+    });
+
+    it('applies the grouping the moment it is picked', () => {
+        // Leaving the graph unrolled here made the control look broken: both modes
+        // rendered identically and the difference only showed after a separate Fold.
+        // #1977 governs how a report *opens*; clicking a mode is the ask. #1976
+        renderGraph(LAYER_OPERATION_LIST);
+        runBuild.mockClear();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Group by layers' }));
+
+        expect(runBuild.mock.calls.at(-1)?.[0]).toEqual(
+            expect.objectContaining({ grouping: OpGraphGrouping.LAYERS, expandedBlockIds: [] }),
+        );
+    });
+
+    it("discards the other detector's instance ids when the grouping changes", () => {
+        // A kept fold decision would name blocks that do not exist in the new mode.
+        renderFolded();
+        fireEvent.click(screen.getAllByRole('button', { name: 'Unroll 2 operations' })[0]);
+        const unrolled = runBuild.mock.calls.at(-1)?.[0] as OpGraphBuildOptions;
+        expect(unrolled.expandedBlockIds).toEqual([FIRST_BLOCK_ID]);
+
+        runBuild.mockClear();
+        fireEvent.click(screen.getByRole('button', { name: 'Group by layers' }));
+
+        expect((runBuild.mock.calls.at(-1)?.[0] as OpGraphBuildOptions).expandedBlockIds).toEqual([]);
+    });
+
+    it('shows how many blocks the active detector found', () => {
+        // The two strategies are compared by switching, not by folding each and
+        // counting nodes on screen.
+        renderGraph(REPEAT_OPERATION_LIST);
+
+        expect(screen.getByRole('button', { name: 'Group by repeats' })).toHaveTextContent('Repeats (2)');
+        expect(screen.getByRole('button', { name: 'Group by layers' })).toHaveTextContent('Layers');
+        expect(screen.getByRole('button', { name: 'Group by layers' })).not.toHaveTextContent('(');
     });
 
     it('keeps the selection on a folded block when the selected op is a non-first member', () => {

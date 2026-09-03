@@ -7,10 +7,14 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 
 import OpGraphToolbar from '../src/components/operation-graph/OpGraphToolbar';
+import { OpGraphGrouping } from '../src/components/operation-graph/opGraphTypes';
 import { CRITICAL_PATH_TOOLTIP, PERF_OVERLAY_TOOLTIP, PerfOverlayStatus } from '../src/definitions/PerfOverlayStatus';
 import { GraphFilterMode } from '../src/definitions/GraphFilterMode';
 
 interface RenderToolbarOptions {
+    grouping?: OpGraphGrouping;
+    onGroupingChange?: (next: OpGraphGrouping) => void;
+    groupingBlockCount?: number;
     status: PerfOverlayStatus;
     onPerfOverlayChange?: (next: boolean) => void;
     onCriticalPathChange?: (next: boolean) => void;
@@ -34,6 +38,9 @@ const renderToolbar = ({
     areAllBlocksCollapsed = true,
     onExpandAllBlocks = vi.fn(),
     onCollapseAllBlocks = vi.fn(),
+    grouping = OpGraphGrouping.REPEATS,
+    onGroupingChange = vi.fn(),
+    groupingBlockCount = 0,
 }: RenderToolbarOptions) => {
     render(
         <OpGraphToolbar
@@ -45,6 +52,9 @@ const renderToolbar = ({
             isRegexInvalid={false}
             matchCount={0}
             currentMatchIndex={null}
+            grouping={grouping}
+            onGroupingChange={onGroupingChange}
+            groupingBlockCount={groupingBlockCount}
             onPrevMatch={vi.fn()}
             onNextMatch={vi.fn()}
             selectedOperationId={1}
@@ -215,6 +225,40 @@ describe('switch tooltips', () => {
 // Each Repeats button has two independent disable reasons; only the
 // all-expanded / all-collapsed one was covered. Mid-build is the one that matters,
 // where an unroll would be queued against a node set about to be replaced. #1944
+describe('grouping control', () => {
+    it('offers both detectors and marks the active one', () => {
+        renderToolbar({ status: PerfOverlayStatus.READY, hasBlocks: true });
+
+        expect(screen.getByRole('button', { name: 'Group by repeats' })).toHaveAttribute('aria-pressed', 'true');
+        expect(screen.getByRole('button', { name: 'Group by layers' })).toHaveAttribute('aria-pressed', 'false');
+    });
+
+    it('reports the mode the user picked', () => {
+        const onGroupingChange = vi.fn();
+        renderToolbar({ status: PerfOverlayStatus.READY, hasBlocks: true, onGroupingChange });
+
+        fireEvent.click(screen.getByRole('button', { name: 'Group by layers' }));
+
+        expect(onGroupingChange).toHaveBeenCalledWith(OpGraphGrouping.LAYERS);
+    });
+
+    it('stays available when the active detector found nothing', () => {
+        // Gating this row on `hasBlocks` stranded any report without repeats: the
+        // control that would ask for layers instead was the one being hidden. #1976
+        renderToolbar({ status: PerfOverlayStatus.READY, hasBlocks: false });
+
+        expect(screen.getByRole('button', { name: 'Group by layers' })).toBeEnabled();
+        expect(screen.getByText('no repeats detected')).toBeInTheDocument();
+    });
+
+    it('names the detector that came up empty', () => {
+        renderToolbar({ status: PerfOverlayStatus.READY, hasBlocks: false, grouping: OpGraphGrouping.LAYERS });
+
+        expect(screen.getByText('no layers detected')).toBeInTheDocument();
+        expect(screen.queryByText('no repeats detected')).toBeNull();
+    });
+});
+
 describe('repeats controls', () => {
     const repeatsButtons = () => ({
         unroll: screen.getByRole('button', { name: 'Unroll all repeats' }),

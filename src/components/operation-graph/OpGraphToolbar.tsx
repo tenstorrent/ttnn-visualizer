@@ -2,13 +2,32 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-import { Button, ButtonVariant, PopoverPosition, Switch, Tooltip } from '@blueprintjs/core';
+import { Button, ButtonGroup, ButtonVariant, PopoverPosition, Switch, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { type FormEvent, type Ref, memo } from 'react';
 import GraphOpFilter, { type GraphOpFilterHandle } from '../GraphOpFilter';
 import type { GraphFilterMode } from '../../definitions/GraphFilterMode';
 import { CRITICAL_PATH_TOOLTIP, PERF_OVERLAY_TOOLTIP, PerfOverlayStatus } from '../../definitions/PerfOverlayStatus';
+import { OpGraphGrouping } from './opGraphTypes';
 import 'styles/components/OpGraphToolbar.scss';
+
+/**
+ * Descriptions rather than bare labels: "Layers" means nothing until a reader knows
+ * it is reading op names, and the distinction from "Repeats" is the whole point of
+ * offering both. #1976
+ */
+const GROUPING_OPTIONS = [
+    {
+        value: OpGraphGrouping.REPEATS,
+        label: 'Repeats',
+        description: 'Fold subgraphs that repeat, whatever they do',
+    },
+    {
+        value: OpGraphGrouping.LAYERS,
+        label: 'Layers',
+        description: 'Fold spans whose operation names identify them — attention, feed-forward, embedding',
+    },
+] as const;
 
 interface PerfGatedSwitchProps {
     tooltipByStatus: Record<PerfOverlayStatus, string>;
@@ -80,6 +99,10 @@ interface OpGraphToolbarProps {
     // `disabled={isDisabled || areAllBlocksExpanded}` render an enabled button whose
     // onClick is undefined — a silent no-op the type system should be catching.
     hasBlocks: boolean;
+    grouping: OpGraphGrouping;
+    onGroupingChange: (next: OpGraphGrouping) => void;
+    /** How many blocks the active detector found, shown on its own button. */
+    groupingBlockCount: number;
     areAllBlocksExpanded: boolean;
     areAllBlocksCollapsed: boolean;
     onExpandAllBlocks: () => void;
@@ -116,6 +139,9 @@ const OpGraphToolbar = memo(
         isDisabled,
         hiddenMatchCount = 0,
         hasBlocks,
+        grouping,
+        onGroupingChange,
+        groupingBlockCount,
         areAllBlocksExpanded,
         areAllBlocksCollapsed,
         onExpandAllBlocks,
@@ -232,27 +258,64 @@ const OpGraphToolbar = memo(
                 />
             </div>
 
-            {hasBlocks ? (
-                <div className='op-graph-toolbar-row'>
-                    <span className='op-graph-toolbar-group-label'>Repeats</span>
-                    <Button
-                        variant={ButtonVariant.OUTLINED}
-                        disabled={isDisabled || areAllBlocksExpanded}
-                        onClick={onExpandAllBlocks}
-                        aria-label='Unroll all repeats'
-                    >
-                        Unroll
-                    </Button>
-                    <Button
-                        variant={ButtonVariant.OUTLINED}
-                        disabled={isDisabled || areAllBlocksCollapsed}
-                        onClick={onCollapseAllBlocks}
-                        aria-label='Fold all repeats'
-                    >
-                        Fold
-                    </Button>
-                </div>
-            ) : null}
+            <div className='op-graph-toolbar-row'>
+                <span className='op-graph-toolbar-group-label'>Grouping</span>
+                {/* Rendered whatever the current mode found: gating this on `hasBlocks`
+                    would strand a report whose repeats are empty, with no way to ask
+                    for layers instead. #1976 */}
+                <ButtonGroup>
+                    {GROUPING_OPTIONS.map(({ value, label, description }) => (
+                        <Tooltip
+                            key={value}
+                            content={description}
+                            position={PopoverPosition.BOTTOM}
+                        >
+                            <Button
+                                variant={ButtonVariant.OUTLINED}
+                                active={grouping === value}
+                                disabled={isDisabled}
+                                onClick={() => onGroupingChange(value)}
+                                aria-label={`Group by ${label.toLowerCase()}`}
+                                aria-pressed={grouping === value}
+                            >
+                                {/* The count sits on the active button so the two
+                                    strategies are comparable by switching, rather than
+                                    by folding each and counting nodes. 89 repeats
+                                    against 13 layers is the whole distinction. #1976 */}
+                                {grouping === value && groupingBlockCount > 0
+                                    ? `${label} (${groupingBlockCount})`
+                                    : label}
+                            </Button>
+                        </Tooltip>
+                    ))}
+                </ButtonGroup>
+                {hasBlocks ? (
+                    <>
+                        <Button
+                            variant={ButtonVariant.OUTLINED}
+                            disabled={isDisabled || areAllBlocksExpanded}
+                            onClick={onExpandAllBlocks}
+                            aria-label='Unroll all repeats'
+                        >
+                            Unroll
+                        </Button>
+                        <Button
+                            variant={ButtonVariant.OUTLINED}
+                            disabled={isDisabled || areAllBlocksCollapsed}
+                            onClick={onCollapseAllBlocks}
+                            aria-label='Fold all repeats'
+                        >
+                            Fold
+                        </Button>
+                    </>
+                ) : (
+                    // Says which detector came up empty, so "nothing here" reads as an
+                    // answer about this report rather than a broken control.
+                    <span className='op-graph-toolbar-empty-note'>
+                        {grouping === OpGraphGrouping.LAYERS ? 'no layers detected' : 'no repeats detected'}
+                    </span>
+                )}
+            </div>
         </div>
     ),
 );
