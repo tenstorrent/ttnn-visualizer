@@ -42,7 +42,7 @@ jobs:
         run: pnpm lint ${{ steps.pr_changes.outputs.changed }} --report-unused-disable-directives --max-warnings 0 --no-warn-ignored
         background: true
 
-      - name: Lint changed SASS
+      - name: Lint changed SCSS
         if: ${{ steps.pr_changes.outputs.changed_scss != '' }}
         run: pnpm exec stylelint ${{ steps.pr_changes.outputs.changed_scss }}
         background: true
