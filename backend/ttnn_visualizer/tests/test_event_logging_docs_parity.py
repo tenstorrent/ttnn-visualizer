@@ -126,10 +126,21 @@ def _documented_values_matching(
 
 def test_the_event_logging_docs_page_is_in_the_resources_toctree():
     expected_entry = f"src/{_EVENT_LOGGING_DOCS.stem}"
+    toctrees = re.findall(
+        r"^\.\. toctree::\s*$\n(.*?)(?=^\.\. toctree::|\Z)",
+        _read(_DOCS_INDEX),
+        re.DOTALL | re.MULTILINE,
+    )
+    resources_toctrees = [
+        toctree
+        for toctree in toctrees
+        if re.search(r"^\s+:caption:\s+Resources\s*$", toctree, re.MULTILINE)
+    ]
 
+    assert len(resources_toctrees) == 1
     assert expected_entry in {
         entry.strip()
-        for entry in re.findall(r"^\s+src/\S+$", _read(_DOCS_INDEX), re.MULTILINE)
+        for entry in re.findall(r"^\s+src/\S+$", resources_toctrees[0], re.MULTILINE)
     }
 
 

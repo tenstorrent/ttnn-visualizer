@@ -187,7 +187,8 @@ Applies on touch to views that draw data-proportional visuals (NPE chip cluster 
 
 `src/functions/recordUsage.ts` posts usage events to `POST /api/usage`. Local installs use one fixed log; `SERVER_MODE` uses server-derived per-session logs under `/data/usage`. The invariants a reader cannot infer from the code alone are detailed, with the caps table and the route's deliberate decorator stack, in [CONVENTIONS.md](./CONVENTIONS.md#event-logging-frontend):
 
-- **`usage.py` owns the vocabulary; `src/definitions/UsageEvent.ts` and `docs/src/event-logging.md` are copies.** Every new event must name the Q1–Q5 decision from #1819 that it informs; update the relevant copies in the same commit. `test_usage_frontend_parity.py` and `test_event_logging_docs_parity.py` enforce the contract.
+- **`usage.py` owns the vocabulary; `src/definitions/UsageEvent.ts` is a copy.** Keep them in sync; `test_usage_frontend_parity.py` enforces the contract.
+- **`docs/src/event-logging.md` is the user-facing copy of the event schema.** Every new event must name the Q1–Q5 decision from #1819 that it informs; update the documentation in the same commit. `test_event_logging_docs_parity.py` enforces the contract.
 - **`MAX_BUFFERED_EVENTS` must equal `MAX_USAGE_BATCH_EVENTS`**, which bounds write atomicity rather than merely an HTTP body.
 - **The unload beacon must send a `Blob` typed `application/json`** — that content type is what keeps the request non-simple, and a bare-string beacon goes as `text/plain` and is refused.
 - **Failures are silent and batches are never re-buffered.** The only diagnostic is a `console.warn` under `import.meta.env.DEV` carrying the status, never a response body.
