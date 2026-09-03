@@ -329,15 +329,16 @@ def _usage_recording_remedy(env_value: str) -> str:
     # default, so nobody sets this variable to get it — an unrecognised value is far
     # likelier to be a botched opt-out than a botched opt-in, and that is the same
     # reading ``_is_recording_disabled_by_environment`` gives its own typos.
+    server_mode = parse_bool(os.getenv("SERVER_MODE", "")) is True
     if parse_bool(env_value) is True:
         # Must name the inverse *value*, and must assert nothing about the current
         # state. The posture is readable here, but the marker file is not consulted and
         # a ``settings_override`` posture never reaches the environment, so a sentence
         # that describes the state would be wrong for somebody — see the docstring on
         # ``describe_opt_in``, which has been wrong twice for exactly that reason.
-        return describe_opt_in()
+        return describe_opt_in(server_mode)
 
-    return describe_opt_out()
+    return describe_opt_out(server_mode)
 
 
 # Descriptor-backed settings whose own name reaches nothing, mapped to the advice for
@@ -531,8 +532,8 @@ class DefaultConfig(object):
     TESTING = False
     PRINT_ENV = True
     SERVER_MODE = _parse_env_bool("SERVER_MODE", False)
-    # Local usage recording is on by default; ``USAGE_RECORDING_DISABLED=true`` is the
-    # opt-out. Written on this machine only; the application transmits nothing.
+    # Usage recording is on by default; ``USAGE_RECORDING_DISABLED=true`` is the
+    # opt-out. The backend stores events locally and never forwards them.
     # See backend/ttnn_visualizer/usage.py.
     USAGE_RECORDING_ACTIVE = _UsageRecordingActive()
     MALWARE_SCANNER = os.getenv("MALWARE_SCANNER")

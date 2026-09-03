@@ -792,12 +792,9 @@ def test_the_advice_survives_a_home_directory_that_cannot_be_resolved(
     assert DISABLED_MARKER_NAME not in warning
 
 
-def test_asking_to_record_under_server_mode_does_not_promise_the_local_controls_work(
+def test_asking_to_record_under_server_mode_names_the_hosted_controls(
     usage_directory, monkeypatch, caplog
 ):
-    # #1937 review, second round. ``is_recording_enabled`` returns False on the posture
-    # *before* it consults either opt-out, so advice naming only the local pair sends a
-    # hosted operator round a loop neither control can end. The posture no test covered.
     monkeypatch.setenv("USAGE_RECORDING_ACTIVE", "true")
     monkeypatch.setenv("SERVER_MODE", "true")
 
@@ -807,10 +804,9 @@ def test_asking_to_record_under_server_mode_does_not_promise_the_local_controls_
 
     (warning,) = _settings_warnings(caplog, "USAGE_RECORDING_ACTIVE")
 
-    assert config.USAGE_RECORDING_ACTIVE is False
-
-    # The claim that must not be made: that clearing the local pair is sufficient.
-    assert "SERVER_MODE" in warning
+    assert config.USAGE_RECORDING_ACTIVE is True
+    assert "Recording is on by default" in warning
+    assert str(usage.get_disabled_marker_path(server_mode=True)) in warning
 
 
 def test_the_two_opt_out_directions_name_the_same_controls():

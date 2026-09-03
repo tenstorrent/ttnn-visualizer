@@ -5,9 +5,10 @@
 """The usage log is a privacy commitment expressed as code.
 
 Recording is on by default, so the tests that matter most are the ones asserting it
-does *not* happen: under ``SERVER_MODE``, with the opt-out set, and with anything
-free-form in a field. The rest pin the file's contract with the out-of-band
-collector — totals never go down, and no line can be forged.
+does *not* happen with the opt-out set or with anything free-form in a field. Hosted
+recording additionally pins that separate browser sessions never share a file. The
+rest pin the file's contract with the out-of-band collector — totals never go down,
+and no line can be forged.
 """
 
 import os
@@ -162,6 +163,46 @@ def test_the_path_ignores_every_environment_derived_data_directory(monkeypatch):
     monkeypatch.setenv("APP_DATA_DIRECTORY", "/somewhere/else")
 
     assert usage.get_usage_directory() == Path.home() / ".ttnn-visualizer" / "usage"
+
+
+def test_hosted_path_is_partitioned_by_session(usage_directory):
+    event_log_id = "a" * usage.EVENT_LOG_ID_LENGTH
+
+    assert (
+        usage.get_usage_directory(True, event_log_id)
+        == (usage_directory / event_log_id).resolve()
+    )
+    assert (
+        usage.get_usage_log_path(True, event_log_id)
+        == (usage_directory / event_log_id / usage.USAGE_LOG_NAME).resolve()
+    )
+    assert usage.get_disabled_marker_path(True) == usage_directory / "disabled"
+
+
+def test_production_hosted_root_is_fixed(monkeypatch):
+    monkeypatch.setattr(usage, "USAGE_DIRECTORY", None)
+
+    assert usage.get_usage_root(True) == Path("/data/usage")
+
+
+@pytest.mark.parametrize(
+    "event_log_id",
+    [None, "", "../escape", "A" * 32, "a" * 31, "a" * 33],
+)
+def test_hosted_path_refuses_an_invalid_event_log_id(usage_directory, event_log_id):
+    with pytest.raises(ValueError, match="valid event log identifier"):
+        usage.get_usage_directory(True, event_log_id)
+
+
+def test_hosted_path_refuses_a_session_directory_symlink_escape(usage_directory):
+    event_log_id = "a" * usage.EVENT_LOG_ID_LENGTH
+    outside = usage_directory.parent / "outside"
+    usage_directory.mkdir()
+    outside.mkdir()
+    (usage_directory / event_log_id).symlink_to(outside, target_is_directory=True)
+
+    with pytest.raises(ValueError, match="escaped its configured root"):
+        usage.get_usage_directory(True, event_log_id)
 
 
 def test_recording_is_on_by_default(usage_directory):
@@ -324,17 +365,32 @@ def test_a_disabled_install_leaves_no_directory_behind(usage_directory, monkeypa
     assert not usage_directory.exists()
 
 
-def test_nothing_is_recorded_under_server_mode(usage_directory):
-    assert is_recording_enabled(server_mode=True) is False
+def test_server_mode_is_enabled_but_requires_a_session_id(usage_directory):
+    assert is_recording_enabled(server_mode=True) is True
 
     record_event(UsageEvent.APP_START, server_mode=True)
 
     assert read_usage_lines(usage_directory) == []
 
 
+def test_hosted_recording_honours_the_root_marker(usage_directory):
+    usage_directory.mkdir(parents=True)
+    usage.get_disabled_marker_path(server_mode=True).touch()
+
+    assert is_recording_enabled(server_mode=True) is False
+    assert (
+        record_events(
+            [(UsageEvent.VIEW_OPENED, {"view": UsageView.OPERATIONS})],
+            server_mode=True,
+            event_log_id="a" * usage.EVENT_LOG_ID_LENGTH,
+        )
+        is False
+    )
+    assert not (usage_directory / ("a" * usage.EVENT_LOG_ID_LENGTH)).exists()
+
+
 def test_server_mode_is_read_from_the_app_context(app, usage_directory):
-    # The shared fixture is a hosted app (SERVER_MODE: True). A caller inside a
-    # request should not have to know that to be refused.
+    # A process-level event has no browser session to select a hosted log.
     assert app.config["SERVER_MODE"] is True
 
     with app.app_context():
@@ -352,12 +408,14 @@ def test_a_local_app_context_still_records(app, usage_directory):
     assert len(read_usage_lines(usage_directory)) == 1
 
 
-def test_a_stringified_server_mode_does_not_disable_recording(usage_directory):
+def test_a_stringified_server_mode_selects_the_right_posture(usage_directory):
     # Flask ``settings_override`` can inject a raw string without going through
     # ``override_with_env_variables``; ``"false"`` is truthy, so ``_as_bool`` has to
     # re-parse. Trusting the string would silently stop recording on a local install.
     assert is_recording_enabled(server_mode="false") is True
-    assert is_recording_enabled(server_mode="true") is False
+    assert is_recording_enabled(server_mode="true") is True
+    with pytest.raises(ValueError, match="valid event log identifier"):
+        usage.get_usage_log_path(server_mode="true")
 
 
 def test_the_environment_switch_survives_config_override(monkeypatch):
@@ -375,15 +433,13 @@ def test_the_environment_switch_survives_config_override(monkeypatch):
     assert config.to_dict()["USAGE_RECORDING_ACTIVE"] is False
 
 
-def test_usage_recording_config_reflects_server_mode(usage_directory, monkeypatch):
-    # The PRINT_ENV dump must not claim recording is on when SERVER_MODE has
-    # switched the writer off.
+def test_usage_recording_config_is_active_in_server_mode(usage_directory, monkeypatch):
     monkeypatch.delenv(USAGE_DISABLED_ENV_VAR, raising=False)
 
     config = DefaultConfig()
     config.SERVER_MODE = True
 
-    assert config.USAGE_RECORDING_ACTIVE is False
+    assert config.USAGE_RECORDING_ACTIVE is True
 
 
 def test_usage_recording_config_reflects_the_marker_file(usage_directory, monkeypatch):
@@ -796,6 +852,20 @@ def test_the_log_is_not_world_readable(usage_directory, monkeypatch):
     assert get_usage_log_path().stat().st_mode & 0o077 == 0
 
 
+def test_the_hosted_session_directory_and_log_are_not_world_readable(usage_directory):
+    event_log_id = "a" * usage.EVENT_LOG_ID_LENGTH
+
+    assert record_events(
+        [(UsageEvent.VIEW_OPENED, {"view": UsageView.OPERATIONS})],
+        server_mode=True,
+        event_log_id=event_log_id,
+    )
+
+    directory = usage_directory / event_log_id
+    assert directory.stat().st_mode & 0o077 == 0
+    assert get_usage_log_path(True, event_log_id).stat().st_mode & 0o077 == 0
+
+
 def test_record_launch_replaces_an_inherited_id_and_exports_the_new_one(
     usage_directory, monkeypatch
 ):
@@ -817,7 +887,7 @@ def test_record_launch_replaces_an_inherited_id_and_exports_the_new_one(
     assert usage.get_run_id() == recorded_run_id
 
 
-def test_record_launch_reports_server_mode_and_records_nothing(
+def test_record_launch_reports_hosted_root_and_records_no_app_start(
     usage_directory, monkeypatch, capsys
 ):
     from ttnn_visualizer.app import _record_launch
@@ -827,9 +897,9 @@ def test_record_launch_reports_server_mode_and_records_nothing(
 
     output = capsys.readouterr().out
 
-    assert "Event logging is DISABLED: SERVER_MODE is enabled" in output
-    assert "by the user" not in output
-    assert read_usage_lines(usage_directory) == []
+    assert "Recording hosted usage by browser session under" in output
+    assert str(usage_directory) in output
+    assert list(usage_directory.rglob(usage.USAGE_LOG_NAME)) == []
     # The run id is still exported so workers agree on one if it is switched on later.
     assert os.environ[RUN_ID_ENV_VAR]
 
@@ -969,6 +1039,58 @@ def test_record_events_refuses_to_grow_a_log_past_the_cap(usage_directory, monke
 
     assert refusals == [False] * 5
     assert read_usage_lines(usage_directory) == before
+
+
+def test_a_full_hosted_log_does_not_suppress_another_session(
+    usage_directory, monkeypatch
+):
+    event = (UsageEvent.VIEW_OPENED, {"view": UsageView.OPERATIONS})
+    first_log_id = "a" * usage.EVENT_LOG_ID_LENGTH
+    second_log_id = "b" * usage.EVENT_LOG_ID_LENGTH
+
+    assert record_events([event], server_mode=True, event_log_id=first_log_id)
+    monkeypatch.setattr(usage, "MAX_LOG_BYTES", 0)
+    first_path = get_usage_log_path(True, first_log_id)
+    usage._ensure_hosted_log_state(first_path).bytes_since_size_check = (
+        LOG_SIZE_CHECK_INTERVAL_BYTES
+    )
+
+    assert record_events([event], server_mode=True, event_log_id=first_log_id) is False
+    assert record_events([event], server_mode=True, event_log_id=second_log_id) is True
+    assert len(read_usage_lines(usage_directory / first_log_id)) == 1
+    assert len(read_usage_lines(usage_directory / second_log_id)) == 1
+
+
+def test_hosted_recording_resumes_after_external_compaction(
+    usage_directory, monkeypatch
+):
+    event = (UsageEvent.VIEW_OPENED, {"view": UsageView.OPERATIONS})
+    event_log_id = "a" * usage.EVENT_LOG_ID_LENGTH
+    assert record_events([event], server_mode=True, event_log_id=event_log_id)
+
+    log_path = get_usage_log_path(True, event_log_id)
+    monkeypatch.setattr(usage, "MAX_LOG_BYTES", 0)
+    usage._ensure_hosted_log_state(log_path).bytes_since_size_check = (
+        LOG_SIZE_CHECK_INTERVAL_BYTES
+    )
+    assert record_events([event], server_mode=True, event_log_id=event_log_id) is False
+
+    log_path.write_text("", encoding="utf-8")
+
+    assert record_events([event], server_mode=True, event_log_id=event_log_id) is True
+    assert len(read_usage_lines(usage_directory / event_log_id)) == 1
+
+
+def test_hosted_log_state_cache_is_bounded(usage_directory, monkeypatch):
+    monkeypatch.setattr(usage, "MAX_TRACKED_USAGE_LOGS", 2)
+
+    for index in range(3):
+        usage._ensure_hosted_log_state(usage_directory / f"{index}.log")
+
+    assert list(usage._hosted_log_state_by_path) == [
+        usage_directory / "1.log",
+        usage_directory / "2.log",
+    ]
 
 
 def test_the_cap_is_reached_by_ordinary_appends_alone(usage_directory, monkeypatch):
@@ -1138,6 +1260,34 @@ def test_a_persistent_write_failure_warns_once_not_once_per_flush(
     ]
 
     assert len(warnings) == 1
+
+
+def test_hosted_write_failure_warnings_are_isolated_by_log(
+    usage_directory, monkeypatch, caplog
+):
+    def raise_os_error(_line, _log_path=None):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(usage, "_append_line", raise_os_error)
+    event = (UsageEvent.VIEW_OPENED, {"view": UsageView.OPERATIONS})
+
+    with caplog.at_level("WARNING"):
+        for _ in range(2):
+            record_events(
+                [event],
+                server_mode=True,
+                event_log_id="a" * usage.EVENT_LOG_ID_LENGTH,
+            )
+        record_events(
+            [event],
+            server_mode=True,
+            event_log_id="b" * usage.EVENT_LOG_ID_LENGTH,
+        )
+
+    warnings = [
+        record for record in caplog.records if "usage events" in record.getMessage()
+    ]
+    assert len(warnings) == 2
 
 
 def test_a_write_landing_again_re_arms_the_failure_warning(

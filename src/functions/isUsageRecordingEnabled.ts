@@ -11,9 +11,8 @@ import getServerConfig from './getServerConfig';
  * gives: that module is mocked wholesale by a dozen specs, so a predicate living inside it
  * cannot be exercised independently.
  *
- * Checking here is a courtesy rather than a control — `/api/usage` is `@local_only` and
- * the writer re-checks the switch — but it avoids a request on every interaction in the
- * hosted deployment, where the answer is always no.
+ * Checking here is a courtesy rather than a control — the writer re-checks the switch —
+ * but it avoids requests when the operator has disabled recording.
  */
 
 let recordingEnabled: boolean | null = null;
@@ -24,10 +23,7 @@ export default function isUsageRecordingEnabled(): boolean {
     if (recordingEnabled === null) {
         const config = getServerConfig();
 
-        // Both, not just the flag. The backend already returns false for the hosted
-        // posture, so this is belt and braces — but it keeps the client correct if the
-        // config is ever served by something that forgets.
-        recordingEnabled = !config.SERVER_MODE && !!config.USAGE_RECORDING_ACTIVE;
+        recordingEnabled = !!config.USAGE_RECORDING_ACTIVE;
     }
 
     return recordingEnabled;

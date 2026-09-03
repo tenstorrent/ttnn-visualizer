@@ -2,12 +2,12 @@
 #
 # SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-"""Local-only usage event log.
+"""Append-only usage event logs.
 
-The application appends one ``key=value`` line per event to a file under a fixed
-path in the user's home directory. Written on this machine only; the application
-transmits nothing. An out-of-band collector may later read the file — that is
-outside this process.
+Local installs append to one fixed file under the user's home directory. Hosted
+installs append to a separate file per anonymous Flask session under ``/data/usage``.
+The identifier stays in the path rather than entering event data. The application
+backend forwards nothing; an out-of-band collector may later read the files.
 
 Properties this file's consumers depend on, stated here because they are not
 obvious from the code that reads it:
@@ -23,7 +23,7 @@ obvious from the code that reads it:
   at once can interleave a line.
 * **Only ``*.log`` files are event data.** Compaction leaves a ``.compaction.lock``
   beside the log; globbing the directory for anything else will pick it up.
-* **Compaction does not preserve line order across the summarised span.**
+* **Local compaction does not preserve line order across the summarised span.**
   Unparseable lines kept verbatim are appended after the sorted summaries, so
   they can land out of time order relative to events they sat between.
 * **``ts`` is when the event was written, not when it happened.** Events posted by
@@ -37,8 +37,9 @@ obvious from the code that reads it:
   go down. The check is amortised, so the overshoot is bounded by
   ``LOG_SIZE_CHECK_INTERVAL_BYTES`` plus one batch rather than being exact — and the
   counter behind it is per-process, so a multi-worker deployment multiplies that
-  overshoot by its worker count. Treat the cap as approximate. Compaction at the next
-  launch summarises the older half and appends resume.
+  overshoot by its worker count. Treat the cap as approximate. Local compaction at the
+  next launch summarises the older half and appends resume; hosted retention and
+  compaction belong to the deployment collector.
 
 Every recorded value comes from a closed enum, a bucketed value, or the
 application's own version. No report, file, directory, operation or host names,
@@ -52,6 +53,8 @@ import platform
 import re
 import sys
 import uuid
+from collections import OrderedDict
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from enum import Enum
 from importlib.metadata import PackageNotFoundError, distribution
@@ -79,13 +82,17 @@ SCHEMA_VERSION = 1
 # fixed and documented — while the app data directory is an implementation detail
 # that has already moved once.
 #
-# Override for tests. Production resolves via :func:`get_usage_directory` on each
+# Override for tests. Production resolves via :func:`get_usage_root` on each
 # call so ``Path.home()`` is not on the import path of ``settings`` (it raises
-# ``RuntimeError`` when ``HOME`` is unset and the uid is absent from passwd).
+# ``RuntimeError`` when ``HOME`` is unset and the uid is absent from passwd). The
+# override replaces both posture roots so tests cannot touch ``/data`` either.
 USAGE_DIRECTORY: Optional[Path] = None
+HOSTED_USAGE_DIRECTORY = Path("/data/usage")
 USAGE_LOG_NAME = "events.log"
 DISABLED_MARKER_NAME = "disabled"
 COMPACTION_LOCK_NAME = ".compaction.lock"
+EVENT_LOG_ID_SESSION_KEY = "event_log_id"
+EVENT_LOG_ID_LENGTH = 32
 
 # Recording is on by default, so the variable is an opt-out rather than a switch: an
 # operator who wants no usage data sets this, and everyone else sets nothing.
@@ -148,6 +155,7 @@ UNKNOWN_VALUE = "unknown"
 # forge extra fields or whole extra events. Enum members, versions and timestamps all
 # fit inside this set; anything that doesn't is a bug rather than a value to escape.
 _SAFE_VALUE_PATTERN = re.compile(r"^[A-Za-z0-9._:+-]+$")
+_EVENT_LOG_ID_PATTERN = re.compile(rf"^[0-9a-f]{{{EVENT_LOG_ID_LENGTH}}}$")
 
 # Fields that identify a single line rather than a class of them, and so cannot
 # survive being summarised into a count.
@@ -183,6 +191,23 @@ _log_full = False
 # warning per flush would fill the log of the application this module promises not to
 # disturb.
 _write_failure_logged = False
+
+
+@dataclass
+class _UsageLogState:
+    """Amortised write state belonging to one hosted session log."""
+
+    bytes_since_size_check: int = LOG_SIZE_CHECK_INTERVAL_BYTES
+    directory_ensured: bool = False
+    log_full: bool = False
+    write_failure_logged: bool = False
+
+
+# Hosted clients select different logs, so the local writer's module globals cannot be
+# shared between them. Bound this cache because a public endpoint can mint unbounded
+# sessions; eviction is safe and only makes the next append pay a mkdir/stat again.
+MAX_TRACKED_USAGE_LOGS = 1024
+_hosted_log_state_by_path: "OrderedDict[Path, _UsageLogState]" = OrderedDict()
 
 
 class UsageEvent(str, Enum):
@@ -328,23 +353,66 @@ class UsageEventRejected(Exception):
     """
 
 
-def get_usage_directory() -> Path:
-    """The one fixed location usage data is written to."""
+def get_usage_root(server_mode: Any = False) -> Path:
+    """The fixed root for the selected deployment posture."""
     if USAGE_DIRECTORY is not None:
         return USAGE_DIRECTORY
+
+    if _as_bool(server_mode):
+        return HOSTED_USAGE_DIRECTORY
 
     return Path.home() / ".ttnn-visualizer" / "usage"
 
 
-def get_usage_log_path() -> Path:
-    return get_usage_directory() / USAGE_LOG_NAME
+def _is_valid_event_log_id(value: Any) -> bool:
+    return isinstance(value, str) and bool(_EVENT_LOG_ID_PATTERN.fullmatch(value))
 
 
-def get_disabled_marker_path() -> Path:
-    return get_usage_directory() / DISABLED_MARKER_NAME
+def ensure_event_log_id() -> str:
+    """Return the server-minted anonymous log identifier in the Flask session."""
+    from flask import session
+
+    event_log_id = session.get(EVENT_LOG_ID_SESSION_KEY)
+    if not _is_valid_event_log_id(event_log_id):
+        event_log_id = uuid.uuid4().hex
+        session[EVENT_LOG_ID_SESSION_KEY] = event_log_id
+
+    return event_log_id
 
 
-def _nameable_marker_path() -> Optional[Path]:
+def get_usage_directory(
+    server_mode: Any = False, event_log_id: Optional[str] = None
+) -> Path:
+    """The event directory for a local install or one hosted browser session."""
+    root = get_usage_root(server_mode)
+    if not _as_bool(server_mode):
+        return root
+
+    if not _is_valid_event_log_id(event_log_id):
+        raise ValueError("Hosted event logging requires a valid event log identifier")
+    assert event_log_id is not None
+
+    resolved_root = root.resolve()
+    resolved_directory = (root / event_log_id).resolve()
+    try:
+        resolved_directory.relative_to(resolved_root)
+    except ValueError:
+        raise ValueError("Hosted usage directory escaped its configured root") from None
+
+    return resolved_directory
+
+
+def get_usage_log_path(
+    server_mode: Any = False, event_log_id: Optional[str] = None
+) -> Path:
+    return get_usage_directory(server_mode, event_log_id) / USAGE_LOG_NAME
+
+
+def get_disabled_marker_path(server_mode: Any = False) -> Path:
+    return get_usage_root(server_mode) / DISABLED_MARKER_NAME
+
+
+def _nameable_marker_path(server_mode: Any = False) -> Optional[Path]:
     """The marker path when it can be resolved, ``None`` when it cannot.
 
     ``get_disabled_marker_path`` resolves ``Path.home()``, which raises ``RuntimeError``
@@ -358,60 +426,44 @@ def _nameable_marker_path() -> Optional[Path]:
     environment variable really is the only control left.
     """
     try:
-        return get_disabled_marker_path()
+        return get_disabled_marker_path(server_mode)
     except RuntimeError:
         return None
 
 
-def describe_opt_out() -> str:
+def describe_opt_out(server_mode: Any = False) -> str:
     """The sentence telling an operator how to switch recording off.
 
     One function because two places say it — the launch banner and the retired-variable
     warning — from the same two ingredients, and they have to agree. The rename that
     introduced this helper had to edit both in lockstep, which is the drift it prevents.
     """
-    marker = _nameable_marker_path()
+    marker = _nameable_marker_path(server_mode)
     if marker is None:
         return f"Switch it off with {USAGE_DISABLED_ENV_VAR}=true."
 
     return f"Switch it off with {USAGE_DISABLED_ENV_VAR}=true or by creating {marker}."
 
 
-def describe_opt_in() -> str:
+def describe_opt_in(server_mode: Any = False) -> str:
     """The sentence for an operator who wants recording on and hasn't got it.
 
     The inverse of :func:`describe_opt_out`, and here for the same reason: the marker
     path and the variable are written once, so the two directions can't drift into
     naming different controls.
 
-    Asserts no current state, and names every switch rather than only the local pair.
-    It is emitted from the settings override loop, which sees neither the marker file
-    nor a posture applied outside the environment, so any sentence that claimed
-    recording was on — or that clearing these two would turn it on — would be wrong for
-    somebody. Both wordings have already been that: "recording is already on" misled an
-    operator whose opt-out was in effect, and naming only the local pair sent a hosted
-    operator round a loop neither control could end (#1937 review, twice).
-
-    ``SERVER_MODE`` is named as a fact to explain the silence, and explicitly *not* as
-    a control to change: it gates every ``@local_only`` endpoint, so an operator
-    clearing it to chase the telemetry would open those instead.
+    Asserts only the default and names both opt-out controls for the selected posture.
     """
-    marker = _nameable_marker_path()
+    marker = _nameable_marker_path(server_mode)
     if marker is None:
-        local = f"{USAGE_DISABLED_ENV_VAR}=false clears the local opt-out"
-        regardless = "whatever it says"
+        remedy = f"{USAGE_DISABLED_ENV_VAR}=false clears the opt-out"
     else:
-        local = (
+        remedy = (
             f"{USAGE_DISABLED_ENV_VAR}=false and removing {marker} "
-            "clear the two local opt-outs"
+            "clear the two opt-outs"
         )
-        regardless = "whatever those say"
 
-    return (
-        "Recording is on by default on a local install. "
-        f"{local}; under SERVER_MODE recording is off {regardless}, by design — "
-        "SERVER_MODE gates the local-only endpoints and is not the control to change."
-    )
+    return f"Recording is on by default. {remedy}."
 
 
 def _as_bool(value: Any) -> bool:
@@ -489,13 +541,10 @@ def describe_unrecognised_usage_disabled_value(value: str) -> str:
 
 def get_recording_disabled_reason(server_mode: Any = False) -> Optional[str]:
     """Why event logging is disabled, or ``None`` when it is enabled."""
-    if _as_bool(server_mode):
-        return "SERVER_MODE is enabled"
-
     if _is_recording_disabled_by_environment():
         return f"{USAGE_DISABLED_ENV_VAR} requests the opt-out"
 
-    marker = get_disabled_marker_path()
+    marker = get_disabled_marker_path(server_mode)
     if marker.exists():
         return f"the marker file exists at {marker}"
 
@@ -507,9 +556,8 @@ def is_recording_enabled(server_mode: Any = False) -> bool:
 
     Recording is on by default, and ``USAGE_RECORDING_DISABLED`` is the opt-out.
 
-    The hosted deployment records nothing: a "local file on a managed machine" there
-    would be a shared server file mixing many users, including external ones, which
-    has a different privacy profile entirely.
+    Hosted events are separated into server-derived session directories rather than
+    mixed into one shared file.
 
     The file half of the off switch exists because an environment variable is
     per-shell, and so easy to set in one terminal and lose in the next.
@@ -657,11 +705,32 @@ def _format_line(
     return _render_line(fields)
 
 
-def _open_log() -> int:
-    return os.open(get_usage_log_path(), os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
+def _ensure_hosted_log_state(log_path: Path) -> _UsageLogState:
+    """Return bounded per-path state, refreshing its LRU position."""
+    state = _hosted_log_state_by_path.pop(log_path, None)
+    if state is None:
+        state = _UsageLogState()
+
+    _hosted_log_state_by_path[log_path] = state
+    while len(_hosted_log_state_by_path) > MAX_TRACKED_USAGE_LOGS:
+        _hosted_log_state_by_path.popitem(last=False)
+
+    return state
 
 
-def _ensure_directory(directory: Path, force: bool = False) -> None:
+def _open_log(log_path: Optional[Path] = None) -> int:
+    return os.open(
+        log_path or get_usage_log_path(),
+        os.O_WRONLY | os.O_APPEND | os.O_CREAT,
+        0o600,
+    )
+
+
+def _ensure_directory(
+    directory: Path,
+    force: bool = False,
+    hosted_state: Optional[_UsageLogState] = None,
+) -> None:
     """Create the usage directory unless this process is known to have done so already.
 
     Cached because ``mkdir`` — plus its caught ``FileExistsError`` and stat — would
@@ -670,12 +739,18 @@ def _ensure_directory(directory: Path, force: bool = False) -> None:
     """
     global _ensured_directory
 
+    if hosted_state is not None:
+        if force or not hosted_state.directory_ensured:
+            directory.mkdir(mode=0o700, parents=True, exist_ok=True)
+            hosted_state.directory_ensured = True
+        return
+
     if force or _ensured_directory != directory:
         directory.mkdir(mode=0o700, parents=True, exist_ok=True)
         _ensured_directory = directory
 
 
-def _append_line(line: str) -> None:
+def _append_line(line: str, log_path: Optional[Path] = None) -> None:
     """Append one write, relying on ``O_APPEND`` instead of a lock.
 
     A single short write to a file opened ``O_APPEND`` is atomic on a local
@@ -691,21 +766,25 @@ def _append_line(line: str) -> None:
     """
     global _bytes_since_size_check, _ensured_directory, _write_failure_logged
 
-    directory = get_usage_directory()
-    _ensure_directory(directory)
+    directory = log_path.parent if log_path is not None else get_usage_directory()
+    hosted_state = _ensure_hosted_log_state(log_path) if log_path is not None else None
+    _ensure_directory(directory, hosted_state=hosted_state)
 
     try:
-        descriptor = _open_log()
+        descriptor = _open_log(log_path)
     except FileNotFoundError:
         # The directory has gone since it was cached, which the docs actively invite by
         # offering a delete command. Recreate it and retry rather than losing this batch
         # and every batch after it to a condition one ``mkdir`` fixes.
-        _ensure_directory(directory, force=True)
-        descriptor = _open_log()
+        _ensure_directory(directory, force=True, hosted_state=hosted_state)
+        descriptor = _open_log(log_path)
     except OSError:
         # A revoked permission or a full disk may equally be fixed before the next
         # append, so stop claiming the directory is known-good.
-        _ensured_directory = None
+        if hosted_state is None:
+            _ensured_directory = None
+        else:
+            hosted_state.directory_ensured = False
         raise
 
     try:
@@ -719,21 +798,28 @@ def _append_line(line: str) -> None:
                 raise OSError("usage log write returned 0 bytes")
             offset += written
 
-        _bytes_since_size_check += offset
-        # Writes are landing again, so the next failure is worth a warning of its own.
-        _write_failure_logged = False
+        if hosted_state is None:
+            _bytes_since_size_check += offset
+        else:
+            hosted_state.bytes_since_size_check += offset
+        # Writes are landing again, so the next failure for this log is worth a warning.
+        if hosted_state is None:
+            _write_failure_logged = False
+        else:
+            hosted_state.write_failure_logged = False
     finally:
         os.close(descriptor)
 
 
-def _is_log_full() -> bool:
+def _is_log_full(log_path: Optional[Path] = None) -> bool:
     """Whether the log has reached its cap, re-measured at most once per interval.
 
     Refusing appends is the only correct answer at the cap. Trimming here is what makes
     cumulative totals go down, which Prometheus reads as a counter reset and then
     extrapolates — losing history and inventing activity at once. Compacting here is no
     better: ``_compact`` reads the whole file, and this runs on a request path.
-    Compaction at the next launch summarises the older half and appends resume.
+    Local compaction at the next launch summarises the older half and appends resume;
+    hosted logs are re-checked after external compaction.
 
     Between measurements the previous verdict is returned rather than recomputed, and that
     is load-bearing rather than an optimisation. ``_bytes_since_size_check`` counts bytes
@@ -751,34 +837,54 @@ def _is_log_full() -> bool:
     """
     global _bytes_since_size_check, _log_full
 
-    if _bytes_since_size_check < LOG_SIZE_CHECK_INTERVAL_BYTES:
-        return _log_full
+    hosted_state = _ensure_hosted_log_state(log_path) if log_path is not None else None
+    if hosted_state is None:
+        bytes_since_size_check = _bytes_since_size_check
+        log_full = _log_full
+    else:
+        bytes_since_size_check = hosted_state.bytes_since_size_check
+        log_full = hosted_state.log_full
 
-    _bytes_since_size_check = 0
-    was_full = _log_full
+    # Hosted compaction is deployment-owned, so a cached refusal cannot stay sticky:
+    # once full, re-stat on each attempted batch until an external collector has made
+    # room. Local logs keep the launch-time compaction contract.
+    if hosted_state is not None and log_full:
+        bytes_since_size_check = LOG_SIZE_CHECK_INTERVAL_BYTES
+
+    if bytes_since_size_check < LOG_SIZE_CHECK_INTERVAL_BYTES:
+        return log_full
+
+    was_full = log_full
 
     try:
-        _log_full = get_usage_log_path().stat().st_size > MAX_LOG_BYTES
+        log_full = (log_path or get_usage_log_path()).stat().st_size > MAX_LOG_BYTES
     except OSError:
         # No log yet, or it is unreadable. Either way not full; a real write failure is
         # the append's problem to report, not this check's.
-        _log_full = False
+        log_full = False
 
-    if _log_full and not was_full:
+    if hosted_state is None:
+        _bytes_since_size_check = 0
+        _log_full = log_full
+    else:
+        hosted_state.bytes_since_size_check = 0
+        hosted_state.log_full = log_full
+
+    if log_full and not was_full:
         # Once, on the way in. Everything after this point is dropped and answered 204,
         # so without a line here a machine whose recording has stopped is indistinguishable
         # from a user who stopped using the application — the same misreading the refusal
         # itself exists to prevent.
         logger.warning(
             "Usage log has reached its %d byte cap; no further events will be recorded "
-            "until it is compacted at the next launch",
+            "until it is compacted or removed",
             MAX_LOG_BYTES,
         )
 
-    return _log_full
+    return log_full
 
 
-def _invalidate_size_check() -> None:
+def _invalidate_size_check(log_path: Optional[Path] = None) -> None:
     """Force the next append to measure the log again.
 
     Called after compaction, which is the only thing that gives a full log room. It does
@@ -788,11 +894,19 @@ def _invalidate_size_check() -> None:
     """
     global _bytes_since_size_check, _log_full
 
-    _log_full = False
-    _bytes_since_size_check = LOG_SIZE_CHECK_INTERVAL_BYTES
+    if log_path is None:
+        _log_full = False
+        _bytes_since_size_check = LOG_SIZE_CHECK_INTERVAL_BYTES
+        return
+
+    state = _ensure_hosted_log_state(log_path)
+    state.log_full = False
+    state.bytes_since_size_check = LOG_SIZE_CHECK_INTERVAL_BYTES
 
 
-def _warn_write_failure(message: str, *args: Any) -> None:
+def _warn_write_failure(
+    message: str, *args: Any, hosted_state: Optional[_UsageLogState] = None
+) -> None:
     """Report the first failure of a run of them, then stay quiet until a write lands.
 
     A persistent failure — a full disk, a revoked permission, a deleted directory — would
@@ -804,11 +918,19 @@ def _warn_write_failure(message: str, *args: Any) -> None:
     """
     global _write_failure_logged
 
-    if _write_failure_logged:
+    failure_logged = (
+        _write_failure_logged
+        if hosted_state is None
+        else hosted_state.write_failure_logged
+    )
+    if failure_logged:
         logger.debug(message, *args)
         return
 
-    _write_failure_logged = True
+    if hosted_state is None:
+        _write_failure_logged = True
+    else:
+        hosted_state.write_failure_logged = True
     logger.warning(message, *args)
 
 
@@ -826,7 +948,9 @@ def _resolve_server_mode(server_mode: Optional[Any]) -> Any:
 
 
 def _write_events(
-    events: Sequence[Tuple[UsageEvent, Mapping[str, Any]]], server_mode: Any
+    events: Sequence[Tuple[UsageEvent, Mapping[str, Any]]],
+    server_mode: Any,
+    event_log_id: Optional[str] = None,
 ) -> bool:
     """The whole write path, all of it or none of it, in a single append.
 
@@ -852,7 +976,13 @@ def _write_events(
     if len(events) > MAX_USAGE_BATCH_EVENTS:
         return False
 
-    if _is_log_full():
+    hosted = _as_bool(server_mode)
+    if hosted and event_log_id is None:
+        return False
+
+    log_path = get_usage_log_path(server_mode, event_log_id) if hosted else None
+
+    if _is_log_full(log_path):
         return False
 
     timestamp = _get_timestamp()
@@ -868,7 +998,10 @@ def _write_events(
     if not lines:
         return False
 
-    _append_line("".join(lines))
+    if log_path is None:
+        _append_line("".join(lines))
+    else:
+        _append_line("".join(lines), log_path)
     return True
 
 
@@ -969,6 +1102,7 @@ def validate_client_event(entry: Any) -> Tuple[UsageEvent, Dict[str, Enum]]:
 def record_events(
     events: Sequence[Tuple[UsageEvent, Mapping[str, Any]]],
     server_mode: Optional[Any] = None,
+    event_log_id: Optional[str] = None,
 ) -> bool:
     """Append a batch of events, all of them or none, in a single write.
 
@@ -991,13 +1125,31 @@ def record_events(
     "written" without inspecting the log. Never raises: instrumentation must not break
     the application it measures, least of all from a request handler.
     """
+    resolved_server_mode = _resolve_server_mode(server_mode)
     try:
-        return _write_events(events, _resolve_server_mode(server_mode))
+        return _write_events(
+            events,
+            resolved_server_mode,
+            event_log_id=event_log_id,
+        )
     except Exception as error:
         # One warning for the batch, and only for the first of a run of them: per-event
         # logging on a request path would turn one failed flush into a screenful, and a
         # persistent failure would turn every later flush into another screenful.
-        _warn_write_failure("Unable to record %d usage events: %s", len(events), error)
+        hosted_state = None
+        if _as_bool(resolved_server_mode) and _is_valid_event_log_id(event_log_id):
+            try:
+                hosted_state = _ensure_hosted_log_state(
+                    get_usage_log_path(resolved_server_mode, event_log_id)
+                )
+            except (OSError, ValueError):
+                pass
+        _warn_write_failure(
+            "Unable to record %d usage events: %s",
+            len(events),
+            error,
+            hosted_state=hosted_state,
+        )
         return False
 
 

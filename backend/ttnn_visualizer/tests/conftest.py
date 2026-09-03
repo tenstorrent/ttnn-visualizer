@@ -9,6 +9,7 @@ Pytest fixtures for API tests.
 import shutil
 import sqlite3
 import tempfile
+from collections import OrderedDict
 from pathlib import Path
 
 import pytest
@@ -69,6 +70,7 @@ def usage_directory(tmp_path, monkeypatch):
     # Keyed on the path, so a fresh `tmp_path` invalidates it anyway — reset regardless,
     # since relying on that couples every test to the fixture's choice of directory.
     monkeypatch.setattr(usage, "_ensured_directory", None)
+    monkeypatch.setattr(usage, "_hosted_log_state_by_path", OrderedDict())
     monkeypatch.delenv(RUN_ID_ENV_VAR, raising=False)
     monkeypatch.delenv(USAGE_DISABLED_ENV_VAR, raising=False)
 

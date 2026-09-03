@@ -57,13 +57,13 @@ def test_the_usage_recording_state_reaches_the_browser_as_a_boolean(
     assert client_config["USAGE_RECORDING_ACTIVE"] is expected
 
 
-def test_the_published_usage_state_follows_the_posture_not_the_config_snapshot(
+def test_the_published_usage_state_is_active_in_server_mode(
     monkeypatch, usage_directory
 ):
     # `create_app` runs `from_object` before applying `settings_override`, so a snapshot of
     # `USAGE_RECORDING_ACTIVE` is resolved against the pre-override `SERVER_MODE` and reads
-    # true for a hosted app. The builder recomputes instead; this is the test that fails if
-    # someone simplifies it back to a config lookup.
+    # true for a hosted app. The builder recomputes against the live opt-out state rather
+    # than trusting that snapshot.
     monkeypatch.delenv(USAGE_DISABLED_ENV_VAR, raising=False)
 
     config = DefaultConfig().to_dict()
@@ -73,7 +73,7 @@ def test_the_published_usage_state_follows_the_posture_not_the_config_snapshot(
 
     client_config = _build_spa_client_config(_FakeApp(config))
 
-    assert client_config["USAGE_RECORDING_ACTIVE"] is False
+    assert client_config["USAGE_RECORDING_ACTIVE"] is True
 
 
 def test_the_usage_recording_state_is_published_under_both_postures(usage_directory):

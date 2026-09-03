@@ -46,6 +46,7 @@ from ttnn_visualizer.usage import (
     get_recording_disabled_reason,
     get_unrecognised_usage_disabled_value,
     get_usage_log_path,
+    get_usage_root,
     is_recording_enabled,
     record_app_start,
     start_run,
@@ -425,7 +426,7 @@ def display_mode_info_without_db(config):
 
 
 def _record_launch(config):
-    """Record this launch locally, and say so.
+    """Record a local launch or report hosted recording status.
 
     Split out of ``main()`` because ``main()`` binds a socket and spawns gunicorn and
     so cannot be called from a test, which would leave the wiring — the part that
@@ -435,7 +436,12 @@ def _record_launch(config):
     # identifier, even if recording is switched on part-way through the session.
     os.environ[RUN_ID_ENV_VAR] = start_run()
 
-    disabled_reason = get_recording_disabled_reason(config.SERVER_MODE)
+    server_mode = (
+        str_to_bool(config.SERVER_MODE)
+        if isinstance(config.SERVER_MODE, str)
+        else bool(config.SERVER_MODE)
+    )
+    disabled_reason = get_recording_disabled_reason(server_mode)
     if disabled_reason is not None:
         unrecognised_value = get_unrecognised_usage_disabled_value()
         if unrecognised_value is not None:
@@ -446,8 +452,17 @@ def _record_launch(config):
         print(f"📊 Event logging is DISABLED: {disabled_reason}.")
         return
 
+    if server_mode:
+        print(
+            f"📊 Recording hosted usage by browser session under "
+            f"{get_usage_root(server_mode=True)}.\n"
+            f"   Session identifiers remain in file paths and are not exported.\n"
+            f"   {describe_opt_out(server_mode=True)}"
+        )
+        return
+
     compact_if_needed()
-    record_app_start(config, server_mode=config.SERVER_MODE)
+    record_app_start(config, server_mode=server_mode)
 
     # `print` rather than `logger.info`: nothing has configured logging at this point
     # in `main()` — `create_app()` does that — and the last-resort handler drops

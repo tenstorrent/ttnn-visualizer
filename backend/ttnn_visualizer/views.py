@@ -131,6 +131,7 @@ from ttnn_visualizer.usage import (
     MAX_USAGE_BATCH_EVENTS,
     UsageEvent,
     UsageEventRejected,
+    ensure_event_log_id,
     is_recording_enabled,
     record_events,
     validate_client_event,
@@ -2783,26 +2784,25 @@ def get_latest_version():
 
 
 @api.route("/usage", methods=["POST"])
-@local_only
 def record_usage_events():
-    """Append a batch of frontend usage events to the local log.
+    """Append a batch of frontend usage events to the deployment's usage log.
 
     Recording happens frontend-side because backend API counts are misleading — React
     Query caching, prefetching and retries inflate them, and the interactions worth
     measuring (chart views, table toggles, filters, playback) never reach the API at
     all. So the client needs somewhere local to post, and this is it.
 
-    **No ``@with_instance``, deliberately.** The log is machine-scoped rather than
-    report-scoped, so this route takes no ``instanceId`` — an exception to the
+    **No ``@with_instance``, deliberately.** Usage is deployment/session-scoped rather
+    than report-scoped, so this route takes no ``instanceId`` — an exception to the
     convention every report-backed route follows, not an omission to be tidied up.
 
     **No ``@timer`` either**: it logs a line per call, and this endpoint is called often
     by design.
 
-    ``@local_only`` is the control that matters. Nothing here is authenticated and
-    ``ALLOWED_ORIGINS`` is the only other gate, so the handler validates its body
-    against a closed schema rather than trusting it: a permitted page must not be able
-    to write arbitrary lines into the file we are asking IT to parse.
+    Nothing here is authenticated and ``ALLOWED_ORIGINS`` only governs browsers, so the
+    handler validates its body against a closed schema rather than trusting it. Hosted
+    log selection comes only from a server-minted event log ID in the signed Flask
+    session.
     """
     # Before anything reads the stream. Werkzeug enforces this both against a declared
     # `Content-Length` and while reading a stream the server has terminated, which a
@@ -2855,8 +2855,19 @@ def record_usage_events():
             return response_unprocessable_entity(str(rejection))
 
     # Deliberately the same answer whether or not the write happened. Recording being
-    # switched off locally is not the client's problem, and whether a log exists on this
-    # machine is not something a page needs told.
-    record_events(validated)
+    # switched off for this deployment is not the client's problem, and whether a log
+    # exists on this machine is not something a page needs told.
+    configured_server_mode = current_app.config["SERVER_MODE"]
+    server_mode = (
+        str_to_bool(configured_server_mode)
+        if isinstance(configured_server_mode, str)
+        else bool(configured_server_mode)
+    )
+    event_log_id = ensure_event_log_id() if server_mode else None
+    record_events(
+        validated,
+        server_mode=server_mode,
+        event_log_id=event_log_id,
+    )
 
     return Response(status=HTTPStatus.NO_CONTENT)

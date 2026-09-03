@@ -25,6 +25,8 @@ from ttnn_visualizer.tests.usage_log import (
 from ttnn_visualizer.usage import (
     CLIENT_EVENT_DETAIL_FIELDS,
     EVENT_FIELD,
+    EVENT_LOG_ID_LENGTH,
+    EVENT_LOG_ID_SESSION_KEY,
     LOG_SIZE_CHECK_INTERVAL_BYTES,
     MAX_USAGE_BATCH_EVENTS,
     RUN_ID_FIELD,
@@ -61,9 +63,7 @@ def isolate_usage_log(usage_directory):
 
 @pytest.fixture(autouse=True)
 def local_mode(app):
-    # `/api/usage` is @local_only and the shared test app runs in SERVER_MODE, which
-    # would 403 every case here. Default the module to local mode so the functional
-    # contract is exercised; the 403 case re-enables SERVER_MODE.
+    # Exercise the longstanding local contract by default; hosted partition tests opt in.
     previous = app.config["SERVER_MODE"]
     app.config["SERVER_MODE"] = False
     yield
@@ -74,14 +74,126 @@ def _post_events(client, events):
     return client.post(USAGE_ENDPOINT, json={"events": events})
 
 
-def test_hosted_instance_refuses_to_record(app, client, usage_directory):
-    """@local_only: the hosted deployment writes no usage log at all."""
+def _event_log_id(client):
+    with client.session_transaction() as flask_session:
+        return flask_session.get(EVENT_LOG_ID_SESSION_KEY)
+
+
+def test_hosted_instance_records_to_its_session_directory(app, client, usage_directory):
     app.config["SERVER_MODE"] = True
 
     response = _post_events(client, [REPORT_LOADED_EVENT])
 
-    assert response.status_code == HTTPStatus.FORBIDDEN
-    assert read_usage_lines(usage_directory) == []
+    assert response.status_code == HTTPStatus.NO_CONTENT
+    event_log_id = _event_log_id(client)
+    assert isinstance(event_log_id, str)
+    assert len(event_log_id) == EVENT_LOG_ID_LENGTH
+    assert len(read_usage_lines(usage_directory / event_log_id)) == 1
+
+
+def test_hosted_session_reuses_its_log(app, client, usage_directory):
+    app.config["SERVER_MODE"] = True
+
+    _post_events(client, [REPORT_LOADED_EVENT])
+    event_log_id = _event_log_id(client)
+    _post_events(client, [VIEW_OPENED_EVENT])
+
+    assert len(read_usage_lines(usage_directory / event_log_id)) == 2
+    assert [path.name for path in usage_directory.iterdir()] == [event_log_id]
+
+
+def test_hosted_clients_get_distinct_logs(app, client, usage_directory):
+    app.config["SERVER_MODE"] = True
+    other_client = app.test_client()
+
+    _post_events(client, [REPORT_LOADED_EVENT])
+    _post_events(other_client, [VIEW_OPENED_EVENT])
+
+    first_id = _event_log_id(client)
+    second_id = _event_log_id(other_client)
+    assert first_id != second_id
+    assert len(read_usage_lines(usage_directory / first_id)) == 1
+    assert len(read_usage_lines(usage_directory / second_id)) == 1
+
+
+def test_hosted_log_path_ignores_caller_supplied_ids(app, client, usage_directory):
+    app.config["SERVER_MODE"] = True
+    supplied_id = "f" * EVENT_LOG_ID_LENGTH
+
+    response = client.post(
+        USAGE_ENDPOINT,
+        query_string={"usageSessionId": supplied_id},
+        json={"events": [VIEW_OPENED_EVENT], "usageSessionId": supplied_id},
+    )
+
+    actual_id = _event_log_id(client)
+    assert response.status_code == HTTPStatus.NO_CONTENT
+    assert actual_id != supplied_id
+    assert not (usage_directory / supplied_id).exists()
+    assert len(read_usage_lines(usage_directory / actual_id)) == 1
+
+
+def test_hosted_session_replaces_a_malformed_stored_id(app, client, usage_directory):
+    app.config["SERVER_MODE"] = True
+    with client.session_transaction() as flask_session:
+        flask_session[EVENT_LOG_ID_SESSION_KEY] = "../escape"
+
+    _post_events(client, [VIEW_OPENED_EVENT])
+
+    replacement = _event_log_id(client)
+    assert replacement != "../escape"
+    assert len(replacement) == EVENT_LOG_ID_LENGTH
+    assert len(read_usage_lines(usage_directory / replacement)) == 1
+
+
+def test_minting_a_hosted_usage_id_does_not_make_the_session_permanent(app, client):
+    app.config["SERVER_MODE"] = True
+
+    _post_events(client, [VIEW_OPENED_EVENT])
+
+    with client.session_transaction() as flask_session:
+        assert flask_session.get(EVENT_LOG_ID_SESSION_KEY)
+        assert flask_session.permanent is False
+
+
+def test_hosted_usage_keeps_an_existing_permanent_session_id(
+    app, client, usage_directory
+):
+    app.config["SERVER_MODE"] = True
+    existing_id = "c" * EVENT_LOG_ID_LENGTH
+    with client.session_transaction() as flask_session:
+        flask_session[EVENT_LOG_ID_SESSION_KEY] = existing_id
+        flask_session.permanent = True
+
+    _post_events(client, [VIEW_OPENED_EVENT])
+
+    with client.session_transaction() as flask_session:
+        assert flask_session[EVENT_LOG_ID_SESSION_KEY] == existing_id
+        assert flask_session.permanent is True
+    assert len(read_usage_lines(usage_directory / existing_id)) == 1
+
+
+def test_hosted_opt_out_creates_no_session_or_log(
+    app, client, usage_directory, monkeypatch
+):
+    app.config["SERVER_MODE"] = True
+    monkeypatch.setenv(USAGE_DISABLED_ENV_VAR, "true")
+
+    response = _post_events(client, [VIEW_OPENED_EVENT])
+
+    assert response.status_code == HTTPStatus.NO_CONTENT
+    assert _event_log_id(client) is None
+    assert not usage_directory.exists()
+
+
+def test_string_false_server_mode_remains_local(app, client, usage_directory):
+    app.config["SERVER_MODE"] = "false"
+
+    response = _post_events(client, [VIEW_OPENED_EVENT])
+
+    assert response.status_code == HTTPStatus.NO_CONTENT
+    assert _event_log_id(client) is None
+    assert len(read_usage_lines(usage_directory)) == 1
 
 
 def test_accepted_batch_appends_one_well_formed_line_per_event(client, usage_directory):

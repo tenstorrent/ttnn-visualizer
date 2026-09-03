@@ -6,13 +6,11 @@ SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 # Event logging
 
-TT-NN Visualizer records a small, fixed set of usage events on local installations. Recording is on by default. The application writes the events to a file on the same machine and does not transmit them.
-
-The hosted instance at [ttnn-visualizer.tenstorrent.com](https://ttnn-visualizer.tenstorrent.com) runs in `SERVER_MODE` and records no usage events.
+TT-NN Visualizer records a small, fixed set of usage events. Recording is on by default. The frontend posts events to the TT-NN Visualizer backend, which stores them on its own machine and does not forward or export them. On a local installation that request remains on the local machine; under `SERVER_MODE` it travels from the user's browser to the hosted backend.
 
 ## Storage and inspection
 
-Usage data always lives at:
+Local usage data lives at:
 
 ```text
 ~/.ttnn-visualizer/usage/events.log
@@ -20,13 +18,21 @@ Usage data always lives at:
 
 This path is separate from the application data directory. Deleting the application data directory, including a directory selected through `TT_METAL_HOME` or `APP_DATA_DIRECTORY`, does not delete the usage log.
 
+An installation running in `SERVER_MODE` stores one log per anonymous browser session:
+
+```text
+/data/usage/<event-log-id>/events.log
+```
+
+The backend generates the 32-character event log ID and stores it inside the signed Flask session cookie. It is a log partition key, not Flask's session identifier or a user identity. It is never accepted from a request parameter or body, never written into an event line, and must not be exported by the collector. It normally lasts for the browser session; uploading a report makes the existing Flask session permanent for Flask's default 31-day lifetime. Hosted deployments must provide a strong, stable `SECRET_KEY`, mount writable persistent storage at `/data/usage`, and enforce aggregate retention, quota, and request-rate controls.
+
 The log is plain text in logfmt format. Inspect it with:
 
 ```shell
 cat ~/.ttnn-visualizer/usage/events.log
 ```
 
-Stop TT-NN Visualizer before deleting the log; a running process can create it again. Delete the recorded events with:
+Stop TT-NN Visualizer before deleting logs; a running process can create them again. Delete locally recorded events with:
 
 ```shell
 rm -f ~/.ttnn-visualizer/usage/events.log
@@ -51,7 +57,7 @@ mkdir -p ~/.ttnn-visualizer/usage
 touch ~/.ttnn-visualizer/usage/disabled
 ```
 
-Recording resumes after the marker is removed unless `USAGE_RECORDING_DISABLED` still disables it. Neither local control can enable recording under `SERVER_MODE`.
+Under `SERVER_MODE`, create `/data/usage/disabled` instead. The marker applies to every hosted session. Recording resumes after the posture's marker is removed unless `USAGE_RECORDING_DISABLED` still disables it.
 
 ## Log fields
 
@@ -60,7 +66,7 @@ Ordinary event lines contain these common fields:
 - `ts`: the UTC time at which the server wrote the event, in `YYYY-MM-DDTHH:MM:SSZ` form. Frontend events are buffered, so this can be later than the interaction.
 - `event`: one of `app_start`, `report_loaded`, `report_load_failed`, `view_opened`, or `view_engaged`.
 - `schema_version`: the log format version, currently `1`.
-- `run_id`: a random `8`-character identifier generated for each application launch and shared by its server workers. It is not persisted between launches and is never exported by the out-of-band collector.
+- `run_id`: a random `8`-character identifier generated for each backend launch and shared by its server workers. It is not persisted between launches and is never exported by the out-of-band collector. Hosted browser-session identity comes from the containing directory, not this field.
 
 After the log is compacted, a summary line can contain:
 
@@ -80,7 +86,7 @@ Recorded by the server once during a successful local launch.
 - `os`: `darwin`, `linux`, `windows`, `other`.
 - `python_version`: the Python major and minor version, such as `3.10`.
 
-`hosted` is part of the closed `launch_mode` vocabulary, but an application running in `SERVER_MODE` disables recording before this event is written.
+`hosted` remains part of the closed `launch_mode` vocabulary, but `app_start` is not written under `SERVER_MODE`: a shared server process launch is not a browser session or evidence of user activity.
 
 ### `report_loaded`
 
@@ -125,10 +131,10 @@ TT-NN Visualizer does not record:
 
 ## Out-of-band collection
 
-TT-NN Visualizer only writes the local log. It makes no off-machine usage-reporting request and has no knowledge of whether another process reads the file.
+The TT-NN Visualizer backend only writes the logs; it does not forward or export them and has no knowledge of whether another process reads the files. Under `SERVER_MODE`, the browser-to-backend event request is necessarily a network request to the hosted application.
 
-On a managed machine, an independently operated collector can read the log and export machine-level aggregate counters. The collector must not export timestamps, `run_id`, per-event rows, or per-user series. Deleting or disabling the local log is independent of that collector and does not remove aggregates it has already exported.
+An independently operated collector can read the logs and export aggregate counters. The collector must not export timestamps, `run_id`, hosted session directory names, per-event rows, or per-user series. Hosted retention and compaction are collector/deployment responsibilities; the application neither enumerates session logs at startup nor compacts them on a request path. Deleting or disabling a log is independent of that collector and does not remove aggregates it has already exported.
 
 ## Documentation-site analytics
 
-The Sphinx documentation site can use PostHog for documentation feedback and traffic. That site analytics system is separate from TT-NN Visualizer's local usage log: documentation traffic and application usage are complementary signals, but they measure different populations and must not be combined or directly compared.
+The Sphinx documentation site can use PostHog for documentation feedback and traffic. That site analytics system is separate from TT-NN Visualizer's usage logs: documentation traffic and application usage are complementary signals, but they measure different populations and must not be combined or directly compared.

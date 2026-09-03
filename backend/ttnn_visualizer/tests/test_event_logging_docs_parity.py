@@ -19,6 +19,8 @@ from ttnn_visualizer.usage import (
     COUNT_FIELD,
     DISABLED_MARKER_NAME,
     EVENT_FIELD,
+    EVENT_LOG_ID_LENGTH,
+    HOSTED_USAGE_DIRECTORY,
     RUN_ID_FIELD,
     RUN_ID_LENGTH,
     SCHEMA_VERSION,
@@ -212,6 +214,10 @@ def test_the_event_logging_docs_name_the_fixed_paths_and_environment_control():
 
     assert str(usage_directory / USAGE_LOG_NAME) in source
     assert str(usage_directory / DISABLED_MARKER_NAME) in source
+    assert str(HOSTED_USAGE_DIRECTORY / "<event-log-id>" / USAGE_LOG_NAME) in source
+    assert str(HOSTED_USAGE_DIRECTORY / DISABLED_MARKER_NAME) in source
+    assert f"{EVENT_LOG_ID_LENGTH}-character event log ID" in source
+    assert "strong, stable `SECRET_KEY`" in source
     assert USAGE_DISABLED_ENV_VAR in source
     assert _documented_values_matching(
         source,

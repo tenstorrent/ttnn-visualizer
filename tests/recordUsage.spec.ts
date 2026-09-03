@@ -474,11 +474,8 @@ describe('recordUsage idle scheduling', () => {
 });
 
 describe('recordUsage gating', () => {
-    it.each([
-        ['recording is switched off', { SERVER_MODE: false, USAGE_RECORDING_ACTIVE: false, BASE_PATH: '/' }],
-        ['the app is in server mode', { SERVER_MODE: true, USAGE_RECORDING_ACTIVE: true, BASE_PATH: '/' }],
-    ])('sends nothing when %s', async (_label, config) => {
-        serverConfigMock.mockReturnValue(config);
+    it('sends nothing when recording is switched off', async () => {
+        serverConfigMock.mockReturnValue({ SERVER_MODE: true, USAGE_RECORDING_ACTIVE: false, BASE_PATH: '/' });
 
         const { recordUsage, flushUsage, initUsageRecording, post } = await loadRecorder();
         const teardown = startRecording(initUsageRecording);
@@ -491,6 +488,18 @@ describe('recordUsage gating', () => {
         expect(post).not.toHaveBeenCalled();
         expect(sendBeacon).not.toHaveBeenCalled();
         expect(teardown).not.toThrow();
+    });
+
+    it('records in server mode when the published switch is active', async () => {
+        serverConfigMock.mockReturnValue({ SERVER_MODE: true, USAGE_RECORDING_ACTIVE: true, BASE_PATH: '/' });
+
+        const { recordUsage, flushUsage, initUsageRecording, post } = await loadRecorder();
+        startRecording(initUsageRecording);
+
+        recordUsage(VIEW_OPENED);
+        flushUsage();
+
+        expect(post).toHaveBeenCalledTimes(1);
     });
 });
 

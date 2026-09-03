@@ -400,7 +400,7 @@ For HTTP API calls going through `axiosInstance`, the frontend never embeds the 
 
 **Don't.** Building a URL like `${Endpoints.OPERATIONS_LIST}/${instanceId}` collides with the operation-detail route shape and loses session scoping for every other call sharing the axios config.
 
-**Documented exception.** The unload flush in `src/functions/recordUsage.ts` calls `navigator.sendBeacon` rather than `axiosInstance`, because a beacon is the only request the browser guarantees to send while the document is being discarded. It therefore gets neither interceptor, and composes `BASE_PATH` + `Endpoints.USAGE` by hand — deliberately without `instanceId`, since `POST /api/usage` is machine-scoped and takes no `@with_instance`. The body must be a `Blob` typed `application/json`: the route requires that content type so the request stays non-simple and a hostile origin needs a preflight `ALLOWED_ORIGINS` refuses, and a bare-string beacon is sent as `text/plain` and rejected.
+**Documented exception.** The unload flush in `src/functions/recordUsage.ts` calls `navigator.sendBeacon` rather than `axiosInstance`, because a beacon is the only request the browser guarantees to send while the document is being discarded. It therefore gets neither interceptor, and composes `BASE_PATH` + `Endpoints.USAGE` by hand — deliberately without `instanceId`, since `POST /api/usage` is deployment/session-scoped and takes no `@with_instance`. The body must be a `Blob` typed `application/json`: the route requires that content type so the request stays non-simple and a hostile origin needs a preflight `ALLOWED_ORIGINS` refuses, and a bare-string beacon is sent as `text/plain` and rejected.
 
 **Documented exception.** The Socket.IO connection URL is built at module scope in `src/libs/SocketProvider.tsx` (`io(\`${BASE_PATH}?instanceId=${getOrCreateInstanceId()}\`)`) because `io(...)` doesn't go through axios and there's no interceptor to inject the param. The instance ID still travels as a `?instanceId=...` query string — just one assembled by hand rather than injected.
 
@@ -598,7 +598,7 @@ Defaults belong on the `<ToastContainer>` in `Layout.tsx`, which is mounted once
 
 ## Event logging (frontend)
 
-`src/functions/recordUsage.ts` buffers local usage events and posts them to `POST /api/usage`, which appends them to a log under the user's home directory (`backend/ttnn_visualizer/usage.py`). Nothing is transmitted off the machine. The invariants below are not visible from either side alone.
+`src/functions/recordUsage.ts` buffers usage events and posts them to `POST /api/usage`. Local installs append to `~/.ttnn-visualizer/usage/events.log`; `SERVER_MODE` appends to `/data/usage/<event-log-id>/events.log`, where the server-derived log partition key lives in the signed Flask session cookie. The backend never forwards or exports the events; the browser-to-backend post is local only on a local installation and crosses the network under `SERVER_MODE`. The invariants below are not visible from either side alone.
 
 ### `usage.py` owns the vocabulary; the frontend and user reference are copies
 
@@ -607,6 +607,12 @@ Defaults belong on the `<ToastContainer>` in `Layout.tsx`, which is mounted once
 `backend/ttnn_visualizer/tests/test_usage_frontend_parity.py` pins more than the enums: the detail fields each client event declares, the route path, the `{ events }` envelope key, and that a full batch of the largest event still fits `MAX_USAGE_REQUEST_BYTES`. `backend/ttnn_visualizer/tests/test_event_logging_docs_parity.py` separately pins the structured event, field and enum reference in `docs/src/event-logging.md`.
 
 The event list exists to answer Q1–Q5 in #1819, not to accumulate counters. Every proposed event must name the decision it informs. **Adding or changing an event, detail field or closed value means updating `usage.py`, the client copy where applicable, and the user reference in one commit.** The two parity tests are the review gate: a code-only vocabulary change, or prose that omits part of the bounded schema, must fail CI.
+
+### Hosted identity stays in the path
+
+The usage endpoint is the narrow exception to `@local_only`: hosted clients may post the same closed event vocabulary, but they never choose where it lands. `usage.py::ensure_event_log_id` mints a 32-character UUID hex log partition key inside Flask's signed session, and path resolution requires that exact form plus containment under `/data/usage`. It is neither Flask's session identifier nor a user identity. Never use the caller-controlled `instanceId`, a query parameter, request JSON, or the raw signed cookie value.
+
+One hosted session gets one directory; the identifier is not copied into logfmt and the collector must not export directory names or per-user series. Minting it does not make a session permanent, although the existing upload flow can later make the whole cookie permanent for Flask's default 31-day lifetime. Hosted deployments require a strong stable `SECRET_KEY`, aggregate storage quota/retention, and request-rate controls: a 10 MiB per-file cap cannot bound the number of anonymous sessions.
 
 ### Three caps, and each pair has to stay consistent
 
@@ -630,7 +636,7 @@ navigator.sendBeacon(getUsageEndpointUrl(), new Blob([body], { type: 'applicatio
 
 ### Failures are silent, and batches are never re-buffered
 
-The endpoint answers **204** whether it wrote, whether recording is switched off locally, or whether the batch was dropped — so there is nothing to branch on and the client never backs off. A refused or unreachable endpoint therefore *drops* the batch: re-buffering would grow the buffer without bound for the life of the tab, and a malformed batch would be resubmitted forever. Overflow past `MAX_BUFFERED_EVENTS` is dropped for the same reason.
+The endpoint answers **204** whether it wrote, whether recording is switched off for the deployment, or whether the batch was dropped — so there is nothing to branch on and the client never backs off. A refused or unreachable endpoint therefore *drops* the batch: re-buffering would grow the buffer without bound for the life of the tab, and a malformed batch would be resubmitted forever. Overflow past `MAX_BUFFERED_EVENTS` is dropped for the same reason.
 
 The only diagnostic is a `console.warn` under `import.meta.env.DEV` carrying **the status only** — never a response body, which would put server text back into a subsystem whose whole point is that it holds none. Warn from the rejection path as well as the success path: axios resolves only on 2xx, so a 422 never reaches `.then`.
 
@@ -642,11 +648,10 @@ The only diagnostic is a `console.warn` under `import.meta.env.DEV` carrying **t
 
 ```python
 @api.route("/usage", methods=["POST"])
-@local_only
 def record_usage_events():
 ```
 
-No `@with_instance`, because the log is machine-scoped rather than report-scoped — an exception to the rule every report-backed route follows, not an omission to tidy up. No `@timer`, because the endpoint is called often by design. `@local_only` is the control that matters: nothing is authenticated, so the handler validates against a closed schema rather than trusting a permitted page not to write arbitrary lines into a file another team parses. Every event is validated before any is written, so a batch carrying one bad event appends nothing.
+No `@with_instance`, because usage is deployment/session-scoped rather than report-scoped — an exception to the rule every report-backed route follows, not an omission to tidy up. No `@timer`, because the endpoint is called often by design. No `@local_only`, because this is the single ingest path intentionally enabled under `SERVER_MODE`. Nothing is authenticated and CORS does not govern non-browser clients, so the handler derives hosted identity from the signed session and validates against a closed schema. Every event is validated before any is written, so a batch carrying one bad event appends nothing.
 
 `initUsageRecording()` is called once, from `Layout`, rather than registering listeners at module scope — so importing the module has no side effect. Its teardown **drains** rather than discards, since it has already cancelled the pending flush.
 
