@@ -8,6 +8,7 @@ import {
     type OpGraphBuildOptions,
     type OpGraphBuiltGraph,
     type OpGraphDeviceSubgraph,
+    OpGraphGrouping,
     type OpGraphSourceOperation,
     type OpGraphWorkerInboundMessage,
     OpGraphWorkerMessageType,
@@ -96,6 +97,18 @@ const build = (
     expandedBlockIds,
 });
 
+const buildWithGrouping = (requestId: number, grouping: OpGraphGrouping): OpGraphWorkerInboundMessage => ({
+    type: OpGraphWorkerMessageType.BUILD,
+    sourceVersion: 1,
+    requestId,
+    hideDeallocate: false,
+    deviceSubgraphs: [],
+    expandedBlockIds: [],
+    grouping,
+});
+
+const optionsOfLastBuild = () => buildOpGraph.mock.calls.at(-1)?.[1];
+
 const builtReplies = () => posted.filter((message) => message.type === OpGraphWorkerMessageType.BUILT);
 
 const drain = () => vi.advanceTimersByTime(0);
@@ -119,6 +132,67 @@ afterEach(() => {
 });
 
 describe('opGraphLayoutWorker', () => {
+    describe('grouping', () => {
+        it('hands the build the grouping the view asked for', async () => {
+            // The handler used to rebuild the request by listing its fields, and
+            // `grouping` was not among them. Every option on `OpGraphBuildOptions` is
+            // optional, so the omission type-checked and every build silently ran the
+            // default detector while the toolbar showed the mode the user picked. #1976
+            const send = await loadWorker();
+            send(setGraph(1));
+
+            send(buildWithGrouping(1, OpGraphGrouping.LAYERS));
+            drain();
+
+            expect(optionsOfLastBuild()).toEqual(expect.objectContaining({ grouping: OpGraphGrouping.LAYERS }));
+        });
+
+        it('carries every option across the message boundary, not a chosen few', async () => {
+            // Guards the shape rather than one field: a future option added to the
+            // build must not need a second edit here to survive the hop.
+            const send = await loadWorker();
+            send(setGraph(1));
+
+            send(buildWithGrouping(1, OpGraphGrouping.REPEATS));
+            drain();
+
+            expect(optionsOfLastBuild()).toEqual(
+                expect.objectContaining({
+                    hideDeallocate: false,
+                    deviceSubgraphs: [],
+                    expandedBlockIds: [],
+                    grouping: OpGraphGrouping.REPEATS,
+                }),
+            );
+        });
+
+        it('does not serve the layout of one grouping to the other', async () => {
+            const send = await loadWorker();
+            send(setGraph(1));
+
+            send(buildWithGrouping(1, OpGraphGrouping.REPEATS));
+            drain();
+            send(buildWithGrouping(2, OpGraphGrouping.LAYERS));
+            drain();
+
+            // Same source, same fold state: only the detector differs, so a cache key
+            // blind to it would hand back the first graph.
+            expect(buildOpGraph).toHaveBeenCalledTimes(2);
+        });
+
+        it('reuses the layout when the grouping is unchanged', async () => {
+            const send = await loadWorker();
+            send(setGraph(1));
+
+            send(buildWithGrouping(1, OpGraphGrouping.LAYERS));
+            drain();
+            send(buildWithGrouping(2, OpGraphGrouping.LAYERS));
+            drain();
+
+            expect(buildOpGraph).toHaveBeenCalledTimes(1);
+        });
+    });
+
     describe('coalescing', () => {
         it('lays out once for a burst and answers the newest request', async () => {
             const send = await loadWorker();

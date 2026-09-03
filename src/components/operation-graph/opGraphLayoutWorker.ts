@@ -4,6 +4,7 @@
 
 import { touchLruCache } from '../../functions/touchLruCache';
 import { type CandidateEdge, buildOpGraph, collectCandidateEdges, getKeptOperations } from './opGraphBuilder';
+import { detectLayerBlocks } from './opGraphLayerBlocks';
 import { detectRepeatBlocks } from './opGraphRepeatBlocks';
 import {
     type OpGraphBuildOptions,
@@ -14,6 +15,7 @@ import {
     OpGraphWorkerMessageType,
     type RepeatBlockInstance,
 } from './opGraphTypes';
+import { OpGraphGrouping } from './opGraphTypes';
 
 // The op-range slider drives builds from Blueprint's continuous `onChange`, so
 // requests arrive per pointer frame while Dagre takes 43ms on a typical report
@@ -67,6 +69,7 @@ const cacheKeyOf = (
     hideDeallocate: boolean,
     deviceSubgraphs: OpGraphDeviceSubgraph[],
     expandedBlockIds: readonly string[] | undefined,
+    grouping: OpGraphGrouping,
 ): string => {
     const expanded = deviceSubgraphs
         .map((subgraph) => subgraph.operationId)
@@ -75,16 +78,20 @@ const cacheKeyOf = (
     // `undefined` (nothing folded yet) and `[]` (fold every instance) build
     // different graphs, so they must not share a cache entry. #1977
     const blocks = expandedBlockIds === undefined ? 'none' : [...expandedBlockIds].sort().join(',');
-    return `${version}:${hideDeallocate}:${expanded}:${blocks}`;
+    return `${version}:${hideDeallocate}:${expanded}:${blocks}:${grouping}`;
 };
 
-const detectedBlocksOf = (hideDeallocate: boolean): RepeatBlockInstance[] => {
-    const key = `${sourceVersion}:${hideDeallocate}`;
+const detectedBlocksOf = (hideDeallocate: boolean, grouping: OpGraphGrouping): RepeatBlockInstance[] => {
+    // Grouping is part of the key: the two detectors answer the same question
+    // differently, so one cache entry per deallocate setting would serve repeat
+    // blocks to a layer-grouped build. #1976
+    const key = `${sourceVersion}:${hideDeallocate}:${grouping}`;
     const cached = detectionByDeallocate.get(key);
     if (cached !== undefined) {
         return cached;
     }
-    const blocks = detectRepeatBlocks(getKeptOperations(operations, hideDeallocate, candidatesOf()));
+    const kept = getKeptOperations(operations, hideDeallocate, candidatesOf());
+    const blocks = grouping === OpGraphGrouping.LAYERS ? detectLayerBlocks(kept) : detectRepeatBlocks(kept);
     detectionByDeallocate.set(key, blocks);
     return blocks;
 };
@@ -113,11 +120,13 @@ const drainPendingBuild = (): void => {
         return;
     }
 
+    const grouping = request.grouping ?? OpGraphGrouping.REPEATS;
     const cacheKey = cacheKeyOf(
         request.sourceVersion,
         request.hideDeallocate,
         request.deviceSubgraphs,
         request.expandedBlockIds,
+        grouping,
     );
     const cached = layoutCache.get(cacheKey);
     if (cached) {
@@ -136,7 +145,8 @@ const drainPendingBuild = (): void => {
             hideDeallocate: request.hideDeallocate,
             deviceSubgraphs: request.deviceSubgraphs,
             expandedBlockIds: request.expandedBlockIds,
-            detectedBlocks: detectedBlocksOf(request.hideDeallocate),
+            grouping,
+            detectedBlocks: detectedBlocksOf(request.hideDeallocate, grouping),
         });
         touchLruCache(layoutCache, cacheKey, graph, LAYOUT_CACHE_LIMIT);
         postMessage({
@@ -165,13 +175,13 @@ onmessage = (event: MessageEvent<OpGraphWorkerInboundMessage>) => {
         return;
     }
 
-    pendingBuild = {
-        requestId: message.requestId,
-        sourceVersion: message.sourceVersion,
-        hideDeallocate: message.hideDeallocate,
-        deviceSubgraphs: message.deviceSubgraphs,
-        expandedBlockIds: message.expandedBlockIds,
-    };
+    // Spread rather than re-listed field by field. The hand-written version silently
+    // dropped `grouping` when it was added: every option is optional on
+    // `OpGraphBuildOptions`, so an omitted one type-checks, and the build then ran the
+    // default detector while the toolbar reported the mode the user had picked. Taking
+    // everything except the discriminant cannot lose the next option either. #1976
+    const { type: _discriminant, ...options } = message;
+    pendingBuild = options;
 
     if (!isDrainScheduled) {
         isDrainScheduled = true;
