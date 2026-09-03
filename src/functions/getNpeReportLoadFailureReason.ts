@@ -4,8 +4,8 @@
 
 import axios, { HttpStatusCode } from 'axios';
 import { NPEValidationError, NPE_LOAD_FAILURE_REASON_BY_VALIDATION_ERROR } from '../definitions/NPEData';
-import { ReportLoadFailureReason } from '../definitions/UsageEvent';
-import { getReportLoadFailureReason } from './reportLoadUsage';
+import { ReportLoadFailureReason } from '../definitions/EventLogEvent';
+import { getReportLoadFailureReason } from './reportLoadEvents';
 
 export default function getNpeReportLoadFailureReason(
     validationError: NPEValidationError,

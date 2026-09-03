@@ -6,17 +6,17 @@ SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 # Event logging
 
-TT-NN Visualizer records a small, fixed set of usage events. Recording is on by default. The frontend posts events to the TT-NN Visualizer backend, which stores them on its own machine and does not forward or export them. On a local installation that request remains on the local machine; under `SERVER_MODE` it travels from the user's browser to the hosted backend.
+TT-NN Visualizer records a small, fixed set of events. Recording is on by default. The frontend posts events to the TT-NN Visualizer backend, which stores them on its own machine and does not forward or export them. On a local installation that request remains on the local machine; under `SERVER_MODE` it travels from the user's browser to the hosted backend.
 
 ## Storage and inspection
 
-Local usage data lives at:
+Local event-log data lives at:
 
 ```text
 ~/.ttnn-visualizer/usage/events.log
 ```
 
-This path is separate from the application data directory. Deleting the application data directory, including a directory selected through `TT_METAL_HOME` or `APP_DATA_DIRECTORY`, does not delete the usage log.
+This path is separate from the application data directory. Deleting the application data directory, including a directory selected through `TT_METAL_HOME` or `APP_DATA_DIRECTORY`, does not delete the event log.
 
 An installation running in `SERVER_MODE` stores one log per anonymous browser session:
 
@@ -24,7 +24,9 @@ An installation running in `SERVER_MODE` stores one log per anonymous browser se
 /data/usage/<event-log-id>/events.log
 ```
 
-The backend generates the 32-character event log ID and stores it inside the signed Flask session cookie. It is a log partition key, not Flask's session identifier or a user identity. It is never accepted from a request parameter or body, never written into an event line, and must not be exported by the collector. It normally lasts for the browser session; uploading a report makes the existing Flask session permanent for Flask's default 31-day lifetime. Hosted deployments must provide a strong, stable `SECRET_KEY`, mount writable persistent storage at `/data/usage`, and enforce aggregate retention, quota, and request-rate controls.
+The backend generates the 32-character event log ID and stores it inside the signed Flask session cookie. It is a log partition key, not Flask's session identifier or a user identity. It is never accepted from a request parameter or body, never written into an event line, and must not be exported by the collector. It normally lasts for the browser session; uploading a report makes the existing Flask session permanent for Flask's default 31-day lifetime.
+
+`SERVER_MODE` refuses to start unless `SECRET_KEY` is non-default and at least 32 bytes. The application accepts at most 1,024 hosted event logs, at most 60 new event logs per minute across workers, and at most 120 batches per event log per minute in each worker. Combined with the 10 MiB per-file cap, the log-count limit bounds aggregate event-file storage to approximately 10 GiB. Hosted deployments must still mount writable persistent storage at `/data/usage`, remove collected session logs to reclaim quota, and apply edge-level request controls appropriate to their worker count and expected traffic.
 
 The log is plain text in logfmt format. Inspect it with:
 
@@ -137,4 +139,4 @@ An independently operated collector can read the logs and export aggregate count
 
 ## Documentation-site analytics
 
-The Sphinx documentation site can use PostHog for documentation feedback and traffic. That site analytics system is separate from TT-NN Visualizer's usage logs: documentation traffic and application usage are complementary signals, but they measure different populations and must not be combined or directly compared.
+The Sphinx documentation site can use PostHog for documentation feedback and traffic. That site analytics system is separate from TT-NN Visualizer's event logs: documentation traffic and application activity are complementary signals, but they measure different populations and must not be combined or directly compared.

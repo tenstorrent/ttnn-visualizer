@@ -17,7 +17,7 @@ import { ModalAwareOutlet } from '../libs/ModalAwareOutlet';
 import FeedbackButton from './FeedbackButton';
 import FileStatusOverlay from './FileStatusOverlay';
 import MlirFileResultsOverlay from './mlir/MlirFileResultsOverlay';
-import { initUsageRecording } from '../functions/recordUsage';
+import { initEventLogging } from '../functions/recordEvent';
 import useRecordViewOpened from '../hooks/useRecordViewOpened';
 import { isModalOpen } from '../functions/modalRoute';
 
@@ -33,10 +33,10 @@ function Layout() {
     const location = useLocation();
     const isTopologyOpen = isModalOpen(location, ROUTES.CLUSTER);
 
-    // Starts the usage flush lifecycle; it records nothing on its own. Here rather than at
+    // Starts the event-log flush lifecycle; it records nothing on its own. Here rather than at
     // module scope so importing the sender has no side effect, and so the listeners are
     // owned the way every other listener in this app is.
-    useEffect(() => initUsageRecording(), []);
+    useEffect(() => initEventLogging(), []);
 
     useRecordViewOpened();
 

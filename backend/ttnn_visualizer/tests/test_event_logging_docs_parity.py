@@ -12,24 +12,28 @@ from typing import Any, Dict, List, Set
 from unittest.mock import patch
 
 import pytest
-from ttnn_visualizer import usage
-from ttnn_visualizer.usage import (
+from ttnn_visualizer import event_logging
+from ttnn_visualizer.event_logging import (
     _DETAIL_FIELD_ENUMS,
     CLIENT_EVENT_DETAIL_FIELDS,
     COUNT_FIELD,
     DISABLED_MARKER_NAME,
     EVENT_FIELD,
+    EVENT_LOG_FILENAME,
     EVENT_LOG_ID_LENGTH,
-    HOSTED_USAGE_DIRECTORY,
+    HOSTED_EVENT_LOG_ROOT,
+    MAX_HOSTED_BATCHES_PER_MINUTE,
+    MAX_HOSTED_EVENT_LOG_CREATIONS_PER_MINUTE,
+    MAX_HOSTED_EVENT_LOGS,
+    RECORDING_DISABLED_ENV_VAR,
     RUN_ID_FIELD,
     RUN_ID_LENGTH,
     SCHEMA_VERSION,
     SCHEMA_VERSION_FIELD,
     TIMESTAMP_FIELD,
-    USAGE_DISABLED_ENV_VAR,
-    USAGE_LOG_NAME,
-    UsageEvent,
+    EventLogEvent,
 )
+from ttnn_visualizer.settings import MIN_HOSTED_SECRET_KEY_BYTES
 from ttnn_visualizer.utils import FALSE_VALUES, TRUE_VALUES
 
 _REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
@@ -91,10 +95,12 @@ def _documented_fields(section: str) -> Set[str]:
 
 def _app_start_details() -> Dict[str, Any]:
     with (
-        patch.object(usage, "is_recording_enabled", return_value=True),
-        patch.object(usage, "record_event") as record_event,
+        patch.object(event_logging, "is_recording_enabled", return_value=True),
+        patch.object(event_logging, "record_event") as record_event,
     ):
-        usage.record_app_start(SimpleNamespace(TT_METAL_HOME=None), server_mode=False)
+        event_logging.record_app_start(
+            SimpleNamespace(TT_METAL_HOME=None), server_mode=False
+        )
 
     record_event.assert_called_once()
     return {
@@ -154,15 +160,15 @@ def test_the_event_logging_docs_page_has_an_spdx_header():
 def test_every_usage_event_has_exactly_one_documented_section():
     sections = _event_sections(_read(_EVENT_LOGGING_DOCS))
 
-    assert set(sections) == {event.value for event in UsageEvent}
+    assert set(sections) == {event.value for event in EventLogEvent}
 
 
-@pytest.mark.parametrize("event", sorted(UsageEvent, key=str))
+@pytest.mark.parametrize("event", sorted(EventLogEvent, key=str))
 def test_every_event_documents_exactly_its_specific_fields(event):
     section = _event_sections(_read(_EVENT_LOGGING_DOCS))[event.value]
     expected_fields = (
         set(_app_start_details())
-        if event is UsageEvent.APP_START
+        if event is EventLogEvent.APP_START
         else set(CLIENT_EVENT_DETAIL_FIELDS[event])
     )
 
@@ -210,26 +216,35 @@ def test_the_event_logging_docs_name_every_common_log_field():
     ]
     assert _documented_value_sets(section, RUN_ID_FIELD) == [{str(RUN_ID_LENGTH)}]
     assert _documented_value_sets(section, EVENT_FIELD) == [
-        {event.value for event in UsageEvent}
+        {event.value for event in EventLogEvent}
     ]
 
 
 def test_the_event_logging_docs_name_the_fixed_paths_and_environment_control():
     with (
-        patch.object(usage, "USAGE_DIRECTORY", None),
-        patch.object(usage.Path, "home", return_value=Path("~")),
+        patch.object(event_logging, "EVENT_LOG_DIRECTORY", None),
+        patch.object(event_logging.Path, "home", return_value=Path("~")),
     ):
-        usage_directory = usage.get_usage_directory()
+        event_log_directory = event_logging.get_event_log_directory()
 
     source = _read(_EVENT_LOGGING_DOCS)
 
-    assert str(usage_directory / USAGE_LOG_NAME) in source
-    assert str(usage_directory / DISABLED_MARKER_NAME) in source
-    assert str(HOSTED_USAGE_DIRECTORY / "<event-log-id>" / USAGE_LOG_NAME) in source
-    assert str(HOSTED_USAGE_DIRECTORY / DISABLED_MARKER_NAME) in source
+    assert str(event_log_directory / EVENT_LOG_FILENAME) in source
+    assert str(event_log_directory / DISABLED_MARKER_NAME) in source
+    assert str(HOSTED_EVENT_LOG_ROOT / "<event-log-id>" / EVENT_LOG_FILENAME) in source
+    assert str(HOSTED_EVENT_LOG_ROOT / DISABLED_MARKER_NAME) in source
     assert f"{EVENT_LOG_ID_LENGTH}-character event log ID" in source
-    assert "strong, stable `SECRET_KEY`" in source
-    assert USAGE_DISABLED_ENV_VAR in source
+    assert f"at least {MIN_HOSTED_SECRET_KEY_BYTES} bytes" in source
+    assert f"at most {MAX_HOSTED_EVENT_LOGS:,} hosted event logs" in source
+    assert (
+        f"at most {MAX_HOSTED_EVENT_LOG_CREATIONS_PER_MINUTE} new event logs per minute"
+        in source
+    )
+    assert (
+        f"at most {MAX_HOSTED_BATCHES_PER_MINUTE} batches per event log per minute"
+        in source
+    )
+    assert RECORDING_DISABLED_ENV_VAR in source
     assert _documented_values_matching(
         source,
         r"Setting it to (.*?) switches recording off\.",

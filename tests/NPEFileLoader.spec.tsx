@@ -8,7 +8,7 @@ import { cleanup, fireEvent, render, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import NPEFileLoader from '../src/components/npe/NPEFileLoader';
 import { ConnectionTestStates } from '../src/definitions/ConnectionStatus';
-import { ReportKind, ReportLoadFailureReason } from '../src/definitions/UsageEvent';
+import { ReportKind, ReportLoadFailureReason } from '../src/definitions/EventLogEvent';
 
 const uploadNpeFile = vi.fn();
 const { recordReportLoadFailed } = vi.hoisted(() => ({ recordReportLoadFailed: vi.fn() }));
@@ -17,10 +17,10 @@ vi.mock('../src/hooks/useLocal', () => ({
     default: () => ({ uploadNpeFile }),
 }));
 
-vi.mock('../src/functions/reportLoadUsage', async (importOriginal) => {
-    const { reportLoadUsageSpiesMock } = await import('./helpers/mockReportLoadUsage');
+vi.mock('../src/functions/reportLoadEvents', async (importOriginal) => {
+    const { reportLoadEventsSpiesMock } = await import('./helpers/mockReportLoadEvents');
 
-    return reportLoadUsageSpiesMock(importOriginal, vi.fn(), recordReportLoadFailed);
+    return reportLoadEventsSpiesMock(importOriginal, vi.fn(), recordReportLoadFailed);
 });
 
 vi.mock('../src/functions/createToastNotification', async () => {

@@ -4,9 +4,9 @@
 
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { NPEValidationError } from '../definitions/NPEData';
-import { ReportKind, ReportSource } from '../definitions/UsageEvent';
+import { ReportKind, ReportSource } from '../definitions/EventLogEvent';
 import getNpeReportLoadFailureReason from '../functions/getNpeReportLoadFailureReason';
-import { recordReportLoadFailed, recordReportLoaded } from '../functions/reportLoadUsage';
+import { recordReportLoadFailed, recordReportLoaded } from '../functions/reportLoadEvents';
 
 interface NpeLoadAttempt {
     id: number;

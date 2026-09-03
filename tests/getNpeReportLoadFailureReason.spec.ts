@@ -5,7 +5,7 @@
 import { AxiosError, HttpStatusCode } from 'axios';
 import { describe, expect, it } from 'vitest';
 import { NPEValidationError } from '../src/definitions/NPEData';
-import { ReportLoadFailureReason } from '../src/definitions/UsageEvent';
+import { ReportLoadFailureReason } from '../src/definitions/EventLogEvent';
 import getNpeReportLoadFailureReason from '../src/functions/getNpeReportLoadFailureReason';
 
 const getAxiosError = (status: number): AxiosError => {

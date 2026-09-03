@@ -2,7 +2,7 @@
 #
 # SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-"""The ingest endpoint is the one piece of network surface the usage log has.
+"""The ingest endpoint is the one piece of network surface the event log has.
 
 Nothing in a local install is authenticated and ``ALLOWED_ORIGINS`` is the only other
 gate, so an endpoint that trusted its body would let any permitted page write arbitrary
@@ -16,49 +16,49 @@ from http import HTTPStatus
 from pathlib import Path
 
 import pytest
-from ttnn_visualizer import usage
-from ttnn_visualizer.tests.usage_log import (
-    parse_usage_line,
-    read_usage_lines,
-    total_usage_events,
-)
-from ttnn_visualizer.usage import (
+from ttnn_visualizer import event_logging
+from ttnn_visualizer.event_logging import (
     CLIENT_EVENT_DETAIL_FIELDS,
     EVENT_FIELD,
     EVENT_LOG_ID_LENGTH,
     EVENT_LOG_ID_SESSION_KEY,
     LOG_SIZE_CHECK_INTERVAL_BYTES,
-    MAX_USAGE_BATCH_EVENTS,
+    MAX_EVENT_LOG_BATCH_EVENTS,
+    RECORDING_DISABLED_ENV_VAR,
     RUN_ID_FIELD,
     SCHEMA_VERSION,
     SCHEMA_VERSION_FIELD,
     TIMESTAMP_FIELD,
-    USAGE_DISABLED_ENV_VAR,
-    UsageEvent,
+    EventLogEvent,
     get_disabled_marker_path,
 )
-from ttnn_visualizer.views import MAX_USAGE_REQUEST_BYTES
+from ttnn_visualizer.tests.event_log_readers import (
+    parse_event_log_line,
+    read_event_log_lines,
+    total_event_log_events,
+)
+from ttnn_visualizer.views import MAX_EVENT_LOG_REQUEST_BYTES
 
-USAGE_ENDPOINT = "/api/usage"
+EVENT_LOG_ENDPOINT = "/api/event-log/events"
 
 REPORT_LOADED_EVENT = {
-    "event": UsageEvent.REPORT_LOADED.value,
+    "event": EventLogEvent.REPORT_LOADED.value,
     "details": {"kind": "profiler", "source": "upload"},
 }
 VIEW_OPENED_EVENT = {
-    "event": UsageEvent.VIEW_OPENED.value,
+    "event": EventLogEvent.VIEW_OPENED.value,
     "details": {"view": "operations"},
 }
 
 
 @pytest.fixture(autouse=True)
-def isolate_usage_log(usage_directory):
+def isolate_event_log(event_log_directory):
     """Autouse rather than opt-in: forgetting it would append to the developer's own log.
 
     An opt-in fixture fails open here — a test that omits it still passes, having written
     to ``~/.ttnn-visualizer/usage``.
     """
-    return usage_directory
+    return event_log_directory
 
 
 @pytest.fixture(autouse=True)
@@ -71,7 +71,7 @@ def local_mode(app):
 
 
 def _post_events(client, events):
-    return client.post(USAGE_ENDPOINT, json={"events": events})
+    return client.post(EVENT_LOG_ENDPOINT, json={"events": events})
 
 
 def _event_log_id(client):
@@ -79,7 +79,9 @@ def _event_log_id(client):
         return flask_session.get(EVENT_LOG_ID_SESSION_KEY)
 
 
-def test_hosted_instance_records_to_its_session_directory(app, client, usage_directory):
+def test_hosted_instance_records_to_its_session_directory(
+    app, client, event_log_directory
+):
     app.config["SERVER_MODE"] = True
 
     response = _post_events(client, [REPORT_LOADED_EVENT])
@@ -88,21 +90,23 @@ def test_hosted_instance_records_to_its_session_directory(app, client, usage_dir
     event_log_id = _event_log_id(client)
     assert isinstance(event_log_id, str)
     assert len(event_log_id) == EVENT_LOG_ID_LENGTH
-    assert len(read_usage_lines(usage_directory / event_log_id)) == 1
+    assert len(read_event_log_lines(event_log_directory / event_log_id)) == 1
 
 
-def test_hosted_session_reuses_its_log(app, client, usage_directory):
+def test_hosted_session_reuses_its_log(app, client, event_log_directory):
     app.config["SERVER_MODE"] = True
 
     _post_events(client, [REPORT_LOADED_EVENT])
     event_log_id = _event_log_id(client)
     _post_events(client, [VIEW_OPENED_EVENT])
 
-    assert len(read_usage_lines(usage_directory / event_log_id)) == 2
-    assert [path.name for path in usage_directory.iterdir()] == [event_log_id]
+    assert len(read_event_log_lines(event_log_directory / event_log_id)) == 2
+    assert [path.name for path in event_log_directory.iterdir() if path.is_dir()] == [
+        event_log_id
+    ]
 
 
-def test_hosted_clients_get_distinct_logs(app, client, usage_directory):
+def test_hosted_clients_get_distinct_logs(app, client, event_log_directory):
     app.config["SERVER_MODE"] = True
     other_client = app.test_client()
 
@@ -112,16 +116,16 @@ def test_hosted_clients_get_distinct_logs(app, client, usage_directory):
     first_id = _event_log_id(client)
     second_id = _event_log_id(other_client)
     assert first_id != second_id
-    assert len(read_usage_lines(usage_directory / first_id)) == 1
-    assert len(read_usage_lines(usage_directory / second_id)) == 1
+    assert len(read_event_log_lines(event_log_directory / first_id)) == 1
+    assert len(read_event_log_lines(event_log_directory / second_id)) == 1
 
 
-def test_hosted_log_path_ignores_caller_supplied_ids(app, client, usage_directory):
+def test_hosted_log_path_ignores_caller_supplied_ids(app, client, event_log_directory):
     app.config["SERVER_MODE"] = True
     supplied_id = "f" * EVENT_LOG_ID_LENGTH
 
     response = client.post(
-        USAGE_ENDPOINT,
+        EVENT_LOG_ENDPOINT,
         query_string={"usageSessionId": supplied_id},
         json={"events": [VIEW_OPENED_EVENT], "usageSessionId": supplied_id},
     )
@@ -129,11 +133,13 @@ def test_hosted_log_path_ignores_caller_supplied_ids(app, client, usage_director
     actual_id = _event_log_id(client)
     assert response.status_code == HTTPStatus.NO_CONTENT
     assert actual_id != supplied_id
-    assert not (usage_directory / supplied_id).exists()
-    assert len(read_usage_lines(usage_directory / actual_id)) == 1
+    assert not (event_log_directory / supplied_id).exists()
+    assert len(read_event_log_lines(event_log_directory / actual_id)) == 1
 
 
-def test_hosted_session_replaces_a_malformed_stored_id(app, client, usage_directory):
+def test_hosted_session_replaces_a_malformed_stored_id(
+    app, client, event_log_directory
+):
     app.config["SERVER_MODE"] = True
     with client.session_transaction() as flask_session:
         flask_session[EVENT_LOG_ID_SESSION_KEY] = "../escape"
@@ -143,7 +149,7 @@ def test_hosted_session_replaces_a_malformed_stored_id(app, client, usage_direct
     replacement = _event_log_id(client)
     assert replacement != "../escape"
     assert len(replacement) == EVENT_LOG_ID_LENGTH
-    assert len(read_usage_lines(usage_directory / replacement)) == 1
+    assert len(read_event_log_lines(event_log_directory / replacement)) == 1
 
 
 def test_minting_a_hosted_usage_id_does_not_make_the_session_permanent(app, client):
@@ -157,7 +163,7 @@ def test_minting_a_hosted_usage_id_does_not_make_the_session_permanent(app, clie
 
 
 def test_hosted_usage_keeps_an_existing_permanent_session_id(
-    app, client, usage_directory
+    app, client, event_log_directory
 ):
     app.config["SERVER_MODE"] = True
     existing_id = "c" * EVENT_LOG_ID_LENGTH
@@ -170,46 +176,48 @@ def test_hosted_usage_keeps_an_existing_permanent_session_id(
     with client.session_transaction() as flask_session:
         assert flask_session[EVENT_LOG_ID_SESSION_KEY] == existing_id
         assert flask_session.permanent is True
-    assert len(read_usage_lines(usage_directory / existing_id)) == 1
+    assert len(read_event_log_lines(event_log_directory / existing_id)) == 1
 
 
 def test_hosted_opt_out_creates_no_session_or_log(
-    app, client, usage_directory, monkeypatch
+    app, client, event_log_directory, monkeypatch
 ):
     app.config["SERVER_MODE"] = True
-    monkeypatch.setenv(USAGE_DISABLED_ENV_VAR, "true")
+    monkeypatch.setenv(RECORDING_DISABLED_ENV_VAR, "true")
 
     response = _post_events(client, [VIEW_OPENED_EVENT])
 
     assert response.status_code == HTTPStatus.NO_CONTENT
     assert _event_log_id(client) is None
-    assert not usage_directory.exists()
+    assert not event_log_directory.exists()
 
 
-def test_string_false_server_mode_remains_local(app, client, usage_directory):
+def test_string_false_server_mode_remains_local(app, client, event_log_directory):
     app.config["SERVER_MODE"] = "false"
 
     response = _post_events(client, [VIEW_OPENED_EVENT])
 
     assert response.status_code == HTTPStatus.NO_CONTENT
     assert _event_log_id(client) is None
-    assert len(read_usage_lines(usage_directory)) == 1
+    assert len(read_event_log_lines(event_log_directory)) == 1
 
 
-def test_accepted_batch_appends_one_well_formed_line_per_event(client, usage_directory):
+def test_accepted_batch_appends_one_well_formed_line_per_event(
+    client, event_log_directory
+):
     response = _post_events(client, [REPORT_LOADED_EVENT, VIEW_OPENED_EVENT])
 
     assert response.status_code == HTTPStatus.NO_CONTENT
 
-    lines = read_usage_lines(usage_directory)
+    lines = read_event_log_lines(event_log_directory)
     assert len(lines) == 2
 
-    first, second = (parse_usage_line(line) for line in lines)
+    first, second = (parse_event_log_line(line) for line in lines)
 
-    assert first[EVENT_FIELD] == UsageEvent.REPORT_LOADED.value
+    assert first[EVENT_FIELD] == EventLogEvent.REPORT_LOADED.value
     assert first["kind"] == "profiler"
     assert first["source"] == "upload"
-    assert second[EVENT_FIELD] == UsageEvent.VIEW_OPENED.value
+    assert second[EVENT_FIELD] == EventLogEvent.VIEW_OPENED.value
     assert second["view"] == "operations"
 
     for fields in (first, second):
@@ -219,11 +227,13 @@ def test_accepted_batch_appends_one_well_formed_line_per_event(client, usage_dir
         assert fields[RUN_ID_FIELD]
 
 
-def test_accepted_batch_totals_the_way_the_collector_reads_it(client, usage_directory):
+def test_accepted_batch_totals_the_way_the_collector_reads_it(
+    client, event_log_directory
+):
     """Cumulative counts have to come out right, since a decrease reads as a reset."""
     _post_events(client, [VIEW_OPENED_EVENT] * 3)
 
-    assert total_usage_events(read_usage_lines(usage_directory)) == 3
+    assert total_event_log_events(read_event_log_lines(event_log_directory)) == 3
 
 
 @pytest.mark.parametrize(
@@ -231,12 +241,12 @@ def test_accepted_batch_totals_the_way_the_collector_reads_it(client, usage_dire
     [
         pytest.param({"event": "not_an_event", "details": {}}, id="unknown_event"),
         pytest.param(
-            {"event": UsageEvent.APP_START.value, "details": {}},
+            {"event": EventLogEvent.APP_START.value, "details": {}},
             id="server_owned_event",
         ),
         pytest.param(
             {
-                "event": UsageEvent.REPORT_LOADED.value,
+                "event": EventLogEvent.REPORT_LOADED.value,
                 "details": {
                     "kind": "profiler",
                     "source": "upload",
@@ -246,55 +256,66 @@ def test_accepted_batch_totals_the_way_the_collector_reads_it(client, usage_dire
             id="unknown_detail_key",
         ),
         pytest.param(
-            {"event": UsageEvent.REPORT_LOADED.value, "details": {"kind": "profiler"}},
+            {
+                "event": EventLogEvent.REPORT_LOADED.value,
+                "details": {"kind": "profiler"},
+            },
             id="missing_detail_key",
         ),
         pytest.param(
-            {"event": UsageEvent.VIEW_OPENED.value, "details": {"view": "not_a_view"}},
+            {
+                "event": EventLogEvent.VIEW_OPENED.value,
+                "details": {"view": "not_a_view"},
+            },
             id="out_of_enum_value",
         ),
         pytest.param(
             {
-                "event": UsageEvent.VIEW_OPENED.value,
+                "event": EventLogEvent.VIEW_OPENED.value,
                 "details": {"view": "operations\nts=2026-01-01T00:00:00Z"},
             },
             id="embedded_newline",
         ),
         pytest.param(
-            {"event": UsageEvent.VIEW_OPENED.value, "details": {"view": "view=forged"}},
+            {
+                "event": EventLogEvent.VIEW_OPENED.value,
+                "details": {"view": "view=forged"},
+            },
             id="embedded_equals",
         ),
         pytest.param(
             {
-                "event": UsageEvent.VIEW_OPENED.value,
+                "event": EventLogEvent.VIEW_OPENED.value,
                 "details": {"view": "operations", "ts": "2026-01-01T00:00:00Z"},
             },
             id="client_supplied_timestamp",
         ),
         pytest.param(
             {
-                "event": UsageEvent.VIEW_OPENED.value,
+                "event": EventLogEvent.VIEW_OPENED.value,
                 "details": {"view": "operations", "schema_version": "99"},
             },
             id="client_supplied_schema_version",
         ),
         pytest.param(
-            {"event": UsageEvent.VIEW_OPENED.value, "details": {"view": 1}},
+            {"event": EventLogEvent.VIEW_OPENED.value, "details": {"view": 1}},
             id="non_string_value",
         ),
         pytest.param(
-            {"event": UsageEvent.VIEW_OPENED.value, "details": "operations"},
+            {"event": EventLogEvent.VIEW_OPENED.value, "details": "operations"},
             id="details_not_an_object",
         ),
-        pytest.param({"event": UsageEvent.VIEW_OPENED.value}, id="details_absent"),
+        pytest.param({"event": EventLogEvent.VIEW_OPENED.value}, id="details_absent"),
         pytest.param({"details": {"view": "operations"}}, id="event_name_absent"),
     ],
 )
-def test_rejected_event_is_refused_and_appends_nothing(client, usage_directory, event):
+def test_rejected_event_is_refused_and_appends_nothing(
+    client, event_log_directory, event
+):
     response = _post_events(client, [event])
 
     assert response.status_code == HTTPStatus.UNPROCESSABLE_ENTITY
-    assert read_usage_lines(usage_directory) == []
+    assert read_event_log_lines(event_log_directory) == []
 
 
 @pytest.mark.parametrize(
@@ -306,32 +327,32 @@ def test_rejected_event_is_refused_and_appends_nothing(client, usage_directory, 
     ],
 )
 def test_a_batch_element_that_is_not_an_object_is_refused(
-    client, usage_directory, entry
+    client, event_log_directory, entry
 ):
     response = _post_events(client, [entry])
 
     assert response.status_code == HTTPStatus.UNPROCESSABLE_ENTITY
-    assert read_usage_lines(usage_directory) == []
+    assert read_event_log_lines(event_log_directory) == []
 
 
-def test_unknown_top_level_event_keys_are_refused(client, usage_directory):
+def test_unknown_top_level_event_keys_are_refused(client, event_log_directory):
     """Closed at the envelope level too, so a dropped field cannot pass for a sent one."""
     response = _post_events(
         client, [{**VIEW_OPENED_EVENT, "run_id": "forged01", "note": "hello"}]
     )
 
     assert response.status_code == HTTPStatus.UNPROCESSABLE_ENTITY
-    assert read_usage_lines(usage_directory) == []
+    assert read_event_log_lines(event_log_directory) == []
 
 
 ACCEPTED_EVENTS = {
-    UsageEvent.REPORT_LOADED: {"kind": "profiler", "source": "upload"},
-    UsageEvent.REPORT_LOAD_FAILED: {
+    EventLogEvent.REPORT_LOADED: {"kind": "profiler", "source": "upload"},
+    EventLogEvent.REPORT_LOAD_FAILED: {
         "kind": "performance",
         "reason_class": "parse_error",
     },
-    UsageEvent.VIEW_OPENED: {"view": "operations"},
-    UsageEvent.VIEW_ENGAGED: {"view": "performance"},
+    EventLogEvent.VIEW_OPENED: {"view": "operations"},
+    EventLogEvent.VIEW_ENGAGED: {"view": "performance"},
 }
 
 
@@ -346,7 +367,7 @@ def test_the_round_trip_fixture_covers_every_client_postable_event():
 
 
 @pytest.mark.parametrize("event", list(ACCEPTED_EVENTS), ids=lambda event: event.value)
-def test_every_client_postable_event_round_trips(client, usage_directory, event):
+def test_every_client_postable_event_round_trips(client, event_log_directory, event):
     """All four, not just the two the other cases happen to use.
 
     A detail tuple naming the wrong-but-valid field — ``view`` where ``reason_class``
@@ -358,7 +379,7 @@ def test_every_client_postable_event_round_trips(client, usage_directory, event)
 
     assert response.status_code == HTTPStatus.NO_CONTENT
 
-    written = parse_usage_line(read_usage_lines(usage_directory)[0])
+    written = parse_event_log_line(read_event_log_lines(event_log_directory)[0])
 
     assert written[EVENT_FIELD] == event.value
     assert set(CLIENT_EVENT_DETAIL_FIELDS[event]) <= set(written)
@@ -366,18 +387,20 @@ def test_every_client_postable_event_round_trips(client, usage_directory, event)
         assert written[field] == value
 
 
-def test_a_batch_shares_one_run_id(client, usage_directory):
+def test_a_batch_shares_one_run_id(client, event_log_directory):
     """Session shape is only reconstructable if one flush reads as one flush."""
     _post_events(client, [REPORT_LOADED_EVENT, VIEW_OPENED_EVENT])
 
     first, second = (
-        parse_usage_line(line) for line in read_usage_lines(usage_directory)
+        parse_event_log_line(line) for line in read_event_log_lines(event_log_directory)
     )
 
     assert first[RUN_ID_FIELD] == second[RUN_ID_FIELD]
 
 
-def test_a_full_batch_of_the_largest_event_fits_the_byte_cap(client, usage_directory):
+def test_a_full_batch_of_the_largest_event_fits_the_byte_cap(
+    client, event_log_directory
+):
     """The two caps have to be consistent, or a legal max batch 413s.
 
     ``test_batch_at_the_cap_is_accepted`` uses the smallest event and so leaves most of
@@ -385,21 +408,21 @@ def test_a_full_batch_of_the_largest_event_fits_the_byte_cap(client, usage_direc
     combination that would break first if either cap moved.
     """
     largest = {
-        "event": UsageEvent.REPORT_LOAD_FAILED.value,
+        "event": EventLogEvent.REPORT_LOAD_FAILED.value,
         "details": {
             "kind": "cluster_descriptor",
             "reason_class": "unsupported_version",
         },
     }
 
-    response = _post_events(client, [largest] * MAX_USAGE_BATCH_EVENTS)
+    response = _post_events(client, [largest] * MAX_EVENT_LOG_BATCH_EVENTS)
 
     assert response.status_code == HTTPStatus.NO_CONTENT
-    assert len(read_usage_lines(usage_directory)) == MAX_USAGE_BATCH_EVENTS
+    assert len(read_event_log_lines(event_log_directory)) == MAX_EVENT_LOG_BATCH_EVENTS
 
 
 def test_a_failed_write_does_not_fail_the_request(
-    client, usage_directory, monkeypatch, caplog
+    client, event_log_directory, monkeypatch, caplog
 ):
     """The contract that keeps instrumentation from taking the app down with it.
 
@@ -414,23 +437,21 @@ def test_a_failed_write_does_not_fail_the_request(
     def failing_append(_line):
         raise OSError("disk full")
 
-    monkeypatch.setattr(usage, "_append_line", failing_append)
+    monkeypatch.setattr(event_logging, "_append_line", failing_append)
 
     with caplog.at_level("WARNING"):
         response = _post_events(client, [REPORT_LOADED_EVENT, VIEW_OPENED_EVENT])
 
-    warnings = [
-        record for record in caplog.records if "usage events" in record.getMessage()
-    ]
+    warnings = [record for record in caplog.records if "events" in record.getMessage()]
 
     assert response.status_code == HTTPStatus.NO_CONTENT
-    assert read_usage_lines(usage_directory) == []
+    assert read_event_log_lines(event_log_directory) == []
     assert len(warnings) == 1
-    assert "2 usage events" in warnings[0].getMessage()
+    assert "2 events" in warnings[0].getMessage()
 
 
 def test_a_log_at_the_cap_accepts_no_further_events(
-    client, usage_directory, monkeypatch
+    client, event_log_directory, monkeypatch
 ):
     """Growth is client-driven now, so the cap has to hold on the write path too.
 
@@ -446,11 +467,13 @@ def test_a_log_at_the_cap_accepts_no_further_events(
     any cap, so the guard is deliberately silent until there is something to measure.
     """
     _post_events(client, [VIEW_OPENED_EVENT])
-    already_written = read_usage_lines(usage_directory)
+    already_written = read_event_log_lines(event_log_directory)
     assert len(already_written) == 1
 
-    monkeypatch.setattr(usage, "MAX_LOG_BYTES", 0)
-    monkeypatch.setattr(usage, "_bytes_since_size_check", LOG_SIZE_CHECK_INTERVAL_BYTES)
+    monkeypatch.setattr(event_logging, "MAX_LOG_BYTES", 0)
+    event_logging._local_log_state.bytes_since_size_check = (
+        LOG_SIZE_CHECK_INTERVAL_BYTES
+    )
 
     for _ in range(3):
         response = _post_events(client, [REPORT_LOADED_EVENT])
@@ -458,11 +481,11 @@ def test_a_log_at_the_cap_accepts_no_further_events(
         # have something to back off from, and this is not its business.
         assert response.status_code == HTTPStatus.NO_CONTENT
 
-    assert read_usage_lines(usage_directory) == already_written
+    assert read_event_log_lines(event_log_directory) == already_written
 
 
 def test_a_full_log_is_reported_once_rather_than_per_flush(
-    client, usage_directory, monkeypatch, caplog
+    client, event_log_directory, monkeypatch, caplog
 ):
     """Silent refusal reads as "nobody uses this machine" months later.
 
@@ -472,8 +495,10 @@ def test_a_full_log_is_reported_once_rather_than_per_flush(
     """
     _post_events(client, [VIEW_OPENED_EVENT])
 
-    monkeypatch.setattr(usage, "MAX_LOG_BYTES", 0)
-    monkeypatch.setattr(usage, "_bytes_since_size_check", LOG_SIZE_CHECK_INTERVAL_BYTES)
+    monkeypatch.setattr(event_logging, "MAX_LOG_BYTES", 0)
+    event_logging._local_log_state.bytes_since_size_check = (
+        LOG_SIZE_CHECK_INTERVAL_BYTES
+    )
 
     with caplog.at_level("WARNING"):
         for _ in range(3):
@@ -487,14 +512,14 @@ def test_a_full_log_is_reported_once_rather_than_per_flush(
 
 
 def test_the_size_check_is_amortised_rather_than_per_request(
-    client, usage_directory, monkeypatch
+    client, event_log_directory, monkeypatch
 ):
     """One stat per interval, not one per flush — this route is called often by design."""
     stats = []
     real_stat = Path.stat
 
     def counting_stat(self, *args, **kwargs):
-        if self.name == usage.USAGE_LOG_NAME:
+        if self.name == event_logging.EVENT_LOG_FILENAME:
             stats.append(self)
         return real_stat(self, *args, **kwargs)
 
@@ -503,17 +528,17 @@ def test_the_size_check_is_amortised_rather_than_per_request(
     for _ in range(5):
         _post_events(client, [VIEW_OPENED_EVENT])
 
-    # Snapshot before reading the log back: `read_usage_lines` stats it too, via
+    # Snapshot before reading the log back: `read_event_log_lines` stats it too, via
     # `exists()`, and would be counted as a sixth request's check.
     checks_during_requests = len(stats)
 
-    assert len(read_usage_lines(usage_directory)) == 5
+    assert len(read_event_log_lines(event_log_directory)) == 5
     # The first append checks (the fixture primes the counter); the remaining four are
     # nowhere near LOG_SIZE_CHECK_INTERVAL_BYTES of appended data.
     assert checks_during_requests == 1
 
 
-def test_the_topology_overlay_is_a_countable_view(client, usage_directory):
+def test_the_topology_overlay_is_a_countable_view(client, event_log_directory):
     """A modal route is still a view, and this one is easy to lose.
 
     ``ROUTES.CLUSTER`` has ``element: null`` only because ``Layout`` renders the overlay
@@ -522,11 +547,14 @@ def test_the_topology_overlay_is_a_countable_view(client, usage_directory):
     """
     response = _post_events(
         client,
-        [{"event": UsageEvent.VIEW_OPENED.value, "details": {"view": "topology"}}],
+        [{"event": EventLogEvent.VIEW_OPENED.value, "details": {"view": "topology"}}],
     )
 
     assert response.status_code == HTTPStatus.NO_CONTENT
-    assert parse_usage_line(read_usage_lines(usage_directory)[0])["view"] == "topology"
+    assert (
+        parse_event_log_line(read_event_log_lines(event_log_directory)[0])["view"]
+        == "topology"
+    )
 
 
 SECRET = "modelname-customer-a"
@@ -537,12 +565,12 @@ SECRET = "modelname-customer-a"
     [
         pytest.param({"event": SECRET, "details": {}}, id="event_name"),
         pytest.param(
-            {"event": UsageEvent.VIEW_OPENED.value, "details": {"view": SECRET}},
+            {"event": EventLogEvent.VIEW_OPENED.value, "details": {"view": SECRET}},
             id="detail_value",
         ),
         pytest.param(
             {
-                "event": UsageEvent.VIEW_OPENED.value,
+                "event": EventLogEvent.VIEW_OPENED.value,
                 "details": {"view": "operations", SECRET: "x"},
             },
             id="detail_key",
@@ -552,11 +580,14 @@ SECRET = "modelname-customer-a"
             id="top_level_key",
         ),
         pytest.param(
-            {"event": UsageEvent.VIEW_OPENED.value, "details": SECRET},
+            {"event": EventLogEvent.VIEW_OPENED.value, "details": SECRET},
             id="details_not_an_object",
         ),
         pytest.param(
-            {"event": UsageEvent.VIEW_OPENED.value, "details": {"view": {"a": SECRET}}},
+            {
+                "event": EventLogEvent.VIEW_OPENED.value,
+                "details": {"view": {"a": SECRET}},
+            },
             id="non_string_value",
         ),
     ],
@@ -573,58 +604,61 @@ def test_rejection_never_echoes_the_offending_value(client, event):
     assert SECRET not in response.get_data(as_text=True)
 
 
-def test_mixed_batch_appends_nothing_at_all(client, usage_directory):
+def test_mixed_batch_appends_nothing_at_all(client, event_log_directory):
     """The case a naive loop passes: partial acceptance is the failure to guard against."""
     response = _post_events(
         client,
         [
             REPORT_LOADED_EVENT,
             VIEW_OPENED_EVENT,
-            {"event": UsageEvent.VIEW_OPENED.value, "details": {"view": "not_a_view"}},
+            {
+                "event": EventLogEvent.VIEW_OPENED.value,
+                "details": {"view": "not_a_view"},
+            },
         ],
     )
 
     assert response.status_code == HTTPStatus.UNPROCESSABLE_ENTITY
-    assert read_usage_lines(usage_directory) == []
+    assert read_event_log_lines(event_log_directory) == []
 
 
-def test_oversized_batch_is_refused(client, usage_directory):
-    events = [VIEW_OPENED_EVENT] * (MAX_USAGE_BATCH_EVENTS + 1)
+def test_oversized_batch_is_refused(client, event_log_directory):
+    events = [VIEW_OPENED_EVENT] * (MAX_EVENT_LOG_BATCH_EVENTS + 1)
 
     response = _post_events(client, events)
 
     assert response.status_code == HTTPStatus.BAD_REQUEST
-    assert read_usage_lines(usage_directory) == []
+    assert read_event_log_lines(event_log_directory) == []
 
 
-def test_batch_at_the_cap_is_accepted(client, usage_directory):
+def test_batch_at_the_cap_is_accepted(client, event_log_directory):
     """Pins the boundary, so the cap cannot drift to off-by-one unnoticed."""
-    response = _post_events(client, [VIEW_OPENED_EVENT] * MAX_USAGE_BATCH_EVENTS)
+    response = _post_events(client, [VIEW_OPENED_EVENT] * MAX_EVENT_LOG_BATCH_EVENTS)
 
     assert response.status_code == HTTPStatus.NO_CONTENT
-    assert len(read_usage_lines(usage_directory)) == MAX_USAGE_BATCH_EVENTS
+    assert len(read_event_log_lines(event_log_directory)) == MAX_EVENT_LOG_BATCH_EVENTS
 
 
-def test_oversized_body_is_refused_before_it_is_parsed(client, usage_directory):
+def test_oversized_body_is_refused_before_it_is_parsed(client, event_log_directory):
     """413 from Werkzeug, not 400: asserted rather than assumed, as it is framework-owned.
 
     The body is well-formed and would otherwise be accepted, so only the byte cap can
     reject it. ``MAX_CONTENT_LENGTH`` is unset on a default install, which is why the
     route sets a limit per request.
     """
-    padding = "x" * MAX_USAGE_REQUEST_BYTES
+    padding = "x" * MAX_EVENT_LOG_REQUEST_BYTES
 
     response = client.post(
-        USAGE_ENDPOINT,
+        EVENT_LOG_ENDPOINT,
         data=json.dumps({"events": [VIEW_OPENED_EVENT], "padding": padding}),
         content_type="application/json",
     )
 
     assert response.status_code == HTTPStatus.REQUEST_ENTITY_TOO_LARGE
-    assert read_usage_lines(usage_directory) == []
+    assert read_event_log_lines(event_log_directory) == []
 
 
-def test_plain_text_body_is_refused(client, usage_directory):
+def test_plain_text_body_is_refused(client, event_log_directory):
     """Pins the contract the client's ``sendBeacon`` flush has to honour.
 
     A bare-string beacon is sent as ``text/plain``, which fails ``is_json`` and lands
@@ -633,13 +667,13 @@ def test_plain_text_body_is_refused(client, usage_directory):
     a preflight ``ALLOWED_ORIGINS`` refuses.
     """
     response = client.post(
-        USAGE_ENDPOINT,
+        EVENT_LOG_ENDPOINT,
         data=json.dumps({"events": [VIEW_OPENED_EVENT]}),
         content_type="text/plain;charset=UTF-8",
     )
 
     assert response.status_code == HTTPStatus.BAD_REQUEST
-    assert read_usage_lines(usage_directory) == []
+    assert read_event_log_lines(event_log_directory) == []
 
 
 @pytest.mark.parametrize(
@@ -651,32 +685,32 @@ def test_plain_text_body_is_refused(client, usage_directory):
         pytest.param([REPORT_LOADED_EVENT], id="body_not_an_object"),
     ],
 )
-def test_malformed_body_is_refused(client, usage_directory, payload):
-    response = client.post(USAGE_ENDPOINT, json=payload)
+def test_malformed_body_is_refused(client, event_log_directory, payload):
+    response = client.post(EVENT_LOG_ENDPOINT, json=payload)
 
     assert response.status_code == HTTPStatus.BAD_REQUEST
-    assert read_usage_lines(usage_directory) == []
+    assert read_event_log_lines(event_log_directory) == []
 
 
-def test_unparseable_json_is_refused(client, usage_directory):
+def test_unparseable_json_is_refused(client, event_log_directory):
     response = client.post(
-        USAGE_ENDPOINT, data="{not json", content_type="application/json"
+        EVENT_LOG_ENDPOINT, data="{not json", content_type="application/json"
     )
 
     assert response.status_code == HTTPStatus.BAD_REQUEST
-    assert read_usage_lines(usage_directory) == []
+    assert read_event_log_lines(event_log_directory) == []
 
 
 def test_switch_off_via_environment_writes_nothing(
-    client, usage_directory, monkeypatch
+    client, event_log_directory, monkeypatch
 ):
     """Answers the same either way: whether a log exists here is not the client's business."""
-    monkeypatch.setenv(USAGE_DISABLED_ENV_VAR, "true")
+    monkeypatch.setenv(RECORDING_DISABLED_ENV_VAR, "true")
 
     response = _post_events(client, [REPORT_LOADED_EVENT])
 
     assert response.status_code == HTTPStatus.NO_CONTENT
-    assert read_usage_lines(usage_directory) == []
+    assert read_event_log_lines(event_log_directory) == []
 
 
 @pytest.mark.parametrize(
@@ -684,13 +718,13 @@ def test_switch_off_via_environment_writes_nothing(
     [
         pytest.param(
             lambda client: client.post(
-                USAGE_ENDPOINT, data="{not json", content_type="application/json"
+                EVENT_LOG_ENDPOINT, data="{not json", content_type="application/json"
             ),
             id="unparseable_body",
         ),
         pytest.param(
             lambda client: _post_events(
-                client, [VIEW_OPENED_EVENT] * (MAX_USAGE_BATCH_EVENTS + 1)
+                client, [VIEW_OPENED_EVENT] * (MAX_EVENT_LOG_BATCH_EVENTS + 1)
             ),
             id="oversized_batch",
         ),
@@ -701,7 +735,7 @@ def test_switch_off_via_environment_writes_nothing(
     ],
 )
 def test_a_disabled_install_answers_before_it_validates(
-    client, usage_directory, monkeypatch, post
+    client, event_log_directory, monkeypatch, post
 ):
     """The early off-switch check is what keeps a disabled install from parsing 16 KB.
 
@@ -710,20 +744,20 @@ def test_a_disabled_install_answers_before_it_validates(
     to bodies it currently accepts silently, and the response would begin to depend on
     machine-local state the client is deliberately not told about.
     """
-    monkeypatch.setenv(USAGE_DISABLED_ENV_VAR, "true")
+    monkeypatch.setenv(RECORDING_DISABLED_ENV_VAR, "true")
 
     response = post(client)
 
     assert response.status_code == HTTPStatus.NO_CONTENT
-    assert read_usage_lines(usage_directory) == []
+    assert read_event_log_lines(event_log_directory) == []
 
 
-def test_switch_off_via_marker_file_writes_nothing(client, usage_directory):
+def test_switch_off_via_marker_file_writes_nothing(client, event_log_directory):
     """The file half of the off switch, which is independent of the environment half."""
-    usage_directory.mkdir(mode=0o700, parents=True, exist_ok=True)
+    event_log_directory.mkdir(mode=0o700, parents=True, exist_ok=True)
     get_disabled_marker_path().touch()
 
     response = _post_events(client, [REPORT_LOADED_EVENT])
 
     assert response.status_code == HTTPStatus.NO_CONTENT
-    assert read_usage_lines(usage_directory) == []
+    assert read_event_log_lines(event_log_directory) == []

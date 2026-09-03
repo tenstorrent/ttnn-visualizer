@@ -16,7 +16,7 @@ import webbrowser
 from http import HTTPStatus
 from os import environ
 from pathlib import Path
-from typing import cast
+from typing import Any, Mapping, cast
 from urllib.error import URLError
 from urllib.request import urlopen
 
@@ -25,6 +25,19 @@ from dotenv import load_dotenv
 from flask import Flask, abort, jsonify
 from flask_cors import CORS
 from ttnn_visualizer.database_migrations import run_alembic_migrations
+from ttnn_visualizer.event_logging import (
+    RUN_ID_ENV_VAR,
+    compact_if_needed,
+    describe_opt_out,
+    describe_unrecognised_recording_disabled_value,
+    get_event_log_path,
+    get_event_log_root,
+    get_recording_disabled_reason,
+    get_unrecognised_recording_disabled_value,
+    is_recording_enabled,
+    record_app_start,
+    start_run,
+)
 from ttnn_visualizer.exceptions import (
     DatabaseFileNotFoundException,
     InvalidProfilerPath,
@@ -34,25 +47,15 @@ from ttnn_visualizer.exceptions import (
 )
 from ttnn_visualizer.instances import create_instance_from_local_paths
 from ttnn_visualizer.settings import (
+    DEFAULT_SECRET_KEY,
+    MIN_HOSTED_SECRET_KEY_BYTES,
     Config,
     DefaultConfig,
     build_socketio_origin_check,
 )
-from ttnn_visualizer.usage import (
-    RUN_ID_ENV_VAR,
-    compact_if_needed,
-    describe_opt_out,
-    describe_unrecognised_usage_disabled_value,
-    get_recording_disabled_reason,
-    get_unrecognised_usage_disabled_value,
-    get_usage_log_path,
-    get_usage_root,
-    is_recording_enabled,
-    record_app_start,
-    start_run,
-)
 from ttnn_visualizer.utils import (
     find_gunicorn_path,
+    is_flag_enabled,
     migrate_old_data_directory,
     str_to_bool,
 )
@@ -86,8 +89,8 @@ def _build_spa_client_config(app: Flask) -> dict:
         "REPORT_DATA_DIRECTORY": str(app.config["REPORT_DATA_DIRECTORY"]),
         "USERNAME": _get_client_username(server_mode),
         # Recomputed rather than read from ``app.config``: ``from_object`` resolves the
-        # ``_UsageRecordingActive`` descriptor before ``settings_override`` is applied,
-        # so the snapshot can claim recording is on for an app that is in server mode.
+        # ``_EventLoggingActive`` descriptor before ``settings_override`` is applied,
+        # so the snapshot may check the wrong posture's root-level disabled marker.
         # Published under both postures, unlike the local-only metadata below — a missing
         # key would be indistinguishable from a disabled switch, and the client needs to
         # tell those apart to decide whether to post at all.
@@ -110,6 +113,23 @@ def _serialize_spa_js_config(js_config: dict) -> str:
     """Embed client config in a ``<script>`` tag without ``</script>`` breakout."""
     payload = json.dumps(js_config).replace("<", "\\u003c")
     return f"window.TTNN_VISUALIZER_CONFIG = {payload};"
+
+
+def _validate_hosted_secret_key(config: Mapping[str, Any]) -> None:
+    if not is_flag_enabled(config.get("SERVER_MODE", False)):
+        return
+
+    secret_key = config.get("SECRET_KEY")
+    encoded = (
+        secret_key
+        if isinstance(secret_key, bytes)
+        else str(secret_key or "").encode("utf-8")
+    )
+    if secret_key == DEFAULT_SECRET_KEY or len(encoded) < MIN_HOSTED_SECRET_KEY_BYTES:
+        raise RuntimeError(
+            "SERVER_MODE requires SECRET_KEY to contain at least "
+            f"{MIN_HOSTED_SECRET_KEY_BYTES} bytes and not use the development default"
+        )
 
 
 def create_app(settings_override=None):
@@ -150,6 +170,7 @@ def create_app(settings_override=None):
     if settings_override:
         app.config.update(settings_override)
 
+    _validate_hosted_secret_key(app.config)
     middleware(app)
 
     app.register_blueprint(api, url_prefix=f"{app.config['BASE_PATH']}api")
@@ -436,17 +457,13 @@ def _record_launch(config):
     # identifier, even if recording is switched on part-way through the session.
     os.environ[RUN_ID_ENV_VAR] = start_run()
 
-    server_mode = (
-        str_to_bool(config.SERVER_MODE)
-        if isinstance(config.SERVER_MODE, str)
-        else bool(config.SERVER_MODE)
-    )
+    server_mode = is_flag_enabled(config.SERVER_MODE)
     disabled_reason = get_recording_disabled_reason(server_mode)
     if disabled_reason is not None:
-        unrecognised_value = get_unrecognised_usage_disabled_value()
+        unrecognised_value = get_unrecognised_recording_disabled_value()
         if unrecognised_value is not None:
             print(
-                f"⚠️  {describe_unrecognised_usage_disabled_value(unrecognised_value)}"
+                f"⚠️  {describe_unrecognised_recording_disabled_value(unrecognised_value)}"
             )
 
         print(f"📊 Event logging is DISABLED: {disabled_reason}.")
@@ -454,8 +471,8 @@ def _record_launch(config):
 
     if server_mode:
         print(
-            f"📊 Recording hosted usage by browser session under "
-            f"{get_usage_root(server_mode=True)}.\n"
+            f"📊 Recording hosted events by browser session under "
+            f"{get_event_log_root(server_mode=True)}.\n"
             f"   Session identifiers remain in file paths and are not exported.\n"
             f"   {describe_opt_out(server_mode=True)}"
         )
@@ -468,7 +485,7 @@ def _record_launch(config):
     # in `main()` — `create_app()` does that — and the last-resort handler drops
     # anything below WARNING, so an info line here would never be seen.
     print(
-        f"📊 Recording usage locally to {get_usage_log_path()}.\n"
+        f"📊 Recording events locally to {get_event_log_path()}.\n"
         f"   Written on this machine only; the application transmits nothing.\n"
         f"   {describe_opt_out()}"
     )

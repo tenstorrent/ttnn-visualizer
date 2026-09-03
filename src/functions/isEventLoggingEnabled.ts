@@ -5,7 +5,7 @@
 import getServerConfig from './getServerConfig';
 
 /**
- * Whether this install may post usage events.
+ * Whether this install may post events.
  *
  * Kept out of `getServerConfig.ts` deliberately, for the reason `isDirectReportMode.ts`
  * gives: that module is mocked wholesale by a dozen specs, so a predicate living inside it
@@ -17,7 +17,7 @@ import getServerConfig from './getServerConfig';
 
 let recordingEnabled: boolean | null = null;
 
-export default function isUsageRecordingEnabled(): boolean {
+export default function isEventLoggingEnabled(): boolean {
     // Memoised: neither the posture nor the switch can change within a page's lifetime,
     // and this is consulted once per recorded event.
     if (recordingEnabled === null) {

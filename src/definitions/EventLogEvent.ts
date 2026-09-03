@@ -3,11 +3,11 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 /**
- * The client half of the usage-event vocabulary.
+ * The client half of the event-log vocabulary.
  *
- * These mirror the enums in `backend/ttnn_visualizer/usage.py`, which is the authority:
+ * These mirror the enums in `backend/ttnn_visualizer/event_logging.py`, which is the authority:
  * validation happens in the handler, because client-side checks protect nothing when
- * anything `ALLOWED_ORIGINS` permits can post. `test_usage_frontend_parity.py` pins the
+ * anything `ALLOWED_ORIGINS` permits can post. `test_event_logging_frontend_parity.py` pins the
  * two together and is the only thing that would notice them diverging — a posted event
  * the server rejects produces a 422 that this client deliberately swallows and never
  * surfaces.
@@ -17,7 +17,7 @@
  * space or an `=` would be dropped when the line is formatted, silently.
  */
 
-export enum UsageEvent {
+export enum EventLogEvent {
     // Recorded by the server at launch. Present so this enum mirrors the Python one, but
     // the endpoint refuses it from a client — a page able to post launches could forge
     // the population every other figure is read against.
@@ -69,7 +69,7 @@ export enum ReportLoadFailureReason {
  * once per operation viewed rather than once per visit to the surface, so its total is
  * not comparable to the other nine and should be read per-session or deduplicated.
  */
-export enum UsageView {
+export enum EventLogView {
     REPORTS = 'reports',
     OPERATIONS = 'operations',
     OPERATION_DETAILS = 'operation_details',
@@ -93,11 +93,11 @@ export enum UsageView {
  * `reason_class` is snake_case because it is a wire field, not a TS property — renaming
  * it to camelCase would break every `report_load_failed` post.
  */
-export type UsageEventPayload =
-    | { event: UsageEvent.REPORT_LOADED; details: { kind: ReportKind; source: ReportSource } }
+export type EventLogEventPayload =
+    | { event: EventLogEvent.REPORT_LOADED; details: { kind: ReportKind; source: ReportSource } }
     | {
-          event: UsageEvent.REPORT_LOAD_FAILED;
+          event: EventLogEvent.REPORT_LOAD_FAILED;
           details: { kind: ReportKind; reason_class: ReportLoadFailureReason };
       }
-    | { event: UsageEvent.VIEW_OPENED; details: { view: UsageView } }
-    | { event: UsageEvent.VIEW_ENGAGED; details: { view: UsageView } };
+    | { event: EventLogEvent.VIEW_OPENED; details: { view: EventLogView } }
+    | { event: EventLogEvent.VIEW_ENGAGED; details: { view: EventLogView } };

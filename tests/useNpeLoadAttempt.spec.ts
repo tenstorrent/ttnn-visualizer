@@ -5,7 +5,7 @@
 import { act, renderHook } from '@testing-library/react';
 import { beforeEach, expect, it, vi } from 'vitest';
 import { NPEValidationError } from '../src/definitions/NPEData';
-import { ReportKind, ReportLoadFailureReason, ReportSource } from '../src/definitions/UsageEvent';
+import { ReportKind, ReportLoadFailureReason, ReportSource } from '../src/definitions/EventLogEvent';
 import useNpeLoadAttempt from '../src/hooks/useNpeLoadAttempt';
 
 const { recordReportLoaded, recordReportLoadFailed } = vi.hoisted(() => ({
@@ -13,10 +13,10 @@ const { recordReportLoaded, recordReportLoadFailed } = vi.hoisted(() => ({
     recordReportLoadFailed: vi.fn(),
 }));
 
-vi.mock('../src/functions/reportLoadUsage', async (importOriginal) => {
-    const { reportLoadUsageSpiesMock } = await import('./helpers/mockReportLoadUsage');
+vi.mock('../src/functions/reportLoadEvents', async (importOriginal) => {
+    const { reportLoadEventsSpiesMock } = await import('./helpers/mockReportLoadEvents');
 
-    return reportLoadUsageSpiesMock(importOriginal, recordReportLoaded, recordReportLoadFailed);
+    return reportLoadEventsSpiesMock(importOriginal, recordReportLoaded, recordReportLoadFailed);
 });
 
 beforeEach(() => {

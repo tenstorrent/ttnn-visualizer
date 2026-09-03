@@ -887,6 +887,11 @@ def str_to_bool(string_value):
     return parse_bool(string_value) is True
 
 
+def is_flag_enabled(value: Any) -> bool:
+    """Normalise a config flag that may bypass environment parsing."""
+    return str_to_bool(value) if isinstance(value, str) else bool(value)
+
+
 MIN_TCP_PORT = 1
 MAX_TCP_PORT = 65535
 

@@ -19,7 +19,7 @@ import { getRankedReportLabel } from '../../functions/reportRank';
 import useRemoteConnection from '../../hooks/useRemote';
 import HighlightedText from '../HighlightedText';
 import FolderLinkStatusIcon from './FolderLinkStatusIcon';
-import { ReportKind } from '../../definitions/UsageEvent';
+import { ReportKind } from '../../definitions/EventLogEvent';
 import { RemoteFolderType } from '../../definitions/Reports';
 
 interface RemoteFolderRendererOptions {

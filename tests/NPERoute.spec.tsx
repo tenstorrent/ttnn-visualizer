@@ -11,7 +11,7 @@ import { TestProviders } from './helpers/TestProviders';
 import { minimalValidNpeData } from './helpers/npeFixtures';
 import { activeNpeOpTraceAtom } from '../src/store/app';
 import { TEST_IDS } from '../src/definitions/TestIds';
-import { ReportKind, ReportLoadFailureReason, ReportSource } from '../src/definitions/UsageEvent';
+import { ReportKind, ReportLoadFailureReason, ReportSource } from '../src/definitions/EventLogEvent';
 import { NPEValidationError } from '../src/definitions/NPEData';
 
 interface MockNpeWindowedViewProps {
@@ -109,10 +109,10 @@ vi.mock('../src/components/npe/NPEDemoSelect', () => ({
         </button>
     ),
 }));
-vi.mock('../src/functions/reportLoadUsage', async (importOriginal) => {
-    const { reportLoadUsageSpiesMock } = await import('./helpers/mockReportLoadUsage');
+vi.mock('../src/functions/reportLoadEvents', async (importOriginal) => {
+    const { reportLoadEventsSpiesMock } = await import('./helpers/mockReportLoadEvents');
 
-    return reportLoadUsageSpiesMock(importOriginal, recordReportLoaded, recordReportLoadFailed);
+    return reportLoadEventsSpiesMock(importOriginal, recordReportLoaded, recordReportLoadFailed);
 });
 
 // Import after vi.mock so the route under test sees the stubs.

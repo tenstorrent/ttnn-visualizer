@@ -4,13 +4,13 @@
 
 import { HttpStatusCode } from 'axios';
 import Endpoints from '../definitions/Endpoints';
-import { UsageEventPayload } from '../definitions/UsageEvent';
+import { EventLogEventPayload } from '../definitions/EventLogEvent';
 import axiosInstance from '../libs/axiosInstance';
 import getServerConfig from './getServerConfig';
-import isUsageRecordingEnabled from './isUsageRecordingEnabled';
+import isEventLoggingEnabled from './isEventLoggingEnabled';
 
 /**
- * Buffered, best-effort sender for local usage events.
+ * Buffered, best-effort sender for local events.
  *
  * Events are held in memory and posted off the render path: recording one costs a
  * predicate and an array push, because the views this instruments include the NPE
@@ -23,8 +23,8 @@ import isUsageRecordingEnabled from './isUsageRecordingEnabled';
  * application it measures.
  */
 
-// Mirrors MAX_USAGE_BATCH_EVENTS in backend/ttnn_visualizer/usage.py, which bounds the
-// atomicity of a single append rather than merely an HTTP body. test_usage_frontend_parity
+// Mirrors MAX_EVENT_LOG_BATCH_EVENTS in backend/ttnn_visualizer/event_logging.py, which bounds the
+// atomicity of a single append rather than merely an HTTP body. test_event_logging_frontend_parity
 // pins the two equal so a batch this client builds can never be refused wholesale.
 const MAX_BUFFERED_EVENTS = 50;
 
@@ -41,17 +41,17 @@ const IDLE_FLUSH_TIMEOUT_MS = 2_000;
 // at all, so this is what eventually drains a buffer filled just before the tab was hidden.
 const FLUSH_INTERVAL_MS = 30_000;
 
-const buffer: UsageEventPayload[] = [];
+const buffer: EventLogEventPayload[] = [];
 
 let cancelScheduledFlush: (() => void) | null = null;
 
-function getUsageEndpointUrl(): string {
+function getEventLogEndpointUrl(): string {
     // A beacon bypasses axios and so gets neither its baseURL nor its instanceId param.
     // Joined the way axios's combineURLs does, or a deployment under a non-root BASE_PATH
     // would post to a path that does not exist and never find out.
     const basePath = getServerConfig().BASE_PATH || '/';
 
-    return `${basePath.replace(/\/+$/, '')}/${String(Endpoints.USAGE).replace(/^\/+/, '')}`;
+    return `${basePath.replace(/\/+$/, '')}/${String(Endpoints.EVENT_LOGGING).replace(/^\/+/, '')}`;
 }
 
 function warnOnUnexpectedOutcome(status: number | null): void {
@@ -73,14 +73,14 @@ function warnOnUnexpectedOutcome(status: number | null): void {
             : `were refused with status ${status}, so the client and server vocabularies may disagree`;
 
     // eslint-disable-next-line no-console -- dev-only, and there is no UI that could carry this.
-    console.warn(`Usage events ${reason}.`);
+    console.warn(`Events ${reason}.`);
 }
 
-function postEvents(events: UsageEventPayload[]): void {
+function postEvents(events: EventLogEventPayload[]): void {
     // One sender for both callers, so a header, timeout or signal added later cannot land
     // on one path and not the other — a divergence neither side would report.
     axiosInstance
-        .post(Endpoints.USAGE, { events })
+        .post(Endpoints.EVENT_LOGGING, { events })
         .then((response) => warnOnUnexpectedOutcome(response.status))
         // Dropped, never re-buffered: a refused or unreachable endpoint would otherwise
         // grow the buffer without bound for the life of the tab, and a batch rejected for
@@ -89,7 +89,7 @@ function postEvents(events: UsageEventPayload[]): void {
         .catch((error) => warnOnUnexpectedOutcome(error?.response?.status ?? null));
 }
 
-function takeBatch(): UsageEventPayload[] {
+function takeBatch(): EventLogEventPayload[] {
     // Emptied before the request rather than after, so a batch is never sent twice and the
     // buffer cannot grow past its cap while one is in flight.
     return buffer.splice(0, MAX_BUFFERED_EVENTS);
@@ -115,15 +115,15 @@ function scheduleFlush(): void {
         // Written as a positive guard because that is the shape `compat/compat` recognises
         // as guarding the call — inverted, it reports the unsupported browsers instead.
         if (typeof requestIdleCallback === 'function') {
-            const idleHandle = requestIdleCallback(flushUsage, { timeout: IDLE_FLUSH_TIMEOUT_MS });
+            const idleHandle = requestIdleCallback(flushEventLog, { timeout: IDLE_FLUSH_TIMEOUT_MS });
             cancelIdle = () => cancelIdleCallback(idleHandle);
         } else {
-            flushUsage();
+            flushEventLog();
         }
     }, MIN_BATCH_WINDOW_MS);
 
     // The ceiling runs alongside rather than after: whichever loses finds an empty buffer.
-    const intervalHandle = setTimeout(flushUsage, FLUSH_INTERVAL_MS);
+    const intervalHandle = setTimeout(flushEventLog, FLUSH_INTERVAL_MS);
 
     cancelScheduledFlush = () => {
         clearTimeout(windowHandle);
@@ -132,7 +132,7 @@ function scheduleFlush(): void {
     };
 }
 
-export function flushUsage(): void {
+export function flushEventLog(): void {
     clearScheduledFlush();
 
     if (buffer.length === 0) {
@@ -142,7 +142,7 @@ export function flushUsage(): void {
     postEvents(takeBatch());
 }
 
-function flushUsageViaBeacon(allowFallback: boolean): void {
+function flushEventLogViaBeacon(allowFallback: boolean): void {
     clearScheduledFlush();
 
     if (buffer.length === 0) {
@@ -158,7 +158,7 @@ function flushUsageViaBeacon(allowFallback: boolean): void {
     // would be rejected.
     const sent =
         typeof navigator.sendBeacon === 'function' &&
-        navigator.sendBeacon(getUsageEndpointUrl(), new Blob([body], { type: 'application/json' }));
+        navigator.sendBeacon(getEventLogEndpointUrl(), new Blob([body], { type: 'application/json' }));
 
     if (sent) {
         return;
@@ -177,8 +177,8 @@ function flushUsageViaBeacon(allowFallback: boolean): void {
     }
 }
 
-export default function recordUsage(payload: UsageEventPayload): void {
-    if (!isUsageRecordingEnabled()) {
+export default function recordEvent(payload: EventLogEventPayload): void {
+    if (!isEventLoggingEnabled()) {
         return;
     }
 
@@ -199,12 +199,12 @@ export default function recordUsage(payload: UsageEventPayload): void {
 
 function handleVisibilityChange(): void {
     if (document.visibilityState === 'hidden') {
-        flushUsageViaBeacon(true);
+        flushEventLogViaBeacon(true);
     }
 }
 
 function handlePageHide(): void {
-    flushUsageViaBeacon(false);
+    flushEventLogViaBeacon(false);
 }
 
 /**
@@ -218,8 +218,8 @@ function handlePageHide(): void {
  * This starts the transport. It records nothing on its own — call sites emitting events
  * arrive with the events themselves.
  */
-export function initUsageRecording(): () => void {
-    if (!isUsageRecordingEnabled()) {
+export function initEventLogging(): () => void {
+    if (!isEventLoggingEnabled()) {
         return () => {};
     }
 
@@ -234,9 +234,9 @@ export function initUsageRecording(): () => void {
 
         // Drain rather than discard. Teardown removes the `pagehide` listener and cancels
         // the pending flush, so anything still buffered would be stranded and then lost if
-        // the tab closed before another event re-armed the schedule. `flushUsage` clears
+        // the tab closed before another event re-armed the schedule. `flushEventLog` clears
         // the schedule itself, and is a no-op on an empty buffer — which is the StrictMode
         // mount/unmount/mount case in dev.
-        flushUsage();
+        flushEventLog();
     };
 }
