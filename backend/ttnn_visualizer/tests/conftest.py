@@ -69,9 +69,6 @@ def usage_directory(tmp_path, monkeypatch):
     # Keyed on the path, so a fresh `tmp_path` invalidates it anyway — reset regardless,
     # since relying on that couples every test to the fixture's choice of directory.
     monkeypatch.setattr(usage, "_ensured_directory", None)
-    # Sticky by design too, so a test that trips a warn-once would otherwise leave the
-    # next one with that warning already spent.
-    monkeypatch.setattr(usage, "_warned_env_vars", set())
     monkeypatch.delenv(RUN_ID_ENV_VAR, raising=False)
     monkeypatch.delenv(USAGE_DISABLED_ENV_VAR, raising=False)
 

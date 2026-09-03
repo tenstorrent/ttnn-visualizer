@@ -42,10 +42,13 @@ from ttnn_visualizer.usage import (
     RUN_ID_ENV_VAR,
     compact_if_needed,
     describe_opt_out,
-    get_run_id,
+    describe_unrecognised_usage_disabled_value,
+    get_recording_disabled_reason,
+    get_unrecognised_usage_disabled_value,
     get_usage_log_path,
     is_recording_enabled,
     record_app_start,
+    start_run,
 )
 from ttnn_visualizer.utils import (
     find_gunicorn_path,
@@ -430,9 +433,17 @@ def _record_launch(config):
     """
     # Exported unconditionally so every gunicorn worker this launch spawns shares one
     # identifier, even if recording is switched on part-way through the session.
-    os.environ[RUN_ID_ENV_VAR] = get_run_id()
+    os.environ[RUN_ID_ENV_VAR] = start_run()
 
-    if not is_recording_enabled(config.SERVER_MODE):
+    disabled_reason = get_recording_disabled_reason(config.SERVER_MODE)
+    if disabled_reason is not None:
+        unrecognised_value = get_unrecognised_usage_disabled_value()
+        if unrecognised_value is not None:
+            print(
+                f"⚠️  {describe_unrecognised_usage_disabled_value(unrecognised_value)}"
+            )
+
+        print(f"📊 Event logging is DISABLED: {disabled_reason}.")
         return
 
     compact_if_needed()
@@ -442,9 +453,9 @@ def _record_launch(config):
     # in `main()` — `create_app()` does that — and the last-resort handler drops
     # anything below WARNING, so an info line here would never be seen.
     print(
-        f"📊 Recording usage locally to {get_usage_log_path()}\n"
-        f"   Written on this machine only; the application transmits nothing. "
-        f"{describe_opt_out()}"
+        f"📊 Recording usage locally to {get_usage_log_path()}.\n"
+        f"   Written on this machine only; the application transmits nothing.\n"
+        f"   {describe_opt_out()}"
     )
 
 

@@ -20,7 +20,7 @@ Companion to [`AGENTS.md`](./AGENTS.md). `AGENTS.md` states each convention in o
 - [Network layer](#network-layer)
 - [Data fetching (React Query)](#data-fetching-react-query)
 - [Errors and toasts](#errors-and-toasts)
-- [Usage recording (frontend)](#usage-recording-frontend)
+- [Event logging (frontend)](#event-logging-frontend)
 - [File organization and modules](#file-organization-and-modules)
 - [Routing and page metadata](#routing-and-page-metadata)
 - [Naming](#naming)
@@ -596,15 +596,17 @@ Defaults belong on the `<ToastContainer>` in `Layout.tsx`, which is mounted once
 
 ---
 
-## Usage recording (frontend)
+## Event logging (frontend)
 
 `src/functions/recordUsage.ts` buffers local usage events and posts them to `POST /api/usage`, which appends them to a log under the user's home directory (`backend/ttnn_visualizer/usage.py`). Nothing is transmitted off the machine. The invariants below are not visible from either side alone.
 
-### `usage.py` owns the vocabulary; `src/definitions/UsageEvent.ts` is a copy
+### `usage.py` owns the vocabulary; the frontend and user reference are copies
 
 **Rationale.** Validation is server-side because a client cannot enforce it — anything `ALLOWED_ORIGINS` permits could post. The failure mode is silent: the route answers **422** for an event it can't parse and the client swallows it by design, so a divergence produces no runtime error anywhere.
 
-`backend/ttnn_visualizer/tests/test_usage_frontend_parity.py` is the only thing that notices, and it pins more than the enums: the detail fields each client event declares, the route path, the `{ events }` envelope key, and that a full batch of the largest event still fits `MAX_USAGE_REQUEST_BYTES`. **Adding an event or a detail value means editing both files in one commit.**
+`backend/ttnn_visualizer/tests/test_usage_frontend_parity.py` pins more than the enums: the detail fields each client event declares, the route path, the `{ events }` envelope key, and that a full batch of the largest event still fits `MAX_USAGE_REQUEST_BYTES`. `backend/ttnn_visualizer/tests/test_event_logging_docs_parity.py` separately pins the structured event, field and enum reference in `docs/src/event-logging.md`.
+
+The event list exists to answer Q1–Q5 in #1819, not to accumulate counters. Every proposed event must name the decision it informs. **Adding or changing an event, detail field or closed value means updating `usage.py`, the client copy where applicable, and the user reference in one commit.** The two parity tests are the review gate: a code-only vocabulary change, or prose that omits part of the bounded schema, must fail CI.
 
 ### Three caps, and each pair has to stay consistent
 
@@ -1326,7 +1328,7 @@ The query params are the easiest consumer to forget and the least noisy when bro
 
 `str_to_bool` maps anything unrecognised to `False`, which for `SERVER_MODE` is the *local* posture — the one whose endpoints publish SSH host, username, and path metadata. So `settings.py` reads booleans through `_parse_env_bool`, which logs the value and keeps the coded default instead.
 
-**`USAGE_RECORDING_DISABLED` is the one exception, and obeys a value it doesn't recognise.** `_is_recording_disabled_by_environment` (`usage.py`) warns and then switches recording *off* for anything set that isn't a recognised `false`. Keeping the default there would mean reading `USAGE_RECORDING_DISABLED=yes` as consent to record; the cost of obeying a typo is one missing data point, and the cost of ignoring it is recording against an explicit request. The vocabulary itself is unchanged — it still comes from `parse_bool`, and only the treatment of `None` differs. Don't generalise this to other settings, and don't "fix" it back to `str_to_bool`: `test_an_unrecognised_disable_value_switches_recording_off` pins it.
+**`USAGE_RECORDING_DISABLED` is the one exception, because it is an opt-out.** Unset, `false` and `0` keep recording on; `true` and `1` switch it off. `_is_recording_disabled_by_environment` (`usage.py`) also switches recording off for an unrecognised value, so `USAGE_RECORDING_DISABLED=yes` cannot accidentally be read as consent to record. `_record_launch` prints the unrecognised value beside the resulting disabled status, keeping the warning and its consequence together instead of emitting a logger warning from every predicate call. The cost of obeying a typo is one missing data point; the cost of ignoring a misspelled opt-out is recording against the operator's apparent intent. The vocabulary itself is unchanged — it still comes from `parse_bool`, and only the treatment of `None` differs. Don't generalise this to other settings, and don't "fix" it back to `str_to_bool`: `test_an_unrecognised_disable_value_switches_recording_off` pins it.
 
 A setting listed in **`_STRICT_BOOLEANS`** raises instead of warning. `SERVER_MODE` is the only member: it is the one boolean whose fallback is itself a security posture, so a value we can't read has to stop the app rather than quietly pick the permissive answer — and the warning that would otherwise cover it is emitted at import, before `create_app` configures logging, so it lands on `stderr` and not in the deployment's logs. Everything else is a feature flag and doesn't warrant refusing to boot.
 
