@@ -111,16 +111,31 @@ describe('detectOpRoleGroups', () => {
     });
 
     describe('a mixture-of-experts report (test_ttnn_moe)', () => {
-        it('names the expert routing metal named for it', () => {
-            // This was written up as the known-negative case on the claim that the
-            // capture carried no anchors. That was wrong: every routing op appears
-            // exactly once, so all of them sat below the frequency cutoff used to read
-            // the vocabulary. `ttnn.experimental.deepseek_prefill.*` names the router,
-            // the dispatch, the combine and the expert FFN outright. #1976
-            const groups = detectOpRoleGroups(moe.operations);
+        it('names expert routing wherever a boundary exists to hold it', () => {
+            // The anchors come from ttnn itself: `deepseek_prefill.moe_grouped_topk` is
+            // the router and `reduction/moe` is a first-class op.
+            const groups = detectOpRoleGroups([
+                operation(1, 'ttnn.experimental.deepseek_prefill.moe_grouped_topk'),
+                operation(2, 'ttnn.experimental.deepseek_prefill.dispatch'),
+                operation(3, 'ttnn.layer_norm'),
+            ]);
 
-            expect(groups.map((group) => group.role)).toContain(OpSemanticRole.MOE);
-            expect(groups.find((group) => group.role === OpSemanticRole.MOE)?.anchorName).toBe('moe_grouped_topk');
+            expect(groups[0].role).toBe(OpSemanticRole.MOE);
+            expect(groups[0].anchorName).toBe('moe_grouped_topk');
+        });
+
+        it('declines this report, whose partition leaves no boundary to fold on', () => {
+            // Two corrections in one place. It was first written up as inert, which was
+            // wrong — the routing ops are all there, each appearing once and so sitting
+            // below the frequency cutoff used to read the vocabulary. But naming them
+            // did not make the report groupable: it carries one `add` and no
+            // normalisation, so the only span is the entire graph, and folding that
+            // replaces the model with a single box.
+            //
+            // So it yields nothing, for a different reason than first claimed. The gap
+            // is a delimiter for expert graphs — `dispatch` and `combine` bracket the
+            // region — not the anchors. #1976
+            expect(detectOpRoleGroups(moe.operations)).toHaveLength(0);
         });
 
         it('still declines to name a span that holds only plumbing', () => {

@@ -33,15 +33,17 @@ export const detectLayerBlocks = (operations: readonly OpGraphSourceOperation[])
 
     const seenByRole = new Map<OpSemanticRole, number>();
     return groups.map((group: OpRoleGroup): RepeatBlockInstance => {
-        const instanceIndex = (seenByRole.get(group.role) ?? 0) + 1;
-        seenByRole.set(group.role, instanceIndex);
+        // Zero-based, which is the `RepeatBlockInstance` contract: the panel renders
+        // `instanceIndex + 1`, so a one-based index here read as "instance 2 of 1".
+        const instanceIndex = seenByRole.get(group.role) ?? 0;
+        seenByRole.set(group.role, instanceIndex + 1);
         const instanceCount = totalByRole.get(group.role) ?? 1;
         return {
             // Keyed on the first member rather than the index, so folding one instance
             // cannot rename the others when detection shifts by a span.
             instanceId: `layer:${group.role}:${group.operationIds[0]}`,
             patternId: `layer:${group.role}`,
-            label: instanceCount > 1 ? `${group.label} ${instanceIndex}` : group.label,
+            label: instanceCount > 1 ? `${group.label} ${instanceIndex + 1}` : group.label,
             patternLabel: group.label,
             operationIds: group.operationIds,
             instanceIndex,

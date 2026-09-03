@@ -56,6 +56,30 @@ export interface OpRoleSourceOperation {
 const leafNameOf = (name: string): string => name.slice(name.lastIndexOf('.') + 1);
 
 /**
+ * A span this large does not mean the layer is big — it means the partition failed.
+ * `test_ttnn_moe` carries one `add` and no normalisation at all, so the whole graph
+ * came back as a single span; it holds a router, so it was labelled expert routing
+ * and folding it replaced the entire model with one box. `sentence_bert` did the same
+ * on a smaller scale, its embedding span swallowing the 164-op weight-loading run
+ * ahead of the first norm.
+ *
+ * A layer is a fraction of a model — #1583 reasons the same way about a repeated
+ * subgraph being "a layer, not half the graph". Anything past this is reported as no
+ * grouping rather than as one useless block. Measured: the largest real span is 6.6%
+ * of `resnet50`, and 3.7% of `bge_m3`. #1976
+ */
+const MAX_LAYER_SPAN_FRACTION = 0.25;
+
+/**
+ * The fraction alone is meaningless on a small graph, where one legitimate layer can
+ * be most of it — a five-op chain has no "quarter of the model". The floor is set
+ * above the largest span measured in a real report (26 ops, `bge_m3`'s embedding), so
+ * it admits real layers and only the fraction decides on graphs big enough for the
+ * question to mean anything.
+ */
+const MIN_LAYER_SPAN_ALLOWANCE = 32;
+
+/**
  * Fused and unfused spellings of one role sit in the same list. `bge_m3` emits a
  * single fused `scaled_dot_product_attention`; `sentence_bert` spells the identical
  * concept as `split_query_key_value_and_split_heads` + `attention_softmax_` + two
@@ -266,7 +290,8 @@ export const detectOpRoleGroups = (operations: readonly OpRoleSourceOperation[])
             return;
         }
         const spanLeaves = leaves.slice(spanStart, endExclusive);
-        const classification = classifySpan(spanLeaves);
+        const allowance = Math.max(MIN_LAYER_SPAN_ALLOWANCE, leaves.length * MAX_LAYER_SPAN_FRACTION);
+        const classification = spanLeaves.length > allowance ? null : classifySpan(spanLeaves);
         if (classification !== null) {
             groups.push({
                 role: classification.role,

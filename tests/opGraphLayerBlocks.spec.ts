@@ -28,9 +28,9 @@ describe('detectLayerBlocks', () => {
         const attention = blocks.filter((block) => block.patternLabel === 'Attention');
 
         expect(attention).toHaveLength(24);
-        expect(attention.map((block) => block.instanceIndex)).toEqual(
-            Array.from({ length: 24 }, (_, index) => index + 1),
-        );
+        // Zero-based, matching `RepeatBlockInstance`: the panel renders
+        // `instanceIndex + 1`, so a one-based index here read as "instance 2 of 1".
+        expect(attention.map((block) => block.instanceIndex)).toEqual(Array.from({ length: 24 }, (_, index) => index));
         expect(new Set(attention.map((block) => block.instanceCount))).toEqual(new Set([24]));
         expect(attention[0].label).toBe('Attention 1');
         expect(attention[23].label).toBe('Attention 24');
@@ -74,12 +74,11 @@ describe('detectLayerBlocks', () => {
         expect(pair[0].operationIds).toEqual([2, 3]);
     });
 
-    it('offers the expert routing in a mixture-of-experts report as a foldable block', () => {
-        // Previously asserted to yield nothing, on a mis-read of the vocabulary: the
-        // routing ops each appear once and sat under the frequency cutoff. #1976
-        const moeBlocks = detectLayerBlocks(asSource(moe.operations));
-
-        expect(moeBlocks.map((block) => block.patternLabel)).toContain('Expert routing');
+    it('offers nothing for a report whose only span is the whole graph', () => {
+        // The routing ops are recognised, but this capture has one `add` and no
+        // normalisation, so the single span covers everything and is rejected on size
+        // rather than folded into one box. #1976
+        expect(detectLayerBlocks(asSource(moe.operations))).toHaveLength(0);
     });
 
     it('reports nothing for a graph of pure plumbing', () => {
