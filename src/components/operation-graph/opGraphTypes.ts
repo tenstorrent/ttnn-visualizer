@@ -171,7 +171,12 @@ export interface OpGraphBuildOptions {
     hideDeallocate: boolean;
     /** Only the expanded operations, so a collapsed graph carries no payload. */
     deviceSubgraphs: OpGraphDeviceSubgraph[];
-    /** Empty means every detected instance is collapsed. #1583 */
+    /**
+     * Which detected instances are unrolled. Absent means nobody has folded
+     * anything yet and the graph renders unrolled; an empty array is a deliberate
+     * fold-all. Detection describes the graph, it does not decide how to show it.
+     * #1583 / #1977
+     */
     expandedBlockIds?: readonly string[];
     /** Worker-only: detection is invariant under fold / device-op expand. */
     detectedBlocks?: RepeatBlockInstance[];

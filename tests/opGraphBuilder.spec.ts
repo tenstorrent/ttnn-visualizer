@@ -431,11 +431,17 @@ describe('buildOpGraph', () => {
         const FIRST_BLOCK_ID = 'block:0:2';
         const SECOND_BLOCK_ID = 'block:0:4';
 
+        // Repeats render unrolled unless something folds them, so a test about the
+        // collapsed rendering has to ask for the fold: an empty expansion set is
+        // "fold every instance", where absent means "nothing folded yet". #1977
+        const buildFolded = (operations: OpGraphSourceOperation[], hideDeallocate: boolean) =>
+            buildOpGraph(operations, { hideDeallocate, deviceSubgraphs: [], expandedBlockIds: [] });
+
         const typesOf = (graph: ReturnType<typeof buildOpGraph>) =>
             graph.nodes.map((node) => ({ id: node.id, type: node.type, operationId: node.data.operationId }));
 
         it('replaces each collapsed copy with a block node and hides the members', () => {
-            const graph = build(REPEAT_CHAIN, false);
+            const graph = buildFolded(REPEAT_CHAIN, false);
 
             expect(typesOf(graph)).toEqual([
                 { id: '1', type: OpGraphNodeType.OP, operationId: 1 },
@@ -450,7 +456,7 @@ describe('buildOpGraph', () => {
             // The node's meta line and the panel's stats rows are on screen at the
             // same time; they were derived twice, by independent paths, so drift
             // would have shown as the two disagreeing about one block.
-            const graph = build(REPEAT_CHAIN, false);
+            const graph = buildFolded(REPEAT_CHAIN, false);
             const node = nodeById(graph, FIRST_BLOCK_ID);
             const summary = graph.blocks?.find((block) => block.instanceId === FIRST_BLOCK_ID);
 
@@ -467,7 +473,7 @@ describe('buildOpGraph', () => {
         });
 
         it('sums duration and memory onto the collapsed node', () => {
-            const graph = build(REPEAT_CHAIN, false);
+            const graph = buildFolded(REPEAT_CHAIN, false);
             const first = nodeById(graph, FIRST_BLOCK_ID);
 
             expect(first.data.opCount).toBe(2);
@@ -480,7 +486,7 @@ describe('buildOpGraph', () => {
         });
 
         it('reroutes crossing edges onto the block and drops edges inside it', () => {
-            const graph = build(REPEAT_CHAIN, false);
+            const graph = buildFolded(REPEAT_CHAIN, false);
 
             expect(edgeBetweenOperations(graph, 1, 2).source).toBe('1');
             expect(edgeBetweenOperations(graph, 1, 2).target).toBe(FIRST_BLOCK_ID);
@@ -540,7 +546,7 @@ describe('buildOpGraph', () => {
                 }),
                 operation({ id: 5, name: 'suffix' }),
             ];
-            const graph = build(twoTensors, false);
+            const graph = buildFolded(twoTensors, false);
             const between = graph.edges.filter((edge) => edge.source === 'block:0:1' && edge.target === 'block:0:3');
 
             expect(between).toHaveLength(1);
@@ -552,6 +558,7 @@ describe('buildOpGraph', () => {
             const graph = buildOpGraph(REPEAT_CHAIN, {
                 hideDeallocate: false,
                 deviceSubgraphs: [deviceSubgraph({ operationId: 2 })],
+                expandedBlockIds: [],
             });
 
             expect(graph.nodes.some((node) => node.type === OpGraphNodeType.DEVICE_GROUP)).toBe(false);
@@ -573,9 +580,11 @@ describe('buildOpGraph', () => {
                 operation({ id: 6, name: 'suffix' }),
             ];
 
-            expect(build(withDeallocate, false).nodes.every((node) => node.type === OpGraphNodeType.OP)).toBe(true);
+            expect(
+                buildFolded(withDeallocate, false).nodes.filter((node) => node.type === OpGraphNodeType.BLOCK),
+            ).toHaveLength(0);
 
-            const hidden = build(withDeallocate, true);
+            const hidden = buildFolded(withDeallocate, true);
             expect(hidden.nodes.filter((node) => node.type === OpGraphNodeType.BLOCK)).toHaveLength(2);
             expect(hidden.nodes.some((node) => node.data.filterString === 'ttnn.deallocate')).toBe(false);
         });

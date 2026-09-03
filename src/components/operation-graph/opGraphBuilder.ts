@@ -75,7 +75,7 @@ export function getKeptOperations(
 
 export function buildOpGraph(
     operations: OpGraphSourceOperation[],
-    { hideDeallocate, deviceSubgraphs, expandedBlockIds = [], detectedBlocks: providedBlocks }: OpGraphBuildOptions,
+    { hideDeallocate, deviceSubgraphs, expandedBlockIds, detectedBlocks: providedBlocks }: OpGraphBuildOptions,
 ): OpGraphBuiltGraph {
     const candidates = collectCandidateEdges(operations);
 
@@ -103,10 +103,15 @@ export function buildOpGraph(
         keptOperations.map((operation) => [operation.id, operation]),
     );
     const detectedBlocks = providedBlocks ?? detectRepeatBlocks(keptOperations);
-    const expandedBlocks = new Set<string>(expandedBlockIds);
+    // Detections are still reported when nothing has been folded, so the toolbar can
+    // offer Fold; they are just not applied. Folding on first render decided for the
+    // user, and it cannot be expressed as an id list because the ids only exist once
+    // detection has run. #1977
+    const hasFoldDecision = expandedBlockIds !== undefined;
+    const expandedBlocks = new Set<string>(expandedBlockIds ?? []);
     const collapsedInstanceByOpId = new Map<number, RepeatBlockInstance>();
     for (const instance of detectedBlocks) {
-        if (!expandedBlocks.has(instance.instanceId)) {
+        if (hasFoldDecision && !expandedBlocks.has(instance.instanceId)) {
             for (const operationId of instance.operationIds) {
                 collapsedInstanceByOpId.set(operationId, instance);
             }

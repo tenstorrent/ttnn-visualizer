@@ -160,6 +160,16 @@ const EMPTY_MATCHES: OpGraphMatches = {
 // when nothing was expanded to begin with.
 const NOTHING_EXPANDED: ReadonlySet<number> = new Set<number>();
 const NOTHING_EXPANDED_BLOCKS: ReadonlySet<string> = new Set<string>();
+
+// The build option is absent while nothing has been folded, which renders unrolled.
+// `EMPTY_BLOCK_IDS` keeps a fold-all stable by reference so the memo below doesn't
+// hand the worker a new array for an unchanged decision. #1977
+const foldDecisionToOption = (decision: ReadonlySet<string> | null): readonly string[] | undefined => {
+    if (decision === null) {
+        return undefined;
+    }
+    return decision.size === 0 ? EMPTY_BLOCK_IDS : [...decision];
+};
 const NO_BLOCKS: OpGraphBlockSummary[] = [];
 
 // Folding a block makes its members' device-op expansions unreachable, so they are
@@ -270,7 +280,10 @@ const OperationGraphInner = ({
     // reading position in one graph, and the MLIR view scopes its own namespace
     // expansion the same way. #1195
     const [expandedOperationIds, setExpandedOperationIds] = useState<ReadonlySet<number>>(NOTHING_EXPANDED);
-    const [expandedBlockIds, setExpandedBlockIds] = useState<ReadonlySet<string>>(NOTHING_EXPANDED_BLOCKS);
+    // `null` is "nobody has folded anything yet", which renders unrolled. A Set is a
+    // decision the user made, and an empty one folds every instance. Detection
+    // describes the graph; it does not get to decide how the graph opens. #1977
+    const [expandedBlockIds, setExpandedBlockIds] = useState<ReadonlySet<string> | null>(null);
     const [detectedBlocks, setDetectedBlocks] = useState<OpGraphBlockSummary[]>(NO_BLOCKS);
     const [nodeIdByOperationId, setNodeIdByOperationId] = useState<ReadonlyMap<number, string>>(EMPTY_NODE_ID_BY_OP);
     const [isPerfOverlayEnabled, setIsPerfOverlayEnabled] = useState(false);
@@ -347,7 +360,7 @@ const OperationGraphInner = ({
         // Operation ids restart per report, so a surviving expansion would open
         // whichever unrelated operation now answers to that id.
         setExpandedOperationIds(NOTHING_EXPANDED);
-        setExpandedBlockIds(NOTHING_EXPANDED_BLOCKS);
+        setExpandedBlockIds(null);
         setDetectedBlocks(NO_BLOCKS);
         setNodeIdByOperationId(EMPTY_NODE_ID_BY_OP);
         setRevealedOperationId(null);
@@ -407,17 +420,22 @@ const OperationGraphInner = ({
         return byId;
     }, [operationList]);
 
+    const isBlockExpanded = useCallback(
+        (instanceId: string) => expandedBlockIds === null || expandedBlockIds.has(instanceId),
+        [expandedBlockIds],
+    );
+
     const collapsedMemberIds = useMemo(() => {
         const memberIds = new Set<number>();
         for (const block of detectedBlocks) {
-            if (!expandedBlockIds.has(block.instanceId)) {
+            if (!isBlockExpanded(block.instanceId)) {
                 for (const memberOpId of block.operationIds) {
                     memberIds.add(memberOpId);
                 }
             }
         }
         return memberIds;
-    }, [detectedBlocks, expandedBlockIds]);
+    }, [detectedBlocks, isBlockExpanded]);
 
     // "Which block owns this op?" was four separate linear scans, two of them inside
     // per-render memos. Instances are disjoint, and first-wins matches the `find`
@@ -544,7 +562,7 @@ const OperationGraphInner = ({
         () => ({
             hideDeallocate,
             deviceSubgraphs,
-            expandedBlockIds: expandedBlockIds.size === 0 ? EMPTY_BLOCK_IDS : [...expandedBlockIds],
+            expandedBlockIds: foldDecisionToOption(expandedBlockIds),
         }),
         [hideDeallocate, deviceSubgraphs, expandedBlockIds],
     );
@@ -692,7 +710,7 @@ const OperationGraphInner = ({
             // unrolling, the block itself when folding. Folding needs it most — a
             // double-click on a member replaces the very node the user clicked, which
             // is the "I'm going to click op 49, where has it gone" report. #1944
-            const isUnrolling = !expandedBlockIds.has(instanceId);
+            const isUnrolling = !isBlockExpanded(instanceId);
             pendingRevealRef.current = {
                 nodeIds: new Set(
                     isUnrolling && block !== undefined
@@ -704,7 +722,10 @@ const OperationGraphInner = ({
             // Siblings rather than nested: a state updater must be pure, and
             // `isUnrolling` already decides the branch outside it.
             setExpandedBlockIds((previous) => {
-                const next = new Set(previous);
+                // `null` means every instance is unrolled, so folding one has to
+                // materialise the others as expanded first: `new Set(null)` is empty,
+                // and deleting from that would fold the whole graph. #1977
+                const next = new Set(previous ?? detectedBlocks.map((entry) => entry.instanceId));
                 if (isUnrolling) {
                     next.add(instanceId);
                 } else {
@@ -716,7 +737,7 @@ const OperationGraphInner = ({
                 setExpandedOperationIds((previous) => withoutBlockMembers(previous, [block]));
             }
         },
-        [armViewportAnchor, detectedBlocks, expandedBlockIds, reportScope],
+        [armViewportAnchor, detectedBlocks, isBlockExpanded, reportScope],
     );
 
     const expandAllBlocks = useCallback(() => {
@@ -731,7 +752,7 @@ const OperationGraphInner = ({
     const handleHideDeallocateChange = useCallback(
         (next: boolean) => {
             setHideDeallocate(next);
-            setExpandedBlockIds(NOTHING_EXPANDED_BLOCKS);
+            setExpandedBlockIds(null);
             // Only block members: detection re-runs on this filter so every instance
             // folds, but an expansion on an op belonging to no block is untouched by
             // that and was kept before this feature existed.
@@ -745,8 +766,8 @@ const OperationGraphInner = ({
     if (operationId !== undefined && revealedOperationId !== operationId && detectedBlocks.length > 0) {
         setRevealedOperationId(operationId);
         const buried = blockByMemberOperationId.get(operationId);
-        if (buried !== undefined && !expandedBlockIds.has(buried.instanceId)) {
-            setExpandedBlockIds(new Set([...expandedBlockIds, buried.instanceId]));
+        if (buried !== undefined && !isBlockExpanded(buried.instanceId)) {
+            setExpandedBlockIds(new Set([...(expandedBlockIds ?? []), buried.instanceId]));
         }
     }
 
@@ -1199,11 +1220,11 @@ const OperationGraphInner = ({
                 return;
             }
             const instance = blockByMemberOperationId.get(node.data.operationId);
-            if (instance !== undefined && expandedBlockIds.has(instance.instanceId)) {
+            if (instance !== undefined && isBlockExpanded(instance.instanceId)) {
                 toggleBlockExpansion(instance.instanceId);
             }
         },
-        [blockByMemberOperationId, expandedBlockIds, toggleBlockExpansion],
+        [blockByMemberOperationId, isBlockExpanded, toggleBlockExpansion],
     );
 
     const handlePaneClick = useCallback(() => {
@@ -1277,8 +1298,8 @@ const OperationGraphInner = ({
             return null;
         }
         const owner = blockByMemberOperationId.get(selectedOperationId);
-        return owner !== undefined && !expandedBlockIds.has(owner.instanceId) ? owner : null;
-    }, [selectedOperationId, blockByMemberOperationId, expandedBlockIds]);
+        return owner !== undefined && !isBlockExpanded(owner.instanceId) ? owner : null;
+    }, [selectedOperationId, blockByMemberOperationId, isBlockExpanded]);
 
     const selectedPerfAggregate =
         selectedOperationId === null ? undefined : perfOverlay.aggregatesByOpId.get(selectedOperationId);
@@ -1346,11 +1367,10 @@ const OperationGraphInner = ({
                 hiddenMatchCount={matches.hiddenMatchCount}
                 hasBlocks={detectedBlocks.length > 0}
                 areAllBlocksExpanded={
-                    detectedBlocks.length > 0 && detectedBlocks.every((block) => expandedBlockIds.has(block.instanceId))
+                    detectedBlocks.length > 0 && detectedBlocks.every((block) => isBlockExpanded(block.instanceId))
                 }
                 areAllBlocksCollapsed={
-                    detectedBlocks.length === 0 ||
-                    detectedBlocks.every((block) => !expandedBlockIds.has(block.instanceId))
+                    detectedBlocks.length === 0 || detectedBlocks.every((block) => !isBlockExpanded(block.instanceId))
                 }
                 onExpandAllBlocks={expandAllBlocks}
                 onCollapseAllBlocks={collapseAllBlocks}

@@ -66,13 +66,15 @@ const cacheKeyOf = (
     version: number,
     hideDeallocate: boolean,
     deviceSubgraphs: OpGraphDeviceSubgraph[],
-    expandedBlockIds: readonly string[],
+    expandedBlockIds: readonly string[] | undefined,
 ): string => {
     const expanded = deviceSubgraphs
         .map((subgraph) => subgraph.operationId)
         .sort((left, right) => left - right)
         .join(',');
-    const blocks = [...expandedBlockIds].sort().join(',');
+    // `undefined` (nothing folded yet) and `[]` (fold every instance) build
+    // different graphs, so they must not share a cache entry. #1977
+    const blocks = expandedBlockIds === undefined ? 'none' : [...expandedBlockIds].sort().join(',');
     return `${version}:${hideDeallocate}:${expanded}:${blocks}`;
 };
 
@@ -115,7 +117,7 @@ const drainPendingBuild = (): void => {
         request.sourceVersion,
         request.hideDeallocate,
         request.deviceSubgraphs,
-        request.expandedBlockIds ?? [],
+        request.expandedBlockIds,
     );
     const cached = layoutCache.get(cacheKey);
     if (cached) {
