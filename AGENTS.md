@@ -183,11 +183,11 @@ Applies on touch to views that draw data-proportional visuals (NPE chip cluster 
 - Funnel error-string extraction through **`getResponseError(error, fallback?)`** (`src/functions/getResponseError.ts`). Don't reach into `error.response.data.error` ad-hoc — the helper handles AxiosError, Error, and string fallbacks consistently.
 - Emit toasts via **`createToastNotification(message, fileName, ToastType.X)`** (`src/functions/createToastNotification.tsx`; `ToastType` lives in `src/definitions/ToastType.ts`); the same module exports **`createToast`** and **`dismissToast`** for a custom body or a toast you must dismiss later. Only that module may import `toast` from `react-toastify` — `no-restricted-imports` enforces it. [Signatures and the `<ToastContainer>` rule](./CONVENTIONS.md#emit-toasts-via-createtoastnotification).
 
-### Usage recording (frontend)
+### Event logging (frontend)
 
-`src/functions/recordUsage.ts` posts local usage events to `POST /api/usage`. Four invariants a reader cannot infer from the code alone — all detailed, with the caps table and the route's deliberate decorator stack, in [CONVENTIONS.md](./CONVENTIONS.md#usage-recording-frontend):
+`src/functions/recordUsage.ts` posts local usage events to `POST /api/usage`. Five invariants a reader cannot infer from the code alone — all detailed, with the caps table and the route's deliberate decorator stack, in [CONVENTIONS.md](./CONVENTIONS.md#event-logging-frontend):
 
-- **`usage.py` owns the vocabulary; `src/definitions/UsageEvent.ts` is a copy.** Change both sides in one commit: a divergence is silent at runtime, and `backend/ttnn_visualizer/tests/test_usage_frontend_parity.py` is the only thing that notices.
+- **`usage.py` owns the vocabulary; `src/definitions/UsageEvent.ts` and `docs/src/event-logging.md` are copies.** Every new event must name the Q1–Q5 decision from #1819 that it informs; update the relevant copies in the same commit. `test_usage_frontend_parity.py` and `test_event_logging_docs_parity.py` enforce the contract.
 - **`MAX_BUFFERED_EVENTS` must equal `MAX_USAGE_BATCH_EVENTS`**, which bounds write atomicity rather than merely an HTTP body.
 - **The unload beacon must send a `Blob` typed `application/json`** — that content type is what keeps the request non-simple, and a bare-string beacon goes as `text/plain` and is refused.
 - **Failures are silent and batches are never re-buffered.** The only diagnostic is a `console.warn` under `import.meta.env.DEV` carrying the status, never a response body.

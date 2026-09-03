@@ -24,3 +24,4 @@ Welcome to TT-NN Visualizer documentation!
 
    src/support
    src/troubleshooting
+   src/event-logging
