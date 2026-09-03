@@ -42,7 +42,7 @@ Set the environment variable before launching the application:
 USAGE_RECORDING_DISABLED=true ttnn-visualizer
 ```
 
-The recognised true values are `true` and `1`; any other value except the recognised false values `false` and `0` is also treated as a request to disable recording.
+`USAGE_RECORDING_DISABLED` is an opt-out. Leaving it unset, or setting it to `false` or `0`, keeps recording on. Setting it to `true` or `1` switches recording off. An unrecognised value also switches recording off, so a misspelled opt-out cannot accidentally leave recording enabled; the startup output reports the unrecognised value beside the disabled status.
 
 For an opt-out that applies across shells, create the marker file:
 

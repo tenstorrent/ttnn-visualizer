@@ -244,41 +244,36 @@ def test_the_launch_banner_names_a_working_opt_out(
 
 @pytest.mark.parametrize("value", ["yes", "off", "", "  ", "Ture"])
 def test_an_unrecognised_disable_value_switches_recording_off(
-    usage_directory, monkeypatch, caplog, value
+    usage_directory, monkeypatch, value
 ):
-    # The one boolean in the project that obeys a value it does not recognise. Every
-    # other setting keeps its declared default and warns (`_coerce_env_value`), which
-    # for an opt-out would mean reading a typo as consent to record.
+    # This is the third opt-out branch: false/0 records, true/1 disables, and an
+    # unrecognised value disables before the launcher reports it. Other settings keep
+    # their declared default after a warning, which here would read a misspelling as
+    # consent to record.
     monkeypatch.setenv(USAGE_DISABLED_ENV_VAR, value)
 
-    with caplog.at_level("WARNING"):
-        assert is_recording_enabled() is False
-
-    assert USAGE_DISABLED_ENV_VAR in caplog.text
+    assert is_recording_enabled() is False
 
     record_event(UsageEvent.APP_START)
 
     assert read_usage_lines(usage_directory) == []
 
 
-def test_an_unrecognised_disable_value_is_reported_once(
-    usage_directory, monkeypatch, caplog
+def test_record_launch_reports_an_unrecognised_disable_value_with_its_outcome(
+    usage_directory, monkeypatch, capsys
 ):
-    # The warning fires from the path every recorded event takes, so without warn-once
-    # the misconfiguration it reports is also the one that floods the log.
+    from ttnn_visualizer.app import _record_launch
+
     monkeypatch.setenv(USAGE_DISABLED_ENV_VAR, "yes")
 
-    with caplog.at_level("WARNING"):
-        is_recording_enabled()
-        is_recording_enabled()
+    _record_launch(SimpleNamespace(SERVER_MODE=False, TT_METAL_HOME=None))
 
-    warnings = [
-        record
-        for record in caplog.records
-        if "not a recognised boolean" in record.getMessage()
-    ]
+    output = capsys.readouterr().out
 
-    assert len(warnings) == 1
+    assert f"{USAGE_DISABLED_ENV_VAR}='yes' is not a recognised boolean" in output
+    assert "recording will be switched off" in output
+    assert "Recording usage has been DISABLED" in output
+    assert read_usage_lines(usage_directory) == []
 
 
 def test_a_disabled_install_leaves_no_directory_behind(usage_directory, monkeypatch):
@@ -751,21 +746,24 @@ def test_the_log_is_not_world_readable(usage_directory, monkeypatch):
     assert get_usage_log_path().stat().st_mode & 0o077 == 0
 
 
-def test_record_launch_records_one_line_and_exports_the_run_id(
+def test_record_launch_replaces_an_inherited_id_and_exports_the_new_one(
     usage_directory, monkeypatch
 ):
     from ttnn_visualizer.app import _record_launch
 
     # setenv (not delenv) so the value _record_launch writes is rolled back at teardown.
-    monkeypatch.setenv(RUN_ID_ENV_VAR, "")
+    inherited_run_id = "abc12345"
+    monkeypatch.setenv(RUN_ID_ENV_VAR, inherited_run_id)
     # The string form `.env.sample` produces, which is truthy if taken at face value.
     _record_launch(SimpleNamespace(SERVER_MODE="false", TT_METAL_HOME=None))
 
     lines = read_usage_lines(usage_directory)
 
     assert len(lines) == 1
+    recorded_run_id = parse_usage_line(lines[0])["run_id"]
     assert parse_usage_line(lines[0])["event"] == "app_start"
-    assert os.environ[RUN_ID_ENV_VAR] == parse_usage_line(lines[0])["run_id"]
+    assert recorded_run_id != inherited_run_id
+    assert os.environ[RUN_ID_ENV_VAR] == recorded_run_id
 
 
 def test_record_launch_records_nothing_in_server_mode(usage_directory, monkeypatch):

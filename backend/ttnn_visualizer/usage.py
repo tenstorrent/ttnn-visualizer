@@ -57,7 +57,7 @@ from enum import Enum
 from importlib.metadata import PackageNotFoundError, distribution
 from importlib.metadata import version as distribution_version
 from pathlib import Path
-from typing import Any, Dict, List, Mapping, Optional, Sequence, Set, Tuple, Type
+from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple, Type
 
 from ttnn_visualizer.utils import (
     is_running_in_container,
@@ -181,13 +181,6 @@ _log_full = False
 # warning per flush would fill the log of the application this module promises not to
 # disturb.
 _write_failure_logged = False
-# Variables already warned about. ``is_recording_enabled`` is called on every config
-# read — the ``PRINT_ENV`` dump alone triggers one through the descriptor, and every
-# recorded event another — so an unconditional warning would bury the launch output it
-# is meant to stand out in, and would be loudest in exactly the misconfigured case it
-# is trying to report. One set rather than a flag per warning, so a third needs no new
-# global and no ``global`` statement inside a predicate.
-_warned_env_vars: Set[str] = set()
 
 
 class UsageEvent(str, Enum):
@@ -446,47 +439,35 @@ def _server_mode_from_app_context() -> Optional[bool]:
     return _as_bool(current_app.config.get("SERVER_MODE", False))
 
 
-def _warn_once(env_var: str, message: str, *args: Any) -> None:
-    """Emit one warning per variable for the life of the process.
-
-    Keyed on the variable rather than the message, so changing an offending value
-    mid-process does not earn a second warning — the operator has already been told
-    which name to look at, which is the actionable part.
-    """
-    if env_var in _warned_env_vars:
-        return
-
-    _warned_env_vars.add(env_var)
-    logger.warning(message, *args)
-
-
 def _is_recording_disabled_by_environment() -> bool:
     """Whether the operator's environment asks us not to record.
 
-    Unset means record. Anything set that is not a recognised *false* disables, which
-    is the opposite of how every other boolean setting treats a value outside the
-    vocabulary: :func:`_coerce_env_value` in ``settings`` discards an unrecognised one
-    and keeps the declared default. That is right for a feature flag and wrong here.
-    This is an opt-out, so ``USAGE_RECORDING_DISABLED=yes`` must not be read as
-    consent — the cost of obeying a typo is one missing data point, and the cost of
-    ignoring it is recording against an explicit request.
+    This variable is an opt-out: unset, ``false`` and ``0`` keep recording on;
+    ``true`` and ``1`` switch it off. An unrecognised value also switches recording
+    off, so a misspelling such as ``USAGE_RECORDING_DISABLED=yes`` cannot accidentally
+    be read as consent to record; the top-level launcher reports that decision beside
+    its recording status.
+
+    Other boolean settings discard an unrecognised value and keep their declared
+    default. The different treatment here is deliberate because the safe consequence
+    is one missing data point, while ignoring a misspelled opt-out records against the
+    operator's apparent intent.
     """
     value = os.getenv(USAGE_DISABLED_ENV_VAR)
     if value is None:
         return False
 
     parsed = parse_bool(value)
-    if parsed is None:
-        _warn_once(
-            USAGE_DISABLED_ENV_VAR,
-            "%s=%r is not a recognised boolean. Treating it as a request to switch "
-            "recording off; use true/1 or false/0.",
-            USAGE_DISABLED_ENV_VAR,
-            value,
-        )
-        return True
+    return parsed is not False
 
-    return parsed
+
+def get_unrecognised_usage_disabled_value() -> Optional[str]:
+    """Return the invalid opt-out value the launcher should report, if any."""
+    value = os.getenv(USAGE_DISABLED_ENV_VAR)
+    if value is None or parse_bool(value) is not None:
+        return None
+
+    return value
 
 
 def is_recording_enabled(server_mode: Any = False) -> bool:
@@ -515,9 +496,9 @@ def is_recording_enabled(server_mode: Any = False) -> bool:
 def get_run_id() -> str:
     """A random identifier for this launch, shared by every process serving it.
 
-    ``main()`` exports this so the gunicorn workers it spawns inherit it, which is
-    what lets a session be reconstructed from the log. It is regenerated every launch
-    and never persisted — a stable identifier would turn this into per-user tracking.
+    ``main()`` calls :func:`start_run` and exports the result so the gunicorn workers
+    it spawns inherit it, which is what lets a session be reconstructed from the log.
+    The fallback generation here supports direct module use outside that launcher.
     """
     global _run_id
 
@@ -530,6 +511,17 @@ def get_run_id() -> str:
             inherited if _is_safe_value(inherited) else uuid.uuid4().hex[:RUN_ID_LENGTH]
         )
 
+    return _run_id
+
+
+def start_run() -> str:
+    """Create the fresh identifier that the top-level launcher shares with workers."""
+    global _run_id
+
+    # Never trust an inherited value in the launcher: a shell-level override would
+    # otherwise turn the per-launch identifier into a persistent tracking key. Workers
+    # do not call this function; they inherit the value exported after this returns.
+    _run_id = uuid.uuid4().hex[:RUN_ID_LENGTH]
     return _run_id
 
 
