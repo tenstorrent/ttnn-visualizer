@@ -2,17 +2,13 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { Button, ButtonVariant, MenuItem, Position, Tooltip } from '@blueprintjs/core';
 import { ItemRenderer, Select } from '@blueprintjs/select';
 import { IconNames } from '@blueprintjs/icons';
 import { useInstance } from '../../hooks/useAPI';
 import 'styles/components/FolderPicker.scss';
-import {
-    getFolderLinkState,
-    shouldShowFolderLinkStatus,
-    sortByFolderLinkState,
-} from '../../functions/folderLinkStatus';
+import { getFolderLinkState, shouldShowFolderLinkStatus } from '../../functions/folderLinkStatus';
 import { ReportFolder } from '../../definitions/Reports';
 import getServerConfig from '../../functions/getServerConfig';
 import isDirectReportMode from '../../functions/isDirectReportMode';
@@ -77,18 +73,6 @@ const LocalFolderPicker = ({
     const isDeleteDisabled = loading;
     const showLinkStatus = shouldShowFolderLinkStatus(linkedIds, unlinkedIds);
 
-    // Linked first, unknown next, failed links last — preserve server order within each group.
-    const sortedItems = useMemo(
-        () =>
-            sortByFolderLinkState(
-                items ?? [],
-                (folder) => getReportId(folder.syncedName, folder.path),
-                linkedIds,
-                unlinkedIds,
-            ),
-        [items, linkedIds, unlinkedIds],
-    );
-
     const renderItem: ItemRenderer<ReportFolder> = (folder, { handleClick, handleFocus, modifiers, query }) => {
         if (!modifiers.matchesPredicate) {
             return null;
@@ -149,7 +133,7 @@ const LocalFolderPicker = ({
         <>
             <Select<ReportFolder>
                 className='folder-picker'
-                items={sortedItems}
+                items={items ?? []}
                 itemPredicate={(query, item) => !query || item.path.toLowerCase().includes(query.toLowerCase())}
                 itemRenderer={renderItem}
                 noResults={
