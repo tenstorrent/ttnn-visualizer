@@ -120,6 +120,53 @@ def test_hosted_clients_get_distinct_logs(app, client, event_log_directory):
     assert len(read_event_log_lines(event_log_directory / second_id)) == 1
 
 
+def test_hosted_endpoint_enforces_per_log_batch_rate_limit(
+    app, client, event_log_directory, monkeypatch
+):
+    app.config["SERVER_MODE"] = True
+    monkeypatch.setattr(event_logging, "MAX_HOSTED_BATCHES_PER_MINUTE", 1)
+
+    assert (
+        _post_events(client, [VIEW_OPENED_EVENT]).status_code == HTTPStatus.NO_CONTENT
+    )
+    assert (
+        _post_events(client, [VIEW_OPENED_EVENT]).status_code == HTTPStatus.NO_CONTENT
+    )
+
+    event_log_id = _event_log_id(client)
+    assert len(read_event_log_lines(event_log_directory / event_log_id)) == 1
+
+
+def test_hosted_rate_limit_rejects_before_parsing_the_batch(app, client, monkeypatch):
+    app.config["SERVER_MODE"] = True
+    monkeypatch.setattr(event_logging, "MAX_HOSTED_BATCHES_PER_MINUTE", 0)
+
+    response = _post_events(client, [{"not": "a valid event"}])
+
+    assert response.status_code == HTTPStatus.NO_CONTENT
+
+
+def test_hosted_endpoint_enforces_log_quota(
+    app, client, event_log_directory, monkeypatch
+):
+    app.config["SERVER_MODE"] = True
+    monkeypatch.setattr(event_logging, "MAX_HOSTED_EVENT_LOGS", 1)
+    other_client = app.test_client()
+
+    assert (
+        _post_events(client, [VIEW_OPENED_EVENT]).status_code == HTTPStatus.NO_CONTENT
+    )
+    assert (
+        _post_events(other_client, [VIEW_OPENED_EVENT]).status_code
+        == HTTPStatus.NO_CONTENT
+    )
+
+    assert (
+        len(list(event_log_directory.glob(f"*/{event_logging.EVENT_LOG_FILENAME}")))
+        == 1
+    )
+
+
 def test_hosted_log_path_ignores_caller_supplied_ids(app, client, event_log_directory):
     app.config["SERVER_MODE"] = True
     supplied_id = "f" * EVENT_LOG_ID_LENGTH
@@ -152,7 +199,7 @@ def test_hosted_session_replaces_a_malformed_stored_id(
     assert len(read_event_log_lines(event_log_directory / replacement)) == 1
 
 
-def test_minting_a_hosted_usage_id_does_not_make_the_session_permanent(app, client):
+def test_minting_a_hosted_event_log_id_does_not_make_the_session_permanent(app, client):
     app.config["SERVER_MODE"] = True
 
     _post_events(client, [VIEW_OPENED_EVENT])
@@ -162,7 +209,7 @@ def test_minting_a_hosted_usage_id_does_not_make_the_session_permanent(app, clie
         assert flask_session.permanent is False
 
 
-def test_hosted_usage_keeps_an_existing_permanent_session_id(
+def test_hosted_event_log_keeps_an_existing_permanent_session_id(
     app, client, event_log_directory
 ):
     app.config["SERVER_MODE"] = True

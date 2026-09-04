@@ -41,6 +41,7 @@ from ttnn_visualizer.event_logging import (
     MAX_EVENT_LOG_BATCH_EVENTS,
     EventLogEvent,
     EventLogEventRejected,
+    admit_event_log_batch,
     ensure_event_log_id,
     is_recording_enabled,
     record_events,
@@ -2821,6 +2822,11 @@ def ingest_event_log_events():
     if not is_recording_enabled(current_app.config["SERVER_MODE"]):
         return Response(status=HTTPStatus.NO_CONTENT)
 
+    server_mode = is_flag_enabled(current_app.config["SERVER_MODE"])
+    event_log_id = ensure_event_log_id() if server_mode else None
+    if not admit_event_log_batch(server_mode, event_log_id):
+        return Response(status=HTTPStatus.NO_CONTENT)
+
     # Not `force=True`: requiring `application/json` is load-bearing rather than
     # pedantic. It makes this a non-simple request, so a hostile origin cannot post to it
     # without a preflight `ALLOWED_ORIGINS` refuses, whereas a `text/plain` body would
@@ -2860,12 +2866,11 @@ def ingest_event_log_events():
     # Deliberately the same answer whether or not the write happened. Recording being
     # switched off for this deployment is not the client's problem, and whether a log
     # exists on this machine is not something a page needs told.
-    server_mode = is_flag_enabled(current_app.config["SERVER_MODE"])
-    event_log_id = ensure_event_log_id() if server_mode else None
     record_events(
         validated,
         server_mode=server_mode,
         event_log_id=event_log_id,
+        admission_checked=True,
     )
 
     return Response(status=HTTPStatus.NO_CONTENT)

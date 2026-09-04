@@ -717,6 +717,29 @@ def _is_hosted_rate_limited(state: _EventLogState) -> bool:
     return False
 
 
+def admit_event_log_batch(server_mode: Any, event_log_id: Optional[str]) -> bool:
+    """Reserve and rate-check a hosted batch before parsing its request body."""
+    if not is_flag_enabled(server_mode):
+        return True
+    if event_log_id is None:
+        return False
+
+    log_path = get_event_log_path(server_mode, event_log_id)
+    state = _hosted_log_state_by_path.get(log_path)
+    if state is None:
+        candidate_state = _EventLogState()
+        if not _reserve_hosted_log(log_path, candidate_state):
+            return False
+        state = _state_for_log(log_path, hosted=True)
+        state.reservation_checked = candidate_state.reservation_checked
+    else:
+        state = _state_for_log(log_path, hosted=True)
+        if not _reserve_hosted_log(log_path, state):
+            return False
+
+    return not _is_hosted_rate_limited(state)
+
+
 def _reserve_hosted_log(log_path: Path, state: _EventLogState) -> bool:
     """Atomically reserve one bounded hosted log slot across server workers."""
     global _hosted_quota_warning_logged
@@ -992,6 +1015,7 @@ def _write_events(
     events: Sequence[Tuple[EventLogEvent, Mapping[str, Any]]],
     server_mode: Any,
     event_log_id: Optional[str] = None,
+    admission_checked: bool = False,
 ) -> bool:
     """The whole write path, all of it or none of it, in a single append.
 
@@ -1026,23 +1050,10 @@ def _write_events(
         if hosted
         else get_event_log_path()
     )
-    if hosted:
-        state = _hosted_log_state_by_path.get(log_path)
-        if state is None:
-            candidate_state = _EventLogState()
-            if not _reserve_hosted_log(log_path, candidate_state):
-                return False
-            state = _state_for_log(log_path, hosted=True)
-            state.reservation_checked = candidate_state.reservation_checked
-        else:
-            state = _state_for_log(log_path, hosted=True)
-            if not _reserve_hosted_log(log_path, state):
-                return False
-
-        if _is_hosted_rate_limited(state):
+    if hosted and not admission_checked:
+        if not admit_event_log_batch(server_mode, event_log_id):
             return False
-    else:
-        state = _state_for_log(log_path, hosted=False)
+    state = _state_for_log(log_path, hosted)
 
     if _is_log_full(log_path, state, hosted=hosted):
         return False
@@ -1167,6 +1178,7 @@ def record_events(
     events: Sequence[Tuple[EventLogEvent, Mapping[str, Any]]],
     server_mode: Optional[Any] = None,
     event_log_id: Optional[str] = None,
+    admission_checked: bool = False,
 ) -> bool:
     """Append a batch of events, all of them or none, in a single write.
 
@@ -1195,6 +1207,7 @@ def record_events(
             events,
             resolved_server_mode,
             event_log_id=event_log_id,
+            admission_checked=admission_checked,
         )
     except Exception as error:
         # One warning for the batch, and only for the first of a run of them: per-event

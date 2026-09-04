@@ -157,7 +157,7 @@ def test_the_event_logging_docs_page_has_an_spdx_header():
     assert "SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC" in source
 
 
-def test_every_usage_event_has_exactly_one_documented_section():
+def test_every_event_log_event_has_exactly_one_documented_section():
     sections = _event_sections(_read(_EVENT_LOGGING_DOCS))
 
     assert set(sections) == {event.value for event in EventLogEvent}
