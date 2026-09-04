@@ -1130,7 +1130,10 @@ const OperationGraphInner = ({
         }
         return nodes.map((node) => {
             const isSelected = node.id === highlight?.selectedId;
-            const classNames: string[] = [];
+            // Seeded from the built node so the block-kind class survives a restyle: this
+            // memo replaces `className` outright, and starting empty would drop the
+            // colour the moment anything was selected or filtered. #1982
+            const classNames: string[] = node.className === undefined ? [] : [node.className];
             if (isSelected) {
                 classNames.push(SELECTED_NODE_CLASS);
             } else if (highlight) {

@@ -32,6 +32,23 @@
      * `--graph-group` is mid-grey on `--graph-normal` and vanishes at graph zoom. */
     --graph-block: #{$tt-blue-tint-2};
     --graph-block-border: #{$tt-blue};
+
+    /* One pair per detector, so the three kinds of block are told apart by colour and
+     * not by reading their labels. A role gets its own token even where the value
+     * matches another's, so a later palette tweak cannot move an unrelated block.
+     *
+     * Green and yellow are deliberately unused here: `--graph-input-node`,
+     * `--graph-output-node` and `--graph-focused-node` already own them, and a block in
+     * either would read as an I/O highlight. #1982 */
+    --graph-block-repeat: #{$tt-blue-tint-2};
+    --graph-block-repeat-border: #{$tt-blue};
+    --graph-block-layer: #{$tt-purple-tint-2};
+    --graph-block-layer-border: #{$tt-purple-accent};
+
+    /* Grey on purpose: a weight fan is plumbing, and it is collapsed by default, so it
+     * should recede rather than compete with the model for attention. */
+    --graph-block-weights: #{$tt-grey-7};
+    --graph-block-weights-border: #{$tt-grey-5};
     --graph-section-group: #9b59b6;
     --graph-selected: #{$tt-blue-accent};
 

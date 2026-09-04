@@ -82,6 +82,8 @@ export type OpGraphNodeData = {
     deviceOperationCount: number;
     highlight?: NodeRelation;
     blockInstanceId?: string;
+    /** Drives the block's colour, so the three kinds are distinguishable. #1982 */
+    blockKind?: OpGraphBlockKind;
     memberNames?: string[];
     memberOperationIds?: number[];
     opCount?: number;
@@ -134,7 +136,22 @@ export interface OpGraphDeviceSubgraph {
     exitFallbackNodeId: string | null;
 }
 
+/**
+ * Which detector produced a block. Carried rather than parsed back out of `patternId`,
+ * because a prefix check would silently mislabel the next detector someone adds — and
+ * the kind decides the colour a reader uses to tell them apart. #1982
+ */
+export enum OpGraphBlockKind {
+    /** A repeated subgraph. #1583 */
+    REPEAT = 'repeat',
+    /** A span named by its operations' roles. #1976 */
+    LAYER = 'layer',
+    /** A fan of weight loads feeding one node. #1980 */
+    WEIGHTS = 'weights',
+}
+
 export interface RepeatBlockInstance {
+    kind: OpGraphBlockKind;
     instanceId: string;
     patternId: string;
     label: string;

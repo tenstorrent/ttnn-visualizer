@@ -124,6 +124,26 @@ $minimap-width: 200px;
         background-color: var(--graph-block);
         box-shadow: inset 0 0 0 2px var(--graph-block-border);
 
+        &.op-graph-block-repeat {
+            border-color: var(--graph-block-repeat-border);
+            background-color: var(--graph-block-repeat);
+            box-shadow: inset 0 0 0 2px var(--graph-block-repeat-border);
+        }
+
+        &.op-graph-block-layer {
+            border-color: var(--graph-block-layer-border);
+            background-color: var(--graph-block-layer);
+            box-shadow: inset 0 0 0 2px var(--graph-block-layer-border);
+        }
+
+        &.op-graph-block-weights {
+            border-color: var(--graph-block-weights-border);
+            background-color: var(--graph-block-weights);
+            box-shadow: inset 0 0 0 2px var(--graph-block-weights-border);
+        }
+
+        // Last, so selection outranks the kind: which block is selected matters more
+        // than which detector found it, and the two must not fight over the border.
         &.op-graph-node-selected {
             border-style: solid;
             border-color: var(--graph-selected);
@@ -251,6 +271,14 @@ $minimap-width: 200px;
     // and a badge hung off the corner was clipped by the boundary and easy to
     // miss. Absolute so it can't become a flex item and grow the node past the
     // height the layout measured.
+    .react-flow__node-blockNode.op-graph-block-layer > .op-graph-node-expander {
+        background-color: var(--graph-block-layer-border);
+    }
+
+    .react-flow__node-blockNode.op-graph-block-weights > .op-graph-node-expander {
+        background-color: var(--graph-block-weights-border);
+    }
+
     .react-flow__node-opNode > .op-graph-node-expander,
     .react-flow__node-blockNode > .op-graph-node-expander {
         position: absolute;

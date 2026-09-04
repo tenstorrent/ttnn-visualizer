@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { getDeviceEdgeId, getDeviceNodeId } from '../src/components/operation-graph/opGraphDeviceSubgraph';
 import { formatBlockMeta } from '../src/components/operation-graph/opGraphBlockMeta';
 import { buildOpGraph } from '../src/components/operation-graph/opGraphBuilder';
+import { OpGraphBlockKind, OpGraphGrouping } from '../src/components/operation-graph/opGraphTypes';
 import {
     type OpGraphDeviceSubgraph,
     OpGraphNodeType,
@@ -403,6 +404,73 @@ describe('buildOpGraph', () => {
             const none = build([operation({ id: 1, outputs: [{ consumers: [2] }] })], false).nodes[0];
 
             expect(single.width).toBe(none.width);
+        });
+    });
+
+    describe('block kinds', () => {
+        it('marks a repeat, a layer and a weight fan with different classes', () => {
+            // The three detectors all render the same node type, so without this the only
+            // way to tell them apart is to read the labels. #1982
+            // Prefix and suffix included: the window scan needs the run to be bounded
+            // before it reads as a repeat.
+            const repeats = buildOpGraph(
+                [
+                    operation({ id: 1, name: 'prefix', outputs: [{ consumers: [2] }] }),
+                    operation({ id: 2, name: 'layer_a', outputs: [{ consumers: [3] }] }),
+                    operation({ id: 3, name: 'layer_b', outputs: [{ consumers: [4] }] }),
+                    operation({ id: 4, name: 'layer_a', outputs: [{ consumers: [5] }] }),
+                    operation({ id: 5, name: 'layer_b', outputs: [{ consumers: [6] }] }),
+                    operation({ id: 6, name: 'suffix' }),
+                ],
+                { hideDeallocate: false, deviceSubgraphs: [], expandedBlockIds: [] },
+            );
+            const layers = buildOpGraph(
+                [
+                    operation({
+                        id: 1,
+                        name: 'ttnn.transformer.scaled_dot_product_attention',
+                        outputs: [{ consumers: [2] }],
+                    }),
+                    operation({ id: 2, name: 'ttnn.layer_norm' }),
+                ],
+                {
+                    hideDeallocate: false,
+                    deviceSubgraphs: [],
+                    expandedBlockIds: [],
+                    grouping: OpGraphGrouping.LAYERS,
+                },
+            );
+            const fans = buildOpGraph(
+                [
+                    operation({ id: 1, name: 'ttnn.to_device', outputs: [{ consumers: [3] }] }),
+                    operation({ id: 2, name: 'ttnn.to_device', outputs: [{ consumers: [3] }] }),
+                    operation({ id: 3, name: 'ttnn.linear', outputs: [{ consumers: [4] }] }),
+                    operation({ id: 4, name: 'ttnn.layer_norm' }),
+                ],
+                { hideDeallocate: false, deviceSubgraphs: [], collapseWeightLoads: true },
+            );
+
+            const classOf = (graph: ReturnType<typeof buildOpGraph>, id: string) =>
+                graph.nodes.find((node) => node.id === id)?.className;
+
+            expect(classOf(repeats, 'block:0:2')).toBe('op-graph-block-repeat');
+            expect(classOf(layers, 'layer:attention:1')).toBe('op-graph-block-layer');
+            expect(classOf(fans, 'weights:3')).toBe('op-graph-block-weights');
+        });
+
+        it('carries the kind on the node data as well as the class', () => {
+            // The class paints it; the kind is what a panel or a test can reason about
+            // without parsing a string.
+            const fans = buildOpGraph(
+                [
+                    operation({ id: 1, name: 'ttnn.to_device', outputs: [{ consumers: [3] }] }),
+                    operation({ id: 2, name: 'ttnn.to_device', outputs: [{ consumers: [3] }] }),
+                    operation({ id: 3, name: 'ttnn.linear' }),
+                ],
+                { hideDeallocate: false, deviceSubgraphs: [], collapseWeightLoads: true },
+            );
+
+            expect(nodeById(fans, 'weights:3').data.blockKind).toBe(OpGraphBlockKind.WEIGHTS);
         });
     });
 

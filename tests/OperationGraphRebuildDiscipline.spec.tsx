@@ -1401,6 +1401,24 @@ describe('OperationGraphReactFlow repeat blocks', () => {
         expect(setCenter).not.toHaveBeenCalled();
     });
 
+    it('keeps the block-kind class when a restyle adds its own', () => {
+        // The restyle memo replaces `className` outright. Seeded empty, the colour
+        // vanished the moment anything was selected or filtered — and only while
+        // selected, which is the hardest kind of styling bug to spot. #1982
+        renderFolded();
+
+        const folded = nodeById(lastFlowRender().nodes, FIRST_BLOCK_ID);
+        expect(folded.className).toContain('op-graph-block-repeat');
+
+        act(() => {
+            harness.onNodeClick?.(null, folded);
+        });
+
+        const selected = nodeById(lastFlowRender().nodes, FIRST_BLOCK_ID);
+        expect(selected.className).toContain('op-graph-block-repeat');
+        expect(selected.className).toContain('op-graph-node-selected');
+    });
+
     it('renders repeats unrolled on first layout and offers Fold', () => {
         renderGraph(REPEAT_OPERATION_LIST);
 

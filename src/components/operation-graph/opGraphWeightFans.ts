@@ -4,6 +4,7 @@
 
 import type { CandidateEdge } from './opGraphBuilder';
 import type { OpGraphSourceOperation, RepeatBlockInstance } from './opGraphTypes';
+import { OpGraphBlockKind } from './opGraphTypes';
 
 /**
  * Collapses weight loading, which dominates the node count and is none of the model.
@@ -83,6 +84,7 @@ export const detectWeightFans = ({
     for (const [consumerNodeId, operationIds] of membersByConsumer) {
         if (operationIds.length >= MIN_FAN_MEMBERS) {
             fans.push({
+                kind: OpGraphBlockKind.WEIGHTS,
                 instanceId: fanIdOf(consumerNodeId),
                 patternId: 'weights',
                 label: `${operationIds.length} weight loads`,

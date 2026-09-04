@@ -4,6 +4,7 @@
 
 import { type OpRoleGroup, OpSemanticRole, detectOpRoleGroups } from './opGraphOpRoles';
 import type { OpGraphSourceOperation, RepeatBlockInstance } from './opGraphTypes';
+import { OpGraphBlockKind } from './opGraphTypes';
 
 /**
  * Folding a single operation replaces one node with one node, so a span that short
@@ -41,6 +42,7 @@ export const detectLayerBlocks = (operations: readonly OpGraphSourceOperation[])
         return {
             // Keyed on the first member rather than the index, so folding one instance
             // cannot rename the others when detection shifts by a span.
+            kind: OpGraphBlockKind.LAYER,
             instanceId: `layer:${group.role}:${group.operationIds[0]}`,
             patternId: `layer:${group.role}`,
             label: instanceCount > 1 ? `${group.label} ${instanceIndex + 1}` : group.label,

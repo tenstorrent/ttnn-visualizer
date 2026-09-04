@@ -15,7 +15,7 @@ import { detectWeightFans } from './opGraphWeightFans';
 import { detectRepeatBlocks } from './opGraphRepeatBlocks';
 import { formatBlockMeta } from './opGraphBlockMeta';
 import { sumOptional } from '../../functions/math';
-import { OpGraphGrouping } from './opGraphTypes';
+import { OpGraphBlockKind, OpGraphGrouping } from './opGraphTypes';
 import {
     type OpGraphBlockSummary,
     type OpGraphBuildOptions,
@@ -36,6 +36,17 @@ export interface CandidateEdge {
     label: string;
     tensorId: number;
 }
+
+/**
+ * One class per detector, so a reader can tell a repeated subgraph from a named layer
+ * from a fan of weight loads at a glance. The colours themselves are `--graph-block-*`
+ * tokens in `_base.scss`; nothing here knows a hex value. #1982
+ */
+const BLOCK_KIND_CLASS: Readonly<Record<OpGraphBlockKind, string>> = {
+    [OpGraphBlockKind.REPEAT]: 'op-graph-block-repeat',
+    [OpGraphBlockKind.LAYER]: 'op-graph-block-layer',
+    [OpGraphBlockKind.WEIGHTS]: 'op-graph-block-weights',
+};
 
 const isDeallocate = (name: string): boolean => DEALLOCATE_OP_NAME_LIST.includes(name.toLowerCase());
 
@@ -174,6 +185,9 @@ export function buildOpGraph(
                 nodes.push({
                     id: collapsedInstance.instanceId,
                     type: OpGraphNodeType.BLOCK,
+                    // Static, so it rides on the built node rather than being recomputed
+                    // by the restyle memo on every selection and filter keystroke. #1982
+                    className: BLOCK_KIND_CLASS[collapsedInstance.kind],
                     position: { x: 0, y: 0 },
                     ...size,
                     data: {
@@ -187,6 +201,7 @@ export function buildOpGraph(
                         filterString: collapsedInstance.label,
                         deviceOperationCount: 0,
                         blockInstanceId: collapsedInstance.instanceId,
+                        blockKind: collapsedInstance.kind,
                         memberNames: members.map((member) => member.name),
                         memberOperationIds: collapsedInstance.operationIds,
                         opCount,
