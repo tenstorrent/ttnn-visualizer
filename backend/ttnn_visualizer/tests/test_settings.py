@@ -20,7 +20,12 @@ import sys
 from pathlib import Path
 
 import pytest
-from ttnn_visualizer import usage
+from ttnn_visualizer import event_logging
+from ttnn_visualizer.app import _validate_hosted_secret_key, create_app
+from ttnn_visualizer.event_logging import (
+    DISABLED_MARKER_NAME,
+    RECORDING_DISABLED_ENV_VAR,
+)
 from ttnn_visualizer.settings import (
     _ENV_ALIASES,
     _ENV_NAME_UNREAD,
@@ -31,6 +36,8 @@ from ttnn_visualizer.settings import (
     _ENV_PARSERS,
     _RECOMPUTE_HONOURS,
     _STRICT_BOOLEANS,
+    DEFAULT_SECRET_KEY,
+    MIN_HOSTED_SECRET_KEY_BYTES,
     DefaultConfig,
     DevelopmentConfig,
     ProductionConfig,
@@ -42,9 +49,9 @@ from ttnn_visualizer.settings import (
 )
 from ttnn_visualizer.tests.fixture_settings import (
     PINNED_ENV_SETTINGS,
+    base_test_settings,
     pinned_settings_sample,
 )
-from ttnn_visualizer.usage import DISABLED_MARKER_NAME, USAGE_DISABLED_ENV_VAR
 from ttnn_visualizer.utils import (
     FALSE_VALUES,
     TRUE_VALUES,
@@ -58,6 +65,40 @@ DEV_ARGS = {
     "dev_server_host": "localhost",
     "dev_server_port": "5173",
 }
+
+
+@pytest.mark.parametrize(
+    "secret_key",
+    [None, "", DEFAULT_SECRET_KEY, "short", b"short"],
+)
+def test_server_mode_refuses_an_insecure_secret_key(secret_key):
+    with pytest.raises(RuntimeError, match="SERVER_MODE requires SECRET_KEY"):
+        _validate_hosted_secret_key({"SERVER_MODE": True, "SECRET_KEY": secret_key})
+
+
+def test_server_mode_accepts_a_strong_secret_key():
+    _validate_hosted_secret_key(
+        {
+            "SERVER_MODE": True,
+            "SECRET_KEY": "x" * MIN_HOSTED_SECRET_KEY_BYTES,
+        }
+    )
+
+
+def test_local_mode_keeps_the_development_secret_key():
+    _validate_hosted_secret_key(
+        {"SERVER_MODE": False, "SECRET_KEY": DEFAULT_SECRET_KEY}
+    )
+
+
+def test_create_app_refuses_the_development_secret_in_server_mode(tmp_path):
+    with pytest.raises(RuntimeError, match="SERVER_MODE requires SECRET_KEY"):
+        create_app(
+            settings_override=base_test_settings(
+                str(tmp_path),
+                SECRET_KEY=DEFAULT_SECRET_KEY,
+            )
+        )
 
 
 def _wsgi_environ(host: str, scheme: str = "http", **headers: str) -> dict:
@@ -355,7 +396,7 @@ def test_no_published_setting_name_is_documented_as_a_variable():
     # line whose attribute answers ``getattr`` with a ``bool``, and the descriptor does
     # exactly that (``getattr(DefaultConfig, "USAGE_RECORDING_ACTIVE") is True``), so a
     # ``# USAGE_RECORDING_ACTIVE=true`` line would be accepted as a documented boolean
-    # and silently pass. The same shape as the gap in ``test_usage.py``, where
+    # and silently pass. The same shape as the gap in ``test_event_logging.py``, where
     # ``USAGE_RECORDING_DISABLED`` needs its own pin for the opposite reason: no
     # attribute of that name exists at all.
     documented = {env_name for env_name, _, _ in _documented_boolean_defaults()}
@@ -606,7 +647,9 @@ def test_every_unread_name_is_a_descriptor_backed_setting():
         assert hasattr(vars(DefaultConfig).get(key), "__get__"), key
 
 
-def test_every_unread_remedy_sends_the_operator_somewhere_that_works(usage_directory):
+def test_every_unread_remedy_sends_the_operator_somewhere_that_works(
+    event_log_directory,
+):
     # Both polarities, because the remedy is value-dependent.
     #
     # This deliberately does not ban naming other config attributes, which is what it
@@ -622,7 +665,7 @@ def test_every_unread_remedy_sends_the_operator_somewhere_that_works(usage_direc
             advice = remedy(value)
 
             # Names the variable that actually configures this setting.
-            assert USAGE_DISABLED_ENV_VAR in advice, (key, value)
+            assert RECORDING_DISABLED_ENV_VAR in advice, (key, value)
 
             # Never echoes the inert name back as something to set — that is the whole
             # footgun, and repeating it in the fix would be the cruellest version of it.
@@ -657,14 +700,14 @@ def _settings_warnings(caplog, naming):
 
 
 def test_asking_to_switch_recording_off_by_the_published_name_says_what_to_set(
-    usage_directory, monkeypatch, caplog
+    event_log_directory, monkeypatch, caplog
 ):
     # #1921, and the reason the assertion is on the *value*: naming the variable alone
     # reads as a rename and lands the operator on ``USAGE_RECORDING_DISABLED=false``, a
     # silent no-op. The first version of this test asserted on the name and let exactly
     # that ship.
     #
-    # ``usage_directory`` because ``USAGE_RECORDING_ACTIVE`` resolves through
+    # ``event_log_directory`` because ``USAGE_RECORDING_ACTIVE`` resolves through
     # ``is_recording_enabled``, which reads the real variable and stats the marker file
     # under the developer's home: without it this fails for anyone who has opted out.
     monkeypatch.setenv("USAGE_RECORDING_ACTIVE", "false")
@@ -678,14 +721,14 @@ def test_asking_to_switch_recording_off_by_the_published_name_says_what_to_set(
     (warning,) = _settings_warnings(caplog, "USAGE_RECORDING_ACTIVE")
 
     assert "USAGE_RECORDING_ACTIVE" in warning
-    assert f"{USAGE_DISABLED_ENV_VAR}=true" in warning
+    assert f"{RECORDING_DISABLED_ENV_VAR}=true" in warning
 
     # The symptom the warning exists to explain: the value the operator set did nothing.
     assert config.USAGE_RECORDING_ACTIVE is True
 
 
 def test_asking_to_record_by_the_published_name_names_the_inverse_value(
-    usage_directory, monkeypatch, caplog
+    event_log_directory, monkeypatch, caplog
 ):
     # The other direction of the same guard, and it needs the *value* for the same
     # reason the opt-out branch does: advice naming ``USAGE_RECORDING_DISABLED=true``
@@ -700,22 +743,22 @@ def test_asking_to_record_by_the_published_name_names_the_inverse_value(
     (warning,) = _settings_warnings(caplog, "USAGE_RECORDING_ACTIVE")
 
     assert "USAGE_RECORDING_ACTIVE" in warning
-    assert f"{USAGE_DISABLED_ENV_VAR}=false" in warning
-    assert f"{USAGE_DISABLED_ENV_VAR}=true" not in warning
+    assert f"{RECORDING_DISABLED_ENV_VAR}=false" in warning
+    assert f"{RECORDING_DISABLED_ENV_VAR}=true" not in warning
     assert config.USAGE_RECORDING_ACTIVE is True
 
 
 def test_asking_to_record_while_an_opt_out_is_in_effect_does_not_claim_it_is_on(
-    usage_directory, monkeypatch, caplog
+    event_log_directory, monkeypatch, caplog
 ):
     # #1937 review. This branch used to answer "Recording is already on by default" to
     # an operator whose opt-out was in effect, so recording was off. Pinned rather than
     # left to the wording, because the state-neutrality rule has been broken twice.
     #
-    # Set after ``usage_directory``, which delenvs the variable — which is also why the
+    # Set after ``event_log_directory``, which delenvs the variable — which is also why the
     # tests around this one could not have caught it.
     monkeypatch.setenv("USAGE_RECORDING_ACTIVE", "true")
-    monkeypatch.setenv(USAGE_DISABLED_ENV_VAR, "true")
+    monkeypatch.setenv(RECORDING_DISABLED_ENV_VAR, "true")
 
     with caplog.at_level(logging.WARNING):
         config = DevelopmentConfig()
@@ -729,19 +772,19 @@ def test_asking_to_record_while_an_opt_out_is_in_effect_does_not_claim_it_is_on(
 
     # Still actionable: both local opt-outs are named, because clearing only the
     # variable leaves the marker file switching recording off.
-    assert f"{USAGE_DISABLED_ENV_VAR}=false" in warning
-    assert str(usage.get_disabled_marker_path()) in warning
+    assert f"{RECORDING_DISABLED_ENV_VAR}=false" in warning
+    assert str(event_logging.get_disabled_marker_path()) in warning
 
 
 def test_asking_to_record_while_the_marker_file_is_in_effect_does_not_claim_it_is_on(
-    usage_directory, monkeypatch, caplog
+    event_log_directory, monkeypatch, caplog
 ):
     # #1937 review. The sibling above pins the *variable* opt-out; this pins the marker
     # file, which is the one ``describe_opt_in`` leads with and the reason the rule
     # exists at all: the override loop cannot see it, so a sentence inferring the state
     # from the environment alone gets this case wrong and nothing catches it.
-    usage.get_disabled_marker_path().parent.mkdir(parents=True, exist_ok=True)
-    usage.get_disabled_marker_path().touch()
+    event_logging.get_disabled_marker_path().parent.mkdir(parents=True, exist_ok=True)
+    event_logging.get_disabled_marker_path().touch()
     monkeypatch.setenv("USAGE_RECORDING_ACTIVE", "true")
 
     with caplog.at_level(logging.WARNING):
@@ -757,8 +800,8 @@ def test_asking_to_record_while_the_marker_file_is_in_effect_does_not_claim_it_i
 
     # Still actionable: the marker is what is switching recording off here, so the
     # advice has to name it rather than only the variable.
-    assert str(usage.get_disabled_marker_path()) in warning
-    assert f"{USAGE_DISABLED_ENV_VAR}=false" in warning
+    assert str(event_logging.get_disabled_marker_path()) in warning
+    assert f"{RECORDING_DISABLED_ENV_VAR}=false" in warning
 
 
 def test_the_advice_survives_a_home_directory_that_cannot_be_resolved(
@@ -775,9 +818,9 @@ def test_the_advice_survives_a_home_directory_that_cannot_be_resolved(
     # such a container started fine and a stray ``USAGE_RECORDING_ACTIVE`` was inert.
     monkeypatch.setenv("APP_DATA_DIRECTORY", str(tmp_path / "app"))
 
-    # No ``usage_directory``: the override it installs is exactly what would hide this.
-    monkeypatch.setattr(usage, "USAGE_DIRECTORY", None)
-    monkeypatch.delenv(USAGE_DISABLED_ENV_VAR, raising=False)
+    # No ``event_log_directory``: the override it installs is exactly what would hide this.
+    monkeypatch.setattr(event_logging, "EVENT_LOG_DIRECTORY", None)
+    monkeypatch.delenv(RECORDING_DISABLED_ENV_VAR, raising=False)
     monkeypatch.setattr(Path, "home", staticmethod(_raise_no_home))
     monkeypatch.setenv("USAGE_RECORDING_ACTIVE", "false")
 
@@ -788,16 +831,13 @@ def test_the_advice_survives_a_home_directory_that_cannot_be_resolved(
     (warning,) = _settings_warnings(caplog, "USAGE_RECORDING_ACTIVE")
 
     # The variable is the only control left, and it is still named.
-    assert f"{USAGE_DISABLED_ENV_VAR}=true" in warning
+    assert f"{RECORDING_DISABLED_ENV_VAR}=true" in warning
     assert DISABLED_MARKER_NAME not in warning
 
 
-def test_asking_to_record_under_server_mode_does_not_promise_the_local_controls_work(
-    usage_directory, monkeypatch, caplog
+def test_asking_to_record_under_server_mode_names_the_hosted_controls(
+    event_log_directory, monkeypatch, caplog
 ):
-    # #1937 review, second round. ``is_recording_enabled`` returns False on the posture
-    # *before* it consults either opt-out, so advice naming only the local pair sends a
-    # hosted operator round a loop neither control can end. The posture no test covered.
     monkeypatch.setenv("USAGE_RECORDING_ACTIVE", "true")
     monkeypatch.setenv("SERVER_MODE", "true")
 
@@ -807,25 +847,24 @@ def test_asking_to_record_under_server_mode_does_not_promise_the_local_controls_
 
     (warning,) = _settings_warnings(caplog, "USAGE_RECORDING_ACTIVE")
 
-    assert config.USAGE_RECORDING_ACTIVE is False
-
-    # The claim that must not be made: that clearing the local pair is sufficient.
-    assert "SERVER_MODE" in warning
+    assert config.USAGE_RECORDING_ACTIVE is True
+    assert "Recording is on by default" in warning
+    assert str(event_logging.get_disabled_marker_path(server_mode=True)) in warning
 
 
 def test_the_two_opt_out_directions_name_the_same_controls():
     # ``describe_opt_out`` and ``describe_opt_in`` are inverses, so a control added to
     # one and forgotten in the other would leave an operator able to switch recording
     # off by a route they are never told how to undo.
-    marker = str(usage.get_disabled_marker_path())
+    marker = str(event_logging.get_disabled_marker_path())
 
-    for sentence in (usage.describe_opt_out(), usage.describe_opt_in()):
-        assert USAGE_DISABLED_ENV_VAR in sentence
+    for sentence in (event_logging.describe_opt_out(), event_logging.describe_opt_in()):
+        assert RECORDING_DISABLED_ENV_VAR in sentence
         assert marker in sentence
 
 
 def test_an_unrecognised_published_name_value_is_read_as_a_botched_opt_out(
-    usage_directory, monkeypatch, caplog
+    event_log_directory, monkeypatch, caplog
 ):
     # Nobody sets this variable to ask for the default, so an unreadable value is far
     # likelier to be a fumbled opt-out than a fumbled opt-in — the same reading
@@ -838,11 +877,11 @@ def test_an_unrecognised_published_name_value_is_read_as_a_botched_opt_out(
 
     (warning,) = _settings_warnings(caplog, "USAGE_RECORDING_ACTIVE")
 
-    assert f"{USAGE_DISABLED_ENV_VAR}=true" in warning
+    assert f"{RECORDING_DISABLED_ENV_VAR}=true" in warning
 
 
 def test_the_published_name_left_unset_says_nothing(
-    usage_directory, monkeypatch, caplog
+    event_log_directory, monkeypatch, caplog
 ):
     # The silence branch. Without it every launch warns ``USAGE_RECORDING_ACTIVE=None``,
     # and the whole suite stays green — verified by deleting the guard — so the change
@@ -937,7 +976,7 @@ def test_every_env_override_skip_names_a_real_setting():
 # ``override_with_env_variables`` skips anything with ``__get__``, so
 # ``_OVERRIDABLE_SETTINGS`` excludes the descriptor-backed ``ALLOWED_ORIGINS`` and
 # ``USAGE_RECORDING_ACTIVE``; the former is pinned in the baseline anyway (see
-# ``_UNPOLICEABLE_PINS``) and the latter is neutralised by the ``usage_directory`` fixture,
+# ``_UNPOLICEABLE_PINS``) and the latter is neutralised by the ``event_log_directory`` fixture,
 # but neither is reconciled here. Second, ``APP_DATA_DIRECTORY`` and
 # ``REPORT_DATA_DIRECTORY`` are env-reachable through ``recompute_derived_settings`` while
 # living in ``_ENV_OVERRIDE_SKIP``, so they too are pinned without being policed.
@@ -952,7 +991,6 @@ _INHERITED_BY_TEST_FIXTURES = frozenset(
         "HOST",
         "LAUNCH_BROWSER_ON_START",
         "PORT",
-        "SECRET_KEY",
         "SSH_REMOTE_CHECK_TIMEOUT",
         "SSH_SUBPROCESS_TIMEOUT",
     }
@@ -1037,7 +1075,7 @@ def test_the_descriptor_inventory_is_pinned():
     # has to be classified as reporting its name or reading it.
     #
     # ``callable`` is what separates the two config descriptors from the plain methods
-    # that also answer ``hasattr(value, "__get__")``: ``_UsageRecordingActive`` and
+    # that also answer ``hasattr(value, "__get__")``: ``_EventLoggingActive`` and
     # ``_AllowedOrigins`` define only ``__get__``, while ``to_dict`` and the two loop
     # methods are functions.
     descriptors = {

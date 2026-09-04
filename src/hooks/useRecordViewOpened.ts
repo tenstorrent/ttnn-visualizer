@@ -5,7 +5,7 @@
 import { useEffect, useRef } from 'react';
 import { type Location, useLocation } from 'react-router';
 import { isReturningFromModal } from '../functions/modalRoute';
-import { getUsageView, recordViewOpened, rememberViewPathname } from '../functions/viewUsage';
+import { getEventLogView, recordViewOpened, rememberViewPathname } from '../functions/eventLogViews';
 
 /**
  * Record countable route changes from the one shell shared by every view.
@@ -30,7 +30,7 @@ export default function useRecordViewOpened(): void {
             return;
         }
 
-        const view = getUsageView(location);
+        const view = getEventLogView(location);
         if (view !== null) {
             recordViewOpened(view);
         }

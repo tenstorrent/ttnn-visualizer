@@ -37,6 +37,16 @@ from ttnn_visualizer.enums import (
     HostKeyIssue,
     StackSourceOrigin,
 )
+from ttnn_visualizer.event_logging import (
+    MAX_EVENT_LOG_BATCH_EVENTS,
+    EventLogEvent,
+    EventLogEventRejected,
+    admit_event_log_batch,
+    ensure_event_log_id,
+    is_recording_enabled,
+    record_events,
+    validate_client_event,
+)
 from ttnn_visualizer.exceptions import (
     DataFormatError,
     InvalidRequestPayload,
@@ -127,14 +137,6 @@ from ttnn_visualizer.stack_trace_source import (
     read_stack_source_remote,
     stack_source_response,
 )
-from ttnn_visualizer.usage import (
-    MAX_USAGE_BATCH_EVENTS,
-    UsageEvent,
-    UsageEventRejected,
-    is_recording_enabled,
-    record_events,
-    validate_client_event,
-)
 from ttnn_visualizer.utils import (
     PERFORMANCE_OPS_PERF_PREFIX,
     PERFORMANCE_REPORT_REQUIRED_FILES,
@@ -142,6 +144,7 @@ from ttnn_visualizer.utils import (
     get_mlir_path,
     get_performance_path,
     get_profiler_path,
+    is_flag_enabled,
     is_valid_performance_report_dir,
     is_valid_profiler_report_dir,
     pick_cluster_descriptor_path,
@@ -172,15 +175,15 @@ _NOSNIFF_HEADERS = {"X-Content-Type-Options": "nosniff"}
 
 # What one permitted page may write into a privacy-reviewed artefact in a single request.
 # Not inherited: `MAX_CONTENT_LENGTH` defaults to no limit at all (`settings.py`), so the
-# limit has to be set per request. It has to stay consistent with `MAX_USAGE_BATCH_EVENTS`,
-# which lives in `usage.py` beside the write-atomicity guarantee it bounds — a full batch
+# limit has to be set per request. It has to stay consistent with `MAX_EVENT_LOG_BATCH_EVENTS`,
+# which lives in `event_logging.py` beside the write-atomicity guarantee it bounds — a full batch
 # of the largest permitted event must still fit inside this.
-MAX_USAGE_REQUEST_BYTES = 16 * 1024
+MAX_EVENT_LOG_REQUEST_BYTES = 16 * 1024
 
 # Module-private, unlike the cap above: that is part of the contract the tests pin, this
 # is just the envelope's field name. The shape of an event *inside* the envelope belongs
-# to `usage.py`, which validates it.
-_USAGE_EVENTS_FIELD = "events"
+# to `event_logging.py`, which validates it.
+_EVENT_LOG_EVENTS_FIELD = "events"
 
 
 def _stack_source_request_params():
@@ -2782,27 +2785,26 @@ def get_latest_version():
         return response_internal_server_error("Failed to fetch releases")
 
 
-@api.route("/usage", methods=["POST"])
-@local_only
-def record_usage_events():
-    """Append a batch of frontend usage events to the local log.
+@api.route("/event-log/events", methods=["POST"])
+def ingest_event_log_events():
+    """Append a batch of frontend events to the deployment's event log.
 
     Recording happens frontend-side because backend API counts are misleading — React
     Query caching, prefetching and retries inflate them, and the interactions worth
     measuring (chart views, table toggles, filters, playback) never reach the API at
     all. So the client needs somewhere local to post, and this is it.
 
-    **No ``@with_instance``, deliberately.** The log is machine-scoped rather than
-    report-scoped, so this route takes no ``instanceId`` — an exception to the
+    **No ``@with_instance``, deliberately.** Event logging is deployment/session-scoped rather
+    than report-scoped, so this route takes no ``instanceId`` — an exception to the
     convention every report-backed route follows, not an omission to be tidied up.
 
     **No ``@timer`` either**: it logs a line per call, and this endpoint is called often
     by design.
 
-    ``@local_only`` is the control that matters. Nothing here is authenticated and
-    ``ALLOWED_ORIGINS`` is the only other gate, so the handler validates its body
-    against a closed schema rather than trusting it: a permitted page must not be able
-    to write arbitrary lines into the file we are asking IT to parse.
+    Nothing here is authenticated and ``ALLOWED_ORIGINS`` only governs browsers, so the
+    handler validates its body against a closed schema rather than trusting it. Hosted
+    log selection comes only from a server-minted event log ID in the signed Flask
+    session.
     """
     # Before anything reads the stream. Werkzeug enforces this both against a declared
     # `Content-Length` and while reading a stream the server has terminated, which a
@@ -2811,13 +2813,18 @@ def record_usage_events():
     # Assigning it per request needs Flask >= 3.1 — the attribute is read-only before
     # that, so relaxing the pin in `pyproject.toml` turns every request here into a 500
     # rather than a quietly uncapped body.
-    request.max_content_length = MAX_USAGE_REQUEST_BYTES
+    request.max_content_length = MAX_EVENT_LOG_REQUEST_BYTES
 
     # Checked here as well as in the writer so a user who switched recording off does not
     # pay a 16 KB parse and a 50-event validation on every flush for the rest of the
     # session. The answer is the same 204 either way, so the client never learns which
     # branch it took and never backs off.
     if not is_recording_enabled(current_app.config["SERVER_MODE"]):
+        return Response(status=HTTPStatus.NO_CONTENT)
+
+    server_mode = is_flag_enabled(current_app.config["SERVER_MODE"])
+    event_log_id = ensure_event_log_id() if server_mode else None
+    if not admit_event_log_batch(server_mode, event_log_id):
         return Response(status=HTTPStatus.NO_CONTENT)
 
     # Not `force=True`: requiring `application/json` is load-bearing rather than
@@ -2831,17 +2838,19 @@ def record_usage_events():
     if not isinstance(payload, dict):
         return response_bad_request("Expected a JSON object")
 
-    events = payload.get(_USAGE_EVENTS_FIELD)
+    events = payload.get(_EVENT_LOG_EVENTS_FIELD)
 
     if not isinstance(events, list) or not events:
-        return response_bad_request(f"Expected a non-empty {_USAGE_EVENTS_FIELD} list")
-
-    if len(events) > MAX_USAGE_BATCH_EVENTS:
         return response_bad_request(
-            f"A batch may carry at most {MAX_USAGE_BATCH_EVENTS} events"
+            f"Expected a non-empty {_EVENT_LOG_EVENTS_FIELD} list"
         )
 
-    validated: List[Tuple[UsageEvent, Dict[str, Enum]]] = []
+    if len(events) > MAX_EVENT_LOG_BATCH_EVENTS:
+        return response_bad_request(
+            f"A batch may carry at most {MAX_EVENT_LOG_BATCH_EVENTS} events"
+        )
+
+    validated: List[Tuple[EventLogEvent, Dict[str, Enum]]] = []
 
     # Every event is validated before any is written, so a batch carrying one bad event
     # appends nothing. Partial acceptance would leave a reader unable to tell a truncated
@@ -2849,14 +2858,19 @@ def record_usage_events():
     for entry in events:
         try:
             validated.append(validate_client_event(entry))
-        except UsageEventRejected as rejection:
-            # `UsageEventRejected` messages describe the schema rather than echoing what
+        except EventLogEventRejected as rejection:
+            # `EventLogEventRejected` messages describe the schema rather than echoing what
             # arrived, so passing one through cannot leak client-supplied text.
             return response_unprocessable_entity(str(rejection))
 
     # Deliberately the same answer whether or not the write happened. Recording being
-    # switched off locally is not the client's problem, and whether a log exists on this
-    # machine is not something a page needs told.
-    record_events(validated)
+    # switched off for this deployment is not the client's problem, and whether a log
+    # exists on this machine is not something a page needs told.
+    record_events(
+        validated,
+        server_mode=server_mode,
+        event_log_id=event_log_id,
+        admission_checked=True,
+    )
 
     return Response(status=HTTPStatus.NO_CONTENT)

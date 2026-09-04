@@ -15,8 +15,8 @@ import createToastNotification from '../../functions/createToastNotification';
 import { ToastType } from '../../definitions/ToastType';
 import getResponseError from '../../functions/getResponseError';
 import sanitiseFileName from '../../functions/sanitiseFileName';
-import { ReportKind, ReportLoadFailureReason } from '../../definitions/UsageEvent';
-import { getReportLoadFailureReason, recordReportLoadFailed } from '../../functions/reportLoadUsage';
+import { ReportKind, ReportLoadFailureReason } from '../../definitions/EventLogEvent';
+import { getReportLoadFailureReason, recordReportLoadFailed } from '../../functions/reportLoadEvents';
 import 'styles/components/FileLoader.scss';
 
 const ICON_MAP: Record<ConnectionTestStates, IconName> = {

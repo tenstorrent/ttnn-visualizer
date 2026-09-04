@@ -4,15 +4,15 @@
 
 import { type Location, matchPath } from 'react-router';
 import ROUTES, { ROUTE_PATTERNS } from '../definitions/Routes';
-import { UsageEvent, UsageView } from '../definitions/UsageEvent';
+import { EventLogEvent, EventLogView } from '../definitions/EventLogEvent';
 import { isModalOpen } from './modalRoute';
-import recordUsage from './recordUsage';
+import recordEvent from './recordEvent';
 
 type RoutePath = (typeof ROUTES)[keyof typeof ROUTES];
 
-type RouteUsageDefinition =
-    | { view: UsageView; requiresModalBackground?: true }
-    | { view: UsageView; pattern: string; nestedView?: UsageView };
+type RouteEventLogViewDefinition =
+    | { view: EventLogView; requiresModalBackground?: true }
+    | { view: EventLogView; pattern: string; nestedView?: EventLogView };
 
 /**
  * The single inventory of which application routes are countable views.
@@ -20,24 +20,27 @@ type RouteUsageDefinition =
  * `null` is an explicit exclusion rather than an omitted key, so adding a route
  * without deciding how it should be counted fails type-checking.
  */
-export const USAGE_VIEW_BY_ROUTE = Object.freeze({
-    [ROUTES.HOME]: { view: UsageView.REPORTS },
+export const EVENT_LOG_VIEW_BY_ROUTE = Object.freeze({
+    [ROUTES.HOME]: { view: EventLogView.REPORTS },
     [ROUTES.OPERATIONS]: {
-        view: UsageView.OPERATIONS,
+        view: EventLogView.OPERATIONS,
         pattern: ROUTE_PATTERNS.OPERATION_DETAILS,
-        nestedView: UsageView.OPERATION_DETAILS,
+        nestedView: EventLogView.OPERATION_DETAILS,
     },
-    [ROUTES.TENSORS]: { view: UsageView.TENSORS },
-    [ROUTES.BUFFERS]: { view: UsageView.BUFFERS },
+    [ROUTES.TENSORS]: { view: EventLogView.TENSORS },
+    [ROUTES.BUFFERS]: { view: EventLogView.BUFFERS },
     [ROUTES.STYLEGUIDE]: null,
-    [ROUTES.GRAPHTREE]: { view: UsageView.GRAPH, pattern: ROUTE_PATTERNS.GRAPHTREE },
-    [ROUTES.PERFORMANCE]: { view: UsageView.PERFORMANCE },
-    [ROUTES.NPE]: { view: UsageView.NPE, pattern: ROUTE_PATTERNS.NPE },
-    [ROUTES.MLIR]: { view: UsageView.MLIR, pattern: ROUTE_PATTERNS.MLIR },
-    [ROUTES.CLUSTER]: { view: UsageView.TOPOLOGY, requiresModalBackground: true },
-}) satisfies Readonly<Record<RoutePath, RouteUsageDefinition | null>>;
+    [ROUTES.GRAPHTREE]: { view: EventLogView.GRAPH, pattern: ROUTE_PATTERNS.GRAPHTREE },
+    [ROUTES.PERFORMANCE]: { view: EventLogView.PERFORMANCE },
+    [ROUTES.NPE]: { view: EventLogView.NPE, pattern: ROUTE_PATTERNS.NPE },
+    [ROUTES.MLIR]: { view: EventLogView.MLIR, pattern: ROUTE_PATTERNS.MLIR },
+    [ROUTES.CLUSTER]: { view: EventLogView.TOPOLOGY, requiresModalBackground: true },
+}) satisfies Readonly<Record<RoutePath, RouteEventLogViewDefinition | null>>;
 
-const ROUTE_USAGE_ENTRIES = Object.entries(USAGE_VIEW_BY_ROUTE) as [RoutePath, RouteUsageDefinition | null][];
+const ROUTE_EVENT_LOG_VIEW_ENTRIES = Object.entries(EVENT_LOG_VIEW_BY_ROUTE) as [
+    RoutePath,
+    RouteEventLogViewDefinition | null,
+][];
 
 let lastSeenPathname: string | null = null;
 
@@ -58,8 +61,8 @@ export function rememberViewPathname(pathname: string): boolean {
     return true;
 }
 
-export function getUsageView(location: Pick<Location, 'pathname' | 'state'>): UsageView | null {
-    for (const [route, definition] of ROUTE_USAGE_ENTRIES) {
+export function getEventLogView(location: Pick<Location, 'pathname' | 'state'>): EventLogView | null {
+    for (const [route, definition] of ROUTE_EVENT_LOG_VIEW_ENTRIES) {
         if (matchPath({ path: route, end: true }, location.pathname)) {
             if (definition && 'requiresModalBackground' in definition && definition.requiresModalBackground) {
                 return isModalOpen(location, route) ? definition.view : null;
@@ -86,6 +89,6 @@ export function getUsageView(location: Pick<Location, 'pathname' | 'state'>): Us
     return null;
 }
 
-export function recordViewOpened(view: UsageView): void {
-    recordUsage({ event: UsageEvent.VIEW_OPENED, details: { view } });
+export function recordViewOpened(view: EventLogView): void {
+    recordEvent({ event: EventLogEvent.VIEW_OPENED, details: { view } });
 }

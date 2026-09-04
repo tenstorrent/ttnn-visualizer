@@ -10,7 +10,7 @@ from typing import Any, Callable, List, Mapping, Optional, Set
 
 from dotenv import load_dotenv
 from sqlalchemy.pool import NullPool
-from ttnn_visualizer.usage import (
+from ttnn_visualizer.event_logging import (
     describe_opt_in,
     describe_opt_out,
     is_recording_enabled,
@@ -189,13 +189,13 @@ class _AllowedOrigins:
         )
 
 
-class _UsageRecordingActive:
-    """Resolve whether usage recording is active, on read rather than at import time.
+class _EventLoggingActive:
+    """Resolve whether event logging is active, on read rather than at import time.
 
     A descriptor so the override loop skips it (it tests for ``__get__``) — assigning a
     raw environment string would shadow the live check. Same reason ``ALLOWED_ORIGINS``
     is one. Reading on access also picks up a ``SERVER_MODE`` override applied after
-    import, and delegates to :func:`usage.is_recording_enabled` so the ``PRINT_ENV``
+    import, and delegates to :func:`event_logging.is_recording_enabled` so the ``PRINT_ENV``
     dump cannot claim recording is on while the posture or the marker file has switched
     it off.
 
@@ -213,6 +213,8 @@ class _UsageRecordingActive:
 
 
 _DEFAULT_SSH_PORT = 22
+DEFAULT_SECRET_KEY = "90909"
+MIN_HOSTED_SECRET_KEY_BYTES = 32
 
 
 def _parse_max_content_length(env_value: str) -> Optional[int]:
@@ -315,13 +317,13 @@ _STRICT_BOOLEANS = frozenset({"SERVER_MODE"})
 _ENV_ALIASES: Mapping[str, str] = {"DEBUG": "FLASK_DEBUG"}
 
 
-def _usage_recording_remedy(env_value: str) -> str:
+def _event_logging_remedy(env_value: str) -> str:
     """What to tell an operator who set ``USAGE_RECORDING_ACTIVE``.
 
     Value-dependent because the two directions need opposite advice, and each names a
     *value* rather than a bare variable — the polarity is inverted, so "set
     ``USAGE_RECORDING_DISABLED`` instead" reads as a rename and lands the operator on a
-    silent no-op. Both sentences come from ``usage`` so the marker path is written
+    silent no-op. Both sentences come from ``event_logging`` so the marker path is written
     once. Full argument: CONVENTIONS.md, "The loop walks the MRO and skips derived
     settings".
     """
@@ -329,25 +331,26 @@ def _usage_recording_remedy(env_value: str) -> str:
     # default, so nobody sets this variable to get it — an unrecognised value is far
     # likelier to be a botched opt-out than a botched opt-in, and that is the same
     # reading ``_is_recording_disabled_by_environment`` gives its own typos.
+    server_mode = parse_bool(os.getenv("SERVER_MODE", "")) is True
     if parse_bool(env_value) is True:
         # Must name the inverse *value*, and must assert nothing about the current
         # state. The posture is readable here, but the marker file is not consulted and
         # a ``settings_override`` posture never reaches the environment, so a sentence
         # that describes the state would be wrong for somebody — see the docstring on
         # ``describe_opt_in``, which has been wrong twice for exactly that reason.
-        return describe_opt_in()
+        return describe_opt_in(server_mode)
 
-    return describe_opt_out()
+    return describe_opt_out(server_mode)
 
 
 # Descriptor-backed settings whose own name reaches nothing, mapped to the advice for
 # an operator who set one (#1921). ``ALLOWED_ORIGINS`` is the other descriptor and is
 # deliberately absent: it reads ``os.getenv("ALLOWED_ORIGINS")`` itself, so its silence
 # is correct. Values are callables because a bare variable name cannot carry the
-# polarity — see :func:`_usage_recording_remedy`. Why any of this: CONVENTIONS.md,
+# polarity — see :func:`_event_logging_remedy`. Why any of this: CONVENTIONS.md,
 # "The loop walks the MRO and skips derived settings".
 _ENV_NAME_UNREAD: Mapping[str, Callable[[str], str]] = {
-    "USAGE_RECORDING_ACTIVE": _usage_recording_remedy,
+    "USAGE_RECORDING_ACTIVE": _event_logging_remedy,
 }
 
 # The override loop leaves three different kinds of attribute alone, and they have
@@ -526,15 +529,15 @@ def _coerce_env_value(key: str, declared: Any, env_value: str) -> Any:
 
 class DefaultConfig(object):
     # General Settings
-    SECRET_KEY = os.getenv("SECRET_KEY", "90909")
+    SECRET_KEY = os.getenv("SECRET_KEY", DEFAULT_SECRET_KEY)
     DEBUG = _parse_env_bool("DEBUG", False)
     TESTING = False
     PRINT_ENV = True
     SERVER_MODE = _parse_env_bool("SERVER_MODE", False)
-    # Local usage recording is on by default; ``USAGE_RECORDING_DISABLED=true`` is the
-    # opt-out. Written on this machine only; the application transmits nothing.
-    # See backend/ttnn_visualizer/usage.py.
-    USAGE_RECORDING_ACTIVE = _UsageRecordingActive()
+    # Event logging is on by default; ``USAGE_RECORDING_DISABLED=true`` is the
+    # opt-out. The backend stores events locally and never forwards them.
+    # See backend/ttnn_visualizer/event_logging.py.
+    USAGE_RECORDING_ACTIVE = _EventLoggingActive()
     MALWARE_SCANNER = os.getenv("MALWARE_SCANNER")
     BASE_PATH = os.getenv("BASE_PATH", "/")
     MAX_CONTENT_LENGTH = _parse_max_content_length(os.getenv("MAX_CONTENT_LENGTH", ""))

@@ -22,7 +22,7 @@ import {
 } from '../src/store/app';
 import { GraphBundle, MlirFileResult } from '../src/model/MLIRJsonModel';
 import { MlirServerConnection } from '../src/model/MlirServer';
-import { ReportKind, ReportLoadFailureReason, ReportSource } from '../src/definitions/UsageEvent';
+import { ReportKind, ReportLoadFailureReason, ReportSource } from '../src/definitions/EventLogEvent';
 
 const setActiveMlir = vi.fn();
 const uploadMlirFileToServer = vi.fn();
@@ -42,10 +42,10 @@ vi.mock('../src/functions/createToastNotification', async () => {
     return toastNotificationModuleMock(createToastNotification);
 });
 
-vi.mock('../src/functions/reportLoadUsage', async (importOriginal) => {
-    const { reportLoadUsageSpiesMock } = await import('./helpers/mockReportLoadUsage');
+vi.mock('../src/functions/reportLoadEvents', async (importOriginal) => {
+    const { reportLoadEventsSpiesMock } = await import('./helpers/mockReportLoadEvents');
 
-    return reportLoadUsageSpiesMock(importOriginal, recordReportLoaded, recordReportLoadFailed);
+    return reportLoadEventsSpiesMock(importOriginal, recordReportLoaded, recordReportLoadFailed);
 });
 
 const GRAPH: GraphBundle = { graphs: [{ id: 'g', nodes: [] }] };

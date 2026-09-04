@@ -8,15 +8,15 @@ import { StrictMode } from 'react';
 import { type Location, MemoryRouter, useLocation, useNavigate } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ROUTES from '../src/definitions/Routes';
-import { UsageView } from '../src/definitions/UsageEvent';
+import { EventLogView } from '../src/definitions/EventLogEvent';
 import { modalNavigationState } from '../src/functions/modalRoute';
-import { resetRememberedViewPathname } from '../src/functions/viewUsage';
+import { resetRememberedViewPathname } from '../src/functions/eventLogViews';
 import useRecordViewOpened from '../src/hooks/useRecordViewOpened';
 
 const { recordViewOpened } = vi.hoisted(() => ({ recordViewOpened: vi.fn() }));
 
-vi.mock('../src/functions/viewUsage', async (importOriginal) => {
-    const actual = await importOriginal<typeof import('../src/functions/viewUsage')>();
+vi.mock('../src/functions/eventLogViews', async (importOriginal) => {
+    const actual = await importOriginal<typeof import('../src/functions/eventLogViews')>();
     return { ...actual, recordViewOpened };
 });
 
@@ -110,7 +110,7 @@ describe('useRecordViewOpened', () => {
         renderRecorder(ROUTES.OPERATIONS);
 
         expect(recordViewOpened).toHaveBeenCalledTimes(1);
-        expect(recordViewOpened).toHaveBeenCalledWith(UsageView.OPERATIONS);
+        expect(recordViewOpened).toHaveBeenCalledWith(EventLogView.OPERATIONS);
     });
 
     it('records a parameter change even when the view is unchanged', () => {
@@ -120,7 +120,7 @@ describe('useRecordViewOpened', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Open operation 2' }));
 
         expect(recordViewOpened).toHaveBeenCalledTimes(1);
-        expect(recordViewOpened).toHaveBeenCalledWith(UsageView.OPERATION_DETAILS);
+        expect(recordViewOpened).toHaveBeenCalledWith(EventLogView.OPERATION_DETAILS);
     });
 
     it('records graph parameter changes as graph views', () => {
@@ -130,7 +130,7 @@ describe('useRecordViewOpened', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Open graph operation 2' }));
 
         expect(recordViewOpened).toHaveBeenCalledTimes(1);
-        expect(recordViewOpened).toHaveBeenCalledWith(UsageView.GRAPH);
+        expect(recordViewOpened).toHaveBeenCalledWith(EventLogView.GRAPH);
     });
 
     it('records every view in a sequence of static and parameterised navigations', () => {
@@ -142,9 +142,9 @@ describe('useRecordViewOpened', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Open graph operation 2' }));
 
         expect(recordViewOpened.mock.calls).toEqual([
-            [UsageView.TENSORS],
-            [UsageView.OPERATION_DETAILS],
-            [UsageView.GRAPH],
+            [EventLogView.TENSORS],
+            [EventLogView.OPERATION_DETAILS],
+            [EventLogView.GRAPH],
         ]);
     });
 
@@ -155,7 +155,7 @@ describe('useRecordViewOpened', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Open topology' }));
 
         expect(recordViewOpened).toHaveBeenCalledTimes(1);
-        expect(recordViewOpened).toHaveBeenCalledWith(UsageView.TOPOLOGY);
+        expect(recordViewOpened).toHaveBeenCalledWith(EventLogView.TOPOLOGY);
 
         recordViewOpened.mockClear();
         fireEvent.click(screen.getByRole('button', { name: 'Close topology' }));
@@ -165,7 +165,7 @@ describe('useRecordViewOpened', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Open topology' }));
 
         expect(recordViewOpened).toHaveBeenCalledTimes(1);
-        expect(recordViewOpened).toHaveBeenCalledWith(UsageView.TOPOLOGY);
+        expect(recordViewOpened).toHaveBeenCalledWith(EventLogView.TOPOLOGY);
 
         recordViewOpened.mockClear();
         fireEvent.click(screen.getByRole('button', { name: 'Close topology' }));
@@ -187,7 +187,7 @@ describe('useRecordViewOpened', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Open changed background' }));
 
         expect(recordViewOpened).toHaveBeenCalledTimes(1);
-        expect(recordViewOpened).toHaveBeenCalledWith(UsageView.OPERATIONS);
+        expect(recordViewOpened).toHaveBeenCalledWith(EventLogView.OPERATIONS);
     });
 
     it('does not treat query-only navigation as opening another view', () => {

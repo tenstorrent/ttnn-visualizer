@@ -4,7 +4,7 @@
 
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import Endpoints from '../src/definitions/Endpoints';
-import { ReportKind, ReportSource, UsageEvent, UsageView } from '../src/definitions/UsageEvent';
+import { EventLogEvent, EventLogView, ReportKind, ReportSource } from '../src/definitions/EventLogEvent';
 
 const serverConfigMock = vi.hoisted(() =>
     vi.fn(() => ({ SERVER_MODE: false, USAGE_RECORDING_ACTIVE: true, BASE_PATH: '/' })),
@@ -17,13 +17,13 @@ vi.mock('../src/libs/axiosInstance', () => ({
 }));
 
 const REPORT_LOADED = {
-    event: UsageEvent.REPORT_LOADED,
+    event: EventLogEvent.REPORT_LOADED,
     details: { kind: ReportKind.PROFILER, source: ReportSource.UPLOAD },
 } as const;
 
 const VIEW_OPENED = {
-    event: UsageEvent.VIEW_OPENED,
-    details: { view: UsageView.OPERATIONS },
+    event: EventLogEvent.VIEW_OPENED,
+    details: { view: EventLogView.OPERATIONS },
 } as const;
 
 // Mirrors MAX_BUFFERED_EVENTS. Duplicated rather than imported so a change to the module
@@ -43,12 +43,12 @@ async function loadRecorder() {
     vi.resetModules();
 
     const axiosInstance = await import('../src/libs/axiosInstance');
-    const recordUsage = await import('../src/functions/recordUsage');
+    const recordEvent = await import('../src/functions/recordEvent');
 
     return {
-        recordUsage: recordUsage.default,
-        flushUsage: recordUsage.flushUsage,
-        initUsageRecording: recordUsage.initUsageRecording,
+        recordEvent: recordEvent.default,
+        flushEventLog: recordEvent.flushEventLog,
+        initEventLogging: recordEvent.initEventLogging,
         post: vi.mocked(axiosInstance.default.post),
     };
 }
@@ -129,29 +129,29 @@ afterEach(() => {
     vi.unstubAllGlobals();
 });
 
-describe('recordUsage batching', () => {
+describe('recordEvent batching', () => {
     it('sends one request carrying every buffered event, not one per event', async () => {
-        const { recordUsage, flushUsage, post } = await loadRecorder();
+        const { recordEvent, flushEventLog, post } = await loadRecorder();
         post.mockResolvedValue({ status: 204 });
 
-        recordUsage(REPORT_LOADED);
-        recordUsage(VIEW_OPENED);
-        flushUsage();
+        recordEvent(REPORT_LOADED);
+        recordEvent(VIEW_OPENED);
+        flushEventLog();
 
         expect(post).toHaveBeenCalledTimes(1);
         // The body shape, not merely the count: a flattened payload passes a call-count
         // assertion and is rejected outright by the real endpoint's closed-envelope check.
-        expect(post).toHaveBeenCalledWith(Endpoints.USAGE, {
+        expect(post).toHaveBeenCalledWith(Endpoints.EVENT_LOGGING, {
             events: [REPORT_LOADED, VIEW_OPENED],
         });
     });
 
     it('nests details rather than flattening them beside the event name', async () => {
-        const { recordUsage, flushUsage, post } = await loadRecorder();
+        const { recordEvent, flushEventLog, post } = await loadRecorder();
         post.mockResolvedValue({ status: 204 });
 
-        recordUsage(REPORT_LOADED);
-        flushUsage();
+        recordEvent(REPORT_LOADED);
+        flushEventLog();
 
         const [, body] = post.mock.calls[0];
         const [event] = (body as { events: Record<string, unknown>[] }).events;
@@ -161,11 +161,11 @@ describe('recordUsage batching', () => {
     });
 
     it('sends a full buffer on the scheduled flush rather than inline', async () => {
-        const { recordUsage, post } = await loadRecorder();
+        const { recordEvent, post } = await loadRecorder();
         post.mockResolvedValue({ status: 204 });
 
         for (let index = 0; index < MAX_BUFFERED_EVENTS; index++) {
-            recordUsage(VIEW_OPENED);
+            recordEvent(VIEW_OPENED);
         }
 
         // Nothing yet: a synchronous post here would land on the caller's tick, which for
@@ -179,12 +179,12 @@ describe('recordUsage batching', () => {
     });
 
     it('bounds the request rate under a burst, dropping the overflow', async () => {
-        const { recordUsage, post } = await loadRecorder();
+        const { recordEvent, post } = await loadRecorder();
         post.mockResolvedValue({ status: 204 });
 
         // The shape a VIEW_ENGAGED wired to scroll would produce on a large table.
         for (let index = 0; index < 5_000; index++) {
-            recordUsage(VIEW_OPENED);
+            recordEvent(VIEW_OPENED);
         }
 
         vi.advanceTimersByTime(MIN_BATCH_WINDOW_MS);
@@ -196,35 +196,35 @@ describe('recordUsage batching', () => {
     });
 
     it('does nothing when the buffer is empty', async () => {
-        const { flushUsage, post } = await loadRecorder();
+        const { flushEventLog, post } = await loadRecorder();
 
-        flushUsage();
+        flushEventLog();
 
         expect(post).not.toHaveBeenCalled();
     });
 });
 
-describe('recordUsage flush triggers', () => {
+describe('recordEvent flush triggers', () => {
     it('flushes once on the idle fallback and does not flush again on the interval', async () => {
-        const { recordUsage, post } = await loadRecorder();
+        const { recordEvent, post } = await loadRecorder();
         post.mockResolvedValue({ status: 204 });
 
-        recordUsage(VIEW_OPENED);
+        recordEvent(VIEW_OPENED);
         vi.advanceTimersByTime(FLUSH_INTERVAL_MS);
 
         expect(post).toHaveBeenCalledTimes(1);
     });
 
     it('coalesces over the batch window rather than posting on the first event', async () => {
-        const { recordUsage, post } = await loadRecorder();
+        const { recordEvent, post } = await loadRecorder();
         post.mockResolvedValue({ status: 204 });
 
-        recordUsage(VIEW_OPENED);
+        recordEvent(VIEW_OPENED);
         vi.advanceTimersByTime(MIN_BATCH_WINDOW_MS - 1);
 
         expect(post).not.toHaveBeenCalled();
 
-        recordUsage(REPORT_LOADED);
+        recordEvent(REPORT_LOADED);
         vi.advanceTimersByTime(1);
 
         // Both events in one request: the window is a floor on batching, which is what an
@@ -234,10 +234,10 @@ describe('recordUsage flush triggers', () => {
     });
 
     it('re-arms after a flush, so later events are not stranded', async () => {
-        const { recordUsage, post } = await loadRecorder();
+        const { recordEvent, post } = await loadRecorder();
         post.mockResolvedValue({ status: 204 });
 
-        recordUsage(VIEW_OPENED);
+        recordEvent(VIEW_OPENED);
         vi.advanceTimersByTime(MIN_BATCH_WINDOW_MS);
 
         expect(post).toHaveBeenCalledTimes(1);
@@ -245,7 +245,7 @@ describe('recordUsage flush triggers', () => {
         // Scheduling early-returns while a flush is armed, so clearing the handle is the
         // only thing that lets a second one be scheduled. Without it every event after the
         // first flush would wait for the 50-event cap or a beacon.
-        recordUsage(REPORT_LOADED);
+        recordEvent(REPORT_LOADED);
         vi.advanceTimersByTime(MIN_BATCH_WINDOW_MS);
 
         expect(post).toHaveBeenCalledTimes(2);
@@ -253,10 +253,10 @@ describe('recordUsage flush triggers', () => {
     });
 
     it('beacons on pagehide without touching axios', async () => {
-        const { recordUsage, initUsageRecording, post } = await loadRecorder();
-        startRecording(initUsageRecording);
+        const { recordEvent, initEventLogging, post } = await loadRecorder();
+        startRecording(initEventLogging);
 
-        recordUsage(VIEW_OPENED);
+        recordEvent(VIEW_OPENED);
         window.dispatchEvent(new Event('pagehide'));
 
         expect(sendBeacon).toHaveBeenCalledTimes(1);
@@ -264,7 +264,7 @@ describe('recordUsage flush triggers', () => {
 
         const [url, blob] = sendBeacon.mock.calls[0];
 
-        expect(url).toBe('/api/usage');
+        expect(url).toBe('/api/event-log/events');
         // The type is load-bearing: it makes the request non-simple, and a bare-string
         // beacon would go as text/plain and be refused by the route.
         expect((blob as Blob).type).toBe('application/json');
@@ -276,10 +276,10 @@ describe('recordUsage flush triggers', () => {
     });
 
     it('drains the buffer, so hiding then closing sends one beacon not two', async () => {
-        const { recordUsage, initUsageRecording } = await loadRecorder();
-        startRecording(initUsageRecording);
+        const { recordEvent, initEventLogging } = await loadRecorder();
+        startRecording(initEventLogging);
 
-        recordUsage(VIEW_OPENED);
+        recordEvent(VIEW_OPENED);
         vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden');
         document.dispatchEvent(new Event('visibilitychange'));
         window.dispatchEvent(new Event('pagehide'));
@@ -290,11 +290,11 @@ describe('recordUsage flush triggers', () => {
     });
 
     it('attempts no post during document discard when the beacon is refused', async () => {
-        const { recordUsage, initUsageRecording, post } = await loadRecorder();
-        startRecording(initUsageRecording);
+        const { recordEvent, initEventLogging, post } = await loadRecorder();
+        startRecording(initEventLogging);
         sendBeacon.mockReturnValue(false);
 
-        recordUsage(VIEW_OPENED);
+        recordEvent(VIEW_OPENED);
 
         // Real browsers fire pagehide before the visibility state flips, so the drop wins
         // and the hidden handler finds an empty buffer. Pinned as a sequence because each
@@ -309,12 +309,12 @@ describe('recordUsage flush triggers', () => {
     });
 
     it('drains what is buffered on teardown rather than stranding it', async () => {
-        const { recordUsage, initUsageRecording, post } = await loadRecorder();
+        const { recordEvent, initEventLogging, post } = await loadRecorder();
         post.mockResolvedValue({ status: 204 });
 
-        const teardown = startRecording(initUsageRecording);
+        const teardown = startRecording(initEventLogging);
 
-        recordUsage(VIEW_OPENED);
+        recordEvent(VIEW_OPENED);
         teardown();
 
         // Teardown removes the pagehide listener and cancels the pending flush, so
@@ -324,10 +324,10 @@ describe('recordUsage flush triggers', () => {
     });
 
     it('beacons when the tab is hidden', async () => {
-        const { recordUsage, initUsageRecording } = await loadRecorder();
-        startRecording(initUsageRecording);
+        const { recordEvent, initEventLogging } = await loadRecorder();
+        startRecording(initEventLogging);
 
-        recordUsage(VIEW_OPENED);
+        recordEvent(VIEW_OPENED);
         vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden');
         document.dispatchEvent(new Event('visibilitychange'));
 
@@ -335,10 +335,10 @@ describe('recordUsage flush triggers', () => {
     });
 
     it('does not flush when the tab becomes visible', async () => {
-        const { recordUsage, initUsageRecording, post } = await loadRecorder();
-        startRecording(initUsageRecording);
+        const { recordEvent, initEventLogging, post } = await loadRecorder();
+        startRecording(initEventLogging);
 
-        recordUsage(VIEW_OPENED);
+        recordEvent(VIEW_OPENED);
         vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
         document.dispatchEvent(new Event('visibilitychange'));
 
@@ -347,39 +347,39 @@ describe('recordUsage flush triggers', () => {
     });
 
     it('falls back to a post when a hidden-tab beacon is refused, but not on pagehide', async () => {
-        const { recordUsage, initUsageRecording, post } = await loadRecorder();
+        const { recordEvent, initEventLogging, post } = await loadRecorder();
         post.mockResolvedValue({ status: 204 });
         sendBeacon.mockReturnValue(false);
 
-        startRecording(initUsageRecording);
+        startRecording(initEventLogging);
         vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden');
 
-        recordUsage(VIEW_OPENED);
+        recordEvent(VIEW_OPENED);
         document.dispatchEvent(new Event('visibilitychange'));
 
         expect(post).toHaveBeenCalledTimes(1);
 
         // On pagehide the document is being discarded, so an async post would not reliably
         // run; the batch is dropped instead of pretending otherwise.
-        recordUsage(VIEW_OPENED);
+        recordEvent(VIEW_OPENED);
         window.dispatchEvent(new Event('pagehide'));
 
         expect(post).toHaveBeenCalledTimes(1);
     });
 
     it('stops flushing after teardown', async () => {
-        const { recordUsage, initUsageRecording } = await loadRecorder();
-        const teardown = startRecording(initUsageRecording);
+        const { recordEvent, initEventLogging } = await loadRecorder();
+        const teardown = startRecording(initEventLogging);
 
         teardown();
-        recordUsage(VIEW_OPENED);
+        recordEvent(VIEW_OPENED);
         window.dispatchEvent(new Event('pagehide'));
 
         expect(sendBeacon).not.toHaveBeenCalled();
     });
 });
 
-describe('recordUsage idle scheduling', () => {
+describe('recordEvent idle scheduling', () => {
     // The branch every real browser takes. The rest of the file stubs both callbacks away
     // to pin the fallback, which left the production path — and its cancellation — with no
     // coverage at all: a leaked idle callback firing after teardown would go unnoticed.
@@ -412,9 +412,9 @@ describe('recordUsage idle scheduling', () => {
     }
 
     it('arms the idle callback only once the batch window closes', async () => {
-        const { recordUsage } = await loadRecorder();
+        const { recordEvent } = await loadRecorder();
 
-        recordUsage(VIEW_OPENED);
+        recordEvent(VIEW_OPENED);
 
         expect(requestIdle).not.toHaveBeenCalled();
 
@@ -425,10 +425,10 @@ describe('recordUsage idle scheduling', () => {
     });
 
     it('posts when the idle callback runs', async () => {
-        const { recordUsage, post } = await loadRecorder();
+        const { recordEvent, post } = await loadRecorder();
         post.mockResolvedValue({ status: 204 });
 
-        recordUsage(VIEW_OPENED);
+        recordEvent(VIEW_OPENED);
         vi.advanceTimersByTime(MIN_BATCH_WINDOW_MS);
 
         expect(post).not.toHaveBeenCalled();
@@ -439,12 +439,12 @@ describe('recordUsage idle scheduling', () => {
     });
 
     it('cancels the idle callback and the ceiling on teardown', async () => {
-        const { recordUsage, initUsageRecording, post } = await loadRecorder();
+        const { recordEvent, initEventLogging, post } = await loadRecorder();
         post.mockResolvedValue({ status: 204 });
 
-        const teardown = startRecording(initUsageRecording);
+        const teardown = startRecording(initEventLogging);
 
-        recordUsage(VIEW_OPENED);
+        recordEvent(VIEW_OPENED);
         vi.advanceTimersByTime(MIN_BATCH_WINDOW_MS);
         teardown();
 
@@ -462,10 +462,10 @@ describe('recordUsage idle scheduling', () => {
     });
 
     it('still flushes when the tab is hidden and no idle period ever arrives', async () => {
-        const { recordUsage, post } = await loadRecorder();
+        const { recordEvent, post } = await loadRecorder();
         post.mockResolvedValue({ status: 204 });
 
-        recordUsage(VIEW_OPENED);
+        recordEvent(VIEW_OPENED);
         // A hidden tab runs no idle callbacks, which is what the ceiling is for.
         vi.advanceTimersByTime(FLUSH_INTERVAL_MS);
 
@@ -473,18 +473,15 @@ describe('recordUsage idle scheduling', () => {
     });
 });
 
-describe('recordUsage gating', () => {
-    it.each([
-        ['recording is switched off', { SERVER_MODE: false, USAGE_RECORDING_ACTIVE: false, BASE_PATH: '/' }],
-        ['the app is in server mode', { SERVER_MODE: true, USAGE_RECORDING_ACTIVE: true, BASE_PATH: '/' }],
-    ])('sends nothing when %s', async (_label, config) => {
-        serverConfigMock.mockReturnValue(config);
+describe('recordEvent gating', () => {
+    it('sends nothing when recording is switched off', async () => {
+        serverConfigMock.mockReturnValue({ SERVER_MODE: true, USAGE_RECORDING_ACTIVE: false, BASE_PATH: '/' });
 
-        const { recordUsage, flushUsage, initUsageRecording, post } = await loadRecorder();
-        const teardown = startRecording(initUsageRecording);
+        const { recordEvent, flushEventLog, initEventLogging, post } = await loadRecorder();
+        const teardown = startRecording(initEventLogging);
 
-        recordUsage(VIEW_OPENED);
-        flushUsage();
+        recordEvent(VIEW_OPENED);
+        flushEventLog();
         window.dispatchEvent(new Event('pagehide'));
         vi.advanceTimersByTime(FLUSH_INTERVAL_MS);
 
@@ -492,15 +489,27 @@ describe('recordUsage gating', () => {
         expect(sendBeacon).not.toHaveBeenCalled();
         expect(teardown).not.toThrow();
     });
+
+    it('records in server mode when the published switch is active', async () => {
+        serverConfigMock.mockReturnValue({ SERVER_MODE: true, USAGE_RECORDING_ACTIVE: true, BASE_PATH: '/' });
+
+        const { recordEvent, flushEventLog, initEventLogging, post } = await loadRecorder();
+        startRecording(initEventLogging);
+
+        recordEvent(VIEW_OPENED);
+        flushEventLog();
+
+        expect(post).toHaveBeenCalledTimes(1);
+    });
 });
 
-describe('recordUsage failure handling', () => {
+describe('recordEvent failure handling', () => {
     it('swallows a rejected post', async () => {
-        const { recordUsage, flushUsage, post } = await loadRecorder();
+        const { recordEvent, flushEventLog, post } = await loadRecorder();
         post.mockRejectedValue(new Error('no endpoint'));
 
-        recordUsage(VIEW_OPENED);
-        flushUsage();
+        recordEvent(VIEW_OPENED);
+        flushEventLog();
         await vi.waitFor(() => expect(post).toHaveBeenCalled());
         await settleRejections();
 
@@ -508,78 +517,78 @@ describe('recordUsage failure handling', () => {
     });
 
     it('reports the refusal status in dev, and never the response body', async () => {
-        const { recordUsage, flushUsage, post } = await loadRecorder();
+        const { recordEvent, flushEventLog, post } = await loadRecorder();
         const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
         // axios resolves only on 2xx, so a 422 arrives as a rejection carrying a response.
         // Warning solely from the success path left this unable to report the one case the
         // diagnostic exists for: a vocabulary mismatch the server rejects and nothing says.
-        post.mockRejectedValue({ response: { status: 422, data: { error: 'Unknown usage event' } } });
+        post.mockRejectedValue({ response: { status: 422, data: { error: 'Unknown event' } } });
 
-        recordUsage(VIEW_OPENED);
-        flushUsage();
+        recordEvent(VIEW_OPENED);
+        flushEventLog();
         await vi.waitFor(() => expect(warn).toHaveBeenCalled());
 
         const [message] = warn.mock.calls[0];
 
         expect(message).toContain('422');
-        expect(message).not.toContain('Unknown usage event');
+        expect(message).not.toContain('Unknown event');
     });
 
     it('reports a post that never reached the server', async () => {
-        const { recordUsage, flushUsage, post } = await loadRecorder();
+        const { recordEvent, flushEventLog, post } = await loadRecorder();
         const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
         // No response at all — offline, or no server listening.
         post.mockRejectedValue(new Error('Network Error'));
 
-        recordUsage(VIEW_OPENED);
-        flushUsage();
+        recordEvent(VIEW_OPENED);
+        flushEventLog();
         await vi.waitFor(() => expect(warn).toHaveBeenCalled());
 
         expect(warn.mock.calls[0][0]).toContain('could not be delivered');
     });
 
     it('says nothing when the server accepts the batch', async () => {
-        const { recordUsage, flushUsage, post } = await loadRecorder();
+        const { recordEvent, flushEventLog, post } = await loadRecorder();
         const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
         post.mockResolvedValue({ status: 204 });
 
-        recordUsage(VIEW_OPENED);
-        flushUsage();
+        recordEvent(VIEW_OPENED);
+        flushEventLog();
         await vi.waitFor(() => expect(post).toHaveBeenCalled());
 
         expect(warn).not.toHaveBeenCalled();
     });
 
     it('drops a failed batch rather than re-buffering it', async () => {
-        const { recordUsage, flushUsage, post } = await loadRecorder();
+        const { recordEvent, flushEventLog, post } = await loadRecorder();
         post.mockRejectedValue(new Error('no endpoint'));
 
-        recordUsage(VIEW_OPENED);
-        flushUsage();
+        recordEvent(VIEW_OPENED);
+        flushEventLog();
         await vi.waitFor(() => expect(post).toHaveBeenCalledTimes(1));
 
         // A second flush finds nothing: re-buffering would resubmit a malformed batch
         // forever and grow without bound against a dead endpoint.
-        flushUsage();
+        flushEventLog();
 
         expect(post).toHaveBeenCalledTimes(1);
     });
 });
 
-describe('getUsageEndpointUrl', () => {
+describe('getEventLogEndpointUrl', () => {
     it.each([
-        ['/', '/api/usage'],
-        ['/ttnn/', '/ttnn/api/usage'],
-        ['/ttnn', '/ttnn/api/usage'],
+        ['/', '/api/event-log/events'],
+        ['/ttnn/', '/ttnn/api/event-log/events'],
+        ['/ttnn', '/ttnn/api/event-log/events'],
     ])('composes %s into %s', async (basePath, expected) => {
         serverConfigMock.mockReturnValue({ SERVER_MODE: false, USAGE_RECORDING_ACTIVE: true, BASE_PATH: basePath });
 
-        const { recordUsage, initUsageRecording } = await loadRecorder();
-        startRecording(initUsageRecording);
+        const { recordEvent, initEventLogging } = await loadRecorder();
+        startRecording(initEventLogging);
 
-        recordUsage(VIEW_OPENED);
+        recordEvent(VIEW_OPENED);
         window.dispatchEvent(new Event('pagehide'));
 
         expect(sendBeacon.mock.calls[0][0]).toBe(expected);

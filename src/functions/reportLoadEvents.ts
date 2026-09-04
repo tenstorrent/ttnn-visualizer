@@ -3,15 +3,15 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import axios, { HttpStatusCode } from 'axios';
-import { ReportKind, ReportLoadFailureReason, ReportSource, UsageEvent } from '../definitions/UsageEvent';
-import recordUsage from './recordUsage';
+import { EventLogEvent, ReportKind, ReportLoadFailureReason, ReportSource } from '../definitions/EventLogEvent';
+import recordEvent from './recordEvent';
 
 export function recordReportLoaded(kind: ReportKind, source: ReportSource): void {
-    recordUsage({ event: UsageEvent.REPORT_LOADED, details: { kind, source } });
+    recordEvent({ event: EventLogEvent.REPORT_LOADED, details: { kind, source } });
 }
 
 export function recordReportLoadFailed(kind: ReportKind, reason: ReportLoadFailureReason): void {
-    recordUsage({ event: UsageEvent.REPORT_LOAD_FAILED, details: { kind, reason_class: reason } });
+    recordEvent({ event: EventLogEvent.REPORT_LOAD_FAILED, details: { kind, reason_class: reason } });
 }
 
 /** Classify and record a failure, skipping axios cancels so abort is not a load failure. */

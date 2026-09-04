@@ -10,13 +10,13 @@ import { HelmetProvider } from 'react-helmet-async';
 import { type InitialEntry, MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ROUTES from '../src/definitions/Routes';
-import { UsageEvent, UsageView } from '../src/definitions/UsageEvent';
+import { EventLogEvent, EventLogView } from '../src/definitions/EventLogEvent';
 
 /**
  * Covers the shell's wiring and the one structural invariant it asserts about itself.
  *
- * `initUsageRecording` is called from exactly one place, so without this spec deleting
- * that line breaks usage recording entirely and fails nothing.
+ * `initEventLogging` is called from exactly one place, so without this spec deleting
+ * that line breaks event logging entirely and fails nothing.
  *
  * The children are stubbed -- rendering the real ones drags in the router, the query
  * client and the whole atom graph -- but as identifiable markers rather than `null`, so
@@ -27,10 +27,10 @@ import { UsageEvent, UsageView } from '../src/definitions/UsageEvent';
  */
 
 const teardown = vi.hoisted(() => vi.fn());
-const initUsageRecording = vi.hoisted(() => vi.fn(() => teardown));
-const recordUsage = vi.hoisted(() => vi.fn());
+const initEventLogging = vi.hoisted(() => vi.fn(() => teardown));
+const recordEvent = vi.hoisted(() => vi.fn());
 
-vi.mock('../src/functions/recordUsage', () => ({ default: recordUsage, initUsageRecording }));
+vi.mock('../src/functions/recordEvent', () => ({ default: recordEvent, initEventLogging }));
 
 vi.mock('../src/components/SideNavigation', () => ({ default: () => <div data-testid='stub-side-navigation' /> }));
 vi.mock('../src/components/ServerModeBanner', () => ({ default: () => <div data-testid='stub-server-mode-banner' /> }));
@@ -44,7 +44,7 @@ vi.mock('../src/components/mlir/MlirFileResultsOverlay', () => ({ default: () =>
 vi.mock('../src/libs/ModalAwareOutlet', () => ({ ModalAwareOutlet: () => null }));
 
 async function resetViewOpenedMemory() {
-    const { resetRememberedViewPathname } = await import('../src/functions/viewUsage');
+    const { resetRememberedViewPathname } = await import('../src/functions/eventLogViews');
     resetRememberedViewPathname();
 }
 
@@ -60,7 +60,7 @@ function renderLayout(Layout: ComponentType, initialEntries: InitialEntry[] = ['
     );
 }
 
-describe('Layout usage recording wiring', () => {
+describe('Layout event logging wiring', () => {
     beforeEach(async () => {
         await resetViewOpenedMemory();
         vi.clearAllMocks();
@@ -70,12 +70,12 @@ describe('Layout usage recording wiring', () => {
         cleanup();
     });
 
-    it('starts usage recording on mount', async () => {
+    it('starts event logging on mount', async () => {
         const { default: Layout } = await import('../src/components/Layout');
 
         renderLayout(Layout);
 
-        expect(initUsageRecording).toHaveBeenCalled();
+        expect(initEventLogging).toHaveBeenCalled();
     });
 
     it('records the initial route once under StrictMode', async () => {
@@ -83,10 +83,10 @@ describe('Layout usage recording wiring', () => {
 
         renderLayout(Layout);
 
-        expect(recordUsage).toHaveBeenCalledTimes(1);
-        expect(recordUsage).toHaveBeenCalledWith({
-            event: UsageEvent.VIEW_OPENED,
-            details: { view: UsageView.REPORTS },
+        expect(recordEvent).toHaveBeenCalledTimes(1);
+        expect(recordEvent).toHaveBeenCalledWith({
+            event: EventLogEvent.VIEW_OPENED,
+            details: { view: EventLogView.REPORTS },
         });
     });
 
@@ -99,7 +99,7 @@ describe('Layout usage recording wiring', () => {
         // teardown has already run by now. An unbalanced pair here would leave the
         // discarded instance's listeners attached to the shared document — the exact leak
         // the explicit teardown exists to prevent.
-        expect(initUsageRecording).toHaveBeenCalledTimes(2);
+        expect(initEventLogging).toHaveBeenCalledTimes(2);
         expect(teardown).toHaveBeenCalledTimes(1);
 
         unmount();
