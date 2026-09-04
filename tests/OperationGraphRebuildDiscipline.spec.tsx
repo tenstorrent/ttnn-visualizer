@@ -556,6 +556,7 @@ describe('OperationGraphReactFlow rebuild triggers', () => {
             deviceSubgraphs: [],
             expandedBlockIds: undefined,
             grouping: OpGraphGrouping.REPEATS,
+            collapseWeightLoads: true,
         });
     });
 

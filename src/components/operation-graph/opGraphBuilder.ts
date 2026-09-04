@@ -11,6 +11,7 @@ import {
     layoutOpGraph,
 } from './opGraphLayout';
 import { detectLayerBlocks } from './opGraphLayerBlocks';
+import { detectWeightFans } from './opGraphWeightFans';
 import { detectRepeatBlocks } from './opGraphRepeatBlocks';
 import { formatBlockMeta } from './opGraphBlockMeta';
 import { sumOptional } from '../../functions/math';
@@ -82,6 +83,7 @@ export function buildOpGraph(
         deviceSubgraphs,
         expandedBlockIds,
         grouping,
+        collapseWeightLoads,
         detectedBlocks: providedBlocks,
     }: OpGraphBuildOptions,
 ): OpGraphBuiltGraph {
@@ -130,6 +132,26 @@ export function buildOpGraph(
 
     const renderedNodeIdOf = (operationId: number): string =>
         collapsedInstanceByOpId.get(operationId)?.instanceId ?? String(operationId);
+
+    // Added to the same map grouping uses, which is the whole integration: `renderedNodeIdOf`
+    // then resolves a member to its fan, and the edge path below already suppresses the
+    // label and dedupes parallel edges across a collapsed boundary. Detected here rather
+    // than in a pre-pass because "the same rendered node" depends on what grouping just
+    // folded. #1980
+    if (collapseWeightLoads) {
+        const fans = detectWeightFans({
+            keptOperations,
+            candidates,
+            kept,
+            renderedNodeIdOf,
+            isClaimed: (operationId) => collapsedInstanceByOpId.has(operationId),
+        });
+        for (const fan of fans) {
+            for (const operationId of fan.operationIds) {
+                collapsedInstanceByOpId.set(operationId, fan);
+            }
+        }
+    }
 
     const nodes: OpGraphFlowNode[] = [];
     const deviceOpNodes: OpGraphFlowNode[] = [];

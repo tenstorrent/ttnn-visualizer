@@ -200,6 +200,12 @@ export interface OpGraphBuildOptions {
     expandedBlockIds?: readonly string[];
     /** Defaults to `REPEATS`, which is what shipped first. #1976 */
     grouping?: OpGraphGrouping;
+    /**
+     * Collapse each fan of weight-loading sources into one node. Absent means off so
+     * that a build asking for nothing gets the raw graph; the view defaults it on, the
+     * way it does for `hideDeallocate`. #1980
+     */
+    collapseWeightLoads?: boolean;
     /** Worker-only: detection is invariant under fold / device-op expand. */
     detectedBlocks?: RepeatBlockInstance[];
 }

@@ -70,6 +70,7 @@ const cacheKeyOf = (
     deviceSubgraphs: OpGraphDeviceSubgraph[],
     expandedBlockIds: readonly string[] | undefined,
     grouping: OpGraphGrouping,
+    collapseWeightLoads: boolean,
 ): string => {
     const expanded = deviceSubgraphs
         .map((subgraph) => subgraph.operationId)
@@ -78,7 +79,7 @@ const cacheKeyOf = (
     // `undefined` (nothing folded yet) and `[]` (fold every instance) build
     // different graphs, so they must not share a cache entry. #1977
     const blocks = expandedBlockIds === undefined ? 'none' : [...expandedBlockIds].sort().join(',');
-    return `${version}:${hideDeallocate}:${expanded}:${blocks}:${grouping}`;
+    return `${version}:${hideDeallocate}:${expanded}:${blocks}:${grouping}:${collapseWeightLoads}`;
 };
 
 const detectedBlocksOf = (hideDeallocate: boolean, grouping: OpGraphGrouping): RepeatBlockInstance[] => {
@@ -127,6 +128,7 @@ const drainPendingBuild = (): void => {
         request.deviceSubgraphs,
         request.expandedBlockIds,
         grouping,
+        request.collapseWeightLoads ?? false,
     );
     const cached = layoutCache.get(cacheKey);
     if (cached) {
@@ -146,6 +148,7 @@ const drainPendingBuild = (): void => {
             deviceSubgraphs: request.deviceSubgraphs,
             expandedBlockIds: request.expandedBlockIds,
             grouping,
+            collapseWeightLoads: request.collapseWeightLoads,
             detectedBlocks: detectedBlocksOf(request.hideDeallocate, grouping),
         });
         touchLruCache(layoutCache, cacheKey, graph, LAYOUT_CACHE_LIMIT);

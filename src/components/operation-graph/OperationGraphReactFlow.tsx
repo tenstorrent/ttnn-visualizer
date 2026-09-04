@@ -290,6 +290,9 @@ const OperationGraphInner = ({
     // A view preference like `hideDeallocate`, so it survives a report change: someone
     // comparing two reports by layer does not want the mode reset under them. #1976
     const [grouping, setGrouping] = useState<OpGraphGrouping>(OpGraphGrouping.REPEATS);
+    // On, like `Hide deallocate ops`: both hide plumbing rather than restructure the
+    // model, which is the distinction #1977 draws about defaults. #1980
+    const [collapseWeightLoads, setCollapseWeightLoads] = useState(true);
     const [nodeIdByOperationId, setNodeIdByOperationId] = useState<ReadonlyMap<number, string>>(EMPTY_NODE_ID_BY_OP);
     const [isPerfOverlayEnabled, setIsPerfOverlayEnabled] = useState(false);
     const [criticalPathScope, setCriticalPathScope] = useAtom(criticalPathScopeAtom);
@@ -572,8 +575,9 @@ const OperationGraphInner = ({
             deviceSubgraphs,
             expandedBlockIds: foldDecisionToOption(expandedBlockIds),
             grouping,
+            collapseWeightLoads,
         }),
-        [hideDeallocate, deviceSubgraphs, expandedBlockIds, grouping],
+        [hideDeallocate, deviceSubgraphs, expandedBlockIds, grouping, collapseWeightLoads],
     );
 
     // `sourceOperations` isn't read here — it's the signal that the worker holds a
@@ -1394,6 +1398,8 @@ const OperationGraphInner = ({
                 grouping={grouping}
                 onGroupingChange={handleGroupingChange}
                 groupingBlockCount={detectedBlocks.length}
+                collapseWeightLoads={collapseWeightLoads}
+                onCollapseWeightLoadsChange={setCollapseWeightLoads}
                 areAllBlocksExpanded={
                     detectedBlocks.length > 0 && detectedBlocks.every((block) => isBlockExpanded(block.instanceId))
                 }

@@ -103,6 +103,8 @@ interface OpGraphToolbarProps {
     onGroupingChange: (next: OpGraphGrouping) => void;
     /** How many blocks the active detector found, shown on its own button. */
     groupingBlockCount: number;
+    collapseWeightLoads: boolean;
+    onCollapseWeightLoadsChange: (next: boolean) => void;
     areAllBlocksExpanded: boolean;
     areAllBlocksCollapsed: boolean;
     onExpandAllBlocks: () => void;
@@ -142,6 +144,8 @@ const OpGraphToolbar = memo(
         grouping,
         onGroupingChange,
         groupingBlockCount,
+        collapseWeightLoads,
+        onCollapseWeightLoadsChange,
         areAllBlocksExpanded,
         areAllBlocksCollapsed,
         onExpandAllBlocks,
@@ -248,6 +252,19 @@ const OpGraphToolbar = memo(
                     isDisabled={isDisabled}
                 />
 
+                <Tooltip
+                    content='Draw each fan of weight loads feeding one node as a single node'
+                    position={PopoverPosition.BOTTOM}
+                >
+                    <Switch
+                        label='Collapse weight loads'
+                        checked={collapseWeightLoads}
+                        disabled={isDisabled}
+                        onChange={(event: FormEvent<HTMLInputElement>) =>
+                            onCollapseWeightLoadsChange(event.currentTarget.checked)
+                        }
+                    />
+                </Tooltip>
                 <PerfGatedSwitch
                     tooltipByStatus={CRITICAL_PATH_TOOLTIP}
                     label='Highlight critical path'

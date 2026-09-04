@@ -97,7 +97,11 @@ const build = (
     expandedBlockIds,
 });
 
-const buildWithGrouping = (requestId: number, grouping: OpGraphGrouping): OpGraphWorkerInboundMessage => ({
+const buildWithGrouping = (
+    requestId: number,
+    grouping: OpGraphGrouping,
+    collapseWeightLoads?: boolean,
+): OpGraphWorkerInboundMessage => ({
     type: OpGraphWorkerMessageType.BUILD,
     sourceVersion: 1,
     requestId,
@@ -105,6 +109,7 @@ const buildWithGrouping = (requestId: number, grouping: OpGraphGrouping): OpGrap
     deviceSubgraphs: [],
     expandedBlockIds: [],
     grouping,
+    collapseWeightLoads,
 });
 
 const optionsOfLastBuild = () => buildOpGraph.mock.calls.at(-1)?.[1];
@@ -178,6 +183,31 @@ describe('opGraphLayoutWorker', () => {
             // Same source, same fold state: only the detector differs, so a cache key
             // blind to it would hand back the first graph.
             expect(buildOpGraph).toHaveBeenCalledTimes(2);
+        });
+
+        it('does not serve the layout of one weight-load setting to the other', async () => {
+            // Same source, same fold state, same grouping: only the collapse differs, and
+            // it changes the node set. A cache key blind to it hands back the first graph
+            // — the failure the dropped `grouping` field already produced once. #1980
+            const send = await loadWorker();
+            send(setGraph(1));
+
+            send(buildWithGrouping(1, OpGraphGrouping.LAYERS, false));
+            drain();
+            send(buildWithGrouping(2, OpGraphGrouping.LAYERS, true));
+            drain();
+
+            expect(buildOpGraph).toHaveBeenCalledTimes(2);
+        });
+
+        it('hands the build the weight-load setting the view asked for', async () => {
+            const send = await loadWorker();
+            send(setGraph(1));
+
+            send(buildWithGrouping(1, OpGraphGrouping.LAYERS, true));
+            drain();
+
+            expect(optionsOfLastBuild()).toEqual(expect.objectContaining({ collapseWeightLoads: true }));
         });
 
         it('reuses the layout when the grouping is unchanged', async () => {

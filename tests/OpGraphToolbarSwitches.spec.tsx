@@ -15,6 +15,8 @@ interface RenderToolbarOptions {
     grouping?: OpGraphGrouping;
     onGroupingChange?: (next: OpGraphGrouping) => void;
     groupingBlockCount?: number;
+    collapseWeightLoads?: boolean;
+    onCollapseWeightLoadsChange?: (next: boolean) => void;
     status: PerfOverlayStatus;
     onPerfOverlayChange?: (next: boolean) => void;
     onCriticalPathChange?: (next: boolean) => void;
@@ -41,6 +43,8 @@ const renderToolbar = ({
     grouping = OpGraphGrouping.REPEATS,
     onGroupingChange = vi.fn(),
     groupingBlockCount = 0,
+    collapseWeightLoads = true,
+    onCollapseWeightLoadsChange = vi.fn(),
 }: RenderToolbarOptions) => {
     render(
         <OpGraphToolbar
@@ -55,6 +59,8 @@ const renderToolbar = ({
             grouping={grouping}
             onGroupingChange={onGroupingChange}
             groupingBlockCount={groupingBlockCount}
+            collapseWeightLoads={collapseWeightLoads}
+            onCollapseWeightLoadsChange={onCollapseWeightLoadsChange}
             onPrevMatch={vi.fn()}
             onNextMatch={vi.fn()}
             selectedOperationId={1}

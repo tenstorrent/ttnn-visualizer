@@ -406,6 +406,82 @@ describe('buildOpGraph', () => {
         });
     });
 
+    describe('weight-load fans', () => {
+        // Three loaders feeding one consumer, plus a downstream op so the consumer is
+        // not itself a source.
+        const FAN_CHAIN = [
+            operation({ id: 1, name: 'ttnn.to_device', outputs: [{ label: '[1, 768]', consumers: [4] }] }),
+            operation({ id: 2, name: 'ttnn.to_device', outputs: [{ label: '[768, 3072]', consumers: [4] }] }),
+            operation({ id: 3, name: 'ttnn.to_device', outputs: [{ label: '[1, 3072]', consumers: [4] }] }),
+            operation({ id: 4, name: 'ttnn.linear', outputs: [{ consumers: [5] }] }),
+            operation({ id: 5, name: 'ttnn.layer_norm' }),
+        ];
+
+        const FAN_ID = 'weights:4';
+
+        it('draws one node for the fan and keeps its consumer', () => {
+            const graph = buildOpGraph(FAN_CHAIN, {
+                hideDeallocate: false,
+                deviceSubgraphs: [],
+                collapseWeightLoads: true,
+            });
+
+            expect(graph.nodes.map((node) => node.id)).toEqual([FAN_ID, '4', '5']);
+            expect(nodeById(graph, FAN_ID).data.filterString).toBe('3 weight loads');
+        });
+
+        it('joins the fan to its consumer with a single unlabelled edge', () => {
+            // Three tensors of different shapes between the same two nodes are one
+            // dependency drawn once. The labels would be three shapes on one line. #1980
+            const graph = buildOpGraph(FAN_CHAIN, {
+                hideDeallocate: false,
+                deviceSubgraphs: [],
+                collapseWeightLoads: true,
+            });
+            const intoConsumer = graph.edges.filter((edge) => edge.target === '4');
+
+            expect(intoConsumer).toHaveLength(1);
+            expect(intoConsumer[0].source).toBe(FAN_ID);
+            expect(intoConsumer[0].label).toBeUndefined();
+        });
+
+        it('leaves every member and its labelled edge when switched off', () => {
+            const graph = buildOpGraph(FAN_CHAIN, { hideDeallocate: false, deviceSubgraphs: [] });
+
+            expect(graph.nodes.map((node) => node.id)).toEqual(['1', '2', '3', '4', '5']);
+            expect(graph.edges.filter((edge) => edge.target === '4')).toHaveLength(3);
+            expect(edgeBetweenOperations(graph, 2, 4).label).toBe('[768, 3072]');
+        });
+
+        it('keeps the fan out of the blocks the toolbar counts', () => {
+            // Grouping owns that count; a fan is plumbing, not a detected layer, and
+            // Fold / Unroll-all must go on meaning what they meant. #1980
+            const graph = buildOpGraph(FAN_CHAIN, {
+                hideDeallocate: false,
+                deviceSubgraphs: [],
+                collapseWeightLoads: true,
+            });
+
+            expect(graph.blocks ?? []).toHaveLength(0);
+        });
+
+        it('does not collapse loaders that feed different consumers', () => {
+            const shared = [
+                operation({ id: 1, name: 'ttnn.to_device', outputs: [{ consumers: [3] }] }),
+                operation({ id: 2, name: 'ttnn.to_device', outputs: [{ consumers: [3, 4] }] }),
+                operation({ id: 3, name: 'ttnn.linear', outputs: [{ consumers: [4] }] }),
+                operation({ id: 4, name: 'ttnn.linear' }),
+            ];
+            const graph = buildOpGraph(shared, {
+                hideDeallocate: false,
+                deviceSubgraphs: [],
+                collapseWeightLoads: true,
+            });
+
+            expect(graph.nodes.map((node) => node.id)).toEqual(['1', '2', '3', '4']);
+        });
+    });
+
     describe('repeat blocks', () => {
         const REPEAT_CHAIN = [
             operation({ id: 1, name: 'prefix', outputs: [{ consumers: [2] }] }),
