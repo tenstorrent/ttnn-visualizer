@@ -23,8 +23,15 @@ import { OpGraphBlockKind } from './opGraphTypes';
  */
 const MIN_FAN_MEMBERS = 2;
 
-/** Fans are keyed on the node they feed, which is what makes the id stable across folds. */
-const fanIdOf = (consumerNodeId: string): string => `weights:${consumerNodeId}`;
+/**
+ * Keyed on the fan's first member, not on the node it feeds. The consumer's *rendered*
+ * id is what the grouping fold moves — a fan feeding an op inside a layer is
+ * `weights:layer:attention:4` folded and `weights:4` unrolled — so keying on it meant a
+ * fan the user had unrolled re-folded itself the moment that layer was folded, and left
+ * the old id behind in a set nothing prunes. A member is a source operation, never
+ * inside a grouping block, so its id does not move. #1980
+ */
+const fanIdOf = (firstMemberOperationId: number): string => `weights:${firstMemberOperationId}`;
 
 export interface WeightFanInput {
     keptOperations: readonly OpGraphSourceOperation[];
@@ -81,11 +88,11 @@ export const detectWeightFans = ({
     }
 
     const fans: RepeatBlockInstance[] = [];
-    for (const [consumerNodeId, operationIds] of membersByConsumer) {
+    for (const operationIds of membersByConsumer.values()) {
         if (operationIds.length >= MIN_FAN_MEMBERS) {
             fans.push({
                 kind: OpGraphBlockKind.WEIGHTS,
-                instanceId: fanIdOf(consumerNodeId),
+                instanceId: fanIdOf(operationIds[0]),
                 patternId: 'weights',
                 label: `${operationIds.length} weight loads`,
                 patternLabel: 'Weight loads',

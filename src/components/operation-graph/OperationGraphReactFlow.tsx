@@ -431,6 +431,11 @@ const OperationGraphInner = ({
         return byId;
     }, [operationList]);
 
+    // Memoised because `isBlockExpanded` is called once per block from a memo and twice
+    // more per block from the render body: a `.some()` there made three O(B²) walks, two
+    // of them on every filter keystroke and drag frame. #1980
+    const detectedBlockIds = useMemo(() => new Set(detectedBlocks.map((block) => block.instanceId)), [detectedBlocks]);
+
     const isBlockExpanded = useCallback(
         (instanceId: string) => {
             // A weight fan defaults the other way round from a grouping block. Its switch
@@ -441,12 +446,24 @@ const OperationGraphInner = ({
             // Getting this wrong made the fan's expander inert: `null` read as expanded,
             // so the click tried to fold something already unrolled and changed nothing.
             // #1980
-            if (!detectedBlocks.some((block) => block.instanceId === instanceId)) {
+            if (!detectedBlockIds.has(instanceId)) {
                 return expandedBlockIds?.has(instanceId) ?? false;
             }
             return expandedBlockIds === null || expandedBlockIds.has(instanceId);
         },
-        [expandedBlockIds, detectedBlocks],
+        [expandedBlockIds, detectedBlockIds],
+    );
+
+    // Out of the render body: these were two more per-block walks evaluated on every
+    // render, including drag frames. #1980
+    const areAllBlocksExpanded = useMemo(
+        () => detectedBlocks.length > 0 && detectedBlocks.every((block) => isBlockExpanded(block.instanceId)),
+        [detectedBlocks, isBlockExpanded],
+    );
+
+    const areAllBlocksCollapsed = useMemo(
+        () => detectedBlocks.length === 0 || detectedBlocks.every((block) => !isBlockExpanded(block.instanceId)),
+        [detectedBlocks, isBlockExpanded],
     );
 
     const collapsedMemberIds = useMemo(() => {
@@ -767,7 +784,13 @@ const OperationGraphInner = ({
     );
 
     const expandAllBlocks = useCallback(() => {
-        setExpandedBlockIds(new Set(detectedBlocks.map((block) => block.instanceId)));
+        // Unions rather than replaces: the set also holds weight-fan ids, which this
+        // button does not own. Replacing it silently re-folded a fan the user had
+        // opened, and `areAllBlocksExpanded` then read true and disabled the button —
+        // leaving no route back to a fully unrolled graph. #1980
+        setExpandedBlockIds(
+            (previous) => new Set([...(previous ?? []), ...detectedBlocks.map((block) => block.instanceId)]),
+        );
     }, [detectedBlocks]);
 
     const collapseAllBlocks = useCallback(() => {
@@ -1416,12 +1439,8 @@ const OperationGraphInner = ({
                 groupingBlockCount={detectedBlocks.length}
                 collapseWeightLoads={collapseWeightLoads}
                 onCollapseWeightLoadsChange={setCollapseWeightLoads}
-                areAllBlocksExpanded={
-                    detectedBlocks.length > 0 && detectedBlocks.every((block) => isBlockExpanded(block.instanceId))
-                }
-                areAllBlocksCollapsed={
-                    detectedBlocks.length === 0 || detectedBlocks.every((block) => !isBlockExpanded(block.instanceId))
-                }
+                areAllBlocksExpanded={areAllBlocksExpanded}
+                areAllBlocksCollapsed={areAllBlocksCollapsed}
                 onExpandAllBlocks={expandAllBlocks}
                 onCollapseAllBlocks={collapseAllBlocks}
                 isPerfOverlayActive={isPerfOverlayActive}

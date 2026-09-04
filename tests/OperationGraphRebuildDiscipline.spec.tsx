@@ -1401,6 +1401,33 @@ describe('OperationGraphReactFlow repeat blocks', () => {
         expect(setCenter).not.toHaveBeenCalled();
     });
 
+    it('does not refold a weight fan when Unroll all is clicked', () => {
+        // Unroll all owns grouping blocks, not fans, but both live in one expansion set.
+        // Replacing that set dropped every fan the user had opened — and because
+        // `areAllBlocksExpanded` only inspects the grouping blocks it then read true and
+        // disabled the button, leaving no route back to a fully unrolled graph. #1980
+        const withFanAndRepeats: OperationDescription[] = [
+            ...REPEAT_OPERATION_LIST,
+            operation(7, 'ttnn.to_device', [6]),
+            operation(8, 'ttnn.to_device', [6]),
+        ];
+        renderGraph(withFanAndRepeats);
+        // Fold first: with the blocks unrolled, opening a fan marks every grouping block
+        // expanded too, which disables Unroll all and puts the bug out of reach.
+        fireEvent.click(screen.getByRole('button', { name: 'Fold all repeats' }));
+        deliver(withFanAndRepeats, { collapseWeightLoads: true, expandedBlockIds: [] });
+
+        act(() => {
+            harness.onNodeDoubleClick?.(null, nodeById(lastFlowRender().nodes, 'weights:7'));
+        });
+        runBuild.mockClear();
+        fireEvent.click(screen.getByRole('button', { name: 'Unroll all repeats' }));
+
+        expect((runBuild.mock.calls.at(-1)?.[0] as OpGraphBuildOptions).expandedBlockIds).toEqual(
+            expect.arrayContaining(['weights:7']),
+        );
+    });
+
     it('asks to unfold a weight fan when its expander is clicked', () => {
         // The reported bug had two halves and this is the one in the view: with grouping
         // unrolled by default the expansion set is `null`, which read as "everything is
@@ -1419,11 +1446,11 @@ describe('OperationGraphReactFlow repeat blocks', () => {
         runBuild.mockClear();
 
         act(() => {
-            harness.onNodeDoubleClick?.(null, nodeById(lastFlowRender().nodes, 'weights:3'));
+            harness.onNodeDoubleClick?.(null, nodeById(lastFlowRender().nodes, 'weights:1'));
         });
 
         expect(runBuild.mock.calls.at(-1)?.[0]).toEqual(
-            expect.objectContaining({ expandedBlockIds: expect.arrayContaining(['weights:3']) }),
+            expect.objectContaining({ expandedBlockIds: expect.arrayContaining(['weights:1']) }),
         );
     });
 

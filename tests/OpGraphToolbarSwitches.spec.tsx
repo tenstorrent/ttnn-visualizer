@@ -297,6 +297,23 @@ describe('weight-load control', () => {
     });
 });
 
+describe('accessible names follow the grouping mode', () => {
+    it('says layers when Layers is the active mode', () => {
+        // The row was called "Repeats" before layers existed, so a screen reader was
+        // told "unroll all repeats" while the buttons acted on layers. #1976
+        renderToolbar({ status: PerfOverlayStatus.READY, hasBlocks: true, grouping: OpGraphGrouping.LAYERS });
+
+        expect(screen.getByRole('button', { name: 'Unroll all layers' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Fold all layers' })).toBeInTheDocument();
+    });
+
+    it('still says repeats in Repeats mode', () => {
+        renderToolbar({ status: PerfOverlayStatus.READY, hasBlocks: true, grouping: OpGraphGrouping.REPEATS });
+
+        expect(screen.getByRole('button', { name: 'Unroll all repeats' })).toBeInTheDocument();
+    });
+});
+
 describe('repeats controls', () => {
     const repeatsButtons = () => ({
         unroll: screen.getByRole('button', { name: 'Unroll all repeats' }),

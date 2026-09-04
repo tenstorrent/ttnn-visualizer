@@ -50,7 +50,7 @@ describe('detectWeightFans', () => {
         expect(fans).toHaveLength(1);
         expect(fans[0].operationIds).toEqual([1, 2, 3]);
         expect(fans[0].label).toBe('3 weight loads');
-        expect(fans[0].instanceId).toBe('weights:4');
+        expect(fans[0].instanceId).toBe('weights:1');
     });
 
     it('matches on topology, not on the op name', () => {
@@ -89,7 +89,8 @@ describe('detectWeightFans', () => {
 
     it('groups by the rendered node, so a folded block gathers its members fans', () => {
         // Two consumers inside one folded block: their loads become a single fan,
-        // because "the same rendered node" is what the rule is about.
+        // because "the same rendered node" is what the rule is about. The *grouping* is
+        // by rendered node; the *id* deliberately is not — see the next test.
         const fans = fansOf({
             operations: [
                 operation(1, 'ttnn.to_device'),
@@ -103,7 +104,27 @@ describe('detectWeightFans', () => {
 
         expect(fans).toHaveLength(1);
         expect(fans[0].operationIds).toEqual([1, 2]);
-        expect(fans[0].instanceId).toBe('weights:layer:attention:3');
+        expect(fans[0].instanceId).toBe('weights:1');
+    });
+
+    it('keys the fan on a member, so its id does not move when its consumer folds', () => {
+        // The consumer's rendered id is exactly what a grouping fold changes, so keying
+        // on it meant a fan the user had unrolled re-folded itself the moment its layer
+        // was folded — and left a dead id behind in a set nothing prunes. Reproduced
+        // against the builder before this changed: the same fan was `weights:4` with the
+        // layer unrolled and `weights:layer:attention:4` with it folded. #1980
+        const operations = [
+            operation(1, 'ttnn.to_device'),
+            operation(2, 'ttnn.to_device'),
+            operation(3, 'ttnn.linear'),
+        ];
+        const edges = [edge(1, 3), edge(2, 3)];
+
+        const unrolled = fansOf({ operations, edges });
+        const folded = fansOf({ operations, edges, renderedAs: { 3: 'layer:attention:3' } });
+
+        expect(unrolled[0].instanceId).toBe('weights:1');
+        expect(folded[0].instanceId).toBe(unrolled[0].instanceId);
     });
 
     it('never claims an operation a grouping block already owns', () => {

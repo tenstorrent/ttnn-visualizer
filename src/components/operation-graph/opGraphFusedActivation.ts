@@ -48,6 +48,11 @@ export const fusedActivationOf = (
         return undefined;
     }
     const config = argumentList.find((argument) => argument.name === PROGRAM_CONFIG_ARGUMENT);
+    // `?? ''` is not dead despite `value: string`. The column is `value text` with no
+    // NOT NULL (`operation_arguments`), and the backend dataclass declares `value: str`
+    // without enforcing it — so a null row serialises to JSON `null`, which TS types as
+    // a string and a regex would then match against "null". No report sampled has one;
+    // the schema permits it. #1976
     const match = config === undefined ? null : FUSED_ACTIVATION.exec(config.value ?? '');
     return match === null ? undefined : match[1].toLowerCase();
 };

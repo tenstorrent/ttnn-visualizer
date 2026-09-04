@@ -16,6 +16,16 @@ import 'styles/components/OpGraphToolbar.scss';
  * it is reading op names, and the distinction from "Repeats" is the whole point of
  * offering both. #1976
  */
+/**
+ * The accessible name has to follow the mode: the row was called "Repeats" before layers
+ * existed, and a screen reader was still being told "unroll all repeats" while the
+ * buttons acted on layers. #1976
+ */
+const GROUPING_NOUN: Readonly<Record<OpGraphGrouping, string>> = {
+    [OpGraphGrouping.REPEATS]: 'repeats',
+    [OpGraphGrouping.LAYERS]: 'layers',
+};
+
 const GROUPING_OPTIONS = [
     {
         value: OpGraphGrouping.REPEATS,
@@ -319,7 +329,7 @@ const OpGraphToolbar = memo(
                             variant={ButtonVariant.OUTLINED}
                             disabled={isDisabled || areAllBlocksExpanded}
                             onClick={onExpandAllBlocks}
-                            aria-label='Unroll all repeats'
+                            aria-label={`Unroll all ${GROUPING_NOUN[grouping]}`}
                         >
                             Unroll
                         </Button>
@@ -327,7 +337,7 @@ const OpGraphToolbar = memo(
                             variant={ButtonVariant.OUTLINED}
                             disabled={isDisabled || areAllBlocksCollapsed}
                             onClick={onCollapseAllBlocks}
-                            aria-label='Fold all repeats'
+                            aria-label={`Fold all ${GROUPING_NOUN[grouping]}`}
                         >
                             Fold
                         </Button>

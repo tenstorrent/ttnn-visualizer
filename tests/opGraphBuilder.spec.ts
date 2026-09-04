@@ -2,6 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { getDeviceEdgeId, getDeviceNodeId } from '../src/components/operation-graph/opGraphDeviceSubgraph';
 import { formatBlockMeta } from '../src/components/operation-graph/opGraphBlockMeta';
@@ -455,7 +456,21 @@ describe('buildOpGraph', () => {
 
             expect(classOf(repeats, 'block:0:2')).toBe('op-graph-block-repeat');
             expect(classOf(layers, 'layer:attention:1')).toBe('op-graph-block-layer');
-            expect(classOf(fans, 'weights:3')).toBe('op-graph-block-weights');
+            expect(classOf(fans, 'weights:1')).toBe('op-graph-block-weights');
+        });
+
+        it('gives every kind of block an expander pill that matches its own border', () => {
+            // Overrides were added for layer and weights and not for repeat, so a repeat
+            // pill kept the legacy `--graph-block-border` while its ring had moved to
+            // `--graph-block-repeat-border` — a different blue. Asserted through the
+            // class, since the stylesheet is what carries the colour. #1982
+            const stylesheet = readFileSync('src/scss/components/OperationGraphReactFlow.scss', 'utf8');
+
+            for (const kind of ['repeat', 'layer', 'weights']) {
+                expect(stylesheet).toContain(
+                    `.react-flow__node-blockNode.op-graph-block-${kind} > .op-graph-node-expander`,
+                );
+            }
         });
 
         it('carries the kind on the node data as well as the class', () => {
@@ -470,7 +485,7 @@ describe('buildOpGraph', () => {
                 { hideDeallocate: false, deviceSubgraphs: [], collapseWeightLoads: true },
             );
 
-            expect(nodeById(fans, 'weights:3').data.blockKind).toBe(OpGraphBlockKind.WEIGHTS);
+            expect(nodeById(fans, 'weights:1').data.blockKind).toBe(OpGraphBlockKind.WEIGHTS);
         });
     });
 
@@ -485,7 +500,7 @@ describe('buildOpGraph', () => {
             operation({ id: 5, name: 'ttnn.layer_norm' }),
         ];
 
-        const FAN_ID = 'weights:4';
+        const FAN_ID = 'weights:1';
 
         it('draws one node for the fan and keeps its consumer', () => {
             const graph = buildOpGraph(FAN_CHAIN, {

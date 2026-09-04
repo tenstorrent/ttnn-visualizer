@@ -262,6 +262,57 @@ describe('detectOpRoleGroups', () => {
         });
     });
 
+    describe('the sequence production actually detects on', () => {
+        // `hideDeallocate` defaults on, so the builder detects over `getKeptOperations`,
+        // not the raw capture. The group *counts* are identical either way — which is
+        // what the acceptance criteria are about — but every span size differs, and the
+        // sizes are this suite's corroboration idiom, so they have to corroborate the
+        // view that ships. The node labels bear this out: `sentence_bert`'s attention
+        // block renders "9 ops", which is the filtered figure, not the raw 14. #1976
+        const withoutDeallocate = (operations: readonly OpRoleSourceOperation[]) =>
+            operations.filter((candidate) => !candidate.name.endsWith('deallocate'));
+
+        it('finds the same groups with deallocate ops hidden', () => {
+            expect(detectOpRoleGroups(withoutDeallocate(bgeM3.operations))).toHaveLength(49);
+            expect(detectOpRoleGroups(withoutDeallocate(sentenceBert.operations))).toHaveLength(24);
+            expect(detectOpRoleGroups(withoutDeallocate(resnet50.operations))).toHaveLength(48);
+        });
+
+        it('keeps every span uniform in the view, at the sizes a reader sees', () => {
+            const filtered = detectOpRoleGroups(withoutDeallocate(bgeM3.operations));
+
+            expect(sizesOf(ofRole(filtered, OpSemanticRole.ATTENTION))).toEqual(new Set([17]));
+            expect(sizesOf(ofRole(filtered, OpSemanticRole.FEED_FORWARD))).toEqual(new Set([11]));
+
+            const sbert = detectOpRoleGroups(withoutDeallocate(sentenceBert.operations));
+
+            expect(sizesOf(ofRole(sbert, OpSemanticRole.ATTENTION))).toEqual(new Set([9]));
+            expect(sizesOf(ofRole(sbert, OpSemanticRole.FEED_FORWARD))).toEqual(new Set([4]));
+        });
+
+        it('keeps the three-conv bottleneck dominant in resnet50', () => {
+            // A stated acceptance criterion that nothing pinned: the delimiter set could
+            // change and only the total would stay 48.
+            const blocks = ofRole(
+                detectOpRoleGroups(withoutDeallocate(resnet50.operations)),
+                OpSemanticRole.CONV_RESIDUAL,
+            );
+            const convsPerBlock = blocks.map(
+                (block) =>
+                    block.operationIds.filter((id) =>
+                        (resnet50.operations.find((candidate) => candidate.id === id)?.name ?? '').endsWith('conv2d'),
+                    ).length,
+            );
+            const distribution = convsPerBlock.reduce<Record<number, number>>((counts, convs) => {
+                counts[convs] = (counts[convs] ?? 0) + 1;
+                return counts;
+            }, {});
+
+            expect(distribution[3]).toBe(36);
+            expect(Object.keys(distribution).sort()).toEqual(['3', '4', '5']);
+        });
+    });
+
     describe('partitioning rules', () => {
         it('gives the trailing delimiter to the block it terminates', () => {
             const groups = detectOpRoleGroups([

@@ -271,6 +271,10 @@ $minimap-width: 200px;
     // and a badge hung off the corner was clipped by the boundary and easy to
     // miss. Absolute so it can't become a flex item and grow the node past the
     // height the layout measured.
+    .react-flow__node-blockNode.op-graph-block-repeat > .op-graph-node-expander {
+        background-color: var(--graph-block-repeat-border);
+    }
+
     .react-flow__node-blockNode.op-graph-block-layer > .op-graph-node-expander {
         background-color: var(--graph-block-layer-border);
     }

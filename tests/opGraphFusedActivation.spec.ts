@@ -57,6 +57,14 @@ describe('fusedActivationOf', () => {
         expect(fusedActivationOf([argument('program_config', 'MatmulProgramConfig(in0_block_w=4)')])).toBeUndefined();
     });
 
+    it('survives a program config whose value arrived as null', () => {
+        // `operation_arguments.value` has no NOT NULL constraint and the backend
+        // dataclass declares `value: str` without enforcing it, so a null row serialises
+        // to JSON `null` — which TS types as `string`. A review pass called this branch
+        // unreachable from the declaration alone; the schema says otherwise. #1976
+        expect(fusedActivationOf([{ name: 'program_config', value: null as unknown as string }])).toBeUndefined();
+    });
+
     it('returns nothing when the op has no arguments at all', () => {
         expect(fusedActivationOf(undefined)).toBeUndefined();
         expect(fusedActivationOf([])).toBeUndefined();
