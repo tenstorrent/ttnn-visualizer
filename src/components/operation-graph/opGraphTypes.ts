@@ -42,6 +42,14 @@ export interface OpGraphSourceOperation {
     deviceOperationCount: number;
     /** Fingerprint inputs for repeat detection. Absent in older test fixtures. */
     inputShapes?: string[];
+    /**
+     * An activation fused into this op's matmul rather than emitted as its own op,
+     * parsed at the mapping boundary. Carried as the bare name so role detection can
+     * treat it like an op leaf; the raw `program_config` string is deliberately not
+     * forwarded, since the full argument payload is hundreds of KiB per report and
+     * crosses to the worker. #1976
+     */
+    fusedActivation?: string;
     durationSeconds?: number;
     memoryDeltaBytes?: number;
 }

@@ -73,6 +73,7 @@ import {
     OpGraphNodeType,
     type OpGraphSourceOperation,
 } from './opGraphTypes';
+import { fusedActivationOf } from './opGraphFusedActivation';
 import { OpGraphGrouping } from './opGraphTypes';
 import 'styles/components/OperationGraphReactFlow.scss';
 
@@ -410,6 +411,9 @@ const OperationGraphInner = ({
                 // and which screens out the `Tensor::` frames the graph draws.
                 deviceOperationCount: countDeviceOperations(operation),
                 inputShapes: operation.inputs.map((tensor) => toReadableShape(tensor.shape)),
+                // Parsed here rather than forwarded raw: only this one field is needed
+                // downstream, and the arguments it comes from are 444-678 KiB per report.
+                fusedActivation: fusedActivationOf(operation.arguments),
                 durationSeconds: operation.duration,
                 memoryDeltaBytes: tensorBytes(operation.outputs) - tensorBytes(operation.inputs),
             })),

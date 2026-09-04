@@ -399,7 +399,8 @@
 },
 {
 "id": 100,
-"name": "ttnn.matmul"
+"name": "ttnn.matmul",
+"fusedActivation": "silu"
 },
 {
 "id": 101,

@@ -1353,7 +1353,36 @@ describe('OperationGraphReactFlow repeat blocks', () => {
             expect(mappedOperation.inputShapes).toBeDefined();
             expect(mappedOperation).toHaveProperty('durationSeconds');
             expect(mappedOperation).toHaveProperty('memoryDeltaBytes');
+            expect(mappedOperation).toHaveProperty('fusedActivation');
         }
+    });
+
+    it('parses a fused activation out of the arguments on the way to the worker', () => {
+        // The detector reads op names, so an activation ttnn fuses into the matmul is
+        // invisible to it unless this mapping lifts it out. Asserted end to end because
+        // the parser passing its own unit tests says nothing about it being wired. #1976
+        const withFusedGelu = REPEAT_OPERATION_LIST.map((candidate) =>
+            candidate.id === 2
+                ? {
+                      ...candidate,
+                      arguments: [
+                          {
+                              name: 'program_config',
+                              value: 'Cfg(fused_activation=UnaryWithParam(op_type=UnaryOpType::GELU, params=[1]))',
+                              parsedValue: null,
+                          },
+                      ],
+                  }
+                : candidate,
+        );
+        renderGraph(withFusedGelu);
+
+        const mapped = harness.sourceOperations ?? [];
+
+        expect(mapped.find((candidate) => candidate.id === 2)?.fusedActivation).toBe('gelu');
+        // Only the op that declared one, and the raw argument string is not forwarded.
+        expect(mapped.find((candidate) => candidate.id === 1)?.fusedActivation).toBeUndefined();
+        expect(JSON.stringify(mapped)).not.toContain('UnaryWithParam');
     });
 
     it('holds the viewport on an unroll instead of recentring on the selection', () => {

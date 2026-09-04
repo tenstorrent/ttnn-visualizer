@@ -45,6 +45,13 @@ export interface OpRoleGroup {
 export interface OpRoleSourceOperation {
     id: number;
     name: string;
+    /**
+     * An activation ttnn fused into this op instead of emitting it separately, already
+     * reduced to its bare lowercase name by `fusedActivationOf`. It is classified as
+     * though it were an op leaf, which is why one anchor table serves both spellings.
+     * #1976
+     */
+    fusedActivation?: string;
 }
 
 /**
@@ -247,9 +254,9 @@ interface SpanClassification {
  * not a layer — it is the `from_torch` weight-loading run between two of them, and
  * returning `null` is how those are dropped rather than guessed at.
  */
-const classifySpan = (leaves: readonly string[]): SpanClassification | null => {
+const classifySpan = (anchorLeaves: readonly string[]): SpanClassification | null => {
     const found = new Map<OpSemanticRole, SpanClassification>();
-    for (const leaf of leaves) {
+    for (const leaf of anchorLeaves) {
         const naming = NAMING_ANCHORS.get(leaf) ?? familyRoleOf(leaf);
         const role = naming ?? SUPPORTING_ANCHORS.get(leaf);
         // First anchor per role wins, so the span is named by the op a reader meets
@@ -280,6 +287,7 @@ const classifySpan = (leaves: readonly string[]): SpanClassification | null => {
  */
 export const detectOpRoleGroups = (operations: readonly OpRoleSourceOperation[]): OpRoleGroup[] => {
     const leaves = operations.map((operation) => leafNameOf(operation.name));
+    const fusedActivations = operations.map((operation) => operation.fusedActivation);
     const delimiters = delimitersFor(leaves);
 
     const groups: OpRoleGroup[] = [];
@@ -291,7 +299,15 @@ export const detectOpRoleGroups = (operations: readonly OpRoleSourceOperation[])
         }
         const spanLeaves = leaves.slice(spanStart, endExclusive);
         const allowance = Math.max(MIN_LAYER_SPAN_ALLOWANCE, leaves.length * MAX_LAYER_SPAN_FRACTION);
-        const classification = spanLeaves.length > allowance ? null : classifySpan(spanLeaves);
+        // Fused activations extend what the span can be *identified* by, never how it is
+        // cut: they are appended for classification only. Adding them to `leaves` would
+        // desynchronise the indices the partition and `operationIds` both rely on, and an
+        // activation is not a boundary in any case.
+        const spanAnchors = [
+            ...spanLeaves,
+            ...fusedActivations.slice(spanStart, endExclusive).filter((leaf) => leaf !== undefined),
+        ];
+        const classification = spanLeaves.length > allowance ? null : classifySpan(spanAnchors);
         if (classification !== null) {
             groups.push({
                 role: classification.role,

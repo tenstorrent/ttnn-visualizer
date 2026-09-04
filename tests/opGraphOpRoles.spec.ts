@@ -84,11 +84,31 @@ describe('detectOpRoleGroups', () => {
             expect(sizesOf(attention)).toEqual(new Set([14]));
         });
 
-        it('drops the feed-forward spans it cannot name instead of guessing', () => {
-            // This capture has no activation op at all, so 12 spans exist between the
-            // norms with nothing to identify them. Reporting them as feed-forward on
-            // position alone is the inference this detector is meant to avoid.
-            expect(ofRole(groups, OpSemanticRole.FEED_FORWARD)).toHaveLength(0);
+        it('finds the feed-forward halves through an activation fused into the matmul', () => {
+            // This test previously asserted the opposite, and the comment justifying it
+            // was wrong. It read: "no activation op at all, so 12 spans exist between the
+            // norms with nothing to identify them". The first half is true — there is no
+            // activation *op* — but the conclusion was not: every one of those 12 spans
+            // carries `fused_activation=UnaryWithParam(op_type=UnaryOpType::GELU)` in its
+            // matmul `program_config`. The evidence was in an argument, and reading only
+            // op names could not see it, so the suite recorded a false negative as if it
+            // were correct behaviour. #1976
+            const feedForward = ofRole(groups, OpSemanticRole.FEED_FORWARD);
+
+            expect(feedForward).toHaveLength(12);
+            expect(feedForward.every((group) => group.anchorName === 'gelu')).toBe(true);
+            // MEDIUM, the same standing as an explicit `ttnn.gelu` op: an activation says
+            // something feed-forward happened without naming the block.
+            expect(feedForward.every((group) => group.confidence === OpRoleConfidence.MEDIUM)).toBe(true);
+            // Uniform, which is what says the partition found real structure rather than
+            // that the new anchor started matching arbitrary spans.
+            expect(sizesOf(feedForward)).toEqual(new Set([5]));
+        });
+
+        it('pairs one feed-forward with each attention block', () => {
+            // 12 layers, each attention + feed-forward. Before the fused anchor this
+            // report yielded 12 groups; it now yields 24.
+            expect(groups).toHaveLength(24);
         });
     });
 
@@ -290,6 +310,48 @@ describe('detectOpRoleGroups', () => {
             const groups = detectOpRoleGroups([operation(1, 'ttnn.layer_norm'), operation(2, 'ttnn.embedding')]);
 
             expect(groups.map((group) => group.operationIds)).toEqual([[2]]);
+        });
+
+        it('lets a fused activation identify a span without ever cutting one', () => {
+            // The activation extends what a span can be identified *by*, never how it is
+            // cut. If it reached the delimiter list — or the array the partition indexes —
+            // it would either split the block it identifies or desynchronise
+            // `operationIds` from the spans. One span of all three ops, named by the
+            // fused activation on the middle one.
+            const groups = detectOpRoleGroups([
+                { id: 1, name: 'ttnn.linear' },
+                { id: 2, name: 'ttnn.linear', fusedActivation: 'gelu' },
+                { id: 3, name: 'ttnn.layer_norm' },
+            ]);
+
+            expect(groups).toHaveLength(1);
+            expect(groups[0].role).toBe(OpSemanticRole.FEED_FORWARD);
+            expect(groups[0].operationIds).toEqual([1, 2, 3]);
+            expect(groups[0].anchorName).toBe('gelu');
+        });
+
+        it('prefers a naming anchor in the span over a fused activation', () => {
+            // Priority is unchanged by the new evidence: attention still outranks
+            // feed-forward, however the activation arrived.
+            const groups = detectOpRoleGroups([
+                { id: 1, name: 'ttnn.linear', fusedActivation: 'gelu' },
+                { id: 2, name: 'ttnn.transformer.scaled_dot_product_attention' },
+                { id: 3, name: 'ttnn.layer_norm' },
+            ]);
+
+            expect(groups[0].role).toBe(OpSemanticRole.ATTENTION);
+            expect(groups[0].confidence).toBe(OpRoleConfidence.HIGH);
+        });
+
+        it('ignores a fused activation it does not recognise', () => {
+            // The tables are the vocabulary, not the argument. A future UnaryOpType we
+            // have not classified must not become a feed-forward block by default.
+            const groups = detectOpRoleGroups([
+                { id: 1, name: 'ttnn.linear', fusedActivation: 'some_new_thing' },
+                { id: 2, name: 'ttnn.layer_norm' },
+            ]);
+
+            expect(groups).toHaveLength(0);
         });
 
         it('returns nothing for an empty graph', () => {
