@@ -21,11 +21,15 @@ const GROUPING_OPTIONS = [
         value: OpGraphGrouping.REPEATS,
         label: 'Repeats',
         description: 'Fold subgraphs that repeat, whatever they do',
+        // Tied to the colour its blocks are drawn in, so the control and the thing it
+        // produces are recognisably the same feature. #1982
+        swatchClass: 'op-graph-grouping-repeat',
     },
     {
         value: OpGraphGrouping.LAYERS,
         label: 'Layers',
         description: 'Fold spans whose operation names identify them — attention, feed-forward, embedding',
+        swatchClass: 'op-graph-grouping-layer',
     },
 ] as const;
 
@@ -229,6 +233,21 @@ const OpGraphToolbar = memo(
                     disabled={isDisabled}
                 />
 
+                <Tooltip
+                    placement={PopoverPosition.BOTTOM}
+                    content='Draw each fan of weight loads feeding one node as a single node'
+                >
+                    <Switch
+                        className='op-graph-toolbar-switch op-graph-switch-weights'
+                        checked={collapseWeightLoads}
+                        onChange={(event: FormEvent<HTMLInputElement>) =>
+                            onCollapseWeightLoadsChange(event.currentTarget.checked)
+                        }
+                        label='Collapse weight loads'
+                        disabled={isDisabled}
+                    />
+                </Tooltip>
+
                 <Switch
                     className='op-graph-toolbar-switch'
                     checked={isDimUnrelatedEdges}
@@ -252,19 +271,6 @@ const OpGraphToolbar = memo(
                     isDisabled={isDisabled}
                 />
 
-                <Tooltip
-                    content='Draw each fan of weight loads feeding one node as a single node'
-                    position={PopoverPosition.BOTTOM}
-                >
-                    <Switch
-                        label='Collapse weight loads'
-                        checked={collapseWeightLoads}
-                        disabled={isDisabled}
-                        onChange={(event: FormEvent<HTMLInputElement>) =>
-                            onCollapseWeightLoadsChange(event.currentTarget.checked)
-                        }
-                    />
-                </Tooltip>
                 <PerfGatedSwitch
                     tooltipByStatus={CRITICAL_PATH_TOOLTIP}
                     label='Highlight critical path'
@@ -281,13 +287,14 @@ const OpGraphToolbar = memo(
                     would strand a report whose repeats are empty, with no way to ask
                     for layers instead. #1976 */}
                 <ButtonGroup>
-                    {GROUPING_OPTIONS.map(({ value, label, description }) => (
+                    {GROUPING_OPTIONS.map(({ value, label, description, swatchClass }) => (
                         <Tooltip
                             key={value}
                             content={description}
                             position={PopoverPosition.BOTTOM}
                         >
                             <Button
+                                className={swatchClass}
                                 variant={ButtonVariant.OUTLINED}
                                 active={grouping === value}
                                 disabled={isDisabled}

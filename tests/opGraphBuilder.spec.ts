@@ -521,6 +521,34 @@ describe('buildOpGraph', () => {
             expect(edgeBetweenOperations(graph, 2, 4).label).toBe('[768, 3072]');
         });
 
+        it('unfolds a fan the expansion set names', () => {
+            // The reported bug: the expander pill rendered and clicking it did nothing,
+            // because the fan was rebuilt and folded regardless of what had been asked
+            // for. #1980
+            const graph = buildOpGraph(FAN_CHAIN, {
+                hideDeallocate: false,
+                deviceSubgraphs: [],
+                collapseWeightLoads: true,
+                expandedBlockIds: [FAN_ID],
+            });
+
+            expect(graph.nodes.map((node) => node.id)).toEqual(['1', '2', '3', '4', '5']);
+            expect(edgeBetweenOperations(graph, 2, 4).label).toBe('[768, 3072]');
+        });
+
+        it('folds a fan the expansion set does not name', () => {
+            // Absence means folded for a fan, the opposite of grouping's #1977 default:
+            // the switch is on, so an unnamed fan has not been asked for.
+            const graph = buildOpGraph(FAN_CHAIN, {
+                hideDeallocate: false,
+                deviceSubgraphs: [],
+                collapseWeightLoads: true,
+                expandedBlockIds: [],
+            });
+
+            expect(graph.nodes.map((node) => node.id)).toEqual([FAN_ID, '4', '5']);
+        });
+
         it('keeps the fan out of the blocks the toolbar counts', () => {
             // Grouping owns that count; a fan is plumbing, not a detected layer, and
             // Fold / Unroll-all must go on meaning what they meant. #1980

@@ -41,14 +41,20 @@
      * `--graph-output-node` and `--graph-focused-node` already own them, and a block in
      * either would read as an I/O highlight. #1982 */
     --graph-block-repeat: #{$tt-blue-tint-2};
-    --graph-block-repeat-border: #{$tt-blue};
-    --graph-block-layer: #{$tt-purple-tint-2};
-    --graph-block-layer-border: #{$tt-purple-accent};
+    --graph-block-repeat-border: #{$tt-blue-accent};
 
-    /* Grey on purpose: a weight fan is plumbing, and it is collapsed by default, so it
-     * should recede rather than compete with the model for attention. */
-    --graph-block-weights: #{$tt-grey-7};
-    --graph-block-weights-border: #{$tt-grey-5};
+    /* Teal, not purple: purple sits next to blue on the wheel and at these tints the
+     * two blocks were near-indistinguishable on the dark canvas. Cyan separates from
+     * indigo at a glance, and tint-1 rather than tint-2 so the fill carries hue instead
+     * of reading as another pale wash. */
+    --graph-block-layer: #{$tt-teal-tint-1};
+    --graph-block-layer-border: #{$tt-teal-accent};
+
+    /* Sand: warm, so it separates from both cool hues by temperature and not only by
+     * hue, which is what survives a dark background and a low zoom. Grey was tried and
+     * read as disabled rather than as plumbing. */
+    --graph-block-weights: #{$tt-sand-tint-1};
+    --graph-block-weights-border: #{$tt-sand-accent};
     --graph-section-group: #9b59b6;
     --graph-selected: #{$tt-blue-accent};
 

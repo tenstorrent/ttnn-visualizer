@@ -1401,6 +1401,32 @@ describe('OperationGraphReactFlow repeat blocks', () => {
         expect(setCenter).not.toHaveBeenCalled();
     });
 
+    it('asks to unfold a weight fan when its expander is clicked', () => {
+        // The reported bug had two halves and this is the one in the view: with grouping
+        // unrolled by default the expansion set is `null`, which read as "everything is
+        // expanded" — so the fan's expander tried to fold something already unrolled and
+        // nothing happened. A fan is folded until named. #1980
+        const withFan: OperationDescription[] = [
+            operation(1, 'ttnn.to_device', [3]),
+            operation(2, 'ttnn.to_device', [3]),
+            operation(3, 'ttnn.linear', [4]),
+            operation(4, 'ttnn.layer_norm', []),
+        ];
+        renderGraph(withFan);
+        // The stubbed worker does not read the view's options, so the fan-collapsed
+        // graph is delivered explicitly.
+        deliver(withFan, { collapseWeightLoads: true });
+        runBuild.mockClear();
+
+        act(() => {
+            harness.onNodeDoubleClick?.(null, nodeById(lastFlowRender().nodes, 'weights:3'));
+        });
+
+        expect(runBuild.mock.calls.at(-1)?.[0]).toEqual(
+            expect.objectContaining({ expandedBlockIds: expect.arrayContaining(['weights:3']) }),
+        );
+    });
+
     it('keeps the block-kind class when a restyle adds its own', () => {
         // The restyle memo replaces `className` outright. Seeded empty, the colour
         // vanished the moment anything was selected or filtered — and only while

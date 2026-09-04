@@ -61,3 +61,36 @@
     font-style: italic;
     white-space: nowrap;
 }
+
+// The grouping controls wear the colour of the blocks they produce, so the toolbar and
+// the canvas read as one feature rather than two. Borders always, fill only when
+// active: an inactive button that is already filled cannot show that it is selected.
+// #1982
+.op-graph-grouping-repeat.bp6-button {
+    border-color: var(--graph-block-repeat-border);
+
+    &.bp6-active {
+        background-color: var(--graph-block-repeat);
+
+        // The fills are pale, because they have to sit behind dark node text on the
+        // canvas; the label has to flip with them.
+        color: $tt-black;
+    }
+}
+
+.op-graph-grouping-layer.bp6-button {
+    border-color: var(--graph-block-layer-border);
+
+    &.bp6-active {
+        background-color: var(--graph-block-layer);
+        color: $tt-black;
+    }
+}
+
+// The weight-load switch completes the set: its indicator takes the fan colour so all
+// three grouping controls point at their own blocks. `.bp6-control` is chained in to
+// outrank Blueprint's own checked-indicator rule on specificity rather than with
+// `!important`, which this stylesheet disallows. #1982
+.op-graph-toolbar-switch.op-graph-switch-weights.bp6-control input:checked ~ .bp6-control-indicator {
+    background-color: var(--graph-block-weights-border);
+}

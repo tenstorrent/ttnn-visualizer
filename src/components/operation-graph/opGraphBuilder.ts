@@ -158,8 +158,15 @@ export function buildOpGraph(
             isClaimed: (operationId) => collapsedInstanceByOpId.has(operationId),
         });
         for (const fan of fans) {
-            for (const operationId of fan.operationIds) {
-                collapsedInstanceByOpId.set(operationId, fan);
+            // Unlike a grouping block, a fan's absence from the expansion set means
+            // folded: the switch is on by default, so "no decision" is the folded state
+            // rather than the unrolled one #1977 gives grouping. Without this the
+            // expander pill rendered, incremented the set, and the fan folded anyway.
+            // #1980
+            if (!expandedBlocks.has(fan.instanceId)) {
+                for (const operationId of fan.operationIds) {
+                    collapsedInstanceByOpId.set(operationId, fan);
+                }
             }
         }
     }

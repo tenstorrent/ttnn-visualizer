@@ -46,7 +46,7 @@ const renderToolbar = ({
     collapseWeightLoads = true,
     onCollapseWeightLoadsChange = vi.fn(),
 }: RenderToolbarOptions) => {
-    render(
+    return render(
         <OpGraphToolbar
             filterRef={null}
             query=''
@@ -239,6 +239,16 @@ describe('grouping control', () => {
         expect(screen.getByRole('button', { name: 'Group by layers' })).toHaveAttribute('aria-pressed', 'false');
     });
 
+    it('gives each grouping control the class its blocks are coloured by', () => {
+        // The control and the blocks it produces have to be recognisably one feature, so
+        // the class the stylesheet colours is asserted here rather than left to a visual
+        // check that nothing runs. #1982
+        renderToolbar({ status: PerfOverlayStatus.READY, hasBlocks: true });
+
+        expect(screen.getByRole('button', { name: 'Group by repeats' })).toHaveClass('op-graph-grouping-repeat');
+        expect(screen.getByRole('button', { name: 'Group by layers' })).toHaveClass('op-graph-grouping-layer');
+    });
+
     it('reports the mode the user picked', () => {
         const onGroupingChange = vi.fn();
         renderToolbar({ status: PerfOverlayStatus.READY, hasBlocks: true, onGroupingChange });
@@ -262,6 +272,28 @@ describe('grouping control', () => {
 
         expect(screen.getByText('no layers detected')).toBeInTheDocument();
         expect(screen.queryByText('no repeats detected')).toBeNull();
+    });
+});
+
+describe('weight-load control', () => {
+    it('carries the swatch class that ties it to the fan colour', () => {
+        renderToolbar({ status: PerfOverlayStatus.READY });
+
+        expect(screen.getByLabelText('Collapse weight loads').closest('label')).toHaveClass('op-graph-switch-weights');
+    });
+
+    it('sits ahead of the perf-gated switches rather than between them', () => {
+        // It landed between `Perf overlay` and `Highlight critical path` first, splitting
+        // that pair, which is what made the row read as misaligned. The invariant is the
+        // ordering, so that is what is asserted. #1980
+        const { container } = renderToolbar({ status: PerfOverlayStatus.READY });
+        const order = [...container.querySelectorAll('.op-graph-toolbar-switch')].map((node) => node.textContent ?? '');
+
+        const indexOf = (label: string) => order.findIndex((text) => text.includes(label));
+
+        expect(indexOf('Collapse weight loads')).toBeGreaterThan(-1);
+        expect(indexOf('Collapse weight loads')).toBeLessThan(indexOf('Perf overlay'));
+        expect(indexOf('Perf overlay')).toBeLessThan(indexOf('Highlight critical path'));
     });
 });
 

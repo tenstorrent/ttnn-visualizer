@@ -432,8 +432,21 @@ const OperationGraphInner = ({
     }, [operationList]);
 
     const isBlockExpanded = useCallback(
-        (instanceId: string) => expandedBlockIds === null || expandedBlockIds.has(instanceId),
-        [expandedBlockIds],
+        (instanceId: string) => {
+            // A weight fan defaults the other way round from a grouping block. Its switch
+            // is on, so absence from the set means folded, where #1977 has absence mean
+            // unrolled for grouping. Decided by membership of `detectedBlocks` rather than
+            // by sniffing the id, which would break for the next detector added.
+            //
+            // Getting this wrong made the fan's expander inert: `null` read as expanded,
+            // so the click tried to fold something already unrolled and changed nothing.
+            // #1980
+            if (!detectedBlocks.some((block) => block.instanceId === instanceId)) {
+                return expandedBlockIds?.has(instanceId) ?? false;
+            }
+            return expandedBlockIds === null || expandedBlockIds.has(instanceId);
+        },
+        [expandedBlockIds, detectedBlocks],
     );
 
     const collapsedMemberIds = useMemo(() => {
