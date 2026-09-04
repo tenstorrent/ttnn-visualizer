@@ -1650,6 +1650,9 @@ const renderPerformanceSelector = async (
     connectionList: RemoteConnection[],
     folderList: RemoteFolder[] = multihostFolders,
     onSelectFolder: (folder: RemoteFolder) => void = () => undefined,
+    type: RemoteFolderType = ReportKind.PERFORMANCE,
+    linkedIds?: Set<string>,
+    unlinkedIds?: Set<string>,
 ) => {
     setupConnection(connectionList);
 
@@ -1658,7 +1661,9 @@ const renderPerformanceSelector = async (
             <RemoteFolderSelector
                 remoteFolderList={folderList}
                 onSelectFolder={onSelectFolder}
-                type={ReportKind.PERFORMANCE}
+                type={type}
+                linkedIds={linkedIds}
+                unlinkedIds={unlinkedIds}
             />
         </TestProviders>,
     );
@@ -1666,6 +1671,33 @@ const renderPerformanceSelector = async (
     getButtonWithText(NO_SELECTION).click();
     await waitFor(testForPortal, WAIT_FOR_OPTIONS);
 };
+
+const expectSuppliedOrder = async (type: RemoteFolderType) => {
+    const folders = [rankFolder(1), rankFolder(0)];
+
+    await renderPerformanceSelector(
+        multihostConnection,
+        folders,
+        () => undefined,
+        type,
+        new Set([folders[1].syncedName!]),
+        new Set([folders[0].syncedName!]),
+    );
+
+    const options = screen.getAllByRole('menuitem');
+    expect(options.map((option) => option.textContent)).toEqual([
+        expect.stringContaining(`Rank 1: ${TIMESTAMP}`),
+        expect.stringContaining(`Rank 0: ${TIMESTAMP}`),
+    ]);
+};
+
+it('preserves supplied order regardless of performance report link status', async () => {
+    await expectSuppliedOrder(ReportKind.PERFORMANCE);
+});
+
+it('preserves supplied order regardless of memory report link status', async () => {
+    await expectSuppliedOrder(ReportKind.PROFILER);
+});
 
 it('tells apart ranks whose reports share a name', async () => {
     await renderPerformanceSelector(multihostConnection);

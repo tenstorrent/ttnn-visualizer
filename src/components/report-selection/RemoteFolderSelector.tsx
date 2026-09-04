@@ -5,13 +5,9 @@
 import { Button, MenuItem } from '@blueprintjs/core';
 import { IconName, IconNames } from '@blueprintjs/icons';
 import { type ItemPredicate, ItemRenderer, Select } from '@blueprintjs/select';
-import { type ReactNode, useMemo } from 'react';
+import { type ReactNode } from 'react';
 import 'styles/components/FolderPicker.scss';
-import {
-    getFolderLinkState,
-    shouldShowFolderLinkStatus,
-    sortByFolderLinkState,
-} from '../../functions/folderLinkStatus';
+import { getFolderLinkState, shouldShowFolderLinkStatus } from '../../functions/folderLinkStatus';
 import { RemoteConnection, RemoteFolder } from '../../model/RemoteConnection';
 import { TEST_IDS } from '../../definitions/TestIds';
 import { getReportId } from '../../functions/reportLinks';
@@ -114,16 +110,11 @@ const RemoteFolderSelector = ({
 
     const isDisabled = loading || remoteFolderList?.length === 0 || disabled;
 
-    const sortedFolderList = useMemo(
-        () => sortByFolderLinkState(remoteFolderList ?? [], getRemoteFolderId, linkedIds, unlinkedIds),
-        [remoteFolderList, linkedIds, unlinkedIds],
-    );
-
     return (
         <div className='form-container'>
             <Select
                 className='remote-select'
-                items={sortedFolderList}
+                items={remoteFolderList}
                 itemRenderer={remoteFolderRenderer({
                     type,
                     selectedFolder: remoteFolder,
@@ -147,7 +138,7 @@ const RemoteFolderSelector = ({
             >
                 <Button
                     icon={icon}
-                    endIcon={sortedFolderList.length > 0 ? IconNames.CARET_DOWN : undefined}
+                    endIcon={remoteFolderList.length > 0 ? IconNames.CARET_DOWN : undefined}
                     disabled={isDisabled}
                     loading={loading}
                     text={remoteFolder ? getRemoteFolderLabel(remoteFolder) : fallbackLabel}

@@ -43,7 +43,7 @@ const folders: ReportFolder[] = [
 const deleteLabel = (folder: ReportFolder) => getDeleteActionLabel(ManagedEntity.REPORT, folder.reportName);
 
 describe('LocalFolderPicker link badges', () => {
-    it('sorts linked first, unknown middle, unlinked last', async () => {
+    it('preserves the supplied order when showing link badges', async () => {
         render(
             <TestProviders>
                 <LocalFolderPicker
@@ -63,7 +63,7 @@ describe('LocalFolderPicker link badges', () => {
             (el) => el.textContent,
         );
 
-        expect(labels).toEqual(['/linked-run', '/unknown-run', '/unlinked-run']);
+        expect(labels).toEqual(['/unknown-run', '/unlinked-run', '/linked-run']);
     });
 
     it('disables the picker when disabled is set', () => {
@@ -159,9 +159,8 @@ describe('LocalFolderPicker link badges', () => {
         fireEvent.click(screen.getByText('Select a report...'));
         await waitFor(testForPortal, WAIT_FOR_OPTIONS);
 
-        // Rows render sorted, so read the row's own label rather than assuming the items order.
         const secondRow = screen.getAllByTestId(TEST_IDS.FOLDER_PICKER_ROW)[1];
-        const secondRowFolder = folders.find((folder) => secondRow.textContent?.includes(`/${folder.path}`))!;
+        const secondRowFolder = folders[1];
 
         fireEvent.click(within(secondRow).getByLabelText(deleteLabel(secondRowFolder)));
 
