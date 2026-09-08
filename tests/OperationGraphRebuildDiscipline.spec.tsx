@@ -996,6 +996,16 @@ describe('OperationGraphReactFlow critical path report scope', () => {
         });
     };
 
+    // The switch turning off is the intent; what matters on screen is that the drawing
+    // goes with it — the lit nodes, the lit edges and the annotation that sums them.
+    // Asserted per report kind because they reach the same clear by different routes.
+    const expectNoPathDrawn = () => {
+        const { nodes, edges } = lastFlowRender();
+        expect(nodes.some((node) => hasClass(node, 'op-graph-node-critical-path'))).toBe(false);
+        expect(edges.some((edge) => hasClass(edge, 'op-graph-edge-critical-path'))).toBe(false);
+        expect(screen.queryByText(/Critical path/)).toBeNull();
+    };
+
     it('drops the highlight when the performance report changes', () => {
         // The weights come from that report, so a stale path is a wrong path drawn
         // with full confidence.
@@ -1006,6 +1016,7 @@ describe('OperationGraphReactFlow critical path report scope', () => {
         setReport(activePerformanceReportAtom, reportFolder('resnet50-perf'));
 
         expect(criticalPathSwitch().checked).toBe(false);
+        expectNoPathDrawn();
     });
 
     it('drops the highlight when the profiler report changes', () => {
@@ -1015,6 +1026,7 @@ describe('OperationGraphReactFlow critical path report scope', () => {
         setReport(activeProfilerReportAtom, reportFolder('resnet50'));
 
         expect(criticalPathSwitch().checked).toBe(false);
+        expectNoPathDrawn();
     });
 
     it('does not re-enable itself when a report is swapped back', () => {
