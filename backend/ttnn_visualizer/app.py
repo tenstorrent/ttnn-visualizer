@@ -16,7 +16,7 @@ import webbrowser
 from http import HTTPStatus
 from os import environ
 from pathlib import Path
-from typing import Any, Mapping, cast
+from typing import Any, Mapping
 from urllib.error import URLError
 from urllib.request import urlopen
 
@@ -166,7 +166,7 @@ def create_app(settings_override=None):
 
     flask_env = environ.get("FLASK_ENV", "development")
 
-    config = cast(DefaultConfig, Config())
+    config = Config()
 
     app = Flask(
         __name__,
@@ -178,6 +178,10 @@ def create_app(settings_override=None):
 
     if settings_override:
         app.config.update(settings_override)
+
+    # Hosted session IDs identify the event log, so browsers must never send them over
+    # an unencrypted connection. ``settings_override`` bypasses Config's recomputation.
+    app.config["SESSION_COOKIE_SECURE"] = is_flag_enabled(app.config["SERVER_MODE"])
 
     _validate_hosted_secret_key(app.config)
     middleware(app)
@@ -551,7 +555,7 @@ def _config_after_cli_env(args: argparse.Namespace) -> DefaultConfig:
     )
 
     _apply_cli_env_overrides(args)
-    return cast(DefaultConfig, Config())
+    return Config()
 
 
 def main():

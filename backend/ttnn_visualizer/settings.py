@@ -377,6 +377,7 @@ _ENV_OVERRIDE_DERIVED = frozenset(
         "SQLALCHEMY_DATABASE_URI",
         "STATIC_ASSETS_DIR",
         "GUNICORN_BIND",
+        "SESSION_COOKIE_SECURE",
     }
 )
 
@@ -398,13 +399,10 @@ _ENV_OVERRIDE_CONSTANTS = frozenset(
 )
 
 # Settings nobody has made configurable *yet* — deployment knobs whose answer today is
-# "no", not "never". These are the entries to revisit first: a TLS-fronted hosted
-# deployment has a genuine reason to want the two cookie settings, and moving one out of
-# here is a one-line change plus a class-body ``os.getenv``.
+# "no", not "never".
 _ENV_OVERRIDE_UNCONFIGURED = frozenset(
     {
         "SESSION_COOKIE_SAMESITE",
-        "SESSION_COOKIE_SECURE",
         "PRINT_ENV",
     }
 )
@@ -617,7 +615,7 @@ class DefaultConfig(object):
 
     # Session Settings
     SESSION_COOKIE_SAMESITE = "Lax"
-    SESSION_COOKIE_SECURE = False  # For development on HTTP
+    SESSION_COOKIE_SECURE = False  # Recomputed for hosted mode below.
     # Max uploaded report paths / instance IDs stored in session cookie (FIFO); avoids cookie size limits (e.g. 4KB)
     SESSION_MAX_UPLOADED_REPORTS = _parse_session_max_uploaded_reports(
         os.getenv("SESSION_MAX_UPLOADED_REPORTS")
@@ -750,6 +748,7 @@ class DefaultConfig(object):
         self.SQLALCHEMY_DATABASE_URI = f"sqlite:///{db_file_path}"
 
         self.GUNICORN_BIND = f"{self.HOST}:{self.PORT}"
+        self.SESSION_COOKIE_SECURE = self.SERVER_MODE
 
     def _refuse_debug_under_server_mode(self) -> None:
         """Hosted mode wins over debug mode, because ``DEBUG`` is not just verbosity.
@@ -793,25 +792,33 @@ class ProductionConfig(DefaultConfig):
     TESTING = False
 
 
-class Config:
-    _instance = None
+class _ConfigFactory:
+    """Callable singleton that exposes the selected configuration value.
 
-    def __new__(cls):
-        if cls._instance is None:
-            cls._instance = super(Config, cls).__new__(cls)
-            cls._instance = cls._determine_config()
-            cls._instance.override_with_env_variables()
-        return cls._instance
+    ``Config`` is an instance rather than a configuration class so its return
+    type can be the environment-specific subclass while remaining compatible
+    with mypy's inference.
+    """
+
+    def __init__(self) -> None:
+        self._instance: Optional[DefaultConfig] = None
+
+    def __call__(self) -> DefaultConfig:
+        if self._instance is None:
+            self._instance = self._determine_config()
+            self._instance.override_with_env_variables()
+        return self._instance
 
     @staticmethod
-    def _determine_config():
-        # Determine the environment
+    def _determine_config() -> DefaultConfig:
         flask_env = os.getenv("FLASK_ENV", "development").lower()
 
-        # Choose the correct configuration class based on FLASK_ENV
         if flask_env == "production":
             return ProductionConfig()
         elif flask_env == "testing":
             return TestingConfig()
         else:
             return DevelopmentConfig()
+
+
+Config = _ConfigFactory()

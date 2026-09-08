@@ -45,6 +45,7 @@ from ttnn_visualizer.settings import (
     DefaultConfig,
     DevelopmentConfig,
     ProductionConfig,
+    TestingConfig,
     _build_allowed_origins,
     _coerce_env_value,
     _parse_env_bool,
@@ -114,6 +115,25 @@ def test_create_app_refuses_the_development_secret_in_server_mode(tmp_path):
                 SECRET_KEY=DEFAULT_SECRET_KEY,
             )
         )
+
+
+def test_create_app_requires_secure_session_cookies_in_server_mode(tmp_path):
+    hosted_app = create_app(
+        settings_override=base_test_settings(
+            str(tmp_path / "hosted"),
+            SESSION_COOKIE_SECURE=False,
+        )
+    )
+    local_app = create_app(
+        settings_override=base_test_settings(
+            str(tmp_path / "local"),
+            SERVER_MODE=False,
+            SESSION_COOKIE_SECURE=True,
+        )
+    )
+
+    assert hosted_app.config["SESSION_COOKIE_SECURE"] is True
+    assert local_app.config["SESSION_COOKIE_SECURE"] is False
 
 
 def _wsgi_environ(host: str, scheme: str = "http", **headers: str) -> dict:
@@ -1258,6 +1278,42 @@ def test_gunicorn_bind_is_recomputed_from_host_and_port(monkeypatch):
     assert config.HOST == "127.0.0.1"
     assert config.PORT == "9001"
     assert config.GUNICORN_BIND == "127.0.0.1:9001"
+
+
+@pytest.mark.parametrize(
+    ("flask_env", "expected_type"),
+    [
+        ("development", DevelopmentConfig),
+        ("testing", TestingConfig),
+        ("production", ProductionConfig),
+    ],
+)
+def test_config_selects_environment_subclass_and_reuses_it(
+    monkeypatch, flask_env, expected_type
+):
+    from ttnn_visualizer.settings import Config
+
+    monkeypatch.setattr(Config, "_instance", None)
+    monkeypatch.setenv("FLASK_ENV", flask_env)
+
+    config = Config()
+
+    assert isinstance(config, expected_type)
+    assert Config() is config
+
+
+def test_config_cache_wins_over_later_environment_changes(monkeypatch):
+    from ttnn_visualizer.settings import Config
+
+    monkeypatch.setattr(Config, "_instance", None)
+    monkeypatch.setenv("FLASK_ENV", "production")
+
+    config = Config()
+
+    monkeypatch.setenv("FLASK_ENV", "development")
+
+    assert Config() is config
+    assert isinstance(config, ProductionConfig)
 
 
 def test_server_cli_flag_enables_server_mode_without_a_manual_patch(monkeypatch):
