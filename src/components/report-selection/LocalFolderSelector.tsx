@@ -53,12 +53,12 @@ import {
 import { TEST_IDS } from '../../definitions/TestIds';
 import { DBVersionValidation } from '../../definitions/Versions';
 import { evaluateDbVersion } from '../../functions/compareDbVersion';
-import { ReportKind, ReportLoadFailureReason, ReportSource } from '../../definitions/UsageEvent';
+import { ReportKind, ReportLoadFailureReason, ReportSource } from '../../definitions/EventLogEvent';
 import {
     getReportLoadFailureReason,
     recordReportLoadFailed,
     recordReportLoaded,
-} from '../../functions/reportLoadUsage';
+} from '../../functions/reportLoadEvents';
 
 const ICON_MAP: Record<ConnectionTestStates, IconName> = {
     [ConnectionTestStates.IDLE]: IconNames.DOT,

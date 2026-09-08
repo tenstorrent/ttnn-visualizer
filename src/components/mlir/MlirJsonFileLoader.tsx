@@ -23,8 +23,8 @@ import sanitiseFileName from '../../functions/sanitiseFileName';
 import mapConvertedMlirServerResult from '../../functions/mapConvertedMlirServerResult';
 import relabelMlirGraphIds from '../../functions/relabelMlirGraphIds';
 import uniqueMlirName from '../../functions/uniqueMlirName';
-import { ReportKind, ReportLoadFailureReason } from '../../definitions/UsageEvent';
-import { getReportLoadFailureReason, recordReportLoadFailed } from '../../functions/reportLoadUsage';
+import { ReportKind, ReportLoadFailureReason } from '../../definitions/EventLogEvent';
+import { getReportLoadFailureReason, recordReportLoadFailed } from '../../functions/reportLoadEvents';
 import { MLIRValidationError, MLIR_LOAD_FAILURE_REASON_BY_VALIDATION_ERROR } from '../../definitions/MLIRData';
 import 'styles/components/FileLoader.scss';
 

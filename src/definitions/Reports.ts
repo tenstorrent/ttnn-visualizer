@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { ReportKind } from './UsageEvent';
+import { ReportKind } from './EventLogEvent';
 
 export enum ReportLocation {
     LOCAL = 'local',

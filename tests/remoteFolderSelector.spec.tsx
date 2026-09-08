@@ -53,7 +53,7 @@ import {
 import { SshConfigHostsQueryResult, noSshConfigResult } from './helpers/sshConfigFixtures';
 import testForPortal from './helpers/testForPortal';
 import { TestProviders } from './helpers/TestProviders';
-import { ReportKind, ReportLoadFailureReason, ReportSource } from '../src/definitions/UsageEvent';
+import { ReportKind, ReportLoadFailureReason, ReportSource } from '../src/definitions/EventLogEvent';
 import { RemoteFolderType } from '../src/definitions/Reports';
 
 // Scrub the markup after each test
@@ -124,10 +124,10 @@ vi.mock('../src/libs/axiosInstance', () => ({
     },
 }));
 
-vi.mock('../src/functions/reportLoadUsage', async (importOriginal) => {
-    const { reportLoadUsageSpiesMock } = await import('./helpers/mockReportLoadUsage');
+vi.mock('../src/functions/reportLoadEvents', async (importOriginal) => {
+    const { reportLoadEventsSpiesMock } = await import('./helpers/mockReportLoadEvents');
 
-    return reportLoadUsageSpiesMock(importOriginal, recordReportLoaded, recordReportLoadFailed);
+    return reportLoadEventsSpiesMock(importOriginal, recordReportLoaded, recordReportLoadFailed);
 });
 
 // The edit dialog renders SshConfigHostPicker; without this it would issue a real request from

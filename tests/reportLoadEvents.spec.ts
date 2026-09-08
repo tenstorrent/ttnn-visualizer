@@ -9,12 +9,12 @@ import {
     recordReportLoadFailed,
     recordReportLoadFailure,
     recordReportLoaded,
-} from '../src/functions/reportLoadUsage';
-import { ReportKind, ReportLoadFailureReason, ReportSource, UsageEvent } from '../src/definitions/UsageEvent';
+} from '../src/functions/reportLoadEvents';
+import { EventLogEvent, ReportKind, ReportLoadFailureReason, ReportSource } from '../src/definitions/EventLogEvent';
 
-const { recordUsage } = vi.hoisted(() => ({ recordUsage: vi.fn() }));
+const { recordEvent } = vi.hoisted(() => ({ recordEvent: vi.fn() }));
 
-vi.mock('../src/functions/recordUsage', () => ({ default: recordUsage }));
+vi.mock('../src/functions/recordEvent', () => ({ default: recordEvent }));
 
 const getAxiosError = (status: number, body: unknown = null): AxiosError => {
     const error = new AxiosError('private response message');
@@ -33,12 +33,12 @@ beforeEach(() => {
     vi.clearAllMocks();
 });
 
-describe('report-load usage payloads', () => {
+describe('report-load event payloads', () => {
     it('records only the bounded kind and source for a successful load', () => {
         recordReportLoaded(ReportKind.PROFILER, ReportSource.REMOTE_SYNC);
 
-        expect(recordUsage).toHaveBeenCalledWith({
-            event: UsageEvent.REPORT_LOADED,
+        expect(recordEvent).toHaveBeenCalledWith({
+            event: EventLogEvent.REPORT_LOADED,
             details: { kind: ReportKind.PROFILER, source: ReportSource.REMOTE_SYNC },
         });
     });
@@ -47,11 +47,11 @@ describe('report-load usage payloads', () => {
         const error = getAxiosError(HttpStatusCode.InternalServerError, { error: 'private response message' });
         recordReportLoadFailed(ReportKind.NPE, getReportLoadFailureReason(error));
 
-        expect(recordUsage).toHaveBeenCalledWith({
-            event: UsageEvent.REPORT_LOAD_FAILED,
+        expect(recordEvent).toHaveBeenCalledWith({
+            event: EventLogEvent.REPORT_LOAD_FAILED,
             details: { kind: ReportKind.NPE, reason_class: ReportLoadFailureReason.OTHER },
         });
-        expect(JSON.stringify(recordUsage.mock.calls)).not.toContain('private response message');
+        expect(JSON.stringify(recordEvent.mock.calls)).not.toContain('private response message');
     });
 });
 
@@ -85,7 +85,7 @@ describe('recordReportLoadFailure', () => {
     it('skips axios cancels', () => {
         recordReportLoadFailure(ReportKind.PROFILER, new CanceledError('aborted'));
 
-        expect(recordUsage).not.toHaveBeenCalled();
+        expect(recordEvent).not.toHaveBeenCalled();
     });
 
     it('classifies an HTTP error without recording the response body', () => {
@@ -94,10 +94,10 @@ describe('recordReportLoadFailure', () => {
             getAxiosError(HttpStatusCode.NotFound, { error: 'private response message' }),
         );
 
-        expect(recordUsage).toHaveBeenCalledWith({
-            event: UsageEvent.REPORT_LOAD_FAILED,
+        expect(recordEvent).toHaveBeenCalledWith({
+            event: EventLogEvent.REPORT_LOAD_FAILED,
             details: { kind: ReportKind.PROFILER, reason_class: ReportLoadFailureReason.MISSING_FILE },
         });
-        expect(JSON.stringify(recordUsage.mock.calls)).not.toContain('private response message');
+        expect(JSON.stringify(recordEvent.mock.calls)).not.toContain('private response message');
     });
 });

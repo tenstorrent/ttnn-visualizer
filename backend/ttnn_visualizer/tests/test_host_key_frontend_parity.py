@@ -7,8 +7,8 @@
 The enum crosses the wire as strings, and nothing at runtime reports a divergence: an
 ``issue`` the client does not recognise makes ``isHostKeyStatus`` return false and the
 whole prompt silently disappears — the user is left with the same dead end the feature
-exists to remove. Follows the pattern ``test_usage_frontend_parity.py`` established for
-the usage vocabulary.
+exists to remove. Follows the pattern ``test_event_logging_frontend_parity.py`` established for
+the event-log vocabulary.
 """
 
 import re

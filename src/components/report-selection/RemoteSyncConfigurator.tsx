@@ -52,8 +52,8 @@ import { clearReportCaches, updateInstance, useReportMetadata } from '../../hook
 import { ActiveReport } from '../../model/APIData';
 import { DBVersionValidation } from '../../definitions/Versions';
 import { evaluateDbVersion } from '../../functions/compareDbVersion';
-import { ReportKind, ReportLoadFailureReason, ReportSource } from '../../definitions/UsageEvent';
-import { recordReportLoadFailed, recordReportLoadFailure, recordReportLoaded } from '../../functions/reportLoadUsage';
+import { ReportKind, ReportLoadFailureReason, ReportSource } from '../../definitions/EventLogEvent';
+import { recordReportLoadFailed, recordReportLoadFailure, recordReportLoaded } from '../../functions/reportLoadEvents';
 
 interface RemoteReportActions {
     mount: (connection: RemoteConnection, folder: RemoteFolder) => Promise<AxiosResponse>;

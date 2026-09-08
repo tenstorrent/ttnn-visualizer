@@ -27,7 +27,7 @@ import { getDeleteActionLabel } from '../src/functions/managedEntityLabels';
 import { isActivatingReportAtom } from '../src/store/app';
 import testForPortal from './helpers/testForPortal';
 import createMockFile, { MOCK_FOLDER } from './helpers/createMockFile';
-import { ReportKind, ReportLoadFailureReason, ReportSource } from '../src/definitions/UsageEvent';
+import { ReportKind, ReportLoadFailureReason, ReportSource } from '../src/definitions/EventLogEvent';
 
 // Scrub the markup after each test
 const WAIT_FOR_OPTIONS = { timeout: 1000 };
@@ -97,10 +97,10 @@ vi.mock('../src/hooks/useAPI', async () => {
     };
 });
 
-vi.mock('../src/functions/reportLoadUsage', async (importOriginal) => {
-    const { reportLoadUsageSpiesMock } = await import('./helpers/mockReportLoadUsage');
+vi.mock('../src/functions/reportLoadEvents', async (importOriginal) => {
+    const { reportLoadEventsSpiesMock } = await import('./helpers/mockReportLoadEvents');
 
-    return reportLoadUsageSpiesMock(importOriginal, recordReportLoaded, recordReportLoadFailed);
+    return reportLoadEventsSpiesMock(importOriginal, recordReportLoaded, recordReportLoadFailed);
 });
 
 const defaultUpdateInstance = (updates: {

@@ -3,11 +3,11 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import axios from 'axios';
-import { ReportKind } from '../definitions/UsageEvent';
+import { ReportKind } from '../definitions/EventLogEvent';
 import createToastNotification from './createToastNotification';
 import { ToastType } from '../definitions/ToastType';
 import getResponseError from './getResponseError';
-import { recordReportLoadFailure } from './reportLoadUsage';
+import { recordReportLoadFailure } from './reportLoadEvents';
 
 export const FOLDER_LIST_SYNC_ERROR_TOAST_TITLE = 'Folder list sync error';
 export const FOLDER_SYNC_ERROR_TOAST_TITLE = 'Folder sync error';

@@ -7,8 +7,8 @@ import re
 
 import pytest
 from ttnn_visualizer.app import _build_spa_client_config, _serialize_spa_js_config
+from ttnn_visualizer.event_logging import RECORDING_DISABLED_ENV_VAR
 from ttnn_visualizer.settings import DefaultConfig, _parse_env_bool
-from ttnn_visualizer.usage import USAGE_DISABLED_ENV_VAR
 from ttnn_visualizer.utils import parse_tcp_port
 
 
@@ -42,11 +42,11 @@ def test_a_configured_server_mode_reaches_the_browser_as_a_boolean(
 
 @pytest.mark.parametrize("disabled, expected", [("false", True), ("true", False)])
 def test_the_usage_recording_state_reaches_the_browser_as_a_boolean(
-    disabled, expected, monkeypatch, usage_directory
+    disabled, expected, monkeypatch, event_log_directory
 ):
     # The SPA has no other way to know whether to post, and the key is published under
     # both postures so that absent can only mean "nothing was inlined".
-    monkeypatch.setenv(USAGE_DISABLED_ENV_VAR, disabled)
+    monkeypatch.setenv(RECORDING_DISABLED_ENV_VAR, disabled)
     monkeypatch.setattr(DefaultConfig, "SERVER_MODE", False)
 
     config = DefaultConfig()
@@ -57,14 +57,14 @@ def test_the_usage_recording_state_reaches_the_browser_as_a_boolean(
     assert client_config["USAGE_RECORDING_ACTIVE"] is expected
 
 
-def test_the_published_usage_state_follows_the_posture_not_the_config_snapshot(
-    monkeypatch, usage_directory
+def test_the_published_usage_state_is_active_in_server_mode(
+    monkeypatch, event_log_directory
 ):
     # `create_app` runs `from_object` before applying `settings_override`, so a snapshot of
     # `USAGE_RECORDING_ACTIVE` is resolved against the pre-override `SERVER_MODE` and reads
-    # true for a hosted app. The builder recomputes instead; this is the test that fails if
-    # someone simplifies it back to a config lookup.
-    monkeypatch.delenv(USAGE_DISABLED_ENV_VAR, raising=False)
+    # true for a hosted app. The builder recomputes against the live opt-out state rather
+    # than trusting that snapshot.
+    monkeypatch.delenv(RECORDING_DISABLED_ENV_VAR, raising=False)
 
     config = DefaultConfig().to_dict()
     assert config["USAGE_RECORDING_ACTIVE"] is True
@@ -73,10 +73,12 @@ def test_the_published_usage_state_follows_the_posture_not_the_config_snapshot(
 
     client_config = _build_spa_client_config(_FakeApp(config))
 
-    assert client_config["USAGE_RECORDING_ACTIVE"] is False
+    assert client_config["USAGE_RECORDING_ACTIVE"] is True
 
 
-def test_the_usage_recording_state_is_published_under_both_postures(usage_directory):
+def test_the_usage_recording_state_is_published_under_both_postures(
+    event_log_directory,
+):
     for server_mode in (False, True):
         client_config = _build_spa_client_config(
             _FakeApp(DefaultConfig().to_dict() | {"SERVER_MODE": server_mode})

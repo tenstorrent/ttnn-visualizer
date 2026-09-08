@@ -168,7 +168,7 @@ Applies on touch to views that draw data-proportional visuals (NPE chip cluster 
 - **Use `axiosInstance` (`src/libs/axiosInstance.ts`) for every HTTP request; never `axios.get/post/put/delete/patch/head` at a call site.** The shared instance carries the request interceptor that injects `instanceId` and the response interceptor that retries the operations endpoint when a large payload comes back as a string — bypassing it loses both. Importing *types and helpers* from `axios` (`AxiosError`, `HttpStatusCode`, `AxiosProgressEvent`, `axios.isAxiosError`) at a call site is fine and idiomatic.
 - **Cross-cutting retries belong in the interceptor, not in a `queryFn`.** Extend the interceptor so every consumer of the endpoint benefits.
 - **One module-scope `socket`** in `src/libs/SocketProvider.tsx` — StrictMode remounts would otherwise double the listeners. Pair every `socket.on(name)` with a matching `socket.off(name)` in the effect cleanup, in the same change; don't add a second `io(...)` anywhere.
-- Two documented exceptions compose their URL by hand because neither goes through axios: the socket connection URL, and the unload beacon in `recordUsage.ts`. Both are described in [CONVENTIONS.md](./CONVENTIONS.md#network-layer) — don't add a third without the same treatment.
+- Two documented exceptions compose their URL by hand because neither goes through axios: the socket connection URL, and the unload beacon in `recordEvent.ts`. Both are described in [CONVENTIONS.md](./CONVENTIONS.md#network-layer) — don't add a third without the same treatment.
 
 ### Data fetching (React Query)
 
@@ -185,13 +185,15 @@ Applies on touch to views that draw data-proportional visuals (NPE chip cluster 
 
 ### Event logging (frontend)
 
-`src/functions/recordUsage.ts` posts local usage events to `POST /api/usage`. Five invariants a reader cannot infer from the code alone — all detailed, with the caps table and the route's deliberate decorator stack, in [CONVENTIONS.md](./CONVENTIONS.md#event-logging-frontend):
+`src/functions/recordEvent.ts` posts events to `POST /api/event-log/events`. Local installs use one fixed log; `SERVER_MODE` uses server-derived per-session logs under `/data/usage`. The invariants a reader cannot infer from the code alone are detailed, with the caps table and the route's deliberate decorator stack, in [CONVENTIONS.md](./CONVENTIONS.md#event-logging-frontend):
 
-- **`usage.py` owns the vocabulary; `src/definitions/UsageEvent.ts` is a copy.** Keep them in sync; `test_usage_frontend_parity.py` enforces the contract.
+- **`event_logging.py` owns the vocabulary; `src/definitions/EventLogEvent.ts` is a copy.** Keep them in sync; `test_event_logging_frontend_parity.py` enforces the contract.
 - **`docs/src/event-logging.md` is the user-facing copy of the event schema.** Every new event must name the Q1–Q5 decision from #1819 that it informs; update the documentation in the same commit. `test_event_logging_docs_parity.py` enforces the contract.
-- **`MAX_BUFFERED_EVENTS` must equal `MAX_USAGE_BATCH_EVENTS`**, which bounds write atomicity rather than merely an HTTP body.
+- **`MAX_BUFFERED_EVENTS` must equal `MAX_EVENT_LOG_BATCH_EVENTS`**, which bounds write atomicity rather than merely an HTTP body.
 - **The unload beacon must send a `Blob` typed `application/json`** — that content type is what keeps the request non-simple, and a bare-string beacon goes as `text/plain` and is refused.
 - **Failures are silent and batches are never re-buffered.** The only diagnostic is a `console.warn` under `import.meta.env.DEV` carrying the status, never a response body.
+- **Hosted log identity comes only from the signed Flask session.** Never accept it from `instanceId`, request parameters, or event data; it stays in the path and is not exported.
+- **Hosted admission is bounded at three layers:** startup requires a strong `SECRET_KEY`, cross-worker reservation caps and rate-limits new log files, and per-log batch rates are bounded in each worker. Deployment retention and edge limits remain part of the hosted contract.
 
 ### File organization and modules
 
