@@ -1247,6 +1247,23 @@ def test_hosted_log_quota_bounds_session_files(event_log_directory, monkeypatch)
     )
 
 
+def test_hosted_deleted_log_does_not_bypass_full_quota(
+    event_log_directory, monkeypatch
+):
+    event = (EventLogEvent.VIEW_OPENED, {"view": EventLogView.OPERATIONS})
+    monkeypatch.setattr(event_logging, "MAX_HOSTED_EVENT_LOGS", 1)
+    first_log_id = "a" * event_logging.EVENT_LOG_ID_LENGTH
+    second_log_id = "b" * event_logging.EVENT_LOG_ID_LENGTH
+
+    assert record_events([event], server_mode=True, event_log_id=first_log_id)
+    first_log_path = get_event_log_path(True, first_log_id)
+    first_log_path.unlink()
+
+    assert record_events([event], server_mode=True, event_log_id=second_log_id)
+    assert record_events([event], server_mode=True, event_log_id=first_log_id) is False
+    assert not first_log_path.exists()
+
+
 def test_hosted_creation_rate_bounds_new_session_files(
     event_log_directory, monkeypatch
 ):

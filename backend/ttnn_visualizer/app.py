@@ -30,6 +30,7 @@ from ttnn_visualizer.event_logging import (
     compact_if_needed,
     describe_opt_out,
     describe_unrecognised_recording_disabled_value,
+    ensure_event_log_id,
     get_event_log_path,
     get_event_log_root,
     get_recording_disabled_reason,
@@ -64,6 +65,7 @@ from werkzeug.exceptions import HTTPException
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 logger = logging.getLogger(__name__)
+SENSITIVE_CONFIG_KEYS = frozenset({"SECRET_KEY"})
 
 
 def _get_client_username(server_mode: bool) -> str | None:
@@ -132,6 +134,13 @@ def _validate_hosted_secret_key(config: Mapping[str, Any]) -> None:
         )
 
 
+def _print_environment(config: DefaultConfig) -> None:
+    print("\nENVIRONMENT:")
+    for key, value in config.to_dict().items():
+        rendered_value = "***REDACTED***" if key in SENSITIVE_CONFIG_KEYS else value
+        print(f"{key}={rendered_value}")
+
+
 def create_app(settings_override=None):
     from ttnn_visualizer.views import api
 
@@ -194,6 +203,11 @@ def create_app(settings_override=None):
         def catch_all(path):
             if path.startswith("static/"):
                 abort(404)  # Pass control to Flask's static view
+
+            if is_flag_enabled(app.config["SERVER_MODE"]) and is_recording_enabled(
+                server_mode=True
+            ):
+                ensure_event_log_id()
 
             js = _serialize_spa_js_config(_build_spa_client_config(app))
 
@@ -550,6 +564,7 @@ def main():
 
     # Priority: CLI args > env vars > auto-detection (in settings.py)
     config = _config_after_cli_env(args)
+    _validate_hosted_secret_key(config.to_dict())
 
     instance_id = None
 
@@ -609,9 +624,7 @@ def main():
 
     debug_mode = str_to_bool(os.environ.get("DEBUG", "false"))
     if config.PRINT_ENV:
-        print("\nENVIRONMENT:")
-        for key, value in config.to_dict().items():
-            print(f"{key}={value}")
+        _print_environment(config)
 
     # Warn if there's a gunicorn config file in current directory
     if Path("gunicorn.conf.py").exists():
@@ -673,7 +686,9 @@ def main():
     _record_launch(config)
 
     try:
-        subprocess.run(gunicorn_args)
+        result = subprocess.run(gunicorn_args)
+        if result.returncode != 0:
+            sys.exit(result.returncode)
     except KeyboardInterrupt:
         print("\nServer stopped by user (Ctrl+C)")
 

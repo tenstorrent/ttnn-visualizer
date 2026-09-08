@@ -21,7 +21,11 @@ from pathlib import Path
 
 import pytest
 from ttnn_visualizer import event_logging
-from ttnn_visualizer.app import _validate_hosted_secret_key, create_app
+from ttnn_visualizer.app import (
+    _print_environment,
+    _validate_hosted_secret_key,
+    create_app,
+)
 from ttnn_visualizer.event_logging import (
     DISABLED_MARKER_NAME,
     RECORDING_DISABLED_ENV_VAR,
@@ -89,6 +93,17 @@ def test_local_mode_keeps_the_development_secret_key():
     _validate_hosted_secret_key(
         {"SERVER_MODE": False, "SECRET_KEY": DEFAULT_SECRET_KEY}
     )
+
+
+def test_environment_output_redacts_the_secret_key(capsys):
+    config = DefaultConfig()
+    config.SECRET_KEY = "a-secret-that-must-not-be-printed"
+
+    _print_environment(config)
+
+    output = capsys.readouterr().out
+    assert "SECRET_KEY=***REDACTED***" in output
+    assert config.SECRET_KEY not in output
 
 
 def test_create_app_refuses_the_development_secret_in_server_mode(tmp_path):

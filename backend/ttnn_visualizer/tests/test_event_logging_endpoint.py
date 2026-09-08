@@ -137,13 +137,86 @@ def test_hosted_endpoint_enforces_per_log_batch_rate_limit(
     assert len(read_event_log_lines(event_log_directory / event_log_id)) == 1
 
 
-def test_hosted_rate_limit_rejects_before_parsing_the_batch(app, client, monkeypatch):
+def test_hosted_malformed_batch_is_rejected_before_rate_admission(
+    app, client, monkeypatch
+):
     app.config["SERVER_MODE"] = True
     monkeypatch.setattr(event_logging, "MAX_HOSTED_BATCHES_PER_MINUTE", 0)
 
     response = _post_events(client, [{"not": "a valid event"}])
 
+    assert response.status_code == HTTPStatus.UNPROCESSABLE_ENTITY
+    assert _event_log_id(client) is None
+
+
+@pytest.mark.parametrize(
+    ("body", "content_type"),
+    [
+        ("not json", "text/plain"),
+        ("{", "application/json"),
+    ],
+)
+def test_hosted_malformed_requests_create_no_session_or_log(
+    app, client, event_log_directory, body, content_type
+):
+    app.config["SERVER_MODE"] = True
+
+    response = client.post(
+        EVENT_LOG_ENDPOINT,
+        data=body,
+        content_type=content_type,
+    )
+
+    assert response.status_code == HTTPStatus.BAD_REQUEST
+    assert _event_log_id(client) is None
+    assert not event_log_directory.exists()
+
+
+def test_hosted_reservation_failure_is_silent_and_warns_once(
+    app, client, event_log_directory, monkeypatch, caplog
+):
+    app.config["SERVER_MODE"] = True
+
+    def _raise_reservation_error(*_args):
+        raise OSError("read-only event-log root")
+
+    monkeypatch.setattr(
+        event_logging,
+        "_reserve_hosted_log",
+        _raise_reservation_error,
+    )
+
+    with caplog.at_level("WARNING"):
+        responses = [_post_events(client, [VIEW_OPENED_EVENT]) for _ in range(3)]
+
+    assert [response.status_code for response in responses] == [
+        HTTPStatus.NO_CONTENT
+    ] * 3
+    assert not event_log_directory.exists()
+    warnings = [
+        record
+        for record in caplog.records
+        if "Unable to reserve hosted event log" in record.getMessage()
+    ]
+    assert len(warnings) == 1
+
+
+def test_hosted_cookie_headroom_trims_report_history_before_minting_id(
+    app, client, event_log_directory
+):
+    app.config["SERVER_MODE"] = True
+    app.config["SESSION_MAX_UPLOADED_REPORTS"] = 100
+
+    with client.session_transaction() as flask_session:
+        flask_session["profiler_paths"] = [
+            f"/reports/{index}-" + ("x" * 100) for index in range(100)
+        ]
+
+    response = _post_events(client, [VIEW_OPENED_EVENT])
+
     assert response.status_code == HTTPStatus.NO_CONTENT
+    assert _event_log_id(client)
+    assert len(read_event_log_lines(event_log_directory / _event_log_id(client))) == 1
 
 
 def test_hosted_endpoint_enforces_log_quota(

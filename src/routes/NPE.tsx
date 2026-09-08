@@ -60,11 +60,10 @@ const NPE = () => {
 
     const npeData = useMemo(() => demoData || loadedData || loadedTimeline, [demoData, loadedData, loadedTimeline]);
 
-    // Demos are hosted-only. Keep their source wired for vocabulary parity, but
-    // recordEvent drops the event under SERVER_MODE. The non-windowed settle
+    // Demos are hosted-only. Keep their source wired for vocabulary parity, and
+    // let the hosted event logger record the demo load. The non-windowed settle
     // effect below is retained for that hosted path and for #1802; local uploads
-    // record via NpeWindowedView, so this effect emits nothing where recording
-    // is enabled.
+    // record via NpeWindowedView.
     const isDemoEnabled = isServerMode;
     // Prefer RQ isLoading (isPending && isFetching) over bare isFetching so a
     // background refetch cannot pin the spinner after data is already present.

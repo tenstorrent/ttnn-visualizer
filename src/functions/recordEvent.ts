@@ -10,7 +10,7 @@ import getServerConfig from './getServerConfig';
 import isEventLoggingEnabled from './isEventLoggingEnabled';
 
 /**
- * Buffered, best-effort sender for local events.
+ * Buffered, best-effort sender for frontend events.
  *
  * Events are held in memory and posted off the render path: recording one costs a
  * predicate and an array push, because the views this instruments include the NPE
@@ -44,6 +44,7 @@ const FLUSH_INTERVAL_MS = 30_000;
 const buffer: EventLogEventPayload[] = [];
 
 let cancelScheduledFlush: (() => void) | null = null;
+let postEventsInFlight: Promise<void> | null = null;
 
 function getEventLogEndpointUrl(): string {
     // A beacon bypasses axios and so gets neither its baseURL nor its instanceId param.
@@ -77,16 +78,31 @@ function warnOnUnexpectedOutcome(status: number | null): void {
 }
 
 function postEvents(events: EventLogEventPayload[]): void {
-    // One sender for both callers, so a header, timeout or signal added later cannot land
-    // on one path and not the other — a divergence neither side would report.
-    axiosInstance
-        .post(Endpoints.EVENT_LOGGING, { events })
-        .then((response) => warnOnUnexpectedOutcome(response.status))
-        // Dropped, never re-buffered: a refused or unreachable endpoint would otherwise
-        // grow the buffer without bound for the life of the tab, and a batch rejected for
-        // being malformed would be resubmitted forever. A transport failure has no
-        // response at all, hence the null.
-        .catch((error) => warnOnUnexpectedOutcome(error?.response?.status ?? null));
+    // Serialise writes so two batches flushed before the first response cannot both mint
+    // a hosted session ID and create separate log files.
+    const send = (): Promise<void> =>
+        axiosInstance
+            .post(Endpoints.EVENT_LOGGING, { events })
+            .then((response) => warnOnUnexpectedOutcome(response.status))
+            // Dropped, never re-buffered: a refused or unreachable endpoint would otherwise
+            // grow the buffer without bound for the life of the tab, and a batch rejected for
+            // being malformed would be resubmitted forever. A transport failure has no
+            // response at all, hence the null.
+            .catch((error) => warnOnUnexpectedOutcome(error?.response?.status ?? null));
+
+    if (postEventsInFlight === null) {
+        postEventsInFlight = send();
+    } else {
+        postEventsInFlight = postEventsInFlight.then(send, send);
+    }
+
+    const completedRequest = postEventsInFlight;
+    void completedRequest.then(() => {
+        if (postEventsInFlight === completedRequest) {
+            postEventsInFlight = null;
+        }
+        return null;
+    });
 }
 
 function takeBatch(): EventLogEventPayload[] {

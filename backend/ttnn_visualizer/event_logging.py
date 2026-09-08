@@ -196,6 +196,15 @@ MAX_TRACKED_EVENT_LOGS = MAX_HOSTED_EVENT_LOGS
 _local_log_state = _EventLogState()
 _hosted_log_state_by_path: "OrderedDict[Path, _EventLogState]" = OrderedDict()
 _hosted_quota_warning_logged = False
+_hosted_reservation_failure_logged = False
+
+SESSION_COOKIE_HEADROOM_BYTES = 256
+_SESSION_REPORT_LIST_KEYS = (
+    "profiler_paths",
+    "performance_paths",
+    "npe_paths",
+    "instances",
+)
 
 
 class EventLogEvent(str, Enum):
@@ -356,16 +365,50 @@ def _is_valid_event_log_id(value: Any) -> bool:
     return isinstance(value, str) and bool(_EVENT_LOG_ID_PATTERN.fullmatch(value))
 
 
-def ensure_event_log_id() -> str:
+def ensure_event_log_id() -> Optional[str]:
     """Return the server-minted anonymous log identifier in the Flask session."""
-    from flask import session
+    from flask import current_app, session
 
     event_log_id = session.get(EVENT_LOG_ID_SESSION_KEY)
     if not _is_valid_event_log_id(event_log_id):
         event_log_id = uuid.uuid4().hex
         session[EVENT_LOG_ID_SESSION_KEY] = event_log_id
+        if not _trim_session_for_event_log_id(current_app, session):
+            return None
 
     return event_log_id
+
+
+def _trim_session_for_event_log_id(app: Any, session: Any) -> bool:
+    """Keep enough signed-cookie room for the hosted log identifier.
+
+    Report history is a convenience cache, whereas the event-log identifier must
+    persist across flushes. Trim the oldest report entries until the serialised
+    cookie has headroom for normal response attributes.
+    """
+    serializer = app.session_interface.get_signing_serializer(app)
+    if serializer is None:
+        return True
+
+    max_size = app.config.get("MAX_COOKIE_SIZE")
+    if not isinstance(max_size, int):
+        return True
+    target_size = max_size - SESSION_COOKIE_HEADROOM_BYTES
+
+    def cookie_size() -> int:
+        return len(serializer.dumps(dict(session)).encode("utf-8"))
+
+    while cookie_size() > target_size:
+        largest_key = max(
+            _SESSION_REPORT_LIST_KEYS,
+            key=lambda key: len(session.get(key, [])),
+        )
+        largest_list = session.get(largest_key, [])
+        if not largest_list:
+            session.pop(EVENT_LOG_ID_SESSION_KEY, None)
+            return False
+        session[largest_key] = largest_list[1:]
+    return True
 
 
 def get_event_log_directory(
@@ -728,13 +771,23 @@ def admit_event_log_batch(server_mode: Any, event_log_id: Optional[str]) -> bool
     state = _hosted_log_state_by_path.get(log_path)
     if state is None:
         candidate_state = _EventLogState()
-        if not _reserve_hosted_log(log_path, candidate_state):
+        try:
+            reserved = _reserve_hosted_log(log_path, candidate_state)
+        except OSError as error:
+            _warn_hosted_reservation_failure(error)
+            return False
+        if not reserved:
             return False
         state = _state_for_log(log_path, hosted=True)
         state.reservation_checked = candidate_state.reservation_checked
     else:
         state = _state_for_log(log_path, hosted=True)
-        if not _reserve_hosted_log(log_path, state):
+        try:
+            reserved = _reserve_hosted_log(log_path, state)
+        except OSError as error:
+            _warn_hosted_reservation_failure(error)
+            return False
+        if not reserved:
             return False
 
     return not _is_hosted_rate_limited(state)
@@ -742,10 +795,11 @@ def admit_event_log_batch(server_mode: Any, event_log_id: Optional[str]) -> bool
 
 def _reserve_hosted_log(log_path: Path, state: _EventLogState) -> bool:
     """Atomically reserve one bounded hosted log slot across server workers."""
-    global _hosted_quota_warning_logged
+    global _hosted_quota_warning_logged, _hosted_reservation_failure_logged
 
     if state.reservation_checked:
         return True
+    state.reservation_checked = False
 
     if log_path.exists():
         state.reservation_checked = True
@@ -816,6 +870,7 @@ def _reserve_hosted_log(log_path: Path, state: _EventLogState) -> bool:
                 )
                 os.close(descriptor)
                 _hosted_quota_warning_logged = False
+                _hosted_reservation_failure_logged = False
                 state.reservation_checked = True
                 return True
             finally:
@@ -823,14 +878,27 @@ def _reserve_hosted_log(log_path: Path, state: _EventLogState) -> bool:
     except FileExistsError:
         state.reservation_checked = log_path.exists()
         return state.reservation_checked
-    except OSError:
-        raise
+    except OSError as error:
+        _warn_hosted_reservation_failure(error)
+        return False
 
 
-def _open_log(log_path: Path) -> int:
+def _warn_hosted_reservation_failure(error: OSError) -> None:
+    global _hosted_reservation_failure_logged
+
+    if _hosted_reservation_failure_logged:
+        return
+    logger.warning("Unable to reserve hosted event log: %s", error)
+    _hosted_reservation_failure_logged = True
+
+
+def _open_log(log_path: Path, create: bool = True) -> int:
+    flags = os.O_WRONLY | os.O_APPEND
+    if create:
+        flags |= os.O_CREAT
     return os.open(
         log_path,
-        os.O_WRONLY | os.O_APPEND | os.O_CREAT,
+        flags,
         0o600,
     )
 
@@ -871,7 +939,7 @@ def _append_line(
     _ensure_directory(directory, state)
 
     try:
-        descriptor = _open_log(log_path)
+        descriptor = _open_log(log_path, create=not hosted)
     except FileNotFoundError:
         # The directory has gone since it was cached, which the docs actively invite by
         # offering a delete command. Recreate it and retry rather than losing this batch

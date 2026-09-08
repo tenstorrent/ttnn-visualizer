@@ -202,6 +202,32 @@ describe('recordEvent batching', () => {
 
         expect(post).not.toHaveBeenCalled();
     });
+
+    it('serialises the first writes until the hosted session cookie is stored', async () => {
+        const { recordEvent, flushEventLog, post } = await loadRecorder();
+        const firstRequest: { resolve: (() => void) | null } = { resolve: null };
+        post.mockImplementationOnce(
+            () =>
+                new Promise((resolve) => {
+                    firstRequest.resolve = () => resolve({ status: 204 });
+                }),
+        );
+        post.mockResolvedValue({ status: 204 });
+
+        recordEvent(REPORT_LOADED);
+        flushEventLog();
+        recordEvent(VIEW_OPENED);
+        flushEventLog();
+
+        expect(post).toHaveBeenCalledTimes(1);
+
+        firstRequest.resolve?.();
+        await Promise.resolve();
+        await Promise.resolve();
+        await Promise.resolve();
+
+        expect(post).toHaveBeenCalledTimes(2);
+    });
 });
 
 describe('recordEvent flush triggers', () => {
@@ -247,6 +273,9 @@ describe('recordEvent flush triggers', () => {
         // first flush would wait for the 50-event cap or a beacon.
         recordEvent(REPORT_LOADED);
         vi.advanceTimersByTime(MIN_BATCH_WINDOW_MS);
+        await Promise.resolve();
+        await Promise.resolve();
+        await Promise.resolve();
 
         expect(post).toHaveBeenCalledTimes(2);
         expect((post.mock.calls[1][1] as { events: unknown[] }).events).toEqual([REPORT_LOADED]);
