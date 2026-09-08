@@ -13,14 +13,10 @@ import { OpGraphBlockKind } from './opGraphTypes';
 const MIN_LAYER_BLOCK_OPS = 2;
 
 /**
- * Presents role groups (#1976) as `RepeatBlockInstance`, which is what lets layer
- * grouping reuse every part of the folding machinery #1583 already built — block
- * nodes, expanders, edge remapping across a folded boundary, buried filter matches
- * and the block panel. A second block type would have duplicated all of it to render
- * the same shape: a labelled, foldable span of consecutive operations.
- *
- * The two detectors stay mutually exclusive per build, which is how a region avoids
- * carrying two competing identities — the open reconciliation question in #1953.
+ * Presents role groups (#1976) as `RepeatBlockInstance`, so layer grouping reuses the
+ * folding machinery #1583 already built rather than adding a second block type to
+ * render the same shape. The two detectors stay mutually exclusive per build, which is
+ * how a region avoids carrying two competing identities — the open question in #1953.
  */
 export const detectLayerBlocks = (operations: readonly OpGraphSourceOperation[]): RepeatBlockInstance[] => {
     const groups = detectOpRoleGroups(operations).filter((group) => group.operationIds.length >= MIN_LAYER_BLOCK_OPS);

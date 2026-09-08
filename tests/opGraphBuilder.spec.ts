@@ -473,6 +473,24 @@ describe('buildOpGraph', () => {
             }
         });
 
+        it('lets the I/O highlight outrank the kind colour on a block', () => {
+            // The kind rules match the shared I/O rule on specificity (three classes
+            // each), so source order decides, and the shared rule sits higher up the
+            // file: a block that was an input or output of the selection silently kept
+            // its own fill and dropped a highlight that shipped with #1195. The block
+            // rule carries its own I/O override, and it has to stay below the three kind
+            // rules for that to hold. #1982
+            const stylesheet = readFileSync('src/scss/components/OperationGraphReactFlow.scss', 'utf8');
+            const lastKindRule = Math.max(
+                ...['repeat', 'layer', 'weights'].map((kind) => stylesheet.indexOf(`&.op-graph-block-${kind} {`)),
+            );
+
+            for (const relation of ['input', 'output']) {
+                const override = stylesheet.indexOf(`&.op-graph-node-${relation} {`);
+                expect(override).toBeGreaterThan(lastKindRule);
+            }
+        });
+
         it('carries the kind on the node data as well as the class', () => {
             // The class paints it; the kind is what a panel or a test can reason about
             // without parsing a string.

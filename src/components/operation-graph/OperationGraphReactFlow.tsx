@@ -172,6 +172,28 @@ const foldDecisionToOption = (decision: ReadonlySet<string> | null): readonly st
     }
     return decision.size === 0 ? EMPTY_BLOCK_IDS : [...decision];
 };
+// Fold-all and a grouping switch both mean "fold what this detector found", not
+// "fold everything": the set also holds weight-fan ids, which the grouping controls
+// do not own and for which absence means folded rather than unrolled. Replacing the
+// set outright re-folded a fan the user had opened — the mirror of the bug
+// `expandAllBlocks` unions to avoid. Returns `previous` unchanged when there was
+// nothing of this detector's to drop, so an unchanged decision doesn't rebuild. #1980
+const withoutGroupingBlocks = (
+    previous: ReadonlySet<string> | null,
+    groupingBlockIds: ReadonlySet<string>,
+): ReadonlySet<string> => {
+    if (previous === null) {
+        return NOTHING_EXPANDED_BLOCKS;
+    }
+    const next = new Set<string>();
+    for (const instanceId of previous) {
+        if (!groupingBlockIds.has(instanceId)) {
+            next.add(instanceId);
+        }
+    }
+    return next.size === previous.size ? previous : next;
+};
+
 const NO_BLOCKS: OpGraphBlockSummary[] = [];
 
 // Folding a block makes its members' device-op expansions unreachable, so they are
@@ -438,14 +460,10 @@ const OperationGraphInner = ({
 
     const isBlockExpanded = useCallback(
         (instanceId: string) => {
-            // A weight fan defaults the other way round from a grouping block. Its switch
-            // is on, so absence from the set means folded, where #1977 has absence mean
-            // unrolled for grouping. Decided by membership of `detectedBlocks` rather than
-            // by sniffing the id, which would break for the next detector added.
-            //
-            // Getting this wrong made the fan's expander inert: `null` read as expanded,
-            // so the click tried to fold something already unrolled and changed nothing.
-            // #1980
+            // Two opposite defaults: a grouping block is unrolled unless folded (#1977),
+            // a weight fan is folded unless unrolled, because its switch is already on.
+            // Told apart by membership of `detectedBlocks` — fans are not in it — rather
+            // than by sniffing the id, which would break for the next detector added.
             if (!detectedBlockIds.has(instanceId)) {
                 return expandedBlockIds?.has(instanceId) ?? false;
             }
@@ -794,9 +812,9 @@ const OperationGraphInner = ({
     }, [detectedBlocks]);
 
     const collapseAllBlocks = useCallback(() => {
-        setExpandedBlockIds(NOTHING_EXPANDED_BLOCKS);
+        setExpandedBlockIds((previous) => withoutGroupingBlocks(previous, detectedBlockIds));
         setExpandedOperationIds((previous) => withoutBlockMembers(previous, detectedBlocks));
-    }, [detectedBlocks]);
+    }, [detectedBlocks, detectedBlockIds]);
 
     const handleGroupingChange = useCallback(
         (next: OpGraphGrouping) => {
@@ -804,23 +822,27 @@ const OperationGraphInner = ({
             // Applied, not just armed. #1977 is about how a report *opens* — nobody
             // asked for a grouping then. Clicking one is the ask, so leaving the graph
             // unrolled made the control look broken: both modes rendered identically
-            // and the difference only appeared after a separate Fold. An empty set
-            // folds whatever this mode detects, and the other mode's instance ids are
-            // discarded with it rather than naming blocks that no longer exist. #1976
-            setExpandedBlockIds(NOTHING_EXPANDED_BLOCKS);
+            // and the difference only appeared after a separate Fold. Dropping the
+            // outgoing mode's ids folds whatever this mode detects and stops the set
+            // naming blocks that no longer exist; weight-fan ids are not mode-specific,
+            // so they stay. #1976
+            setExpandedBlockIds((previous) => withoutGroupingBlocks(previous, detectedBlockIds));
             setExpandedOperationIds((previous) => withoutBlockMembers(previous, detectedBlocks));
             setRevealedNodeIds(null);
         },
-        [detectedBlocks],
+        [detectedBlocks, detectedBlockIds],
     );
 
     const handleHideDeallocateChange = useCallback(
         (next: boolean) => {
             setHideDeallocate(next);
+            // Detection re-runs on this filter, so the ids held here would name
+            // instances that may no longer exist. The decision is dropped rather than
+            // remapped, which returns the graph to the unrolled default. #1977
             setExpandedBlockIds(null);
-            // Only block members: detection re-runs on this filter so every instance
-            // folds, but an expansion on an op belonging to no block is untouched by
-            // that and was kept before this feature existed.
+            // Only block members: their expansions were opened inside a fold that this
+            // drops, while an expansion on an op belonging to no block is untouched by
+            // the filter and was kept before this feature existed.
             setExpandedOperationIds((previous) => withoutBlockMembers(previous, detectedBlocks));
             // Nothing is folded open any more, so nothing was "just opened".
             setRevealedNodeIds(null);

@@ -1428,6 +1428,33 @@ describe('OperationGraphReactFlow repeat blocks', () => {
         );
     });
 
+    it('does not refold a weight fan when Fold all is clicked', () => {
+        // The mirror of the case above, and it was still broken after that one was
+        // fixed: Fold all replaced the whole set, so a fan the user had opened folded
+        // itself along with the grouping blocks the button actually owns. Fold means
+        // "fold what this detector found". #1980
+        const withFanAndRepeats: OperationDescription[] = [
+            ...REPEAT_OPERATION_LIST,
+            operation(7, 'ttnn.to_device', [6]),
+            operation(8, 'ttnn.to_device', [6]),
+        ];
+        renderGraph(withFanAndRepeats);
+        // The repeats open unrolled, so this is the path a user actually takes: open a
+        // fan, then fold the repeats away to read the model's shape.
+        deliver(withFanAndRepeats, { collapseWeightLoads: true });
+        act(() => {
+            harness.onNodeDoubleClick?.(null, nodeById(lastFlowRender().nodes, 'weights:7'));
+        });
+        const opened = (runBuild.mock.calls.at(-1)?.[0] as OpGraphBuildOptions).expandedBlockIds;
+        expect(opened).toEqual(expect.arrayContaining(['weights:7']));
+        deliver(withFanAndRepeats, { collapseWeightLoads: true, expandedBlockIds: opened });
+
+        runBuild.mockClear();
+        fireEvent.click(screen.getByRole('button', { name: 'Fold all repeats' }));
+
+        expect((runBuild.mock.calls.at(-1)?.[0] as OpGraphBuildOptions).expandedBlockIds).toEqual(['weights:7']);
+    });
+
     it('asks to unfold a weight fan when its expander is clicked', () => {
         // The reported bug had two halves and this is the one in the view: with grouping
         // unrolled by default the expansion set is `null`, which read as "everything is
@@ -1639,7 +1666,7 @@ describe('OperationGraphReactFlow repeat blocks', () => {
         expect(runBuild.mock.calls.at(-1)?.[0]).toEqual(expect.objectContaining({ expandedBlockIds: [] }));
     });
 
-    it('folds every instance and drops member device-op expansion when deallocate hiding changes', () => {
+    it('drops the fold decision and member device-op expansion when deallocate hiding changes', () => {
         const operations = REPEAT_OPERATION_LIST.map((op) =>
             op.id === 2
                 ? withDeviceOperations(op, ['AlphaDeviceOperation', 'BetaDeviceOperation', 'GammaDeviceOperation'])

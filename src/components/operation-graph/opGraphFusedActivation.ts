@@ -5,15 +5,11 @@
 /**
  * Recovers an activation ttnn fused into a matmul rather than emitting as an op.
  *
- * The role detector reads op names, and that premise holds only while ttnn spells a
- * role as an op. `sentence_bert` fuses every feed-forward GELU into the matmul's
- * `program_config`, so its 12 feed-forward blocks carried no anchor and were dropped
- * as unidentifiable — while `bge_m3`, which emits 24 explicit `ttnn.gelu` ops, was
- * detected fine. Same model family, same role, two spellings.
- *
- * This is the fused/unfused problem one level deeper than attention's: not a different
- * op name, but no op at all. Fusion is the direction of travel, so `bge_m3` is the
- * lucky case rather than the representative one. #1976
+ * The role detector reads op names, which holds only while ttnn spells a role as an
+ * op: `sentence_bert` fuses every feed-forward GELU into the matmul `program_config`,
+ * so its 12 feed-forward blocks carried no anchor at all, while `bge_m3` emits 24
+ * explicit `ttnn.gelu` ops and was detected fine. Fusion is the direction of travel,
+ * so `bge_m3` is the lucky case rather than the representative one. #1976
  */
 
 /**

@@ -55,34 +55,34 @@ export interface OpRoleSourceOperation {
 }
 
 /**
- * Anchors are matched on the **leaf** of the op name, which is what makes matching
- * prefix-tolerant: ResNet arrives as `ttnn.experimental.quasar.conv2d` and attention
- * as `ttnn.transformer.scaled_dot_product_attention`, so an exact-string table would
- * miss whole architectures. #1976
+ * Anchors match on the name's leaf: ResNet arrives as
+ * `ttnn.experimental.quasar.conv2d`, so an exact-string table misses whole
+ * architectures.
  */
 const leafNameOf = (name: string): string => name.slice(name.lastIndexOf('.') + 1);
 
 /**
- * A span this large does not mean the layer is big — it means the partition failed.
- * `test_ttnn_moe` carries one `add` and no normalisation at all, so the whole graph
- * came back as a single span; it holds a router, so it was labelled expert routing
- * and folding it replaced the entire model with one box. `sentence_bert` did the same
- * on a smaller scale, its embedding span swallowing the 164-op weight-loading run
- * ahead of the first norm.
+ * A span this large does not mean the layer is big — it means the partition failed,
+ * and folding it replaces the model with one box. Past this a span is reported as no
+ * grouping rather than as one useless block.
  *
- * A layer is a fraction of a model — #1583 reasons the same way about a repeated
- * subgraph being "a layer, not half the graph". Anything past this is reported as no
- * grouping rather than as one useless block. Measured: the largest real span is 6.6%
- * of `resnet50`, and 3.7% of `bge_m3`. #1976
+ * Measured: the largest real span is 6.6% of `resnet50` and 3.7% of `bge_m3`, and the
+ * smallest that must be rejected is 41% (`test_ttnn_moe`, whose whole graph comes back
+ * as one span) — so anything in 0.07–0.40 behaves identically on the four captures and
+ * 0.25 is the middle of that band. #1976
  */
 const MAX_LAYER_SPAN_FRACTION = 0.25;
 
 /**
  * The fraction alone is meaningless on a small graph, where one legitimate layer can
- * be most of it — a five-op chain has no "quarter of the model". The floor is set
- * above the largest span measured in a real report (26 ops, `bge_m3`'s embedding), so
- * it admits real layers and only the fraction decides on graphs big enough for the
- * question to mean anything.
+ * be most of it — a five-op chain has no "quarter of the model". Set above the largest
+ * span measured in a real report so it admits real layers and leaves the fraction to
+ * decide on graphs big enough for the question to mean anything.
+ *
+ * The margin is thinner than it looks: 26 ops is `bge_m3`'s embedding span *after*
+ * hide-deallocate, and detection sees the raw 30 when that filter is off. Two ops of
+ * headroom, and on a graph of 32 or fewer this floor readmits the whole-graph span the
+ * bound exists to reject.
  */
 const MIN_LAYER_SPAN_ALLOWANCE = 32;
 
@@ -216,17 +216,30 @@ const ROLE_LABELS: Readonly<Record<OpSemanticRole, string>> = {
     [OpSemanticRole.CONV_RESIDUAL]: 'Residual conv block',
 };
 
-/** Priority order, so a span holding both an attention anchor and an activation reads as attention. */
+/**
+ * Breaks ties *within* one confidence level; confidence itself decides first. Listing
+ * the roles alone was not enough, because it put feed-forward — which only ever comes
+ * from a supporting anchor — above two roles an op names outright: a span of
+ * `embedding, gelu, layer_norm` read as feed-forward and threw the embedding away.
+ */
 const ROLE_PRIORITY: readonly OpSemanticRole[] = [
     OpSemanticRole.ATTENTION,
-    // Above feed-forward: an expert block contains an activation, so the generic
-    // evidence must not outrank the specific.
     OpSemanticRole.MOE,
     OpSemanticRole.FEED_FORWARD,
     OpSemanticRole.POSITIONAL_ENCODING,
     OpSemanticRole.EMBEDDING,
     OpSemanticRole.CONV_RESIDUAL,
 ];
+
+/** Direct evidence before circumstantial: an op that names the role wins. */
+const CONFIDENCE_PRIORITY: readonly OpRoleConfidence[] = [OpRoleConfidence.HIGH, OpRoleConfidence.MEDIUM];
+
+/**
+ * Named, and lifted out of the span loop where it recomputed one `Math.max` per span
+ * from a value that depends only on the graph.
+ */
+const isSpanTooLarge = (spanLength: number, graphLength: number): boolean =>
+    spanLength > Math.max(MIN_LAYER_SPAN_ALLOWANCE, graphLength * MAX_LAYER_SPAN_FRACTION);
 
 /**
  * Normalisation when the capture has any, residual adds otherwise. Chosen from the
@@ -250,9 +263,10 @@ interface SpanClassification {
 }
 
 /**
- * A span is named by the highest-priority anchor it holds. A span with no anchor is
- * not a layer — it is the `from_torch` weight-loading run between two of them, and
- * returning `null` is how those are dropped rather than guessed at.
+ * A span is named by the strongest anchor it holds: an op that says what the span is
+ * outranks one that merely suggests it, and `ROLE_PRIORITY` settles the rest. A span
+ * with no anchor is not a layer — it is the `from_torch` weight-loading run between
+ * two of them, and returning `null` is how those are dropped rather than guessed at.
  */
 const classifySpan = (anchorLeaves: readonly string[]): SpanClassification | null => {
     const found = new Map<OpSemanticRole, SpanClassification>();
@@ -269,10 +283,12 @@ const classifySpan = (anchorLeaves: readonly string[]): SpanClassification | nul
             });
         }
     }
-    for (const role of ROLE_PRIORITY) {
-        const hit = found.get(role);
-        if (hit !== undefined) {
-            return hit;
+    for (const confidence of CONFIDENCE_PRIORITY) {
+        for (const role of ROLE_PRIORITY) {
+            const hit = found.get(role);
+            if (hit?.confidence === confidence) {
+                return hit;
+            }
         }
     }
     return null;
@@ -298,7 +314,6 @@ export const detectOpRoleGroups = (operations: readonly OpRoleSourceOperation[])
             return;
         }
         const spanLeaves = leaves.slice(spanStart, endExclusive);
-        const allowance = Math.max(MIN_LAYER_SPAN_ALLOWANCE, leaves.length * MAX_LAYER_SPAN_FRACTION);
         // Fused activations extend what the span can be *identified* by, never how it is
         // cut: they are appended for classification only. Adding them to `leaves` would
         // desynchronise the indices the partition and `operationIds` both rely on, and an
@@ -307,7 +322,7 @@ export const detectOpRoleGroups = (operations: readonly OpRoleSourceOperation[])
             ...spanLeaves,
             ...fusedActivations.slice(spanStart, endExclusive).filter((leaf) => leaf !== undefined),
         ];
-        const classification = spanLeaves.length > allowance ? null : classifySpan(spanAnchors);
+        const classification = isSpanTooLarge(spanLeaves.length, leaves.length) ? null : classifySpan(spanAnchors);
         if (classification !== null) {
             groups.push({
                 role: classification.role,
@@ -331,23 +346,4 @@ export const detectOpRoleGroups = (operations: readonly OpRoleSourceOperation[])
     closeSpan(leaves.length);
 
     return groups;
-};
-
-/**
- * Cheap corroboration that needs no detector: if a role really repeats N times, the
- * op histogram divides by N. `bge_m3` has 96 `linear` over 24 attention blocks (four
- * per layer) and 49 `layer_norm` (two per layer plus the embedding norm). A count
- * that does not divide is the signal that the grouping is wrong. #1976
- */
-export const countsCorroborate = (
-    operations: readonly OpRoleSourceOperation[],
-    opLeafName: string,
-    groupCount: number,
-    perGroup: number,
-): boolean => {
-    if (groupCount <= 0) {
-        return false;
-    }
-    const total = operations.filter((operation) => leafNameOf(operation.name) === opLeafName).length;
-    return total === groupCount * perGroup;
 };

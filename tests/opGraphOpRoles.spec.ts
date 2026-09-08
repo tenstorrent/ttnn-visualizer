@@ -8,9 +8,9 @@ import {
     type OpRoleGroup,
     type OpRoleSourceOperation,
     OpSemanticRole,
-    countsCorroborate,
     detectOpRoleGroups,
 } from '../src/components/operation-graph/opGraphOpRoles';
+import { DEALLOCATE_OP_NAME_LIST } from '../src/definitions/Deallocate';
 import bgeM3 from './fixtures/opRoles/bge_m3.json';
 import moe from './fixtures/opRoles/moe.json';
 import resnet50 from './fixtures/opRoles/resnet50.json';
@@ -24,6 +24,27 @@ const ofRole = (groups: readonly OpRoleGroup[], role: OpSemanticRole) => groups.
 const sizesOf = (groups: readonly OpRoleGroup[]) => new Set(groups.map((group) => group.operationIds.length));
 
 const operation = (id: number, name: string): OpRoleSourceOperation => ({ id, name });
+
+/**
+ * Cheap corroboration that needs no detector: if a role really repeats N times, the op
+ * histogram divides by N. `bge_m3` has 96 `linear` over 24 attention blocks (four per
+ * layer) and 49 `layer_norm` (two per layer plus the embedding norm), so a count that
+ * does not divide says the grouping is wrong. Lives here rather than in `src/`, where
+ * it was exported production code with no production consumer. #1976
+ */
+const countsCorroborate = (
+    operations: readonly OpRoleSourceOperation[],
+    opLeafName: string,
+    groupCount: number,
+    perGroup: number,
+): boolean => {
+    if (groupCount <= 0) {
+        return false;
+    }
+    const leafOf = (name: string) => name.slice(name.lastIndexOf('.') + 1);
+    const total = operations.filter((candidate) => leafOf(candidate.name) === opLeafName).length;
+    return total === groupCount * perGroup;
+};
 
 describe('detectOpRoleGroups', () => {
     describe('a fused-attention transformer (bge_m3)', () => {
@@ -230,6 +251,52 @@ describe('detectOpRoleGroups', () => {
                 expect(groups[0]?.role).toBe(OpSemanticRole.FEED_FORWARD);
             }
         });
+
+        // Every remaining table row, stated here independently of the table. Thirteen
+        // of them reached no test, including the whole positional-encoding role — and
+        // the thesis of widening the tables against ttnn's taxonomy is that a narrow
+        // table costs a class of report, so a typo in a row is exactly the failure
+        // worth pinning. Written out rather than iterated over the exported map: a
+        // test that reads the table can only prove it matches itself.
+        it.each([
+            ['rotary_embedding', OpSemanticRole.POSITIONAL_ENCODING],
+            ['rotary_embedding_llama', OpSemanticRole.POSITIONAL_ENCODING],
+            ['moe', OpSemanticRole.MOE],
+            ['moe_hash_gate', OpSemanticRole.MOE],
+            ['routed_expert_ffn', OpSemanticRole.MOE],
+            ['unified_routed_expert_ffn', OpSemanticRole.MOE],
+            ['unified_routed_expert_moe', OpSemanticRole.MOE],
+            ['post_combine_reduce', OpSemanticRole.MOE],
+            ['nlp_concat_heads', OpSemanticRole.ATTENTION],
+            ['attention_softmax', OpSemanticRole.ATTENTION],
+            ['concatenate_heads', OpSemanticRole.ATTENTION],
+            ['relu6', OpSemanticRole.FEED_FORWARD],
+            ['mish', OpSemanticRole.FEED_FORWARD],
+            ['silu', OpSemanticRole.FEED_FORWARD],
+            ['conv1d', OpSemanticRole.CONV_RESIDUAL],
+            ['conv_transpose2d', OpSemanticRole.CONV_RESIDUAL],
+        ])('names a span from `%s`', (anchor, role) => {
+            const groups = detectOpRoleGroups([operation(1, `ttnn.${anchor}`), operation(2, 'ttnn.layer_norm')]);
+
+            expect(groups[0]?.role).toBe(role);
+        });
+
+        it.each(['group_norm', 'batch_norm', 'layer_norm_pre_all_gather', 'rms_norm_pre_all_gather'])(
+            'cuts a span on `%s`',
+            (delimiter) => {
+                const groups = detectOpRoleGroups([
+                    operation(1, 'ttnn.gelu'),
+                    operation(2, `ttnn.${delimiter}`),
+                    operation(3, 'ttnn.transformer.scaled_dot_product_attention'),
+                    operation(4, `ttnn.${delimiter}`),
+                ]);
+
+                expect(groups.map((group) => group.operationIds)).toEqual([
+                    [1, 2],
+                    [3, 4],
+                ]);
+            },
+        );
     });
 
     describe("where metal's taxonomy must not be adopted wholesale", () => {
@@ -269,8 +336,11 @@ describe('detectOpRoleGroups', () => {
         // sizes are this suite's corroboration idiom, so they have to corroborate the
         // view that ships. The node labels bear this out: `sentence_bert`'s attention
         // block renders "9 ops", which is the filtered figure, not the raw 14. #1976
+        // The production predicate, not a lookalike: `endsWith('deallocate')` happened
+        // to agree on these four captures, but it would not follow a change to the
+        // list the filter actually consults.
         const withoutDeallocate = (operations: readonly OpRoleSourceOperation[]) =>
-            operations.filter((candidate) => !candidate.name.endsWith('deallocate'));
+            operations.filter((candidate) => !DEALLOCATE_OP_NAME_LIST.includes(candidate.name.toLowerCase()));
 
         it('finds the same groups with deallocate ops hidden', () => {
             expect(detectOpRoleGroups(withoutDeallocate(bgeM3.operations))).toHaveLength(49);
@@ -338,6 +408,27 @@ describe('detectOpRoleGroups', () => {
 
             expect(groups).toHaveLength(1);
             expect(groups[0].role).toBe(OpSemanticRole.ATTENTION);
+            expect(groups[0].confidence).toBe(OpRoleConfidence.HIGH);
+        });
+
+        it.each([
+            ['an embedding', 'ttnn.embedding', OpSemanticRole.EMBEDDING],
+            ['a positional encoding', 'ttnn.experimental.rotary_embedding', OpSemanticRole.POSITIONAL_ENCODING],
+        ])('lets %s outrank an activation sharing its span', (_case, anchor, role) => {
+            // Confidence decides before the role order does. Ordering the roles alone
+            // put feed-forward — which only ever comes from a supporting anchor — above
+            // two roles an op names outright, so this span read as feed-forward and
+            // threw away the anchor that actually identified it. None of the four
+            // fixtures happens to put an activation in one of these spans, so nothing
+            // else would catch it.
+            const groups = detectOpRoleGroups([
+                operation(1, anchor),
+                operation(2, 'ttnn.gelu'),
+                operation(3, 'ttnn.layer_norm'),
+            ]);
+
+            expect(groups).toHaveLength(1);
+            expect(groups[0].role).toBe(role);
             expect(groups[0].confidence).toBe(OpRoleConfidence.HIGH);
         });
 

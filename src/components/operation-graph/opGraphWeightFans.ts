@@ -24,12 +24,13 @@ import { OpGraphBlockKind } from './opGraphTypes';
 const MIN_FAN_MEMBERS = 2;
 
 /**
- * Keyed on the fan's first member, not on the node it feeds. The consumer's *rendered*
- * id is what the grouping fold moves — a fan feeding an op inside a layer is
- * `weights:layer:attention:4` folded and `weights:4` unrolled — so keying on it meant a
- * fan the user had unrolled re-folded itself the moment that layer was folded, and left
- * the old id behind in a set nothing prunes. A member is a source operation, never
- * inside a grouping block, so its id does not move. #1980
+ * Keyed on the fan's first member rather than on the node it feeds, whose *rendered*
+ * id is exactly the value a grouping fold moves.
+ *
+ * Members are not outside grouping blocks — every `bge_m3` attention span contains
+ * six `from_torch` sources — so the invariant is narrower than "the id cannot move":
+ * an operation id is stable, but which sources are unclaimed is fold-dependent, so a
+ * fold that merges two fans still renames the survivor. #1980
  */
 const fanIdOf = (firstMemberOperationId: number): string => `weights:${firstMemberOperationId}`;
 

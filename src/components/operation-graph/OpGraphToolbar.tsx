@@ -12,20 +12,21 @@ import { OpGraphGrouping } from './opGraphTypes';
 import 'styles/components/OpGraphToolbar.scss';
 
 /**
- * Descriptions rather than bare labels: "Layers" means nothing until a reader knows
- * it is reading op names, and the distinction from "Repeats" is the whole point of
- * offering both. #1976
- */
-/**
- * The accessible name has to follow the mode: the row was called "Repeats" before layers
- * existed, and a screen reader was still being told "unroll all repeats" while the
- * buttons acted on layers. #1976
+ * The noun every per-mode string is built from: the accessible names on Unroll and
+ * Fold, and the note that says which detector came up empty. The row was called
+ * "Repeats" before layers existed, and a screen reader was still being told "unroll
+ * all repeats" while the buttons acted on layers. #1976
  */
 const GROUPING_NOUN: Readonly<Record<OpGraphGrouping, string>> = {
     [OpGraphGrouping.REPEATS]: 'repeats',
     [OpGraphGrouping.LAYERS]: 'layers',
 };
 
+/**
+ * Descriptions rather than bare labels: "Layers" means nothing until a reader knows
+ * it is reading op names, and the distinction from "Repeats" is the whole point of
+ * offering both. #1976
+ */
 const GROUPING_OPTIONS = [
     {
         value: OpGraphGrouping.REPEATS,
@@ -345,9 +346,7 @@ const OpGraphToolbar = memo(
                 ) : (
                     // Says which detector came up empty, so "nothing here" reads as an
                     // answer about this report rather than a broken control.
-                    <span className='op-graph-toolbar-empty-note'>
-                        {grouping === OpGraphGrouping.LAYERS ? 'no layers detected' : 'no repeats detected'}
-                    </span>
+                    <span className='op-graph-toolbar-empty-note'>{`no ${GROUPING_NOUN[grouping]} detected`}</span>
                 )}
             </div>
         </div>
