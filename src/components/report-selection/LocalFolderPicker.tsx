@@ -22,7 +22,10 @@ import FolderLinkStatusIcon from './FolderLinkStatusIcon';
 import SelectRowActions from './SelectRowActions';
 
 interface LocalFolderPickerProps {
-    /** `null` while the folder list query is still loading — the component renders disabled. */
+    /**
+     * `null` while the folder list query is still loading — the component renders disabled.
+     * Folders render in the supplied order; link-status badges do not reorder them.
+     */
     items: ReportFolder[] | null;
     value: string | null;
     handleSelect: (folder: ReportFolder) => void;

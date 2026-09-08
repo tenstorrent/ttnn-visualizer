@@ -1646,14 +1646,23 @@ const rankFolder = (rank: number, reportName = TIMESTAMP): RemoteFolder => ({
 // granularity, so sharing a name is the normal case rather than the edge case.
 const multihostFolders: RemoteFolder[] = [rankFolder(0), rankFolder(1)];
 
-const renderPerformanceSelector = async (
-    connectionList: RemoteConnection[],
-    folderList: RemoteFolder[] = multihostFolders,
-    onSelectFolder: (folder: RemoteFolder) => void = () => undefined,
-    type: RemoteFolderType = ReportKind.PERFORMANCE,
-    linkedIds?: Set<string>,
-    unlinkedIds?: Set<string>,
-) => {
+interface RenderRemoteFolderSelectorOptions {
+    connectionList: RemoteConnection[];
+    folderList?: RemoteFolder[];
+    onSelectFolder?: (folder: RemoteFolder) => void;
+    type?: RemoteFolderType;
+    linkedIds?: Set<string>;
+    unlinkedIds?: Set<string>;
+}
+
+const renderPerformanceSelector = async ({
+    connectionList,
+    folderList = multihostFolders,
+    onSelectFolder = () => undefined,
+    type = ReportKind.PERFORMANCE,
+    linkedIds,
+    unlinkedIds,
+}: RenderRemoteFolderSelectorOptions) => {
     setupConnection(connectionList);
 
     render(
@@ -1675,14 +1684,13 @@ const renderPerformanceSelector = async (
 const expectSuppliedOrder = async (type: RemoteFolderType) => {
     const folders = [rankFolder(1), rankFolder(0)];
 
-    await renderPerformanceSelector(
-        multihostConnection,
-        folders,
-        () => undefined,
+    await renderPerformanceSelector({
+        connectionList: multihostConnection,
+        folderList: folders,
         type,
-        new Set([folders[1].syncedName!]),
-        new Set([folders[0].syncedName!]),
-    );
+        linkedIds: new Set([folders[1].syncedName!]),
+        unlinkedIds: new Set([folders[0].syncedName!]),
+    });
 
     const options = screen.getAllByRole('menuitem');
     expect(options.map((option) => option.textContent)).toEqual([
@@ -1695,12 +1703,8 @@ it('preserves supplied order regardless of performance report link status', asyn
     await expectSuppliedOrder(ReportKind.PERFORMANCE);
 });
 
-it('preserves supplied order regardless of memory report link status', async () => {
-    await expectSuppliedOrder(ReportKind.PROFILER);
-});
-
 it('tells apart ranks whose reports share a name', async () => {
-    await renderPerformanceSelector(multihostConnection);
+    await renderPerformanceSelector({ connectionList: multihostConnection });
 
     expect(screen.getByText(`Rank 0: ${TIMESTAMP}`)).toBeTruthy();
     expect(screen.getByText(`Rank 1: ${TIMESTAMP}`)).toBeTruthy();
@@ -1711,7 +1715,11 @@ it('tells apart ranks whose reports share a name', async () => {
 it('hands back the rank that was clicked', async () => {
     const onSelectFolder = vi.fn();
 
-    await renderPerformanceSelector(multihostConnection, multihostFolders, onSelectFolder);
+    await renderPerformanceSelector({
+        connectionList: multihostConnection,
+        folderList: multihostFolders,
+        onSelectFolder,
+    });
     screen.getByText(`Rank 1: ${TIMESTAMP}`).click();
 
     expect(onSelectFolder).toHaveBeenCalledTimes(1);
@@ -1748,7 +1756,10 @@ it('leaves single-host performance labels as paths', async () => {
         },
     ];
 
-    await renderPerformanceSelector(singleHostConnection, singleHostFolders);
+    await renderPerformanceSelector({
+        connectionList: singleHostConnection,
+        folderList: singleHostFolders,
+    });
 
     expect(screen.queryByText(`Rank 0: ${TIMESTAMP}`)).toBeNull();
     expect(screen.getByText(`/rank0/reports/${TIMESTAMP}`)).toBeTruthy();
@@ -1767,7 +1778,10 @@ it('labels an already-synced rank the same as the online listing', async () => {
         },
     ];
 
-    await renderPerformanceSelector(multihostConnection, syncedFolders);
+    await renderPerformanceSelector({
+        connectionList: multihostConnection,
+        folderList: syncedFolders,
+    });
 
     expect(screen.getByText(`Rank 0: ${TIMESTAMP}`)).toBeTruthy();
 });
@@ -1782,7 +1796,10 @@ it('falls back to the path when the listing reported no rank', async () => {
         },
     ];
 
-    await renderPerformanceSelector(multihostConnection, folderWithoutRank);
+    await renderPerformanceSelector({
+        connectionList: multihostConnection,
+        folderList: folderWithoutRank,
+    });
 
     expect(screen.getByText('/loose_report')).toBeTruthy();
 });

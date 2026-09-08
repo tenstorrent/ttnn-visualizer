@@ -77,6 +77,7 @@ const remoteFolderRenderer =
 
 interface RemoteFolderSelectorProps {
     remoteFolder?: RemoteFolder;
+    /** Folders render in the supplied order; link-status badges do not reorder them. */
     remoteFolderList?: RemoteFolder[];
     loading?: boolean;
     disabled?: boolean;
