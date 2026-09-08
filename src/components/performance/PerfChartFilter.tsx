@@ -3,10 +3,9 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { Checkbox } from '@blueprintjs/core';
-import { useEffect, useState } from 'react';
+import { useMemo } from 'react';
 import 'styles/components/PerfChartFilter.scss';
 import { Marker } from '../../definitions/PerfTable';
-import { isHostOp } from '../../functions/perfFunctions';
 
 const MAX_OPTION_LENGTH = 25; // Brittle
 
@@ -17,24 +16,17 @@ interface PerfChartFilterProps {
 }
 
 function PerfChartFilter({ opCodeOptions, selectedOpCodes, updateOpCodes }: PerfChartFilterProps) {
-    const [isAllSelected, setIsAllSelected] = useState(true);
-    const [isIndeterminate, setIsIndeterminate] = useState(false);
-
-    useEffect(() => {
+    const { isAllSelected, isIndeterminate } = useMemo(() => {
         if (selectedOpCodes.length === 0) {
-            setIsAllSelected(false);
-            setIsIndeterminate(false);
+            return { isAllSelected: false, isIndeterminate: false };
         }
-
         if (selectedOpCodes.length > 0 && selectedOpCodes.length < opCodeOptions.length) {
-            setIsAllSelected(false);
-            setIsIndeterminate(true);
+            return { isAllSelected: false, isIndeterminate: true };
         }
-
         if (selectedOpCodes.length === opCodeOptions.length) {
-            setIsAllSelected(true);
-            setIsIndeterminate(false);
+            return { isAllSelected: true, isIndeterminate: false };
         }
+        return { isAllSelected: false, isIndeterminate: false };
     }, [selectedOpCodes, opCodeOptions]);
 
     const handleAllSelectedChange = () => {
@@ -96,7 +88,6 @@ function PerfChartFilter({ opCodeOptions, selectedOpCodes, updateOpCodes }: Perf
                 </div>
 
                 {opCodeOptions
-                    .filter((option) => !isHostOp(option.opCode))
                     .sort((a, b) => a.opCode.localeCompare(b.opCode))
                     .map((option) => (
                         <div

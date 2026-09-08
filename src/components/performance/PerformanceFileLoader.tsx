@@ -8,7 +8,7 @@ interface PerformanceFileLoaderProps {
     onFileLoad: (data: unknown) => void;
 }
 
-const PerformanceFileLoader: React.FC<PerformanceFileLoaderProps> = ({ onFileLoad }) => {
+const PerformanceFileLoader = ({ onFileLoad }: PerformanceFileLoaderProps) => {
     const [, setFileName] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
 

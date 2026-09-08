@@ -8,12 +8,8 @@ import { MemoryLegendElement } from './MemoryLegendElement';
 import MemoryPlotRenderer from './MemoryPlotRenderer';
 import { isEqual } from '../../functions/math';
 import { DRAM_MEMORY_SIZE } from '../../definitions/DRAMMemorySize';
-import {
-    DRAMRenderConfiguration,
-    MAX_LEGEND_LENGTH,
-    PlotDataCustom,
-    PlotMouseEventCustom,
-} from '../../definitions/PlotConfigurations';
+import { DRAMRenderConfiguration, MAX_LEGEND_LENGTH } from '../../definitions/PlotConfigurations';
+import { PlotDataCustom, PlotMouseEventCustom } from '../../model/PlotData';
 import { FragmentationEntry } from '../../model/APIData';
 import { BufferType } from '../../model/BufferType';
 import { OperationDetails } from '../../model/OperationDetails';
@@ -31,7 +27,7 @@ interface DramPlotProps {
     zoomedInViewMainMemory: boolean;
     onDramBufferClick: (event: Readonly<PlotMouseEventCustom>) => void;
     onDramDeltaClick: (event: Readonly<PlotMouseEventCustom>) => void;
-    onLegendClick: (address: number, tensorId?: number) => void;
+    onLegendClick: (address: number, tensorId?: number, colorVariance?: number) => void;
 }
 
 function DRAMPlots({
@@ -118,7 +114,7 @@ function DRAMPlots({
                                 plotZoomRange={[dramNonContinuousPlotZoomRangeStart, dramNonContinuousPlotZoomRangeEnd]}
                                 chartDataList={[chartData]}
                                 isZoomedIn
-                                memorySize={DRAM_MEMORY_SIZE}
+                                memoryZoomEnd={DRAM_MEMORY_SIZE}
                                 onBufferClick={onDramBufferClick}
                                 configuration={{
                                     ...DRAMRenderConfiguration,
@@ -139,7 +135,7 @@ function DRAMPlots({
                         plotZoomRange={[dramPlotZoomRangeStart, dramPlotZoomRangeEnd]}
                         chartDataList={[previousDramData]}
                         isZoomedIn={zoomedInViewMainMemory}
-                        memorySize={DRAM_MEMORY_SIZE}
+                        memoryZoomEnd={DRAM_MEMORY_SIZE}
                         configuration={DRAMRenderConfiguration}
                     />
                 )}
@@ -168,7 +164,7 @@ function DRAMPlots({
                                 plotZoomRange={[dramNonContinuousPlotZoomRangeStart, dramNonContinuousPlotZoomRangeEnd]}
                                 chartDataList={[chartData]}
                                 isZoomedIn
-                                memorySize={DRAM_MEMORY_SIZE}
+                                memoryZoomEnd={DRAM_MEMORY_SIZE}
                                 onBufferClick={onDramBufferClick}
                                 configuration={{
                                     ...DRAMRenderConfiguration,
@@ -188,7 +184,7 @@ function DRAMPlots({
                         plotZoomRange={[dramPlotZoomRangeStart, dramPlotZoomRangeEnd]}
                         chartDataList={[dramData]}
                         isZoomedIn={zoomedInViewMainMemory}
-                        memorySize={DRAM_MEMORY_SIZE}
+                        memoryZoomEnd={DRAM_MEMORY_SIZE}
                         onBufferClick={onDramBufferClick}
                         configuration={DRAMRenderConfiguration}
                     />
@@ -219,7 +215,7 @@ function DRAMPlots({
                                 plotZoomRange={[dramNonContinuousPlotZoomRangeStart, dramNonContinuousPlotZoomRangeEnd]}
                                 chartDataList={[chartData]}
                                 isZoomedIn
-                                memorySize={DRAM_MEMORY_SIZE}
+                                memoryZoomEnd={DRAM_MEMORY_SIZE}
                                 onBufferClick={onDramDeltaClick}
                                 configuration={{
                                     ...DRAMRenderConfiguration,
@@ -240,7 +236,7 @@ function DRAMPlots({
                         plotZoomRange={[dramPlotZoomRangeStart, dramPlotZoomRangeEnd]}
                         chartDataList={[dramHasntChanged ? EMPTY_CHART : dramData]}
                         isZoomedIn={zoomedInViewMainMemory}
-                        memorySize={DRAM_MEMORY_SIZE}
+                        memoryZoomEnd={DRAM_MEMORY_SIZE}
                         onBufferClick={onDramBufferClick}
                         configuration={DRAMRenderConfiguration}
                     />

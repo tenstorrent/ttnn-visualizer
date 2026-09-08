@@ -1,0 +1,17 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
+
+@use '../definitions/colours' as *;
+
+// The panel chrome graph views float over the canvas: perf legend, critical path
+// annotation. They stack in the same bottom-left band, so drift between them is
+// visible side by side in one screenshot. Layout stays with each consumer — only
+// what makes them read as one surface lives here.
+@mixin graph-chrome-chip {
+    background-color: rgba($tt-grey-2, 0.85);
+    border-radius: 4px;
+    font-size: 11px;
+    line-height: 1.4;
+    pointer-events: none;
+}

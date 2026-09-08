@@ -1,0 +1,1626 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
+
+/* eslint-disable react/prop-types */
+/* eslint-disable no-continue */
+/* eslint-disable no-nested-ternary */
+
+import {
+    type MouseEvent,
+    createContext,
+    memo,
+    useCallback,
+    useContext,
+    useEffect,
+    useId,
+    useMemo,
+    useRef,
+    useState,
+} from 'react';
+import 'styles/components/MLIRViewReactFlow.scss';
+import type { Edge, Node, NodeProps } from '@xyflow/react';
+import {
+    Background,
+    ConnectionLineType,
+    Controls,
+    Handle,
+    MarkerType,
+    MiniMap,
+    Position,
+    ReactFlow,
+    ReactFlowProvider,
+    useEdgesState,
+    useNodesState,
+    useReactFlow,
+} from '@xyflow/react';
+import '@xyflow/react/dist/style.css';
+import { useAtom } from 'jotai';
+
+import { GraphBundle } from '../../model/MLIRJsonModel';
+import { mlirNodeBodyTogglesAtom } from '../../store/app';
+import type {
+    BuiltGraph,
+    IncomingEdgeView,
+    IndexedPortMetadata,
+    OutgoingEdge,
+    SourceNode,
+    WorkerNode,
+} from './mlirGraphTypes';
+import { GRAPH_COLORS } from '../../definitions/GraphColors';
+import { MLIR_FIT_VIEW_OPTIONS } from '../../definitions/MlirFitView';
+import { useMlirLayoutWorker } from './useMlirLayoutWorker';
+import MlirNodeDetailsPanel from './MlirNodeDetailsPanel';
+import GraphOpFilter, { GraphOpFilterHandle } from '../GraphOpFilter';
+import { GraphFilterMode } from '../../definitions/GraphFilterMode';
+import { buildGraphFilterMatcher } from '../../functions/graphFilterMatcher';
+import { resolveFilterMatches } from './mlirFilter';
+import MlirNodeBodyToggles from './MlirNodeBodyToggles';
+import MlirExpandCollapseControls from './MlirExpandCollapseControls';
+import MlirNodeColorLegend from './MlirNodeColorLegend';
+import { collectLocationLines, collectShapeLines } from './mlirNodeBodySummary';
+import { createMoveGroupBatcher } from './mlirMoveGroupBatch';
+import { getNamespaceSegments } from './mlirGraphHelpers';
+
+const FILTER_DIM_OPACITY = 0.18;
+// Debounce the applied filter query so the memo chain (filterMatchInfo →
+// styledNodes/styledEdges → React Flow diff) only runs after typing settles.
+// Cleared queries bypass the debounce so Escape / clear feels instant.
+const FILTER_DEBOUNCE_MS = 120;
+// Session-scoped so a page reload preserves the user's mode choice without
+// leaking across browser sessions or profiles.
+const FILTER_MODE_STORAGE_KEY = 'mlirFilterMode';
+
+const NODE_BODY_OVERLAY_LINE_PX = 11;
+
+// View-layer additions to the worker's canonical node data:
+//  - `highlight`: producer/consumer role vs. the selected node. Ops take a
+//    fill via `style.background`; groups route through `data.highlight` so
+//    the border is colourised instead — painting the wrapper background
+//    bleeds behind the dashed body and hides children.
+//  - `buriedMatchCount`: hidden filter matches under a collapsed anchor;
+//    drives the "+N" badge.
+//  - `shapeLines` / `locationLines`: overlay strings for the node-body
+//    toggles. Routed through per-node `data` (not a context provider) so a
+//    toggle flip only re-renders ops that actually have overlay content.
+type MLNodeData = WorkerNode['data'] & {
+    highlight?: 'input' | 'output';
+    buriedMatchCount?: number;
+    shapeLines?: readonly string[];
+    locationLines?: readonly string[];
+};
+
+interface ViewProps {
+    data: GraphBundle;
+    // Enables the details panel's collapse-to-rail affordance; the split view
+    // opts in because reclaiming a half-pane's width is worthwhile there.
+    detailsCollapsible?: boolean;
+}
+
+type MLNode = Node<MLNodeData>;
+
+// Stable empty-array reference for the overlay-line fallbacks — avoids
+// churning MlirOpNode's referential identity on every render when a node
+// has no overlay entry.
+const EMPTY_OVERLAY_LINES: readonly string[] = Object.freeze([]);
+
+const EMPTY_CHAIN: readonly string[] = Object.freeze([]);
+
+// `parentChain` is root-first, terminating at the immediate parent.
+type NodeTopologyEntry = {
+    parentChain: readonly string[];
+    parentId: string | undefined;
+    type: string | undefined;
+    groupKind: MLNodeData['groupKind'];
+    collapsedSubgraphNamespace: MLNodeData['collapsedSubgraphNamespace'];
+    subgraphToggleState: MLNodeData['subgraphToggleState'];
+};
+
+const EMPTY_TOPOLOGY: Map<string, NodeTopologyEntry> = new Map();
+const EMPTY_VISIBLE_OP_IDS: Set<string> = new Set();
+// Shared empty result so an idle filter yields a stable `matchedNodesInOrder`
+// identity (no fresh `[]` per render).
+const EMPTY_MATCHED_ORDER: string[] = [];
+
+// Derived once per worker rebuild in `applyBuiltGraph`. Structural fields
+// (parentId, type, groupKind, collapsedSubgraphNamespace, subgraphToggleState)
+// are invariant under drag / selection / hover — RF only mutates `position`
+// and `selected` on those paths — so recomputing here means downstream memos
+// keying on the topology map bail out for free on non-structural frames,
+// without a per-render source rebuild + equality walk.
+const buildNodeTopologyById = (nodes: readonly MLNode[]): Map<string, NodeTopologyEntry> => {
+    const parentById = new Map<string, string | undefined>();
+    for (const n of nodes) {
+        parentById.set(n.id, n.parentId);
+    }
+    const result = new Map<string, NodeTopologyEntry>();
+    for (const n of nodes) {
+        const chain: string[] = [];
+        let pid = n.parentId;
+        while (pid) {
+            chain.push(pid);
+            pid = parentById.get(pid);
+        }
+        chain.reverse();
+        result.set(n.id, {
+            parentChain: chain,
+            parentId: n.parentId,
+            type: n.type,
+            groupKind: n.data?.groupKind,
+            collapsedSubgraphNamespace: n.data?.collapsedSubgraphNamespace,
+            subgraphToggleState: n.data?.subgraphToggleState,
+        });
+    }
+    return result;
+};
+
+const buildVisibleOpNodeIds = (nodes: readonly MLNode[]): Set<string> => {
+    const next = new Set<string>();
+    for (const n of nodes) {
+        if (n.type === 'mlirOp') {
+            next.add(n.id);
+        }
+    }
+    return next;
+};
+
+type MlirNodeBodyOverlayLines = { shapes: string[]; location: string[] };
+
+// Shared empty-map used when both toggles are off; keeps map identity stable.
+const EMPTY_OVERLAY_MAP: Map<string, MlirNodeBodyOverlayLines> = new Map();
+
+const MlirOpNode = memo<NodeProps<MLNode>>(({ data }) => {
+    const shapeLines = data.shapeLines ?? EMPTY_OVERLAY_LINES;
+    const locationLines = data.locationLines ?? EMPTY_OVERLAY_LINES;
+
+    return (
+        <>
+            <Handle
+                type='target'
+                position={Position.Top}
+                isConnectable={false}
+            />
+            {data.collapsedSubgraphNamespace ? (
+                <span
+                    className='mlir-op-node-collapse-hint'
+                    title={
+                        data.subgraphToggleState === 'expanded'
+                            ? 'Subgraph expanded — click to collapse'
+                            : 'Subgraph collapsed — click to expand'
+                    }
+                >
+                    {data.subgraphToggleState === 'expanded' ? '▾' : '▸'}
+                </span>
+            ) : null}
+            {data.buriedMatchCount ? (
+                <span
+                    className='mlir-op-node-buried-badge'
+                    title={`${data.buriedMatchCount} filter ${
+                        data.buriedMatchCount === 1 ? 'match' : 'matches'
+                    } inside this collapsed subgraph`}
+                >
+                    {`+${data.buriedMatchCount}`}
+                </span>
+            ) : null}
+            <div className='mlir-op-node-label'>{data.label}</div>
+            {shapeLines.map((line, idx) => (
+                <div
+                    className='mlir-op-node-overlay-line mlir-op-node-shapes'
+                    key={`s-${idx}-${line}`}
+                    title={line}
+                >
+                    {line}
+                </div>
+            ))}
+            {locationLines.map((line, idx) => (
+                <div
+                    className='mlir-op-node-overlay-line mlir-op-node-location'
+                    key={`l-${idx}-${line}`}
+                    title={line}
+                >
+                    {line}
+                </div>
+            ))}
+            <Handle
+                type='source'
+                position={Position.Bottom}
+                isConnectable={false}
+            />
+        </>
+    );
+});
+
+// Group nodes communicate with the parent component via this context. We can't
+// re-enable React Flow's `draggable: true` (it would re-add the `nopan` class
+// on the wrapper and break canvas panning inside the group — see worker
+// comment), so the header implements drag-to-move manually and uses these
+// callbacks to update the parent's node state and to dispatch the collapse.
+type MlirGroupContextValue = {
+    toggleNamespace: (namespace: string) => void;
+    moveGroup: (groupId: string, dx: number, dy: number) => void;
+    getZoom: () => number;
+};
+
+const MlirGroupContext = createContext<MlirGroupContextValue | null>(null);
+
+const DRAG_THRESHOLD_PX = 4;
+
+const MlirGroupNode = memo<NodeProps<MLNode>>(({ id, data }) => {
+    const ctx = useContext(MlirGroupContext);
+    const isSection = data.groupKind === 'section';
+    const countText = typeof data.nodeCount === 'number' && data.nodeCount > 0 ? ` · ${data.nodeCount} nodes` : '';
+
+    // `dragRef` survives the gesture: started on mousedown, mutated through
+    // mousemove (incremental dx/dy applied each frame so React Flow's children
+    // — which use `parentId` + `extent: 'parent'` — follow), and read by the
+    // immediately-following click handler to suppress the collapse toggle if
+    // the gesture moved past the threshold.
+    const dragRef = useRef<{
+        startX: number;
+        startY: number;
+        lastX: number;
+        lastY: number;
+        moved: boolean;
+    } | null>(null);
+
+    const onHandleMouseDown = useCallback(
+        (event: MouseEvent) => {
+            // Stop the gesture before React Flow's pane sees it; otherwise a
+            // drag from the header would also pan the canvas.
+            event.stopPropagation();
+            if (event.button !== 0 || !ctx) {
+                return;
+            }
+            dragRef.current = {
+                startX: event.clientX,
+                startY: event.clientY,
+                lastX: event.clientX,
+                lastY: event.clientY,
+                moved: false,
+            };
+
+            // The window event is the DOM `MouseEvent`, not React's synthetic
+            // type that's imported above; we only need clientX/clientY.
+            const onWindowMouseMove = (ev: { clientX: number; clientY: number }) => {
+                const drag = dragRef.current;
+                if (!drag) {
+                    return;
+                }
+                const totalDx = ev.clientX - drag.startX;
+                const totalDy = ev.clientY - drag.startY;
+                if (!drag.moved) {
+                    if (Math.hypot(totalDx, totalDy) < DRAG_THRESHOLD_PX) {
+                        return;
+                    }
+                    drag.moved = true;
+                }
+                const incDx = ev.clientX - drag.lastX;
+                const incDy = ev.clientY - drag.lastY;
+                drag.lastX = ev.clientX;
+                drag.lastY = ev.clientY;
+                const zoom = ctx.getZoom() || 1;
+                ctx.moveGroup(id, incDx / zoom, incDy / zoom);
+            };
+
+            const onWindowMouseUp = () => {
+                window.removeEventListener('mousemove', onWindowMouseMove);
+                window.removeEventListener('mouseup', onWindowMouseUp);
+                // Don't clear dragRef here — the click event fires next and
+                // needs to read `moved` to decide whether to suppress the
+                // collapse. The click handler clears it.
+            };
+
+            window.addEventListener('mousemove', onWindowMouseMove);
+            window.addEventListener('mouseup', onWindowMouseUp);
+        },
+        [ctx, id],
+    );
+
+    const onHandleClick = useCallback(
+        (event: MouseEvent) => {
+            // Always swallow the click so React Flow's wrapper-level onClick
+            // doesn't double-fire onSubgraphNodeClick — we drive the toggle
+            // ourselves with full information about whether the gesture was a
+            // drag or a click.
+            event.stopPropagation();
+            const drag = dragRef.current;
+            dragRef.current = null;
+            if (drag?.moved) {
+                return;
+            }
+            ctx?.toggleNamespace(data.namespace);
+        },
+        [ctx, data.namespace],
+    );
+
+    // When this group is a producer/consumer of the selected node, swap the
+    // body's neutral border colour for the highlight colour (and bump the
+    // weight slightly so it's visible against the existing dashed pattern).
+    // We deliberately don't touch the wrapper's background — the dashed body
+    // sits on top of a transparent wrapper, so wrapper-level fills bleed into
+    // the canvas behind the body and obscure the group's children.
+    const highlightColor =
+        data.highlight === 'input'
+            ? GRAPH_COLORS.inputNode
+            : data.highlight === 'output'
+              ? GRAPH_COLORS.outputNode
+              : undefined;
+    const bodyStyle = highlightColor ? { borderColor: highlightColor, borderStyle: 'solid' as const } : undefined;
+
+    return (
+        <div
+            className={`mlir-group-body${isSection ? ' is-section' : ''}`}
+            style={bodyStyle}
+        >
+            {/* Group nodes need explicit handles so React Flow has somewhere
+                to attach edges that aggregate to the group boundary (e.g. a
+                top-level op connecting to an op buried inside this expanded
+                group). Without handles the edges silently render as no-ops. */}
+            <Handle
+                type='target'
+                position={Position.Top}
+                isConnectable={false}
+                className='mlir-group-handle-port'
+            />
+            <Handle
+                type='source'
+                position={Position.Bottom}
+                isConnectable={false}
+                className='mlir-group-handle-port'
+            />
+            {/* Header doubles as the collapse button and the drag handle. The
+                `nopan`/`nodrag` classes (matched by RF's runtime filters) plus
+                onMouseDown stopPropagation prevent the gesture from leaking to
+                the pane. Click + drag are disambiguated locally via dragRef. */}
+            {/* eslint-disable-next-line jsx-a11y/no-static-element-interactions, jsx-a11y/click-events-have-key-events */}
+            <div
+                className='mlir-group-handle nopan nodrag'
+                title='Click to collapse · drag to move'
+                onMouseDown={onHandleMouseDown}
+                onClick={onHandleClick}
+            >
+                <span
+                    className='mlir-group-handle-icon'
+                    aria-hidden='true'
+                >
+                    ▾
+                </span>
+                <span className='mlir-group-handle-name'>{data.displayName ?? data.label}</span>
+                <span className='mlir-group-handle-count'>{countText}</span>
+                <span
+                    className='mlir-group-handle-grip'
+                    aria-hidden='true'
+                    title='Drag to move'
+                >
+                    ⋮⋮
+                </span>
+            </div>
+        </div>
+    );
+});
+
+function builtGraphToReactFlow(built: BuiltGraph): { nodes: MLNode[]; edges: Edge[] } {
+    const nodes: MLNode[] = built.nodes.map((n) => ({
+        ...n,
+        type: n.type === 'mlirGroup' ? 'mlirGroup' : 'mlirOp',
+        data: n.data as MLNodeData,
+    }));
+    const edges: Edge[] = built.edges.map((e) => ({
+        ...e,
+        markerEnd: e.markerEnd ? { ...e.markerEnd, type: MarkerType.ArrowClosed } : undefined,
+    }));
+    return { nodes, edges };
+}
+
+const MlGraphInner = ({ data, detailsCollapsible = false }: ViewProps) => {
+    const { fitView, getViewport, setViewport, updateNode } = useReactFlow<MLNode, Edge>();
+    // Unique per instance so two side-by-side panes don't emit colliding React
+    // Flow marker/DOM ids (both panes can show the same graph.id).
+    const rfId = useId();
+    const graph = data.graphs[0];
+    const [nodes, setNodes, onNodesChange] = useNodesState<MLNode>([]);
+    const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
+    const [expandedNamespaces, setExpandedNamespaces] = useState<Set<string>>(() => new Set());
+    const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+    // Persists across selections (the panel remounts per node) but resets on
+    // graph switch via the keyed remount and on close (a full dismissal).
+    const [detailsExpanded, setDetailsExpanded] = useState(true);
+    // Live op-name filter. `filterQuery` drives the input for instant visual
+    // feedback; `appliedFilterQuery` is what the memo chain reads and lags
+    // by `FILTER_DEBOUNCE_MS` on non-empty queries.
+    const [filterQuery, setFilterQuery] = useState('');
+    const [appliedFilterQuery, setAppliedFilterQuery] = useState('');
+    const [filterMode, setFilterMode] = useState<GraphFilterMode>(() => {
+        const stored = sessionStorage.getItem(FILTER_MODE_STORAGE_KEY);
+        return stored === GraphFilterMode.REGEX ? GraphFilterMode.REGEX : GraphFilterMode.SUBSTRING;
+    });
+    const [currentMatchIndex, setCurrentMatchIndex] = useState<number | null>(null);
+    const [nodeBodyToggles, setNodeBodyToggles] = useAtom(mlirNodeBodyTogglesAtom);
+    const filterRef = useRef<GraphOpFilterHandle>(null);
+    const selectedNodeIdRef = useRef<string | null>(null);
+    // Passive mirror of `nodes` so callbacks stored in context (see
+    // `toggleNamespaceFromGroup`) don't churn identity per drag frame.
+    const latestNodesRef = useRef<MLNode[]>([]);
+    const viewportAnchorRef = useRef<{
+        toNodeId: string;
+        fromPosition: { x: number; y: number };
+    } | null>(null);
+    // Set by `navigateToNode` when the target lives inside one or more
+    // collapsed namespaces and we have to wait for the worker to rebuild
+    // before we can fitView on it. Consumed once the rebuilt graph lands.
+    const pendingFocusNodeIdRef = useRef<string | null>(null);
+    // `viewportAnchorRef`, `pendingFocusNodeIdRef`, and `pendingFitAllRef`
+    // are mutually exclusive post-build viewport intents. The worker can
+    // coalesce successive builds into a single reply, so every arming site
+    // below clears the other two — whichever gesture fires last wins.
+    const pendingFitAllRef = useRef(false);
+    const hasFitInitiallyRef = useRef(false);
+    // Group-drag mousemove deltas coalesce into a single per-frame write via a
+    // RAF batcher. `applyBuiltGraph` cancels it so an in-flight drag delta
+    // can't land on top of a fresh worker placement; the unmount effect cancels
+    // it to release a dangling frame. `updateNode` from `useReactFlow` is
+    // referentially stable, so the batcher is created once.
+    const moveGroupBatcher = useMemo(
+        () =>
+            createMoveGroupBatcher({
+                applyDelta: (groupId, dx, dy) =>
+                    updateNode(groupId, (n) => ({
+                        position: { x: n.position.x + dx, y: n.position.y + dy },
+                    })),
+                requestFrame: (callback) => window.requestAnimationFrame(callback),
+                cancelFrame: (handle) => window.cancelAnimationFrame(handle),
+            }),
+        [updateNode],
+    );
+
+    // No graph-id reset effect: `MlGraphInner` is keyed by `graph.id` in
+    // `MlGraphWithProvider`, so React fully remounts the subtree when the
+    // graph changes. That gives us a fresh worker, fresh refs, and fresh
+    // state for free without an in-effect setState (which would trip
+    // react-hooks/set-state-in-effect).
+
+    useEffect(() => {
+        selectedNodeIdRef.current = selectedNodeId;
+    }, [selectedNodeId]);
+
+    useEffect(() => {
+        latestNodesRef.current = nodes;
+    }, [nodes]);
+
+    // `pendingFocusNodeIdRef` is a one-shot baton armed by `navigateToNode`
+    // when the locate target lives in a collapsed namespace and consumed by
+    // `applyBuiltGraph` after the worker rebuild. If the user changes the
+    // selection in the meantime (clicks another node, clicks empty space),
+    // the user's intent has moved on — drop the baton so the rebuild
+    // doesn't jerk the viewport to a stale target. Back-to-back "Locate"
+    // clicks don't go through here: `navigateToNode` overwrites the ref
+    // directly and doesn't touch selection, so the latest target wins
+    // without any effect firing.
+    useEffect(() => {
+        pendingFocusNodeIdRef.current = null;
+    }, [selectedNodeId]);
+
+    // Reset the prev/next cursor with the query; clearing also applies
+    // instantly so Escape / clear feels responsive. Non-empty updates flow
+    // through the debounce effect below.
+    const handleQueryChange = useCallback((next: string) => {
+        setFilterQuery(next);
+        setCurrentMatchIndex(null);
+        if (next === '') {
+            setAppliedFilterQuery('');
+        }
+    }, []);
+
+    // Match set differs across modes, so reset the cursor on toggle.
+    const handleModeChange = useCallback((next: GraphFilterMode) => {
+        setFilterMode(next);
+        setCurrentMatchIndex(null);
+        sessionStorage.setItem(FILTER_MODE_STORAGE_KEY, next);
+    }, []);
+
+    // Debounce non-empty query updates. `filterQuery` drives the input for
+    // instant feedback; `appliedFilterQuery` lands one debounce interval
+    // past the last keystroke so the memo → styledNodes → React Flow diff
+    // chain doesn't run per keystroke.
+    useEffect(() => {
+        if (filterQuery === '') {
+            return undefined;
+        }
+        const id = window.setTimeout(() => setAppliedFilterQuery(filterQuery), FILTER_DEBOUNCE_MS);
+        return () => window.clearTimeout(id);
+    }, [filterQuery]);
+
+    // Cmd/Ctrl+F focuses the filter input while the MLIR view is mounted;
+    // the native find-in-page returns as soon as the user navigates away.
+    useEffect(() => {
+        const onKeyDown = (event: KeyboardEvent) => {
+            if (!(event.metaKey || event.ctrlKey) || event.key !== 'f' || event.shiftKey || event.altKey) {
+                return;
+            }
+            event.preventDefault();
+            filterRef.current?.focus();
+        };
+        window.addEventListener('keydown', onKeyDown);
+        return () => {
+            window.removeEventListener('keydown', onKeyDown);
+        };
+    }, []);
+
+    // Reflect selectedNodeId onto each node's `selected` flag so React Flow
+    // applies its built-in selected styling.
+    useEffect(() => {
+        setNodes((current) => {
+            let changed = false;
+            const next = current.map((n) => {
+                const shouldSelect = n.id === selectedNodeId;
+                if (!!n.selected === shouldSelect) {
+                    return n;
+                }
+                changed = true;
+                return { ...n, selected: shouldSelect };
+            });
+            return changed ? next : current;
+        });
+    }, [selectedNodeId, setNodes]);
+
+    // Structural indices derived from the RF `nodes` array. Only recomputed
+    // when the worker delivers a fresh build (see `applyBuiltGraph`); the
+    // selection reflection effect, drag frames, and `updateNode` all preserve
+    // structural fields, so keeping these off the `[nodes]` render dep path
+    // means downstream memos (`displayedEdges`, `filterMatchInfo`,
+    // `overlayLinesByNodeId`) don't invalidate on drag / select / hover.
+    const [nodeTopologyById, setNodeTopologyById] = useState<Map<string, NodeTopologyEntry>>(EMPTY_TOPOLOGY);
+    const [visibleOpNodeIds, setVisibleOpNodeIds] = useState<Set<string>>(EMPTY_VISIBLE_OP_IDS);
+
+    const applyBuiltGraph = useCallback(
+        (built: BuiltGraph) => {
+            // Drop any in-flight group-drag delta: the pending RAF would
+            // otherwise apply it against the just-committed canonical
+            // position (shift by delta on top of the worker's placement).
+            moveGroupBatcher.cancel();
+
+            const rf = builtGraphToReactFlow(built);
+            const selId = selectedNodeIdRef.current;
+            const styledNodes = selId ? rf.nodes.map((n) => (n.id === selId ? { ...n, selected: true } : n)) : rf.nodes;
+            setNodes(styledNodes);
+            setEdges(rf.edges);
+            setNodeTopologyById(buildNodeTopologyById(styledNodes));
+            setVisibleOpNodeIds(buildVisibleOpNodeIds(styledNodes));
+
+            // Read + clear every post-rebuild viewport baton up-front. The
+            // arming sites enforce mutual exclusion (see the useRef decl
+            // comment for `pendingFitAllRef`), and the `if / else if` chain
+            // below enforces it a second time at the consumer so a stray
+            // arming site can't schedule two fitViews on the same frame.
+            const anchor = viewportAnchorRef.current;
+            viewportAnchorRef.current = null;
+            const pendingFocusId = pendingFocusNodeIdRef.current;
+            pendingFocusNodeIdRef.current = null;
+            const shouldFitAll = pendingFitAllRef.current;
+            pendingFitAllRef.current = false;
+
+            if (anchor) {
+                const toNode = rf.nodes.find((n) => n.id === anchor.toNodeId);
+                if (toNode) {
+                    const vp = getViewport();
+                    const dx = toNode.position.x - anchor.fromPosition.x;
+                    const dy = toNode.position.y - anchor.fromPosition.y;
+                    void setViewport(
+                        { x: vp.x - dx * vp.zoom, y: vp.y - dy * vp.zoom, zoom: vp.zoom },
+                        { duration: 0 },
+                    );
+                }
+            } else if (pendingFocusId && rf.nodes.some((n) => n.id === pendingFocusId)) {
+                // Locate-from-panel: the user clicked "locate" and the target
+                // wasn't visible pre-rebuild. Skip silently if the target still
+                // isn't in the build (e.g. synthetic id that never reaches the
+                // canvas) — a missing fitView is preferable to a noisy error.
+                requestAnimationFrame(() => {
+                    void fitView({ nodes: [{ id: pendingFocusId }], ...MLIR_FIT_VIEW_OPTIONS.localJump });
+                });
+            } else if (shouldFitAll || !hasFitInitiallyRef.current) {
+                hasFitInitiallyRef.current = true;
+                requestAnimationFrame(() => {
+                    void fitView({ ...MLIR_FIT_VIEW_OPTIONS.bulk });
+                });
+            }
+        },
+        [fitView, getViewport, moveGroupBatcher, setEdges, setNodes, setViewport],
+    );
+
+    // The view component owns React Flow / viewport / selection state; the
+    // worker hook owns the wire protocol. We hand `applyBuiltGraph` to the
+    // hook so freshly-built graphs land back here for styling + fitView.
+    const sourceNodes = useMemo<SourceNode[]>(
+        () =>
+            graph.nodes.map((node) => ({
+                id: node.id,
+                label: node.label,
+                namespace: node.namespace,
+                attrs: node.attrs,
+                incomingEdges: node.incomingEdges,
+                outputsMetadata: node.outputsMetadata,
+                config: node.config,
+            })),
+        [graph.nodes],
+    );
+    // Canonical lookup keyed on the same id space the worker builds against.
+    // Used by the details panel, the overlay-lines memo (needs source attrs
+    // + output metadata to compute per-node overlay strings), and by the
+    // edge/label memoisation chain further down. `sourceNodes` is already
+    // memoised so this map only rebuilds when the underlying graph changes.
+    const sourceNodeById = useMemo(() => {
+        const result = new Map<string, SourceNode>();
+        for (const sourceNode of sourceNodes) {
+            result.set(sourceNode.id, sourceNode);
+        }
+        return result;
+    }, [sourceNodes]);
+    const { interactionIndex, runBuild, isBuilding } = useMlirLayoutWorker(graph.id, sourceNodes, applyBuiltGraph);
+
+    useEffect(() => {
+        runBuild(expandedNamespaces);
+    }, [expandedNamespaces, runBuild]);
+
+    // Per-node overlay lines for the node-body toggles. Only op-nodes
+    // with non-empty overlay content appear in this map; `styledNodes`
+    // applies the arrays onto `data.shapeLines` / `data.locationLines`
+    // so React Flow's per-node diff drives re-renders on toggle flip.
+    const overlayLinesByNodeId = useMemo<Map<string, MlirNodeBodyOverlayLines>>(() => {
+        if (!nodeBodyToggles.location && !nodeBodyToggles.shapes) {
+            return EMPTY_OVERLAY_MAP;
+        }
+        const result = new Map<string, MlirNodeBodyOverlayLines>();
+        for (const id of visibleOpNodeIds) {
+            const source = sourceNodeById.get(id);
+            if (!source) {
+                continue;
+            }
+            const shapes = nodeBodyToggles.shapes ? collectShapeLines(source.outputsMetadata) : [];
+            const location = nodeBodyToggles.location ? collectLocationLines(source.attrs) : [];
+            if (shapes.length > 0 || location.length > 0) {
+                result.set(id, { shapes, location });
+            }
+        }
+        return result;
+    }, [nodeBodyToggles.location, nodeBodyToggles.shapes, visibleOpNodeIds, sourceNodeById]);
+
+    // Compile the label matcher once per applied query. Lifted out of
+    // `filterMatchInfo` so an active filter doesn't rebuild the RegExp on
+    // every interaction frame. Match *resolution* — mapping each hit to its
+    // visible representative and counting buried matches — lives in
+    // `resolveFilterMatches`, which owns the up-to-date contract comment.
+    const filterMatcher = useMemo(() => {
+        if (appliedFilterQuery.length === 0) {
+            return null;
+        }
+        return buildGraphFilterMatcher(filterMode, appliedFilterQuery);
+    }, [filterMode, appliedFilterQuery]);
+
+    const filterMatchInfo = useMemo<{
+        visibleRepIds: Set<string>;
+        buriedCountByRepId: Map<string, number>;
+        hiddenMatchCount: number;
+        isRegexInvalid: boolean;
+    } | null>(() => {
+        if (!filterMatcher) {
+            return null;
+        }
+        const resolution = resolveFilterMatches({
+            testLabel: filterMatcher.test,
+            sources: sourceNodes,
+            expandedNamespaces,
+            anchorByNamespace: interactionIndex?.anchorByNamespace ?? {},
+            containingNamespacesByNodeId: interactionIndex?.containingNamespacesByNodeId ?? {},
+            visibleOpNodeIds,
+        });
+        return { ...resolution, isRegexInvalid: filterMatcher.isRegexInvalid };
+    }, [filterMatcher, sourceNodes, expandedNamespaces, interactionIndex, visibleOpNodeIds]);
+
+    // Visible reps in canvas order so prev/next walks top-to-bottom. Iterates
+    // `visibleOpNodeIds` (build-time state, insertion order == canvas order)
+    // rather than `nodes`, so a position-only drag frame — which churns the
+    // `nodes` array but never the visible-op set — doesn't recompute the walk.
+    const matchedNodesInOrder = useMemo<string[]>(() => {
+        if (!filterMatchInfo || filterMatchInfo.visibleRepIds.size === 0) {
+            return EMPTY_MATCHED_ORDER;
+        }
+        const result: string[] = [];
+        for (const id of visibleOpNodeIds) {
+            if (filterMatchInfo.visibleRepIds.has(id)) {
+                result.push(id);
+            }
+        }
+        return result;
+    }, [visibleOpNodeIds, filterMatchInfo]);
+
+    // `fitView` lives outside the updater so React's StrictMode double-
+    // invocation of updaters in dev doesn't fire two pans per step.
+    const goToMatch = useCallback(
+        (direction: 'next' | 'prev') => {
+            const total = matchedNodesInOrder.length;
+            if (total === 0) {
+                return;
+            }
+            let nextIdx: number;
+            if (currentMatchIndex === null) {
+                nextIdx = direction === 'next' ? 0 : total - 1;
+            } else {
+                nextIdx =
+                    direction === 'next' ? (currentMatchIndex + 1) % total : (currentMatchIndex - 1 + total) % total;
+            }
+            const targetId = matchedNodesInOrder[nextIdx];
+            if (targetId) {
+                void fitView({ nodes: [{ id: targetId }], ...MLIR_FIT_VIEW_OPTIONS.localJump });
+            }
+            setCurrentMatchIndex(nextIdx);
+        },
+        [matchedNodesInOrder, currentMatchIndex, fitView],
+    );
+    const goToPrevMatch = useCallback(() => goToMatch('prev'), [goToMatch]);
+    const goToNextMatch = useCallback(() => goToMatch('next'), [goToMatch]);
+
+    // Anchor the viewport so the namespace's representative op (post-collapse)
+    // visually stays put, then drop the namespace from `expandedNamespaces`.
+    // `fromPosition` is the screen-space position of the gesture origin (the
+    // clicked group header, or the parent group of a click on a nested op).
+    const collapseNamespace = useCallback(
+        (namespace: string, fromPosition: { x: number; y: number }) => {
+            pendingFitAllRef.current = false;
+            pendingFocusNodeIdRef.current = null;
+            const anchorNodeId = interactionIndex?.anchorByNamespace[namespace];
+            if (anchorNodeId) {
+                viewportAnchorRef.current = { toNodeId: anchorNodeId, fromPosition };
+            }
+            setExpandedNamespaces((prev) => {
+                if (!prev.has(namespace)) {
+                    return prev;
+                }
+                const next = new Set(prev);
+                next.delete(namespace);
+                return next;
+            });
+        },
+        [interactionIndex],
+    );
+
+    // Anchor the viewport so the group wrapper appears where the user clicked,
+    // then add the namespace to `expandedNamespaces`. Group nodes are always
+    // synthesised at id `group:<namespace>`, so we anchor directly to that id —
+    // there's no need to consult `interactionIndex.anchorByNamespace` here.
+    const expandNamespace = useCallback((namespace: string, fromPosition: { x: number; y: number }) => {
+        pendingFitAllRef.current = false;
+        pendingFocusNodeIdRef.current = null;
+        viewportAnchorRef.current = {
+            toNodeId: `group:${namespace}`,
+            fromPosition,
+        };
+        setExpandedNamespaces((prev) => {
+            if (prev.has(namespace)) {
+                return prev;
+            }
+            const next = new Set(prev);
+            next.add(namespace);
+            return next;
+        });
+    }, []);
+
+    // `anchorByNamespace` covers both natural regions and topology-sectioned
+    // synthetic wrappers, so its keys are the authoritative expandable set.
+    const allExpandableNamespaces = useMemo<string[]>(
+        () => (interactionIndex ? Object.keys(interactionIndex.anchorByNamespace) : []),
+        [interactionIndex],
+    );
+
+    const expandAllNamespaces = useCallback(() => {
+        if (allExpandableNamespaces.length === 0) {
+            return;
+        }
+        viewportAnchorRef.current = null;
+        pendingFocusNodeIdRef.current = null;
+        pendingFitAllRef.current = true;
+        setExpandedNamespaces(new Set(allExpandableNamespaces));
+    }, [allExpandableNamespaces]);
+
+    const collapseAllNamespaces = useCallback(() => {
+        viewportAnchorRef.current = null;
+        pendingFocusNodeIdRef.current = null;
+        pendingFitAllRef.current = true;
+        setExpandedNamespaces(new Set());
+    }, []);
+
+    const onSubgraphNodeClick = useCallback(
+        (event: MouseEvent, node: MLNode) => {
+            // For group nodes, only the header (`.mlir-group-handle`) is a click
+            // target; clicks on the empty group body behave like a pane click —
+            // they clear any current selection. Without this, React Flow's
+            // built-in selection logic deselects the previously-selected leaf
+            // (the blue ring vanishes) while our `selectedNodeId` state stays
+            // set, leaving the producer/consumer highlights stuck on.
+            if (node.type === 'mlirGroup') {
+                const target = event.target as Element | null;
+                const headerHit = target?.closest?.('.mlir-group-handle');
+                if (!headerHit) {
+                    setSelectedNodeId(null);
+                    return;
+                }
+            }
+            // Trust the worker's decision on which clicks toggle a subgraph.
+            // The worker explicitly omits `collapsedSubgraphNamespace` when a
+            // node should NOT act as a toggle (e.g. the inner anchor of its
+            // own already-expanded group — the group header handles collapse).
+            const toggleNamespace =
+                node.type === 'mlirGroup' ? node.data?.namespace : node.data?.collapsedSubgraphNamespace;
+            // A click on a "toggle node" (an mlirGroup header, or an op node
+            // whose body acts as a collapsed-namespace anchor) is a structural
+            // navigation gesture — expand/collapse only. Don't treat it as a
+            // selection too: a collapsed section anchor stands in for hundreds
+            // of inner ops, so highlighting its aggregated edges floods the
+            // canvas and is not what the user intended. Selection is reserved
+            // for actual leaf ops (no collapsedSubgraphNamespace).
+            if (!toggleNamespace && node.type !== 'mlirGroup') {
+                setSelectedNodeId(node.id);
+            }
+            if (!toggleNamespace) {
+                return;
+            }
+            if (expandedNamespaces.has(toggleNamespace)) {
+                // Collapsing a nested op: anchor from the surrounding parent
+                // group (its position is what's visible after collapse), not
+                // from the inner op which is about to disappear.
+                let fromPosition = { x: node.position.x, y: node.position.y };
+                if (node.parentId) {
+                    const parentNode = nodes.find((n) => n.id === node.parentId);
+                    if (parentNode) {
+                        fromPosition = { x: parentNode.position.x, y: parentNode.position.y };
+                    }
+                }
+                collapseNamespace(toggleNamespace, fromPosition);
+            } else {
+                expandNamespace(toggleNamespace, { x: node.position.x, y: node.position.y });
+            }
+        },
+        [
+            //
+            collapseNamespace,
+            expandNamespace,
+            expandedNamespaces,
+            nodes,
+        ],
+    );
+
+    const onPaneClick = useCallback(() => {
+        setSelectedNodeId(null);
+    }, []);
+
+    // Group header invokes this on click (drag suppresses it). Always a
+    // collapse — the header only exists for an expanded group. Reads
+    // `nodes` via `latestNodesRef` so callback identity survives drag
+    // frames and doesn't fan a re-render through `groupContextValue`.
+    const toggleNamespaceFromGroup = useCallback(
+        (namespace: string) => {
+            const groupNode = latestNodesRef.current.find(
+                (n) => n.type === 'mlirGroup' && n.data?.namespace === namespace,
+            );
+            const fromPosition = groupNode ? { x: groupNode.position.x, y: groupNode.position.y } : { x: 0, y: 0 };
+            collapseNamespace(namespace, fromPosition);
+        },
+        [collapseNamespace],
+    );
+
+    // Header drag updates only the group's own position; React Flow auto-
+    // moves children because they declare `parentId` + `extent: 'parent'`.
+    // Mousemove deltas are coalesced into a single RAF-batched write —
+    // per-flush cost against the RF store is the same as `setNodes` (xyflow's
+    // `updateNode` is `setNodes(prev.map(...))` internally), but the write
+    // rate drops from one-per-mousemove to one-per-frame.
+    const moveGroup = useCallback(
+        (groupId: string, dx: number, dy: number) => {
+            moveGroupBatcher.accumulate(groupId, dx, dy);
+        },
+        [moveGroupBatcher],
+    );
+    useEffect(() => () => moveGroupBatcher.cancel(), [moveGroupBatcher]);
+
+    const groupContextValue = useMemo<MlirGroupContextValue>(
+        () => ({
+            toggleNamespace: toggleNamespaceFromGroup,
+            moveGroup,
+            getZoom: () => getViewport().zoom,
+        }),
+        [toggleNamespaceFromGroup, moveGroup, getViewport],
+    );
+
+    const nodeTypes = useMemo(() => ({ mlirOp: MlirOpNode, mlirGroup: MlirGroupNode }) as const, []);
+
+    const selectedSourceNode = selectedNodeId ? (sourceNodeById.get(selectedNodeId) ?? null) : null;
+
+    // Region partnership maps for expanded namespaces. The layout worker
+    // remaps cross-region edges in two symmetric ways when a namespace is
+    // expanded:
+    //
+    //   - Outputs: edges conceptually flowing OUT of the region's anchor op
+    //     (e.g. `stablehlo.reduce`) are rendered as sourced from the
+    //     terminator (e.g. `stablehlo.return`). The anchor carries
+    //     `outputsMetadata`; the terminator carries the rendered consumer
+    //     edges. Bonded bidirectionally so selecting either side surfaces
+    //     the same data.
+    //
+    //   - Inputs: edges conceptually flowing INTO the anchor op are rendered
+    //     as targeting the namespace's inner input-arg node for the matching
+    //     port (`namespaceInputByNamespace[ns][portIdx]`). To surface those
+    //     under the anchor's Inputs section, we keep an inverse map from
+    //     arg id → the anchor + port index it represents.
+    //
+    // `anchorByNamespace` is the right key here: it maps every namespace
+    // (top-level or nested) to its representative op. `outerNamespaceByNodeId`
+    // only records *parent-level toggles* (an op in the parent namespace
+    // that controls a child), so it silently misses top-level regions whose
+    // anchor lives inside the namespace — which is exactly the case for ops
+    // like a top-level `stablehlo.all_reduce_N`. All three maps are populated
+    // only for expanded namespaces; collapsed regions need no pairing.
+    const { regionOutputPartnerByNodeId, inputArgIdxByArgIdByAnchor } = useMemo<{
+        regionOutputPartnerByNodeId: Map<string, string>;
+        inputArgIdxByArgIdByAnchor: Map<string, Map<string, number>>;
+    }>(() => {
+        const outputPartner = new Map<string, string>();
+        const inputArgsByAnchor = new Map<string, Map<string, number>>();
+        if (!interactionIndex) {
+            return {
+                regionOutputPartnerByNodeId: outputPartner,
+                inputArgIdxByArgIdByAnchor: inputArgsByAnchor,
+            };
+        }
+        for (const namespace of expandedNamespaces) {
+            const anchorNodeId = interactionIndex.anchorByNamespace[namespace];
+            if (!anchorNodeId) {
+                continue;
+            }
+            const returnNodeId = interactionIndex.namespaceReturnNodeByNamespace[namespace];
+            if (returnNodeId && returnNodeId !== anchorNodeId) {
+                outputPartner.set(anchorNodeId, returnNodeId);
+                outputPartner.set(returnNodeId, anchorNodeId);
+            }
+            const inputArgs = interactionIndex.namespaceInputByNamespace[namespace];
+            if (inputArgs && inputArgs.length > 0) {
+                const argToIdx = new Map<string, number>();
+                inputArgs.forEach((argId, idx) => argToIdx.set(argId, idx));
+                inputArgsByAnchor.set(anchorNodeId, argToIdx);
+            }
+        }
+        return {
+            regionOutputPartnerByNodeId: outputPartner,
+            inputArgIdxByArgIdByAnchor: inputArgsByAnchor,
+        };
+    }, [interactionIndex, expandedNamespaces]);
+
+    // Both panel I/O sections read from the React Flow `edges` array — i.e.
+    // the connections actually drawn on the canvas — rather than from the
+    // source-data inversion. Terminator ops (e.g. `stablehlo.return`) have
+    // outgoing arrows that the layout worker synthesises for region plumbing
+    // but that never round-trip through the raw graph JSON, so the source-
+    // data inversion would miss them. The edge `label` carries the tensor
+    // shape (e.g. "[7, 3072] bf16"), and for inputs we additionally enrich
+    // with the producer's `outputsMetadata` for the relevant source port —
+    // that's the per-port shape/dtype/`__tensor_tag` payload that flows
+    // along the wire.
+    //
+    // Index `edges` once per build by source-id and target-id so each
+    // selection change is O(degree of selected node) instead of O(|E|).
+    // MLIR graphs can run into the tens of thousands of edges; without
+    // these indices, every node click would re-walk the whole edge list.
+    const { outgoingEdgesByNodeId, incomingEdgesByNodeId } = useMemo<{
+        outgoingEdgesByNodeId: Map<string, Edge[]>;
+        incomingEdgesByNodeId: Map<string, Edge[]>;
+    }>(() => {
+        const outgoing = new Map<string, Edge[]>();
+        const incoming = new Map<string, Edge[]>();
+        for (const edge of edges) {
+            const fromBucket = outgoing.get(edge.source);
+            if (fromBucket) {
+                fromBucket.push(edge);
+            } else {
+                outgoing.set(edge.source, [edge]);
+            }
+            const toBucket = incoming.get(edge.target);
+            if (toBucket) {
+                toBucket.push(edge);
+            } else {
+                incoming.set(edge.target, [edge]);
+            }
+        }
+        return { outgoingEdgesByNodeId: outgoing, incomingEdgesByNodeId: incoming };
+    }, [edges]);
+
+    // Per-node output-port lookup so incoming-edge enrichment can grab the
+    // producer's port metadata in O(1) instead of `find()`-ing through the
+    // producer's `outputsMetadata` array on every edge.
+    const outputsPortMetadataByNodeIdAndPortId = useMemo<Map<string, Map<string, IndexedPortMetadata>>>(() => {
+        const result = new Map<string, Map<string, IndexedPortMetadata>>();
+        for (const sourceNode of sourceNodes) {
+            if (sourceNode.outputsMetadata.length === 0) {
+                continue;
+            }
+            const portMap = new Map<string, IndexedPortMetadata>();
+            for (const port of sourceNode.outputsMetadata) {
+                portMap.set(port.id, port);
+            }
+            result.set(sourceNode.id, portMap);
+        }
+        return result;
+    }, [sourceNodes]);
+
+    const selectedOutgoingEdges = useMemo<OutgoingEdge[]>(() => {
+        if (!selectedNodeId) {
+            return [];
+        }
+        // Also pick up edges sourced from the region-output partner so that
+        // selecting either side of the (outer op ↔ terminator) pair surfaces
+        // the same consumers.
+        const partnerNodeId = regionOutputPartnerByNodeId.get(selectedNodeId);
+        const buckets: Edge[][] = [];
+        const selfBucket = outgoingEdgesByNodeId.get(selectedNodeId);
+        if (selfBucket) {
+            buckets.push(selfBucket);
+        }
+        if (partnerNodeId) {
+            const partnerBucket = outgoingEdgesByNodeId.get(partnerNodeId);
+            if (partnerBucket) {
+                buckets.push(partnerBucket);
+            }
+        }
+        // De-dupe on the tuple the user actually reads off the row
+        // (target node + source output port + target input port). The
+        // self and partner buckets can both surface the same logical
+        // wire when the worker's `addEdgeSafe` keeps two edge ids that
+        // share an endpoint tuple (its id-dedup only blocks exact id
+        // collisions, and pair-dedup is bypassed for non-top-level
+        // endpoints). Without this guard the Outputs section renders
+        // duplicated consumer rows for region-pair selections.
+        const result: OutgoingEdge[] = [];
+        const seenKeys = new Set<string>();
+        for (const bucket of buckets) {
+            for (const edge of bucket) {
+                const sourceOutputId = edge.sourceHandle ?? '0';
+                const targetInputId = edge.targetHandle ?? '0';
+                const key = `${edge.target}|${sourceOutputId}|${targetInputId}`;
+                if (seenKeys.has(key)) {
+                    continue;
+                }
+                seenKeys.add(key);
+                result.push({
+                    targetNodeId: edge.target,
+                    targetNodeLabel: sourceNodeById.get(edge.target)?.label ?? null,
+                    sourceNodeOutputId: sourceOutputId,
+                    targetNodeInputId: targetInputId,
+                    label: typeof edge.label === 'string' ? edge.label : undefined,
+                });
+            }
+        }
+        return result;
+    }, [outgoingEdgesByNodeId, selectedNodeId, regionOutputPartnerByNodeId, sourceNodeById]);
+
+    // Output port metadata for the panel: the selected node's own metadata
+    // when present, else the partner's. For a region's terminator (no own
+    // `outputsMetadata`) this surfaces the outer op's port metadata, so the
+    // Outputs section stays consistent across both sides of the pair.
+    const selectedOutputsMetadata = useMemo<IndexedPortMetadata[]>(() => {
+        if (!selectedSourceNode) {
+            return [];
+        }
+        if (selectedSourceNode.outputsMetadata.length > 0) {
+            return selectedSourceNode.outputsMetadata;
+        }
+        const partnerNodeId = regionOutputPartnerByNodeId.get(selectedSourceNode.id);
+        if (!partnerNodeId) {
+            return [];
+        }
+        return sourceNodeById.get(partnerNodeId)?.outputsMetadata ?? [];
+    }, [selectedSourceNode, regionOutputPartnerByNodeId, sourceNodeById]);
+    const selectedIncomingEdges = useMemo<IncomingEdgeView[]>(() => {
+        if (!selectedNodeId) {
+            return [];
+        }
+        // When the selection is the anchor op of an expanded region, the
+        // layout worker has rewritten its cross-region incoming edges to land
+        // on the inner input-arg nodes. Walk those args too and attribute
+        // their edges back to the anchor's input port (the index of the
+        // arg in `namespaceInputByNamespace[ns]`).
+        const argIdxByArgId = inputArgIdxByArgIdByAnchor.get(selectedNodeId);
+        // Build the (bucket, targetInputId resolver) pairs we need to walk.
+        // Direct edges hitting the selection use their own targetHandle; arg
+        // edges resolve to the anchor's input-port index via `argIdxByArgId`.
+        const pairs: Array<{ bucket: Edge[]; resolveTargetInputId: (edge: Edge) => string | null }> = [];
+        const selfBucket = incomingEdgesByNodeId.get(selectedNodeId);
+        if (selfBucket) {
+            pairs.push({
+                bucket: selfBucket,
+                resolveTargetInputId: (edge) => edge.targetHandle ?? '0',
+            });
+        }
+        if (argIdxByArgId) {
+            for (const [argNodeId, portIdx] of argIdxByArgId) {
+                const argBucket = incomingEdgesByNodeId.get(argNodeId);
+                if (argBucket) {
+                    const portIdStr = String(portIdx);
+                    pairs.push({
+                        bucket: argBucket,
+                        resolveTargetInputId: () => portIdStr,
+                    });
+                }
+            }
+        }
+        // De-dupe on the tuple the user actually reads off the row
+        // (producer + source output port + target input port). Distinct
+        // worker edge ids can share this tuple — see the matching
+        // comment on `selectedOutgoingEdges` — which otherwise surfaces
+        // as duplicated rows in the Inputs section and an inflated
+        // section count.
+        const result: IncomingEdgeView[] = [];
+        const seenKeys = new Set<string>();
+        for (const { bucket, resolveTargetInputId } of pairs) {
+            for (const edge of bucket) {
+                const targetInputId = resolveTargetInputId(edge);
+                if (targetInputId === null) {
+                    continue;
+                }
+                const sourcePortId = edge.sourceHandle ?? '0';
+                const key = `${edge.source}|${sourcePortId}|${targetInputId}`;
+                if (seenKeys.has(key)) {
+                    continue;
+                }
+                seenKeys.add(key);
+                const producer = sourceNodeById.get(edge.source);
+                const sourcePortMetadata =
+                    outputsPortMetadataByNodeIdAndPortId.get(edge.source)?.get(sourcePortId) ?? null;
+                result.push({
+                    sourceNodeId: edge.source,
+                    sourceNodeLabel: producer?.label ?? null,
+                    sourceNodeOutputId: sourcePortId,
+                    targetNodeInputId: targetInputId,
+                    label: typeof edge.label === 'string' ? edge.label : undefined,
+                    sourcePortMetadata,
+                });
+            }
+        }
+        return result;
+    }, [
+        incomingEdgesByNodeId,
+        outputsPortMetadataByNodeIdAndPortId,
+        selectedNodeId,
+        sourceNodeById,
+        inputArgIdxByArgIdByAnchor,
+    ]);
+
+    const closeDetailsPanel = useCallback(() => {
+        setSelectedNodeId(null);
+        // Reopen expanded next time: close is a full dismissal, unlike moving
+        // the selection to another node (which keeps the collapse preference).
+        setDetailsExpanded(true);
+    }, []);
+
+    const toggleDetailsExpanded = useCallback(() => {
+        setDetailsExpanded((open) => !open);
+    }, []);
+
+    const recenterOnSelected = useCallback(() => {
+        if (!selectedNodeId) {
+            return;
+        }
+        void fitView({ nodes: [{ id: selectedNodeId }], ...MLIR_FIT_VIEW_OPTIONS.localJump });
+    }, [fitView, selectedNodeId]);
+
+    // Click handler for the "locate" affordance next to each producer /
+    // consumer reference in the details panel. This is a peek — it pans
+    // the viewport to the linked node without changing the current
+    // selection, so the panel stays on the originating op and the
+    // input/output highlighting on the canvas doesn't churn.
+    //
+    // The target may live inside one or more collapsed namespaces, so we:
+    //   1. Look it up in the source-data map. If unknown (e.g. a synthetic
+    //      arg-node id that never appears as a SourceNode), bail.
+    //   2. Walk the namespace chain and queue any ancestor prefixes — and
+    //      the target's own namespace — that aren't already expanded. Every
+    //      level must be expanded for the node to actually be rendered.
+    //   3. If no expansion was needed, fitView straight away. Otherwise
+    //      stash the id in `pendingFocusNodeIdRef` so the post-rebuild path
+    //      in `applyBuiltGraph` recenters once the new nodes land.
+    const navigateToNode = useCallback(
+        (targetNodeId: string) => {
+            const target = sourceNodeById.get(targetNodeId);
+            if (!target) {
+                return;
+            }
+            const segments = getNamespaceSegments(target.namespace);
+            const prefixesToAdd: string[] = [];
+            for (let i = 1; i <= segments.length; i++) {
+                const prefix = segments.slice(0, i).join('/');
+                if (!expandedNamespaces.has(prefix)) {
+                    prefixesToAdd.push(prefix);
+                }
+            }
+            if (prefixesToAdd.length === 0) {
+                void fitView({ nodes: [{ id: targetNodeId }], ...MLIR_FIT_VIEW_OPTIONS.localJump });
+                return;
+            }
+            viewportAnchorRef.current = null;
+            pendingFitAllRef.current = false;
+            pendingFocusNodeIdRef.current = targetNodeId;
+            setExpandedNamespaces((prev) => {
+                const next = new Set(prev);
+                for (const prefix of prefixesToAdd) {
+                    next.add(prefix);
+                }
+                return next;
+            });
+        },
+        [expandedNamespaces, fitView, sourceNodeById],
+    );
+
+    // Edge display rules:
+    // 1. Drop edges where either endpoint is a real-namespace group node.
+    //    The worker's internal-edges loop emits these for nested expanded
+    //    regions, but the top-level loop ALWAYS also emits the direct
+    //    node-to-node alternative (e.g. `gather → arg42` is the direct twin
+    //    of `gather → group:all_reduce_0`). Keeping both causes duplicate
+    //    edges with disagreeing labels.
+    // 2. Selection edges: when a node is selected, every edge touching it is
+    //    shown end-to-end so the user can trace exact connections.
+    // 3. Collapsed-to-collapsed edges: when both endpoints are collapsed
+    //    namespace anchors, the edge represents an aggregated bundle of
+    //    many inner connections. Drop the per-edge label and dedup by pair
+    //    so we don't paint a stack of tensor shapes between two anchors.
+    // 4. Same-parent edges (otherwise): shown end-to-end with their label.
+    // 5. Cross-boundary edges: lift each endpoint to the level just below
+    //    the lowest common ancestor of the two parent chains, then on each
+    //    side independently if the lifted endpoint is a *real* MLIR
+    //    namespace group (not a synthetic topology section), drop the lift
+    //    and use the actual node. This gives direct node-to-node edges for
+    //    region boundaries while preserving the aggregate "section A →
+    //    section B" rendering for high-fan-out synthetic sections. Aggregate
+    //    pairs are de-duplicated.
+    const displayedEdges = useMemo<Edge[]>(() => {
+        if (edges.length === 0) {
+            return edges;
+        }
+        const parentChain = (nodeId: string): readonly string[] =>
+            nodeTopologyById.get(nodeId)?.parentChain ?? EMPTY_CHAIN;
+        const isRealNamespaceGroup = (id: string): boolean => {
+            const t = nodeTopologyById.get(id);
+            return t?.type === 'mlirGroup' && t.groupKind !== 'section';
+        };
+        const isCollapsedAnchor = (id: string): boolean => {
+            const t = nodeTopologyById.get(id);
+            return !!t?.collapsedSubgraphNamespace && t.subgraphToggleState === 'collapsed';
+        };
+        // LCA lift: for an edge whose endpoints live in different parent
+        // chains, walk each chain down to the point just below their lowest
+        // common ancestor. The lifted ids represent the edge's projection onto
+        // that LCA boundary. Returns the *raw* lifted ids (no real-namespace
+        // fallback yet — that happens at the call site, where rule 5 also
+        // decides whether to keep the original endpoint).
+        const liftToLCA = (srcId: string, tgtId: string): { liftedSrc: string; liftedTgt: string } => {
+            const srcChain = parentChain(srcId);
+            const tgtChain = parentChain(tgtId);
+            let lcaDepth = 0;
+            while (
+                lcaDepth < srcChain.length &&
+                lcaDepth < tgtChain.length &&
+                srcChain[lcaDepth] === tgtChain[lcaDepth]
+            ) {
+                lcaDepth++;
+            }
+            return {
+                liftedSrc: srcChain.length > lcaDepth ? srcChain[lcaDepth] : srcId,
+                liftedTgt: tgtChain.length > lcaDepth ? tgtChain[lcaDepth] : tgtId,
+            };
+        };
+        const result: Edge[] = [];
+        const seenAggregatePairs = new Set<string>();
+        const seenCollapsedPairs = new Set<string>();
+        for (const e of edges) {
+            // (1) Suppress redundant container-level edges for real
+            // namespaces. We already emit the direct twin from the top-level
+            // edge loop, so the group-boundary version is pure visual noise.
+            if (isRealNamespaceGroup(e.source) || isRealNamespaceGroup(e.target)) {
+                continue;
+            }
+            // (2) Selection wins over everything below — labels included.
+            if (e.source === selectedNodeId || e.target === selectedNodeId) {
+                result.push(e);
+                continue;
+            }
+            // (3) Collapsed-to-collapsed: aggregated bundle, no label, dedup.
+            if (isCollapsedAnchor(e.source) && isCollapsedAnchor(e.target)) {
+                const pairKey = `${e.source}|${e.target}`;
+                if (seenCollapsedPairs.has(pairKey)) {
+                    continue;
+                }
+                seenCollapsedPairs.add(pairKey);
+                result.push({ ...e, label: undefined });
+                continue;
+            }
+            const srcParent = nodeTopologyById.get(e.source)?.parentId;
+            const tgtParent = nodeTopologyById.get(e.target)?.parentId;
+            // (4) Same-parent — push as-is.
+            if (srcParent === tgtParent) {
+                result.push(e);
+                continue;
+            }
+            // (5) Cross-boundary — LCA lift with real-namespace fallback.
+            const { liftedSrc, liftedTgt } = liftToLCA(e.source, e.target);
+            const finalSrc = isRealNamespaceGroup(liftedSrc) ? e.source : liftedSrc;
+            const finalTgt = isRealNamespaceGroup(liftedTgt) ? e.target : liftedTgt;
+            if (finalSrc === finalTgt) {
+                continue;
+            }
+            if (finalSrc === e.source && finalTgt === e.target) {
+                result.push(e);
+                continue;
+            }
+            const pairKey = `${finalSrc}|${finalTgt}`;
+            if (seenAggregatePairs.has(pairKey)) {
+                continue;
+            }
+            seenAggregatePairs.add(pairKey);
+            result.push({
+                ...e,
+                id: `agg:${pairKey}`,
+                source: finalSrc,
+                target: finalTgt,
+                label: undefined,
+            });
+        }
+        return result;
+    }, [edges, nodeTopologyById, selectedNodeId]);
+
+    // Focus context: the selected node, its directly connected neighbours, and
+    // the edges that connect them. Held as derived state so the rest of the
+    // component (and any future side panels) can render details about the
+    // current focus without re-walking the edge list.
+    const focusedConnections = useMemo(() => {
+        const inputNodeIds = new Set<string>();
+        const outputNodeIds = new Set<string>();
+        const inputEdgeIds = new Set<string>();
+        const outputEdgeIds = new Set<string>();
+        if (selectedNodeId) {
+            for (const e of displayedEdges) {
+                if (e.target === selectedNodeId) {
+                    inputNodeIds.add(e.source);
+                    inputEdgeIds.add(e.id);
+                }
+                if (e.source === selectedNodeId) {
+                    outputNodeIds.add(e.target);
+                    outputEdgeIds.add(e.id);
+                }
+            }
+        }
+        return { inputNodeIds, outputNodeIds, inputEdgeIds, outputEdgeIds };
+    }, [displayedEdges, selectedNodeId]);
+
+    // Composes selection highlight + filter dim + buried-match badge + the
+    // node-body overlay height in one map pass. Groups stay neutral
+    // (opacity on the wrapper bleeds into children); the selected node
+    // stays bright regardless of match state so the user doesn't lose
+    // their anchor. Overlay height is applied inline (not routed through
+    // the layout worker) so toggling doesn't reflow the graph.
+    const styledNodes = useMemo<MLNode[]>(() => {
+        const { inputNodeIds, outputNodeIds } = focusedConnections;
+        const hasSelectionHighlight = !!selectedNodeId && (inputNodeIds.size > 0 || outputNodeIds.size > 0);
+        // Zero-match filter is treated as "no filter" for dim/badge purposes
+        // — leaves the canvas untouched instead of dimming everything to 18%.
+        const activeFilter = filterMatchInfo && filterMatchInfo.visibleRepIds.size > 0 ? filterMatchInfo : null;
+        const hasOverlayHeight = overlayLinesByNodeId.size > 0;
+        if (!hasSelectionHighlight && !activeFilter && !hasOverlayHeight) {
+            return nodes;
+        }
+        return nodes.map((n) => {
+            let next = n;
+            if (hasSelectionHighlight) {
+                const role: 'input' | 'output' | undefined = inputNodeIds.has(n.id)
+                    ? 'input'
+                    : outputNodeIds.has(n.id)
+                      ? 'output'
+                      : undefined;
+                if (role) {
+                    const color = role === 'input' ? GRAPH_COLORS.inputNode : GRAPH_COLORS.outputNode;
+                    if (n.type === 'mlirGroup') {
+                        next = { ...next, data: { ...next.data, highlight: role } };
+                    } else {
+                        next = { ...next, style: { ...(next.style ?? {}), background: color } };
+                    }
+                }
+            }
+            if (activeFilter) {
+                const { visibleRepIds, buriedCountByRepId } = activeFilter;
+                const buriedCount = buriedCountByRepId.get(n.id) ?? 0;
+                if (buriedCount > 0) {
+                    next = { ...next, data: { ...next.data, buriedMatchCount: buriedCount } };
+                }
+                const isMatch = visibleRepIds.has(n.id);
+                if (n.type !== 'mlirGroup' && n.id !== selectedNodeId && !isMatch) {
+                    next = { ...next, style: { ...(next.style ?? {}), opacity: FILTER_DIM_OPACITY } };
+                }
+            }
+            if (hasOverlayHeight && n.type !== 'mlirGroup') {
+                const overlay = overlayLinesByNodeId.get(n.id);
+                if (overlay) {
+                    const extra = overlay.shapes.length + overlay.location.length;
+                    const baseHeight = typeof n.height === 'number' ? n.height : 40;
+                    const grownHeight = baseHeight + extra * NODE_BODY_OVERLAY_LINE_PX;
+                    next = {
+                        ...next,
+                        height: grownHeight,
+                        style: { ...(next.style ?? {}), height: grownHeight },
+                        data: {
+                            ...next.data,
+                            shapeLines: overlay.shapes,
+                            locationLines: overlay.location,
+                        },
+                    };
+                }
+            }
+            return next;
+        });
+    }, [nodes, focusedConnections, selectedNodeId, filterMatchInfo, overlayLinesByNodeId]);
+
+    // MiniMap reads `node.style.background` to colour each mini-node. The
+    // unhighlighted op-node fill now lives in SCSS (`.react-flow__node-mlirOp`),
+    // so without this callback the minimap would fall back to its CSS var —
+    // which is the same `$tt-grey-2` as the minimap pane background, making
+    // nodes invisible. Group wrappers carry no inline background (their chrome
+    // is the inner `.mlir-group-body`), so we paint them with the shared group
+    // identity colour here.
+    const minimapNodeColor = useCallback((node: Node): string => {
+        const inlineBg = (node.style as { background?: string } | undefined)?.background;
+        if (typeof inlineBg === 'string' && inlineBg !== 'transparent') {
+            return inlineBg;
+        }
+        if (node.type === 'mlirGroup') {
+            return GRAPH_COLORS.group;
+        }
+        return GRAPH_COLORS.opNode;
+    }, []);
+
+    // Selection incoming green / outgoing yellow, then dim when a filter is
+    // active. Edges between two matches stay bright so the matched subset
+    // remains traceable; selection edges trump filter dim.
+    const styledEdges = useMemo<Edge[]>(() => {
+        const { inputEdgeIds, outputEdgeIds } = focusedConnections;
+        const hasSelectionHighlight = !!selectedNodeId && (inputEdgeIds.size > 0 || outputEdgeIds.size > 0);
+        const activeFilter = filterMatchInfo && filterMatchInfo.visibleRepIds.size > 0 ? filterMatchInfo : null;
+        if (!hasSelectionHighlight && !activeFilter) {
+            return displayedEdges;
+        }
+        return displayedEdges.map((e) => {
+            let next = e;
+            if (hasSelectionHighlight) {
+                if (inputEdgeIds.has(e.id)) {
+                    next = {
+                        ...next,
+                        style: { ...(next.style ?? {}), stroke: GRAPH_COLORS.inputEdge, strokeWidth: 2 },
+                        markerEnd:
+                            typeof next.markerEnd === 'object' && next.markerEnd
+                                ? { ...next.markerEnd, color: GRAPH_COLORS.inputEdge }
+                                : next.markerEnd,
+                    };
+                } else if (outputEdgeIds.has(e.id)) {
+                    next = {
+                        ...next,
+                        style: { ...(next.style ?? {}), stroke: GRAPH_COLORS.outputEdge, strokeWidth: 2 },
+                        markerEnd:
+                            typeof next.markerEnd === 'object' && next.markerEnd
+                                ? { ...next.markerEnd, color: GRAPH_COLORS.outputEdge }
+                                : next.markerEnd,
+                    };
+                }
+            }
+            if (activeFilter) {
+                const { visibleRepIds } = activeFilter;
+                const bothMatch = visibleRepIds.has(e.source) && visibleRepIds.has(e.target);
+                const isSelectionEdge = inputEdgeIds.has(e.id) || outputEdgeIds.has(e.id);
+                if (!bothMatch && !isSelectionEdge) {
+                    next = { ...next, style: { ...(next.style ?? {}), opacity: FILTER_DIM_OPACITY } };
+                }
+            }
+            return next;
+        });
+    }, [displayedEdges, focusedConnections, selectedNodeId, filterMatchInfo]);
+
+    return (
+        <div className='mlir-view-pane'>
+            <MlirGroupContext.Provider value={groupContextValue}>
+                <ReactFlow
+                    id={rfId}
+                    nodes={styledNodes}
+                    edges={styledEdges}
+                    onNodeClick={onSubgraphNodeClick}
+                    onPaneClick={onPaneClick}
+                    onNodesChange={onNodesChange}
+                    onEdgesChange={onEdgesChange}
+                    nodeTypes={nodeTypes}
+                    minZoom={0.003}
+                    maxZoom={1.5}
+                    fitView
+                    connectionLineType={ConnectionLineType.SmoothStep}
+                    selectNodesOnDrag={false}
+                >
+                    <MiniMap
+                        nodeColor={minimapNodeColor}
+                        pannable
+                        zoomable
+                    />
+                    <Controls />
+                    <Background />
+                </ReactFlow>
+            </MlirGroupContext.Provider>
+
+            <div className='mlir-top-left-controls'>
+                <GraphOpFilter
+                    ref={filterRef}
+                    query={filterQuery}
+                    onQueryChange={handleQueryChange}
+                    mode={filterMode}
+                    onModeChange={handleModeChange}
+                    isRegexInvalid={filterMatchInfo?.isRegexInvalid ?? false}
+                    matchCount={matchedNodesInOrder.length}
+                    hiddenMatchCount={filterMatchInfo?.hiddenMatchCount ?? 0}
+                    currentMatchIndex={currentMatchIndex}
+                    onPrev={goToPrevMatch}
+                    onNext={goToNextMatch}
+                />
+
+                <div className='mlir-controls-row'>
+                    <MlirNodeBodyToggles
+                        value={nodeBodyToggles}
+                        onChange={setNodeBodyToggles}
+                        disabled={isBuilding}
+                    />
+
+                    <MlirExpandCollapseControls
+                        namespaceCount={allExpandableNamespaces.length}
+                        expandedCount={expandedNamespaces.size}
+                        isBuilding={isBuilding}
+                        nodeCount={sourceNodes.length}
+                        onExpandAll={expandAllNamespaces}
+                        onCollapseAll={collapseAllNamespaces}
+                    />
+                </div>
+            </div>
+
+            <MlirNodeColorLegend />
+
+            {selectedSourceNode && (
+                <MlirNodeDetailsPanel
+                    node={selectedSourceNode}
+                    incomingEdges={selectedIncomingEdges}
+                    outgoingEdges={selectedOutgoingEdges}
+                    outputsMetadata={selectedOutputsMetadata}
+                    onClose={closeDetailsPanel}
+                    onRecenter={recenterOnSelected}
+                    onNavigateToNode={navigateToNode}
+                    collapsible={detailsCollapsible}
+                    expanded={detailsExpanded}
+                    onToggleExpand={toggleDetailsExpanded}
+                />
+            )}
+        </div>
+    );
+};
+
+const MlGraphWithProvider = (props: ViewProps) => (
+    <ReactFlowProvider>
+        {/* Keying on graph.id remounts the inner subtree when the user
+            switches graphs — cleaner than imperatively resetting half a
+            dozen state slots in an effect, and lints cleanly under
+            react-hooks/set-state-in-effect. */}
+        <MlGraphInner
+            key={props.data.graphs[0]?.id}
+            {...props}
+        />
+    </ReactFlowProvider>
+);
+
+// Memoised so a parent re-render with a referentially-stable `data` (e.g. the
+// split view's per-pane bundle during a divider drag) skips both panes.
+export default memo(MlGraphWithProvider);

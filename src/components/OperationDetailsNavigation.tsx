@@ -2,8 +2,19 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { useCallback, useEffect } from 'react';
-import { Button, ButtonGroup, ButtonVariant, Icon, Intent, PopoverPosition, Tooltip } from '@blueprintjs/core';
+import { useCallback, useEffect, useState } from 'react';
+import {
+    Button,
+    ButtonGroup,
+    ButtonVariant,
+    Intent,
+    PopoverPosition,
+    Size,
+    Tab,
+    TabId,
+    Tabs,
+    Tooltip,
+} from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { useNavigate } from 'react-router';
 import { useNextOperation, useOperationDetails, usePreviousOperation } from '../hooks/useAPI';
@@ -11,6 +22,14 @@ import 'styles/components/OperationDetailsNavigation.scss';
 import ROUTES from '../definitions/Routes';
 import LoadingSpinner from './LoadingSpinner';
 import { LoadingSpinnerSizes } from '../definitions/LoadingSpinner';
+import Overlay from './Overlay';
+import StackTrace from './operation-details/StackTrace';
+import { StackTraceLanguage } from '../definitions/StackTrace';
+
+enum TAB_IDS {
+    ERROR = 'ERROR',
+    STACK_TRACE = 'STACK_TRACE',
+}
 
 interface OperationDetailsNavigationProps {
     operationId: number;
@@ -18,17 +37,21 @@ interface OperationDetailsNavigationProps {
 }
 
 function OperationDetailsNavigation({ operationId, isLoading }: OperationDetailsNavigationProps) {
+    const [errorIsOpen, setErrorIsOpen] = useState(false);
+    const [selectedTabId, setSelectedTabId] = useState<TabId>(TAB_IDS.ERROR);
+    const [isErrorExpanded, setIsErrorExpanded] = useState(false);
+
     const navigate = useNavigate();
     const { operation } = useOperationDetails(operationId);
     const previousOperation = usePreviousOperation(operationId);
     const nextOperation = useNextOperation(operationId);
 
     const navigateToPreviousOperation = useCallback(() => {
-        navigate(`${ROUTES.OPERATIONS}/${previousOperation?.id}`);
+        void navigate(`${ROUTES.OPERATIONS}/${previousOperation?.id}`);
     }, [navigate, previousOperation]);
 
     const navigateToNextOperation = useCallback(() => {
-        navigate(`${ROUTES.OPERATIONS}/${nextOperation?.id}`);
+        void navigate(`${ROUTES.OPERATIONS}/${nextOperation?.id}`);
     }, [navigate, nextOperation]);
 
     useEffect(() => {
@@ -52,7 +75,7 @@ function OperationDetailsNavigation({ operationId, isLoading }: OperationDetails
     }, [navigateToPreviousOperation, navigateToNextOperation, previousOperation, nextOperation]);
 
     return (
-        <nav className='operation-details-navigation navbar'>
+        <nav className='operation-details-navigation'>
             <ButtonGroup className='button-group'>
                 <Button
                     icon={IconNames.Graph}
@@ -63,7 +86,7 @@ function OperationDetailsNavigation({ operationId, isLoading }: OperationDetails
                 />
 
                 <Tooltip
-                    content={previousOperation ? `${previousOperation?.id} ${previousOperation?.name}` : ''}
+                    content={`${previousOperation?.id} ${previousOperation?.name}`}
                     placement={PopoverPosition.TOP}
                     disabled={!previousOperation}
                 >
@@ -99,7 +122,7 @@ function OperationDetailsNavigation({ operationId, isLoading }: OperationDetails
                 </Tooltip>
 
                 <Tooltip
-                    content={nextOperation ? `${nextOperation?.id} ${nextOperation?.name}` : ''}
+                    content={`${nextOperation?.id} ${nextOperation?.name}`}
                     placement={PopoverPosition.TOP}
                     disabled={!nextOperation}
                 >
@@ -128,20 +151,67 @@ function OperationDetailsNavigation({ operationId, isLoading }: OperationDetails
                         </h2>
 
                         {operation?.error && (
-                            <Tooltip
-                                content='Error recorded in operation'
-                                placement={PopoverPosition.TOP}
-                            >
-                                <Icon
-                                    icon={IconNames.ERROR}
-                                    intent={Intent.DANGER}
-                                    size={20}
-                                />
-                            </Tooltip>
+                            <Button
+                                icon={IconNames.ERROR}
+                                intent={Intent.DANGER}
+                                onClick={() => setErrorIsOpen(true)}
+                                variant={ButtonVariant.MINIMAL}
+                                text='View operation error'
+                            />
                         )}
                     </>
                 )}
             </ButtonGroup>
+
+            <Overlay
+                isOpen={errorIsOpen}
+                onClose={() => setErrorIsOpen(false)}
+            >
+                {operation?.error && (
+                    <Tabs
+                        selectedTabId={selectedTabId}
+                        onChange={setSelectedTabId}
+                        size={Size.LARGE}
+                        id='error-details-tabs'
+                        className='report-tabs'
+                        renderActiveTabPanelOnly
+                    >
+                        <Tab
+                            id={TAB_IDS.ERROR}
+                            title='Error details'
+                            icon={IconNames.COMMENT}
+                            panel={
+                                <StackTrace
+                                    stackTrace={operation.error.error_message}
+                                    language={StackTraceLanguage.CPP}
+                                    intent={Intent.DANGER}
+                                    isInitiallyExpanded={isErrorExpanded}
+                                    onExpandChange={(state) => setIsErrorExpanded(!state)}
+                                    hideSourceButton
+                                    isInline
+                                />
+                            }
+                        />
+
+                        <Tab
+                            id={TAB_IDS.STACK_TRACE}
+                            title='Stack Trace'
+                            icon={IconNames.APPLICATION}
+                            panel={
+                                <StackTrace
+                                    stackTrace={operation.error.stack_trace}
+                                    language={StackTraceLanguage.CPP}
+                                    intent={Intent.DANGER}
+                                    isInitiallyExpanded={isErrorExpanded}
+                                    onExpandChange={(state) => setIsErrorExpanded(!state)}
+                                    hideSourceButton
+                                    isInline
+                                />
+                            }
+                        />
+                    </Tabs>
+                )}
+            </Overlay>
         </nav>
     );
 }

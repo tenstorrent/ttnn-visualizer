@@ -1,0 +1,81 @@
+# Troubleshooting
+
+## No SSH keys found
+
+<img width="492" alt="SSH key error" src="https://github.com/user-attachments/assets/3f7f9983-f92d-4900-9321-9d46c6355c36" />
+
+Check your local ssh agent has your ssh key by running:
+
+```shell
+ssh-add -L
+```
+
+If your key isn't present, run the following on your local machine:
+
+```shell
+ssh-add
+```
+
+## Unable to find Python modules
+
+```shell
+rm -rf .venv
+uv sync
+```
+
+Then {ref}`follow the steps <back-end>` if problems persist.
+
+## Missing distutils package
+
+Remove the virtual environment and resync dependencies:
+
+```shell
+rm -rf .venv
+uv sync
+```
+
+
+## Event synchronization is not supported during trace capture
+
+Report generation in TTNN is not compatible with trace capture. If you see this error,
+it likely means that trace capture has been enabled in TTNN. This is not
+a setting in TT-Metal or TTNN, but rather a hard-coded value in several of the models
+and demos.
+
+How trace capture is enabled depends on the model or demo. In some cases you will see
+`enable_trace = True` in the Python code. In other cases it may be enabled by a
+`--enable_trace` CLI arg. Some tests use the PyTest `parametrize` decorator to run the
+demo both with and without trace capture.
+
+Models or demos that have trace capture enabled need to be modified to not use that
+feature in order for report generation to work.
+
+
+## Pytest Timeout
+
+Report generation when running models with `pytest` can sometimes take longer than the
+default timeout value:
+
+```
+Failed: Timeout (>300.0s) from pytest-timeout.
+```
+
+This can be resolved by passing a `--timeout <timeout>` value to the `pytest` command,
+with a larger timeout value than the default. For example:
+
+```shell
+python -m tracy -r -v -m pytest --timeout 900 /path/to/demo.py
+```
+
+(cluster-descriptor-missing)=
+## Missing cluster descriptor 
+
+The cluster layout view reads `cluster_descriptor.yaml` from the same folder as `db.sqlite` for the active memory report (for example `${TT_METAL_HOME}/generated/ttnn/reports/<report_folder>/cluster_descriptor.yaml`), but sometimes it has not been generated.
+
+Run topology to generate the cluster descriptor.
+
+   ```shell
+   "${TT_METAL_HOME}/build/tools/umd/topology"
+   ```
+
+By default it will be output into a temporary directory `{temp_directory}/umd_XXXXXX/` which will be picked up when you generate your memory report.

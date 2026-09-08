@@ -2,21 +2,34 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import React, { useMemo } from 'react';
+import { useMemo } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { useParams } from 'react-router';
 
 import { useAtomValue } from 'jotai';
-import { useOperationsList } from '../hooks/useAPI';
-import OperationGraph from '../components/OperationGraphComponent';
+import { useGetDeviceOperationListPerf, useLinkedPerformanceReport, useOperationsList } from '../hooks/useAPI';
+import OperationGraph from '../components/operation-graph/OperationGraphReactFlow';
 import LoadingSpinner from '../components/LoadingSpinner';
-import useClearSelectedBuffer from '../functions/clearSelectedBuffer';
-import { selectedOperationRangeAtom } from '../store/app';
+import useClearSelectedBuffer from '../hooks/useClearSelectedBuffer';
+import { activePerformanceReportFolderNameAtom, selectedOperationRangeAtom } from '../store/app';
+import { PerfOverlaySource } from '../functions/perfOverlay';
 
-const GraphView: React.FC = () => {
+const GraphView = () => {
     const { data: operationList, isLoading } = useOperationsList();
     const { operationId } = useParams<{ operationId?: string }>();
     const selectedOperationRange = useAtomValue(selectedOperationRangeAtom);
+    // Read alongside the report rather than out of it: `useLinkedPerformanceReport`
+    // resolves the name internally and returns only the data, which cannot
+    // distinguish "nothing selected" from "selected and still in flight". #1880
+    const activeReportFolderName = useAtomValue(activePerformanceReportFolderNameAtom);
+    // The link-pinned report, so a perf-tab view filter can neither hide the
+    // report from the overlay nor break the match below (#1812).
+    const { data: perfReport } = useLinkedPerformanceReport();
+    // Canonical "do the loaded reports belong to the same run?" signal. This is
+    // the same name-based lock-step match used by `ReportLinkStatus`: returns
+    // `[]` whenever the loaded perf report doesn't line up with the profiler
+    // report, which the overlay must treat as UNLINKED rather than READY.
+    const matchedPerfOps = useGetDeviceOperationListPerf();
 
     useClearSelectedBuffer();
 
@@ -27,6 +40,40 @@ const GraphView: React.FC = () => {
                 : operationList,
         [operationList, selectedOperationRange],
     );
+
+    // Source overlay rows from the matched op list so the row `id` is the
+    // *profiler* op id (what the graph keys on), not the perf-table row index.
+    // The two id spaces often coincide for simple non-tracing runs, which is
+    // why the previous "rows from perfReport.report directly" approach passed
+    // most of the time and then silently mis-matched on mixed-run reports.
+    const perfOverlayRows = useMemo<PerfOverlaySource[] | undefined>(() => {
+        if (matchedPerfOps.length === 0) {
+            return undefined;
+        }
+        return matchedPerfOps.flatMap((op) => {
+            const deviceTime = op.perfData?.device_time;
+            if (deviceTime === undefined) {
+                return [];
+            }
+            const parsedDeviceTime = parseFloat(deviceTime);
+            return [
+                {
+                    id: op.id,
+                    device_time: Number.isFinite(parsedDeviceTime) ? parsedDeviceTime : null,
+                },
+            ];
+        });
+    }, [matchedPerfOps]);
+
+    // The overlay needs to distinguish "no perf report loaded at all"
+    // (UNAVAILABLE) from "loaded but doesn't match this graph" (UNLINKED).
+    // `perfOverlayRows` collapses both into "empty"; this flag preserves the
+    // distinction, which is what the toggle's disabled tooltip reads. Keyed on
+    // the selection rather than the row count, so a report that parsed to zero
+    // rows still reads as loaded instead of telling the user to load the report
+    // they already have. The query resolves an empty report when nothing is
+    // selected, so its data alone cannot answer this. #1880
+    const isPerfReportLoaded = activeReportFolderName !== null && perfReport !== undefined;
 
     return (
         <div className='data-padding'>
@@ -40,6 +87,8 @@ const GraphView: React.FC = () => {
                 <OperationGraph
                     operationList={filteredOperationList}
                     operationId={operationId ? parseInt(operationId, 10) : undefined}
+                    perfRows={perfOverlayRows}
+                    isPerfReportLoaded={isPerfReportLoaded}
                 />
             )}
         </div>

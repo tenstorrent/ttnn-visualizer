@@ -28,13 +28,13 @@ function OperationArguments({ operationIndex, operation, onCollapseTensor }: Ope
     };
 
     return (
-        <table className='ttnn-table two-tone-rows arguments-table has-vertical-headings'>
+        <table className='ttnn-table two-tone-rows arguments-table'>
             <caption>Arguments</caption>
 
             <tbody>
                 {operationArguments?.map((arg) => (
                     <tr key={`${id}-${arg.name}`}>
-                        <td>{arg.name}</td>
+                        <th>{arg.name}</th>
 
                         <td ref={cellRef}>
                             <TensorArgument

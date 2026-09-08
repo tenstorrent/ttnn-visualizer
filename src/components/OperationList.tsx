@@ -2,57 +2,68 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Button, ButtonGroup, ButtonVariant, Intent, PopoverPosition, Size, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
-import { useLocation, useNavigate } from 'react-router-dom';
-import classNames from 'classnames';
 import { useVirtualizer } from '@tanstack/react-virtual';
+import classNames from 'classnames';
 import { useAtom, useAtomValue } from 'jotai';
-import SearchField from './SearchField';
-import Collapsible from './Collapsible';
-import OperationArguments from './OperationArguments';
-import LoadingSpinner from './LoadingSpinner';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router';
 import 'styles/components/ListView.scss';
-import { useOperationsList } from '../hooks/useAPI';
 import ROUTES from '../definitions/Routes';
-import { activePerformanceReportAtom, selectedOperationRangeAtom, shouldCollapseAllOperationsAtom } from '../store/app';
-import { OperationDescription } from '../model/APIData';
-import ListItem from './ListItem';
+import { ScrollLocations } from '../definitions/VirtualLists';
+import { SortingOptions } from '../definitions/SortingOptions';
+import { StackTraceLanguage } from '../definitions/StackTrace';
 import { formatSize } from '../functions/math';
-import OperationListPerfData from './OperationListPerfData';
+import { useGetUniqueDeviceOperationsList, useOperationsList } from '../hooks/useAPI';
+import useRestoreScrollPosition from '../hooks/useRestoreScrollPosition';
+import useScrollShade from '../hooks/useScrollShade';
+import { OperationDescription } from '../model/APIData';
+import {
+    operationListFilterAtom,
+    selectedDeviceOperationsAtom,
+    selectedOperationRangeAtom,
+    shouldCollapseAllOperationsAtom,
+    shouldSortByIDAtom,
+    shouldSortDurationAtom,
+} from '../store/app';
+import Collapsible from './Collapsible';
+import ListItem from './ListItem';
+import LoadingSpinner from './LoadingSpinner';
 import StackTrace from './operation-details/StackTrace';
-import useRestoreScrollPositionV2 from '../hooks/useRestoreScrollPositionV2';
-import { SCROLL_TOLERANCE_PX } from '../definitions/ScrollPositions';
-import { ScrollLocationsV2 } from '../definitions/ScrollPositionsV2';
+import SourceFileButton from './operation-details/SourceFileButton';
+import { extractOperationSourceData } from '../functions/stackTraceSource';
+import OperationArguments from './OperationArguments';
+import OperationListPerfData from './OperationListPerfData';
+import OperationPerfRowBar from './OperationPerfRowBar';
+import SearchField from './SearchField';
+import SimpleMultiselect from './SimpleMultiselect';
+import { useOpPerfRowScores } from '../hooks/useOpPerfRowScores';
 
 const PLACEHOLDER_ARRAY_SIZE = 50;
 const OPERATION_EL_HEIGHT = 39; // Height in px of each list item
-const TOTAL_SHADE_HEIGHT = 100; // Height in px of 'scroll-shade' pseudo elements
-
-enum SortingOptions {
-    OFF,
-    ASCENDING,
-    DESCENDING,
-}
+const TOTAL_SHADE_HEIGHT = 100; // Total height in px of 'scroll-shade' pseudo elements
 
 const OperationList = () => {
+    'use no memo';
+
     const [shouldCollapseAll, setShouldCollapseAll] = useAtom(shouldCollapseAllOperationsAtom);
     const selectedOperationRange = useAtomValue(selectedOperationRangeAtom);
-    const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
 
-    const [filterQuery, setFilterQuery] = useState('');
-    const [shouldSortByID, setShouldSortByID] = useState<SortingOptions>(SortingOptions.ASCENDING);
-    const [shouldSortDuration, setShouldSortDuration] = useState<SortingOptions>(SortingOptions.OFF);
-    const [hasScrolledFromTop, setHasScrolledFromTop] = useState(false);
-    const [hasScrolledToBottom, setHasScrolledToBottom] = useState(false);
+    const [filterQuery, setFilterQuery] = useAtom(operationListFilterAtom);
+    const [shouldSortByID, setShouldSortByID] = useAtom(shouldSortByIDAtom);
+    const [shouldSortDuration, setShouldSortDuration] = useAtom(shouldSortDurationAtom);
     const [focusedRow, setFocusedRow] = useState<number | null>(null);
     const [expandedItems, setExpandedItems] = useState<number[]>([]);
+    const [selectedDeviceOperations, setSelectedDeviceOperations] = useAtom(selectedDeviceOperationsAtom);
 
     const location = useLocation();
     const navigate = useNavigate();
     const { data: fetchedOperations, error, isLoading } = useOperationsList();
-    const { getListState, updateListState } = useRestoreScrollPositionV2(ScrollLocationsV2.OPERATION_LIST);
+    const { scoreByOpId, isAvailable: hasPerfRowBars } = useOpPerfRowScores();
+    const { hasScrolledFromTop, hasScrolledToBottom, updateScrollShade, resetScrollShade, shadeClasses } =
+        useScrollShade();
+    const { getListState, updateListState } = useRestoreScrollPosition(ScrollLocations.OPERATION_LIST);
     const scrollElementRef = useRef<HTMLDivElement>(null);
 
     const operationsWithRange = useMemo(() => {
@@ -64,6 +75,11 @@ const OperationList = () => {
 
         return fetchedOperations;
     }, [fetchedOperations, selectedOperationRange]);
+    const uniqueDeviceOperationNames = useGetUniqueDeviceOperationsList();
+
+    const filterDeviceOperations = (list: string[]) => {
+        setSelectedDeviceOperations(new Set(list));
+    };
 
     const filteredOperationsList = useMemo(() => {
         if (operationsWithRange) {
@@ -72,6 +88,12 @@ const OperationList = () => {
             if (filterQuery) {
                 operations = operationsWithRange?.filter((operation) =>
                     getOperationFilterName(operation).toLowerCase().includes(filterQuery.toLowerCase()),
+                );
+            }
+
+            if (selectedDeviceOperations.size > 0) {
+                operations = operations.filter((operation) =>
+                    operation.deviceOperationNameList.some((opName) => selectedDeviceOperations.has(opName)),
                 );
             }
 
@@ -93,23 +115,28 @@ const OperationList = () => {
         }
 
         return [];
-    }, [operationsWithRange, filterQuery, shouldSortByID, shouldSortDuration]);
-
-    const listState = getListState();
+    }, [
+        //
+        operationsWithRange,
+        filterQuery,
+        selectedDeviceOperations,
+        shouldSortByID,
+        shouldSortDuration,
+    ]);
 
     const {
-        itemCount: restoredItemCount,
         scrollOffset: restoredOffset,
         measurementsCache: restoredMeasurementsCache,
         expandedItems: restoredExpandedItems,
-    } = listState ?? {};
+    } = useMemo(() => getListState(), [getListState]) ?? {};
 
+    // eslint-disable-next-line react-hooks/incompatible-library
     const virtualizer = useVirtualizer({
         estimateSize: () => OPERATION_EL_HEIGHT,
         getScrollElement: () => scrollElementRef.current,
         overscan: 10,
         initialMeasurementsCache: restoredMeasurementsCache,
-        count: restoredItemCount || filteredOperationsList?.length || PLACEHOLDER_ARRAY_SIZE,
+        count: filteredOperationsList?.length || PLACEHOLDER_ARRAY_SIZE,
         initialOffset: restoredOffset || 0,
         // TODO: Can help prevent stuttering when scrolling back up but needs more research
         // measureElement: (element, _entry, instance) => {
@@ -146,17 +173,33 @@ const OperationList = () => {
 
     const handleSortByID = useCallback(() => {
         setShouldSortDuration(SortingOptions.OFF);
-        setShouldSortByID(
-            shouldSortByID === SortingOptions.ASCENDING ? SortingOptions.DESCENDING : SortingOptions.ASCENDING,
-        );
-    }, [shouldSortByID]);
+        setShouldSortByID((current) => {
+            if (current === SortingOptions.OFF) {
+                return SortingOptions.ASCENDING;
+            }
+
+            if (current === SortingOptions.DESCENDING) {
+                return SortingOptions.OFF;
+            }
+
+            return SortingOptions.DESCENDING;
+        });
+    }, [setShouldSortByID, setShouldSortDuration]);
 
     const handleSortByDuration = useCallback(() => {
         setShouldSortByID(SortingOptions.OFF);
-        setShouldSortDuration(
-            shouldSortDuration === SortingOptions.ASCENDING ? SortingOptions.DESCENDING : SortingOptions.ASCENDING,
-        );
-    }, [shouldSortDuration]);
+        setShouldSortDuration((current) => {
+            if (current === SortingOptions.OFF) {
+                return SortingOptions.ASCENDING;
+            }
+
+            if (current === SortingOptions.DESCENDING) {
+                return SortingOptions.OFF;
+            }
+
+            return SortingOptions.DESCENDING;
+        });
+    }, [setShouldSortDuration, setShouldSortByID]);
 
     const handleExpandAllToggle = useCallback(() => {
         setShouldCollapseAll((shouldCollapse) => !shouldCollapse);
@@ -166,19 +209,10 @@ const OperationList = () => {
         );
     }, [filteredOperationsList, shouldCollapseAll, setShouldCollapseAll]);
 
-    const updateScrollShade = useCallback(() => {
-        if (scrollElementRef.current) {
-            const { scrollTop, offsetHeight, scrollHeight } = scrollElementRef.current;
-            const scrollBottom = scrollTop + offsetHeight;
-
-            setHasScrolledFromTop(scrollTop > 0 + SCROLL_TOLERANCE_PX);
-            setHasScrolledToBottom(scrollBottom >= scrollHeight - SCROLL_TOLERANCE_PX);
-        }
-    }, []);
-
     const handleUserScrolling = useCallback(() => {
-        // TODO: Maybe move this into a hook
-        updateScrollShade();
+        if (scrollElementRef.current) {
+            updateScrollShade(scrollElementRef.current);
+        }
     }, [updateScrollShade]);
 
     const handleToggleStackTrace = (index: number) => {
@@ -201,31 +235,70 @@ const OperationList = () => {
         scrollToIndex(numberOfOperations);
     };
 
+    const sortByIdControl = useMemo(() => {
+        let label = 'Clear ID sorting';
+
+        if (shouldSortByID === SortingOptions.OFF) {
+            label = 'Sort by ID (ascending)';
+        }
+        if (shouldSortByID === SortingOptions.ASCENDING) {
+            label = 'Sort by ID (descending)';
+        }
+
+        const icon =
+            shouldSortByID === SortingOptions.ASCENDING || shouldSortByID === SortingOptions.OFF
+                ? IconNames.SORT_ALPHABETICAL
+                : IconNames.SORT_ALPHABETICAL_DESC;
+
+        return { icon, label };
+    }, [shouldSortByID]);
+
+    const sortByDurationControl = useMemo(() => {
+        let label = 'Clear Duration sorting';
+
+        if (shouldSortDuration === SortingOptions.OFF) {
+            label = 'Sort by Duration (ascending)';
+        }
+        if (shouldSortDuration === SortingOptions.ASCENDING) {
+            label = 'Sort by Duration (descending)';
+        }
+
+        const icon =
+            shouldSortDuration === SortingOptions.ASCENDING || shouldSortDuration === SortingOptions.OFF
+                ? IconNames.SORT_NUMERICAL
+                : IconNames.SORT_NUMERICAL_DESC;
+
+        return { icon, label };
+    }, [shouldSortDuration]);
+
+    const shouldCollapseAllLabel = shouldCollapseAll ? 'Collapse all' : 'Expand all';
+    const scrollToTopLabel = 'Scroll to top';
+    const scrollToBottomLabel = 'Scroll to bottom';
+
     useEffect(() => {
         const initialOperationId = location.state?.previousOperationId;
 
         if (initialOperationId) {
             const operationIndex =
-                fetchedOperations?.findIndex(
+                filteredOperationsList?.findIndex(
                     (operation: OperationDescription) => operation.id === parseInt(initialOperationId, 10),
                 ) || 0;
 
             setFocusedRow(operationIndex);
 
             // Navigating to the same page replaces the entry in the browser history
-            navigate(ROUTES.OPERATIONS, { replace: true });
+            void navigate(ROUTES.OPERATIONS, { replace: true });
         }
-    }, [fetchedOperations, location.state?.previousOperationId, navigate]);
+    }, [filteredOperationsList, location.state?.previousOperationId, navigate]);
 
     useEffect(() => {
         if (virtualHeight <= 0 && scrollElementRef.current) {
             scrollElementRef.current.scrollTop = 0;
-            setHasScrolledFromTop(false);
-            setHasScrolledToBottom(false);
+            resetScrollShade();
+        } else if (scrollElementRef.current) {
+            updateScrollShade(scrollElementRef.current);
         }
-
-        updateScrollShade();
-    }, [virtualHeight, updateScrollShade]);
+    }, [virtualHeight, updateScrollShade, resetScrollShade]);
 
     // Restore expanded items on mount
     useEffect(() => {
@@ -246,17 +319,18 @@ const OperationList = () => {
 
     // Update stored list state on unmount
     useEffect(() => {
-        return () =>
+        return () => {
             updateListState({
                 scrollOffset: scrollOffsetRef.current || 0,
                 measurementsCache: measurementsCacheRef.current,
                 expandedItems: expandedItemsRef.current,
             });
-    }, [updateListState]);
+        };
+    }, [updateListState, filteredOperationsList]);
 
     return (
-        // TODO: Turn this into a generation ListView component used by OperationList and TensorList
-        <fieldset className='list-wrap'>
+        // TODO: Turn this into a generic ListView component used by OperationList and TensorList
+        <fieldset className='list-wrap operations-list-component'>
             <legend>Operations</legend>
 
             <div className='list-controls'>
@@ -266,85 +340,68 @@ const OperationList = () => {
                     onQueryChanged={(value) => setFilterQuery(value)}
                 />
 
+                <SimpleMultiselect
+                    label='Device Operations'
+                    optionList={uniqueDeviceOperationNames || []}
+                    onUpdateHandler={filterDeviceOperations}
+                    initialValue={selectedDeviceOperations ? Array.from(selectedDeviceOperations) : []}
+                />
+
                 <ButtonGroup variant={ButtonVariant.MINIMAL}>
                     <Tooltip
-                        content={shouldCollapseAll ? 'Collapse all' : 'Expand all'}
+                        content={shouldCollapseAllLabel}
                         placement={PopoverPosition.TOP}
                     >
                         <Button
                             onClick={() => handleExpandAllToggle()}
                             endIcon={shouldCollapseAll ? IconNames.CollapseAll : IconNames.ExpandAll}
-                            aria-label={shouldCollapseAll ? 'Collapse all' : 'Expand all'}
+                            aria-label={shouldCollapseAllLabel}
                         />
                     </Tooltip>
 
                     <Tooltip
-                        content={
-                            shouldSortByID === SortingOptions.DESCENDING
-                                ? 'Sort by id descending'
-                                : 'Sort by id ascending'
-                        }
+                        content={sortByIdControl.label}
                         placement={PopoverPosition.TOP}
                     >
                         <Button
                             onClick={() => handleSortByID()}
-                            icon={
-                                shouldSortByID === SortingOptions.DESCENDING
-                                    ? IconNames.SortAlphabeticalDesc
-                                    : IconNames.SortAlphabetical
-                            }
+                            icon={sortByIdControl.icon}
                             variant={isSortingModeActive(shouldSortByID) ? ButtonVariant.OUTLINED : undefined}
-                            aria-label={
-                                shouldSortByID === SortingOptions.DESCENDING
-                                    ? 'Sort by id descending'
-                                    : 'Sort by id ascending'
-                            }
+                            aria-label={sortByIdControl.label}
                         />
                     </Tooltip>
 
                     <Tooltip
-                        content={
-                            shouldSortDuration === SortingOptions.DESCENDING
-                                ? 'Sort by duration descending'
-                                : 'Sort by duration ascending'
-                        }
+                        content={sortByDurationControl.label}
                         placement={PopoverPosition.TOP}
                     >
                         <Button
                             onClick={() => handleSortByDuration()}
-                            icon={
-                                shouldSortDuration === SortingOptions.DESCENDING
-                                    ? IconNames.SortNumericalDesc
-                                    : IconNames.SortNumerical
-                            }
+                            icon={sortByDurationControl.icon}
                             variant={isSortingModeActive(shouldSortDuration) ? ButtonVariant.OUTLINED : undefined}
-                            aria-label={
-                                shouldSortDuration === SortingOptions.DESCENDING
-                                    ? 'Sort by duration descending'
-                                    : 'Sort by duration ascending'
-                            }
+                            aria-label={sortByDurationControl.label}
                         />
                     </Tooltip>
 
                     <Tooltip
-                        content='Scroll to top'
+                        content={scrollToTopLabel}
                         placement={PopoverPosition.TOP}
                     >
                         <Button
                             onClick={scrollToTop}
                             icon={IconNames.DOUBLE_CHEVRON_UP}
-                            aria-label='Scroll to top'
+                            aria-label={scrollToTopLabel}
                         />
                     </Tooltip>
 
                     <Tooltip
-                        content='Scroll to bottom'
+                        content={scrollToBottomLabel}
                         placement={PopoverPosition.TOP}
                     >
                         <Button
                             onClick={scrollToEnd}
                             icon={IconNames.DOUBLE_CHEVRON_DOWN}
-                            aria-label='Scroll to bottom'
+                            aria-label={scrollToBottomLabel}
                         />
                     </Tooltip>
                 </ButtonGroup>
@@ -361,8 +418,8 @@ const OperationList = () => {
             <div
                 ref={scrollElementRef}
                 className={classNames('scrollable-element', {
-                    'scroll-shade-top': hasScrolledFromTop && virtualHeight >= 0,
-                    'scroll-shade-bottom': !hasScrolledToBottom && numberOfOperations > virtualItems.length,
+                    [shadeClasses.top]: hasScrolledFromTop && virtualHeight >= 0,
+                    [shadeClasses.bottom]: !hasScrolledToBottom && numberOfOperations > virtualItems.length,
                 })}
                 onScroll={handleUserScrolling}
             >
@@ -382,6 +439,7 @@ const OperationList = () => {
                         {filteredOperationsList?.length ? (
                             virtualItems.map((virtualRow) => {
                                 const operation = filteredOperationsList[virtualRow.index];
+                                const operationSourceData = extractOperationSourceData(operation);
 
                                 return (
                                     <li
@@ -394,30 +452,50 @@ const OperationList = () => {
                                         data-index={virtualRow.index}
                                     >
                                         <Collapsible
+                                            collapseClassName='list-collapsible'
                                             onExpandToggle={() => handleToggleCollapsible(operation.id)}
                                             label={
                                                 <Tooltip
-                                                    content={operation?.error ? `Error recorded in operation` : ''}
+                                                    content='Error recorded in operation'
                                                     placement={PopoverPosition.TOP}
+                                                    disabled={!operation?.error}
                                                 >
                                                     <ListItem
                                                         filterName={getOperationFilterName(operation)}
                                                         filterQuery={filterQuery}
                                                         icon={operation?.error ? IconNames.ERROR : IconNames.CUBE}
                                                         iconColour={operation?.error ? 'error' : 'operation'}
-                                                    />
+                                                    >
+                                                        {hasPerfRowBars && (
+                                                            <OperationPerfRowBar
+                                                                score={scoreByOpId.get(operation.id)}
+                                                            />
+                                                        )}
+                                                    </ListItem>
                                                 </Tooltip>
                                             }
                                             additionalElements={
-                                                <Button
-                                                    className='buffer-view'
-                                                    onClick={() => navigate(`${ROUTES.OPERATIONS}/${operation.id}`)}
-                                                    text='Memory details'
-                                                    intent={Intent.PRIMARY}
-                                                    endIcon={IconNames.SEGMENTED_CONTROL}
-                                                    size={Size.SMALL}
-                                                    variant={ButtonVariant.OUTLINED}
-                                                />
+                                                <>
+                                                    <Button
+                                                        className='buffer-view'
+                                                        onClick={() => navigate(`${ROUTES.OPERATIONS}/${operation.id}`)}
+                                                        text='Memory details'
+                                                        intent={Intent.PRIMARY}
+                                                        endIcon={IconNames.SEGMENTED_CONTROL}
+                                                        size={Size.SMALL}
+                                                    />
+                                                    {operationSourceData && (
+                                                        <SourceFileButton
+                                                            filePath={operationSourceData.filePath}
+                                                            sourceFileId={operation.stack_trace_source_file_id}
+                                                            lineNumber={operationSourceData.lineNumber}
+                                                            language={StackTraceLanguage.PYTHON}
+                                                            size={Size.SMALL}
+                                                            variant={ButtonVariant.OUTLINED}
+                                                            ariaLabel={`View source for operation ${operation.id} ${operation.name}`}
+                                                        />
+                                                    )}
+                                                </>
                                             }
                                             isOpen={!!expandedItems?.includes(operation.id)}
                                             keepChildrenMounted
@@ -429,41 +507,35 @@ const OperationList = () => {
 
                                                 {operation?.error && (
                                                     <>
-                                                        <div className='memory-error'>
-                                                            <p className='memory-error-title'>
-                                                                {operation.error.error_type}
-                                                            </p>
+                                                        <StackTrace
+                                                            className='memory-error'
+                                                            title='Error Message'
+                                                            stackTrace={operation.error.error_message}
+                                                            language={StackTraceLanguage.CPP}
+                                                            onExpandChange={(_isOpen: boolean) =>
+                                                                handleToggleStackTrace(virtualRow.index)
+                                                            }
+                                                            intent={Intent.DANGER}
+                                                            hideSourceButton
+                                                            isInline
+                                                        />
 
-                                                            <StackTrace
-                                                                stackTrace={operation.error.error_message}
-                                                                language='cpp'
-                                                                hideSourceButton
-                                                                isInline
-                                                                onExpandChange={(_isOpen: boolean) =>
-                                                                    handleToggleStackTrace(virtualRow.index)
-                                                                }
-                                                            />
-                                                        </div>
-
-                                                        <div className='memory-error'>
-                                                            <p className='memory-error-title'>Stack Trace</p>
-
-                                                            <StackTrace
-                                                                stackTrace={operation.error.stack_trace}
-                                                                language='cpp'
-                                                                hideSourceButton
-                                                                isInline
-                                                                onExpandChange={(_isOpen: boolean) =>
-                                                                    handleToggleStackTrace(virtualRow.index)
-                                                                }
-                                                            />
-                                                        </div>
+                                                        <StackTrace
+                                                            className='memory-error'
+                                                            title='Error Stack Trace'
+                                                            stackTrace={operation.error.stack_trace}
+                                                            language={StackTraceLanguage.CPP}
+                                                            onExpandChange={(_isOpen: boolean) =>
+                                                                handleToggleStackTrace(virtualRow.index)
+                                                            }
+                                                            intent={Intent.DANGER}
+                                                            hideSourceButton
+                                                            isInline
+                                                        />
                                                     </>
                                                 )}
 
-                                                {activePerformanceReport && (
-                                                    <OperationListPerfData operation={operation} />
-                                                )}
+                                                <OperationListPerfData operation={operation} />
 
                                                 {operation.arguments && (
                                                     <OperationArguments

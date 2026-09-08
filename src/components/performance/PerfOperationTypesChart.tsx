@@ -2,44 +2,42 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import Plot from 'react-plotly.js';
-import classNames from 'classnames';
-import { Layout, PlotData } from 'plotly.js';
+import type { PlotData } from 'plotly.js';
 import { useMemo } from 'react';
-import { Marker, PerfTableRow } from '../../definitions/PerfTable';
-import 'styles/components/PerformanceOperationTypesChart.scss';
-import { PerfChartConfig } from '../../definitions/PlotConfigurations';
+import { Marker } from '../../definitions/PerfTable';
+import { TypedPerfTableRow } from '../../model/PerfTable';
+import { OnOpCodeClick, PERF_CHART_LABELS, PerfChartId } from '../../definitions/PerformanceCharts';
+import { PerfPieChartLayout } from '../../definitions/PlotConfigurations';
+import { useHandlePerfChartPlotClick } from '../../hooks/useHandlePerfChartPlotClick';
+import { getUniqueChartRawOpCodes } from '../../functions/getUniqueChartRawOpCodes';
+import PerfChart from './PerfChart';
 
 interface PerfOperationTypesChartProps {
     reportTitle: string;
     opCodes: Marker[];
-    data?: PerfTableRow[];
+    data?: TypedPerfTableRow[];
     className?: string;
+    id?: string;
+    onOpCodeClick?: OnOpCodeClick;
 }
 
-const LAYOUT: Partial<Layout> = {
-    autosize: true,
-    paper_bgcolor: 'transparent',
-    margin: {
-        l: 50,
-        r: 50,
-        b: 50,
-        t: 50,
-    },
-    showlegend: false,
-};
-
-function PerfOperationTypesChart({ reportTitle, data = [], opCodes, className = '' }: PerfOperationTypesChartProps) {
-    const filteredOpCodes = useMemo(
-        () => [...new Set(data?.filter((row) => row.raw_op_code !== undefined).map((row) => row.raw_op_code))],
-        [data],
-    );
+function PerfOperationTypesChart({
+    reportTitle,
+    data = [],
+    opCodes,
+    className = '',
+    id,
+    onOpCodeClick,
+}: PerfOperationTypesChartProps) {
+    const filteredOpCodes = useMemo(() => getUniqueChartRawOpCodes(data), [data]);
+    const handlePlotClick = useHandlePerfChartPlotClick(onOpCodeClick);
 
     const chartData = useMemo(
         () =>
             ({
                 values: filteredOpCodes.map((opCode) => data.filter((row) => row.raw_op_code === opCode).length),
                 labels: [...filteredOpCodes],
+                customdata: [...filteredOpCodes],
                 type: 'pie',
                 textinfo: 'percent',
                 hovertemplate: `%{label}<br />Count: %{value}<extra></extra>`,
@@ -56,18 +54,15 @@ function PerfOperationTypesChart({ reportTitle, data = [], opCodes, className = 
     );
 
     return (
-        <div className={classNames('operation-types-chart', className)}>
-            <h3>Operation Types</h3>
-            <p>{reportTitle}</p>
-
-            <Plot
-                className='chart'
-                data={[chartData]}
-                layout={LAYOUT}
-                config={PerfChartConfig}
-                useResizeHandler
-            />
-        </div>
+        <PerfChart
+            id={id}
+            title={PERF_CHART_LABELS[PerfChartId.OperationTypes]}
+            subtitle={<p>{reportTitle}</p>}
+            className={className}
+            chartData={[chartData]}
+            layout={PerfPieChartLayout}
+            onPlotClick={onOpCodeClick ? handlePlotClick : undefined}
+        />
     );
 }
 

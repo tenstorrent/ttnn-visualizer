@@ -1,0 +1,27 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
+
+.mlir-file-results-overlay {
+    position: relative;
+
+    .heading {
+        margin-top: 0;
+        padding-right: 30px;
+    }
+
+    .mlir-file-results-hint {
+        margin: 0 0 12px;
+        opacity: 0.85;
+    }
+
+    .close-button-anchor {
+        position: absolute;
+        right: 0;
+        top: 0;
+    }
+
+    .close-button {
+        position: static;
+    }
+}

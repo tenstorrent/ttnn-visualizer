@@ -2,17 +2,42 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { FC, useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { FormGroup } from '@blueprintjs/core';
-
-import { useAtom } from 'jotai';
 import { useQueryClient } from '@tanstack/react-query';
-import { RemoteConnection, RemoteFolder } from '../../definitions/RemoteConnection';
+import { AxiosResponse, HttpStatusCode } from 'axios';
+import { useAtom, useStore } from 'jotai';
+import { RemoteConnection, RemoteFolder } from '../../model/RemoteConnection';
+import { RemoteFolderType, ReportLocation } from '../../definitions/Reports';
+import {
+    ACTIVE_MEMORY_REPORT_TOAST_TITLE,
+    ACTIVE_PERFORMANCE_REPORT_TOAST_TITLE,
+} from '../../definitions/notifyActiveReport';
 import createToastNotification from '../../functions/createToastNotification';
+import { ToastType } from '../../definitions/ToastType';
+import getRemoteSyncFailureAction from '../../functions/getRemoteSyncFailureAction';
+import { RemoteSyncFailureAction } from '../../definitions/RemoteSync';
+import getResponseError from '../../functions/getResponseError';
+import hasPerformanceDiscoveryChanged from '../../functions/hasPerformanceDiscoveryChanged';
 import getServerConfig from '../../functions/getServerConfig';
 import isRemoteFolderOutdated from '../../functions/isRemoteFolderOutdated';
+import mergeRemoteFolders from '../../functions/mergeRemoteFolders';
+import { isSameConnection } from '../../functions/remoteConnection';
+import notifyFolderSyncError, {
+    notifyAndRecordFolderSyncError,
+    notifyAndRecordRemoteFolderMountError,
+    notifyFolderListSyncError,
+} from '../../functions/notifyFolderSyncError';
+import notifyFolderSyncLocalFallback, {
+    notifyLocalSyncedReportsListFallback,
+} from '../../functions/notifyFolderSyncLocalFallback';
+import isRemoteFolderActive from '../../functions/isRemoteFolderActive';
+import { getRankedReportLabel } from '../../functions/reportRank';
+import { createDataIntegrityWarning, hasBeenNormalised } from '../../functions/validateReportFolder';
+import { useActivatingReport } from '../../hooks/useActivatingReport';
 import useRemoteConnection from '../../hooks/useRemote';
+import { useReportLinkBadgeIds } from '../../hooks/useReportLinkBadgeIds';
 import {
     activePerformanceReportAtom,
     activeProfilerReportAtom,
@@ -22,50 +47,281 @@ import {
 import AddRemoteConnection from './AddRemoteConnection';
 import RemoteConnectionSelector from './RemoteConnectionSelector';
 import RemoteFolderSelector from './RemoteFolderSelector';
-import { createDataIntegrityWarning, hasBeenNormalised } from '../../functions/validateReportFolder';
-import { ReportLocation } from '../../definitions/Reports';
 import RemoteSyncButton from './RemoteSyncButton';
+import { clearReportCaches, updateInstance, useReportMetadata } from '../../hooks/useAPI';
+import { ActiveReport } from '../../model/APIData';
+import { DBVersionValidation } from '../../definitions/Versions';
+import { evaluateDbVersion } from '../../functions/compareDbVersion';
+import { ReportKind, ReportLoadFailureReason, ReportSource } from '../../definitions/EventLogEvent';
+import { recordReportLoadFailed, recordReportLoadFailure, recordReportLoaded } from '../../functions/reportLoadEvents';
 
-const RemoteSyncConfigurator: FC = () => {
+interface RemoteReportActions {
+    mount: (connection: RemoteConnection, folder: RemoteFolder) => Promise<AxiosResponse>;
+    activateWithToast: (folder: RemoteFolder) => void;
+    applySelection: (folder: RemoteFolder) => void;
+    type: RemoteFolderType;
+}
+
+const RemoteSyncConfigurator = () => {
     const remote = useRemoteConnection();
+    const { setPersistentSelectedConnection, setPersistentSavedConnectionList } = remote;
     const queryClient = useQueryClient();
+    const jotaiStore = useStore();
     const disableRemoteSync = !!getServerConfig()?.SERVER_MODE;
 
     const [profilerReportLocation, setProfilerReportLocation] = useAtom(profilerReportLocationAtom);
     const [performanceReportLocation, setPerformanceReportLocation] = useAtom(performanceReportLocationAtom);
     const [activeProfilerReport, setActiveProfilerReport] = useAtom(activeProfilerReportAtom);
     const [activePerformanceReport, setActivePerformanceReport] = useAtom(activePerformanceReportAtom);
+    const { isActivatingReport, withActivatingReport } = useActivatingReport();
 
-    const [isRemoteOffline, setIsRemoteOffline] = useState(false);
+    const { data: reportMetadata, error: reportMetadataError } = useReportMetadata();
+    useEffect(() => {
+        if (reportMetadataError) {
+            return;
+        }
+        if (reportMetadata) {
+            const dbValidationResult = evaluateDbVersion(reportMetadata.version);
+            if (dbValidationResult.statusCode !== DBVersionValidation.OK) {
+                // @ts-expect-error its only empty when status is OK, and we dont do a toast here
+                createToastNotification('Incompatible report version', dbValidationResult.message, ToastType.WARNING);
+            }
+        }
+    }, [reportMetadata, reportMetadataError]);
+
+    // The saved list and the selection live in localStorage, so persisting them doesn't re-render on
+    // its own. Both are mirrored in state and written through persistConnectionList /
+    // persistSelectedConnection. Mirroring both matters: reading one live and one from state let the
+    // dropdown and its trigger disagree within a render, and the selection getter also re-parses two
+    // keys and returns a fresh object identity per read, which churned the selector's props.
+    // Initialisers are lazy because an eager one parses localStorage on every render. The mirrors are
+    // a stopgap: migrating remote.persistentState to atomWithStorage would make it reactive without
+    // a second source of truth, which no longer relies on this component being the only writer.
+    const [savedConnectionList, setSavedConnectionList] = useState<RemoteConnection[]>(
+        () => remote.persistentState.savedConnectionList,
+    );
+    const [selectedConnection, setSelectedConnection] = useState<RemoteConnection | undefined>(
+        () => remote.persistentState.selectedConnection,
+    );
     const [isFetching, setIsFetching] = useState(false);
-    const [reportFolderList, setReportFolders] = useState<RemoteFolder[]>(
-        remote.persistentState.getSavedReportFolders(remote.persistentState.selectedConnection),
+    const [reportFolderList, setReportFolders] = useState<RemoteFolder[]>(() =>
+        remote.persistentState.getSavedReportFolders(selectedConnection),
     );
     const [isSyncingReportFolder, setIsSyncingReportFolder] = useState(false);
-    const [selectedReportFolder, setSelectedReportFolder] = useState<RemoteFolder | undefined>(
+    const [selectedReportFolder, setSelectedReportFolder] = useState<RemoteFolder | undefined>(() =>
         activeProfilerReport
             ? reportFolderList.find((folder) => folder.remotePath?.includes(activeProfilerReport.path))
             : undefined,
     );
-    const [remotePerformanceFolderList, setRemotePerformanceFolders] = useState<RemoteFolder[]>(
-        remote.persistentState.getSavedPerformanceFolders(remote.persistentState.selectedConnection),
+    const [remotePerformanceFolderList, setRemotePerformanceFolders] = useState<RemoteFolder[]>(() =>
+        remote.persistentState.getSavedPerformanceFolders(selectedConnection),
     );
     const [isSyncingPerformanceFolder, setIsSyncingPerformanceFolder] = useState(false);
-    const [selectedPerformanceFolder, setSelectedPerformanceFolder] = useState<RemoteFolder | undefined>(
+    const [selectedPerformanceFolder, setSelectedPerformanceFolder] = useState<RemoteFolder | undefined>(() =>
         activePerformanceReport
-            ? remotePerformanceFolderList.find((folder) =>
-                  folder.reportName?.includes(activePerformanceReport?.reportName),
-              )
+            ? remotePerformanceFolderList.find((folder) => isRemoteFolderActive(folder, activePerformanceReport))
             : remotePerformanceFolderList[0],
     );
+    // Aborts in-flight local disk scans when the connection changes quickly.
+    const localSyncedFoldersAbortRef = useRef<AbortController | null>(null);
 
-    const updateSelectedConnection = (connection: RemoteConnection) => {
-        remote.persistentState.selectedConnection = connection;
-        setReportFolders(remote.persistentState.getSavedReportFolders(connection));
-        setRemotePerformanceFolders(remote.persistentState.getSavedPerformanceFolders(connection));
+    const persistConnectionList = (connectionList: RemoteConnection[]) => {
+        setPersistentSavedConnectionList(connectionList);
+        setSavedConnectionList(connectionList);
+    };
 
-        setSelectedReportFolder(remote.persistentState.getSavedReportFolders(connection)[0]);
-        setSelectedPerformanceFolder(remote.persistentState.getSavedPerformanceFolders(connection)[0]);
+    const persistSelectedConnection = (connection: RemoteConnection | undefined) => {
+        setPersistentSelectedConnection(connection);
+        setSelectedConnection(connection);
+    };
+
+    // `connection` is undefined once the last saved connection is removed. Folder lists are then
+    // emptied rather than read for it, because the cache key for no connection is a real but
+    // degenerate localStorage key that no connection ever writes to.
+    const updateSelectedConnection = async (connection: RemoteConnection | undefined) => {
+        persistSelectedConnection(connection);
+        setReportFolders(connection ? remote.persistentState.getSavedReportFolders(connection) : []);
+        setRemotePerformanceFolders(connection ? remote.persistentState.getSavedPerformanceFolders(connection) : []);
+
+        const activeReport: ActiveReport = {};
+
+        if (selectedReportFolder && profilerReportLocation === ReportLocation.REMOTE) {
+            setSelectedReportFolder(undefined);
+            setActiveProfilerReport(null);
+            activeReport.profiler_name = ''; // Empty string will clear the active report on the backend
+        }
+
+        if (selectedPerformanceFolder && performanceReportLocation === ReportLocation.REMOTE) {
+            setSelectedPerformanceFolder(undefined);
+            setActivePerformanceReport(null);
+            activeReport.performance_name = ''; // Empty string will clear the active report on the backend
+        }
+
+        if (Object.keys(activeReport).length > 0) {
+            await updateInstance({
+                active_report: activeReport,
+            });
+        }
+
+        if (!connection) {
+            // Nothing left to scan, and aborting stops a scan already in flight for the removed
+            // connection from repopulating the dropdowns that were just cleared.
+            localSyncedFoldersAbortRef.current?.abort();
+            localSyncedFoldersAbortRef.current = null;
+
+            return;
+        }
+
+        // Populate report dropdowns from on-disk synced copies for this host (no SSH).
+        // Fire-and-forget so connection switch stays cache-fast; abort cancels prior scans.
+        loadLocalSyncedFolders(connection).catch(() => {
+            // Local scan is best-effort; cached folders remain if it fails.
+        });
+    };
+
+    const isCurrentLocalScan = (abortController: AbortController, signal: AbortSignal) =>
+        !signal.aborted && localSyncedFoldersAbortRef.current === abortController;
+
+    const loadLocalSyncedFolders = async (connection: RemoteConnection) => {
+        localSyncedFoldersAbortRef.current?.abort();
+        const abortController = new AbortController();
+        localSyncedFoldersAbortRef.current = abortController;
+        const { signal } = abortController;
+
+        try {
+            const [localProfilerFolders, localPerformanceFolders] = await Promise.allSettled([
+                connection.profilerPath ? remote.listLocalProfilerReports(connection, signal) : Promise.resolve([]),
+                connection.performancePath
+                    ? remote.listLocalPerformanceReports(connection, signal)
+                    : Promise.resolve([]),
+            ]);
+
+            if (!isCurrentLocalScan(abortController, signal)) {
+                return;
+            }
+
+            // Always replace cached lists on a successful scan — including []. Otherwise
+            // never-synced / empty local dirs from an older remote fetch stay visible.
+            if (localProfilerFolders.status === 'fulfilled') {
+                updateSavedReportFolders(connection, localProfilerFolders.value);
+            }
+
+            if (localPerformanceFolders.status === 'fulfilled') {
+                updateSavedPerformanceFolders(connection, localPerformanceFolders.value);
+            }
+        } finally {
+            if (localSyncedFoldersAbortRef.current === abortController) {
+                localSyncedFoldersAbortRef.current = null;
+            }
+        }
+    };
+
+    const applyRemoteOrLocalFolderList = async (
+        remoteResult: PromiseSettledResult<RemoteFolder[]>,
+        connection: RemoteConnection,
+        pathPresent: boolean,
+        listLocal: (connection: RemoteConnection, signal?: AbortSignal) => Promise<RemoteFolder[]>,
+        updateSaved: (connection: RemoteConnection, folders: RemoteFolder[]) => void,
+        abortController: AbortController,
+        signal: AbortSignal,
+    ): Promise<{ usedLocalFallback: boolean; error: string | null }> => {
+        if (remoteResult.status === 'fulfilled') {
+            if (!isCurrentLocalScan(abortController, signal)) {
+                return { usedLocalFallback: false, error: null };
+            }
+            updateSaved(connection, remoteResult.value);
+            return { usedLocalFallback: false, error: null };
+        }
+
+        if (!pathPresent) {
+            return { usedLocalFallback: false, error: null };
+        }
+
+        try {
+            const localFolders = await listLocal(connection, signal);
+            if (!isCurrentLocalScan(abortController, signal)) {
+                return { usedLocalFallback: false, error: null };
+            }
+            updateSaved(connection, localFolders);
+
+            if (localFolders.length > 0) {
+                return { usedLocalFallback: true, error: null };
+            }
+
+            return { usedLocalFallback: false, error: getResponseError(remoteResult.reason) };
+        } catch {
+            if (!isCurrentLocalScan(abortController, signal)) {
+                return { usedLocalFallback: false, error: null };
+            }
+            return { usedLocalFallback: false, error: getResponseError(remoteResult.reason) };
+        }
+    };
+
+    const fetchRemoteFolderLists = async (connection: RemoteConnection) => {
+        localSyncedFoldersAbortRef.current?.abort();
+        const abortController = new AbortController();
+        localSyncedFoldersAbortRef.current = abortController;
+        const { signal } = abortController;
+
+        try {
+            setIsFetching(true);
+
+            const [reportFolders, performanceFolders] = await Promise.allSettled([
+                connection.profilerPath ? remote.listProfilerReports(connection, signal) : Promise.resolve([]),
+                connection.performancePath ? remote.listPerformanceReports(connection, signal) : Promise.resolve([]),
+            ]);
+
+            if (!isCurrentLocalScan(abortController, signal)) {
+                return;
+            }
+
+            // Run local fallbacks in parallel when both SSH lists fail (same dual-failure cost).
+            const [profilerOutcome, performanceOutcome] = await Promise.all([
+                applyRemoteOrLocalFolderList(
+                    reportFolders,
+                    connection,
+                    Boolean(connection.profilerPath),
+                    remote.listLocalProfilerReports,
+                    updateSavedReportFolders,
+                    abortController,
+                    signal,
+                ),
+                applyRemoteOrLocalFolderList(
+                    performanceFolders,
+                    connection,
+                    Boolean(connection.performancePath),
+                    remote.listLocalPerformanceReports,
+                    updateSavedPerformanceFolders,
+                    abortController,
+                    signal,
+                ),
+            ]);
+
+            if (!isCurrentLocalScan(abortController, signal)) {
+                return;
+            }
+
+            if (profilerOutcome.usedLocalFallback || performanceOutcome.usedLocalFallback) {
+                notifyLocalSyncedReportsListFallback();
+            }
+
+            const fetchErrors = [profilerOutcome.error, performanceOutcome.error].filter(
+                (error): error is string => error !== null,
+            );
+
+            if (fetchErrors.length > 0) {
+                notifyFolderListSyncError(fetchErrors.join('; '));
+            }
+        } catch (err: unknown) {
+            if (isCurrentLocalScan(abortController, signal)) {
+                notifyFolderListSyncError(getResponseError(err));
+            }
+        } finally {
+            if (localSyncedFoldersAbortRef.current === abortController) {
+                localSyncedFoldersAbortRef.current = null;
+            }
+            setIsFetching(false);
+        }
     };
 
     const updateSavedReportFolders = (connection: RemoteConnection, updatedFolders: RemoteFolder[]) => {
@@ -73,15 +329,10 @@ const RemoteSyncConfigurator: FC = () => {
             return [];
         }
 
-        const savedFolders = remote.persistentState.getSavedReportFolders(connection);
-        const mergedFolders = (updatedFolders ?? []).map((updatedFolder) => {
-            const existingFolder = savedFolders?.find((f) => f.reportName === updatedFolder.reportName);
-
-            return {
-                ...existingFolder,
-                ...updatedFolder,
-            };
-        });
+        const mergedFolders = mergeRemoteFolders(
+            remote.persistentState.getSavedReportFolders(connection),
+            updatedFolders,
+        );
 
         remote.persistentState.setSavedReportFolders(connection, mergedFolders);
         setReportFolders(mergedFolders);
@@ -94,15 +345,10 @@ const RemoteSyncConfigurator: FC = () => {
             return [];
         }
 
-        const savedFolders = remote.persistentState.getSavedPerformanceFolders(connection);
-        const mergedFolders = (updatedFolders ?? []).map((updatedFolder) => {
-            const existingFolder = savedFolders?.find((f) => f.reportName === updatedFolder.reportName);
-
-            return {
-                ...existingFolder,
-                ...updatedFolder,
-            };
-        });
+        const mergedFolders = mergeRemoteFolders(
+            remote.persistentState.getSavedPerformanceFolders(connection),
+            updatedFolders,
+        );
 
         remote.persistentState.setSavedPerformanceFolders(connection, mergedFolders);
         setRemotePerformanceFolders(mergedFolders);
@@ -111,149 +357,353 @@ const RemoteSyncConfigurator: FC = () => {
     };
 
     const findConnectionIndex = (connection?: RemoteConnection) => {
-        return remote.persistentState.savedConnectionList.findIndex((c) => {
-            const isSameName = c.name === connection?.name;
-            const isSameHost = c.host === connection?.host;
-            const isSamePort = c.port === connection?.port;
-
-            return isSameName && isSameHost && isSamePort;
-        });
+        return savedConnectionList.findIndex((c) => isSameConnection(c, connection));
     };
 
-    const updateReportSelection = (folder: RemoteFolder) => {
-        queryClient.clear();
+    /**
+     * Both dropdown row actions share this shape: locate the row, apply the change to a copy of the
+     * list, then re-point the selection only when the affected connection held it.
+     * updateSelectedConnection also clears the active remote report, so acting on any other row must
+     * leave the selection alone. `applyChange` returns what the selection should become, or undefined
+     * when removing the last connection leaves nothing to select.
+     */
+    const changeSavedConnection = async (
+        target: RemoteConnection | undefined,
+        applyChange: (connectionList: RemoteConnection[], index: number) => RemoteConnection | undefined,
+    ) => {
+        const connectionIndex = findConnectionIndex(target);
+
+        if (connectionIndex === -1) {
+            return;
+        }
+
+        const wasSelected = isSameConnection(target, selectedConnection);
+        const updatedConnections = [...savedConnectionList];
+        const nextSelectedConnection = applyChange(updatedConnections, connectionIndex);
+
+        persistConnectionList(updatedConnections);
+
+        if (wasSelected) {
+            await updateSelectedConnection(nextSelectedConnection);
+        }
+    };
+
+    const applyProfilerReportSelection = (folder: RemoteFolder) => {
+        clearReportCaches(queryClient);
         setProfilerReportLocation(ReportLocation.REMOTE);
         setActiveProfilerReport({
             path: folder.remotePath,
             reportName: folder.reportName,
+            syncedName: folder.syncedName,
         });
-        createToastNotification('Active memory report', folder.reportName);
+        recordReportLoaded(ReportKind.PROFILER, ReportSource.REMOTE_SYNC);
     };
 
-    const updatePerformanceSelection = (folder: RemoteFolder) => {
-        queryClient.clear();
+    const applyPerformanceReportSelection = (folder: RemoteFolder) => {
+        clearReportCaches(queryClient);
         setPerformanceReportLocation(ReportLocation.REMOTE);
         setActivePerformanceReport({
             path: folder.remotePath,
             reportName: folder.reportName,
+            syncedName: folder.syncedName,
         });
-        createToastNotification('Active performance report', folder.reportName);
+        recordReportLoaded(ReportKind.PERFORMANCE, ReportSource.REMOTE_SYNC);
     };
 
-    const syncSelectedReportFolder = async (folder?: RemoteFolder) => {
+    const updateReportSelection = (folder: RemoteFolder) => {
+        applyProfilerReportSelection(folder);
+        createToastNotification(
+            ACTIVE_MEMORY_REPORT_TOAST_TITLE,
+            getRankedReportLabel(folder.reportName, folder.rank),
+            ToastType.SUCCESS,
+        );
+    };
+
+    const updatePerformanceSelection = (folder: RemoteFolder) => {
+        applyPerformanceReportSelection(folder);
+        createToastNotification(
+            ACTIVE_PERFORMANCE_REPORT_TOAST_TITLE,
+            getRankedReportLabel(folder.reportName, folder.rank),
+            ToastType.SUCCESS,
+        );
+    };
+
+    const profilerReportActions: RemoteReportActions = {
+        mount: (connection, report) => remote.mountRemoteFolder(connection, report),
+        activateWithToast: updateReportSelection,
+        applySelection: applyProfilerReportSelection,
+        type: ReportKind.PROFILER,
+    };
+    const performanceReportActions: RemoteReportActions = {
+        mount: (connection, report) => remote.mountRemoteFolder(connection, undefined, report),
+        activateWithToast: updatePerformanceSelection,
+        applySelection: applyPerformanceReportSelection,
+        type: ReportKind.PERFORMANCE,
+    };
+
+    const mountLocalFolderOnSyncFailure = async (
+        selectedReport: RemoteFolder,
+        err: unknown,
+        mount: (connection: RemoteConnection) => Promise<AxiosResponse>,
+        applySelection: (folder: RemoteFolder) => void,
+        type: RemoteFolderType,
+    ) => {
+        const connection = selectedConnection;
+
+        if (!connection) {
+            notifyAndRecordFolderSyncError(type, err);
+            return;
+        }
+
         try {
-            const selectedReport = folder ?? selectedReportFolder;
+            const mountResponse = await mount(connection);
 
-            setIsSyncingReportFolder(true);
+            if (mountResponse.status === HttpStatusCode.Ok) {
+                applySelection(selectedReport);
+                notifyFolderSyncLocalFallback(err);
 
-            if (remote.persistentState.selectedConnection) {
-                const { data: updatedFolder } = await remote.syncRemoteFolder(
-                    remote.persistentState.selectedConnection,
-                    selectedReport,
-                );
-
-                if (hasBeenNormalised(updatedFolder)) {
-                    createDataIntegrityWarning(updatedFolder);
+                if (hasBeenNormalised(selectedReport)) {
+                    createDataIntegrityWarning(selectedReport);
                 }
 
-                const savedRemoteFolders = remote.persistentState.getSavedReportFolders(
-                    remote.persistentState.selectedConnection,
-                );
+                return;
+            }
+        } catch (mountError: unknown) {
+            recordReportLoadFailure(type, mountError);
+        }
 
-                const updatedFolders = savedRemoteFolders.map((f) =>
+        notifyFolderSyncError(err);
+    };
+
+    const handleSyncFailure = async (
+        err: unknown,
+        selectedReport: RemoteFolder | undefined,
+        mountLocalFallback: (folder: RemoteFolder, err: unknown) => Promise<void>,
+        type: RemoteFolderType,
+    ) => {
+        const failureAction = getRemoteSyncFailureAction(err, selectedReport);
+
+        if (failureAction === RemoteSyncFailureAction.IGNORE_CANCEL) {
+            return;
+        }
+
+        if (failureAction === RemoteSyncFailureAction.FALLBACK_LOCAL && selectedReport) {
+            await mountLocalFallback(selectedReport, err);
+            return;
+        }
+
+        notifyAndRecordFolderSyncError(type, err);
+    };
+
+    const mountAndActivateFolder = async (
+        folder: RemoteFolder,
+        { mount, activateWithToast, type }: Pick<RemoteReportActions, 'mount' | 'activateWithToast' | 'type'>,
+    ) => {
+        const connection = selectedConnection;
+        if (!connection) {
+            recordReportLoadFailed(type, ReportLoadFailureReason.OTHER);
+            return;
+        }
+
+        await withActivatingReport(async () => {
+            try {
+                const response = await mount(connection, folder);
+
+                if (response.status === HttpStatusCode.Ok) {
+                    activateWithToast(folder);
+
+                    if (hasBeenNormalised(folder)) {
+                        createDataIntegrityWarning(folder);
+                    }
+                }
+            } catch (err: unknown) {
+                notifyAndRecordRemoteFolderMountError(type, err);
+            }
+        });
+    };
+
+    const syncSelectedFolder = async ({
+        selected,
+        setSyncing,
+        sync,
+        getSaved,
+        updateSaved,
+        mount,
+        activateWithToast,
+        applySelection,
+        getActivePath,
+        type,
+    }: {
+        selected: RemoteFolder | undefined;
+        setSyncing: (syncing: boolean) => void;
+        sync: (connection: RemoteConnection, folder: RemoteFolder) => Promise<AxiosResponse<RemoteFolder>>;
+        getSaved: (connection: RemoteConnection) => RemoteFolder[];
+        updateSaved: (connection: RemoteConnection, folders: RemoteFolder[]) => RemoteFolder[];
+        mount: (connection: RemoteConnection, folder: RemoteFolder) => Promise<AxiosResponse>;
+        activateWithToast: (folder: RemoteFolder) => void;
+        applySelection: (folder: RemoteFolder) => void;
+        getActivePath: () => string | null | undefined;
+        type: RemoteFolderType;
+    }) => {
+        setSyncing(true);
+
+        try {
+            const connection = selectedConnection;
+            if (!connection || !selected) {
+                return;
+            }
+
+            // Snapshot before transfer — local pickers stay usable while syncing.
+            const activePathAtSyncStart = getActivePath() ?? null;
+
+            const shouldActivateAfterSync = () => {
+                const currentActivePath = getActivePath() ?? null;
+                // User activated a different report during the transfer; keep their choice.
+                return currentActivePath === activePathAtSyncStart || currentActivePath === selected.remotePath;
+            };
+
+            try {
+                // Transfer only — do not hold isActivatingReportAtom here or local
+                // report pickers spin for the whole SSH sync (progress is FileStatusOverlay).
+                const { data: updatedFolder } = await sync(connection, selected);
+
+                const updatedFolders = getSaved(connection).map((f) =>
                     f.remotePath === updatedFolder?.remotePath ? updatedFolder : f,
                 );
 
-                updateSavedReportFolders(remote.persistentState.selectedConnection, updatedFolders);
+                updateSaved(connection, updatedFolders);
 
-                if (selectedReport) {
-                    const mountResponse = await remote.mountRemoteFolder(
-                        remote.persistentState.selectedConnection,
-                        updatedFolder,
-                    );
-
-                    if (mountResponse.status === 200) {
-                        updateReportSelection(updatedFolder);
-                        queryClient.clear();
-                    }
+                if (updatedFolder && shouldActivateAfterSync()) {
+                    await mountAndActivateFolder(updatedFolder, { mount, activateWithToast, type });
                 }
+            } catch (err: unknown) {
+                await handleSyncFailure(
+                    err,
+                    selected,
+                    async (report, syncErr) => {
+                        if (!shouldActivateAfterSync()) {
+                            notifyFolderSyncError(syncErr);
+                            return;
+                        }
+                        await withActivatingReport(() =>
+                            mountLocalFolderOnSyncFailure(
+                                report,
+                                syncErr,
+                                (conn) => mount(conn, report),
+                                applySelection,
+                                type,
+                            ),
+                        );
+                    },
+                    type,
+                );
             }
-        } catch {
-            // eslint-disable-next-line no-alert
-            alert('Unable to sync remote folder');
         } finally {
-            setIsSyncingReportFolder(false);
+            // REMOTE_SYNC registry clear is owned by syncRemoteFolder's finally.
+            setSyncing(false);
         }
     };
 
-    const syncSelectedPerfReportFolder = async (folder?: RemoteFolder) => {
-        try {
-            const selectedReport = folder ?? selectedPerformanceFolder;
+    const syncSelectedReportFolder = (folder?: RemoteFolder) =>
+        syncSelectedFolder({
+            selected: folder ?? selectedReportFolder,
+            setSyncing: setIsSyncingReportFolder,
+            sync: (connection, report) => remote.syncRemoteFolder(connection, report),
+            getSaved: remote.persistentState.getSavedReportFolders,
+            updateSaved: updateSavedReportFolders,
+            getActivePath: () => jotaiStore.get(activeProfilerReportAtom)?.path,
+            ...profilerReportActions,
+        });
 
-            setIsSyncingPerformanceFolder(true);
+    const syncSelectedPerfReportFolder = (folder?: RemoteFolder) =>
+        syncSelectedFolder({
+            selected: folder ?? selectedPerformanceFolder,
+            setSyncing: setIsSyncingPerformanceFolder,
+            sync: (connection, report) => remote.syncRemoteFolder(connection, undefined, report),
+            getSaved: remote.persistentState.getSavedPerformanceFolders,
+            updateSaved: updateSavedPerformanceFolders,
+            getActivePath: () => jotaiStore.get(activePerformanceReportAtom)?.path,
+            ...performanceReportActions,
+        });
 
-            if (remote.persistentState.selectedConnection) {
-                const { data: updatedFolder } = await remote.syncRemoteFolder(
-                    remote.persistentState.selectedConnection,
-                    undefined,
-                    selectedReport,
-                );
+    /**
+     * Never-synced folders sync on select (may fail offline — falls back if a local
+     * copy exists). Previously synced folders mount the on-disk copy even when
+     * stale; refresh via the Sync button.
+     */
+    const selectAndActivateFolder = async (
+        folder: RemoteFolder,
+        {
+            setSelected,
+            syncFolder,
+            mount,
+            activateWithToast,
+            type,
+        }: {
+            setSelected: (folder: RemoteFolder) => void;
+            syncFolder: (folder: RemoteFolder) => Promise<void>;
+        } & Pick<RemoteReportActions, 'mount' | 'activateWithToast' | 'type'>,
+    ) => {
+        setSelected(folder);
 
-                if (hasBeenNormalised(updatedFolder)) {
-                    createDataIntegrityWarning(updatedFolder);
-                }
-
-                const savedRemoteFolders = remote.persistentState.getSavedPerformanceFolders(
-                    remote.persistentState.selectedConnection,
-                );
-
-                const updatedFolders = savedRemoteFolders.map((f) =>
-                    f.remotePath === updatedFolder?.remotePath ? updatedFolder : f,
-                );
-
-                updateSavedPerformanceFolders(remote.persistentState.selectedConnection, updatedFolders);
-
-                if (updatedFolder) {
-                    const mountResponse = await remote.mountRemoteFolder(
-                        remote.persistentState.selectedConnection,
-                        undefined,
-                        updatedFolder,
-                    );
-
-                    if (mountResponse.status === 200) {
-                        updatePerformanceSelection(updatedFolder);
-                        queryClient.clear();
-                    }
-                }
-            }
-        } catch {
-            // eslint-disable-next-line no-alert
-            alert('Unable to sync remote folder');
-        } finally {
-            setIsSyncingPerformanceFolder(false);
+        if (!folder.lastSynced) {
+            await syncFolder(folder);
+            return;
         }
+
+        await mountAndActivateFolder(folder, { mount, activateWithToast, type });
     };
 
-    const isLoading = isSyncingReportFolder || isSyncingPerformanceFolder;
+    const isProfilerRemote = profilerReportLocation === ReportLocation.REMOTE;
+    const isPerformanceRemote = performanceReportLocation === ReportLocation.REMOTE;
+    const isLoading = isSyncingReportFolder || isSyncingPerformanceFolder || isActivatingReport;
     const isDisabled = isFetching || isLoading || disableRemoteSync;
+
+    const selectedRemoteHost = selectedConnection?.host ?? null;
+    const { linkedPerfIds, unlinkedPerfIds, linkedProfilerReportIds, unlinkedProfilerReportIds } =
+        useReportLinkBadgeIds({ remoteHost: selectedRemoteHost });
+
+    // On mount (and when SERVER_MODE is off), seed dropdowns from on-disk synced copies
+    // for the currently selected host so offline use works without clicking Fetch.
+    // Cleanup aborts any in-flight scan so unmount cannot call setState after teardown.
+    useEffect(() => {
+        if (!disableRemoteSync) {
+            const connection = selectedConnection;
+
+            if (connection) {
+                loadLocalSyncedFolders(connection).catch(() => {
+                    // Local scan is best-effort; cached folders remain if it fails.
+                });
+            }
+        }
+
+        return () => {
+            localSyncedFoldersAbortRef.current?.abort();
+        };
+        // Intentionally once on mount for the persisted selection; connection changes go
+        // through updateSelectedConnection which also calls loadLocalSyncedFolders.
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- mount seed only
+    }, []);
 
     // Populates the selectedReportFolder if there is a stored activeProfilerReport
     useEffect(() => {
-        if (activeProfilerReport && profilerReportLocation === ReportLocation.REMOTE) {
-            const matchedFolder = reportFolderList.find((folder) =>
-                folder.remotePath?.includes(activeProfilerReport.path),
-            );
+        queueMicrotask(() => {
+            if (activeProfilerReport && isProfilerRemote) {
+                const matchedFolder = reportFolderList.find((folder) =>
+                    isRemoteFolderActive(folder, activeProfilerReport),
+                );
 
-            setSelectedReportFolder(matchedFolder);
-        }
+                setSelectedReportFolder(matchedFolder);
+            }
 
-        if (activePerformanceReport && performanceReportLocation === ReportLocation.REMOTE) {
-            const matchedFolder = remotePerformanceFolderList.find((folder) =>
-                folder.reportName?.includes(activePerformanceReport.reportName),
-            );
+            if (activePerformanceReport && isPerformanceRemote) {
+                const matchedFolder = remotePerformanceFolderList.find((folder) =>
+                    isRemoteFolderActive(folder, activePerformanceReport),
+                );
 
-            setSelectedPerformanceFolder(matchedFolder);
-        }
+                setSelectedPerformanceFolder(matchedFolder);
+            }
+        });
     }, [
         activeProfilerReport,
         profilerReportLocation,
@@ -261,6 +711,8 @@ const RemoteSyncConfigurator: FC = () => {
         activePerformanceReport,
         remotePerformanceFolderList,
         performanceReportLocation,
+        isProfilerRemote,
+        isPerformanceRemote,
     ]);
 
     const isSelectedReportFolderOutdated = useMemo(
@@ -281,13 +733,11 @@ const RemoteSyncConfigurator: FC = () => {
             >
                 <AddRemoteConnection
                     disabled={isDisabled}
-                    onAddConnection={(newConnection) => {
-                        remote.persistentState.savedConnectionList = [
-                            ...remote.persistentState.savedConnectionList,
-                            newConnection,
-                        ];
+                    connectionList={savedConnectionList}
+                    onAddConnection={async (newConnection) => {
+                        persistConnectionList([...savedConnectionList, newConnection]);
 
-                        updateSelectedConnection(newConnection);
+                        await updateSelectedConnection(newConnection);
                     }}
                 />
             </FormGroup>
@@ -298,66 +748,44 @@ const RemoteSyncConfigurator: FC = () => {
                 subLabel='Select remote server that will be used for syncing folders'
             >
                 <RemoteConnectionSelector
-                    connection={remote.persistentState.selectedConnection}
-                    connectionList={remote.persistentState.savedConnectionList}
+                    connection={selectedConnection}
+                    connectionList={savedConnectionList}
                     disabled={isDisabled}
                     loading={isFetching}
-                    offline={isRemoteOffline}
-                    onEditConnection={(updatedConnection, oldConnection) => {
-                        const updatedConnections = [...remote.persistentState.savedConnectionList];
+                    onEditConnection={async (updatedConnection, oldConnection) => {
+                        await changeSavedConnection(oldConnection, (connectionList, connectionIndex) => {
+                            connectionList[connectionIndex] = updatedConnection;
+                            remote.persistentState.updateSavedRemoteFoldersConnection(oldConnection, updatedConnection);
 
-                        updatedConnections[findConnectionIndex(oldConnection)] = updatedConnection;
-                        remote.persistentState.savedConnectionList = updatedConnections;
-                        remote.persistentState.updateSavedRemoteFoldersConnection(oldConnection, updatedConnection);
+                            // The two layouts have disjoint report paths, so a cached list
+                            // survives the switch offering reports this connection can no
+                            // longer find. Dropping it here rather than clearing the
+                            // selection directly lets updateSelectedConnection re-read the
+                            // emptied cache, and only when this row held the selection.
+                            if (hasPerformanceDiscoveryChanged(oldConnection, updatedConnection)) {
+                                remote.persistentState.deleteSavedPerformanceFolders(updatedConnection);
+                            }
 
-                        updateSelectedConnection(updatedConnection);
+                            return updatedConnection;
+                        });
                     }}
-                    onRemoveConnection={(connection) => {
-                        const updatedConnections = [...remote.persistentState.savedConnectionList];
+                    onRemoveConnection={async (connection) => {
+                        await changeSavedConnection(connection, (connectionList, connectionIndex) => {
+                            connectionList.splice(connectionIndex, 1);
+                            remote.persistentState.deleteSavedReportFolders(connection);
+                            remote.persistentState.deleteSavedPerformanceFolders(connection);
 
-                        updatedConnections.splice(findConnectionIndex(connection), 1);
-                        remote.persistentState.savedConnectionList = updatedConnections;
-                        remote.persistentState.deleteSavedReportFolders(connection);
-                        remote.persistentState.deleteSavedPerformanceFolders(connection);
-
-                        updateSelectedConnection(updatedConnections[0]);
-                        setSelectedReportFolder(undefined);
-                        setSelectedPerformanceFolder(undefined);
+                            // `.at` rather than `[0]` so removing the last connection types as
+                            // undefined instead of silently claiming to be a connection.
+                            return connectionList.at(0);
+                        });
                     }}
-                    onSelectConnection={(connection) => {
-                        updateSelectedConnection(connection);
-                        setIsRemoteOffline(false);
+                    onSelectConnection={async (connection) => {
+                        await updateSelectedConnection(connection);
                     }}
                     onSyncRemoteFolderList={async () => {
-                        try {
-                            setIsFetching(true);
-
-                            if (remote.persistentState.selectedConnection) {
-                                const [fetchedReportFolders, fetchedPerformanceFolders] = await Promise.all([
-                                    remote.persistentState.selectedConnection.profilerPath
-                                        ? remote.listReportFolders(remote.persistentState.selectedConnection)
-                                        : [],
-                                    remote.persistentState.selectedConnection.performancePath
-                                        ? remote.listPerformanceFolders(remote.persistentState.selectedConnection)
-                                        : [],
-                                ]);
-
-                                updateSavedReportFolders(
-                                    remote.persistentState.selectedConnection,
-                                    fetchedReportFolders,
-                                );
-
-                                updateSavedPerformanceFolders(
-                                    remote.persistentState.selectedConnection,
-                                    fetchedPerformanceFolders,
-                                );
-                            }
-                            // eslint-disable-next-line @typescript-eslint/no-unused-vars
-                        } catch (err) {
-                            // eslint-disable-next-line no-alert
-                            alert('Unable to connect to remote server.');
-                        } finally {
-                            setIsFetching(false);
+                        if (selectedConnection) {
+                            await fetchRemoteFolderLists(selectedConnection);
                         }
                     }}
                 />
@@ -369,43 +797,30 @@ const RemoteSyncConfigurator: FC = () => {
                 subLabel='Select a memory report'
             >
                 <RemoteFolderSelector
-                    remoteFolder={profilerReportLocation === ReportLocation.REMOTE ? selectedReportFolder : undefined}
+                    remoteFolder={isProfilerRemote ? selectedReportFolder : undefined}
                     remoteFolderList={reportFolderList}
-                    loading={isLoading || isFetching}
                     disabled={isDisabled}
-                    onSelectFolder={async (folder) => {
-                        if (remote.persistentState.selectedConnection) {
-                            if (isRemoteFolderOutdated(folder)) {
-                                setSelectedReportFolder(folder);
-                                await syncSelectedReportFolder(folder);
-                            } else {
-                                const response = await remote.mountRemoteFolder(
-                                    remote.persistentState.selectedConnection,
-                                    folder,
-                                );
-
-                                if (response.status === 200) {
-                                    updateReportSelection(folder);
-
-                                    if (hasBeenNormalised(folder)) {
-                                        createDataIntegrityWarning(folder);
-                                    }
-                                }
-                            }
-                        }
-                    }}
-                    type='profiler'
+                    linkedIds={linkedProfilerReportIds}
+                    unlinkedIds={unlinkedProfilerReportIds}
+                    onSelectFolder={(folder) =>
+                        selectAndActivateFolder(folder, {
+                            setSelected: setSelectedReportFolder,
+                            syncFolder: syncSelectedReportFolder,
+                            ...profilerReportActions,
+                        })
+                    }
+                    type={profilerReportActions.type}
+                    showReportName
                 >
-                    {(profilerReportLocation === ReportLocation.REMOTE || isSyncingReportFolder) &&
-                        selectedReportFolder && (
-                            <RemoteSyncButton
-                                isDisabled={isDisabled}
-                                selectedReportFolder={selectedReportFolder}
-                                isSyncingReportFolder={isSyncingReportFolder}
-                                isSelectedReportFolderOutdated={isSelectedReportFolderOutdated}
-                                handleClick={syncSelectedReportFolder}
-                            />
-                        )}
+                    {(isProfilerRemote || isSyncingReportFolder) && selectedReportFolder && (
+                        <RemoteSyncButton
+                            isDisabled={isDisabled}
+                            selectedReportFolder={selectedReportFolder}
+                            isSyncingReportFolder={isSyncingReportFolder}
+                            isSelectedReportFolderOutdated={isSelectedReportFolderOutdated}
+                            handleClick={syncSelectedReportFolder}
+                        />
+                    )}
                 </RemoteFolderSelector>
             </FormGroup>
 
@@ -415,46 +830,29 @@ const RemoteSyncConfigurator: FC = () => {
                 subLabel='Select a performance report'
             >
                 <RemoteFolderSelector
-                    remoteFolder={
-                        performanceReportLocation === ReportLocation.REMOTE ? selectedPerformanceFolder : undefined
-                    }
+                    remoteFolder={isPerformanceRemote ? selectedPerformanceFolder : undefined}
                     remoteFolderList={remotePerformanceFolderList}
-                    loading={isLoading || isFetching}
                     disabled={isDisabled}
-                    onSelectFolder={async (folder) => {
-                        if (remote.persistentState.selectedConnection) {
-                            if (isRemoteFolderOutdated(folder)) {
-                                setSelectedPerformanceFolder(folder);
-                                await syncSelectedPerfReportFolder(folder);
-                            } else {
-                                const response = await remote.mountRemoteFolder(
-                                    remote.persistentState.selectedConnection,
-                                    undefined,
-                                    folder,
-                                );
-
-                                if (response.status === 200) {
-                                    updatePerformanceSelection(folder);
-
-                                    if (hasBeenNormalised(folder)) {
-                                        createDataIntegrityWarning(folder);
-                                    }
-                                }
-                            }
-                        }
-                    }}
-                    type='performance'
+                    linkedIds={linkedPerfIds}
+                    unlinkedIds={unlinkedPerfIds}
+                    onSelectFolder={(folder) =>
+                        selectAndActivateFolder(folder, {
+                            setSelected: setSelectedPerformanceFolder,
+                            syncFolder: syncSelectedPerfReportFolder,
+                            ...performanceReportActions,
+                        })
+                    }
+                    type={performanceReportActions.type}
                 >
-                    {(performanceReportLocation === ReportLocation.REMOTE || isSyncingPerformanceFolder) &&
-                        selectedPerformanceFolder && (
-                            <RemoteSyncButton
-                                isDisabled={isDisabled}
-                                selectedReportFolder={selectedPerformanceFolder}
-                                isSyncingReportFolder={isSyncingPerformanceFolder}
-                                isSelectedReportFolderOutdated={isSelectedPerfFolderOutdated}
-                                handleClick={syncSelectedPerfReportFolder}
-                            />
-                        )}
+                    {(isPerformanceRemote || isSyncingPerformanceFolder) && selectedPerformanceFolder && (
+                        <RemoteSyncButton
+                            isDisabled={isDisabled}
+                            selectedReportFolder={selectedPerformanceFolder}
+                            isSyncingReportFolder={isSyncingPerformanceFolder}
+                            isSelectedReportFolderOutdated={isSelectedPerfFolderOutdated}
+                            handleClick={syncSelectedPerfReportFolder}
+                        />
+                    )}
                 </RemoteFolderSelector>
             </FormGroup>
         </>

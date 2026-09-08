@@ -1,0 +1,37 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
+
+@use '../definitions/colours' as *;
+@use '../mixins/formLayout' as form-layout;
+
+.inline-loaders {
+    display: flex;
+    flex-direction: row;
+    gap: 5px;
+}
+
+.file-loader {
+    @include form-layout.stacked-form-controls;
+
+    .form-header {
+        font-weight: 700;
+        margin: 0;
+    }
+
+    .form-container {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 5px;
+    }
+
+    .folder-upload-status {
+        display: inline-flex;
+        gap: 2px;
+        flex-basis: 100%;
+
+        .message {
+            line-height: 1.4;
+        }
+    }
+}

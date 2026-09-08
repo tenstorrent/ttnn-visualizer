@@ -4,26 +4,30 @@
 
 import classNames from 'classnames';
 import { Fragment } from 'react/jsx-runtime';
-import { formatSize } from '../functions/math';
+import { formatPercentage, formatSize } from '../functions/math';
 import { getCoreColour, getOpToOpGapColour } from '../functions/perfFunctions';
-import { DeviceOperationMapping, useGetDeviceOperationListPerf } from '../hooks/useAPI';
+import { useGetDeviceOperationListPerfByOpId } from '../hooks/useAPI';
 import { OperationDescription } from '../model/APIData';
 
 interface OperationListPerfDataProps {
     operation: OperationDescription;
 }
 
+const EMPTY_PERF_DEVICE_OPERATIONS: never[] = [];
+
 const OperationListPerfData = ({ operation }: OperationListPerfDataProps) => {
-    const perfData = useGetDeviceOperationListPerf();
+    // Grouped by op id rather than scanned, because this renders once per row of
+    // a virtualised list and a filter over the whole match is O(rows) per row.
+    const perfDataByOpId = useGetDeviceOperationListPerfByOpId();
+    const perfDeviceOperations = perfDataByOpId.get(operation.id) ?? EMPTY_PERF_DEVICE_OPERATIONS;
 
     return (
         <div className='perf-data'>
-            {perfData
-                ?.filter((perf: DeviceOperationMapping) => perf.id === operation.id)
-                .map(
-                    (perf) =>
+            {perfDeviceOperations.length > 0 &&
+                perfDeviceOperations.map(
+                    (perf, index) =>
                         perf.perfData && (
-                            <Fragment key={perf.id + perf.operationName}>
+                            <Fragment key={`${operation.id}${perf.operationName}${perf.id}${index}`}>
                                 <strong>{perf.perfData?.raw_op_code}</strong>
                                 <div>
                                     <span className={classNames('monospace', getCoreColour(perf.perfData?.cores))}>
@@ -35,7 +39,7 @@ const OperationListPerfData = ({ operation }: OperationListPerfDataProps) => {
                                         {formatSize(parseFloat(perf.perfData?.device_time))} µs
                                     </span>{' '}
                                     <span className='monospace'>
-                                        ({formatSize(parseFloat(perf.perfData?.total_percent))} %)
+                                        ({formatPercentage(parseFloat(perf.perfData?.total_percent), 2)})
                                     </span>
                                     {perf.perfData?.op_to_op_gap && (
                                         <>
@@ -43,7 +47,7 @@ const OperationListPerfData = ({ operation }: OperationListPerfDataProps) => {
                                             <span
                                                 className={classNames(
                                                     'monospace',
-                                                    getOpToOpGapColour(perf.perfData.op_to_op_gap),
+                                                    getOpToOpGapColour(parseFloat(perf.perfData.op_to_op_gap)),
                                                 )}
                                             >
                                                 {formatSize(parseFloat(perf.perfData.op_to_op_gap))} µs
@@ -55,6 +59,17 @@ const OperationListPerfData = ({ operation }: OperationListPerfDataProps) => {
                             </Fragment>
                         ),
                 )}
+            {perfDeviceOperations.length === 0 && operation.deviceOperationNameList.length > 0 && (
+                <div>
+                    {operation.deviceOperationNameList.map((op: string, index) => {
+                        return (
+                            <div key={`${operation.id}-${op}-${index}`}>
+                                <strong>{op}</strong>
+                            </div>
+                        );
+                    })}
+                </div>
+            )}
         </div>
     );
 };

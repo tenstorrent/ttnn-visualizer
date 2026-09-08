@@ -9,28 +9,34 @@ import 'styles/components/Overlay.scss';
 
 interface OverlayProps {
     isOpen: boolean;
+    onOpened?: () => void;
     onClose?: () => void;
     children: ReactNode;
     hideCloseButton?: boolean;
     canEscapeKeyClose?: boolean;
     canOutsideClickClose?: boolean;
+    lazy?: boolean;
 }
 
 function Overlay({
     isOpen,
+    onOpened,
     onClose,
     children,
     hideCloseButton = false,
     canEscapeKeyClose = true,
     canOutsideClickClose = true,
+    lazy,
 }: OverlayProps) {
     return (
         <Overlay2
             isOpen={isOpen}
+            onOpened={onOpened}
             onClose={onClose}
             className={Classes.OVERLAY_SCROLL_CONTAINER}
             canEscapeKeyClose={canEscapeKeyClose}
             canOutsideClickClose={canOutsideClickClose}
+            lazy={lazy}
         >
             <div className={classNames('overlay-contents', Classes.DARK, Classes.CARD, Classes.ELEVATION_4)}>
                 {children}

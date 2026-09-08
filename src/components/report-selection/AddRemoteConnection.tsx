@@ -2,20 +2,21 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { FC, useState } from 'react';
+import { useState } from 'react';
 
 import { Button } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 
 import RemoteConnectionDialog from './RemoteConnectionDialog';
-import { RemoteConnection } from '../../definitions/RemoteConnection';
+import { RemoteConnection } from '../../model/RemoteConnection';
 
 interface AddRemoteConnectionProps {
     disabled: boolean;
+    connectionList: RemoteConnection[];
     onAddConnection: (remoteConnection: RemoteConnection) => void;
 }
 
-const AddRemoteConnection: FC<AddRemoteConnectionProps> = ({ disabled, onAddConnection }) => {
+const AddRemoteConnection = ({ disabled, connectionList, onAddConnection }: AddRemoteConnectionProps) => {
     const [isAddConnectionDialogOpen, setIsAddConnectionDialogOpen] = useState(false);
 
     return (
@@ -29,6 +30,7 @@ const AddRemoteConnection: FC<AddRemoteConnectionProps> = ({ disabled, onAddConn
 
             <RemoteConnectionDialog
                 open={isAddConnectionDialogOpen}
+                existingConnections={connectionList}
                 onAddConnection={(newConnection) => {
                     onAddConnection(newConnection);
                     setIsAddConnectionDialogOpen(false);

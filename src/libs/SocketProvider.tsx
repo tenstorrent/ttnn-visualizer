@@ -3,12 +3,11 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 /* eslint-disable no-console */
-import React, { ReactNode, createContext, useEffect } from 'react';
+import { ReactNode, createContext, useEffect } from 'react';
 import { Socket, io } from 'socket.io-client';
-import { useAtom } from 'jotai';
 import { getOrCreateInstanceId } from './axiosInstance';
-import { fileTransferProgressAtom } from '../store/app';
-import { FileProgress, FileStatus } from '../model/APIData';
+import { FileTransferSource } from '../definitions/FileTransferSource';
+import { clearStaleRemoteSyncOnReconnect, setFileTransferProgressForSource } from '../store/app';
 import getServerConfig from '../functions/getServerConfig';
 
 type SocketContextType = Socket | null;
@@ -23,13 +22,16 @@ interface SocketProviderProps {
     children: ReactNode;
 }
 
-export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
-    const [_, setFileTransferProgress] = useAtom(fileTransferProgressAtom);
+export const SocketProvider = ({ children }: SocketProviderProps) => {
     const instanceId = getOrCreateInstanceId();
 
     useEffect(() => {
         socket.on('connect', () => {
-            setFileTransferProgress((previous: FileProgress) => ({ ...previous, status: FileStatus.INACTIVE }));
+            // Reconnect-triggered only (not a wall-clock timer). If the backend
+            // dies and socket.io never reconnects, the axios timeout in
+            // syncRemoteFolder is the backstop — not infinite, but until then
+            // the overlay can linger (#1757).
+            clearStaleRemoteSyncOnReconnect();
 
             console.log(`Socket connected with ID: ${socket.id}`);
         });
@@ -47,15 +49,24 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
         });
 
         socket.on('fileTransferProgress', (data) => {
-            if (data.instanceId === instanceId) {
-                setFileTransferProgress({
-                    currentFileName: data.current_file_name,
-                    numberOfFiles: data.number_of_files,
-                    percentOfCurrent: data.percent_of_current,
-                    finishedFiles: data.finished_files,
-                    status: data.status,
-                });
+            // Require an explicit instance_id match so events bound for
+            // another tab/connection never bleed into this one. Older
+            // payloads without `instance_id` (treated as untargeted) are
+            // ignored to stay safe under multi-tab use.
+            if (data.instance_id !== instanceId) {
+                return;
             }
+
+            setFileTransferProgressForSource(FileTransferSource.REMOTE_SYNC, {
+                currentFileName: data.current_file_name,
+                numberOfFiles: data.number_of_files,
+                percentOfCurrent: data.percent_of_current,
+                finishedFiles: data.finished_files,
+                status: data.status,
+                bytesTransferred: data.bytes_transferred,
+                bytesTotal: data.bytes_total,
+                currentFileSize: data.current_file_size,
+            });
         });
 
         /* For debugging socket messages */
@@ -69,8 +80,9 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
             socket.off('disconnect');
             socket.off('connect_error');
             socket.off('reconnect');
+            socket.off('fileTransferProgress');
         };
-    }, [instanceId, setFileTransferProgress]);
+    }, [instanceId]);
 
     return <SocketContext.Provider value={socket}>{children}</SocketContext.Provider>;
 };

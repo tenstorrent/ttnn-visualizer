@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { OpType } from '../definitions/Performance';
-import { TypedPerfTableRow } from '../definitions/PerfTable';
+import { TypedPerfTableRow } from '../model/PerfTable';
 
 const MISSING_OP_STRING = 'MISSING';
 const PLACEHOLDER: TypedPerfTableRow = {
@@ -32,11 +32,25 @@ const PLACEHOLDER: TypedPerfTableRow = {
     inner_dim_block_size: '',
     output_subblock_h: '',
     output_subblock_w: '',
-    pm_ideal_ns: '',
+    pm_ideal_ns: null,
+    device_kernel_duration: null,
+    brisc_kernel_duration: null,
+    ncrisc_kernel_duration: null,
+    trisc0_kernel_duration: null,
+    trisc1_kernel_duration: null,
+    trisc2_kernel_duration: null,
+    erisc_kernel_duration: null,
     op_type: OpType.UNKNOWN,
     device: null,
     buffer_type: null,
     layout: null,
+    hash: null,
+    cache_hit: null,
+    isFirstHashOccurrence: false,
+    l1_fullness_percent: null,
+    l1_free_segments: null,
+    l1_largest_free: null,
+    l1_largest_free_percent: null,
 };
 
 export interface NormalisedPerfData {

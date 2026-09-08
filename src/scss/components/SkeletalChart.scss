@@ -5,20 +5,13 @@
 
 .dummy-chart-container {
     width: 100%;
-    height: 450px;
-    margin-bottom: 110px;
-
-    .title {
-        height: 20px;
-        width: 200px;
-        margin-top: 15px;
-        margin-bottom: 25px;
-    }
+    height: auto;
+    margin-bottom: 70px;
 
     .dummy-chart {
         box-sizing: border-box;
         display: flex;
-        height: 390px;
+        height: 300px;
         align-items: flex-end;
         justify-content: space-between;
         border-left: 2px solid $tt-grey-4;

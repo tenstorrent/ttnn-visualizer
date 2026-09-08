@@ -2,7 +2,6 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import React from 'react';
 import { Tooltip } from '@blueprintjs/core';
 import { CommonInfo, NPE_KPI, NPE_KPI_METADATA } from '../../model/NPEModel';
 import Collapsible from '../Collapsible';
@@ -12,7 +11,7 @@ interface NPEMetadataProps {
     numTransfers: number;
 }
 
-const NPEMetadata: React.FC<NPEMetadataProps> = ({ info, numTransfers }) => {
+const NPEMetadata = ({ info, numTransfers }: NPEMetadataProps) => {
     const hasKey = (key: keyof CommonInfo) => {
         return NPE_KPI_METADATA[key] !== undefined && NPE_KPI_METADATA[key] !== null;
     };
@@ -24,7 +23,7 @@ const NPEMetadata: React.FC<NPEMetadataProps> = ({ info, numTransfers }) => {
         const kpi = NPE_KPI_METADATA[key] as NPE_KPI;
         const unit = kpi.units;
         const decimals = kpi.decimals !== undefined ? kpi.decimals : 2;
-        return `${typeof value === 'number' ? Number(value).toFixed(decimals) : value} ${unit}`;
+        return `${typeof value === 'number' ? Number(value).toFixed(decimals) : value}${unit}`;
     };
     const formatMetadataLabel = (key: keyof CommonInfo) => {
         const KPI: NPE_KPI | null = NPE_KPI_METADATA[key];
@@ -38,7 +37,7 @@ const NPEMetadata: React.FC<NPEMetadataProps> = ({ info, numTransfers }) => {
     return (
         <div className='metadata'>
             <Collapsible
-                label={<h3 className='title'>Run summary</h3>}
+                label={<h2 className='title'>Run summary</h2>}
                 isOpen
             >
                 <div>
@@ -47,7 +46,7 @@ const NPEMetadata: React.FC<NPEMetadataProps> = ({ info, numTransfers }) => {
                             if (hasKey(key) && info[key] !== undefined) {
                                 return (
                                     <div key={key}>
-                                        <span>{formatMetadataLabel(key)}: </span>
+                                        <span>{formatMetadataLabel(key)} </span>
                                         <span>{formatMetadataValue(key, info[key])}</span>
                                     </div>
                                 );
@@ -57,7 +56,7 @@ const NPEMetadata: React.FC<NPEMetadataProps> = ({ info, numTransfers }) => {
                 </div>
                 <hr />
                 <div>
-                    <span>Active transfers:</span>
+                    <span>Active transfers: </span>
                     <span>{numTransfers}</span>
                 </div>
             </Collapsible>

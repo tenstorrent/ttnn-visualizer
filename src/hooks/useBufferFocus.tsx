@@ -2,54 +2,73 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { toast } from 'react-toastify';
-import { useAtom, useSetAtom } from 'jotai';
+import { Id } from 'react-toastify';
+import { useCallback } from 'react';
+import { useAtom } from 'jotai';
+import { createToast, dismissToast } from '../functions/createToastNotification';
 import { getBufferColor, getTensorColor } from '../functions/colorGenerator';
+import isValidNumber from '../functions/isValidNumber';
 import ToastTensorMessage from '../components/operation-details/ToastTensorMessage';
-import { activeToastAtom, selectedAddressAtom, selectedTensorAtom } from '../store/app';
+import { activeToastAtom, selectedAddressAtom, selectedBufferColourAtom, selectedTensorIdAtom } from '../store/app';
 
 const useBufferFocus = () => {
     const [activeToast, setActiveToast] = useAtom(activeToastAtom);
-    const setSelectedTensor = useSetAtom(selectedTensorAtom);
-    const setSelectedAddress = useSetAtom(selectedAddressAtom);
+    const [selectedTensorId, setSelectedTensorId] = useAtom(selectedTensorIdAtom);
+    const [selectedAddress, setSelectedAddress] = useAtom(selectedAddressAtom);
+    const [selectedBufferColour, setSelectedBufferColour] = useAtom(selectedBufferColourAtom);
 
-    const resetToasts = () => {
-        setSelectedTensor(null);
+    const resetToasts = useCallback(() => {
+        setSelectedTensorId(null);
         setSelectedAddress(null);
+        setSelectedBufferColour(null);
         setActiveToast(null);
-        toast.dismiss();
+        dismissToast();
+    }, [setActiveToast, setSelectedAddress, setSelectedBufferColour, setSelectedTensorId]);
+
+    const updateBufferFocus = useCallback(
+        (address?: number, tensorId?: number, colorVariance?: number): void => {
+            const previousToast = activeToast;
+            let colour = getTensorColor(tensorId);
+
+            if (previousToast) {
+                dismissToast(previousToast);
+            }
+
+            if (isValidNumber(address) && !colour) {
+                colour = getBufferColor(address + (colorVariance || 0));
+            }
+
+            setSelectedBufferColour(colour ?? null);
+
+            const toastInstance: Id = createToast(
+                <ToastTensorMessage
+                    tensorId={tensorId}
+                    address={address}
+                    colour={colour}
+                />,
+                {
+                    autoClose: false,
+                    hideProgressBar: true,
+                    onClick: resetToasts,
+                },
+            );
+
+            setActiveToast(toastInstance);
+            setSelectedAddress(address ?? null);
+            setSelectedTensorId(tensorId ?? null);
+        },
+        [activeToast, resetToasts, setActiveToast, setSelectedAddress, setSelectedBufferColour, setSelectedTensorId],
+    );
+
+    return {
+        selectedTensorId,
+        selectedAddress,
+        activeToast,
+        resetToasts,
+        setActiveToast,
+        updateBufferFocus,
+        selectedBufferColour,
     };
-
-    const createToast = (address?: number, tensorId?: number) => {
-        if (activeToast) {
-            toast.dismiss(activeToast);
-        }
-
-        let colour = getTensorColor(tensorId);
-
-        if (address && !colour) {
-            colour = getBufferColor(address);
-        }
-
-        const toastInstance = toast(
-            <ToastTensorMessage
-                tensorId={tensorId}
-                address={address}
-                colour={colour}
-            />,
-            {
-                position: 'bottom-right',
-                hideProgressBar: true,
-                closeOnClick: true,
-                onClick: resetToasts,
-                theme: 'light',
-            },
-        ) as number;
-
-        setActiveToast(toastInstance);
-    };
-
-    return { activeToast, resetToasts, setActiveToast, createToast };
 };
 
 export default useBufferFocus;

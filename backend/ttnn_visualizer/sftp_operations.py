@@ -4,31 +4,206 @@
 
 import json
 import logging
+import os
+import re
 import subprocess
 import time
+from enum import Enum
+from http import HTTPStatus
 from pathlib import Path
-from stat import S_ISDIR
 from threading import Thread
-from typing import List, Optional
+from typing import Callable, List, NamedTuple, NoReturn, Optional
 
+import yaml
 from flask import current_app
 from ttnn_visualizer.decorators import remote_exception_handler
-from ttnn_visualizer.enums import ConnectionTestStates
+from ttnn_visualizer.enums import ConnectionTestStates, SyncMethod
 from ttnn_visualizer.exceptions import (
-    NoProjectsException,
+    AuthenticationException,
+    HostKeyVerificationException,
+    NoValidConnectionsError,
     RemoteConnectionException,
     SSHException,
 )
-from ttnn_visualizer.models import RemoteConnection, RemoteReportFolder
+from ttnn_visualizer.models import (
+    Instance,
+    RemoteConnection,
+    RemoteReportFolder,
+    folder_segment_from_remote_path,
+    rank_from_remote_path,
+)
+from ttnn_visualizer.remote_command import (
+    RemoteCommand,
+    remote_arg,
+    remote_glob_arg,
+    remote_scp_target,
+)
 from ttnn_visualizer.sockets import FileProgress, FileStatus, emit_file_status
-from ttnn_visualizer.ssh_client import SSHClient
-from ttnn_visualizer.utils import update_last_synced
+from ttnn_visualizer.ssh_client import SSHClient, raise_for_ssh_subprocess_error
+from ttnn_visualizer.utils import (
+    PROFILER_CONFIG_BASENAME,
+    pick_cluster_descriptor_path,
+    ranked_profiler_config_basenames,
+    update_last_synced,
+)
 
 logger = logging.getLogger(__name__)
 
-TEST_CONFIG_FILE = "config.json"
+# Hosts where the SFTP subsystem is unavailable but scp over SSH still works,
+# keyed by (username, host, port). Process-global and never evicted: a single
+# subsystem failure pins that endpoint to scp for the rest of the process
+# lifetime (across users under SERVER_MODE). That's an intentional tradeoff —
+# scp is a safe superset fallback, so a stale entry only costs an unnecessary
+# scp where sftp might now work, never a failed sync. A restart clears it.
+_sftp_subsystem_unavailable: set[tuple[str, str, int]] = set()
+
+# What the report search exits with when its root is not there, so the caller can
+# tell an absent path from one holding nothing. Kept clear of the codes the remote
+# side produces on its own: `find` uses 1, a shell that cannot run the command uses
+# 126 or 127, and ssh itself uses 255.
+_MISSING_ROOT_EXIT_CODE = 87
+
+# And when the root is there but is not a directory, which `find` would otherwise
+# report as a root holding no reports.
+_NOT_A_DIRECTORY_EXIT_CODE = 88
+
+
+def _remote_transfer_key(remote_connection: RemoteConnection) -> tuple[str, str, int]:
+    return (
+        remote_connection.username,
+        remote_connection.host,
+        remote_connection.port,
+    )
+
+
+def _is_sftp_subsystem_unavailable(stderr: str) -> bool:
+    return "subsystem request failed" in (stderr or "").lower()
+
+
+def get_active_sync_method(remote_connection: RemoteConnection) -> SyncMethod:
+    """Which transport this host is currently using (scp once SFTP has failed)."""
+    if _remote_transfer_key(remote_connection) in _sftp_subsystem_unavailable:
+        return SyncMethod.SCP
+    return SyncMethod.SFTP
+
+
+def _ssh_subprocess_timeout_seconds() -> int:
+    """Timeout for SSH subprocess ops (find, stat, cat, list). Configurable via SSH_SUBPROCESS_TIMEOUT."""
+    try:
+        return int(current_app.config["SSH_SUBPROCESS_TIMEOUT"])
+    except RuntimeError:
+        return int(os.getenv("SSH_SUBPROCESS_TIMEOUT", "120"))
+
+
+def _ssh_remote_check_timeout_seconds() -> int:
+    """Timeout per quick SSH check (e.g. test -f per folder). Configurable via SSH_REMOTE_CHECK_TIMEOUT."""
+    try:
+        return int(current_app.config["SSH_REMOTE_CHECK_TIMEOUT"])
+    except RuntimeError:
+        return int(os.getenv("SSH_REMOTE_CHECK_TIMEOUT", "45"))
+
+
+TEST_CONFIG_FILE = PROFILER_CONFIG_BASENAME
+TEST_DB_FILE = "db.sqlite"
 TEST_PROFILER_FILE = "profile_log_device.csv"
-REPORT_DATA_DIRECTORY = Path(__file__).parent.absolute().joinpath("data")
+
+# `tt-run --tracy` gives each rank its own copy of the profiler output root, so a
+# multihost report lives at <root>/rank<N>/reports/<report> rather than directly
+# under the configured path. Requiring this relative subpath does two jobs: it
+# keeps a root that is not the per-rank parent from matching (the single-host
+# <root>/reports/<report> layout otherwise sits at a searchable depth of its
+# own), and it skips each rank's `.logs`, which holds the raw
+# profile_log_device.csv and would otherwise look like a report.
+#
+# Glob syntax cannot express "digits only", so this only narrows the candidates
+# worth an SSH round trip; `rank_from_remote_path` is what decides whether a
+# candidate is really a rank.
+MULTIHOST_REPORT_PARENT_GLOB = "rank[0-9]*/reports"
+
+# Spelled for humans rather than for `find`, since it reaches the connection-test UI.
+MULTIHOST_REPORT_LAYOUT_HINT = "rank<N>/reports"
+
+# Paths per batched `stat` call, so a rank-heavy tree cannot build a remote
+# command line long enough to hit ARG_MAX.
+_MTIME_BATCH_SIZE = 200
+
+
+def _ssh_cmd_prefix(remote_connection: RemoteConnection) -> List[str]:
+    """Build SSH command prefix (never prompts for password). Includes BatchMode=yes and optional identity file."""
+    cmd = ["ssh"]
+    identity = (getattr(remote_connection, "identityFile", None) or "").strip()
+    if identity:
+        cmd.extend(["-F", os.devnull])
+    cmd.extend(["-o", "BatchMode=yes", "-o", "PasswordAuthentication=no"])
+    if identity:
+        cmd.extend(["-o", "IdentitiesOnly=yes", "-i", identity])
+    if remote_connection.port != 22:
+        cmd.extend(["-p", str(remote_connection.port)])
+    cmd.append(f"{remote_connection.username}@{remote_connection.host}")
+    return cmd
+
+
+def _ssh_argv(remote_connection: RemoteConnection, command: RemoteCommand) -> List[str]:
+    """Full ``ssh`` argv for one remote command.
+
+    The only intended caller of ``_ssh_cmd_prefix``. Everything after ``user@host``
+    is a single element because OpenSSH joins multiple remote arguments with spaces
+    and hands the result to the remote login shell — passing a path as its own argv
+    element looks safe locally but is not quoted remotely. Taking a ``RemoteCommand``
+    rather than a ``str`` is what makes a naive f-string a type error here.
+    """
+    return _ssh_cmd_prefix(remote_connection) + [str(command)]
+
+
+def _sftp_cmd_prefix(remote_connection: RemoteConnection) -> List[str]:
+    """Build SFTP command prefix (never prompts for password). Includes BatchMode=yes and optional identity file."""
+    cmd = ["sftp"]
+    identity = (getattr(remote_connection, "identityFile", None) or "").strip()
+    if identity:
+        cmd.extend(["-F", os.devnull])
+    cmd.extend(["-o", "BatchMode=yes", "-o", "PasswordAuthentication=no"])
+    if identity:
+        cmd.extend(["-o", "IdentitiesOnly=yes", "-i", identity])
+    if remote_connection.port != 22:
+        cmd.extend(["-P", str(remote_connection.port)])
+    cmd.extend(["-b", "-", f"{remote_connection.username}@{remote_connection.host}"])
+    return cmd
+
+
+def _scp_cmd_prefix(remote_connection: RemoteConnection) -> List[str]:
+    """Build scp command prefix (never prompts for password). Mirrors ssh/sftp options.
+
+    `-O` forces the legacy SCP/rcp transfer protocol. OpenSSH 9+ defaults scp to
+    the SFTP subsystem, which is exactly the subsystem that's unavailable on the
+    hosts this fallback targets; `-O` transfers over a plain remote exec instead.
+    """
+    cmd = ["scp", "-O"]
+    identity = (getattr(remote_connection, "identityFile", None) or "").strip()
+    if identity:
+        cmd.extend(["-F", os.devnull])
+    cmd.extend(["-o", "BatchMode=yes", "-o", "PasswordAuthentication=no"])
+    if identity:
+        cmd.extend(["-o", "IdentitiesOnly=yes", "-i", identity])
+    if remote_connection.port != 22:
+        cmd.extend(["-P", str(remote_connection.port)])
+    return cmd
+
+
+def handle_ssh_subprocess_error(
+    e: subprocess.CalledProcessError, remote_connection: RemoteConnection
+) -> NoReturn:
+    """
+    Convert subprocess SSH errors to appropriate exceptions with clear messages.
+
+    Always raises (`NoReturn`); the type checker now treats every line after
+    a call to this helper as unreachable, which keeps the call sites tidy
+    and prevents accidental fall-through.
+    """
+    raw_error = (e.stderr or "").strip() or "No stderr output"
+    logger.warning(
+        f"SSH error for {remote_connection.username}@{remote_connection.host}: {raw_error}"
+    )
+    raise_for_ssh_subprocess_error(e, remote_connection)
 
 
 def start_background_task(task, *args):
@@ -55,21 +230,20 @@ def resolve_file_path(remote_connection, file_path: str) -> str:
     :raises FileNotFoundError: If no files match the pattern.
     """
     if "*" in file_path:
-        # Build SSH command to list files matching the pattern
-        ssh_cmd = [
-            "ssh",
-            f"{remote_connection.username}@{remote_connection.host}",
-        ]
-
-        # Handle non-standard SSH port
-        if remote_connection.port != 22:
-            ssh_cmd.extend(["-p", str(remote_connection.port)])
-
-        # Add the ls command
-        ssh_cmd.append(f"ls -1 {file_path}")
+        # Build SSH command to list files matching the pattern (never prompts for password)
+        ssh_cmd = _ssh_argv(
+            remote_connection,
+            RemoteCommand.from_shell_fragment(f"ls -1 {remote_glob_arg(file_path)}"),
+        )
 
         try:
-            result = subprocess.run(ssh_cmd, capture_output=True, text=True, check=True)
+            result = subprocess.run(
+                ssh_cmd,
+                capture_output=True,
+                text=True,
+                check=True,
+                timeout=_ssh_subprocess_timeout_seconds(),
+            )
 
             files = result.stdout.strip().splitlines()
 
@@ -96,117 +270,16 @@ def resolve_file_path(remote_connection, file_path: str) -> str:
     return file_path
 
 
-def get_cluster_desc_path(remote_connection: RemoteConnection) -> Optional[str]:
-    """
-    List all folders matching '/tmp/umd_*' on the remote machine, filter for those containing
-    'cluster_descriptor.yaml', and return the full path to the most recently modified YAML file.
-
-    :param remote_connection: RemoteConnection object containing SSH connection details.
-    :return: Full path to the most recently modified 'cluster_descriptor.yaml' file, or None.
-    """
-    latest_yaml_path = None
-    latest_mod_time = 0
-    cluster_desc_file = "cluster_descriptor.yaml"
-
-    try:
-        # Build SSH command to list folders matching '/tmp/umd_*'
-        ssh_cmd = [
-            "ssh",
-            f"{remote_connection.username}@{remote_connection.host}",
-        ]
-
-        # Handle non-standard SSH port
-        if remote_connection.port != 22:
-            ssh_cmd.extend(["-p", str(remote_connection.port)])
-
-        # Add the ls command
-        ssh_cmd.append("ls -1d /tmp/umd_* 2>/dev/null")
-
-        # Execute SSH command to list folders
-        result = subprocess.run(
-            ssh_cmd,
-            capture_output=True,
-            text=True,
-            check=False,  # Don't raise exception on non-zero exit (in case no folders found)
-        )
-
-        # Get the list of folders
-        folder_paths = (
-            result.stdout.strip().splitlines() if result.stdout.strip() else []
-        )
-
-        if not folder_paths:
-            logger.info("No folders found matching the pattern '/tmp/umd_*'")
-            return None
-
-        # Check each folder for 'cluster_descriptor.yaml' and track the most recent one
-        for folder in folder_paths:
-            yaml_file_path = f"{folder}/{cluster_desc_file}"
-
-            # Build SSH command to check if file exists and get its modification time
-            stat_cmd = [
-                "ssh",
-                "-o",
-                "PasswordAuthentication=no",
-                f"{remote_connection.username}@{remote_connection.host}",
-            ]
-
-            if remote_connection.port != 22:
-                stat_cmd.extend(["-p", str(remote_connection.port)])
-
-            # Use stat to get modification time (seconds since epoch)
-            stat_cmd.append(f"stat -c %Y '{yaml_file_path}' 2>/dev/null")
-
-            try:
-                stat_result = subprocess.run(
-                    stat_cmd, capture_output=True, text=True, check=True
-                )
-
-                mod_time = float(stat_result.stdout.strip())
-
-                # Update the latest file if this one is newer
-                if mod_time > latest_mod_time:
-                    latest_mod_time = mod_time
-                    latest_yaml_path = yaml_file_path
-                    logger.info(f"Found newer {cluster_desc_file}: {yaml_file_path}")
-
-            except subprocess.CalledProcessError as e:
-                # Check if it's an SSH-specific error
-                if e.returncode == 255:  # SSH returns 255 for SSH protocol errors
-                    handle_ssh_subprocess_error(e, remote_connection)
-                else:
-                    # File not found or other command error
-                    logger.debug(f"'{cluster_desc_file}' not found in: {folder}")
-                    continue
-            except ValueError:
-                logger.debug(f"'{cluster_desc_file}' not found in: {folder}")
-                continue
-
-        if latest_yaml_path:
-            logger.info(
-                f"Most recently modified {cluster_desc_file}: {latest_yaml_path}"
-            )
-        else:
-            logger.info(
-                f"No {cluster_desc_file} files found in any '/tmp/umd_*' folders"
-            )
-        return latest_yaml_path
-
-    except Exception as e:
-        logger.error(f"Error retrieving {cluster_desc_file} path: {e}")
-        raise RemoteConnectionException(
-            message=f"Failed to get '{cluster_desc_file}' path",
-            status=ConnectionTestStates.FAILED,
-        )
-
-
-@remote_exception_handler
-def get_cluster_desc(remote_connection: RemoteConnection):
-    cluster_path = get_cluster_desc_path(remote_connection)
-    if cluster_path:
-        return read_remote_file(remote_connection, cluster_path)
-    else:
+def get_cluster_desc(instance: Instance, logical_rank: int = 0):
+    if not instance.profiler_path:
         return None
+    report_path = Path(instance.profiler_path).parent
+    cluster_path, _err = pick_cluster_descriptor_path(report_path, logical_rank)
+    if cluster_path is None:
+        return None
+
+    with open(cluster_path, "r", encoding="utf-8") as cluster_desc_file:
+        return yaml.safe_load(cluster_desc_file)
 
 
 def is_excluded(file_path, exclude_patterns):
@@ -217,6 +290,24 @@ def is_excluded(file_path, exclude_patterns):
     return False
 
 
+def _is_unsupported_printf_error(stderr: str) -> bool:
+    """True when stderr looks like a find variant rejecting `-printf`.
+
+    Covers the messages seen from BSD find (macOS, FreeBSD) and busybox
+    find. We deliberately match the literal `-printf` token plus an
+    "unknown"/"unrecognized" signal so that ordinary failures (permission
+    denied, path not found, etc.) do not silently downgrade to the
+    size-less fallback.
+    """
+    lowered = stderr.lower()
+    if "-printf" not in lowered:
+        return False
+    return any(
+        marker in lowered
+        for marker in ("unknown", "unrecognized", "not supported", "illegal option")
+    )
+
+
 @remote_exception_handler
 def sync_files_and_directories(
     remote_connection: RemoteConnection,
@@ -224,8 +315,12 @@ def sync_files_and_directories(
     destination_dir: Path,
     exclude_patterns=None,
     sid=None,
-):
-    """Download files and directories using SFTP with progress reporting."""
+) -> SyncMethod:
+    """Download files and directories using SFTP with progress reporting.
+
+    Returns the transport actually used (``sftp``, or ``scp`` when the remote
+    SFTP subsystem was unavailable and we fell back).
+    """
     exclude_patterns = exclude_patterns or []
 
     # Ensure the destination directory exists
@@ -246,6 +341,40 @@ def sync_files_and_directories(
 
     logger.info(f"Found {len(all_files)} files and {len(all_dirs)} directories to sync")
 
+    # `find -type d` on an existing readable folder always returns at least
+    # the folder itself, so an empty dir list is the unambiguous "listing
+    # failed" signal (permission denied, missing path, SSH downgrade to
+    # fallback after a real error, etc.). Surface it as a real error rather
+    # than letting the loop fall through to a misleading "0 files synced"
+    # FINISHED. The list helpers already log the underlying stderr.
+    if not all_dirs:
+        if current_app.config["USE_WEBSOCKETS"]:
+            # Emit FAILED before raising so the overlay closes even if a
+            # caller swallows the exception; flush ordering matters because
+            # `emit_file_status` treats FAILED as terminal and bypasses the
+            # debounce.
+            emit_file_status(
+                FileProgress(
+                    current_file_name="",
+                    number_of_files=0,
+                    percent_of_current=0,
+                    finished_files=0,
+                    status=FileStatus.FAILED,
+                ),
+                sid,
+            )
+        # 422, not 500: the remote path is user-supplied input that the
+        # server *could* talk to over SSH but cannot read at the requested
+        # location. Matches the precedent set by `AuthenticationFailedException`.
+        raise RemoteConnectionException(
+            message=(
+                f"Could not list remote folder {remote_profiler_folder!r}. "
+                "Check that the path exists and is readable by the SSH user."
+            ),
+            status=ConnectionTestStates.FAILED,
+            http_status_code=HTTPStatus.UNPROCESSABLE_ENTITY,
+        )
+
     # Create local directory structure
     logger.info("Creating local directory structure...")
     for remote_dir in all_dirs:
@@ -258,22 +387,76 @@ def sync_files_and_directories(
             # Skip if remote_dir is not relative to remote_profiler_folder
             continue
 
-    # Download files with progress reporting
+    # Download files with progress reporting.
+    #
+    # NOTE: byte progress is file-granular, not streaming. SFTP gives us no
+    # per-chunk callback, so `bytes_transferred` jumps up only after each
+    # full file completes; the UI may look idle between updates while a
+    # large file is in flight (compounded by the 500ms debounce in
+    # emit_file_status). Acceptable for v1 — streaming byte progress would
+    # require Paramiko or rsync.
     total_files = len(all_files)
+    total_bytes = sum(size for _, size in all_files)
     finished_files = 0
+    failed_count = 0
+    bytes_transferred = 0
+    last_download_error: Optional[str] = None
+    # Track the transport actually used this run rather than reading the
+    # process-global fallback cache, so the reported method reflects *this*
+    # sync (and this port), not a stale guess from a prior host.
+    methods_used: set[SyncMethod] = set()
 
     logger.info(f"Starting download of {total_files} files...")
 
-    for remote_file in all_files:
+    # Skip all transfer-progress websocket emits when there's nothing to
+    # download — STARTED is an *active* status on the client, so emitting it
+    # for an empty folder would briefly open the overlay only to close it on
+    # FINISHED below.
+    should_emit_progress = current_app.config["USE_WEBSOCKETS"] and total_files > 0
+
+    if should_emit_progress:
+        emit_file_status(
+            FileProgress(
+                current_file_name="",
+                number_of_files=total_files,
+                percent_of_current=0,
+                finished_files=0,
+                bytes_transferred=0,
+                bytes_total=total_bytes,
+                current_file_size=0,
+                status=FileStatus.STARTED,
+            ),
+            sid,
+        )
+
+    for remote_file, remote_file_size in all_files:
         try:
             # Calculate relative path from the base remote folder
             relative_path = Path(remote_file).relative_to(remote_profiler_folder)
             local_file = destination_dir / relative_path
 
-            # Download the file using SFTP
-            download_single_file_sftp(remote_connection, remote_file, local_file)
+            if should_emit_progress:
+                emit_file_status(
+                    FileProgress(
+                        current_file_name=str(relative_path),
+                        number_of_files=total_files,
+                        percent_of_current=0,
+                        finished_files=finished_files,
+                        bytes_transferred=bytes_transferred,
+                        bytes_total=total_bytes,
+                        current_file_size=remote_file_size,
+                        status=FileStatus.DOWNLOADING,
+                    ),
+                    sid,
+                )
+
+            # Download the file using SFTP (or scp fallback)
+            methods_used.add(
+                download_single_file_sftp(remote_connection, remote_file, local_file)
+            )
 
             finished_files += 1
+            bytes_transferred += remote_file_size
 
             # Emit progress
             progress = FileProgress(
@@ -281,10 +464,13 @@ def sync_files_and_directories(
                 number_of_files=total_files,
                 percent_of_current=100,  # We don't get per-file progress with SFTP
                 finished_files=finished_files,
+                bytes_transferred=bytes_transferred,
+                bytes_total=total_bytes,
+                current_file_size=remote_file_size,
                 status=FileStatus.DOWNLOADING,
             )
 
-            if current_app.config["USE_WEBSOCKETS"]:
+            if should_emit_progress:
                 emit_file_status(progress, sid)
 
             if finished_files % 10 == 0:  # Log every 10 files
@@ -294,75 +480,199 @@ def sync_files_and_directories(
             # Skip if remote_file is not relative to remote_profiler_folder
             logger.warning(f"Skipping file outside base folder: {remote_file}")
             continue
+        except (
+            HostKeyVerificationException,
+            AuthenticationException,
+            NoValidConnectionsError,
+            SSHException,
+        ):
+            # Fatal SSH errors must not be swallowed — the decorator maps host-key
+            # and auth failures to actionable 422 responses; connectivity
+            # (NoValidConnectionsError) surfaces as a 500.
+            raise
         except Exception as e:
-            logger.error(f"Failed to download {remote_file}: {e}")
-            # Continue with other files rather than failing completely
+            last_download_error = f"{remote_file}: {e}"
+            logger.error("Failed to download %s: %s", remote_file, e)
+            failed_count += 1
+            # Best-effort: try remaining files, but do not report success if any fail.
             continue
 
-    # Create a .last-synced file in directory
+    # scp wins the label if any file needed the fallback; otherwise sftp.
+    run_sync_method = (
+        SyncMethod.SCP if SyncMethod.SCP in methods_used else SyncMethod.SFTP
+    )
+
+    sync_incomplete = total_files > 0 and finished_files < total_files
+    if sync_incomplete:
+        sync_method = run_sync_method
+        logger.error(
+            "%s sync incomplete: downloaded %s/%s files (%s failed). Last error: %s",
+            sync_method.value,
+            finished_files,
+            total_files,
+            failed_count,
+            last_download_error or "unknown",
+        )
+        if current_app.config["USE_WEBSOCKETS"]:
+            emit_file_status(
+                FileProgress(
+                    current_file_name="",
+                    number_of_files=total_files,
+                    percent_of_current=0,
+                    finished_files=finished_files,
+                    bytes_transferred=bytes_transferred,
+                    bytes_total=total_bytes,
+                    current_file_size=0,
+                    status=FileStatus.FAILED,
+                ),
+                sid,
+            )
+        message = (
+            f"Sync incomplete: downloaded {finished_files} of {total_files} "
+            f"file(s) ({failed_count} failed) via {sync_method.value}."
+        )
+        if last_download_error:
+            message = f"{message} Last error: {last_download_error}"
+        raise RemoteConnectionException(
+            message=message,
+            status=ConnectionTestStates.FAILED,
+            http_status_code=HTTPStatus.UNPROCESSABLE_ENTITY,
+            detail=last_download_error,
+            sync_method=sync_method.value,
+        )
+
+    # Only stamp success after every queued file downloaded.
     update_last_synced(destination_dir)
 
-    # Emit final status
     final_progress = FileProgress(
         current_file_name="",
         number_of_files=total_files,
         percent_of_current=100,
         finished_files=finished_files,
+        bytes_transferred=bytes_transferred,
+        bytes_total=total_bytes,
+        current_file_size=0,
         status=FileStatus.FINISHED,
     )
 
-    if current_app.config["USE_WEBSOCKETS"]:
+    if should_emit_progress:
         emit_file_status(final_progress, sid)
 
     logger.info(
-        f"SFTP sync completed. Downloaded {finished_files}/{total_files} files."
+        "%s sync completed. Downloaded %s/%s files.",
+        run_sync_method.value,
+        finished_files,
+        total_files,
     )
+    return run_sync_method
 
 
 def get_remote_file_list(
     remote_connection: RemoteConnection, remote_folder: str, exclude_patterns=None
-) -> List[str]:
-    """Get a list of all files in the remote directory recursively, applying exclusion patterns."""
+) -> List[tuple[str, int]]:
+    """Get a list of (path, size_bytes) for all files in the remote directory.
+
+    Uses GNU find's -printf to fetch size and path in one SSH call; falls back
+    to plain -type f (sizes = 0) if the remote find lacks -printf support.
+    """
     exclude_patterns = exclude_patterns or []
 
-    # Build SSH command to find all files recursively
-    ssh_cmd = ["ssh", "-o", "PasswordAuthentication=no"]
-
-    # Handle non-standard SSH port
-    if remote_connection.port != 22:
-        ssh_cmd.extend(["-p", str(remote_connection.port)])
-
-    ssh_cmd.extend(
-        [
-            f"{remote_connection.username}@{remote_connection.host}",
-            f"find '{remote_folder}' -type f",
-        ]
+    # GNU find: emit '<size>\t<path>\0' records. NUL terminator is illegal in
+    # POSIX paths, so paths containing tabs/newlines round-trip safely; the
+    # first '\t' in each record is the unambiguous separator between the
+    # decimal size and the path. Falls back below if -printf is unsupported.
+    quoted_folder = remote_arg(remote_folder)
+    ssh_cmd = _ssh_argv(
+        remote_connection,
+        RemoteCommand.from_shell_fragment(
+            f"find {quoted_folder} -type f -printf '%s\\t%p\\0'"
+        ),
     )
 
     try:
         result = subprocess.run(
-            ssh_cmd, capture_output=True, text=True, check=True, timeout=60
+            ssh_cmd,
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=_ssh_subprocess_timeout_seconds(),
         )
 
-        all_files = result.stdout.strip().splitlines()
+        entries: List[tuple[str, int]] = []
+        for record in result.stdout.split("\x00"):
+            if not record:
+                continue
+            size_str, separator, path_str = record.partition("\t")
+            if not separator or not path_str or is_excluded(path_str, exclude_patterns):
+                continue
+            try:
+                size = int(size_str)
+            except ValueError:
+                size = 0
+            entries.append((path_str, size))
 
-        # Filter out excluded files
-        filtered_files = []
-        for file_path in all_files:
-            if not is_excluded(file_path, exclude_patterns):
-                filtered_files.append(file_path.strip())
-
-        return filtered_files
+        return entries
 
     except subprocess.CalledProcessError as e:
         if e.returncode == 255:  # SSH protocol errors
-            handle_ssh_subprocess_error(e, remote_connection)
-            return []
-        else:
-            logger.error(f"Error getting file list: {e.stderr}")
-            return []
+            handle_ssh_subprocess_error(e, remote_connection)  # always raises
+        stderr = (e.stderr or "").strip()
+        # Only fall back when stderr indicates the remote find lacks -printf
+        # support (BSD/busybox find variants). Other non-255 failures
+        # (permission denied, missing directory, etc.) must surface as an
+        # empty list + error log instead of triggering a second SSH call
+        # that would hide the real cause.
+        if _is_unsupported_printf_error(stderr):
+            logger.warning(
+                "find -printf unsupported on remote (%s); retrying without size information.",
+                stderr or "no stderr",
+            )
+            return _get_remote_file_list_without_sizes(
+                remote_connection, remote_folder, exclude_patterns
+            )
+        logger.error(
+            "Error getting file list from %s: %s",
+            remote_folder,
+            stderr or "no stderr",
+        )
+        return []
     except subprocess.TimeoutExpired:
         logger.error(f"Timeout getting file list from: {remote_folder}")
+        return []
+    except Exception as e:
+        logger.error(f"Error getting file list: {e}")
+        return []
+
+
+def _get_remote_file_list_without_sizes(
+    remote_connection: RemoteConnection,
+    remote_folder: str,
+    exclude_patterns: List[str],
+) -> List[tuple[str, int]]:
+    """Fallback when GNU find -printf is unavailable. Sizes default to 0."""
+    ssh_cmd = _ssh_argv(
+        remote_connection,
+        RemoteCommand.of("find", remote_folder, "-type", "f"),
+    )
+    try:
+        result = subprocess.run(
+            ssh_cmd,
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=_ssh_subprocess_timeout_seconds(),
+        )
+        entries: List[tuple[str, int]] = []
+        for line in result.stdout.splitlines():
+            path = line.strip()
+            if not path or is_excluded(path, exclude_patterns):
+                continue
+            entries.append((path, 0))
+        return entries
+    except subprocess.CalledProcessError as e:
+        if e.returncode == 255:  # SSH protocol errors
+            handle_ssh_subprocess_error(e, remote_connection)  # always raises
+        logger.error(f"Error getting file list: {e.stderr}")
         return []
     except Exception as e:
         logger.error(f"Error getting file list: {e}")
@@ -375,23 +685,19 @@ def get_remote_directory_list(
     """Get a list of all directories in the remote directory recursively, applying exclusion patterns."""
     exclude_patterns = exclude_patterns or []
 
-    # Build SSH command to find all directories recursively
-    ssh_cmd = ["ssh", "-o", "PasswordAuthentication=no"]
-
-    # Handle non-standard SSH port
-    if remote_connection.port != 22:
-        ssh_cmd.extend(["-p", str(remote_connection.port)])
-
-    ssh_cmd.extend(
-        [
-            f"{remote_connection.username}@{remote_connection.host}",
-            f"find '{remote_folder}' -type d",
-        ]
+    # Build SSH command to find all directories recursively (never prompts for password)
+    ssh_cmd = _ssh_argv(
+        remote_connection,
+        RemoteCommand.of("find", remote_folder, "-type", "d"),
     )
 
     try:
         result = subprocess.run(
-            ssh_cmd, capture_output=True, text=True, check=True, timeout=60
+            ssh_cmd,
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=_ssh_subprocess_timeout_seconds(),
         )
 
         all_dirs = result.stdout.strip().splitlines()
@@ -406,11 +712,9 @@ def get_remote_directory_list(
 
     except subprocess.CalledProcessError as e:
         if e.returncode == 255:  # SSH protocol errors
-            handle_ssh_subprocess_error(e, remote_connection)
-            return []
-        else:
-            logger.error(f"Error getting directory list: {e.stderr}")
-            return []
+            handle_ssh_subprocess_error(e, remote_connection)  # always raises
+        logger.error(f"Error getting directory list: {e.stderr}")
+        return []
     except subprocess.TimeoutExpired:
         logger.error(f"Timeout getting directory list from: {remote_folder}")
         return []
@@ -419,34 +723,57 @@ def get_remote_directory_list(
         return []
 
 
+def download_single_file_scp(
+    remote_connection: RemoteConnection, remote_file: str, local_file: Path
+) -> SyncMethod:
+    """Download a single file using scp (when the remote SFTP subsystem is disabled)."""
+    local_file.parent.mkdir(parents=True, exist_ok=True)
+    remote_spec = remote_scp_target(remote_connection, remote_file)
+    scp_cmd = _scp_cmd_prefix(remote_connection) + [remote_spec, str(local_file)]
+    try:
+        subprocess.run(
+            scp_cmd,
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=300,
+        )
+        logger.debug("Downloaded via scp: %s -> %s", remote_file, local_file)
+        return SyncMethod.SCP
+    except subprocess.CalledProcessError as e:
+        logger.error(
+            "scp download failed for %s (rc=%s): %s",
+            remote_file,
+            e.returncode,
+            (e.stderr or "").strip() or "no stderr",
+        )
+        if e.returncode == 255:
+            handle_ssh_subprocess_error(e, remote_connection)  # always raises
+        detail = (e.stderr or "").strip() or "no stderr"
+        raise RuntimeError(f"Failed to download {remote_file}: {detail}")
+    except subprocess.TimeoutExpired:
+        logger.error("Timeout downloading file via scp: %s", remote_file)
+        raise RuntimeError(f"Timeout downloading {remote_file}")
+
+
 def download_single_file_sftp(
     remote_connection: RemoteConnection, remote_file: str, local_file: Path
-):
-    """Download a single file using SFTP."""
-    # Ensure local directory exists
+) -> SyncMethod:
+    """Download a single file using SFTP, falling back to scp when needed.
+
+    Returns the transport actually used for this file.
+    """
+    transfer_key = _remote_transfer_key(remote_connection)
+    if transfer_key in _sftp_subsystem_unavailable:
+        return download_single_file_scp(remote_connection, remote_file, local_file)
+
     local_file.parent.mkdir(parents=True, exist_ok=True)
-
-    # Build SFTP command
-    sftp_cmd = ["sftp", "-o", "PasswordAuthentication=no"]
-
-    # Handle non-standard SSH port
-    if remote_connection.port != 22:
-        sftp_cmd.extend(["-P", str(remote_connection.port)])
-
-    # Add batch mode and other options
-    sftp_cmd.extend(
-        [
-            "-b",
-            "-",  # Read commands from stdin
-            f"{remote_connection.username}@{remote_connection.host}",
-        ]
-    )
-
-    # SFTP commands to execute
-    sftp_commands = f"get '{remote_file}' '{local_file}'\nquit\n"
+    sftp_cmd = _sftp_cmd_prefix(remote_connection)
+    # Batch script is parsed by sftp, not the shell — quote paths for spaces/special chars.
+    sftp_commands = f"get {remote_arg(remote_file)} {remote_arg(local_file)}\nquit\n"
 
     try:
-        result = subprocess.run(
+        subprocess.run(
             sftp_cmd,
             input=sftp_commands,
             capture_output=True,
@@ -454,72 +781,137 @@ def download_single_file_sftp(
             check=True,
             timeout=300,  # 5 minute timeout per file
         )
-
-        logger.debug(f"Downloaded: {remote_file} -> {local_file}")
+        logger.debug("Downloaded via sftp: %s -> %s", remote_file, local_file)
+        return SyncMethod.SFTP
 
     except subprocess.CalledProcessError as e:
+        stderr = e.stderr or ""
+        if _is_sftp_subsystem_unavailable(stderr):
+            logger.warning(
+                "SFTP subsystem unavailable on %s@%s:%s; using scp for remaining files",
+                remote_connection.username,
+                remote_connection.host,
+                remote_connection.port,
+            )
+            _sftp_subsystem_unavailable.add(transfer_key)
+            return download_single_file_scp(remote_connection, remote_file, local_file)
+        logger.error(
+            "Error downloading file %s (rc=%s): %s",
+            remote_file,
+            e.returncode,
+            stderr.strip() or "no stderr",
+        )
         if e.returncode == 255:  # SSH protocol errors
-            handle_ssh_subprocess_error(e, remote_connection)
-        else:
-            logger.error(f"Error downloading file {remote_file}: {e.stderr}")
-            raise RuntimeError(f"Failed to download {remote_file}")
+            handle_ssh_subprocess_error(e, remote_connection)  # always raises
+        detail = stderr.strip() or "no stderr"
+        raise RuntimeError(f"Failed to download {remote_file}: {detail}")
     except subprocess.TimeoutExpired:
-        logger.error(f"Timeout downloading file: {remote_file}")
+        logger.error("Timeout downloading file: %s", remote_file)
         raise RuntimeError(f"Timeout downloading {remote_file}")
     except Exception as e:
-        logger.error(f"Error downloading file {remote_file}: {e}")
-        raise RuntimeError(f"Failed to download {remote_file}")
+        logger.error(
+            "Error downloading file %s: %s: %s",
+            remote_file,
+            type(e).__name__,
+            e,
+        )
+        raise RuntimeError(f"Failed to download {remote_file}: {type(e).__name__}: {e}")
 
 
 def get_remote_profiler_folder_from_config_path(
     remote_connection: RemoteConnection, config_path: str
 ) -> RemoteReportFolder:
     """Read a remote config file and return RemoteFolder object."""
-    try:
-        # Build SSH command to get file modification time
-        stat_cmd = [
-            "ssh",
-            "-o",
-            "PasswordAuthentication=no",
-            f"{remote_connection.username}@{remote_connection.host}",
-        ]
+    folder_path = Path(config_path).parent
+    parent_folder_name = folder_path.name
+    folder_str = str(folder_path).rstrip("/")
+    ssh_timeout = _ssh_subprocess_timeout_seconds()
+    check_timeout = _ssh_remote_check_timeout_seconds()
 
-        # Handle non-standard SSH port
-        if remote_connection.port != 22:
-            stat_cmd.extend(["-p", str(remote_connection.port)])
-
-        # Get modification time using stat command
-        stat_cmd.append(f"stat -c %Y '{config_path}' 2>/dev/null")
-
-        stat_result = subprocess.run(
-            stat_cmd, capture_output=True, text=True, check=True
+    def ssh_run_checked(cmd: List[str]) -> subprocess.CompletedProcess:
+        return subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=ssh_timeout,
         )
 
-        last_modified = int(float(stat_result.stdout.strip()))
+    def ssh_stat_mtime(path: str) -> int:
+        stat_cmd = _ssh_argv(
+            remote_connection, RemoteCommand.of("stat", "-c", "%Y", path)
+        )
+        stat_result = ssh_run_checked(stat_cmd)
+        return int(float(stat_result.stdout.strip()))
 
-        # Build SSH command to read file content
-        cat_cmd = [
-            "ssh",
-            "-o",
-            "PasswordAuthentication=no",
-            f"{remote_connection.username}@{remote_connection.host}",
-        ]
+    def ssh_cat(path: str) -> str:
+        cat_cmd = _ssh_argv(remote_connection, RemoteCommand.of("cat", path))
+        cat_result = ssh_run_checked(cat_cmd)
+        return cat_result.stdout
 
-        if remote_connection.port != 22:
-            cat_cmd.extend(["-p", str(remote_connection.port)])
+    def ssh_test_file(path: str) -> bool:
+        test_cmd = _ssh_argv(remote_connection, RemoteCommand.of("test", "-f", path))
+        result = subprocess.run(
+            test_cmd,
+            capture_output=True,
+            text=True,
+            timeout=check_timeout,
+        )
+        return result.returncode == 0
 
-        # Read file content using cat command
-        cat_cmd.append(f"cat '{config_path}'")
+    def ssh_list_ranked_config_paths() -> List[str]:
+        # One argv after user@host: OpenSSH may wrap multi-arg remote commands in
+        # `sh -c` on the server and break `for ...; do ...; done`. Pass a single
+        # `bash -lc '<script>'` string instead. Use find so the script has no
+        # shell loop syntax.
+        inner = (
+            f"find {remote_arg(folder_str)} -maxdepth 1 "
+            "-name 'config_*_of_*.json' -print"
+        )
+        list_cmd = _ssh_argv(
+            remote_connection,
+            RemoteCommand.of("bash", "-lc", inner),
+        )
+        result = subprocess.run(
+            list_cmd,
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=ssh_timeout,
+        )
+        lines = [ln.strip() for ln in result.stdout.splitlines() if ln.strip()]
+        by_base = {Path(l).name: l for l in lines}
+        ordered = ranked_profiler_config_basenames(by_base.keys())
+        return [by_base[n] for n in ordered]
 
-        cat_result = subprocess.run(cat_cmd, capture_output=True, text=True, check=True)
+    try:
+        single_config = str(Path(config_path))  # .../config.json from caller
+        read_path: Optional[str] = None
+        mtime_paths: List[str] = []
 
-        # Parse JSON data
-        data = json.loads(cat_result.stdout)
-        report_name = data.get("report_name")
-        logger.info(f"********* report_name: {report_name}")
+        if ssh_test_file(single_config):
+            read_path = single_config
+            mtime_paths = [single_config]
+        else:
+            ranked_paths = ssh_list_ranked_config_paths()
+            if ranked_paths:
+                read_path = ranked_paths[0]
+                mtime_paths = ranked_paths
+
+        if read_path is None:
+            return RemoteReportFolder(
+                remotePath=folder_str,
+                reportName=parent_folder_name,
+                lastModified=int(time.time()),
+            )
+
+        last_modified = max(ssh_stat_mtime(p) for p in mtime_paths)
+        raw_json = ssh_cat(read_path)
+        data = json.loads(raw_json)
+        report_name = data.get("report_name") if isinstance(data, dict) else None
 
         return RemoteReportFolder(
-            remotePath=str(Path(config_path).parent),
+            remotePath=folder_str,
             reportName=report_name,
             lastModified=last_modified,
         )
@@ -528,79 +920,67 @@ def get_remote_profiler_folder_from_config_path(
         logger.error(f"SSH command failed while reading config: {e}")
         logger.error(f"stderr: {e.stderr}")
 
-        # Check if it's an SSH-specific error (authentication, connection, etc.)
         if e.returncode == 255:  # SSH returns 255 for SSH protocol errors
             handle_ssh_subprocess_error(e, remote_connection)
-            # This line never executes as handle_ssh_subprocess_error raises an exception
-            return RemoteReportFolder(
-                remotePath=str(Path(config_path).parent),
-                reportName="",
-                lastModified=int(time.time()),
-            )
-        else:
-            # Fall back to current time if we can't get modification time
-            return RemoteReportFolder(
-                remotePath=str(Path(config_path).parent),
-                reportName="",
-                lastModified=int(time.time()),
-            )
+        # Fall back to current time if we can't get modification time.
+        return RemoteReportFolder(
+            remotePath=folder_str,
+            reportName=parent_folder_name,
+            lastModified=int(time.time()),
+        )
     except (json.JSONDecodeError, ValueError) as e:
         logger.error(f"Error parsing config file {config_path}: {e}")
         # Fall back to current time and no report name
         return RemoteReportFolder(
-            remotePath=str(Path(config_path).parent),
-            reportName="",
+            remotePath=folder_str,
+            reportName=parent_folder_name,
             lastModified=int(time.time()),
         )
 
 
-def get_remote_performance_folder(
-    remote_connection: RemoteConnection, profile_folder: str
+def _describe_remote_report_folder(
+    remote_connection: RemoteConnection,
+    remote_path: str,
+    *,
+    last_modified: int,
+    report_name: Optional[str] = None,
 ) -> RemoteReportFolder:
-    """Get remote performance folder info and return RemoteFolder object."""
-    performance_name = profile_folder.split("/")[-1]
-    remote_path = profile_folder
+    """Build the wire type, including the local name this report syncs to."""
+    qualify_rank = bool(remote_connection.multihostPerformance)
 
-    # Get modification time using subprocess SSH command
-    try:
-        ssh_command = ["ssh", "-o", "PasswordAuthentication=no"]
-        if remote_connection.port != 22:
-            ssh_command.extend(["-p", str(remote_connection.port)])
-        ssh_command.extend(
-            [
-                f"{remote_connection.username}@{remote_connection.host}",
-                f"stat -c %Y '{profile_folder}'",
-            ]
-        )
+    return RemoteReportFolder(
+        remotePath=remote_path,
+        reportName=report_name or Path(remote_path).name,
+        lastModified=last_modified,
+        syncedName=folder_segment_from_remote_path(
+            remote_path, qualify_rank=qualify_rank
+        ),
+        rank=rank_from_remote_path(remote_path) if qualify_rank else None,
+    )
 
-        result = subprocess.run(ssh_command, capture_output=True, text=True, timeout=30)
 
-        if result.returncode == 0:
-            last_modified = int(result.stdout.strip())
-        else:
-            # If stat fails, handle SSH errors
-            if result.returncode == 255:
-                handle_ssh_subprocess_error(
-                    subprocess.CalledProcessError(
-                        result.returncode, ssh_command, result.stdout, result.stderr
-                    ),
-                    remote_connection,
-                )
+def get_remote_performance_folders_from_paths(
+    remote_connection: RemoteConnection, profile_folders: List[str]
+) -> List[RemoteReportFolder]:
+    """Describe each performance report folder, reading all mtimes in one batch."""
+    mtimes = _remote_directory_mtimes(remote_connection, profile_folders)
+    now = int(time.time())
+    folders = []
+
+    for profile_folder, mtime in zip(profile_folders, mtimes):
+        if mtime is None:
             logger.warning(
                 f"Could not get modification time for {profile_folder}, using current time"
             )
-            last_modified = int(time.time())
-    except (subprocess.TimeoutExpired, subprocess.CalledProcessError, ValueError) as e:
-        logger.warning(
-            f"Error getting modification time for {profile_folder}: {e}, using current time"
+        folders.append(
+            _describe_remote_report_folder(
+                remote_connection,
+                profile_folder,
+                last_modified=now if mtime is None else mtime,
+            )
         )
-        last_modified = int(time.time())
 
-    return RemoteReportFolder(
-        remotePath=str(remote_path),
-        reportName=str(performance_name),
-        lastModified=last_modified,
-    )
+    return folders
 
 
 @remote_exception_handler
@@ -618,142 +998,422 @@ def read_remote_file(
     return ssh_client.read_file(path, timeout=30)
 
 
-@remote_exception_handler
-def check_remote_path_for_reports(remote_connection):
-    remote_profiler_paths = find_folders_by_files(
-        remote_connection, remote_connection.profilerPath, [TEST_CONFIG_FILE]
+class RemoteSearchRootState(Enum):
+    """What the search settled about its root before matching anything under it.
+
+    ``UNKNOWN`` is the honest answer when no reply came back at all: a timeout
+    has not established that the root is there, and calling it ``PRESENT``
+    would report an absence of reports under a directory never reached.
+
+    ``NOT_A_DIRECTORY`` is a root that is there and still cannot hold reports —
+    a path pointing at a file. Neither "missing" nor "empty" describes it, and
+    both are advice the user would act on wrongly.
+    """
+
+    PRESENT = "present"
+    MISSING = "missing"
+    NOT_A_DIRECTORY = "not_a_directory"
+    UNKNOWN = "unknown"
+
+
+class RemoteFolderSearch(NamedTuple):
+    """Folders the search matched, and what it settled about its root.
+
+    One remote command answers both, but what the root's state *means* belongs
+    to the caller: the connection test reports anything other than ``PRESENT``
+    as a failed path, while the listing flows treat them all the same as a path
+    holding nothing.
+    """
+
+    folders: List[str]
+    root_state: RemoteSearchRootState
+
+
+def _find_performance_report_folders(
+    remote_connection: RemoteConnection,
+    timeout_seconds: Optional[float] = None,
+) -> RemoteFolderSearch:
+    """Remote performance report folders, honouring the connection's layout."""
+    performance_path = remote_connection.performancePath
+    if not performance_path:
+        return RemoteFolderSearch(folders=[], root_state=RemoteSearchRootState.UNKNOWN)
+
+    if not remote_connection.multihostPerformance:
+        return find_folders_by_files(
+            remote_connection,
+            performance_path,
+            [TEST_PROFILER_FILE],
+            timeout_seconds=timeout_seconds,
+        )
+
+    return find_folders_by_files(
+        remote_connection,
+        performance_path,
+        [TEST_PROFILER_FILE],
+        subdirectory_glob=MULTIHOST_REPORT_PARENT_GLOB,
+        # A candidate whose rank we cannot read back would sync to an unqualified
+        # folder and collide with the other ranks of the same launch.
+        directory_filter=lambda path: rank_from_remote_path(path) is not None,
+        timeout_seconds=timeout_seconds,
     )
 
-    remote_performance_paths = find_folders_by_files(
-        remote_connection, remote_connection.performancePath, [TEST_PROFILER_FILE]
-    )
 
-    errors = []
-    if not remote_profiler_paths and remote_connection.profilerPath:
-        errors.append(
-            f"No matching profiler projects found: {remote_connection.profilerPath}"
-        )
-    if not remote_performance_paths and remote_connection.performancePath:
-        errors.append(
-            f"No matching performance projects found: {remote_connection.performancePath}"
-        )
+class RemoteReportPathOutcome(NamedTuple):
+    """What one configured path's search settled, whether or not it succeeded.
 
-    if errors:
-        raise NoProjectsException(
-            message="; ".join(errors),
-            status=ConnectionTestStates.FAILED,
-        )
+    ``error_message`` set means the search raised against this path in
+    particular — an unreadable root, say — and it is the outcome, ``root_state``
+    standing at ``UNKNOWN`` only because nothing was settled. Read the two in
+    that order rather than as independent fields.
+    """
 
-    return True
+    # Not `count`: `NamedTuple` inherits `tuple.count` and a field cannot shadow it.
+    root_state: RemoteSearchRootState
+    report_count: int = 0
+    error_message: Optional[str] = None
+    error_detail: Optional[str] = None
+
+
+class RemoteReportSearchResults(NamedTuple):
+    """What each kind's path settled; ``None`` when that path is not configured.
+
+    A path that fails carries its failure here rather than raising, so a bad
+    path costs the other path's answer nothing.
+    """
+
+    profiler: Optional[RemoteReportPathOutcome]
+    performance: Optional[RemoteReportPathOutcome]
 
 
 @remote_exception_handler
-def check_remote_path_exists(remote_connection: RemoteConnection, path_key: str):
-    """Check if a remote path exists using SSH test command."""
-    path = getattr(remote_connection, path_key)
+def _converted_search(
+    remote_connection: RemoteConnection, search: Callable[[], RemoteFolderSearch]
+) -> RemoteFolderSearch:
+    """Run one search with the ``SSHException`` family already converted.
 
-    ssh_client = SSHClient(remote_connection)
+    The searches raise that family rather than ``RemoteConnectionException``, so
+    without this frame the conversion would only happen on the way out of
+    ``check_remote_path_for_reports`` — above the per-path handling, which is
+    exactly where one path's transient failure takes the other path's answer
+    with it. Converting here instead lets ``_search_report_path`` apply the
+    verdict test it already applies.
+    """
+    return search()
 
+
+def _search_report_path(
+    remote_connection: RemoteConnection,
+    search: Callable[[], RemoteFolderSearch],
+) -> RemoteReportPathOutcome:
+    """Run one path's search, keeping a failure that is only about that path.
+
+    A failure that is the connection's verdict (rejected credentials, an
+    untrusted host key) is re-raised instead: reporting it as one path's line
+    would name the wrong culprit and leave the other path looking unanswered.
+    Anything else — including a transport error that happens to be transient —
+    is this path's line, so the other path keeps whatever it already answered.
+    A genuinely dead connection therefore says the same thing twice, which is
+    honest and unreachable from a cold start: ``test_ssh_connection`` runs first
+    and short-circuits the search entirely.
+    """
     try:
-        if ssh_client.check_path_exists(path, timeout=10):
-            return True
-        else:
-            # Directory does not exist or is inaccessible
-            if path_key == "performancePath":
-                message = "Performance directory does not exist or cannot be accessed"
-            if path_key == "profilerPath":
-                message = "Profiler directory does not exist or cannot be accessed"
-            else:
-                message = f"Remote path '{path}' does not exist or cannot be accessed"
-
-            logger.error(message)
-            raise RemoteConnectionException(
-                message=message, status=ConnectionTestStates.FAILED
-            )
-    except SSHException as e:
-        logger.error(f"Error checking remote path: {path}")
-        raise RemoteConnectionException(
-            message=f"Error checking remote path: {path}: {str(e)}",
-            status=ConnectionTestStates.FAILED,
+        found = _converted_search(remote_connection, search)
+    except RemoteConnectionException as err:
+        if err.is_connection_verdict:
+            raise
+        logger.error(err.message)
+        return RemoteReportPathOutcome(
+            root_state=RemoteSearchRootState.UNKNOWN,
+            error_message=err.message,
+            error_detail=err.detail,
         )
+
+    return RemoteReportPathOutcome(
+        root_state=found.root_state, report_count=len(found.folders)
+    )
+
+
+@remote_exception_handler
+def check_remote_path_for_reports(
+    remote_connection: RemoteConnection,
+) -> RemoteReportSearchResults:
+    """Search each configured path for reports, one SSH round trip each.
+
+    Every configured path is searched and answered, including when an earlier
+    one failed: the searches are independent, so a path the user typed wrongly
+    says nothing about the path they typed correctly.
+
+    The searches share one timeout budget rather than taking the full one each.
+    A host where ``find`` hangs would otherwise hold this request for twice the
+    configured timeout, and a hang is a fact about the host, not about either
+    path — so the second search inherits whatever the first left, and reports
+    its own line either way.
+    """
+    deadline = time.monotonic() + _ssh_subprocess_timeout_seconds()
+
+    def remaining_seconds() -> float:
+        return max(0.0, deadline - time.monotonic())
+
+    profiler: Optional[RemoteReportPathOutcome] = None
+    if remote_connection.profilerPath:
+        profiler = _search_report_path(
+            remote_connection,
+            lambda: find_folders_by_files(
+                remote_connection,
+                remote_connection.profilerPath,
+                [TEST_DB_FILE],
+                timeout_seconds=remaining_seconds(),
+            ),
+        )
+    else:
+        logger.info("No profiler path configured; skipping check")
+
+    performance: Optional[RemoteReportPathOutcome] = None
+    if remote_connection.performancePath:
+        performance = _search_report_path(
+            remote_connection,
+            lambda: _find_performance_report_folders(
+                remote_connection, timeout_seconds=remaining_seconds()
+            ),
+        )
+    else:
+        logger.info("No performance path configured; skipping check")
+
+    return RemoteReportSearchResults(profiler=profiler, performance=performance)
+
+
+def _report_search_command(
+    root_folder: str, subdirectory_glob: Optional[str], file_names: List[str]
+) -> str:
+    """Remote command listing report directories in one round trip.
+
+    Without ``subdirectory_glob``, candidates are the immediate children of
+    ``root_folder``. With it, candidates sit directly below a matching relative
+    subpath, so the search depth follows the number of glob segments. Only
+    directories holding one of ``file_names`` are printed.
+
+    The root's own existence is settled here rather than by a preceding
+    ``test -e`` over its own SSH connection: ``find`` cannot distinguish "the
+    path is not there" from "nothing under it matched", and the connection test
+    has to tell a user those apart.
+    """
+    # A configured trailing slash is normalised out of both the root and the
+    # pattern below. GNU and BSD `find` disagree on whether the root it echoes
+    # keeps that slash, so a pattern built around either spelling matches
+    # nothing on the other implementation.
+    root = root_folder.rstrip("/")
+    search_root = root or "/"
+
+    if subdirectory_glob is None:
+        depth = 1
+        path_filter = ""
+    else:
+        # `*` matches `/` in a `-path` pattern, so pinning min and max depth to
+        # the same value is what stops the glob spanning segments and matching a
+        # deeper accidental layout.
+        depth = 1 + len(subdirectory_glob.split("/"))
+        # Fully quoted, not `remote_glob_arg`: this `*` is part of a `-path` pattern
+        # that `find` itself matches, so the shell must not expand it.
+        path_filter = f" -path {remote_arg(f'{root}/{subdirectory_glob}/*')}"
+
+    # The report-file test runs inside `find` rather than as a follow-up command
+    # per candidate: the multihost layout multiplies candidates by the rank
+    # count, and `_ssh_cmd_prefix` sets up no connection sharing, so a round trip
+    # each meant a full TCP and auth handshake per rank per report.
+    # `{}` is find's own placeholder for the candidate directory, so this quotes a
+    # pattern find expands rather than a path the shell should resolve.
+    tests = " -o ".join(
+        f"-exec test -f {remote_arg('{}/' + file_name)} ';'" for file_name in file_names
+    )
+
+    # `test -e` first, matching what the standalone path check used to run, so a
+    # path whose parent is unreadable still reports as absent rather than as a
+    # file. `test -d` then separates a path pointing at a file from a directory
+    # holding nothing, which `find` alone reports identically.
+    #
+    # `-H` because both probes resolve symlinks and bare `find` does not: a root
+    # symlinked to the real report directory passes `test -d`, then `find` refuses
+    # to descend through it and prints nothing, so the reports sitting there are
+    # reported as a path holding none. `-H` resolves the root only, leaving
+    # symlinks *under* it unfollowed so the search cannot wander off the tree.
+    return (
+        f"test -e {remote_arg(search_root)} || exit {_MISSING_ROOT_EXIT_CODE}; "
+        f"test -d {remote_arg(search_root)} || exit {_NOT_A_DIRECTORY_EXIT_CODE}; "
+        f"find -H {remote_arg(search_root)} "
+        f"-mindepth {depth} -maxdepth {depth} -type d{path_filter} "
+        f"'(' {tests} ')' -print"
+    )
+
+
+def _permission_denied_path(stderr: str) -> Optional[str]:
+    """The directory `find` could not read, so the error names it and not the root."""
+    match = re.search(r"find: [‘'\"]?(.+?)[’'\"]?: Permission denied", stderr)
+    return match.group(1) if match else None
+
+
+def _remote_directory_mtimes(
+    remote_connection: RemoteConnection, directories: List[str]
+) -> List[Optional[int]]:
+    """Modification times for ``directories``, batched into one round trip each.
+
+    ``stat`` is invoked per path inside a single remote shell so that a path it
+    cannot read yields a blank line, keeping the results aligned with the input.
+    """
+    mtimes: List[Optional[int]] = []
+
+    for index in range(0, len(directories), _MTIME_BATCH_SIZE):
+        batch = directories[index : index + _MTIME_BATCH_SIZE]
+        quoted = " ".join(remote_arg(directory) for directory in batch)
+        ssh_cmd = _ssh_argv(
+            remote_connection,
+            RemoteCommand.from_shell_fragment(
+                f'for p in {quoted}; do stat -c %Y "$p" 2>/dev/null || echo; done'
+            ),
+        )
+
+        try:
+            result = subprocess.run(
+                ssh_cmd,
+                capture_output=True,
+                text=True,
+                timeout=_ssh_subprocess_timeout_seconds(),
+            )
+        except subprocess.TimeoutExpired:
+            logger.warning(
+                "Timed out reading modification times for %d paths", len(batch)
+            )
+            mtimes.extend([None] * len(batch))
+            continue
+
+        if result.returncode == 255:
+            handle_ssh_subprocess_error(
+                subprocess.CalledProcessError(
+                    result.returncode, ssh_cmd, result.stdout, result.stderr
+                ),
+                remote_connection,
+            )
+
+        lines = result.stdout.splitlines() if result.stdout else []
+        for offset in range(len(batch)):
+            line = lines[offset].strip() if offset < len(lines) else ""
+            try:
+                mtimes.append(int(line))
+            except ValueError:
+                mtimes.append(None)
+
+    return mtimes
 
 
 def find_folders_by_files(
-    remote_connection: RemoteConnection, root_folder: str, file_names: List[str]
-) -> List[str]:
-    """Given a remote path, return a list of top-level folders that contain any of the specified files."""
-    matched_folders: List[str] = []
+    remote_connection: RemoteConnection,
+    root_folder: str,
+    file_names: List[str],
+    subdirectory_glob: Optional[str] = None,
+    directory_filter: Optional[Callable[[str], bool]] = None,
+    timeout_seconds: Optional[float] = None,
+) -> RemoteFolderSearch:
+    """Search for remote folders containing any of ``file_names``.
 
-    # Build SSH command to find directories in root_folder
-    ssh_cmd = ["ssh", "-o", "PasswordAuthentication=no"]
+    By default these are report folders directly under ``root_folder``. Pass
+    ``subdirectory_glob`` to look one level deeper instead, through intervening
+    directories whose names match the glob, and ``directory_filter`` to drop
+    candidates the glob cannot exclude before they cost an SSH round trip.
 
-    # Handle non-standard SSH port
-    if remote_connection.port != 22:
-        ssh_cmd.extend(["-p", str(remote_connection.port)])
+    ``timeout_seconds`` overrides the configured budget for this one search, so
+    a caller running several of them can hold them to one shared deadline rather
+    than to the full budget each.
+    """
+    if not root_folder or not file_names:
+        # Nothing was asked of the remote host, so nothing is known about the root.
+        return RemoteFolderSearch(folders=[], root_state=RemoteSearchRootState.UNKNOWN)
 
-    ssh_cmd.extend(
-        [
-            f"{remote_connection.username}@{remote_connection.host}",
-            f"find '{root_folder}' -maxdepth 1 -type d -not -path '{root_folder}'",
-        ]
+    if timeout_seconds is None:
+        timeout_seconds = _ssh_subprocess_timeout_seconds()
+    elif timeout_seconds <= 0:
+        # A shared deadline already spent. Spawning ssh only to kill it would
+        # report the same UNKNOWN a second later, having held the request longer.
+        logger.error(f"No time left to search for folders in: {root_folder}")
+        return RemoteFolderSearch(folders=[], root_state=RemoteSearchRootState.UNKNOWN)
+
+    ssh_cmd = _ssh_argv(
+        remote_connection,
+        RemoteCommand.from_shell_fragment(
+            _report_search_command(root_folder, subdirectory_glob, file_names)
+        ),
     )
 
     try:
         result = subprocess.run(
-            ssh_cmd, capture_output=True, text=True, check=True, timeout=30
+            ssh_cmd,
+            capture_output=True,
+            text=True,
+            # The probes run inside this call, so it inherits the longer budget.
+            # Deliberately not `check=True`: `find` exits nonzero for an unreadable
+            # subtree after printing everything it did match, and those matches are
+            # still reports. The return code is inspected below instead.
+            timeout=timeout_seconds,
         )
-
-        directories = result.stdout.strip().splitlines()
-
-        # For each directory, check if it contains any of the specified files
-        for directory in directories:
-            directory = directory.strip()
-            if not directory:
-                continue
-
-            # Build SSH command to check for files in this directory
-            file_checks = []
-            for file_name in file_names:
-                file_checks.append(f"test -f '{directory}/{file_name}'")
-
-            # Use OR logic to check if any of the files exist
-            check_cmd = ["ssh", "-o", "PasswordAuthentication=no"]
-            if remote_connection.port != 22:
-                check_cmd.extend(["-p", str(remote_connection.port)])
-
-            check_cmd.extend(
-                [
-                    f"{remote_connection.username}@{remote_connection.host}",
-                    f"({' || '.join(file_checks)})",
-                ]
-            )
-
-            try:
-                check_result = subprocess.run(
-                    check_cmd, capture_output=True, check=True, timeout=10
-                )
-                # If command succeeds, at least one file exists
-                matched_folders.append(directory)
-            except subprocess.CalledProcessError:
-                # None of the files exist in this directory, skip it
-                continue
-
-        return matched_folders
-
-    except subprocess.CalledProcessError as e:
-        if e.returncode == 255:  # SSH protocol errors
-            handle_ssh_subprocess_error(e, remote_connection)
-            # This line should never be reached as handle_ssh_subprocess_error raises an exception
-            return []
-        else:
-            logger.error(f"Error finding folders: {e.stderr}")
-            return []
     except subprocess.TimeoutExpired:
         logger.error(f"Timeout finding folders in: {root_folder}")
-        return []
-    except Exception as e:
-        logger.error(f"Error finding folders: {e}")
-        return []
+        return RemoteFolderSearch(folders=[], root_state=RemoteSearchRootState.UNKNOWN)
+
+    if result.returncode == _MISSING_ROOT_EXIT_CODE:
+        logger.info("Search root does not exist or cannot be accessed: %s", root_folder)
+        return RemoteFolderSearch(folders=[], root_state=RemoteSearchRootState.MISSING)
+
+    if result.returncode == _NOT_A_DIRECTORY_EXIT_CODE:
+        logger.info("Search root is not a directory: %s", root_folder)
+        return RemoteFolderSearch(
+            folders=[], root_state=RemoteSearchRootState.NOT_A_DIRECTORY
+        )
+
+    matched_folders = [
+        directory.strip()
+        for directory in result.stdout.splitlines()
+        if directory.strip()
+    ]
+    if directory_filter is not None:
+        matched_folders = [
+            directory for directory in matched_folders if directory_filter(directory)
+        ]
+
+    if result.returncode != 0:
+        if result.returncode == 255:  # SSH protocol errors
+            handle_ssh_subprocess_error(
+                subprocess.CalledProcessError(
+                    result.returncode, ssh_cmd, result.stdout, result.stderr
+                ),
+                remote_connection,
+            )
+        stderr = result.stderr or ""
+        # `find` exits nonzero for any subtree it could not read, having already
+        # printed everything it did match. Reports it found are still reports.
+        if matched_folders:
+            logger.warning(
+                "Search under %s reported errors but matched %d directories: %s",
+                root_folder,
+                len(matched_folders),
+                stderr.strip(),
+            )
+        elif "permission denied" in stderr.lower():
+            unreadable = _permission_denied_path(stderr) or root_folder
+            error_msg = (
+                f"Permission denied accessing '{unreadable}'. "
+                f"The user '{remote_connection.username}' does not have read access to this directory. "
+                "Please check directory permissions on the remote server or choose a different path."
+            )
+            logger.error(f"Error finding folders: {stderr}")
+            raise RemoteConnectionException(
+                message=error_msg,
+                status=ConnectionTestStates.FAILED,
+                detail=stderr.strip() or None,
+            )
+        else:
+            logger.error(f"Error finding folders: {stderr}")
+
+    return RemoteFolderSearch(
+        folders=matched_folders, root_state=RemoteSearchRootState.PRESENT
+    )
 
 
 @remote_exception_handler
@@ -761,45 +1421,82 @@ def get_remote_performance_folders(
     remote_connection: RemoteConnection,
 ) -> List[RemoteReportFolder]:
     """Return a list of remote folders containing a profile_log_device file."""
-    if remote_connection.performancePath is None:
-        error = "Performance path is not configured for this connection"
-        logger.error(error)
-        raise NoProjectsException(status=ConnectionTestStates.FAILED, message=error)
+    performance_paths = []
 
-    performance_paths = find_folders_by_files(
-        remote_connection, remote_connection.performancePath, [TEST_PROFILER_FILE]
-    )
+    if remote_connection.performancePath:
+        performance_paths = _find_performance_report_folders(remote_connection).folders
+    else:
+        logger.info("No performance path configured for this connection")
+        return []
+
     if not performance_paths:
-        error = f"No profiler paths found at {remote_connection.performancePath}"
-        logger.info(error)
-        raise NoProjectsException(status=ConnectionTestStates.FAILED, message=error)
-    remote_folder_data = []
-    for path in performance_paths:
-        remote_folder_data.append(
-            get_remote_performance_folder(remote_connection, path)
+        logger.info(
+            "No performance reports found under path: %s (searching %s)",
+            remote_connection.performancePath,
+            (
+                f"{MULTIHOST_REPORT_LAYOUT_HINT}/<report> subdirectories"
+                if remote_connection.multihostPerformance
+                else "immediate subdirectories"
+            ),
         )
-    return remote_folder_data
+        return []
+
+    remote_folder_data = get_remote_performance_folders_from_paths(
+        remote_connection, performance_paths
+    )
+
+    return sorted(remote_folder_data, key=lambda x: x.lastModified, reverse=True)
 
 
 @remote_exception_handler
 def get_remote_profiler_folders(
     remote_connection: RemoteConnection,
 ) -> List[RemoteReportFolder]:
-    """Return a list of remote folders containing a config.json file."""
-    remote_config_paths = find_folders_by_files(
-        remote_connection, remote_connection.profilerPath, [TEST_CONFIG_FILE]
-    )
-    if not remote_config_paths:
-        error = f"No projects found at {remote_connection.profilerPath}"
-        logger.info(error)
-        raise NoProjectsException(status=ConnectionTestStates.FAILED, message=error)
+    """Return a list of remote folders containing a db.sqlite file."""
+    profiler_paths = []
+
+    if remote_connection.profilerPath:
+        profiler_paths = find_folders_by_files(
+            remote_connection, remote_connection.profilerPath, [TEST_DB_FILE]
+        ).folders
+    else:
+        logger.info("No profiler path configured for this connection")
+        return []
+
+    if not profiler_paths:
+        logger.info(
+            "No profiler reports found under path: %s",
+            remote_connection.profilerPath,
+        )
+        return []
+
     remote_folder_data = []
-    for config_path in remote_config_paths:
+    for path in profiler_paths:
         remote_folder = get_remote_profiler_folder_from_config_path(
-            remote_connection, str(Path(config_path).joinpath(TEST_CONFIG_FILE))
+            remote_connection, str(Path(path).joinpath(TEST_CONFIG_FILE))
+        )
+        remote_folder.syncedName = folder_segment_from_remote_path(
+            remote_folder.remotePath
         )
         remote_folder_data.append(remote_folder)
-    return remote_folder_data
+
+    return sorted(remote_folder_data, key=lambda x: x.lastModified, reverse=True)
+
+
+def _safe_sync_destination_segment(
+    remote_folder_path: str, *, qualify_rank: bool = False
+) -> str:
+    """Collapse remotePath to a single local folder segment; reject ``.`` / ``..`` / empty."""
+    segment = folder_segment_from_remote_path(
+        remote_folder_path, qualify_rank=qualify_rank
+    )
+    if not segment:
+        raise RemoteConnectionException(
+            message="Invalid report path",
+            status=ConnectionTestStates.FAILED,
+            http_status_code=HTTPStatus.BAD_REQUEST,
+        )
+    return segment
 
 
 @remote_exception_handler
@@ -809,11 +1506,11 @@ def sync_remote_profiler_folders(
     path_prefix: str,
     exclude_patterns: Optional[List[str]] = None,
     sid=None,
-):
+) -> SyncMethod:
     """Main function to sync test folders, handles both compressed and individual syncs."""
-    profiler_folder = Path(remote_folder_path).name
+    profiler_folder = _safe_sync_destination_segment(remote_folder_path)
     destination_dir = Path(
-        REPORT_DATA_DIRECTORY,
+        current_app.config["REPORT_DATA_DIRECTORY"],
         path_prefix,
         remote_connection.host,
         current_app.config["PROFILER_DIRECTORY_NAME"],
@@ -821,7 +1518,7 @@ def sync_remote_profiler_folders(
     )
     destination_dir.mkdir(parents=True, exist_ok=True)
 
-    sync_files_and_directories(
+    return sync_files_and_directories(
         remote_connection, remote_folder_path, destination_dir, exclude_patterns, sid
     )
 
@@ -833,17 +1530,20 @@ def sync_remote_performance_folders(
     performance: RemoteReportFolder,
     exclude_patterns: Optional[List[str]] = None,
     sid=None,
-):
+) -> SyncMethod:
     remote_folder_path = performance.remotePath
-    profile_folder = Path(remote_folder_path).name
+    profile_folder = _safe_sync_destination_segment(
+        remote_folder_path,
+        qualify_rank=bool(remote_connection.multihostPerformance),
+    )
     destination_dir = Path(
-        REPORT_DATA_DIRECTORY,
+        current_app.config["REPORT_DATA_DIRECTORY"],
         path_prefix,
         remote_connection.host,
         current_app.config["PERFORMANCE_DIRECTORY_NAME"],
         profile_folder,
     )
     destination_dir.mkdir(parents=True, exist_ok=True)
-    sync_files_and_directories(
+    return sync_files_and_directories(
         remote_connection, remote_folder_path, destination_dir, exclude_patterns, sid
     )

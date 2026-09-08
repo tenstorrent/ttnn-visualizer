@@ -1,4 +1,3 @@
-/* eslint-disable no-console */
 // SPDX-License-Identifier: Apache-2.0
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
@@ -66,8 +65,9 @@ const checkMissingDepLicenses = () => {
             process.exit(1);
         }
 
-        console.info('No missing licenses found.\n');
-        process.exit(0);
+        console.info('No missing licenses found for JavaScript dependencies.\n');
+
+        checkMissingDepLicensesPython();
     });
 };
 
@@ -128,6 +128,5 @@ const checkMissingDepLicensesPython = () => {
 };
 
 checkMissingDepLicenses();
-checkMissingDepLicensesPython();
 
 export default checkMissingDepLicenses;

@@ -2,45 +2,83 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { FilterableColumnKeys, TableFilter, TableKeys, TypedPerfTableRow } from '../definitions/PerfTable';
+import { ColumnKeys, PerfTableFilters } from '../definitions/PerfTable';
+import { TypedPerfTableRow, signpostRowDefaults } from '../model/PerfTable';
+import { DeviceOperationLayoutTypes } from '../model/APIData';
 import { BufferType } from '../model/BufferType';
-import { isHostOp } from './perfFunctions';
+import { Signpost } from '../model/Signpost';
 
-const isFiltersActive = (filters: TableFilter) =>
+const SIGNPOST_MARKER = '(signpost)';
+
+const isFiltersActive = (filters?: PerfTableFilters) =>
     filters ? Object.values(filters).some((filter) => filter.length > 0) : false;
 
-const getCellText = (buffer: TypedPerfTableRow, key: TableKeys) => {
+const getCellText = (buffer: TypedPerfTableRow, key: ColumnKeys) => {
     const textValue = buffer[key]?.toString() || '';
 
     return textValue;
 };
 
+interface SortAndFilterPerfTableDataOptions {
+    filters?: PerfTableFilters;
+    rawOpCodeFilter?: string[];
+    mathFilter?: string[];
+    bufferTypeFilter?: (BufferType | null)[];
+    activeLayoutFilterList?: (DeviceOperationLayoutTypes | null)[];
+    filterBySignpost?: (Signpost | null)[];
+}
+
 const sortAndFilterPerfTableData = (
-    data: TypedPerfTableRow[],
-    filters: TableFilter,
-    rawOpCodeFilter: string[],
-    mathFilter: string[],
-    bufferTypeFilter: (BufferType | null)[],
-    hideHostOps: boolean,
+    data: TypedPerfTableRow[] = [],
+    {
+        filters,
+        rawOpCodeFilter = [],
+        mathFilter = [],
+        bufferTypeFilter = [],
+        activeLayoutFilterList = [],
+        filterBySignpost = [],
+    }: SortAndFilterPerfTableDataOptions = {},
 ): TypedPerfTableRow[] => {
-    if (data?.length === 0) {
+    if (data.length === 0) {
         return data;
     }
 
     let filteredRows = data || [];
 
-    if (hideHostOps) {
-        filteredRows = filteredRows.filter((row) => !isHostOp(row.raw_op_code));
+    if (filterBySignpost[0]) {
+        filteredRows = [
+            {
+                ...signpostRowDefaults,
+                id: filterBySignpost[0].id,
+                // TODO: Figure out a better logic for this mismatch between tt-perf-report and visualiser
+                op_code: `${filterBySignpost[0].op_code} ${!filterBySignpost[0].op_code.includes(SIGNPOST_MARKER) ? SIGNPOST_MARKER : ''}`,
+                raw_op_code: filterBySignpost[0].op_code,
+            },
+            ...filteredRows,
+        ];
     }
 
-    if (isFiltersActive(filters) && FilterableColumnKeys) {
+    if (filterBySignpost[1]) {
+        filteredRows = [
+            ...filteredRows,
+            {
+                ...signpostRowDefaults,
+                id: filterBySignpost[1].id,
+                // TODO: Figure out a better logic for this mismatch between tt-perf-report and visualiser
+                op_code: `${filterBySignpost[1].op_code} ${!filterBySignpost[1].op_code.includes(SIGNPOST_MARKER) ? SIGNPOST_MARKER : ''}`,
+                raw_op_code: filterBySignpost[1].op_code,
+            },
+        ];
+    }
+
+    if (isFiltersActive(filters)) {
         filteredRows = filteredRows.filter((row) => {
             const isFilteredOut =
                 filters &&
                 Object.entries(filters)
                     .filter(([_key, filterValue]) => String(filterValue).length)
                     .some(([key, filterValue]) => {
-                        const bufferValue = getCellText(row, key as TableKeys);
+                        const bufferValue = getCellText(row, key as ColumnKeys);
 
                         return !bufferValue.toLowerCase().includes(filterValue.toLowerCase());
                     });
@@ -64,6 +102,12 @@ const sortAndFilterPerfTableData = (
     if (bufferTypeFilter?.length > 0) {
         filteredRows = filteredRows.filter(
             (row) => row?.buffer_type !== null && bufferTypeFilter.includes(row.buffer_type),
+        );
+    }
+
+    if (activeLayoutFilterList?.length > 0) {
+        filteredRows = filteredRows.filter(
+            (row) => row?.layout !== null && activeLayoutFilterList.includes(row.layout),
         );
     }
 

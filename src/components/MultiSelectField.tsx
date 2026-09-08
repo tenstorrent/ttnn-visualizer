@@ -5,6 +5,7 @@
 import { Checkbox, MenuItem } from '@blueprintjs/core';
 import { ItemPredicate, MultiSelect } from '@blueprintjs/select';
 import { Dispatch, SetStateAction, useCallback, useMemo } from 'react';
+import HighlightedText from './HighlightedText';
 
 type MultiSelectFieldProps<T, K extends keyof T> = {
     keyName: K;
@@ -14,6 +15,8 @@ type MultiSelectFieldProps<T, K extends keyof T> = {
     updateHandler: Dispatch<SetStateAction<T[K][]>>;
     labelFormatter?: (value: T[K]) => string;
     disabled?: boolean;
+    /** Options kept visible but unselectable, typically because they would match nothing. */
+    disabledValues?: ReadonlySet<T[K]>;
 };
 
 const MultiSelectField = <T, K extends keyof T>({
@@ -24,6 +27,7 @@ const MultiSelectField = <T, K extends keyof T>({
     updateHandler,
     labelFormatter,
     disabled,
+    disabledValues,
 }: MultiSelectFieldProps<T, K>) => {
     const updateMultiSelect = useCallback(
         (updatedFilter: T[K]) => {
@@ -37,17 +41,21 @@ const MultiSelectField = <T, K extends keyof T>({
         [updateHandler],
     );
 
+    const isOptionDisabled = useCallback((option: T[K]) => disabledValues?.has(option) ?? false, [disabledValues]);
+
     const renderOption = useCallback(
-        (option: T[K]) => (
+        (option: T[K], { query }: { query: string }) => (
             <Option
                 key={String(option)}
+                query={query}
                 type={option}
                 label={labelFormatter ? labelFormatter(option) : String(option)}
                 values={values}
                 updateHandler={updateMultiSelect}
+                disabled={isOptionDisabled(option)}
             />
         ),
-        [values, updateMultiSelect, labelFormatter],
+        [values, updateMultiSelect, labelFormatter, isOptionDisabled],
     );
 
     const formattedOptions = useMemo((): T[K][] => {
@@ -59,8 +67,10 @@ const MultiSelectField = <T, K extends keyof T>({
     }, [options, keyName]);
 
     const filterPredicate: ItemPredicate<T[K]> = useCallback(
-        (query, selected) => !query || String(selected).toLowerCase().includes(query.toLowerCase()),
-        [],
+        (query, selected) =>
+            !query ||
+            (labelFormatter ? labelFormatter(selected) : String(selected)).toLowerCase().includes(query.toLowerCase()),
+        [labelFormatter],
     );
 
     const selectedItems = useMemo(
@@ -72,9 +82,13 @@ const MultiSelectField = <T, K extends keyof T>({
         <MultiSelect<T[K]>
             items={formattedOptions}
             placeholder={placeholder}
-            onItemSelect={(selectedType) => updateMultiSelect(selectedType)}
+            onItemSelect={updateMultiSelect}
             selectedItems={selectedItems}
             itemRenderer={renderOption}
+            // Blueprint drives keyboard activation from its own active-item state, which never
+            // touches the option's checkbox: without this, arrowing stops on unselectable options
+            // and Enter has to be swallowed after the fact instead of never reaching them.
+            itemDisabled={isOptionDisabled}
             tagRenderer={(selected) => (labelFormatter ? labelFormatter(selected) : String(selected))}
             onRemove={(selected) => updateMultiSelect(selected)}
             itemPredicate={filterPredicate}
@@ -90,14 +104,22 @@ type OptionProps<T> = {
     values: T[];
     updateHandler: (type: T) => void;
     label?: string;
+    query?: string;
+    disabled?: boolean;
 };
 
-const Option = <T,>({ type, values, updateHandler, label }: OptionProps<T>) => {
+const Option = <T,>({ type, values, updateHandler, label, query, disabled = false }: OptionProps<T>) => {
     return (
         <li>
             <Checkbox
-                label={label || String(type)}
+                labelElement={
+                    <HighlightedText
+                        text={label ?? String(type)}
+                        filter={query || ''}
+                    />
+                }
                 checked={values.includes(type)}
+                disabled={disabled}
                 onClick={() => updateHandler(type)}
             />
         </li>

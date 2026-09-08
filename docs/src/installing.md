@@ -1,0 +1,90 @@
+# Installing
+
+## Prerequisites
+
+TT-NN Visualizer requires data generated from TT-NN to analyze.
+
+Follow instructions for setting up [TT-Metalium](https://docs.tenstorrent.com/tt-metal/latest/tt-metalium/index.html) and [TT-NN](https://docs.tenstorrent.com/tt-metal/latest/ttnn/index.html).
+
+### Memory reports
+
+Recommended pytest config when generating your data:
+
+``` bash
+export TTNN_CONFIG_OVERRIDES='{
+    "enable_fast_runtime_mode": false,
+    "enable_logging": true,
+    "report_name": "YOUR REPORT NAME",
+    "enable_detailed_buffer_report": true,
+    "enable_detailed_tensor_report": false,
+    "enable_graph_report": true,
+    "enable_graph_python_stack_traces": true,
+    "enable_comparison_mode": false
+}'
+```
+
+| Configuration Option | Description |
+|----------------------|-------------|
+| **enable_fast_runtime_mode** | Disable fast runtime mode to ensure all operations are properly traced. **Must be disabled to enable logging**. |
+| **enable_logging** | Synchronizes main thread after every operation and logs the operation. **Must be enabled**. |
+| **report_name** | Prefix of the folder name where the memory report is output. **Must have a value for data to be output to disk**. |
+| **enable_detailed_buffer_report** | Enable to visualize the detailed buffer report after every operation. **Needed for full buffer information**. |
+| **enable_detailed_tensor_report** | Enable to visualize the values of input and output tensors of every operation. **Data not used by the visualizer**. |
+| **enable_graph_report** | Generates an SVG visualization of the computation graph and enables automatic report generation with pytest. **Must be enabled**. |
+| **enable_graph_python_stack_traces** | Capture the Python stack trace at each operation invocation and store it alongside the graph. **Required for the visualizer's per-operation stack trace and source-file view**. |
+| **enable_comparison_mode** | Enable to test the output of operations against their golden implementation. **Optional, not always available on models**. |
+
+To run a test with custom input data, you can use the following command with suitable values for `input-path`:
+
+``` bash
+pytest --disable-warnings --input-path="path/to/input.json" path/to/test_file.py::test_function[param]
+```
+
+The final output should be a folder within `${TT_METAL_HOME}/generated/ttnn/reports/` which should include at least a `db.sqlite` file (config.json is optional for the visualizer). The report is created automatically when running TT-Metal model demos and tests with `pytest`, provided `enable_logging` is `true`, `report_name` has a value, and `enable_graph_report` is `true`. (`enable_comparison_mode` also triggers generation, but it is not a substitute — see the table above.)
+
+Important: every one of those conditions fails silently. With any of them unset you get no report and no error, and not even an empty folder. `report_name` is the one most often missed — always set it explicitly, for tests as well as model demos.
+
+<img width="909" alt="Memory report files" src="https://github.com/user-attachments/assets/ab31892a-2779-4fe1-9ad5-0f35f8329f9a" />
+
+The topology view expects `cluster_descriptor.yaml` in that same folder. If it is missing, see {ref}`Missing cluster descriptor <cluster-descriptor-missing>`.
+
+Topology also uses `physical_chip_mesh_coordinate_mapping_x_of_y.yaml` for some multidevice and  multi-host runs. In `tt-metal`, these files are created in `${TT_METAL_HOME}/generated/fabric/` after fabric topology mapping is initialized, then copied into the memory report folder during graph report import. If it is missing, check `enable_graph_report` in `TTNN_CONFIG_OVERRIDES` is enabled.
+
+For further information on generating data please refer to [TT-Metalium](https://docs.tenstorrent.com/tt-metal/latest/tt-metalium/get_started/get_started.html) and [TT-NN](https://docs.tenstorrent.com/tt-metal/latest/ttnn/ttnn/get_started.html) documentation.
+
+To generate reports with other codebases using TT-NN, see the [TT-NN Graph Tracing](https://github.com/tenstorrent/tt-metal/blob/main/tech_reports/ttnn/graph-tracing.md) documentation.
+
+### Performance reports
+
+TT-NN Visualizer supports the reading of TT-Metalium performance reports. The expected output should be a folder within `${TT_METAL_HOME}/generated/profiler/reports/` containing a `profile_log_device.csv` file and another csv with the performance results, e.g. `ops_perf_results_2024_12_11_11_09_16.csv`. A `tracy_profile_log_host.tracy` file is optional — newer TT-Metal runs may omit it.
+
+<img width="916" alt="Performance report files" src="https://github.com/user-attachments/assets/8209f500-7913-41dc-8952-c1307e7720c3" />
+
+Consult the TT-Metalium documentation on [how to generate a performance report](https://github.com/tenstorrent/tt-perf-report?tab=readme-ov-file#generating-performance-traces).
+
+### NPE
+
+Network-on-chip performance estimator data can be loaded separately on the `/npe` route.
+
+Refer to the [tt-npe documentation](https://github.com/tenstorrent/tt-npe/blob/main/docs/src/getting_started.md) for more details.
+
+(installing-from-pypi)=
+## Installing from PyPI
+
+TT-NN Visualizer is a standard Python package and can be installed from [PyPI](https://pypi.org/project/ttnn-visualizer/) with whichever tool you already use.
+
+Using `pip` (within a virtual environment):
+
+`pip install ttnn-visualizer`
+
+Using `pipx`, which installs the app in an isolated environment for you:
+
+`pipx install ttnn-visualizer`
+
+Or, if you already use `uv`:
+
+`uv tool install ttnn-visualizer`
+
+The minimum supported version of Python is **3.10**. After installation run `ttnn-visualizer` to start the application.
+
+Whichever tool you choose, ensure `ttnn-visualizer` is installed in an isolated/virtual environment and not with the system Python. Having the package installed at the system level and in a virtual environment at the same time can lead to version mismatches. If you run into any issue with an unexpected TT-NN Visualizer version appearing in the browser ensure you have uninstalled the system package.

@@ -3,6 +3,7 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 .heading {
-    display: flex;
-    justify-content: space-between;
+    margin-top: 0;
+    display: inline-flex;
+    gap: 10px;
 }

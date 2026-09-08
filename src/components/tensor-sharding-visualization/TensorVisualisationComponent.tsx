@@ -2,21 +2,23 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import React, { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Button, ButtonVariant, Card, Overlay2, Size } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { PlotData } from 'plotly.js';
 import classNames from 'classnames';
+import { useAtomValue } from 'jotai';
 import { BufferType } from '../../model/BufferType';
-import { useBufferPages, useDevices } from '../../hooks/useAPI';
-import '../../scss/components/TensorVisualizationComponent.scss';
-import { BufferPage, Tensor } from '../../model/APIData';
+import { useBufferChunks, useDevices } from '../../hooks/useAPI';
+import 'styles/components/TensorVisualizationComponent.scss';
+import { DecoratedBufferChunk, Tensor } from '../../model/APIData';
 import SVGBufferRenderer from './SVGBufferRenderer';
 import { getBufferColor, getTensorColor } from '../../functions/colorGenerator';
-import getChartData, { pageDataToChunkArray } from '../../functions/getChartData';
+import getChartData, { bufferChunksToColoredChunks } from '../../functions/getChartData';
 import { L1RenderConfiguration } from '../../definitions/PlotConfigurations';
 import MemoryPlotRenderer from '../operation-details/MemoryPlotRenderer';
 import LoadingSpinner from '../LoadingSpinner';
+import { showHexAtom } from '../../store/app';
 
 export interface TensorVisualisationComponentProps {
     title: string;
@@ -27,23 +29,10 @@ export interface TensorVisualisationComponentProps {
     onClose: () => void;
     tensorByAddress?: Map<number, Tensor>;
     tensorId?: number;
-    zoomRange: [number, number];
+    plotZoomRange: [number, number];
 }
 
-/**
- * @description Component for visualising buffer pagination data on tensix grid
- * @param title popup title
- * @param operationId
- * @param address buffer address or comma separated list of addresses
- * @param bufferType buffer type (always L1 as there is no other page data)
- * @param isOpen
- * @param onClose close callback
- * @param tensorByAddress optional historical lookup map
- * @param tensorId optionally used in the absence of tensorByAddress
- * @param zoomRange range of memory to display
- * @constructor
- */
-const TensorVisualisationComponent: React.FC<TensorVisualisationComponentProps> = ({
+const TensorVisualisationComponent = ({
     title,
     operationId,
     address,
@@ -51,14 +40,53 @@ const TensorVisualisationComponent: React.FC<TensorVisualisationComponentProps> 
     isOpen,
     onClose,
     tensorByAddress,
-    zoomRange,
+    plotZoomRange,
     tensorId,
-}) => {
-    const { data } = useBufferPages(operationId, address, bufferType);
+}: TensorVisualisationComponentProps) => {
+    const { data } = useBufferChunks(operationId, address, bufferType);
     const { data: devices } = useDevices();
+    const showHex = useAtomValue(showHexAtom);
 
     const [selectedTensix, setSelectedTensix] = useState<number | null>(null);
     const [chartData, setChartData] = useState<Partial<PlotData>[]>([]);
+
+    // Project each cached BufferChunk into a DecoratedBufferChunk that
+    // carries the resolved tensor association and the palette colour for
+    // this render. Done off the React Query cache so the cached objects
+    // stay untouched and a future second consumer of useBufferChunks can't
+    // see fields populated by our `tensorByAddress` map. Computed in a
+    // useMemo because both downstream readers (the per-bank grid and the
+    // tensix-detail click handler) need the same shape, and the
+    // address-keyed colour lookups are stable across re-renders.
+    const { buffersByBankId, coordsByBankId } = useMemo(() => {
+        const buckets: DecoratedBufferChunk[][] = [];
+        const coords: { x: number; y: number }[] = [];
+        if (!data) {
+            return { buffersByBankId: buckets, coordsByBankId: coords };
+        }
+        for (const chunk of data) {
+            // Match the original branching exactly: when `tensorByAddress` is
+            // provided we use it (even if it doesn't contain the address —
+            // the `tensorId` prop is then ignored); otherwise fall back to
+            // the explicit `tensorId` prop, treating 0 / undefined as
+            // "no association" the same way the legacy code did.
+            const tensor = tensorByAddress?.get(chunk.address);
+            const resolvedTensorId = tensorByAddress ? tensor?.id : tensorId || undefined;
+            const tensorColor = resolvedTensorId !== undefined ? getTensorColor(resolvedTensorId) : undefined;
+            // 'red' mirrors the SVGBufferRenderer's old `|| 'red'` fallback;
+            // keeping it lets us narrow DecoratedBufferChunk.color to a
+            // required string while preserving the pre-fix render.
+            const color = tensorColor ?? getBufferColor(chunk.address) ?? 'red';
+            const decorated: DecoratedBufferChunk = { ...chunk, tensor_id: resolvedTensorId, color };
+
+            if (!buckets[chunk.bank_id]) {
+                buckets[chunk.bank_id] = [];
+            }
+            buckets[chunk.bank_id].push(decorated);
+            coords[chunk.bank_id] = { x: chunk.core_x, y: chunk.core_y };
+        }
+        return { buffersByBankId: buckets, coordsByBankId: coords };
+    }, [data, tensorByAddress, tensorId]);
 
     if (!data || !devices) {
         return (
@@ -86,34 +114,9 @@ const TensorVisualisationComponent: React.FC<TensorVisualisationComponentProps> 
     const width = devices[0].num_x_cores;
     const height = devices[0].num_y_cores;
 
-    const memStart = zoomRange[0];
-    const memSize = zoomRange[1];
+    const [memStart, memEnd] = plotZoomRange;
     const tensixSize = 120;
     const tensixHeight = tensixSize / 3;
-
-    const buffersByBankId: BufferPage[][] = [];
-    const coordsByBankId: { x: number; y: number }[] = [];
-
-    data.forEach((page: BufferPage) => {
-        if (!buffersByBankId[page.bank_id]) {
-            buffersByBankId[page.bank_id] = [];
-        }
-
-        if (tensorByAddress) {
-            const tensor = tensorByAddress?.get(page.address);
-            page.tensor_id = tensor?.id;
-            page.color = getTensorColor(tensor?.id);
-        } else if (tensorId) {
-            page.tensor_id = tensorId;
-            page.color = getTensorColor(tensorId);
-        }
-        if (page.tensor_id === undefined) {
-            page.color = getBufferColor(page.address);
-        }
-
-        buffersByBankId[page.bank_id].push(page);
-        coordsByBankId[page.bank_id] = { x: page.core_x, y: page.core_y };
-    });
 
     return (
         <Overlay2
@@ -169,8 +172,10 @@ const TensorVisualisationComponent: React.FC<TensorVisualisationComponentProps> 
                                         setSelectedTensix(matchIndex);
                                         setChartData(
                                             getChartData(
-                                                pageDataToChunkArray(buffersByBankId[matchIndex]),
+                                                bufferChunksToColoredChunks(buffersByBankId[matchIndex]),
                                                 (id) => tensorByAddress?.get(id) || null,
+                                                undefined,
+                                                { showHex },
                                             ),
                                         );
                                     }}
@@ -178,8 +183,8 @@ const TensorVisualisationComponent: React.FC<TensorVisualisationComponentProps> 
                                     <SVGBufferRenderer
                                         height={tensixHeight}
                                         data={buffersByBankId[matchIndex]}
-                                        memorySize={memSize}
                                         memoryStart={memStart}
+                                        memoryEnd={memEnd}
                                     />
                                 </button>
                             ) : (
@@ -215,9 +220,9 @@ const TensorVisualisationComponent: React.FC<TensorVisualisationComponentProps> 
                                 }`}
                                 className='detailed-l1-memory-renderer l1-memory-renderer'
                                 isZoomedIn
-                                plotZoomRange={[memStart, memSize]}
+                                plotZoomRange={[memStart, memEnd]}
                                 chartDataList={[chartData]}
-                                memorySize={memSize}
+                                memoryZoomEnd={memEnd}
                                 onBufferClick={() => {}}
                                 configuration={{
                                     ...L1RenderConfiguration,

@@ -30,14 +30,14 @@ interface NPEZoneFilterComponentProps {
     onZoneClick: (zone: NPEZone) => void;
 }
 
-const NPEZoneFilterComponent: React.FC<NPEZoneFilterComponentProps> = ({
+const NPEZoneFilterComponent = ({
     npeData,
     open = false,
     onClose,
     onSelect,
     onExpand,
     onZoneClick,
-}) => {
+}: NPEZoneFilterComponentProps) => {
     const [selectedDeviceId, setSelectedDeviceId] = React.useState<number | null>(null);
     const [selectedCoreAddress, setSelectedCoreAddress] = React.useState<string | null>(null);
     const sortCoreAddress = useCallback((a: NPERootZone, b: NPERootZone) => {
@@ -125,11 +125,13 @@ const NPEZoneFilterComponent: React.FC<NPEZoneFilterComponentProps> = ({
                         variant={ButtonVariant.MINIMAL}
                         onClick={onClose}
                         icon={IconNames.CHEVRON_LEFT}
+                        title='Close zones panel'
                     />
                 </h3>
                 <ButtonGroup className='zone-filters'>
                     <Select
                         className='device-selector'
+                        popoverProps={{ portalClassName: 'npe-zone-filter-portal' }}
                         items={uniqueDeviceIdList}
                         itemRenderer={deviceItemRenderer}
                         filterable
@@ -154,6 +156,7 @@ const NPEZoneFilterComponent: React.FC<NPEZoneFilterComponentProps> = ({
                     </Select>
                     <Select
                         className='core-selector'
+                        popoverProps={{ portalClassName: 'npe-zone-filter-portal' }}
                         items={coreAddressList}
                         itemRenderer={coreItemRenderer}
                         disabled={selectedDeviceId === null}
@@ -196,29 +199,37 @@ const NPEZoneFilterComponent: React.FC<NPEZoneFilterComponentProps> = ({
                 </ButtonGroup>
             </div>
             <div className='zones-container'>
-                {sortedFilteredZones.map((rootZone) => {
-                    return (
-                        <Collapsible
-                            collapseClassName='root-zone-collapsible'
-                            key={`${rootZone.proc}-${rootZone.core.join('-')}`}
-                            label={
-                                <div className='root-zone-label'>
-                                    <span
-                                        className='color-square'
-                                        style={{ backgroundColor: getKernelColor(rootZone.proc) }}
-                                    />
-                                    {rootZone.proc} {rootZone.core.join('-')}
-                                </div>
-                            }
-                            isOpen={false}
-                            onExpandToggle={(state) => {
-                                onExpandStateChange(state, rootZone.proc, rootZone.core);
-                            }}
-                        >
-                            <div>{getZoneElements(rootZone.zones, rootZone.core, 1)}</div>
-                        </Collapsible>
-                    );
-                })}
+                {/* The panel is hidden by CSS rather than unmounted, so without this
+                    gate a zone-heavy report still reconciled one `Collapsible` per
+                    root zone (~5k of them, each with two state hooks, a Button and a
+                    Collapse) on every NPEView render while shut. #1803 */}
+                {open &&
+                    sortedFilteredZones.map((rootZone) => {
+                        return (
+                            <Collapsible
+                                collapseClassName='root-zone-collapsible'
+                                key={`${rootZone.proc}-${rootZone.core.join('-')}`}
+                                label={
+                                    <div className='root-zone-label'>
+                                        <span
+                                            className='color-square'
+                                            style={{ backgroundColor: getKernelColor(rootZone.proc) }}
+                                        />
+                                        {rootZone.proc} {rootZone.core.join('-')}
+                                    </div>
+                                }
+                                isOpen={false}
+                                // A large report can carry ~100k zones across these
+                                // collapsibles, and mounting them all made every NPEView
+                                // render re-diff that whole hidden host tree. Build each
+                                // section's rows only while it is open. #1803
+                                renderContent={() => <div>{getZoneElements(rootZone.zones, rootZone.core, 1)}</div>}
+                                onExpandToggle={(state) => {
+                                    onExpandStateChange(state, rootZone.proc, rootZone.core);
+                                }}
+                            />
+                        );
+                    })}
             </div>
         </div>
     );

@@ -2,43 +2,28 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import React from 'react';
-import { Icon, Tooltip } from '@blueprintjs/core';
+import { JSX } from 'react';
+import classNames from 'classnames';
+import { Classes, Icon, Intent, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
-import { Link } from 'react-router-dom';
-import {
-    ColumnHeaders,
-    MathFidelity,
-    PerfTableRow,
-    TableHeader,
-    TableKeys,
-    TypedPerfTableRow,
-} from '../definitions/PerfTable';
+import { Link } from 'react-router';
+import { BoundType, ColumnDefinition, ColumnKeys } from '../definitions/PerfTable';
+import { TypedPerfTableRow } from '../model/PerfTable';
+import { MIN_TOTAL_PERCENT } from '../definitions/PerfHeuristics';
 import { OperationDescription } from '../model/APIData';
-import { formatPercentage, formatSize, toSecondsPretty } from './math';
+import { formatMemorySize, formatPercentage, formatSize, toSecondsPretty } from './math';
 import ROUTES from '../definitions/Routes';
 import HighlightedText from '../components/HighlightedText';
-import { OpType } from '../definitions/Performance';
+import { HIGH_DISPATCH_THRESHOLD_US, OpType } from '../definitions/Performance';
 import { TypedStackedPerfRow } from '../definitions/StackedPerfTable';
 import { NormalisedPerfData } from './normalisePerformanceData';
-import { BufferTypeLabel } from '../model/BufferType';
-
-export enum CellColour {
-    White = 'white',
-    Green = 'green',
-    Red = 'red',
-    Blue = 'blue',
-    Magenta = 'magenta',
-    Cyan = 'cyan',
-    Yellow = 'yellow',
-    Orange = 'orange',
-    Grey = 'grey',
-}
-
-export interface Signpost {
-    id: number;
-    op_code: string;
-}
+import MemoryTag from '../components/MemoryTag';
+import { BufferType, BufferTypeLabel } from '../model/BufferType';
+import L1FullnessBar from '../components/performance/L1FullnessBar';
+import PerfHeuristicFlags from '../components/performance/PerfHeuristicFlags';
+import { MathFidelity } from '../definitions/MathFidelity';
+import { CellColour } from '../definitions/CellColour';
+import { isSlowDramDominant } from './perfBoundPredicates';
 
 const OPERATION_COLOURS: { [key: string]: CellColour } = {
     '(torch)': CellColour.Red,
@@ -59,65 +44,86 @@ const DEFAULT_COLOUR = CellColour.White;
 const FALLBACK_COLOUR = CellColour.Grey;
 const WARNING_COLOUR = CellColour.Yellow;
 
-const MIN_PERCENTAGE = 0.5;
-
-const NUMBER_KEYS_TO_PARSE = [
-    'device_time',
-    'op_to_op_gap',
-    'cores',
-    'total_percent',
-    'dram',
-    'dram_percent',
-    'flops',
-    'flops_percent',
+// Per-RISC kernel durations run concurrently, so the device kernel duration is gated by whichever
+// RISC runs longest. Highlight the RISC(s) on that critical path so the user can see where the
+// time goes (#1518). This is informational, not a warning — a data-movement op pinned to BRISC or
+// a matmul pinned to a compute TRISC is expected, so a neutral accent is used rather than red.
+const KERNEL_RISC_KEYS: ColumnKeys[] = [
+    ColumnKeys.BriscKernelDuration,
+    ColumnKeys.NcriscKernelDuration,
+    ColumnKeys.Trisc0KernelDuration,
+    ColumnKeys.Trisc1KernelDuration,
+    ColumnKeys.Trisc2KernelDuration,
+    ColumnKeys.EriscKernelDuration,
 ];
+// A RISC within 10% of the device kernel duration is treated as gating the op and accented. This
+// is a display heuristic, not a correctness boundary: non-critical RISCs keep the default (readable)
+// colour, so a near-miss RISC stays legible even when it isn't accented.
+const KERNEL_CRITICAL_PATH_SHARE = 0.9;
 
+// https://github.com/tenstorrent/ttnn-visualizer/issues/1267
 export const formatCell = (
     row: TypedPerfTableRow,
-    header: TableHeader,
+    column: ColumnDefinition,
     operations?: OperationDescription[],
     highlight?: string | null,
-): React.JSX.Element | string => {
-    const { key, unit, decimals } = header;
-    let formatted: string | boolean | string[];
-    let value = row[key];
+    isFirstOfOpRun: boolean = true,
+): JSX.Element | string => {
+    const { key, unit, decimals } = column;
     const isSignpost = row.op_type === OpType.SIGNPOST;
-    const isHost = isHostOp(row.raw_op_code);
+    const isHost = isHostOp(row.bound);
 
+    if (key === ColumnKeys.Flags) {
+        return <PerfHeuristicFlags row={row} />;
+    }
+
+    const value = row[key];
+    let formatted: string | boolean | string[];
+
+    if (value === null || value === '' || Number.isNaN(value)) {
+        return '';
+    }
+
+    // L1 pressure values reflect a TTNN-op snapshot; suppress repeats inside the same op group.
+    if (!isFirstOfOpRun && key === ColumnKeys.L1Fullness) {
+        return '';
+    }
+
+    // Signposts only have a few meaningful columns
     if (isSignpost) {
-        if (key !== ColumnHeaders.id && key !== ColumnHeaders.op_code) {
+        if (key !== ColumnKeys.Id && key !== ColumnKeys.OpCode) {
             return '';
         }
-
-        // Return here because we don't want to apply formatting
-        return value !== null ? String(value) : '';
     }
 
+    // Host Ops only have a few meaningful columns
     if (isHost) {
-        if (key !== ColumnHeaders.id && key !== ColumnHeaders.op_code && key !== ColumnHeaders.bound) {
+        if (key !== ColumnKeys.Id && key !== ColumnKeys.OpCode && key !== ColumnKeys.Bound) {
             return '';
         }
     }
 
-    if (key === ColumnHeaders.buffer_type) {
-        return typeof value === 'number' && Number.isInteger(value) && value in BufferTypeLabel
-            ? BufferTypeLabel[value as number]
-            : '';
+    if (key === ColumnKeys.BufferType) {
+        return <MemoryTag memory={BufferTypeLabel[value as BufferType]} />;
     }
 
-    if (key === ColumnHeaders.high_dispatch) {
-        return (
-            <Tooltip content='Op with > 6 µs dispatch latency'>
+    if (key === ColumnKeys.HighDispatch) {
+        const tooltipMessage = `Op with > ${HIGH_DISPATCH_THRESHOLD_US} µs dispatch latency`;
+
+        return row?.[ColumnKeys.DeviceTime] !== null && row?.[ColumnKeys.DeviceTime] > HIGH_DISPATCH_THRESHOLD_US ? (
+            <Tooltip content={tooltipMessage}>
                 <Icon
                     className={WARNING_COLOUR}
                     icon={IconNames.WARNING_SIGN}
-                    title='Op with > 6 µs dispatch latency'
+                    title={tooltipMessage}
                 />
             </Tooltip>
+        ) : (
+            ''
         );
     }
 
-    if (key === ColumnHeaders.OP && operations) {
+    if (key === ColumnKeys.OP && operations) {
         return (
             <Tooltip
                 content={
@@ -132,25 +138,115 @@ export const formatCell = (
         );
     }
 
-    if (NUMBER_KEYS_TO_PARSE.includes(key) && value) {
-        value = typeof value === 'string' ? parseFloat(value) : value;
+    if (key === ColumnKeys.Hash) {
+        const hashText = value?.toString() || '';
+
+        return hashText || '';
     }
 
-    if (value == null || value === '') {
-        return '';
+    if (key === ColumnKeys.CacheHit) {
+        if (typeof value !== 'boolean') {
+            return '';
+        }
+
+        // Only show icon if this is not the first occurrence of the hash
+        if (row.isFirstHashOccurrence) {
+            return '';
+        }
+
+        const tooltipMessage =
+            value === true ? (
+                <>
+                    Operation result reused from cache
+                    <br />
+                    <strong>Hash:</strong> {row[ColumnKeys.Hash]}
+                </>
+            ) : (
+                <>
+                    Operation result was recomputed
+                    <br />
+                    <strong>Hash:</strong> {row[ColumnKeys.Hash]}
+                </>
+            );
+
+        return value === true ? (
+            <Tooltip content={tooltipMessage}>
+                <Icon
+                    intent={Intent.SUCCESS}
+                    icon={IconNames.TICK}
+                />
+            </Tooltip>
+        ) : (
+            <Tooltip content={tooltipMessage}>
+                <Icon
+                    intent={Intent.WARNING}
+                    icon={IconNames.WARNING_SIGN}
+                />
+            </Tooltip>
+        );
     }
 
-    if (typeof value === 'string' && value.includes('Matmul')) {
-        // there was a logic here to do something clever with Matmul size, removing it for now
-        formatted = `${value}`;
-    } else if (typeof value === 'number') {
+    if (key === ColumnKeys.L1Fullness) {
+        if (typeof value !== 'number') {
+            return '';
+        }
+
+        const largestFreeBytes = row.l1_largest_free;
+        const freeSegments = row.l1_free_segments;
+        const tooltipBody = (
+            <>
+                <L1FullnessBar
+                    fullnessPercent={value}
+                    largestFreePercent={row.l1_largest_free_percent}
+                />
+
+                <div className='l1-fullness-attributes'>
+                    <strong>Free segments:</strong> {freeSegments ?? 'n/a'}
+                    <br />
+                    <strong>Largest free segment:</strong>{' '}
+                    {largestFreeBytes != null ? formatMemorySize(largestFreeBytes, 2) : 'n/a'}
+                    <br />
+                    <em>Excludes circular buffers</em>
+                </div>
+            </>
+        );
+
+        const formattedPercent = formatPercentage(value, decimals);
+
+        return (
+            <Tooltip
+                content={tooltipBody}
+                usePortal={false}
+            >
+                <span
+                    className={classNames(Classes.TOOLTIP_INDICATOR)}
+                    style={{ whiteSpace: 'nowrap' }}
+                >
+                    {highlight ? (
+                        <HighlightedText
+                            text={formattedPercent}
+                            filter={highlight}
+                        />
+                    ) : (
+                        formattedPercent
+                    )}
+                </span>
+            </Tooltip>
+        );
+    }
+
+    if (typeof value === 'number' && key !== ColumnKeys.Id) {
         formatted = formatSize(value, decimals);
     } else {
-        formatted = value.toString();
+        formatted = value?.toString() || '';
     }
 
     if (unit) {
-        formatted += ` ${unit}`;
+        if (unit === '%') {
+            formatted = formatPercentage(Number(value), decimals);
+        } else {
+            formatted += ` ${unit}`;
+        }
     }
 
     return getCellMarkup(formatted, getCellColour(row, key), highlight);
@@ -178,11 +274,14 @@ export const getCellMarkup = (text: string, colour?: CellColour, highlight?: str
     return <span>{text}</span>;
 };
 
-export const getCellColour = (row: TypedPerfTableRow, key: TableKeys): CellColour => {
+export const getCellColour = (row: TypedPerfTableRow, key: ColumnKeys): CellColour => {
     const keyValue = row[key];
     const percentage = row.total_percent;
 
-    if (percentage != null && percentage < MIN_PERCENTAGE) {
+    // tt-perf-report mutes ops below the threshold, except host "(torch)" ops, which it always
+    // keeps coloured (perf_report.py color_row() + is_host_op()). raw_op_code is a required string
+    // on every row type (device ops, placeholders, signposts), so reading it here is always safe.
+    if (percentage != null && percentage < MIN_TOTAL_PERCENT && !row.raw_op_code.includes('(torch)')) {
         return FALLBACK_COLOUR;
     }
 
@@ -190,61 +289,97 @@ export const getCellColour = (row: TypedPerfTableRow, key: TableKeys): CellColou
         return DEFAULT_COLOUR;
     }
 
-    if (key === ColumnHeaders.id || key === ColumnHeaders.total_percent || key === ColumnHeaders.device_time) {
+    if (
+        key === ColumnKeys.Id ||
+        key === ColumnKeys.TotalPercent ||
+        key === ColumnKeys.DeviceTime ||
+        key === ColumnKeys.DeviceKernelDuration
+    ) {
         return DEFAULT_COLOUR;
     }
 
-    if (key === ColumnHeaders.bound) {
-        if (keyValue === 'DRAM') {
+    if (key === ColumnKeys.Bound) {
+        if (keyValue === BoundType.HOST) {
+            return CellColour.Red;
+        }
+
+        if (keyValue === BoundType.FLOP) {
             return CellColour.Green;
         }
 
-        if (keyValue === 'FLOP') {
-            return CellColour.Green;
-        }
-
-        if (keyValue === 'SLOW') {
+        if (keyValue === BoundType.SLOW) {
             return CellColour.Yellow;
         }
+
+        if (keyValue === BoundType.DRAM) {
+            return CellColour.Green;
+        }
+
+        // tt-perf-report only colours the Bound cell for DRAM/FLOP/SLOW/HOST; anything else
+        // (BOTH, empty, unrecognised) stays neutral (perf_report.py color_row()).
+        return DEFAULT_COLOUR;
     }
 
     if (
-        key === ColumnHeaders.dram ||
-        key === ColumnHeaders.dram_percent ||
-        key === ColumnHeaders.flops ||
-        key === ColumnHeaders.flops_percent
+        key === ColumnKeys.Dram ||
+        key === ColumnKeys.DramPercent ||
+        key === ColumnKeys.Flops ||
+        key === ColumnKeys.FlopsPercent
     ) {
+        if (row.bound === BoundType.DRAM) {
+            if (key === ColumnKeys.Dram || key === ColumnKeys.DramPercent) {
+                return CellColour.Green;
+            }
+        }
+
+        if (row.bound === BoundType.FLOP) {
+            if (key === ColumnKeys.Flops || key === ColumnKeys.FlopsPercent) {
+                return CellColour.Green;
+            }
+        }
+
         const dramP = row.dram_percent;
         const flopsP = row.flops_percent;
 
-        if (dramP != null && flopsP != null) {
-            if (dramP > flopsP) {
-                if (key === ColumnHeaders.dram || key === ColumnHeaders.dram_percent) {
+        if (row.bound === BoundType.SLOW && dramP != null && flopsP != null) {
+            if (isSlowDramDominant(row)) {
+                if (key === ColumnKeys.Dram || key === ColumnKeys.DramPercent) {
                     return CellColour.Yellow;
                 }
-            } else if (key === ColumnHeaders.flops || key === ColumnHeaders.flops_percent) {
+            } else if (key === ColumnKeys.Flops || key === ColumnKeys.FlopsPercent) {
                 return CellColour.Yellow;
             }
         }
 
-        if (keyValue === 'HOST') {
-            return CellColour.Red;
-        }
-
         return DEFAULT_COLOUR;
     }
 
-    if (key === ColumnHeaders.cores && keyValue != null) {
+    if (key === ColumnKeys.Cores && keyValue != null) {
         return getCoreColour(keyValue);
     }
 
-    if (key === ColumnHeaders.op_code) {
+    if (key === ColumnKeys.OpCode) {
         const match = Object.keys(OPERATION_COLOURS).find((opCodeKey) => row.raw_op_code.includes(opCodeKey));
 
         return match ? OPERATION_COLOURS[match] : DEFAULT_COLOUR;
     }
 
-    if (key === ColumnHeaders.math_fidelity && typeof keyValue === 'string') {
+    if (key === ColumnKeys.Hash) {
+        // Highlight hash in red if there's a cache miss
+        if (row.cache_hit === false) {
+            return CellColour.Red;
+        }
+    }
+
+    if (key === ColumnKeys.MathFidelity && typeof keyValue === 'string') {
+        // tt-perf-report only evaluates fidelity for Matmul / OptimizedConvNew ops (perf_report.py:1055-1056).
+        const isFidelityEvaluatedOp =
+            row.raw_op_code.includes('Matmul') || row.raw_op_code.includes('OptimizedConvNew');
+
+        if (!isFidelityEvaluatedOp || keyValue === '') {
+            return DEFAULT_COLOUR;
+        }
+
         const parts = keyValue.split(' ');
         const mathFidelity = parts[0] as MathFidelity;
         const input0Datatype = row.input_0_datatype || '';
@@ -267,12 +402,32 @@ export const getCellColour = (row: TypedPerfTableRow, key: TableKeys): CellColou
         return DEFAULT_COLOUR;
     }
 
-    if (key === ColumnHeaders.op_to_op_gap && typeof keyValue === 'string') {
-        return getOpToOpGapColour(keyValue);
+    if (key === ColumnKeys.OpToOpGap) {
+        // tt-perf-report only ever colours this cell red (gap > 6.5µs); a missing gap stays neutral (perf_report.py:1052).
+        return typeof keyValue === 'number' ? getOpToOpGapColour(keyValue) : DEFAULT_COLOUR;
+    }
+
+    if (KERNEL_RISC_KEYS.includes(key)) {
+        return typeof keyValue === 'number'
+            ? getKernelRiscColour(keyValue, row.device_kernel_duration)
+            : FALLBACK_COLOUR;
     }
 
     // Shouldn't get to this point but need to return something
     return FALLBACK_COLOUR;
+};
+
+// Accent the RISC(s) on the op's critical path (≈ the device kernel duration); the rest keep the
+// default colour so the whole row stays readable. A neutral accent is used deliberately: being the
+// critical path identifies where the time goes, it does not imply the op is unhealthy.
+export const getKernelRiscColour = (riscUs: number, deviceKernelUs: number | null): CellColour => {
+    if (!deviceKernelUs || deviceKernelUs <= 0) {
+        return DEFAULT_COLOUR;
+    }
+
+    const share = riscUs / deviceKernelUs;
+
+    return share >= KERNEL_CRITICAL_PATH_SHARE ? CellColour.Blue : DEFAULT_COLOUR;
 };
 
 export const getCoreColour = (value: string | string[] | boolean | number): CellColour => {
@@ -291,10 +446,8 @@ export const getCoreColour = (value: string | string[] | boolean | number): Cell
     return DEFAULT_COLOUR;
 };
 
-export const getOpToOpGapColour = (value: string): CellColour => {
-    const parsedValue = parseFloat(value) || 0;
-
-    return parsedValue > 6.5 ? CellColour.Red : FALLBACK_COLOUR;
+export const getOpToOpGapColour = (value: number): CellColour => {
+    return value > HIGH_DISPATCH_THRESHOLD_US ? CellColour.Red : DEFAULT_COLOUR;
 };
 
 export const calcHighDispatchOps = (rows: TypedPerfTableRow[]) => {
@@ -302,7 +455,7 @@ export const calcHighDispatchOps = (rows: TypedPerfTableRow[]) => {
         .map((opData: TypedPerfTableRow, index: number): [number, TypedPerfTableRow] => [index + 1, opData])
         .filter(([_, opData]) => {
             const val = opData.op_to_op_gap;
-            return val !== null && val !== undefined && typeof val === 'number' && val > 6.5;
+            return val !== null && val !== undefined && typeof val === 'number' && val > HIGH_DISPATCH_THRESHOLD_US;
         });
 
     if (highDispatchOps.length === 0) {
@@ -313,7 +466,7 @@ export const calcHighDispatchOps = (rows: TypedPerfTableRow[]) => {
     const maxDispatchOverhead = highDispatchOps.reduce((acc, [_, opData]) => {
         const val = opData.op_to_op_gap || 0;
 
-        return acc + (val - 6);
+        return acc + (val - HIGH_DISPATCH_THRESHOLD_US);
     }, 0);
 
     // Compute total_duration as sum of device times + Op-to-Op Gaps
@@ -335,7 +488,7 @@ export const calcHighDispatchOps = (rows: TypedPerfTableRow[]) => {
     return (
         <div className='high-dispatch-advice'>
             <p>
-                Marked ops have &gt; 6 µs dispatch latency. Running with tracing could save{' '}
+                Marked ops have &gt; {HIGH_DISPATCH_THRESHOLD_US} µs dispatch latency. Running with tracing could save{' '}
                 {formatSize(maxDispatchOverhead, 0)} µs {toSecondsPretty(maxDispatchOverhead)} (
                 {formatPercentage(percentageSaved, 1)} of overall time).
             </p>
@@ -344,22 +497,39 @@ export const calcHighDispatchOps = (rows: TypedPerfTableRow[]) => {
     );
 };
 
+// Mirrors tt-perf-report evaluate_fidelity() (perf_report.py:535-556).
+const INTEGER_DATATYPES = ['UINT8', 'UINT16', 'INT32', 'UINT32'];
+const MANTISSA_BITS: Record<string, number> = {
+    FLOAT32: 23,
+    BFLOAT16: 8,
+    BFLOAT8_B: 7,
+    BFLOAT4_B: 3,
+};
+
 export function evaluateFidelity(
     input0Datatype: string,
     input1Datatype: string,
     outputDatatype: string,
     mathFidelity: MathFidelity | '',
 ): [string, string | null] {
-    const mantissaBits: Record<string, number> = {
-        FLOAT32: 23,
-        BFLOAT16: 8,
-        BFLOAT8_B: 7,
-        BFLOAT4_B: 3,
-    };
+    if ([input0Datatype, input1Datatype, outputDatatype].some((datatype) => INTEGER_DATATYPES.includes(datatype))) {
+        return [
+            'not_applicable',
+            'Fidelity evaluation is not applicable for integer datatypes (UINT8, UINT16, INT32, UINT32).',
+        ];
+    }
 
-    const in0Bits = mantissaBits[input0Datatype];
-    const in1Bits = mantissaBits[input1Datatype];
-    const outBits = mantissaBits[outputDatatype];
+    const unsupportedDatatype = [input0Datatype, input1Datatype, outputDatatype].find(
+        (datatype) => MANTISSA_BITS[datatype] === undefined,
+    );
+
+    if (unsupportedDatatype !== undefined) {
+        return ['unknown', `Datatype ${unsupportedDatatype} is not supported for fidelity evaluation.`];
+    }
+
+    const in0Bits = MANTISSA_BITS[input0Datatype];
+    const in1Bits = MANTISSA_BITS[input1Datatype];
+    const outBits = MANTISSA_BITS[outputDatatype];
 
     // I note that we're not using the second part of the returned array, only the first part.
     if (in0Bits === 8 && outBits >= 7) {
@@ -431,7 +601,7 @@ export function getAxisUpperRange(arrays: Array<unknown[]>): number {
     return Math.max(...arrays.map((arr) => arr.length), 0) + 1;
 }
 
-export const isHostOp = (op: string) => op.includes('(torch)');
+export const isHostOp = (bound: BoundType | null) => bound === BoundType.HOST;
 
 export const getStandardViewCounts = (
     data: TypedPerfTableRow[],
@@ -441,16 +611,16 @@ export const getStandardViewCounts = (
     filteredComparisonRows: TypedPerfTableRow[],
     normalisedData: NormalisedPerfData | null,
     comparisonIndex: number,
-    comparisonData?: PerfTableRow[][],
+    comparisonMaxLength?: number,
 ) => {
     const filtered = isInitialTab ? filteredData.length : filteredComparisonRows.length;
-    let total = 0;
+    let total: number;
     let delta = 0;
 
     if (normalisedData) {
         total = normalisedData.data[0]?.length || 0;
     } else {
-        total = isInitialTab ? data?.length || 0 : comparisonData?.[comparisonIndex]?.length || 0;
+        total = isInitialTab ? data?.length || 0 : comparisonMaxLength || 0;
     }
 
     if (normalisedData) {

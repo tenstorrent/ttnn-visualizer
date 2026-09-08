@@ -1,0 +1,163 @@
+# Remote Sync
+
+TT-NN Visualizer supports syncing data from remote servers via SSH. This feature downloads files from the remote server to your local machine using SSH/SFTP, allowing you to work with them as if they were generated locally.
+
+## Benefits of remote sync
+- Work with files locally after downloading for faster access
+- Ability to work offline after the initial sync
+- Full access to all file data and features
+- No additional server-side requirements
+- Ability to easily re-sync updated files
+
+## SSH Setup
+
+### How SSH key authentication works (overview)
+
+Remote sync uses SSH key-based authentication only. The app never asks for a password or passphrase in the UI, and the underlying SSH commands are run in a way that prevents the terminal from prompting you. You must set things up so that the key is usable without interaction.
+
+The pieces:
+1. Key pair – You have a private key (e.g. `~/.ssh/id_ed25519`) and a public key (e.g. `~/.ssh/id_ed25519.pub`). The private key stays on your machine; the public key is what the server trusts.
+
+2. Server – On the remote host, your public key must be in the right place: one line per key in `~/.ssh/authorized_keys` for the user you connect as.
+
+3. Identity file – The “SSH identity file” in the app is the path to your private key on your machine. If you leave it empty, SSH uses its default (e.g. `~/.ssh/id_ed25519`) and still reads `~/.ssh/config` (so Host aliases, ProxyJump, and config IdentityFile apply). If you use a different key or path, enter the path here. When you set a custom identity, the app tells SSH to use only that key (and to ignore `~/.ssh/config` for that connection) so the right key is used.
+
+4. Passphrase – If your private key has a passphrase, SSH would normally prompt for it. The app does not have a place to type that, and the SSH process has no terminal. You must unlock the key once using ssh-agent; after that, the agent provides the key and no prompt is needed:
+   ```bash
+   ssh-add ~/.ssh/id_ed25519
+   ```
+   (Use the same path as your identity file.) Enter the passphrase once; then the app (and any `ssh` that uses that agent) can use the key without prompting. If the app is started from a terminal, run `ssh-add` in that same terminal before starting the app so the agent is available.
+
+Quick checklist before using remote sync:
+- [ ] Public key is in `~/.ssh/authorized_keys` on the remote server (for the user you connect as).
+- [ ] You can log in from a terminal without a password: `ssh username@hostname` (or `ssh -i /path/to/key username@hostname` if you use a non-default key).
+- [ ] If the key has a passphrase: you’ve run `ssh-add /path/to/private_key` in an environment the app can use (e.g. the same terminal where you start the app), so the agent holds the unlocked key.
+
+### Prerequisites
+
+Important: Remote sync requires SSH key-based authentication. Password authentication is not supported.
+
+Before using remote sync, ensure that:
+
+1. Your SSH public key is in the `~/.ssh/authorized_keys` file on the remote server (for the username you use in the app).
+2. You can connect from a terminal without a password (and without a passphrase prompt if you use ssh-agent).
+3. If your key has a passphrase: the key is loaded in ssh-agent (e.g. `ssh-add /path/to/key`) in the same environment you use to start the app.
+
+To test from a terminal (use the same host and user as in the app):
+
+```bash
+ssh username@hostname
+# Or, if you use a custom key:
+ssh -i /path/to/your_private_key username@hostname
+```
+
+If you’re prompted for a password, the public key is not correctly set up on the server. If you’re prompted for a passphrase, use `ssh-add` as above.
+
+### Setting up SSH key authentication (first time)
+
+If you don’t have a key yet or haven’t set up the server:
+
+#### 1. Generate a key pair (if you don’t have one)
+```bash
+ssh-keygen -t ed25519 -C "your_email@example.com"
+```
+
+#### 2. Put your public key on the remote server
+```bash
+ssh-copy-id username@hostname
+```
+This appends your public key to `~/.ssh/authorized_keys` on the server. If you use a non-default key:
+```bash
+ssh-copy-id -i ~/.ssh/id_ed25519.pub username@hostname
+```
+
+#### 3. If the key has a passphrase: load it into ssh-agent (so the app can use it)
+```bash
+ssh-add ~/.ssh/id_ed25519
+```
+Use the path to your private key. Enter the passphrase once; after that, the agent provides the key and you won’t be prompted when using the app (as long as the app runs in an environment that has access to the same agent, e.g. started from the same terminal).
+
+#### 4. Verify from a terminal
+```bash
+ssh username@hostname
+```
+You should get a shell without being asked for a password (or passphrase, if you used ssh-add).
+
+### Why the app never prompts
+
+The app runs `ssh`/`sftp` via subprocess with no TTY and with `BatchMode=yes`, so the SSH client never prompts for a password or passphrase. If key-based auth isn’t already satisfied (e.g. key in ssh-agent), the connection fails and the app shows an error. When the user sets a custom identity file, the app also passes `-F /dev/null` for that run so SSH does not read `~/.ssh/config`; that way a catch-all `IdentityFile` in config (e.g. `Host * IdentityFile ~/.ssh/id_ed25519`) doesn’t override or conflict with the key the user chose in the UI.
+
+## Using Remote Sync
+
+To use remote sync you must first add the SSH connection details, set the remote report paths, and
+sync the individual reports you would like to use.
+
+### Add SSH Connection
+
+1. Open TT-NN Visualizer and navigate to the Reports tab.
+2. In the "Remote Sync" section, click "+ Add New Connection".
+3. Optionally choose an **SSH config host** from the dropdown (populated from your local `~/.ssh/config`; local installs only — not available when `SERVER_MODE` is enabled). This prefills the Host alias, username, and port, and names the connection after the alias if you haven’t typed a name yourself. Selecting a config host clears the identity file so OpenSSH can still apply ProxyJump, IdentityFile, and other config for that alias, and discards any earlier connection-test result, since it was run against a different target. Saved connections live in browser localStorage separately — the dropdown is only a prefiller, not a second connection list.
+4. Enter or adjust SSH connection details (hostname or Host alias, username, and report paths). The app always connects as `user@host`, so the form’s username overrides any `User` in SSH config (including `Host *`). The port is only passed explicitly when it isn’t 22: leave it at 22 and SSH config’s `Port` for the alias still applies, set anything else and it overrides. Either can differ from bare `ssh my-alias` in a terminal. Editing any field the test exercises — host, username, port, identity file, either report path, or the multihost performance setting — discards an earlier test result; renaming the connection does not.
+5. SSH identity file (optional): Path to your private key on this machine (e.g. `~/.ssh/id_ed25519` or `/Users/you/break_id_ed25519_test`). Leave empty to use SSH’s default and honour `~/.ssh/config` for the Host alias. When set, the app uses only this key and ignores `~/.ssh/config` for this connection.
+6. Passphrase: The app never prompts for a passphrase. If your key has one, run `ssh-add /path/to/your_private_key` once (in the same terminal you use to start the app, or in an environment the app can see), then start the app.
+7. Click "Test Connection". If it succeeds, click "Add connection".
+
+If authentication fails, the app will show a short message. Common causes: public key not in `~/.ssh/authorized_keys` on the server; wrong identity file path; or key has a passphrase and is not in ssh-agent (run `ssh-add` and restart the app from that environment). See [How SSH key authentication works](#how-ssh-key-authentication-works-overview) above for the full picture.
+
+Make sure you have sufficient local storage space for the files you want to sync.
+
+### Report Paths
+
+Both report paths must be **absolute** — they have to start with `/`. The paths are sent to the
+remote host quoted, so nothing on the far side expands them: a home-relative path such as
+`~/tt-metal/generated/ttnn/reports/` is taken literally, matches nothing, and would otherwise
+report an empty folder list rather than an error. Write the full path instead
+(`/home/username/tt-metal/generated/ttnn/reports/`). Paths must also be free of line breaks and
+other control characters, and no longer than 4096 characters. The dialog flags a path it would
+refuse and withholds the connection test until you fix it; a connection saved before this was
+enforced stays in the list, marked with a warning, so you can edit it.
+
+When adding the SSH connection, you must specify a _Memory report folder path_. This is either a
+folder outside of tt-metal where you have stored reports, or you can point it directly to the
+`generated` directory in `tt-metal`. If syncing directly from the generated directory, point
+it to the `generated/ttnn/reports/` directory: `/home/username/tt-metal/generated/ttnn/reports/`.
+
+You may optionally specify a _Performance report folder path_. As with memory reports, this can
+either be any folder on the remote machine where you have a sub-folders with reports you have
+stored there yourself, or you can point it at the generated directory in `tt-metal`:
+`/home/username/tt-metal/generated/profiler/reports/`.
+
+#### Multihost performance reports
+
+`tt-run --tracy` writes one report per rank, each under its own `rank<N>` directory, so the
+reports are one level deeper than a single-host run puts them. To pick these up, tick
+_Search per-rank subdirectories_ under _Remote Performance Report Folder Path_, and point that
+path at the folder that directly contains the rank directories, for example
+`/home/username/tt-metal/generated/profiler/ttrun/`. Reports are then discovered at
+`ttrun/rank<N>/reports/<report>`, and the dropdown lists them by rank.
+
+The setting selects between the two layouts rather than widening the search: while it is on, only
+`rank<N>/reports/<report>` is looked at, so single-host reports sitting directly under the same
+path are not listed. Toggling it clears the cached folder list for that connection, since the
+paths it holds belong to the other layout.
+
+Every rank names its report after its own start time to the second, so ranks of the same launch
+routinely produce the same report name. Synced copies therefore get their rank appended
+(`<report>_rank0`) to keep them from overwriting each other locally. The suffix is built from the
+rank number rather than copied from the remote directory, so `rank0/`, `Rank0/` and `rank00/` all
+sync into the one local folder instead of three. That naming applies only to
+performance reports of a connection with this setting on — memory reports and single-host
+connections keep the names they already sync under, including a connection pointed straight at
+one rank's `reports/` directory.
+
+
+### Sync Folders
+
+After saving the SSH connection details, you must fetch the list of remote folders. Any memory
+and performance reports that were found at the provided report paths will appear in the respective
+dropdowns. Choose which report you would like to sync, and press the sync button beside the
+dropdown to perform the sync.
+
+### Troubleshooting
+
+See our [troubleshooting](./troubleshooting.md) section for some known issues and solutions.

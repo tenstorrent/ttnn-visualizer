@@ -2,18 +2,20 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import React, { CSSProperties, useMemo, useState } from 'react';
-import Plot from 'react-plotly.js';
+import { CSSProperties, useMemo, useState } from 'react';
 import { Config, Layout, PlotData, Shape } from 'plotly.js';
 import { useAtomValue } from 'jotai';
-import { PlotConfiguration, PlotMarker, PlotMouseEventCustom } from '../../definitions/PlotConfigurations';
+import Plot from '../../libs/PlotComponent';
+import { PlotConfiguration, PlotMarker } from '../../definitions/PlotConfigurations';
+import { PlotMouseEventCustom } from '../../model/PlotData';
 import { selectedAddressAtom, showHexAtom } from '../../store/app';
 import { getDimmedColour, getLightlyDimmedColour } from '../../functions/colour';
+import { getMemoryAddress } from '../../functions/math';
 
 export interface MemoryPlotRendererProps {
     chartDataList: Partial<PlotData>[][];
     isZoomedIn: boolean;
-    memorySize: number;
+    memoryZoomEnd: number;
     title?: string;
     onBufferClick?: (event: Readonly<PlotMouseEventCustom>) => void;
     plotZoomRange?: [start: number, end: number];
@@ -23,10 +25,10 @@ export interface MemoryPlotRendererProps {
     markers?: PlotMarker[];
 }
 
-const MemoryPlotRenderer: React.FC<MemoryPlotRendererProps> = ({
+const MemoryPlotRenderer = ({
     chartDataList,
     isZoomedIn,
-    memorySize,
+    memoryZoomEnd,
     className = '',
     title,
     onBufferClick,
@@ -34,16 +36,15 @@ const MemoryPlotRenderer: React.FC<MemoryPlotRendererProps> = ({
     configuration,
     style,
     markers,
-}) => {
+}: MemoryPlotRendererProps) => {
     const showHex = useAtomValue(showHexAtom);
     const chartData = useMemo(() => chartDataList.flat(), [chartDataList]);
 
     const selectedAddress = useAtomValue(selectedAddressAtom);
     const [hoveredPoint, setHoveredPoint] = useState<number | null>(null);
 
-    const [augmentedChart, setAugmentedChart] = useState<Partial<PlotData>[]>(structuredClone(chartData));
-
-    const range = isZoomedIn ? plotZoomRange : [0, memorySize];
+    const range = isZoomedIn ? plotZoomRange : [0, memoryZoomEnd];
+    // If we need more flexibility on the tickformat front, we can expand this to accept a prop instead of defaulting to the below (hex or decimal)
     const tickFormat = showHex ? { tickformat: 'x', tickprefix: '0x' } : { tickformat: 'd' };
 
     const markerLines: Partial<Shape>[] =
@@ -128,40 +129,40 @@ const MemoryPlotRenderer: React.FC<MemoryPlotRendererProps> = ({
         responsive: true,
     };
 
-    useMemo(() => {
-        setAugmentedChart(
-            // creating a deep clone of the chart data to avoid mutating the original data
-            (JSON.parse(JSON.stringify(chartData)) as Partial<PlotData>[]).map((data, index) => {
-                if (!data?.marker?.color || !data?.x || !chartData?.[index]?.marker) {
-                    return data;
-                }
+    const augmentedChart = useMemo<Partial<PlotData>[]>(() => {
+        // creating a deep clone of the chart data to avoid mutating the original data
+        return (JSON.parse(JSON.stringify(chartData)) as Partial<PlotData>[]).map((data, index) => {
+            if (!data?.marker?.color || !data?.x || !chartData?.[index]?.marker) {
+                return data;
+            }
 
-                const originalColour = chartData[index].marker?.color as string;
-                const lightlyDimmedColour = getLightlyDimmedColour(originalColour);
-                const dimmedColour = getDimmedColour(originalColour);
+            const originalColour = chartData[index].marker?.color as string;
+            const lightlyDimmedColour = getLightlyDimmedColour(originalColour);
+            const dimmedColour = getDimmedColour(originalColour);
 
-                if (selectedAddress) {
-                    data.marker.color =
-                        hoveredPoint === data.x[0] || data.hovertemplate?.includes(selectedAddress.toString())
-                            ? originalColour
-                            : dimmedColour;
+            if (selectedAddress !== null) {
+                const formattedAddress = getMemoryAddress(selectedAddress, showHex);
 
-                    return data;
-                }
-
-                // No selected address (but could be hovered)
-                if (hoveredPoint) {
-                    data.marker.color = hoveredPoint === data.x[0] ? originalColour : lightlyDimmedColour;
-
-                    return data;
-                }
-
-                data.marker.color = lightlyDimmedColour;
+                data.marker.color =
+                    hoveredPoint === data.x[0] || data.hovertemplate?.includes(formattedAddress)
+                        ? originalColour
+                        : dimmedColour;
 
                 return data;
-            }),
-        );
-    }, [hoveredPoint, chartData, selectedAddress]);
+            }
+
+            // No selected address (but could be hovered)
+            if (hoveredPoint) {
+                data.marker.color = hoveredPoint === data.x[0] ? originalColour : lightlyDimmedColour;
+
+                return data;
+            }
+
+            data.marker.color = lightlyDimmedColour;
+
+            return data;
+        });
+    }, [hoveredPoint, chartData, selectedAddress, showHex]);
 
     return (
         <div
@@ -175,8 +176,8 @@ const MemoryPlotRenderer: React.FC<MemoryPlotRendererProps> = ({
                 data={augmentedChart}
                 layout={layout}
                 config={config}
-                // @ts-expect-error PlotMouseEventCustom extends PlotMouseEvent and will be fine
                 onClick={onBufferClick}
+                // @ts-expect-error PlotMouseEventCustom extends PlotMouseEvent and will be fine
                 onHover={(data) => setHoveredPoint(data.points[0].x as number)}
                 onUnhover={() => setHoveredPoint(null)}
                 useResizeHandler

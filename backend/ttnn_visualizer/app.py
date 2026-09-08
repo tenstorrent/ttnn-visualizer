@@ -3,33 +3,142 @@
 # SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import argparse
+import getpass
 import json
 import logging
 import os
+import socket
 import subprocess
 import sys
 import threading
+import time
 import webbrowser
+from http import HTTPStatus
 from os import environ
 from pathlib import Path
-from typing import cast
+from typing import Any, Mapping
+from urllib.error import URLError
+from urllib.request import urlopen
 
 import flask
 from dotenv import load_dotenv
 from flask import Flask, abort, jsonify
 from flask_cors import CORS
+from ttnn_visualizer.database_migrations import run_alembic_migrations
+from ttnn_visualizer.event_logging import (
+    RUN_ID_ENV_VAR,
+    compact_if_needed,
+    describe_opt_out,
+    describe_unrecognised_recording_disabled_value,
+    ensure_event_log_id,
+    get_event_log_path,
+    get_event_log_root,
+    get_recording_disabled_reason,
+    get_unrecognised_recording_disabled_value,
+    is_recording_enabled,
+    record_app_start,
+    start_run,
+)
 from ttnn_visualizer.exceptions import (
     DatabaseFileNotFoundException,
     InvalidProfilerPath,
     InvalidReportPath,
+    InvalidRequestPayload,
+    ReportNotLoadedException,
 )
 from ttnn_visualizer.instances import create_instance_from_local_paths
-from ttnn_visualizer.settings import Config, DefaultConfig
-from ttnn_visualizer.utils import create_path_resolver
+from ttnn_visualizer.settings import (
+    DEFAULT_SECRET_KEY,
+    MIN_HOSTED_SECRET_KEY_BYTES,
+    Config,
+    DefaultConfig,
+    build_socketio_origin_check,
+)
+from ttnn_visualizer.utils import (
+    find_gunicorn_path,
+    is_flag_enabled,
+    migrate_old_data_directory,
+    str_to_bool,
+)
 from werkzeug.debug import DebuggedApplication
+from werkzeug.exceptions import HTTPException
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 logger = logging.getLogger(__name__)
+SENSITIVE_CONFIG_KEYS = frozenset({"SECRET_KEY"})
+
+
+def _get_client_username(server_mode: bool) -> str | None:
+    if server_mode:
+        return None
+
+    try:
+        return getpass.getuser()
+    except Exception as error:
+        logger.warning(
+            "Unable to determine local username for client config: %s", error
+        )
+        return None
+
+
+def _build_spa_client_config(app: Flask) -> dict:
+    """Shape of ``window.TTNN_VISUALIZER_CONFIG`` injected into the SPA shell."""
+    server_mode = app.config["SERVER_MODE"]
+    js_config = {
+        "SERVER_MODE": server_mode,
+        "BASE_PATH": app.config["BASE_PATH"],
+        "TT_METAL_HOME": app.config["TT_METAL_HOME"],
+        "REPORT_DATA_DIRECTORY": str(app.config["REPORT_DATA_DIRECTORY"]),
+        "USERNAME": _get_client_username(server_mode),
+        # Recomputed rather than read from ``app.config``: ``from_object`` resolves the
+        # ``_EventLoggingActive`` descriptor before ``settings_override`` is applied,
+        # so the snapshot may check the wrong posture's root-level disabled marker.
+        # Published under both postures, unlike the local-only metadata below — a missing
+        # key would be indistinguishable from a disabled switch, and the client needs to
+        # tell those apart to decide whether to post at all.
+        "USAGE_RECORDING_ACTIVE": is_recording_enabled(server_mode),
+    }
+
+    # SSH dialog defaults are local-dev convenience only. Never publish
+    # operator-configured paths/ports under SERVER_MODE (same posture as USERNAME).
+    if not server_mode:
+        js_config["SSH_DEFAULT_PORT"] = app.config["SSH_DEFAULT_PORT"]
+        js_config["SSH_DEFAULT_PROFILER_PATH"] = app.config["SSH_DEFAULT_PROFILER_PATH"]
+        js_config["SSH_DEFAULT_PERFORMANCE_PATH"] = app.config[
+            "SSH_DEFAULT_PERFORMANCE_PATH"
+        ]
+
+    return js_config
+
+
+def _serialize_spa_js_config(js_config: dict) -> str:
+    """Embed client config in a ``<script>`` tag without ``</script>`` breakout."""
+    payload = json.dumps(js_config).replace("<", "\\u003c")
+    return f"window.TTNN_VISUALIZER_CONFIG = {payload};"
+
+
+def _validate_hosted_secret_key(config: Mapping[str, Any]) -> None:
+    if not is_flag_enabled(config.get("SERVER_MODE", False)):
+        return
+
+    secret_key = config.get("SECRET_KEY")
+    encoded = (
+        secret_key
+        if isinstance(secret_key, bytes)
+        else str(secret_key or "").encode("utf-8")
+    )
+    if secret_key == DEFAULT_SECRET_KEY or len(encoded) < MIN_HOSTED_SECRET_KEY_BYTES:
+        raise RuntimeError(
+            "SERVER_MODE requires SECRET_KEY to contain at least "
+            f"{MIN_HOSTED_SECRET_KEY_BYTES} bytes and not use the development default"
+        )
+
+
+def _print_environment(config: DefaultConfig) -> None:
+    print("\nENVIRONMENT:")
+    for key, value in config.to_dict().items():
+        rendered_value = "***REDACTED***" if key in SENSITIVE_CONFIG_KEYS else value
+        print(f"{key}={rendered_value}")
 
 
 def create_app(settings_override=None):
@@ -46,22 +155,35 @@ def create_app(settings_override=None):
     if dotenv_path.exists():
         load_dotenv(str(dotenv_path))
 
+    debug_logging = str_to_bool(os.environ.get("DEBUG", "false"))
+    log_level = logging.DEBUG if debug_logging else logging.INFO
+    root_logger = logging.getLogger()
+    root_logger.setLevel(log_level)
+    for handler in root_logger.handlers:
+        handler.setLevel(log_level)
+    if not root_logger.handlers:
+        logging.basicConfig(level=log_level)
+
     flask_env = environ.get("FLASK_ENV", "development")
 
-    config = cast(DefaultConfig, Config())
+    config = Config()
 
     app = Flask(
         __name__,
         static_folder=config.STATIC_ASSETS_DIR,
         static_url_path=f"{config.BASE_PATH}static",
     )
-    logging.basicConfig(level=app.config.get("LOG_LEVEL", "INFO"))
 
     app.config.from_object(config)
 
     if settings_override:
         app.config.update(settings_override)
 
+    # Hosted session IDs identify the event log, so browsers must never send them over
+    # an unencrypted connection. ``settings_override`` bypasses Config's recomputation.
+    app.config["SESSION_COOKIE_SECURE"] = is_flag_enabled(app.config["SERVER_MODE"])
+
+    _validate_hosted_secret_key(app.config)
     middleware(app)
 
     app.register_blueprint(api, url_prefix=f"{app.config['BASE_PATH']}api")
@@ -70,19 +192,28 @@ def create_app(settings_override=None):
 
     if flask_env == "production":
 
+        @app.route(f"{app.config['BASE_PATH']}robots.txt")
+        def robots_txt():
+            """Serve a permissive robots.txt so analyzers don't get SPA HTML."""
+            body = "User-agent: *\nAllow: /\n"
+            return flask.Response(
+                body,
+                mimetype="text/plain",
+                headers={"Cache-Control": "public, max-age=86400"},
+            )
+
         @app.route(f"{app.config['BASE_PATH']}", defaults={"path": ""})
         @app.route(f"{app.config['BASE_PATH']}<path:path>")
         def catch_all(path):
             if path.startswith("static/"):
                 abort(404)  # Pass control to Flask's static view
 
-            js_config = {
-                "SERVER_MODE": app.config["SERVER_MODE"],
-                "BASE_PATH": app.config["BASE_PATH"],
-                "TT_METAL_HOME": app.config["TT_METAL_HOME"],
-                "REPORT_DATA_DIRECTORY": str(app.config["REPORT_DATA_DIRECTORY"]),
-            }
-            js = f"window.TTNN_VISUALIZER_CONFIG = {json.dumps(js_config)};"
+            if is_flag_enabled(app.config["SERVER_MODE"]) and is_recording_enabled(
+                server_mode=True
+            ):
+                ensure_event_log_id()
+
+            js = _serialize_spa_js_config(_build_spa_client_config(app))
 
             with open(os.path.join(app.static_folder, "index.html")) as f:
                 html = f.read()
@@ -115,22 +246,27 @@ def extensions(app: flask.Flask):
     :param app: Flask application instance
     :return: None
     """
-
     flask_static_digest.init_app(app)
     if app.config["USE_WEBSOCKETS"]:
-        socketio.init_app(app)
+        socketio.init_app(
+            app,
+            cors_allowed_origins=build_socketio_origin_check(
+                app.config["ALLOWED_ORIGINS"],
+                bind_host=app.config["HOST"],
+            ),
+        )
+
+    # Create app data and report directories
+    Path(app.config["APP_DATA_DIRECTORY"]).mkdir(parents=True, exist_ok=True)
+    Path(app.config["LOCAL_DATA_DIRECTORY"]).mkdir(parents=True, exist_ok=True)
+    Path(app.config["REMOTE_DATA_DIRECTORY"]).mkdir(parents=True, exist_ok=True)
     db.init_app(app)
 
     if app.config["USE_WEBSOCKETS"]:
         register_handlers(socketio)
 
-    # Create the tables within the application context
     with app.app_context():
-        db.create_all()
-
-    # For automatically reflecting table data
-    # with app.app_context():
-    #    db.reflect()
+        run_alembic_migrations(app.config["SQLALCHEMY_DATABASE_URI"])
 
     return None
 
@@ -144,16 +280,43 @@ def middleware(app: flask.Flask):
     """
 
     @app.errorhandler(DatabaseFileNotFoundException)
-    def handle_database_not_found_error(error):
-        # Return a JSON response with a 404 status code
+    @app.errorhandler(ReportNotLoadedException)
+    def handle_report_not_available(error):
         response = jsonify({"error": str(error)})
-        response.status_code = 404
+        response.status_code = HTTPStatus.NOT_FOUND
         return response
+
+    @app.errorhandler(InvalidRequestPayload)
+    def handle_invalid_request_payload(error: InvalidRequestPayload):
+        return jsonify({"error": str(error)}), HTTPStatus.BAD_REQUEST
+
+    @app.errorhandler(HTTPException)
+    def handle_http_error(error: HTTPException):
+        message = error.description or error.name or "Request failed"
+        return (
+            jsonify({"error": message}),
+            error.code or HTTPStatus.INTERNAL_SERVER_ERROR,
+        )
+
+    # Preserve the interactive traceback in debug mode.
+    if not app.debug:
+
+        @app.errorhandler(Exception)
+        def handle_unexpected_error(error: Exception):
+            logger.exception("Unhandled server error", exc_info=error)
+            return (
+                jsonify({"error": "Internal server error"}),
+                HTTPStatus.INTERNAL_SERVER_ERROR,
+            )
 
     # Only use the middleware if running in pure WSGI (HTTP requests)
     if not app.config.get("USE_WEBSOCKETS"):
-        # Enable the Flask interactive debugger in the browser for development.
-        if app.debug:
+        # Enable the Flask interactive debugger in the browser for development. The
+        # console evaluates arbitrary Python for whoever reaches it, so it is gated on
+        # the posture as well as on debug mode: the config layer already refuses that
+        # combination, but ``settings_override`` reaches this point without passing
+        # through it.
+        if app.debug and not app.config.get("SERVER_MODE"):
             app.wsgi_app = DebuggedApplication(app.wsgi_app, evalex=True)
 
         # Set the real IP address into request.remote_addr when behind a proxy.
@@ -162,10 +325,7 @@ def middleware(app: flask.Flask):
     # CORS configuration
     origins = app.config["ALLOWED_ORIGINS"]
 
-    CORS(
-        app,
-        origins=origins,
-    )
+    CORS(app, origins=origins)
 
     return None
 
@@ -175,14 +335,53 @@ def open_browser(host, port, instance_id=None):
     if instance_id:
         url = f"{url}?instanceId={instance_id}"
 
-    print(f"Launching browser with url: {url}")
+    max_attempts = 10
+    attempt = 0
+    app_ready = False
+
+    print(f"Waiting for application to be ready at {url}...")
+    while attempt < max_attempts and not app_ready:
+        try:
+            urlopen(url, timeout=1)
+            app_ready = True
+        except (URLError, ConnectionError, OSError):
+            attempt += 1
+            logger.warning(f"Retrying {url}...")
+            time.sleep(0.5)
+
+    if not app_ready:
+        print(
+            f"❌ Application not ready after {max_attempts} attempts - is the front end running?"
+        )
+    else:
+        print(f"Launching browser with url: {url}")
+
+        try:
+            if (
+                os.name == "posix" and "DISPLAY" in os.environ
+            ):  # Checks for non-headless
+                subprocess.run(["xdg-open", url], check=True)
+            else:
+                webbrowser.open(url)
+        except webbrowser.Error as e:
+            print(f"Could not open the default browser: {e}")
+
+
+def check_socket_bind(host: str, port) -> tuple[bool, str | None]:
+    """
+    Try to bind to (host, port). Returns (True, None) if bind succeeds,
+    (False, error_message) if it fails (e.g. address already in use).
+    The socket is closed before returning so the port can be used by gunicorn.
+    """
+    port_int = int(port)
     try:
-        if os.name == "posix" and "DISPLAY" in os.environ:  # Checks for non-headless
-            subprocess.run(["xdg-open", url], check=True)
-        else:
-            webbrowser.open(url)
-    except webbrowser.Error as e:
-        print(f"Could not open the default browser: {e}")
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        sock.bind((host, port_int))
+        sock.close()
+        return True, None
+    except OSError as e:
+        return False, str(e)
 
 
 def parse_args():
@@ -198,7 +397,165 @@ def parse_args():
     parser.add_argument(
         "--tt-metal-home", help="Specify a TT-Metal home path", default=None
     )
+    parser.add_argument(
+        "--host",
+        type=str,
+        help="Host to bind to (default: auto-detected based on environment)",
+        default=None,
+    )
+    parser.add_argument(
+        "--port",
+        type=str,
+        help="Port to bind to (default: 8000)",
+        default=None,
+    )
+    parser.add_argument(
+        "--server",
+        action="store_true",
+        help="Bind to all network interfaces (0.0.0.0) and enable server mode. Useful for servers and VMs",
+    )
+    parser.add_argument(
+        "-d",
+        "--daemon",
+        action="store_true",
+        help="Run the server as a daemon process",
+    )
     return parser.parse_args()
+
+
+def display_mode_info_without_db(config):
+    """Display mode information using only config, without initializing database."""
+    # Determine if we're in TT-Metal mode
+    tt_metal_home = config.TT_METAL_HOME
+    is_tt_metal_mode = tt_metal_home is not None
+
+    if is_tt_metal_mode:
+        print("🚀 TT-METAL MODE: Working directly with tt-metal generated directory")
+        print(f"   TT_METAL_HOME: {tt_metal_home}")
+
+        profiler_base = Path(tt_metal_home) / "generated" / "ttnn" / "reports"
+        performance_base = Path(tt_metal_home) / "generated" / "profiler" / "reports"
+
+        print(f"   Profiler reports: {profiler_base}")
+        print(f"   Performance reports: {performance_base}")
+
+        # Validate setup
+        if not Path(tt_metal_home).exists():
+            print(
+                f"   ⚠️  Warning: TT_METAL_HOME directory does not exist: {tt_metal_home}"
+            )
+        elif not (Path(tt_metal_home) / "generated").exists():
+            print(f"   ⚠️  Warning: TT-Metal generated directory not found")
+        elif not profiler_base.exists():
+            print(
+                f"   ⚠️  Warning: Profiler reports directory not found: {profiler_base}"
+            )
+        elif not performance_base.exists():
+            print(
+                f"   ⚠️  Warning: Performance reports directory not found: {performance_base}"
+            )
+        else:
+            print(f"   ✓ TT-Metal setup is valid")
+    else:
+        print(
+            "📁 UPLOAD/SYNC MODE: Using local data directory for uploaded/synced reports"
+        )
+        print(f"   Local directory: {config.LOCAL_DATA_DIRECTORY}")
+        print(f"   Remote directory: {config.REMOTE_DATA_DIRECTORY}")
+
+
+def _record_launch(config):
+    """Record a local launch or report hosted recording status.
+
+    Split out of ``main()`` because ``main()`` binds a socket and spawns gunicorn and
+    so cannot be called from a test, which would leave the wiring — the part that
+    fails open — unpinned.
+    """
+    # Exported unconditionally so every gunicorn worker this launch spawns shares one
+    # identifier, even if recording is switched on part-way through the session.
+    os.environ[RUN_ID_ENV_VAR] = start_run()
+
+    server_mode = is_flag_enabled(config.SERVER_MODE)
+    disabled_reason = get_recording_disabled_reason(server_mode)
+    if disabled_reason is not None:
+        unrecognised_value = get_unrecognised_recording_disabled_value()
+        if unrecognised_value is not None:
+            print(
+                f"⚠️  {describe_unrecognised_recording_disabled_value(unrecognised_value)}"
+            )
+
+        print(f"📊 Event logging is DISABLED: {disabled_reason}.")
+        return
+
+    if server_mode:
+        print(
+            f"📊 Recording hosted events by browser session under "
+            f"{get_event_log_root(server_mode=True)}.\n"
+            f"   Session identifiers remain in file paths and are not exported.\n"
+            f"   {describe_opt_out(server_mode=True)}"
+        )
+        return
+
+    compact_if_needed()
+    record_app_start(config, server_mode=server_mode)
+
+    # `print` rather than `logger.info`: nothing has configured logging at this point
+    # in `main()` — `create_app()` does that — and the last-resort handler drops
+    # anything below WARNING, so an info line here would never be seen.
+    print(
+        f"📊 Recording events locally to {get_event_log_path()}.\n"
+        f"   Written on this machine only; the application transmits nothing.\n"
+        f"   {describe_opt_out()}"
+    )
+
+
+def _apply_cli_env_overrides(args: argparse.Namespace) -> None:
+    """Write ``--host`` / ``--server`` / ``--port`` into the environment.
+
+    Must run before ``Config()`` so ``override_with_env_variables`` sees the values.
+    Workers inherit the mutated environment as a fresh import; the launching process
+    relies on the override loop reaching inherited settings.
+    """
+    # Set independently of ``--host``: ``--server`` is documented as enabling server
+    # mode, and the two flags together are the shape that matters — naming an interface
+    # explicitly still binds a reachable socket, so letting ``--host`` suppress this
+    # would leave every ``@local_only`` endpoint open on it.
+    if args.server:
+        os.environ["SERVER_MODE"] = "true"
+        print("🖥️  Server mode enabled")
+
+    if args.host:
+        os.environ["HOST"] = args.host
+        print(f"🌐 Binding to host: {args.host} (from --host flag)")
+    elif args.server:
+        os.environ["HOST"] = "0.0.0.0"
+        print("🌐 Binding to all interfaces (0.0.0.0) via --server flag")
+
+    if args.port:
+        os.environ["PORT"] = args.port
+        print(f"🔌 Binding to port: {args.port}")
+
+
+def _config_after_cli_env(args: argparse.Namespace) -> DefaultConfig:
+    """Apply CLI env mutations and return the config singleton.
+
+    Split out of ``main()`` so ``--server`` / ``--host`` / ``--port`` can be asserted
+    without binding a socket or spawning gunicorn. Relies on the override loop — no
+    hand-patches of ``HOST`` / ``SERVER_MODE`` / ``PORT``.
+
+    That only works while this is the first construction: ``Config`` is a singleton, so
+    an instance built during import would make the writes above silently ineffective and
+    ``--server`` would yield ``SERVER_MODE=False`` with no error. The assert makes a
+    future import-time ``Config()`` fail loudly instead, which is the guarantee the
+    hand-patches used to paper over.
+    """
+    assert Config._instance is None, (
+        "Config was constructed before the CLI flags were applied; "
+        "--server / --host / --port would be ignored."
+    )
+
+    _apply_cli_env_overrides(args)
+    return Config()
 
 
 def main():
@@ -207,64 +564,85 @@ def main():
     if run_command[-1] == "ttnn-visualizer":
         os.environ.setdefault("FLASK_ENV", "production")
 
-    config = cast(DefaultConfig, Config())
     args = parse_args()
+
+    # Priority: CLI args > env vars > auto-detection (in settings.py)
+    config = _config_after_cli_env(args)
+    _validate_hosted_secret_key(config.to_dict())
+
     instance_id = None
 
+    # Display mode information first (using config only, no DB needed)
+    if args.tt_metal_home:
+        os.environ["TT_METAL_HOME"] = args.tt_metal_home
+        config.TT_METAL_HOME = args.tt_metal_home
+        # The whole path tree hangs off this root, so rebuild it in one place rather
+        # than open-coding the cascade here — the hand-rolled version reached
+        # ``APP_DATA_DIRECTORY`` and the DB URI but left ``REPORT_DATA_DIRECTORY`` and
+        # the local/remote directories on the value derived at import.
+        config.recompute_derived_settings()
+
+    # Check for and migrate old data from site-packages if needed
+    # Only migrate if environment variables are not explicitly set
+    if not os.getenv("APP_DATA_DIRECTORY") and not os.getenv("REPORT_DATA_DIRECTORY"):
+        # Calculate what the old directories would have been (in site-packages)
+        old_app_data_dir = config.APPLICATION_DIR
+        old_report_data_dir = str(
+            Path(config.APPLICATION_DIR).joinpath("ttnn_visualizer", "data")
+        )
+
+        # Get new directories (already calculated in config)
+        new_app_data_dir = config.APP_DATA_DIRECTORY
+        new_report_data_dir = config.REPORT_DATA_DIRECTORY
+
+        # Only migrate if we're not in TT-Metal mode (migration doesn't apply there)
+        if not config.TT_METAL_HOME:
+            migrate_old_data_directory(
+                old_app_data_dir,
+                old_report_data_dir,
+                new_app_data_dir,
+                new_report_data_dir,
+                config.DB_VERSION,
+            )
+
+    display_mode_info_without_db(config)
+
+    # If profiler/performance paths are provided, create an instance
+    # This requires DB access, so we create the app temporarily
     if args.profiler_path or args.performance_path:
         app = create_app()
-        app.app_context().push()
-        try:
-            session = create_instance_from_local_paths(
-                profiler_path=args.profiler_path,
-                performance_path=args.performance_path,
-            )
-        except InvalidReportPath:
-            sys.exit("Invalid report path")
-        except InvalidProfilerPath:
-            sys.exit("Invalid profiler path")
+        with app.app_context():
+            try:
+                session = create_instance_from_local_paths(
+                    profiler_path=args.profiler_path,
+                    performance_path=args.performance_path,
+                )
+                instance_id = session.instance_id
+            except InvalidReportPath:
+                sys.exit(f"❌ Invalid profiler path: {args.profiler_path}")
+            except InvalidProfilerPath:
+                sys.exit(f"❌ Invalid performance path: {args.performance_path}")
 
-        instance_id = session.instance_id
+        # Clean up this temporary app - workers will create their own
+        del app
 
-    if args.tt_metal_home:
-        config.TT_METAL_HOME = args.tt_metal_home
-
-    # Display mode information
-    app = create_app()
-    with app.app_context():
-        resolver = create_path_resolver(app)
-        mode_info = resolver.get_mode_info()
-
-        if mode_info["mode"] == "tt_metal":
-            print(
-                "🚀 TT-METAL MODE: Working directly with tt-metal generated directory"
-            )
-            print(f"   TT_METAL_HOME: {mode_info['tt_metal_home']}")
-            print(f"   Profiler reports: {mode_info['profiler_base']}")
-            print(f"   Performance reports: {mode_info['performance_base']}")
-
-            # Validate setup
-            is_valid, message = resolver.validate_tt_metal_setup()
-            if is_valid:
-                print(f"   ✓ {message}")
-            else:
-                print(f"   ⚠️  Warning: {message}")
-        else:
-            print(
-                "📁 UPLOAD/SYNC MODE: Using local data directory for uploaded/synced reports"
-            )
-            print(f"   Local directory: {mode_info['local_dir']}")
-            print(f"   Remote directory: {mode_info['remote_dir']}")
-
-    # Check if DEBUG environment variable is set
-    debug_mode = os.environ.get("DEBUG", "false").lower() == "true"
+    debug_mode = str_to_bool(os.environ.get("DEBUG", "false"))
     if config.PRINT_ENV:
-        print("\nENVIRONMENT:")
-        for key, value in config.to_dict().items():
-            print(f"{key}={value}")
+        _print_environment(config)
+
+    # Warn if there's a gunicorn config file in current directory
+    if Path("gunicorn.conf.py").exists():
+        logger.warning(
+            "Found gunicorn.conf.py in current directory - this may override environment settings"
+        )
+
+    gunicorn_cmd, gunicorn_warning = find_gunicorn_path()
+
+    if gunicorn_warning:
+        print(gunicorn_warning)
 
     gunicorn_args = [
-        "gunicorn",
+        gunicorn_cmd,
         "-t",
         config.GUNICORN_TIMEOUT,
         "-k",
@@ -279,13 +657,42 @@ def main():
     if debug_mode:
         gunicorn_args.insert(1, "--reload")
 
-    if config.LAUNCH_BROWSER_ON_START:
+    if args.daemon:
+        gunicorn_args.insert(1, "--daemon")
+
+    # When not daemon, check that we can bind before starting gunicorn (and possibly
+    # the browser). If we can't bind, exit with a clear message and do not open browser.
+    if not args.daemon:
+        can_bind, bind_error = check_socket_bind(config.HOST, config.PORT)
+        if not can_bind:
+            print(
+                "Could not bind to the requested address. The port may already be in use.\n"
+                "Try a different port with --port or a different host with --host (e.g. "
+                "--port 8001 or --host 127.0.0.1)."
+            )
+            if bind_error:
+                print(f"Details: {bind_error}")
+            sys.exit(1)
+
+    if config.LAUNCH_BROWSER_ON_START and not args.daemon:
         flask_env = os.getenv("FLASK_ENV", "development")
         port = config.PORT if flask_env == "production" else config.DEV_SERVER_PORT
         host = config.HOST if flask_env == "production" else config.DEV_SERVER_HOST
-        threading.Timer(2, open_browser, [host, port, instance_id]).start()
+        threading.Thread(target=open_browser, args=[host, port, instance_id]).start()
+
+    # Upgrade the app database before binding workers (idempotent; workers also
+    # upgrade via create_app when using multi-worker mode).
+    run_alembic_migrations(config.SQLALCHEMY_DATABASE_URI)
+
+    # Deliberately last: every exit above (an invalid report path, a port already in
+    # use) ends a launch that never served a request, and counting those would
+    # inflate the figure with exactly the sessions where nobody used the tool.
+    _record_launch(config)
+
     try:
-        subprocess.run(gunicorn_args)
+        result = subprocess.run(gunicorn_args)
+        if result.returncode != 0:
+            sys.exit(result.returncode)
     except KeyboardInterrupt:
         print("\nServer stopped by user (Ctrl+C)")
 

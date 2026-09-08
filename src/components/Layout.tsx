@@ -2,32 +2,24 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { Link, useLocation } from 'react-router-dom';
-import { Classes, PopoverPosition } from '@blueprintjs/core';
-import { Helmet } from 'react-helmet-async';
-import { useAtom, useSetAtom } from 'jotai';
-import { ToastContainer, cssTransition } from 'react-toastify';
-import 'react-toastify/dist/ReactToastify.min.css';
-import 'styles/components/ToastOverrides.scss';
 import { useEffect } from 'react';
-import {
-    activeNpeOpTraceAtom,
-    activePerformanceReportAtom,
-    activeProfilerReportAtom,
-    performanceReportLocationAtom,
-    profilerReportLocationAtom,
-} from '../store/app';
-import MainNavigation from './MainNavigation';
-import { useInstance, useReportFolderList } from '../hooks/useAPI';
+import { useLocation } from 'react-router';
+import { Helmet } from 'react-helmet-async';
+import { Theme, ToastContainer, ToastPosition, cssTransition } from 'react-toastify';
+import 'styles/components/ToastOverrides.scss';
+
+import SideNavigation from './SideNavigation';
+import ServerModeBanner from './ServerModeBanner';
 import ROUTES from '../definitions/Routes';
 import FooterInfobar from './FooterInfobar';
 import ClusterRenderer from './cluster/ClusterRenderer';
 import { ModalAwareOutlet } from '../libs/ModalAwareOutlet';
 import FeedbackButton from './FeedbackButton';
-import { ReportFolder, ReportLocation } from '../definitions/Reports';
-import { RemoteFolder } from '../definitions/RemoteConnection';
-import useRemoteConnection from '../hooks/useRemote';
-import useRestoreScrollPositionV2 from '../hooks/useRestoreScrollPositionV2';
+import FileStatusOverlay from './FileStatusOverlay';
+import MlirFileResultsOverlay from './mlir/MlirFileResultsOverlay';
+import { initEventLogging } from '../functions/recordEvent';
+import useRecordViewOpened from '../hooks/useRecordViewOpened';
+import { isModalOpen } from '../functions/modalRoute';
 
 const BounceIn = cssTransition({
     enter: `Toastify--animate Toastify__bounce-enter`,
@@ -38,79 +30,18 @@ const BounceIn = cssTransition({
 });
 
 function Layout() {
-    const setActiveProfilerReport = useSetAtom(activeProfilerReportAtom);
-    const setActivePerformanceReport = useSetAtom(activePerformanceReportAtom);
-    const setActiveNpe = useSetAtom(activeNpeOpTraceAtom);
-    const [profilerReportLocation, setProfilerReportLocation] = useAtom(profilerReportLocationAtom);
-    const setPerformanceReportLocation = useSetAtom(performanceReportLocationAtom);
-
-    const remote = useRemoteConnection();
-    const { data: instance } = useInstance();
-    const { data: reports } = useReportFolderList();
     const location = useLocation();
-    const { resetListStates } = useRestoreScrollPositionV2();
+    const isTopologyOpen = isModalOpen(location, ROUTES.CLUSTER);
 
-    const appVersion = import.meta.env.APP_VERSION;
-    const remoteFolders = remote.persistentState.getSavedReportFolders(remote.persistentState.selectedConnection);
-    const state = location.state as { background?: Location };
+    // Starts the event-log flush lifecycle; it records nothing on its own. Here rather than at
+    // module scope so importing the sender has no side effect, and so the listeners are
+    // owned the way every other listener in this app is.
+    useEffect(() => initEventLogging(), []);
 
-    // TODO: Resolve naming issue here with profiler_name/performance_name being the path
-    const profilerReportPath = instance?.active_report?.profiler_name || null;
-    const profilerReportName =
-        (profilerReportLocation === ReportLocation.REMOTE && profilerReportPath) || instance?.remote_profiler_folder
-            ? getRemoteReportName(remoteFolders, profilerReportPath) || ''
-            : getLocalReportName(reports, profilerReportPath) || '';
-    const perfReportPath = instance?.active_report?.performance_name || null;
-
-    // Loads the active reports into global state when the instance changes
-    useEffect(() => {
-        if (instance?.active_report) {
-            resetListStates();
-
-            setActiveProfilerReport(
-                profilerReportPath
-                    ? {
-                          path: profilerReportPath,
-                          reportName: profilerReportName,
-                      }
-                    : null,
-            );
-            setActivePerformanceReport(
-                perfReportPath
-                    ? {
-                          path: perfReportPath,
-                          reportName: perfReportPath,
-                      }
-                    : null,
-            );
-            setActiveNpe(instance.active_report?.npe_name ?? null);
-            setProfilerReportLocation(
-                instance?.profiler_path?.includes('/remote') && instance?.remote_profiler_folder
-                    ? ReportLocation.REMOTE
-                    : ReportLocation.LOCAL,
-            );
-            setPerformanceReportLocation(
-                instance?.performance_path?.includes('/remote') && instance?.remote_performance_folder
-                    ? ReportLocation.REMOTE
-                    : ReportLocation.LOCAL,
-            );
-        }
-    }, [
-        instance,
-        profilerReportPath,
-        profilerReportName,
-        perfReportPath,
-        setActiveProfilerReport,
-        setActivePerformanceReport,
-        setActiveNpe,
-        profilerReportLocation,
-        setProfilerReportLocation,
-        setPerformanceReportLocation,
-        resetListStates,
-    ]);
+    useRecordViewOpened();
 
     return (
-        <div className={Classes.DARK}>
+        <>
             <Helmet
                 defaultTitle='TT-NN Visualizer'
                 titleTemplate='%s | TT-NN Visualizer'
@@ -122,53 +53,40 @@ function Layout() {
                 />
             </Helmet>
 
-            <header className='app-header'>
-                <nav className='nav-container'>
-                    <Link
-                        to={ROUTES.HOME}
-                        className='title'
-                    >
-                        <h1>
-                            <img
-                                width={250}
-                                alt='tenstorrent'
-                                src='https://docs.tenstorrent.com/tt-tm-assets/Logo/Standard%20Lockup/svg/tt_logo_color-orange-whitetext.svg'
-                            />
-                            <span className='visualizer-title'>TT-NN Visualizer</span>
-                        </h1>
-                        {!parseInt(import.meta.env.VITE_MARKETING, 10) && <sup className='version'>v{appVersion}</sup>}
-                    </Link>
+            <ServerModeBanner />
 
-                    <MainNavigation />
-                </nav>
-            </header>
+            {/* Wraps only the chrome that shares space with the page: the fixed footer and
+                the overlays below must stay outside so the flex shell can't reposition them. */}
+            <div className='app-shell'>
+                <SideNavigation />
 
-            <main>
-                <ModalAwareOutlet />
-                {location.pathname === ROUTES.CLUSTER && state?.background && <ClusterRenderer />}
-            </main>
+                <main>
+                    <ModalAwareOutlet />
+                    {isTopologyOpen && <ClusterRenderer />}
+                </main>
+            </div>
 
             <FooterInfobar />
 
             <FeedbackButton />
 
+            <FileStatusOverlay />
+
+            <MlirFileResultsOverlay />
+
             <ToastContainer
-                position={PopoverPosition.TOP_RIGHT}
-                autoClose={false}
+                position={'bottom-right' as ToastPosition}
+                autoClose={5000}
                 newestOnTop={false}
+                pauseOnHover={false}
+                draggable={false}
                 closeOnClick
                 closeButton={false}
-                theme='light'
+                theme={'light' as Theme}
                 transition={BounceIn}
             />
-        </div>
+        </>
     );
 }
-
-const getLocalReportName = (reports: ReportFolder[], path: string | null): string | undefined =>
-    reports?.find((report) => report.path === path)?.reportName;
-
-const getRemoteReportName = (remoteFolders: RemoteFolder[], folderName: string | null): string | undefined =>
-    folderName ? remoteFolders?.find((report) => report.remotePath.includes(folderName))?.reportName : undefined;
 
 export default Layout;

@@ -2,7 +2,23 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
+import { CoreCoord, CoreCoordList } from '../model/CoreCoord';
+
 const LOCALE = 'en-US';
+
+const NS_PER_US = 1000;
+
+/** Parse a raw nanosecond string (as it arrives in the perf CSV) into microseconds, or null when
+ *  absent or non-numeric (so a bad parse never propagates a NaN into numeric row data). */
+export const nsToUs = (value: string | null | undefined): number | null => {
+    if (!value) {
+        return null;
+    }
+
+    const microseconds = parseFloat(value) / NS_PER_US;
+
+    return Number.isFinite(microseconds) ? microseconds : null;
+};
 
 export const toHex = (num: number): string => {
     // eslint-disable-next-line no-bitwise
@@ -13,11 +29,15 @@ export const formatSize = (number: number, decimals?: number): string => {
     return new Intl.NumberFormat(LOCALE, { maximumFractionDigits: decimals }).format(number);
 };
 
-export const formatUnit = (value: number, unit: string): string => {
+export const formatUnit = (
+    value: number,
+    unit: string,
+    unitDisplay: Intl.NumberFormatOptions['unitDisplay'] = 'long',
+): string => {
     return new Intl.NumberFormat(LOCALE, {
         style: 'unit',
         unit,
-        unitDisplay: 'long',
+        unitDisplay,
     }).format(value);
 };
 
@@ -39,9 +59,18 @@ export const toSecondsPretty = (us: number, min: number = 1000): string => {
     return `( ${(us / 1_000_000).toFixed(3)}s )`;
 };
 
-export const prettyPrintAddress = (address: number | null, memorySize: number): string => {
+// Pretty print an address, with option to display in hex or decimal, and pad with leading zeros based on memory size
+export const prettyPrintAddress = (address: number | null, memorySize: number, isHex: boolean = false): string => {
     if (address === null) {
         return 'NULL';
+    }
+
+    if (isHex) {
+        // eslint-disable-next-line no-bitwise
+        const hexStr = (address >>> 0).toString(16).toUpperCase();
+        // eslint-disable-next-line no-bitwise
+        const maxHexLength = (memorySize >>> 0).toString(16).length;
+        return `0x${hexStr.padStart(maxHexLength, '0')}`;
     }
 
     return address.toString().padStart(memorySize?.toString().length, '0');
@@ -101,32 +130,117 @@ export const isEqual = <T>(value: T, other: T): boolean => {
         return isEqual(valueObj[key], otherObj[key]);
     });
 };
-export const toReadableShape = (input: string) => {
-    const match = input.match(/Shape\((\[.*\])\)/);
-    if (!match) {
-        return input;
+
+const CORE_RANGE_RECT_RE = /\[([^\]]+)\]/g;
+const CORE_COORD_RE = /\(x=(\d+),y=(\d+)\)|(\d+)-(\d+)/g;
+
+/**
+ * Expand a core_range_set string to the deduplicated list of (x,y) cores it covers.
+ * Accepts both `{[(x=N,y=N) - (x=N,y=N)]}` (legacy) and `{[N-N - N-N]}` (modern),
+ * multi-rectangle unions, and `{}`.
+ */
+// A mesh op repeats one `core_range_set` string per device, so the parse below
+// runs identically N times for the N devices this expansion exists to
+// distinguish. Entries are handed out shared, which the `readonly` return type
+// is what keeps safe. #1844
+const coresInRangeCache = new Map<string, CoreCoordList>();
+
+export const getCoresInRangeList = (rangeString: string): CoreCoordList => {
+    const cached = coresInRangeCache.get(rangeString);
+    if (cached) {
+        return cached;
     }
-    return match[1];
+    const cores = new Map<string, CoreCoord>();
+    for (const rect of rangeString.matchAll(CORE_RANGE_RECT_RE)) {
+        const corners: CoreCoord[] = [];
+        for (const m of rect[1].matchAll(CORE_COORD_RE)) {
+            const x = m[1] !== undefined ? Number(m[1]) : Number(m[3]);
+            const y = m[2] !== undefined ? Number(m[2]) : Number(m[4]);
+            corners.push({ x, y });
+            if (corners.length === 2) {
+                break;
+            }
+        }
+        if (corners.length !== 2) {
+            continue; // eslint-disable-line no-continue
+        }
+        const [a, b] = corners;
+        const xMin = Math.min(a.x, b.x);
+        const xMax = Math.max(a.x, b.x);
+        const yMin = Math.min(a.y, b.y);
+        const yMax = Math.max(a.y, b.y);
+        for (let x = xMin; x <= xMax; x += 1) {
+            for (let y = yMin; y <= yMax; y += 1) {
+                const k = `${x},${y}`;
+                if (!cores.has(k)) {
+                    cores.set(k, { x, y });
+                }
+            }
+        }
+    }
+    const expanded: CoreCoordList = Array.from(cores.values());
+    coresInRangeCache.set(rangeString, expanded);
+    return expanded;
 };
-export const toReadableType = (input: string) => {
-    return input.replace(/^DataType\./, '');
+
+export const getCoresInRange = (rangeString: string): number => getCoresInRangeList(rangeString).length;
+
+/**
+ * Convert bytes to human-readable format using binary units (1024-based)
+ * Appropriate for memory sizes (L1, DRAM, etc.) as memory is organized in powers of 2
+ * @param bytes - The number of bytes to convert
+ * @param decimals - Number of decimal places (default: 0 for B/KiB, 2 for MiB+)
+ * @example convertBytes(1024) // "1 KiB"
+ * @example convertBytes(163840) // "160 KiB"
+ * @example convertBytes(22370304) // "21.33 MiB"
+ */
+export const formatMemorySize = (bytes: number | undefined, decimals = 0): string => {
+    const sizes = ['B', 'KiB', 'MiB', 'GiB', 'TiB'];
+
+    if (bytes === undefined) {
+        return 'N/A';
+    }
+
+    if (bytes === 0) {
+        return `0 ${sizes[0]}`;
+    }
+
+    if (bytes < 1) {
+        return `${formatSize(bytes, decimals)} ${sizes[0]}`;
+    }
+
+    const maxIndex = sizes.length - 1;
+    const denominationIndex = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), maxIndex);
+    const fractionDigits = denominationIndex > 1 ? 2 : decimals; // MiB and up always requires decimals
+    const value = formatSize(bytes / 1024 ** denominationIndex, fractionDigits);
+
+    return `${value} ${sizes[denominationIndex]}`;
+};
+
+// Formats a memory address to a string with optional hex formatting
+export const getMemoryAddress = (address: number | null, showHex: boolean): string => {
+    if (address === null) {
+        return 'NULL';
+    }
+
+    return showHex ? toHex(address) : address.toString();
 };
 
 /**
- @description Count the number of cores in a range string
- @param {string} rangeString - The range string to parse {[(x=0,y=0) - (x=7,y=7)]}
- @returns {number} The number of cores
+ * @description Sum values that may be absent or non-finite, treating both as
+ * nothing rather than propagating NaN. Report fields are optional per row, so a
+ * plain reduce poisons the total for the whole set.
  */
-export const getCoresInRange = (rangeString: string): number => {
-    const regex = /\(x=(\d+),y=(\d+)\)/g;
-    const matches = [...rangeString.matchAll(regex)];
-
-    if (matches.length !== 2) {
-        return 0;
+export const sumOptional = (values: readonly (number | undefined)[]): number => {
+    let total = 0;
+    for (const value of values) {
+        if (value !== undefined && Number.isFinite(value)) {
+            total += value;
+        }
     }
-
-    const [x1, y1] = matches[0].slice(1).map(Number);
-    const [x2, y2] = matches[1].slice(1).map(Number);
-
-    return (x2 - x1 + 1) * (y2 - y1 + 1);
+    return total;
 };
+
+/** @description Total bytes across tensors, counting an unknown size as zero. */
+export const tensorBytes = (tensors: readonly { size: number | null }[]): number =>
+    tensors.reduce((total, tensor) => total + (tensor.size ?? 0), 0);

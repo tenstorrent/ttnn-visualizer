@@ -2,8 +2,9 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import axios from 'axios';
+import axios, { AxiosError, AxiosRequestConfig } from 'axios';
 import getServerConfig from '../functions/getServerConfig';
+import Endpoints from '../definitions/Endpoints';
 
 const serverConfig = getServerConfig();
 const baseURL = serverConfig?.BASE_PATH;
@@ -14,7 +15,15 @@ const axiosInstance = axios.create({
     baseURL,
 });
 
-export const getOrCreateInstanceId = () => {
+// Resolved once per page load rather than per call. The id is fixed for the
+// lifetime of the tab — it is read from the URL or sessionStorage and written
+// straight back — but it is read inside query keys, and those are rebuilt in the
+// render body of hooks reached once per virtualised row (`useLinkedPerformanceReport`
+// through `OperationListPerfData`). Uncached, that is a synchronous sessionStorage
+// read plus a `URLSearchParams` allocation per row, per scroll tick.
+let cachedInstanceId: string | null = null;
+
+const resolveInstanceId = () => {
     const urlInstanceId = new URLSearchParams(window.location.search).get('instanceId');
     let instanceId = sessionStorage.getItem('instanceId');
 
@@ -36,6 +45,12 @@ export const getOrCreateInstanceId = () => {
     return instanceId;
 };
 
+export const getOrCreateInstanceId = () => {
+    cachedInstanceId ??= resolveInstanceId();
+
+    return cachedInstanceId;
+};
+
 axiosInstance.interceptors.request.use(
     (config) => {
         const instanceId = getOrCreateInstanceId();
@@ -47,7 +62,60 @@ axiosInstance.interceptors.request.use(
                 instanceId,
             };
         }
+
         return config;
+    },
+    (error) => {
+        return Promise.reject(error);
+    },
+);
+
+interface RetryConfig extends AxiosRequestConfig {
+    retryCount?: number;
+}
+
+const MAX_RETRIES = 3;
+
+// Response interceptor to validate data integrity and auto-retry for large JSON responses
+axiosInstance.interceptors.response.use(
+    async (response) => {
+        const isOperationsEndpoint = response.config.url?.endsWith(Endpoints.OPERATIONS_LIST);
+
+        if (response.config.method === 'get' && isOperationsEndpoint && !Array.isArray(response.data)) {
+            const retryCount = (response.config as RetryConfig).retryCount || 0;
+
+            if (retryCount < MAX_RETRIES) {
+                const backoffDelay = Math.min(500 * 2 ** retryCount, 2500);
+
+                // eslint-disable-next-line no-console
+                console.warn(
+                    `Endpoint returned invalid format (${typeof response.data}). ` +
+                        `Auto-retrying (attempt ${retryCount + 1}/${MAX_RETRIES}) after ${backoffDelay}ms...`,
+                );
+
+                await new Promise((resolve) => {
+                    setTimeout(resolve, backoffDelay);
+                });
+
+                const newConfig = {
+                    ...response.config,
+                    retryCount: retryCount + 1,
+                };
+
+                return axiosInstance.request(newConfig);
+            }
+
+            const error: AxiosError = new AxiosError(
+                `Invalid response format from ${response.config.url} after ${MAX_RETRIES} retries: ` +
+                    `expected array, got ${typeof response.data}. This may indicate a server-side issue with large datasets.`,
+            );
+            error.config = response.config;
+            error.response = response;
+
+            return Promise.reject(error);
+        }
+
+        return response;
     },
     (error) => {
         return Promise.reject(error);

@@ -5,22 +5,30 @@
 import { PlotData } from 'plotly.js';
 import { useMemo } from 'react';
 import { useAtomValue } from 'jotai';
-import { PerfTableRow } from '../../definitions/PerfTable';
+import { TypedPerfTableRow } from '../../model/PerfTable';
 import getCoreUtilization from '../../functions/getCoreUtilization';
-import { PlotConfiguration } from '../../definitions/PlotConfigurations';
+import {
+    PlotConfiguration,
+    getDeviceUtilizationAxisConfig,
+    getNsAxisConfig,
+} from '../../definitions/PlotConfigurations';
+import { PERF_CHART_LABELS, PerfChartId } from '../../definitions/PerformanceCharts';
 import PerfChart from './PerfChart';
 import getPlotLabel from '../../functions/getPlotLabel';
-import { activePerformanceReportAtom, comparisonPerformanceReportListAtom } from '../../store/app';
+import { activePerformanceReportAtom, comparisonPerformanceReportListAtom, mergeDevicesAtom } from '../../store/app';
 import { getPrimaryDataColours } from '../../definitions/PerformancePlotColours';
+import PerfMultiDeviceNotice from './PerfMultiDeviceNotice';
 
 interface PerfKernelDurationUtilizationChartProps {
-    datasets: PerfTableRow[][];
+    datasets: TypedPerfTableRow[][];
     maxCores: number;
+    chartId: PerfChartId;
 }
 
-function PerfKernelDurationUtilizationChart({ datasets, maxCores }: PerfKernelDurationUtilizationChartProps) {
+function PerfKernelDurationUtilizationChart({ datasets, maxCores, chartId }: PerfKernelDurationUtilizationChartProps) {
     const perfReport = useAtomValue(activePerformanceReportAtom);
     const comparisonReportList = useAtomValue(comparisonPerformanceReportListAtom);
+    const mergeDevices = useAtomValue(mergeDevicesAtom);
 
     const chartData = useMemo(
         () =>
@@ -39,30 +47,24 @@ function PerfKernelDurationUtilizationChart({ datasets, maxCores }: PerfKernelDu
         [datasets, maxCores, perfReport, comparisonReportList],
     );
 
+    const maxYValue = Math.max(...chartData.flatMap((data) => (data.y as number[]) ?? []));
+
     const configuration: PlotConfiguration = {
         showLegend: true,
-        xAxis: {
-            title: {
-                text: 'Device Kernel Duration (ns)',
-            },
-            tickformat: 'd',
-            hoverformat: ',.2r',
-        },
-        yAxis: {
-            title: {
-                text: 'Utilization (%)',
-            },
-            tickformat: '.0%',
-            hoverformat: '.2%',
-        },
+        xAxis: getNsAxisConfig('Device Kernel Duration (ns)'),
+        yAxis: getDeviceUtilizationAxisConfig(maxYValue),
     };
 
     return (
-        <PerfChart
-            title='Utilization vs Device Kernel Duration'
-            chartData={chartData}
-            configuration={configuration}
-        />
+        <>
+            {maxYValue > 0 && mergeDevices && <PerfMultiDeviceNotice />}
+            <PerfChart
+                id={chartId}
+                title={PERF_CHART_LABELS[chartId]}
+                chartData={chartData}
+                configuration={configuration}
+            />
+        </>
     );
 }
 

@@ -4,10 +4,12 @@
 
 import { IconNames } from '@blueprintjs/icons';
 import LocalFolderSelector from '../components/report-selection/LocalFolderSelector';
+import MLIRFileSelector from '../components/report-selection/MLIRFileSelector';
 import RemoteSyncConfigurator from '../components/report-selection/RemoteSyncConfigurator';
 import 'styles/routes/Home.scss';
-import useClearSelectedBuffer from '../functions/clearSelectedBuffer';
+import useClearSelectedBuffer from '../hooks/useClearSelectedBuffer';
 import getServerConfig from '../functions/getServerConfig';
+import isDirectReportMode from '../functions/isDirectReportMode';
 import InitialMessage from '../components/InitialMessage';
 import FolderFieldset from '../components/report-selection/FolderFieldset';
 
@@ -15,7 +17,6 @@ function Home() {
     useClearSelectedBuffer();
 
     const isServerMode = !!getServerConfig()?.SERVER_MODE;
-    const isDirectReportMode = !!getServerConfig()?.TT_METAL_HOME;
 
     return (
         <div className='home'>
@@ -30,10 +31,20 @@ function Home() {
                 <FolderFieldset
                     title='Remote sync'
                     icon={IconNames.CLOUD}
-                    isFeatureDisabled={isServerMode || isDirectReportMode}
+                    isFeatureDisabled={isServerMode || isDirectReportMode()}
                 >
                     <RemoteSyncConfigurator />
                 </FolderFieldset>
+
+                {!isServerMode && (
+                    <FolderFieldset
+                        title='MLIR'
+                        icon={IconNames.LAYOUT}
+                        isBeta
+                    >
+                        <MLIRFileSelector />
+                    </FolderFieldset>
+                )}
             </div>
 
             {isServerMode && <InitialMessage />}

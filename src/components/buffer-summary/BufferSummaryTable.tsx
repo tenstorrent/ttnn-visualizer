@@ -6,42 +6,55 @@ import classNames from 'classnames';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useAtomValue } from 'jotai';
 import { Table2 as BlueprintTable, Cell, Column, ColumnHeaderCell, Table2 } from '@blueprintjs/table';
-import { Checkbox, HotkeysProvider, Icon, InputGroup, Size } from '@blueprintjs/core';
+import { Checkbox, HotkeysProvider, Icon, InputGroup, Size, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
-import { BuffersByOperationData } from '../../hooks/useAPI';
 import { BufferTypeLabel } from '../../model/BufferType';
 import LoadingSpinner from '../LoadingSpinner';
 import '@blueprintjs/table/lib/css/table.css';
 import 'styles/components/BufferSummaryTable.scss';
 import HighlightedText from '../HighlightedText';
 import useSortTable, { SortingDirection } from '../../hooks/useSortTable';
-import { TensorsByOperationByAddress } from '../../model/BufferSummary';
-import { toHex } from '../../functions/math';
+import { formatMemorySize, toHex } from '../../functions/math';
 import { getBufferColor, getTensorColor } from '../../functions/colorGenerator';
-import { Buffer, BufferData } from '../../model/APIData';
-import { selectedTensorAtom } from '../../store/app';
+import { Buffer, BufferData, BuffersByOperation } from '../../model/APIData';
 import { BufferTableFilters, ColumnKeys, Columns } from '../../definitions/BufferSummary';
+import useBufferFocus from '../../hooks/useBufferFocus';
+import { showHexAtom } from '../../store/app';
+import { BufferMemoryLayout } from '../../model/MemoryConfig';
+import isValidNumber from '../../functions/isValidNumber';
+import { toReadableShape, toReadableType } from '../../functions/formatting';
+import { TensorsByOperationByAddress } from '../../model/BufferSummary';
 
 interface BufferSummaryTableProps {
-    buffersByOperation: BuffersByOperationData[];
+    buffersByOperation: BuffersByOperation[];
     tensorListByOperation: TensorsByOperationByAddress;
+    /** When set, skips a second address-dedupe pass (same list as the plot hook). */
+    uniqueBuffersByOperationList?: BuffersByOperation[];
 }
 
 interface SummaryTableBuffer extends BufferData {
     size: number;
     operation_name: string;
     tensor_id: number;
-    hexAddress: string;
+    buffer_layout: number | null;
+    dtype?: string;
+    shape?: string;
 }
 
-function BufferSummaryTable({ buffersByOperation, tensorListByOperation }: BufferSummaryTableProps) {
-    const { sortTableFields, changeSorting, sortingColumn, sortDirection } = useSortTable(Columns[0].key);
-    const selectedTensor = useAtomValue(selectedTensorAtom);
+function BufferSummaryTable({
+    buffersByOperation,
+    tensorListByOperation,
+    uniqueBuffersByOperationList: uniqueBuffersFromParent,
+}: BufferSummaryTableProps) {
     const [userSelectedRows, setUserSelectedRows] = useState<number[]>([]);
     const [showOnlySelected, setShowOnlySelected] = useState(false);
     const [mergedByDevice, setMergedByDevice] = useState(true);
+    const showHex = useAtomValue(showHexAtom);
 
+    const { selectedTensorId } = useBufferFocus();
+    const { sortTableFields, changeSorting, sortingColumn, sortDirection } = useSortTable(Columns[0].key);
     const tableRef = useRef<Table2 | null>(null);
+
     const filterableColumnKeys = useMemo(
         () => Columns.filter((column) => column.filterable).map((column) => column.key),
         [],
@@ -53,8 +66,16 @@ function BufferSummaryTable({ buffersByOperation, tensorListByOperation }: Buffe
         >,
     );
 
-    // TODO: move this to a hook. eventually
+    const isMultiDevice = useMemo(() => {
+        const allDeviceIds = new Set(buffersByOperation.flatMap((op) => op.buffers.map((buffer) => buffer.device_id)));
+        return allDeviceIds.size > 1;
+    }, [buffersByOperation]);
+
     const uniqueBuffersByOperationList = useMemo(() => {
+        if (uniqueBuffersFromParent) {
+            return uniqueBuffersFromParent;
+        }
+
         return buffersByOperation.map((operation) => {
             const uniqueBuffers: Map<number, Buffer> = new Map<number, Buffer>();
             operation.buffers.forEach((buffer) => {
@@ -63,7 +84,6 @@ function BufferSummaryTable({ buffersByOperation, tensorListByOperation }: Buffe
                     const existingBuffer = uniqueBuffers.get(address);
                     if (!existingBuffer || size > existingBuffer.size) {
                         uniqueBuffers.set(address, buffer);
-                        // TODO: add device list to buffer fro rendering maybe
                     }
                 }
             });
@@ -72,24 +92,36 @@ function BufferSummaryTable({ buffersByOperation, tensorListByOperation }: Buffe
                 buffers: Array.from(uniqueBuffers.values()),
             };
         });
-    }, [buffersByOperation]);
+    }, [buffersByOperation, uniqueBuffersFromParent]);
 
     const listOfBuffers = useMemo(() => {
         const targetList = mergedByDevice ? uniqueBuffersByOperationList : buffersByOperation;
+
         return targetList
             ?.map((operation) =>
                 operation.buffers
-                    .map((buffer) => ({
-                        ...buffer,
-                        hexAddress: toHex(buffer.address),
-                        operation_id: operation.id,
-                        operation_name: operation.name,
-                        tensor_id: tensorListByOperation.get(operation.id)?.get(buffer.address)?.id,
-                    }))
+                    .map((buffer) => {
+                        const bufferData = tensorListByOperation.get(operation.id)?.get(buffer.address);
+
+                        return {
+                            ...buffer,
+                            address: showHex ? toHex(buffer.address) : buffer.address,
+                            operation_id: operation.id,
+                            operation_name: operation.name,
+                            tensor_id: tensorListByOperation.get(operation.id)?.get(buffer.address)?.id,
+                            dtype: bufferData ? toReadableType(bufferData?.dtype) : undefined,
+                            shape: bufferData ? toReadableShape(bufferData?.shape) : undefined,
+                        };
+                    })
                     .flat(),
             )
             .flat() as SummaryTableBuffer[];
-    }, [buffersByOperation, tensorListByOperation, uniqueBuffersByOperationList, mergedByDevice]);
+    }, [buffersByOperation, tensorListByOperation, uniqueBuffersByOperationList, mergedByDevice, showHex]);
+
+    const tableColumns = useMemo(
+        () => (isMultiDevice ? Columns : Columns.filter((column) => column.key !== 'device_id')),
+        [isMultiDevice],
+    );
 
     const updateColumnFilter = (key: ColumnKeys, value: string) => {
         setFilters({
@@ -99,14 +131,14 @@ function BufferSummaryTable({ buffersByOperation, tensorListByOperation }: Buffe
     };
 
     const createColumns = () => {
-        return Columns.map((column) => createColumn(column.key, column.name));
+        return tableColumns.map((column) => createColumn(column.key, column.name));
     };
 
     const createColumn = (key: ColumnKeys, label: string) => (
         <Column
             key={key}
             name={label}
-            cellRenderer={createCell(key, tableFields, filters, selectedRows)}
+            cellRenderer={createCell(key, tableRows, filters, selectedRows)}
             columnHeaderCellRenderer={() => createCellHeader(key, label)}
         />
     );
@@ -162,15 +194,17 @@ function BufferSummaryTable({ buffersByOperation, tensorListByOperation }: Buffe
         );
     };
 
-    const tableFields = useMemo<SummaryTableBuffer[]>(() => {
-        let filteredTableFields = listOfBuffers;
+    // TODO: React Compiler optimization warning, look into this
+    // eslint-disable-next-line react-hooks/preserve-manual-memoization
+    const tableRows = useMemo<SummaryTableBuffer[]>(() => {
+        let filteredRows = listOfBuffers;
 
         if (showOnlySelected) {
-            filteredTableFields = listOfBuffers.filter((buffer) => buffer.tensor_id === selectedTensor);
+            filteredRows = listOfBuffers.filter((buffer) => buffer.tensor_id === selectedTensorId);
         }
 
         if (isFiltersActive(filters) && filterableColumnKeys) {
-            filteredTableFields = filteredTableFields.filter((buffer) => {
+            filteredRows = filteredRows.filter((buffer) => {
                 const isFilteredOut = Object.entries(filters)
                     .filter(([_key, filterValue]) => String(filterValue).length)
                     .some(([key, filterValue]) => {
@@ -184,74 +218,86 @@ function BufferSummaryTable({ buffersByOperation, tensorListByOperation }: Buffe
         }
 
         // Still some awkward casting here
-        return [...sortTableFields(filteredTableFields as [])];
-    }, [listOfBuffers, sortTableFields, filterableColumnKeys, filters, selectedTensor, showOnlySelected]);
+        return [...sortTableFields(filteredRows as [])];
+    }, [listOfBuffers, sortTableFields, filterableColumnKeys, filters, selectedTensorId, showOnlySelected]);
 
-    useEffect(() => {
-        if (selectedTensor) {
-            setUserSelectedRows([]);
-        } else {
-            setShowOnlySelected(false);
-        }
-    }, [selectedTensor]);
-
+    // TODO: React Compiler optimization warning, look into this
+    // eslint-disable-next-line react-hooks/preserve-manual-memoization
     const selectedRows = useMemo(() => {
         if (userSelectedRows.length) {
             return userSelectedRows;
         }
 
-        if (!selectedTensor) {
+        if (!selectedTensorId) {
             return [];
         }
 
-        const matchingBuffers = tableFields.reduce((arr: number[], buffer, index: number) => {
-            if (buffer?.tensor_id === selectedTensor) {
+        const matchingBuffers = tableRows.reduce((arr: number[], buffer, index: number) => {
+            if (buffer?.tensor_id === selectedTensorId) {
                 arr.push(index);
             }
 
             return arr;
         }, []);
 
-        if (tableRef?.current?.scrollToRegion && matchingBuffers.length) {
-            tableRef.current.scrollToRegion({ rows: [matchingBuffers[0], matchingBuffers[0]] });
-        }
-
         return matchingBuffers;
-    }, [tableFields, selectedTensor, userSelectedRows]);
+        // TODO: React Compiler optimization warning, look into this
+        // eslint-disable-next-line react-hooks/preserve-manual-memoization
+    }, [tableRows, selectedTensorId, userSelectedRows]);
 
-    return tableFields ? (
+    useEffect(() => {
+        if (selectedTensorId) {
+            // Has sufficient guard conditions
+            // eslint-disable-next-line react-hooks/set-state-in-effect
+            setUserSelectedRows([]);
+        } else {
+            setShowOnlySelected(false);
+        }
+    }, [selectedTensorId]);
+
+    useEffect(() => {
+        if (tableRef?.current?.scrollToRegion && selectedRows.length) {
+            tableRef.current.scrollToRegion({ rows: [selectedRows[0], selectedRows[0]] });
+        }
+    }, [selectedRows]);
+
+    return tableRows ? (
         <HotkeysProvider>
             <div className='buffer-summary-table'>
                 <div className='aside-container'>
-                    <Checkbox
-                        checked={mergedByDevice}
-                        onChange={() => setMergedByDevice(!mergedByDevice)}
-                    >
-                        Merge buffers across devices
-                    </Checkbox>
+                    <Tooltip content='Merging is only available when multiple devices are present'>
+                        <Checkbox
+                            checked={isMultiDevice && mergedByDevice}
+                            onChange={() => setMergedByDevice(!mergedByDevice)}
+                            disabled={!isMultiDevice}
+                        >
+                            Merge buffers across devices
+                        </Checkbox>
+                    </Tooltip>
                 </div>
+
                 <div className='aside-container'>
                     <Checkbox
                         checked={showOnlySelected}
                         onChange={() => setShowOnlySelected(!showOnlySelected)}
-                        disabled={selectedTensor === null}
+                        disabled={selectedTensorId === null}
                     >
-                        Show selected tensor rows ({selectedRows.length})
+                        Filter selected tensor rows ({selectedRows.length})
                     </Checkbox>
                     <p className='result-count'>
-                        {tableFields.length !== listOfBuffers.length
-                            ? `Showing ${tableFields.length} of ${listOfBuffers.length} buffers`
-                            : `Showing ${tableFields.length} buffers`}
+                        {tableRows.length !== listOfBuffers.length
+                            ? `Showing ${tableRows.length} of ${listOfBuffers.length} buffers`
+                            : `Showing ${tableRows.length} buffers`}
                     </p>
                 </div>
 
                 <BlueprintTable
-                    numRows={tableFields.length}
+                    numRows={tableRows.length}
+                    columnWidths={tableColumns.map((column) => column.width)}
                     enableRowResizing={false}
-                    cellRendererDependencies={[sortDirection, sortingColumn, tableFields, tableFields.length]}
-                    columnWidths={[200, 120, 120, 140, 120, 120, 100]}
+                    cellRendererDependencies={[sortDirection, sortingColumn, tableRows, tableRows.length]}
                     ref={tableRef}
-                    getCellClipboardData={(row, col) => getCellText(tableFields[row], Columns[col].key)}
+                    getCellClipboardData={(row, col) => getCellText(tableRows[row], tableColumns[col].key)}
                 >
                     {createColumns()}
                 </BlueprintTable>
@@ -265,39 +311,44 @@ function BufferSummaryTable({ buffersByOperation, tensorListByOperation }: Buffe
 const getCellText = (buffer: SummaryTableBuffer, key: ColumnKeys) => {
     let textValue = buffer[key]?.toString() || '';
 
-    if (key === 'tensor_id') {
-        textValue = buffer?.tensor_id ? `Tensor ${buffer.tensor_id}` : '';
+    if (key === ColumnKeys.TensorId) {
+        // Using a space character to ensure the table cell height remains consistent
+        textValue = buffer?.tensor_id ? `Tensor ${buffer.tensor_id}` : '\u00A0';
     }
 
-    if (key === 'operation_id') {
+    if (key === ColumnKeys.OperationId) {
         textValue = `${buffer.operation_id} ${buffer.operation_name}`;
     }
 
-    if (key === 'buffer_type') {
+    if (key === ColumnKeys.BufferType) {
         textValue = BufferTypeLabel[buffer.buffer_type];
+    }
+
+    if (key === ColumnKeys.BufferLayout) {
+        textValue = isValidNumber(buffer.buffer_layout) ? BufferMemoryLayout[buffer.buffer_layout] : '';
     }
 
     return textValue;
 };
 
 const createCell =
-    (key: ColumnKeys, tableFields: SummaryTableBuffer[], filters: BufferTableFilters, selectedRows: number[]) =>
+    (key: ColumnKeys, rows: SummaryTableBuffer[], filters: BufferTableFilters, selectedRows: number[]) =>
     (rowIndex: number) => (
         <Cell className={classNames({ 'row-is-active': selectedRows.includes(rowIndex) })}>
-            {getCellContent(key, rowIndex, tableFields, filters)}
+            {getCellContent(key, rowIndex, rows, filters)}
         </Cell>
     );
 
-const getCellContent = (
-    key: ColumnKeys,
-    rowIndex: number,
-    tableFields: SummaryTableBuffer[],
-    filters: BufferTableFilters,
-) => {
-    const buffer = tableFields[rowIndex] as SummaryTableBuffer;
+const getCellContent = (key: ColumnKeys, rowIndex: number, rows: SummaryTableBuffer[], filters: BufferTableFilters) => {
+    const buffer = rows[rowIndex] as SummaryTableBuffer;
     const textValue = getCellText(buffer, key);
 
-    if (key === 'tensor_id') {
+    // Redo columns - https://github.com/tenstorrent/ttnn-visualizer/issues/1270
+    if (key === ColumnKeys.Size) {
+        return formatMemorySize(buffer.size, 2);
+    }
+
+    if (key === ColumnKeys.TensorId) {
         return (
             <div className='operation-cell'>
                 <div

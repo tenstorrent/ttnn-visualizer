@@ -2,9 +2,11 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { RemoteConnection, RemoteFolder } from '../definitions/RemoteConnection';
-import { BufferMemoryLayout, MemoryConfig } from '../functions/parseMemoryConfig';
-import { BufferType } from './BufferType';
+import { RemoteConnection, RemoteFolder } from './RemoteConnection';
+import { DeviceLogEntryType, DeviceLogZonePhase } from '../definitions/Performance';
+import { ReportLocation } from '../definitions/Reports';
+import { BufferMemoryLayout, MemoryConfig } from './MemoryConfig';
+import { BufferType, StringBufferType } from './BufferType';
 
 interface OperationError {
     operation_id: number;
@@ -21,6 +23,7 @@ export interface Operation {
     inputs: Tensor[];
     outputs: Tensor[];
     stack_trace: string;
+    stack_trace_source_file_id: number | null;
     device_operations: Node[];
     operationFileIdentifier: string;
     error: OperationError | null;
@@ -58,6 +61,7 @@ export interface Tensor {
         };
     } | null;
     io: 'input' | 'output' | null;
+    size: number | null;
 }
 
 export interface BufferData {
@@ -65,13 +69,13 @@ export interface BufferData {
     device_id: number;
     address: number;
     max_size_per_bank: number;
-    buffer_type: number;
+    buffer_type: BufferType;
     next_usage?: number;
 }
 
 export interface Buffer {
     address: number;
-    buffer_type: number;
+    buffer_type: BufferType;
     device_id: number;
     size: number;
     buffer_layout?: BufferMemoryLayout | null;
@@ -84,12 +88,24 @@ export interface OperationDetailsData extends Operation {
     l1_sizes: number[];
 }
 
+export interface ActiveReport {
+    profiler_name?: string;
+    profiler_location?: ReportLocation;
+    performance_name?: string;
+    performance_location?: ReportLocation;
+    npe_name?: string;
+    npe_location?: ReportLocation;
+    mlir_name?: string;
+    mlir_location?: ReportLocation;
+}
+
 export interface Instance {
     instance_id: string;
     profiler_path: string | null;
     performance_path: string | null;
     npe_path: string | null;
-    active_report: { performance_name?: string; profiler_name?: string; npe_name?: string } | null;
+    mlir_path: string | null;
+    active_report: ActiveReport | null;
     remote_connection: RemoteConnection | null;
     remote_profiler_folder: RemoteFolder | null;
     remote_performance_folder: RemoteFolder | null;
@@ -99,7 +115,8 @@ export enum FileStatus {
     DOWNLOADING = 'DOWNLOADING',
     FAILED = 'FAILED',
     UPLOADING = 'UPLOADING',
-    COMPRESSING = 'COMPRESSING',
+    // Used for MLIR to indicate the file was uploaded but the server hasn't converted the file yet
+    PROCESSING = 'PROCESSING',
     FINISHED = 'FINISHED',
     STARTED = 'STARTED',
     INACTIVE = 'INACTIVE',
@@ -112,11 +129,15 @@ export interface FileProgress {
     percentOfCurrent: number;
     finishedFiles: number;
     status: FileStatus; // Use the FileStatus enum
+    bytesTransferred?: number;
+    bytesTotal?: number;
+    currentFileSize?: number;
     timestamp?: string; // Optional, with default handled elsewhere if necessary
+    /** Client-only: ms since epoch of the last registry write. Used for reconnect staleness. */
+    updatedAtMs?: number;
 }
 
-// TODO: we may want to revisit the 'default' portion for the variable name
-export const defaultOperationDetailsData: OperationDetailsData = {
+export const defaultOperation: OperationDetailsData = {
     id: 0,
     name: '',
     inputs: [],
@@ -125,13 +146,14 @@ export const defaultOperationDetailsData: OperationDetailsData = {
     buffersSummary: [],
     l1_sizes: [],
     stack_trace: '',
+    stack_trace_source_file_id: null,
     device_operations: [],
     operationFileIdentifier: '',
     error: null,
 };
 
 export const defaultTensorData: Tensor = {
-    buffer_type: 0,
+    buffer_type: BufferType.L1,
     id: 0,
     shape: '',
     dtype: '',
@@ -145,6 +167,7 @@ export const defaultTensorData: Tensor = {
     producerNames: [],
     consumerNames: [],
     comparison: null,
+    size: null,
 };
 
 export const defaultBuffer: BufferData = {
@@ -152,7 +175,7 @@ export const defaultBuffer: BufferData = {
     device_id: 0,
     address: 0,
     max_size_per_bank: 0,
-    buffer_type: 0,
+    buffer_type: BufferType.L1,
 };
 
 export interface Chunk {
@@ -160,36 +183,62 @@ export interface Chunk {
     size: number;
     tensorId?: number;
     device_id?: number;
+    lateDeallocation?: boolean;
 }
 
 export interface ColoredChunk extends Chunk {
     color: string | undefined;
 }
 
+export enum MarkerType {
+    CB = 'CB',
+    L1_SMALL = 'L1_SMALL',
+    L1_START = 'L1_START',
+}
+
+export const MarkerTypeLabel: Record<MarkerType, string> = {
+    [MarkerType.CB]: 'Circular Buffer',
+    [MarkerType.L1_SMALL]: 'L1 SMALL',
+    [MarkerType.L1_START]: 'L1 START',
+};
+
 export interface FragmentationEntry extends Chunk {
+    markerType?: MarkerType | undefined;
+    colorVariance?: number | undefined;
     empty?: boolean;
     largestEmpty?: boolean;
-    bufferType?: 'CB' | 'L1_START' | 'L1_SMALL' | undefined;
-    colorVariance?: number | undefined;
+    // Mirrors `CircularBuffer.globallyAllocated` for the legend renderer. #1652
+    globallyAllocated?: boolean;
+    // How many devices a collapsed CB row stands for, so the legend can say so
+    // rather than repeating the row once per device. #1879
+    deviceCount?: number;
 }
 
-export interface ReportMetaData {
-    cache_path: string;
-    model_cache_path: string;
-    tmp_dir: string;
-    enable_model_cache: boolean;
-    enable_fast_runtime_mode: boolean;
-    throw_exception_on_fallback: boolean;
-    enable_logging: boolean;
-    enable_graph_report: boolean;
-    enable_detailed_buffer_report: boolean;
-    enable_detailed_tensor_report: boolean;
-    enable_comparison_mode: boolean;
-    comparison_mode_pcc: number;
-    root_profiler_path: string;
-    profiler_name: string;
-}
+// export interface ReportMetaData {
+//     cache_path: string;
+//     model_cache_path: string;
+//     tmp_dir: string;
+//     enable_model_cache: boolean;
+//     enable_fast_runtime_mode: boolean;
+//     throw_exception_on_fallback: boolean;
+//     enable_logging: boolean;
+//     enable_graph_report: boolean;
+//     enable_detailed_buffer_report: boolean;
+//     enable_detailed_tensor_report: boolean;
+//     enable_comparison_mode: boolean;
+//     comparison_mode_pcc: number;
+//     root_profiler_path: string;
+//     profiler_name: string;
+// }
 
+export interface ReportMetadataResponse {
+    schema_version?: string;
+    capture_timestamp_ns?: string;
+    total_duration_ns?: string;
+    git_url?: string;
+    git_sha?: string;
+    world_size?: string;
+}
 export interface OperationDescription extends Operation {
     duration: number;
     arguments: {
@@ -197,6 +246,8 @@ export interface OperationDescription extends Operation {
         value: string;
         parsedValue: MemoryConfig | null;
     }[];
+    processedConnections: DeviceOperationNode[];
+    deviceOperationNameList: string[]; // List of device operation names. actual device ops only
 }
 
 export enum NodeType {
@@ -220,39 +271,110 @@ export enum DeviceOperationLayoutTypes {
     TILE = 'TILE',
 }
 
-export enum DeviceOperationTypes {
-    L1 = 'L1',
-    DRAM = 'DRAM',
-}
-
-interface DeviceOperationParams {
-    inputs: number;
+export interface DeviceOperationParams {
     name: string;
-    tensor_id: number;
-    shape: string;
-    address: string;
-    layout: DeviceOperationLayoutTypes;
-    size: string;
-    type: DeviceOperationTypes;
-    /** only for CBs */
-    core_range_set: string;
-    /** only for buffers */
-    num_cores: string;
     device_id?: number | string;
-    derived_device_id?: number[];
+    inputs?: number;
 }
 
-export interface Node {
+export interface CircularBufferDeallocateParams {
+    device_id: number;
+}
+
+interface BaseMemoryParams {
+    address: string; // '1259520';
+    // Absent in older captures and emitted as a string by at least one other,
+    // both present in the local report corpus, so consumers must normalise
+    // rather than read this as a number. #1844
+    device_id?: number | string;
+    num_cores: string; // '64';
+    page_size: string; // '448';
+    size: string; // '7340032';
+    type: StringBufferType; // 'L1';
+    exact_buffer_type: BufferType;
+    layout: DeviceOperationLayoutTypes;
+    buffer_type: BufferType;
+}
+
+export interface BufferDeallocateParams extends Omit<BaseMemoryParams, 'address'> {
+    address?: string;
+}
+
+export interface DeviceTensorParams extends BaseMemoryParams {
+    device_tensors: string; // '[{"address": 1374208, "device_id": 0, "mesh_device_id": 0}]';
+    dtype: string;
+    memory_config: string; // 'MemoryConfig(memory_layout=TensorMemoryLayout::HEIGHT_SHARDED,buffer_type=BufferType::L1,shard_spec=ShardSpec{grid=[{"start":{"x":0,"y":0},"end":{"x":5,"y":7}], shape=[224, 224], orientation=ShardOrientation::ROW_MAJOR},nd_shard_spec={"shard_shape":[224, 224],"grid":[{"start":{"x":0,"y":0},"end":{"x":5,"y":7}}],"orientation":"ShardOrientation::ROW_MAJOR","shard_distribution_strategy":"ShardDistributionStrategy::ROUND_ROBIN_1D"},created_with_nd_shard_spec=0)';
+    shape: string; // 'Shape([16, 3, 224, 224])';
+    tensor_id: number; // '0';
+}
+
+interface BufferAllocateParams extends BaseMemoryParams {
+    max_size_per_bank?: string; // '114688';
+    derivedDeviceId?: number[];
+}
+
+interface CircularBufferAllocateParams extends BaseMemoryParams {
+    core_range_set: string;
+    // tt-metal emits this as a JSON string `'0'` / `'1'` in the captured-graph
+    // blob (verified against the `resnet50_main_jun10_2110` raw
+    // `graph_capture.json`, not just the DB round-trip). The stale `'false'`
+    // comment on this field was misleading: the values are integer-valued
+    // strings, not boolean strings. `'1'` means the CB is a kernel-side view
+    // bound to an existing L1 sharded buffer (the tensor) rather than a fresh
+    // allocation. Optional because older reports captured before the field was
+    // added won't include it; the renderer falls back to treating the CB as a
+    // standalone allocation in that case. See #1651.
+    globally_allocated?: '0' | '1';
+    allocateOperationId: number;
+    allocateOperationName: string;
+}
+
+export interface BaseNode<T extends NodeType, P> {
     connections: number[];
     id: number;
-    node_type: NodeType;
-    params: DeviceOperationParams;
-    inputs: Node[];
-    outputs: Node[];
-    operation?: Node;
-    buffer?: Node[];
-    allocation?: Node;
+    node_type: T;
+    params: P;
+    inputs: Node[]; // tree specific
+    outputs: Node[]; // tree specific
+    operation?: DeviceOperationNode;
+    buffer?: BufferNode[];
+    allocation?: BufferAllocateNode;
+    stacking_level: number;
 }
+
+export interface DeviceOperationNode extends BaseNode<NodeType.function_start, DeviceOperationParams> {
+    input_tensors: number[];
+    arguments: string[];
+    stack_trace: string[];
+}
+
+export type CaptureStartNode = BaseNode<NodeType.capture_start, DeviceOperationParams>;
+export type CaptureEndNode = BaseNode<NodeType.capture_end, DeviceOperationParams>;
+export type DeviceOperationNodeEnd = BaseNode<NodeType.function_end, DeviceOperationParams>;
+
+export type BufferNode = BaseNode<NodeType.buffer, BufferAllocateParams>;
+export type BufferAllocateNode = BaseNode<NodeType.buffer_allocate, BufferAllocateParams>;
+export type BufferDeallocateNode = BaseNode<NodeType.buffer_deallocate, BufferDeallocateParams>;
+
+export type CircularBufferAllocateNode = BaseNode<NodeType.circular_buffer_allocate, CircularBufferAllocateParams>;
+export type CircularBufferDeallocateAllNode = BaseNode<
+    NodeType.circular_buffer_deallocate_all,
+    CircularBufferDeallocateParams
+>;
+
+export type TensorNode = BaseNode<NodeType.tensor, DeviceTensorParams>;
+
+export type Node =
+    | CaptureStartNode
+    | CaptureEndNode
+    | DeviceOperationNode
+    | DeviceOperationNodeEnd
+    | BufferNode
+    | BufferAllocateNode
+    | BufferDeallocateNode
+    | CircularBufferAllocateNode
+    | CircularBufferDeallocateAllNode
+    | TensorNode;
 
 export interface DeviceOperation {
     id: number;
@@ -269,26 +391,135 @@ export interface CircularBuffer extends Chunk {
     num_cores: number;
     core_range_set: string;
     colorVariance?: number | undefined;
+    // Aliased views into an existing L1 buffer — not new allocations. #1651 / #1652
+    globallyAllocated?: boolean;
 }
 
 export interface TensorBuffer extends Chunk {
     layout: DeviceOperationLayoutTypes;
-    type: DeviceOperationTypes;
+    type: StringBufferType;
 }
 
-export interface BufferPage {
+export interface BufferChunk {
+    operation_id: number;
+    device_id: number;
     address: number;
     bank_id: number;
-    buffer_type: number;
     core_x: number;
     core_y: number;
-    device_id: number;
-    operation_id: number;
-    page_address: number;
-    page_index: number;
+    chunk_address: number;
+    chunk_size: number;
     page_size: number;
+    num_pages: number;
+    buffer_type: BufferType;
+    rank?: number;
     id: string;
+}
 
+/**
+ * Render-side projection of a ``BufferChunk`` with the tensor association
+ * and palette colour resolved by the consuming component.
+ *
+ * Lives outside the API/cache shape on purpose: ``tensor_id`` and ``color``
+ * are derived from the caller's ``tensorByAddress`` map (or fallback hues),
+ * so they're per-render concerns and don't belong on the React Query cache
+ * entry. Keeping them off ``BufferChunk`` also prevents accidental in-place
+ * mutation of cached objects when more than one consumer of
+ * ``useBufferChunks`` shows up later.
+ */
+export interface DecoratedBufferChunk extends BufferChunk {
     tensor_id?: number;
-    color?: string;
+    color: string;
+}
+
+/**
+ * Legacy raw row from a backend that has not yet been updated to return
+ * pre-aggregated chunks. The FE adapter in ``fetchBufferChunks`` collapses
+ * an array of these into ``BufferChunk[]`` so downstream code never sees
+ * the old shape.
+ */
+export interface LegacyBufferPage {
+    operation_id: number;
+    device_id: number;
+    address: number;
+    bank_id: number;
+    core_x: number;
+    core_y: number;
+    page_index: number;
+    page_address: number;
+    page_size: number;
+    buffer_type: BufferType;
+    rank?: number;
+    id?: string;
+}
+
+export interface BuffersByOperation {
+    buffers: Buffer[];
+    id: number;
+    name: string;
+}
+
+export interface DeviceInfo {
+    address_at_first_l1_bank: number;
+    address_at_first_l1_cb_buffer: number;
+    cb_limit: number;
+    device_id: number;
+    l1_bank_size: number;
+    l1_num_banks: number;
+    num_banks_per_storage_core: number;
+    num_compute_cores: number;
+    num_x_compute_cores: number;
+    num_x_cores: number;
+    num_y_compute_cores: number;
+    num_y_cores: number;
+    total_l1_for_interleaved_buffers: number;
+    total_l1_for_sharded_buffers: number;
+    total_l1_for_tensors: number;
+    total_l1_memory: number;
+    worker_l1_size: number;
+}
+
+/**
+ * A row of `profile_log_device.csv`, as `GET /api/performance/device-log` serves
+ * it. The backend reads the CSV header by name and passes every column through,
+ * so which keys are present depends on the tt-metal that wrote the capture:
+ * `run_ID` only appears in older ones, the trace pair only in newer, and
+ * captures old enough to predate tt-metal's column rename carry `stat_value`
+ * and `zone_phase` where newer ones carry `data` and `type`. Those two pairs
+ * are mutually exclusive, so neither is guaranteed. Spaces in the column names
+ * become underscores.
+ *
+ * Only `timer_id`, `zone_name` and `run_host_ID` are required, and they are the
+ * three `REQUIRED_DEVICE_LOG_COLUMNS` enforces: the gate deliberately asks for
+ * as little as possible, because gating on the union of known columns rejected
+ * the shipped demo reports. Widening it to the optional keys below would trade a
+ * wrong answer for a 422 on captures that are merely older — which is the drift
+ * #1941 was about. See #1941.
+ */
+export interface PerformanceLog {
+    PCIe_slot: number;
+    RISC_processor_type: string; // Can we scope this down to a specific set of values?
+    core_x: number;
+    core_y: number;
+    run_host_ID: number;
+    source_file: string;
+    source_line: number;
+    'time[cycles_since_reset]': number;
+    timer_id: number;
+    zone_name: string;
+    // Present-but-empty cells arrive as `null`, not as an absent key:
+    // `execute_query` maps every NaN to `None`. Narrowing on key presence
+    // alone is not enough. See #1941.
+    meta_data?: string | null;
+    run_ID?: number | null;
+    trace_id?: number | null;
+    trace_id_counter?: number | null;
+    // Post-rename captures carry this pair...
+    data?: number | null;
+    type?: DeviceLogEntryType | null;
+    // ...and pre-rename ones carry these two instead. A consumer that reads
+    // either pair has to handle the other shape, so narrow on the key rather
+    // than assuming the capture is current.
+    stat_value?: number | null;
+    zone_phase?: DeviceLogZonePhase | null;
 }

@@ -2,51 +2,126 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { useEffect } from 'react';
-import { useAtom } from 'jotai';
-import { Virtualizer } from '@tanstack/react-virtual';
-import { ScrollLocations, ScrollPositions } from '../definitions/ScrollPositions';
-import { scrollPositionsAtom } from '../store/app';
+import { useAtomValue, useSetAtom } from 'jotai';
+import { useCallback } from 'react';
+import {
+    listStatesAtom,
+    operationListFilterAtom,
+    selectedDeviceOperationsAtom,
+    shouldCollapseAllOperationsAtom,
+    shouldCollapseAllTensorsAtom,
+    shouldSortByIDAtom,
+    shouldSortBySizeAtom,
+    shouldSortDurationAtom,
+    showHighConsumerTensorsAtom,
+    showLateDeallocatedTensorsAtom,
+    tensorBufferTypeFiltersAtom,
+    tensorListFilterAtom,
+} from '../store/app';
+import { ListStates, ScrollLocations, VirtualListState } from '../definitions/VirtualLists';
+import { SortingOptions } from '../definitions/SortingOptions';
 
-const useRestoreScrollPosition = (virtualizer: Virtualizer<HTMLDivElement, Element>, key: ScrollLocations) => {
-    const [scrollPositions, setScrollPositions] = useAtom(scrollPositionsAtom);
+export const useResetMemoryListStates = () => {
+    const setListStates = useSetAtom(listStatesAtom);
+    // Operation List
+    const setOperationListFilter = useSetAtom(operationListFilterAtom);
+    const setSelectedDeviceOperations = useSetAtom(selectedDeviceOperationsAtom);
+    const setShouldSortByID = useSetAtom(shouldSortByIDAtom);
+    const setShouldSortDuration = useSetAtom(shouldSortDurationAtom);
+    const setShouldCollapseAllOperations = useSetAtom(shouldCollapseAllOperationsAtom);
 
-    const updateScrollPosition = (index: number) => {
-        setScrollPositions((currentValue): ScrollPositions => {
-            const updatedPosition = {
-                [key]: {
-                    index,
-                },
-            };
+    // Tensor List
+    const setTensorBufferTypeFilters = useSetAtom(tensorBufferTypeFiltersAtom);
+    const setTensorListFilter = useSetAtom(tensorListFilterAtom);
+    const setShowHighConsumerTensors = useSetAtom(showHighConsumerTensorsAtom);
+    const setShowLateDeallocatedTensors = useSetAtom(showLateDeallocatedTensorsAtom);
+    const setShouldSortBySize = useSetAtom(shouldSortBySizeAtom);
+    const setShouldCollapseAllTensors = useSetAtom(shouldCollapseAllTensorsAtom);
 
-            if (!currentValue) {
-                return updatedPosition;
-            }
+    const resetOperationList = useCallback(() => {
+        setOperationListFilter('');
+        setSelectedDeviceOperations(new Set());
+        setShouldSortByID(SortingOptions.ASCENDING);
+        setShouldSortDuration(SortingOptions.OFF);
+        setShouldCollapseAllOperations(false);
+    }, [
+        setOperationListFilter,
+        setSelectedDeviceOperations,
+        setShouldSortByID,
+        setShouldSortDuration,
+        setShouldCollapseAllOperations,
+    ]);
 
-            return {
-                ...currentValue,
-                ...updatedPosition,
-            };
-        });
-    };
+    const resetTensorList = useCallback(() => {
+        setTensorListFilter('');
+        setTensorBufferTypeFilters([]);
+        setShowHighConsumerTensors(false);
+        setShowLateDeallocatedTensors(false);
+        setShouldSortBySize(SortingOptions.OFF);
+        setShouldCollapseAllTensors(false);
+    }, [
+        setTensorListFilter,
+        setTensorBufferTypeFilters,
+        setShowHighConsumerTensors,
+        setShowLateDeallocatedTensors,
+        setShouldSortBySize,
+        setShouldCollapseAllTensors,
+    ]);
 
-    useEffect(() => {
-        const offsetIndex = scrollPositions?.[key].index || 0;
+    const resetMemoryListStates = useCallback(() => {
+        setListStates(null);
 
-        if (offsetIndex > 0) {
-            virtualizer.scrollToIndex(offsetIndex, { align: 'start' }); // start seems to align best with the centre of the list
-            setScrollPositions(
-                (currentValue): ScrollPositions => ({
-                    ...currentValue,
-                    [key]: { index: 0 },
-                }),
-            );
-        }
-    }, [virtualizer, scrollPositions, setScrollPositions, key]);
+        resetOperationList();
+        resetTensorList();
+    }, [setListStates, resetOperationList, resetTensorList]);
 
     return {
-        scrollPositions,
-        updateScrollPosition,
+        resetMemoryListStates,
+    };
+};
+
+const useRestoreScrollPosition = (key?: ScrollLocations) => {
+    const listStates = useAtomValue(listStatesAtom);
+    const setListStates = useSetAtom(listStatesAtom);
+    const { resetMemoryListStates } = useResetMemoryListStates();
+
+    const updateListState = useCallback(
+        (state: Partial<VirtualListState>) => {
+            if (key) {
+                setListStates((currentValue): ListStates => {
+                    if (!currentValue) {
+                        return {
+                            [key]: {
+                                ...(state as VirtualListState),
+                            },
+                        };
+                    }
+
+                    return {
+                        ...currentValue,
+                        [key]: {
+                            ...currentValue[key],
+                            ...state,
+                        },
+                    };
+                });
+            }
+        },
+        [key, setListStates],
+    );
+
+    const getListState = useCallback((): VirtualListState | null => {
+        if (!key) {
+            return null;
+        }
+
+        return listStates?.[key] || null;
+    }, [key, listStates]);
+
+    return {
+        getListState,
+        updateListState,
+        resetMemoryListStates,
     };
 };
 

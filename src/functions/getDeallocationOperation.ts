@@ -3,18 +3,17 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { OperationDescription, Tensor } from '../model/APIData';
+import { DEALLOCATE_OP_NAME_LIST } from '../definitions/Deallocate';
 
 function getDeallocationOperation(
     tensor: Tensor,
     operations: OperationDescription[],
 ): OperationDescription | undefined {
-    // TODO: Maybe we can strengthen this logic to ensure we're looking at deallocations rather than just checking the name
-    const matchingInputs = operations.filter(
+    return operations.find(
         (operation) =>
-            operation.name.includes('deallocate') && operation.inputs.find((input) => input.id === tensor.id),
+            DEALLOCATE_OP_NAME_LIST.includes(operation.name.toLowerCase()) &&
+            operation.inputs.find((input) => input.id === tensor.id),
     );
-
-    return matchingInputs?.[0];
 }
 
 export default getDeallocationOperation;

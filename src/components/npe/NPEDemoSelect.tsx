@@ -2,7 +2,6 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { FC } from 'react';
 import { Button, ButtonVariant, MenuItem } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { ItemRenderer, Select } from '@blueprintjs/select';
@@ -34,28 +33,32 @@ const NPE_DEMO_DATA: NPEDemoData[] = [
     },
 ];
 
-const NPEDemoSelect: FC<{
+interface NPEDemoSelectProps {
     selectedDemo: NPEDemoData | null;
     setSelectedDemo: (demo: NPEDemoData | null) => void;
     setDemoData: (data: NPEData | null) => void;
-}> = ({ selectedDemo, setSelectedDemo, setDemoData }) => {
+    onDemoSelected: () => void;
+}
+
+const NPEDemoSelect = ({ selectedDemo, setSelectedDemo, setDemoData, onDemoSelected }: NPEDemoSelectProps) => {
     const renderItem: ItemRenderer<NPEDemoData> = (item, { handleClick, modifiers }) => (
-        <MenuItem
+        <div
+            className='folder-picker-menu-item'
             key={item.reportFile}
-            textClassName='folder-picker-label'
-            text={item.label}
-            labelClassName='folder-picker-name-label'
-            active={item.reportFile === selectedDemo?.reportFile}
-            roleStructure='listoption'
-            disabled={modifiers.disabled}
-            onClick={handleClick}
-            icon={IconNames.SAVED}
-        />
+        >
+            <MenuItem
+                text={item.label}
+                active={item.reportFile === selectedDemo?.reportFile}
+                roleStructure='listoption'
+                disabled={modifiers.disabled}
+                onClick={handleClick}
+                icon={IconNames.SAVED}
+            />
+        </div>
     );
 
     return (
         <Select
-            className=''
             items={NPE_DEMO_DATA}
             itemRenderer={renderItem}
             noResults={
@@ -66,6 +69,7 @@ const NPEDemoSelect: FC<{
                 />
             }
             onItemSelect={(item) => {
+                onDemoSelected();
                 setSelectedDemo(item);
                 setDemoData(item.data);
             }}

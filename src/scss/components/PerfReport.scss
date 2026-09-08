@@ -11,14 +11,17 @@ $row-pattern-1: linear-gradient(0deg, transparent 50%, rgb(255 255 255 / 5%) 50%
 $row-pattern-2: linear-gradient(45deg, transparent 50%, rgb(255 255 255 / 5%) 50%);
 $header-footer-border: 2px solid colours.$tt-grey-5;
 
+// Narrowest the columns stay readable at; below this the table scrolls horizontally.
+$perf-table-min-width: 1240px;
+
 .perf-report {
     color: #fff;
-    min-width: 1240px;
     overflow: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
 
     .report-tabs {
-        margin-top: 10px;
-
         > .bp6-tab-list {
             flex-wrap: wrap;
         }
@@ -32,6 +35,10 @@ $header-footer-border: 2px solid colours.$tt-grey-5;
         display: flex;
         width: 100%;
         justify-content: space-between;
+
+        .title {
+            margin-bottom: 0;
+        }
     }
 
     .op-tooltip {
@@ -41,6 +48,19 @@ $header-footer-border: 2px solid colours.$tt-grey-5;
     .perf-table {
         border-collapse: collapse;
         width: 100%;
+
+        // The floor sits on the table rather than on `.perf-report` so a narrow viewport
+        // scrolls the table inside its own `overflow: auto` container instead of the whole
+        // document. Without it the table tracks the container, and every width change --
+        // collapsing the navigation rail is one, on demand -- re-runs auto table layout
+        // across every unvirtualised row.
+        min-width: $perf-table-min-width;
+
+        .skeleton-cell {
+            display: block;
+            height: 14px;
+            min-width: 40px;
+        }
     }
 
     .header-aside {
@@ -54,11 +74,40 @@ $header-footer-border: 2px solid colours.$tt-grey-5;
         margin-bottom: 0;
     }
 
-    .filters {
+    .filters-container {
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+    }
+
+    .option-row {
         display: flex;
         flex-wrap: nowrap;
-        gap: 5px;
-        margin-bottom: 15px;
+        column-gap: 10px;
+        align-items: stretch;
+        margin-bottom: 0;
+
+        .form-group {
+            display: inline-flex;
+            margin-bottom: 0;
+        }
+
+        .select-group {
+            align-items: flex-start;
+            column-gap: 5px;
+            margin-right: 10px;
+        }
+
+        .switch-group {
+            column-gap: 5px;
+            margin-right: 5px;
+            margin-bottom: 0;
+
+            .option-switch {
+                margin-top: 7px;
+                margin-bottom: 0;
+            }
+        }
     }
 
     .view-options {
@@ -66,23 +115,18 @@ $header-footer-border: 2px solid colours.$tt-grey-5;
         flex-wrap: nowrap;
         gap: 10px;
         align-items: center;
-        margin-bottom: 1rem;
     }
 
-    .data-options {
-        display: flex;
-        flex-wrap: nowrap;
-        gap: 10px;
-        align-items: center;
-
-        .option-switch {
-            margin-bottom: 0;
-        }
+    .multi-device-note {
+        width: auto;
+        display: inline-block;
+        margin-bottom: 10px;
     }
 
     .cell-header {
         text-align: left;
         vertical-align: initial;
+        padding: 3px;
 
         .header-label {
             font-weight: 400;
@@ -122,6 +166,10 @@ $header-footer-border: 2px solid colours.$tt-grey-5;
                 background-color: rgb(255 255 255 / 5%);
             }
 
+            &.is-selected {
+                background-color: rgb(255 255 255 / 10%);
+            }
+
             &.comparison-row {
                 border-bottom: 2px solid colours.$tt-sand-shade;
                 background-size: 5px 5px;
@@ -150,6 +198,14 @@ $header-footer-border: 2px solid colours.$tt-grey-5;
         }
     }
 
+    .perf-tensor-trigger-wrapper {
+        display: inline-flex;
+
+        .perf-tensor-trigger {
+            background-color: transparent;
+        }
+    }
+
     .missing-data {
         background-color: colours.$tt-red-shade;
 
@@ -173,6 +229,37 @@ $header-footer-border: 2px solid colours.$tt-grey-5;
         &.advice {
             border-bottom: none;
         }
+
+        .l1-fullness-attributes {
+            font-size: 12px;
+        }
+
+        .perf-heuristic-flags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 4px;
+            max-width: 180px;
+        }
+
+        .perf-heuristic-flag {
+            &:hover,
+            &:active {
+                cursor: help;
+            }
+        }
+    }
+
+    .perf-heuristic-flag-tooltip {
+        max-width: 260px;
+
+        p {
+            margin: 4px 0 0;
+        }
+
+        .perf-heuristic-flag-detail {
+            font-family: $base-font;
+            opacity: 0.85;
+        }
     }
 
     .table-header {
@@ -184,14 +271,10 @@ $header-footer-border: 2px solid colours.$tt-grey-5;
         font-style: italic;
 
         td {
-            padding: 1rem 0.25rem;
+            line-height: 1;
 
-            &.no-wrap {
-                white-space: nowrap;
-            }
-
-            &.break-word {
-                word-break: break-word;
+            &.pre-wrap {
+                white-space: pre-wrap;
             }
         }
     }

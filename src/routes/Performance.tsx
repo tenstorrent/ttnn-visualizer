@@ -3,59 +3,92 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { Helmet } from 'react-helmet-async';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Size, Tab, Tabs } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { useAtom, useAtomValue } from 'jotai';
 import { HttpStatusCode } from 'axios';
+import getResponseError from '../functions/getResponseError';
 import {
+    useL1PressureByOperation,
+    useOpToPerfIdFiltered,
     usePerfFolderList,
+    usePerfMeta,
+    usePerfMetas,
     usePerformanceComparisonReport,
     usePerformanceRange,
     usePerformanceReport,
 } from '../hooks/useAPI';
+import { useResetPerfTableSessionState } from '../hooks/useResetPerfTableSessionState';
 import LoadingSpinner from '../components/LoadingSpinner';
 import PerformanceReport from '../components/performance/PerfReport';
 import {
     activePerformanceReportAtom,
+    activePerformanceReportFolderNameAtom,
     comparisonPerformanceReportListAtom,
     perfSelectedTabAtom,
     selectedPerformanceRangeAtom,
 } from '../store/app';
-import PerfCharts from '../components/performance/PerfCharts';
-import PerfChartFilter from '../components/performance/PerfChartFilter';
-import { Marker, MarkerColours, PerfTableRow } from '../definitions/PerfTable';
-import NonFilterablePerfCharts from '../components/performance/NonFilterablePerfCharts';
+import PerformanceChartsTab from '../components/performance/PerformanceChartsTab';
+import { Marker, MarkerColours } from '../definitions/PerfTable';
+import { TypedPerfTableRow } from '../model/PerfTable';
+import { L1PressureStatus } from '../model/L1Pressure';
+import { annotatePerfHeuristicFlags } from '../functions/computePerfHeuristicFlags';
+import { resolveMaxCores } from '../functions/getCoreCount';
+import { enrichRowData } from '../functions/enrichPerfRowData';
+import { clampSelectionToRange } from '../functions/perfRangeSelection';
 import ComparisonReportSelector from '../components/performance/ComparisonReportSelector';
 import 'styles/routes/Performance.scss';
 import getServerConfig from '../functions/getServerConfig';
 import { OpType, PerfTabIds } from '../definitions/Performance';
+import { StackedColumnKeys, StackedPerfRow, TypedStackedPerfRow } from '../definitions/StackedPerfTable';
 
 const INITIAL_TAB_ID = PerfTabIds.TABLE;
+const EMPTY_COMPARISON_ROWS: TypedPerfTableRow[][] = [];
+const EMPTY_COMPARISON_MAX_CORES: number[] = [];
 
 export default function Performance() {
     const [comparisonReportList, setComparisonReportList] = useAtom(comparisonPerformanceReportListAtom);
     const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
+    const activeReportFolderName = useAtomValue(activePerformanceReportFolderNameAtom);
     const [selectedRange, setSelectedRange] = useAtom(selectedPerformanceRangeAtom);
     const [selectedTabId, setSelectedTabId] = useAtom(perfSelectedTabAtom);
-
-    const [filteredPerfData, setFilteredPerfData] = useState<PerfTableRow[]>([]);
-    const [filteredComparisonData, setFilteredComparisonData] = useState<PerfTableRow[][]>([]);
     const [selectedOpCodes, setSelectedOpCodes] = useState<Marker[]>([]);
+    const [hasUserChangedOpCodeFilter, setHasUserChangedOpCodeFilter] = useState(false);
+    const [appliedOpCodeOptionsKey, setAppliedOpCodeOptionsKey] = useState<string | null>(null);
+
+    const setSelectedOpCodesFromUser = useCallback((update: Marker[] | ((previous: Marker[]) => Marker[])) => {
+        setHasUserChangedOpCodeFilter(true);
+        setSelectedOpCodes(update);
+    }, []);
 
     const {
         data,
         isLoading: isLoadingPerformance,
         error: perfDataError,
-    } = usePerformanceReport(activePerformanceReport?.reportName || null);
-    const { data: comparisonData } = usePerformanceComparisonReport();
+    } = usePerformanceReport(activeReportFolderName);
+    const { data: comparisonData, isLoading: isLoadingComparison } = usePerformanceComparisonReport();
     const { data: folderList } = usePerfFolderList();
     const perfRange = usePerformanceRange();
+    const opIdsMap = useOpToPerfIdFiltered();
+    const l1Pressure = useL1PressureByOperation();
+    const l1PressureMap = l1Pressure.data;
+    const { data: deviceMeta } = usePerfMeta(activeReportFolderName);
+    // Combined to `(MetaData | null)[]` so comparison enrichment memos on stable data, not per-render query objects.
+    const comparisonDeviceMetas = usePerfMetas(comparisonReportList);
+    // Reserve the column while still loading so it doesn't pop in and shift the table sideways;
+    // hide it only once we know the data is genuinely unavailable.
+    const hasL1PressureData = l1Pressure.status !== L1PressureStatus.Unavailable;
+    const resetPerfTableSessionState = useResetPerfTableSessionState();
+    // undefined until first effect run so we skip the mount cycle and clear only on path change
+    const previousReportPathRef = useRef<string | null | undefined>(undefined);
 
     const shouldDisableComparison = getServerConfig()?.SERVER_MODE;
 
     const perfData = data?.report;
     const stackedData = data?.stacked_report;
+    const reportSelectors =
+        comparisonReportList && comparisonReportList?.length > 0 ? [...comparisonReportList, null] : [null];
     const comparisonPerfData = useMemo(() => comparisonData?.map((d) => d.report) || [], [comparisonData]);
     const comparisonStackedData = useMemo(() => comparisonData?.map((d) => d.stacked_report) || [], [comparisonData]);
     const opCodeOptions = useMemo(() => {
@@ -82,16 +115,141 @@ export default function Performance() {
         }));
     }, [perfData, comparisonPerfData]);
 
+    const opCodeOptionsKey = useMemo(
+        () => opCodeOptions.map((o) => `${o.opCode}:${o.colour}`).join('|'),
+        [opCodeOptions],
+    );
+
+    // Prefer the user's selected range, but don't wait on RangeSlider's sync effect — when
+    // selectedRange is still null (or left over from a disjoint prior report) fall back to
+    // the report's full span so we never flash "No data to display" after the skeleton.
+    //
+    // The same helper the slider clamps its handles with, so the two cannot disagree about
+    // what "misses the report" means. Clamping an overhanging selection is row-set neutral
+    // here — every row id already lies inside `perfRange` — so only the widen branch, which
+    // produces the full-span fallback, changes what the table shows.
+    const rangeForTable = useMemo(() => {
+        if (!perfRange) {
+            return selectedRange;
+        }
+
+        if (!selectedRange) {
+            return perfRange;
+        }
+
+        return clampSelectionToRange(selectedRange[0], selectedRange[1], perfRange[0], perfRange[1]);
+    }, [selectedRange, perfRange]);
+
     const rangedData = useMemo(
         () =>
-            comparisonReportList && selectedRange && filteredPerfData.length > 0
-                ? filteredPerfData.filter((row) => {
+            rangeForTable && perfData
+                ? perfData.filter((row) => {
                       const rowId = typeof row?.id === 'number' ? row.id : parseInt(row?.id, 10);
-                      return rowId >= selectedRange[0] && rowId <= selectedRange[1];
+                      return rowId >= rangeForTable[0] && rowId <= rangeForTable[1];
                   })
-                : filteredPerfData,
-        [selectedRange, filteredPerfData, comparisonReportList],
+                : [],
+        [rangeForTable, perfData],
     );
+
+    // Report finished but range not yet derived (should be rare with the fallback above).
+    const isTableLoading = isLoadingPerformance || (!!perfData?.length && rangeForTable === null);
+
+    const typedRows = useMemo(
+        () => enrichRowData(rangedData, opIdsMap, l1PressureMap),
+        [rangedData, opIdsMap, l1PressureMap],
+    );
+
+    const maxCores = useMemo(() => resolveMaxCores(deviceMeta, typedRows), [deviceMeta, typedRows]);
+
+    const enrichedData = useMemo(() => annotatePerfHeuristicFlags(typedRows, maxCores), [typedRows, maxCores]);
+
+    // Each comparison dataset is thresholded with its own device capacity (meta when
+    // available, else row/architecture fallback) so cross-architecture compares stay honest.
+    const { enrichedComparisonData, comparisonMaxCores } = useMemo(() => {
+        if (!comparisonPerfData?.length) {
+            return { enrichedComparisonData: EMPTY_COMPARISON_ROWS, comparisonMaxCores: EMPTY_COMPARISON_MAX_CORES };
+        }
+
+        const maxCoresByDataset: number[] = [];
+        const annotatedByDataset = comparisonPerfData.map((dataset, index) => {
+            // L1 pressure comes from the active profiler report only — never attribute it to
+            // comparison datasets (op-id sync and buffer lookups are keyed to the active report).
+            const comparisonTypedRows = enrichRowData(dataset, opIdsMap, null);
+            const datasetMaxCores = resolveMaxCores(comparisonDeviceMetas[index], comparisonTypedRows);
+            maxCoresByDataset.push(datasetMaxCores);
+
+            return annotatePerfHeuristicFlags(comparisonTypedRows, datasetMaxCores);
+        });
+
+        return { enrichedComparisonData: annotatedByDataset, comparisonMaxCores: maxCoresByDataset };
+    }, [comparisonPerfData, opIdsMap, comparisonDeviceMetas]);
+
+    const selectedOpCodeSet = useMemo(
+        () => new Set(selectedOpCodes.map((selected) => selected.opCode)),
+        [selectedOpCodes],
+    );
+
+    const filteredEnrichedData = useMemo(() => {
+        if (opCodeOptions.length === 0) {
+            return enrichedData;
+        }
+
+        if (selectedOpCodes.length === 0) {
+            if (!hasUserChangedOpCodeFilter) {
+                return enrichedData;
+            }
+
+            return [];
+        }
+
+        return enrichedData.filter((row) => row.raw_op_code !== undefined && selectedOpCodeSet.has(row.raw_op_code));
+    }, [enrichedData, hasUserChangedOpCodeFilter, opCodeOptions.length, selectedOpCodes.length, selectedOpCodeSet]);
+
+    const filteredEnrichedComparisonData = useMemo(() => {
+        if (opCodeOptions.length === 0) {
+            return enrichedComparisonData;
+        }
+
+        if (selectedOpCodes.length === 0) {
+            if (!hasUserChangedOpCodeFilter) {
+                return enrichedComparisonData;
+            }
+
+            return enrichedComparisonData.map(() => []);
+        }
+
+        return enrichedComparisonData.map((dataset) =>
+            dataset.filter((row) => row.raw_op_code !== undefined && selectedOpCodeSet.has(row.raw_op_code)),
+        );
+    }, [
+        enrichedComparisonData,
+        hasUserChangedOpCodeFilter,
+        opCodeOptions.length,
+        selectedOpCodes.length,
+        selectedOpCodeSet,
+    ]);
+    const enrichedStackedData = useMemo(() => (stackedData ? enrichStackedRowData(stackedData) : []), [stackedData]);
+    const enrichedComparisonStackedData = useMemo(
+        () => comparisonStackedData?.map((dataset) => enrichStackedRowData(dataset)) || [],
+        [comparisonStackedData],
+    );
+
+    useEffect(() => {
+        const nextPath = activePerformanceReport?.path ?? null;
+        const previousPath = previousReportPathRef.current;
+
+        if (previousPath === undefined) {
+            previousReportPathRef.current = nextPath;
+            return;
+        }
+
+        if (previousPath === nextPath) {
+            return;
+        }
+
+        previousReportPathRef.current = nextPath;
+        resetPerfTableSessionState();
+    }, [activePerformanceReport?.path, resetPerfTableSessionState]);
 
     // Clear comparison report if users switches active perf report to the comparison report
     useEffect(() => {
@@ -110,41 +268,19 @@ export default function Performance() {
     }, [comparisonReportList, setSelectedRange, perfRange]);
 
     useEffect(() => {
-        setFilteredComparisonData(
-            comparisonPerfData?.map((dataset) =>
-                dataset.filter((row) =>
-                    selectedOpCodes.length
-                        ? selectedOpCodes.map((selected) => selected.opCode).includes(row.raw_op_code ?? '') ||
-                          row.op_type === OpType.SIGNPOST
-                        : row.op_type === OpType.SIGNPOST,
-                ),
-            ) || [],
-        );
-    }, [selectedOpCodes, comparisonPerfData]);
-
-    useEffect(() => {
-        setFilteredPerfData(
-            perfData?.filter((row) =>
-                selectedOpCodes.length
-                    ? selectedOpCodes.map((selected) => selected.opCode).includes(row.raw_op_code ?? '') ||
-                      row.op_type === OpType.SIGNPOST
-                    : row.op_type === OpType.SIGNPOST,
-            ) || [],
-        );
-    }, [selectedOpCodes, perfData]);
-
-    useEffect(() => {
-        setSelectedOpCodes(opCodeOptions);
-    }, [opCodeOptions]);
-
-    if (isLoadingPerformance && !perfDataError) {
-        return <LoadingSpinner />;
-    }
+        if (appliedOpCodeOptionsKey === null || opCodeOptionsKey !== appliedOpCodeOptionsKey) {
+            // Has sufficient guard conditions
+            // eslint-disable-next-line react-hooks/set-state-in-effect
+            setAppliedOpCodeOptionsKey(opCodeOptionsKey);
+            setHasUserChangedOpCodeFilter(false);
+            setSelectedOpCodes(opCodeOptions);
+        }
+    }, [appliedOpCodeOptionsKey, opCodeOptionsKey, opCodeOptions]);
 
     if (perfDataError?.status === HttpStatusCode.UnprocessableEntity) {
         return (
             <>
-                <h2>Unable to process performance data</h2>
+                <h2>Unable to load performance data</h2>
                 <p>
                     Data format is not supported, try using{' '}
                     <a href='https://github.com/tenstorrent/ttnn-visualizer/releases/tag/v0.49.0'>
@@ -153,12 +289,11 @@ export default function Performance() {
                     or earlier, or regenerate performance report using a newer version of{' '}
                     <a href='https://github.com/tenstorrent/tt-metal/'>TT-Metal</a>.
                 </p>
+
+                <code className='formatted-code'>{getResponseError(perfDataError)}</code>
             </>
         );
     }
-
-    const reportSelectors =
-        comparisonReportList && comparisonReportList?.length > 0 ? [...comparisonReportList, null] : [null];
 
     return (
         <div className='performance data-padding'>
@@ -198,11 +333,16 @@ export default function Performance() {
                     icon={IconNames.TH}
                     panel={
                         <PerformanceReport
-                            data={rangedData}
-                            comparisonData={filteredComparisonData}
-                            stackedData={stackedData}
-                            comparisonStackedData={comparisonStackedData}
+                            data={enrichedData}
+                            comparisonData={enrichedComparisonData}
+                            stackedData={enrichedStackedData}
+                            comparisonStackedData={enrichedComparisonStackedData}
                             signposts={data?.signposts}
+                            hasL1PressureData={hasL1PressureData}
+                            isLoading={isTableLoading}
+                            isComparisonLoading={isLoadingComparison}
+                            maxCores={maxCores}
+                            comparisonMaxCores={comparisonMaxCores}
                         />
                     }
                 />
@@ -216,33 +356,15 @@ export default function Performance() {
                             <h3 className='title'>Performance charts</h3>
 
                             {perfData ? (
-                                <>
-                                    <div className='charts-container'>
-                                        <PerfChartFilter
-                                            opCodeOptions={opCodeOptions}
-                                            selectedOpCodes={selectedOpCodes}
-                                            updateOpCodes={setSelectedOpCodes}
-                                        />
-
-                                        <PerfCharts
-                                            filteredPerfData={rangedData}
-                                            comparisonData={filteredComparisonData}
-                                            selectedOpCodes={selectedOpCodes}
-                                        />
-                                    </div>
-
-                                    <div className='charts-container non-filterable-charts'>
-                                        <span />
-
-                                        <div>
-                                            <NonFilterablePerfCharts
-                                                chartData={rangedData}
-                                                secondaryData={comparisonPerfData || []}
-                                                opCodeOptions={opCodeOptions}
-                                            />
-                                        </div>
-                                    </div>
-                                </>
+                                <PerformanceChartsTab
+                                    filteredPerfData={filteredEnrichedData}
+                                    filteredComparisonData={filteredEnrichedComparisonData}
+                                    enrichedData={enrichedData}
+                                    enrichedComparisonData={enrichedComparisonData}
+                                    selectedOpCodes={selectedOpCodes}
+                                    opCodeOptions={opCodeOptions}
+                                    updateOpCodes={setSelectedOpCodesFromUser}
+                                />
                             ) : null}
                         </div>
                     }
@@ -251,3 +373,31 @@ export default function Performance() {
         </div>
     );
 }
+
+const enrichStackedRowData = (rows: StackedPerfRow[]): TypedStackedPerfRow[] =>
+    rows.map((row) => ({
+        ...row,
+        [StackedColumnKeys.Percent]: row[StackedColumnKeys.Percent] ? parseFloat(row[StackedColumnKeys.Percent]) : null,
+        [StackedColumnKeys.Device]: row[StackedColumnKeys.Device] ? parseInt(row[StackedColumnKeys.Device], 10) : null,
+        [StackedColumnKeys.DeviceTimeSumUs]: row[StackedColumnKeys.DeviceTimeSumUs]
+            ? parseFloat(row[StackedColumnKeys.DeviceTimeSumUs])
+            : null,
+        [StackedColumnKeys.OpsCount]: row[StackedColumnKeys.OpsCount]
+            ? parseFloat(row[StackedColumnKeys.OpsCount])
+            : null,
+        [StackedColumnKeys.FlopsMin]: row[StackedColumnKeys.FlopsMin]
+            ? parseFloat(row[StackedColumnKeys.FlopsMin])
+            : null,
+        [StackedColumnKeys.FlopsMax]: row[StackedColumnKeys.FlopsMax]
+            ? parseFloat(row[StackedColumnKeys.FlopsMax])
+            : null,
+        [StackedColumnKeys.FlopsMean]: row[StackedColumnKeys.FlopsMean]
+            ? parseFloat(row[StackedColumnKeys.FlopsMean])
+            : null,
+        [StackedColumnKeys.FlopsStd]: row[StackedColumnKeys.FlopsStd]
+            ? parseFloat(row[StackedColumnKeys.FlopsStd])
+            : null,
+        [StackedColumnKeys.FlopsWeightedMean]: row[StackedColumnKeys.FlopsWeightedMean]
+            ? parseFloat(row[StackedColumnKeys.FlopsWeightedMean])
+            : null,
+    }));

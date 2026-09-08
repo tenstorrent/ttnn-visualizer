@@ -1,0 +1,178 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
+
+import '@testing-library/jest-dom/vitest';
+import { act, cleanup, render, screen } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import FileStatusOverlay from '../src/components/FileStatusOverlay';
+import { getFileStatusLabel } from '../src/functions/getFileStatusLabel';
+import { FileProgress, FileStatus } from '../src/model/APIData';
+import { ConnectionTestStates } from '../src/definitions/ConnectionStatus';
+import { FileTransferSource } from '../src/definitions/FileTransferSource';
+import { fileTransferRegistryAtom, mlirFileResultsAtom } from '../src/store/app';
+import { TestProviders } from './helpers/TestProviders';
+
+function renderOverlay(progress: FileProgress, source: FileTransferSource = FileTransferSource.REMOTE_SYNC) {
+    return render(
+        <TestProviders initialAtomValues={[[fileTransferRegistryAtom, { [source]: progress }]]}>
+            <FileStatusOverlay />
+        </TestProviders>,
+    );
+}
+
+afterEach(cleanup);
+
+describe('FileStatusOverlay status row', () => {
+    // Regression for issue #1599: the overlay opens on STARTED (empty filename)
+    // and previously showed no per-file row, so the first DOWNLOADING event
+    // injected a new <p> and grew the modal height. The STARTED label now
+    // renders standalone so height stays stable across STARTED -> DOWNLOADING.
+    it('shows the standalone STARTED label before a filename arrives', () => {
+        renderOverlay({
+            currentFileName: '',
+            numberOfFiles: 3,
+            percentOfCurrent: 0,
+            finishedFiles: 0,
+            status: FileStatus.STARTED,
+            bytesTransferred: 0,
+            bytesTotal: 200,
+            currentFileSize: 0,
+        });
+
+        expect(screen.getByText(getFileStatusLabel(FileStatus.STARTED))).toBeInTheDocument();
+    });
+
+    it('shows the filename row when DOWNLOADING reports a current file', () => {
+        renderOverlay({
+            currentFileName: 'db.sqlite',
+            numberOfFiles: 3,
+            percentOfCurrent: 0,
+            finishedFiles: 0,
+            status: FileStatus.DOWNLOADING,
+            bytesTransferred: 0,
+            bytesTotal: 200,
+            currentFileSize: 183 * 1024 * 1024,
+        });
+
+        expect(screen.getByText('db.sqlite')).toBeInTheDocument();
+        expect(screen.queryByText(getFileStatusLabel(FileStatus.STARTED))).not.toBeInTheDocument();
+    });
+
+    // Uploads stream as a single multipart request, so currentFileName stays
+    // empty throughout. The STARTED-only guard keeps the per-file row hidden
+    // for UPLOADING — no standalone "Uploading" line for the whole upload.
+    it('does not render the per-file row for UPLOADING with no filename', () => {
+        renderOverlay(
+            {
+                currentFileName: '',
+                numberOfFiles: 5,
+                percentOfCurrent: 0,
+                finishedFiles: 0,
+                status: FileStatus.UPLOADING,
+                bytesTransferred: 64_000,
+                bytesTotal: 1_024_000,
+            },
+            FileTransferSource.LOCAL_UPLOAD,
+        );
+
+        expect(screen.queryByText(getFileStatusLabel(FileStatus.STARTED))).not.toBeInTheDocument();
+        expect(screen.queryByText(getFileStatusLabel(FileStatus.UPLOADING))).not.toBeInTheDocument();
+    });
+
+    it('renders PROCESSING as an indeterminate stage without transfer summary text', () => {
+        renderOverlay({
+            currentFileName: 'model.mlir',
+            numberOfFiles: 2,
+            percentOfCurrent: 100,
+            finishedFiles: 0,
+            status: FileStatus.PROCESSING,
+            bytesTransferred: 256_000,
+            bytesTotal: 256_000,
+            currentFileSize: 256_000,
+        });
+
+        expect(screen.getByText('Processing reports')).toBeInTheDocument();
+        expect(screen.getByText(getFileStatusLabel(FileStatus.PROCESSING))).toBeInTheDocument();
+        expect(screen.getByLabelText('Processing reports')).toBeInTheDocument();
+        expect(screen.queryByText(/files\s*\(/i)).not.toBeInTheDocument();
+        expect(screen.queryByText(/complete/i)).not.toBeInTheDocument();
+    });
+
+    // Files upload as one batch then convert in parallel on the server, so the
+    // processing stage lists every file with a spinner instead of a single
+    // "processing one report" line.
+    it('lists each pending file with a spinner while PROCESSING', () => {
+        render(
+            <TestProviders
+                initialAtomValues={[
+                    [
+                        fileTransferRegistryAtom,
+                        {
+                            [FileTransferSource.MLIR_UPLOAD]: {
+                                currentFileName: 'a.mlir',
+                                numberOfFiles: 2,
+                                percentOfCurrent: 100,
+                                finishedFiles: 0,
+                                status: FileStatus.PROCESSING,
+                            },
+                        },
+                    ],
+                    [
+                        mlirFileResultsAtom,
+                        [
+                            {
+                                filename: 'a.mlir',
+                                name: null,
+                                status: ConnectionTestStates.PROGRESS,
+                                graph: null,
+                                persisted: true,
+                            },
+                            {
+                                filename: 'b.mlir',
+                                name: null,
+                                status: ConnectionTestStates.PROGRESS,
+                                graph: null,
+                                persisted: true,
+                            },
+                        ],
+                    ],
+                ]}
+            >
+                <FileStatusOverlay />
+            </TestProviders>,
+        );
+
+        expect(screen.getByText('a.mlir')).toBeInTheDocument();
+        expect(screen.getByText('b.mlir')).toBeInTheDocument();
+        // One spinner per file rather than the single indeterminate line.
+        expect(document.querySelectorAll('.bp6-spinner')).toHaveLength(2);
+    });
+
+    it('shows percent and elapsed time during download', () => {
+        vi.useFakeTimers();
+
+        try {
+            vi.setSystemTime(new Date('2026-01-01T00:00:00Z'));
+
+            renderOverlay({
+                currentFileName: 'db.sqlite',
+                numberOfFiles: 1,
+                percentOfCurrent: 50,
+                finishedFiles: 0,
+                status: FileStatus.DOWNLOADING,
+                bytesTransferred: 100,
+                bytesTotal: 200,
+                currentFileSize: 0,
+            });
+
+            act(() => {
+                vi.runOnlyPendingTimers();
+            });
+
+            expect(screen.getByText(/\d+% — \d+s elapsed/)).toBeInTheDocument();
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+});

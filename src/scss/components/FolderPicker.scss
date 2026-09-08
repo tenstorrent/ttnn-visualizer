@@ -2,6 +2,12 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
+@use '../definitions/colours' as *;
+@use '../definitions/variables' as variables;
+@use '../mixins/formLayout' as form-layout;
+
+$folder-text-size: 15px;
+
 // The select component
 .folder-picker {
     > .bp6-popover-target {
@@ -9,7 +15,7 @@
     }
 
     .folder-picker-button {
-        width: 250px;
+        width: variables.$report-select-width;
 
         .bp6-button-text {
             white-space: nowrap;
@@ -21,28 +27,18 @@
 
 // Each item in the dropdown
 .folder-picker-menu-item {
-    display: flex;
-    flex-wrap: nowrap;
-    justify-content: space-between;
+    @include form-layout.select-menu-item-actions;
 
-    .bp6-menu-item {
-        padding-left: 7px;
+    font-size: $folder-text-size;
+
+    .folder-picker-sub-label {
+        display: block;
+        font-size: 11px;
+        line-height: 1.1;
+        color: $tt-grey-5;
     }
 
-    > li {
-        flex-grow: 1;
-        flex-shrink: 1;
-    }
-
-    .folder-picker-label {
-        max-width: 145px;
-    }
-
-    .folder-picker-name-label {
-        max-width: 145px;
-        text-align: right;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
+    .folder-link-status-unknown {
+        opacity: 0.2;
     }
 }

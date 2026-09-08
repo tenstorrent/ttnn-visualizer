@@ -5,23 +5,32 @@
 import { PlotData } from 'plotly.js';
 import { useMemo } from 'react';
 import { useAtomValue } from 'jotai';
-import { PerfTableRow } from '../../definitions/PerfTable';
+import { TypedPerfTableRow } from '../../model/PerfTable';
 import getCoreUtilization from '../../functions/getCoreUtilization';
-import { PlotConfiguration } from '../../definitions/PlotConfigurations';
+import {
+    PERF_CHART_WIDE_LEFT_MARGIN,
+    PlotConfiguration,
+    getCoreCountAxisConfig,
+    getDeviceUtilizationAxisConfig,
+} from '../../definitions/PlotConfigurations';
+import { PERF_CHART_LABELS, PerfChartId } from '../../definitions/PerformanceCharts';
 import PerfChart from './PerfChart';
-import { activePerformanceReportAtom, comparisonPerformanceReportListAtom } from '../../store/app';
+import { activePerformanceReportAtom, comparisonPerformanceReportListAtom, mergeDevicesAtom } from '../../store/app';
 import getPlotLabel from '../../functions/getPlotLabel';
 import { getAxisUpperRange } from '../../functions/perfFunctions';
 import { getPrimaryDataColours, getSecondaryDataColours } from '../../definitions/PerformancePlotColours';
+import PerfMultiDeviceNotice from './PerfMultiDeviceNotice';
 
 interface PerfCoreCountUtilizationChartProps {
-    datasets?: PerfTableRow[][];
+    datasets?: TypedPerfTableRow[][];
     maxCores: number;
+    chartId: PerfChartId;
 }
 
-function PerfCoreCountUtilizationChart({ datasets = [], maxCores }: PerfCoreCountUtilizationChartProps) {
+function PerfCoreCountUtilizationChart({ datasets = [], maxCores, chartId }: PerfCoreCountUtilizationChartProps) {
     const perfReport = useAtomValue(activePerformanceReportAtom);
     const comparisonReportList = useAtomValue(comparisonPerformanceReportListAtom);
+    const mergeDevices = useAtomValue(mergeDevicesAtom);
 
     const chartDataDuration = useMemo(
         () =>
@@ -54,39 +63,39 @@ function PerfCoreCountUtilizationChart({ datasets = [], maxCores }: PerfCoreCoun
             })) as Partial<PlotData>[],
         [datasets, perfReport, comparisonReportList, maxCores],
     );
+    const maxY2Value = Math.max(...chartDataUtilization.flatMap((data) => (data.y as number[]) ?? []));
 
-    const configuration: PlotConfiguration = {
-        margin: {
-            l: 100,
-            r: 0,
-            b: 50,
-            t: 0,
-        },
-        showLegend: true,
-        xAxis: {
-            title: { text: 'Operation' },
-            range: [0, getAxisUpperRange(datasets)],
-        },
-        yAxis: {
-            title: { text: 'Core Count' },
-            tickformat: 'd',
-            hoverformat: ',.2r',
-            range: [0, maxCores],
-        },
-        yAxis2: {
-            title: { text: 'Utilization (%)' },
-            tickformat: '.0%',
-            hoverformat: '.2%',
-            range: [0, 1],
-        },
-    };
+    const chartData = useMemo(
+        () => [...chartDataDuration, ...chartDataUtilization],
+        [chartDataDuration, chartDataUtilization],
+    );
+
+    // Memoized because PerfChart derives the Plotly layout from it, and a fresh object redraws
+    // the chart — and re-reads the chart chrome from the stylesheet — on every render.
+    const configuration = useMemo<PlotConfiguration>(
+        () => ({
+            margin: PERF_CHART_WIDE_LEFT_MARGIN,
+            showLegend: true,
+            xAxis: {
+                title: { text: 'Operation' },
+                range: [0, getAxisUpperRange(datasets)],
+            },
+            yAxis: getCoreCountAxisConfig(maxCores),
+            yAxis2: getDeviceUtilizationAxisConfig(maxY2Value),
+        }),
+        [datasets, maxCores, maxY2Value],
+    );
 
     return (
-        <PerfChart
-            title='Core Count + Utilization'
-            chartData={[...chartDataDuration, ...chartDataUtilization]}
-            configuration={configuration}
-        />
+        <>
+            {maxY2Value > 0 && mergeDevices && <PerfMultiDeviceNotice />}
+            <PerfChart
+                id={chartId}
+                title={PERF_CHART_LABELS[chartId]}
+                chartData={chartData}
+                configuration={configuration}
+            />
+        </>
     );
 }
 

@@ -12,9 +12,15 @@ export enum SortingDirection {
 type SortingValue = string | number | null;
 
 const sortAsc = (a: SortingValue, b: SortingValue): number => {
-    // Nulls should be sorted to the end
-    if (a === null || b === null) {
-        return a === null ? 1 : -1;
+    // NaN and nulls should be sorted to the end
+    const aIsInvalid = a === null || (typeof a === 'number' && Number.isNaN(a));
+    const bIsInvalid = b === null || (typeof b === 'number' && Number.isNaN(b));
+
+    if (aIsInvalid || bIsInvalid) {
+        if (aIsInvalid && bIsInvalid) {
+            return 0;
+        }
+        return aIsInvalid ? 1 : -1;
     }
 
     if (a === undefined || b === undefined || a === b) {
@@ -29,9 +35,15 @@ const sortAsc = (a: SortingValue, b: SortingValue): number => {
 };
 
 const sortDesc = (a: SortingValue, b: SortingValue): number => {
-    // Nulls should be sorted to the end
-    if (a === null || b === null) {
-        return a === null ? 1 : -1;
+    // NaN and nulls should be sorted to the end
+    const aIsInvalid = a === null || (typeof a === 'number' && Number.isNaN(a));
+    const bIsInvalid = b === null || (typeof b === 'number' && Number.isNaN(b));
+
+    if (aIsInvalid || bIsInvalid) {
+        if (aIsInvalid && bIsInvalid) {
+            return 0;
+        }
+        return aIsInvalid ? 1 : -1;
     }
 
     if (a === undefined || b === undefined || a === b) {

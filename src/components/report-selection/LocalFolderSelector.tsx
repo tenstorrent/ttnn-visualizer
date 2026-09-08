@@ -4,33 +4,45 @@
 
 import { FileInput, FormGroup, Icon, IconName, Intent } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
-import { ChangeEvent, type FC, useEffect, useMemo, useState } from 'react';
+import { ChangeEvent, useEffect, useMemo, useState } from 'react';
 
 import { useQueryClient } from '@tanstack/react-query';
-import { useAtom, useSetAtom } from 'jotai';
+import { useAtom } from 'jotai';
 import useLocalConnection from '../../hooks/useLocal';
 import {
     activePerformanceReportAtom,
     activeProfilerReportAtom,
     performanceReportLocationAtom,
     profilerReportLocationAtom,
-    selectedDeviceAtom,
 } from '../../store/app';
 import { ConnectionStatus, ConnectionTestStates } from '../../definitions/ConnectionStatus';
-import FileStatusOverlay from '../FileStatusOverlay';
+import {
+    ACTIVE_MEMORY_REPORT_TOAST_TITLE,
+    ACTIVE_PERFORMANCE_REPORT_TOAST_TITLE,
+    MEMORY_REPORT_DELETED_TOAST_TITLE,
+    MEMORY_REPORT_DELETE_FAILED_TOAST_TITLE,
+    MEMORY_REPORT_LOAD_FAILED_TOAST_TITLE,
+    PERFORMANCE_REPORT_DELETED_TOAST_TITLE,
+    PERFORMANCE_REPORT_DELETE_FAILED_TOAST_TITLE,
+    PERFORMANCE_REPORT_LOAD_FAILED_TOAST_TITLE,
+} from '../../definitions/notifyActiveReport';
 import createToastNotification from '../../functions/createToastNotification';
-import getServerConfig from '../../functions/getServerConfig';
-import { DEFAULT_DEVICE_ID } from '../../definitions/Devices';
+import { ToastType } from '../../definitions/ToastType';
+import getResponseError from '../../functions/getResponseError';
+import isDirectReportMode from '../../functions/isDirectReportMode';
 import {
     PERFORMANCE_FOLDER_QUERY_KEY,
     PROFILER_FOLDER_QUERY_KEY,
+    clearReportCaches,
     deletePerformance,
     deleteProfiler,
     updateInstance,
-    useInstance,
     usePerfFolderList,
     useReportFolderList,
+    useReportMetadata,
 } from '../../hooks/useAPI';
+import { useActivatingReport } from '../../hooks/useActivatingReport';
+import { useReportLinkBadgeIds } from '../../hooks/useReportLinkBadgeIds';
 import LocalFolderPicker from './LocalFolderPicker';
 import { ReportFolder, ReportLocation } from '../../definitions/Reports';
 import {
@@ -39,12 +51,21 @@ import {
     normaliseReportFolder,
 } from '../../functions/validateReportFolder';
 import { TEST_IDS } from '../../definitions/TestIds';
+import { DBVersionValidation } from '../../definitions/Versions';
+import { evaluateDbVersion } from '../../functions/compareDbVersion';
+import { ReportKind, ReportLoadFailureReason, ReportSource } from '../../definitions/EventLogEvent';
+import {
+    getReportLoadFailureReason,
+    recordReportLoadFailed,
+    recordReportLoaded,
+} from '../../functions/reportLoadEvents';
 
 const ICON_MAP: Record<ConnectionTestStates, IconName> = {
     [ConnectionTestStates.IDLE]: IconNames.DOT,
     [ConnectionTestStates.PROGRESS]: IconNames.DOT,
     [ConnectionTestStates.FAILED]: IconNames.CROSS,
     [ConnectionTestStates.OK]: IconNames.TICK,
+    [ConnectionTestStates.WARNING]: IconNames.WARNING_SIGN,
 };
 
 const INTENT_MAP: Record<ConnectionTestStates, Intent> = {
@@ -52,6 +73,7 @@ const INTENT_MAP: Record<ConnectionTestStates, Intent> = {
     [ConnectionTestStates.PROGRESS]: Intent.WARNING,
     [ConnectionTestStates.FAILED]: Intent.DANGER,
     [ConnectionTestStates.OK]: Intent.SUCCESS,
+    [ConnectionTestStates.WARNING]: Intent.WARNING,
 };
 
 const connectionOkStatus: ConnectionStatus = {
@@ -66,69 +88,103 @@ const invalidReportStatus: ConnectionStatus = {
 
 const invalidProfilerStatus: ConnectionStatus = {
     status: ConnectionTestStates.FAILED,
-    message: 'Selected directory is not a valid profiler run',
+    message: 'Selected directory does not contain a valid report',
 };
 
 const directoryErrorStatus: ConnectionStatus = {
     status: ConnectionTestStates.FAILED,
-    message: 'Selected directory does not contain a valid report.',
+    message: 'Selected directory does not contain a valid report',
 };
 
-const connectionFailedStatus: ConnectionStatus = {
-    status: ConnectionTestStates.FAILED,
-    message: 'Unable to upload selected directory.',
-};
+const CHOOSE_DIRECTORY_LABEL = 'Choose directory...';
 
-const LocalFolderOptions: FC = () => {
+/** The parts a report delete differs by; the sequence around them is identical for both kinds. */
+interface DeleteReportOptions {
+    sendDelete: (reportPath: string) => Promise<unknown>;
+    folderQueryKey: string;
+    failedTitle: string;
+    deletedTitle: string;
+    isActive: boolean;
+    clearActive: () => void;
+}
+
+const LocalFolderOptions = () => {
     const queryClient = useQueryClient();
     const [profilerReportLocation, setProfilerReportLocation] = useAtom(profilerReportLocationAtom);
     const [performanceReportLocation, setPerformanceReportLocation] = useAtom(performanceReportLocationAtom);
-    const setSelectedDevice = useSetAtom(selectedDeviceAtom);
     const [activeProfilerReport, setActiveProfilerReport] = useAtom(activeProfilerReportAtom);
     const [activePerformanceReport, setActivePerformanceReport] = useAtom(activePerformanceReportAtom);
+    const { isActivatingReport, withActivatingReport } = useActivatingReport();
 
     const {
         uploadLocalFolder,
         uploadLocalPerformanceFolder,
         checkRequiredReportFiles,
-        checkRequiredProfilerFiles,
+        checkRequiredPerformanceFiles,
         filterReportFiles,
     } = useLocalConnection();
     const { data: perfFolderList } = usePerfFolderList();
     const { data: reportFolderList } = useReportFolderList();
-    const { data: instance } = useInstance();
+
+    const { data: reportMetadata, error: reportMetadataError } = useReportMetadata();
+    useEffect(() => {
+        if (reportMetadataError) {
+            return;
+        }
+        if (reportMetadata) {
+            const dbValidationResult = evaluateDbVersion(reportMetadata.version);
+            if (dbValidationResult.statusCode !== DBVersionValidation.OK) {
+                // @ts-expect-error this is good
+                createToastNotification('Incompatible report version', dbValidationResult.message, ToastType.WARNING);
+            }
+        }
+    }, [reportMetadata, reportMetadataError]);
 
     const [profilerFolder, setProfilerFolder] = useState<ConnectionStatus | undefined>();
     const [isUploadingReport, setIsUploadingReport] = useState(false);
     const [isUploadingPerformance, setIsPerformanceUploading] = useState(false);
-    const [profilerUploadLabel, setProfilerUploadLabel] = useState('Choose directory...');
+    const [profilerUploadLabel, setProfilerUploadLabel] = useState(CHOOSE_DIRECTORY_LABEL);
     const [performanceFolder, setPerformanceFolder] = useState<ConnectionStatus | undefined>();
-    const [performanceDataUploadLabel, setPerformanceDataUploadLabel] = useState('Choose directory...');
+    const [performanceDataUploadLabel, setPerformanceDataUploadLabel] = useState(CHOOSE_DIRECTORY_LABEL);
+
+    const isProfilerLocal = profilerReportLocation === ReportLocation.LOCAL;
+    const isPerformanceLocal = performanceReportLocation === ReportLocation.LOCAL;
 
     const folderPickerValue = useMemo(
         () =>
             activeProfilerReport &&
             reportFolderList?.some((folder: ReportFolder) => folder.path.includes(activeProfilerReport.path)) &&
-            profilerReportLocation === ReportLocation.LOCAL
+            isProfilerLocal
                 ? activeProfilerReport.path
                 : null,
-        [activeProfilerReport, reportFolderList, profilerReportLocation],
+        [activeProfilerReport, reportFolderList, isProfilerLocal],
     );
 
     const perfFolderPickerValue = useMemo(
         () =>
             activePerformanceReport &&
             perfFolderList?.some((folder: ReportFolder) => folder.path.includes(activePerformanceReport.path)) &&
-            performanceReportLocation === ReportLocation.LOCAL
+            isPerformanceLocal
                 ? activePerformanceReport.path
                 : null,
-        [activePerformanceReport, perfFolderList, performanceReportLocation],
+        [activePerformanceReport, perfFolderList, isPerformanceLocal],
     );
 
-    const isDirectReportMode = !!getServerConfig()?.TT_METAL_HOME;
+    const { linkedPerfIds, unlinkedPerfIds, linkedProfilerReportIds, unlinkedProfilerReportIds } =
+        useReportLinkBadgeIds();
+
+    const activateLocalReport = async (kind: ReportKind, failedTitle: string, action: () => Promise<void>) => {
+        try {
+            await withActivatingReport(action);
+            recordReportLoaded(kind, ReportSource.LOCAL_TT_METAL);
+        } catch (err: unknown) {
+            createToastNotification(failedTitle, getResponseError(err), ToastType.ERROR);
+            recordReportLoadFailed(kind, getReportLoadFailureReason(err));
+        }
+    };
 
     const handleReportDirectoryOpen = async (e: ChangeEvent<HTMLInputElement>) => {
-        if (!e.target.files) {
+        if (!e.target.files?.length) {
             return;
         }
 
@@ -137,19 +193,22 @@ const LocalFolderOptions: FC = () => {
 
         if (!checkRequiredReportFiles(files)) {
             setProfilerFolder(invalidReportStatus);
+            recordReportLoadFailed(ReportKind.PROFILER, ReportLoadFailureReason.MISSING_FILE);
             return;
         }
-
-        let connectionStatus = connectionOkStatus;
 
         setIsUploadingReport(true);
         setProfilerUploadLabel(`${files.length} files selected.`);
 
-        const response = await uploadLocalFolder(files);
+        try {
+            const response = await uploadLocalFolder(files);
 
-        if (response.status !== 200) {
-            connectionStatus = connectionFailedStatus;
-        } else {
+            if (response?.data?.status != null && response.data.status !== ConnectionTestStates.OK) {
+                setProfilerFolder(invalidReportStatus);
+                recordReportLoadFailed(ReportKind.PROFILER, ReportLoadFailureReason.MISSING_FILE);
+                return;
+            }
+
             setProfilerUploadLabel(`${files.length} files uploaded`);
             response.data = normaliseReportFolder(response.data);
 
@@ -162,118 +221,137 @@ const LocalFolderOptions: FC = () => {
                 reportName: response.data.reportName,
             };
 
-            setSelectedDevice(DEFAULT_DEVICE_ID);
             setActiveProfilerReport(updatedReport);
-            createToastNotification('Active memory report', updatedReport.reportName);
+            createToastNotification(ACTIVE_MEMORY_REPORT_TOAST_TITLE, updatedReport.reportName, ToastType.SUCCESS);
             setProfilerReportLocation(ReportLocation.LOCAL);
-            setProfilerFolder(connectionStatus);
+            setProfilerFolder(connectionOkStatus);
+            recordReportLoaded(ReportKind.PROFILER, ReportSource.UPLOAD);
+        } catch (err: unknown) {
+            const message = getResponseError(err, 'Unable to upload selected directory');
+            setProfilerFolder({ status: ConnectionTestStates.FAILED, message });
+            recordReportLoadFailed(ReportKind.PROFILER, getReportLoadFailureReason(err));
+        } finally {
+            clearReportCaches(queryClient);
+            setIsUploadingReport(false);
         }
-
-        queryClient.clear();
-        setIsUploadingReport(false);
     };
 
     const handlePerformanceDirectoryOpen = async (e: ChangeEvent<HTMLInputElement>) => {
-        if (!e.target.files) {
+        if (!e.target.files?.length) {
             return;
         }
 
         const { files: unfilteredFiles } = e.target;
         const files = filterReportFiles(unfilteredFiles);
 
-        if (!checkRequiredProfilerFiles(files)) {
+        if (!checkRequiredPerformanceFiles(files)) {
             setPerformanceFolder(invalidProfilerStatus);
+            recordReportLoadFailed(ReportKind.PERFORMANCE, ReportLoadFailureReason.MISSING_FILE);
             return;
         }
-
-        let connectionStatus = connectionOkStatus;
 
         setIsPerformanceUploading(true);
         setPerformanceDataUploadLabel(`${files.length} files selected`);
 
-        const response = await uploadLocalPerformanceFolder(files);
+        try {
+            const response = await uploadLocalPerformanceFolder(files);
 
-        if (response.status !== 200) {
-            connectionStatus = connectionFailedStatus;
-        } else if (response?.data?.status !== ConnectionTestStates.OK) {
-            connectionStatus = directoryErrorStatus;
-        } else {
-            const fileName = getFolderName(files);
-            setPerformanceDataUploadLabel(`${files.length} files uploaded`);
-            setPerformanceReportLocation(ReportLocation.LOCAL);
-            setActivePerformanceReport({ path: fileName, reportName: fileName });
-            createToastNotification('Active performance report', fileName);
+            if (response?.data?.status !== ConnectionTestStates.OK) {
+                setPerformanceFolder(directoryErrorStatus);
+                recordReportLoadFailed(ReportKind.PERFORMANCE, ReportLoadFailureReason.MISSING_FILE);
+            } else {
+                const fileName = getFolderName(files);
+                setPerformanceDataUploadLabel(`${files.length} files uploaded`);
+                setPerformanceReportLocation(ReportLocation.LOCAL);
+                setActivePerformanceReport({ path: fileName, reportName: fileName });
+                createToastNotification(ACTIVE_PERFORMANCE_REPORT_TOAST_TITLE, fileName, ToastType.SUCCESS);
+                setPerformanceFolder(connectionOkStatus);
+                recordReportLoaded(ReportKind.PERFORMANCE, ReportSource.UPLOAD);
+            }
+        } catch (err: unknown) {
+            const message = getResponseError(err, 'Unable to upload selected directory');
+            setPerformanceFolder({ status: ConnectionTestStates.FAILED, message });
+            recordReportLoadFailed(ReportKind.PERFORMANCE, getReportLoadFailureReason(err));
+        } finally {
+            clearReportCaches(queryClient);
+            setIsPerformanceUploading(false);
         }
-
-        queryClient.clear();
-        setIsPerformanceUploading(false);
-        setPerformanceFolder(connectionStatus);
     };
 
     const handleSelectProfiler = async (folder: ReportFolder) => {
-        await updateInstance({
-            ...instance,
-            active_report: { profiler_name: folder.path },
+        await activateLocalReport(ReportKind.PROFILER, MEMORY_REPORT_LOAD_FAILED_TOAST_TITLE, async () => {
+            // Backend handles updating only the specific parts of active_report
+            await updateInstance({
+                active_report: { profiler_name: folder.path, profiler_location: ReportLocation.LOCAL },
+            });
+
+            if (hasBeenNormalised(folder)) {
+                createDataIntegrityWarning(folder);
+            }
+
+            createToastNotification(ACTIVE_MEMORY_REPORT_TOAST_TITLE, folder.reportName ?? '', ToastType.SUCCESS);
+            setActiveProfilerReport(folder);
+            setProfilerReportLocation(ReportLocation.LOCAL);
+        });
+    };
+
+    const deleteReport = async (folder: ReportFolder, options: DeleteReportOptions) => {
+        try {
+            await options.sendDelete(folder.path);
+        } catch (err: unknown) {
+            createToastNotification(options.failedTitle, getResponseError(err), ToastType.ERROR);
+            return;
+        }
+
+        await queryClient.invalidateQueries({ queryKey: [options.folderQueryKey] });
+
+        createToastNotification(options.deletedTitle, folder.reportName, ToastType.INFO);
+
+        if (options.isActive) {
+            options.clearActive();
+        }
+    };
+
+    const handleDeleteProfiler = (folder: ReportFolder) =>
+        deleteReport(folder, {
+            sendDelete: deleteProfiler,
+            folderQueryKey: PROFILER_FOLDER_QUERY_KEY,
+            failedTitle: MEMORY_REPORT_DELETE_FAILED_TOAST_TITLE,
+            deletedTitle: MEMORY_REPORT_DELETED_TOAST_TITLE,
+            isActive: activeProfilerReport?.path === folder.path,
+            clearActive: () => {
+                setActiveProfilerReport(null);
+                setProfilerUploadLabel(CHOOSE_DIRECTORY_LABEL);
+                setProfilerFolder(undefined);
+            },
         });
 
-        if (hasBeenNormalised(folder)) {
-            createDataIntegrityWarning(folder);
-        }
-
-        createToastNotification('Active memory report', folder.reportName ?? '');
-        setActiveProfilerReport(folder);
-        setProfilerReportLocation(ReportLocation.LOCAL);
-    };
-
-    const handleDeleteProfiler = async (folder: ReportFolder) => {
-        await deleteProfiler(folder.path);
-        await queryClient.invalidateQueries({ queryKey: [PROFILER_FOLDER_QUERY_KEY] });
-
-        createToastNotification('Memory report deleted', folder.reportName);
-
-        if (activeProfilerReport?.path === folder.path) {
-            setActiveProfilerReport(null);
-            setProfilerUploadLabel('Choose directory...');
-            setProfilerFolder(undefined);
-        }
-    };
-
     const handleSelectPerformance = async (folder: ReportFolder) => {
-        await updateInstance({ ...instance, active_report: { performance_name: folder.path } });
+        await activateLocalReport(ReportKind.PERFORMANCE, PERFORMANCE_REPORT_LOAD_FAILED_TOAST_TITLE, async () => {
+            // Backend handles updating only the specific parts of active_report
+            await updateInstance({
+                active_report: { performance_name: folder.path, performance_location: ReportLocation.LOCAL },
+            });
 
-        createToastNotification('Active performance report', folder.reportName);
-        setActivePerformanceReport(folder);
-        setPerformanceReportLocation(ReportLocation.LOCAL);
+            createToastNotification(ACTIVE_PERFORMANCE_REPORT_TOAST_TITLE, folder.reportName, ToastType.SUCCESS);
+            setActivePerformanceReport(folder);
+            setPerformanceReportLocation(ReportLocation.LOCAL);
+        });
     };
 
-    const handleDeletePerformance = async (folder: ReportFolder) => {
-        await deletePerformance(folder.path);
-        await queryClient.invalidateQueries({ queryKey: [PERFORMANCE_FOLDER_QUERY_KEY] });
-
-        createToastNotification(`Performance report deleted`, folder.reportName);
-
-        if (activePerformanceReport?.path === folder.path) {
-            setActivePerformanceReport(null);
-            setPerformanceDataUploadLabel('Choose directory...');
-            setPerformanceFolder(undefined);
-        }
-    };
-
-    useEffect(() => {
-        if (isUploadingReport) {
-            setProfilerFolder({
-                status: ConnectionTestStates.PROGRESS,
-                message: 'Files uploading...',
-            });
-        }
-
-        if (isUploadingPerformance) {
-            setPerformanceFolder({
-                status: ConnectionTestStates.PROGRESS,
-                message: 'Files uploading...',
-            });
-        }
-    }, [isUploadingReport, isUploadingPerformance]);
+    const handleDeletePerformance = (folder: ReportFolder) =>
+        deleteReport(folder, {
+            sendDelete: deletePerformance,
+            folderQueryKey: PERFORMANCE_FOLDER_QUERY_KEY,
+            failedTitle: PERFORMANCE_REPORT_DELETE_FAILED_TOAST_TITLE,
+            deletedTitle: PERFORMANCE_REPORT_DELETED_TOAST_TITLE,
+            isActive: activePerformanceReport?.path === folder.path,
+            clearActive: () => {
+                setActivePerformanceReport(null);
+                setPerformanceDataUploadLabel(CHOOSE_DIRECTORY_LABEL);
+                setPerformanceFolder(undefined);
+            },
+        });
 
     return (
         <>
@@ -284,14 +362,18 @@ const LocalFolderOptions: FC = () => {
             >
                 <LocalFolderPicker
                     items={reportFolderList}
-                    value={profilerReportLocation === ReportLocation.LOCAL ? folderPickerValue : null}
+                    value={isProfilerLocal ? folderPickerValue : null}
                     valueLabel={activeProfilerReport?.reportName ?? null}
                     handleSelect={handleSelectProfiler}
                     handleDelete={handleDeleteProfiler}
+                    loading={isActivatingReport}
+                    linkedIds={linkedProfilerReportIds}
+                    unlinkedIds={unlinkedProfilerReportIds}
+                    showReportName
                 />
             </FormGroup>
 
-            {!isDirectReportMode && (
+            {!isDirectReportMode() && (
                 <FormGroup subLabel='Upload a local memory report'>
                     <div className='form-container'>
                         <FileInput
@@ -307,20 +389,18 @@ const LocalFolderOptions: FC = () => {
                             }}
                         />
 
-                        <FileStatusOverlay />
-
                         {profilerFolder && !isUploadingReport && (
                             <div
-                                className={`verify-connection-item status-${ConnectionTestStates[profilerFolder.status]}`}
+                                className='folder-upload-status'
+                                data-testid={TEST_IDS.LOCAL_PROFILER_STATUS}
                             >
                                 <Icon
-                                    className='connection-status-icon'
                                     icon={ICON_MAP[profilerFolder.status]}
                                     size={20}
                                     intent={INTENT_MAP[profilerFolder.status]}
                                 />
 
-                                <span className='connection-status-text'>{profilerFolder.message}</span>
+                                <span className='message'>{profilerFolder.message}</span>
                             </div>
                         )}
                     </div>
@@ -333,14 +413,17 @@ const LocalFolderOptions: FC = () => {
             >
                 <LocalFolderPicker
                     items={perfFolderList}
-                    value={performanceReportLocation === ReportLocation.LOCAL ? perfFolderPickerValue : null}
+                    value={isPerformanceLocal ? perfFolderPickerValue : null}
                     valueLabel={activePerformanceReport?.reportName ?? null}
                     handleSelect={handleSelectPerformance}
                     handleDelete={handleDeletePerformance}
+                    loading={isActivatingReport}
+                    linkedIds={linkedPerfIds}
+                    unlinkedIds={unlinkedPerfIds}
                 />
             </FormGroup>
 
-            {!isDirectReportMode && (
+            {!isDirectReportMode() && (
                 <FormGroup subLabel='Upload a local performance report'>
                     <div className='form-container'>
                         <FileInput
@@ -358,16 +441,16 @@ const LocalFolderOptions: FC = () => {
 
                         {performanceFolder && !isUploadingPerformance && (
                             <div
-                                className={`verify-connection-item status-${ConnectionTestStates[performanceFolder.status]}`}
+                                className='folder-upload-status'
+                                data-testid={TEST_IDS.LOCAL_PERFORMANCE_STATUS}
                             >
                                 <Icon
-                                    className='connection-status-icon'
                                     icon={ICON_MAP[performanceFolder.status]}
                                     size={20}
                                     intent={INTENT_MAP[performanceFolder.status]}
                                 />
 
-                                <span className='connection-status-text'>{performanceFolder.message}</span>
+                                <span className='message'>{performanceFolder.message}</span>
                             </div>
                         )}
                     </div>

@@ -5,7 +5,7 @@
 import { useState } from 'react';
 import { Button, ButtonVariant, Icon, Size } from '@blueprintjs/core';
 import classNames from 'classnames';
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router';
 import { IconNames } from '@blueprintjs/icons';
 import ROUTES from '../../definitions/Routes';
 import { OperationDetails } from '../../model/OperationDetails';

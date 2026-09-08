@@ -18,37 +18,37 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
-      - name: Read .nvmrc
-        id: nvm
-        run: echo "NODE_VERSION=$(cat .nvmrc)" >> $GITHUB_OUTPUT
+      - uses: pnpm/action-setup@v6
+        name: Install pnpm
+        with:
+          run_install: false
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
-          node-version: ${{ steps.nvm.outputs.NODE_VERSION }}
+          node-version-file: '.nvmrc'
+          cache: 'pnpm'
 
-      - run: npm install -g pnpm@latest-10
       - run: pnpm install
       - run: pnpm build
 
-      - name: Set up Python 3.10
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.10.16'
+      - name: Read .python-version
+        id: python
+        run: echo "PYTHON_VERSION=$(cat .python-version)" >> $GITHUB_OUTPUT
 
-      - name: Install build dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install build
+      - name: Install uv
+        uses: astral-sh/setup-uv@v10.0.1
+        with:
+          python-version: ${{ steps.python.outputs.PYTHON_VERSION }}
+          enable-cache: true
 
       - name: Build wheel
-        run: |
-          python -m build --wheel
+        run: uv build --wheel
 
       - name: Upload wheel as artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: python-wheel
           path: dist/*.whl
@@ -59,36 +59,35 @@ jobs:
     needs: build-wheel
     strategy:
       matrix:
-        python-version: ['3.10', '3.11', '3.12', '3.13']
+        python-version: ['3.10', '3.11', '3.12', '3.13', '3.14']
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
-      - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v10.0.1
         with:
           python-version: ${{ matrix.python-version }}
+          enable-cache: true
 
       - name: Download wheel artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: python-wheel
           path: dist/
 
       - name: Install wheel and dependencies
         run: |
-          python -m pip install --upgrade pip
-          # Install the wheel file
-          pip install dist/*.whl
-          # Install playwright for testing
-          pip install playwright
-          playwright install --with-deps chromium
+          # Isolated venv so we test the wheel artifact, not the editable checkout.
+          uv venv /tmp/smoke-venv
+          uv pip install --python /tmp/smoke-venv dist/*.whl playwright
+          /tmp/smoke-venv/bin/playwright install --with-deps chromium
 
       - name: Start ttnn-visualizer server in background
         run: |
           # Start the server in the background
-          ttnn-visualizer &
+          /tmp/smoke-venv/bin/ttnn-visualizer &
           SERVER_PID=$!
           echo "SERVER_PID=$SERVER_PID" >> $GITHUB_ENV
 
@@ -115,7 +114,7 @@ jobs:
 
       - name: Run Playwright smoke test
         run: |
-          python scripts/smoke_test.py
+          /tmp/smoke-venv/bin/python scripts/smoke_test.py
 
       - name: Cleanup
         if: always()

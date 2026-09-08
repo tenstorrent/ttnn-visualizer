@@ -1,0 +1,83 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
+
+import { useState } from 'react';
+import { ItemRenderer, MultiSelect } from '@blueprintjs/select';
+import { Checkbox, MenuItem } from '@blueprintjs/core';
+import { toggleListMembership } from '../functions/toggleListMembership';
+
+const SimpleMultiselect = ({
+    label,
+    optionList,
+    onUpdateHandler,
+    initialValue,
+    className,
+}: {
+    label: string;
+    optionList: string[];
+    onUpdateHandler: (values: string[]) => void;
+    initialValue?: string[];
+    className?: string;
+}) => {
+    const [selected, setSelected] = useState<string[]>(initialValue ?? []);
+    const handleItemSelect = (item: string) => {
+        const list = toggleListMembership(selected, item);
+
+        setSelected(list);
+        onUpdateHandler(list);
+    };
+
+    const handleItemRemove = (_item: string, index: number) => {
+        setSelected((prev) => {
+            const list = prev.filter((_, i) => i !== index);
+            onUpdateHandler(list);
+            return list;
+        });
+    };
+
+    const renderOption: ItemRenderer<string> = (item, { modifiers, handleClick }) => {
+        if (!modifiers.matchesPredicate) {
+            return null;
+        }
+
+        return (
+            <Checkbox
+                key={item}
+                checked={selected.includes(item)}
+                label={item}
+                onClick={handleClick}
+            />
+        );
+    };
+
+    return (
+        <MultiSelect<string>
+            className={className ?? ''}
+            items={optionList}
+            itemRenderer={renderOption}
+            onItemSelect={handleItemSelect}
+            selectedItems={selected}
+            placeholder={label}
+            tagRenderer={(item) => item}
+            onRemove={handleItemRemove}
+            resetOnSelect
+            disabled={false}
+            noResults={RenderNoResults}
+            query=''
+            onQueryChange={() => {}}
+            tagInputProps={{
+                inputProps: { readOnly: true },
+            }}
+        />
+    );
+};
+
+const RenderNoResults = (
+    <MenuItem
+        text='No results.'
+        roleStructure='listoption'
+        disabled
+    />
+);
+export default SimpleMultiselect;

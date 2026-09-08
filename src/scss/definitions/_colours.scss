@@ -146,6 +146,8 @@ $tt-performance: $tt-green;
 $tt-performance-active: $tt-green-tint-1;
 $tt-npe: $tt-blue;
 $tt-npe-active: $tt-blue-tint-2;
+$tt-mlir: $tt-yellow-accent;
+$tt-mlir-active: $tt-yellow-tint-2;
 $tt-cluster: $tt-slate-tint-2;
 $tt-cluster-active: $tt-white;
 
@@ -155,6 +157,9 @@ $tt-zone-color: $tt-red;
 
 // Highlight colour for when a tensor is focussed
 $tt-bg-highlight: $tt-slate-accent;
+
+// Sticky source-path header background in the source-file overlay (matches the Blueprint dark overlay)
+$tt-source-overlay-background: $dark-gray2;
 
 // core colors
 $c-dram: #7abdcc;

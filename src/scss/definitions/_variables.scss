@@ -13,7 +13,7 @@ $monospace-font: monospace;
 $bp-large: 1300px;
 $bp-medium: 1100px;
 
-// Colors
+// Colours
 // TODO: Temporary placing of these here - reconcile with usage in _blueprintjs.scss
 $dark-button-background-base: $tt-grey-2;
 $tt-dark-minimal-button-background-color-hover: color.adjust($dark-button-background-base, $lightness: 5%);
@@ -22,6 +22,72 @@ $tt-dark-minimal-button-background-color-hover: color.adjust($dark-button-backgr
 $npe-highlight-src: #ff0;
 $npe-highlight-dst: #ff4500;
 
-// TODO: we should refactor ALL z-indexes across the code base. none use vars
-$z-index-active-transfer-details: 10;
+// z-index scale
+// Keep in-page chrome below Blueprint overlays (`.bp6-overlay` is 20) so e.g.
+// NPE Run summary / zone-filter portals cannot cover FileStatusOverlay.
+$z-index-0-background: -1;
+$z-index-1-base: 0;
+$z-index-2-interactive: 1;
+$z-index-3-overlay: 10;
+
+// Popovers/menus launched from within an overlay must stack above it, still
+// below Blueprint (20).
+$z-index-4-popover: 15;
+
+// Component-specific variables
 $active-transfer-width: 380px;
+
+// Device-operation memory legend columns. Definite widths, because the cells are
+// `nowrap` and each row is its own grid — a share-based track takes its minimum
+// from the row's own text and so resolves differently per row. Sized to the
+// widest observed content plus headroom.
+//
+// The size column held `40.13 KiB x 50 cores x 32 devices` until the multipliers
+// moved to the tensor column (#1879), which left it three times wider than the
+// size alone needs and the tensor column 22px short of the labels it inherited.
+// 80px moves across; the pair still totals 480px, so the numeric gutter this view
+// aligns against does not shift. #1897 tracks the wider alignment problem.
+$legend-size-column: 220px;
+$legend-address-column: 90px;
+$legend-tensor-column: 260px;
+$legend-buffer-type-column: 130px;
+$legend-shape-column: 170px;
+
+// Reserved at the right of the size column for the aliased-CB marker.
+$legend-marker-slot: 25px;
+
+// Every report-selection control on the Home page sizes to this, so the local, remote and
+// MLIR pickers line up regardless of how long the label they display happens to be.
+$report-select-width: 250px;
+
+// Vertical navigation rail. Collapsed keeps a Blueprint icon button centred with no
+// room for its label.
+$side-nav-width-expanded: 180px;
+$side-nav-width-collapsed: 56px;
+
+// Fixed app chrome that every viewport-height view subtracts. The status bar is
+// `.app-footer`'s closed `min-height`; it grows when opened.
+$app-status-bar-height: 34px;
+
+// `main`'s own padding and the trailing gutter that clears the fixed data bar,
+// owned here rather than copied into each viewport-height view: a view that
+// subtracts its own literal silently mis-sizes the moment `main` changes.
+$main-padding: 15px;
+$main-padding-bottom: 30px;
+$data-padding-bottom: 20px;
+
+// Where React Flow docks its bottom-left panel. Both graph views lay their own
+// bottom-left chrome out from it, so it is owned here rather than copied into each.
+$reactflow-panel-origin-left: 12px;
+
+// Width the connection dialogs' results block must stay inside: the Blueprint dialog
+// footer is narrower than the dialog, and both the error detail and the host-key prompt
+// have to fit it.
+$connection-detail-width: 415px;
+
+// Fixed app chrome at the foot of the MLIR page: the footer info bar. The navigation is
+// a vertical rail, so nothing sits above the page to offset against. The title and
+// (optional) loader rows sit inside `.mlir-page` and are laid out by flex, so the graph
+// reclaims their space when absent — the footer is the only remaining structural offset.
+$mlir-footer-clearance: $app-status-bar-height + 6px;
+$mlir-page-height: calc(100vh - #{$mlir-footer-clearance});

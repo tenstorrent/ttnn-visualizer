@@ -6,12 +6,13 @@ import { cleanup, render, screen } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
 import { afterEach, expect, it, vi } from 'vitest';
 import { activePerformanceReportAtom } from '../src/store/app';
+import { FETCH_REMOTE_FOLDERS_LABEL } from '../src/definitions/RemoteConnection';
 import { TEST_IDS } from '../src/definitions/TestIds';
 import Home from '../src/routes/Home';
 import Performance from '../src/routes/Performance';
 import mockPerformanceReport from './data/mockPerformanceReport.json';
 import mockPerformanceReportFolders from './data/mockPerformanceReportFolders.json';
-import mockDeviceLog from './data/mockDeviceLog.json';
+import mockDeviceMeta from './data/mockDeviceMeta.json';
 import mockInstance from './data/mockInstance.json';
 import mockProfilerFolderList from './data/mockProfilerFolderList.json';
 import { TestProviders } from './helpers/TestProviders';
@@ -24,14 +25,17 @@ vi.mock('../src/hooks/useAPI.tsx', () => ({
     useGetClusterDescription: () => ({ data: null }),
     usePerformanceReport: () => ({ data: mockPerformanceReport }),
     usePerformanceComparisonReport: () => ({ data: null }),
-    useDeviceLog: () => ({ data: mockDeviceLog }),
+    usePerfMeta: () => ({ data: mockDeviceMeta }),
+    usePerfMetas: () => [],
     usePerfFolderList: () => ({ data: mockPerformanceReportFolders }),
-    usePerformanceRange: () => ({ data: null }),
+    usePerformanceRange: () => null,
     useInstance: () => ({ data: mockInstance }),
     useOpToPerfIdFiltered: () => [],
+    useL1PressureByOperation: () => ({ status: 'unavailable', data: null }),
     useOperationsList: () => ({ data: [] }),
     useReportFolderList: () => ({ data: mockProfilerFolderList }),
     useGetNPEManifest: () => ({ data: null }),
+    useReportMetadata: () => ({ data: undefined, error: undefined }),
 }));
 
 vi.mock('../src/functions/getServerConfig.ts', () => ({
@@ -50,7 +54,7 @@ it('Disable remote sync in Home route', () => {
     expect(screen.getAllByTestId(TEST_IDS.REMOTE_SYNC_DISABLED)).toHaveLength(1);
     expect(getButtonWithText('Add new connection')).toBeDisabled();
     expect(getButtonWithText('(No connection)')).toBeDisabled();
-    expect(getButtonWithText('Fetch remote folders list')).toBeDisabled();
+    expect(getButtonWithText(FETCH_REMOTE_FOLDERS_LABEL)).toBeDisabled();
     noSelectionButtons.forEach((button) => {
         expect(button).toBeDisabled();
     });

@@ -3,9 +3,50 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 @use '../definitions/colours' as *;
+@use '../definitions/variables' as variables;
 
 .container {
     margin-bottom: 20px;
+}
+
+// Inline-render `.perf-overlay-legend` inside the styleguide rather than
+// pinning it to the viewport. Component default (`.operation-graph-component
+// .perf-overlay-legend`) is `position: fixed` — we wrap the styleguide
+// preview in `.operation-graph-component` to inherit the component styling,
+// then explicitly out-specify the position rule so the legend sits inline.
+.operation-graph-component .styleguide-perf-overlay-host {
+    position: relative;
+    display: inline-block;
+    min-height: 80px;
+    margin-bottom: 10px;
+
+    .perf-overlay-legend {
+        position: relative;
+        right: auto;
+        bottom: auto;
+    }
+}
+
+// The perf bar is a pseudo-element of `.react-flow__node-opNode` scoped under
+// `.operation-graph-react-flow`, so the preview has to carry that class to get any
+// of it. Compound rather than descendant: the view's own rule matches at the same
+// specificity, and this has to win regardless of bundle order.
+/* stylelint-disable-next-line selector-class-pattern */
+.operation-graph-react-flow.styleguide-perf-bar-host {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+
+    // Neutralises the view's viewport-filling band and its trailing negative
+    // margin, neither of which means anything for an inline sample.
+    height: auto;
+    margin-bottom: 10px;
+
+    // React Flow sizes nodes inline from the layout; these are hand-mounted.
+    /* stylelint-disable-next-line selector-class-pattern */
+    .react-flow__node-opNode {
+        width: 170px;
+    }
 }
 
 .table {
@@ -39,6 +80,10 @@
 
 .colour-container {
     flex-basis: 10%;
+
+    .heading {
+        font-weight: bold;
+    }
 
     .colour {
         height: 30px;
@@ -92,5 +137,16 @@
     top: 0;
     left: 0;
     right: 0;
-    z-index: 9999;
+    z-index: variables.$z-index-3-overlay;
+}
+
+// Bounded host for components that normally pin to a viewport-sized parent.
+// Used by the MLIR Node Details panel (absolute inside `.mlir-view-pane`).
+.styleguide-bounded-host {
+    position: relative;
+    width: 100%;
+    height: 520px;
+    background: $tt-grey-2;
+    border: 1px dashed rgba($tt-grey-5, 0.5);
+    overflow: hidden;
 }

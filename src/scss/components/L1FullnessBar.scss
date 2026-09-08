@@ -1,0 +1,109 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
+
+@use '../definitions/colours' as colours;
+
+$bar-height: 10px;
+$bar-radius: 2px;
+$bar-used: colours.$tt-red-shade;
+$bar-largest-free: rgb(0 169 70);
+
+// Striped fragmented segment visually distinguishes 'lots of free, not usable as one block'.
+$bar-fragmented-base: colours.$tt-grey-4;
+$bar-fragmented-stripe: colours.$tt-grey-3;
+$swatch-size: 10px;
+$swatch-radius: 2px;
+
+%bar-used-fill {
+    background-color: $bar-used;
+}
+
+%bar-largest-free-fill {
+    background-color: $bar-largest-free;
+}
+
+%bar-fragmented-free-fill {
+    background-image: repeating-linear-gradient(
+        45deg,
+        $bar-fragmented-base,
+        $bar-fragmented-base 3px,
+        $bar-fragmented-stripe 3px,
+        $bar-fragmented-stripe 6px
+    );
+}
+
+.l1-fullness-bar {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin: 4px 0 6px;
+
+    .bar-track {
+        display: flex;
+        flex-direction: row;
+        width: 100%;
+        height: $bar-height;
+        border-radius: $bar-radius;
+        overflow: hidden;
+        background-color: colours.$tt-grey-3;
+
+        .bar-segment {
+            height: 100%;
+            min-width: 1px;
+        }
+
+        .bar-used {
+            @extend %bar-used-fill;
+        }
+
+        .bar-largest-free {
+            @extend %bar-largest-free-fill;
+        }
+
+        .bar-fragmented-free {
+            @extend %bar-fragmented-free-fill;
+        }
+    }
+
+    .bar-legend {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        padding: 0;
+        margin: 0;
+        list-style: none;
+        font-size: 0.85em;
+        line-height: 1.2;
+    }
+
+    .bar-legend-item {
+        display: grid;
+        grid-template-columns: $swatch-size 1fr auto;
+        column-gap: 8px;
+        align-items: center;
+    }
+
+    .bar-legend-swatch {
+        display: inline-block;
+        width: $swatch-size;
+        height: $swatch-size;
+        border-radius: $swatch-radius;
+
+        &.bar-used {
+            @extend %bar-used-fill;
+        }
+
+        &.bar-largest-free {
+            @extend %bar-largest-free-fill;
+        }
+
+        &.bar-fragmented-free {
+            @extend %bar-fragmented-free-fill;
+        }
+    }
+
+    .bar-legend-value {
+        font-variant-numeric: tabular-nums;
+    }
+}

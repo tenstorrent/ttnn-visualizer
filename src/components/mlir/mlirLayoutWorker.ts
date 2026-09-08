@@ -1,0 +1,146 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
+
+/* eslint-disable no-restricted-globals */
+/* eslint-disable no-continue */
+import { buildVisibleGraph } from './mlirGraphBuilder';
+import { buildGraphIndex } from './mlirGraphIndexBuilder';
+import { touchLruCache } from '../../functions/touchLruCache';
+import { CACHE_LIMIT_PER_GRAPH } from './mlirLayoutWorkerCache';
+import type { BuiltGraph, GraphIndex, WorkerInboundMessage } from './mlirGraphTypes';
+
+const touchGraphCache = (cache: Map<string, BuiltGraph>, key: string, value: BuiltGraph): void =>
+    touchLruCache(cache, key, value, CACHE_LIMIT_PER_GRAPH);
+
+const indexByGraphId = new Map<string, GraphIndex>();
+const cacheByGraphId = new Map<string, Map<string, BuiltGraph>>();
+const graphVersionByGraphId = new Map<string, number>();
+const latestBuildByGraphId = new Map<
+    string,
+    { graphId: string; requestId: number; expandedNamespaces: string[]; cacheKey: string; graphVersion: number }
+>();
+const processingGraphIds = new Set<string>();
+
+const getGraphVersion = (graphId: string): number => graphVersionByGraphId.get(graphId) ?? 0;
+
+const postWorkerError = (requestId: number, error: unknown) => {
+    postMessage({
+        type: 'error',
+        requestId,
+        error: error instanceof Error ? error.message : String(error),
+    });
+};
+
+// Both the cache-hit and fresh-build arms emit an identical `built` message; a
+// structured-clone failure on post must degrade to a worker `error` the same way
+// on both paths, so route every `built` through here to keep that gating unified.
+const safePostBuilt = (requestId: number, graphId: string, cacheKey: string, graph: BuiltGraph): void => {
+    try {
+        postMessage({ type: 'built', requestId, graphId, cacheKey, graph });
+    } catch (error) {
+        postWorkerError(requestId, error);
+    }
+};
+
+function processLatestBuild(graphId: string): void {
+    if (processingGraphIds.has(graphId)) {
+        return;
+    }
+    processingGraphIds.add(graphId);
+    try {
+        while (true) {
+            const request = latestBuildByGraphId.get(graphId);
+            if (!request) {
+                break;
+            }
+            latestBuildByGraphId.delete(graphId);
+
+            const index = indexByGraphId.get(graphId);
+            if (!index) {
+                postMessage({
+                    type: 'error',
+                    requestId: request.requestId,
+                    error: `Graph index not found for ${graphId}`,
+                });
+                continue;
+            }
+            if (request.graphVersion !== getGraphVersion(graphId)) {
+                continue;
+            }
+
+            const cache = cacheByGraphId.get(graphId) ?? new Map<string, BuiltGraph>();
+            cacheByGraphId.set(graphId, cache);
+
+            const cached = cache.get(request.cacheKey);
+            if (cached) {
+                touchGraphCache(cache, request.cacheKey, cached);
+                if (!latestBuildByGraphId.has(graphId)) {
+                    safePostBuilt(request.requestId, graphId, request.cacheKey, cached);
+                }
+                continue;
+            }
+
+            try {
+                const built = buildVisibleGraph(index, request.expandedNamespaces);
+                touchGraphCache(cache, request.cacheKey, built);
+                const newerRequestExists = latestBuildByGraphId.has(graphId);
+                const graphVersionChanged = request.graphVersion !== getGraphVersion(graphId);
+                if (!newerRequestExists && !graphVersionChanged) {
+                    safePostBuilt(request.requestId, graphId, request.cacheKey, built);
+                }
+            } catch (error) {
+                if (!latestBuildByGraphId.has(graphId)) {
+                    postWorkerError(request.requestId, error);
+                }
+            }
+        }
+    } finally {
+        processingGraphIds.delete(graphId);
+        if (latestBuildByGraphId.has(graphId)) {
+            processLatestBuild(graphId);
+        }
+    }
+}
+
+// addEventListener composes cleanly with any other 'message' handler that might
+// be attached later (test harness, future telemetry, etc.); assigning
+// self.onmessage would clobber it instead.
+self.addEventListener('message', (event: MessageEvent<WorkerInboundMessage>) => {
+    const message = event.data;
+
+    if (message.type === 'set-graph') {
+        try {
+            const nextVersion = getGraphVersion(message.graphId) + 1;
+            graphVersionByGraphId.set(message.graphId, nextVersion);
+            const index = buildGraphIndex(message.graphId, message.nodes);
+            indexByGraphId.set(message.graphId, index);
+            cacheByGraphId.set(message.graphId, new Map());
+            latestBuildByGraphId.delete(message.graphId);
+            postMessage({
+                type: 'indexed',
+                graphId: message.graphId,
+                interactionIndex: {
+                    anchorByNamespace: index.anchorByNamespace,
+                    anchorNamespaceByNodeId: index.anchorNamespaceByNodeId,
+                    outerNamespaceByNodeId: index.outerNamespaceByNodeId,
+                    namespaceReturnNodeByNamespace: index.namespaceReturnNodeByNamespace,
+                    namespaceInputByNamespace: index.namespaceInputByNamespace,
+                    containingNamespacesByNodeId: index.containingNamespacesByNodeId,
+                },
+            });
+        } catch (error) {
+            postWorkerError(0, error);
+        }
+        return;
+    }
+
+    latestBuildByGraphId.set(message.graphId, {
+        graphId: message.graphId,
+        requestId: message.requestId,
+        expandedNamespaces: message.expandedNamespaces,
+        cacheKey: message.cacheKey,
+        graphVersion: getGraphVersion(message.graphId),
+    });
+    processLatestBuild(message.graphId);
+});

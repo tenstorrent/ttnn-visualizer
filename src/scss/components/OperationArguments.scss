@@ -2,19 +2,6 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-@use 'sass:color';
-@use '../definitions/colours' as *;
-
-$row-background: $tt-grey-2;
-
 .arguments-table {
     width: 100%;
-    margin-bottom: 20px;
-
-    th,
-    td {
-        &.expandable-tensor {
-            word-break: break-word; // Can get really long strings in the table cell which cause horizontal overflows
-        }
-    }
 }

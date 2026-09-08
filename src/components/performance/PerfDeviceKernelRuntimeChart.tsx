@@ -5,27 +5,31 @@
 import { PlotData } from 'plotly.js';
 import { useMemo } from 'react';
 import { useAtomValue } from 'jotai';
-import { PerfTableRow } from '../../definitions/PerfTable';
+import { TypedPerfTableRow } from '../../model/PerfTable';
 import PerfChart from './PerfChart';
-import { PlotConfiguration } from '../../definitions/PlotConfigurations';
+import {
+    PERF_CHART_WIDE_LEFT_MARGIN,
+    PlotConfiguration,
+    getCoreCountAxisConfig,
+    getNsAxisConfig,
+} from '../../definitions/PlotConfigurations';
+import { PERF_CHART_LABELS, PerfChartId } from '../../definitions/PerformanceCharts';
 import getPlotLabel from '../../functions/getPlotLabel';
 import { activePerformanceReportAtom, comparisonPerformanceReportListAtom } from '../../store/app';
 import { getPrimaryDataColours, getSecondaryDataColours } from '../../definitions/PerformancePlotColours';
-import { useDeviceLog } from '../../hooks/useAPI';
-import { DeviceArchitecture } from '../../definitions/DeviceArchitecture';
-import getCoreCount from '../../functions/getCoreCount';
+import { usePerfMeta } from '../../hooks/useAPI';
+import { resolveMaxCores } from '../../functions/getCoreCount';
 
 interface PerfDeviceKernelRuntimeChartProps {
-    datasets?: PerfTableRow[][];
+    datasets?: TypedPerfTableRow[][];
 }
 
 function PerfDeviceKernelRuntimeChart({ datasets = [] }: PerfDeviceKernelRuntimeChartProps) {
-    const { data: deviceLog } = useDeviceLog();
+    const { data: deviceMeta } = usePerfMeta();
     const perfReport = useAtomValue(activePerformanceReportAtom);
     const comparisonReportList = useAtomValue(comparisonPerformanceReportListAtom);
     const maxDataSize = datasets.reduce((max, data) => Math.max(max, data?.length || 0), 0);
-    const architecture = (deviceLog?.deviceMeta?.architecture ?? DeviceArchitecture.WORMHOLE) as DeviceArchitecture;
-    const maxCores = getCoreCount(architecture, datasets[0] ?? []);
+    const maxCores = resolveMaxCores(deviceMeta, datasets[0] ?? []);
 
     const chartDataCoreCount = useMemo(
         () =>
@@ -62,33 +66,20 @@ function PerfDeviceKernelRuntimeChart({ datasets = [] }: PerfDeviceKernelRuntime
     );
 
     const configuration: PlotConfiguration = {
-        margin: {
-            l: 100,
-            r: 0,
-            b: 50,
-            t: 0,
-        },
+        margin: PERF_CHART_WIDE_LEFT_MARGIN,
         showLegend: true,
         xAxis: {
             title: { text: 'Operation' },
             range: [0, maxDataSize],
         },
-        yAxis: {
-            title: { text: 'Core Count' },
-            tickformat: 'd',
-            hoverformat: ',.2r',
-            range: [0, maxCores],
-        },
-        yAxis2: {
-            title: { text: 'Device Kernel Duration (ns)' },
-            tickformat: 'd',
-            hoverformat: ',.2r',
-        },
+        yAxis: getCoreCountAxisConfig(maxCores),
+        yAxis2: getNsAxisConfig('Device Kernel Duration (ns)'),
     };
 
     return (
         <PerfChart
-            title='Core Count + Device Kernel Runtime'
+            id={PerfChartId.CoreCountKernelRuntime}
+            title={PERF_CHART_LABELS[PerfChartId.CoreCountKernelRuntime]}
             chartData={[...chartDataCoreCount, ...chartDataDuration]}
             configuration={configuration}
         />

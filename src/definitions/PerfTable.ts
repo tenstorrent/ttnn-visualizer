@@ -2,101 +2,23 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { DeviceOperationLayoutTypes } from '../model/APIData';
-import { BufferType } from '../model/BufferType';
-import { OpType } from './Performance';
-
-export type TableKeys = keyof TypedPerfTableRow;
-export type TableFilter = Partial<Record<TableKeys, string>> | null;
-
-export interface TableHeader {
-    label: string;
-    key: TableKeys;
+export interface ColumnDefinition {
+    name: string;
+    key: ColumnKeys;
     colour?: string;
     unit?: string;
     decimals?: number;
     sortable?: boolean;
     filterable?: boolean;
+    footerSpan?: number;
 }
 
-enum BoundType {
-    BOTH,
-    DRAM,
-    FLOP,
-    SLOW,
-    HOST,
-}
-
-export interface PerfTableRow {
-    id: string;
-    global_call_count: number;
-    advice: string[];
-    total_percent: string;
-    bound: BoundType;
-    op_code: string;
-    raw_op_code: string;
-    device_time: string;
-    op_to_op_gap: string;
-    cores: string;
-    dram: string;
-    dram_percent: string;
-    flops: string;
-    flops_percent: string;
-    math_fidelity: string;
-    output_datatype: string;
-    output_0_memory: string;
-    input_0_datatype: string;
-    input_1_datatype: string;
-    dram_sharded: string;
-    input_0_memory: string;
-    input_1_memory: string;
-    inner_dim_block_size: string;
-    output_subblock_h: string;
-    output_subblock_w: string;
-    high_dispatch?: boolean;
-    pm_ideal_ns: string;
-    op_type: OpType;
-    op?: number;
-    missing?: boolean;
-}
-
-export interface TypedPerfTableRow
-    extends Omit<
-        PerfTableRow,
-        | 'id'
-        | 'global_call_count'
-        | 'total_percent'
-        | 'device_time'
-        | 'op_to_op_gap'
-        | 'cores'
-        | 'dram'
-        | 'dram_percent'
-        | 'flops'
-        | 'flops_percent'
-        | 'bound'
-    > {
-    id: number | null;
-    global_call_count: number | null;
-    total_percent: number | null;
-    device_time: number | null;
-    op_to_op_gap: number | null;
-    cores: number | null;
-    dram: number | null;
-    dram_percent: number | null;
-    flops: number | null;
-    flops_percent: number | null;
-    bound: BoundType | null;
-    // Next three extracted from input_0_memory
-    buffer_type: BufferType | null;
-    device: number | null;
-    layout: DeviceOperationLayoutTypes | null;
-}
-
-// Not a general enum but used in evaluateFidelity to analyze tt-perf-report output
-export enum MathFidelity {
-    HiFi4 = 'HiFi4',
-    HiFi2 = 'HiFi2',
-    LoFi = 'LoFi',
+export enum BoundType {
+    BOTH = 'BOTH',
+    DRAM = 'DRAM',
+    FLOP = 'FLOP',
+    SLOW = 'SLOW',
+    HOST = 'HOST',
 }
 
 export const MarkerColours = [
@@ -138,89 +60,115 @@ export interface Marker {
     colour: (typeof MarkerColours)[number];
 }
 
-export enum ColumnHeaders {
-    id = 'id',
-    total_percent = 'total_percent',
-    bound = 'bound',
-    op_code = 'op_code',
-    device = 'device',
-    buffer_type = 'buffer_type',
-    device_time = 'device_time',
-    layout = 'layout',
-    op_to_op_gap = 'op_to_op_gap',
-    cores = 'cores',
-    dram = 'dram',
-    dram_percent = 'dram_percent',
-    flops = 'flops',
-    flops_percent = 'flops_percent',
-    math_fidelity = 'math_fidelity',
+export enum ColumnKeys {
+    Id = 'id',
+    TotalPercent = 'total_percent',
+    Bound = 'bound',
+    OpCode = 'op_code',
+    Flags = 'heuristicFlags',
+    Device = 'device',
+    BufferType = 'buffer_type',
+    DeviceTime = 'device_time',
+    Layout = 'layout',
+    OpToOpGap = 'op_to_op_gap',
+    Cores = 'cores',
+    Dram = 'dram',
+    DramPercent = 'dram_percent',
+    Flops = 'flops',
+    FlopsPercent = 'flops_percent',
+    MathFidelity = 'math_fidelity',
     OP = 'op',
-    high_dispatch = 'high_dispatch',
-    global_call_count = 'global_call_count',
+    HighDispatch = 'high_dispatch',
+    GlobalCallCount = 'global_call_count',
+    Hash = 'hash',
+    CacheHit = 'cache_hit',
+    L1Fullness = 'l1_fullness_percent',
+    DeviceKernelDuration = 'device_kernel_duration',
+    BriscKernelDuration = 'brisc_kernel_duration',
+    NcriscKernelDuration = 'ncrisc_kernel_duration',
+    Trisc0KernelDuration = 'trisc0_kernel_duration',
+    Trisc1KernelDuration = 'trisc1_kernel_duration',
+    Trisc2KernelDuration = 'trisc2_kernel_duration',
+    EriscKernelDuration = 'erisc_kernel_duration',
 }
 
-export const TableHeaders: TableHeader[] = [
-    { label: 'ID', key: ColumnHeaders.id, sortable: true },
-    { label: 'Total %', key: ColumnHeaders.total_percent, unit: '%', decimals: 1, sortable: true },
-    { label: 'Bound', key: ColumnHeaders.bound, colour: 'yellow' },
-    { label: 'OP Code', key: ColumnHeaders.op_code, colour: 'blue', sortable: true, filterable: true },
-    // { label: 'Device', key: ColumnHeaders.device }, Hidden because tt-perf-report doesn't really support multi device well
-    { label: 'Buffer Type', key: ColumnHeaders.buffer_type, sortable: true, filterable: true },
-    { label: 'Layout', key: ColumnHeaders.layout, sortable: true, filterable: true },
-    { label: 'Device Time', key: ColumnHeaders.device_time, unit: 'µs', decimals: 0, sortable: true },
-    { label: 'Op-to-Op Gap', key: ColumnHeaders.op_to_op_gap, colour: 'red', unit: 'µs', decimals: 0, sortable: true },
-    { label: 'Cores', key: ColumnHeaders.cores, colour: 'green', sortable: true },
-    { label: 'DRAM', key: ColumnHeaders.dram, colour: 'yellow', unit: 'GB/s', sortable: true },
-    { label: 'DRAM %', key: ColumnHeaders.dram_percent, colour: 'yellow', unit: '%', sortable: true },
-    { label: 'FLOPs', key: ColumnHeaders.flops, unit: 'TFLOPs', sortable: true },
-    { label: 'FLOPs %', key: ColumnHeaders.flops_percent, unit: '%', sortable: true },
-    { label: 'Math Fidelity', key: ColumnHeaders.math_fidelity, colour: 'cyan' },
+export const Columns: ColumnDefinition[] = [
+    { name: 'ID', key: ColumnKeys.Id, sortable: true },
+    { name: 'Total %', key: ColumnKeys.TotalPercent, unit: '%', decimals: 1, sortable: true },
+    { name: 'Bound', key: ColumnKeys.Bound, colour: 'yellow' },
+    {
+        name: 'OP Code',
+        key: ColumnKeys.OpCode,
+        colour: 'blue',
+        sortable: true,
+        filterable: true,
+        // Absorbs Flags + Device + Type (all footerSpan: 0) — keep in sync with getFooterColumns.
+        footerSpan: 4,
+    },
+    { name: 'Flags', key: ColumnKeys.Flags, footerSpan: 0 },
+    { name: 'Device', key: ColumnKeys.Device, footerSpan: 0 },
+    { name: 'Type', key: ColumnKeys.BufferType, sortable: true, filterable: true, footerSpan: 0 },
+    { name: 'Layout', key: ColumnKeys.Layout, sortable: true, filterable: true },
+    { name: 'Device Time', key: ColumnKeys.DeviceTime, unit: 'µs', decimals: 0, sortable: true },
+    { name: 'Op-to-Op Gap', key: ColumnKeys.OpToOpGap, colour: 'red', unit: 'µs', decimals: 0, sortable: true },
+    { name: 'Cores', key: ColumnKeys.Cores, colour: 'green', sortable: true },
+    { name: 'DRAM', key: ColumnKeys.Dram, colour: 'yellow', unit: 'GB/s', decimals: 1, sortable: true },
+    { name: 'DRAM %', key: ColumnKeys.DramPercent, colour: 'yellow', unit: '%', decimals: 1, sortable: true },
+    { name: 'FLOPS', key: ColumnKeys.Flops, unit: 'TFLOPS', decimals: 1, sortable: true },
+    { name: 'FLOPS %', key: ColumnKeys.FlopsPercent, unit: '%', decimals: 1, sortable: true },
+    { name: 'Math Fidelity', key: ColumnKeys.MathFidelity, colour: 'cyan' },
+    // Per-RISC kernel durations (#1518). Stored in µs (converted from the raw ns CSV values in
+    // enrichRowData); 2dp keeps sub-microsecond contributions legible alongside Device Time.
+    { name: 'Kernel Duration', key: ColumnKeys.DeviceKernelDuration, unit: 'µs', decimals: 2, sortable: true },
+    { name: 'BRISC', key: ColumnKeys.BriscKernelDuration, unit: 'µs', decimals: 2, sortable: true },
+    { name: 'NCRISC', key: ColumnKeys.NcriscKernelDuration, unit: 'µs', decimals: 2, sortable: true },
+    { name: 'TRISC_0', key: ColumnKeys.Trisc0KernelDuration, unit: 'µs', decimals: 2, sortable: true },
+    { name: 'TRISC_1', key: ColumnKeys.Trisc1KernelDuration, unit: 'µs', decimals: 2, sortable: true },
+    { name: 'TRISC_2', key: ColumnKeys.Trisc2KernelDuration, unit: 'µs', decimals: 2, sortable: true },
+    { name: 'ERISC', key: ColumnKeys.EriscKernelDuration, unit: 'µs', decimals: 2, sortable: true },
+    { name: 'Hash', key: ColumnKeys.Hash },
+    { name: 'Cache Hit', key: ColumnKeys.CacheHit, colour: 'magenta', filterable: true },
 ];
 
-export const FilterableColumnKeys = TableHeaders.filter((column) => column.filterable).map((column) => column.key);
-
-export const ComparisonKeys: TableKeys[] = [
-    ColumnHeaders.op_code,
-    ColumnHeaders.bound,
-    ColumnHeaders.total_percent,
-    ColumnHeaders.device_time,
-    ColumnHeaders.op_to_op_gap,
-    ColumnHeaders.cores,
-    ColumnHeaders.dram,
-    ColumnHeaders.dram_percent,
-    ColumnHeaders.flops,
-    ColumnHeaders.flops_percent,
-    ColumnHeaders.math_fidelity,
-    ColumnHeaders.high_dispatch,
-    ColumnHeaders.global_call_count,
+export const L1PressureColumns: ColumnDefinition[] = [
+    { name: 'L1 Usage %', key: ColumnKeys.L1Fullness, unit: '%', decimals: 1, sortable: true },
 ];
 
-export const signpostRowDefaults = Object.freeze({
-    global_call_count: null,
-    total_percent: null,
-    device_time: null,
-    op_to_op_gap: null,
-    cores: null,
-    dram: null,
-    dram_percent: null,
-    flops: null,
-    flops_percent: null,
-    advice: [],
-    bound: null,
-    math_fidelity: '',
-    output_datatype: '',
-    output_0_memory: '',
-    input_0_datatype: '',
-    input_1_datatype: '',
-    dram_sharded: '',
-    input_0_memory: '',
-    input_1_memory: '',
-    inner_dim_block_size: '',
-    output_subblock_h: '',
-    output_subblock_w: '',
-    pm_ideal_ns: '',
-    op_type: OpType.SIGNPOST,
-    device: null,
-    layout: null,
-    buffer_type: null,
-});
+export const LOCKED_PERF_COLUMN_KEYS: ColumnKeys[] = [ColumnKeys.Id, ColumnKeys.OpCode];
+
+export const DISPLAY_COLUMNS_LABEL = 'Display columns';
+
+// L1 pressure is computed from the active profiler report's buffers (op-id sync and buffer
+// lookups are both keyed to that report), so it cannot be attributed per comparison report.
+// ColumnKeys.L1Fullness is intentionally excluded here — comparison sub-rows render an empty
+// L1 cell rather than the active report's numbers misattributed to another report.
+export const comparisonKeys: ColumnKeys[] = [
+    ColumnKeys.Bound,
+    ColumnKeys.BufferType,
+    ColumnKeys.Cores,
+    ColumnKeys.Device,
+    ColumnKeys.DeviceTime,
+    ColumnKeys.Dram,
+    ColumnKeys.DramPercent,
+    ColumnKeys.Flops,
+    ColumnKeys.FlopsPercent,
+    ColumnKeys.GlobalCallCount,
+    ColumnKeys.HighDispatch,
+    ColumnKeys.Layout,
+    ColumnKeys.MathFidelity,
+    ColumnKeys.OpCode,
+    ColumnKeys.Flags,
+    ColumnKeys.OpToOpGap,
+    ColumnKeys.TotalPercent,
+    ColumnKeys.DeviceKernelDuration,
+    ColumnKeys.BriscKernelDuration,
+    ColumnKeys.NcriscKernelDuration,
+    ColumnKeys.Trisc0KernelDuration,
+    ColumnKeys.Trisc1KernelDuration,
+    ColumnKeys.Trisc2KernelDuration,
+    ColumnKeys.EriscKernelDuration,
+    ColumnKeys.Hash,
+    ColumnKeys.CacheHit,
+];
+
+export type PerfTableFilters = Partial<Record<ColumnKeys, string>> | null;

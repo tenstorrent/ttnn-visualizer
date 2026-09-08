@@ -1,0 +1,71 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
+
+/* Bottom-left, beside React Flow's zoom Controls — clear of the top-left
+ * controls and the right-docked details panel. `.mlir-view-pane` is the
+ * positioned ancestor. `column-reverse` keeps the toggle chip level with the
+ * controls while the expanded list grows upward. */
+.mlir-node-color-legend {
+    position: absolute;
+    bottom: 28px;
+    left: 60px;
+    z-index: 6;
+    display: flex;
+    flex-direction: column-reverse;
+    align-items: flex-start;
+    gap: 6px;
+    max-width: 240px;
+}
+
+.mlir-node-color-legend-toggle.bp6-button {
+    background: rgb(30 30 30 / 88%);
+    border: 1px solid rgb(255 255 255 / 12%);
+    border-radius: 6px;
+    color: #eee;
+
+    &:hover {
+        background: rgb(45 45 45 / 95%);
+    }
+}
+
+.mlir-node-color-legend-items {
+    margin: 0;
+    padding: 8px 10px;
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    background: rgb(30 30 30 / 88%);
+    border: 1px solid rgb(255 255 255 / 12%);
+    border-radius: 6px;
+    font-size: 11px;
+    line-height: 1.2;
+    color: #eee;
+}
+
+.mlir-node-color-legend-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.mlir-node-color-legend-swatch {
+    flex: 0 0 auto;
+    width: 14px;
+    height: 14px;
+    border-radius: 3px;
+    background: var(--legend-swatch-color);
+    border: 1px solid rgb(0 0 0 / 35%);
+
+    /* Selected node reads as a ring, not a fill. */
+    &.is-ring {
+        background: var(--graph-op-node);
+        border-color: transparent;
+        box-shadow: 0 0 0 2px var(--legend-swatch-color);
+    }
+}
+
+.mlir-node-color-legend-label {
+    white-space: nowrap;
+}

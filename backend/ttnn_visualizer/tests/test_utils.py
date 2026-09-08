@@ -1,0 +1,980 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
+
+import os
+from pathlib import Path
+from unittest.mock import mock_open, patch
+
+import pytest
+from ttnn_visualizer.models import RemoteConnection
+from ttnn_visualizer.utils import (
+    FALSE_VALUES,
+    MAX_RANKED_WORLD_SIZE,
+    TRUE_VALUES,
+    find_gunicorn_path,
+    get_app_data_directory,
+    get_mlir_path,
+    get_report_data_directory,
+    is_running_in_container,
+    is_valid_profiler_ranked_entry,
+    parse_bool,
+    pick_cluster_descriptor_path,
+    pick_mesh_descriptor_path,
+    pick_profiler_config_paths,
+    ranked_profiler_config_basenames,
+    read_profiler_config_api_payload,
+    read_profiler_report_name,
+    require_tcp_port,
+    str_to_bool,
+    stringify_chip_unique_ids,
+)
+
+# The vocabulary is narrow on purpose — it has to agree with the SPA's
+# ``isServerModeEnabled``, which has no declared default to fall back to.
+UNRECOGNISED_BOOLEANS = ["yes", "no", "t", "f", "on", "off", "Ture", "maybe", ""]
+
+
+@pytest.mark.parametrize("value", sorted(TRUE_VALUES) + ["TRUE", " true ", "True"])
+def test_str_to_bool_accepts_the_true_vocabulary(value):
+    assert str_to_bool(value) is True
+
+
+@pytest.mark.parametrize(
+    "value", sorted(FALSE_VALUES) + ["FALSE", " false ", *UNRECOGNISED_BOOLEANS]
+)
+def test_str_to_bool_is_false_for_everything_else(value):
+    # Lenient by design: its callers are query params (``views.py``) where a value we
+    # don't recognise and an explicit false are the same answer. Config uses
+    # ``parse_bool`` directly so it can tell the two apart.
+    assert str_to_bool(value) is False
+
+
+@pytest.mark.parametrize("value", UNRECOGNISED_BOOLEANS)
+def test_parse_bool_returns_none_outside_the_vocabulary(value):
+    assert parse_bool(value) is None
+
+
+def test_the_boolean_halves_are_disjoint():
+    assert TRUE_VALUES.isdisjoint(FALSE_VALUES)
+
+
+@pytest.mark.parametrize("value", ["1", "22", "65535"])
+def test_require_tcp_port_accepts_ports_in_range(value):
+    assert require_tcp_port(value) == int(value)
+
+
+@pytest.mark.parametrize("value", ["0", "-1", "65536", "not-a-port", "22.5", ""])
+def test_require_tcp_port_rejects_anything_unusable(value):
+    # The strict half exists so the override loop can report a bad port instead of
+    # substituting a default the operator never asked for.
+    with pytest.raises(ValueError):
+        require_tcp_port(value)
+
+
+@patch("sys.argv", ["/home/user/.local/bin/ttnn-visualizer"])
+@patch("os.access")
+@patch("pathlib.Path.exists")
+@patch("pathlib.Path.is_file")
+@patch("shutil.which")
+def test_find_gunicorn_in_same_directory(
+    mock_which, mock_is_file, mock_exists, mock_access
+):
+    """Test finding gunicorn in the same directory as ttnn-visualizer."""
+    mock_exists.return_value = True
+    mock_is_file.return_value = True
+    mock_access.return_value = True
+    mock_which.return_value = None  # Not in PATH
+
+    gunicorn_path, warning = find_gunicorn_path()
+
+    assert gunicorn_path.endswith("/home/user/.local/bin/gunicorn")
+    assert warning is None
+
+
+@patch("sys.argv", ["/home/user/.local/bin/ttnn-visualizer"])
+@patch("os.access")
+@patch("pathlib.Path.exists")
+@patch("pathlib.Path.is_file")
+@patch("shutil.which")
+def test_find_multiple_gunicorn_installations(
+    mock_which, mock_is_file, mock_exists, mock_access
+):
+    """Test warning when multiple gunicorn installations are detected."""
+    mock_exists.return_value = True
+    mock_is_file.return_value = True
+    mock_access.return_value = True
+    mock_which.return_value = "/usr/bin/gunicorn"  # Different one in PATH
+
+    gunicorn_path, warning = find_gunicorn_path()
+
+    assert gunicorn_path.endswith("/home/user/.local/bin/gunicorn")
+    assert warning is not None
+    assert "Multiple gunicorn installations detected" in warning
+
+
+@patch("sys.argv", ["/home/user/.local/bin/ttnn-visualizer"])
+@patch("os.access")
+@patch("pathlib.Path.exists")
+@patch("pathlib.Path.is_file")
+@patch("shutil.which")
+def test_gunicorn_not_executable(mock_which, mock_is_file, mock_exists, mock_access):
+    """Test when gunicorn exists but is not executable."""
+    mock_exists.return_value = True
+    mock_is_file.return_value = True
+    mock_access.return_value = False  # Not executable
+    mock_which.return_value = "/usr/bin/gunicorn"
+
+    gunicorn_path, warning = find_gunicorn_path()
+
+    assert gunicorn_path == "/usr/bin/gunicorn"
+    assert warning is not None
+    assert "not executable" in warning
+    assert "chmod +x" in warning
+
+
+@patch("sys.argv", ["/home/user/.local/bin/ttnn-visualizer"])
+@patch("os.access")
+@patch("pathlib.Path.exists")
+@patch("pathlib.Path.is_file")
+@patch("shutil.which")
+def test_fallback_to_path(mock_which, mock_is_file, mock_exists, mock_access):
+    """Test falling back to PATH when not in same directory."""
+    mock_exists.return_value = False
+    mock_is_file.return_value = False
+    mock_which.return_value = "/usr/bin/gunicorn"
+
+    gunicorn_path, warning = find_gunicorn_path()
+
+    assert gunicorn_path == "/usr/bin/gunicorn"
+    assert warning is not None
+    assert "not found in" in warning
+    assert "Falling back" in warning
+
+
+@patch("sys.argv", ["/home/user/.local/bin/ttnn-visualizer"])
+@patch("os.access")
+@patch("pathlib.Path.exists")
+@patch("pathlib.Path.is_file")
+@patch("shutil.which")
+def test_gunicorn_not_found(mock_which, mock_is_file, mock_exists, mock_access):
+    """Test when gunicorn is not found anywhere."""
+    mock_exists.return_value = False
+    mock_is_file.return_value = False
+    mock_which.return_value = None
+
+    gunicorn_path, warning = find_gunicorn_path()
+
+    assert gunicorn_path == "gunicorn"
+    assert warning is not None
+    assert "ERROR" in warning
+    assert "not found" in warning
+
+
+# Tests for is_running_in_container()
+
+
+@patch("os.path.exists")
+@patch("os.getenv")
+def test_container_detection_via_dockerenv(mock_getenv, mock_exists):
+    """Test container detection via /.dockerenv file."""
+    mock_exists.return_value = True
+    mock_getenv.return_value = None
+
+    result = is_running_in_container()
+
+    assert result is True
+    mock_exists.assert_called_once_with("/.dockerenv")
+
+
+@patch("os.path.exists")
+@patch(
+    "builtins.open",
+    new_callable=mock_open,
+    read_data="12:pids:/docker/abc123\n11:cpuset:/docker/abc123",
+)
+@patch("os.getenv")
+def test_container_detection_via_cgroup_docker(mock_getenv, mock_file, mock_exists):
+    """Test container detection via /proc/self/cgroup containing 'docker'."""
+    mock_exists.return_value = False  # No /.dockerenv
+    mock_getenv.return_value = None
+
+    result = is_running_in_container()
+
+    assert result is True
+    mock_file.assert_called_once_with("/proc/self/cgroup", "r")
+
+
+@patch("os.path.exists")
+@patch(
+    "builtins.open",
+    new_callable=mock_open,
+    read_data="12:pids:/containerd/abc123\n11:cpuset:/containerd/abc123",
+)
+@patch("os.getenv")
+def test_container_detection_via_cgroup_containerd(mock_getenv, mock_file, mock_exists):
+    """Test container detection via /proc/self/cgroup containing 'containerd'."""
+    mock_exists.return_value = False
+    mock_getenv.return_value = None
+
+    result = is_running_in_container()
+
+    assert result is True
+
+
+@patch("os.path.exists")
+@patch(
+    "builtins.open",
+    new_callable=mock_open,
+    read_data="12:pids:/lxc/container123\n11:cpuset:/lxc/container123",
+)
+@patch("os.getenv")
+def test_container_detection_via_cgroup_lxc(mock_getenv, mock_file, mock_exists):
+    """Test container detection via /proc/self/cgroup containing 'lxc'."""
+    mock_exists.return_value = False
+    mock_getenv.return_value = None
+
+    result = is_running_in_container()
+
+    assert result is True
+
+
+@patch("os.path.exists")
+@patch(
+    "builtins.open",
+    new_callable=mock_open,
+    read_data="12:pids:/kubepods/besteffort/pod123\n11:cpuset:/kubepods/besteffort/pod123",
+)
+@patch("os.getenv")
+def test_container_detection_via_cgroup_kubepods(mock_getenv, mock_file, mock_exists):
+    """Test container detection via /proc/self/cgroup containing 'kubepods'."""
+    mock_exists.return_value = False
+    mock_getenv.return_value = None
+
+    result = is_running_in_container()
+
+    assert result is True
+
+
+@patch("os.path.exists")
+@patch("builtins.open", side_effect=FileNotFoundError())
+@patch("os.getenv")
+def test_container_detection_cgroup_file_not_found(mock_getenv, mock_file, mock_exists):
+    """Test container detection handles FileNotFoundError from /proc/self/cgroup."""
+    mock_exists.return_value = False
+
+    def getenv_side_effect(key):
+        return None
+
+    mock_getenv.side_effect = getenv_side_effect
+
+    result = is_running_in_container()
+
+    assert result is False
+
+
+@patch("os.path.exists")
+@patch("builtins.open", side_effect=PermissionError())
+@patch("os.getenv")
+def test_container_detection_cgroup_permission_error(
+    mock_getenv, mock_file, mock_exists
+):
+    """Test container detection handles PermissionError from /proc/self/cgroup."""
+    mock_exists.return_value = False
+
+    def getenv_side_effect(key):
+        return None
+
+    mock_getenv.side_effect = getenv_side_effect
+
+    result = is_running_in_container()
+
+    assert result is False
+
+
+@patch("os.path.exists")
+@patch(
+    "builtins.open",
+    new_callable=mock_open,
+    read_data="12:pids:/user.slice\n11:cpuset:/",
+)
+def test_container_detection_via_kubernetes_service_host(mock_file, mock_exists):
+    """Test container detection via KUBERNETES_SERVICE_HOST environment variable."""
+    mock_exists.return_value = False
+
+    with patch.dict("os.environ", {"KUBERNETES_SERVICE_HOST": "10.0.0.1"}, clear=True):
+        result = is_running_in_container()
+
+    assert result is True
+
+
+@patch("os.path.exists")
+@patch(
+    "builtins.open",
+    new_callable=mock_open,
+    read_data="12:pids:/user.slice\n11:cpuset:/",
+)
+def test_container_detection_via_kubernetes_port(mock_file, mock_exists):
+    """Test container detection via KUBERNETES_PORT environment variable."""
+    mock_exists.return_value = False
+
+    with patch.dict(
+        "os.environ", {"KUBERNETES_PORT": "tcp://10.0.0.1:443"}, clear=True
+    ):
+        result = is_running_in_container()
+
+    assert result is True
+
+
+@patch("os.path.exists")
+@patch(
+    "builtins.open",
+    new_callable=mock_open,
+    read_data="12:pids:/user.slice\n11:cpuset:/",
+)
+def test_container_detection_via_container_env(mock_file, mock_exists):
+    """Test container detection via 'container' environment variable."""
+    mock_exists.return_value = False
+
+    with patch.dict("os.environ", {"container": "podman"}, clear=True):
+        result = is_running_in_container()
+
+    assert result is True
+
+
+@patch("os.path.exists")
+@patch(
+    "builtins.open",
+    new_callable=mock_open,
+    read_data="12:pids:/user.slice\n11:cpuset:/",
+)
+@patch("os.getenv")
+def test_no_container_detection(mock_getenv, mock_file, mock_exists):
+    """Test that no container is detected when all checks fail."""
+    mock_exists.return_value = False  # No /.dockerenv
+    mock_getenv.return_value = None  # No container env vars
+
+    result = is_running_in_container()
+
+    assert result is False
+
+
+# Tests for get_app_data_directory()
+
+
+def test_get_app_data_directory_with_tt_metal_home():
+    """Test that get_app_data_directory returns correct path when tt_metal_home is provided."""
+    tt_metal_home = "/path/to/tt-metal"
+    application_dir = "/default/app/dir"
+
+    result = get_app_data_directory(tt_metal_home, application_dir)
+
+    assert result == "/path/to/tt-metal/generated/ttnn-visualizer"
+
+
+@patch("os.getenv")
+@patch("ttnn_visualizer.utils.is_running_in_container", return_value=False)
+@patch("pathlib.Path.home", return_value=Path("/home/testuser"))
+def test_get_app_data_directory_with_none(mock_home, mock_container, mock_getenv):
+    """Test that get_app_data_directory returns ~/.ttnn-visualizer/app when tt_metal_home is None."""
+    mock_getenv.return_value = None  # No APP_DATA_DIRECTORY env var
+    tt_metal_home = None
+    application_dir = "/default/app/dir"
+
+    result = get_app_data_directory(tt_metal_home, application_dir)
+
+    assert result == "/home/testuser/.ttnn-visualizer/app"
+
+
+@patch("os.getenv")
+@patch("ttnn_visualizer.utils.is_running_in_container", return_value=False)
+@patch("pathlib.Path.home", return_value=Path("/home/testuser"))
+def test_get_app_data_directory_with_empty_string(
+    mock_home, mock_container, mock_getenv
+):
+    """Test that get_app_data_directory returns ~/.ttnn-visualizer/app when tt_metal_home is empty."""
+    mock_getenv.return_value = None  # No APP_DATA_DIRECTORY env var
+    tt_metal_home = ""
+    application_dir = "/default/app/dir"
+
+    result = get_app_data_directory(tt_metal_home, application_dir)
+
+    assert result == "/home/testuser/.ttnn-visualizer/app"
+
+
+def test_get_app_data_directory_with_special_characters():
+    """Test that get_app_data_directory handles paths with special characters correctly."""
+    tt_metal_home = "/path/with spaces/and-dashes/tt-metal"
+    application_dir = "/default/app/dir"
+
+    result = get_app_data_directory(tt_metal_home, application_dir)
+
+    assert result == "/path/with spaces/and-dashes/tt-metal/generated/ttnn-visualizer"
+
+
+def test_get_app_data_directory_with_relative_path():
+    """Test that get_app_data_directory handles relative paths correctly."""
+    tt_metal_home = "../relative/path/tt-metal"
+    application_dir = "/default/app/dir"
+
+    result = get_app_data_directory(tt_metal_home, application_dir)
+
+    assert result == "../relative/path/tt-metal/generated/ttnn-visualizer"
+
+
+def test_get_app_data_directory_with_trailing_slash():
+    """Test that get_app_data_directory handles paths with trailing slashes correctly."""
+    tt_metal_home = "/path/to/tt-metal/"
+    application_dir = "/default/app/dir"
+
+    result = get_app_data_directory(tt_metal_home, application_dir)
+
+    # Path.join handles trailing slashes correctly
+    assert result == "/path/to/tt-metal/generated/ttnn-visualizer"
+
+
+@patch("os.getenv")
+@patch("ttnn_visualizer.utils.is_running_in_container", return_value=False)
+@patch("pathlib.Path.home", return_value=Path("/home/testuser"))
+def test_get_app_data_directory_with_env_var(mock_home, mock_container, mock_getenv):
+    """Test that get_app_data_directory respects APP_DATA_DIRECTORY environment variable."""
+    mock_getenv.side_effect = lambda key, default=None: (
+        "/custom/app/data" if key == "APP_DATA_DIRECTORY" else None
+    )
+    tt_metal_home = None
+    application_dir = "/default/app/dir"
+
+    result = get_app_data_directory(tt_metal_home, application_dir)
+
+    assert result == "/custom/app/data"
+
+
+@patch("os.getenv")
+@patch("ttnn_visualizer.utils.is_running_in_container", return_value=True)
+@patch("os.geteuid", return_value=0)
+def test_get_app_data_directory_in_container_as_root(
+    mock_geteuid, mock_container, mock_getenv
+):
+    """Test that get_app_data_directory returns /var/lib/ttnn-visualizer/app when running as root in container."""
+    mock_getenv.return_value = None  # No APP_DATA_DIRECTORY env var
+    tt_metal_home = None
+    application_dir = "/default/app/dir"
+
+    result = get_app_data_directory(tt_metal_home, application_dir)
+
+    assert result == "/var/lib/ttnn-visualizer/app"
+
+
+@patch("os.getenv")
+@patch("ttnn_visualizer.utils.is_running_in_container", return_value=True)
+@patch("os.geteuid", return_value=1000)
+@patch("pathlib.Path.home", return_value=Path("/home/testuser"))
+def test_get_app_data_directory_in_container_as_non_root(
+    mock_home, mock_geteuid, mock_container, mock_getenv
+):
+    """Test that get_app_data_directory returns ~/.ttnn-visualizer/app when running as non-root in container."""
+    mock_getenv.return_value = None  # No APP_DATA_DIRECTORY env var
+    tt_metal_home = None
+    application_dir = "/default/app/dir"
+
+    result = get_app_data_directory(tt_metal_home, application_dir)
+
+    assert result == "/home/testuser/.ttnn-visualizer/app"
+
+
+# Tests for get_report_data_directory()
+
+
+@patch("os.getenv")
+@patch("ttnn_visualizer.utils.is_running_in_container", return_value=False)
+@patch("pathlib.Path.home", return_value=Path("/home/testuser"))
+def test_get_report_data_directory_default(mock_home, mock_container, mock_getenv):
+    """Test that get_report_data_directory returns ~/.ttnn-visualizer/reports by default."""
+    mock_getenv.return_value = None  # No REPORT_DATA_DIRECTORY env var
+    tt_metal_home = None
+    application_dir = "/default/app/dir"
+
+    result = get_report_data_directory(tt_metal_home, application_dir)
+
+    assert result == "/home/testuser/.ttnn-visualizer/reports"
+
+
+@patch("os.getenv")
+def test_get_report_data_directory_with_env_var(mock_getenv):
+    """Test that get_report_data_directory respects REPORT_DATA_DIRECTORY environment variable."""
+    mock_getenv.side_effect = lambda key, default=None: (
+        "/custom/reports" if key == "REPORT_DATA_DIRECTORY" else None
+    )
+    tt_metal_home = None
+    application_dir = "/default/app/dir"
+
+    result = get_report_data_directory(tt_metal_home, application_dir)
+
+    assert result == "/custom/reports"
+
+
+# Profiler report config.json vs config_<rank>_of_<world>.json
+
+
+def test_pick_profiler_config_prefers_config_json(tmp_path):
+    (tmp_path / "config.json").write_text('{"report_name": "a"}', encoding="utf-8")
+    (tmp_path / "config_1_of_2.json").write_text("{}", encoding="utf-8")
+    paths = pick_profiler_config_paths(tmp_path)
+    assert len(paths) == 1
+    assert paths[0].name == "config.json"
+
+
+def test_pick_profiler_config_ranked_files(tmp_path):
+    (tmp_path / "config_2_of_2.json").write_text(
+        '{"report_name": "b"}', encoding="utf-8"
+    )
+    (tmp_path / "config_1_of_2.json").write_text(
+        '{"report_name": "a"}', encoding="utf-8"
+    )
+    paths = pick_profiler_config_paths(tmp_path)
+    assert [p.name for p in paths] == [
+        "config_1_of_2.json",
+        "config_2_of_2.json",
+    ]
+
+
+def test_ranked_profiler_config_basenames_picks_common_world_size():
+    names = [
+        "config_1_of_4.json",
+        "config_2_of_4.json",
+        "config_1_of_2.json",
+    ]
+    out = ranked_profiler_config_basenames(names)
+    # world_size 4 is the majority
+    assert out == ["config_1_of_4.json", "config_2_of_4.json"]
+
+
+def test_read_profiler_report_name_from_ranked(tmp_path):
+    (tmp_path / "config_1_of_2.json").write_text(
+        '{"report_name": "my run"}', encoding="utf-8"
+    )
+    (tmp_path / "config_2_of_2.json").write_text("{}", encoding="utf-8")
+    assert read_profiler_report_name(tmp_path) == "my run"
+
+
+def test_read_profiler_config_api_payload_multi_host_default_rank(tmp_path):
+    (tmp_path / "config_1_of_2.json").write_text('{"k": 1}', encoding="utf-8")
+    (tmp_path / "config_2_of_2.json").write_text('{"k": 2}', encoding="utf-8")
+    payload, err = read_profiler_config_api_payload(tmp_path, logical_rank=0)
+    assert err is None
+    assert payload == {"k": 1}
+
+
+def test_read_profiler_config_api_payload_multi_host_explicit_rank(tmp_path):
+    (tmp_path / "config_1_of_2.json").write_text('{"k": 1}', encoding="utf-8")
+    (tmp_path / "config_2_of_2.json").write_text('{"k": 2}', encoding="utf-8")
+    payload, err = read_profiler_config_api_payload(tmp_path, logical_rank=1)
+    assert err is None
+    assert payload == {"k": 2}
+
+
+def test_read_profiler_config_api_payload_rank_out_of_range(tmp_path):
+    (tmp_path / "config_1_of_2.json").write_text("{}", encoding="utf-8")
+    (tmp_path / "config_2_of_2.json").write_text("{}", encoding="utf-8")
+    payload, err = read_profiler_config_api_payload(tmp_path, logical_rank=2)
+    assert payload is None
+    assert err == "rank_out_of_range"
+
+
+def test_read_profiler_config_api_payload_missing_rank_file(tmp_path):
+    (tmp_path / "config_2_of_2.json").write_text("{}", encoding="utf-8")
+    payload, err = read_profiler_config_api_payload(tmp_path, logical_rank=0)
+    assert payload is None
+    assert err == "missing_rank_file"
+
+
+def test_read_profiler_config_api_payload_single_file(tmp_path):
+    (tmp_path / "config.json").write_text('{"report_name": "x"}', encoding="utf-8")
+    payload, err = read_profiler_config_api_payload(tmp_path, logical_rank=99)
+    assert err is None
+    assert payload == {"report_name": "x"}
+
+
+def test_pick_profiler_config_paths_missing_directory(tmp_path):
+    missing = tmp_path / "deleted_report"
+    assert pick_profiler_config_paths(missing) == []
+
+
+def test_read_profiler_config_api_payload_missing_directory(tmp_path):
+    missing = tmp_path / "deleted_report"
+    payload, err = read_profiler_config_api_payload(missing)
+    assert payload is None
+    assert err is None
+
+
+def test_get_mlir_path_falls_back_when_host_scoped_file_missing(app):
+    """With a remote host set, missing host-scoped MLIR should still use legacy fallback."""
+    remote_dir = Path(app.config["REMOTE_DATA_DIRECTORY"])
+    mlir_name = "legacy-model"
+    fallback = remote_dir / app.config["MLIR_DIRECTORY_NAME"] / f"{mlir_name}.json"
+    fallback.parent.mkdir(parents=True, exist_ok=True)
+    fallback.write_text("{}", encoding="utf-8")
+
+    remote_connection = RemoteConnection(
+        name="conn",
+        username="user",
+        host="remote-host.test",
+        port=22,
+        profilerPath="/reports",
+    )
+
+    resolved = get_mlir_path(mlir_name, app, remote_connection=remote_connection)
+
+    assert resolved == str(fallback)
+
+
+def test_get_mlir_path_uses_deterministic_host_candidate_order(app):
+    """When no host context is supplied, host-scoped matches are chosen deterministically."""
+    remote_dir = Path(app.config["REMOTE_DATA_DIRECTORY"])
+    mlir_name = "shared-model"
+    alpha = remote_dir / "alpha-host" / app.config["MLIR_DIRECTORY_NAME"]
+    zeta = remote_dir / "zeta-host" / app.config["MLIR_DIRECTORY_NAME"]
+    alpha.mkdir(parents=True, exist_ok=True)
+    zeta.mkdir(parents=True, exist_ok=True)
+    (alpha / f"{mlir_name}.json").write_text("{}", encoding="utf-8")
+    (zeta / f"{mlir_name}.json").write_text("{}", encoding="utf-8")
+
+    resolved = get_mlir_path(mlir_name, app)
+
+    assert resolved == str(alpha / f"{mlir_name}.json")
+
+
+def test_get_mlir_path_treats_glob_metacharacters_as_literal_name(app):
+    """Wildcard characters in mlir_name must not match arbitrary files."""
+    remote_dir = Path(app.config["REMOTE_DATA_DIRECTORY"])
+    alpha = remote_dir / "alpha-host" / app.config["MLIR_DIRECTORY_NAME"]
+    alpha.mkdir(parents=True, exist_ok=True)
+    matched_by_glob = alpha / "modelx.json"
+    matched_by_glob.write_text("{}", encoding="utf-8")
+
+    resolved = get_mlir_path("model*", app)
+
+    assert resolved != str(matched_by_glob)
+    assert resolved.endswith(f"/{app.config['MLIR_DIRECTORY_NAME']}/model*.json")
+
+
+# Mesh / cluster descriptor YAML with and without _<n>_of_<world> suffix
+
+
+def test_pick_mesh_descriptor_prefers_unsuffixed_file(tmp_path):
+    (tmp_path / "physical_chip_mesh_coordinate_mapping.yaml").write_text(
+        "chips: []\n", encoding="utf-8"
+    )
+    (tmp_path / "physical_chip_mesh_coordinate_mapping_1_of_2.yaml").write_text(
+        "chips: [1]\n", encoding="utf-8"
+    )
+    path, err = pick_mesh_descriptor_path(tmp_path, logical_rank=1)
+    assert err is None
+    assert path is not None
+    assert path.name == "physical_chip_mesh_coordinate_mapping.yaml"
+
+
+def test_pick_mesh_descriptor_ranked_files(tmp_path):
+    (tmp_path / "physical_chip_mesh_coordinate_mapping_2_of_2.yaml").write_text(
+        "chips: [2]\n", encoding="utf-8"
+    )
+    (tmp_path / "physical_chip_mesh_coordinate_mapping_1_of_2.yaml").write_text(
+        "chips: [1]\n", encoding="utf-8"
+    )
+    path, err = pick_mesh_descriptor_path(tmp_path, logical_rank=0)
+    assert err is None
+    assert path is not None
+    assert path.name == "physical_chip_mesh_coordinate_mapping_1_of_2.yaml"
+
+
+def test_pick_mesh_descriptor_rank_out_of_range(tmp_path):
+    (tmp_path / "physical_chip_mesh_coordinate_mapping_1_of_2.yaml").write_text(
+        "chips: [1]\n", encoding="utf-8"
+    )
+    (tmp_path / "physical_chip_mesh_coordinate_mapping_2_of_2.yaml").write_text(
+        "chips: [2]\n", encoding="utf-8"
+    )
+    path, err = pick_mesh_descriptor_path(tmp_path, logical_rank=2)
+    assert path is None
+    assert err == "rank_out_of_range"
+
+
+def _write(path: Path, text: str, mtime_ns: int | None = None) -> Path:
+    path.write_text(text, encoding="utf-8")
+    if mtime_ns is not None:
+        os.utime(path, ns=(mtime_ns, mtime_ns))
+    return path
+
+
+# The producer reuses the output directory and writes each descriptor only
+# `if not path.exists()`, so the import that runs first owns its filenames and a
+# later import of a different world size adds the other family. Which family is
+# stale therefore depends on import order, and both orders are reachable. #1947
+OLD_NS = 1_600_000_000_000_000_000
+NEW_NS = 1_700_000_000_000_000_000
+
+
+def _cluster_families(tmp_path, single_ns, ranked_ns, world=2):
+    _write(tmp_path / "cluster_descriptor.yaml", "chips: []\n", single_ns)
+    for index in range(1, world + 1):
+        _write(
+            tmp_path / f"cluster_descriptor_{index}_of_{world}.yaml",
+            f"chips: [{index}]\n",
+            ranked_ns,
+        )
+
+
+def _mesh_families(tmp_path, single_ns, ranked_ns, world=2):
+    _write(
+        tmp_path / "physical_chip_mesh_coordinate_mapping.yaml",
+        "chips: []\n",
+        single_ns,
+    )
+    for index in range(1, world + 1):
+        _write(
+            tmp_path / f"physical_chip_mesh_coordinate_mapping_{index}_of_{world}.yaml",
+            f"chips: [{index}]\n",
+            ranked_ns,
+        )
+
+
+def test_ranked_family_wins_when_it_is_the_newer_import(tmp_path):
+    # world-1 imported first, then world-2: the unsuffixed file is the leftover.
+    _cluster_families(tmp_path, single_ns=OLD_NS, ranked_ns=NEW_NS)
+
+    for rank, expected in (
+        (0, "cluster_descriptor_1_of_2.yaml"),
+        (1, "cluster_descriptor_2_of_2.yaml"),
+    ):
+        path, err = pick_cluster_descriptor_path(tmp_path, logical_rank=rank)
+        assert err is None
+        assert path is not None and path.name == expected
+
+    path, err = pick_cluster_descriptor_path(tmp_path, logical_rank=2)
+    assert path is None and err == "rank_out_of_range"
+
+
+def test_unsuffixed_wins_when_it_is_the_newer_import(tmp_path):
+    # The reverse order, which the producer permits just as readily: world-2
+    # imported first, then world-1, so the ranked family is the leftover.
+    _cluster_families(tmp_path, single_ns=NEW_NS, ranked_ns=OLD_NS)
+
+    path, err = pick_cluster_descriptor_path(tmp_path, logical_rank=0)
+    assert err is None
+    assert path is not None and path.name == "cluster_descriptor.yaml"
+
+    # One host, so nothing past rank 0 — not the stale ranked family's world.
+    path, err = pick_cluster_descriptor_path(tmp_path, logical_rank=1)
+    assert path is None and err == "rank_out_of_range"
+
+
+def test_a_partial_ranked_family_does_not_mask_an_unsuffixed_descriptor(tmp_path):
+    # `ranked_report_basenames` calls a lone `_1_of_2` a consistent group, which
+    # made rank 1 fail with `missing_rank_file` while a usable descriptor sat
+    # beside it. An incomplete family is not eligible to win, whatever its mtime.
+    _write(tmp_path / "cluster_descriptor.yaml", "chips: []\n", OLD_NS)
+    _write(tmp_path / "cluster_descriptor_1_of_2.yaml", "chips: [1]\n", NEW_NS)
+
+    path, err = pick_cluster_descriptor_path(tmp_path, logical_rank=0)
+    assert err is None
+    assert path is not None and path.name == "cluster_descriptor.yaml"
+
+    path, err = pick_cluster_descriptor_path(tmp_path, logical_rank=1)
+    assert path is None and err == "rank_out_of_range"
+
+
+def test_a_partial_ranked_family_is_still_used_when_it_is_all_there_is(tmp_path):
+    # Completeness governs precedence, not usability: with no unsuffixed file to
+    # defer to, rank 0 is still serviceable and only the absent rank errors.
+    _write(tmp_path / "cluster_descriptor_1_of_2.yaml", "chips: [1]\n")
+
+    path, err = pick_cluster_descriptor_path(tmp_path, logical_rank=0)
+    assert err is None
+    assert path is not None and path.name == "cluster_descriptor_1_of_2.yaml"
+
+    path, err = pick_cluster_descriptor_path(tmp_path, logical_rank=1)
+    assert path is None and err == "missing_rank_file"
+
+
+@pytest.mark.parametrize(
+    "single_ns,ranked_ns,expect_ranked",
+    [(OLD_NS, NEW_NS, True), (NEW_NS, OLD_NS, False)],
+)
+def test_cluster_and_mesh_choose_the_same_generation(
+    tmp_path, single_ns, ranked_ns, expect_ranked
+):
+    # The failure this guards: cluster selecting the current ranked descriptors
+    # while mesh returned the stale unsuffixed mapping, which then overrode
+    # `descriptor.chips` for every host. Family selection is shared, so the two
+    # cannot disagree; only the per-rank rule differs. #1947
+    _cluster_families(tmp_path, single_ns, ranked_ns)
+    _mesh_families(tmp_path, single_ns, ranked_ns)
+
+    cluster, cluster_err = pick_cluster_descriptor_path(tmp_path, logical_rank=0)
+    mesh, mesh_err = pick_mesh_descriptor_path(tmp_path, logical_rank=0)
+
+    assert cluster_err is None and mesh_err is None
+    assert cluster is not None and mesh is not None
+    assert ("_1_of_2" in cluster.name) is expect_ranked
+    assert (
+        "_1_of_2" in mesh.name
+    ) is expect_ranked, "mesh chose a different generation"
+
+
+def test_pick_cluster_descriptor_ranked_set_outranks_a_stale_unsuffixed_file(tmp_path):
+    # tt-metal reuses the output directory and writes each descriptor only
+    # `if not path.exists()`, so a world-1 import followed by a world-2 import into
+    # the same directory leaves the unsuffixed file beside the ranked pair. Serving
+    # that leftover for every rank reproduced #1939 bounded by the world size, so
+    # the ranked set wins and its bound applies. #1947
+    (tmp_path / "cluster_descriptor.yaml").write_text("chips: []\n", encoding="utf-8")
+    (tmp_path / "cluster_descriptor_1_of_2.yaml").write_text(
+        "chips: [1]\n", encoding="utf-8"
+    )
+    (tmp_path / "cluster_descriptor_2_of_2.yaml").write_text(
+        "chips: [2]\n", encoding="utf-8"
+    )
+
+    path, err = pick_cluster_descriptor_path(tmp_path, logical_rank=0)
+    assert err is None
+    assert path is not None and path.name == "cluster_descriptor_1_of_2.yaml"
+
+    path, err = pick_cluster_descriptor_path(tmp_path, logical_rank=1)
+    assert err is None
+    assert path is not None and path.name == "cluster_descriptor_2_of_2.yaml"
+
+    # The probe stops at the world bound instead of walking to its cap.
+    for rank in (2, 3, 31):
+        path, err = pick_cluster_descriptor_path(tmp_path, logical_rank=rank)
+        assert path is None, f"rank {rank} resolved to {path}"
+        assert err == "rank_out_of_range"
+
+
+def test_stringify_chip_unique_ids_preserves_64_bit_values():
+    # 5313998941933517939 is chip 9 of test_ttnn_moe_aug26_2217. As a JSON number
+    # the browser rounds it to ...518000; as a string it survives. #1950
+    exact = 5313998941933517939
+    assert exact > 2**53
+    descriptor = {
+        "chip_unique_ids": {9: exact, 10: exact + 1},
+        "ethernet_connections_to_remote_devices": [
+            [{"chip": 25, "chan": 9}, {"remote_chip_id": exact + 2, "chan": 9}],
+            # Reversed, so the key-carrying endpoint is at index 0. The rule is
+            # "any endpoint dict carrying remote_chip_id", not "the second one".
+            [{"remote_chip_id": exact + 3, "chan": 1}, {"chip": 26, "chan": 1}],
+        ],
+    }
+
+    result = stringify_chip_unique_ids(descriptor)
+
+    assert result["chip_unique_ids"] == {9: str(exact), 10: str(exact + 1)}
+    # Adjacent values stay distinct; as doubles they would collapse together.
+    assert float(exact) == float(exact + 1)
+    pairs = result["ethernet_connections_to_remote_devices"]
+    assert pairs[0][1]["remote_chip_id"] == str(exact + 2)
+    assert pairs[1][0]["remote_chip_id"] == str(exact + 3)
+    # Endpoints without the key are untouched, whichever side they sit on.
+    assert pairs[0][0] == {"chip": 25, "chan": 9}
+    assert pairs[1][1] == {"chip": 26, "chan": 1}
+
+
+def test_stringify_chip_unique_ids_tolerates_missing_and_odd_shapes():
+    assert stringify_chip_unique_ids(None) is None
+    assert stringify_chip_unique_ids("not a mapping") == "not a mapping"
+    # A descriptor without either field passes through unchanged.
+    assert stringify_chip_unique_ids({"arch": {0: "blackhole"}}) == {
+        "arch": {0: "blackhole"}
+    }
+    # Remote entries that are not endpoint pairs are left alone rather than raising.
+    assert stringify_chip_unique_ids(
+        {"ethernet_connections_to_remote_devices": ["unexpected", []]}
+    ) == {"ethernet_connections_to_remote_devices": ["unexpected", []]}
+
+
+def test_pick_cluster_descriptor_single_file_answers_rank_zero_only(tmp_path):
+    # A report shipping one unsuffixed descriptor is a single host. Answering
+    # rank 1..N with the same file made the topology probe clone that host once
+    # per probed rank (#1939), so every rank past 0 is out of range.
+    (tmp_path / "cluster_descriptor.yaml").write_text("chips: []\n", encoding="utf-8")
+
+    path, err = pick_cluster_descriptor_path(tmp_path, logical_rank=0)
+    assert err is None
+    assert path is not None
+    assert path.name == "cluster_descriptor.yaml"
+
+    for rank in (1, 2, 31, 99):
+        path, err = pick_cluster_descriptor_path(tmp_path, logical_rank=rank)
+        assert path is None, f"rank {rank} should not resolve to a file"
+        assert err == "rank_out_of_range", f"rank {rank} returned {err!r}"
+
+
+def test_pick_mesh_descriptor_single_file_serves_every_rank(tmp_path):
+    # Deliberately unlike the cluster rule: one unsuffixed mesh mapping covers the
+    # whole world, either reused as a legacy single doc or holding one `chips:`
+    # document per rank that the frontend selects from. Applying the cluster
+    # rank-0-only rule here left later hosts with no mesh data. #1947
+    (tmp_path / "physical_chip_mesh_coordinate_mapping.yaml").write_text(
+        "chips: []\n", encoding="utf-8"
+    )
+
+    for rank in (0, 1, 5, 31):
+        path, err = pick_mesh_descriptor_path(tmp_path, logical_rank=rank)
+        assert err is None, f"rank {rank} returned {err!r}"
+        assert path is not None
+        assert path.name == "physical_chip_mesh_coordinate_mapping.yaml"
+
+
+def test_pick_cluster_descriptor_ranked_files(tmp_path):
+    (tmp_path / "cluster_descriptor_2_of_2.yaml").write_text(
+        "chips: [2]\n", encoding="utf-8"
+    )
+    (tmp_path / "cluster_descriptor_1_of_2.yaml").write_text(
+        "chips: [1]\n", encoding="utf-8"
+    )
+    path, err = pick_cluster_descriptor_path(tmp_path, logical_rank=1)
+    assert err is None
+    assert path is not None
+    assert path.name == "cluster_descriptor_2_of_2.yaml"
+
+
+def test_ranked_world_size_is_bounded_against_a_hostile_filename(tmp_path):
+    """
+    ``world_size`` is parsed straight out of a filename, and the local upload path
+    preserves client basenames. Completeness used to be decided by comparing
+    against ``set(range(1, world_size + 1))``, so an 11-digit world size asked for
+    a multi-terabyte allocation inside the shared Flask process. #1947
+    """
+    assert is_valid_profiler_ranked_entry(1, MAX_RANKED_WORLD_SIZE) is True
+    assert is_valid_profiler_ranked_entry(1, MAX_RANKED_WORLD_SIZE + 1) is False
+    assert is_valid_profiler_ranked_entry(1, 99_999_999_999) is False
+
+    # End to end: an over-cap name is skipped, so a usable unsuffixed descriptor
+    # still answers rather than the request dying on the allocation.
+    (tmp_path / "cluster_descriptor.yaml").write_text("chips: []\n", encoding="utf-8")
+    (tmp_path / "cluster_descriptor_1_of_99999999999.yaml").write_text(
+        "chips: [1]\n", encoding="utf-8"
+    )
+
+    path, err = pick_cluster_descriptor_path(tmp_path, logical_rank=0)
+
+    assert err is None
+    assert path is not None
+    assert path.name == "cluster_descriptor.yaml"
+
+
+def test_ranked_family_completeness_counts_rather_than_enumerating(tmp_path):
+    # The count settles completeness because the indices are unique and already
+    # bounded to 1..world; an incomplete family must not outrank the unsuffixed file.
+    (tmp_path / "cluster_descriptor.yaml").write_text("chips: []\n", encoding="utf-8")
+    (tmp_path / "cluster_descriptor_1_of_3.yaml").write_text(
+        "chips: [1]\n", encoding="utf-8"
+    )
+    (tmp_path / "cluster_descriptor_2_of_3.yaml").write_text(
+        "chips: [2]\n", encoding="utf-8"
+    )
+
+    path, err = pick_cluster_descriptor_path(tmp_path, logical_rank=0)
+
+    assert err is None
+    assert path is not None
+    assert path.name == "cluster_descriptor.yaml"

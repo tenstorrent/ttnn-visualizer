@@ -2,25 +2,17 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import React from 'react';
-import { BufferPage } from '../../model/APIData';
-import { pageDataToChunkArray } from '../../functions/getChartData';
+import { DecoratedBufferChunk } from '../../model/APIData';
 
 interface SVGBufferRendererProps {
     height: number;
-    data: BufferPage[];
-    memorySize: number;
+    data: DecoratedBufferChunk[];
     memoryStart: number;
+    memoryEnd: number;
 }
 
-const SVGBufferRenderer: React.FC<SVGBufferRendererProps> = ({
-    height,
-    data,
-    memorySize,
-    memoryStart,
-}: SVGBufferRendererProps) => {
-    const memoryRange = memorySize - memoryStart;
-    const mergedRange = pageDataToChunkArray(data);
+const SVGBufferRenderer = ({ height, data, memoryStart, memoryEnd }: SVGBufferRendererProps) => {
+    const memoryRange = memoryEnd - memoryStart;
 
     return (
         <svg
@@ -28,18 +20,18 @@ const SVGBufferRenderer: React.FC<SVGBufferRendererProps> = ({
             width='100%'
         >
             <g>
-                {mergedRange.map((range) => {
-                    const xPercent = ((range.address - memoryStart) / memoryRange) * 100;
-                    const widthPercent = (range.size / memoryRange) * 100;
+                {data.map((chunk) => {
+                    const xPercent = ((chunk.address - memoryStart) / memoryRange) * 100;
+                    const widthPercent = (chunk.chunk_size / memoryRange) * 100;
 
                     return (
                         <rect
-                            key={range.address}
+                            key={chunk.id}
                             x={`${xPercent}%`}
                             y={0}
                             width={`${widthPercent}%`}
                             height={height}
-                            fill={range.color || 'red'}
+                            fill={chunk.color}
                         />
                     );
                 })}

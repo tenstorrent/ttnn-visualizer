@@ -1,2 +1,4 @@
 graft backend/ttnn_visualizer/static
+graft backend/ttnn_visualizer/alembic
+include backend/ttnn_visualizer/alembic.ini
 prune backend/ttnn_visualizer/data

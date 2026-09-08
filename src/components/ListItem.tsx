@@ -6,7 +6,7 @@ import React from 'react';
 import classNames from 'classnames';
 import { Icon, IconName, Intent, TagProps } from '@blueprintjs/core';
 import HighlightedText from './HighlightedText';
-import '../scss/components/ListItem.scss';
+import 'styles/components/ListItem.scss';
 import MemoryTag from './MemoryTag';
 
 interface ListItemProps {
@@ -26,7 +26,7 @@ const ICON_COLOURS = {
     error: 'error-icon',
 };
 
-const ListItem: React.FC<ListItemProps> = ({
+const ListItem = ({
     filterName,
     filterQuery,
     icon,
@@ -34,7 +34,7 @@ const ListItem: React.FC<ListItemProps> = ({
     intent = Intent.NONE,
     tags,
     children,
-}) => {
+}: ListItemProps) => {
     return (
         <div className={classNames(ICON_COLOURS[iconColour], 'list-item')}>
             <Icon

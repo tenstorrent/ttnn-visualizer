@@ -1,0 +1,72 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
+
+.buffer-summary-controls {
+    display: inline-flex;
+    flex-direction: column;
+    margin-bottom: 0;
+    align-items: flex-start;
+
+    // Row wrapper so the stale-tensor count sits beside its switch instead of
+    // below it — the control stack itself is a column.
+    .late-dealloc-control {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+
+        // The switch's own bottom margin is what spaces the control stack, so
+        // move it to the wrapper — leaving it on the switch would push the
+        // count tag out of line with the label.
+        margin-bottom: 10px;
+
+        // `GlobalSwitch` stamps this on the Blueprint Switch root, so the
+        // margin is reset without reaching for Blueprint's own classname.
+        > .global-switch {
+            margin-bottom: 0;
+        }
+    }
+
+    .top-n-controls {
+        display: inline-flex;
+        align-items: center;
+        gap: 12px;
+        margin-top: 6px;
+        flex-wrap: wrap;
+        row-gap: 8px;
+
+        // Blueprint 6 ships `.bp6-…` classes; the previous `.bp5-…` rules
+        // here matched nothing, so the Switch kept its default
+        // `margin-bottom: 10px` (knocking it out of vertical alignment
+        // with the NumericInput / HTMLSelect) and the stepper size
+        // overrides never applied.
+        > .bp6-control {
+            margin-bottom: 0;
+
+            // Children of `.bp6-control` (the indicator + label) need a
+            // shared baseline so the toggle visually centres against the
+            // larger NumericInput and HTMLSelect to its right.
+            display: inline-flex;
+            align-items: center;
+        }
+
+        // Two-digit ceiling (`TOP_N_COUNT_MAX`). Width tuned so the
+        // stepper arrows on the right of the input have enough margin
+        // away from the adjacent "ops by" label — previously the arrows
+        // ran flush against the label at the wrap boundary.
+        .bp6-numeric-input {
+            width: 72px;
+
+            .bp6-input {
+                width: 48px;
+            }
+        }
+
+        .top-n-by {
+            font-size: 12px;
+            color: inherit;
+            opacity: 0.85;
+            white-space: nowrap;
+        }
+    }
+}

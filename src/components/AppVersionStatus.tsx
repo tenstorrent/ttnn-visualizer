@@ -1,0 +1,105 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
+
+import classNames from 'classnames';
+import { Icon, PopoverPosition, Tooltip } from '@blueprintjs/core';
+import { IconNames } from '@blueprintjs/icons';
+import { useMemo } from 'react';
+import { getVersionOutdatedLevel } from '../functions/getVersionOutdatedLevel';
+import { OutdatedLevel } from '../definitions/Versions';
+import { VERSION_ICON_SIZE } from '../definitions/UiConfig';
+import 'styles/components/AppVersionStatus.scss';
+
+interface AppVersionStatusProps {
+    appVersion: string;
+    latestAppVersion?: string;
+    isServerMode?: boolean;
+    latestVersionCheckFailed?: boolean;
+}
+
+const OUTDATED_CLASS_MAP: Record<OutdatedLevel, string> = {
+    [OutdatedLevel.NONE]: '',
+    [OutdatedLevel.ONE]: 'is-outdated-one',
+    [OutdatedLevel.TWO]: 'is-outdated-two',
+    [OutdatedLevel.THREE]: 'is-outdated-three',
+};
+
+const PYPI_SOURCE_URL = 'https://pypi.org/project/ttnn-visualizer/';
+
+function AppVersionStatus({
+    appVersion,
+    latestAppVersion,
+    isServerMode,
+    latestVersionCheckFailed,
+}: AppVersionStatusProps) {
+    const versionOutdatedLevel: OutdatedLevel = useMemo(
+        () => (isServerMode ? OutdatedLevel.NONE : getVersionOutdatedLevel(appVersion, latestAppVersion)),
+        [isServerMode, latestAppVersion, appVersion],
+    );
+    const isAppOutdated = versionOutdatedLevel > OutdatedLevel.NONE;
+    const versionClasses = classNames('version-info', OUTDATED_CLASS_MAP[versionOutdatedLevel], {
+        'is-anchor': isAppOutdated,
+    });
+
+    if (isServerMode) {
+        return (
+            <div className='version-info'>
+                <span className='app-version'>v{appVersion}</span>
+            </div>
+        );
+    }
+
+    if (latestVersionCheckFailed) {
+        return (
+            <Tooltip
+                content='Could not check for the latest version'
+                position={PopoverPosition.TOP}
+            >
+                <div className='version-info version-info--latest-check-unknown'>
+                    <Icon
+                        className='version-status-icon'
+                        icon={IconNames.ISSUE}
+                        size={VERSION_ICON_SIZE}
+                    />
+                    <span className='app-version'>v{appVersion}</span>
+                </div>
+            </Tooltip>
+        );
+    }
+
+    return (
+        <Tooltip
+            content={isAppOutdated ? `App update available: v${latestAppVersion}` : 'TT-NN Visualizer is up to date'}
+            position={PopoverPosition.TOP}
+        >
+            {isAppOutdated ? (
+                <a
+                    href={`${PYPI_SOURCE_URL}${latestAppVersion}`}
+                    target='_blank'
+                    rel='noopener noreferrer'
+                    aria-label='Update available'
+                    className={versionClasses}
+                >
+                    <Icon
+                        className='version-status-icon'
+                        icon={IconNames.OUTDATED}
+                        size={VERSION_ICON_SIZE}
+                    />
+                    <span className='app-version'>v{appVersion}</span>
+                </a>
+            ) : (
+                <div className={versionClasses}>
+                    <Icon
+                        className='version-status-icon'
+                        icon={IconNames.TICK}
+                        size={VERSION_ICON_SIZE}
+                    />
+                    <span className='app-version'>v{appVersion}</span>
+                </div>
+            )}
+        </Tooltip>
+    );
+}
+
+export default AppVersionStatus;

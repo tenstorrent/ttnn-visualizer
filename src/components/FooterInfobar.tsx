@@ -3,9 +3,20 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import classNames from 'classnames';
-import { Button, ButtonVariant, Collapse, NumberRange, PopoverPosition, Size, Tooltip } from '@blueprintjs/core';
+import {
+    Button,
+    Classes,
+    Collapse,
+    Icon,
+    Intent,
+    NumberRange,
+    PopoverPosition,
+    Size,
+    Tag,
+    Tooltip,
+} from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
-import { useCallback, useEffect, useState } from 'react';
+import { type ReactNode, useCallback, useEffect, useState } from 'react';
 import { useAtomValue } from 'jotai';
 import { useLocation } from 'react-router';
 import {
@@ -13,19 +24,30 @@ import {
     activeProfilerReportAtom,
     operationRangeAtom,
     performanceRangeAtom,
+    performanceReportLocationAtom,
+    profilerReportLocationAtom,
     selectedOperationRangeAtom,
 } from '../store/app';
-import SyncStatus from './SyncStatus';
+import { ReportLocation, SINGLE_HOST_WORLD_SIZE } from '../definitions/Reports';
+import ReportLinkStatus from './ReportLinkStatus';
 import Range from './RangeSlider';
 import ROUTES from '../definitions/Routes';
 import 'styles/components/FooterInfobar.scss';
-import { useInstance } from '../hooks/useAPI';
+import { useGetLatestAppVersion, useInstance, useReportMetadata } from '../hooks/useAPI';
 import getServerConfig from '../functions/getServerConfig';
+import { formatSyncedReportName, getScopedRankLabel } from '../functions/reportRank';
 import { Instance } from '../model/APIData';
-
-const MAX_TITLE_LENGTH = 20;
+import LoadingSpinner from './LoadingSpinner';
+import { LoadingSpinnerSizes } from '../definitions/LoadingSpinner';
+import AppVersionStatus from './AppVersionStatus';
+import { ReportGitMetadataLines } from './operation-details/GitCommitInfo';
 
 const RANGE_DISALLOWED_ROUTES: string[] = [ROUTES.NPE];
+
+// The API scopes every report-backed read to rank 0 while rank selection is
+// unimplemented, so the footer states which rank is on screen rather than
+// letting a multi-host report look like the whole run. #1842
+const SCOPED_RANK = 0;
 
 function FooterInfobar() {
     const [sliderIsOpen, setSliderIsOpen] = useState(false);
@@ -34,9 +56,30 @@ function FooterInfobar() {
     const performanceRange = useAtomValue(performanceRangeAtom);
     const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
     const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
-    const { data: instance } = useInstance();
+    const profilerReportLocation = useAtomValue(profilerReportLocationAtom);
+    const performanceReportLocation = useAtomValue(performanceReportLocationAtom);
 
+    const { data: instance } = useInstance();
+    const { data: reportMetadata } = useReportMetadata();
+    const worldSize = reportMetadata?.worldSize ?? SINGLE_HOST_WORLD_SIZE;
+    const isMultiHostReport = worldSize > SINGLE_HOST_WORLD_SIZE;
     const location = useLocation();
+    const {
+        data: latestAppVersion,
+        isPending: isLatestAppPending,
+        isError: isLatestAppVersionError,
+    } = useGetLatestAppVersion();
+    const serverConfig = getServerConfig();
+
+    const isServerMode = serverConfig.SERVER_MODE || false;
+    const appVersion = import.meta.env.APP_VERSION;
+
+    const activeProfilerReportName = activeProfilerReport?.reportName;
+    const activeProfilerReportPath = activeProfilerReport?.path;
+    const hasLoadedRemoteReport =
+        instance?.remote_connection?.profilerPath || instance?.remote_connection?.performancePath;
+    const activePerformanceReportPath = activePerformanceReport?.path;
+    const isPerformanceRoute = location.pathname === ROUTES.PERFORMANCE;
 
     const isAllowedRoute = useCallback(() => {
         if (RANGE_DISALLOWED_ROUTES.includes(location.pathname)) {
@@ -51,13 +94,6 @@ function FooterInfobar() {
 
         return true;
     }, [location.pathname]);
-    const isPerformanceRoute = location.pathname === ROUTES.PERFORMANCE;
-
-    useEffect(() => {
-        if (!isAllowedRoute()) {
-            setSliderIsOpen(false);
-        }
-    }, [isAllowedRoute]);
 
     const getSelectedRangeLabel = (): string | null => {
         if (isPerformanceRoute) {
@@ -67,18 +103,27 @@ function FooterInfobar() {
         return selectedRange && `Selected: ${selectedRange[0]} - ${selectedRange[1]}`;
     };
 
-    const activeProfilerReportName = activeProfilerReport?.reportName;
-    const activeProfilerReportPath = activeProfilerReport?.path;
-    const hasLoadedRemoteReport =
-        instance?.remote_connection?.profilerPath || instance?.remote_connection?.performancePath;
-    const activePerformanceReportName = activePerformanceReport?.reportName;
+    const versionStatus = getAppVersionStatus(
+        appVersion,
+        isLatestAppPending,
+        isServerMode,
+        latestAppVersion,
+        isLatestAppVersionError,
+    );
 
-    const serverConfig = getServerConfig();
-    const isServerMode = serverConfig.SERVER_MODE;
+    useEffect(() => {
+        if (!isAllowedRoute()) {
+            // Synchronize slider state with route availability
+            // eslint-disable-next-line react-hooks/set-state-in-effect
+            setSliderIsOpen(false);
+        }
+    }, [location.pathname, isAllowedRoute]);
 
     return (
         <footer className={classNames('app-footer', { 'is-open': sliderIsOpen })}>
             <div className='current-data'>
+                <div className='version-container'>{versionStatus}</div>
+
                 <div className='active-reports'>
                     {!isServerMode && (
                         <Tooltip
@@ -95,42 +140,72 @@ function FooterInfobar() {
                             }
                             position={PopoverPosition.TOP}
                         >
-                            <Button
-                                className='path-button'
+                            <Icon
                                 icon={IconNames.FOLDER_OPEN}
-                                variant={ButtonVariant.MINIMAL}
+                                aria-label='Base folder paths'
+                                size={16}
                             />
                         </Tooltip>
                     )}
 
-                    {activeProfilerReportName && (
+                    {activeProfilerReportPath && (
                         <Tooltip
-                            content={`/${activeProfilerReportPath}`}
+                            disabled={!activeProfilerReportPath}
+                            content={
+                                <>
+                                    <strong>Report path:</strong> {formatPath(activeProfilerReportPath)}
+                                    <ReportGitMetadataLines
+                                        gitUrl={reportMetadata?.gitUrl ?? null}
+                                        gitSha={reportMetadata?.gitSha ?? null}
+                                    />
+                                    {isMultiHostReport && (
+                                        <>
+                                            <br />
+                                            <strong>Multi-host report:</strong> showing{' '}
+                                            {getScopedRankLabel(SCOPED_RANK, worldSize)}. Other ranks are not yet
+                                            selectable.
+                                        </>
+                                    )}
+                                </>
+                            }
                             position={PopoverPosition.TOP}
                         >
                             <div className='title'>
                                 <strong>Memory:</strong>
-                                <span className='report-name'>{activeProfilerReportName}</span>
+                                <span className={classNames('report-name', Classes.TOOLTIP_INDICATOR)}>
+                                    {activeProfilerReportName || formatName(activeProfilerReportPath)}
+                                </span>
+                                {profilerReportLocation !== null && (
+                                    <ReportLocationTag location={profilerReportLocation} />
+                                )}
+                                {isMultiHostReport && <ReportRankTag worldSize={worldSize} />}
                             </div>
                         </Tooltip>
                     )}
 
-                    {activePerformanceReportName && (
+                    {activeProfilerReportPath && activePerformanceReportPath && <ReportLinkStatus />}
+
+                    {activePerformanceReportPath && (
                         <Tooltip
+                            disabled={!activePerformanceReportPath}
                             content={
-                                activePerformanceReportName?.length > MAX_TITLE_LENGTH
-                                    ? `/${activePerformanceReportName}`
-                                    : ''
+                                <>
+                                    <strong>Report path:</strong> {formatPath(activePerformanceReportPath)}
+                                </>
                             }
                             position={PopoverPosition.TOP}
                         >
                             <div className='title'>
                                 <strong>Performance:</strong>
-                                <span className='report-name'>{activePerformanceReportName}</span>
+                                <span className={classNames('report-name', Classes.TOOLTIP_INDICATOR)}>
+                                    {formatSyncedReportName(formatName(activePerformanceReportPath))}
+                                </span>
+                                {performanceReportLocation !== null && (
+                                    <ReportLocationTag location={performanceReportLocation} />
+                                )}
                             </div>
                         </Tooltip>
                     )}
-                    {activeProfilerReport && activePerformanceReport && <SyncStatus />}
                 </div>
 
                 {(operationRange || performanceRange) && (
@@ -151,7 +226,7 @@ function FooterInfobar() {
                 )}
             </div>
 
-            {(activeProfilerReport || activePerformanceReport) && (
+            {(activeProfilerReportPath || activePerformanceReportPath) && (
                 <Collapse
                     isOpen={sliderIsOpen}
                     keepChildrenMounted
@@ -162,6 +237,41 @@ function FooterInfobar() {
         </footer>
     );
 }
+
+interface ReportRankTagProps {
+    worldSize: number;
+}
+
+const ReportRankTag = ({ worldSize }: ReportRankTagProps) => {
+    const label = getScopedRankLabel(SCOPED_RANK, worldSize);
+
+    return (
+        <Tag
+            minimal
+            className='report-rank-tag'
+            aria-label={`Showing ${label}`}
+            intent={Intent.WARNING}
+        >
+            {label}
+        </Tag>
+    );
+};
+
+const ReportLocationTag = ({ location }: { location: ReportLocation }) => {
+    const isRemote = location === ReportLocation.REMOTE;
+    const label = isRemote ? 'Remote' : 'Local';
+
+    return (
+        <Tag
+            minimal
+            className='report-source-tag'
+            aria-label={`Report source: ${label}`}
+            intent={Intent.PRIMARY}
+        >
+            {label}
+        </Tag>
+    );
+};
 
 const hasRangeSelected = (selectedRange: NumberRange | null, operationRange: NumberRange | null): boolean =>
     !!(
@@ -178,6 +288,64 @@ const getRemotePaths = (instance: Instance): string => {
 
     // Return a more easily readable stringified array
     return `[ ${paths.toString().replace(/,/g, ', ')} ]`;
+};
+
+const formatPath = (str?: string): string => {
+    if (!str) {
+        return '';
+    }
+
+    const endPath = str.includes('/') ? str.split('/').at(-1) : str;
+
+    return endPath?.startsWith('/') ? endPath : `/${endPath}`;
+};
+
+// If the name is a path, return the parent folder name otherwise return the name (name is optional)
+const formatName = (str: string): string => {
+    const isPath = str.includes('/');
+
+    if (isPath) {
+        return str.split('/').at(-1) || str;
+    }
+
+    return str;
+};
+
+const getAppVersionStatus = (
+    appVersion: string,
+    isLatestAppPending: boolean,
+    isServerMode: boolean,
+    latestAppVersion: string | null | undefined,
+    isLatestAppVersionError: boolean,
+): ReactNode => {
+    if (isServerMode) {
+        return (
+            <AppVersionStatus
+                appVersion={appVersion}
+                isServerMode
+            />
+        );
+    }
+
+    if (isLatestAppPending) {
+        return <LoadingSpinner size={LoadingSpinnerSizes.SMALL} />;
+    }
+
+    if (isLatestAppVersionError && latestAppVersion == null) {
+        return (
+            <AppVersionStatus
+                appVersion={appVersion}
+                latestVersionCheckFailed
+            />
+        );
+    }
+
+    return (
+        <AppVersionStatus
+            appVersion={appVersion}
+            latestAppVersion={latestAppVersion ?? undefined}
+        />
+    );
 };
 
 export default FooterInfobar;

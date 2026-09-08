@@ -8,7 +8,8 @@ import tempfile
 import unittest
 from unittest.mock import Mock, patch
 
-from ttnn_visualizer.models import DeviceOperation, TensorComparisonRecord
+from ttnn_visualizer.exceptions import ProfilerReportNotLoadedException
+from ttnn_visualizer.models import BufferChunk, DeviceOperation, TensorComparisonRecord
 from ttnn_visualizer.queries import DatabaseQueries, LocalQueryRunner
 
 
@@ -119,7 +120,6 @@ class TestDatabaseQueries(unittest.TestCase):
             address_at_first_l1_cb_buffer int,
             num_banks_per_storage_core int,
             num_compute_cores int,
-            num_storage_cores int,
             total_l1_memory int,
             total_l1_for_tensors int,
             total_l1_for_interleaved_buffers int,
@@ -232,10 +232,10 @@ class TestDatabaseQueries(unittest.TestCase):
         mock_instance = Mock()
         mock_instance.profiler_path = None
         mock_instance.remote_connection = None
-        with self.assertRaises(ValueError) as context:
+        with self.assertRaises(ProfilerReportNotLoadedException) as context:
             DatabaseQueries(instance=mock_instance)
-        self.assertIn(
-            "Report path must be provided for local queries", str(context.exception)
+        self.assertEqual(
+            str(context.exception), ProfilerReportNotLoadedException.DEFAULT_MESSAGE
         )
 
     def test_check_table_exists(self):
@@ -271,8 +271,33 @@ class TestDatabaseQueries(unittest.TestCase):
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0].name, "op1")
 
+    def test_query_operations_ignores_unknown_extra_columns(self):
+        """Forward-compatible with TTNN adding columns to report tables."""
+        self.connection.execute(
+            "ALTER TABLE operations ADD COLUMN future_meta TEXT DEFAULT NULL"
+        )
+        self.connection.execute(
+            "INSERT INTO operations (operation_id, name, duration, future_meta) "
+            "VALUES (1, 'op1', 2.0, 'ignored')"
+        )
+        results = list(self.db_queries.query_operations(filters={"operation_id": 1}))
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0].name, "op1")
+
     def test_query_buffers(self):
         self.connection.execute("INSERT INTO buffers VALUES (1, 1, 100, 1024, 0)")
+        results = list(self.db_queries.query_buffers(filters={"operation_id": 1}))
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0].address, 100)
+
+    def test_query_buffers_ignores_unknown_extra_columns(self):
+        self.connection.execute(
+            "ALTER TABLE buffers ADD COLUMN extra_note TEXT DEFAULT NULL"
+        )
+        self.connection.execute(
+            "INSERT INTO buffers (operation_id, device_id, address, max_size_per_bank, "
+            "buffer_type, extra_note) VALUES (1, 1, 100, 1024, 0, 'note')"
+        )
         results = list(self.db_queries.query_buffers(filters={"operation_id": 1}))
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0].address, 100)
@@ -283,14 +308,78 @@ class TestDatabaseQueries(unittest.TestCase):
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0].stack_trace, "trace_data")
 
+    def test_query_source_files(self):
+        self.connection.executescript("""
+            CREATE TABLE source_files (
+                id int PRIMARY KEY,
+                path text,
+                contents text
+            );
+            INSERT INTO source_files VALUES (1, '/a.py', 'contents');
+            """)
+        results = list(self.db_queries.query_source_files())
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0].contents, "contents")
+
+    def test_get_source_file_by_id_and_path(self):
+        self.connection.executescript("""
+            CREATE TABLE source_files (
+                id int PRIMARY KEY,
+                path text,
+                contents text
+            );
+            INSERT INTO source_files VALUES (5, '/b.py', 'body');
+            """)
+        by_id = self.db_queries.get_source_file_by_id(5)
+        self.assertIsNotNone(by_id)
+        self.assertEqual(by_id.path, "/b.py")
+        by_path = self.db_queries.get_source_file_by_path("/b.py")
+        self.assertEqual(by_path.id, 5)
+
+    def test_get_source_file_path_if_present(self):
+        self.connection.executescript("""
+            CREATE TABLE source_files (
+                id int PRIMARY KEY,
+                path text,
+                contents text
+            );
+            INSERT INTO source_files VALUES (1, '/has.py', 'body');
+            INSERT INTO source_files VALUES (2, '/empty.py', '');
+            INSERT INTO source_files VALUES (3, '/null.py', NULL);
+            """)
+        self.assertEqual(
+            self.db_queries.get_source_file_path_if_present(source_file_id=1),
+            "/has.py",
+        )
+        self.assertEqual(
+            self.db_queries.get_source_file_path_if_present(file_path="/has.py"),
+            "/has.py",
+        )
+        self.assertIsNone(
+            self.db_queries.get_source_file_path_if_present(source_file_id=2)
+        )
+        self.assertIsNone(
+            self.db_queries.get_source_file_path_if_present(source_file_id=3)
+        )
+        self.assertIsNone(
+            self.db_queries.get_source_file_path_if_present(source_file_id=999)
+        )
+        self.assertIsNone(self.db_queries.get_source_file_path_if_present())
+        # When source_file_id misses and file_path is also supplied, the
+        # implementation must fall through to the path branch.
+        self.assertEqual(
+            self.db_queries.get_source_file_path_if_present(
+                source_file_id=999, file_path="/has.py"
+            ),
+            "/has.py",
+        )
+
     def test_query_tensor_comparisons(self):
-        self.connection.execute(
-            """
+        self.connection.execute("""
             INSERT INTO local_tensor_comparison_records
             (tensor_id, golden_tensor_id, matches, desired_pcc, actual_pcc)
             VALUES (1, 10, 1, 0.9, 0.8)
-            """
-        )
+            """)
         results = list(
             self.db_queries.query_tensor_comparisons(local=True, filters={"matches": 1})
         )
@@ -311,6 +400,53 @@ class TestDatabaseQueries(unittest.TestCase):
         results = list(self.db_queries.query_buffer_pages(filters={"operation_id": 1}))
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0].address, 100)
+
+    def test_buffer_chunks_source_table_prefers_legacy_when_no_new_table(self):
+        self.assertEqual(self.db_queries.buffer_chunks_source_table(), "buffer_pages")
+
+    def test_query_buffer_chunks_aggregates_legacy_buffer_pages(self):
+        # Two pages on bank 1 / (0,0) at address 100, contiguous: 1000..1024 and 1024..1048.
+        # One page on bank 2 / (1,0) at address 200.
+        self.connection.executemany(
+            "INSERT INTO buffer_pages VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            [
+                (1, 0, 100, 0, 0, 1, 0, 1000, 24, 0),
+                (1, 0, 100, 0, 0, 1, 1, 1024, 24, 0),
+                (1, 0, 200, 0, 1, 2, 0, 2000, 16, 1),
+                # Different op_id should not bleed into the op_id=1 group.
+                (2, 0, 100, 0, 0, 1, 0, 5000, 8, 0),
+            ],
+        )
+
+        chunks = sorted(
+            self.db_queries.query_buffer_chunks(filters={"operation_id": 1}),
+            key=lambda c: (c.address, c.bank_id),
+        )
+
+        self.assertEqual(len(chunks), 2)
+
+        first, second = chunks
+        self.assertEqual(first.address, 100)
+        self.assertEqual(first.bank_id, 1)
+        self.assertEqual(first.core_x, 0)
+        self.assertEqual(first.core_y, 0)
+        self.assertEqual(first.chunk_address, 1000)
+        # max(page_address + page_size) - min(page_address) = (1024+24) - 1000 = 48
+        self.assertEqual(first.chunk_size, 48)
+        self.assertEqual(first.page_size, 24)
+        self.assertEqual(first.num_pages, 2)
+
+        self.assertEqual(second.address, 200)
+        self.assertEqual(second.bank_id, 2)
+        self.assertEqual(second.chunk_address, 2000)
+        self.assertEqual(second.chunk_size, 16)
+        self.assertEqual(second.num_pages, 1)
+
+    def test_query_buffer_chunks_returns_empty_when_no_source_table(self):
+        self.connection.execute("DROP TABLE buffer_pages")
+        chunks = list(self.db_queries.query_buffer_chunks())
+        self.assertEqual(chunks, [])
+        self.assertIsNone(self.db_queries.buffer_chunks_source_table())
 
     def test_query_tensors(self):
         self.connection.execute(
@@ -336,7 +472,7 @@ class TestDatabaseQueries(unittest.TestCase):
 
     def test_query_devices(self):
         self.connection.execute(
-            "INSERT INTO devices VALUES (1, 4, 4, 2, 2, 1024, 4, 256, 0, 0, 1, 2, 2, 4096, 2048, 2048, 2048, 256)"
+            "INSERT INTO devices VALUES (1, 4, 4, 2, 2, 1024, 4, 256, 0, 0, 1, 2, 4096, 2048, 2048, 2048, 256)"
         )
         results = list(self.db_queries.query_devices(filters={"device_id": 1}))
         self.assertEqual(len(results), 1)
@@ -363,6 +499,92 @@ class TestDatabaseQueries(unittest.TestCase):
         result = self.db_queries.query_next_buffer(operation_id=1, address=100)
         self.assertIsNotNone(result)
         self.assertEqual(result.operation_id, 2)
+
+
+class TestBufferChunksSourceSelection(unittest.TestCase):
+    """
+    Covers the dispatch in ``query_buffer_chunks`` between the new
+    pre-aggregated ``buffer_chunks`` table and the legacy ``buffer_pages``
+    fallback.
+    """
+
+    def _setup_connection_with_chunks_table(self):
+        connection = sqlite3.connect(":memory:")
+        connection.executescript("""
+            CREATE TABLE buffer_chunks (
+                operation_id INTEGER,
+                device_id INTEGER,
+                address INTEGER,
+                bank_id INTEGER,
+                core_x INTEGER,
+                core_y INTEGER,
+                chunk_address INTEGER,
+                chunk_size INTEGER,
+                page_size INTEGER,
+                num_pages INTEGER,
+                buffer_type INTEGER,
+                rank INTEGER DEFAULT 0
+            );
+            """)
+        return connection
+
+    def test_prefers_buffer_chunks_when_present(self):
+        connection = self._setup_connection_with_chunks_table()
+        # Also create buffer_pages with bogus content; we must NOT read it.
+        connection.executescript("""
+            CREATE TABLE buffer_pages (
+                operation_id INTEGER, device_id INTEGER, address INTEGER,
+                core_y INTEGER, core_x INTEGER, bank_id INTEGER,
+                page_index INTEGER, page_address INTEGER, page_size INTEGER,
+                buffer_type INTEGER
+            );
+            """)
+        connection.execute(
+            "INSERT INTO buffer_pages VALUES (99, 99, 999, 9, 9, 9, 0, 99999, 99999, 0)"
+        )
+        connection.execute(
+            "INSERT INTO buffer_chunks "
+            "(operation_id, device_id, address, bank_id, core_x, core_y, "
+            "chunk_address, chunk_size, page_size, num_pages, buffer_type, rank) "
+            "VALUES (1, 0, 100, 1, 0, 0, 1000, 48, 24, 2, 0, 0)"
+        )
+
+        db = DatabaseQueries(connection=connection)
+        self.assertEqual(db.buffer_chunks_source_table(), "buffer_chunks")
+
+        chunks = list(db.query_buffer_chunks(filters={"operation_id": 1}))
+        self.assertEqual(len(chunks), 1)
+        chunk = chunks[0]
+        self.assertIsInstance(chunk, BufferChunk)
+        self.assertEqual(chunk.address, 100)
+        self.assertEqual(chunk.chunk_size, 48)
+        self.assertEqual(chunk.num_pages, 2)
+        # Verify nothing leaked from buffer_pages.
+        self.assertNotEqual(chunk.address, 999)
+        connection.close()
+
+    def test_falls_back_to_buffer_pages_aggregation(self):
+        connection = sqlite3.connect(":memory:")
+        connection.executescript("""
+            CREATE TABLE buffer_pages (
+                operation_id INTEGER, device_id INTEGER, address INTEGER,
+                core_y INTEGER, core_x INTEGER, bank_id INTEGER,
+                page_index INTEGER, page_address INTEGER, page_size INTEGER,
+                buffer_type INTEGER
+            );
+            """)
+        connection.execute(
+            "INSERT INTO buffer_pages VALUES (1, 0, 100, 0, 0, 1, 0, 1000, 24, 0)"
+        )
+
+        db = DatabaseQueries(connection=connection)
+        self.assertEqual(db.buffer_chunks_source_table(), "buffer_pages")
+
+        chunks = list(db.query_buffer_chunks(filters={"operation_id": 1}))
+        self.assertEqual(len(chunks), 1)
+        self.assertEqual(chunks[0].chunk_size, 24)
+        self.assertEqual(chunks[0].num_pages, 1)
+        connection.close()
 
 
 if __name__ == "__main__":

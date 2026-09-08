@@ -9,6 +9,7 @@ export interface CommonInfo {
     arch: string;
     congestion_model_name: string;
     cycles_per_timestep: number;
+    mcast_write_link_util: number;
     device_name: string;
     dram_bw_util: number;
     link_demand: number;
@@ -38,7 +39,7 @@ export const NPE_KPI_METADATA = {
         description: 'Congestion model used in simulation to infer congestion (default: fast)',
     },
     cycles_per_timestep: {
-        units: 'cycles',
+        units: ' cycles',
         label: 'Device Cycles Per Timestep',
         description: 'How many cycles each simulation timestep/frame spans',
     },
@@ -68,6 +69,12 @@ export const NPE_KPI_METADATA = {
         units: '%',
         label: 'Max NoC Link Demand',
         description: 'Maximum observed link demand over all timesteps. See link_demand for more details.',
+    },
+    mcast_write_link_util: {
+        units: '%',
+        label: 'Multicast Write Link Utilization',
+        description:
+            'Average utilization of NoC links for multicast write operations over entire runtime. Represents the portion of link bandwidth used specifically for multicast writes.',
     },
     num_cols: {
         decimals: 0,
@@ -134,6 +141,11 @@ export type LinkUtilization = [
 export type NoCLink = [device_id: number, row: number, col: number, noc_id: NoCID];
 export type NPE_COORDINATES = [device_id: number, row: number, col: number];
 
+export interface SelectedNode {
+    index: number;
+    coords: NPE_COORDINATES;
+}
+
 export interface NoCFlowBase {
     id: NoCTransferId | null;
     src: [device_id, row, col];
@@ -167,14 +179,58 @@ export interface TimestepData {
     end_cycle: number;
     active_transfers: NoCTransferId[];
     link_demand: LinkUtilization[];
+    // Present in the raw NPE JSON per step; used as the timeline "worst" row
+    // fallback when `link_demand` is windowed-out (#861).
+    max_link_demand?: number;
     avg_link_demand: number; // percentage
     avg_link_util: number; // percentage
+    mcast_write_link_util: number;
     noc: {
         [K in NoCType]: {
             avg_link_demand: number; //  percentage
             avg_link_util: number; // percentage
         };
     };
+}
+
+// Columnar summary wire contract (#861): the keys backing NpeTimestepColumns.
+// Single source of truth so the type, the client-side shape guard, and the
+// skeleton builder can't drift apart.
+export const NPE_SUMMARY_COLUMN_KEYS = [
+    'start_cycle',
+    'end_cycle',
+    'avg_link_demand',
+    'avg_link_util',
+    'max_link_demand',
+    'mcast_write_link_util',
+    'active_count',
+] as const;
+
+// Per-step aggregates for the timeline heat bar / scrubber, sent as parallel
+// arrays (columnar) rather than one object per step so the ~54k-step summary
+// stays small (#861). Index each array by timestep `t`; `link_demand` and
+// transfers are fetched per window.
+export type NpeTimestepColumns = {
+    [K in (typeof NPE_SUMMARY_COLUMN_KEYS)[number]]: number[];
+};
+
+export interface NpeSummary {
+    common_info: CommonInfo;
+    // Carried through the index so the windowed path resolves the same descriptor
+    // the whole-file path does. `null` when the report supplied none. See #1776.
+    soc_descriptor?: unknown;
+    chips: NPEData['chips'];
+    zones?: NPERootZone[];
+    n_timesteps: number;
+    timesteps: NpeTimestepColumns;
+}
+
+export type NpeWindowTimestep = Omit<TimestepData, 'start_cycle' | 'end_cycle'>;
+
+export interface NpeWindow {
+    t: number;
+    timestep: NpeWindowTimestep;
+    transfers: NoCTransfer[];
 }
 
 export interface NPEData {
@@ -185,6 +241,11 @@ export interface NPEData {
     chips: {
         [key: device_id]: ClusterCoordinates;
     };
+    // Optional report-supplied SoC descriptor, taking precedence over the baked
+    // lookup keyed on `common_info.arch`. Typed `unknown` on purpose: it arrives
+    // from a file we do not control, so `parseSocDescriptorOverride` validates it
+    // rather than a cast asserting the shape. See #1776.
+    soc_descriptor?: unknown;
 }
 
 export interface NPERootZone {

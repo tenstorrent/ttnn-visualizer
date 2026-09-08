@@ -2,15 +2,15 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import React, { useState } from 'react';
+import { useState } from 'react';
 import classNames from 'classnames';
 import { Button, Icon, Intent, PopoverPosition, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
-
 import { useAtomValue } from 'jotai';
 import { getTensorColor } from '../../functions/colorGenerator';
 import { Tensor } from '../../model/APIData';
-import { prettyPrintAddress, toHex, toReadableShape, toReadableType } from '../../functions/math';
+import { getMemoryAddress } from '../../functions/math';
+import { toReadableLayout, toReadableShape, toReadableType } from '../../functions/formatting';
 import { BufferType, BufferTypeLabel } from '../../model/BufferType';
 import { useOperationsList } from '../../hooks/useAPI';
 import getNextAllocationOperation from '../../functions/getNextAllocationOperation';
@@ -19,30 +19,37 @@ import TensorVisualisationComponent from '../tensor-sharding-visualization/Tenso
 import 'styles/components/TensorDetailsComponent.scss';
 import { MAX_NUM_CONSUMERS } from '../../definitions/ProducersConsumers';
 import GoldenTensorComparisonIndicator from '../GoldenTensorComparisonIndicator';
-import { selectedTensorAtom } from '../../store/app';
 import MemoryTag from '../MemoryTag';
+import useBufferFocus from '../../hooks/useBufferFocus';
+import { showHexAtom } from '../../store/app';
+import { isAddressRangeOutOfL1Zoom } from '../../functions/isAddressRangeVisibleInL1Zoom';
 
 export interface TensorDetailsComponentProps {
     tensor: Tensor;
-    memorySize: number;
     onTensorClick: (address?: number, tensorId?: number) => void;
     operationId: number;
-    zoomRange: [number, number];
+    plotZoomRange: [number, number];
+    userL1ZoomRange?: [number, number];
 }
 
-const TensorDetailsComponent: React.FC<TensorDetailsComponentProps> = ({
+const TensorDetailsComponent = ({
     tensor,
-    memorySize,
     onTensorClick,
     operationId,
-    zoomRange,
-}) => {
+    plotZoomRange,
+    userL1ZoomRange,
+}: TensorDetailsComponentProps) => {
+    const [overlayOpen, setOverlayOpen] = useState(false);
+    const useHex = useAtomValue(showHexAtom);
+
     const { address } = tensor;
     const { data: operations } = useOperationsList();
     const nextAllocationOperationId = operations ? getNextAllocationOperation(tensor, operations)?.id : null;
-    const selectedTensorId = useAtomValue(selectedTensorAtom);
-
-    const [overlayOpen, setOverlayOpen] = useState(false);
+    const { selectedTensorId } = useBufferFocus();
+    const isTensorOutOfL1ZoomRange =
+        tensor.buffer_type === BufferType.L1 &&
+        tensor.address !== null &&
+        isAddressRangeOutOfL1Zoom(tensor.address, tensor.address + Math.max(tensor.size ?? 0, 0), userL1ZoomRange);
 
     const shardSpec = tensor.memory_config?.shard_spec;
 
@@ -50,7 +57,7 @@ const TensorDetailsComponent: React.FC<TensorDetailsComponentProps> = ({
         <div
             className={classNames('tensor-item', {
                 active: tensor.id === selectedTensorId,
-                dimmed: selectedTensorId !== null && tensor.id !== selectedTensorId,
+                dimmed: isTensorOutOfL1ZoomRange || (selectedTensorId !== null && tensor.id !== selectedTensorId),
             })}
         >
             <div className='tensor-header'>
@@ -87,12 +94,12 @@ const TensorDetailsComponent: React.FC<TensorDetailsComponentProps> = ({
 
                 {isValidNumber(nextAllocationOperationId) && isValidNumber(address) && operations ? (
                     <Tooltip
-                        content={`Next allocation of ${toHex(address)} in ${nextAllocationOperationId} ${operations.find((operation) => operation.id === nextAllocationOperationId)?.name}(+${nextAllocationOperationId - operationId} operations)`}
+                        content={`Next allocation of ${getMemoryAddress(address, useHex)} in ${nextAllocationOperationId} ${operations.find((operation) => operation.id === nextAllocationOperationId)?.name}(+${nextAllocationOperationId - operationId} operations)`}
                         placement={PopoverPosition.TOP}
                     >
                         <Icon
                             icon={IconNames.INFO_SIGN}
-                            title={`Next allocation of ${toHex(address)} in ${nextAllocationOperationId} ${operations.find((operation) => operation.id === nextAllocationOperationId)?.name}(+${nextAllocationOperationId - operationId} operations)`}
+                            title={`Next allocation of ${getMemoryAddress(address, useHex)} in ${nextAllocationOperationId} ${operations.find((operation) => operation.id === nextAllocationOperationId)?.name}(+${nextAllocationOperationId - operationId} operations)`}
                         />
                     </Tooltip>
                 ) : null}
@@ -105,7 +112,7 @@ const TensorDetailsComponent: React.FC<TensorDetailsComponentProps> = ({
                         bufferType={tensor.buffer_type}
                         isOpen={overlayOpen}
                         onClose={() => setOverlayOpen(false)}
-                        zoomRange={zoomRange}
+                        plotZoomRange={plotZoomRange}
                         tensorId={tensor.id}
                     />
                 )}
@@ -113,7 +120,7 @@ const TensorDetailsComponent: React.FC<TensorDetailsComponentProps> = ({
 
             <div className='tensor-meta'>
                 <p>
-                    Address: <strong> {prettyPrintAddress(tensor.address, memorySize)}</strong>
+                    Address: <strong>{getMemoryAddress(tensor.address, useHex)}</strong>
                 </p>
                 {tensor.buffer_type !== null && (
                     <p>
@@ -124,15 +131,15 @@ const TensorDetailsComponent: React.FC<TensorDetailsComponentProps> = ({
                     Shape:<strong> {toReadableShape(tensor.shape)}</strong>
                 </p>
                 <p>
-                    Dtype:<strong> {toReadableType(tensor.dtype)}</strong>
+                    Type:<strong> {toReadableType(tensor.dtype)}</strong>
                 </p>
                 <p>
-                    Layout:<strong> {tensor.layout}</strong>
+                    Layout:<strong> {toReadableLayout(tensor.layout)}</strong>
                 </p>
                 <p>
                     {tensor.memory_config?.memory_layout && (
                         <>
-                            Memory layout:<strong> {tensor.memory_config.memory_layout}</strong>
+                            Memory:<strong> {toReadableLayout(tensor.memory_config.memory_layout)}</strong>
                         </>
                     )}
                 </p>

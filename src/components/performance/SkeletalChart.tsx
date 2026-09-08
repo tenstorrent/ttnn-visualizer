@@ -6,8 +6,6 @@ import 'styles/components/SkeletalChart.scss';
 const SkeletalChart = () => {
     return (
         <div className='dummy-chart-container'>
-            <div className='title' />
-
             <div className='dummy-chart'>
                 <div
                     className='bar'

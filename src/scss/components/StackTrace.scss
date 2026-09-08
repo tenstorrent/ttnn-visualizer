@@ -3,16 +3,69 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 @use '../definitions/colours' as *;
+@use '../definitions/variables' as variables;
+
+// Sticky source-path header padding; the negative top margin pulls it over the
+// container's top padding while leaving the 1px top border visible.
+$source-path-vertical-padding: 20px;
+$container-border-width: 1px;
 
 .stack-trace {
-    display: flex;
-    flex-wrap: nowrap;
-    padding: 10px;
-    padding-left: 0;
-    background-color: $tt-black;
-    align-items: flex-start;
-    gap: 10px;
     margin-top: 0;
+
+    .stack-trace-title {
+        font-size: 16px;
+        font-weight: bold;
+    }
+
+    .formatted-code {
+        display: flex;
+        align-items: flex-start;
+        gap: 10px;
+        padding: 10px;
+        padding-left: 0;
+        background-color: $tt-black;
+        margin-top: 0;
+
+        &.is-inline {
+            overflow: hidden scroll;
+            max-height: 500px; // Allows sticky behaviour to work within operation list
+
+            .code-wrapper {
+                padding-top: 0;
+                padding-bottom: 0;
+                overflow: hidden scroll;
+            }
+
+            .stack-trace-buttons.is-sticky {
+                position: sticky;
+                top: 5px;
+                z-index: variables.$z-index-2-interactive;
+            }
+        }
+
+        &.intent-danger {
+            border: 1px solid $tt-red-shade;
+        }
+    }
+
+    .stack-trace-source-remap-notice {
+        margin-bottom: 12px;
+    }
+
+    .stack-trace-path {
+        color: $tt-grey-5;
+        position: sticky;
+        top: 0;
+        left: 0;
+        background-color: $tt-source-overlay-background;
+        z-index: variables.$z-index-2-interactive;
+        padding-top: $source-path-vertical-padding;
+        padding-bottom: $source-path-vertical-padding;
+        margin-top: -($source-path-vertical-padding - $container-border-width);
+        margin-right: 30px; // Avoids overlapping with source-file-controls
+        margin-bottom: 0;
+    }
 
     .code-wrapper {
         flex-basis: 100%;
@@ -46,9 +99,9 @@
             position: absolute;
             text-align: right;
             left: 5px;
-            min-width: 30px;
             font-size: 1em;
             color: $tt-grey-5;
+            min-width: 35px;
         }
 
         &::before {
@@ -69,21 +122,23 @@
             }
         }
     }
+}
 
-    &.is-inline {
-        overflow: hidden scroll;
-        max-height: 500px; // Allows sticky behaviour to work within operation list
+.source-file-controls {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    z-index: variables.$z-index-2-interactive;
+    opacity: 0.5;
 
-        .code-wrapper {
-            padding-top: 0;
-            padding-bottom: 0;
-            overflow: hidden scroll;
-        }
+    &:hover {
+        opacity: 1;
+    }
 
-        .stack-trace-buttons.is-sticky {
-            position: sticky;
-            top: 5px;
-            z-index: 10;
-        }
+    .buttons {
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+        align-items: flex-start;
     }
 }

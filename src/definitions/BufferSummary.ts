@@ -2,6 +2,8 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
+import type { PlotData } from 'plotly.js';
+
 export enum SECTION_IDS {
     PLOT = 'plot',
     TABLE = 'table',
@@ -12,63 +14,109 @@ export enum TAB_IDS {
     DRAM = 'DRAM',
 }
 
-export interface ColumnDefinition {
+export enum ColumnKeys {
+    OperationId = 'operation_id',
+    TensorId = 'tensor_id',
+    Address = 'address',
+    Size = 'size',
+    BufferType = 'buffer_type',
+    BufferLayout = 'buffer_layout',
+    Dtype = 'dtype',
+    Shape = 'shape',
+    DeviceId = 'device_id',
+}
+
+interface ColumnDefinition {
     name: string;
     key: ColumnKeys;
+    width: number;
     sortable?: boolean;
     filterable?: boolean;
 }
 
-export enum ColumnHeaders {
-    operation_id = 'Operation',
-    tensor_id = 'Tensor',
-    address = 'Address',
-    hexAddress = 'Address (hex)',
-    size = 'Size',
-    buffer_type = 'Buffer Type',
-    device_id = 'Device Id',
-}
-
-export type ColumnKeys = keyof typeof ColumnHeaders;
+const DEFAULT_COLUMN_WIDTH = 140;
 
 export const Columns: ColumnDefinition[] = [
     {
-        name: ColumnHeaders.operation_id,
-        key: 'operation_id',
-        sortable: true,
+        name: 'Operation',
+        key: ColumnKeys.OperationId,
         filterable: true,
+        sortable: true,
+        width: 200,
     },
     {
-        name: ColumnHeaders.tensor_id,
-        key: 'tensor_id',
-        sortable: true,
+        name: 'Tensor',
+        key: ColumnKeys.TensorId,
         filterable: true,
+        sortable: true,
+        width: DEFAULT_COLUMN_WIDTH,
     },
     {
-        name: ColumnHeaders.address,
-        key: 'address',
-        sortable: true,
+        name: 'Address',
+        key: ColumnKeys.Address,
         filterable: true,
+        sortable: true,
+        width: 100,
     },
     {
-        name: ColumnHeaders.hexAddress,
-        key: 'hexAddress',
-        sortable: true,
+        name: 'Size',
+        key: ColumnKeys.Size,
         filterable: true,
-    },
-    {
-        name: ColumnHeaders.size,
-        key: 'size',
         sortable: true,
+        width: 100,
     },
     {
-        name: ColumnHeaders.buffer_type,
-        key: 'buffer_type',
+        name: 'Shape',
+        key: ColumnKeys.Shape,
+        filterable: true,
+        sortable: true,
+        width: DEFAULT_COLUMN_WIDTH,
     },
     {
-        name: ColumnHeaders.device_id,
-        key: 'device_id',
+        name: 'Data Type',
+        key: ColumnKeys.Dtype,
+        filterable: true,
+        sortable: true,
+        width: 150,
+    },
+    {
+        name: 'Buffer Layout',
+        key: ColumnKeys.BufferLayout,
+        filterable: true,
+        sortable: true,
+        width: DEFAULT_COLUMN_WIDTH,
+    },
+    {
+        name: 'Buffer Type',
+        key: ColumnKeys.BufferType,
+        width: 105,
+    },
+    {
+        name: 'Device Id',
+        key: ColumnKeys.DeviceId,
+        width: 100,
     },
 ];
 
 export type BufferTableFilters = Record<ColumnKeys, string>;
+
+export const OPERATION_EL_HEIGHT = 28; // Height in px of each list item (including padding/margin)
+export const TOTAL_SHADE_HEIGHT = 20; // Combined height in px of 'scroll-shade' pseudo elements
+export const MEMORY_ZOOM_PADDING_RATIO = 0.01;
+
+/** Above this total buffer count, DRAM zoom "gap split" is skipped to avoid flattening and sorting all buffers. */
+export const MAX_DRAM_BUFFERS_FOR_GAP_SPLIT = 200_000;
+
+export const CHART_DATA: Partial<PlotData>[][] = [
+    [
+        {
+            x: [0],
+            y: [1],
+            type: 'bar',
+            width: [0],
+            marker: {
+                color: 'transparent',
+            },
+        },
+    ],
+];

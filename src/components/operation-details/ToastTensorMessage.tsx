@@ -2,8 +2,10 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
+import { useAtomValue } from 'jotai';
 import 'styles/components/ToastTensorMessage.scss';
-import { toHex } from '../../functions/math';
+import { prettyPrintAddress } from '../../functions/math';
+import { showHexAtom } from '../../store/app';
 
 interface ToastTensorMessageProps {
     tensorId?: number;
@@ -11,20 +13,25 @@ interface ToastTensorMessageProps {
     colour?: string;
 }
 
-const ToastTensorMessage = ({ tensorId, address, colour }: ToastTensorMessageProps) => (
-    <div className='toast-tensor-message'>
-        <div
-            className='memory-color-block'
-            style={colour ? { backgroundColor: colour } : {}}
-        />
+const ToastTensorMessage = ({ tensorId, address, colour }: ToastTensorMessageProps) => {
+    const showHex = useAtomValue(showHexAtom);
+    const formattedAddress = prettyPrintAddress(address ?? null, 0, showHex);
 
-        <strong>
-            {tensorId ? `Tensor ${tensorId}` : 'Buffer'}
-            <span className='light'>{' at '}</span>
-            {address ? toHex(address) : 'NULL'}
-            <span className='light'>{' selected'}</span>
-        </strong>
-    </div>
-);
+    return (
+        <div className='toast-tensor-message'>
+            <div
+                className='memory-color-block'
+                style={colour ? { backgroundColor: colour } : {}}
+            />
+
+            <strong>
+                {tensorId ? `Tensor ${tensorId}` : 'Buffer'}
+                <span className='light'>{' at '}</span>
+                {formattedAddress}
+                <span className='light'>{' selected'}</span>
+            </strong>
+        </div>
+    );
+};
 
 export default ToastTensorMessage;

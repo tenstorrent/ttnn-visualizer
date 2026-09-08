@@ -1,0 +1,74 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
+
+@use '../definitions/colours' as colours;
+
+.perf-tensor-drawer-content {
+    padding: 10px 15px;
+    height: 100%;
+    overflow-y: auto;
+}
+
+.perf-tensor-drawer {
+    .bp6-drawer-header {
+        padding-left: 15px;
+    }
+
+    .perf-tensor-drawer-title {
+        font-family: var(--monospace-font-family);
+    }
+
+    .perf-tensor-drawer-op-link {
+        display: flex;
+        gap: 5px;
+        margin: 0 0 16px;
+    }
+
+    .perf-tensor-drawer-op-link-anchor {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+    }
+
+    .perf-tensor-drawer-empty {
+        margin: 0;
+        color: colours.$tt-grey-3;
+    }
+}
+
+.perf-tensor-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+
+    .perf-tensor-panel-section {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+    }
+
+    .perf-tensor-panel-heading {
+        text-decoration: underline;
+        margin: 0;
+    }
+
+    .perf-tensor-panel-empty {
+        margin: 0;
+    }
+}
+
+.perf-tensor-row {
+    border: 1px solid colours.$tt-grey-5;
+    border-radius: 4px;
+    padding: 12px;
+
+    .perf-tensor-row-title {
+        margin: 0 0 8px;
+        font-size: 14px;
+    }
+
+    .perf-tensor-row-table {
+        width: 100%;
+    }
+}

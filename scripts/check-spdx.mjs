@@ -1,4 +1,3 @@
-/* eslint-disable no-console */
 // SPDX-License-Identifier: Apache-2.0
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
@@ -6,17 +5,17 @@
 import fs from 'fs';
 import path from 'path';
 
-const CURRENT_YEAR = new Date().getFullYear();
+const NON_COMPLIANT_FILES = [];
+
+// License formats (regex patterns that accept any 4-digit year)
 const BRAND = 'Tenstorrent AI ULC';
 const LICENSE = 'Apache-2.0';
-
-// License formats
-const SPDX_JS_LICENSE = `// SPDX-License-Identifier: ${LICENSE}
-//
-// SPDX-FileCopyrightText: © ${CURRENT_YEAR} ${BRAND}`;
-const SPDX_PYTHON_LICENSE = `# SPDX-License-Identifier: ${LICENSE}
-#
-# SPDX-FileCopyrightText: © ${CURRENT_YEAR} ${BRAND}`;
+const SPDX_JS_LICENSE = new RegExp(
+    `// SPDX-License-Identifier: ${LICENSE}\\n//\\n// SPDX-FileCopyrightText: © \\d{4} ${BRAND}`,
+);
+const SPDX_PYTHON_LICENSE = new RegExp(
+    `# SPDX-License-Identifier: ${LICENSE}\\n#\\n# SPDX-FileCopyrightText: © \\d{4} ${BRAND}`,
+);
 const SPDX_PACKAGE_JSON_LICENSE = {
     license: LICENSE,
     author: {
@@ -26,7 +25,7 @@ const SPDX_PACKAGE_JSON_LICENSE = {
 };
 
 // File extensions
-const JS_FILE_EXTENSIONS = ['.js', '.ts', '.jsx', '.tsx', '.mjs', '.css', '.scss', '.xml'];
+const JS_FILE_EXTENSIONS = ['.js', '.ts', '.jsx', '.tsx', '.mjs', '.scss', '.xml'];
 const PYTHON_FILE_EXTENSIONS = ['.py'];
 const JSON_FILE_EXTENSIONS = ['.json'];
 
@@ -34,23 +33,27 @@ const IGNORED_DIRS = [
     '.git',
     '.github',
     '.idea',
+    '.venv',
     '.vscode',
-    'dist',
-    'build',
     'backend/data/',
     'backend/ttnn_visualizer/data',
     'backend/ttnn_visualizer/static',
+    'build',
+    'dist',
+    'docs/output',
+    'myenv',
     'node_modules',
     'ttnn_env',
 ];
-const NON_COMPLIANT_FILES = [];
 
 const isFileType = (filePath, extensions) => extensions.includes(path.extname(filePath).toLowerCase());
 
 const checkLicenseString = (filePath, licenseType) => {
     const content = fs.readFileSync(filePath, 'utf8');
 
-    if (!content.includes(licenseType)) {
+    const isCompliant = licenseType instanceof RegExp ? licenseType.test(content) : content.includes(licenseType);
+
+    if (!isCompliant) {
         NON_COMPLIANT_FILES.push(filePath);
     }
 };
@@ -100,10 +103,12 @@ function walkDirectory(dir) {
 walkDirectory(process.cwd());
 
 if (NON_COMPLIANT_FILES.length > 0) {
-    console.error(`${NON_COMPLIANT_FILES.length} files missing the SPDX-License-Identifier string:`);
+    console.error(
+        `${NON_COMPLIANT_FILES.length} files that are missing or have an incorrect SPDX-License-Identifier string:`,
+    );
     NON_COMPLIANT_FILES.forEach((file) => console.log(file));
     process.exit(1);
 } else {
-    console.log('All scanned files contain the SPDX-License-Identifier string.');
+    console.log('All scanned files contain the correct SPDX-License-Identifier string.');
     process.exit(0);
 }

@@ -5,15 +5,16 @@
 import { PlotData } from 'plotly.js';
 import { useMemo } from 'react';
 import { useAtomValue } from 'jotai';
-import { PerfTableRow } from '../../definitions/PerfTable';
+import { TypedPerfTableRow } from '../../model/PerfTable';
 import PerfChart from './PerfChart';
-import { PlotConfiguration } from '../../definitions/PlotConfigurations';
+import { PlotConfiguration, getNsAxisConfig } from '../../definitions/PlotConfigurations';
+import { PERF_CHART_LABELS, PerfChartId } from '../../definitions/PerformanceCharts';
 import getPlotLabel from '../../functions/getPlotLabel';
 import { activePerformanceReportAtom, comparisonPerformanceReportListAtom } from '../../store/app';
 import { getPrimaryDataColours } from '../../definitions/PerformancePlotColours';
 
 interface PerfDeviceKernelDurationChartProps {
-    datasets?: PerfTableRow[][];
+    datasets?: TypedPerfTableRow[][];
 }
 
 function PerfDeviceKernelDurationChart({ datasets = [] }: PerfDeviceKernelDurationChartProps) {
@@ -37,25 +38,25 @@ function PerfDeviceKernelDurationChart({ datasets = [] }: PerfDeviceKernelDurati
         [datasets, comparisonReportList, perfReport],
     );
 
-    const configuration: PlotConfiguration = {
-        showLegend: true,
-        xAxis: {
-            title: {
-                text: 'Core Count',
+    // Memoized because PerfChart derives the Plotly layout from it, and a fresh object redraws
+    // the chart — and re-reads the chart chrome from the stylesheet — on every render.
+    const configuration = useMemo<PlotConfiguration>(
+        () => ({
+            showLegend: true,
+            xAxis: {
+                title: {
+                    text: 'Core Count',
+                },
             },
-        },
-        yAxis: {
-            title: {
-                text: 'Device Kernel Duration (ns)',
-            },
-            tickformat: 'd',
-            hoverformat: ',.2r',
-        },
-    };
+            yAxis: getNsAxisConfig('Device Kernel Duration (ns)'),
+        }),
+        [],
+    );
 
     return (
         <PerfChart
-            title='Device Kernel Duration vs Core Count'
+            id={PerfChartId.KernelDurationVsCoreCount}
+            title={PERF_CHART_LABELS[PerfChartId.KernelDurationVsCoreCount]}
             chartData={chartData}
             configuration={configuration}
         />

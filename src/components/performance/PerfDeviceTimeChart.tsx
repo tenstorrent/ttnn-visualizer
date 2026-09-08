@@ -5,8 +5,9 @@
 import { PlotData } from 'plotly.js';
 import { useMemo } from 'react';
 import { useAtomValue } from 'jotai';
-import { PerfTableRow } from '../../definitions/PerfTable';
-import { PlotConfiguration } from '../../definitions/PlotConfigurations';
+import { TypedPerfTableRow } from '../../model/PerfTable';
+import { PERF_CHART_WIDE_LEFT_MARGIN, PlotConfiguration, getNsAxisConfig } from '../../definitions/PlotConfigurations';
+import { PERF_CHART_LABELS, PerfChartId } from '../../definitions/PerformanceCharts';
 import PerfChart from './PerfChart';
 import { activePerformanceReportAtom, comparisonPerformanceReportListAtom } from '../../store/app';
 import getPlotLabel from '../../functions/getPlotLabel';
@@ -14,10 +15,11 @@ import { getAxisUpperRange } from '../../functions/perfFunctions';
 import { getPrimaryDataColours, getSecondaryDataColours } from '../../definitions/PerformancePlotColours';
 
 interface PerfDeviceTimeChartProps {
-    datasets?: PerfTableRow[][];
+    datasets?: TypedPerfTableRow[][];
+    chartId: PerfChartId;
 }
 
-function PerfDeviceTimeChart({ datasets = [] }: PerfDeviceTimeChartProps) {
+function PerfDeviceTimeChart({ datasets = [], chartId }: PerfDeviceTimeChartProps) {
     const perfReport = useAtomValue(activePerformanceReportAtom);
     const comparisonReportList = useAtomValue(comparisonPerformanceReportListAtom);
 
@@ -25,7 +27,7 @@ function PerfDeviceTimeChart({ datasets = [] }: PerfDeviceTimeChartProps) {
         () =>
             datasets.map((data, dataIndex) => ({
                 x: data?.map((_row, index) => index + 1),
-                y: data?.map((row) => parseFloat(row.device_time) * 1000), // Convert microseconds to nanoseconds
+                y: data?.map((row) => (row.device_time ? row.device_time * 1000 : 0)), // Convert microseconds to nanoseconds
                 type: 'bar',
                 hovertemplate: `<b>%{data.name}</b><br />Operation: %{x}<br />Device time: %{y} ns<extra></extra>`,
                 name: getPlotLabel(dataIndex, perfReport?.reportName, comparisonReportList),
@@ -52,35 +54,34 @@ function PerfDeviceTimeChart({ datasets = [] }: PerfDeviceTimeChartProps) {
         [datasets, perfReport, comparisonReportList],
     );
 
-    const maxDeviceTime = Math.max(
-        ...datasets.flatMap((data) => data.map((row) => parseFloat(row.device_time) * 1000)),
-    ); // Convert microseconds to nanoseconds
-    const maxIdealTime = Math.max(...datasets.flatMap((data) => data.map((row) => parseFloat(row.pm_ideal_ns))));
+    const chartData = useMemo(() => [...deviceTimes, ...idealTimes], [deviceTimes, idealTimes]);
 
-    const configuration: PlotConfiguration = {
-        margin: {
-            l: 100,
-            r: 0,
-            b: 50,
-            t: 0,
-        },
-        showLegend: true,
-        xAxis: {
-            title: { text: 'Operation' },
-            range: [0, getAxisUpperRange(datasets)],
-        },
-        yAxis: {
-            title: { text: 'Time (ns)' },
-            tickformat: 'd',
-            hoverformat: ',.2r',
-            range: [0, Math.max(maxDeviceTime, maxIdealTime)],
-        },
-    };
+    // Memoized because PerfChart derives the Plotly layout from it, and a fresh object redraws
+    // the chart — and re-reads the chart chrome from the stylesheet — on every render.
+    const configuration = useMemo<PlotConfiguration>(() => {
+        const maxDeviceTime = Math.max(
+            ...datasets.flatMap((data) => data.map((row) => (row.device_time ? row.device_time * 1000 : 0))),
+        ); // Convert microseconds to nanoseconds
+        const maxIdealTime = Math.max(...datasets.flatMap((data) => data.map((row) => row.pm_ideal_ns ?? 0)));
+
+        return {
+            margin: PERF_CHART_WIDE_LEFT_MARGIN,
+            showLegend: true,
+            xAxis: {
+                title: { text: 'Operation' },
+                range: [0, getAxisUpperRange(datasets)],
+            },
+            yAxis: getNsAxisConfig('Time (ns)', {
+                range: [0, Math.max(maxDeviceTime, maxIdealTime)],
+            }),
+        };
+    }, [datasets]);
 
     return (
         <PerfChart
-            title='Device Time + Ideal Time'
-            chartData={[...deviceTimes, ...idealTimes]}
+            id={chartId}
+            title={PERF_CHART_LABELS[chartId]}
+            chartData={chartData}
             configuration={configuration}
         />
     );

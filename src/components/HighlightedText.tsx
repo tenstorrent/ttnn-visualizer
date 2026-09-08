@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
+
 import classNames from 'classnames';
-import React from 'react';
 
 interface HighlightedTextProps {
     text: string;
@@ -10,7 +10,7 @@ interface HighlightedTextProps {
     className?: string;
 }
 
-const HighlightedText: React.FC<HighlightedTextProps> = ({ text, filter, className }) => {
+const HighlightedText = ({ text, filter, className }: HighlightedTextProps) => {
     const index = text.toLowerCase().indexOf(filter.toLowerCase());
 
     if (index === -1) {
@@ -32,9 +32,11 @@ const HighlightedText: React.FC<HighlightedTextProps> = ({ text, filter, classNa
         <span
             title={text}
             className={classNames('highlighted-text', className)}
-            // eslint-disable-next-line react/no-danger
-            dangerouslySetInnerHTML={{ __html: `${before}<mark>${match}</mark>${after}` }}
-        />
+        >
+            {before}
+            <mark>{match}</mark>
+            {after}
+        </span>
     );
 };
 

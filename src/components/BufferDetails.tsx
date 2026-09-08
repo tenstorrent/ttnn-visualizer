@@ -3,17 +3,21 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import classNames from 'classnames';
-import { Link } from 'react-router-dom';
-import { Operation, OperationDescription, Tensor } from '../model/APIData';
-import { toHex, toReadableShape, toReadableType } from '../functions/math';
+import { Link } from 'react-router';
+import { useAtomValue } from 'jotai';
+import { OperationDescription, Tensor } from '../model/APIData';
+import { getMemoryAddress } from '../functions/math';
+import { toReadableShape, toReadableType } from '../functions/formatting';
 import ROUTES from '../definitions/Routes';
 import 'styles/components/BufferDetails.scss';
 import getDeallocationOperation from '../functions/getDeallocationOperation';
 import getNextAllocationOperation from '../functions/getNextAllocationOperation';
+import { getLastConsumerLink, getOperationLink } from './OperationLinks';
 import isValidNumber from '../functions/isValidNumber';
-import { ShardSpec } from '../functions/parseMemoryConfig';
+import { ShardSpec } from '../model/MemoryConfig';
 import MemoryConfigRow from './MemoryConfigRow';
 import GoldenTensorComparisonIndicator from './GoldenTensorComparisonIndicator';
+import { showHexAtom } from '../store/app';
 
 interface BufferDetailsProps {
     tensor: Tensor;
@@ -21,12 +25,16 @@ interface BufferDetailsProps {
     className?: string;
 }
 
+// TODO: The tensor-details table below largely duplicates the one in PerfTensorRow.tsx.
+// Extract a shared TensorDetailsTable both can consume so the two don't drift.
 function BufferDetails({ tensor, operations, className }: BufferDetailsProps) {
     const { address, dtype, layout, shape } = tensor;
     const firstOperationId = tensor.producers[0];
     const lastOperationId = tensor.consumers[tensor.consumers.length - 1];
     const deallocationOperationId = getDeallocationOperation(tensor, operations)?.id;
     const nextAllocationOperationId = getNextAllocationOperation(tensor, operations)?.id;
+
+    const showHex = useAtomValue(showHexAtom);
 
     return (
         <>
@@ -41,7 +49,7 @@ function BufferDetails({ tensor, operations, className }: BufferDetailsProps) {
                         <th>Producer</th>
                         <td>
                             {isValidNumber(firstOperationId)
-                                ? getFirstOperation(firstOperationId, operations)
+                                ? getOperationLink(firstOperationId, operations)
                                 : 'No producer for this tensor'}
                         </td>
                     </tr>
@@ -50,7 +58,7 @@ function BufferDetails({ tensor, operations, className }: BufferDetailsProps) {
                         <th>Last consumer</th>
                         <td>
                             {isValidNumber(lastOperationId)
-                                ? getLastOperation(lastOperationId, operations, tensor)
+                                ? getLastConsumerLink(tensor, operations)
                                 : 'No consumers for this tensor'}
                         </td>
                     </tr>
@@ -63,7 +71,7 @@ function BufferDetails({ tensor, operations, className }: BufferDetailsProps) {
                             <th>Next allocation</th>
                             <td>
                                 <span>
-                                    {toHex(address)} next allocated in{' '}
+                                    {getMemoryAddress(address, showHex)} next allocated in{' '}
                                     <Link to={`${ROUTES.OPERATIONS}/${nextAllocationOperationId}`}>
                                         {nextAllocationOperationId}{' '}
                                         {
@@ -127,49 +135,27 @@ function BufferDetails({ tensor, operations, className }: BufferDetailsProps) {
                                 </td>
                             </tr>
 
-                            <tr>
-                                <th>Matches Globally</th>
-                                <td>
-                                    <GoldenTensorComparisonIndicator
-                                        value={tensor.comparison.global.actual_pcc}
-                                        label='Actual PCC:'
-                                    />
-                                    <GoldenTensorComparisonIndicator
-                                        value={tensor.comparison.global.desired_pcc}
-                                        label='Desired PCC:'
-                                    />
-                                </td>
-                            </tr>
+                            {tensor?.comparison?.global ? (
+                                <tr>
+                                    <th>Matches Globally</th>
+                                    <td>
+                                        <GoldenTensorComparisonIndicator
+                                            value={tensor.comparison.global.actual_pcc}
+                                            label='Actual PCC:'
+                                        />
+                                        <GoldenTensorComparisonIndicator
+                                            value={tensor.comparison.global.desired_pcc}
+                                            label='Desired PCC:'
+                                        />
+                                    </td>
+                                </tr>
+                            ) : null}
                         </>
                     ) : null}
                 </tbody>
             </table>
         </>
     );
-}
-
-function getFirstOperation(operationId: number, operations: Operation[]) {
-    const op = operations.find((operation) => operation.id === operationId);
-
-    return op ? (
-        <Link to={`${ROUTES.OPERATIONS}/${op.id}`}>
-            {op?.id} {op.name} ({op.operationFileIdentifier})
-        </Link>
-    ) : null;
-}
-
-function getLastOperation(operationId: number, operations: Operation[], tensor: Tensor) {
-    let op = operations.find((operation) => operation.id === operationId);
-
-    if (op?.name.includes('deallocate') && tensor.consumers.length > 1) {
-        op = operations.find((operation) => operation.id === tensor.consumers[tensor.consumers.length - 2]);
-    }
-
-    return op ? (
-        <Link to={`${ROUTES.OPERATIONS}/${op.id}`}>
-            {op?.id} {op.name} ({op.operationFileIdentifier})
-        </Link>
-    ) : null;
 }
 
 export default BufferDetails;

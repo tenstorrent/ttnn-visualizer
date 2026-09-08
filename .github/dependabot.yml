@@ -1,0 +1,14 @@
+version: 2
+
+updates:
+    -   package-ecosystem: "github-actions"
+        directory: "/"
+        schedule:
+            interval: "weekly"
+        groups:
+            # Majors stay ungrouped so runtime and breaking changes get reviewed on their own,
+            # rather than arriving inside a batch that reads as routine.
+            actions-minor-and-patch:
+                update-types:
+                    - "minor"
+                    - "patch"

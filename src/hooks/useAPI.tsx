@@ -2,57 +2,132 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import axios, { AxiosError } from 'axios';
-import { useQuery } from '@tanstack/react-query';
-import Papa, { ParseResult } from 'papaparse';
-import { useCallback, useMemo } from 'react';
+import { AxiosError, AxiosRequestConfig } from 'axios';
+import { QueryClient, keepPreviousData, useQueries, useQuery } from '@tanstack/react-query';
+import { useCallback, useEffect, useMemo } from 'react';
 import { useAtomValue } from 'jotai';
 import { NumberRange } from '@blueprintjs/core';
 import Ajv from 'ajv';
-import axiosInstance from '../libs/axiosInstance';
+import axiosInstance, { getOrCreateInstanceId } from '../libs/axiosInstance';
 import {
     Buffer,
+    BufferChunk,
     BufferData,
-    BufferPage,
+    BuffersByOperation,
+    DeviceInfo,
+    DeviceOperationParams,
     Instance,
     NodeType,
-    Operation,
     OperationDescription,
     OperationDetailsData,
-    ReportMetaData,
+    ReportMetadataResponse,
     Tensor,
     defaultBuffer,
-    defaultOperationDetailsData,
-    defaultTensorData,
+    defaultOperation,
 } from '../model/APIData';
 import { BufferType } from '../model/BufferType';
-import parseMemoryConfig, { MemoryConfig, memoryConfigPattern } from '../functions/parseMemoryConfig';
-import { PerfTableRow } from '../definitions/PerfTable';
+import parseMemoryConfig, { memoryConfigPattern } from '../functions/parseMemoryConfig';
+import { MemoryConfig } from '../model/MemoryConfig';
+import getServerConfig from '../functions/getServerConfig';
+import { PerfTableRow } from '../model/PerfTable';
+import { DeviceOperationMapping } from '../model/DeviceOperationMapping';
+import { matchDeviceOperationsToPerf } from '../functions/deviceOperationMatching';
+import memoiseLatest from '../functions/memoiseLatest';
+import {
+    PerformanceReportParams,
+    getLinkedPerformanceReportParams,
+    getPerformanceComparisonReportQueryKey,
+    getPerformanceReportQueryKey,
+} from '../functions/performanceReportQueryKey';
+import { L1PressureResult } from '../model/L1Pressure';
+import { buildL1PressureResult } from '../functions/l1Pressure';
 import { StackedPerfRow } from '../definitions/StackedPerfTable';
 import { isDeviceOperation } from '../functions/filterOperations';
+import { normalizeBufferPagesResponse } from '../functions/normalizeBufferPagesResponse';
 import {
+    activeMlirJsonAtom,
     activeNpeOpTraceAtom,
     activePerformanceReportAtom,
+    activePerformanceReportFolderNameAtom,
     activeProfilerReportAtom,
     comparisonPerformanceReportListAtom,
     filterBySignpostAtom,
+    hideHostOpsAtom,
+    mergeDevicesAtom,
+    performanceReportLocationAtom,
     selectedOperationRangeAtom,
-    stackByIn0Atom,
+    stackedGroupByAtom,
+    tracingModeAtom,
 } from '../store/app';
-import archWormhole from '../assets/data/arch-wormhole.json';
-import archBlackhole from '../assets/data/arch-blackhole.json';
 import { DeviceArchitecture } from '../definitions/DeviceArchitecture';
-import { NPEData, NPEManifestEntry } from '../model/NPEModel';
-import { ChipDesign, ClusterModel } from '../model/ClusterModel';
+import { getChipDesign } from '../functions/getChipDesign';
+import { parseSocDescriptorOverride } from '../functions/socDescriptorOverride';
+import { NPEData, NPEManifestEntry, NpeSummary, NpeWindow } from '../model/NPEModel';
+import { GraphBundle } from '../model/MLIRJsonModel';
+import { ChipDesign, ClusterModel, ClusterTopology, MeshData, MeshDescriptorResponse } from '../model/ClusterModel';
+import {
+    PerRankInput,
+    looksLikeRankedDescriptor,
+    pickMeshDocForRank,
+    stitchClusterTopology,
+} from '../functions/clusterTopology';
 import npeManifestSchema from '../schemas/npe-manifest.schema.json';
+import { getErroredReportFolderLabel, normaliseReportFolder } from '../functions/validateReportFolder';
+import { Signpost } from '../model/Signpost';
+import { TensorsByOperationByAddress } from '../model/BufferSummary';
+import { L1_DEFAULT_MEMORY_SIZE } from '../definitions/L1MemorySize';
+import {
+    NPE_QUERY_KEY,
+    NPE_SUMMARY_QUERY_KEY,
+    NPE_TIMELINE_QUERY_KEY,
+    NPE_WINDOW_QUERY_KEY,
+    NpeClientErrorKind,
+} from '../definitions/NPEData';
+import Endpoints from '../definitions/Endpoints';
+import { ReportFolder, SINGLE_HOST_WORLD_SIZE } from '../definitions/Reports';
+import { RemoteFolder } from '../model/RemoteConnection';
 import createToastNotification from '../functions/createToastNotification';
-import { normaliseReportFolder } from '../functions/validateReportFolder';
-import { Signpost } from '../functions/perfFunctions';
-import { TensorDeallocationReport, TensorsByOperationByAddress } from '../model/BufferSummary';
+import { ToastType } from '../definitions/ToastType';
+import { buildLateDeallocationReports } from '../functions/lateDeallocation';
+import { processInputsOutputs } from '../functions/processMemoryAllocations';
+import { SemVer, semverParse } from '../functions/semverParse';
+import { parseNpeAxiosResponseData } from '../functions/parseNpeAxiosResponseData';
+import { throwNpeClientAxiosError } from '../functions/throwNpeClientAxiosError';
+import validateNpeSummary from '../functions/validateNpeSummary';
+import validateNpeWindow from '../functions/validateNpeWindow';
 
 const EMPTY_PERF_RETURN = { report: [], stacked_report: [], signposts: [] };
 
+/**
+ * Normalises device_operations nodes coming from the backend.
+ *
+ * Older report databases stored the node identifier under `counter` while
+ * the frontend (and newer backends) expect `id`. Rather than transforming
+ * the JSON on the server, we intercept the response here and rewrite any
+ * `counter` field to `id`. Nodes that already expose `id` are left alone.
+ *
+ * Mutates the passed array in place for performance — these arrays can be
+ * very large and are consumed immediately by the hooks below.
+ */
+const updateDeviceOperationId = (nodes: unknown): void => {
+    if (!Array.isArray(nodes)) {
+        return;
+    }
+    for (const node of nodes) {
+        if (node && typeof node === 'object' && 'counter' in node) {
+            const typedNode = node as Record<string, unknown>;
+            if (!('id' in typedNode) || typedNode.id === undefined) {
+                typedNode.id = typedNode.counter;
+            }
+            delete typedNode.counter;
+        }
+    }
+};
+
 const parseFileOperationIdentifier = (stackTrace: string): string => {
+    if (!stackTrace) {
+        return '';
+    }
     const regex = /File\s+"(?:.+\/)?([^/]+)",\s+line\s+(\d+)/;
     const match = stackTrace.match(regex);
 
@@ -64,77 +139,69 @@ const parseFileOperationIdentifier = (stackTrace: string): string => {
 };
 
 export const fetchInstance = async (): Promise<Instance | null> => {
-    // eslint-disable-next-line promise/valid-params
-    const response = await axiosInstance.get<Instance>('/api/instance').catch();
-    return response?.data;
+    const response = await axiosInstance.get<Instance>(Endpoints.INSTANCE);
+    return response?.data ?? null;
 };
 
 export const updateInstance = async (payload: Partial<Instance>): Promise<Instance | null> => {
-    // eslint-disable-next-line promise/valid-params
-    const response = await axiosInstance.put<Instance>('/api/instance', payload).catch();
-    return response?.data;
+    const response = await axiosInstance.put<Instance>(Endpoints.INSTANCE, payload);
+    return response?.data ?? null;
 };
 
-export const fetchBufferPages = async (
+export const fetchBufferChunks = async (
     operationId: number,
     address?: number | string,
     bufferType?: BufferType,
-): Promise<BufferPage[]> => {
-    const response = await axiosInstance.get<BufferPage[]>(`/api/buffer-pages`, {
+): Promise<BufferChunk[]> => {
+    const response = await axiosInstance.get<unknown[]>(Endpoints.BUFFER_PAGES, {
         params: {
             operation_id: operationId,
             address,
             buffer_type: bufferType,
         },
     });
-    return response.data;
+
+    return normalizeBufferPagesResponse(response.data ?? []);
 };
 
 const fetchOperationDetails = async (id: number | null): Promise<OperationDetailsData> => {
     if (id === null) {
-        return defaultOperationDetailsData;
+        return defaultOperation;
     }
-    try {
-        const { data: operationDetails } = await axiosInstance.get<OperationDetailsData>(`/api/operations/${id}`, {
-            maxRedirects: 1,
-        });
-        return {
-            ...operationDetails,
-            operationFileIdentifier: parseFileOperationIdentifier(operationDetails.stack_trace),
-        };
-    } catch (error: unknown) {
-        if (axios.isAxiosError(error)) {
-            if (error.response && error.response.status >= 400 && error.response.status < 500) {
-                // we may want to handle this differently
-                throw error;
-            }
-            if (error.response && error.response.status >= 500) {
-                throw error;
-            }
-        }
-    }
-    return defaultOperationDetailsData;
-};
 
-const MAX_RETRY_COUNT = 2;
+    const { data: operationDetails } = await axiosInstance.get<OperationDetailsData>(
+        `${Endpoints.OPERATIONS_LIST}/${id}`,
+        {
+            maxRedirects: 1,
+        },
+    );
+
+    updateDeviceOperationId(operationDetails.device_operations);
+
+    return {
+        ...operationDetails,
+        operationFileIdentifier: parseFileOperationIdentifier(operationDetails.stack_trace),
+    };
+};
 
 const fetchOperations = async (): Promise<OperationDescription[]> => {
     const tensorList: Map<number, Tensor> = new Map<number, Tensor>();
-    let response = await axiosInstance.get<OperationDescription[]>('/api/operations');
-    let operationList = response.data;
-    let retryCount = 0;
+    const response = await axiosInstance.get<OperationDescription[]>(Endpoints.OPERATIONS_LIST);
+    const operationList = response.data;
 
-    // TODO: Figure out why we sometimes get a string back instead of an array so we don't need this hack
-    while (!Array.isArray(operationList) && retryCount < MAX_RETRY_COUNT) {
-        // eslint-disable-next-line no-console
-        console.info('Data is not a JSON array, refetching operations list');
-        // eslint-disable-next-line no-await-in-loop
-        response = await axiosInstance.get<OperationDescription[]>('/api/operations');
-        operationList = response.data;
-        retryCount++;
-    }
+    const getDeviceOperationNameList = (operation: OperationDescription) => {
+        if (!Array.isArray(operation.device_operations)) {
+            return [];
+        }
+        return operation.device_operations
+            .filter((op) => {
+                return op.node_type === NodeType.function_start && isDeviceOperation(op.params.name);
+            })
+            .map((op) => (op.params as DeviceOperationParams).name);
+    };
 
     return operationList.map((operation: OperationDescription) => {
+        updateDeviceOperationId(operation.device_operations);
         operation.operationFileIdentifier = parseFileOperationIdentifier(operation.stack_trace);
 
         const outputs = operation.outputs.map((tensor) => {
@@ -151,9 +218,11 @@ const fetchOperations = async (): Promise<OperationDescription[]> => {
 
         const inputs = operation.inputs.map((tensor) => {
             const cachedTensor = tensorList.get(tensor.id);
+
             if (cachedTensor) {
                 return { ...cachedTensor, io: 'input' };
             }
+
             return { ...tensor, io: 'input' };
         });
 
@@ -172,59 +241,18 @@ const fetchOperations = async (): Promise<OperationDescription[]> => {
             outputs,
             inputs,
             arguments: argumentsWithParsedValues,
+            deviceOperationNameList: getDeviceOperationNameList(operation),
+            processedConnections: processInputsOutputs(operation.device_operations),
         } as OperationDescription;
     });
 };
 
-export interface BuffersByOperationData {
-    buffers: Buffer[];
-    id: number;
-    name: string;
-}
-
-export interface DeviceData {
-    address_at_first_l1_bank: number;
-    address_at_first_l1_cb_buffer: number;
-    cb_limit: number;
-    device_id: number;
-    l1_bank_size: number;
-    l1_num_banks: number;
-    num_banks_per_storage_core: number;
-    num_compute_cores: number;
-    num_storage_cores: number;
-    num_x_compute_cores: number;
-    num_x_cores: number;
-    num_y_compute_cores: number;
-    num_y_cores: number;
-    total_l1_for_interleaved_buffers: number;
-    total_l1_for_sharded_buffers: number;
-    total_l1_for_tensors: number;
-    total_l1_memory: number;
-    worker_l1_size: number;
-}
-
-export interface PerformanceData {
-    PCIe_slot: number;
-    RISC_processor_type: string; // Can we scope this down to a specific set of values?
-    core_x: number;
-    core_y: number;
-    run_ID: number;
-    run_host_ID: number;
-    source_file: string;
-    source_line: number;
-    stat_value: number;
-    'time[cycles_since_reset]': number;
-    timer_id: number;
-    zone_name: string; // Can we scope this down to a specific set of values?
-    zone_phase: 'begin' | 'end';
-}
-
-const fetchBuffersByOperation = async (bufferType: BufferType | null): Promise<BuffersByOperationData[]> => {
+const fetchBuffersByOperation = async (bufferType: BufferType | null): Promise<BuffersByOperation[]> => {
     const params = {
         buffer_type: bufferType,
     };
 
-    const { data: buffers } = await axiosInstance.get<BuffersByOperationData[]>('/api/operation-buffers', {
+    const { data: buffers } = await axiosInstance.get<BuffersByOperation[]>(Endpoints.OPERATION_BUFFERS, {
         params,
     });
 
@@ -236,7 +264,7 @@ const fetchAllBuffers = async (bufferType: BufferType | null): Promise<Buffer[]>
         buffer_type: bufferType,
     };
 
-    const { data: buffers } = await axiosInstance.get<Buffer[]>('/api/buffers', {
+    const { data: buffers } = await axiosInstance.get<Buffer[]>(Endpoints.BUFFERS_LIST, {
         params,
     });
 
@@ -253,16 +281,36 @@ const useGetAllBuffers = (bufferType: BufferType | null) => {
     });
 };
 
+export const useGetUniqueDeviceOperationsList = (): string[] => {
+    const { data: operations } = useOperationsList();
+
+    return useMemo(() => {
+        if (!operations || operations.length === 0) {
+            return [];
+        }
+
+        const deviceOperationSet = new Set<string>();
+
+        for (const operation of operations) {
+            for (const deviceOperation of operation.deviceOperationNameList) {
+                deviceOperationSet.add(deviceOperation);
+            }
+        }
+
+        return Array.from(deviceOperationSet);
+    }, [operations]);
+};
+
 /**
  * @description returns start address of the first L1 small buffer. this is interim solution until BE can collect to devices table
  */
 export const useGetL1SmallMarker = (): number => {
     const { data: buffers } = useGetAllBuffers(BufferType.L1_SMALL);
-
+    const l1Size = useGetL1Size();
     return useMemo(() => {
         const addresses = buffers?.map((buffer) => {
             return buffer.address;
-        }) || [0];
+        }) || [l1Size ?? L1_DEFAULT_MEMORY_SIZE];
 
         let min = Infinity;
         for (let i = 0; i < addresses.length; i++) {
@@ -270,8 +318,8 @@ export const useGetL1SmallMarker = (): number => {
                 min = addresses[i];
             }
         }
-        return min === Infinity ? 0 : min;
-    }, [buffers]);
+        return min === Infinity ? (l1Size ?? L1_DEFAULT_MEMORY_SIZE) : min;
+    }, [buffers, l1Size]);
 };
 
 /**
@@ -288,50 +336,57 @@ export const useGetL1StartMarker = (): number => {
     }, [devices]);
 };
 
+export const useGetL1Size = (): number => {
+    const { data: devices } = useDevices();
+
+    return useMemo(() => {
+        if (devices && devices.length > 0) {
+            return devices[0].worker_l1_size;
+        }
+        return 0;
+    }, [devices]);
+};
+
 export const fetchOperationBuffers = async (operationId: number) => {
-    const { data: buffers } = await axiosInstance.get(`/api/operation-buffers/${operationId}`);
+    const { data: buffers } = await axiosInstance.get(`${Endpoints.OPERATION_BUFFERS}/${operationId}`);
 
     return buffers;
 };
 
 export const useOperationBuffers = (operationId: number) => {
-    return useQuery<BuffersByOperationData, AxiosError>({
-        queryKey: ['get-operation-buffers', operationId],
+    // Scope the cache by the active report's path. Operation ids reset per
+    // report, so a key of `[..., operationId]` collides across reports and
+    // serves the previously-loaded report's payload when the same id is
+    // revisited under the new one. See #1674.
+    const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
+    return useQuery<BuffersByOperation, AxiosError>({
+        queryKey: ['get-operation-buffers', operationId, activeProfilerReport?.path],
         queryFn: () => fetchOperationBuffers(operationId),
         retry: false,
         staleTime: Infinity,
     });
 };
 
-const fetchReportMeta = async (): Promise<ReportMetaData> => {
-    const { data: meta } = await axiosInstance.get<ReportMetaData>('/api/config');
+// Not currently used
+// const fetchReportMeta = async (): Promise<ReportMetaData> => {
+//     const { data: meta } = await axiosInstance.get<ReportMetaData>(Endpoints.CONFIG);
 
-    return meta;
-};
+//     return meta;
+// };
 
-const fetchDevices = async (reportName: string) => {
-    const { data: meta } = await axiosInstance.get<DeviceData[]>('/api/devices');
+const fetchDevices = async (report: ReportFolder | RemoteFolder) => {
+    const { data: meta } = await axiosInstance.get<DeviceInfo[]>(Endpoints.DEVICES);
 
     if (meta.length === 0) {
-        // TODO: Report Name here is actually the path because that's what we store in the atom - atom should store ReportFolder object
-        createToastNotification('Data integrity warning: No device information provided.', `/${reportName}`, true);
+        createToastNotification(
+            'Data integrity warning: No device information provided.',
+            getErroredReportFolderLabel(report),
+            ToastType.WARNING,
+        );
     }
 
     return [...new Map(meta.map((device) => [device.device_id, device])).values()];
 };
-
-// Not currently used
-// const fetchPerformanceDataRaw = async (): Promise<ParseResult<Record<string, string>>> => {
-//     const { data } = await axiosInstance.get<string>('/api/performance/perf-results/raw');
-
-//     return new Promise((resolve, reject) => {
-//         Papa.parse<Record<string, string>>(data, {
-//             complete: (results) => resolve(results),
-//             error: (error: Error) => reject(error),
-//             header: true,
-//         });
-//     });
-// };
 
 export interface PerformanceReportResponse {
     report: PerfTableRow[];
@@ -339,9 +394,22 @@ export interface PerformanceReportResponse {
     signposts?: Signpost[];
 }
 
-const fetchPerformanceReport = async (name: string | null, stackByIn0: boolean, signpost: Signpost | null) => {
-    const { data } = await axiosInstance.get<PerformanceReportResponse>(`/api/performance/perf-results/report`, {
-        params: { name, stack_by_in0: stackByIn0, signpost: signpost?.op_code },
+// Takes the params as one object rather than positionally: `hideHostOps`,
+// `mergeDevices` and `tracingMode` are adjacent booleans, so a positional
+// signature lets two of them be swapped without a type error while the query key
+// is still built from the correct object — a request cached under a key that
+// misdescribes it.
+const fetchPerformanceReport = async (name: string | null, params: PerformanceReportParams) => {
+    const { data } = await axiosInstance.get<PerformanceReportResponse>(Endpoints.PERFORMANCE_RESULTS_REPORT, {
+        params: {
+            name,
+            group_by: params.groupBy,
+            start_signpost: params.startSignpost?.op_code,
+            end_signpost: params.endSignpost?.op_code,
+            hide_host_ops: params.hideHostOps,
+            merge_devices: params.mergeDevices,
+            tracing_mode: params.tracingMode,
+        },
     });
 
     return data;
@@ -350,7 +418,7 @@ const fetchPerformanceReport = async (name: string | null, stackByIn0: boolean, 
 const fetchNPEManifest = async (): Promise<NPEManifestEntry[]> => {
     const ajv = new Ajv();
     const validateNPEManifest = ajv.compile(npeManifestSchema);
-    const { data } = await axiosInstance.get<NPEManifestEntry[]>(`/api/performance/npe/manifest`);
+    const { data } = await axiosInstance.get<NPEManifestEntry[]>(`${Endpoints.PERFORMANCE}/npe/manifest`);
     const valid = validateNPEManifest(data);
     if (!valid) {
         // eslint-disable-next-line no-console
@@ -370,18 +438,68 @@ export const useGetNPEManifest = () => {
     });
 };
 
+const NPE_TEXT_GET_OPTIONS = {
+    responseType: 'text' as const,
+    transitional: { forcedJSONParsing: false },
+};
+
+// Own AbortController (not React Query's signal): Strict Mode remount must not
+// abort a multi-hundred-MB download. Report switch / overlapping fetch aborts the prior.
+let activeNpeRequestAbort: AbortController | null = null;
+
+/**
+ * Exported for contract tests; prefer useNpe / useNPETimelineFile at call sites.
+ *
+ * Contract: at most one NPE download may be in flight application-wide. Every
+ * caller shares `activeNpeRequestAbort`, so a second call aborts the first —
+ * callers must be mutually exclusive (see isNpeQueryEnabled / isTimelineQueryEnabled
+ * in NPE.tsx). A concurrent caller would kill a sibling's multi-hundred-MB download
+ * and surface the CanceledError as INVALID_NPE_DATA, since it carries no HTTP status.
+ */
+export const fetchNpeText = async (url: string, config?: AxiosRequestConfig): Promise<NPEData> => {
+    // Abort any prior NPE download before starting a new one (key change / refetch).
+    // Do not wire React Query's AbortSignal — Strict Mode remount must join in-flight work.
+    activeNpeRequestAbort?.abort();
+    const abortController = new AbortController();
+    activeNpeRequestAbort = abortController;
+    try {
+        const response = await axiosInstance.get<string>(url, {
+            ...NPE_TEXT_GET_OPTIONS,
+            ...config,
+            signal: abortController.signal,
+        });
+        try {
+            // Parse then drop the text body so RQ caches only the object graph.
+            const parsed = parseNpeAxiosResponseData(response.data);
+            (response as { data: string | null }).data = null;
+            return parsed;
+        } catch (error) {
+            // Drop the huge string before throwing so the synthetic error does not
+            // keep it alive via the response reference.
+            (response as { data: string | null }).data = null;
+            // CONVENTIONS.md: client-side JSON failures → synthetic 422 AxiosError.
+            const message = error instanceof Error ? error.message : 'Failed to parse NPE response';
+            return throwNpeClientAxiosError(message, NpeClientErrorKind.PARSE, response);
+        }
+    } finally {
+        if (activeNpeRequestAbort === abortController) {
+            activeNpeRequestAbort = null;
+        }
+    }
+};
+
 const fetchNPETimeline = async (fileName: string): Promise<NPEData> => {
-    const { data } = await axiosInstance.get<NPEData>(`/api/performance/npe/timeline`, {
+    return fetchNpeText(`${Endpoints.PERFORMANCE}/npe/timeline`, {
         params: { filename: fileName },
     });
-
-    return data;
 };
 
 export const useNPETimelineFile = (fileName: string | undefined) => {
     return useQuery<NPEData, AxiosError>({
         queryFn: () => fetchNPETimeline(fileName!),
-        queryKey: ['get-npe-timeline', fileName],
+        // instanceId matches useNpeSummary/useNpeWindow — basename-only keys bleed
+        // cached whole-file payloads across instances on a name collision.
+        queryKey: [NPE_TIMELINE_QUERY_KEY, getOrCreateInstanceId(), fileName],
         retry: false,
         enabled: !!fileName,
     });
@@ -390,55 +508,130 @@ export const useNPETimelineFile = (fileName: string | undefined) => {
 interface MetaData {
     architecture: DeviceArchitecture | null;
     frequency: number | null;
+    max_cores: number | null;
 }
 
-interface FetchDeviceLogRawResult {
-    deviceMeta: MetaData;
-    deviceLog: ParseResult<Record<string, string>[]>;
+function getDeviceMetaQueryKey(name: string | null) {
+    return ['get-device-log-meta', name] as const;
 }
 
-const fetchDeviceLogRaw = async (name: string | null): Promise<FetchDeviceLogRawResult> => {
-    const { data } = await axiosInstance.get<string>('/api/performance/device-log/raw', {
+const fetchDeviceMeta = async (name: string | null) => {
+    const { data } = await axiosInstance.get<MetaData>(`${Endpoints.PERFORMANCE}/device-log/meta`, {
         params: { name },
     });
 
-    function parseArchAndFreq(input: string): MetaData {
-        const archMatch = input.match(/ARCH:\s*([\w\d_]+)/);
-        const freqMatch = input.match(/CHIP_FREQ\[MHz\]:\s*(\d+)/);
-        const architecture = archMatch ? (archMatch[1] as DeviceArchitecture) : null;
-        const frequency = freqMatch ? parseInt(freqMatch[1], 10) : null;
-
-        return { architecture, frequency };
-    }
-
-    return new Promise<FetchDeviceLogRawResult>((resolve, reject) => {
-        const rows = data.split('\n');
-        const csv = rows.slice(1); // Remove the first row
-        const deviceMeta = parseArchAndFreq(rows[0]);
-        const headers = csv!
-            .shift()!
-            .split(/,\s{1,2}/)
-            .join(','); // headers without spaces
-        const processedCsv = [headers, ...csv].join('\n');
-        Papa.parse<Record<string, string>[]>(processedCsv, {
-            header: true,
-            complete: (deviceLog) => resolve({ deviceMeta, deviceLog }),
-            error: (error: Error) => reject(error),
-        });
-    });
+    return data;
 };
 
 const fetchClusterDescription = async (): Promise<ClusterModel> => {
-    const { data } = await axiosInstance.get<ClusterModel>('/api/cluster-descriptor');
+    const { data } = await axiosInstance.get<ClusterModel>(Endpoints.CLUSTER_DESCRIPTOR);
+
+    try {
+        const { data: meshData } = await axiosInstance.get<MeshData>(Endpoints.MESH_DESCRIPTOR);
+
+        if (meshData?.chips) {
+            data.chips = meshData.chips;
+        }
+    } catch (err) {
+        // eslint-disable-next-line no-console
+        console.error('mesh-descriptor not found', err);
+    }
+
     return data;
 };
 
 export const useGetClusterDescription = () => {
     const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
 
-    return useQuery({
+    return useQuery<ClusterModel | null, AxiosError>({
         queryFn: () => fetchClusterDescription(),
         queryKey: ['get-cluster-description', activeProfilerReport?.path],
+        retry: false,
+        // The descriptor lives beside the memory report, so without one the request can
+        // only 404. The navigation reads this to decide whether Topology is reachable and
+        // is mounted before any report is chosen.
+        enabled: !!activeProfilerReport?.path,
+        // Report-bound: the key carries the report path, so switching reports refetches and
+        // nothing else can change the answer for a given one.
+        staleTime: Infinity,
+    });
+};
+
+// Guards against runaway probing if the backend stops signalling world end.
+const MAX_PROBE_RANKS = 32;
+
+const fetchClusterDescriptorForRank = async (rank: number): Promise<ClusterModel> => {
+    const { data } = await axiosInstance.get<ClusterModel>(Endpoints.CLUSTER_DESCRIPTOR, {
+        params: { rank },
+    });
+    return data;
+};
+
+const fetchMeshDescriptorForRank = async (rank: number): Promise<MeshData | null> => {
+    try {
+        const { data } = await axiosInstance.get<MeshDescriptorResponse>(Endpoints.MESH_DESCRIPTOR, {
+            params: { rank },
+        });
+        // Backend can return single-doc or `{ docs: [...] }` envelope.
+        return pickMeshDocForRank(data, rank);
+    } catch (err) {
+        // mesh-descriptor is optional in some reports
+        // eslint-disable-next-line no-console
+        console.warn(`mesh-descriptor for rank ${rank} not available`, err);
+        return null;
+    }
+};
+
+const fetchRankSlice = async (rank: number): Promise<PerRankInput> => {
+    const [descriptor, mesh] = await Promise.all([
+        fetchClusterDescriptorForRank(rank),
+        fetchMeshDescriptorForRank(rank),
+    ]);
+    // Mesh-descriptor wins; `descriptor.chips` is the fallback for galaxy
+    // reports that don't ship a separate mesh file.
+    const meshChips = mesh?.chips ?? descriptor.chips ?? null;
+    return { rank, descriptor, meshDescriptor: meshChips };
+};
+
+const fetchClusterTopology = async (): Promise<ClusterTopology> => {
+    // Rank 0 anchors detection (the backend serves either the legacy
+    // single-host or the multi-host rank-tagged descriptor).
+    const rank0Slice = await fetchRankSlice(0);
+
+    if (!looksLikeRankedDescriptor(rank0Slice.descriptor)) {
+        return stitchClusterTopology([rank0Slice]);
+    }
+
+    // TODO(#1241): replace serial probing with a dedicated rank-metadata
+    // endpoint so per-rank fetches can fan out in parallel.
+    const perRankInputs: PerRankInput[] = [rank0Slice];
+    for (let nextRank = 1; nextRank < MAX_PROBE_RANKS; nextRank += 1) {
+        try {
+            // eslint-disable-next-line no-await-in-loop
+            const slice = await fetchRankSlice(nextRank);
+            perRankInputs.push(slice);
+        } catch (err) {
+            // Backend signals world end via 400 rank_out_of_range or
+            // 404 missing_rank_file. Anything else (5xx, network) should
+            // surface so React Query can mark the topology errored rather
+            // than silently truncating it.
+            const status = err instanceof AxiosError ? err.response?.status : undefined;
+            if (status === 400 || status === 404) {
+                break;
+            }
+            throw err;
+        }
+    }
+
+    return stitchClusterTopology(perRankInputs);
+};
+
+export const useGetClusterTopology = () => {
+    const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
+
+    return useQuery<ClusterTopology | null, AxiosError>({
+        queryFn: () => fetchClusterTopology(),
+        queryKey: ['get-cluster-topology', activeProfilerReport?.path],
         initialData: null,
         retry: false,
     });
@@ -460,39 +653,111 @@ export const useOperationListRange = (): NumberRange | null => {
     return useMemo(
         () => (response?.data?.length ? [response.data?.[0].id, response.data?.[response.data.length - 1].id] : null),
         // TODO: this used to rely on response.isLoading... which iis an invalid dependency. will have to wait for david to come back.
-        // this fixes #613 https://github.com/tenstorrent/ttnn-visualizer/issues/613
+        // this fixes https://github.com/tenstorrent/ttnn-visualizer/issues/613
         [response.data],
     );
 };
 
-const fetchNpeOpTrace = async () => {
-    const response = await axiosInstance.get<NPEData>('/api/npe');
-    return response?.data;
-};
+const fetchNpeOpTrace = async () => fetchNpeText(Endpoints.NPE);
 
-export const useNpe = (fileName: string | null) =>
-    useQuery<NPEData, AxiosError>({
+export const useNpe = (fileName: string | null) => {
+    return useQuery<NPEData, AxiosError>({
         queryFn: () => fetchNpeOpTrace(),
-        queryKey: ['fetch-npe', fileName],
+        // instanceId matches useNpeSummary/useNpeWindow — basename-only keys bleed
+        // cached whole-file payloads across instances on a name collision.
+        queryKey: [NPE_QUERY_KEY, getOrCreateInstanceId(), fileName],
         retry: false,
         staleTime: 30000,
+        enabled: fileName !== null,
     });
+};
+
+const fetchNpeSummary = async (signal?: AbortSignal): Promise<NpeSummary> => {
+    const response = await axiosInstance.get<NpeSummary>(Endpoints.NPE_SUMMARY, { signal });
+    const { data } = response;
+    const shapeError = validateNpeSummary(data);
+    if (shapeError) {
+        throwNpeClientAxiosError(shapeError, NpeClientErrorKind.SHAPE, response);
+    }
+    return data;
+};
+
+// #861 windowed loading: per-step aggregates for the whole trace, small enough
+// to load once; transfers/link_demand come from useNpeWindow per visited step.
+// instanceId is part of the key because staleTime is Infinity — a bare basename
+// key would serve one instance's cached report to another on a name collision.
+export const useNpeSummary = (fileName: string | null) => {
+    return useQuery<NpeSummary, AxiosError>({
+        queryFn: ({ signal }) => fetchNpeSummary(signal),
+        queryKey: [NPE_SUMMARY_QUERY_KEY, getOrCreateInstanceId(), fileName],
+        retry: false,
+        staleTime: Infinity,
+        enabled: fileName !== null,
+    });
+};
+
+const fetchNpeWindow = async (t: number, signal?: AbortSignal): Promise<NpeWindow> => {
+    const response = await axiosInstance.get<NpeWindow>(Endpoints.NPE_WINDOW, {
+        params: { t },
+        // React Query aborts this signal when the query is superseded; passing it
+        // lets axios cancel abandoned seeks during play/scrub instead of letting a
+        // storm of in-flight /npe/window requests all resolve and churn the cache.
+        signal,
+    });
+    const { data } = response;
+    const shapeError = validateNpeWindow(data);
+    if (shapeError) {
+        throwNpeClientAxiosError(shapeError, NpeClientErrorKind.SHAPE, response);
+    }
+    return data;
+};
+
+export const useNpeWindow = (fileName: string | null, t: number | null) => {
+    return useQuery<NpeWindow, AxiosError>({
+        queryFn: ({ signal }) => fetchNpeWindow(t!, signal),
+        queryKey: [NPE_WINDOW_QUERY_KEY, getOrCreateInstanceId(), fileName, t],
+        retry: false,
+        staleTime: Infinity,
+        // Keep the previous window visible while a seek's fetch is in flight so
+        // the graph doesn't flash empty on every scrub.
+        placeholderData: keepPreviousData,
+        enabled: fileName !== null && t !== null,
+    });
+};
+
+const fetchMlirJson = async (): Promise<GraphBundle> => {
+    const { data } = await axiosInstance.get<GraphBundle>(Endpoints.MLIR);
+    return data;
+};
+
+export const useMlir = (fileName: string | null) => {
+    return useQuery<GraphBundle, AxiosError>({
+        queryFn: () => fetchMlirJson(),
+        queryKey: ['fetch-mlir', fileName],
+        retry: false,
+        staleTime: Infinity,
+        enabled: fileName !== null,
+    });
+};
 
 export const useOperationDetails = (operationId: number | null) => {
     const { data: operations } = useOperationsList();
+    // Scope the cache by the active report's path. Operation ids reset per
+    // report, so a key of `[..., operationId]` collides across reports and
+    // serves the previously-loaded report's payload when the same id is
+    // revisited under the new one. See #1674.
+    const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
 
-    // Memoize the operation lookup
     const operation = useMemo(
         () => operations?.find((_operation) => _operation.id === operationId) || null,
         [operations, operationId],
     );
 
-    // Memoized function for fetching operation details
     const fetchDetails = useCallback(() => fetchOperationDetails(operationId), [operationId]);
 
-    const operationDetails = useQuery<OperationDetailsData>({
+    const operationDetails = useQuery<OperationDetailsData, AxiosError>({
         queryFn: () => fetchDetails(),
-        queryKey: ['get-operation-detail', operationId],
+        queryKey: ['get-operation-detail', operationId, activeProfilerReport?.path],
         retry: 2,
         retryDelay: (retryAttempt) => Math.min(retryAttempt * 100, 500),
         staleTime: Infinity,
@@ -521,13 +786,23 @@ export const useOperationDetails = (operationId: number | null) => {
         return Array.from(uniqueBuffers.values());
     }, [operationDetails.data]);
 
-    if (operationDetails.data) {
-        operationDetails.data.buffersSummary = buffersSummary;
-    }
+    const augmentedOperationDetails = useMemo(() => {
+        if (!operationDetails.data) {
+            return operationDetails;
+        }
+
+        return {
+            ...operationDetails,
+            data: {
+                ...operationDetails.data,
+                buffersSummary,
+            },
+        };
+    }, [operationDetails, buffersSummary]);
 
     return {
         operation,
-        operationDetails,
+        operationDetails: augmentedOperationDetails,
     };
 };
 
@@ -569,11 +844,7 @@ export const useGetDeviceOperationsListByOp = () => {
         return (
             operations
                 ?.map((operation) => {
-                    const ops = operation.device_operations
-                        .filter((op) => op.node_type === NodeType.function_start)
-                        .map((deviceOperation) => deviceOperation.params.name)
-                        .filter((opName) => isDeviceOperation(opName));
-                    return { id: operation.id, name: operation.name, ops };
+                    return { id: operation.id, name: operation.name, ops: operation.deviceOperationNameList };
                 })
                 .filter((data) => {
                     return data.ops.length > 0;
@@ -582,123 +853,106 @@ export const useGetDeviceOperationsListByOp = () => {
     }, [operations]);
 };
 
-export const useGetDeviceOperationsList = (): DeviceOperationMapping[] => {
-    const { data: operations } = useOperationsList();
-    const { data: devices } = useDevices();
+// Memoised across call sites, not per hook invocation: both derived values are
+// read by a handful of hooks and by one component instance per virtualised row,
+// and `useMemo` would run the flatMap and the O(rows) match once for each. The
+// inputs are React Query results, so their identity is shared by every caller in
+// a render pass. Callers must not mutate the results — they share them now.
+const getDeviceOperationsList = memoiseLatest((operations?: OperationDescription[]): DeviceOperationMapping[] => {
+    if (!operations) {
+        return [];
+    }
 
-    /**
-     * TODO: update when device op data is device bound
-     * @description Collapse multi-device operations into single entry temporary logic, this can under certain circumstances lead to false positives
-     * @param data
-     * @param numDevices
-     */
-    const collapseMultideviceOPs = (data: DeviceOperationMapping[], numDevices: number): DeviceOperationMapping[] => {
-        if (numDevices === 1) {
-            return data;
+    return operations.flatMap((operation) =>
+        operation.deviceOperationNameList.map((name) => ({
+            name,
+            id: operation.id,
+            operationName: operation.name,
+        })),
+    );
+});
+
+const getDeviceOperationListPerf = memoiseLatest(matchDeviceOperationsToPerf);
+
+const getOpToPerfIds = memoiseLatest((matched: DeviceOperationMapping[]) =>
+    matched.map(({ id, perfData }) => ({ opId: id, perfId: perfData?.id })),
+);
+
+const getDeviceOperationListPerfByOpId = memoiseLatest((matched: DeviceOperationMapping[]) => {
+    const mappingsByOpId = new Map<number, DeviceOperationMapping[]>();
+
+    for (const mapping of matched) {
+        const existing = mappingsByOpId.get(mapping.id);
+
+        if (existing) {
+            existing.push(mapping);
+        } else {
+            mappingsByOpId.set(mapping.id, [mapping]);
         }
+    }
 
-        const result: DeviceOperationMapping[] = [];
-        const operationCountByKey = new Map<string, number>();
+    return mappingsByOpId;
+});
 
-        for (const { name, id } of data) {
-            const key = `${name}-${id}`;
-            operationCountByKey.set(key, (operationCountByKey.get(key) || 0) + 1);
-        }
-
-        const seen = new Set<string>();
-
-        for (const item of data) {
-            const key = `${item.name}-${item.id}`;
-            if (!seen.has(key) && operationCountByKey.get(key) === numDevices) {
-                result.push(item);
-                seen.add(key);
-            }
-        }
-
-        return result;
-    };
-
-    return useMemo(() => {
-        if (!operations || !devices) {
-            return [];
-        }
-        const result = operations.flatMap((operation) =>
-            operation.device_operations
-                .filter(
-                    (op) =>
-                        op.node_type === NodeType.function_start && op.params.name && isDeviceOperation(op.params.name),
-                )
-                .map((deviceOperation) => ({
-                    name: deviceOperation.params.name,
-                    id: operation.id,
-                    operationName: operation.name,
-                })),
-        );
-        return collapseMultideviceOPs(result, devices.length);
-    }, [operations, devices]);
-};
-
-export interface DeviceOperationMapping {
-    name: string;
-    id: number;
-    operationName: string;
-    perfData?: PerfTableRow;
-}
-
-// Unused
-const useProxyPerformanceReport = (): PerformanceReportResponse => {
-    const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
-    const response = usePerformanceReport(activePerformanceReport?.reportName || null);
-
-    return useMemo(() => {
-        if (!response.data) {
-            return EMPTY_PERF_RETURN;
-        }
-        return response.data;
-    }, [response.data]);
-};
-
-export const useGetDeviceOperationListPerf = () => {
-    const deviceOperations: DeviceOperationMapping[] = useGetDeviceOperationsList();
-    const data = useProxyPerformanceReport();
-
-    return useMemo(() => {
-        const isValid = deviceOperations.every((deviceOperation, index) => {
-            const perfData = data.report[index];
-
-            if (perfData && perfData.raw_op_code === deviceOperation.name) {
-                deviceOperation.perfData = perfData;
-                return true;
-            }
-
-            return false;
-        });
-
-        return isValid ? deviceOperations : [];
-    }, [data, deviceOperations]);
+/**
+ * @description Discards every cached report query along with the values derived
+ * from them. The derived caches are module-level, so clearing React Query alone
+ * leaves the previous report's rows reachable from them for the lifetime of the
+ * page — the two have to be dropped together, which is why this exists rather
+ * than a bare `queryClient.clear()` at each report-switch call site.
+ */
+export const clearReportCaches = (queryClient: QueryClient) => {
+    queryClient.clear();
+    getDeviceOperationsList.reset();
+    getDeviceOperationListPerf.reset();
+    getOpToPerfIds.reset();
+    getDeviceOperationListPerfByOpId.reset();
 };
 
 /**
- * @description op id to perf id mapping only for existing perf ids
+ * @description Every device operation in the memory report, flattened in report
+ * order. Multi-device collapsing happens at match time, not here, because only
+ * the performance report reveals which shape this report has (#1810).
  */
-export const useOpToPerfIdFiltered = () => {
-    const opMapping = useGetDeviceOperationListPerf();
+export const useGetDeviceOperationsList = (): DeviceOperationMapping[] => {
+    const { data: operations } = useOperationsList();
 
-    return useMemo(
-        () =>
-            opMapping.map(({ id, perfData }) => {
-                return {
-                    opId: id,
-                    perfId: perfData?.id,
-                };
-            }),
-        [opMapping],
-    );
+    return getDeviceOperationsList(operations);
 };
 
+export const useGetDeviceOperationListPerf = () => {
+    const deviceOperations = useGetDeviceOperationsList();
+    const { data: devices } = useDevices();
+    const { data } = useLinkedPerformanceReport();
+
+    return getDeviceOperationListPerf(deviceOperations, (data ?? EMPTY_PERF_RETURN).report, devices?.length ?? 0);
+};
+
+/**
+ * @description The matched device operations grouped by profiler op id, for
+ * consumers that look up one operation at a time. Rendered once per row of a
+ * virtualised list, a linear scan per lookup is O(rows) per row.
+ */
+export const useGetDeviceOperationListPerfByOpId = (): Map<number, DeviceOperationMapping[]> =>
+    getDeviceOperationListPerfByOpId(useGetDeviceOperationListPerf());
+
+/**
+ * @description One entry per matched device operation, pairing its op id with
+ * the perf row it matched. An operation that matched no perf row still gets an
+ * entry, with `perfId` left `undefined` — consumers filter or coerce it
+ * themselves (`RangeSlider` leans on `Number(undefined)` being falsy).
+ *
+ * The perf ids come from the link-pinned report (`useLinkedPerformanceReport`),
+ * not from the rows the performance tab is displaying. A row id survives host-op
+ * and signpost filtering, so consumers can still join against those views; ids
+ * do not survive `mergeDevices: false`, where an operation's per-device rows
+ * each carry their own id and only the merged representative joins.
+ */
+export const useOpToPerfIdFiltered = () => getOpToPerfIds(useGetDeviceOperationListPerf());
+
 export const usePerformanceRange = (): NumberRange | null => {
-    const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
-    const { data: perfData } = usePerformanceReport(activePerformanceReport?.reportName || null);
+    const activeReportFolderName = useAtomValue(activePerformanceReportFolderNameAtom);
+    const { data: perfData } = usePerformanceReport(activeReportFolderName);
 
     return useMemo(
         () =>
@@ -712,66 +966,96 @@ export const usePerformanceRange = (): NumberRange | null => {
     );
 };
 
-// Not currently used
-export const useReportMeta = () => {
-    const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
+interface ReportMetadata {
+    version: SemVer;
+    timestamp: string;
+    duration: number;
+    gitUrl: string | null;
+    gitSha: string | null;
+    worldSize: number;
+}
 
-    return useQuery<ReportMetaData, AxiosError>({
-        queryKey: ['get-report-config', activeProfilerReport?.path],
-        queryFn: () => fetchReportMeta(),
-    });
+export const fetchReportMetadata = async (): Promise<ReportMetadata> => {
+    const { data } = await axiosInstance.get<ReportMetadataResponse>(Endpoints.REPORT_METADATA);
+    const parsedSchemaVersion = semverParse(data?.schema_version);
+    const parsedDuration = Number(data?.total_duration_ns);
+    // Single-host reports omit `world_size`; an absent or unparseable value is one rank.
+    const parsedWorldSize = Number(data?.world_size);
+
+    return {
+        timestamp: data?.capture_timestamp_ns,
+        duration: Number.isFinite(parsedDuration) ? parsedDuration : 0,
+        version: parsedSchemaVersion,
+        gitUrl: data?.git_url ?? null,
+        gitSha: data?.git_sha ?? null,
+        worldSize:
+            Number.isFinite(parsedWorldSize) && parsedWorldSize >= SINGLE_HOST_WORLD_SIZE
+                ? parsedWorldSize
+                : SINGLE_HOST_WORLD_SIZE,
+    } as ReportMetadata;
 };
 
-export const useBufferPages = (operationId: number, address?: number | string, bufferType?: BufferType) => {
-    return useQuery<BufferPage[], AxiosError>({
-        queryKey: ['get-buffer-pages', operationId, address, bufferType],
-        queryFn: () => fetchBufferPages(operationId, address, bufferType),
+// The endpoint returns 422 on legacy reports that lack the table
+export const useReportMetadata = () => {
+    const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
+
+    return useQuery<ReportMetadata, AxiosError>({
+        queryKey: ['get-report-metadata', activeProfilerReport?.path],
+        queryFn: fetchReportMetadata,
+        enabled: activeProfilerReport !== null,
+        retry: false,
         staleTime: Infinity,
     });
 };
 
-export const fetchTensors = async (): Promise<Tensor[]> => {
-    try {
-        const { data: tensorList } = await axiosInstance.get<Tensor[]>('/api/tensors', {
-            maxRedirects: 1,
-        });
+export const useBufferChunks = (operationId: number, address?: number | string, bufferType?: BufferType) => {
+    // Scope the cache by the active report's path. Operation ids reset per
+    // report, so a key of `[..., operationId, ...]` collides across reports
+    // and serves the previously-loaded report's payload when the same id is
+    // revisited under the new one. See #1674.
+    const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
+    return useQuery<BufferChunk[], AxiosError>({
+        queryKey: ['get-buffer-chunks', operationId, address, bufferType, activeProfilerReport?.path],
+        queryFn: () => fetchBufferChunks(operationId, address, bufferType),
+        staleTime: Infinity,
+    });
+};
 
-        const operationsList = await fetchOperations();
+export const fetchTensors = async (bufferType?: BufferType): Promise<Tensor[]> => {
+    const { data: tensorList } = await axiosInstance.get<Tensor[]>(Endpoints.TENSOR_LIST, {
+        maxRedirects: 1,
+        params: bufferType !== undefined ? { buffer_type: bufferType } : undefined,
+    });
 
-        for (const tensor of tensorList) {
-            if (tensor.producers.length > 0) {
-                const producerId = tensor.producers[0];
-                const operationDetails = operationsList.find((operation) => operation.id === producerId);
-                const outputTensor = operationDetails?.outputs.find((output) => output.id === tensor.id);
-
-                if (outputTensor) {
-                    tensor.operationIdentifier = outputTensor.operationIdentifier;
-                }
-            }
-        }
-
+    // Skip the operations fetch + enrichment loop when no tensor has a producer
+    // (e.g. an L1_Small-only fetch). fetchOperations is not cheap on large reports.
+    if (!tensorList.some((t) => t.producers.length > 0)) {
         return tensorList;
-    } catch (error: unknown) {
-        if (axios.isAxiosError(error)) {
-            if (error.response && error.response.status >= 400 && error.response.status < 500) {
-                // we may want to handle this differently
-                throw error;
-            }
-            if (error.response && error.response.status >= 500) {
-                throw error;
+    }
+
+    const operationsList = await fetchOperations();
+
+    for (const tensor of tensorList) {
+        if (tensor.producers.length > 0) {
+            const producerId = tensor.producers[0];
+            const operationDetails = operationsList.find((operation) => operation.id === producerId);
+            const outputTensor = operationDetails?.outputs.find((output) => output.id === tensor.id);
+
+            if (outputTensor) {
+                tensor.operationIdentifier = outputTensor.operationIdentifier;
             }
         }
     }
 
-    return [defaultTensorData];
+    return tensorList;
 };
 
-export const useTensors = () => {
+export const useTensors = (bufferType?: BufferType) => {
     const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
 
     return useQuery<Tensor[], AxiosError>({
-        queryFn: () => fetchTensors(),
-        queryKey: ['get-tensors', activeProfilerReport?.path],
+        queryFn: () => fetchTensors(bufferType),
+        queryKey: ['get-tensors', activeProfilerReport?.path, bufferType ?? 'all'],
         retry: false,
         staleTime: Infinity,
     });
@@ -780,8 +1064,8 @@ export const useTensors = () => {
 export const useDevices = () => {
     const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
 
-    return useQuery<DeviceData[], AxiosError>({
-        queryFn: () => (activeProfilerReport !== null ? fetchDevices(activeProfilerReport?.path) : Promise.resolve([])),
+    return useQuery<DeviceInfo[], AxiosError>({
+        queryFn: () => (activeProfilerReport !== null ? fetchDevices(activeProfilerReport) : Promise.resolve([])),
         queryKey: ['get-devices', activeProfilerReport?.path],
         retry: false,
         staleTime: Infinity,
@@ -794,7 +1078,7 @@ export const fetchNextUseOfBuffer = async (address: number | null, consumers: nu
     }
 
     const { data: buffer } = await axiosInstance.get(
-        `/api/buffer?address=${address}&operation_id=${consumers[consumers.length - 1]}`,
+        `${Endpoints.BUFFER}?address=${address}&operation_id=${consumers[consumers.length - 1]}`,
     );
 
     buffer.next_usage = buffer.operation_id - consumers[consumers.length - 1];
@@ -811,11 +1095,11 @@ export const useNextBuffer = (address: number | null, consumers: number[], query
     });
 };
 
-export const useBuffers = (bufferType: BufferType, useRange?: boolean) => {
+export const useBuffers = (bufferType: BufferType | null, useRange?: boolean) => {
     const range = useAtomValue(selectedOperationRangeAtom);
     const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
 
-    const response = useQuery<BuffersByOperationData[], AxiosError>({
+    const response = useQuery<BuffersByOperation[], AxiosError>({
         queryKey: ['fetch-all-buffers', bufferType, activeProfilerReport],
         enabled: activeProfilerReport !== null,
         retry: false,
@@ -839,52 +1123,155 @@ export const useBuffers = (bufferType: BufferType, useRange?: boolean) => {
 
     return useMemo(() => {
         if (response.data && range && useRange) {
-            response.data = response.data.filter((operation) => operation.id >= range[0] && operation.id <= range[1]);
+            const filteredData = response.data.filter(
+                (operation) => operation.id >= range[0] && operation.id <= range[1],
+            );
+
+            return {
+                ...response,
+                data: filteredData,
+            };
         }
 
         return response;
     }, [range, response, useRange]);
 };
 
-export const useDeviceLog = (name?: string | null) => {
-    const key = name || null;
+export const useL1PressureByOperation = (): L1PressureResult => {
+    const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
+    const { data: buffersByOperation, isLoading, isError } = useBuffers(BufferType.L1, false);
+    // The markers depend on these two queries; read their load state directly so we don't compute
+    // pressure against the default L1 window before the real markers resolve (which would briefly
+    // show one set of percentages and then flicker into another).
+    const { data: devices } = useDevices();
+    const { data: l1SmallBuffers } = useGetAllBuffers(BufferType.L1_SMALL);
+    const l1Start = useGetL1StartMarker();
+    const l1End = useGetL1SmallMarker();
 
-    return useQuery({
-        queryFn: () => fetchDeviceLogRaw(key),
-        queryKey: ['get-device-log-raw', key],
+    return useMemo(
+        () =>
+            buildL1PressureResult({
+                hasProfilerReport: activeProfilerReport !== null,
+                isError,
+                isLoading,
+                buffersByOperation,
+                devices,
+                l1SmallBuffers,
+                l1Start,
+                l1End,
+            }),
+        [activeProfilerReport, buffersByOperation, devices, l1SmallBuffers, isError, isLoading, l1End, l1Start],
+    );
+};
+
+export const usePerfMeta = (name?: string | null) => {
+    const key = name || null;
+    return useQuery<MetaData, AxiosError>({
+        queryFn: () => fetchDeviceMeta(key),
+        queryKey: getDeviceMetaQueryKey(key),
         staleTime: Infinity,
     });
 };
 
-export const usePerformanceReport = (name: string | null) => {
-    // TODO: Name in this case is the report "name" which is really just the parent folder name, which we're using as the unique key
-    const signpost = useAtomValue(filterBySignpostAtom);
-    const stackByIn0 = useAtomValue(stackByIn0Atom);
+const EMPTY_REPORT_NAMES: string[] = [];
+const EMPTY_DEVICE_METAS: (MetaData | null)[] = [];
 
-    const response = useQuery<PerformanceReportResponse, AxiosError>({
-        queryFn: () =>
-            name !== null ? fetchPerformanceReport(name, stackByIn0, signpost) : Promise.resolve(EMPTY_PERF_RETURN),
-        queryKey: [
-            'get-performance-report',
-            name,
-            `stackByIn0:${stackByIn0 ? 'true' : 'false'}`,
-            `signpost:${signpost ? `${signpost.id}${signpost.op_code}` : null}`,
-        ],
-        enabled: name !== null,
-        retry: false, // TODO: Added to force not retrying on 4xx errors, might need to handle differently
+/** Device meta for each comparison report, keyed in the same order as `reportNames`. */
+export const usePerfMetas = (reportNames: string[] | null | undefined): (MetaData | null)[] => {
+    // Stable empty list when unset so `queries` / `combine` keep referential equality across renders.
+    const names = reportNames ?? EMPTY_REPORT_NAMES;
+    const queries = useMemo(
+        () =>
+            names.map((name) => ({
+                queryKey: getDeviceMetaQueryKey(name),
+                queryFn: () => fetchDeviceMeta(name),
+                staleTime: Infinity,
+            })),
+        [names],
+    );
+
+    return useQueries({
+        queries,
+        combine: (results) => {
+            if (results.length === 0) {
+                return EMPTY_DEVICE_METAS;
+            }
+
+            return results.map((result) => result.data ?? null);
+        },
     });
+};
+
+const useViewPerformanceReportParams = (): PerformanceReportParams => {
+    const [startSignpost, endSignpost] = useAtomValue(filterBySignpostAtom);
+    const hideHostOps = useAtomValue(hideHostOpsAtom);
+    const mergeDevices = useAtomValue(mergeDevicesAtom);
+    const tracingMode = useAtomValue(tracingModeAtom);
+    const groupBy = useAtomValue(stackedGroupByAtom);
 
     return useMemo(
-        () => response,
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-        [response.data, response.error],
+        () => ({
+            startSignpost: startSignpost ?? null,
+            endSignpost: endSignpost ?? null,
+            hideHostOps,
+            mergeDevices,
+            tracingMode,
+            groupBy,
+        }),
+        [startSignpost, endSignpost, hideHostOps, mergeDevices, tracingMode, groupBy],
     );
+};
+
+// Every filter is pinned, so this is a constant rather than a hook. Held at module
+// scope for a stable identity; the query key is hashed structurally, so this is for
+// readers rather than for React Query.
+const LINKED_PERFORMANCE_REPORT_PARAMS: PerformanceReportParams = Object.freeze(getLinkedPerformanceReportParams());
+
+const usePerformanceReportQuery = (name: string | null, params: PerformanceReportParams) => {
+    const location = useAtomValue(performanceReportLocationAtom);
+
+    const response = useQuery<PerformanceReportResponse, AxiosError>({
+        queryFn: () => (name !== null ? fetchPerformanceReport(name, params) : Promise.resolve(EMPTY_PERF_RETURN)),
+        queryKey: getPerformanceReportQueryKey({ name, instanceId: getOrCreateInstanceId(), location, params }),
+        enabled: name !== null,
+        retry: false,
+        staleTime: Infinity,
+    });
+
+    return response;
+};
+
+/**
+ * @description The performance report as the performance tab is currently
+ * displaying it — every view filter applied.
+ */
+export const usePerformanceReport = (name: string | null) => {
+    const params = useViewPerformanceReportParams();
+
+    return usePerformanceReportQuery(name, params);
+};
+
+/**
+ * @description The active performance report in the one shape the memory
+ * report can be matched against: devices merged, host ops hidden, whole run.
+ * Whether two reports come from the same run is a property of the reports, so
+ * it must not move when the user changes how they are viewing the performance
+ * tab (#1812).
+ *
+ * No performance-tab control moves this, tracing mode included — see
+ * `LINKED_PERFORMANCE_REPORT_FILTERS` for why that toggle cannot change the row
+ * order the match runs against once devices are merged.
+ */
+export const useLinkedPerformanceReport = () => {
+    const name = useAtomValue(activePerformanceReportFolderNameAtom);
+
+    return usePerformanceReportQuery(name, LINKED_PERFORMANCE_REPORT_PARAMS);
 };
 
 export const usePerformanceComparisonReport = () => {
     const rawReportNames = useAtomValue(comparisonPerformanceReportListAtom);
-    const stackByIn0 = useAtomValue(stackByIn0Atom);
-    const signpost = useAtomValue(filterBySignpostAtom);
+    const location = useAtomValue(performanceReportLocationAtom);
+    const params = useViewPerformanceReportParams();
 
     const reportNames = useMemo(() => {
         return Array.isArray(rawReportNames) ? [...rawReportNames] : rawReportNames;
@@ -896,61 +1283,79 @@ export const usePerformanceComparisonReport = () => {
                 return [];
             }
 
-            const results = await Promise.all(
-                reportNames.map((name) => fetchPerformanceReport(name, stackByIn0, signpost)),
-            );
+            const results = await Promise.all(reportNames.map((name) => fetchPerformanceReport(name, params)));
 
             return results;
         },
-        queryKey: [
-            'get-performance-comparison-report',
-            reportNames,
-            `stackByIn0:${stackByIn0 ? 'true' : 'false'}`,
-            `signpost:${signpost ? `${signpost.id}${signpost.op_code}` : null}`,
-        ],
+        queryKey: getPerformanceComparisonReportQueryKey({
+            names: reportNames,
+            instanceId: getOrCreateInstanceId(),
+            location,
+            params,
+        }),
         staleTime: Infinity,
         enabled: !!reportNames,
     });
 
-    const filteredData = useMemo(() => {
-        if (response.data) {
-            return response.data.map((perfReport: PerformanceReportResponse) => {
-                perfReport.report = perfReport.report
-                    .slice()
-                    .filter((r) => !r.op_code?.includes('(torch)') && !(r.op_code === ''));
-
-                return perfReport;
-            });
-        }
-
-        return response.data;
-    }, [response.data]);
-
-    return useMemo(() => ({ ...response, data: filteredData }), [response, filteredData]);
+    return response;
 };
 
 export const useInstance = () => {
     const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
     const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
     const activeNpe = useAtomValue(activeNpeOpTraceAtom);
+    const activeMlirJson = useAtomValue(activeMlirJsonAtom);
 
-    return useQuery({
+    return useQuery<Instance | null, AxiosError>({
         queryFn: () => fetchInstance(),
-        queryKey: ['fetch-instance', activeProfilerReport?.path, activePerformanceReport?.path, activeNpe],
-        initialData: null,
+        queryKey: [
+            'fetch-instance',
+            activeProfilerReport?.path,
+            activePerformanceReport?.path,
+            activeNpe,
+            activeMlirJson,
+        ],
     });
 };
-export const useArchitecture = (arch: DeviceArchitecture): ChipDesign => {
-    switch (arch) {
-        case DeviceArchitecture.WORMHOLE:
-            return archWormhole as ChipDesign;
-        case DeviceArchitecture.BLACKHOLE:
-            return archBlackhole as ChipDesign;
-        default:
+
+export interface ResolvedArchitecture {
+    design: ChipDesign | null;
+    /** Populated only when a report supplied a descriptor that failed validation. */
+    overrideProblems: string[] | null;
+}
+
+/**
+ * Resolve the chip design for `arch`, preferring a report-supplied descriptor.
+ *
+ * A valid override wins outright, so an arch with no baked entry renders its real
+ * topology instead of toasting "Unsupported". A malformed one does *not* silently
+ * fall back: it is reported, because a descriptor that was offered and rejected is
+ * a different problem from one that was never there. See #1776.
+ */
+export const useArchitecture = (arch: DeviceArchitecture, socDescriptor?: unknown): ResolvedArchitecture => {
+    const override = useMemo(() => parseSocDescriptorOverride(socDescriptor, arch), [socDescriptor, arch]);
+    const baked = getChipDesign(arch);
+    const design = override.status === 'valid' ? override.design : baked;
+    const overrideProblems = override.status === 'invalid' ? override.problems : null;
+
+    // Reported from an effect rather than the hook body, which runs on every render:
+    // `useNodeType` is a consumer and NPE playback re-renders per interval tick, so an
+    // inline warn emits a line per frame for the length of the run. #1772
+    useEffect(() => {
+        if (overrideProblems) {
+            // eslint-disable-next-line no-console
+            console.error(`Unusable SoC descriptor in report: ${overrideProblems.join('; ')}`);
+            return;
+        }
+        if (design === null) {
+            // Still worth surfacing: unlike Cluster, these callers have no degraded mode and
+            // silently lose every core-type overlay when the arch doesn't resolve.
             // eslint-disable-next-line no-console
             console.error(`Unsupported arch: ${arch}`);
-            return {} as ChipDesign;
-    }
+        }
+    }, [arch, design, overrideProblems]);
+
+    return { design, overrideProblems };
 };
 
 export const useGetTensorSizesById = (tensorIdList: number[]): { id: number; size: number }[] => {
@@ -969,10 +1374,10 @@ export const useGetTensorSizesById = (tensorIdList: number[]): { id: number; siz
         })
         .filter((item) => item !== null) as { id: number; size: number }[];
 };
-export const useNodeType = (arch: DeviceArchitecture) => {
-    const architecture = useArchitecture(arch);
+export const useNodeType = (arch: DeviceArchitecture, socDescriptor?: unknown) => {
+    const { design: architecture, overrideProblems } = useArchitecture(arch, socDescriptor);
     const cores = useMemo(() => {
-        return architecture.functional_workers?.map((loc) => {
+        return architecture?.functional_workers?.map((loc) => {
             return loc
                 .split('-')
                 .reverse()
@@ -981,7 +1386,7 @@ export const useNodeType = (arch: DeviceArchitecture) => {
     }, [architecture]);
 
     const dram = useMemo(() => {
-        return architecture.dram?.flat().map((loc) => {
+        return architecture?.dram?.flat().map((loc) => {
             return loc
                 .split('-')
                 .reverse()
@@ -990,7 +1395,7 @@ export const useNodeType = (arch: DeviceArchitecture) => {
     }, [architecture]);
 
     const eth = useMemo(() => {
-        return architecture.eth?.flat().map((loc) => {
+        return architecture?.eth?.flat().map((loc) => {
             return loc
                 .split('-')
                 .reverse()
@@ -999,7 +1404,7 @@ export const useNodeType = (arch: DeviceArchitecture) => {
     }, [architecture]);
 
     const pcie = useMemo(() => {
-        return architecture.pcie?.map((loc) => {
+        return architecture?.pcie?.map((loc) => {
             return loc
                 .split('-')
                 .reverse()
@@ -1007,25 +1412,25 @@ export const useNodeType = (arch: DeviceArchitecture) => {
         });
     }, [architecture]);
 
-    return { architecture, cores, dram, eth, pcie };
+    return { architecture, cores, dram, eth, pcie, overrideProblems };
 };
 
 export const PROFILER_FOLDER_QUERY_KEY = 'fetch-profiler-folder-list';
 
 const fetchReportFolderList = async () => {
-    const { data } = await axiosInstance.get('/api/profiler');
+    const { data } = await axiosInstance.get(Endpoints.PROFILER);
 
     return data.map(normaliseReportFolder);
 };
 
 export const deleteProfiler = async (report: string) => {
-    const { data } = await axiosInstance.delete(`/api/profiler/${report}`);
+    const { data } = await axiosInstance.delete(`${Endpoints.PROFILER}/${report}`);
 
     return data;
 };
 
 export const useReportFolderList = () => {
-    return useQuery({
+    return useQuery<ReportFolder[] | null, AxiosError>({
         queryFn: () => fetchReportFolderList(),
         queryKey: [PROFILER_FOLDER_QUERY_KEY],
         initialData: null,
@@ -1035,19 +1440,19 @@ export const useReportFolderList = () => {
 export const PERFORMANCE_FOLDER_QUERY_KEY = 'fetch-performance-folder-list';
 
 const fetchPerfFolderList = async () => {
-    const { data } = await axiosInstance.get('/api/performance');
+    const { data } = await axiosInstance.get(Endpoints.PERFORMANCE);
 
     return data;
 };
 
 export const deletePerformance = async (report: string) => {
-    const { data } = await axiosInstance.delete(`/api/performance/${report}`);
+    const { data } = await axiosInstance.delete(`${Endpoints.PERFORMANCE}/${report}`);
 
     return data;
 };
 
 export const usePerfFolderList = () => {
-    return useQuery({
+    return useQuery<ReportFolder[] | null, AxiosError>({
         queryFn: () => fetchPerfFolderList(),
         queryKey: [PERFORMANCE_FOLDER_QUERY_KEY],
         initialData: null,
@@ -1055,13 +1460,13 @@ export const usePerfFolderList = () => {
 };
 
 export const useCreateTensorsByOperationByIdList = (bufferType: BufferType = BufferType.L1) => {
-    const { data: buffersByOperation } = useBuffers(bufferType);
+    const { data: buffersByOperation } = useBuffers(bufferType, true);
     const { data: operations } = useOperationsList();
 
-    const tensorsByOperationByAddress: TensorsByOperationByAddress = new Map();
     const uniqueBuffersByOperationList = useMemo(() => {
         return buffersByOperation?.map((operation) => {
             const uniqueBuffers: Map<number, Buffer> = new Map<number, Buffer>();
+
             operation.buffers.forEach((buffer) => {
                 const { address, size } = buffer;
                 if (address) {
@@ -1071,6 +1476,7 @@ export const useCreateTensorsByOperationByIdList = (bufferType: BufferType = Buf
                     }
                 }
             });
+
             return {
                 ...operation,
                 buffers: Array.from(uniqueBuffers.values()),
@@ -1078,115 +1484,115 @@ export const useCreateTensorsByOperationByIdList = (bufferType: BufferType = Buf
         });
     }, [buffersByOperation]);
 
-    if (!operations || !buffersByOperation) {
-        return tensorsByOperationByAddress;
-    }
+    const tensorsByOperationByAddress = useMemo(() => {
+        const result: TensorsByOperationByAddress = new Map();
 
-    const buffersByOpId = new Map<number, Buffer[]>();
-    uniqueBuffersByOperationList?.forEach((op) => {
-        buffersByOpId.set(op.id, op.buffers);
-    });
+        if (!operations || !buffersByOperation) {
+            return result;
+        }
 
-    const latestTensorByAddress = new Map<number, Tensor>();
+        const buffersByOpId = new Map<number, Buffer[]>();
+        uniqueBuffersByOperationList?.forEach((op) => {
+            buffersByOpId.set(op.id, op.buffers);
+        });
 
-    for (const op of operations) {
-        if (op.inputs) {
-            for (const t of op.inputs) {
-                if (t && t.address !== null && t.address !== undefined) {
-                    latestTensorByAddress.set(t.address, t);
+        const latestTensorByAddress = new Map<number, Tensor>();
+
+        for (const op of operations) {
+            if (op.inputs) {
+                for (const t of op.inputs) {
+                    if (t && t.address !== null && t.address !== undefined) {
+                        latestTensorByAddress.set(t.address, t);
+                    }
                 }
             }
-        }
-        if (op.outputs) {
-            for (const t of op.outputs) {
-                if (t && t.address !== null && t.address !== undefined) {
-                    latestTensorByAddress.set(t.address, t);
+            if (op.outputs) {
+                for (const t of op.outputs) {
+                    if (t && t.address !== null && t.address !== undefined) {
+                        latestTensorByAddress.set(t.address, t);
+                    }
                 }
             }
-        }
 
-        const buffers = buffersByOpId.get(op.id);
-        if (!buffers?.length) {
-            tensorsByOperationByAddress.set(op.id, new Map());
-            // eslint-disable-next-line no-continue
-            continue;
-        }
-
-        const tensorsByBufferAddress = new Map<number, Tensor>();
-
-        for (const buffer of buffers) {
-            const addr = buffer.address;
-            if (addr === null || addr === undefined) {
+            const buffers = buffersByOpId.get(op.id);
+            if (!buffers?.length) {
+                result.set(op.id, new Map());
                 // eslint-disable-next-line no-continue
                 continue;
             }
 
-            const tensor = latestTensorByAddress.get(addr);
-            if (tensor) {
-                tensorsByBufferAddress.set(addr, {
-                    ...tensor,
-                    buffer_type: buffer.buffer_type,
-                });
+            const tensorsByBufferAddress = new Map<number, Tensor>();
+
+            for (const buffer of buffers) {
+                const addr = buffer.address;
+                if (addr === null || addr === undefined) {
+                    // eslint-disable-next-line no-continue
+                    continue;
+                }
+
+                const tensor = latestTensorByAddress.get(addr);
+                if (tensor) {
+                    tensorsByBufferAddress.set(addr, {
+                        ...tensor,
+                        buffer_type: buffer.buffer_type,
+                    });
+                }
             }
+
+            result.set(op.id, tensorsByBufferAddress);
         }
 
-        tensorsByOperationByAddress.set(op.id, tensorsByBufferAddress);
-    }
+        return result;
+    }, [buffersByOperation, operations, uniqueBuffersByOperationList]);
 
-    return tensorsByOperationByAddress;
+    return {
+        tensorListByOperation: tensorsByOperationByAddress,
+        uniqueBuffersByOperationList,
+    };
 };
 
 export const useGetTensorDeallocationReportByOperation = () => {
-    const tensorListByOperation = useCreateTensorsByOperationByIdList();
+    const { tensorListByOperation } = useCreateTensorsByOperationByIdList();
     const { data: operations } = useOperationsList();
 
-    const operationsById = useMemo(() => {
-        const map = new Map<number, Operation>();
+    const operationNamesById = useMemo(() => {
+        const namesById = new Map<number, string>();
         operations?.forEach((operation) => {
-            map.set(operation.id, operation);
+            namesById.set(operation.id, operation.name);
         });
-        return map;
+        return namesById;
     }, [operations]);
 
     return useMemo(() => {
-        const getLastValidConsumer = (consumers: number[]) => {
-            const list = [...consumers];
-            while (list && list.length > 0) {
-                const lastConsumerOperationId = list.sort().pop() || -1;
-                const lastConsumerName = operationsById.get(lastConsumerOperationId)?.name || '';
-
-                if (lastConsumerOperationId > -1 && !lastConsumerName.includes('ttnn.deallocate')) {
-                    return { lastConsumerOperationId, lastConsumerName };
-                }
-            }
-            return { lastConsumerName: '', lastConsumerOperationId: -1 };
-        };
-        const lateDeallocationsByOperation = new Map<number, TensorDeallocationReport[]>();
-        const nonDeallocatedTensorListById = new Map<number, TensorDeallocationReport>();
-        tensorListByOperation.forEach((tensorsMap, operationId) => {
-            tensorsMap.forEach((tensor, address) => {
-                if (tensor.id && tensor.consumers && tensor.consumers.length > 0) {
-                    const { lastConsumerOperationId, lastConsumerName } = getLastValidConsumer(tensor.consumers);
-                    if (lastConsumerOperationId !== null && lastConsumerOperationId < operationId) {
-                        if (!lateDeallocationsByOperation.has(operationId)) {
-                            lateDeallocationsByOperation.set(operationId, []);
-                        }
-                        const list: TensorDeallocationReport[] = lateDeallocationsByOperation.get(operationId)!;
-                        const tensorInfo: TensorDeallocationReport = {
-                            id: tensor.id,
-                            address,
-                            consumerName: lastConsumerName,
-                            lastConsumerOperationId,
-                            lastOperationId: operationId,
-                        };
-                        list.push(tensorInfo);
-                        lateDeallocationsByOperation.set(operationId, list);
-                        nonDeallocatedTensorListById.set(tensor.id, tensorInfo);
-                    }
-                }
-            });
+        const { reportsByOpId, reportsByTensorId } = buildLateDeallocationReports({
+            tensorsByOperation: tensorListByOperation,
+            operationNamesById,
         });
 
-        return { lateDeallocationsByOperation, nonDeallocatedTensorList: nonDeallocatedTensorListById };
-    }, [operationsById, tensorListByOperation]);
+        return { lateDeallocationsByOperation: reportsByOpId, nonDeallocatedTensorList: reportsByTensorId };
+    }, [operationNamesById, tensorListByOperation]);
+};
+
+const fetchLatestAppVersion = async (): Promise<string | null> => {
+    try {
+        const response = await axiosInstance.get<string>(Endpoints.LATEST_VERSION);
+
+        return response.data;
+    } catch (error) {
+        // eslint-disable-next-line no-console
+        console.error('Failed to fetch latest app version:', error);
+        throw error;
+    }
+};
+
+export const useGetLatestAppVersion = () => {
+    const isServerMode = !!getServerConfig().SERVER_MODE;
+
+    return useQuery<string | null, AxiosError>({
+        queryFn: () => fetchLatestAppVersion(),
+        queryKey: ['get-latest-app-version'],
+        retry: false,
+        staleTime: Infinity,
+        enabled: !isServerMode,
+    });
 };

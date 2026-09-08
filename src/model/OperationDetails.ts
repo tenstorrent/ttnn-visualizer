@@ -3,12 +3,12 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { PlotData } from 'plotly.js';
-import { formatSize, getCoresInRange, toHex } from '../functions/math';
+import { formatMemorySize, getCoresInRange, getMemoryAddress } from '../functions/math';
 import {
     BufferData,
     Chunk,
     DeviceOperation,
-    DeviceOperationTypes,
+    DeviceOperationNode,
     FragmentationEntry,
     Node,
     NodeType,
@@ -16,11 +16,21 @@ import {
     OperationDetailsData,
     Tensor,
 } from './APIData';
-import { BufferType } from './BufferType';
+import { BufferType, StringBufferType } from './BufferType';
 import { DRAM_MEMORY_SIZE } from '../definitions/DRAMMemorySize';
-import { CONDENSED_PLOT_CHUNK_COLOR, PlotDataCustom, PlotDataOverrides } from '../definitions/PlotConfigurations';
+import { CONDENSED_PLOT_CHUNK_COLOR, PlotDataOverrides } from '../definitions/PlotConfigurations';
+import { PlotDataCustom } from './PlotData';
 import getChartData from '../functions/getChartData';
+import { calculateCondensed } from '../functions/calculateCondensed';
 import { L1_DEFAULT_MEMORY_SIZE, L1_NUM_CORES } from '../definitions/L1MemorySize';
+import { TensorDeallocationReport } from './BufferSummary';
+import { normaliseDeviceId } from '../functions/collapseCbDeviceRows';
+
+export interface OperationDetailsOptions {
+    renderPattern: boolean;
+    lateDeallocation: boolean;
+    showHex: boolean;
+}
 
 export class OperationDetails implements Partial<OperationDetailsData> {
     id: number;
@@ -49,6 +59,8 @@ export class OperationDetails implements Partial<OperationDetailsData> {
 
     private operations: OperationDescription[] = [];
 
+    private deallocationReport: TensorDeallocationReport[] = [];
+
     public deviceOperations: DeviceOperation[] = [];
 
     private memoryConfig: {
@@ -56,16 +68,82 @@ export class OperationDetails implements Partial<OperationDetailsData> {
         l1end: number;
     };
 
-    private options: { renderPattern: boolean } = { renderPattern: false };
+    // TEMP (#1291): `${device_id}:${address}` -> real L1_Small Tensor sourced from
+    // /api/tensors?buffer_type=3. Used by getTensorListByAddress() until tt-metal
+    // records producers/consumers for L1_Small and the standard backward op-walk
+    // can locate them via op.inputs/op.outputs.
+    // Composite key avoids cross-device collisions: the same L1_Small address can
+    // exist on multiple devices in multi-chip reports, and would otherwise overwrite
+    // each other in the map.
+    private l1SmallTensorsByAddress: Map<string, Tensor> = new Map();
+
+    private options: OperationDetailsOptions = {
+        renderPattern: false,
+        lateDeallocation: false,
+        showHex: false,
+    };
+
+    protected static mergeDevices(operations: Node[]) {
+        const multiDeviceOps: Node[] = [];
+        const operationsByDevice: Map<string | number | undefined, Node[]> = new Map();
+        let currentDeviceId: string | number | undefined;
+        operations.forEach((op) => {
+            if (op.node_type === NodeType.function_start) {
+                const deviceId = Number(op.params.device_id);
+                currentDeviceId = deviceId;
+                if (op.params.device_id !== undefined) {
+                    if (!operationsByDevice.has(deviceId)) {
+                        operationsByDevice.set(deviceId, []);
+                    }
+                    operationsByDevice.get(deviceId)?.push(op);
+                } else {
+                    multiDeviceOps.push(op);
+                }
+            } else if (currentDeviceId !== undefined) {
+                if (op.params.device_id === undefined) {
+                    multiDeviceOps.push(op);
+                } else {
+                    operationsByDevice.get(currentDeviceId)?.push(op);
+                }
+            } else if (op.params.device_id !== undefined) {
+                const deviceId = Number(op.params.device_id);
+
+                if (!operationsByDevice.has(deviceId)) {
+                    operationsByDevice.set(deviceId, []);
+                }
+                // PLO
+                // galaxy
+                // http://localhost:5173/operations/17
+                // operationsByDevice.get(deviceId)?.push(op);
+            } else {
+                multiDeviceOps.push(op);
+            }
+        });
+
+        const deviceIdList = [...operationsByDevice.keys()]
+            .filter((el) => el !== undefined && el !== null)
+            .map((el) => Number(el));
+
+        const firstDevice = Math.min(...deviceIdList);
+
+        const result: Node[] = [...multiDeviceOps, ...(operationsByDevice.get(firstDevice) || [])];
+        result.sort((a, b) => a.id - b.id);
+        return result;
+    }
 
     constructor(
         data: OperationDetailsData,
         operations: OperationDescription[],
+        deallocationReport: TensorDeallocationReport[],
         memoryConfig: {
             l1start: number;
             l1end: number;
         },
-        options?: { renderPattern: boolean },
+        options?: OperationDetailsOptions,
+        // TEMP (#1291): pre-fetched L1_Small tensor list, supplied so the address->tensor
+        // map can be populated with real tensor ids/shape/dtype while tt-metal does not yet
+        // emit input_tensors/output_tensors rows for L1_Small allocations.
+        l1SmallTensors: Tensor[] = [],
     ) {
         this.id = data.id;
         this.inputs = data.inputs;
@@ -77,11 +155,20 @@ export class OperationDetails implements Partial<OperationDetailsData> {
         this.stack_trace = data.stack_trace;
         this.operations = operations;
         this.raw_device_operations = data.device_operations;
-        // DEBUG
-        // this.device_operations = this.preprocessConnections(data.device_operations); // // this.mergeDevices(this.preprocessConnections(data.device_operations));
-        this.device_operations = this.mergeDevices(this.preprocessConnections(data.device_operations));
-        this.options = options || { renderPattern: false };
+        this.deallocationReport = deallocationReport;
+        // TODO: something in merge device ids is breaking the render. since we are not using device id atm its removed from the stack temporarily
+        // this.device_operations = OperationDetails.mergeDevices(this.preprocessConnections(data.device_operations));
+        this.device_operations = this.preprocessConnections(data.device_operations);
+        this.options = options || { renderPattern: false, lateDeallocation: false, showHex: false };
         this.memoryConfig = memoryConfig;
+        this.l1SmallTensorsByAddress = new Map(
+            l1SmallTensors
+                .filter(
+                    (t): t is Tensor & { address: number; device_id: number } =>
+                        t.address !== null && t.device_id !== null,
+                )
+                .map((t) => [`${t.device_id}:${t.address}`, t]),
+        );
 
         this.inputs.forEach((tensor) => {
             tensor.producerNames = tensor.producers.map((op) => {
@@ -136,7 +223,7 @@ export class OperationDetails implements Partial<OperationDetailsData> {
             Array.from(this.tensorListByAddress.values()).map((tensor) => [tensor.id, tensor]),
         );
 
-        const deviceOpList: Node[] = [];
+        const deviceOpList: DeviceOperationNode[] = [];
         if (this.device_operations !== null) {
             this.device_operations = this.sortDeviceOperationsByBufferDeallocation(this.device_operations);
 
@@ -166,12 +253,21 @@ export class OperationDetails implements Partial<OperationDetailsData> {
                             .find((op) => op.name === deviceOpNode.params.name);
 
                         if (deviceOp) {
+                            // Accept string/number for forward-compat — keep in sync with processMemoryAllocations. #1651 / #1652
+                            const rawGlobalFlag = node.params.globally_allocated as unknown;
+                            const globallyAllocated = rawGlobalFlag === '1' || rawGlobalFlag === 1;
                             deviceOp.cbList.push({
                                 address: parseInt(node.params.address, 10),
                                 size: parseInt(node.params.size, 10),
                                 core_range_set: node.params.core_range_set,
                                 num_cores: getCoresInRange(node.params.core_range_set),
                                 colorVariance: deviceOp.id,
+                                globallyAllocated,
+                                // Normalised here rather than read as a number: absent in
+                                // older captures and emitted as a string by at least one
+                                // other. Without it every device's copy of a CB became its
+                                // own legend row. #1844 / #1879
+                                device_id: normaliseDeviceId(node.params.device_id),
                             });
                         }
                     }
@@ -189,7 +285,7 @@ export class OperationDetails implements Partial<OperationDetailsData> {
                             .find((op) => op.name === deviceOpNode.params.name);
 
                         if (deviceOp) {
-                            if (node.params.type === DeviceOperationTypes.L1) {
+                            if (node.params.type === StringBufferType.L1) {
                                 const cores = parseInt(node.params.num_cores, 10) || L1_NUM_CORES;
                                 deviceOp.bufferList.push({
                                     address: parseInt(node.params.address, 10),
@@ -302,15 +398,22 @@ export class OperationDetails implements Partial<OperationDetailsData> {
             this.buffers
                 ?.filter((buffer: BufferData) => buffer.buffer_type === bufferType)
                 .map((buffer: BufferData) => {
+                    const lateDeallocation = this.deallocationReport.some(
+                        (report) => report.address === buffer.address,
+                    );
+
                     return {
                         address: buffer.address,
                         size: buffer.max_size_per_bank,
                         tensorId: this.getTensorForAddress(buffer.address)?.id,
+                        lateDeallocation,
                     };
                 })
                 .sort((a, b) => a.address - b.address) || [];
 
         const cbMemory = bufferType === BufferType.L1 ? this.deviceOperations.flatMap((op) => op.cbList) : [];
+        // Aliased CBs share bytes with a tensor already in `memory` — exclude them to avoid double-counting. #1652
+        const anonymousCBMemory = cbMemory.filter((cb) => !cb.globallyAllocated);
         const bufferMemory =
             bufferType === BufferType.L1
                 ? this.deviceOperations.flatMap((op) => op.bufferList).filter((op) => op.type === 'L1')
@@ -341,32 +444,42 @@ export class OperationDetails implements Partial<OperationDetailsData> {
             }
         });
 
-        continuousMemory.forEach((chunk, index) => {
-            if (index > 0) {
-                let prevChunkIndex = index - 1;
-                let prevChunk = continuousMemory[prevChunkIndex];
-
-                while (prevChunkIndex >= 0 && prevChunk.address + prevChunk.size > chunk.address) {
-                    prevChunkIndex--;
-                    if (prevChunkIndex >= 0) {
-                        prevChunk = continuousMemory[prevChunkIndex];
+        if (bufferType === BufferType.L1) {
+            continuousMemory.forEach((chunk, index) => {
+                if (index > 0) {
+                    let prevChunkIndex = index - 1;
+                    let prevChunk = continuousMemory[prevChunkIndex];
+                    while (prevChunkIndex >= 0 && prevChunk.address + prevChunk.size > chunk.address) {
+                        prevChunkIndex--;
+                        if (prevChunkIndex >= 0) {
+                            prevChunk = continuousMemory[prevChunkIndex];
+                        }
+                    }
+                    if (prevChunkIndex >= 0 && prevChunk.address + prevChunk.size < chunk.address) {
+                        if (
+                            prevChunk.address + prevChunk.size > this.memoryConfig.l1start &&
+                            prevChunk.address < this.memoryConfig.l1end
+                        ) {
+                            fragmentation.push({
+                                address: prevChunk.address + prevChunk.size,
+                                size: chunk.address - (prevChunk.address + prevChunk.size),
+                                empty: true,
+                            });
+                        } else if (prevChunk.address === 0 && prevChunk.size === 0) {
+                            const address = this.memoryConfig.l1start ?? 0;
+                            const size = chunk.address - address;
+                            if (size > 0) {
+                                fragmentation.push({
+                                    address,
+                                    size,
+                                    empty: true,
+                                });
+                            }
+                        }
                     }
                 }
-                if (prevChunkIndex >= 0 && prevChunk.address + prevChunk.size < chunk.address) {
-                    if (
-                        prevChunk.address + prevChunk.size > this.memoryConfig.l1start &&
-                        prevChunk.address < this.memoryConfig.l1end
-                    ) {
-                        fragmentation.push({
-                            address: prevChunk.address + prevChunk.size,
-                            size: chunk.address - (prevChunk.address + prevChunk.size),
-                            empty: true,
-                        });
-                    }
-                }
-            }
-        });
-
+            });
+        }
         const largestEmpty = fragmentation.length
             ? fragmentation.reduce((prev, current) => {
                   return prev.size > current.size ? prev : current;
@@ -379,15 +492,15 @@ export class OperationDetails implements Partial<OperationDetailsData> {
             }
         });
 
-        const condensed: Chunk = this.calculateCondensed(memory);
-        const cbCondensed: Chunk = this.calculateCondensed(cbMemory);
-        const bufferCondensed: Chunk = this.calculateCondensed(bufferMemory);
+        const condensed: Chunk = calculateCondensed(memory);
+        const cbCondensed: Chunk = calculateCondensed(anonymousCBMemory);
+        const bufferCondensed: Chunk = calculateCondensed(bufferMemory);
 
         const chartData = this.getChartData(memory);
         const cbColor = '#e2defc';
         const cbHoverTemplate = `
 <span style="color:${cbColor};font-size:20px;">&#9632;</span>
-${cbCondensed.address} (${toHex(cbCondensed.address)}) <br>Size: ${formatSize(cbCondensed.size)}
+${getMemoryAddress(cbCondensed.address, this.options.showHex)} <br />${formatMemorySize(cbCondensed.size, 2)}
 <br><br>CBs Summary
 <extra></extra>`;
 
@@ -395,12 +508,18 @@ ${cbCondensed.address} (${toHex(cbCondensed.address)}) <br>Size: ${formatSize(cb
         const cbChartDataByOperation: Map<{ name: string; index: number }, Partial<PlotData>[]> = new Map();
         this.deviceOperations.forEach((op) => {
             if (op.cbList.length !== 0) {
+                // Aliased CBs are emitted as a separate outlined trace so they don't obscure the tensor below. #1652
+                const anonymousCBs = op.cbList.filter((cb) => !cb.globallyAllocated);
+                const aliasedCBs = op.cbList.filter((cb) => cb.globallyAllocated);
+                const filled = this.getChartData(anonymousCBs, { colorVariance: op.id });
+                const outlined =
+                    aliasedCBs.length > 0 ? this.getChartData(aliasedCBs, { colorVariance: op.id, outline: true }) : [];
                 cbChartDataByOperation.set(
                     {
                         name: op.name,
                         index: op.id,
                     },
-                    this.getChartData(op.cbList, { colorVariance: op.id }),
+                    [...filled, ...outlined],
                 );
             }
         });
@@ -408,7 +527,7 @@ ${cbCondensed.address} (${toHex(cbCondensed.address)}) <br>Size: ${formatSize(cb
         const bufferColor = '#fcdefa';
         const bufferHoverTemplate = `
 <span style="color:${bufferColor};font-size:20px;">&#9632;</span>
-${bufferCondensed.address} (${toHex(bufferCondensed.address)}) <br>Size: ${formatSize(bufferCondensed.size)}
+${getMemoryAddress(bufferCondensed.address, this.options.showHex)} <br /> ${formatMemorySize(bufferCondensed.size, 2)}
 <br><br>Buffers Summary
 <extra></extra>`;
         const bufferChartData = this.getChartData([bufferCondensed], {
@@ -479,13 +598,13 @@ ${bufferCondensed.address} (${toHex(bufferCondensed.address)}) <br>Size: ${forma
 
             for (let i = this.operations.indexOf(currentOperation!); i >= 0; i--) {
                 const op = this.operations[i];
-                tensor = op.inputs.find((input) => input.address === bufferAddress);
+                tensor = op.outputs.find((output) => output.address === bufferAddress);
 
                 if (tensor !== undefined) {
                     break;
                 }
 
-                tensor = op.outputs.find((output) => output.address === bufferAddress);
+                tensor = op.inputs.find((input) => input.address === bufferAddress);
 
                 if (tensor !== undefined) {
                     break;
@@ -497,6 +616,21 @@ ${bufferCondensed.address} (${toHex(bufferCondensed.address)}) <br>Size: ${forma
                     ...tensor,
                     buffer_type: bufferType,
                 });
+            } else if (bufferType === BufferType.L1_SMALL) {
+                // TEMP (#1291): L1_Small tensors are not yet reported with
+                // producers/consumers from tt-metal, so they never match the
+                // backward op-walk above. Look them up by address in the
+                // pre-fetched L1_Small tensor list (/api/tensors?buffer_type=3).
+                // Remove this entire branch once tt-metal emits proper
+                // input_tensors/output_tensors rows for L1_Small (see tt-metal
+                // graph_processor.cpp::track_allocate).
+                const l1SmallTensor = this.l1SmallTensorsByAddress.get(`${buffer.device_id}:${bufferAddress}`);
+                if (l1SmallTensor !== undefined) {
+                    tensorsByBufferAddress.set(bufferAddress, {
+                        ...l1SmallTensor,
+                        buffer_type: bufferType,
+                    });
+                }
             }
         }
 
@@ -504,25 +638,10 @@ ${bufferCondensed.address} (${toHex(bufferCondensed.address)}) <br>Size: ${forma
     }
 
     // eslint-disable-next-line class-methods-use-this
-    private calculateCondensed(mem: Chunk[]): Chunk {
-        if (!mem || mem.length === 0) {
-            return {
-                address: 0,
-                size: 0,
-            };
-        }
-        let rangeEnd = 0;
-        mem.forEach((chunk) => {
-            rangeEnd = Math.max(rangeEnd, chunk.address + chunk.size);
-        });
-        return {
-            address: mem[0].address || 0,
-            size: rangeEnd - mem[0].address,
-        };
-    }
-
-    // eslint-disable-next-line class-methods-use-this
     private preprocessConnections(ops: Node[]) {
+        if (!Array.isArray(ops)) {
+            return [];
+        }
         const captureStart = ops.find((op) => op.node_type === NodeType.capture_start);
         const operations: Node[] = ops.map((op) => ({ ...op, inputs: [], outputs: [] }));
         const getConnectedNodes = (node: Node): Node[] => {
@@ -566,7 +685,7 @@ ${bufferCondensed.address} (${toHex(bufferCondensed.address)}) <br>Size: ${forma
                 });
             } else if (op.node_type === NodeType.buffer_allocate) {
                 const connectedNodes = getConnectedNodes(op);
-                connectedNodes.forEach((n) => {
+                connectedNodes.forEach((n: Node) => {
                     if (n.node_type === NodeType.buffer) {
                         const deviceId = (op.params.device_id as number) || 0;
                         const bufferDeviceId = (n.params.device_id as number) || 0;
@@ -601,64 +720,15 @@ ${bufferCondensed.address} (${toHex(bufferCondensed.address)}) <br>Size: ${forma
                     if (n.node_type === NodeType.tensor) {
                         if (n.params.device_id !== undefined) {
                             // KEEPING in case device id arrays confirmed
-                            // op.params.derived_device_id = [
-                            //     ...new Set(op.params.derived_device_id || [n.params.device_id]),
+                            // op.params.derivedDeviceId = [
+                            //     ...new Set(op.params.derivedDeviceId || [n.params.device_id]),
                             // ];
-                            op.params.device_id = n.params.device_id;
+                            // op.params.device_id = n.params.device_id;
                         }
                     }
                 });
             });
         return operations;
-    }
-
-    // eslint-disable-next-line class-methods-use-this
-    private mergeDevices(operations: Node[]) {
-        const multiDeviceOps: Node[] = [];
-        const operationsByDevice: Map<string | number | undefined, Node[]> = new Map();
-        let currentDeviceId: string | number | undefined;
-        operations.forEach((op) => {
-            if (op.node_type === NodeType.function_start) {
-                const deviceId = Number(op.params.device_id);
-                currentDeviceId = deviceId;
-                if (op.params.device_id !== undefined) {
-                    if (!operationsByDevice.has(deviceId)) {
-                        operationsByDevice.set(deviceId, []);
-                    }
-                    operationsByDevice.get(deviceId)?.push(op);
-                } else {
-                    multiDeviceOps.push(op);
-                }
-            } else if (currentDeviceId !== undefined) {
-                if (op.params.device_id === undefined) {
-                    multiDeviceOps.push(op);
-                } else {
-                    operationsByDevice.get(currentDeviceId)?.push(op);
-                }
-            } else if (currentDeviceId === undefined && op.params.device_id !== undefined) {
-                const deviceId = Number(op.params.device_id);
-
-                if (!operationsByDevice.has(deviceId)) {
-                    operationsByDevice.set(deviceId, []);
-                }
-                // PLO
-                // galaxy
-                // http://localhost:5173/operations/17
-                // operationsByDevice.get(deviceId)?.push(op);
-            } else {
-                multiDeviceOps.push(op);
-            }
-        });
-
-        const deviceIdList = [...operationsByDevice.keys()]
-            .filter((el) => el !== undefined && el !== null)
-            .map((el) => Number(el));
-
-        const firstDevice = Math.min(...deviceIdList);
-
-        const result: Node[] = [...multiDeviceOps, ...(operationsByDevice.get(firstDevice) || [])];
-        result.sort((a, b) => a.id - b.id);
-        return result;
     }
 
     // eslint-disable-next-line class-methods-use-this

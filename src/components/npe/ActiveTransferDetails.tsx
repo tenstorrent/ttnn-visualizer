@@ -2,14 +2,14 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { useAtomValue } from 'jotai';
 import { Button, ButtonVariant, Icon, Switch, Tag } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import classNames from 'classnames';
-import { LinkUtilization, NPE_LINK, NoCID, NoCTransfer, NoCType } from '../../model/NPEModel';
+import { LinkUtilization, NPE_LINK, NoCID, NoCTransfer, NoCType, SelectedNode } from '../../model/NPEModel';
 import { calculateLinkCongestionColor, getRouteColor } from './drawingApi';
-import { formatPercentage, formatUnit } from '../../functions/math';
+import { formatMemorySize, formatPercentage } from '../../functions/math';
 import 'styles/components/ActiveTransferDetails.scss';
 import { altCongestionColorsAtom } from '../../store/app';
 
@@ -22,11 +22,12 @@ const ActiveTransferDetails = ({
     congestionData,
     highlightedRoute,
     setHighlightedRoute,
+    isOpen,
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     nocType, // this may or may not be used in the future
 }: {
     groupedTransfersByNoCID: Record<NoCID, NoCTransfer[]>;
-    selectedNode: { index: number; coords: number[] } | null;
+    selectedNode: SelectedNode | null;
     showActiveTransfers: (route: LinkUtilization | null, index?: number) => void;
     highlightedTransfer: NoCTransfer | null;
     setHighlightedTransfer: (transfer: NoCTransfer | null) => void;
@@ -34,14 +35,16 @@ const ActiveTransferDetails = ({
     highlightedRoute: number | null;
     setHighlightedRoute: (route: number | null) => void;
     nocType: NoCType | null;
+    isOpen: boolean;
 }) => {
     const altCongestionColors = useAtomValue(altCongestionColorsAtom);
     const hasData = Object.keys(groupedTransfersByNoCID).length !== 0;
     const [showRoutes, setShowRoutes] = useState(false);
+
     return (
         <aside
             className={classNames('side-data', {
-                'has-data': hasData,
+                'is-open': isOpen,
             })}
         >
             {hasData && (
@@ -129,7 +132,7 @@ const ActiveTransferDetails = ({
                                                             : `${transfer.dst[0].join('-')} - ${transfer.dst[transfer.dst.length - 1].join('-')}`}
                                                     </span>
                                                 </div>
-                                                <div>{formatUnit(transfer.total_bytes, 'byte')}</div>
+                                                <div>{formatMemorySize(transfer.total_bytes, 2)}</div>
                                                 <div>{transfer.noc_event_type}</div>
                                                 {transfer.route[0].injection_rate.toFixed(2)} b/cycle
                                                 <div className='transfer-properties'>
@@ -193,7 +196,7 @@ interface ZoneDetailsProps {
     zones: string;
 }
 
-const ZoneDetails: React.FC<ZoneDetailsProps> = ({ zones }) => {
+const ZoneDetails = ({ zones }: ZoneDetailsProps) => {
     const render = zones.split('/').map((zone: string, index: number) => (
         <Tag
             style={{ marginLeft: `${15 * index}px` }}

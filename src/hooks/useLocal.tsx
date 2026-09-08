@@ -2,16 +2,12 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { getDefaultStore } from 'jotai';
 import { AxiosProgressEvent } from 'axios';
 import axiosInstance from '../libs/axiosInstance';
-import { fileTransferProgressAtom } from '../store/app';
+import { FileTransferSource } from '../definitions/FileTransferSource';
+import { clearFileTransferProgressForSource, setFileTransferProgressForSource } from '../store/app';
 import { FileStatus } from '../model/APIData';
-
-export interface UploadProgress {
-    progress?: number;
-    estimated?: number;
-}
+import Endpoints from '../definitions/Endpoints';
 
 type FileWithRelativePath = File & { webkitRelativePath?: string };
 
@@ -58,9 +54,9 @@ const useLocalConnection = () => {
         return dataTransfer.files;
     }
 
-    const checkRequiredProfilerFiles = (files: FileList): boolean => {
-        // Required profiler files, including a pattern for `ops_perf_results`
-        const requiredFiles = ['profile_log_device.csv', 'tracy_profile_log_host.tracy'];
+    const checkRequiredPerformanceFiles = (files: FileList): boolean => {
+        // Tracy is optional — some TT-Metal runs omit tracy_profile_log_host.tracy.
+        const requiredFiles = ['profile_log_device.csv'];
         const opsPerfPrefix = 'ops_perf_results';
 
         const fileSet = new Set<string>();
@@ -82,7 +78,7 @@ const useLocalConnection = () => {
     };
 
     const checkRequiredReportFiles = (files: FileList): boolean => {
-        const requiredFiles = ['db.sqlite', 'config.json'];
+        const requiredFiles = ['db.sqlite'];
         const fileSet = new Set<string>();
 
         Array.from(files).forEach((file) => {
@@ -95,8 +91,27 @@ const useLocalConnection = () => {
         return requiredFiles.every((file) => fileSet.has(file));
     };
 
+    const handleUploadProgress = (event: AxiosProgressEvent, numberOfFiles: number) => {
+        if (!event || event.total === null || event.total === undefined) {
+            return;
+        }
+        const percentOfCurrent = Math.round((event.loaded * 100) / event.total);
+        setFileTransferProgressForSource(FileTransferSource.LOCAL_UPLOAD, {
+            percentOfCurrent,
+            currentFileName: '',
+            finishedFiles: 0,
+            numberOfFiles,
+            status: FileStatus.UPLOADING,
+            bytesTransferred: event.loaded,
+            bytesTotal: event.total,
+        });
+    };
+
+    const resetTransferProgress = () => {
+        clearFileTransferProgressForSource(FileTransferSource.LOCAL_UPLOAD);
+    };
+
     const uploadLocalFolder = async (files: FileList) => {
-        const store = getDefaultStore();
         const formData = new FormData();
 
         Array.from(files).forEach((f) => {
@@ -108,40 +123,20 @@ const useLocalConnection = () => {
             formData.append('folderName', files[0].webkitRelativePath.split('/')[0]);
         }
 
-        return axiosInstance
-            .post('/api/local/upload/profiler', formData, {
+        try {
+            return await axiosInstance.post(`${Endpoints.LOCAL}/upload/profiler`, formData, {
                 headers: {
                     'Content-Type': 'multipart/form-data',
                 },
-                onUploadProgress: (event: AxiosProgressEvent) => {
-                    if (event && event.total !== null && event.total !== undefined) {
-                        const progress = Math.round((event.loaded * 100) / event.total);
-                        store.set(fileTransferProgressAtom, {
-                            percentOfCurrent: progress,
-                            currentFileName: '', // No filename for batch uploads; customize if needed
-                            finishedFiles: 0, // Update dynamically for partial uploads if necessary
-                            numberOfFiles: files.length,
-                            status: FileStatus.UPLOADING,
-                        });
-                    }
-                },
-            })
-
-            .catch((error) => error)
-            .finally(() => {
-                store.set(fileTransferProgressAtom, {
-                    percentOfCurrent: 0,
-                    currentFileName: '',
-                    finishedFiles: 0,
-                    numberOfFiles: files.length,
-                    status: FileStatus.INACTIVE,
-                });
+                onUploadProgress: (event) => handleUploadProgress(event, files.length),
             });
+        } finally {
+            resetTransferProgress();
+        }
     };
 
     const uploadLocalPerformanceFolder = async (files: FileList) => {
         const formData = new FormData();
-        const store = getDefaultStore();
 
         Array.from(files).forEach((f) => {
             formData.append('files', f);
@@ -152,80 +147,43 @@ const useLocalConnection = () => {
             formData.append('folderName', files[0].webkitRelativePath.split('/')[0]);
         }
 
-        return axiosInstance
-            .post('/api/local/upload/performance', formData, {
+        try {
+            return await axiosInstance.post(`${Endpoints.LOCAL}/upload/performance`, formData, {
                 headers: {
                     'Content-Type': 'multipart/form-data',
                 },
-
-                onUploadProgress: (event: AxiosProgressEvent) => {
-                    if (event && event.total !== null && event.total !== undefined) {
-                        const progress = Math.round((event.loaded * 100) / event.total);
-                        store.set(fileTransferProgressAtom, {
-                            percentOfCurrent: progress,
-                            currentFileName: '',
-                            finishedFiles: 0,
-                            numberOfFiles: files.length,
-                            status: FileStatus.UPLOADING,
-                        });
-                    }
-                },
-            })
-            .catch((error) => error)
-            .finally(() => {
-                store.set(fileTransferProgressAtom, {
-                    percentOfCurrent: 0,
-                    currentFileName: '',
-                    finishedFiles: 0,
-                    numberOfFiles: files.length,
-                    status: FileStatus.INACTIVE,
-                });
+                onUploadProgress: (event) => handleUploadProgress(event, files.length),
             });
+        } finally {
+            resetTransferProgress();
+        }
     };
 
-    const uploadNpeFile = async (files: FileList) => {
-        const store = getDefaultStore();
+    const uploadFileList = async (files: FileList, uploadPath: string) => {
         const formData = new FormData();
 
         Array.from(files).forEach((f) => {
             formData.append('files', f);
         });
 
-        return axiosInstance
-            .post('/api/local/upload/npe', formData, {
+        try {
+            return await axiosInstance.post(`${Endpoints.LOCAL}${uploadPath}`, formData, {
                 headers: {
                     'Content-Type': 'multipart/form-data',
                 },
-                onUploadProgress: (event: AxiosProgressEvent) => {
-                    if (event && event.total !== null && event.total !== undefined) {
-                        const progress = Math.round((event.loaded * 100) / event.total);
-                        store.set(fileTransferProgressAtom, {
-                            percentOfCurrent: progress,
-                            currentFileName: '', // No filename for batch uploads; customize if needed
-                            finishedFiles: 0, // Update dynamically for partial uploads if necessary
-                            numberOfFiles: files.length,
-                            status: FileStatus.UPLOADING,
-                        });
-                    }
-                },
-            })
-
-            .catch((error) => error)
-            .finally(() => {
-                store.set(fileTransferProgressAtom, {
-                    percentOfCurrent: 0,
-                    currentFileName: '',
-                    finishedFiles: 0,
-                    numberOfFiles: files.length,
-                    status: FileStatus.INACTIVE,
-                });
+                onUploadProgress: (event) => handleUploadProgress(event, files.length),
             });
+        } finally {
+            resetTransferProgress();
+        }
     };
+
+    const uploadNpeFile = (files: FileList) => uploadFileList(files, '/upload/npe');
 
     return {
         getUploadedFolderName,
         checkRequiredReportFiles,
-        checkRequiredProfilerFiles,
+        checkRequiredPerformanceFiles,
         uploadLocalFolder,
         uploadLocalPerformanceFolder,
         uploadNpeFile,

@@ -40,7 +40,7 @@
 
     &.empty-collapsible {
         .collapsible-controls {
-            [type='button'] {
+            [type='button'].collapsible-button {
                 cursor: default;
 
                 &:hover {
@@ -66,6 +66,10 @@
         grid-template-columns: repeat(2, max-content);
         gap: 5px;
         margin-bottom: 10px;
+
+        &:empty {
+            margin-bottom: 0;
+        }
 
         @include perf.perf-report-colours;
     }

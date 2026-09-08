@@ -1,0 +1,20 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
+
+@use '../definitions/colours' as *;
+
+.mlir-node-body-toggles-menu {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 8px 10px;
+    background: $tt-grey-2;
+
+    .bp6-control {
+        margin: 0;
+        font-size: 11px;
+        line-height: 1.2;
+        color: $tt-grey-6;
+    }
+}

@@ -3,21 +3,159 @@
 # SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import logging
+import os
 import subprocess
+from http import HTTPStatus
 from pathlib import Path
-from typing import List, Optional, Union
+from typing import List, NoReturn, Optional, Union
 
-from ttnn_visualizer.enums import ConnectionTestStates
+from ttnn_visualizer.enums import ConnectionTestStates, HostKeyIssue
 from ttnn_visualizer.exceptions import (
     AuthenticationException,
     AuthenticationFailedException,
+    HostKeyVerificationException,
+    HostKeyVerificationFailedException,
     NoValidConnectionsError,
     RemoteConnectionException,
+    RemoteFileReadException,
     SSHException,
 )
-from ttnn_visualizer.models import RemoteConnection
+from ttnn_visualizer.known_hosts import host_key_status
+from ttnn_visualizer.models import HostKeyStatus, HostKeyTarget, RemoteConnection
+from ttnn_visualizer.remote_command import (
+    RemoteCommand,
+    remote_arg,
+    remote_scp_target,
+)
 
 logger = logging.getLogger(__name__)
+
+# User-facing message for SSH auth failures (key-based auth required, no password).
+SSH_AUTH_FAILURE_MESSAGE = (
+    "SSH authentication failed. This application requires SSH key-based authentication. "
+    "Add your public key to ~/.ssh/authorized_keys on the remote server. "
+    "Password authentication is not supported. "
+    "If your key has a passphrase, add it to ssh-agent once (e.g. ssh-add) so you are not prompted."
+)
+
+
+# stderr fragments (lowercase) that classify an SSH/SFTP subprocess failure.
+_SSH_AUTH_ERROR_FRAGMENTS = (
+    "permission denied",
+    "authentication failed",
+    "publickey",
+    "password",
+)
+_SSH_CONNECTION_ERROR_FRAGMENTS = (
+    "connection refused",
+    "network is unreachable",
+    "no route to host",
+    "name or service not known",
+    "could not resolve hostname",
+    "connection timed out",
+    "nodename nor servname provided",
+)
+
+
+# stderr fragments (lowercase) that mean the key we already trust no longer matches.
+# Checked before the unknown-key fragments because OpenSSH prints "Host key
+# verification failed." for this case too, so matching that first would tell a user
+# whose host key changed under them to accept it — advice for the opposite situation.
+_SSH_HOST_KEY_CHANGED_FRAGMENTS = (
+    "remote host identification has changed",
+    "has changed and you have requested strict checking",
+)
+
+
+def classify_ssh_host_key_error(stderr: str) -> Optional[HostKeyIssue]:
+    """Which host-key failure this stderr describes, or ``None`` if it isn't one.
+
+    Under ``BatchMode`` an unknown host produces only ``Host key verification
+    failed.`` — the "No ED25519 host key is known …" line needs
+    ``StrictHostKeyChecking=yes``, which we never pass, so it appears only when the
+    user's own config asks for it.
+    """
+    lowered = (stderr or "").lower()
+    if any(fragment in lowered for fragment in _SSH_HOST_KEY_CHANGED_FRAGMENTS):
+        return HostKeyIssue.CHANGED
+    if "host key verification failed" in lowered:
+        return HostKeyIssue.UNKNOWN
+    # e.g. "No ED25519 host key is known for [host]:port and you have requested strict checking."
+    if "host key is known" in lowered and "strict checking" in lowered:
+        return HostKeyIssue.UNKNOWN
+    return None
+
+
+def is_ssh_host_key_verification_error(stderr: str) -> bool:
+    """True when OpenSSH rejected a host key, whether unknown or changed."""
+    return classify_ssh_host_key_error(stderr) is not None
+
+
+def ssh_host_key_unknown_message(
+    connection: RemoteConnection, host_key: HostKeyStatus
+) -> str:
+    """Advice for a host we have no key for, quoting the resolved target.
+
+    Both commands come off ``host_key`` rather than being rebuilt here: they were once
+    derived independently from the typed host while the UI derived them from the
+    resolved one, so a config alias produced two different commands on screen at once.
+    """
+    return (
+        f"SSH host key for {host_key.host} (port {host_key.port}) is not in "
+        "known_hosts. Remote sync cannot prompt to accept new keys. "
+        "Review the key's fingerprint and trust the host to continue, or run "
+        f"{host_key.terminalCommand} once in a terminal and accept it there."
+    )
+
+
+def ssh_host_key_changed_message(
+    connection: RemoteConnection, host_key: HostKeyStatus
+) -> str:
+    """Advice for a key that no longer matches the one already trusted.
+
+    Deliberately offers no way to accept the new key: this is either a rebuilt host or
+    a machine-in-the-middle, and only the user can tell which.
+    """
+    return (
+        f"The SSH host key for {host_key.host} (port {host_key.port}) has changed "
+        "since it was added to known_hosts. This can mean the host was "
+        "rebuilt, or that something is intercepting the connection. Confirm the new "
+        "fingerprint with whoever runs the host, then remove the old entry with "
+        f"{host_key.removalCommand} and test again."
+    )
+
+
+def raise_for_ssh_subprocess_error(
+    e: subprocess.CalledProcessError, connection: RemoteConnection
+) -> NoReturn:
+    """Classify an SSH/SFTP subprocess failure and raise the matching exception.
+
+    Shared by both the SFTP/scp subprocess path and ``SSHClient`` so the two
+    stay in lockstep. Always raises (``NoReturn``).
+    """
+    stderr = (e.stderr or "").lower()
+    host_key_issue = classify_ssh_host_key_error(stderr)
+    if host_key_issue is not None:
+        # Resolved once, here, so the message and the status the UI renders describe the
+        # same target and quote the same commands.
+        status = host_key_status(
+            HostKeyTarget.from_connection(connection), host_key_issue
+        )
+        message = (
+            ssh_host_key_changed_message(connection, status)
+            if host_key_issue is HostKeyIssue.CHANGED
+            else ssh_host_key_unknown_message(connection, status)
+        )
+        raise HostKeyVerificationException(
+            message, issue=host_key_issue, host_key=status
+        )
+    if any(auth_err in stderr for auth_err in _SSH_AUTH_ERROR_FRAGMENTS):
+        raise AuthenticationException(SSH_AUTH_FAILURE_MESSAGE)
+    if any(conn_err in stderr for conn_err in _SSH_CONNECTION_ERROR_FRAGMENTS):
+        raise NoValidConnectionsError(f"SSH connection failed: {e.stderr}")
+    if "ssh:" in stderr or "protocol" in stderr:
+        raise SSHException(f"SSH protocol error: {e.stderr}")
+    raise SSHException(f"SSH command failed: {e.stderr}")
 
 
 class SSHClient:
@@ -28,38 +166,51 @@ class SSHClient:
 
     def __init__(self, connection: RemoteConnection):
         self.connection = connection
+        identity = getattr(connection, "identityFile", None)
+        logger.debug(
+            "SSHClient connection.identityFile=%r (will use only this key if set)",
+            identity,
+        )
         self._base_ssh_cmd = self._build_base_ssh_cmd()
         self._base_sftp_cmd = self._build_base_sftp_cmd()
 
     def _build_base_ssh_cmd(self) -> List[str]:
-        """Build the base SSH command with common options."""
-        cmd = ["ssh", "-o", "PasswordAuthentication=no"]
-
+        """Build the base SSH command with common options. Never prompts for password."""
+        cmd = ["ssh"]
+        identity = (getattr(self.connection, "identityFile", None) or "").strip()
+        if identity:
+            # Use empty config so only our -i key is tried (ignore ~/.ssh/config IdentityFile).
+            cmd.extend(["-F", os.devnull])
+        cmd.extend(["-o", "BatchMode=yes", "-o", "PasswordAuthentication=no"])
+        if identity:
+            cmd.extend(["-o", "IdentitiesOnly=yes", "-i", identity])
         if self.connection.port != 22:
             cmd.extend(["-p", str(self.connection.port)])
-
         cmd.append(f"{self.connection.username}@{self.connection.host}")
         return cmd
 
     def _build_base_sftp_cmd(self) -> List[str]:
-        """Build the base SFTP command with common options."""
-        cmd = ["sftp", "-o", "PasswordAuthentication=no"]
-
+        """Build the base SFTP command with common options. Never prompts for password."""
+        cmd = ["sftp"]
+        identity = (getattr(self.connection, "identityFile", None) or "").strip()
+        if identity:
+            cmd.extend(["-F", os.devnull])
+        cmd.extend(["-o", "BatchMode=yes", "-o", "PasswordAuthentication=no"])
+        if identity:
+            cmd.extend(["-o", "IdentitiesOnly=yes", "-i", identity])
         if self.connection.port != 22:
             cmd.extend(["-P", str(self.connection.port)])
-
         cmd.extend(["-b", "-"])  # Read commands from stdin
         cmd.append(f"{self.connection.username}@{self.connection.host}")
         return cmd
 
-    def _handle_subprocess_error(self, e: subprocess.CalledProcessError):
+    def _handle_subprocess_error(self, e: subprocess.CalledProcessError) -> NoReturn:
         """
         Convert subprocess SSH errors to appropriate SSH exceptions.
 
         :param e: The subprocess.CalledProcessError
         :raises: SSHException, AuthenticationException, or NoValidConnectionsError
         """
-        stderr = e.stderr.lower() if e.stderr else ""
         raw_error = e.stderr.strip() if e.stderr else "No stderr output"
 
         # Log the raw SSH error for debugging
@@ -70,54 +221,22 @@ class SSHClient:
         # Store raw error for exceptions that need it
         self._last_raw_error = raw_error
 
-        # Check for authentication failures
-        if any(
-            auth_err in stderr
-            for auth_err in [
-                "permission denied",
-                "authentication failed",
-                "publickey",
-                "password",
-                "host key verification failed",
-            ]
-        ):
-            raise AuthenticationException(
-                f"SSH authentication failed: {self.connection.username}@{self.connection.host}: Permission denied (publickey,password)"
-            )
+        raise_for_ssh_subprocess_error(e, self.connection)
 
-        # Check for connection failures (including DNS resolution failures)
-        elif any(
-            conn_err in stderr
-            for conn_err in [
-                "connection refused",
-                "network is unreachable",
-                "no route to host",
-                "name or service not known",
-                "could not resolve hostname",
-                "connection timed out",
-                "nodename nor servname provided",
-            ]
-        ):
-            raise NoValidConnectionsError(f"SSH connection failed: {e.stderr}")
-
-        # Check for general SSH protocol errors
-        elif "ssh:" in stderr or "protocol" in stderr:
-            raise SSHException(f"SSH protocol error: {e.stderr}")
-
-        # Default to generic SSH exception
-        else:
-            raise SSHException(f"SSH command failed: {e.stderr}")
-
-    def execute_command(self, command: str, timeout: int = 30) -> str:
+    def execute_command(self, command: RemoteCommand, timeout: int = 30) -> str:
         """
         Execute a command on the remote server via SSH.
+
+        Takes a ``RemoteCommand`` rather than a ``str`` because the argument is run
+        by a shell on the remote host: only ``remote_command`` can build one, so a
+        path interpolated without quoting fails type checking instead of shipping.
 
         :param command: The command to execute
         :param timeout: Timeout in seconds
         :return: Command output (stdout)
         :raises: AuthenticationException, NoValidConnectionsError, SSHException
         """
-        ssh_cmd = self._base_ssh_cmd + [command]
+        ssh_cmd = self._base_ssh_cmd + [str(command)]
 
         logger.debug(f"Executing SSH command on {self.connection.host}: {command}")
 
@@ -150,21 +269,40 @@ class SSHClient:
                 log_message += f" on port {self.connection.port}"
             logger.info(log_message)
 
-            self.execute_command("echo 'SSH connection test'", timeout=10)
+            self.execute_command(
+                RemoteCommand.from_shell_fragment("echo 'SSH connection test'"),
+                timeout=10,
+            )
             return True
+        except HostKeyVerificationException as host_key_err:
+            # Ahead of the generic SSHException arm below, which this subclasses. Left
+            # to fall through, the advice would be rewrapped as "SSH connection error
+            # … Ensure SSH key-based authentication is properly configured" and lose
+            # the HTTP status the dialog reads to tell a host key from a bad password.
+            logger.info(
+                "SSH host key %s for %s@%s:%s",
+                host_key_err.issue.value,
+                self.connection.username,
+                self.connection.host,
+                self.connection.port,
+            )
+            raise HostKeyVerificationFailedException(
+                message=str(host_key_err),
+                status=ConnectionTestStates.FAILED,
+                detail=getattr(self, "_last_raw_error", None),
+                # Already resolved when the error was classified; re-resolving would
+                # spawn a second `ssh -G` and could disagree with the message above.
+                host_key=host_key_err.host_key,
+            )
         except AuthenticationException as e:
             # Convert to AuthenticationFailedException for proper HTTP 422 response
-            user_message = (
-                "SSH authentication failed. This application requires SSH key-based authentication. "
-                "Please ensure your SSH public key is added to the authorized_keys file on the remote server. "
-                "Password authentication is not supported."
-            )
             logger.info(
                 f"SSH authentication failed for {self.connection.username}@{self.connection.host}"
             )
-            # Get the raw error details from the last SSH operation
             raw_error = getattr(self, "_last_raw_error", None)
-            raise AuthenticationFailedException(message=user_message, detail=raw_error)
+            raise AuthenticationFailedException(
+                message=SSH_AUTH_FAILURE_MESSAGE, detail=raw_error
+            )
         except NoValidConnectionsError as ssh_err:
             user_message = (
                 f"Unable to establish SSH connection to {self.connection.host}. "
@@ -216,38 +354,37 @@ class SSHClient:
 
         :param remote_path: Path to the remote file
         :param timeout: Timeout in seconds
-        :return: File contents as bytes, or None if file not found
-        :raises: AuthenticationException, NoValidConnectionsError, SSHException
+        :return: File contents as bytes
+        :raises: RemoteFileReadException
         """
         path = Path(remote_path)
         logger.info(f"Reading remote file {path}")
 
         try:
-            result = self.execute_command(f"cat '{path}'", timeout=timeout)
+            result = self.execute_command(
+                RemoteCommand.of("cat", remote_path), timeout=timeout
+            )
             return result.encode("utf-8")
         except SSHException as e:
-            if "No such file" in str(e) or "cannot open" in str(e):
-                return None
-            raise
-
-    def check_path_exists(
-        self, remote_path: Union[str, Path], timeout: int = 10
-    ) -> bool:
-        """
-        Check if a remote path exists.
-
-        :param remote_path: Path to check
-        :param timeout: Timeout in seconds
-        :return: True if path exists
-        """
-        path = Path(remote_path)
-        logger.debug(f"Checking if remote path exists: {path}")
-
-        try:
-            self.execute_command(f"test -e '{path}'", timeout=timeout)
-            return True
-        except SSHException:
-            return False
+            msg = str(e).lower()
+            # Map only clear "not found" errors to 404; handle other SSH failures appropriately.
+            if "no such file" in msg or "not found" in msg:
+                raise RemoteFileReadException(
+                    message="File not found.",
+                    http_status_code=HTTPStatus.NOT_FOUND,
+                    detail=str(e),
+                )
+            if "permission denied" in msg or "access denied" in msg:
+                raise RemoteFileReadException(
+                    message="Permission denied when reading remote file.",
+                    http_status_code=HTTPStatus.FORBIDDEN,
+                    detail=str(e),
+                )
+            raise RemoteFileReadException(
+                message="Failed to read remote file.",
+                http_status_code=HTTPStatus.BAD_GATEWAY,
+                detail=str(e),
+            )
 
     def download_file(
         self,
@@ -270,7 +407,10 @@ class SSHClient:
         local_path.parent.mkdir(parents=True, exist_ok=True)
 
         # SFTP commands to execute
-        sftp_commands = f"get '{remote_path}' '{local_path}'\nquit\n"
+        # Batch script is parsed by sftp, not the shell — quote paths for spaces/special chars.
+        sftp_commands = (
+            f"get {remote_arg(remote_path)} {remote_arg(local_path)}\n" "quit\n"
+        )
 
         logger.debug(f"Downloading: {remote_path} -> {local_path}")
 
@@ -298,6 +438,62 @@ class SSHClient:
             )
             raise SSHException(f"Timeout downloading {remote_path}")
 
+    def upload_file(
+        self,
+        local_path: Union[str, Path],
+        remote_path: Union[str, Path],
+        timeout: int = 120,
+    ) -> None:
+        """Upload a local file to the remote host via scp (``-O`` legacy protocol).
+
+        Mirrors the scp options used in ``sftp_operations`` so hosts without an
+        SFTP subsystem still accept uploads.
+        """
+        local_path = Path(local_path)
+        remote_path = Path(remote_path)
+        scp_cmd = ["scp", "-O"]
+        identity = (getattr(self.connection, "identityFile", None) or "").strip()
+        if identity:
+            scp_cmd.extend(["-F", os.devnull])
+        scp_cmd.extend(["-o", "BatchMode=yes", "-o", "PasswordAuthentication=no"])
+        if identity:
+            scp_cmd.extend(["-o", "IdentitiesOnly=yes", "-i", identity])
+        if self.connection.port != 22:
+            scp_cmd.extend(["-P", str(self.connection.port)])
+        scp_cmd.extend(
+            [
+                str(local_path),
+                remote_scp_target(self.connection, remote_path),
+            ]
+        )
+
+        logger.debug("Uploading via scp: %s -> %s", local_path, remote_path)
+
+        try:
+            subprocess.run(
+                scp_cmd, capture_output=True, text=True, check=True, timeout=timeout
+            )
+        except subprocess.CalledProcessError as e:
+            if e.returncode == 255:
+                self._handle_subprocess_error(e)
+            logger.error(
+                "scp upload failed for %s@%s:%s (rc=%s): %s",
+                self.connection.username,
+                self.connection.host,
+                remote_path,
+                e.returncode,
+                e.stderr,
+            )
+            raise SSHException(f"Failed to upload {local_path.name}")
+        except subprocess.TimeoutExpired:
+            logger.error(
+                "scp upload timed out for %s@%s:%s",
+                self.connection.username,
+                self.connection.host,
+                remote_path,
+            )
+            raise SSHException(f"Timeout uploading {local_path.name}")
+
     def get_file_stat(
         self, remote_path: Union[str, Path], timeout: int = 10
     ) -> Optional[dict]:
@@ -313,7 +509,10 @@ class SSHClient:
         try:
             # Use stat command to get file information
             result = self.execute_command(
-                f"stat -c '%s %Y %F' '{path}' 2>/dev/null || echo 'NOT_FOUND'",
+                RemoteCommand.from_shell_fragment(
+                    f"stat -c '%s %Y %F' {remote_arg(path)} "
+                    "2>/dev/null || echo 'NOT_FOUND'"
+                ),
                 timeout=timeout,
             )
 
@@ -342,7 +541,10 @@ class SSHClient:
 
         try:
             result = self.execute_command(
-                f"ls -1 '{path}' 2>/dev/null", timeout=timeout
+                RemoteCommand.from_shell_fragment(
+                    f"ls -1 {remote_arg(path)} 2>/dev/null"
+                ),
+                timeout=timeout,
             )
             return [line.strip() for line in result.split("\n") if line.strip()]
         except SSHException:

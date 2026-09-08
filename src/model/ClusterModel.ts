@@ -5,7 +5,7 @@
 import { DeviceArchitecture } from '../definitions/DeviceArchitecture';
 
 type ChipId = number;
-type EthChannel = number;
+export type EthChannel = number;
 type CoreId = string;
 
 export type ClusterCoordinates = [x: number, y: number, r: number, s: number];
@@ -17,13 +17,30 @@ export enum CLUSTER_ETH_POSITION {
     RIGHT = 'right',
 }
 
+// A live ethernet port on a chip. Both the uid and the coordinate label are resolved once,
+// where the connection is recorded, and read back by the port-placement and render passes.
+// Reconstructing either downstream lets the two constructions drift, and a uid mismatch
+// renders no links at all rather than failing loudly. #1772
+export interface EthPort {
+    uid: string;
+    chan: EthChannel;
+    // Arch-derived `rank-chip-core` coordinate; null when no SoC descriptor is baked. #1772
+    coordLabel: string | null;
+}
+
 export interface ClusterChip {
     id: number;
     coords: ClusterCoordinates;
     mmio: boolean;
-    eth: string[];
+    // Live ports from the cluster descriptor; uids derive from its channels rather than the
+    // arch eth list, so a cluster renders with no baked SoC descriptor. #1772
+    ethPorts: EthPort[];
     connectedChipsByEthId: Map<string, ClusterChip>;
-    design?: ChipDesign;
+    // Optional enrichment only (coordinate labels, PCIe markers); null for an unknown arch.
+    design: ChipDesign | null;
+    // Rank of the host this chip lives on. Defaults to 0 for single-host reports.
+    // For multi-host topologies the unique key is `(rank, id)`; local `id`s can collide across ranks.
+    rank?: number;
 }
 
 export enum CLUSTER_COORDS {
@@ -33,16 +50,102 @@ export enum CLUSTER_COORDS {
     S,
 }
 
+export enum CLUSTER_BOARD_INDEX {
+    BOARD_ID,
+    BOARD_TYPE,
+    CHIPS,
+}
+export type ClusterBoard = [
+    //
+    { board_id: string },
+    { board_type: string },
+    { chips: ChipId[] },
+];
+
+// Raw shape of an `ethernet_connections_to_remote_devices` entry as it lands from the YAML.
+// The first endpoint is a local `(chip, chan)`; the second references the remote host's
+// `chip_unique_id`, which must be resolved against the union of `chip_unique_ids` across ranks.
+export type RemoteEthernetConnectionRaw = [
+    { chip: ChipId; chan: EthChannel },
+    // String, not number: 64-bit and would be rounded by `JSON.parse`. #1950
+    { remote_chip_id: string; chan: EthChannel },
+];
+
 export interface ClusterModel {
-    arch: string[];
+    // Keyed by chip id, as the YAML writes it. Optional because a descriptor may omit it
+    // entirely, in which case chips render without arch enrichment.
+    arch?: Record<ChipId, string>;
     chips: {
         [key: ChipId]: ClusterCoordinates;
     };
     ethernet_connections: EthernetConnections;
     chips_with_mmio: [key: number, ChipId][];
+
+    // Present in per-host cluster descriptors for multi-host reports; absent in legacy single-host.
+    ethernet_connections_to_remote_devices?: RemoteEthernetConnectionRaw[];
+    chip_to_boardtype: Record<ChipId, string>;
+    chip_to_bus_id: Record<ChipId, number>;
+    // Strings for the same reason as `remote_chip_id` above. #1950
+    chip_unique_ids: Record<ChipId, string>;
+    boards: ClusterBoard[];
+
+    // Slot each chip occupies within its board group, 1-based. A 32-chip UBB
+    // repeats 1..8 four times, one run per group. Only a layout fallback: mesh
+    // coordinates are authoritative when the report carries them. #1948
+    asic_locations?: Record<ChipId, number>;
 }
 
+export interface MeshData {
+    chips: {
+        [key: ChipId]: ClusterCoordinates;
+    };
+}
+
+// Multi-doc YAML mesh-descriptor envelope. Backend returns this when a
+// `physical_chip_mesh_coordinate_mapping_*.yaml` file contains multiple
+// `chips:` documents (one per rank). The FE resolves which doc belongs
+// to the requested rank — see `pickMeshDocForRank` in `clusterTopology.ts`.
+export interface MeshDataDocs {
+    docs: MeshData[];
+}
+
+export type MeshDescriptorResponse = MeshData | MeshDataDocs;
+
 type EthernetConnections = [{ chip: ChipId; chan: EthChannel }, { chip: ChipId; chan: EthChannel }][];
+
+// One host's slice of a stitched multi-host topology. For single-host reports the topology
+// contains exactly one host with `rank: 0`.
+export interface ClusterHost {
+    rank: number;
+    descriptor: ClusterModel;
+    // Mesh coordinates for this host's chips (may be empty if mesh-descriptor was unavailable).
+    meshChips: Record<ChipId, ClusterCoordinates>;
+}
+
+export interface IntraHostEthernetLink {
+    rank: number;
+    a: { chip: ChipId; chan: EthChannel };
+    b: { chip: ChipId; chan: EthChannel };
+}
+
+// A cross-host ethernet link with both endpoints resolved to `(rank, chip, chan)`.
+// Produced by joining `ethernet_connections_to_remote_devices.remote_chip_id` against
+// the union of `chip_unique_ids` across all hosts.
+export interface InterHostEthernetLink {
+    a: { rank: number; chip: ChipId; chan: EthChannel; chipUniqueId: string };
+    b: { rank: number; chip: ChipId; chan: EthChannel; chipUniqueId: string };
+}
+
+export interface ClusterTopology {
+    isMultiHost: boolean;
+    worldSize: number;
+    hosts: ClusterHost[];
+    intraHostLinks: IntraHostEthernetLink[];
+    interHostLinks: InterHostEthernetLink[];
+    // Number of `ethernet_connections_to_remote_devices` entries whose `remote_chip_id`
+    // could not be resolved against any host's `chip_unique_ids` (e.g. partial reports).
+    unresolvedRemoteCount: number;
+}
 
 export interface DeviceDescriptorJSON {
     eth: CoreId[];
@@ -59,4 +162,5 @@ export interface ChipDesign {
 
     [unknownKey: string]: unknown;
 }
-export const DEFAULT_ARCHITECTURE = 'Wormhole';
+// No default architecture on purpose: guessing one renders another arch's coordinates as
+// if they were this report's. An unresolved arch omits the enrichment instead. #1772

@@ -5,23 +5,35 @@
 import { PlotData } from 'plotly.js';
 import { useMemo } from 'react';
 import { useAtomValue } from 'jotai';
-import { PerfTableRow } from '../../definitions/PerfTable';
+import { TypedPerfTableRow } from '../../model/PerfTable';
 import getCoreUtilization from '../../functions/getCoreUtilization';
 import PerfChart from './PerfChart';
-import { PlotConfiguration } from '../../definitions/PlotConfigurations';
+import {
+    PlotConfiguration,
+    getDeviceUtilizationAxisConfig,
+    getNsAxisConfig,
+} from '../../definitions/PlotConfigurations';
+import { PERF_CHART_LABELS, PerfChartId } from '../../definitions/PerformanceCharts';
 import { getAxisUpperRange } from '../../functions/perfFunctions';
 import getPlotLabel from '../../functions/getPlotLabel';
-import { activePerformanceReportAtom, comparisonPerformanceReportListAtom } from '../../store/app';
+import { activePerformanceReportAtom, comparisonPerformanceReportListAtom, mergeDevicesAtom } from '../../store/app';
 import { getPrimaryDataColours, getSecondaryDataColours } from '../../definitions/PerformancePlotColours';
+import PerfMultiDeviceNotice from './PerfMultiDeviceNotice';
 
 interface PerfOperationKernelUtilizationChartProps {
-    datasets?: PerfTableRow[][];
+    datasets?: TypedPerfTableRow[][];
     maxCores: number;
+    chartId: PerfChartId;
 }
 
-function PerfOperationKernelUtilizationChart({ datasets = [], maxCores }: PerfOperationKernelUtilizationChartProps) {
+function PerfOperationKernelUtilizationChart({
+    datasets = [],
+    maxCores,
+    chartId,
+}: PerfOperationKernelUtilizationChartProps) {
     const perfReport = useAtomValue(activePerformanceReportAtom);
     const comparisonReportList = useAtomValue(comparisonPerformanceReportListAtom);
+    const mergeDevices = useAtomValue(mergeDevicesAtom);
 
     const chartDataDuration = useMemo(
         () =>
@@ -56,13 +68,14 @@ function PerfOperationKernelUtilizationChart({ datasets = [], maxCores }: PerfOp
     );
 
     const maxYValue = Math.max(...chartDataDuration.flatMap((data) => (data.y as number[]) ?? []));
+    const maxY2Value = Math.max(...chartDataUtilization.flatMap((data) => (data.y as number[]) ?? []));
 
     const configuration: PlotConfiguration = {
         margin: {
             l: 100,
-            r: 0,
+            r: 50,
             b: 50,
-            t: 0,
+            t: 10,
         },
         showLegend: true,
         xAxis: {
@@ -71,30 +84,22 @@ function PerfOperationKernelUtilizationChart({ datasets = [], maxCores }: PerfOp
                 text: 'Operation',
             },
         },
-        yAxis: {
-            title: {
-                text: 'Device Kernel Duration (ns)',
-            },
-            tickformat: 'd',
-            hoverformat: ',.2r',
+        yAxis: getNsAxisConfig('Device Kernel Duration (ns)', {
             range: [0, maxYValue],
-        },
-        yAxis2: {
-            title: {
-                text: 'Utilization (%)',
-            },
-            tickformat: '.0%',
-            hoverformat: '.2%',
-            range: [0, 1],
-        },
+        }),
+        yAxis2: getDeviceUtilizationAxisConfig(maxY2Value),
     };
 
     return (
-        <PerfChart
-            title='Device Kernel Duration + Utilization'
-            chartData={[...chartDataDuration, ...chartDataUtilization]}
-            configuration={configuration}
-        />
+        <>
+            {maxY2Value > 0 && mergeDevices && <PerfMultiDeviceNotice />}
+            <PerfChart
+                id={chartId}
+                title={PERF_CHART_LABELS[chartId]}
+                chartData={[...chartDataDuration, ...chartDataUtilization]}
+                configuration={configuration}
+            />
+        </>
     );
 }
 

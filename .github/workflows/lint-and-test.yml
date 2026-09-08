@@ -11,23 +11,18 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
         name: Install pnpm
         with:
-          version: 10
           run_install: false
 
-      -   name: Read .nvmrc
-          id: nvm
-          run: echo "NODE_VERSION=$(cat .nvmrc)" >> $GITHUB_OUTPUT
-
-      -   name: Setup Node.js
-          uses: actions/setup-node@v4
-          with:
-              node-version: ${{ steps.nvm.outputs.NODE_VERSION }}
-              cache: 'pnpm'
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'pnpm'
 
       - name: Install dependencies
         run: pnpm install
@@ -36,36 +31,74 @@ jobs:
         id: pr_changes
         run: |
             git fetch origin ${{ github.base_ref }} --depth=1
-            # Get changed files, filter for .ts and .tsx, exclude deleted files, output as space-separated string
-            CHANGED_FILES=$(git diff --name-only --diff-filter=d origin/${{ github.base_ref }} | grep -E '\.(ts|tsx)$' | tr '\n' ' ' | xargs)
+            # Get changed files, filter for .ts, .tsx, .cjs, and .mjs, exclude deleted files, output as space-separated string
+            CHANGED_FILES=$(git diff --name-only --diff-filter=d origin/${{ github.base_ref }} | awk '/\.(ts|tsx|cjs|mjs)$/ { print }' | tr '\n' ' ' | xargs)
             echo "changed=$CHANGED_FILES" >> $GITHUB_OUTPUT
 
-      - name: Lint and test
-        run: |
-            if [ -n "${{ steps.pr_changes.outputs.changed }}" ]; then
-                pnpm lint ${{ steps.pr_changes.outputs.changed }} --report-unused-disable-directives --max-warnings 0
-            else
-                echo "No .ts or .tsx files changed. Skipping lint."
-            fi
-            pnpm test
+      - name: Lint changed TypeScript/JavaScript
+        if: ${{ steps.pr_changes.outputs.changed != '' }}
+        run: pnpm lint ${{ steps.pr_changes.outputs.changed }} --report-unused-disable-directives --max-warnings 0 --no-warn-ignored
+        background: true
+
+      - name: Lint styles
+        if: ${{ steps.pr_changes.outputs.changed_scss != '' }}
+        run: pnpm lint:scss
+        background: true
+
+      - name: Run frontend tests
+        run: pnpm test
+        background: true
+
+      - name: Typecheck
+        run: pnpm lint:ts
+        background: true
+
+      - wait-all:
 
   backend-lint-and-test:
     name: Lint and Test (Backend)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v7
 
-      - name: Set up Python 3.10
-        uses: actions/setup-python@v4
+      - name: Read .python-version
+        id: python
+        run: echo "PYTHON_VERSION=$(cat .python-version)" >> $GITHUB_OUTPUT
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v10.0.1
         with:
-          python-version: '3.10.16'
+          python-version: ${{ steps.python.outputs.PYTHON_VERSION }}
+          enable-cache: true
+
+      - name: Verify lockfile is up to date
+        run: |
+          set -euo pipefail
+          uv lock --check || {
+            status=$?
+            echo "::error file=uv.lock::'uv lock --check' failed (uv.lock may be out of date with pyproject.toml). Run 'uv lock' locally and commit the updated uv.lock. See logs above for details."
+            exit "${status}"
+          }
 
       - name: Install dependencies
-        run: pip install .[dev]
+        run: uv sync --frozen
 
       - name: Run Black
-        run: black --check backend/ttnn_visualizer
+        run: uv run --frozen black --check backend/ttnn_visualizer
+        background: true
+
+      - name: Run isort
+        run: uv run --frozen isort --check-only backend/ttnn_visualizer
+        background: true
+
+      - name: Run Mypy
+        run: uv run --frozen mypy backend/ttnn_visualizer
+        background: true
+
+      - wait-all:
 
       - name: Run Backend Tests
-        run: pytest backend/ttnn_visualizer
+        # No path argument: `testpaths` in pyproject.toml owns the suite list, so
+        # a new test directory is picked up without editing CI.
+        run: uv run --frozen pytest

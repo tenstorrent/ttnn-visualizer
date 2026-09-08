@@ -2,86 +2,345 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
+@use '../definitions/variables' as variables;
+@use '../definitions/colours' as colours;
+
+$eth-colour: colours.$tt-blue-tint-1;
+$eth-line: colours.$tt-blue;
+$mmio-colour: colours.$tt-yellow;
+$mmio-glow-swatch: rgba(colours.$tt-yellow, 0.6);
+$mmio-glow-chip: rgba(colours.$tt-yellow, 0.35);
+$mmio-fill: rgba(colours.$tt-yellow, 0.18);
+
 .cluster-view-renderer {
-    position: absolute;
-    top: 80px;
-    left: 0;
-    background-color: #000a;
-    width: 100%;
-    height: calc(100% - 80px);
-    bottom: 0;
-    z-index: 10;
+    // Fixed, not absolute: absolute anchored it to the document origin at one viewport
+    // tall, so on a page longer than the viewport -- operation details runs to tens of
+    // thousands of pixels -- scrolling slid the whole overlay off the top and left the
+    // page behind on screen with the overlay still open.
+    position: fixed;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    background: radial-gradient(circle at 30% 20%, rgb(117 132 230 / 12%), transparent 60%), rgb(0 0 0 / 92%);
+    z-index: variables.$z-index-3-overlay;
     padding: 10px;
+
+    // The overlay covers the page but does not stop its scrolling, so a wheel over any
+    // non-scrolling part of it used to chain straight through to the page beneath.
+    // `overflow` makes this a scroll container so `overscroll-behavior` has something to
+    // apply to; the overlay itself has nothing to scroll.
+    overflow: hidden;
+    overscroll-behavior: contain;
 
     .cluster-view-header {
         display: flex;
         flex-direction: row;
         align-items: center;
-        justify-content: flex-end;
+        justify-content: space-between;
+        gap: 10px;
         margin: 0;
+
+        // Groups zoom buttons + layout toggle on the left; close button on the right.
+        .cluster-view-controls {
+            display: flex;
+            flex-direction: row;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .cluster-view-zoom {
+            .zoom-percentage-button {
+                width: 54px;
+            }
+        }
+
+        .cluster-view-layout-toggle {
+            // Drop Blueprint Switch's default bottom margin for vertical alignment.
+            margin: 0;
+        }
+
+        // Shown when the report has no mesh coordinates, so the tiling is not a
+        // physical arrangement. Muted: a caveat, not a control. #1948
+        .cluster-view-layout-note {
+            font-size: 12px;
+            font-style: italic;
+            white-space: nowrap;
+            cursor: help;
+            opacity: 0.65;
+        }
+    }
+}
+
+.cluster-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 18px;
+    align-items: center;
+    margin: 12px 0 4px;
+    padding: 8px 14px;
+    border-radius: 6px;
+    background-color: rgb(255 255 255 / 4%);
+    border: 1px solid rgb(255 255 255 / 8%);
+    color: colours.$tt-grey-6;
+    font-size: 12px;
+    width: fit-content;
+
+    .legend-item {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+    }
+
+    .legend-swatch {
+        display: inline-block;
+        width: 14px;
+        height: 14px;
+        border-radius: 3px;
+    }
+
+    .swatch-chip {
+        background: linear-gradient(160deg, colours.$tt-grey-4, colours.$tt-grey-2);
+        border: 1px solid colours.$tt-grey-5;
+    }
+
+    .swatch-mmio {
+        background: linear-gradient(160deg, colours.$tt-grey-4, colours.$tt-grey-2);
+        border: 1px solid $mmio-colour;
+        box-shadow: 0 0 4px $mmio-glow-swatch;
+    }
+
+    .swatch-eth {
+        background-color: rgb(117 132 230 / 25%);
+        border: 1px solid $eth-colour;
+    }
+
+    .legend-line {
+        display: inline-block;
+        width: 18px;
+        height: 0;
+        border-top: 2px solid $eth-line;
+    }
+
+    .legend-line-inter-host {
+        border-top-style: dashed;
+        border-top-color: colours.$tt-teal;
+    }
+
+    .legend-multihost-tag {
+        margin-left: auto;
+        padding: 2px 8px;
+        border-radius: 10px;
+        background-color: rgba(colours.$tt-teal, 0.18);
+        border: 1px solid rgba(colours.$tt-teal, 0.6);
+        color: colours.$tt-teal;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.4px;
     }
 }
 
 .cluster-view-wrap {
+    flex: 1;
+    min-height: 0;
     width: 100%;
-    height: calc(100vh - 200px);
-    display: flex;
-    place-items: flex-start center;
-    justify-content: center;
-    margin-top: 20px;
+    overflow: auto;
+
+    // Reaching the end of the topology must not hand the rest of the wheel gesture to the
+    // page underneath, which would scroll it behind the overlay.
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
+    margin-top: 8px;
+    padding: 10px;
+
+    .cluster-stage {
+        position: relative;
+        margin: 0 auto;
+    }
 
     .cluster {
-        overflow-y: auto;
-        max-height: calc(100vh - 200px);
-        scrollbar-gutter: stable;
-        padding-right: 15px;
+        position: relative;
+        display: grid;
         align-items: start;
         align-content: start;
-        display: grid;
-        gap: 5px;
+
+        // Let the oversized link-layer SVG bleed outside the grid bounds.
+        overflow: visible;
+
+        .cluster-links {
+            position: absolute;
+
+            // Stack above chip bodies / borders / eth ports so long-haul and
+            // inter-host curves render *over* the chips they route past.
+            z-index: 4;
+            pointer-events: none;
+            overflow: visible;
+        }
+
+        .cluster-link {
+            stroke: $eth-line;
+            stroke-width: 2;
+            stroke-linecap: round;
+            opacity: 0.55;
+            transition:
+                opacity 0.12s ease,
+                stroke 0.12s ease,
+                stroke-width 0.12s ease;
+
+            &.is-highlighted {
+                stroke: colours.$tt-teal;
+                stroke-width: 3.5;
+                opacity: 1;
+            }
+
+            &.is-dimmed {
+                opacity: 0.08;
+            }
+
+            // Inter-host links styled distinctly from intra-host.
+            &.is-inter-host {
+                stroke: colours.$tt-teal;
+                stroke-dasharray: 6 4;
+                opacity: 0.75;
+
+                &.is-highlighted {
+                    stroke-width: 3.5;
+                    opacity: 1;
+                }
+            }
+        }
 
         .chip {
-            background-color: #646464;
+            position: relative;
+            z-index: 1;
             display: grid;
             gap: 5px;
-            position: relative;
+            border-radius: 8px;
+            background: linear-gradient(160deg, colours.$tt-grey-4 0%, colours.$tt-grey-2 100%);
+            outline: 1px solid colours.$tt-grey-5;
+            box-shadow:
+                0 2px 6px rgb(0 0 0 / 45%),
+                inset 0 1px 0 rgb(255 255 255 / 6%);
+            transition:
+                opacity 0.12s ease,
+                box-shadow 0.12s ease,
+                transform 0.12s ease,
+                border-color 0.12s ease;
+
+            &.is-mmio {
+                outline-color: $mmio-colour;
+                box-shadow:
+                    0 2px 6px rgb(0 0 0 / 45%),
+                    0 0 10px $mmio-glow-chip,
+                    inset 0 1px 0 rgb(255 255 255 / 6%);
+            }
+
+            &.is-hovered {
+                outline-color: colours.$tt-teal;
+                outline-width: 2px;
+                box-shadow:
+                    0 4px 14px rgb(0 0 0 / 60%),
+                    0 0 0 2px rgb(116 197 223 / 50%);
+
+                &.is-mmio {
+                    outline-color: $mmio-colour;
+                }
+            }
+
+            // Dim with a veil (not `opacity`) so the PCIe marker stays legible.
+            &::after {
+                content: '';
+                position: absolute;
+                inset: 0;
+                border-radius: 8px;
+                background-color: rgb(0 0 0 / 70%);
+                opacity: 0;
+                pointer-events: none;
+                transition: opacity 0.5s ease;
+                z-index: 2;
+            }
+
+            &.is-dimmed::after {
+                opacity: 1;
+            }
 
             .chip-id {
                 position: absolute;
-                top: 0;
-                right: 0;
-                width: 100%;
-                height: 100%;
-                font-size: 25px;
-                text-align: right;
+                inset: 0;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                padding: 6px 10px;
+                font-weight: 600;
+                letter-spacing: 0.3px;
+                color: colours.$tt-grey-7;
+                text-align: center;
                 pointer-events: none;
+                text-shadow: 0 1px 2px rgb(0 0 0 / 70%);
             }
 
-            .mmio {
-                grid-column: 3;
-                grid-row: 3;
-                border: 1px solid #f80;
+            // Rank badge (multi-host only); top-left corner of each chip.
+            .chip-rank-badge {
+                position: absolute;
+                top: 6px;
+                left: 6px;
+                padding: 1px 6px;
+                border-radius: 8px;
+                border: 1px solid rgba(colours.$tt-teal, 0.6);
+                background-color: rgba(colours.$tt-teal, 0.18);
+                color: colours.$tt-teal;
                 font-size: 10px;
-                color: #fff;
-                text-align: center;
+                font-weight: 700;
+                letter-spacing: 0.4px;
+                pointer-events: none;
+                z-index: 3;
+            }
+
+            // PCIe / host-connected badge. Position set inline from the
+            // physical PCIe coordinate; raised above the dim veil.
+            .mmio {
+                position: absolute;
+                z-index: 3;
                 display: flex;
                 justify-content: center;
                 align-items: center;
-                gap: 5px;
+                box-sizing: border-box;
+                padding: 1px 5px;
+                border: 1px solid $mmio-colour;
+                border-radius: 3px;
+                background-color: $mmio-fill;
+                font-size: 9px;
+                font-weight: 700;
+                line-height: 1.3;
+                white-space: nowrap;
+                overflow: hidden;
+                color: $mmio-colour;
             }
         }
     }
 
     .eth {
-        border-color: #99c4ff;
+        position: relative;
+        z-index: 2;
+        border-color: $eth-colour;
         border-width: 1px;
         border-style: solid;
-        font-size: 10px;
-        color: #fff;
+        border-radius: 2px;
+        background-color: rgb(117 132 230 / 18%);
+
+        // font-size is set inline so the label scales with the port size
+        line-height: 1.1;
+        color: colours.$tt-white;
         text-align: center;
         display: flex;
         justify-content: center;
         align-items: center;
+        overflow: hidden;
+
+        span {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            word-break: break-all;
+        }
 
         &.eth-position-top {
             border-top-color: transparent;

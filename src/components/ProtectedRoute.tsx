@@ -3,30 +3,30 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { ReactNode } from 'react';
-import { Navigate, useLocation } from 'react-router-dom';
+import { Navigate, useLocation } from 'react-router';
 import ROUTES from '../definitions/Routes';
-import { useInstance } from '../hooks/useAPI';
-import { RouteRequirements } from '../definitions/RouteObjectList';
+import { RouteRequirements } from '../routes/routeObjectList';
 import LoadingSpinner from './LoadingSpinner';
 import 'styles/components/ProtectedRoute.scss';
+import useRestoreInstance from '../hooks/useRestoreInstance';
 
 interface ProtectedRouteProps {
     children: ReactNode;
 }
 
 const ProtectedRoute = ({ children }: ProtectedRouteProps) => {
-    const { data: instance, isLoading } = useInstance();
+    const { instance, isLoading, hasRestoredInstance } = useRestoreInstance();
     const location = useLocation();
 
     const currentRoute = RouteRequirements[location.pathname];
     const needsProfiler = currentRoute?.needsProfilerReport ?? false;
     const needsPerformance = currentRoute?.needsPerformanceReport ?? false;
 
-    if (isLoading || instance === undefined) {
+    if (!hasRestoredInstance && (isLoading || Boolean(instance))) {
         return (
-            <div className='session-loader'>
+            <div className='instance-loader'>
                 <LoadingSpinner />
-                <p>Currently fetching session...</p>
+                <p>Initializing instance...</p>
             </div>
         );
     }

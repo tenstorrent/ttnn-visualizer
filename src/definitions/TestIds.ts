@@ -3,27 +3,78 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 export const TEST_IDS = Object.freeze({
+    // App shell navigation
+    SIDE_NAVIGATION: 'side-navigation',
+    SIDE_NAVIGATION_TOGGLE: 'side-navigation-toggle',
+    SERVER_MODE_BANNER: 'server-mode-banner',
+
     // Local folder selector
     LOCAL_FOLDER_SELECTOR_BUTTON: 'local-folder-selector-button',
     LOCAL_SYNC_DISABLED: 'local-sync-disabled',
     LOCAL_PROFILER_UPLOAD: 'local-profiler-upload',
     LOCAL_PERFORMANCE_UPLOAD: 'local-performance-upload',
+    LOCAL_PROFILER_STATUS: 'local-profiler-status',
+    LOCAL_PERFORMANCE_STATUS: 'local-performance-status',
 
     // Remote folder selector
     REMOTE_FOLDER_SELECTOR_BUTTON: 'remote-folder-selector-button',
     REMOTE_SYNC_DISABLED: 'remote-sync-disabled',
+    REMOTE_SYNC_BUTTON: 'remote-sync-button',
+
+    // MLIR
+    MLIR_DISABLED: 'mlir-disabled',
+    MLIR_GRAPH: 'mlir-graph',
+
+    // Report-selection dropdown rows, each carrying its own edit/delete actions
+    FOLDER_PICKER_ROW: 'folder-picker-row',
+    REMOTE_CONNECTION_ROW: 'remote-connection-row',
+    REMOTE_CONNECTION_PATH_WARNING: 'remote-connection-path-warning',
+    MLIR_SERVER_ROW: 'mlir-server-row',
 
     // Comparison components
     COMPARISON_REPORT_SELECTOR: 'comparison-report-selector',
+
+    // Connection dialogs
+    CONNECTION_TEST_RESULTS: 'connection-test-results',
+    HOST_KEY_PROMPT: 'host-key-prompt',
+    HOST_KEY_TRUST_BUTTON: 'host-key-trust-button',
+    HOST_KEY_FINGERPRINT: 'host-key-fingerprint',
+    HOST_KEY_COPY_COMMAND: 'host-key-copy-command',
 
     // Navigation
     ADD_NEW_CONNECTION: 'add-new-connection',
     NO_CONNECTION: 'no-connection',
     FETCH_REMOTE_FOLDERS: 'fetch-remote-folders-list',
+    SHOW_OPERATION_SOURCE_BUTTON: 'show-operation-source-button',
 
     // Performance components
     PERFORMANCE_CHART: 'performance-chart',
     PERFORMANCE_TABLE: 'performance-table',
+    PERF_TENSOR_DRAWER: 'perf-tensor-drawer',
+    PERF_TENSOR_DRAWER_OPEN_BUTTON: 'perf-tensor-drawer-open-button',
+    PERF_TABLE_SKELETON: 'perf-table-skeleton',
+    PERF_COLUMN_PICKER: 'perf-column-picker',
+    PERF_COLUMN_PICKER_TRIGGER: 'perf-column-picker-trigger',
+    PERF_COLUMN_PICKER_RESET: 'perf-column-picker-reset',
+    PERF_COLUMN_PICKER_OPTION: 'perf-column-picker-option',
+    PERF_DURATION_HISTOGRAM: 'perf-duration-histogram',
+    PERF_HEURISTIC_FLAGS: 'perf-heuristic-flags',
+    PERF_HEURISTIC_FLAG: 'perf-heuristic-flag',
+    PERF_CHART_HINT: 'perf-chart-hint',
+    PERF_NPE_LINK: 'perf-npe-link',
+
+    // Buffer summary late deallocation. The badge and rail dot ids are suffixed
+    // with the operation id at the call site.
+    LATE_DEALLOC_COUNT: 'late-dealloc-count',
+    LATE_DEALLOC_BADGE: 'late-dealloc-badge',
+    LATE_DEALLOC_RAIL: 'late-dealloc-rail',
+    LATE_DEALLOC_RAIL_DOT: 'late-dealloc-rail-dot',
+
+    // Buffer summary top-N annotations, suffixed the same way.
+    TOP_N_CONTROLS: 'top-n-controls',
+    TOP_N_BADGE: 'top-n-badge',
+    TOP_N_RAIL: 'top-n-rail',
+    TOP_N_RAIL_DOT: 'top-n-rail-dot',
 
     // General UI
     LOADING_SPINNER: 'loading-spinner',
@@ -32,9 +83,13 @@ export const TEST_IDS = Object.freeze({
     TOAST_FILENAME: 'toast-filename',
 
     // NPE
+    NPE_VIEW: 'npe-view',
+    NPE_WINDOWED_VIEW: 'npe-windowed-view',
     NPE_PROCESSING_INITIAL: 'npe-processing-initial',
+    NPE_PROCESSING_LOADING: 'npe-processing-loading',
     NPE_PROCESSING_INVALID_VERSION: 'npe-processing-invalid-version',
     NPE_PROCESSING_INVALID_DATA: 'npe-processing-invalid-data',
     NPE_PROCESSING_INVALID_JSON: 'npe-processing-invalid-json',
+    NPE_PROCESSING_EMPTY_TRACE: 'npe-processing-empty-trace',
     NPE_PROCESSING_UNHANDLED_ERROR: 'npe-processing-unhandled-error',
 });

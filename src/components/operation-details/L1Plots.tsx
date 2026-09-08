@@ -7,7 +7,7 @@ import { useAtomValue } from 'jotai';
 import { IconNames } from '@blueprintjs/icons';
 import { Icon, Intent, Switch } from '@blueprintjs/core';
 import { Fragment } from 'react/jsx-runtime';
-import { useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import MemoryPlotRenderer from './MemoryPlotRenderer';
 import { OperationDetails } from '../../model/OperationDetails';
 import { MemoryLegendElement } from './MemoryLegendElement';
@@ -20,12 +20,14 @@ import {
     L1_SMALL_MARKER_COLOR,
     L1_START_MARKER_COLOR,
     MAX_LEGEND_LENGTH,
-    PlotMouseEventCustom,
 } from '../../definitions/PlotConfigurations';
+import { PlotMouseEventCustom } from '../../model/PlotData';
 import { BufferType } from '../../model/BufferType';
-import { FragmentationEntry } from '../../model/APIData';
+import { FragmentationEntry, MarkerType } from '../../model/APIData';
 import { MemoryLegendGroup } from './MemoryLegendGroup';
 import { useGetL1SmallMarker, useGetL1StartMarker } from '../../hooks/useAPI';
+import useScrollShade from '../../hooks/useScrollShade';
+import { collapseCbDeviceRows } from '../../functions/collapseCbDeviceRows';
 
 interface L1PlotsProps {
     operationDetails: OperationDetails;
@@ -36,7 +38,7 @@ interface L1PlotsProps {
     showCircularBuffer: boolean;
     showL1Small: boolean;
     onBufferClick: (event: Readonly<PlotMouseEventCustom>) => void;
-    onLegendClick: (address: number, tensorId?: number) => void;
+    onLegendClick: (address: number, tensorId?: number, colorVariance?: number) => void;
 }
 
 const MEMORY_ZOOM_PADDING_RATIO = 0.01;
@@ -56,15 +58,12 @@ function L1Plots({
     const l1StartMarker = useGetL1StartMarker();
     const showMemoryRegions = useAtomValue(showMemoryRegionsAtom);
     const selectedAddress = useAtomValue(selectedAddressAtom);
-    const {
-        chartData,
-        memory,
-        fragmentation,
-        cbChartData,
-        cbChartDataByOperation,
-        bufferMemory,
-        bufferChartDataByOperation,
-    } = operationDetails.memoryData();
+    const { chartData, memory, fragmentation, cbChartData, cbChartDataByOperation, bufferChartDataByOperation } =
+        operationDetails.memoryData();
+    const { hasScrolledFromTop, hasScrolledToBottom, updateScrollShade, resetScrollShade, shadeClasses } =
+        useScrollShade();
+    const [zoomedInViewCBMemory, setZoomedInViewCBMemory] = useState(false);
+    const scrollElementRef = useRef<HTMLDivElement>(null);
 
     const { chartData: previousChartData } = previousOperationDetails.memoryData();
     const {
@@ -79,7 +78,7 @@ function L1Plots({
         .sort((a, b) => a - b)[0];
 
     const cbZoomEnd = operationDetails.deviceOperations
-        .map((op) => op.cbList.map((cd) => cd.address + cd.size))
+        .map((op) => op.cbList.map((cb) => cb.address + cb.size))
         .flat()
         .sort((a, b) => a - b)
         .reverse()[0];
@@ -99,34 +98,51 @@ function L1Plots({
     const MEMORY_PADDING_L1 = (plotZoomRangeEnd - plotZoomRangeStart) * MEMORY_ZOOM_PADDING_RATIO;
     const MEMORY_PADDING_L1_SMALL = (l1SmallZoomEnd - l1SmallZoomStart) * MEMORY_ZOOM_PADDING_RATIO;
 
-    const [zoomedInViewCBMemory, setZoomedInViewCBMemory] = useState(false);
-
     const { memorySizeL1, getGroupedMemoryReport } = operationDetails;
 
     const memoryReport: FragmentationEntry[] = [...memory, ...fragmentation].sort((a, b) => a.address - b.address);
     const groupedMemoryReport = getGroupedMemoryReport(BufferType.L1);
+    const isLengthyLegend = memoryReport.length > MAX_LEGEND_LENGTH;
 
-    const memoryReportWithCB: FragmentationEntry[] = [
-        ...memoryReport,
-        ...operationDetails.deviceOperations
-            .map((op) =>
-                op.cbList.map(
+    // Only the collapse is memoised, not the concatenation and sort around it. The
+    // collapse is the part that allocates per CB per device operation (a Map, a Set
+    // per slot, two joined identity strings), and this component re-renders on
+    // `selectedAddressAtom` — every legend click — plus the region toggle and the
+    // scroll shades, none of which change CB data.
+    //
+    // The sort stays outside deliberately: `[...].sort()` mutates in place, and a
+    // `useMemo` wrapping it cannot be preserved by the compiler
+    // (`react-hooks/preserve-manual-memoization`), which is an error here. `toSorted`
+    // would fix that but needs an es2023 lib target. #1879
+    const collapsedCbEntries: FragmentationEntry[] = useMemo(
+        () =>
+            operationDetails.deviceOperations.flatMap((op) =>
+                collapseCbDeviceRows(op.cbList).map(
                     (cb) =>
                         ({
                             ...cb,
-                            bufferType: 'CB',
+                            markerType: MarkerType.CB,
                             colorVariance: op.id,
                         }) as FragmentationEntry,
                 ),
-            )
-            .flat(),
-    ].sort((a, b) => a.address - b.address);
+            ),
+        [operationDetails.deviceOperations],
+    );
 
-    const bufferZoomRangeStart = Math.min(...bufferMemory.map((chunk) => chunk.address));
-    const bufferZoomRangeEnd = Math.max(...bufferMemory.map((chunk) => chunk.address + chunk.size));
+    const memoryReportWithCB: FragmentationEntry[] = [...memoryReport, ...collapsedCbEntries].sort(
+        (a, b) => a.address - b.address,
+    );
 
-    const zoomRangeStart = Math.min(plotZoomRangeStart, bufferZoomRangeStart);
-    const zoomRangeEnd = Math.max(plotZoomRangeEnd, bufferZoomRangeEnd);
+    // keeping for now, to make sure nothing breaks
+    // const bufferZoomRangeStart = Math.min(...bufferMemory.map((chunk) => chunk.address));
+    // const bufferZoomRangeEnd = Math.max(...bufferMemory.map((chunk) => chunk.address + chunk.size));
+
+    const zoomRangeStart = plotZoomRangeStart; // Math.min(plotZoomRangeStart, bufferZoomRangeStart);
+    const zoomRangeEnd = plotZoomRangeEnd; // Math.max(plotZoomRangeEnd, bufferZoomRangeEnd);
+    const userL1ZoomRange = useMemo(
+        () => (zoomedInViewMainMemory ? ([plotZoomRangeStart, plotZoomRangeEnd] as [number, number]) : undefined),
+        [zoomedInViewMainMemory, plotZoomRangeStart, plotZoomRangeEnd],
+    );
 
     const memoryRegionsMarkers = showMemoryRegions
         ? [
@@ -141,6 +157,22 @@ function L1Plots({
           ]
         : [];
 
+    const handleUserScrolling = useCallback(() => {
+        if (scrollElementRef.current) {
+            updateScrollShade(scrollElementRef.current);
+        }
+    }, [updateScrollShade]);
+
+    useEffect(() => {
+        if (scrollElementRef?.current) {
+            if (scrollElementRef.current.scrollTop === 0) {
+                resetScrollShade();
+            } else {
+                updateScrollShade(scrollElementRef.current);
+            }
+        }
+    }, [updateScrollShade, resetScrollShade]);
+
     return (
         <>
             <MemoryPlotRenderer
@@ -151,7 +183,7 @@ function L1Plots({
                 plotZoomRange={[zoomRangeStart - MEMORY_PADDING_L1, zoomRangeEnd + MEMORY_PADDING_L1]}
                 chartDataList={[previousChartData]}
                 isZoomedIn={zoomedInViewMainMemory}
-                memorySize={memorySizeL1}
+                memoryZoomEnd={memorySizeL1}
                 configuration={L1RenderConfiguration}
                 markers={memoryRegionsMarkers}
             />
@@ -164,7 +196,7 @@ function L1Plots({
                 isZoomedIn={zoomedInViewMainMemory}
                 plotZoomRange={[zoomRangeStart - MEMORY_PADDING_L1, zoomRangeEnd + MEMORY_PADDING_L1]}
                 chartDataList={[cbChartData, chartData, l1SmallMemory.length > 0 ? l1SmallCondensedChart : []]}
-                memorySize={memorySizeL1}
+                memoryZoomEnd={memorySizeL1}
                 onBufferClick={onBufferClick}
                 configuration={L1RenderConfiguration}
                 markers={memoryRegionsMarkers}
@@ -195,7 +227,7 @@ function L1Plots({
                                         zoomRangeEnd + MEMORY_PADDING_L1,
                                     ]}
                                     isZoomedIn={zoomedInViewMainMemory}
-                                    memorySize={memorySizeL1}
+                                    memoryZoomEnd={memorySizeL1}
                                     configuration={BufferRenderConfiguration}
                                     onBufferClick={onBufferClick}
                                     markers={memoryRegionsMarkers}
@@ -218,7 +250,7 @@ function L1Plots({
                         l1SmallZoomEnd + MEMORY_PADDING_L1_SMALL,
                     ]}
                     chartDataList={[l1SmallChartData]}
-                    memorySize={memorySizeL1} // Not used as we're always zoomed in
+                    memoryZoomEnd={memorySizeL1} // Not used as we're always zoomed in
                     configuration={L1SmallRenderConfiguration}
                     onBufferClick={() => {}}
                 />
@@ -253,7 +285,7 @@ function L1Plots({
                                 chartDataList={[plotData]}
                                 plotZoomRange={[cbZoomStart - MEMORY_PADDING_CB, cbZoomEnd + MEMORY_PADDING_CB]}
                                 isZoomedIn={zoomedInViewCBMemory}
-                                memorySize={memorySizeL1}
+                                memoryZoomEnd={memorySizeL1}
                                 configuration={CBRenderConfiguration}
                                 onBufferClick={onBufferClick}
                                 markers={[{ color: L1_SMALL_MARKER_COLOR, address: l1SmallMarker }]}
@@ -265,21 +297,26 @@ function L1Plots({
 
             <div
                 className={classNames('legend', {
-                    'lengthy-legend': memoryReport.length > MAX_LEGEND_LENGTH,
+                    'lengthy-legend': isLengthyLegend,
+                    [shadeClasses.top]: hasScrolledFromTop && isLengthyLegend,
+                    [shadeClasses.bottom]: !hasScrolledToBottom && isLengthyLegend,
                 })}
+                ref={scrollElementRef}
+                onScroll={handleUserScrolling}
             >
                 {showMemoryRegions && l1StartMarker && l1StartMarker !== 0 && (
                     <MemoryLegendElement
                         chunk={{
                             size: 0,
                             address: l1StartMarker,
-                            bufferType: 'L1_START',
+                            markerType: MarkerType.L1_START,
                         }}
                         key='l1start-marker'
                         memSize={memorySizeL1}
                         selectedTensorAddress={null}
                         operationDetails={operationDetails}
                         onLegendClick={onLegendClick}
+                        userL1ZoomRange={userL1ZoomRange}
                     />
                 )}
                 {showCircularBuffer &&
@@ -292,6 +329,9 @@ function L1Plots({
                             operationDetails={operationDetails}
                             onLegendClick={onLegendClick}
                             colorVariance={chunk.colorVariance}
+                            userL1ZoomRange={userL1ZoomRange}
+                            isGloballyAllocated={chunk.globallyAllocated === true}
+                            deviceCount={chunk.deviceCount}
                         />
                     ))}
 
@@ -307,6 +347,7 @@ function L1Plots({
                                 selectedTensorAddress={selectedAddress}
                                 operationDetails={operationDetails}
                                 onLegendClick={onLegendClick}
+                                userL1ZoomRange={userL1ZoomRange}
                             />
                         ) : (
                             <MemoryLegendElement
@@ -316,6 +357,7 @@ function L1Plots({
                                 selectedTensorAddress={selectedAddress}
                                 operationDetails={operationDetails}
                                 onLegendClick={onLegendClick}
+                                userL1ZoomRange={userL1ZoomRange}
                             />
                         );
                     })}
@@ -324,13 +366,14 @@ function L1Plots({
                         chunk={{
                             size: 0,
                             address: l1SmallMarker,
-                            bufferType: 'L1_SMALL',
+                            markerType: MarkerType.L1_SMALL,
                         }}
                         key='l1small-marker'
                         memSize={memorySizeL1}
                         selectedTensorAddress={null}
                         operationDetails={operationDetails}
                         onLegendClick={onLegendClick}
+                        userL1ZoomRange={userL1ZoomRange}
                     />
                 )}
             </div>

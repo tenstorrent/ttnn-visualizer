@@ -67,20 +67,16 @@ $row-background: $tt-grey-2;
         padding: 6px 12px;
         vertical-align: top;
         text-align: left;
-    }
 
-    td {
         // Stops lengthy config values breaking the layout - https://github.com/tenstorrent/ttnn-visualizer/issues/809
-        word-break: break-word;
-    }
+        // Having this as the default behaviour because all our tables currently require this
+        // and use vertical headings (first column) instead of horizontal headings (first row)
+        overflow-wrap: anywhere;
 
-    &.has-vertical-headings {
-        tr {
-            td {
-                &:first-child {
-                    font-weight: 700;
-                }
-            }
+        &:first-child {
+            min-width: 160px; // Stops cells from being too narrow
+            overflow-wrap: normal;
+            width: 160px; // Keeps first column width consistent when other columns have a lot of content
         }
     }
 }
@@ -89,10 +85,6 @@ $row-background: $tt-grey-2;
     width: 15px;
     height: 15px;
     display: inline-block;
-
-    &.empty {
-        background-color: $tt-white;
-    }
 
     &.empty-tensor {
         background: repeating-linear-gradient(
@@ -164,6 +156,20 @@ $row-background: $tt-grey-2;
         margin-bottom: -14px;
         margin-top: 0;
     }
+
+    &.zoom-reference {
+        margin-bottom: -60px;
+        margin-top: -20px;
+        padding-left: 10px;
+        padding-right: 10px;
+
+        &.disabled {
+            opacity: 0.4;
+            filter: brightness(0.2);
+        }
+
+        // background-color: #00e0e0;
+    }
 }
 
 // Element to trigger onClick to dismiss focussed buffer
@@ -174,16 +180,28 @@ $row-background: $tt-grey-2;
     height: 100%;
     position: fixed;
     top: 0;
-    z-index: 0;
+    z-index: variables.$z-index-1-base;
 }
 
 .bp6-tag {
-    &.tag-l1 {
-        background-color: $tt-yellow-accent;
-    }
+    &.memory-tag {
+        // Blueprint tags default to white text, which is unreadable on the light fills
+        // below, so dark text is the default here and only the dark DRAM fill opts out.
+        color: $tt-grey-2;
+        background-color: $tt-grey-6;
 
-    &.tag-dram {
-        background-color: $tt-teal-shade;
+        &.tag-l1 {
+            background-color: $tt-yellow-accent;
+        }
+
+        &.tag-dram {
+            color: $tt-white;
+            background-color: $tt-teal-shade;
+        }
+
+        &.tag-l1-small {
+            background-color: $tt-yellow-tint-1;
+        }
     }
 }
 
@@ -201,7 +219,7 @@ $row-background: $tt-grey-2;
 
 // Padding to offest content from the FooterInfobar
 .data-padding {
-    padding-bottom: 20px;
+    padding-bottom: variables.$data-padding-bottom;
 }
 
 .form-group {
@@ -210,7 +228,7 @@ $row-background: $tt-grey-2;
     }
 }
 
-.delete-folder-backdrop {
+.confirm-delete-backdrop {
     background-color: rgb(0 0 0 / 8%);
 }
 

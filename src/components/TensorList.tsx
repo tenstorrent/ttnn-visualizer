@@ -2,185 +2,281 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
-import classNames from 'classnames';
-import { useVirtualizer } from '@tanstack/react-virtual';
-import { Button, ButtonGroup, ButtonVariant, Icon, Intent, PopoverPosition, Tooltip } from '@blueprintjs/core';
+import { Button, ButtonGroup, ButtonVariant, Icon, Intent, PopoverPosition, Size, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
-import { useAtom, useAtomValue } from 'jotai';
-import SearchField from './SearchField';
-import LoadingSpinner from './LoadingSpinner';
-import { useGetTensorDeallocationReportByOperation, useOperationsList, useTensors } from '../hooks/useAPI';
-import ROUTES from '../definitions/Routes';
-import { Tensor } from '../model/APIData';
-import { BufferTypeLabel } from '../model/BufferType';
-import Collapsible from './Collapsible';
-import { expandedTensorsAtom, selectedOperationRangeAtom, tensorBufferTypeFiltersAtom } from '../store/app';
-import ListItem from './ListItem';
 import '@blueprintjs/select/lib/css/blueprint-select.css';
+import { useVirtualizer } from '@tanstack/react-virtual';
+import classNames from 'classnames';
+import { useAtom, useAtomValue } from 'jotai';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router';
 import 'styles/components/ListView.scss';
-import BufferDetails from './BufferDetails';
-import isValidNumber from '../functions/isValidNumber';
 import { MAX_NUM_CONSUMERS } from '../definitions/ProducersConsumers';
-import { toReadableShape, toReadableType } from '../functions/math';
+import ROUTES from '../definitions/Routes';
+import { ScrollLocations } from '../definitions/VirtualLists';
+import { SortingOptions } from '../definitions/SortingOptions';
+import isValidNumber from '../functions/isValidNumber';
+import { formatMemorySize } from '../functions/math';
+import { toReadableShape, toReadableType } from '../functions/formatting';
+import { useGetTensorDeallocationReportByOperation, useOperationsList, useTensors } from '../hooks/useAPI';
+import useRestoreScrollPosition from '../hooks/useRestoreScrollPosition';
+import useScrollShade from '../hooks/useScrollShade';
+import { Tensor } from '../model/APIData';
+import { BufferType, BufferTypeLabel } from '../model/BufferType';
+import {
+    selectedOperationRangeAtom,
+    shouldCollapseAllTensorsAtom,
+    shouldSortBySizeAtom,
+    showHighConsumerTensorsAtom,
+    showLateDeallocatedTensorsAtom,
+    tensorBufferTypeFiltersAtom,
+    tensorListFilterAtom,
+} from '../store/app';
+import BufferDetails from './BufferDetails';
+import Collapsible from './Collapsible';
+import ListItem from './ListItem';
+import LoadingSpinner from './LoadingSpinner';
 import MultiSelectField from './MultiSelectField';
-import { SCROLL_TOLERANCE_PX } from '../definitions/ScrollPositions';
+import SearchField from './SearchField';
 
-const PLACEHOLDER_ARRAY_SIZE = 10;
+const PLACEHOLDER_ARRAY_SIZE = 50;
 const OPERATION_EL_HEIGHT = 39; // Estimated size of each element in px
-const TOTAL_SHADE_HEIGHT = 100; // Height in px of 'scroll-shade' pseudo elements
+const TOTAL_SHADE_HEIGHT = 100; // Total height in px of 'scroll-shade' pseudo elements
 const HIGH_CONSUMER_INTENT = Intent.DANGER;
 
 const TensorList = () => {
-    const [expandedTensors, setExpandedTensors] = useAtom(expandedTensorsAtom);
-    const selectedOperationRange = useAtomValue(selectedOperationRangeAtom);
-    const [bufferTypeFilters, setBufferTypeFilters] = useAtom(tensorBufferTypeFiltersAtom);
+    'use no memo';
 
-    const [shouldCollapseAll, setShouldCollapseAll] = useState(false);
-    const [filterQuery, setFilterQuery] = useState('');
-    const [filteredTensorList, setFilteredTensorList] = useState<Tensor[]>([]);
-    const [hasScrolledFromTop, setHasScrolledFromTop] = useState(false);
-    const [hasScrolledToBottom, setHasScrolledToBottom] = useState(false);
-    const [showHighConsumerTensors, setShowHighConsumerTensors] = useState(false);
-    const [showLateDeallocatedTensors, setShowLateDeallocatedTensors] = useState(false);
+    const [shouldCollapseAll, setShouldCollapseAll] = useAtom(shouldCollapseAllTensorsAtom);
+    const [bufferTypeFilters, setBufferTypeFilters] = useAtom(tensorBufferTypeFiltersAtom);
+    const [showHighConsumerTensors, setShowHighConsumerTensors] = useAtom(showHighConsumerTensorsAtom);
+    const [showLateDeallocatedTensors, setShowLateDeallocatedTensors] = useAtom(showLateDeallocatedTensorsAtom);
+    const [shouldSortBySize, setShouldSortBySize] = useAtom(shouldSortBySizeAtom);
+    const selectedOperationRange = useAtomValue(selectedOperationRangeAtom);
+    const [filterQuery, setFilterQuery] = useAtom(tensorListFilterAtom);
+    const [expandedItems, setExpandedItems] = useState<number[]>([]);
 
     const location = useLocation();
     const navigate = useNavigate();
-    const scrollElementRef = useRef<HTMLDivElement>(null);
     const { data: operations, isLoading: isOperationsLoading } = useOperationsList();
     const { data: fetchedTensors, error, isLoading: isTensorsLoading } = useTensors();
+    const { getListState, updateListState } = useRestoreScrollPosition(ScrollLocations.TENSOR_LIST);
+    const { nonDeallocatedTensorList } = useGetTensorDeallocationReportByOperation();
+    const { hasScrolledFromTop, hasScrolledToBottom, updateScrollShade, resetScrollShade, shadeClasses } =
+        useScrollShade();
+    const scrollElementRef = useRef<HTMLDivElement>(null);
 
     const tensorsWithRange = useMemo(() => {
         if (fetchedTensors && selectedOperationRange) {
-            return fetchedTensors.filter(
-                (tensor) =>
+            return fetchedTensors.filter((tensor) => {
+                // Tensors with no producers/consumers (e.g. L1_Small scratch tensors)
+                // can't be range-filtered, so pass them through.
+                if (tensor.producers.length === 0 && tensor.consumers.length === 0) {
+                    return true;
+                }
+
+                return (
                     (tensor.producers.some((producer) => producer >= selectedOperationRange[0]) &&
                         tensor.producers.some((producer) => producer <= selectedOperationRange[1])) ||
                     (tensor.consumers.some((consumer) => consumer >= selectedOperationRange[0]) &&
-                        tensor.consumers.some((consumer) => consumer <= selectedOperationRange[1])),
-            );
+                        tensor.consumers.some((consumer) => consumer <= selectedOperationRange[1]))
+                );
+            });
         }
 
         return fetchedTensors;
     }, [fetchedTensors, selectedOperationRange]);
 
-    const { nonDeallocatedTensorList } = useGetTensorDeallocationReportByOperation();
+    const filteredTensorsList = useMemo(() => {
+        if (tensorsWithRange) {
+            let tensors = [...tensorsWithRange];
 
-    // TODO: Figure out an initial scroll position based on last used tensor - https://github.com/tenstorrent/ttnn-visualizer/issues/737
-    const virtualizer = useVirtualizer({
-        count: filteredTensorList?.length || PLACEHOLDER_ARRAY_SIZE,
-        getScrollElement: () => scrollElementRef.current,
-        estimateSize: () => OPERATION_EL_HEIGHT,
-    });
-    const virtualItems = virtualizer.getVirtualItems();
-    const numberOfTensors = filteredTensorList.length || PLACEHOLDER_ARRAY_SIZE;
-    const virtualHeight = virtualizer.getTotalSize() - TOTAL_SHADE_HEIGHT;
+            if (filterQuery) {
+                tensors = tensorsWithRange?.filter((tensor) =>
+                    getTensorFilterName(tensor).toLowerCase().includes(filterQuery.toLowerCase()),
+                );
+            }
 
-    const handleUserScrolling = () => {
-        updateScrollShade();
-    };
+            if (bufferTypeFilters && bufferTypeFilters?.length > 0) {
+                tensors = tensors.filter(
+                    (tensor) => tensor?.buffer_type !== null && bufferTypeFilters.includes(tensor.buffer_type),
+                );
+            }
 
-    const updateScrollShade = () => {
-        if (scrollElementRef.current) {
-            const { scrollTop, offsetHeight, scrollHeight } = scrollElementRef.current;
+            if (showHighConsumerTensors) {
+                tensors = tensors.filter((tensor) => tensor.consumers.length > MAX_NUM_CONSUMERS);
+            }
 
-            setHasScrolledFromTop(scrollTop > 0 + SCROLL_TOLERANCE_PX);
+            if (showLateDeallocatedTensors) {
+                tensors = tensors.filter((tensor) => nonDeallocatedTensorList.get(tensor.id));
+            }
 
-            const scrollBottom = scrollTop + offsetHeight;
+            if (shouldSortBySize !== SortingOptions.OFF) {
+                tensors.sort((a, b) => {
+                    const sizeA = a.size;
+                    const sizeB = b.size;
 
-            setHasScrolledToBottom(scrollBottom >= scrollHeight - SCROLL_TOLERANCE_PX);
+                    const isAValid = isValidNumber(sizeA);
+                    const isBValid = isValidNumber(sizeB);
+
+                    // Invalid values always go to the bottom, regardless of sort direction
+                    if (!isAValid && !isBValid) {
+                        return 0; // Both invalid - maintain their order
+                    }
+                    if (!isAValid) {
+                        return 1; // a is invalid - push to bottom (a after b)
+                    }
+                    if (!isBValid) {
+                        return -1; // b is invalid - push to bottom (a before b)
+                    }
+
+                    // Both values are valid - sort by size according to direction
+                    const numA = sizeA as number;
+                    const numB = sizeB as number;
+
+                    return shouldSortBySize === SortingOptions.ASCENDING ? numA - numB : numB - numA;
+                });
+            }
+
+            return tensors;
         }
-    };
 
-    const handleToggleCollapsible = (operationId: number) => {
-        setExpandedTensors((currentIds) => {
-            const tensorIds = [...currentIds];
+        return [];
+    }, [
+        tensorsWithRange,
+        filterQuery,
+        bufferTypeFilters,
+        showHighConsumerTensors,
+        showLateDeallocatedTensors,
+        shouldSortBySize,
+        nonDeallocatedTensorList,
+    ]);
 
-            if (tensorIds.includes(operationId)) {
-                return tensorIds.filter((id) => id !== operationId);
-            }
+    const {
+        scrollOffset: restoredOffset,
+        measurementsCache: restoredMeasurementsCache,
+        expandedItems: restoredExpandedItems,
+    } = useMemo(() => getListState(), [getListState]) ?? {};
 
-            tensorIds.push(operationId);
-            return tensorIds;
+    // eslint-disable-next-line react-hooks/incompatible-library
+    const virtualizer = useVirtualizer({
+        estimateSize: () => OPERATION_EL_HEIGHT,
+        getScrollElement: () => scrollElementRef.current,
+        overscan: 10,
+        initialMeasurementsCache: restoredMeasurementsCache,
+        count: filteredTensorsList?.length || PLACEHOLDER_ARRAY_SIZE,
+        initialOffset: restoredOffset || 0,
+    });
+
+    const virtualItems = virtualizer.getVirtualItems();
+    const virtualHeight = virtualizer.getTotalSize() - TOTAL_SHADE_HEIGHT;
+    const numberOfTensors = filteredTensorsList.length || PLACEHOLDER_ARRAY_SIZE;
+
+    // Store latest values in refs for unmount cleanup
+    const scrollOffsetRef = useRef(virtualizer.scrollOffset);
+    const measurementsCacheRef = useRef(virtualizer.measurementsCache);
+    const expandedItemsRef = useRef(expandedItems);
+
+    const handleUserScrolling = useCallback(() => {
+        if (scrollElementRef.current) {
+            updateScrollShade(scrollElementRef.current);
+        }
+    }, [updateScrollShade]);
+
+    const handleToggleCollapsible = useCallback((operationId: number) => {
+        setExpandedItems((currentExpanded) => {
+            const newList = currentExpanded || [];
+            return newList.includes(operationId)
+                ? newList.filter((id) => id !== operationId)
+                : [...newList, operationId];
         });
-    };
+    }, []);
 
-    const handleExpandAllToggle = () => {
+    const handleExpandAllToggle = useCallback(() => {
         setShouldCollapseAll((shouldCollapse) => !shouldCollapse);
-        setExpandedTensors(
-            !shouldCollapseAll && filteredTensorList ? filteredTensorList.map((tensor) => tensor.id) : [],
+        setExpandedItems(
+            !shouldCollapseAll && filteredTensorsList ? filteredTensorsList.map((tensor) => tensor.id) : [],
         );
-    };
+    }, [filteredTensorsList, shouldCollapseAll, setShouldCollapseAll]);
 
-    useMemo(
-        () => {
-            if (tensorsWithRange && operations) {
-                let tensors = [...tensorsWithRange];
+    const sortBySizeControl = useMemo(() => {
+        let label = 'Clear Size sorting';
 
-                if (filterQuery) {
-                    tensors = tensorsWithRange?.filter((tensor) =>
-                        getTensorFilterName(tensor).toLowerCase().includes(filterQuery.toLowerCase()),
-                    );
-                }
+        if (shouldSortBySize === SortingOptions.OFF) {
+            label = 'Sort by Size (ascending)';
+        }
 
-                if (bufferTypeFilters && bufferTypeFilters?.length > 0) {
-                    tensors = tensors.filter(
-                        (tensor) => tensor?.buffer_type !== null && bufferTypeFilters.includes(tensor.buffer_type),
-                    );
-                }
+        if (shouldSortBySize === SortingOptions.ASCENDING) {
+            label = 'Sort by Size (descending)';
+        }
 
-                if (showHighConsumerTensors) {
-                    tensors = tensors.filter((tensor) => tensor.consumers.length > MAX_NUM_CONSUMERS);
-                }
+        const icon =
+            shouldSortBySize === SortingOptions.ASCENDING || shouldSortBySize === SortingOptions.OFF
+                ? IconNames.SORT_NUMERICAL
+                : IconNames.SORT_NUMERICAL_DESC;
 
-                if (showLateDeallocatedTensors) {
-                    tensors = tensors.filter((tensor) => nonDeallocatedTensorList.get(tensor.id));
-                }
+        return { label, icon };
+    }, [shouldSortBySize]);
 
-                setFilteredTensorList(tensors);
-            }
-        },
+    const shouldCollapseAllLabel = shouldCollapseAll ? 'Collapse all' : 'Expand all';
+    const scrollToTopLabel = 'Scroll to top';
+    const scrollToBottomLabel = 'Scroll to bottom';
+    const showLateDeallocatedTensorsLabel = 'Show late deallocated tensors';
+    const showHighConsumerTensorsLabel = 'Show high consumer tensors';
+
+    // Keep stored refs updated
+    useEffect(() => {
+        scrollOffsetRef.current = virtualizer.scrollOffset;
+    }, [virtualizer.scrollOffset]);
+    useEffect(() => {
+        measurementsCacheRef.current = virtualizer.measurementsCache;
+    }, [virtualizer.measurementsCache]);
+    useEffect(() => {
+        expandedItemsRef.current = expandedItems;
+    }, [expandedItems]);
+
+    useEffect(() => {
+        // Update stored list state on unmount
+        return () => {
+            updateListState({
+                scrollOffset: scrollOffsetRef.current || 0,
+                measurementsCache: measurementsCacheRef.current,
+                expandedItems: expandedItemsRef.current,
+            });
+        };
+    }, [updateListState]);
+
+    // Restore expanded items on mount
+    useEffect(() => {
+        setExpandedItems(restoredExpandedItems || []);
         // eslint-disable-next-line react-hooks/exhaustive-deps
-        [
-            tensorsWithRange,
-            operations,
-            filterQuery,
-            bufferTypeFilters,
-            showHighConsumerTensors,
-            showLateDeallocatedTensors,
-        ],
-    );
+    }, []);
 
     useEffect(() => {
         const initialTensorId = location.state?.previousOperationId;
-
         if (initialTensorId && virtualizer) {
             const operationIndex =
                 fetchedTensors?.findIndex((tensor: Tensor) => tensor.id === parseInt(initialTensorId, 10)) || 0;
-
             // Looks better if we scroll to the previous index
             virtualizer.scrollToIndex(operationIndex - 1, {
                 align: 'start',
             });
-
             // Navigating to the same page replaces the entry in the browser history
-            navigate(ROUTES.OPERATIONS, { replace: true });
+            void navigate(ROUTES.OPERATIONS, { replace: true });
         }
     }, [virtualizer, fetchedTensors, location, navigate]);
 
     useEffect(() => {
         if (virtualHeight <= 0 && scrollElementRef.current) {
             scrollElementRef.current.scrollTop = 0;
-            setHasScrolledFromTop(false);
-            setHasScrolledToBottom(false);
+            resetScrollShade();
+        } else if (scrollElementRef.current) {
+            updateScrollShade(scrollElementRef.current);
         }
-
-        updateScrollShade();
-    }, [virtualHeight]);
+    }, [virtualHeight, updateScrollShade, resetScrollShade]);
 
     return (
-        // TODO: Turn this into a generation ListView component used by OperationList and TensorList
+        // TODO: Turn this into a generic ListView component used by OperationList and TensorList
         <fieldset className='list-wrap'>
             <legend>Tensors</legend>
 
@@ -191,9 +287,18 @@ const TensorList = () => {
                     onQueryChanged={(value) => setFilterQuery(value)}
                 />
 
+                <MultiSelectField<Tensor, 'buffer_type'>
+                    keyName='buffer_type'
+                    options={tensorsWithRange || []}
+                    placeholder='Buffer type filter...'
+                    values={bufferTypeFilters}
+                    updateHandler={setBufferTypeFilters}
+                    labelFormatter={(value) => (value === null ? 'Unknown' : BufferTypeLabel[value])}
+                />
+
                 <ButtonGroup variant={ButtonVariant.MINIMAL}>
                     <Tooltip
-                        content='Toggle high consumer tensors'
+                        content={showHighConsumerTensorsLabel}
                         placement={PopoverPosition.TOP}
                     >
                         <Button
@@ -202,14 +307,17 @@ const TensorList = () => {
                             disabled={!tensorsWithRange?.some((tensor) => tensor.consumers.length > MAX_NUM_CONSUMERS)}
                             intent={HIGH_CONSUMER_INTENT}
                             variant={showHighConsumerTensors ? ButtonVariant.OUTLINED : undefined}
-                            aria-label='Toggle high consumer tensors'
+                            aria-label={showHighConsumerTensorsLabel}
                         >
-                            {filteredTensorList?.filter((tensor) => tensor.consumers.length > MAX_NUM_CONSUMERS).length}
+                            {
+                                filteredTensorsList?.filter((tensor) => tensor.consumers.length > MAX_NUM_CONSUMERS)
+                                    .length
+                            }
                         </Button>
                     </Tooltip>
 
                     <Tooltip
-                        content='Show late deallocated tensors'
+                        content={showLateDeallocatedTensorsLabel}
                         placement={PopoverPosition.TOP}
                     >
                         <Button
@@ -218,23 +326,50 @@ const TensorList = () => {
                             intent={Intent.WARNING}
                             disabled={nonDeallocatedTensorList.size === 0}
                             variant={showLateDeallocatedTensors ? ButtonVariant.OUTLINED : undefined}
-                            aria-label='Toggle high consumer tensors'
+                            aria-label={showLateDeallocatedTensorsLabel}
                         >
-                            {filteredTensorList?.filter((tensor) => nonDeallocatedTensorList.get(tensor.id)).length}
+                            {filteredTensorsList?.filter((tensor) => nonDeallocatedTensorList.get(tensor.id)).length}
                         </Button>
                     </Tooltip>
+
                     <Tooltip
-                        content={shouldCollapseAll ? 'Collapse all' : 'Expand all'}
+                        content={shouldCollapseAllLabel}
                         placement={PopoverPosition.TOP}
                     >
                         <Button
                             onClick={() => handleExpandAllToggle()}
                             endIcon={shouldCollapseAll ? IconNames.CollapseAll : IconNames.ExpandAll}
-                            aria-label={shouldCollapseAll ? 'Collapse all' : 'Expand all'}
+                            aria-label={shouldCollapseAllLabel}
                         />
                     </Tooltip>
+
                     <Tooltip
-                        content='Scroll to top'
+                        content={sortBySizeControl.label}
+                        placement={PopoverPosition.TOP}
+                    >
+                        <Button
+                            onClick={() =>
+                                setShouldSortBySize((current) => {
+                                    if (current === SortingOptions.OFF) {
+                                        return SortingOptions.ASCENDING;
+                                    }
+
+                                    if (current === SortingOptions.DESCENDING) {
+                                        return SortingOptions.OFF;
+                                    }
+
+                                    return SortingOptions.DESCENDING;
+                                })
+                            }
+                            icon={sortBySizeControl.icon}
+                            active={shouldSortBySize !== SortingOptions.OFF}
+                            variant={shouldSortBySize !== SortingOptions.OFF ? ButtonVariant.OUTLINED : undefined}
+                            aria-label={sortBySizeControl.label}
+                        />
+                    </Tooltip>
+
+                    <Tooltip
+                        content={scrollToTopLabel}
                         placement={PopoverPosition.TOP}
                     >
                         <Button
@@ -242,11 +377,12 @@ const TensorList = () => {
                                 virtualizer.scrollToIndex(0);
                             }}
                             icon={IconNames.DOUBLE_CHEVRON_UP}
-                            aria-label='Scroll to top'
+                            aria-label={scrollToTopLabel}
                         />
                     </Tooltip>
+
                     <Tooltip
-                        content='Scroll to bottom'
+                        content={scrollToBottomLabel}
                         placement={PopoverPosition.TOP}
                     >
                         <Button
@@ -254,18 +390,9 @@ const TensorList = () => {
                                 virtualizer.scrollToIndex(numberOfTensors - 1);
                             }}
                             icon={IconNames.DOUBLE_CHEVRON_DOWN}
-                            aria-label='Scroll to bottom'
+                            aria-label={scrollToBottomLabel}
                         />
                     </Tooltip>
-
-                    <MultiSelectField<Tensor, 'buffer_type'>
-                        keyName='buffer_type'
-                        options={tensorsWithRange || []}
-                        placeholder='Buffer type filter...'
-                        values={bufferTypeFilters}
-                        updateHandler={setBufferTypeFilters}
-                        labelFormatter={(value) => (value === null ? 'Unknown' : BufferTypeLabel[value])}
-                    />
                 </ButtonGroup>
 
                 {!isTensorsLoading && !isOperationsLoading ? (
@@ -280,8 +407,8 @@ const TensorList = () => {
             <div
                 ref={scrollElementRef}
                 className={classNames('scrollable-element', {
-                    'scroll-shade-top': hasScrolledFromTop && virtualHeight >= 0,
-                    'scroll-shade-bottom': !hasScrolledToBottom && numberOfTensors > virtualItems.length,
+                    [shadeClasses.top]: hasScrolledFromTop && virtualHeight >= 0,
+                    [shadeClasses.bottom]: !hasScrolledToBottom && numberOfTensors > virtualItems.length,
                 })}
                 onScroll={handleUserScrolling}
             >
@@ -298,10 +425,9 @@ const TensorList = () => {
                             transform: `translateY(${virtualItems[0]?.start ?? 0}px)`,
                         }}
                     >
-                        {operations && filteredTensorList?.length ? (
+                        {operations && filteredTensorsList?.length ? (
                             virtualItems.map((virtualRow) => {
-                                const tensor = filteredTensorList[virtualRow.index];
-
+                                const tensor = filteredTensorsList[virtualRow.index];
                                 const isLateDeallocated = nonDeallocatedTensorList.get(tensor.id);
 
                                 return (
@@ -314,7 +440,6 @@ const TensorList = () => {
                                         <Collapsible
                                             onExpandToggle={() => handleToggleCollapsible(tensor.id)}
                                             keepChildrenMounted={false}
-                                            isOpen={expandedTensors.includes(tensor.id)}
                                             label={
                                                 <ListItem
                                                     filterName={getTensorFilterName(tensor)}
@@ -334,7 +459,7 @@ const TensorList = () => {
                                                 >
                                                     {tensor.consumers.length > MAX_NUM_CONSUMERS ? (
                                                         <Tooltip
-                                                            content='Unusually high number of consumers'
+                                                            content={`Unusually high number of consumers (${tensor.consumers.length})`}
                                                             position={PopoverPosition.TOP}
                                                             className='high-number-consumers'
                                                         >
@@ -359,7 +484,41 @@ const TensorList = () => {
                                                             />
                                                         </Tooltip>
                                                     ) : null}
+
+                                                    {isValidNumber(tensor.size) ? (
+                                                        <span className='tensor-size'>
+                                                            {formatMemorySize(tensor.size)}
+                                                        </span>
+                                                    ) : null}
                                                 </ListItem>
+                                            }
+                                            isOpen={!!expandedItems?.includes(tensor.id)}
+                                            additionalElements={
+                                                tensor.buffer_type === BufferType.DRAM ||
+                                                tensor.buffer_type === BufferType.L1 ? (
+                                                    <Button
+                                                        className='buffer-view'
+                                                        onClick={() =>
+                                                            navigate(`${ROUTES.BUFFERS}`, {
+                                                                state: {
+                                                                    tensorId: tensor.id,
+                                                                    tensorAddress: tensor.address,
+                                                                    bufferType: tensor.buffer_type,
+                                                                },
+                                                            })
+                                                        }
+                                                        text='Buffer details'
+                                                        intent={Intent.PRIMARY}
+                                                        icon={
+                                                            <Icon
+                                                                icon={IconNames.HORIZONTAL_BAR_CHART}
+                                                                size={12}
+                                                            />
+                                                        }
+                                                        size={Size.SMALL}
+                                                        variant={ButtonVariant.OUTLINED}
+                                                    />
+                                                ) : undefined
                                             }
                                         >
                                             <div className='arguments-wrapper'>
@@ -368,6 +527,12 @@ const TensorList = () => {
                                                     operations={operations}
                                                 />
                                             </div>
+                                            {tensor.consumers.length > MAX_NUM_CONSUMERS ? (
+                                                <p className='arguments-wrapper high-consumer-warning'>
+                                                    This tensor has {tensor.consumers.length} consumers, which is
+                                                    unusually high and may indicate an issue in the model.
+                                                </p>
+                                            ) : null}
                                         </Collapsible>
                                     </li>
                                 );
@@ -386,6 +551,6 @@ const TensorList = () => {
 };
 
 const getTensorFilterName = (tensor: Tensor) =>
-    `${toReadableShape(tensor.shape)} ${toReadableType(tensor.dtype)} ${tensor.operationIdentifier ? tensor.operationIdentifier : ''}`;
+    `${toReadableShape(tensor.shape)} ${toReadableType(tensor.dtype)} ${tensor.operationIdentifier ? `(${tensor.operationIdentifier})` : ''}`;
 
 export default TensorList;

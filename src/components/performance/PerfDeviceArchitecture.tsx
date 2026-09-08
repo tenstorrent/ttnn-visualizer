@@ -4,24 +4,22 @@
 
 import { DeviceArchitecture } from '../../definitions/DeviceArchitecture';
 import { LoadingSpinnerSizes } from '../../definitions/LoadingSpinner';
-import { TypedPerfTableRow } from '../../definitions/PerfTable';
-import getCoreCount from '../../functions/getCoreCount';
-import { useDeviceLog } from '../../hooks/useAPI';
+import { usePerfMeta } from '../../hooks/useAPI';
 import LoadingSpinner from '../LoadingSpinner';
 import 'styles/components/PerfDeviceArchitecture.scss';
 
-const NO_META_DATA = 'n/a';
+const NO_META_DATA = 'Unknown';
 
 interface PerfDeviceArchitectureProps {
-    data: TypedPerfTableRow[];
-    reportName: string | null;
+    /** On-disk folder of the report to read device meta for, not a display name. */
+    reportFolderName: string | null;
+    maxCores: number;
 }
 
-const PerfDeviceArchitecture = ({ data, reportName }: PerfDeviceArchitectureProps) => {
-    const { data: deviceLog, isLoading: isLoadingDeviceLog } = useDeviceLog(reportName);
+const PerfDeviceArchitecture = ({ reportFolderName, maxCores }: PerfDeviceArchitectureProps) => {
+    const { data: deviceMeta, isLoading: isLoadingDeviceLog } = usePerfMeta(reportFolderName);
 
-    const architecture = deviceLog?.deviceMeta?.architecture ?? DeviceArchitecture.WORMHOLE;
-    const maxCores = data ? getCoreCount(architecture, data) : 0;
+    const architecture = deviceMeta?.architecture ?? DeviceArchitecture.WORMHOLE;
 
     return (
         <div className='meta-data'>
