@@ -17,6 +17,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
     useGetDeviceOperationListPerf,
     useGetDeviceOperationListPerfByOpId,
+    useGetDeviceOperationsList,
     useLinkedPerformanceReport,
     usePerformanceReport,
 } from '../src/hooks/useAPI';
@@ -257,6 +258,24 @@ const memoryOperations = DEVICE_OP_NAMES.map((name, index) => ({
     device_operations: [{ node_type: 'function_start', params: { name } }],
 }));
 
+const NESTED_DEVICE_OP_NAMES = ['SparseMatmulDeviceOperation', 'UnaryDeviceOperation'];
+const nestedMemoryOperations = [
+    {
+        id: 59,
+        name: 'ttnn.sparse_matmul',
+        stack_trace: '',
+        inputs: [],
+        outputs: [],
+        arguments: [],
+        device_operations: [
+            { node_type: 'function_start', params: { name: NESTED_DEVICE_OP_NAMES[0] } },
+            { node_type: 'function_start', params: { name: NESTED_DEVICE_OP_NAMES[1] } },
+            { node_type: 'function_end', params: { name: NESTED_DEVICE_OP_NAMES[1] } },
+            { node_type: 'function_end', params: { name: NESTED_DEVICE_OP_NAMES[0] } },
+        ],
+    },
+];
+
 describe('report matching under a filtered performance tab', () => {
     beforeEach(() => {
         // The endpoint really does return roughly one row per device when merging
@@ -319,6 +338,43 @@ describe('report matching under a filtered performance tab', () => {
 
         expect(result.current.get(1)?.map((operation) => operation.perfData?.raw_op_code)).toEqual(['Matmul']);
         expect(result.current.get(2)?.map((operation) => operation.perfData?.raw_op_code)).toEqual(['Softmax']);
+    });
+
+    it('links nested operations in function-end order while preserving the public start-order list (#1860)', async () => {
+        const functionEndNames = [...NESTED_DEVICE_OP_NAMES].reverse();
+
+        vi.mocked(axiosInstance.get).mockImplementation((url: string) => {
+            if (url.includes(Endpoints.PERFORMANCE_RESULTS_REPORT)) {
+                return Promise.resolve({
+                    data: {
+                        report: functionEndNames.map((name, index) => perfRow(index, name)),
+                        stacked_report: [],
+                        signposts: [],
+                    },
+                });
+            }
+
+            if (url.includes(Endpoints.OPERATIONS_LIST)) {
+                return Promise.resolve({ data: [...nestedMemoryOperations] });
+            }
+
+            if (url.includes(Endpoints.DEVICES)) {
+                return Promise.resolve({ data: [{ device_id: 0 }] });
+            }
+
+            return Promise.resolve({ data: [] });
+        });
+
+        const { result } = renderWithView(
+            () => [useGetDeviceOperationsList(), useGetDeviceOperationListPerf()] as const,
+            [[activeProfilerReportAtom, ACTIVE_REPORT]],
+        );
+
+        await waitFor(() => expect(result.current[1]).toHaveLength(NESTED_DEVICE_OP_NAMES.length));
+
+        expect(result.current[0].map(({ name }) => name)).toEqual(NESTED_DEVICE_OP_NAMES);
+        expect(result.current[1].map(({ name }) => name)).toEqual(functionEndNames);
+        expect(result.current[1].map(({ perfData }) => perfData?.raw_op_code)).toEqual(functionEndNames);
     });
 
     // The match is memoised across call sites rather than per invocation, and

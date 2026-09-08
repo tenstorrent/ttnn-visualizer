@@ -3,7 +3,11 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import { describe, expect, it } from 'vitest';
-import { collapseMultideviceOperations, matchDeviceOperationsToPerf } from '../src/functions/deviceOperationMatching';
+import {
+    collapseMultideviceOperations,
+    matchDeviceOperationOrdersToPerf,
+    matchDeviceOperationsToPerf,
+} from '../src/functions/deviceOperationMatching';
 import { PerfTableRow } from '../src/model/PerfTable';
 import { DeviceOperationMapping } from '../src/model/DeviceOperationMapping';
 import { OpType } from '../src/definitions/Performance';
@@ -189,6 +193,64 @@ describe('matchDeviceOperationsToPerf', () => {
 
         expect(matched).toEqual([]);
         expect(deviceOperations.every(({ perfData }) => perfData === undefined)).toBe(true);
+    });
+});
+
+describe('matchDeviceOperationOrdersToPerf', () => {
+    it('falls back to function-end order for nested device operations (#1860)', () => {
+        const functionStartOperations = [
+            mapping('SparseMatmulDeviceOperation', 59),
+            mapping('UnaryDeviceOperation', 59),
+        ];
+        const functionEndOperations = [mapping('UnaryDeviceOperation', 59), mapping('SparseMatmulDeviceOperation', 59)];
+        const perfRows = perfRowsFor(['UnaryDeviceOperation', 'SparseMatmulDeviceOperation']);
+
+        const matched = matchDeviceOperationOrdersToPerf(functionStartOperations, functionEndOperations, perfRows, 1);
+
+        expect(matched.map(({ name }) => name)).toEqual(['UnaryDeviceOperation', 'SparseMatmulDeviceOperation']);
+        expect(matched.map(({ perfData }) => perfData?.id)).toEqual(['0', '1']);
+        expect(functionStartOperations.every(({ perfData }) => perfData === undefined)).toBe(true);
+        expect(functionEndOperations.every(({ perfData }) => perfData === undefined)).toBe(true);
+        expect(matched[0]).not.toBe(functionEndOperations[0]);
+    });
+
+    it('prefers function-start order when both candidates align', () => {
+        const functionStartOperations = [mapping('Alpha', 10), mapping('Alpha', 20)];
+        const functionEndOperations = [mapping('Alpha', 20), mapping('Alpha', 10)];
+
+        const matched = matchDeviceOperationOrdersToPerf(
+            functionStartOperations,
+            functionEndOperations,
+            perfRowsFor(['Alpha', 'Alpha']),
+            1,
+        );
+
+        expect(matched.map(({ id }) => id)).toEqual([10, 20]);
+    });
+
+    it.each([
+        {
+            label: 'is incomplete',
+            functionStartOperations: [mapping('Outer', 1), mapping('Inner', 1)],
+            functionEndOperations: [mapping('Inner', 1)],
+            perfRows: perfRowsFor(['Inner', 'Outer']),
+        },
+        {
+            label: 'contains a different operation',
+            functionStartOperations: [mapping('Outer', 1), mapping('Inner', 1)],
+            functionEndOperations: [mapping('Inner', 1), mapping('Different', 1)],
+            perfRows: perfRowsFor(['Inner', 'Different']),
+        },
+        {
+            label: 'has different duplicate counts',
+            functionStartOperations: [mapping('Alpha', 1), mapping('Alpha', 1), mapping('Beta', 1)],
+            functionEndOperations: [mapping('Alpha', 1), mapping('Beta', 1), mapping('Beta', 1)],
+            perfRows: perfRowsFor(['Alpha', 'Beta', 'Beta']),
+        },
+    ])('rejects function-end order when it $label', ({ functionStartOperations, functionEndOperations, perfRows }) => {
+        expect(matchDeviceOperationOrdersToPerf(functionStartOperations, functionEndOperations, perfRows, 1)).toEqual(
+            [],
+        );
     });
 });
 

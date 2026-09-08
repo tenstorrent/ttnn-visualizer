@@ -112,3 +112,58 @@ export const matchDeviceOperationsToPerf = (
 
     return alignToPerfRows(collapseMultideviceOperations(deviceOperations, numDevices), alignableRows);
 };
+
+const hasSameDeviceOperations = (
+    functionStartOperations: DeviceOperationMapping[],
+    functionEndOperations: DeviceOperationMapping[],
+): boolean => {
+    if (functionStartOperations.length !== functionEndOperations.length) {
+        return false;
+    }
+
+    const operationCountByKey = new Map<string, number>();
+
+    for (const { id, name } of functionStartOperations) {
+        const key = JSON.stringify([id, name]);
+        operationCountByKey.set(key, (operationCountByKey.get(key) ?? 0) + 1);
+    }
+
+    for (const { id, name } of functionEndOperations) {
+        const key = JSON.stringify([id, name]);
+        const remaining = operationCountByKey.get(key);
+
+        if (!remaining) {
+            return false;
+        }
+
+        operationCountByKey.set(key, remaining - 1);
+    }
+
+    return true;
+};
+
+/**
+ * @description Try the captured graph's parent-first function-start order,
+ * then its child-first function-end order when both contain the same device
+ * operations. Each order retains the raw-then-multidevice-collapse fallback.
+ */
+export const matchDeviceOperationOrdersToPerf = (
+    functionStartOperations: DeviceOperationMapping[],
+    functionEndOperations: DeviceOperationMapping[],
+    perfRows: PerfTableRow[],
+    numDevices: number,
+): DeviceOperationMapping[] => {
+    const functionStartMatch = matchDeviceOperationsToPerf(functionStartOperations, perfRows, numDevices);
+
+    if (functionStartMatch.length > 0) {
+        return functionStartMatch;
+    }
+
+    // An interrupted capture can omit function-end events. Since alignment
+    // tolerates trailing perf rows, only a complete reordering is safe to retry.
+    if (!hasSameDeviceOperations(functionStartOperations, functionEndOperations)) {
+        return [];
+    }
+
+    return matchDeviceOperationsToPerf(functionEndOperations, perfRows, numDevices);
+};
