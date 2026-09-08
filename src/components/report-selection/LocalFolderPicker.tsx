@@ -2,17 +2,13 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { Button, ButtonVariant, MenuItem, Position, Tooltip } from '@blueprintjs/core';
 import { ItemRenderer, Select } from '@blueprintjs/select';
 import { IconNames } from '@blueprintjs/icons';
 import { useInstance } from '../../hooks/useAPI';
 import 'styles/components/FolderPicker.scss';
-import {
-    getFolderLinkState,
-    shouldShowFolderLinkStatus,
-    sortByFolderLinkState,
-} from '../../functions/folderLinkStatus';
+import { getFolderLinkState, shouldShowFolderLinkStatus } from '../../functions/folderLinkStatus';
 import { ReportFolder } from '../../definitions/Reports';
 import getServerConfig from '../../functions/getServerConfig';
 import isDirectReportMode from '../../functions/isDirectReportMode';
@@ -26,7 +22,10 @@ import FolderLinkStatusIcon from './FolderLinkStatusIcon';
 import SelectRowActions from './SelectRowActions';
 
 interface LocalFolderPickerProps {
-    /** `null` while the folder list query is still loading — the component renders disabled. */
+    /**
+     * `null` while the folder list query is still loading — the component renders disabled.
+     * Folders render in the supplied order; link-status badges do not reorder them.
+     */
     items: ReportFolder[] | null;
     value: string | null;
     handleSelect: (folder: ReportFolder) => void;
@@ -76,18 +75,6 @@ const LocalFolderPicker = ({
     // direct-report mode.
     const isDeleteDisabled = loading;
     const showLinkStatus = shouldShowFolderLinkStatus(linkedIds, unlinkedIds);
-
-    // Linked first, unknown next, failed links last — preserve server order within each group.
-    const sortedItems = useMemo(
-        () =>
-            sortByFolderLinkState(
-                items ?? [],
-                (folder) => getReportId(folder.syncedName, folder.path),
-                linkedIds,
-                unlinkedIds,
-            ),
-        [items, linkedIds, unlinkedIds],
-    );
 
     const renderItem: ItemRenderer<ReportFolder> = (folder, { handleClick, handleFocus, modifiers, query }) => {
         if (!modifiers.matchesPredicate) {
@@ -149,7 +136,7 @@ const LocalFolderPicker = ({
         <>
             <Select<ReportFolder>
                 className='folder-picker'
-                items={sortedItems}
+                items={items ?? []}
                 itemPredicate={(query, item) => !query || item.path.toLowerCase().includes(query.toLowerCase())}
                 itemRenderer={renderItem}
                 noResults={

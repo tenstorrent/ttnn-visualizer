@@ -20,35 +20,6 @@ export const getFolderLinkState = (
     return FolderLinkState.UNKNOWN;
 };
 
-/** Linked first, unknown middle, failed links last — stable within each group. */
-const FOLDER_LINK_SORT_RANK: Record<FolderLinkState, number> = {
-    [FolderLinkState.LINKED]: 0,
-    [FolderLinkState.UNKNOWN]: 1,
-    [FolderLinkState.UNLINKED]: 2,
-};
-
-export const compareByFolderLinkState = (
-    aId: string | null,
-    bId: string | null,
-    linkedIds?: Set<string> | null,
-    unlinkedIds?: Set<string> | null,
-): number =>
-    FOLDER_LINK_SORT_RANK[getFolderLinkState(aId, linkedIds, unlinkedIds)] -
-    FOLDER_LINK_SORT_RANK[getFolderLinkState(bId, linkedIds, unlinkedIds)];
-
 /** True when badge sets are present and at least one known link/unlinked id exists. */
 export const shouldShowFolderLinkStatus = (linkedIds?: Set<string> | null, unlinkedIds?: Set<string> | null): boolean =>
     Boolean(linkedIds?.size || unlinkedIds?.size);
-
-export const sortByFolderLinkState = <T>(
-    items: T[],
-    getId: (item: T) => string | null,
-    linkedIds?: Set<string> | null,
-    unlinkedIds?: Set<string> | null,
-): T[] => {
-    if (!shouldShowFolderLinkStatus(linkedIds, unlinkedIds)) {
-        return items;
-    }
-
-    return [...items].sort((a, b) => compareByFolderLinkState(getId(a), getId(b), linkedIds, unlinkedIds));
-};
