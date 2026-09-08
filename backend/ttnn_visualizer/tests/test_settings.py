@@ -1230,6 +1230,20 @@ def test_config_selects_environment_subclass_and_reuses_it(
     assert Config() is config
 
 
+def test_config_cache_wins_over_later_environment_changes(monkeypatch):
+    from ttnn_visualizer.settings import Config
+
+    monkeypatch.setattr(Config, "_instance", None)
+    monkeypatch.setenv("FLASK_ENV", "production")
+
+    config = Config()
+
+    monkeypatch.setenv("FLASK_ENV", "development")
+
+    assert Config() is config
+    assert isinstance(config, ProductionConfig)
+
+
 def test_server_cli_flag_enables_server_mode_without_a_manual_patch(monkeypatch):
     # ``main()`` must not hand-patch ``SERVER_MODE`` / ``HOST``; the override loop is
     # the single mechanism. Reset the singleton so a prior ``Config()`` cannot poison

@@ -791,7 +791,15 @@ class ProductionConfig(DefaultConfig):
 
 
 class _ConfigFactory:
-    _instance: Optional[DefaultConfig] = None
+    """Callable singleton that exposes the selected configuration value.
+
+    ``Config`` is an instance rather than a configuration class so its return
+    type can be the environment-specific subclass while remaining compatible
+    with mypy's inference.
+    """
+
+    def __init__(self) -> None:
+        self._instance: Optional[DefaultConfig] = None
 
     def __call__(self) -> DefaultConfig:
         if self._instance is None:
