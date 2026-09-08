@@ -1775,6 +1775,19 @@ describe('OperationGraphReactFlow repeat blocks', () => {
         );
     });
 
+    it('does nothing when the grouping already in use is clicked', () => {
+        // Picking a mode applies it, but re-picking the mode already in use is not a
+        // second ask. It went through the same path, and from the unrolled default that
+        // path folds everything — so clicking the button that was already active folded
+        // the graph, which is the Fold button's job and nobody else's.
+        renderGraph(LAYER_OPERATION_LIST);
+        runBuild.mockClear();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Group by repeats' }));
+
+        expect(runBuild).not.toHaveBeenCalled();
+    });
+
     it("discards the other detector's instance ids when the grouping changes", () => {
         // A kept fold decision would name blocks that do not exist in the new mode.
         renderFolded();

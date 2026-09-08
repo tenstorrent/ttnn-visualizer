@@ -4,8 +4,7 @@
 
 import { touchLruCache } from '../../functions/touchLruCache';
 import { type CandidateEdge, buildOpGraph, collectCandidateEdges, getKeptOperations } from './opGraphBuilder';
-import { detectLayerBlocks } from './opGraphLayerBlocks';
-import { detectRepeatBlocks } from './opGraphRepeatBlocks';
+import { detectorFor } from './opGraphBlockDetectors';
 import {
     type OpGraphBuildOptions,
     type OpGraphBuiltGraph,
@@ -57,9 +56,11 @@ const candidatesOf = (): CandidateEdge[] => {
     return candidateCache.candidates;
 };
 
-// Detection is invariant under fold and device-op expansion, so it is derived from
-// the two options it does depend on rather than keyed here.
-type CachedOption = Exclude<keyof OpGraphBuildOptions, 'detectedBlocks'>;
+// Two options are derived rather than chosen, so they are not part of the key:
+// detection is invariant under fold and device-op expansion (it is keyed separately on
+// the two options it does depend on), and the candidate edges are a function of the
+// operations, which the source version already identifies.
+type CachedOption = Exclude<keyof OpGraphBuildOptions, 'detectedBlocks' | 'candidates'>;
 
 // One part per option, as a record over the option keys rather than a template
 // string: adding an option to `OpGraphBuildOptions` now fails to compile until it
@@ -101,7 +102,7 @@ const detectedBlocksOf = (hideDeallocate: boolean, grouping: OpGraphGrouping): R
         return cached;
     }
     const kept = getKeptOperations(operations, hideDeallocate, candidatesOf());
-    const blocks = grouping === OpGraphGrouping.LAYERS ? detectLayerBlocks(kept) : detectRepeatBlocks(kept);
+    const blocks = detectorFor(grouping)(kept);
     detectionByOptions.set(key, blocks);
     return blocks;
 };
@@ -152,6 +153,10 @@ const drainPendingBuild = (): void => {
             ...options,
             grouping,
             detectedBlocks: detectedBlocksOf(options.hideDeallocate, grouping),
+            // Already walked once for this source, and the build would otherwise walk
+            // every edge again on each uncached layout — including every frame of a
+            // drag on the op-range slider.
+            candidates: candidatesOf(),
         });
         touchLruCache(layoutCache, cacheKey, graph, LAYOUT_CACHE_LIMIT);
         postMessage({

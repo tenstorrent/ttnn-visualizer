@@ -249,6 +249,15 @@ describe('grouping control', () => {
         expect(screen.getByRole('button', { name: 'Group by layers' })).toHaveClass('op-graph-grouping-layer');
     });
 
+    it("marks the active control with our own class, not only Blueprint's", () => {
+        // The fill is keyed off this class so the palette does not depend on
+        // `.bp6-active` surviving a Blueprint upgrade. #1982
+        renderToolbar({ status: PerfOverlayStatus.READY, hasBlocks: true, grouping: OpGraphGrouping.LAYERS });
+
+        expect(screen.getByRole('button', { name: 'Group by layers' })).toHaveClass('op-graph-grouping-active');
+        expect(screen.getByRole('button', { name: 'Group by repeats' })).not.toHaveClass('op-graph-grouping-active');
+    });
+
     it('reports the mode the user picked', () => {
         const onGroupingChange = vi.fn();
         renderToolbar({ status: PerfOverlayStatus.READY, hasBlocks: true, onGroupingChange });
@@ -280,6 +289,39 @@ describe('weight-load control', () => {
         renderToolbar({ status: PerfOverlayStatus.READY });
 
         expect(screen.getByLabelText('Collapse weight loads').closest('label')).toHaveClass('op-graph-switch-weights');
+    });
+
+    it('reports the value the user switched to', () => {
+        const onCollapseWeightLoadsChange = vi.fn();
+        renderToolbar({ status: PerfOverlayStatus.READY, collapseWeightLoads: true, onCollapseWeightLoadsChange });
+
+        fireEvent.click(screen.getByLabelText('Collapse weight loads'));
+
+        expect(onCollapseWeightLoadsChange).toHaveBeenCalledWith(false);
+    });
+
+    it('switches back on from off', () => {
+        const onCollapseWeightLoadsChange = vi.fn();
+        renderToolbar({ status: PerfOverlayStatus.READY, collapseWeightLoads: false, onCollapseWeightLoadsChange });
+
+        fireEvent.click(screen.getByLabelText('Collapse weight loads'));
+
+        expect(onCollapseWeightLoadsChange).toHaveBeenCalledWith(true);
+    });
+
+    it('is not gated on the perf overlay, unlike the switches beside it', () => {
+        // It sits in the same row as two perf-gated switches, so the thing worth pinning
+        // is that it does not inherit their gate: fans exist whether or not a
+        // performance report was loaded.
+        const onCollapseWeightLoadsChange = vi.fn();
+        renderToolbar({ status: PerfOverlayStatus.UNAVAILABLE, onCollapseWeightLoadsChange });
+
+        const control = screen.getByLabelText('Collapse weight loads');
+        expect(control).toBeEnabled();
+
+        fireEvent.click(control);
+
+        expect(onCollapseWeightLoadsChange).toHaveBeenCalledTimes(1);
     });
 
     it('sits ahead of the perf-gated switches rather than between them', () => {
@@ -365,5 +407,21 @@ describe('repeats controls', () => {
         const { unroll, fold } = repeatsButtons();
         expect(unroll).toBeDisabled();
         expect(fold).toBeEnabled();
+    });
+
+    it('disables the other direction when everything is already folded', () => {
+        // The two flags are independent props, not one tri-state, so the branch above
+        // says nothing about this one — and this is the state a report opens in once a
+        // Fold has been applied.
+        renderToolbar({
+            status: PerfOverlayStatus.READY,
+            hasBlocks: true,
+            areAllBlocksExpanded: false,
+            areAllBlocksCollapsed: true,
+        });
+
+        const { unroll, fold } = repeatsButtons();
+        expect(fold).toBeDisabled();
+        expect(unroll).toBeEnabled();
     });
 });

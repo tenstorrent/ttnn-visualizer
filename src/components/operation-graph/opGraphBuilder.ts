@@ -10,12 +10,11 @@ import {
     layoutDeviceSubgraph,
     layoutOpGraph,
 } from './opGraphLayout';
-import { detectLayerBlocks } from './opGraphLayerBlocks';
+import { detectorFor } from './opGraphBlockDetectors';
 import { detectWeightFans } from './opGraphWeightFans';
-import { detectRepeatBlocks } from './opGraphRepeatBlocks';
 import { formatBlockMeta } from './opGraphBlockMeta';
 import { sumOptional } from '../../functions/math';
-import { OpGraphBlockKind, OpGraphGrouping } from './opGraphTypes';
+import { OpGraphBlockKind } from './opGraphTypes';
 import {
     type OpGraphBlockSummary,
     type OpGraphBuildOptions,
@@ -96,9 +95,10 @@ export function buildOpGraph(
         grouping,
         collapseWeightLoads,
         detectedBlocks: providedBlocks,
+        candidates: providedCandidates,
     }: OpGraphBuildOptions,
 ): OpGraphBuiltGraph {
-    const candidates = collectCandidateEdges(operations);
+    const candidates = providedCandidates ?? collectCandidateEdges(operations);
 
     const subgraphByOperationId = new Map<number, OpGraphDeviceSubgraph>(
         deviceSubgraphs.map((subgraph) => [subgraph.operationId, subgraph]),
@@ -123,9 +123,7 @@ export function buildOpGraph(
     const operationById = new Map<number, OpGraphSourceOperation>(
         keptOperations.map((operation) => [operation.id, operation]),
     );
-    const detectedBlocks =
-        providedBlocks ??
-        (grouping === OpGraphGrouping.LAYERS ? detectLayerBlocks(keptOperations) : detectRepeatBlocks(keptOperations));
+    const detectedBlocks = providedBlocks ?? detectorFor(grouping)(keptOperations);
     // Detections are still reported when nothing has been folded, so the toolbar can
     // offer Fold; they are just not applied. Folding on first render decided for the
     // user, and it cannot be expressed as an id list because the ids only exist once

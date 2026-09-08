@@ -5,6 +5,7 @@
 import { Button, ButtonGroup, ButtonVariant, PopoverPosition, Switch, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { type FormEvent, type Ref, memo } from 'react';
+import classNames from 'classnames';
 import GraphOpFilter, { type GraphOpFilterHandle } from '../GraphOpFilter';
 import type { GraphFilterMode } from '../../definitions/GraphFilterMode';
 import { CRITICAL_PATH_TOOLTIP, PERF_OVERLAY_TOOLTIP, PerfOverlayStatus } from '../../definitions/PerfOverlayStatus';
@@ -17,6 +18,9 @@ import 'styles/components/OpGraphToolbar.scss';
  * "Repeats" before layers existed, and a screen reader was still being told "unroll
  * all repeats" while the buttons acted on layers. #1976
  */
+/** Paired with each `swatchClass` below, so the colours are keyed off our own class. */
+const GROUPING_ACTIVE_CLASS = 'op-graph-grouping-active';
+
 const GROUPING_NOUN: Readonly<Record<OpGraphGrouping, string>> = {
     [OpGraphGrouping.REPEATS]: 'repeats',
     [OpGraphGrouping.LAYERS]: 'layers',
@@ -305,7 +309,13 @@ const OpGraphToolbar = memo(
                             position={PopoverPosition.BOTTOM}
                         >
                             <Button
-                                className={swatchClass}
+                                // App-owned active class beside Blueprint's own: the
+                                // stylesheet colours the button from this one rather than
+                                // from `.bp6-active`, so the palette does not depend on a
+                                // Blueprint class name. #1982
+                                className={classNames(swatchClass, {
+                                    [GROUPING_ACTIVE_CLASS]: grouping === value,
+                                })}
                                 variant={ButtonVariant.OUTLINED}
                                 active={grouping === value}
                                 disabled={isDisabled}

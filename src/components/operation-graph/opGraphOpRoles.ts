@@ -225,10 +225,14 @@ const ROLE_LABELS: Readonly<Record<OpSemanticRole, string>> = {
 const ROLE_PRIORITY: readonly OpSemanticRole[] = [
     OpSemanticRole.ATTENTION,
     OpSemanticRole.MOE,
-    OpSemanticRole.FEED_FORWARD,
     OpSemanticRole.POSITIONAL_ENCODING,
     OpSemanticRole.EMBEDDING,
+    // Above feed-forward, though both are supporting anchors: a convolution names a
+    // shape, an activation only says one happened, and every conv block contains one.
+    // `conv2d, relu, add` read as feed-forward before this, which is a residual conv
+    // block in every CNN that emits its activation as an op.
     OpSemanticRole.CONV_RESIDUAL,
+    OpSemanticRole.FEED_FORWARD,
 ];
 
 /** Direct evidence before circumstantial: an op that names the role wins. */

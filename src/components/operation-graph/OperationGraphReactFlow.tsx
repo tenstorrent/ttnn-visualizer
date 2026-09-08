@@ -818,6 +818,12 @@ const OperationGraphInner = ({
 
     const handleGroupingChange = useCallback(
         (next: OpGraphGrouping) => {
+            // Re-picking the mode already in use is not a second ask. Without this the
+            // active button ran the fold below, so clicking it from the unrolled default
+            // folded the graph — the Fold button's job, and nobody else's.
+            if (next === grouping) {
+                return;
+            }
             setGrouping(next);
             // Applied, not just armed. #1977 is about how a report *opens* — nobody
             // asked for a grouping then. Clicking one is the ask, so leaving the graph
@@ -830,7 +836,7 @@ const OperationGraphInner = ({
             setExpandedOperationIds((previous) => withoutBlockMembers(previous, detectedBlocks));
             setRevealedNodeIds(null);
         },
-        [detectedBlocks, detectedBlockIds],
+        [grouping, detectedBlocks, detectedBlockIds],
     );
 
     const handleHideDeallocateChange = useCallback(

@@ -11,10 +11,10 @@ import {
     detectOpRoleGroups,
 } from '../src/components/operation-graph/opGraphOpRoles';
 import { DEALLOCATE_OP_NAME_LIST } from '../src/definitions/Deallocate';
-import bgeM3 from './fixtures/opRoles/bge_m3.json';
-import moe from './fixtures/opRoles/moe.json';
-import resnet50 from './fixtures/opRoles/resnet50.json';
-import sentenceBert from './fixtures/opRoles/sentence_bert.json';
+import bgeM3 from './data/opRoles/bge_m3.json';
+import moe from './data/opRoles/moe.json';
+import resnet50 from './data/opRoles/resnet50.json';
+import sentenceBert from './data/opRoles/sentence_bert.json';
 
 // Fixtures are the real op sequences from captured reports, not synthetic chains:
 // the whole claim of #1976 is that production op names carry their own role, so a
@@ -409,6 +409,23 @@ describe('detectOpRoleGroups', () => {
             expect(groups).toHaveLength(1);
             expect(groups[0].role).toBe(OpSemanticRole.ATTENTION);
             expect(groups[0].confidence).toBe(OpRoleConfidence.HIGH);
+        });
+
+        it('names a conv block by its convolution, not by the activation inside it', () => {
+            // Both anchors are supporting, so confidence cannot separate them and the
+            // role order has to: a convolution names a shape, an activation only says
+            // one happened, and every conv block contains one. `conv2d, relu, add` read
+            // as feed-forward, which is wrong for every CNN that emits its activation as
+            // an op — `resnet50` fuses its own, so no fixture covers this.
+            const groups = detectOpRoleGroups([
+                operation(1, 'ttnn.conv2d'),
+                operation(2, 'ttnn.relu'),
+                operation(3, 'ttnn.add'),
+            ]);
+
+            expect(groups).toHaveLength(1);
+            expect(groups[0].role).toBe(OpSemanticRole.CONV_RESIDUAL);
+            expect(groups[0].anchorName).toBe('conv2d');
         });
 
         it.each([

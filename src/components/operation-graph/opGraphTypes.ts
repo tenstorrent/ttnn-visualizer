@@ -4,6 +4,9 @@
 
 import type { Edge, Node } from '@xyflow/react';
 import type { NodeRelation } from '../../definitions/NodeRelation';
+// Type-only, so nothing is imported at runtime and the builder's import of this
+// module stays the only real edge between the two.
+import type { CandidateEdge } from './opGraphBuilder';
 
 export enum OpGraphNodeType {
     OP = 'opNode',
@@ -225,6 +228,13 @@ export interface OpGraphBuildOptions {
     collapseWeightLoads?: boolean;
     /** Worker-only: detection is invariant under fold / device-op expand. */
     detectedBlocks?: RepeatBlockInstance[];
+    /**
+     * Worker-only, and the same bargain as `detectedBlocks`: the candidate-edge pass is
+     * an ops x outputs x consumers walk that the worker already runs once per source
+     * for detection, so a caller holding it hands it over rather than making the build
+     * repeat it. Derived from `operations` alone, so it varies with nothing else here.
+     */
+    candidates?: readonly CandidateEdge[];
 }
 
 export type OpGraphWorkerInboundMessage =

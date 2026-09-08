@@ -5,8 +5,8 @@
 import { describe, expect, it } from 'vitest';
 import { detectLayerBlocks } from '../src/components/operation-graph/opGraphLayerBlocks';
 import type { OpGraphSourceOperation } from '../src/components/operation-graph/opGraphTypes';
-import bgeM3 from './fixtures/opRoles/bge_m3.json';
-import moe from './fixtures/opRoles/moe.json';
+import bgeM3 from './data/opRoles/bge_m3.json';
+import moe from './data/opRoles/moe.json';
 
 // The adapter only needs `id` and `name`; the rest of the source shape is inert here.
 const asSource = (operations: readonly { id: number; name: string }[]) =>

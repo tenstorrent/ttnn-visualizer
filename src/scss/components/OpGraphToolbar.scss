@@ -65,11 +65,22 @@
 // The grouping controls wear the colour of the blocks they produce, so the toolbar and
 // the canvas read as one feature rather than two. Borders always, fill only when
 // active: an inactive button that is already filled cannot show that it is selected.
-// #1982
-.op-graph-grouping-repeat.bp6-button {
+//
+// Every class here is ours: the toolbar and row scope the swatch, and the component
+// adds `op-graph-grouping-active` beside Blueprint's own state class, so the palette
+// does not depend on a Blueprint class name.
+//
+// Two ancestors rather than one because the theme rules are what have to be beaten,
+// not the base ones: `.bp6-dark .bp6-button.bp6-outlined` (three classes) sets the
+// border and `.bp6-dark .bp6-button.bp6-outlined.bp6-active` (four) the active fill.
+// Counting only the light-theme selectors is how these buttons shipped with Blueprint's
+// grey instead of their own colour — the app is dark by default, so nothing on the
+// canvas ever matched the control that produced it. Verified in the browser against the
+// computed style, not against the cascade on paper. #1982
+.op-graph-toolbar .op-graph-toolbar-row .op-graph-grouping-repeat {
     border-color: var(--graph-block-repeat-border);
 
-    &.bp6-active {
+    &.op-graph-grouping-active {
         background-color: var(--graph-block-repeat);
 
         // The fills are pale, because they have to sit behind dark node text on the
@@ -78,19 +89,25 @@
     }
 }
 
-.op-graph-grouping-layer.bp6-button {
+.op-graph-toolbar .op-graph-toolbar-row .op-graph-grouping-layer {
     border-color: var(--graph-block-layer-border);
 
-    &.bp6-active {
+    &.op-graph-grouping-active {
         background-color: var(--graph-block-layer);
         color: $tt-black;
     }
 }
 
 // The weight-load switch completes the set: its indicator takes the fan colour so all
-// three grouping controls point at their own blocks. `.bp6-control` is chained in to
-// outrank Blueprint's own checked-indicator rule on specificity rather than with
-// `!important`, which this stylesheet disallows. #1982
+// three grouping controls point at their own blocks.
+//
+// The one place here that has to name Blueprint internals, because the indicator is
+// Blueprint's own element and carries no hook of ours — the documented exception to
+// preferring app-owned classnames. Kept local and scoped to our two classes rather
+// than moved to `_blueprintjs.scss`, where a feature-specific colour would reach every
+// switch in the app; `.bp6-control` is chained in to outrank Blueprint's own
+// checked-indicator rule on specificity rather than with `!important`, which this
+// stylesheet disallows. #1982
 .op-graph-toolbar-switch.op-graph-switch-weights.bp6-control input:checked ~ .bp6-control-indicator {
     background-color: var(--graph-block-weights-border);
 }

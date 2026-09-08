@@ -128,6 +128,27 @@ describe('buildOpGraph', () => {
             expect(operationIdsOf(graph)).toEqual([1, 2]);
         });
 
+        it('uses the candidate edges it was handed instead of walking them again', () => {
+            // The walk is ops x outputs x consumers and the worker already runs it once
+            // per source for detection, so it hands the same pass over rather than
+            // making every uncached layout — every frame of an op-range drag — repeat it.
+            // Proved by supplying a set that omits a real edge: if the build recollected,
+            // ops 3 and 4 would be connected and drawn.
+            const operations = [
+                operation({ id: 1, outputs: [{ consumers: [2] }] }),
+                operation({ id: 2 }),
+                operation({ id: 3, outputs: [{ consumers: [4] }] }),
+                operation({ id: 4 }),
+            ];
+            const graph = buildOpGraph(operations, {
+                hideDeallocate: false,
+                deviceSubgraphs: [],
+                candidates: [{ source: 1, target: 2, label: '[1, 32]', tensorId: 1 }],
+            });
+
+            expect(operationIdsOf(graph)).toEqual([1, 2]);
+        });
+
         it('labels a node with its id and name, and filters on the bare name', () => {
             const [node] = build(
                 [operation({ id: 7, name: 'ttnn.matmul', outputs: [{ consumers: [8] }] })],
