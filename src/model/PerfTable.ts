@@ -48,6 +48,10 @@ export interface PerfTableRow {
     trisc1_kernel_duration: string | null;
     trisc2_kernel_duration: string | null;
     erisc_kernel_duration: string | null;
+    device_fw_start_cycle: string | null;
+    device_fw_end_cycle: string | null;
+    metal_trace_id: string | null;
+    metal_trace_replay_session_id: string | null;
     op_type: OpType;
     op?: number;
     missing?: boolean;
@@ -64,6 +68,7 @@ export interface TypedPerfTableRow extends Omit<
     | 'device_time'
     | 'op_to_op_gap'
     | 'cores'
+    | 'available_cores'
     | 'dram'
     | 'dram_percent'
     | 'flops'
@@ -86,6 +91,7 @@ export interface TypedPerfTableRow extends Omit<
     device_time: number | null;
     op_to_op_gap: number | null;
     cores: number | null;
+    available_cores: number | null;
     dram: number | null;
     dram_percent: number | null;
     flops: number | null;
@@ -116,6 +122,10 @@ export const signpostRowDefaults = Object.freeze({
     global_call_count: null,
     sub_device_id: null,
     available_cores: null,
+    device_fw_start_cycle: null,
+    device_fw_end_cycle: null,
+    metal_trace_id: null,
+    metal_trace_replay_session_id: null,
     total_percent: null,
     device_time: null,
     op_to_op_gap: null,

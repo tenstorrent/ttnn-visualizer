@@ -9,6 +9,7 @@ import { IconNames } from '@blueprintjs/icons';
 import { Link } from 'react-router';
 import { BoundType, ColumnDefinition, ColumnKeys } from '../definitions/PerfTable';
 import { TypedPerfTableRow } from '../model/PerfTable';
+import { isFlagEnabled } from './getServerConfig';
 import { MIN_TOTAL_PERCENT } from '../definitions/PerfHeuristics';
 import { OperationDescription } from '../model/APIData';
 import { formatMemorySize, formatPercentage, formatSize, toSecondsPretty } from './math';
@@ -78,7 +79,7 @@ export const formatCell = (
     }
 
     const value = row[key];
-    let formatted: string | boolean | string[];
+    let formatted: string;
 
     if (value === null || value === '' || Number.isNaN(value)) {
         return '';
@@ -435,13 +436,15 @@ export const getCoreColour = (
     availableCores: string | number | null | undefined = null,
     dramSharded: boolean | string | null | undefined = null,
 ): CellColour => {
-    const cores = (typeof value === 'string' ? parseInt(value, 10) : value) as number;
+    const parsedCores = typeof value === 'string' ? parseInt(value, 10) : value;
+    const cores = typeof parsedCores === 'number' && !Number.isNaN(parsedCores) ? parsedCores : null;
     const parsedAvailableCores = typeof availableCores === 'string' ? parseInt(availableCores, 10) : availableCores;
-    const isDramSharded =
-        dramSharded === true || (typeof dramSharded === 'string' && ['true', '1'].includes(dramSharded.toLowerCase()));
+    const normalisedAvailableCores =
+        typeof parsedAvailableCores === 'number' && !Number.isNaN(parsedAvailableCores) ? parsedAvailableCores : null;
+    const isDramSharded = isFlagEnabled(dramSharded);
 
     if (cores != null) {
-        const usesLittleOfBudget = parsedAvailableCores == null || cores < parsedAvailableCores / 2;
+        const usesLittleOfBudget = normalisedAvailableCores == null || cores < normalisedAvailableCores / 2;
 
         if (isDramSharded) {
             return CellColour.Green;
@@ -451,7 +454,7 @@ export const getCoreColour = (
             return CellColour.Red;
         }
 
-        if (parsedAvailableCores != null && cores === parsedAvailableCores) {
+        if (normalisedAvailableCores != null && cores === normalisedAvailableCores) {
             return CellColour.Green;
         }
     }

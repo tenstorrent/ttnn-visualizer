@@ -9,11 +9,21 @@ import { DeviceOperationLayoutTypes } from '../model/APIData';
 import { L1PressureMetrics } from '../model/L1Pressure';
 import { nsToUs } from './math';
 import { parsePerfRowTensorAttributes } from './parsePerfRowTensorAttributes';
+import { isFlagEnabled } from './getServerConfig';
 
 interface RowAttributes {
     buffer_type: BufferType | null;
     layout: DeviceOperationLayoutTypes | null;
 }
+
+const parseNullableInteger = (value: string | null | undefined): number | null => {
+    if (value == null || value === '') {
+        return null;
+    }
+
+    const parsed = parseInt(value, 10);
+    return Number.isNaN(parsed) ? null : parsed;
+};
 
 export const getRowAttributes = (row: PerfTableRow): RowAttributes => {
     const { buffer_type: bufferType, layout } = parsePerfRowTensorAttributes(row);
@@ -63,11 +73,12 @@ export const enrichRowData = (
             device_time: parseFloat(row.device_time),
             op_to_op_gap: opToOpGap,
             cores: parseInt(row.cores, 10),
+            available_cores: parseNullableInteger(row.available_cores),
             dram: row.dram ? parseFloat(row.dram) : null,
             dram_percent: row.dram_percent ? parseFloat(row.dram_percent) : null,
             flops: row.flops ? parseFloat(row.flops) : null,
             flops_percent: row.flops_percent ? parseFloat(row.flops_percent) : null,
-            dram_sharded: (row.dram_sharded ?? '').toLowerCase() === 'true',
+            dram_sharded: isFlagEnabled(row.dram_sharded),
             pm_ideal_ns: row.pm_ideal_ns ? parseFloat(row.pm_ideal_ns) : null,
             // Kernel durations arrive as raw nanosecond strings (CSV `[ns]` columns); convert to µs
             // to match the table's `unit: 'µs'` column declarations. nsToUs handles the nullish case.

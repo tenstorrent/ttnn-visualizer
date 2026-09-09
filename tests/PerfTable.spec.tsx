@@ -344,7 +344,7 @@ describe('PerfTable column visibility', () => {
                 id: 1,
                 raw_op_code: 'Matmul',
                 sub_device_id: 'subdevice-7',
-                available_cores: '108',
+                available_cores: 108,
             }),
         ]);
 
@@ -360,7 +360,7 @@ describe('PerfTable column visibility', () => {
             id: 99,
             raw_op_code: 'Matmul',
             sub_device_id: 'comparison-subdevice',
-            available_cores: '72',
+            available_cores: 72,
         });
 
         renderTable([matmulRow], { comparisonData: [[comparisonRow]] });
@@ -391,7 +391,7 @@ describe('PerfTable column visibility', () => {
         expect(footerSpanTotal).toBe(visibleHeaderCount - 1);
     });
 
-    it('gives OP Code a colspan that covers Flags under default columns', () => {
+    it('gives OP Code a colspan that covers the visible grouped columns', () => {
         renderTable([matmulRow]);
 
         const table = screen.getByRole('table');
@@ -401,7 +401,7 @@ describe('PerfTable column visibility', () => {
             cell.textContent?.includes('device ops'),
         );
 
-        expect(Number(opCodeFooter?.getAttribute('colspan'))).toBe(5);
+        expect(Number(opCodeFooter?.getAttribute('colspan'))).toBe(4);
     });
 });
 

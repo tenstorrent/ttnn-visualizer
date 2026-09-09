@@ -14,6 +14,8 @@ describe('PerfTable column helpers', () => {
             hasL1PressureData: true,
             hiliteHighDispatch: true,
             hasNpe: true,
+            hasSubDeviceIds: true,
+            hasMultipleAvailableCoreBudgets: true,
         });
 
         expect(eligibleColumns.map((column) => column.key)).toEqual([
@@ -25,14 +27,18 @@ describe('PerfTable column helpers', () => {
             ColumnKeys.OpCode,
             ColumnKeys.Flags,
             ColumnKeys.Device,
-            ColumnKeys.SubDevice,
+            ColumnKeys.SUB_DEVICE,
             ColumnKeys.HighDispatch,
             ColumnKeys.BufferType,
             ColumnKeys.Layout,
             ColumnKeys.DeviceTime,
             ColumnKeys.OpToOpGap,
             ColumnKeys.Cores,
-            ColumnKeys.AvailableCores,
+            ColumnKeys.AVAILABLE_CORES,
+            ColumnKeys.DEVICE_FW_START_CYCLE,
+            ColumnKeys.DEVICE_FW_END_CYCLE,
+            ColumnKeys.METAL_TRACE_ID,
+            ColumnKeys.METAL_TRACE_REPLAY_SESSION_ID,
             ColumnKeys.Dram,
             ColumnKeys.DramPercent,
             ColumnKeys.Flops,
@@ -57,6 +63,8 @@ describe('PerfTable column helpers', () => {
             hasL1PressureData: false,
             hiliteHighDispatch: false,
             hasNpe: false,
+            hasSubDeviceIds: false,
+            hasMultipleAvailableCoreBudgets: false,
         });
 
         expect(eligibleColumns.map((column) => column.key)).toContain(ColumnKeys.Flags);

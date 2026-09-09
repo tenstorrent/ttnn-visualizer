@@ -127,6 +127,11 @@ COLOUR_SCENARIOS = [
     # Cores column
     {"id": "cores-low", "column": "cores", "row": {"cores": 4}},
     {"id": "cores-full", "column": "cores", "row": {"cores": 64}},
+    {
+        "id": "cores-full-non-default-budget",
+        "column": "cores",
+        "row": {"cores": 110, "available_cores": 110},
+    },
     {"id": "cores-mid", "column": "cores", "row": {"cores": 32}},
     {"id": "cores-missing", "column": "cores", "row": {"cores": None}},
     {

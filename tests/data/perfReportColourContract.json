@@ -345,6 +345,26 @@
             "expected": "green"
         },
         {
+            "id": "cores-full-non-default-budget",
+            "column": "cores",
+            "row": {
+                "total_percent": 50.0,
+                "raw_op_code": "SomeDeviceOp",
+                "bound": null,
+                "cores": 110,
+                "available_cores": 110,
+                "dram_sharded": false,
+                "dram_percent": null,
+                "flops_percent": null,
+                "op_to_op_gap": null,
+                "math_fidelity": "",
+                "input_0_datatype": "",
+                "input_1_datatype": "",
+                "output_datatype": ""
+            },
+            "expected": "green"
+        },
+        {
             "id": "cores-mid",
             "column": "cores",
             "row": {

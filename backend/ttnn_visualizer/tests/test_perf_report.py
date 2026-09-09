@@ -28,30 +28,30 @@ KERNEL_DURATION_KEYS = [
 ]
 
 REPORT_HEADER = [
-    "id",
-    "total_percent",
-    "bound",
-    "op_code",
-    "device",
-    "device_time",
-    "op_to_op_gap",
-    "cores",
-    "dram",
-    "dram_percent",
-    "flops",
-    "flops_percent",
-    "math_fidelity",
-    "output_datatype",
-    "input_0_datatype",
-    "input_1_datatype",
-    "dram_sharded",
-    "input_0_memory",
-    "inner_dim_block_size",
-    "output_subblock_h",
-    "output_subblock_w",
-    "global_call_count",
-    "advice",
-    "raw_op_code",
+    "ID",
+    "Total %",
+    "Bound",
+    "OP Code",
+    "Device",
+    "Device Time",
+    "Op-to-Op Gap",
+    "Cores",
+    "DRAM",
+    "DRAM %",
+    "FLOPs",
+    "FLOPs %",
+    "Math Fidelity",
+    "Output Datatype",
+    "Input 0 Datatype",
+    "Input 1 Datatype",
+    "DRAM Sharded",
+    "Input 0 Memory",
+    "Inner Dim Block Size",
+    "Output Subblock H",
+    "Output Subblock W",
+    "Global Call Count",
+    "Advice",
+    "Raw OP Code",
 ]
 
 
@@ -273,10 +273,39 @@ class TestPerfReportKernelDurationSchemaCompatibility(unittest.TestCase):
         ):
             report = OpsPerformanceReportQueries.generate_report(instance)["report"]
 
-        self.assertEqual(report[0]["raw_op_code"], "Matmul")
-        self.assertEqual(report[0]["advice"], ["useful advice"])
-        self.assertEqual(report[0]["sub_device_id"], "subdevice-7")
-        self.assertEqual(report[0]["available_cores"], "108")
+        expected = {
+            "id": "2",
+            "total_percent": "1.0",
+            "bound": "DRAM",
+            "op_code": "Matmul",
+            "device": "0",
+            "device_time": "10.0",
+            "op_to_op_gap": "1.0",
+            "cores": "64",
+            "dram": "100.0",
+            "dram_percent": "50.0",
+            "flops": "200.0",
+            "flops_percent": "50.0",
+            "math_fidelity": "HiFi4",
+            "output_datatype": "BFLOAT16",
+            "input_0_datatype": "BFLOAT16",
+            "input_1_datatype": "BFLOAT16",
+            "dram_sharded": "False",
+            "input_0_memory": "DRAM",
+            "inner_dim_block_size": "",
+            "output_subblock_h": "",
+            "output_subblock_w": "",
+            "global_call_count": "1",
+            "sub_device_id": "subdevice-7",
+            "available_cores": "108",
+            "advice": ["useful advice"],
+            "raw_op_code": "Matmul",
+            "op_type": "tt_dnn_device",
+            "hash": None,
+        }
+        for key, value in expected.items():
+            self.assertIn(key, report[0])
+            self.assertEqual(report[0][key], value)
 
 
 class TestPerfReportSignpostOpType(unittest.TestCase):
@@ -306,9 +335,9 @@ class TestPerfReportSignpostOpType(unittest.TestCase):
 
             def row(row_id, op_code):
                 values = ["" for _ in REPORT_HEADER]
-                values[REPORT_HEADER.index("id")] = row_id
-                values[REPORT_HEADER.index("op_code")] = op_code
-                values[REPORT_HEADER.index("raw_op_code")] = op_code
+                values[REPORT_HEADER.index("ID")] = row_id
+                values[REPORT_HEADER.index("OP Code")] = op_code
+                values[REPORT_HEADER.index("Raw OP Code")] = op_code
                 return ",".join(values)
 
             with open(
@@ -339,6 +368,19 @@ class TestPerfReportSignpostOpType(unittest.TestCase):
         # The device row alongside it must not be tarred with the same value, or
         # the frontend filter would drop real operations.
         self.assertEqual(op_types.get("Matmul"), "tt_dnn_device")
+
+
+class TestPerfReportCsvEscaping(unittest.TestCase):
+    def test_formula_escaping_is_removed_without_changing_apostrophes(self):
+        parsed = OpsPerformanceReportQueries._parse_report_row(
+            {"math_fidelity": 0, "op_code": 1, "advice": 2, "raw_op_code": 3},
+            ["'= > BF16", "'-3", "'@trace", "'normal"],
+        )
+
+        self.assertEqual(parsed["math_fidelity"], "= > BF16")
+        self.assertEqual(parsed["op_code"], "-3")
+        self.assertEqual(parsed["advice"], "@trace")
+        self.assertEqual(parsed["raw_op_code"], "'normal")
 
 
 if __name__ == "__main__":

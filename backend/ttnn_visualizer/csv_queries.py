@@ -539,32 +539,32 @@ class OpsPerformanceQueries:
 
 class OpsPerformanceReportQueries:
     REPORT_COLUMN_HEADERS = {
-        "id": ("ID", "id"),
-        "total_percent": ("Total %", "total_percent"),
-        "bound": ("Bound", "bound"),
-        "op_code": ("OP Code", "op_code"),
-        "device": ("Device", "device"),
-        "device_time": ("Device Time", "device_time"),
-        "op_to_op_gap": ("Op-to-Op Gap", "op_to_op_gap"),
-        "cores": ("Cores", "cores"),
-        "dram": ("DRAM", "dram"),
-        "dram_percent": ("DRAM %", "dram_percent"),
-        "flops": ("FLOPs", "flops"),
-        "flops_percent": ("FLOPs %", "flops_percent"),
-        "math_fidelity": ("Math Fidelity", "math_fidelity"),
-        "output_datatype": ("Output Datatype", "output_datatype"),
-        "input_0_datatype": ("Input 0 Datatype", "input_0_datatype"),
-        "input_1_datatype": ("Input 1 Datatype", "input_1_datatype"),
-        "dram_sharded": ("DRAM Sharded", "dram_sharded"),
-        "input_0_memory": ("Input 0 Memory", "input_0_memory"),
-        "inner_dim_block_size": ("Inner Dim Block Size", "inner_dim_block_size"),
-        "output_subblock_h": ("Output Subblock H", "output_subblock_h"),
-        "output_subblock_w": ("Output Subblock W", "output_subblock_w"),
-        "global_call_count": ("Global Call Count", "global_call_count"),
-        "sub_device_id": ("Sub Device ID", "sub_device_id"),
-        "available_cores": ("Available Cores", "available_cores"),
-        "advice": ("Advice", "advice"),
-        "raw_op_code": ("Raw OP Code", "raw_op_code"),
+        "id": "ID",
+        "total_percent": "Total %",
+        "bound": "Bound",
+        "op_code": "OP Code",
+        "device": "Device",
+        "device_time": "Device Time",
+        "op_to_op_gap": "Op-to-Op Gap",
+        "cores": "Cores",
+        "dram": "DRAM",
+        "dram_percent": "DRAM %",
+        "flops": "FLOPs",
+        "flops_percent": "FLOPs %",
+        "math_fidelity": "Math Fidelity",
+        "output_datatype": "Output Datatype",
+        "input_0_datatype": "Input 0 Datatype",
+        "input_1_datatype": "Input 1 Datatype",
+        "dram_sharded": "DRAM Sharded",
+        "input_0_memory": "Input 0 Memory",
+        "inner_dim_block_size": "Inner Dim Block Size",
+        "output_subblock_h": "Output Subblock H",
+        "output_subblock_w": "Output Subblock W",
+        "global_call_count": "Global Call Count",
+        "sub_device_id": "Sub Device ID",
+        "available_cores": "Available Cores",
+        "advice": "Advice",
+        "raw_op_code": "Raw OP Code",
     }
 
     STACKED_REPORT_COLUMNS = [
@@ -603,6 +603,10 @@ class OpsPerformanceReportQueries:
         "trisc1_kernel_duration": "DEVICE TRISC1 KERNEL DURATION [ns]",
         "trisc2_kernel_duration": "DEVICE TRISC2 KERNEL DURATION [ns]",
         "erisc_kernel_duration": "DEVICE ERISC KERNEL DURATION [ns]",
+        "device_fw_start_cycle": "DEVICE FW START CYCLE",
+        "device_fw_end_cycle": "DEVICE FW END CYCLE",
+        "metal_trace_id": "METAL TRACE ID",
+        "metal_trace_replay_session_id": "METAL TRACE REPLAY SESSION ID",
     }
 
     DEFAULT_START_SIGNPOST = None
@@ -632,25 +636,30 @@ class OpsPerformanceReportQueries:
         }
         column_indexes = {}
 
-        for column, header_names in cls.REPORT_COLUMN_HEADERS.items():
-            column_indexes[column] = next(
-                (
-                    header_index_by_name[name]
-                    for name in header_names
-                    if name in header_index_by_name
-                ),
-                None,
-            )
+        for column, header_name in cls.REPORT_COLUMN_HEADERS.items():
+            column_indexes[column] = header_index_by_name.get(header_name)
 
         return column_indexes
 
     @classmethod
     def _parse_report_row(cls, column_indexes, row):
         return {
-            column: row[index]
+            column: cls._unescape_csv_formula(row[index])
             for column, index in column_indexes.items()
             if index is not None and index < len(row)
         }
+
+    @staticmethod
+    def _unescape_csv_formula(value):
+        # tt-perf-report prefixes formula-like strings with an apostrophe for CSV safety.
+        if (
+            isinstance(value, str)
+            and len(value) > 1
+            and value[0] == "'"
+            and value[1] in "=+-@\t\r"
+        ):
+            return value[1:]
+        return value
 
     @staticmethod
     def extract_signposts(csv_file):
