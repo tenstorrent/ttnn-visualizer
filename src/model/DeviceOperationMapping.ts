@@ -14,3 +14,8 @@ export interface DeviceOperationMapping {
     operationName: string;
     perfData?: PerfTableRow;
 }
+
+export interface DeviceOperationOrderCandidates {
+    functionStartOperations: DeviceOperationMapping[];
+    functionEndOperations: DeviceOperationMapping[];
+}
