@@ -34,6 +34,11 @@ const signpostRow = (label: string, id: number): PerfTableRow => perfRow(label, 
 const duplicatedPerDevice = (names: string[], numDevices: number): DeviceOperationMapping[] =>
     names.flatMap((name, index) => Array.from({ length: numDevices }, () => mapping(name, index + 1)));
 
+const orderCandidates = (
+    functionStartOperations: DeviceOperationMapping[],
+    functionEndOperations: DeviceOperationMapping[],
+) => ({ functionStartOperations, functionEndOperations });
+
 describe('matchDeviceOperationsToPerf', () => {
     it('matches a multi-device report that records each device op once (#1810)', () => {
         // Shape of resnet50_jul28_1524: two devices, one entry per device op, and
@@ -205,7 +210,11 @@ describe('matchDeviceOperationOrdersToPerf', () => {
         const functionEndOperations = [mapping('UnaryDeviceOperation', 59), mapping('SparseMatmulDeviceOperation', 59)];
         const perfRows = perfRowsFor(['UnaryDeviceOperation', 'SparseMatmulDeviceOperation']);
 
-        const matched = matchDeviceOperationOrdersToPerf(functionStartOperations, functionEndOperations, perfRows, 1);
+        const matched = matchDeviceOperationOrdersToPerf(
+            orderCandidates(functionStartOperations, functionEndOperations),
+            perfRows,
+            1,
+        );
 
         expect(matched.map(({ name }) => name)).toEqual(['UnaryDeviceOperation', 'SparseMatmulDeviceOperation']);
         expect(matched.map(({ perfData }) => perfData?.id)).toEqual(['0', '1']);
@@ -231,7 +240,11 @@ describe('matchDeviceOperationOrdersToPerf', () => {
         ];
         const perfRows = perfRowsFor(['Pad', 'Pad', 'Matmul', 'Inner', 'Outer']);
 
-        const matched = matchDeviceOperationOrdersToPerf(functionStartOperations, functionEndOperations, perfRows, 2);
+        const matched = matchDeviceOperationOrdersToPerf(
+            orderCandidates(functionStartOperations, functionEndOperations),
+            perfRows,
+            2,
+        );
 
         expect(matched.map(({ name }) => name)).toEqual(['Pad', 'Pad', 'Matmul', 'Inner', 'Outer']);
     });
@@ -251,8 +264,7 @@ describe('matchDeviceOperationOrdersToPerf', () => {
         ];
 
         const matched = matchDeviceOperationOrdersToPerf(
-            functionStartOperations,
-            functionEndOperations,
+            orderCandidates(functionStartOperations, functionEndOperations),
             perfRowsFor(['Inner', 'Outer']),
             2,
         );
@@ -277,8 +289,7 @@ describe('matchDeviceOperationOrdersToPerf', () => {
         ];
 
         const matched = matchDeviceOperationOrdersToPerf(
-            functionStartOperations,
-            functionEndOperations,
+            orderCandidates(functionStartOperations, functionEndOperations),
             perfRowsFor(['Inner', 'Outer', 'Matmul']),
             2,
         );
@@ -291,8 +302,7 @@ describe('matchDeviceOperationOrdersToPerf', () => {
         const functionEndOperations = [mapping('Alpha', 20), mapping('Alpha', 10)];
 
         const matched = matchDeviceOperationOrdersToPerf(
-            functionStartOperations,
-            functionEndOperations,
+            orderCandidates(functionStartOperations, functionEndOperations),
             perfRowsFor(['Alpha', 'Alpha']),
             1,
         );
@@ -320,9 +330,13 @@ describe('matchDeviceOperationOrdersToPerf', () => {
             perfRows: perfRowsFor(['Alpha', 'Beta', 'Beta']),
         },
     ])('rejects function-end order when it $label', ({ functionStartOperations, functionEndOperations, perfRows }) => {
-        expect(matchDeviceOperationOrdersToPerf(functionStartOperations, functionEndOperations, perfRows, 1)).toEqual(
-            [],
-        );
+        expect(
+            matchDeviceOperationOrdersToPerf(
+                orderCandidates(functionStartOperations, functionEndOperations),
+                perfRows,
+                1,
+            ),
+        ).toEqual([]);
     });
 });
 

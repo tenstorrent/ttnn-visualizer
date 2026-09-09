@@ -30,7 +30,7 @@ import parseMemoryConfig, { memoryConfigPattern } from '../functions/parseMemory
 import { MemoryConfig } from '../model/MemoryConfig';
 import getServerConfig from '../functions/getServerConfig';
 import { PerfTableRow } from '../model/PerfTable';
-import { DeviceOperationMapping } from '../model/DeviceOperationMapping';
+import { DeviceOperationMapping, DeviceOperationOrderCandidates } from '../model/DeviceOperationMapping';
 import { matchDeviceOperationOrdersToPerf } from '../functions/deviceOperationMatching';
 import memoiseLatest from '../functions/memoiseLatest';
 import {
@@ -854,11 +854,6 @@ export const useGetDeviceOperationsListByOp = () => {
     }, [operations]);
 };
 
-interface DeviceOperationOrderCandidates {
-    functionStartOperations: DeviceOperationMapping[];
-    functionEndOperations: DeviceOperationMapping[];
-}
-
 // Memoised across call sites, not per hook invocation:
 // `useGetDeviceOperationListPerf` is read by several hooks and by one component
 // instance per virtualised row, so `useMemo` would rebuild both order candidates
@@ -934,13 +929,12 @@ export const clearReportCaches = (queryClient: QueryClient) => {
 
 export const useGetDeviceOperationListPerf = () => {
     const { data: operations } = useOperationsList();
-    const { functionStartOperations, functionEndOperations } = getDeviceOperationOrderCandidates(operations);
+    const deviceOperationOrderCandidates = getDeviceOperationOrderCandidates(operations);
     const { data: devices } = useDevices();
     const { data } = useLinkedPerformanceReport();
 
     return getDeviceOperationListPerf(
-        functionStartOperations,
-        functionEndOperations,
+        deviceOperationOrderCandidates,
         (data ?? EMPTY_PERF_RETURN).report,
         devices?.length ?? 0,
     );

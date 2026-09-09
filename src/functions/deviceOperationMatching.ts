@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import { PerfTableRow } from '../model/PerfTable';
-import { DeviceOperationMapping } from '../model/DeviceOperationMapping';
+import { DeviceOperationMapping, DeviceOperationOrderCandidates } from '../model/DeviceOperationMapping';
 import { OpType } from '../definitions/Performance';
 
 /**
@@ -166,8 +166,7 @@ const hasSameDeviceOperations = (
  * cannot suppress the complete end-order match. See #1860.
  */
 export const matchDeviceOperationOrdersToPerf = (
-    functionStartOperations: DeviceOperationMapping[],
-    functionEndOperations: DeviceOperationMapping[],
+    { functionStartOperations, functionEndOperations }: DeviceOperationOrderCandidates,
     perfRows: PerfTableRow[],
     numDevices: number,
 ): DeviceOperationMapping[] => {
