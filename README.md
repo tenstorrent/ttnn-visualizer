@@ -92,31 +92,31 @@ https://github.com/user-attachments/assets/4e51a636-c6d6-46df-bf34-a06bca13c0b3
 
 | L1 Summary with Tensor highlight | Operation inputs and outputs |
 |-----------------------------------------------|------------------------------------------|
-| <img width="400" alt="L1 Summary with Tensor highlight" src="https://github.com/user-attachments/assets/7c6a3558-1084-492b-ac0b-f5f910487c8f" /> | <img width="400" alt="Operation inputs and outputs" src="https://github.com/user-attachments/assets/48197e65-4831-4005-9da8-99574c47d5c7" /> |
+| <img width="400" alt="L1 Summary with Tensor highlight" src="https://github.com/user-attachments/assets/82f57116-e40e-45e6-8f09-d87b447c0ab1" /> | <img width="400" alt="Operation inputs and outputs" src="https://github.com/user-attachments/assets/6d93e76f-cca8-4ff8-adf1-3950757f207f" /> |
 
 | Device operations with memory consumption | DRAM memory allocation |
 |-----------------------------------------------|------------------------------------------|
-| <img width="400" alt="Device operations with memory consumption" src="https://github.com/user-attachments/assets/4b8cefb9-fd75-4291-9e64-ab2f2c866c51" />| <img width="400" alt="DRAM memory allocations" src="https://github.com/user-attachments/assets/a9ad8b1d-200c-4c10-b1d8-5d76900c688c" /> |
+| <img width="400" alt="Device operations with memory consumption" src="https://github.com/user-attachments/assets/54677fdc-ba32-4501-a247-616f4a50c3f5" />| <img width="400" alt="DRAM memory allocations" src="https://github.com/user-attachments/assets/63d0ce63-a38c-4853-aae4-85e6398b4902" /> |
 
 | Operation graph view | Model buffer summary |
 |-----------------------------------------------|------------------------------------------|
-| <img width="400" alt="Operation graph view" src="https://github.com/user-attachments/assets/422f1591-4232-4d16-a783-726960261443" /> | <img width="400" alt="Model buffer summary" src="https://github.com/user-attachments/assets/9afa48b2-628d-4dad-ac89-42fda762aee6" /> |
+| <img width="400" alt="Operation graph view" src="https://github.com/user-attachments/assets/d33175d7-217b-4ed5-81fa-9cd9a1a8cd8c" /> | <img width="400" alt="Model buffer summary" src="https://github.com/user-attachments/assets/0310cd6d-5153-4cc3-8423-73da2031e24d" /> |
 
 | Per core allocation details | Per core allocation details for individual tensors |
 |-----------------------------------------------|------------------------------------------|
-| <img width="400" alt="Per core allocation details" src="https://github.com/user-attachments/assets/681c8d0e-c628-4839-afca-f31ff9d53f73" /> | <img width="400" alt="Per core allocation details for individual tensor" src="https://github.com/user-attachments/assets/a9d66f2d-2457-4ced-b777-6e8f0c54eb86" /> |
+| <img width="400" alt="Per core allocation details" src="https://github.com/user-attachments/assets/72038343-1509-44cc-91fc-1d4c92df7779" /> | <img width="400" alt="Per core allocation details for individual tensor" src="https://github.com/user-attachments/assets/c93e36d1-5dfe-488d-abff-ec0a732d7111" /> |
 
 | Tensor details list | Performance report |
 |-----------------------------------------------|------------------------------------------|
-| <img width="400" alt="Tensor details list" src="https://github.com/user-attachments/assets/315089ff-ae75-4615-87b9-19c45431871c" /> | <img width="400" alt="Performnance analysis" src="https://github.com/user-attachments/assets/468b0acb-733e-4891-8e16-781c47889017" /> |
+| <img width="400" alt="Tensor details list" src="https://github.com/user-attachments/assets/88d00ef7-bd59-4e44-bbae-5270ffa794a4" /> | <img width="400" alt="Performance analysis" src="https://github.com/user-attachments/assets/4506fd4c-6cef-4621-8661-20ba12c6b662" /> |
 
 | Performance charts |  |
 |-----------------------------------------------|------------------------------------------|
-| <img width="400" alt="Performance charts" src="https://github.com/user-attachments/assets/19f6bd6f-8f48-48dd-b9ee-726b1a1e40e3" /> |  <img width="400" alt="Performance charts" src="https://github.com/user-attachments/assets/bc6ae03b-f143-4ee5-9f14-834ddf8b0cde" /> |
+| <img width="400" alt="Performance charts" src="https://github.com/user-attachments/assets/440d00aa-61db-4ac1-99e8-ccfc4caf9f94" /> |  <img width="400" alt="Performance charts" src="https://github.com/user-attachments/assets/2d0a125a-b60e-4935-b77e-c2bcd31bcaf0" /> |
 
 | NPE |  |
 |-----------------------------------------------|------------------------------------------|
-| <img width="400" alt="NPE" src="https://github.com/user-attachments/assets/5f45c1bf-565d-4003-b3b7-0ddd90cbdeca" /> | <img width="400" alt="NPE" src="https://github.com/user-attachments/assets/8a3e9a09-4c86-45a6-9916-52fba16debc6" />
+| <img width="400" alt="NPE" src="https://github.com/user-attachments/assets/fbd5be87-7df0-4e21-9743-f2fcc6b22343" /> | <img width="400" alt="NPE" src="https://github.com/user-attachments/assets/d1ddbd74-5861-4d1b-8b85-c5a9eaa63f48" />
 
 ## Sample reports
 
