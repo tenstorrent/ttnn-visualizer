@@ -30,7 +30,16 @@ const OperationListPerfData = ({ operation }: OperationListPerfDataProps) => {
                             <Fragment key={`${operation.id}${perf.operationName}${perf.id}${index}`}>
                                 <strong>{perf.perfData?.raw_op_code}</strong>
                                 <div>
-                                    <span className={classNames('monospace', getCoreColour(perf.perfData?.cores))}>
+                                    <span
+                                        className={classNames(
+                                            'monospace',
+                                            getCoreColour(
+                                                perf.perfData?.cores,
+                                                perf.perfData?.available_cores,
+                                                perf.perfData?.dram_sharded,
+                                            ),
+                                        )}
+                                    >
                                         {parseInt(perf.perfData?.cores, 10)} core
                                         {parseInt(perf.perfData?.cores, 10) > 1 && 's'}
                                     </span>

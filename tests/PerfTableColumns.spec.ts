@@ -14,6 +14,8 @@ describe('PerfTable column helpers', () => {
             hasL1PressureData: true,
             hiliteHighDispatch: true,
             hasNpe: true,
+            hasSubDeviceIds: true,
+            hasMultipleAvailableCoreBudgets: true,
         });
 
         expect(eligibleColumns.map((column) => column.key)).toEqual([
@@ -25,12 +27,18 @@ describe('PerfTable column helpers', () => {
             ColumnKeys.OpCode,
             ColumnKeys.Flags,
             ColumnKeys.Device,
+            ColumnKeys.SUB_DEVICE,
             ColumnKeys.HighDispatch,
             ColumnKeys.BufferType,
             ColumnKeys.Layout,
             ColumnKeys.DeviceTime,
             ColumnKeys.OpToOpGap,
             ColumnKeys.Cores,
+            ColumnKeys.AVAILABLE_CORES,
+            ColumnKeys.DEVICE_FW_START_CYCLE,
+            ColumnKeys.DEVICE_FW_END_CYCLE,
+            ColumnKeys.METAL_TRACE_ID,
+            ColumnKeys.METAL_TRACE_REPLAY_SESSION_ID,
             ColumnKeys.Dram,
             ColumnKeys.DramPercent,
             ColumnKeys.Flops,
@@ -55,6 +63,8 @@ describe('PerfTable column helpers', () => {
             hasL1PressureData: false,
             hiliteHighDispatch: false,
             hasNpe: false,
+            hasSubDeviceIds: false,
+            hasMultipleAvailableCoreBudgets: false,
         });
 
         expect(eligibleColumns.map((column) => column.key)).toContain(ColumnKeys.Flags);
@@ -74,16 +84,16 @@ describe('PerfTable column helpers', () => {
         const footerColumns = getFooterColumns(visibleColumns);
         const opCodeFooter = footerColumns.find((column) => column.key === ColumnKeys.OpCode);
 
-        // Flags remains visible (footerSpan: 0), so Op Code still absorbs it.
-        expect(opCodeFooter?.footerSpan).toBe(2);
+        // Flags and Sub Device ID remain visible (footerSpan: 0), so OP Code still absorbs them.
+        expect(opCodeFooter?.footerSpan).toBe(3);
         expect(footerColumns.map((column) => column.key)).not.toContain(ColumnKeys.Flags);
     });
 
-    it('absorbs Flags, Device, and Type into the OP Code footer span by default', () => {
+    it('absorbs Flags, Device, Sub Device ID, and Type into the OP Code footer span by default', () => {
         const footerColumns = getFooterColumns(Columns);
         const opCodeFooter = footerColumns.find((column) => column.key === ColumnKeys.OpCode);
 
-        expect(opCodeFooter?.footerSpan).toBe(4);
+        expect(opCodeFooter?.footerSpan).toBe(5);
         expect(footerColumns.map((column) => column.key)).not.toContain(ColumnKeys.Flags);
         expect(footerColumns.map((column) => column.key)).not.toContain(ColumnKeys.Device);
         expect(footerColumns.map((column) => column.key)).not.toContain(ColumnKeys.BufferType);

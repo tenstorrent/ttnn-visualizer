@@ -3228,15 +3228,15 @@ wheels = [
 
 [[package]]
 name = "tt-perf-report"
-version = "1.2.8"
+version = "1.3.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "matplotlib" },
     { name = "pandas" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/6e/b5/602539d0bdf36ee6f9ec6a5f8658ea83afc70ca5e305b49005232a9fc638/tt_perf_report-1.2.8.tar.gz", hash = "sha256:c1ee314bd8e2c8212e293f5f11f4aae406f03cba22e7013fd3e3fcb45df1f640", size = 44634, upload-time = "2026-07-16T16:54:42.233Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/a4/b4/409327d7170aabd3d8433899b821d35c096c32c77f8a9d1056b732931a01/tt_perf_report-1.3.0.tar.gz", hash = "sha256:364aaed88a022e6e17161ce764815bc16cb4e6b88da303c125c19ff8b86edb68", size = 71647, upload-time = "2026-09-08T22:04:16.656Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/1b/fe/2414b1575c950c01a264e125221d9446e3ab006561d2217da9c3d30f2b12/tt_perf_report-1.2.8-py3-none-any.whl", hash = "sha256:17d1c2a40fd1f47158ec61fecf6ebe3ea6d6d3d8bdd0a46685858f4d00e3459d", size = 35528, upload-time = "2026-07-16T16:54:40.851Z" },
+    { url = "https://files.pythonhosted.org/packages/64/29/4133671bc85924596cb6c1b18fec61348ed760fd2d069afc64601d251ee1/tt_perf_report-1.3.0-py3-none-any.whl", hash = "sha256:16f0974e6c3106fcf40dacc5e93bd8380bb0ccb94114cd5845f67103bc2d0957", size = 48573, upload-time = "2026-09-08T22:04:15.516Z" },
 ]
 
 [[package]]
@@ -3296,7 +3296,7 @@ requires-dist = [
     { name = "pydantic-core", specifier = "==2.41.5" },
     { name = "python-dotenv", specifier = "==1.2.2" },
     { name = "pyyaml", specifier = ">=6.0.0,<7.0" },
-    { name = "tt-perf-report", specifier = "==1.2.8" },
+    { name = "tt-perf-report", specifier = "==1.3.0" },
     { name = "zstd", specifier = ">=1.5.7,<2.0" },
 ]
 

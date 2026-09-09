@@ -15,7 +15,8 @@ function getCoreUtilization(row: TypedPerfTableRow, maxCores: number): number {
     }
 
     const kernelDurationNs = kernelDuration * 1000;
-    const utilization = (ideal / kernelDurationNs) * (maxCores / coreCount);
+    const availableCoreCount = row.available_cores ?? maxCores;
+    const utilization = (ideal / kernelDurationNs) * (availableCoreCount / coreCount);
 
     return isValidNumber(utilization) ? utilization : 0;
 }

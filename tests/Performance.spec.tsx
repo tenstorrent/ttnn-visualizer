@@ -51,6 +51,7 @@ vi.mock('../src/hooks/useAPI.tsx', () => ({
 
 vi.mock('../src/functions/getServerConfig', () => ({
     default: () => ({ SERVER_MODE: true }),
+    isFlagEnabled: (value: unknown) => value === true || value === 'true' || value === '1',
 }));
 
 // Stub the report shell so these tests exercise only the route's own
