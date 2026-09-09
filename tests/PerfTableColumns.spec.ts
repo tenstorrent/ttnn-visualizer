@@ -25,7 +25,7 @@ describe('PerfTable column helpers', () => {
             ColumnKeys.OpCode,
             ColumnKeys.Flags,
             ColumnKeys.Device,
-            ColumnKeys.SUB_DEVICE,
+            ColumnKeys.SubDevice,
             ColumnKeys.HighDispatch,
             ColumnKeys.BufferType,
             ColumnKeys.Layout,
