@@ -538,32 +538,34 @@ class OpsPerformanceQueries:
 
 
 class OpsPerformanceReportQueries:
-    REPORT_COLUMNS = [
-        "id",
-        "total_percent",
-        "bound",
-        "op_code",
-        "device",
-        "device_time",
-        "op_to_op_gap",
-        "cores",
-        "dram",
-        "dram_percent",
-        "flops",
-        "flops_percent",
-        "math_fidelity",
-        "output_datatype",
-        "input_0_datatype",
-        "input_1_datatype",
-        "dram_sharded",
-        "input_0_memory",
-        "inner_dim_block_size",
-        "output_subblock_h",
-        "output_subblock_w",
-        "global_call_count",
-        "advice",
-        "raw_op_code",
-    ]
+    REPORT_COLUMN_HEADERS = {
+        "id": "ID",
+        "total_percent": "Total %",
+        "bound": "Bound",
+        "op_code": "OP Code",
+        "device": "Device",
+        "device_time": "Device Time",
+        "op_to_op_gap": "Op-to-Op Gap",
+        "cores": "Cores",
+        "dram": "DRAM",
+        "dram_percent": "DRAM %",
+        "flops": "FLOPs",
+        "flops_percent": "FLOPs %",
+        "math_fidelity": "Math Fidelity",
+        "output_datatype": "Output Datatype",
+        "input_0_datatype": "Input 0 Datatype",
+        "input_1_datatype": "Input 1 Datatype",
+        "dram_sharded": "DRAM Sharded",
+        "input_0_memory": "Input 0 Memory",
+        "inner_dim_block_size": "Inner Dim Block Size",
+        "output_subblock_h": "Output Subblock H",
+        "output_subblock_w": "Output Subblock W",
+        "global_call_count": "Global Call Count",
+        "sub_device_id": "Sub Device ID",
+        "available_cores": "Available Cores",
+        "advice": "Advice",
+        "raw_op_code": "Raw OP Code",
+    }
 
     STACKED_REPORT_COLUMNS = [
         "%",
@@ -601,6 +603,10 @@ class OpsPerformanceReportQueries:
         "trisc1_kernel_duration": "DEVICE TRISC1 KERNEL DURATION [ns]",
         "trisc2_kernel_duration": "DEVICE TRISC2 KERNEL DURATION [ns]",
         "erisc_kernel_duration": "DEVICE ERISC KERNEL DURATION [ns]",
+        "device_fw_start_cycle": "DEVICE FW START CYCLE",
+        "device_fw_end_cycle": "DEVICE FW END CYCLE",
+        "metal_trace_id": "METAL TRACE ID",
+        "metal_trace_replay_session_id": "METAL TRACE REPLAY SESSION ID",
     }
 
     DEFAULT_START_SIGNPOST = None
@@ -622,6 +628,38 @@ class OpsPerformanceReportQueries:
     DEFAULT_SUMMARY_FILE = None  # Stacked report output file
     DEFAULT_CLASSIC_COLORS = False  # Colour scheme for plotted stacked report
     DEFAULT_GROUP_BY = None  # Group by method for stacked report
+
+    @classmethod
+    def _resolve_report_column_indexes(cls, header):
+        header_index_by_name = {
+            column_name: index for index, column_name in enumerate(header)
+        }
+        column_indexes = {}
+
+        for column, header_name in cls.REPORT_COLUMN_HEADERS.items():
+            column_indexes[column] = header_index_by_name.get(header_name)
+
+        return column_indexes
+
+    @classmethod
+    def _parse_report_row(cls, column_indexes, row):
+        return {
+            column: cls._unescape_csv_formula(row[index])
+            for column, index in column_indexes.items()
+            if index is not None and index < len(row)
+        }
+
+    @staticmethod
+    def _unescape_csv_formula(value):
+        # tt-perf-report prefixes formula-like strings with an apostrophe for CSV safety.
+        if (
+            isinstance(value, str)
+            and len(value) > 1
+            and value[0] == "'"
+            and value[1] in "=+-@\t\r"
+        ):
+            return value[1:]
+        return value
 
     @staticmethod
     def extract_signposts(csv_file):
@@ -805,19 +843,24 @@ class OpsPerformanceReportQueries:
                                 )
                                 report = []
                             else:
+                                column_indexes = cls._resolve_report_column_indexes(
+                                    header
+                                )
+                                id_index = column_indexes.get("id")
                                 for row in reader:
                                     try:
-                                        op_id = int(row[0])
+                                        if id_index is None or id_index >= len(row):
+                                            raise ValueError(
+                                                "Report row is missing its ID"
+                                            )
+
+                                        op_id = int(row[id_index])
                                         # IDs in result column one correspond to row numbers in ops perf results csv
                                         idx = op_id - 2
 
-                                        processed_row = {
-                                            column: row[index]
-                                            for index, column in enumerate(
-                                                cls.REPORT_COLUMNS
-                                            )
-                                            if index < len(row)
-                                        }
+                                        processed_row = cls._parse_report_row(
+                                            column_indexes, row
+                                        )
 
                                         if (
                                             "advice" in processed_row
