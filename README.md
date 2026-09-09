@@ -92,15 +92,15 @@ https://github.com/user-attachments/assets/4e51a636-c6d6-46df-bf34-a06bca13c0b3
 
 | L1 Summary with Tensor highlight | Operation inputs and outputs |
 |-----------------------------------------------|------------------------------------------|
-| <img width="400" alt="L1 Summary with Tensor highlight" src="https://github.com/user-attachments/assets/7c6a3558-1084-492b-ac0b-f5f910487c8f" /> | <img width="400" alt="Operation inputs and outputs" src="https://github.com/user-attachments/assets/48197e65-4831-4005-9da8-99574c47d5c7" /> |
+| <img width="400" height="884" alt="L1 Summary with Tensor highlight" src="https://github.com/user-attachments/assets/82f57116-e40e-45e6-8f09-d87b447c0ab1" /> | <img width="400" alt="Operation inputs and outputs" src="https://github.com/user-attachments/assets/6d93e76f-cca8-4ff8-adf1-3950757f207f" /> |
 
 | Device operations with memory consumption | DRAM memory allocation |
 |-----------------------------------------------|------------------------------------------|
-| <img width="400" alt="Device operations with memory consumption" src="https://github.com/user-attachments/assets/4b8cefb9-fd75-4291-9e64-ab2f2c866c51" />| <img width="400" alt="DRAM memory allocations" src="https://github.com/user-attachments/assets/a9ad8b1d-200c-4c10-b1d8-5d76900c688c" /> |
+| <img width="400" alt="Device operations with memory consumption" src="https://github.com/user-attachments/assets/54677fdc-ba32-4501-a247-616f4a50c3f5" />| <img width="400" alt="DRAM memory allocations" src="https://github.com/user-attachments/assets/63d0ce63-a38c-4853-aae4-85e6398b4902" /> |
 
 | Operation graph view | Model buffer summary |
 |-----------------------------------------------|------------------------------------------|
-| <img width="400" alt="Operation graph view" src="https://github.com/user-attachments/assets/422f1591-4232-4d16-a783-726960261443" /> | <img width="400" alt="Model buffer summary" src="https://github.com/user-attachments/assets/9afa48b2-628d-4dad-ac89-42fda762aee6" /> |
+| <img width="400" alt="Operation graph view" src="https://github.com/user-attachments/assets/d33175d7-217b-4ed5-81fa-9cd9a1a8cd8c" /> | <img width="400" alt="Model buffer summary" src="https://github.com/user-attachments/assets/0310cd6d-5153-4cc3-8423-73da2031e24d" /> |
 
 | Per core allocation details | Per core allocation details for individual tensors |
 |-----------------------------------------------|------------------------------------------|
