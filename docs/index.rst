@@ -15,6 +15,7 @@ Welcome to TT-NN Visualizer documentation!
 
    src/remote-sync
    src/linking-reports
+   src/agent-tools
    src/running-from-source
 
 

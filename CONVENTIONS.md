@@ -28,6 +28,7 @@ Companion to [`AGENTS.md`](./AGENTS.md). `AGENTS.md` states each convention in o
 - [Testing](#testing)
 - [Canvas and rendering performance](#canvas-and-rendering-performance)
 - [Frontend data integrity](#frontend-data-integrity)
+- [Agent-facing tools](#agent-facing-tools)
 - [Trust boundaries](#trust-boundaries)
 - [Upload security](#upload-security)
 - [Toolchain and package management](#toolchain-and-package-management)
@@ -1110,6 +1111,21 @@ throw new AxiosError(
 ```
 
 Pass the original `response.config` and `response.request` (omitting them breaks callers that assume they exist), spread the response so type guards on the error shape still work (don't pass a fresh object), and use the numeric `HttpStatusCode` constant from `axios` — call sites compare with `===`.
+
+## Agent-facing tools
+
+### Read a canonical projection, not the view's
+
+`src/functions`/route code shapes report data for the screen: the performance route defaults `hide_host_ops` and `merge_devices` to true and can narrow to a signpost range. Those are display choices, and they are the right ones for a table a person is looking at.
+
+A tool called by an agent has no such person. Hand it view-filtered rows and it will reason confidently over a partial set with nothing rendered beside the answer to make the omission visible — the same failure as [#1883](https://github.com/tenstorrent/ttnn-visualizer/issues/1883), where a link status polluted by view filters silently dropped six downstream features.
+
+So `backend/ttnn_visualizer/agent/` calls the query classes with an explicit projection (`CANONICAL_PROJECTION`) rather than inheriting a route's defaults, and every response repeats the projection it used. Two rules follow:
+
+- **Bounded results only.** Aggregates, top-N or capped slices — never the table. A perf report is 10⁴–10⁵ rows × ~35 fields; an agent's context is a tighter budget than the browser heap that already forced server-side windowing on the NPE view.
+- **A number that can mislead carries its caveat in the response.** A total over a partitioned run assumes sequential execution, and summed-across-cores cycles are occupancy rather than elapsed time. Both are stated where the number is returned, not only in the docs.
+
+New tools go in that package and follow both. Adding one to a Flask route instead puts an agent back on the view's projection.
 
 ---
 

@@ -63,6 +63,8 @@ build-backend = "setuptools.build_meta"
 
 [project.scripts]
 ttnn-visualizer = "ttnn_visualizer.app:main"
+# Speaks newline-delimited JSON-RPC on stdio; point an MCP client at it. #1995
+ttnn-visualizer-mcp = "ttnn_visualizer.agent.server:main"
 
 [tool.black]
 line-length = 88

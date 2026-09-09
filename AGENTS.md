@@ -142,6 +142,10 @@ Applies on touch to views that draw data-proportional visuals (NPE chip cluster 
 
 - Prefer **client-side JSON validation** for user-uploaded JSON before the backend parses it. Surface validation errors with a friendly UI message rather than a 5xx round-trip. Use `try { JSON.parse(...) } catch (e) { ... }` and shape-check predicates.
 
+### Agent-facing tools
+
+- The MCP surface lives in **`backend/ttnn_visualizer/agent/`** and reads the query classes directly with an **explicit canonical projection**, never a route's view defaults (which hide host ops and merge devices). Tools return **aggregates or capped slices, never the whole report**, and a number that can mislead — a total over a partitioned run, cycles summed across cores — carries its caveat in the response. Rationale and the #1883 precedent: [CONVENTIONS.md](./CONVENTIONS.md#agent-facing-tools). User-facing docs: [docs/src/agent-tools.md](./docs/src/agent-tools.md).
+
 ### Upload security
 
 - All **single-file** upload handlers must apply `Path(filename).name` to the user-supplied filename before composing a destination path, and carry a regression test that submits a crafted traversal filename and asserts where the file lands. `.name` is not a full cross-platform sanitiser — backslash and drive-letter forms survive it — and the **folder-upload** branch uses a resolved-path containment check instead, not this collapse. Both caveats: [CONVENTIONS.md](./CONVENTIONS.md#upload-security).
