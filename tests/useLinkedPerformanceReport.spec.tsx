@@ -17,7 +17,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
     useGetDeviceOperationListPerf,
     useGetDeviceOperationListPerfByOpId,
-    useGetDeviceOperationsList,
     useLinkedPerformanceReport,
     usePerformanceReport,
 } from '../src/hooks/useAPI';
@@ -340,7 +339,7 @@ describe('report matching under a filtered performance tab', () => {
         expect(result.current.get(2)?.map((operation) => operation.perfData?.raw_op_code)).toEqual(['Softmax']);
     });
 
-    it('links nested operations in function-end order while preserving the public start-order list (#1860)', async () => {
+    it('links nested operations in function-end order (#1860)', async () => {
         const functionEndNames = [...NESTED_DEVICE_OP_NAMES].reverse();
 
         vi.mocked(axiosInstance.get).mockImplementation((url: string) => {
@@ -366,15 +365,14 @@ describe('report matching under a filtered performance tab', () => {
         });
 
         const { result } = renderWithView(
-            () => [useGetDeviceOperationsList(), useGetDeviceOperationListPerf()] as const,
+            () => useGetDeviceOperationListPerf(),
             [[activeProfilerReportAtom, ACTIVE_REPORT]],
         );
 
-        await waitFor(() => expect(result.current[1]).toHaveLength(NESTED_DEVICE_OP_NAMES.length));
+        await waitFor(() => expect(result.current).toHaveLength(NESTED_DEVICE_OP_NAMES.length));
 
-        expect(result.current[0].map(({ name }) => name)).toEqual(NESTED_DEVICE_OP_NAMES);
-        expect(result.current[1].map(({ name }) => name)).toEqual(functionEndNames);
-        expect(result.current[1].map(({ perfData }) => perfData?.raw_op_code)).toEqual(functionEndNames);
+        expect(result.current.map(({ name }) => name)).toEqual(functionEndNames);
+        expect(result.current.map(({ perfData }) => perfData?.raw_op_code)).toEqual(functionEndNames);
     });
 
     // The match is memoised across call sites rather than per invocation, and

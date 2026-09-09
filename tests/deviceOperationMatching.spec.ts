@@ -214,6 +214,78 @@ describe('matchDeviceOperationOrdersToPerf', () => {
         expect(matched[0]).not.toBe(functionEndOperations[0]);
     });
 
+    it('tries complete function-end order before a spurious collapsed start prefix', () => {
+        const functionStartOperations = [
+            mapping('Pad', 1),
+            mapping('Pad', 1),
+            mapping('Matmul', 2),
+            mapping('Outer', 3),
+            mapping('Inner', 3),
+        ];
+        const functionEndOperations = [
+            mapping('Pad', 1),
+            mapping('Pad', 1),
+            mapping('Matmul', 2),
+            mapping('Inner', 3),
+            mapping('Outer', 3),
+        ];
+        const perfRows = perfRowsFor(['Pad', 'Pad', 'Matmul', 'Inner', 'Outer']);
+
+        const matched = matchDeviceOperationOrdersToPerf(functionStartOperations, functionEndOperations, perfRows, 2);
+
+        expect(matched.map(({ name }) => name)).toEqual(['Pad', 'Pad', 'Matmul', 'Inner', 'Outer']);
+    });
+
+    it('matches a per-device duplicated nested sequence on the collapsed end-order pass', () => {
+        const functionStartOperations = [
+            mapping('Outer', 1),
+            mapping('Outer', 1),
+            mapping('Inner', 1),
+            mapping('Inner', 1),
+        ];
+        const functionEndOperations = [
+            mapping('Inner', 1),
+            mapping('Inner', 1),
+            mapping('Outer', 1),
+            mapping('Outer', 1),
+        ];
+
+        const matched = matchDeviceOperationOrdersToPerf(
+            functionStartOperations,
+            functionEndOperations,
+            perfRowsFor(['Inner', 'Outer']),
+            2,
+        );
+
+        expect(matched.map(({ name }) => name)).toEqual(['Inner', 'Outer']);
+    });
+
+    it('rejects a collapsed end-order prefix that omits non-duplicated operations', () => {
+        const functionStartOperations = [
+            mapping('Outer', 1),
+            mapping('Inner', 1),
+            mapping('Outer', 1),
+            mapping('Inner', 1),
+            mapping('Matmul', 2),
+        ];
+        const functionEndOperations = [
+            mapping('Inner', 1),
+            mapping('Outer', 1),
+            mapping('Inner', 1),
+            mapping('Outer', 1),
+            mapping('Matmul', 2),
+        ];
+
+        const matched = matchDeviceOperationOrdersToPerf(
+            functionStartOperations,
+            functionEndOperations,
+            perfRowsFor(['Inner', 'Outer', 'Matmul']),
+            2,
+        );
+
+        expect(matched).toEqual([]);
+    });
+
     it('prefers function-start order when both candidates align', () => {
         const functionStartOperations = [mapping('Alpha', 10), mapping('Alpha', 20)];
         const functionEndOperations = [mapping('Alpha', 20), mapping('Alpha', 10)];

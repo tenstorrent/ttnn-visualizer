@@ -854,16 +854,16 @@ export const useGetDeviceOperationsListByOp = () => {
     }, [operations]);
 };
 
-// Memoised across call sites, not per hook invocation: both derived values are
-// read by a handful of hooks and by one component instance per virtualised row,
-// and `useMemo` would run the flatMap and the O(rows) match once for each. The
-// inputs are React Query results, so their identity is shared by every caller in
-// a render pass. Callers must not mutate the results — they share them now.
 interface DeviceOperationOrderCandidates {
     functionStartOperations: DeviceOperationMapping[];
     functionEndOperations: DeviceOperationMapping[];
 }
 
+// Memoised across call sites, not per hook invocation:
+// `useGetDeviceOperationListPerf` is read by several hooks and by one component
+// instance per virtualised row, so `useMemo` would rebuild both order candidates
+// and rerun the O(rows) match for each. The inputs are shared React Query results.
+// Callers must not mutate the derived values — they share them now.
 const getDeviceOperationOrderCandidates = memoiseLatest(
     (operations?: OperationDescription[]): DeviceOperationOrderCandidates => {
         const functionStartOperations: DeviceOperationMapping[] = [];
@@ -930,17 +930,6 @@ export const clearReportCaches = (queryClient: QueryClient) => {
     getDeviceOperationListPerf.reset();
     getOpToPerfIds.reset();
     getDeviceOperationListPerfByOpId.reset();
-};
-
-/**
- * @description Every device operation in the memory report, flattened in report
- * order. Multi-device collapsing happens at match time, not here, because only
- * the performance report reveals which shape this report has (#1810).
- */
-export const useGetDeviceOperationsList = (): DeviceOperationMapping[] => {
-    const { data: operations } = useOperationsList();
-
-    return getDeviceOperationOrderCandidates(operations).functionStartOperations;
 };
 
 export const useGetDeviceOperationListPerf = () => {
