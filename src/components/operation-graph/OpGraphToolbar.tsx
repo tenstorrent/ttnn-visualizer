@@ -2,13 +2,51 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-import { Button, ButtonVariant, PopoverPosition, Switch, Tooltip } from '@blueprintjs/core';
+import { Button, ButtonGroup, ButtonVariant, PopoverPosition, Switch, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { type FormEvent, type Ref, memo } from 'react';
+import classNames from 'classnames';
 import GraphOpFilter, { type GraphOpFilterHandle } from '../GraphOpFilter';
 import type { GraphFilterMode } from '../../definitions/GraphFilterMode';
 import { CRITICAL_PATH_TOOLTIP, PERF_OVERLAY_TOOLTIP, PerfOverlayStatus } from '../../definitions/PerfOverlayStatus';
+import { OpGraphGrouping } from './opGraphTypes';
 import 'styles/components/OpGraphToolbar.scss';
+
+/**
+ * The noun every per-mode string is built from: the accessible names on Unroll and
+ * Fold, and the note that says which detector came up empty. The row was called
+ * "Repeats" before layers existed, and a screen reader was still being told "unroll
+ * all repeats" while the buttons acted on layers. #1976
+ */
+/** Paired with each `swatchClass` below, so the colours are keyed off our own class. */
+const GROUPING_ACTIVE_CLASS = 'op-graph-grouping-active';
+
+const GROUPING_NOUN: Readonly<Record<OpGraphGrouping, string>> = {
+    [OpGraphGrouping.REPEATS]: 'repeats',
+    [OpGraphGrouping.LAYERS]: 'layers',
+};
+
+/**
+ * Descriptions rather than bare labels: "Layers" means nothing until a reader knows
+ * it is reading op names, and the distinction from "Repeats" is the whole point of
+ * offering both. #1976
+ */
+const GROUPING_OPTIONS = [
+    {
+        value: OpGraphGrouping.REPEATS,
+        label: 'Repeats',
+        description: 'Fold subgraphs that repeat, whatever they do',
+        // Tied to the colour its blocks are drawn in, so the control and the thing it
+        // produces are recognisably the same feature. #1982
+        swatchClass: 'op-graph-grouping-repeat',
+    },
+    {
+        value: OpGraphGrouping.LAYERS,
+        label: 'Layers',
+        description: 'Fold spans whose operation names identify them — attention, feed-forward, embedding',
+        swatchClass: 'op-graph-grouping-layer',
+    },
+] as const;
 
 interface PerfGatedSwitchProps {
     tooltipByStatus: Record<PerfOverlayStatus, string>;
@@ -80,6 +118,12 @@ interface OpGraphToolbarProps {
     // `disabled={isDisabled || areAllBlocksExpanded}` render an enabled button whose
     // onClick is undefined — a silent no-op the type system should be catching.
     hasBlocks: boolean;
+    grouping: OpGraphGrouping;
+    onGroupingChange: (next: OpGraphGrouping) => void;
+    /** How many blocks the active detector found, shown on its own button. */
+    groupingBlockCount: number;
+    collapseWeightLoads: boolean;
+    onCollapseWeightLoadsChange: (next: boolean) => void;
     areAllBlocksExpanded: boolean;
     areAllBlocksCollapsed: boolean;
     onExpandAllBlocks: () => void;
@@ -116,6 +160,11 @@ const OpGraphToolbar = memo(
         isDisabled,
         hiddenMatchCount = 0,
         hasBlocks,
+        grouping,
+        onGroupingChange,
+        groupingBlockCount,
+        collapseWeightLoads,
+        onCollapseWeightLoadsChange,
         areAllBlocksExpanded,
         areAllBlocksCollapsed,
         onExpandAllBlocks,
@@ -199,6 +248,21 @@ const OpGraphToolbar = memo(
                     disabled={isDisabled}
                 />
 
+                <Tooltip
+                    placement={PopoverPosition.BOTTOM}
+                    content='Draw each fan of weight loads feeding one node as a single node'
+                >
+                    <Switch
+                        className='op-graph-toolbar-switch op-graph-switch-weights'
+                        checked={collapseWeightLoads}
+                        onChange={(event: FormEvent<HTMLInputElement>) =>
+                            onCollapseWeightLoadsChange(event.currentTarget.checked)
+                        }
+                        label='Collapse weight loads'
+                        disabled={isDisabled}
+                    />
+                </Tooltip>
+
                 <Switch
                     className='op-graph-toolbar-switch'
                     checked={isDimUnrelatedEdges}
@@ -232,27 +296,69 @@ const OpGraphToolbar = memo(
                 />
             </div>
 
-            {hasBlocks ? (
-                <div className='op-graph-toolbar-row'>
-                    <span className='op-graph-toolbar-group-label'>Repeats</span>
-                    <Button
-                        variant={ButtonVariant.OUTLINED}
-                        disabled={isDisabled || areAllBlocksExpanded}
-                        onClick={onExpandAllBlocks}
-                        aria-label='Unroll all repeats'
-                    >
-                        Unroll
-                    </Button>
-                    <Button
-                        variant={ButtonVariant.OUTLINED}
-                        disabled={isDisabled || areAllBlocksCollapsed}
-                        onClick={onCollapseAllBlocks}
-                        aria-label='Fold all repeats'
-                    >
-                        Fold
-                    </Button>
-                </div>
-            ) : null}
+            <div className='op-graph-toolbar-row'>
+                <span className='op-graph-toolbar-group-label'>Grouping</span>
+                {/* Rendered whatever the current mode found: gating this on `hasBlocks`
+                    would strand a report whose repeats are empty, with no way to ask
+                    for layers instead. #1976 */}
+                <ButtonGroup>
+                    {GROUPING_OPTIONS.map(({ value, label, description, swatchClass }) => (
+                        <Tooltip
+                            key={value}
+                            content={description}
+                            position={PopoverPosition.BOTTOM}
+                        >
+                            <Button
+                                // App-owned active class beside Blueprint's own: the
+                                // stylesheet colours the button from this one rather than
+                                // from `.bp6-active`, so the palette does not depend on a
+                                // Blueprint class name. #1982
+                                className={classNames(swatchClass, {
+                                    [GROUPING_ACTIVE_CLASS]: grouping === value,
+                                })}
+                                variant={ButtonVariant.OUTLINED}
+                                active={grouping === value}
+                                disabled={isDisabled}
+                                onClick={() => onGroupingChange(value)}
+                                aria-label={`Group by ${label.toLowerCase()}`}
+                                aria-pressed={grouping === value}
+                            >
+                                {/* The count sits on the active button so the two
+                                    strategies are comparable by switching, rather than
+                                    by folding each and counting nodes. 89 repeats
+                                    against 13 layers is the whole distinction. #1976 */}
+                                {grouping === value && groupingBlockCount > 0
+                                    ? `${label} (${groupingBlockCount})`
+                                    : label}
+                            </Button>
+                        </Tooltip>
+                    ))}
+                </ButtonGroup>
+                {hasBlocks ? (
+                    <>
+                        <Button
+                            variant={ButtonVariant.OUTLINED}
+                            disabled={isDisabled || areAllBlocksExpanded}
+                            onClick={onExpandAllBlocks}
+                            aria-label={`Unroll all ${GROUPING_NOUN[grouping]}`}
+                        >
+                            Unroll
+                        </Button>
+                        <Button
+                            variant={ButtonVariant.OUTLINED}
+                            disabled={isDisabled || areAllBlocksCollapsed}
+                            onClick={onCollapseAllBlocks}
+                            aria-label={`Fold all ${GROUPING_NOUN[grouping]}`}
+                        >
+                            Fold
+                        </Button>
+                    </>
+                ) : (
+                    // Says which detector came up empty, so "nothing here" reads as an
+                    // answer about this report rather than a broken control.
+                    <span className='op-graph-toolbar-empty-note'>{`no ${GROUPING_NOUN[grouping]} detected`}</span>
+                )}
+            </div>
         </div>
     ),
 );

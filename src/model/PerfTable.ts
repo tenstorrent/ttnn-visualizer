@@ -17,9 +17,11 @@ export interface PerfTableRow {
     op_code: string;
     raw_op_code: string;
     device: string;
+    sub_device_id?: string | null;
     device_time: string;
     op_to_op_gap: string;
     cores: string;
+    available_cores?: string | null;
     dram: string;
     dram_percent: string;
     flops: string;
@@ -46,6 +48,10 @@ export interface PerfTableRow {
     trisc1_kernel_duration: string | null;
     trisc2_kernel_duration: string | null;
     erisc_kernel_duration: string | null;
+    device_fw_start_cycle: string | null;
+    device_fw_end_cycle: string | null;
+    metal_trace_id: string | null;
+    metal_trace_replay_session_id: string | null;
     op_type: OpType;
     op?: number;
     missing?: boolean;
@@ -62,10 +68,12 @@ export interface TypedPerfTableRow extends Omit<
     | 'device_time'
     | 'op_to_op_gap'
     | 'cores'
+    | 'available_cores'
     | 'dram'
     | 'dram_percent'
     | 'flops'
     | 'flops_percent'
+    | 'dram_sharded'
     | 'bound'
     | 'pm_ideal_ns'
     | 'device_kernel_duration'
@@ -83,10 +91,12 @@ export interface TypedPerfTableRow extends Omit<
     device_time: number | null;
     op_to_op_gap: number | null;
     cores: number | null;
+    available_cores: number | null;
     dram: number | null;
     dram_percent: number | null;
     flops: number | null;
     flops_percent: number | null;
+    dram_sharded: boolean | null;
     bound: BoundType | null;
     pm_ideal_ns: number | null;
     device_kernel_duration: number | null;
@@ -110,6 +120,12 @@ export interface TypedPerfTableRow extends Omit<
 
 export const signpostRowDefaults = Object.freeze({
     global_call_count: null,
+    sub_device_id: null,
+    available_cores: null,
+    device_fw_start_cycle: null,
+    device_fw_end_cycle: null,
+    metal_trace_id: null,
+    metal_trace_replay_session_id: null,
     total_percent: null,
     device_time: null,
     op_to_op_gap: null,
@@ -125,7 +141,7 @@ export const signpostRowDefaults = Object.freeze({
     output_0_memory: '',
     input_0_datatype: '',
     input_1_datatype: '',
-    dram_sharded: '',
+    dram_sharded: null,
     input_0_memory: '',
     input_1_memory: '',
     inner_dim_block_size: '',

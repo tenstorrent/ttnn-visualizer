@@ -8,6 +8,7 @@ import {
     type OpGraphBuildOptions,
     type OpGraphBuiltGraph,
     type OpGraphDeviceSubgraph,
+    OpGraphGrouping,
     type OpGraphSourceOperation,
     type OpGraphWorkerInboundMessage,
     OpGraphWorkerMessageType,
@@ -62,6 +63,8 @@ const loadWorker = async (): Promise<Send> => {
     return (message) => handler({ data: message } as MessageEvent<OpGraphWorkerInboundMessage>);
 };
 
+type BuildMessage = Extract<OpGraphWorkerInboundMessage, { type: OpGraphWorkerMessageType.BUILD }>;
+
 const setGraph = (sourceVersion: number): OpGraphWorkerInboundMessage => ({
     type: OpGraphWorkerMessageType.SET_GRAPH,
     sourceVersion,
@@ -87,7 +90,7 @@ const build = (
     sourceVersion = 1,
     deviceSubgraphs: OpGraphDeviceSubgraph[] = [],
     expandedBlockIds: readonly string[] = [],
-): OpGraphWorkerInboundMessage => ({
+): BuildMessage => ({
     type: OpGraphWorkerMessageType.BUILD,
     sourceVersion,
     requestId,
@@ -95,6 +98,23 @@ const build = (
     deviceSubgraphs,
     expandedBlockIds,
 });
+
+const buildWithGrouping = (
+    requestId: number,
+    grouping: OpGraphGrouping,
+    collapseWeightLoads?: boolean,
+): BuildMessage => ({
+    type: OpGraphWorkerMessageType.BUILD,
+    sourceVersion: 1,
+    requestId,
+    hideDeallocate: false,
+    deviceSubgraphs: [],
+    expandedBlockIds: [],
+    grouping,
+    collapseWeightLoads,
+});
+
+const optionsOfLastBuild = () => buildOpGraph.mock.calls.at(-1)?.[1];
 
 const builtReplies = () => posted.filter((message) => message.type === OpGraphWorkerMessageType.BUILT);
 
@@ -119,6 +139,93 @@ afterEach(() => {
 });
 
 describe('opGraphLayoutWorker', () => {
+    describe('grouping', () => {
+        it('hands the build the grouping the view asked for', async () => {
+            // The handler used to rebuild the request by listing its fields, and
+            // `grouping` was not among them. Every option on `OpGraphBuildOptions` is
+            // optional, so the omission type-checked and every build silently ran the
+            // default detector while the toolbar showed the mode the user picked. #1976
+            const send = await loadWorker();
+            send(setGraph(1));
+
+            send(buildWithGrouping(1, OpGraphGrouping.LAYERS));
+            drain();
+
+            expect(optionsOfLastBuild()).toEqual(expect.objectContaining({ grouping: OpGraphGrouping.LAYERS }));
+        });
+
+        it('carries every option across the message boundary, not a chosen few', async () => {
+            // A field the types do not know about stands in for the next option someone
+            // adds: it has to reach the build without a second edit to the handler, which
+            // is what listing the fields cost `grouping`. Naming the four known options
+            // instead would pass just as happily while a fifth was being dropped. #1976
+            const send = await loadWorker();
+            send(setGraph(1));
+
+            const withFutureOption = { ...buildWithGrouping(1, OpGraphGrouping.REPEATS), futureOption: 'kept' };
+            send(withFutureOption as unknown as OpGraphWorkerInboundMessage);
+            drain();
+
+            expect(optionsOfLastBuild()).toHaveProperty('futureOption', 'kept');
+            // The envelope stays out of the options: the request id and source version
+            // address the reply, they are not something the graph is built from.
+            for (const enveloped of ['type', 'requestId', 'sourceVersion']) {
+                expect(optionsOfLastBuild()).not.toHaveProperty(enveloped);
+            }
+        });
+
+        it('does not serve the layout of one grouping to the other', async () => {
+            const send = await loadWorker();
+            send(setGraph(1));
+
+            send(buildWithGrouping(1, OpGraphGrouping.REPEATS));
+            drain();
+            send(buildWithGrouping(2, OpGraphGrouping.LAYERS));
+            drain();
+
+            // Same source, same fold state: only the detector differs, so a cache key
+            // blind to it would hand back the first graph.
+            expect(buildOpGraph).toHaveBeenCalledTimes(2);
+        });
+
+        it('does not serve the layout of one weight-load setting to the other', async () => {
+            // Same source, same fold state, same grouping: only the collapse differs, and
+            // it changes the node set. A cache key blind to it hands back the first graph
+            // — the failure the dropped `grouping` field already produced once. #1980
+            const send = await loadWorker();
+            send(setGraph(1));
+
+            send(buildWithGrouping(1, OpGraphGrouping.LAYERS, false));
+            drain();
+            send(buildWithGrouping(2, OpGraphGrouping.LAYERS, true));
+            drain();
+
+            expect(buildOpGraph).toHaveBeenCalledTimes(2);
+        });
+
+        it('hands the build the weight-load setting the view asked for', async () => {
+            const send = await loadWorker();
+            send(setGraph(1));
+
+            send(buildWithGrouping(1, OpGraphGrouping.LAYERS, true));
+            drain();
+
+            expect(optionsOfLastBuild()).toEqual(expect.objectContaining({ collapseWeightLoads: true }));
+        });
+
+        it('reuses the layout when the grouping is unchanged', async () => {
+            const send = await loadWorker();
+            send(setGraph(1));
+
+            send(buildWithGrouping(1, OpGraphGrouping.LAYERS));
+            drain();
+            send(buildWithGrouping(2, OpGraphGrouping.LAYERS));
+            drain();
+
+            expect(buildOpGraph).toHaveBeenCalledTimes(1);
+        });
+    });
+
     describe('coalescing', () => {
         it('lays out once for a burst and answers the newest request', async () => {
             const send = await loadWorker();
@@ -202,6 +309,25 @@ describe('opGraphLayoutWorker', () => {
             const replies = builtReplies();
             expect(replies).toHaveLength(3);
             expect(replies[2].graph).toBe(replies[0].graph);
+        });
+
+        // Nothing else distinguishes these two requests, and the distinction is not a
+        // nicety: `undefined` renders every instance unrolled, `[]` folds every one of
+        // them. Reachable in four clicks — open a report, Fold all, then toggle Hide
+        // deallocate on and off, which returns the state to "nothing folded" against a
+        // key the fold-all build already wrote. #1977
+        it('does not serve a fold-all layout to a graph that has folded nothing', async () => {
+            const send = await loadWorker();
+            send(setGraph(1));
+
+            send({ ...build(1, false), expandedBlockIds: undefined });
+            drain();
+            send({ ...build(2, false), expandedBlockIds: [] });
+            drain();
+
+            expect(buildOpGraph).toHaveBeenCalledTimes(2);
+            const replies = builtReplies();
+            expect(replies[1].graph).not.toBe(replies[0].graph);
         });
 
         // The rest of the request is identical when an operation is expanded, so a

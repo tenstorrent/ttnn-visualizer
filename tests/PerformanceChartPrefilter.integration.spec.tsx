@@ -47,6 +47,7 @@ vi.mock('../src/hooks/useAPI.tsx', () => ({
 
 vi.mock('../src/functions/getServerConfig', () => ({
     default: () => ({ SERVER_MODE: true }),
+    isFlagEnabled: (value: unknown) => value === true || value === 'true' || value === '1',
 }));
 
 const row = (opCode: string, id: number, deviceTime = 10): TypedPerfTableRow =>

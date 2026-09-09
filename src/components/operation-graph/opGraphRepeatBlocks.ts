@@ -5,6 +5,7 @@
 /* eslint-disable no-continue -- window scan skips consumed spans instead of nesting four levels */
 
 import type { OpGraphSourceOperation, RepeatBlockInstance } from './opGraphTypes';
+import { OpGraphBlockKind } from './opGraphTypes';
 
 export const MIN_REPEAT_WINDOW = 2;
 export const MIN_REPEAT_COUNT = 2;
@@ -364,6 +365,7 @@ export function detectRepeatBlocks(keptOperations: readonly OpGraphSourceOperati
             const instanceStart = run.start + instanceIndex * run.length;
             const memberIds = operationIds.slice(instanceStart, instanceStart + run.length);
             instances.push({
+                kind: OpGraphBlockKind.REPEAT,
                 instanceId: `block:${runIndex}:${memberIds[0]}`,
                 patternId,
                 label: `${patternLabel} × ${run.repeatCount}`,

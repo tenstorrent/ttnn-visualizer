@@ -7,10 +7,16 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 
 import OpGraphToolbar from '../src/components/operation-graph/OpGraphToolbar';
+import { OpGraphGrouping } from '../src/components/operation-graph/opGraphTypes';
 import { CRITICAL_PATH_TOOLTIP, PERF_OVERLAY_TOOLTIP, PerfOverlayStatus } from '../src/definitions/PerfOverlayStatus';
 import { GraphFilterMode } from '../src/definitions/GraphFilterMode';
 
 interface RenderToolbarOptions {
+    grouping?: OpGraphGrouping;
+    onGroupingChange?: (next: OpGraphGrouping) => void;
+    groupingBlockCount?: number;
+    collapseWeightLoads?: boolean;
+    onCollapseWeightLoadsChange?: (next: boolean) => void;
     status: PerfOverlayStatus;
     onPerfOverlayChange?: (next: boolean) => void;
     onCriticalPathChange?: (next: boolean) => void;
@@ -34,8 +40,13 @@ const renderToolbar = ({
     areAllBlocksCollapsed = true,
     onExpandAllBlocks = vi.fn(),
     onCollapseAllBlocks = vi.fn(),
+    grouping = OpGraphGrouping.REPEATS,
+    onGroupingChange = vi.fn(),
+    groupingBlockCount = 0,
+    collapseWeightLoads = true,
+    onCollapseWeightLoadsChange = vi.fn(),
 }: RenderToolbarOptions) => {
-    render(
+    return render(
         <OpGraphToolbar
             filterRef={null}
             query=''
@@ -45,6 +56,11 @@ const renderToolbar = ({
             isRegexInvalid={false}
             matchCount={0}
             currentMatchIndex={null}
+            grouping={grouping}
+            onGroupingChange={onGroupingChange}
+            groupingBlockCount={groupingBlockCount}
+            collapseWeightLoads={collapseWeightLoads}
+            onCollapseWeightLoadsChange={onCollapseWeightLoadsChange}
             onPrevMatch={vi.fn()}
             onNextMatch={vi.fn()}
             selectedOperationId={1}
@@ -215,6 +231,131 @@ describe('switch tooltips', () => {
 // Each Repeats button has two independent disable reasons; only the
 // all-expanded / all-collapsed one was covered. Mid-build is the one that matters,
 // where an unroll would be queued against a node set about to be replaced. #1944
+describe('grouping control', () => {
+    it('offers both detectors and marks the active one', () => {
+        renderToolbar({ status: PerfOverlayStatus.READY, hasBlocks: true });
+
+        expect(screen.getByRole('button', { name: 'Group by repeats' })).toHaveAttribute('aria-pressed', 'true');
+        expect(screen.getByRole('button', { name: 'Group by layers' })).toHaveAttribute('aria-pressed', 'false');
+    });
+
+    it('gives each grouping control the class its blocks are coloured by', () => {
+        // The control and the blocks it produces have to be recognisably one feature, so
+        // the class the stylesheet colours is asserted here rather than left to a visual
+        // check that nothing runs. #1982
+        renderToolbar({ status: PerfOverlayStatus.READY, hasBlocks: true });
+
+        expect(screen.getByRole('button', { name: 'Group by repeats' })).toHaveClass('op-graph-grouping-repeat');
+        expect(screen.getByRole('button', { name: 'Group by layers' })).toHaveClass('op-graph-grouping-layer');
+    });
+
+    it("marks the active control with our own class, not only Blueprint's", () => {
+        // The fill is keyed off this class so the palette does not depend on
+        // `.bp6-active` surviving a Blueprint upgrade. #1982
+        renderToolbar({ status: PerfOverlayStatus.READY, hasBlocks: true, grouping: OpGraphGrouping.LAYERS });
+
+        expect(screen.getByRole('button', { name: 'Group by layers' })).toHaveClass('op-graph-grouping-active');
+        expect(screen.getByRole('button', { name: 'Group by repeats' })).not.toHaveClass('op-graph-grouping-active');
+    });
+
+    it('reports the mode the user picked', () => {
+        const onGroupingChange = vi.fn();
+        renderToolbar({ status: PerfOverlayStatus.READY, hasBlocks: true, onGroupingChange });
+
+        fireEvent.click(screen.getByRole('button', { name: 'Group by layers' }));
+
+        expect(onGroupingChange).toHaveBeenCalledWith(OpGraphGrouping.LAYERS);
+    });
+
+    it('stays available when the active detector found nothing', () => {
+        // Gating this row on `hasBlocks` stranded any report without repeats: the
+        // control that would ask for layers instead was the one being hidden. #1976
+        renderToolbar({ status: PerfOverlayStatus.READY, hasBlocks: false });
+
+        expect(screen.getByRole('button', { name: 'Group by layers' })).toBeEnabled();
+        expect(screen.getByText('no repeats detected')).toBeInTheDocument();
+    });
+
+    it('names the detector that came up empty', () => {
+        renderToolbar({ status: PerfOverlayStatus.READY, hasBlocks: false, grouping: OpGraphGrouping.LAYERS });
+
+        expect(screen.getByText('no layers detected')).toBeInTheDocument();
+        expect(screen.queryByText('no repeats detected')).toBeNull();
+    });
+});
+
+describe('weight-load control', () => {
+    it('carries the swatch class that ties it to the fan colour', () => {
+        renderToolbar({ status: PerfOverlayStatus.READY });
+
+        expect(screen.getByLabelText('Collapse weight loads').closest('label')).toHaveClass('op-graph-switch-weights');
+    });
+
+    it('reports the value the user switched to', () => {
+        const onCollapseWeightLoadsChange = vi.fn();
+        renderToolbar({ status: PerfOverlayStatus.READY, collapseWeightLoads: true, onCollapseWeightLoadsChange });
+
+        fireEvent.click(screen.getByLabelText('Collapse weight loads'));
+
+        expect(onCollapseWeightLoadsChange).toHaveBeenCalledWith(false);
+    });
+
+    it('switches back on from off', () => {
+        const onCollapseWeightLoadsChange = vi.fn();
+        renderToolbar({ status: PerfOverlayStatus.READY, collapseWeightLoads: false, onCollapseWeightLoadsChange });
+
+        fireEvent.click(screen.getByLabelText('Collapse weight loads'));
+
+        expect(onCollapseWeightLoadsChange).toHaveBeenCalledWith(true);
+    });
+
+    it('is not gated on the perf overlay, unlike the switches beside it', () => {
+        // It sits in the same row as two perf-gated switches, so the thing worth pinning
+        // is that it does not inherit their gate: fans exist whether or not a
+        // performance report was loaded.
+        const onCollapseWeightLoadsChange = vi.fn();
+        renderToolbar({ status: PerfOverlayStatus.UNAVAILABLE, onCollapseWeightLoadsChange });
+
+        const control = screen.getByLabelText('Collapse weight loads');
+        expect(control).toBeEnabled();
+
+        fireEvent.click(control);
+
+        expect(onCollapseWeightLoadsChange).toHaveBeenCalledTimes(1);
+    });
+
+    it('sits ahead of the perf-gated switches rather than between them', () => {
+        // It landed between `Perf overlay` and `Highlight critical path` first, splitting
+        // that pair, which is what made the row read as misaligned. The invariant is the
+        // ordering, so that is what is asserted. #1980
+        const { container } = renderToolbar({ status: PerfOverlayStatus.READY });
+        const order = [...container.querySelectorAll('.op-graph-toolbar-switch')].map((node) => node.textContent ?? '');
+
+        const indexOf = (label: string) => order.findIndex((text) => text.includes(label));
+
+        expect(indexOf('Collapse weight loads')).toBeGreaterThan(-1);
+        expect(indexOf('Collapse weight loads')).toBeLessThan(indexOf('Perf overlay'));
+        expect(indexOf('Perf overlay')).toBeLessThan(indexOf('Highlight critical path'));
+    });
+});
+
+describe('accessible names follow the grouping mode', () => {
+    it('says layers when Layers is the active mode', () => {
+        // The row was called "Repeats" before layers existed, so a screen reader was
+        // told "unroll all repeats" while the buttons acted on layers. #1976
+        renderToolbar({ status: PerfOverlayStatus.READY, hasBlocks: true, grouping: OpGraphGrouping.LAYERS });
+
+        expect(screen.getByRole('button', { name: 'Unroll all layers' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Fold all layers' })).toBeInTheDocument();
+    });
+
+    it('still says repeats in Repeats mode', () => {
+        renderToolbar({ status: PerfOverlayStatus.READY, hasBlocks: true, grouping: OpGraphGrouping.REPEATS });
+
+        expect(screen.getByRole('button', { name: 'Unroll all repeats' })).toBeInTheDocument();
+    });
+});
+
 describe('repeats controls', () => {
     const repeatsButtons = () => ({
         unroll: screen.getByRole('button', { name: 'Unroll all repeats' }),
@@ -266,5 +407,21 @@ describe('repeats controls', () => {
         const { unroll, fold } = repeatsButtons();
         expect(unroll).toBeDisabled();
         expect(fold).toBeEnabled();
+    });
+
+    it('disables the other direction when everything is already folded', () => {
+        // The two flags are independent props, not one tri-state, so the branch above
+        // says nothing about this one — and this is the state a report opens in once a
+        // Fold has been applied.
+        renderToolbar({
+            status: PerfOverlayStatus.READY,
+            hasBlocks: true,
+            areAllBlocksExpanded: false,
+            areAllBlocksCollapsed: true,
+        });
+
+        const { unroll, fold } = repeatsButtons();
+        expect(fold).toBeDisabled();
+        expect(unroll).toBeEnabled();
     });
 });

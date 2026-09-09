@@ -69,7 +69,8 @@ function isUnderutilisedCores(row: TypedPerfTableRow, maxCores: number, hasMinIm
         return false;
     }
 
-    return cores / maxCores < UNDERUTILISED_CORES_RATIO;
+    const availableCoreCount = row.available_cores ?? maxCores;
+    return availableCoreCount > 0 && cores / availableCoreCount < UNDERUTILISED_CORES_RATIO;
 }
 
 function evaluateRowHeuristics(row: TypedPerfTableRow, maxCores: number): RowHeuristicEvaluation {
@@ -103,7 +104,7 @@ function evaluateRowHeuristics(row: TypedPerfTableRow, maxCores: number): RowHeu
         flags.push(PerfHeuristicFlag.UNDERUTILISED_CORES);
 
         if (row.cores != null) {
-            details[PerfHeuristicFlag.UNDERUTILISED_CORES] = `Cores: ${row.cores} / ${maxCores}`;
+            details[PerfHeuristicFlag.UNDERUTILISED_CORES] = `Cores: ${row.cores} / ${row.available_cores ?? maxCores}`;
         }
     }
 

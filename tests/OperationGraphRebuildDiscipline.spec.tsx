@@ -20,6 +20,7 @@ import type {
     OpGraphFlowNode,
     OpGraphSourceOperation,
 } from '../src/components/operation-graph/opGraphTypes';
+import { OpGraphGrouping } from '../src/components/operation-graph/opGraphTypes';
 
 // A layout is the most expensive thing this view can do, and every cheap
 // interaction — typing, selecting, stepping matches — is one dependency array away
@@ -553,7 +554,9 @@ describe('OperationGraphReactFlow rebuild triggers', () => {
         expect(runBuild).toHaveBeenLastCalledWith({
             hideDeallocate: false,
             deviceSubgraphs: [],
-            expandedBlockIds: [],
+            expandedBlockIds: undefined,
+            grouping: OpGraphGrouping.REPEATS,
+            collapseWeightLoads: true,
         });
     });
 
@@ -993,6 +996,16 @@ describe('OperationGraphReactFlow critical path report scope', () => {
         });
     };
 
+    // The switch turning off is the intent; what matters on screen is that the drawing
+    // goes with it — the lit nodes, the lit edges and the annotation that sums them.
+    // Asserted per report kind because they reach the same clear by different routes.
+    const expectNoPathDrawn = () => {
+        const { nodes, edges } = lastFlowRender();
+        expect(nodes.some((node) => hasClass(node, 'op-graph-node-critical-path'))).toBe(false);
+        expect(edges.some((edge) => hasClass(edge, 'op-graph-edge-critical-path'))).toBe(false);
+        expect(screen.queryByText(/Critical path/)).toBeNull();
+    };
+
     it('drops the highlight when the performance report changes', () => {
         // The weights come from that report, so a stale path is a wrong path drawn
         // with full confidence.
@@ -1003,6 +1016,7 @@ describe('OperationGraphReactFlow critical path report scope', () => {
         setReport(activePerformanceReportAtom, reportFolder('resnet50-perf'));
 
         expect(criticalPathSwitch().checked).toBe(false);
+        expectNoPathDrawn();
     });
 
     it('drops the highlight when the profiler report changes', () => {
@@ -1012,6 +1026,7 @@ describe('OperationGraphReactFlow critical path report scope', () => {
         setReport(activeProfilerReportAtom, reportFolder('resnet50'));
 
         expect(criticalPathSwitch().checked).toBe(false);
+        expectNoPathDrawn();
     });
 
     it('does not re-enable itself when a report is swapped back', () => {
@@ -1327,6 +1342,15 @@ describe('OperationGraphReactFlow repeat blocks', () => {
         });
     };
 
+    // Repeats open unrolled, so a test about folded rendering folds first — through
+    // the toolbar, so component state and the delivered graph agree. #1977
+    const renderFolded = (operations = REPEAT_OPERATION_LIST) => {
+        const view = renderGraph(operations);
+        fireEvent.click(screen.getByRole('button', { name: 'Fold all repeats' }));
+        deliver(operations, { expandedBlockIds: [] });
+        return view;
+    };
+
     it('hands the worker every field detection fingerprints on', () => {
         // The fixture used to reimplement this mapping and drop three of its
         // fields, `inputShapes` among them — so every folding assertion in this
@@ -1342,14 +1366,43 @@ describe('OperationGraphReactFlow repeat blocks', () => {
             expect(mappedOperation.inputShapes).toBeDefined();
             expect(mappedOperation).toHaveProperty('durationSeconds');
             expect(mappedOperation).toHaveProperty('memoryDeltaBytes');
+            expect(mappedOperation).toHaveProperty('fusedActivation');
         }
+    });
+
+    it('parses a fused activation out of the arguments on the way to the worker', () => {
+        // The detector reads op names, so an activation ttnn fuses into the matmul is
+        // invisible to it unless this mapping lifts it out. Asserted end to end because
+        // the parser passing its own unit tests says nothing about it being wired. #1976
+        const withFusedGelu = REPEAT_OPERATION_LIST.map((candidate) =>
+            candidate.id === 2
+                ? {
+                      ...candidate,
+                      arguments: [
+                          {
+                              name: 'program_config',
+                              value: 'Cfg(fused_activation=UnaryWithParam(op_type=UnaryOpType::GELU, params=[1]))',
+                              parsedValue: null,
+                          },
+                      ],
+                  }
+                : candidate,
+        );
+        renderGraph(withFusedGelu);
+
+        const mapped = harness.sourceOperations ?? [];
+
+        expect(mapped.find((candidate) => candidate.id === 2)?.fusedActivation).toBe('gelu');
+        // Only the op that declared one, and the raw argument string is not forwarded.
+        expect(mapped.find((candidate) => candidate.id === 1)?.fusedActivation).toBeUndefined();
+        expect(JSON.stringify(mapped)).not.toContain('UnaryWithParam');
     });
 
     it('holds the viewport on an unroll instead of recentring on the selection', () => {
         // The anchor and the selection tween fight for the viewport; the anchor
         // has to win, or the graph jumps to whatever the selection fell back to.
         // Both stubs were inert, so neither half of this was observable. #1944
-        renderGraph(REPEAT_OPERATION_LIST);
+        renderFolded();
         setCenter.mockClear();
         setViewport.mockClear();
 
@@ -1360,13 +1413,142 @@ describe('OperationGraphReactFlow repeat blocks', () => {
         expect(setCenter).not.toHaveBeenCalled();
     });
 
-    it('collapses repeats on first layout and offers Unroll / Fold', () => {
+    it('does not refold a weight fan when Unroll all is clicked', () => {
+        // Unroll all owns grouping blocks, not fans, but both live in one expansion set.
+        // Replacing that set dropped every fan the user had opened — and because
+        // `areAllBlocksExpanded` only inspects the grouping blocks it then read true and
+        // disabled the button, leaving no route back to a fully unrolled graph. #1980
+        const withFanAndRepeats: OperationDescription[] = [
+            ...REPEAT_OPERATION_LIST,
+            operation(7, 'ttnn.to_device', [6]),
+            operation(8, 'ttnn.to_device', [6]),
+        ];
+        renderGraph(withFanAndRepeats);
+        // Fold first: with the blocks unrolled, opening a fan marks every grouping block
+        // expanded too, which disables Unroll all and puts the bug out of reach.
+        fireEvent.click(screen.getByRole('button', { name: 'Fold all repeats' }));
+        deliver(withFanAndRepeats, { collapseWeightLoads: true, expandedBlockIds: [] });
+
+        act(() => {
+            harness.onNodeDoubleClick?.(null, nodeById(lastFlowRender().nodes, 'weights:7'));
+        });
+        runBuild.mockClear();
+        fireEvent.click(screen.getByRole('button', { name: 'Unroll all repeats' }));
+
+        expect((runBuild.mock.calls.at(-1)?.[0] as OpGraphBuildOptions).expandedBlockIds).toEqual(
+            expect.arrayContaining(['weights:7']),
+        );
+    });
+
+    it('does not refold a weight fan when Fold all is clicked', () => {
+        // The mirror of the case above, and it was still broken after that one was
+        // fixed: Fold all replaced the whole set, so a fan the user had opened folded
+        // itself along with the grouping blocks the button actually owns. Fold means
+        // "fold what this detector found". #1980
+        const withFanAndRepeats: OperationDescription[] = [
+            ...REPEAT_OPERATION_LIST,
+            operation(7, 'ttnn.to_device', [6]),
+            operation(8, 'ttnn.to_device', [6]),
+        ];
+        renderGraph(withFanAndRepeats);
+        // The repeats open unrolled, so this is the path a user actually takes: open a
+        // fan, then fold the repeats away to read the model's shape.
+        deliver(withFanAndRepeats, { collapseWeightLoads: true });
+        act(() => {
+            harness.onNodeDoubleClick?.(null, nodeById(lastFlowRender().nodes, 'weights:7'));
+        });
+        const opened = (runBuild.mock.calls.at(-1)?.[0] as OpGraphBuildOptions).expandedBlockIds;
+        expect(opened).toEqual(expect.arrayContaining(['weights:7']));
+        deliver(withFanAndRepeats, { collapseWeightLoads: true, expandedBlockIds: opened });
+
+        runBuild.mockClear();
+        fireEvent.click(screen.getByRole('button', { name: 'Fold all repeats' }));
+
+        expect((runBuild.mock.calls.at(-1)?.[0] as OpGraphBuildOptions).expandedBlockIds).toEqual(['weights:7']);
+    });
+
+    it('asks to unfold a weight fan when its expander is clicked', () => {
+        // The reported bug had two halves and this is the one in the view: with grouping
+        // unrolled by default the expansion set is `null`, which read as "everything is
+        // expanded" — so the fan's expander tried to fold something already unrolled and
+        // nothing happened. A fan is folded until named. #1980
+        const withFan: OperationDescription[] = [
+            operation(1, 'ttnn.to_device', [3]),
+            operation(2, 'ttnn.to_device', [3]),
+            operation(3, 'ttnn.linear', [4]),
+            operation(4, 'ttnn.layer_norm', []),
+        ];
+        renderGraph(withFan);
+        // The stubbed worker does not read the view's options, so the fan-collapsed
+        // graph is delivered explicitly.
+        deliver(withFan, { collapseWeightLoads: true });
+        runBuild.mockClear();
+
+        act(() => {
+            harness.onNodeDoubleClick?.(null, nodeById(lastFlowRender().nodes, 'weights:1'));
+        });
+
+        expect(runBuild.mock.calls.at(-1)?.[0]).toEqual(
+            expect.objectContaining({ expandedBlockIds: expect.arrayContaining(['weights:1']) }),
+        );
+    });
+
+    it('keeps the block-kind class when a restyle adds its own', () => {
+        // The restyle memo replaces `className` outright. Seeded empty, the colour
+        // vanished the moment anything was selected or filtered — and only while
+        // selected, which is the hardest kind of styling bug to spot. #1982
+        renderFolded();
+
+        const folded = nodeById(lastFlowRender().nodes, FIRST_BLOCK_ID);
+        expect(folded.className).toContain('op-graph-block-repeat');
+
+        act(() => {
+            harness.onNodeClick?.(null, folded);
+        });
+
+        const selected = nodeById(lastFlowRender().nodes, FIRST_BLOCK_ID);
+        expect(selected.className).toContain('op-graph-block-repeat');
+        expect(selected.className).toContain('op-graph-node-selected');
+    });
+
+    it('renders repeats unrolled on first layout and offers Fold', () => {
         renderGraph(REPEAT_OPERATION_LIST);
 
+        expect(lastFlowRender().nodes.map((node) => node.id)).toEqual(['1', '2', '3', '4', '5', '6']);
+        expect(screen.getByRole('button', { name: 'Unroll all repeats' })).toBeDisabled();
+        expect(screen.getByRole('button', { name: 'Fold all repeats' })).toBeEnabled();
+        expect(screen.queryAllByRole('button', { name: 'Unroll 2 operations' })).toHaveLength(0);
+    });
+
+    it('still reports the detections it did not apply, so Fold is offered', () => {
+        renderGraph(REPEAT_OPERATION_LIST);
+
+        // The toolbar row is driven by the detections, not by the folded nodes, so an
+        // unrolled first layout must still carry them or folding becomes unreachable.
+        expect(screen.getByRole('button', { name: 'Fold all repeats' })).toBeInTheDocument();
+        expect(runBuild.mock.calls.at(-1)?.[0]).toEqual(expect.objectContaining({ expandedBlockIds: undefined }));
+    });
+
+    it('folds every instance from the toolbar', () => {
+        renderFolded();
+
         expect(lastFlowRender().nodes.map((node) => node.id)).toEqual(['1', FIRST_BLOCK_ID, SECOND_BLOCK_ID, '6']);
-        expect(screen.getByRole('button', { name: 'Unroll all repeats' })).toBeEnabled();
-        expect(screen.getByRole('button', { name: 'Fold all repeats' })).toBeDisabled();
         expect(screen.getAllByRole('button', { name: 'Unroll 2 operations' })).toHaveLength(2);
+    });
+
+    it('folds only the double-clicked instance, leaving its siblings unrolled', () => {
+        // `new Set(null)` is empty, so a naive delete from the unrolled default would
+        // fold every instance instead of the one clicked. #1977
+        renderGraph(REPEAT_OPERATION_LIST);
+        runBuild.mockClear();
+
+        act(() => {
+            harness.onNodeDoubleClick?.(null, nodeById(lastFlowRender().nodes, '3'));
+        });
+
+        expect(runBuild.mock.calls.at(-1)?.[0]).toEqual(
+            expect.objectContaining({ expandedBlockIds: [SECOND_BLOCK_ID] }),
+        );
     });
 
     it('does not show the Repeats row when nothing was detected', () => {
@@ -1376,7 +1558,7 @@ describe('OperationGraphReactFlow repeat blocks', () => {
     });
 
     it('unrolls every instance from the toolbar and folds them back', () => {
-        renderGraph(REPEAT_OPERATION_LIST);
+        renderFolded();
         runBuild.mockClear();
 
         fireEvent.click(screen.getByRole('button', { name: 'Unroll all repeats' }));
@@ -1395,7 +1577,7 @@ describe('OperationGraphReactFlow repeat blocks', () => {
     });
 
     it('unrolls one instance from its chip', () => {
-        renderGraph(REPEAT_OPERATION_LIST);
+        renderFolded();
         runBuild.mockClear();
 
         fireEvent.click(screen.getAllByRole('button', { name: 'Unroll 2 operations' })[0]);
@@ -1405,7 +1587,7 @@ describe('OperationGraphReactFlow repeat blocks', () => {
     });
 
     it('counts a folded block as a visible match when the query hits its label', () => {
-        renderGraph(REPEAT_OPERATION_LIST);
+        renderFolded();
         typeFilter('layer_a');
 
         expect(screen.getByText('2 matches')).toBeInTheDocument();
@@ -1421,7 +1603,7 @@ describe('OperationGraphReactFlow repeat blocks', () => {
             operation(5, 'layer_b', [6], 'mlp.py:2'),
             operation(6, 'suffix', []),
         ];
-        renderGraph(operations);
+        renderFolded(operations);
         typeFilter('layer_a');
 
         expect(screen.getByText('2 matches (+2 inside)')).toBeInTheDocument();
@@ -1430,7 +1612,7 @@ describe('OperationGraphReactFlow repeat blocks', () => {
     });
 
     it('opens the block panel instead of the first member when a collapsed block is selected', () => {
-        renderGraph(REPEAT_OPERATION_LIST);
+        renderFolded();
 
         act(() => {
             harness.onNodeClick?.(null, nodeById(lastFlowRender().nodes, FIRST_BLOCK_ID));
@@ -1464,7 +1646,7 @@ describe('OperationGraphReactFlow repeat blocks', () => {
                 ? withDeviceOperations(op, ['AlphaDeviceOperation', 'BetaDeviceOperation', 'GammaDeviceOperation'])
                 : op,
         );
-        renderGraph(operations);
+        renderFolded(operations);
 
         fireEvent.click(screen.getByRole('button', { name: 'Unroll all repeats' }));
         const unrolled = runBuild.mock.calls.at(-1)?.[0] as OpGraphBuildOptions;
@@ -1483,7 +1665,7 @@ describe('OperationGraphReactFlow repeat blocks', () => {
     });
 
     it('folds that instance when an unrolled member is double-clicked', () => {
-        renderGraph(REPEAT_OPERATION_LIST);
+        renderFolded();
         fireEvent.click(screen.getAllByRole('button', { name: 'Unroll 2 operations' })[0]);
         const unrolled = runBuild.mock.calls.at(-1)?.[0] as OpGraphBuildOptions;
         deliver(REPEAT_OPERATION_LIST, { expandedBlockIds: unrolled.expandedBlockIds });
@@ -1496,13 +1678,13 @@ describe('OperationGraphReactFlow repeat blocks', () => {
         expect(runBuild.mock.calls.at(-1)?.[0]).toEqual(expect.objectContaining({ expandedBlockIds: [] }));
     });
 
-    it('folds every instance and drops member device-op expansion when deallocate hiding changes', () => {
+    it('drops the fold decision and member device-op expansion when deallocate hiding changes', () => {
         const operations = REPEAT_OPERATION_LIST.map((op) =>
             op.id === 2
                 ? withDeviceOperations(op, ['AlphaDeviceOperation', 'BetaDeviceOperation', 'GammaDeviceOperation'])
                 : op,
         );
-        renderGraph(operations);
+        renderFolded(operations);
 
         fireEvent.click(screen.getByRole('button', { name: 'Unroll all repeats' }));
         const unrolled = runBuild.mock.calls.at(-1)?.[0] as OpGraphBuildOptions;
@@ -1514,13 +1696,15 @@ describe('OperationGraphReactFlow repeat blocks', () => {
         runBuild.mockClear();
         fireEvent.click(screen.getByLabelText('Hide deallocate ops'));
 
+        // Toggling the filter drops the fold decision as well as the expansions, so
+        // the rebuilt graph opens unrolled again rather than folded. #1977
         expect(runBuild.mock.calls.at(-1)?.[0]).toEqual(
-            expect.objectContaining({ hideDeallocate: false, deviceSubgraphs: [], expandedBlockIds: [] }),
+            expect.objectContaining({ hideDeallocate: false, deviceSubgraphs: [], expandedBlockIds: undefined }),
         );
     });
 
     it('unrolls the instance that contains the operation the URL names', () => {
-        const { rerender } = renderGraph(REPEAT_OPERATION_LIST);
+        const { rerender } = renderFolded();
         runBuild.mockClear();
 
         rerender(
@@ -1538,7 +1722,7 @@ describe('OperationGraphReactFlow repeat blocks', () => {
     });
 
     it('forgets unrolled instances when the profiler report changes', () => {
-        renderGraph(REPEAT_OPERATION_LIST);
+        renderFolded();
         fireEvent.click(screen.getByRole('button', { name: 'Unroll all repeats' }));
         expect((runBuild.mock.calls.at(-1)?.[0] as OpGraphBuildOptions).expandedBlockIds).toHaveLength(2);
 
@@ -1550,11 +1734,97 @@ describe('OperationGraphReactFlow repeat blocks', () => {
             } as ReportFolder);
         });
 
-        expect(runBuild.mock.calls.at(-1)?.[0]).toEqual(expect.objectContaining({ expandedBlockIds: [] }));
+        expect(runBuild.mock.calls.at(-1)?.[0]).toEqual(expect.objectContaining({ expandedBlockIds: undefined }));
+    });
+
+    // No repeated subgraph anywhere in this chain, but two spans whose op names say
+    // exactly what they are. It is the case repetition structurally cannot reach. #1976
+    const LAYER_OPERATION_LIST: OperationDescription[] = [
+        operation(1, 'ttnn.linear', [2]),
+        operation(2, 'ttnn.transformer.scaled_dot_product_attention', [3]),
+        operation(3, 'ttnn.layer_norm', [4]),
+        operation(4, 'ttnn.linear', [5]),
+        operation(5, 'ttnn.gelu', [6]),
+        operation(6, 'ttnn.layer_norm', []),
+    ];
+
+    it('finds nothing to fold by repetition in a graph with no repeats', () => {
+        renderGraph(LAYER_OPERATION_LIST);
+
+        expect(screen.getByText('no repeats detected')).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: 'Fold all repeats' })).toBeNull();
+    });
+
+    it('asks the worker for layer grouping when the mode changes', () => {
+        renderGraph(LAYER_OPERATION_LIST);
+        runBuild.mockClear();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Group by layers' }));
+
+        expect(runBuild.mock.calls.at(-1)?.[0]).toEqual(expect.objectContaining({ grouping: OpGraphGrouping.LAYERS }));
+    });
+
+    it('folds semantic spans the repeat scan could not see', () => {
+        renderGraph(LAYER_OPERATION_LIST);
+        fireEvent.click(screen.getByRole('button', { name: 'Group by layers' }));
+        deliver(LAYER_OPERATION_LIST, { grouping: OpGraphGrouping.LAYERS, expandedBlockIds: [] });
+
+        expect(lastFlowRender().nodes.map((node) => node.id)).toEqual(['layer:attention:1', 'layer:feedForward:4']);
+        expect(screen.getByRole('button', { name: 'Group by layers' })).toHaveAttribute('aria-pressed', 'true');
+    });
+
+    it('applies the grouping the moment it is picked', () => {
+        // Leaving the graph unrolled here made the control look broken: both modes
+        // rendered identically and the difference only showed after a separate Fold.
+        // #1977 governs how a report *opens*; clicking a mode is the ask. #1976
+        renderGraph(LAYER_OPERATION_LIST);
+        runBuild.mockClear();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Group by layers' }));
+
+        expect(runBuild.mock.calls.at(-1)?.[0]).toEqual(
+            expect.objectContaining({ grouping: OpGraphGrouping.LAYERS, expandedBlockIds: [] }),
+        );
+    });
+
+    it('does nothing when the grouping already in use is clicked', () => {
+        // Picking a mode applies it, but re-picking the mode already in use is not a
+        // second ask. It went through the same path, and from the unrolled default that
+        // path folds everything — so clicking the button that was already active folded
+        // the graph, which is the Fold button's job and nobody else's.
+        renderGraph(LAYER_OPERATION_LIST);
+        runBuild.mockClear();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Group by repeats' }));
+
+        expect(runBuild).not.toHaveBeenCalled();
+    });
+
+    it("discards the other detector's instance ids when the grouping changes", () => {
+        // A kept fold decision would name blocks that do not exist in the new mode.
+        renderFolded();
+        fireEvent.click(screen.getAllByRole('button', { name: 'Unroll 2 operations' })[0]);
+        const unrolled = runBuild.mock.calls.at(-1)?.[0] as OpGraphBuildOptions;
+        expect(unrolled.expandedBlockIds).toEqual([FIRST_BLOCK_ID]);
+
+        runBuild.mockClear();
+        fireEvent.click(screen.getByRole('button', { name: 'Group by layers' }));
+
+        expect((runBuild.mock.calls.at(-1)?.[0] as OpGraphBuildOptions).expandedBlockIds).toEqual([]);
+    });
+
+    it('shows how many blocks the active detector found', () => {
+        // The two strategies are compared by switching, not by folding each and
+        // counting nodes on screen.
+        renderGraph(REPEAT_OPERATION_LIST);
+
+        expect(screen.getByRole('button', { name: 'Group by repeats' })).toHaveTextContent('Repeats (2)');
+        expect(screen.getByRole('button', { name: 'Group by layers' })).toHaveTextContent('Layers');
+        expect(screen.getByRole('button', { name: 'Group by layers' })).not.toHaveTextContent('(');
     });
 
     it('keeps the selection on a folded block when the selected op is a non-first member', () => {
-        renderGraph(REPEAT_OPERATION_LIST);
+        renderFolded();
         fireEvent.click(screen.getAllByRole('button', { name: 'Unroll 2 operations' })[0]);
         const unrolled = runBuild.mock.calls.at(-1)?.[0] as OpGraphBuildOptions;
         deliver(REPEAT_OPERATION_LIST, { expandedBlockIds: unrolled.expandedBlockIds });

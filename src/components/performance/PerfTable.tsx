@@ -109,6 +109,11 @@ const PerformanceTable = ({
         return firstRows;
     }, [tableFields]);
 
+    const rowsForColumnEligibility = useMemo(
+        () => [...tableFields, ...comparisonDataTableFields.flat()],
+        [tableFields, comparisonDataTableFields],
+    );
+
     const eligibleColumns = useMemo(
         () =>
             getEligiblePerfColumns({
@@ -116,8 +121,14 @@ const PerformanceTable = ({
                 hasL1PressureData,
                 hiliteHighDispatch,
                 hasNpe: Boolean(npeManifest && npeManifest.length > 0),
+                hasSubDeviceIds: rowsForColumnEligibility.some(
+                    (row) => row.sub_device_id != null && row.sub_device_id !== '',
+                ),
+                hasMultipleAvailableCoreBudgets:
+                    new Set(rowsForColumnEligibility.map((row) => row.available_cores).filter((value) => value != null))
+                        .size > 1,
             }),
-        [opIdsMap.length, hasL1PressureData, hiliteHighDispatch, npeManifest],
+        [opIdsMap.length, hasL1PressureData, hiliteHighDispatch, npeManifest, rowsForColumnEligibility],
     );
 
     const visibleColumns = useMemo(
