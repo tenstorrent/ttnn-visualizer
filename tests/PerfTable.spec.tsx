@@ -338,6 +338,14 @@ describe('PerfTable loading state', () => {
 });
 
 describe('PerfTable column visibility', () => {
+    it('renders the Sub Device ID column from the row value', () => {
+        renderTable([baseRow({ id: 1, raw_op_code: 'Matmul', sub_device_id: 'subdevice-7' })]);
+
+        const table = screen.getByRole('table');
+        expect(within(table).getByText('Sub Device ID')).toBeInTheDocument();
+        expect(within(table).getByText('subdevice-7')).toBeInTheDocument();
+    });
+
     it('keeps OP Code visible even when it is listed as hidden', () => {
         renderTable([matmulRow], { hiddenColumns: [ColumnKeys.OpCode, ColumnKeys.DeviceTime] });
 
@@ -369,7 +377,7 @@ describe('PerfTable column visibility', () => {
             cell.textContent?.includes('device ops'),
         );
 
-        expect(Number(opCodeFooter?.getAttribute('colspan'))).toBe(4);
+        expect(Number(opCodeFooter?.getAttribute('colspan'))).toBe(5);
     });
 });
 

@@ -25,6 +25,7 @@ describe('PerfTable column helpers', () => {
             ColumnKeys.OpCode,
             ColumnKeys.Flags,
             ColumnKeys.Device,
+            ColumnKeys.SubDeviceId,
             ColumnKeys.HighDispatch,
             ColumnKeys.BufferType,
             ColumnKeys.Layout,
@@ -74,16 +75,16 @@ describe('PerfTable column helpers', () => {
         const footerColumns = getFooterColumns(visibleColumns);
         const opCodeFooter = footerColumns.find((column) => column.key === ColumnKeys.OpCode);
 
-        // Flags remains visible (footerSpan: 0), so Op Code still absorbs it.
-        expect(opCodeFooter?.footerSpan).toBe(2);
+        // Flags and Sub Device ID remain visible (footerSpan: 0), so OP Code still absorbs them.
+        expect(opCodeFooter?.footerSpan).toBe(3);
         expect(footerColumns.map((column) => column.key)).not.toContain(ColumnKeys.Flags);
     });
 
-    it('absorbs Flags, Device, and Type into the OP Code footer span by default', () => {
+    it('absorbs Flags, Device, Sub Device ID, and Type into the OP Code footer span by default', () => {
         const footerColumns = getFooterColumns(Columns);
         const opCodeFooter = footerColumns.find((column) => column.key === ColumnKeys.OpCode);
 
-        expect(opCodeFooter?.footerSpan).toBe(4);
+        expect(opCodeFooter?.footerSpan).toBe(5);
         expect(footerColumns.map((column) => column.key)).not.toContain(ColumnKeys.Flags);
         expect(footerColumns.map((column) => column.key)).not.toContain(ColumnKeys.Device);
         expect(footerColumns.map((column) => column.key)).not.toContain(ColumnKeys.BufferType);

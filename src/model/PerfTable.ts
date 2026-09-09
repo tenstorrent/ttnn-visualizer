@@ -17,6 +17,7 @@ export interface PerfTableRow {
     op_code: string;
     raw_op_code: string;
     device: string;
+    sub_device_id?: string | null;
     device_time: string;
     op_to_op_gap: string;
     cores: string;
@@ -110,6 +111,7 @@ export interface TypedPerfTableRow extends Omit<
 
 export const signpostRowDefaults = Object.freeze({
     global_call_count: null,
+    sub_device_id: null,
     total_percent: null,
     device_time: null,
     op_to_op_gap: null,

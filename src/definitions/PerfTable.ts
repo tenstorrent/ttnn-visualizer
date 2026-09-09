@@ -80,6 +80,7 @@ export enum ColumnKeys {
     OP = 'op',
     HighDispatch = 'high_dispatch',
     GlobalCallCount = 'global_call_count',
+    SubDevice = 'sub_device_id',
     Hash = 'hash',
     CacheHit = 'cache_hit',
     L1Fullness = 'l1_fullness_percent',
@@ -102,11 +103,13 @@ export const Columns: ColumnDefinition[] = [
         colour: 'blue',
         sortable: true,
         filterable: true,
-        // Absorbs Flags + Device + Type (all footerSpan: 0) — keep in sync with getFooterColumns.
-        footerSpan: 4,
+        // Absorbs Flags + Device + Sub Device + Type (all footerSpan: 0) — keep in sync with
+        // getFooterColumns.
+        footerSpan: 5,
     },
     { name: 'Flags', key: ColumnKeys.Flags, footerSpan: 0 },
     { name: 'Device', key: ColumnKeys.Device, footerSpan: 0 },
+    { name: 'Sub Device', key: ColumnKeys.SubDevice, footerSpan: 0 },
     { name: 'Type', key: ColumnKeys.BufferType, sortable: true, filterable: true, footerSpan: 0 },
     { name: 'Layout', key: ColumnKeys.Layout, sortable: true, filterable: true },
     { name: 'Device Time', key: ColumnKeys.DeviceTime, unit: 'µs', decimals: 0, sortable: true },
@@ -147,6 +150,7 @@ export const comparisonKeys: ColumnKeys[] = [
     ColumnKeys.BufferType,
     ColumnKeys.Cores,
     ColumnKeys.Device,
+    ColumnKeys.SubDeviceId,
     ColumnKeys.DeviceTime,
     ColumnKeys.Dram,
     ColumnKeys.DramPercent,

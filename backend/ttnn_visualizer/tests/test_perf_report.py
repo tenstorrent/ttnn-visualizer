@@ -183,6 +183,98 @@ class TestPerfReportKernelDurationSchemaCompatibility(unittest.TestCase):
             self.assertIn(key, report[0])
             self.assertEqual(report[0][key], value)
 
+    def test_report_columns_are_matched_by_header_name(self):
+        raw_csv = "\n".join(
+            [
+                "OP TYPE,OP CODE",
+                "tt_dnn_device,Matmul",
+                "",
+            ]
+        )
+        report_header = [
+            "ID",
+            "Total %",
+            "Bound",
+            "OP Code",
+            "Device",
+            "Device Time",
+            "Op-to-Op Gap",
+            "Cores",
+            "DRAM",
+            "DRAM %",
+            "FLOPs",
+            "FLOPs %",
+            "Math Fidelity",
+            "Output Datatype",
+            "Input 0 Datatype",
+            "Input 1 Datatype",
+            "DRAM Sharded",
+            "Input 0 Memory",
+            "Inner Dim Block Size",
+            "Output Subblock H",
+            "Output Subblock W",
+            "Global Call Count",
+            "Sub Device ID",
+            "Available Cores",
+            "Advice",
+            "Raw OP Code",
+        ]
+        report_row = [
+            "2",
+            "1.0",
+            "DRAM",
+            "Matmul",
+            "0",
+            "10.0",
+            "1.0",
+            "64",
+            "100.0",
+            "50.0",
+            "200.0",
+            "50.0",
+            "HiFi4",
+            "BFLOAT16",
+            "BFLOAT16",
+            "BFLOAT16",
+            "False",
+            "DRAM",
+            "",
+            "",
+            "",
+            "1",
+            "subdevice-7",
+            "108",
+            "useful advice",
+            "Matmul",
+        ]
+
+        def _fake_generate_perf_report(*args, **kwargs):
+            output_csv_path = args[8]
+            with open(
+                output_csv_path, "w", encoding="utf-8", newline=""
+            ) as output_file:
+                output_file.write(",".join(report_header) + "\n")
+                output_file.write(",".join(report_row) + "\n")
+
+        instance = Instance(instance_id="test", performance_path="/tmp")
+
+        with (
+            mock.patch(
+                "ttnn_visualizer.csv_queries.OpsPerformanceQueries.get_raw_csv",
+                return_value=raw_csv,
+            ),
+            mock.patch(
+                "ttnn_visualizer.csv_queries.perf_report.generate_perf_report",
+                side_effect=_fake_generate_perf_report,
+            ),
+        ):
+            report = OpsPerformanceReportQueries.generate_report(instance)["report"]
+
+        self.assertEqual(report[0]["raw_op_code"], "Matmul")
+        self.assertEqual(report[0]["advice"], ["useful advice"])
+        self.assertEqual(report[0]["sub_device_id"], "subdevice-7")
+        self.assertEqual(report[0]["available_cores"], "108")
+
 
 class TestPerfReportSignpostOpType(unittest.TestCase):
     """A signpost row must reach the report as ``op_type == "signpost"``.

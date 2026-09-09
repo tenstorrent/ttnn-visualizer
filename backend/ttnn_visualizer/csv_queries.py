@@ -561,9 +561,40 @@ class OpsPerformanceReportQueries:
         "output_subblock_h",
         "output_subblock_w",
         "global_call_count",
+        "sub_device_id",
+        "available_cores",
         "advice",
         "raw_op_code",
     ]
+
+    REPORT_COLUMN_HEADERS = {
+        "id": ("ID", "id"),
+        "total_percent": ("Total %", "total_percent"),
+        "bound": ("Bound", "bound"),
+        "op_code": ("OP Code", "op_code"),
+        "device": ("Device", "device"),
+        "device_time": ("Device Time", "device_time"),
+        "op_to_op_gap": ("Op-to-Op Gap", "op_to_op_gap"),
+        "cores": ("Cores", "cores"),
+        "dram": ("DRAM", "dram"),
+        "dram_percent": ("DRAM %", "dram_percent"),
+        "flops": ("FLOPs", "flops"),
+        "flops_percent": ("FLOPs %", "flops_percent"),
+        "math_fidelity": ("Math Fidelity", "math_fidelity"),
+        "output_datatype": ("Output Datatype", "output_datatype"),
+        "input_0_datatype": ("Input 0 Datatype", "input_0_datatype"),
+        "input_1_datatype": ("Input 1 Datatype", "input_1_datatype"),
+        "dram_sharded": ("DRAM Sharded", "dram_sharded"),
+        "input_0_memory": ("Input 0 Memory", "input_0_memory"),
+        "inner_dim_block_size": ("Inner Dim Block Size", "inner_dim_block_size"),
+        "output_subblock_h": ("Output Subblock H", "output_subblock_h"),
+        "output_subblock_w": ("Output Subblock W", "output_subblock_w"),
+        "global_call_count": ("Global Call Count", "global_call_count"),
+        "sub_device_id": ("Sub Device ID", "sub_device_id"),
+        "available_cores": ("Available Cores", "available_cores"),
+        "advice": ("Advice", "advice"),
+        "raw_op_code": ("Raw OP Code", "raw_op_code"),
+    }
 
     STACKED_REPORT_COLUMNS = [
         "%",
@@ -622,6 +653,25 @@ class OpsPerformanceReportQueries:
     DEFAULT_SUMMARY_FILE = None  # Stacked report output file
     DEFAULT_CLASSIC_COLORS = False  # Colour scheme for plotted stacked report
     DEFAULT_GROUP_BY = None  # Group by method for stacked report
+
+    @classmethod
+    def _parse_report_row(cls, header, row):
+        header_index_by_name = {
+            column_name: index for index, column_name in enumerate(header)
+        }
+        processed_row = {}
+
+        for column, header_names in cls.REPORT_COLUMN_HEADERS.items():
+            header_name = next(
+                (name for name in header_names if name in header_index_by_name),
+                None,
+            )
+            if header_name is not None:
+                header_index = header_index_by_name[header_name]
+                if header_index < len(row):
+                    processed_row[column] = row[header_index]
+
+        return processed_row
 
     @staticmethod
     def extract_signposts(csv_file):
@@ -811,13 +861,9 @@ class OpsPerformanceReportQueries:
                                         # IDs in result column one correspond to row numbers in ops perf results csv
                                         idx = op_id - 2
 
-                                        processed_row = {
-                                            column: row[index]
-                                            for index, column in enumerate(
-                                                cls.REPORT_COLUMNS
-                                            )
-                                            if index < len(row)
-                                        }
+                                        processed_row = cls._parse_report_row(
+                                            header, row
+                                        )
 
                                         if (
                                             "advice" in processed_row
