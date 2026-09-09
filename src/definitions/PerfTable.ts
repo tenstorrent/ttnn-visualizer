@@ -150,7 +150,7 @@ export const comparisonKeys: ColumnKeys[] = [
     ColumnKeys.BufferType,
     ColumnKeys.Cores,
     ColumnKeys.Device,
-    ColumnKeys.SubDeviceId,
+    ColumnKeys.SubDevice,
     ColumnKeys.DeviceTime,
     ColumnKeys.Dram,
     ColumnKeys.DramPercent,
