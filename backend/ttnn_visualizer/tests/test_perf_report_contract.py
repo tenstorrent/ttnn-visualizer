@@ -75,6 +75,8 @@ ROW_DEFAULTS = {
     "raw_op_code": "SomeDeviceOp",
     "bound": None,
     "cores": 32,
+    "available_cores": 64,
+    "dram_sharded": False,
     "dram_percent": None,
     "flops_percent": None,
     "op_to_op_gap": None,
@@ -127,6 +129,21 @@ COLOUR_SCENARIOS = [
     {"id": "cores-full", "column": "cores", "row": {"cores": 64}},
     {"id": "cores-mid", "column": "cores", "row": {"cores": 32}},
     {"id": "cores-missing", "column": "cores", "row": {"cores": None}},
+    {
+        "id": "cores-small-subdevice-budget",
+        "column": "cores",
+        "row": {"cores": 5, "available_cores": 12},
+    },
+    {
+        "id": "cores-half-subdevice-budget",
+        "column": "cores",
+        "row": {"cores": 6, "available_cores": 12},
+    },
+    {
+        "id": "cores-dram-sharded",
+        "column": "cores",
+        "row": {"cores": 4, "available_cores": 64, "dram_sharded": True},
+    },
     # OP Code column
     {
         "id": "op-torch",
@@ -322,6 +339,8 @@ def _build_op_data(row):
     return {
         "OP Code": Cell(values["raw_op_code"]),
         "Cores": Cell(values["cores"]),
+        "Available Cores": Cell(values["available_cores"]),
+        "DRAM Sharded": Cell(values["dram_sharded"]),
         "Bound": Cell(values["bound"]),
         "DRAM": Cell(0.0),
         "DRAM %": Cell(values["dram_percent"]),

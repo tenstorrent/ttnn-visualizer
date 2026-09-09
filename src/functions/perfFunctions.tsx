@@ -355,7 +355,7 @@ export const getCellColour = (row: TypedPerfTableRow, key: ColumnKeys): CellColo
     }
 
     if (key === ColumnKeys.Cores && keyValue != null) {
-        return getCoreColour(keyValue);
+        return getCoreColour(keyValue, row.available_cores, row.dram_sharded);
     }
 
     if (key === ColumnKeys.OpCode) {
@@ -430,12 +430,29 @@ export const getKernelRiscColour = (riscUs: number, deviceKernelUs: number | nul
     return share >= KERNEL_CRITICAL_PATH_SHARE ? CellColour.Blue : DEFAULT_COLOUR;
 };
 
-export const getCoreColour = (value: string | string[] | boolean | number): CellColour => {
+export const getCoreColour = (
+    value: string | string[] | boolean | number,
+    availableCores: string | number | null | undefined = null,
+    dramSharded: boolean | string | null | undefined = null,
+): CellColour => {
     const cores = (typeof value === 'string' ? parseInt(value, 10) : value) as number;
+    const parsedAvailableCores = typeof availableCores === 'string' ? parseInt(availableCores, 10) : availableCores;
+    const isDramSharded =
+        dramSharded === true || (typeof dramSharded === 'string' && ['true', '1'].includes(dramSharded.toLowerCase()));
 
     if (cores != null) {
-        if (cores < 10) {
+        const usesLittleOfBudget = parsedAvailableCores == null || cores < parsedAvailableCores / 2;
+
+        if (isDramSharded) {
+            return CellColour.Green;
+        }
+
+        if (cores < 10 && usesLittleOfBudget) {
             return CellColour.Red;
+        }
+
+        if (parsedAvailableCores != null && cores === parsedAvailableCores) {
+            return CellColour.Green;
         }
     }
 

@@ -68,6 +68,7 @@ export interface TypedPerfTableRow extends Omit<
     | 'dram_percent'
     | 'flops'
     | 'flops_percent'
+    | 'dram_sharded'
     | 'bound'
     | 'pm_ideal_ns'
     | 'device_kernel_duration'
@@ -89,6 +90,7 @@ export interface TypedPerfTableRow extends Omit<
     dram_percent: number | null;
     flops: number | null;
     flops_percent: number | null;
+    dram_sharded: boolean | null;
     bound: BoundType | null;
     pm_ideal_ns: number | null;
     device_kernel_duration: number | null;
@@ -129,7 +131,7 @@ export const signpostRowDefaults = Object.freeze({
     output_0_memory: '',
     input_0_datatype: '',
     input_1_datatype: '',
-    dram_sharded: '',
+    dram_sharded: null,
     input_0_memory: '',
     input_1_memory: '',
     inner_dim_block_size: '',

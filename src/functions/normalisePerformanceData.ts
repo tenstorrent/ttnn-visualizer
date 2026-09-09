@@ -26,7 +26,7 @@ const PLACEHOLDER: TypedPerfTableRow = {
     output_0_memory: '',
     input_0_datatype: '',
     input_1_datatype: '',
-    dram_sharded: '',
+    dram_sharded: null,
     input_0_memory: '',
     input_1_memory: '',
     inner_dim_block_size: '',

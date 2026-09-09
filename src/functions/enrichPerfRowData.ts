@@ -67,6 +67,7 @@ export const enrichRowData = (
             dram_percent: row.dram_percent ? parseFloat(row.dram_percent) : null,
             flops: row.flops ? parseFloat(row.flops) : null,
             flops_percent: row.flops_percent ? parseFloat(row.flops_percent) : null,
+            dram_sharded: (row.dram_sharded ?? '').toLowerCase() === 'true',
             pm_ideal_ns: row.pm_ideal_ns ? parseFloat(row.pm_ideal_ns) : null,
             // Kernel durations arrive as raw nanosecond strings (CSV `[ns]` columns); convert to µs
             // to match the table's `unit: 'µs'` column declarations. nsToUs handles the nullish case.
