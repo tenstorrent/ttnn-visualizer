@@ -11,7 +11,7 @@ database or a Flask app context -- the query classes only need a path. #1995
 """
 
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Callable, Dict, List, Optional
 
 from ttnn_visualizer.csv_queries import (
     DeviceLogProfilerQueries,
@@ -38,6 +38,7 @@ class ReportRegistry:
 
     def __init__(self) -> None:
         self._instances: Dict[str, Instance] = {}
+        self._reports: Dict[str, Dict] = {}
         self._next_id = 1
 
     def add(self, profiler_path: Optional[str], performance_path: Optional[str]) -> str:
@@ -59,8 +60,24 @@ class ReportRegistry:
                 f"unknown handle {handle!r}; loaded handles: {known}"
             ) from None
 
+    def cached_report(self, handle: str, build: Callable[[Instance], Dict]) -> Dict:
+        """Generate a report once per handle.
+
+        `generate_report` re-parses the CSV, shells through tt-perf-report and
+        writes three temp files; an agent asking four questions of one report
+        should pay for that once. The cache lives here rather than in a module
+        global so its lifetime is the registry's — a fresh registry, in a test or
+        a new session, starts empty by construction.
+        """
+        report = self._reports.get(handle)
+        if report is None:
+            report = build(self.get(handle))
+            self._reports[handle] = report
+        return report
+
     def clear(self) -> None:
         self._instances.clear()
+        self._reports.clear()
         self._next_id = 1
 
 
@@ -86,12 +103,18 @@ def _inventory(instance: Instance) -> Dict[str, object]:
     def record(name: str, present: bool) -> None:
         (available if present else missing).append(name)
 
+    # The selector the tools actually read through, not a second glob. Picking
+    # the lexicographically first file here while `get_local_ops_perf_file_path`
+    # picks the newest meant `load_report` could name one capture and `top_ops`
+    # analyse another in a directory holding two.
     perf_csv = None
     if instance.performance_path:
-        perf_csv = next(
-            iter(sorted(Path(instance.performance_path).glob("ops_perf_results*.csv"))),
-            None,
-        )
+        try:
+            perf_csv = Path(
+                OpsPerformanceQueries.get_local_ops_perf_file_path(instance)
+            )
+        except Exception:
+            perf_csv = None
     record("top_ops", perf_csv is not None)
 
     performance_path = instance.performance_path
@@ -101,15 +124,21 @@ def _inventory(instance: Instance) -> Dict[str, object]:
         performance_path is not None
         and Path(performance_path, DeviceLogProfilerQueries.DEVICE_LOG_FILE).is_file(),
     )
-    record(
-        "operations",
-        profiler_path is not None and Path(profiler_path, PROFILER_DB_FILE).is_file(),
-    )
-
     return {
+        # Tool names only. `operations` used to appear here whenever a `db.sqlite`
+        # was present, but no such tool is registered — so the list handed an
+        # agent a name it could not call.
         "answerable": available,
         "unanswerable": missing,
         "performance_csv": perf_csv.name if perf_csv else None,
+        # Data the report holds that no tool exposes yet. Kept apart from the
+        # names above so the two cannot be read as the same kind of thing.
+        "data_present_without_tools": (
+            ["operations_database"]
+            if profiler_path is not None
+            and Path(profiler_path, PROFILER_DB_FILE).is_file()
+            else []
+        ),
     }
 
 

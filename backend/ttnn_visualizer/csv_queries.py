@@ -16,6 +16,7 @@ from typing import (
     List,
     Literal,
     Optional,
+    Tuple,
     Union,
     overload,
 )
@@ -435,7 +436,7 @@ class DeviceLogProfilerQueries:
 
     def query_zone_summary(
         self, limit: Optional[int] = None
-    ) -> List[Dict[str, object]]:
+    ) -> Tuple[List[Dict[str, object]], Dict[str, int]]:
         """Aggregate the whole log into one row per (zone, RISC).
 
         The two existing zone queries both need you to already know the zone you
@@ -445,16 +446,46 @@ class DeviceLogProfilerQueries:
         produce, so an agent handed this file has no way in.
 
         Durations come from pairing each `ZONE_START` with the `ZONE_END` that
-        closes it on the same core, RISC and run. The open starts are held in a
-        dict rather than the rows, so a pair split across two chunks still
-        matches and peak memory tracks concurrently-open zones (tens) rather
-        than the file (~288 MB, ~724k rows). Cycles are a per-core counter, so a
-        difference is only meaningful within one core — which is exactly what
-        the pairing key guarantees.
+        closes it on the same physical core, RISC and run. The open starts are
+        held in a dict rather than the rows, so a pair split across two chunks
+        still matches and peak memory tracks concurrently-open zones (tens)
+        rather than the file (~288 MB, ~724k rows). Cycles are a per-core
+        counter, so a difference is only meaningful within one core — which is
+        what the pairing key has to guarantee.
+
+        A core is `(PCIe slot, core_x, core_y)`, not `(core_x, core_y)`: the two
+        captures in `reports/` span 32 and 8 slots, so coordinates alone collide
+        across devices and one device's start would close against another's end.
+
+        Returns the summary and a count of what did not pair. A truncated
+        capture leaves starts open, which is invisible in a total that reports
+        only what matched.
         """
         if self.runner is None:
             raise RuntimeError(
                 "DeviceLogProfilerQueries must be used as a context manager"
+            )
+
+        # Checked here rather than added to `REQUIRED_DEVICE_LOG_COLUMNS`: that
+        # list gates every route, and its comment records that gating on columns
+        # a query does not read rejects captures which work fine. These are the
+        # ones *this* query indexes, so a capture missing one fails here with a
+        # reason instead of a `KeyError` mid-parse.
+        available = set(self.runner.df.columns if self.runner.df is not None else [])
+        needed = {
+            "PCIe slot",
+            "zone name",
+            "RISC processor type",
+            "core_x",
+            "core_y",
+            "run host ID",
+            "time[cycles since reset]",
+        }
+        missing = sorted(needed - available)
+        if missing:
+            raise DataFormatError(
+                f"{self.DEVICE_LOG_FILE} cannot be summarised by zone; missing: "
+                f"{', '.join(missing)}"
             )
 
         occurrences: Dict[tuple, int] = defaultdict(int)
@@ -473,6 +504,7 @@ class DeviceLogProfilerQueries:
         columns = [
             "zone name",
             "RISC processor type",
+            "PCIe slot",
             "core_x",
             "core_y",
             "run host ID",
@@ -484,6 +516,10 @@ class DeviceLogProfilerQueries:
                 self.runner.file_path,
                 skiprows=self.runner.offset,
                 chunksize=CSV_CHUNK_SIZE,
+                # Only the columns this aggregate reads. The header carries a
+                # leading space on every field after the first, so the names are
+                # matched stripped.
+                usecols=lambda name: name.strip() in set(columns),
             )
             for chunk in chunks:
                 chunk.columns = chunk.columns.str.strip()
@@ -495,20 +531,21 @@ class DeviceLogProfilerQueries:
                     if not zone or zone == "nan":
                         continue
                     risc = str(values[1]).strip()
-                    cycles = values[5]
-                    entry_type = str(values[6]).strip() if has_entry_type else ""
+                    cycles = values[6]
+                    entry_type = str(values[7]).strip() if has_entry_type else ""
 
                     zone_key = (zone, risc)
                     if zone_key not in cores_seen:
                         zone_keys.append(zone_key)
-                    core = (values[2], values[3])
+                    # Slot included: coordinates repeat on every device.
+                    core = (values[2], values[3], values[4])
                     cores_seen[zone_key].add(core)
 
                     if not has_entry_type:
                         occurrences[zone_key] += 1
                         continue
 
-                    pair_key = (zone, risc, core, values[4])
+                    pair_key = (zone, risc, core, values[5])
                     if entry_type == "ZONE_START":
                         open_starts[pair_key] = int(cycles)
                         continue
@@ -555,15 +592,24 @@ class DeviceLogProfilerQueries:
             ),
             reverse=True,
         )
-        # Reported rather than dropped: a capture stopped mid-zone leaves ends
-        # without starts, and a silent aggregate would read as a complete one.
-        if unpaired_ends:
+
+        # Both directions, returned rather than logged. A capture stopped
+        # mid-zone leaves *starts* open, which is the truncation case, and a
+        # capture whose first chunk begins mid-zone leaves ends without starts.
+        # Either way the totals below describe only what paired, and a caller
+        # cannot see that from the totals themselves.
+        pairing = {
+            "unmatched_starts": len(open_starts),
+            "unmatched_ends": unpaired_ends,
+        }
+        if pairing["unmatched_starts"] or pairing["unmatched_ends"]:
             logger.info(
-                "%s: %d zone ends had no matching start",
+                "%s: %d zone starts and %d ends did not pair",
                 self.DEVICE_LOG_FILE,
-                unpaired_ends,
+                pairing["unmatched_starts"],
+                pairing["unmatched_ends"],
             )
-        return summary[:limit] if limit is not None else summary
+        return (summary[:limit] if limit is not None else summary), pairing
 
     @staticmethod
     def get_raw_csv(instance: Instance):

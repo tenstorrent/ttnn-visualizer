@@ -30,6 +30,11 @@ logger = logging.getLogger(__name__)
 PROTOCOL_VERSION = "2025-06-18"
 SERVER_NAME = "ttnn-visualizer"
 
+# A frame this long is a client fault or a runaway, not a call: the largest real
+# request is a `tools/call` with two handles and a limit. Read as a cap rather
+# than a buffer, so an unbounded line cannot be accumulated before it is refused.
+MAX_LINE_BYTES = 1_000_000
+
 _LIMIT_SCHEMA = {
     "type": "integer",
     "description": f"Rows to return, capped at {tools.MAX_LIMIT}.",
@@ -147,9 +152,22 @@ def _tool_failure(request_id: object, message: str) -> Dict:
     )
 
 
-def handle_message(message: Dict, table: Dict[str, Dict]) -> Optional[Dict]:
-    """One request in, at most one response out. `None` means notification."""
+def handle_message(message: object, table: Dict[str, Dict]) -> Optional[Dict]:
+    """One request in, at most one response out. `None` means notification.
+
+    Takes `object`, not `Dict`: `json.loads` returns whatever the client sent, and
+    `[]`, `null` or `7` are all valid JSON. Calling `.get` on one of those raised
+    out of `serve` and took the session with it, so a single malformed frame
+    ended the conversation instead of being answered.
+    """
+    if not isinstance(message, dict):
+        return _error(None, -32600, "invalid request: expected a JSON object")
+
     method = message.get("method")
+    if not isinstance(method, str):
+        return _error(
+            message.get("id"), -32600, "invalid request: 'method' must be a string"
+        )
     request_id = message.get("id")
 
     if method == "initialize":
@@ -182,13 +200,23 @@ def handle_message(message: Dict, table: Dict[str, Dict]) -> Optional[Dict]:
         )
 
     if method == "tools/call":
-        params = message.get("params") or {}
+        # Checked before the `or {}` default: `[]` is falsy, so coercing first
+        # would turn a malformed params into an empty one and answer it.
+        raw_params = message.get("params")
+        if raw_params is not None and not isinstance(raw_params, dict):
+            return _error(request_id, -32602, "invalid params: expected an object")
+        params = raw_params or {}
         name = str(params.get("name") or "")
         entry = table.get(name)
         if entry is None:
             return _tool_failure(request_id, f"unknown tool {name!r}")
 
-        arguments = params.get("arguments") or {}
+        raw_arguments = params.get("arguments")
+        if raw_arguments is not None and not isinstance(raw_arguments, dict):
+            return _error(
+                request_id, -32602, "invalid params: 'arguments' must be an object"
+            )
+        arguments = raw_arguments or {}
         try:
             payload = entry["handler"](arguments)
         except (UnknownHandleError, ValueError) as error:
@@ -211,6 +239,11 @@ def handle_message(message: Dict, table: Dict[str, Dict]) -> Optional[Dict]:
         )
 
     return _error(request_id, -32601, f"method not found: {method}")
+
+
+def _write(stdout: TextIO, payload: Dict) -> None:
+    stdout.write(json.dumps(payload) + "\n")
+    stdout.flush()
 
 
 def serve(

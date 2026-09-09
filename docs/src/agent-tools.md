@@ -65,14 +65,29 @@ repeats the projection it used and you can see it.
 **A total on a partitioned run carries a caveat.** When a report spans more than one
 sub-device, operations on different sub-devices can run concurrently, so summed device
 time, total percentages and op-to-op gaps overstate elapsed time. Responses that include a
-total say so, and name the sub-devices involved.
+total say so, and name the sub-devices involved — `top_ops` and `diff_reports` alike, since
+a delta between two unsound totals is unsound the same way.
+
+Totals are only reported for metrics a sum means something for: device time, op-to-op gap
+and total percentage. DRAM bandwidth, FLOPS and core count are per-operation figures, and
+adding them across a report would produce a number that looks authoritative and is not.
 
 `zone_timings` carries a caveat of its own: cycles are summed across every core that ran
-the zone, so they measure occupancy rather than wall-clock duration. A zone on 130 cores
-reports the sum of all 130. Durations also need the device log's `type` column to pair zone
-starts with ends; a capture without it reports occurrence counts only.
+the zone, so they measure occupancy rather than wall-clock duration. A core is counted per
+device — the captures we test against span 8 and 32 PCIe slots, and coordinates alone
+repeat on each — so a zone can report thousands of cores on a multi-device run. Durations
+need the device log's `type` column to pair zone starts with ends; a capture without it
+reports occurrence counts only, and a capture that stopped mid-zone reports how many starts
+and ends failed to pair so a partial total does not read as a complete one.
 
 ## Limitations
+
+The partitioned-run caveat above is implemented but dormant: `sub_device_id` is not yet
+parsed out of the performance report on `dev`, and the pinned `tt-perf-report` is 1.2.8, so
+no generated row carries the field. It begins reporting the moment
+[#1994](https://github.com/tenstorrent/ttnn-visualizer/pull/1994) lands, with no change
+here.
+
 
 Device profiler logs carry named zones only where a kernel was instrumented to emit them.
 Most captures contain only the default firmware and kernel zones — `BRISC-FW`,

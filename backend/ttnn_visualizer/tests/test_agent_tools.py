@@ -25,6 +25,7 @@ from ttnn_visualizer.agent.handles import (
     load_report,
 )
 from ttnn_visualizer.csv_queries import DeviceLogProfilerQueries
+from ttnn_visualizer.exceptions import DataFormatError
 from ttnn_visualizer.models import Instance
 from ttnn_visualizer.tests.test_device_log_columns import (
     MODERN_HEADER,
@@ -41,6 +42,15 @@ ZONED_ROWS = [
     "1,2,1,BRISC,13,2100,0,1,,,MATMUL,ZONE_END,1,brisc.cc,",
     "1,1,1,NCRISC,14,3000,0,1,,,READ,ZONE_START,1,ncrisc.cc,",
     "1,1,1,NCRISC,15,3050,0,1,,,READ,ZONE_END,1,ncrisc.cc,",
+]
+
+# The same core coordinates on a second PCIe slot. Every capture in `reports/`
+# spans several slots -- 8 and 32 -- so coordinates alone are not a core.
+TWO_SLOT_ROWS = [
+    "1,1,1,BRISC,10,1000,0,1,,,MATMUL,ZONE_START,1,brisc.cc,",
+    "1,1,1,BRISC,11,1200,0,1,,,MATMUL,ZONE_END,1,brisc.cc,",
+    "2,1,1,BRISC,12,5000,0,1,,,MATMUL,ZONE_START,1,brisc.cc,",
+    "2,1,1,BRISC,13,5300,0,1,,,MATMUL,ZONE_END,1,brisc.cc,",
 ]
 
 # No `type` column, so a start cannot be told from an end.
@@ -87,9 +97,28 @@ class TestReportInventory:
 
         assert loaded["handle"] == "report-1"
         assert set(loaded["answerable"]) == {"top_ops", "zone_timings"}
-        assert loaded["unanswerable"] == ["operations"]
+        assert loaded["unanswerable"] == []
         assert loaded["capture"]["ARCH"] == "wormhole_b0"
         assert loaded["performance_csv"] == "ops_perf_results_x.csv"
+
+    def test_it_never_names_a_tool_that_is_not_registered(self, tmp_path):
+        """`operations` was listed whenever a `db.sqlite` was present, but no such
+        tool exists — so an agent reading the list had a name it could not call.
+        Data the report holds is reported separately from what can be asked."""
+        write_device_log(tmp_path, MODERN_HEADER, [])
+        profiler = tmp_path / "profiler"
+        profiler.mkdir()
+        (profiler / "db.sqlite").write_text("", encoding="utf-8")
+
+        loaded = load_report(
+            ReportRegistry(),
+            profiler_path=str(profiler),
+            performance_path=str(tmp_path),
+        )
+
+        registered = set(server._tool_table(ReportRegistry()))
+        assert set(loaded["answerable"]) | set(loaded["unanswerable"]) <= registered
+        assert loaded["data_present_without_tools"] == ["operations_database"]
 
     def test_a_missing_directory_is_refused_with_the_path(self, tmp_path):
         with pytest.raises(ValueError, match="performance_path is not a directory"):
@@ -190,6 +219,53 @@ class TestTopOps:
         assert [op["id"] for op in by_time["ops"]] == ["b", "a"]
         assert [op["id"] for op in by_gap["ops"]] == ["a", "b"]
 
+    def test_a_report_is_generated_once_per_handle(self, tmp_path):
+        """Four questions of one report should not run tt-perf-report four times.
+
+        Each call re-parses the CSV, shells through the library and writes three
+        temp files.
+        """
+        registry = self._registry(tmp_path)
+        with patch.object(
+            tools, "_generate_canonical_report", return_value=_perf_report([_row()])
+        ) as generate:
+            tools.top_ops(registry, "report-1")
+            tools.top_ops(registry, "report-1", by="op_to_op_gap")
+            tools.top_ops(registry, "report-1", limit=5)
+
+        generate.assert_called_once()
+
+    def test_only_additive_metrics_get_a_total(self, tmp_path):
+        """`dram` is GB/s and `cores` is a per-op allocation.
+
+        Summing either across operations produces an authoritative-looking number
+        that is not a bandwidth or a core count.
+        """
+        registry = self._registry(tmp_path)
+        rows = [_row(dram="12.5", cores="64"), _row(id="2", dram="8.0", cores="32")]
+        with patch.object(
+            tools, "_generate_canonical_report", return_value=_perf_report(rows)
+        ):
+            additive = tools.top_ops(registry, "report-1", by="device_time")
+            per_op = tools.top_ops(registry, "report-1", by="dram")
+            allocation = tools.top_ops(registry, "report-1", by="cores")
+
+        assert "device_time_total" in additive
+        assert "dram_total" not in per_op
+        assert "cores_total" not in allocation
+
+    def test_a_signpost_row_is_identifiable_in_the_response(self, tmp_path):
+        """The projection keeps signpost rows on the grounds that `op_type` tells
+        them apart, so the field has to reach the caller."""
+        registry = self._registry(tmp_path)
+        rows = [_row(op_type="signpost", op_code="start_of_layer")]
+        with patch.object(
+            tools, "_generate_canonical_report", return_value=_perf_report(rows)
+        ):
+            result = tools.top_ops(registry, "report-1")
+
+        assert result["ops"][0]["op_type"] == "signpost"
+
     def test_an_unknown_metric_lists_the_ones_that_exist(self, tmp_path):
         registry = self._registry(tmp_path)
         with pytest.raises(ValueError, match="device_time"):
@@ -264,6 +340,32 @@ class TestDiffReports:
         assert by_op["Reshard"]["delta"] == 2.0
         assert by_op["Reshard"]["count_before"] == 0
 
+    def test_a_partitioned_diff_carries_the_caveat_too(self, tmp_path):
+        """A delta of two unsound totals is unsound the same way — and this is the
+        response most likely to be acted on, since it answers "did it help"."""
+        registry = self._two_reports(tmp_path)
+        before = [_row(sub_device_id="0"), _row(id="2", sub_device_id="1")]
+        after = [_row(sub_device_id="0"), _row(id="2", sub_device_id="1")]
+        with patch.object(
+            tools,
+            "_generate_canonical_report",
+            side_effect=[_perf_report(before), _perf_report(after)],
+        ):
+            result = tools.diff_reports(registry, "report-1", "report-2")
+
+        assert "2 sub-devices" in result["caveat"]
+
+    def test_a_non_additive_diff_has_no_delta_total(self, tmp_path):
+        registry = self._two_reports(tmp_path)
+        rows = [_row(dram="10.0")]
+        with patch.object(
+            tools, "_generate_canonical_report", return_value=_perf_report(rows)
+        ):
+            result = tools.diff_reports(registry, "report-1", "report-2", by="dram")
+
+        assert "delta_total" not in result
+        assert result["changes"][0]["delta"] == 0.0
+
     def test_the_largest_movement_comes_first_in_either_direction(self, tmp_path):
         registry = self._two_reports(tmp_path)
         before = [
@@ -293,7 +395,7 @@ class TestZoneSummary:
         write_device_log(tmp_path, MODERN_HEADER, ZONED_ROWS)
 
         with DeviceLogProfilerQueries(instance, stream=True) as queries:
-            summary = queries.query_zone_summary()
+            summary, _pairing = queries.query_zone_summary()
 
         by_zone = {entry["zone"]: entry for entry in summary}
         # 400 cycles on core (1,1) plus 100 on core (2,1).
@@ -315,11 +417,64 @@ class TestZoneSummary:
         instance = Instance(instance_id="pytest", performance_path=str(tmp_path))
 
         with DeviceLogProfilerQueries(instance, stream=True) as queries:
-            summary = queries.query_zone_summary()
+            summary, _pairing = queries.query_zone_summary()
 
         by_zone = {entry["zone"]: entry for entry in summary}
         assert by_zone["MATMUL"]["total_cycles"] == 500
         assert by_zone["MATMUL"]["occurrences"] == 2
+
+    def test_a_core_is_scoped_to_its_device(self, tmp_path):
+        """`(core_x, core_y)` repeats on every PCIe slot.
+
+        Without the slot in the identity, two devices' cores are one core: the
+        count collapses, and one device's start can be closed by another's end
+        — across per-device cycle counters, which makes the duration meaningless.
+        The local captures span 8 and 32 slots, where this understated the core
+        count by the same factor.
+        """
+        write_device_log(tmp_path, MODERN_HEADER, TWO_SLOT_ROWS)
+        instance = Instance(instance_id="pytest", performance_path=str(tmp_path))
+
+        with DeviceLogProfilerQueries(instance, stream=True) as queries:
+            summary, _pairing = queries.query_zone_summary()
+
+        assert summary[0]["cores"] == 2
+        assert summary[0]["occurrences"] == 2
+        # 200 cycles on slot 1 plus 300 on slot 2, each paired within its device.
+        assert summary[0]["total_cycles"] == 500
+
+    def test_unpaired_starts_and_ends_are_reported(self, tmp_path):
+        """A truncated capture leaves starts open, which a total cannot show."""
+        truncated = [
+            "1,1,1,BRISC,10,1000,0,1,,,MATMUL,ZONE_START,1,brisc.cc,",
+            "1,1,1,BRISC,11,1400,0,1,,,MATMUL,ZONE_END,1,brisc.cc,",
+            # Opens and never closes: the capture stopped here.
+            "1,1,1,BRISC,12,2000,0,1,,,MATMUL,ZONE_START,1,brisc.cc,",
+            # Closes something that was never opened in this file.
+            "1,3,3,NCRISC,13,9000,0,1,,,READ,ZONE_END,1,ncrisc.cc,",
+        ]
+        write_device_log(tmp_path, MODERN_HEADER, truncated)
+        instance = Instance(instance_id="pytest", performance_path=str(tmp_path))
+
+        with DeviceLogProfilerQueries(instance, stream=True) as queries:
+            summary, pairing = queries.query_zone_summary()
+
+        assert pairing == {"unmatched_starts": 1, "unmatched_ends": 1}
+        assert summary[0]["occurrences"] == 1
+
+    def test_a_capture_missing_a_column_this_query_reads_is_refused(self, tmp_path):
+        """Refused here rather than by widening `REQUIRED_DEVICE_LOG_COLUMNS`.
+
+        That list gates every route, and its own comment records that requiring
+        columns a query does not read rejects captures which work fine.
+        """
+        header = MODERN_HEADER.replace(" core_y,", " not_core_y,")
+        write_device_log(tmp_path, header, [])
+        instance = Instance(instance_id="pytest", performance_path=str(tmp_path))
+
+        with DeviceLogProfilerQueries(instance, stream=True) as queries:
+            with pytest.raises(DataFormatError, match="core_y"):
+                queries.query_zone_summary()
 
     def test_a_capture_without_the_type_column_reports_occurrences_only(self, tmp_path):
         """`type` is deliberately not required, so durations must degrade, not lie."""
@@ -327,7 +482,7 @@ class TestZoneSummary:
         instance = Instance(instance_id="pytest", performance_path=str(tmp_path))
 
         with DeviceLogProfilerQueries(instance, stream=True) as queries:
-            summary = queries.query_zone_summary()
+            summary, _pairing = queries.query_zone_summary()
 
         assert summary[0]["occurrences"] == 2
         assert summary[0]["total_cycles"] is None
@@ -359,6 +514,23 @@ class TestZoneTimingsTool:
         assert matmul["total_us"] == 0.5
         # The sum-across-cores reading has to be stated; the number invites the other.
         assert "occupancy" in result["note"]
+
+
+class TestZeroDuration:
+    def test_a_zone_that_opened_and_closed_on_one_cycle_reports_zero(self, tmp_path):
+        """Zero is a measurement; `None` means the capture could not say."""
+        instant = [
+            "1,1,1,BRISC,10,1000,0,1,,,INSTANT,ZONE_START,1,brisc.cc,",
+            "1,1,1,BRISC,11,1000,0,1,,,INSTANT,ZONE_END,1,brisc.cc,",
+        ]
+        registry = ReportRegistry()
+        write_device_log(tmp_path, MODERN_HEADER, instant)
+        load_report(registry, performance_path=str(tmp_path))
+
+        result = tools.zone_timings(registry, "report-1")
+
+        assert result["zones"][0]["total_cycles"] == 0
+        assert result["zones"][0]["total_us"] == 0.0
 
 
 class TestTransport:
@@ -402,6 +574,32 @@ class TestTransport:
         assert response["result"]["isError"] is True
         assert "unknown handle" in response["result"]["content"][0]["text"]
         assert "error" not in response
+
+    @pytest.mark.parametrize("frame", ["[]", "null", "7", '"text"'])
+    def test_a_non_object_frame_is_refused_rather_than_fatal(self, frame):
+        """`json.loads` returns whatever the client sent. Calling `.get` on a list
+        raised out of `serve` and ended the session on one malformed frame."""
+        import json as json_module
+
+        response = server.handle_message(json_module.loads(frame), self._table())
+
+        assert response["error"]["code"] == -32600
+
+    @pytest.mark.parametrize("params", [[], "text", 7])
+    def test_non_object_params_are_refused(self, params):
+        response = server.handle_message(
+            {"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": params},
+            self._table(),
+        )
+
+        assert response["error"]["code"] == -32602
+
+    def test_a_non_string_method_is_refused(self):
+        response = server.handle_message(
+            {"jsonrpc": "2.0", "id": 1, "method": 123}, self._table()
+        )
+
+        assert response["error"]["code"] == -32600
 
     def test_an_unknown_method_is_a_protocol_error(self):
         response = server.handle_message(
