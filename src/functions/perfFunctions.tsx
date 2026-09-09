@@ -437,10 +437,6 @@ export const getCoreColour = (value: string | string[] | boolean | number): Cell
         if (cores < 10) {
             return CellColour.Red;
         }
-
-        if (cores === 64) {
-            return CellColour.Green;
-        }
     }
 
     return DEFAULT_COLOUR;
