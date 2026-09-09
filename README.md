@@ -104,15 +104,15 @@ https://github.com/user-attachments/assets/4e51a636-c6d6-46df-bf34-a06bca13c0b3
 
 | Per core allocation details | Per core allocation details for individual tensors |
 |-----------------------------------------------|------------------------------------------|
-| <img width="400" alt="Per core allocation details" src="https://github.com/user-attachments/assets/681c8d0e-c628-4839-afca-f31ff9d53f73" /> | <img width="400" alt="Per core allocation details for individual tensor" src="https://github.com/user-attachments/assets/a9d66f2d-2457-4ced-b777-6e8f0c54eb86" /> |
+| <img width="400" alt="Per core allocation details" src="https://github.com/user-attachments/assets/72038343-1509-44cc-91fc-1d4c92df7779" /> | <img width="400" alt="Per core allocation details for individual tensor" src="https://github.com/user-attachments/assets/c93e36d1-5dfe-488d-abff-ec0a732d7111" /> |
 
 | Tensor details list | Performance report |
 |-----------------------------------------------|------------------------------------------|
-| <img width="400" alt="Tensor details list" src="https://github.com/user-attachments/assets/315089ff-ae75-4615-87b9-19c45431871c" /> | <img width="400" alt="Performnance analysis" src="https://github.com/user-attachments/assets/468b0acb-733e-4891-8e16-781c47889017" /> |
+| <img width="400" alt="Tensor details list" src="https://github.com/user-attachments/assets/88d00ef7-bd59-4e44-bbae-5270ffa794a4" /> | <img width="400" alt="Performance analysis" src="https://github.com/user-attachments/assets/4506fd4c-6cef-4621-8661-20ba12c6b662" /> |
 
 | Performance charts |  |
 |-----------------------------------------------|------------------------------------------|
-| <img width="400" alt="Performance charts" src="https://github.com/user-attachments/assets/19f6bd6f-8f48-48dd-b9ee-726b1a1e40e3" /> |  <img width="400" alt="Performance charts" src="https://github.com/user-attachments/assets/bc6ae03b-f143-4ee5-9f14-834ddf8b0cde" /> |
+| <img width="400" alt="Performance charts" src="https://github.com/user-attachments/assets/440d00aa-61db-4ac1-99e8-ccfc4caf9f94" /> |  <img width="400" alt="Performance charts" src="https://github.com/user-attachments/assets/2d0a125a-b60e-4935-b77e-c2bcd31bcaf0" /> |
 
 | NPE |  |
 |-----------------------------------------------|------------------------------------------|
