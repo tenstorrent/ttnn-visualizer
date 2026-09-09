@@ -116,7 +116,7 @@ https://github.com/user-attachments/assets/4e51a636-c6d6-46df-bf34-a06bca13c0b3
 
 | NPE |  |
 |-----------------------------------------------|------------------------------------------|
-| <img width="400" alt="NPE" src="https://github.com/user-attachments/assets/5f45c1bf-565d-4003-b3b7-0ddd90cbdeca" /> | <img width="400" alt="NPE" src="https://github.com/user-attachments/assets/8a3e9a09-4c86-45a6-9916-52fba16debc6" />
+| <img width="400" alt="NPE" src="https://github.com/user-attachments/assets/fbd5be87-7df0-4e21-9743-f2fcc6b22343" /> | <img width="400" alt="NPE" src="https://github.com/user-attachments/assets/d1ddbd74-5861-4d1b-8b85-c5a9eaa63f48" />
 
 ## Sample reports
 
