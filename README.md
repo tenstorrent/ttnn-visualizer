@@ -92,7 +92,7 @@ https://github.com/user-attachments/assets/4e51a636-c6d6-46df-bf34-a06bca13c0b3
 
 | L1 Summary with Tensor highlight | Operation inputs and outputs |
 |-----------------------------------------------|------------------------------------------|
-| <img width="400" height="884" alt="L1 Summary with Tensor highlight" src="https://github.com/user-attachments/assets/82f57116-e40e-45e6-8f09-d87b447c0ab1" /> | <img width="400" alt="Operation inputs and outputs" src="https://github.com/user-attachments/assets/6d93e76f-cca8-4ff8-adf1-3950757f207f" /> |
+| <img width="400" alt="L1 Summary with Tensor highlight" src="https://github.com/user-attachments/assets/82f57116-e40e-45e6-8f09-d87b447c0ab1" /> | <img width="400" alt="Operation inputs and outputs" src="https://github.com/user-attachments/assets/6d93e76f-cca8-4ff8-adf1-3950757f207f" /> |
 
 | Device operations with memory consumption | DRAM memory allocation |
 |-----------------------------------------------|------------------------------------------|
