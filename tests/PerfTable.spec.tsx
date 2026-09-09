@@ -339,11 +339,20 @@ describe('PerfTable loading state', () => {
 
 describe('PerfTable column visibility', () => {
     it('renders the Sub Device column from the row value', () => {
-        renderTable([baseRow({ id: 1, raw_op_code: 'Matmul', sub_device_id: 'subdevice-7' })]);
+        renderTable([
+            baseRow({
+                id: 1,
+                raw_op_code: 'Matmul',
+                sub_device_id: 'subdevice-7',
+                available_cores: '108',
+            }),
+        ]);
 
         const table = screen.getByRole('table');
         expect(within(table).getByText('Sub Device')).toBeInTheDocument();
         expect(within(table).getByText('subdevice-7')).toBeInTheDocument();
+        expect(within(table).getByText('Available Cores')).toBeInTheDocument();
+        expect(within(table).getByText('108')).toBeInTheDocument();
     });
 
     it('renders the Sub Device value on comparison rows', () => {
@@ -351,12 +360,14 @@ describe('PerfTable column visibility', () => {
             id: 99,
             raw_op_code: 'Matmul',
             sub_device_id: 'comparison-subdevice',
+            available_cores: '72',
         });
 
         renderTable([matmulRow], { comparisonData: [[comparisonRow]] });
 
         const comparisonTableRow = screen.getByText('comparison-subdevice').closest('tr');
         expect(comparisonTableRow).toHaveClass('comparison-row');
+        expect(within(comparisonTableRow as HTMLElement).getByText('72')).toBeInTheDocument();
     });
 
     it('keeps OP Code visible even when it is listed as hidden', () => {

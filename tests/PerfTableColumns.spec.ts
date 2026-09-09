@@ -32,6 +32,7 @@ describe('PerfTable column helpers', () => {
             ColumnKeys.DeviceTime,
             ColumnKeys.OpToOpGap,
             ColumnKeys.Cores,
+            ColumnKeys.AvailableCores,
             ColumnKeys.Dram,
             ColumnKeys.DramPercent,
             ColumnKeys.Flops,
