@@ -103,6 +103,7 @@ function FooterInfobar() {
         return selectedRange && `Selected: ${selectedRange[0]} - ${selectedRange[1]}`;
     };
 
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const versionStatus = getAppVersionStatus(
         appVersion,
         isLatestAppPending,
@@ -122,7 +123,7 @@ function FooterInfobar() {
     return (
         <footer className={classNames('app-footer', { 'is-open': sliderIsOpen })}>
             <div className='current-data'>
-                <div className='version-container'>{versionStatus}</div>
+                <div className='version-container'>{/* {versionStatus} */}</div>
 
                 <div className='active-reports'>
                     {!isServerMode && (
