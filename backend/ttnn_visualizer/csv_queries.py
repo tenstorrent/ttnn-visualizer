@@ -8,6 +8,7 @@ import logging
 import os
 import tempfile
 import traceback
+from collections import defaultdict
 from io import StringIO
 from pathlib import Path
 from typing import (
@@ -410,6 +411,159 @@ class DeviceLogProfilerQueries:
                 "DeviceLogProfilerQueries must be used as a context manager"
             )
         return self.runner.execute_query(columns=None, as_dict=as_dict, limit=limit)
+
+    @classmethod
+    def read_capture_metadata(cls, instance: Instance) -> Dict[str, str]:
+        """The `ARCH: …, CHIP_FREQ[MHz]: …` line every device log opens with.
+
+        `__enter__` skips it (`offset=1`) because pandas would read it as a
+        header, so the only way to the clock is to read the line directly — and
+        without the clock a cycle count cannot be turned into a duration.
+        """
+        if not instance.performance_path:
+            raise PerformanceReportNotLoadedException()
+        path = Path(instance.performance_path, cls.DEVICE_LOG_FILE)
+        with open(path, "r") as handle:
+            first_line = handle.readline()
+
+        metadata: Dict[str, str] = {}
+        for field in first_line.split(","):
+            key, separator, value = field.partition(":")
+            if separator:
+                metadata[key.strip()] = value.strip()
+        return metadata
+
+    def query_zone_summary(
+        self, limit: Optional[int] = None
+    ) -> List[Dict[str, object]]:
+        """Aggregate the whole log into one row per (zone, RISC).
+
+        The two existing zone queries both need you to already know the zone you
+        are looking for — `query_zone_statistics` takes a name and
+        `query_by_timer_id` takes an id. Nothing answers "what is in this
+        capture", which is the first question anyone asks of a log they did not
+        produce, so an agent handed this file has no way in.
+
+        Durations come from pairing each `ZONE_START` with the `ZONE_END` that
+        closes it on the same core, RISC and run. The open starts are held in a
+        dict rather than the rows, so a pair split across two chunks still
+        matches and peak memory tracks concurrently-open zones (tens) rather
+        than the file (~288 MB, ~724k rows). Cycles are a per-core counter, so a
+        difference is only meaningful within one core — which is exactly what
+        the pairing key guarantees.
+        """
+        if self.runner is None:
+            raise RuntimeError(
+                "DeviceLogProfilerQueries must be used as a context manager"
+            )
+
+        occurrences: Dict[tuple, int] = defaultdict(int)
+        cycle_totals: Dict[tuple, int] = defaultdict(int)
+        cores_seen: Dict[tuple, set] = defaultdict(set)
+        zone_keys: List[tuple] = []
+        open_starts: Dict[tuple, int] = {}
+        unpaired_ends = 0
+        # Not in `REQUIRED_DEVICE_LOG_COLUMNS` on purpose: older captures predate
+        # it. Without it a start cannot be told from an end, so those captures get
+        # occurrence counts and no durations rather than a guess.
+        has_entry_type = "type" in (
+            self.runner.df.columns if self.runner.df is not None else []
+        )
+
+        columns = [
+            "zone name",
+            "RISC processor type",
+            "core_x",
+            "core_y",
+            "run host ID",
+            "time[cycles since reset]",
+        ] + (["type"] if has_entry_type else [])
+
+        try:
+            chunks = pd.read_csv(
+                self.runner.file_path,
+                skiprows=self.runner.offset,
+                chunksize=CSV_CHUNK_SIZE,
+            )
+            for chunk in chunks:
+                chunk.columns = chunk.columns.str.strip()
+                # Zipped column-wise rather than `itertuples`, which renames any
+                # field that is not a valid identifier -- "zone name" arrives as
+                # `_1` and every lookup by name silently misses.
+                for values in zip(*(chunk[column] for column in columns)):
+                    zone = str(values[0]).strip()
+                    if not zone or zone == "nan":
+                        continue
+                    risc = str(values[1]).strip()
+                    cycles = values[5]
+                    entry_type = str(values[6]).strip() if has_entry_type else ""
+
+                    zone_key = (zone, risc)
+                    if zone_key not in cores_seen:
+                        zone_keys.append(zone_key)
+                    core = (values[2], values[3])
+                    cores_seen[zone_key].add(core)
+
+                    if not has_entry_type:
+                        occurrences[zone_key] += 1
+                        continue
+
+                    pair_key = (zone, risc, core, values[4])
+                    if entry_type == "ZONE_START":
+                        open_starts[pair_key] = int(cycles)
+                        continue
+                    if entry_type != "ZONE_END":
+                        continue
+
+                    start = open_starts.pop(pair_key, None)
+                    if start is None:
+                        unpaired_ends += 1
+                        continue
+
+                    occurrences[zone_key] += 1
+                    cycle_totals[zone_key] += int(cycles) - start
+        except (pd.errors.EmptyDataError, pd.errors.ParserError) as error:
+            raise self.runner._unparseable(error) from error
+
+        summary = []
+        for zone, risc in zone_keys:
+            zone_key = (zone, risc)
+            count = occurrences[zone_key]
+            total_cycles = cycle_totals[zone_key]
+            summary.append(
+                {
+                    "zone": zone,
+                    "risc": risc,
+                    "occurrences": count,
+                    "cores": len(cores_seen[zone_key]),
+                    "total_cycles": total_cycles if has_entry_type else None,
+                    "mean_cycles": (
+                        round(total_cycles / count, 1)
+                        if has_entry_type and count
+                        else None
+                    ),
+                }
+            )
+
+        # Costliest first: the reason to ask is to find where the time went. A
+        # capture with no `type` column has no durations to sort on, so it falls
+        # back to the count.
+        summary.sort(
+            key=lambda entry: (
+                int(entry["total_cycles"] or 0),
+                int(entry["occurrences"] or 0),
+            ),
+            reverse=True,
+        )
+        # Reported rather than dropped: a capture stopped mid-zone leaves ends
+        # without starts, and a silent aggregate would read as a complete one.
+        if unpaired_ends:
+            logger.info(
+                "%s: %d zone ends had no matching start",
+                self.DEVICE_LOG_FILE,
+                unpaired_ends,
+            )
+        return summary[:limit] if limit is not None else summary
 
     @staticmethod
     def get_raw_csv(instance: Instance):
