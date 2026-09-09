@@ -150,6 +150,20 @@ class TestTopOps:
         assert result["projection"]["hide_host_ops"] is False
         generate.assert_called_once()
 
+    def test_the_projection_declares_no_filter(self, tmp_path):
+        """`print_signposts` drops rows rather than only omitting a printout.
+
+        It is inert while no tool passes a signpost range — `ignore_signposts`
+        returns the frame before the strip runs — so this pins the declaration
+        rather than an observable difference: a projection that exists to not
+        filter should not carry a filter it would honour if a range arrived.
+        """
+        assert tools.CANONICAL_PROJECTION == {
+            "hide_host_ops": False,
+            "merge_devices": True,
+            "print_signposts": True,
+        }
+
     def test_a_limit_is_capped_rather_than_honoured(self, tmp_path):
         registry = self._registry(tmp_path)
         rows = [_row(id=str(index), device_time=str(index)) for index in range(500)]

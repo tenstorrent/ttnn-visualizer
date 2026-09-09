@@ -52,11 +52,15 @@ Three properties are deliberate, and worth knowing before you act on a number.
 report runs to tens of thousands of rows of about thirty-five fields. Limits are capped
 server-side, so asking for more returns the cap rather than the report.
 
-**The rows are unfiltered.** The web application's performance view hides host operations
-by default, merges per-device rows, and can narrow to a signpost range. Those are display
-choices, and an agent handed them unannounced would reason confidently about a partial set.
-The tools read the report with host operations included and no signpost range, and every
-response repeats the projection it used.
+**No rows are hidden from you.** The web application's performance view hides host
+operations by default and can narrow to a signpost range. Those are display choices, and an
+agent handed them unannounced would reason confidently about a partial set. The tools read
+the report with host operations included, signpost markers kept, and no signpost range.
+
+One filter is applied, deliberately: per-device rows are **merged**, so an operation that
+ran on eight devices is one row rather than eight. That is the unit an operation is
+reported in rather than a subset of the report — but it is a choice, so every response
+repeats the projection it used and you can see it.
 
 **A total on a partitioned run carries a caveat.** When a report spans more than one
 sub-device, operations on different sub-devices can run concurrently, so summed device
@@ -71,9 +75,11 @@ starts with ends; a capture without it reports occurrence counts only.
 ## Limitations
 
 Device profiler logs carry named zones only where a kernel was instrumented to emit them.
-Most captures contain only the six default firmware and kernel zones
-(`BRISC-FW`, `BRISC-KERNEL`, and the same for `NCRISC` and `TRISC`), so `zone_timings`
-describes RISC-level phases rather than named model operations on those reports.
+Most captures contain only the default firmware and kernel zones — `BRISC-FW`,
+`BRISC-KERNEL` and the same pair for `NCRISC` and `TRISC`, plus `ERISC` where a capture
+used ethernet cores — so on those reports `zone_timings` describes RISC-level phases rather
+than named model operations. A capture whose kernels do emit named zones reports them
+alongside the defaults.
 
 The transport is a minimal JSON-RPC implementation rather than the official MCP SDK, which
 keeps the server free of additional dependencies while the tool set settles.

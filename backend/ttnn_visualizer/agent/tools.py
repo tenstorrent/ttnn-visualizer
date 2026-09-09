@@ -30,13 +30,24 @@ logger = logging.getLogger(__name__)
 # `get_performance_results_report` defaults `hide_host_ops` and `merge_devices`
 # to true and can narrow to a signpost range. Those are view choices: handed to
 # an agent unannounced they produce confident reasoning over a partial set,
-# which is how #1883 lost six features to a filtered link status. Host ops stay
-# in because dropping rows silently is the failure worth avoiding; devices stay
-# merged because that is the unit an op is reported in.
+# which is how #1883 lost six features to a filtered link status.
+#
+# So nothing here drops a row. Host ops stay in, and `print_signposts` is true
+# because the name understates it: `filter_by_signpost` drops the signpost rows
+# themselves when it is false, rather than only omitting them from a printout
+# (`perf_report.py:480`). It is inert on this path today -- passing no signpost
+# range means `ignore_signposts`, which returns the frame before the strip can
+# run -- but a projection that exists to not filter should not declare a filter
+# it would honour the moment a tool took a range. Rows carry `op_type`, so an
+# agent can tell a marker from an operation.
+#
+# `merge_devices` is the one filter kept, and deliberately: unmerged rows report
+# the same op once per device, so a merged row is the unit an op is reported in
+# rather than a subset of the report. Every response repeats this projection.
 CANONICAL_PROJECTION: Dict[str, object] = {
     "hide_host_ops": False,
     "merge_devices": True,
-    "print_signposts": False,
+    "print_signposts": True,
 }
 
 # Sort keys an agent may ask for, mapped to the report's own field names.
