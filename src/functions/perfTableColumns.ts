@@ -12,7 +12,7 @@ import {
 
 const OP_ID_INSERTION_POINT = 1;
 const L1_PRESSURE_INSERTION_POINT = 2;
-const HIGH_DISPATCH_INSERTION_POINT = 7;
+const HIGH_DISPATCH_INSERTION_POINT = Columns.findIndex((column) => column.key === ColumnKeys.BufferType);
 
 export interface EligiblePerfColumnsFlags {
     hasOpIds: boolean;

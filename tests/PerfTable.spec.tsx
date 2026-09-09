@@ -338,12 +338,25 @@ describe('PerfTable loading state', () => {
 });
 
 describe('PerfTable column visibility', () => {
-    it('renders the Sub Device ID column from the row value', () => {
+    it('renders the Sub Device column from the row value', () => {
         renderTable([baseRow({ id: 1, raw_op_code: 'Matmul', sub_device_id: 'subdevice-7' })]);
 
         const table = screen.getByRole('table');
-        expect(within(table).getByText('Sub Device ID')).toBeInTheDocument();
+        expect(within(table).getByText('Sub Device')).toBeInTheDocument();
         expect(within(table).getByText('subdevice-7')).toBeInTheDocument();
+    });
+
+    it('renders the Sub Device value on comparison rows', () => {
+        const comparisonRow = baseRow({
+            id: 99,
+            raw_op_code: 'Matmul',
+            sub_device_id: 'comparison-subdevice',
+        });
+
+        renderTable([matmulRow], { comparisonData: [[comparisonRow]] });
+
+        const comparisonTableRow = screen.getByText('comparison-subdevice').closest('tr');
+        expect(comparisonTableRow).toHaveClass('comparison-row');
     });
 
     it('keeps OP Code visible even when it is listed as hidden', () => {

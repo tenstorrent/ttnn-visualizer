@@ -247,6 +247,9 @@ class TestPerfReportKernelDurationSchemaCompatibility(unittest.TestCase):
             "useful advice",
             "Matmul",
         ]
+        # The CSV parser must not rely on ID being the first column.
+        report_header = report_header[1:] + [report_header[0]]
+        report_row = report_row[1:] + [report_row[0]]
 
         def _fake_generate_perf_report(*args, **kwargs):
             output_csv_path = args[8]

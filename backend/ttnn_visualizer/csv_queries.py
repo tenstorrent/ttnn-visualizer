@@ -538,35 +538,6 @@ class OpsPerformanceQueries:
 
 
 class OpsPerformanceReportQueries:
-    REPORT_COLUMNS = [
-        "id",
-        "total_percent",
-        "bound",
-        "op_code",
-        "device",
-        "device_time",
-        "op_to_op_gap",
-        "cores",
-        "dram",
-        "dram_percent",
-        "flops",
-        "flops_percent",
-        "math_fidelity",
-        "output_datatype",
-        "input_0_datatype",
-        "input_1_datatype",
-        "dram_sharded",
-        "input_0_memory",
-        "inner_dim_block_size",
-        "output_subblock_h",
-        "output_subblock_w",
-        "global_call_count",
-        "sub_device_id",
-        "available_cores",
-        "advice",
-        "raw_op_code",
-    ]
-
     REPORT_COLUMN_HEADERS = {
         "id": ("ID", "id"),
         "total_percent": ("Total %", "total_percent"),
@@ -655,23 +626,31 @@ class OpsPerformanceReportQueries:
     DEFAULT_GROUP_BY = None  # Group by method for stacked report
 
     @classmethod
-    def _parse_report_row(cls, header, row):
+    def _resolve_report_column_indexes(cls, header):
         header_index_by_name = {
             column_name: index for index, column_name in enumerate(header)
         }
-        processed_row = {}
+        column_indexes = {}
 
         for column, header_names in cls.REPORT_COLUMN_HEADERS.items():
-            header_name = next(
-                (name for name in header_names if name in header_index_by_name),
+            column_indexes[column] = next(
+                (
+                    header_index_by_name[name]
+                    for name in header_names
+                    if name in header_index_by_name
+                ),
                 None,
             )
-            if header_name is not None:
-                header_index = header_index_by_name[header_name]
-                if header_index < len(row):
-                    processed_row[column] = row[header_index]
 
-        return processed_row
+        return column_indexes
+
+    @classmethod
+    def _parse_report_row(cls, column_indexes, row):
+        return {
+            column: row[index]
+            for column, index in column_indexes.items()
+            if index is not None and index < len(row)
+        }
 
     @staticmethod
     def extract_signposts(csv_file):
@@ -855,14 +834,23 @@ class OpsPerformanceReportQueries:
                                 )
                                 report = []
                             else:
+                                column_indexes = cls._resolve_report_column_indexes(
+                                    header
+                                )
+                                id_index = column_indexes.get("id")
                                 for row in reader:
                                     try:
-                                        op_id = int(row[0])
+                                        if id_index is None or id_index >= len(row):
+                                            raise ValueError(
+                                                "Report row is missing its ID"
+                                            )
+
+                                        op_id = int(row[id_index])
                                         # IDs in result column one correspond to row numbers in ops perf results csv
                                         idx = op_id - 2
 
                                         processed_row = cls._parse_report_row(
-                                            header, row
+                                            column_indexes, row
                                         )
 
                                         if (
