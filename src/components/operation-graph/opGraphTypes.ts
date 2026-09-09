@@ -4,6 +4,9 @@
 
 import type { Edge, Node } from '@xyflow/react';
 import type { NodeRelation } from '../../definitions/NodeRelation';
+// Type-only, so nothing is imported at runtime and the builder's import of this
+// module stays the only real edge between the two.
+import type { CandidateEdge } from './opGraphBuilder';
 
 export enum OpGraphNodeType {
     OP = 'opNode',
@@ -42,6 +45,14 @@ export interface OpGraphSourceOperation {
     deviceOperationCount: number;
     /** Fingerprint inputs for repeat detection. Absent in older test fixtures. */
     inputShapes?: string[];
+    /**
+     * An activation fused into this op's matmul rather than emitted as its own op,
+     * parsed at the mapping boundary. Carried as the bare name so role detection can
+     * treat it like an op leaf; the raw `program_config` string is deliberately not
+     * forwarded, since the full argument payload is hundreds of KiB per report and
+     * crosses to the worker. #1976
+     */
+    fusedActivation?: string;
     durationSeconds?: number;
     memoryDeltaBytes?: number;
 }
@@ -74,6 +85,8 @@ export type OpGraphNodeData = {
     deviceOperationCount: number;
     highlight?: NodeRelation;
     blockInstanceId?: string;
+    /** Drives the block's colour, so the three kinds are distinguishable. #1982 */
+    blockKind?: OpGraphBlockKind;
     memberNames?: string[];
     memberOperationIds?: number[];
     opCount?: number;
@@ -126,7 +139,22 @@ export interface OpGraphDeviceSubgraph {
     exitFallbackNodeId: string | null;
 }
 
+/**
+ * Which detector produced a block. Carried rather than parsed back out of `patternId`,
+ * because a prefix check would silently mislabel the next detector someone adds — and
+ * the kind decides the colour a reader uses to tell them apart. #1982
+ */
+export enum OpGraphBlockKind {
+    /** A repeated subgraph. #1583 */
+    REPEAT = 'repeat',
+    /** A span named by its operations' roles. #1976 */
+    LAYER = 'layer',
+    /** A fan of weight loads feeding one node. #1980 */
+    WEIGHTS = 'weights',
+}
+
 export interface RepeatBlockInstance {
+    kind: OpGraphBlockKind;
     instanceId: string;
     patternId: string;
     label: string;
@@ -167,14 +195,46 @@ export interface OpGraphNodeIndexEntry {
     memberOperationIds?: number[];
 }
 
+/**
+ * Which detector supplies the foldable blocks. Mutually exclusive per build, so a
+ * region cannot carry two competing identities — the reconciliation question #1953
+ * records. #1976
+ */
+export enum OpGraphGrouping {
+    /** Strict repeated subgraphs. #1583 */
+    REPEATS = 'repeats',
+    /** Semantic spans named by their op roles. #1976 */
+    LAYERS = 'layers',
+}
+
 export interface OpGraphBuildOptions {
     hideDeallocate: boolean;
     /** Only the expanded operations, so a collapsed graph carries no payload. */
     deviceSubgraphs: OpGraphDeviceSubgraph[];
-    /** Empty means every detected instance is collapsed. #1583 */
+    /**
+     * Which detected instances are unrolled. Absent means nobody has folded
+     * anything yet and the graph renders unrolled; an empty array is a deliberate
+     * fold-all. Detection describes the graph, it does not decide how to show it.
+     * #1583 / #1977
+     */
     expandedBlockIds?: readonly string[];
+    /** Defaults to `REPEATS`, which is what shipped first. #1976 */
+    grouping?: OpGraphGrouping;
+    /**
+     * Collapse each fan of weight-loading sources into one node. Absent means off so
+     * that a build asking for nothing gets the raw graph; the view defaults it on, the
+     * way it does for `hideDeallocate`. #1980
+     */
+    collapseWeightLoads?: boolean;
     /** Worker-only: detection is invariant under fold / device-op expand. */
     detectedBlocks?: RepeatBlockInstance[];
+    /**
+     * Worker-only, and the same bargain as `detectedBlocks`: the candidate-edge pass is
+     * an ops x outputs x consumers walk that the worker already runs once per source
+     * for detection, so a caller holding it hands it over rather than making the build
+     * repeat it. Derived from `operations` alone, so it varies with nothing else here.
+     */
+    candidates?: readonly CandidateEdge[];
 }
 
 export type OpGraphWorkerInboundMessage =

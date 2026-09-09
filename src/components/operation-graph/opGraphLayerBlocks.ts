@@ -1,0 +1,51 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
+
+import { type OpRoleGroup, OpSemanticRole, detectOpRoleGroups } from './opGraphOpRoles';
+import type { OpGraphSourceOperation, RepeatBlockInstance } from './opGraphTypes';
+import { OpGraphBlockKind } from './opGraphTypes';
+
+/**
+ * Folding a single operation replaces one node with one node, so a span that short
+ * costs a click and buys nothing.
+ */
+const MIN_LAYER_BLOCK_OPS = 2;
+
+/**
+ * Presents role groups (#1976) as `RepeatBlockInstance`, so layer grouping reuses the
+ * folding machinery #1583 already built rather than adding a second block type to
+ * render the same shape. The two detectors stay mutually exclusive per build, which is
+ * how a region avoids carrying two competing identities — the open question in #1953.
+ */
+export const detectLayerBlocks = (operations: readonly OpGraphSourceOperation[]): RepeatBlockInstance[] => {
+    const groups = detectOpRoleGroups(operations).filter((group) => group.operationIds.length >= MIN_LAYER_BLOCK_OPS);
+
+    // Counted up front so every instance can name its total: "Attention 3" is only
+    // meaningful next to a count, and the panel shows "instance 3 of 24".
+    const totalByRole = new Map<OpSemanticRole, number>();
+    for (const group of groups) {
+        totalByRole.set(group.role, (totalByRole.get(group.role) ?? 0) + 1);
+    }
+
+    const seenByRole = new Map<OpSemanticRole, number>();
+    return groups.map((group: OpRoleGroup): RepeatBlockInstance => {
+        // Zero-based, which is the `RepeatBlockInstance` contract: the panel renders
+        // `instanceIndex + 1`, so a one-based index here read as "instance 2 of 1".
+        const instanceIndex = seenByRole.get(group.role) ?? 0;
+        seenByRole.set(group.role, instanceIndex + 1);
+        const instanceCount = totalByRole.get(group.role) ?? 1;
+        return {
+            // Keyed on the first member rather than the index, so folding one instance
+            // cannot rename the others when detection shifts by a span.
+            kind: OpGraphBlockKind.LAYER,
+            instanceId: `layer:${group.role}:${group.operationIds[0]}`,
+            patternId: `layer:${group.role}`,
+            label: instanceCount > 1 ? `${group.label} ${instanceIndex + 1}` : group.label,
+            patternLabel: group.label,
+            operationIds: group.operationIds,
+            instanceIndex,
+            instanceCount,
+        };
+    });
+};
