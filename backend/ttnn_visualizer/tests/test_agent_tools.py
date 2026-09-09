@@ -298,6 +298,39 @@ class TestTopOps:
         assert "caveat" not in result
 
 
+class TestPartitionCaveatDependency:
+    """A tripwire, not a behaviour test.
+
+    `_partitioned_caveat` is implemented but cannot fire: `sub_device_id` is not
+    parsed out of the performance report on `dev`, so no generated row carries
+    it and only the mocked rows above exercise the branch. This asserts that
+    state, so the day #1994 lands and the column appears, this test fails and
+    tells whoever is looking to verify the caveat end to end against a real
+    partitioned report and then delete it. An issue would have to be remembered;
+    a red test arrives on its own.
+    """
+
+    def test_the_caveat_is_dormant_until_the_column_is_parsed(self):
+        from ttnn_visualizer.csv_queries import OpsPerformanceReportQueries
+
+        # `REPORT_COLUMNS` on `dev`; #1994 renames it to `REPORT_COLUMN_HEADERS`
+        # and makes it a mapping, so both shapes are read rather than assuming
+        # either — that rename is part of the change this watches for.
+        columns = getattr(
+            OpsPerformanceReportQueries,
+            "REPORT_COLUMN_HEADERS",
+            OpsPerformanceReportQueries.REPORT_COLUMNS,
+        )
+        parsed_fields = set(columns)
+
+        assert "sub_device_id" not in parsed_fields, (
+            "sub_device_id is now parsed, so the partitioned-run caveat can fire: "
+            "verify top_ops and diff_reports against a real partitioned report, "
+            "drop the dormancy note from docs/src/agent-tools.md, and delete this "
+            "test. See #1994."
+        )
+
+
 class TestDiffReports:
     def _two_reports(self, tmp_path):
         registry = ReportRegistry()
@@ -469,7 +502,11 @@ class TestZoneSummary:
         with DeviceLogProfilerQueries(instance, stream=True) as queries:
             summary, pairing = queries.query_zone_summary()
 
-        assert pairing == {"unmatched_starts": 1, "unmatched_ends": 1}
+        assert pairing == {
+            "unmatched_starts": 1,
+            "unmatched_ends": 1,
+            "dropped_starts": 0,
+        }
         assert summary[0]["occurrences"] == 1
 
     def test_a_capture_missing_a_column_this_query_reads_is_refused(self, tmp_path):
@@ -551,7 +588,54 @@ class TestPreRenameCaptures:
 
         assert summary[0]["occurrences"] == 1
         assert summary[0]["total_cycles"] == 700
-        assert pairing == {"unmatched_starts": 0, "unmatched_ends": 0}
+        assert pairing == {
+            "unmatched_starts": 0,
+            "unmatched_ends": 0,
+            "dropped_starts": 0,
+        }
+
+
+class TestOpenZoneCeiling:
+    def test_starts_past_the_ceiling_are_counted_rather_than_held(
+        self, tmp_path, monkeypatch
+    ):
+        """A malformed log can open a zone on every row and close none.
+
+        The map is bounded so the read cannot be made to grow with the file, and
+        what the bound cost is reported — a truncated read must not be
+        indistinguishable from a complete one.
+        """
+        monkeypatch.setattr(csv_queries, "MAX_OPEN_ZONE_STARTS", 2)
+        never_closed = [
+            f"1,{index},1,BRISC,{index},1000,0,1,,,LEAK,ZONE_START,1,brisc.cc,"
+            for index in range(5)
+        ]
+        write_device_log(tmp_path, MODERN_HEADER, never_closed)
+        instance = Instance(instance_id="pytest", performance_path=str(tmp_path))
+
+        with DeviceLogProfilerQueries(instance, stream=True) as queries:
+            _summary, pairing = queries.query_zone_summary()
+
+        assert pairing["unmatched_starts"] == 2
+        assert pairing["dropped_starts"] == 3
+
+    def test_the_caveat_says_the_log_is_malformed(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(csv_queries, "MAX_OPEN_ZONE_STARTS", 1)
+        registry = ReportRegistry()
+        write_device_log(
+            tmp_path,
+            MODERN_HEADER,
+            [
+                "1,1,1,BRISC,1,1000,0,1,,,LEAK,ZONE_START,1,brisc.cc,",
+                "1,2,1,BRISC,2,1000,0,1,,,LEAK,ZONE_START,1,brisc.cc,",
+            ],
+        )
+        load_report(registry, performance_path=str(tmp_path))
+
+        result = tools.zone_timings(registry, "report-1")
+
+        assert "open-zone ceiling" in result["caveat"]
+        assert "malformed" in result["caveat"]
 
 
 class TestZeroDuration:

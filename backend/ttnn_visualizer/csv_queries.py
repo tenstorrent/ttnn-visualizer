@@ -47,6 +47,15 @@ CSVFilters = Dict[str, Optional[Union[str, int]]]
 # never lands in memory whole.
 CSV_CHUNK_SIZE = 50_000
 
+# Ceiling on zone starts held open while pairing. A well-formed capture can only
+# have one open per (slot, core, RISC, nesting level) at a time -- the widest
+# local capture is 32 slots x 130 cores x 5 RISCs, so ~21k -- while a malformed
+# one can open a zone on every row and never close it, which is 724k on that
+# same file. Ten times the legitimate worst case bounds the map at roughly 40 MB
+# and still cannot be reached by a real log. Past it, starts are counted rather
+# than kept, so the total reports what it could pair and says what it dropped.
+MAX_OPEN_ZONE_STARTS = 200_000
+
 
 class LocalCSVQueryRunner:
     def __init__(
@@ -494,6 +503,7 @@ class DeviceLogProfilerQueries:
         zone_keys: List[tuple] = []
         open_starts: Dict[tuple, int] = {}
         unpaired_ends = 0
+        dropped_starts = 0
         # Two spellings of the same fact, neither required: a current capture
         # marks boundaries in `type` as ZONE_START/ZONE_END, and a pre-rename one
         # in `zone phase` as begin/end (`PRE_RENAME_HEADER` pins that shape).
@@ -552,6 +562,12 @@ class DeviceLogProfilerQueries:
 
                     pair_key = (zone, risc, core, values[5])
                     if phase == start_token:
+                        if (
+                            len(open_starts) >= MAX_OPEN_ZONE_STARTS
+                            and pair_key not in open_starts
+                        ):
+                            dropped_starts += 1
+                            continue
                         open_starts[pair_key] = int(cycles)
                         continue
                     if phase != end_token:
@@ -606,13 +622,19 @@ class DeviceLogProfilerQueries:
         pairing = {
             "unmatched_starts": len(open_starts),
             "unmatched_ends": unpaired_ends,
+            # Non-zero only past `MAX_OPEN_ZONE_STARTS`, which a well-formed
+            # capture cannot reach. Reported so a bounded read is never mistaken
+            # for a complete one.
+            "dropped_starts": dropped_starts,
         }
-        if pairing["unmatched_starts"] or pairing["unmatched_ends"]:
+        if any(pairing.values()):
             logger.info(
-                "%s: %d zone starts and %d ends did not pair",
+                "%s: %d zone starts and %d ends did not pair; %d starts dropped "
+                "at the open-zone ceiling",
                 self.DEVICE_LOG_FILE,
                 pairing["unmatched_starts"],
                 pairing["unmatched_ends"],
+                pairing["dropped_starts"],
             )
         return (summary[:limit] if limit is not None else summary), pairing
 

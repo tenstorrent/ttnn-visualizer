@@ -252,13 +252,20 @@ def zone_timings(
     # A truncated capture leaves starts open and a capture that begins mid-zone
     # leaves ends unmatched. Either way the totals describe only what paired,
     # which is invisible from the totals themselves.
-    if pairing["unmatched_starts"] or pairing["unmatched_ends"]:
-        result["caveat"] = (
+    if any(pairing.values()):
+        caveat = (
             f"{pairing['unmatched_starts']} zone starts and "
             f"{pairing['unmatched_ends']} ends did not pair, so these totals "
             "cover only the zones that did. A capture stopped mid-run is the "
             "usual cause."
         )
+        if pairing["dropped_starts"]:
+            caveat += (
+                f" A further {pairing['dropped_starts']} starts were dropped at "
+                "the open-zone ceiling, which a well-formed capture does not "
+                "reach — treat this log as malformed."
+            )
+        result["caveat"] = caveat
     return result
 
 
