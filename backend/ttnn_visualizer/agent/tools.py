@@ -279,6 +279,18 @@ def diff_reports(
         raise ValueError(
             f"unknown metric {by!r}; expected one of {', '.join(sorted(SORTABLE_METRICS))}"
         )
+    # Refused rather than aggregated some other way. A diff groups by op code and
+    # compares the two sides, so for a rate or an allocation every number in the
+    # response is a sum of them: one 10-TFLOPS matmul against two at 8 reads as
+    # 10 -> 16, an apparent gain where every invocation regressed. Whether the
+    # right comparison is a mean, a max, or per-invocation is a product question,
+    # and answering it wrongly is worse than not answering it.
+    if by not in ADDITIVE_METRICS:
+        raise ValueError(
+            f"{by!r} is a per-operation rate or allocation, so summing it across a "
+            f"report is not meaningful; diff_reports accepts "
+            f"{', '.join(sorted(ADDITIVE_METRICS))}. Use top_ops to rank by {by!r}."
+        )
     field = SORTABLE_METRICS[by]
 
     sub_devices: set = set()
@@ -332,21 +344,20 @@ def diff_reports(
         "projection": dict(CANONICAL_PROJECTION),
         "grouped_by": "op_code",
     }
-    if by in ADDITIVE_METRICS:
-        result["delta_total"] = round(
-            sum(entry["total"] for entry in after.values())
-            - sum(entry["total"] for entry in before.values()),
-            3,
+    result["delta_total"] = round(
+        sum(entry["total"] for entry in after.values())
+        - sum(entry["total"] for entry in before.values()),
+        3,
+    )
+    # A delta of two unsound totals is unsound the same way, and this is the
+    # response most likely to be acted on -- it answers "did my change help".
+    if len(sub_devices) > 1:
+        result["caveat"] = (
+            f"Either report spans {len(sub_devices)} sub-devices "
+            f"({', '.join(sorted(sub_devices))}). Ops on different sub-devices "
+            "can run concurrently, so these summed totals -- and the delta "
+            "between them -- overstate elapsed time."
         )
-        # A delta of two unsound totals is unsound the same way, and this is the
-        # response most likely to be acted on -- it answers "did my change help".
-        if len(sub_devices) > 1:
-            result["caveat"] = (
-                f"Either report spans {len(sub_devices)} sub-devices "
-                f"({', '.join(sorted(sub_devices))}). Ops on different sub-devices "
-                "can run concurrently, so these summed totals -- and the delta "
-                "between them -- overstate elapsed time."
-            )
     return result
 
 

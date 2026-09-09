@@ -44,6 +44,11 @@ _METRIC_SCHEMA = {
     "enum": sorted(tools.SORTABLE_METRICS),
     "description": "Which metric to rank by.",
 }
+_ADDITIVE_METRIC_SCHEMA = {
+    "type": "string",
+    "enum": sorted(tools.ADDITIVE_METRICS),
+    "description": "Which metric to compare. Summable metrics only.",
+}
 
 
 def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
@@ -110,14 +115,16 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
             "description": (
                 "Per-op-code deltas between two reports, largest movement first. "
                 "Grouped by op code rather than joined on op id, so a change that "
-                "adds or reorders ops does not report every later op as changed."
+                "adds or reorders ops does not report every later op as changed. "
+                "Accepts additive metrics only (device_time, op_to_op_gap, "
+                "total_percent); rank by a rate or a core count with top_ops."
             ),
             "schema": {
                 "type": "object",
                 "properties": {
                     "handle_a": {"type": "string", "description": "Baseline."},
                     "handle_b": {"type": "string", "description": "After the change."},
-                    "by": _METRIC_SCHEMA,
+                    "by": _ADDITIVE_METRIC_SCHEMA,
                     "limit": _LIMIT_SCHEMA,
                 },
                 "required": ["handle_a", "handle_b"],
@@ -183,6 +190,12 @@ def handle_message(message: object, table: Dict[str, Dict]) -> Optional[Dict]:
     # Notifications carry no id and must not be answered.
     if request_id is None:
         return None
+
+    # Answered before the fallback below, and answered promptly. `ping` is the
+    # protocol's liveness check: a compliant client reads a `-32601` here as a
+    # failed health check and may restart the server under us.
+    if method == "ping":
+        return _result(request_id, {})
 
     if method == "tools/list":
         return _result(

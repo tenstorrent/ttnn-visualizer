@@ -355,16 +355,26 @@ class TestDiffReports:
 
         assert "2 sub-devices" in result["caveat"]
 
-    def test_a_non_additive_diff_has_no_delta_total(self, tmp_path):
-        registry = self._two_reports(tmp_path)
-        rows = [_row(dram="10.0")]
-        with patch.object(
-            tools, "_generate_canonical_report", return_value=_perf_report(rows)
-        ):
-            result = tools.diff_reports(registry, "report-1", "report-2", by="dram")
+    @pytest.mark.parametrize("metric", ["dram", "flops", "cores"])
+    def test_a_non_additive_metric_is_refused_rather_than_summed(
+        self, tmp_path, metric
+    ):
+        """Every number in a diff is a per-op-code sum, so a rate cannot be one.
 
-        assert "delta_total" not in result
-        assert result["changes"][0]["delta"] == 0.0
+        One 10-TFLOPS matmul against two at 8 would read as 10 → 16: an apparent
+        gain where every invocation regressed. Refusing beats inventing an
+        aggregation the caller did not ask for.
+        """
+        registry = self._two_reports(tmp_path)
+
+        with pytest.raises(ValueError, match="per-operation rate or allocation"):
+            tools.diff_reports(registry, "report-1", "report-2", by=metric)
+
+    def test_the_refusal_names_the_metrics_that_do_work(self, tmp_path):
+        registry = self._two_reports(tmp_path)
+
+        with pytest.raises(ValueError, match="device_time"):
+            tools.diff_reports(registry, "report-1", "report-2", by="flops")
 
     def test_the_largest_movement_comes_first_in_either_direction(self, tmp_path):
         registry = self._two_reports(tmp_path)
@@ -516,6 +526,34 @@ class TestZoneTimingsTool:
         assert "occupancy" in result["note"]
 
 
+class TestPreRenameCaptures:
+    def test_a_begin_end_capture_pairs_rather_than_double_counting(self, tmp_path):
+        """Pre-rename logs mark boundaries in `zone phase`, not `type`.
+
+        Reading only `type` counted a `begin` and its `end` as two occurrences
+        and threw the duration between them away — one invocation reported as
+        two, which is worse than reporting none.
+        """
+        header = (
+            "PCIe slot, core_x, core_y, RISC processor type, timer_id,"
+            " time[cycles since reset], stat value, run ID, run host ID,  zone name,"
+            " zone phase, source line, source file"
+        )
+        rows = [
+            "0,1,1,BRISC,924,1000,0,0,480,BRISC-FW,begin,396,brisc.cc",
+            "0,1,1,BRISC,66460,1700,0,0,480,BRISC-FW,end,396,brisc.cc",
+        ]
+        write_device_log(tmp_path, header, rows)
+        instance = Instance(instance_id="pytest", performance_path=str(tmp_path))
+
+        with DeviceLogProfilerQueries(instance, stream=True) as queries:
+            summary, pairing = queries.query_zone_summary()
+
+        assert summary[0]["occurrences"] == 1
+        assert summary[0]["total_cycles"] == 700
+        assert pairing == {"unmatched_starts": 0, "unmatched_ends": 0}
+
+
 class TestZeroDuration:
     def test_a_zone_that_opened_and_closed_on_one_cycle_reports_zero(self, tmp_path):
         """Zero is a measurement; `None` means the capture could not say."""
@@ -600,6 +638,16 @@ class TestTransport:
         )
 
         assert response["error"]["code"] == -32600
+
+    def test_ping_is_answered(self):
+        """The protocol's liveness check. A `-32601` here reads as a failed health
+        check and a compliant client may restart the server."""
+        response = server.handle_message(
+            {"jsonrpc": "2.0", "id": 7, "method": "ping"}, self._table()
+        )
+
+        assert response["result"] == {}
+        assert "error" not in response
 
     def test_an_unknown_method_is_a_protocol_error(self):
         response = server.handle_message(

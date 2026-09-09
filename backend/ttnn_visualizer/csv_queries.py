@@ -494,12 +494,17 @@ class DeviceLogProfilerQueries:
         zone_keys: List[tuple] = []
         open_starts: Dict[tuple, int] = {}
         unpaired_ends = 0
-        # Not in `REQUIRED_DEVICE_LOG_COLUMNS` on purpose: older captures predate
-        # it. Without it a start cannot be told from an end, so those captures get
-        # occurrence counts and no durations rather than a guess.
-        has_entry_type = "type" in (
-            self.runner.df.columns if self.runner.df is not None else []
-        )
+        # Two spellings of the same fact, neither required: a current capture
+        # marks boundaries in `type` as ZONE_START/ZONE_END, and a pre-rename one
+        # in `zone phase` as begin/end (`PRE_RENAME_HEADER` pins that shape).
+        # Reading only `type` counted a pre-rename begin *and* its end as two
+        # occurrences and discarded the duration between them -- one invocation
+        # reported as two, which is worse than reporting none.
+        phase_column, start_token, end_token = None, "", ""
+        if "type" in available:
+            phase_column, start_token, end_token = "type", "ZONE_START", "ZONE_END"
+        elif "zone phase" in available:
+            phase_column, start_token, end_token = "zone phase", "begin", "end"
 
         columns = [
             "zone name",
@@ -509,7 +514,7 @@ class DeviceLogProfilerQueries:
             "core_y",
             "run host ID",
             "time[cycles since reset]",
-        ] + (["type"] if has_entry_type else [])
+        ] + ([phase_column] if phase_column else [])
 
         try:
             chunks = pd.read_csv(
@@ -532,7 +537,7 @@ class DeviceLogProfilerQueries:
                         continue
                     risc = str(values[1]).strip()
                     cycles = values[6]
-                    entry_type = str(values[7]).strip() if has_entry_type else ""
+                    phase = str(values[7]).strip() if phase_column else ""
 
                     zone_key = (zone, risc)
                     if zone_key not in cores_seen:
@@ -541,15 +546,15 @@ class DeviceLogProfilerQueries:
                     core = (values[2], values[3], values[4])
                     cores_seen[zone_key].add(core)
 
-                    if not has_entry_type:
+                    if not phase_column:
                         occurrences[zone_key] += 1
                         continue
 
                     pair_key = (zone, risc, core, values[5])
-                    if entry_type == "ZONE_START":
+                    if phase == start_token:
                         open_starts[pair_key] = int(cycles)
                         continue
-                    if entry_type != "ZONE_END":
+                    if phase != end_token:
                         continue
 
                     start = open_starts.pop(pair_key, None)
@@ -573,18 +578,18 @@ class DeviceLogProfilerQueries:
                     "risc": risc,
                     "occurrences": count,
                     "cores": len(cores_seen[zone_key]),
-                    "total_cycles": total_cycles if has_entry_type else None,
+                    "total_cycles": total_cycles if phase_column else None,
                     "mean_cycles": (
                         round(total_cycles / count, 1)
-                        if has_entry_type and count
+                        if phase_column and count
                         else None
                     ),
                 }
             )
 
         # Costliest first: the reason to ask is to find where the time went. A
-        # capture with no `type` column has no durations to sort on, so it falls
-        # back to the count.
+        # capture with neither boundary column has no durations to sort on, so it
+        # falls back to the count.
         summary.sort(
             key=lambda entry: (
                 int(entry["total_cycles"] or 0),
