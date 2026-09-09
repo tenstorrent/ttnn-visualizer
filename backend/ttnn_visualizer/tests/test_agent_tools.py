@@ -272,7 +272,8 @@ class TestTopOps:
             tools.top_ops(registry, "report-1", by="wall_clock")
 
     def test_a_partitioned_report_carries_the_totals_caveat(self, tmp_path):
-        """tt-perf-report warns about this; the visualizer does not (#1994).
+        """tt-perf-report prints this warning to the terminal; a tool response
+        has no terminal, so it has to carry the warning itself.
 
         Ops on different sub-devices can run concurrently, so the sum is not
         elapsed time. An agent reading the total without this would conclude the
@@ -298,37 +299,76 @@ class TestTopOps:
         assert "caveat" not in result
 
 
-class TestPartitionCaveatDependency:
-    """A tripwire, not a behaviour test.
+class TestPartitionCaveatEndToEnd:
+    """The mocked rows above pin the branch; this pins the wiring underneath it.
 
-    `_partitioned_caveat` is implemented but cannot fire: `sub_device_id` is not
-    parsed out of the performance report on `dev`, so no generated row carries
-    it and only the mocked rows above exercise the branch. This asserts that
-    state, so the day #1994 lands and the column appears, this test fails and
-    tells whoever is looking to verify the caveat end to end against a real
-    partitioned report and then delete it. An issue would have to be remembered;
-    a red test arrives on its own.
+    Between the two sits the parser -- #1994's `sub_device_id` entry in
+    `REPORT_COLUMN_HEADERS` and tt-perf-report 1.3.0's `SUB DEVICE ID` column.
+    Mocking `_generate_canonical_report` skips exactly that, so a rename either
+    side would leave the mocked tests green and every real report uncaveated.
+    Only the sub-device column is synthesised here; the rest is a real capture
+    through the real report generator.
     """
 
-    def test_the_caveat_is_dormant_until_the_column_is_parsed(self):
-        from ttnn_visualizer.csv_queries import OpsPerformanceReportQueries
+    SMOKE_CAPTURE = Path("scripts/fixtures/smoke-performance-report")
 
-        # `REPORT_COLUMNS` on `dev`; #1994 renames it to `REPORT_COLUMN_HEADERS`
-        # and makes it a mapping, so both shapes are read rather than assuming
-        # either — that rename is part of the change this watches for.
-        columns = getattr(
-            OpsPerformanceReportQueries,
-            "REPORT_COLUMN_HEADERS",
-            OpsPerformanceReportQueries.REPORT_COLUMNS,
-        )
-        parsed_fields = set(columns)
+    def _capture(self, tmp_path, name, sub_device_ids):
+        import csv
 
-        assert "sub_device_id" not in parsed_fields, (
-            "sub_device_id is now parsed, so the partitioned-run caveat can fire: "
-            "verify top_ops and diff_reports against a real partitioned report, "
-            "drop the dormancy note from docs/src/agent-tools.md, and delete this "
-            "test. See #1994."
-        )
+        source = self.SMOKE_CAPTURE / "ops_perf_results.csv"
+        if not source.is_file():
+            pytest.skip(f"{source} is not present")
+        rows = list(csv.DictReader(source.open()))
+        destination = tmp_path / name
+        destination.mkdir()
+        fields = list(rows[0].keys()) + ["SUB DEVICE ID"]
+        with (destination / "ops_perf_results.csv").open("w", newline="") as out:
+            writer = csv.DictWriter(out, fieldnames=fields)
+            writer.writeheader()
+            for index, row in enumerate(rows):
+                row["SUB DEVICE ID"] = sub_device_ids[index % len(sub_device_ids)]
+                writer.writerow(row)
+        return destination
+
+    def _handle(self, registry, tmp_path, name, sub_device_ids):
+        capture = self._capture(tmp_path, name, sub_device_ids)
+        return load_report(registry, performance_path=str(capture))["handle"]
+
+    def test_the_generated_rows_carry_the_sub_device_the_capture_recorded(
+        self, tmp_path
+    ):
+        registry = ReportRegistry()
+        handle = self._handle(registry, tmp_path, "partitioned", ["0", "1"])
+
+        report = tools._generate_canonical_report(registry.get(handle))
+        recorded = {
+            str(row.get("sub_device_id", "")).strip()
+            for row in report.get("report", [])
+        }
+
+        assert recorded == {"0", "1"}
+
+    def test_a_real_partitioned_capture_is_caveated(self, tmp_path):
+        registry = ReportRegistry()
+        handle = self._handle(registry, tmp_path, "partitioned", ["0", "1"])
+
+        assert "2 sub-devices" in tools.top_ops(registry, handle)["caveat"]
+
+    def test_a_real_single_sub_device_capture_is_not(self, tmp_path):
+        """The other half: a caveat on every report is a caveat nobody reads."""
+        registry = ReportRegistry()
+        handle = self._handle(registry, tmp_path, "whole", ["0"])
+
+        assert "caveat" not in tools.top_ops(registry, handle)
+
+    def test_a_diff_of_two_partitioned_captures_is_caveated(self, tmp_path):
+        registry = ReportRegistry()
+        before = self._handle(registry, tmp_path, "before", ["0", "1"])
+        after = self._handle(registry, tmp_path, "after", ["0", "1"])
+
+        diff = tools.diff_reports(registry, before, after)
+
+        assert "2 sub-devices" in diff["caveat"]
 
 
 class TestDiffReports:

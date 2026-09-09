@@ -121,16 +121,10 @@ def _partitioned_caveat(rows: List[Dict]) -> Optional[str]:
     """Totals assume ops ran sequentially, which a partitioned run breaks.
 
     tt-perf-report prints this warning itself when a report carries more than one
-    sub-device; the visualizer does not surface it (raised on #1994). An agent
-    summing device time across subdevices that ran concurrently would overstate
-    the total and understate every op's share, so any tool reporting a total says
-    so here.
-
-    Inert until #1994 lands: `sub_device_id` is not in `REPORT_COLUMN_HEADERS` on
-    `dev` and the pinned tt-perf-report is 1.2.8, so no generated row carries the
-    field yet and this returns `None` for every real report. Written now because
-    the alternative is remembering to add it to three call sites later, and it
-    starts working the moment the column arrives.
+    sub-device, but it prints it to the terminal -- no tool response carries it.
+    An agent summing device time across subdevices that ran concurrently would
+    overstate the total and understate every op's share, so any tool reporting a
+    total says so here.
     """
     sub_devices = _sub_devices(rows)
     if len(sub_devices) <= 1:

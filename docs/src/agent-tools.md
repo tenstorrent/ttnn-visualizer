@@ -82,13 +82,6 @@ and ends failed to pair so a partial total does not read as a complete one.
 
 ## Limitations
 
-The partitioned-run caveat above is implemented but dormant: `sub_device_id` is not yet
-parsed out of the performance report on `dev`, and the pinned `tt-perf-report` is 1.2.8, so
-no generated row carries the field. It begins reporting the moment
-[#1994](https://github.com/tenstorrent/ttnn-visualizer/pull/1994) lands, with no change
-here.
-
-
 Device profiler logs carry named zones only where a kernel was instrumented to emit them.
 Most captures contain only the default firmware and kernel zones — `BRISC-FW`,
 `BRISC-KERNEL` and the same pair for `NCRISC` and `TRISC`, plus `ERISC` where a capture
