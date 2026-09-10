@@ -1,0 +1,4741 @@
+{
+    "report": "graph_report_device_ops_jan30",
+    "operations": [
+        {
+            "id": 0,
+            "name": "ttnn::convert_python_tensor_to_tt_tensor"
+        },
+        {
+            "id": 1,
+            "name": "ttnn::convert_python_tensor_to_tt_tensor"
+        },
+        {
+            "id": 2,
+            "name": "ttnn::convert_python_tensor_to_tt_tensor"
+        },
+        {
+            "id": 3,
+            "name": "ttnn::convert_python_tensor_to_tt_tensor"
+        },
+        {
+            "id": 4,
+            "name": "ttnn::convert_python_tensor_to_tt_tensor"
+        },
+        {
+            "id": 5,
+            "name": "ttnn::convert_python_tensor_to_tt_tensor"
+        },
+        {
+            "id": 6,
+            "name": "ttnn::convert_python_tensor_to_tt_tensor"
+        },
+        {
+            "id": 7,
+            "name": "ttnn::convert_python_tensor_to_tt_tensor"
+        },
+        {
+            "id": 8,
+            "name": "ttnn::convert_python_tensor_to_tt_tensor"
+        },
+        {
+            "id": 9,
+            "name": "ttnn::convert_python_tensor_to_tt_tensor"
+        },
+        {
+            "id": 10,
+            "name": "ttnn::convert_python_tensor_to_tt_tensor"
+        },
+        {
+            "id": 11,
+            "name": "ttnn::convert_python_tensor_to_tt_tensor"
+        },
+        {
+            "id": 12,
+            "name": "ttnn::convert_python_tensor_to_tt_tensor"
+        },
+        {
+            "id": 13,
+            "name": "ttnn::convert_python_tensor_to_tt_tensor"
+        },
+        {
+            "id": 14,
+            "name": "ttnn::convert_python_tensor_to_tt_tensor"
+        },
+        {
+            "id": 15,
+            "name": "ttnn::convert_python_tensor_to_tt_tensor"
+        },
+        {
+            "id": 16,
+            "name": "ttnn::convert_python_tensor_to_tt_tensor"
+        },
+        {
+            "id": 17,
+            "name": "ttnn::convert_python_tensor_to_tt_tensor"
+        },
+        {
+            "id": 18,
+            "name": "ttnn::convert_python_tensor_to_tt_tensor"
+        },
+        {
+            "id": 19,
+            "name": "ttnn::convert_python_tensor_to_tt_tensor"
+        },
+        {
+            "id": 20,
+            "name": "ttnn::convert_python_tensor_to_tt_tensor"
+        },
+        {
+            "id": 21,
+            "name": "ttnn::convert_python_tensor_to_tt_tensor"
+        },
+        {
+            "id": 22,
+            "name": "ttnn::convert_python_tensor_to_tt_tensor"
+        },
+        {
+            "id": 23,
+            "name": "ttnn::convert_python_tensor_to_tt_tensor"
+        },
+        {
+            "id": 24,
+            "name": "ttnn::convert_python_tensor_to_tt_tensor"
+        },
+        {
+            "id": 25,
+            "name": "ttnn::convert_python_tensor_to_tt_tensor"
+        },
+        {
+            "id": 26,
+            "name": "ttnn::convert_python_tensor_to_tt_tensor"
+        },
+        {
+            "id": 27,
+            "name": "ttnn::convert_python_tensor_to_tt_tensor"
+        },
+        {
+            "id": 28,
+            "name": "ttnn::convert_python_tensor_to_tt_tensor"
+        },
+        {
+            "id": 29,
+            "name": "ttnn::convert_python_tensor_to_tt_tensor"
+        },
+        {
+            "id": 30,
+            "name": "ttnn::convert_python_tensor_to_tt_tensor"
+        },
+        {
+            "id": 31,
+            "name": "ttnn::convert_python_tensor_to_tt_tensor"
+        },
+        {
+            "id": 32,
+            "name": "ttnn::convert_python_tensor_to_tt_tensor"
+        },
+        {
+            "id": 33,
+            "name": "ttnn::convert_python_tensor_to_tt_tensor"
+        },
+        {
+            "id": 34,
+            "name": "ttnn::convert_python_tensor_to_tt_tensor"
+        },
+        {
+            "id": 35,
+            "name": "ttnn::convert_python_tensor_to_tt_tensor"
+        },
+        {
+            "id": 36,
+            "name": "ttnn::convert_python_tensor_to_tt_tensor"
+        },
+        {
+            "id": 37,
+            "name": "ttnn::convert_python_tensor_to_tt_tensor"
+        },
+        {
+            "id": 38,
+            "name": "ttnn::convert_python_tensor_to_tt_tensor"
+        },
+        {
+            "id": 39,
+            "name": "ttnn::convert_python_tensor_to_tt_tensor"
+        },
+        {
+            "id": 40,
+            "name": "ttnn::convert_python_tensor_to_tt_tensor"
+        },
+        {
+            "id": 41,
+            "name": "ttnn::convert_python_tensor_to_tt_tensor"
+        },
+        {
+            "id": 42,
+            "name": "ttnn::convert_python_tensor_to_tt_tensor"
+        },
+        {
+            "id": 43,
+            "name": "ttnn::convert_python_tensor_to_tt_tensor"
+        },
+        {
+            "id": 44,
+            "name": "ttnn::convert_python_tensor_to_tt_tensor"
+        },
+        {
+            "id": 45,
+            "name": "ttnn::convert_python_tensor_to_tt_tensor"
+        },
+        {
+            "id": 46,
+            "name": "ttnn::convert_python_tensor_to_tt_tensor"
+        },
+        {
+            "id": 47,
+            "name": "ttnn::convert_python_tensor_to_tt_tensor"
+        },
+        {
+            "id": 48,
+            "name": "ttnn::convert_python_tensor_to_tt_tensor"
+        },
+        {
+            "id": 49,
+            "name": "ttnn::convert_python_tensor_to_tt_tensor"
+        },
+        {
+            "id": 50,
+            "name": "ttnn::convert_python_tensor_to_tt_tensor"
+        },
+        {
+            "id": 51,
+            "name": "ttnn::convert_python_tensor_to_tt_tensor"
+        },
+        {
+            "id": 52,
+            "name": "ttnn::convert_python_tensor_to_tt_tensor"
+        },
+        {
+            "id": 53,
+            "name": "ttnn::convert_python_tensor_to_tt_tensor"
+        },
+        {
+            "id": 54,
+            "name": "ttnn::convert_python_tensor_to_tt_tensor"
+        },
+        {
+            "id": 55,
+            "name": "ttnn::convert_python_tensor_to_tt_tensor"
+        },
+        {
+            "id": 56,
+            "name": "ttnn::convert_python_tensor_to_tt_tensor"
+        },
+        {
+            "id": 57,
+            "name": "ttnn::convert_python_tensor_to_tt_tensor"
+        },
+        {
+            "id": 58,
+            "name": "ttnn::convert_python_tensor_to_tt_tensor"
+        },
+        {
+            "id": 59,
+            "name": "ttnn::convert_python_tensor_to_tt_tensor"
+        },
+        {
+            "id": 60,
+            "name": "ttnn::convert_python_tensor_to_tt_tensor"
+        },
+        {
+            "id": 61,
+            "name": "ttnn::convert_python_tensor_to_tt_tensor"
+        },
+        {
+            "id": 62,
+            "name": "ttnn::convert_python_tensor_to_tt_tensor"
+        },
+        {
+            "id": 63,
+            "name": "ttnn::convert_python_tensor_to_tt_tensor"
+        },
+        {
+            "id": 64,
+            "name": "ttnn::convert_python_tensor_to_tt_tensor"
+        },
+        {
+            "id": 65,
+            "name": "ttnn::convert_python_tensor_to_tt_tensor"
+        },
+        {
+            "id": 66,
+            "name": "ttnn::convert_python_tensor_to_tt_tensor"
+        },
+        {
+            "id": 67,
+            "name": "ttnn::convert_python_tensor_to_tt_tensor"
+        },
+        {
+            "id": 68,
+            "name": "ttnn::convert_python_tensor_to_tt_tensor"
+        },
+        {
+            "id": 69,
+            "name": "ttnn::convert_python_tensor_to_tt_tensor"
+        },
+        {
+            "id": 70,
+            "name": "ttnn::convert_python_tensor_to_tt_tensor"
+        },
+        {
+            "id": 71,
+            "name": "ttnn::convert_python_tensor_to_tt_tensor"
+        },
+        {
+            "id": 72,
+            "name": "ttnn::convert_python_tensor_to_tt_tensor"
+        },
+        {
+            "id": 73,
+            "name": "ttnn::convert_python_tensor_to_tt_tensor"
+        },
+        {
+            "id": 74,
+            "name": "ttnn::convert_python_tensor_to_tt_tensor"
+        },
+        {
+            "id": 75,
+            "name": "ttnn::convert_python_tensor_to_tt_tensor"
+        },
+        {
+            "id": 76,
+            "name": "ttnn::convert_python_tensor_to_tt_tensor"
+        },
+        {
+            "id": 77,
+            "name": "ttnn::convert_python_tensor_to_tt_tensor"
+        },
+        {
+            "id": 78,
+            "name": "ttnn::convert_python_tensor_to_tt_tensor"
+        },
+        {
+            "id": 79,
+            "name": "ttnn::convert_python_tensor_to_tt_tensor"
+        },
+        {
+            "id": 80,
+            "name": "ttnn::convert_python_tensor_to_tt_tensor"
+        },
+        {
+            "id": 81,
+            "name": "ttnn::convert_python_tensor_to_tt_tensor"
+        },
+        {
+            "id": 82,
+            "name": "ttnn::convert_python_tensor_to_tt_tensor"
+        },
+        {
+            "id": 83,
+            "name": "ttnn::convert_python_tensor_to_tt_tensor"
+        },
+        {
+            "id": 84,
+            "name": "ttnn::convert_python_tensor_to_tt_tensor"
+        },
+        {
+            "id": 85,
+            "name": "ttnn::convert_python_tensor_to_tt_tensor"
+        },
+        {
+            "id": 86,
+            "name": "ttnn::convert_python_tensor_to_tt_tensor"
+        },
+        {
+            "id": 87,
+            "name": "ttnn::convert_python_tensor_to_tt_tensor"
+        },
+        {
+            "id": 88,
+            "name": "ttnn::convert_python_tensor_to_tt_tensor"
+        },
+        {
+            "id": 89,
+            "name": "ttnn::convert_python_tensor_to_tt_tensor"
+        },
+        {
+            "id": 90,
+            "name": "ttnn::convert_python_tensor_to_tt_tensor"
+        },
+        {
+            "id": 91,
+            "name": "ttnn::convert_python_tensor_to_tt_tensor"
+        },
+        {
+            "id": 92,
+            "name": "ttnn::convert_python_tensor_to_tt_tensor"
+        },
+        {
+            "id": 93,
+            "name": "ttnn::convert_python_tensor_to_tt_tensor"
+        },
+        {
+            "id": 94,
+            "name": "ttnn::convert_python_tensor_to_tt_tensor"
+        },
+        {
+            "id": 95,
+            "name": "ttnn::convert_python_tensor_to_tt_tensor"
+        },
+        {
+            "id": 96,
+            "name": "ttnn::convert_python_tensor_to_tt_tensor"
+        },
+        {
+            "id": 97,
+            "name": "ttnn::convert_python_tensor_to_tt_tensor"
+        },
+        {
+            "id": 98,
+            "name": "ttnn::convert_python_tensor_to_tt_tensor"
+        },
+        {
+            "id": 99,
+            "name": "ttnn::convert_python_tensor_to_tt_tensor"
+        },
+        {
+            "id": 100,
+            "name": "ttnn::convert_python_tensor_to_tt_tensor"
+        },
+        {
+            "id": 101,
+            "name": "ttnn::convert_python_tensor_to_tt_tensor"
+        },
+        {
+            "id": 102,
+            "name": "ttnn::convert_python_tensor_to_tt_tensor"
+        },
+        {
+            "id": 103,
+            "name": "ttnn::convert_python_tensor_to_tt_tensor"
+        },
+        {
+            "id": 104,
+            "name": "ttnn::convert_python_tensor_to_tt_tensor"
+        },
+        {
+            "id": 105,
+            "name": "ttnn::convert_python_tensor_to_tt_tensor"
+        },
+        {
+            "id": 106,
+            "name": "tt::tt_metal::to_dtype"
+        },
+        {
+            "id": 107,
+            "name": "ttnn::convert_python_tensor_to_tt_tensor"
+        },
+        {
+            "id": 108,
+            "name": "tt::tt_metal::to_dtype"
+        },
+        {
+            "id": 109,
+            "name": "ttnn::convert_python_tensor_to_tt_tensor"
+        },
+        {
+            "id": 110,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 111,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 112,
+            "name": "Tensor::reshape"
+        },
+        {
+            "id": 113,
+            "name": "Tensor::reshape"
+        },
+        {
+            "id": 114,
+            "name": "ttnn::convert_python_tensor_to_tt_tensor"
+        },
+        {
+            "id": 115,
+            "name": "tt::tt_metal::to_dtype"
+        },
+        {
+            "id": 116,
+            "name": "tt::tt_metal::to_dtype"
+        },
+        {
+            "id": 117,
+            "name": "ttnn::convert_python_tensor_to_tt_tensor"
+        },
+        {
+            "id": 118,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 119,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 120,
+            "name": "PadDeviceOperation"
+        },
+        {
+            "id": 121,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 122,
+            "name": "TransposeDeviceOperation"
+        },
+        {
+            "id": 123,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 124,
+            "name": "PadDeviceOperation"
+        },
+        {
+            "id": 125,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 126,
+            "name": "TransposeDeviceOperation"
+        },
+        {
+            "id": 127,
+            "name": "Tensor::reshape"
+        },
+        {
+            "id": 128,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 129,
+            "name": "TransposeDeviceOperation"
+        },
+        {
+            "id": 130,
+            "name": "Tensor::reshape"
+        },
+        {
+            "id": 131,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 132,
+            "name": "TransposeDeviceOperation"
+        },
+        {
+            "id": 133,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 134,
+            "name": "SliceDeviceOperation"
+        },
+        {
+            "id": 135,
+            "name": "Tensor::reshape"
+        },
+        {
+            "id": 136,
+            "name": "Tensor::reshape"
+        },
+        {
+            "id": 137,
+            "name": "Tensor::to_layout"
+        },
+        {
+            "id": 138,
+            "name": "tt::tt_metal::to_dtype"
+        },
+        {
+            "id": 139,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 140,
+            "name": "Tensor::pad"
+        },
+        {
+            "id": 141,
+            "name": "Tensor::to_layout"
+        },
+        {
+            "id": 142,
+            "name": "tt::tt_metal::to_dtype"
+        },
+        {
+            "id": 143,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 144,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 145,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 146,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 147,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 148,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 149,
+            "name": "HaloDeviceOperation"
+        },
+        {
+            "id": 150,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 151,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 152,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 153,
+            "name": "Conv2dDeviceOperation"
+        },
+        {
+            "id": 154,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 155,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 156,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 157,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 158,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 159,
+            "name": "HaloDeviceOperation"
+        },
+        {
+            "id": 160,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 161,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 162,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 163,
+            "name": "Pool2D"
+        },
+        {
+            "id": 164,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 165,
+            "name": "ReshardDeviceOperation"
+        },
+        {
+            "id": 166,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 167,
+            "name": "TilizeDeviceOperation"
+        },
+        {
+            "id": 168,
+            "name": "Tensor::to_layout"
+        },
+        {
+            "id": 169,
+            "name": "tt::tt_metal::to_dtype"
+        },
+        {
+            "id": 170,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 171,
+            "name": "Tensor::pad"
+        },
+        {
+            "id": 172,
+            "name": "Tensor::to_layout"
+        },
+        {
+            "id": 173,
+            "name": "tt::tt_metal::to_dtype"
+        },
+        {
+            "id": 174,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 175,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 176,
+            "name": "MatmulDeviceOperation"
+        },
+        {
+            "id": 177,
+            "name": "Tensor::to_layout"
+        },
+        {
+            "id": 178,
+            "name": "tt::tt_metal::to_dtype"
+        },
+        {
+            "id": 179,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 180,
+            "name": "Tensor::pad"
+        },
+        {
+            "id": 181,
+            "name": "Tensor::to_layout"
+        },
+        {
+            "id": 182,
+            "name": "tt::tt_metal::to_dtype"
+        },
+        {
+            "id": 183,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 184,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 185,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 186,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 187,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 188,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 189,
+            "name": "HaloDeviceOperation"
+        },
+        {
+            "id": 190,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 191,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 192,
+            "name": "Conv2dDeviceOperation"
+        },
+        {
+            "id": 193,
+            "name": "Tensor::to_layout"
+        },
+        {
+            "id": 194,
+            "name": "tt::tt_metal::to_dtype"
+        },
+        {
+            "id": 195,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 196,
+            "name": "Tensor::pad"
+        },
+        {
+            "id": 197,
+            "name": "Tensor::to_layout"
+        },
+        {
+            "id": 198,
+            "name": "tt::tt_metal::to_dtype"
+        },
+        {
+            "id": 199,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 200,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 201,
+            "name": "MatmulDeviceOperation"
+        },
+        {
+            "id": 202,
+            "name": "Tensor::to_layout"
+        },
+        {
+            "id": 203,
+            "name": "tt::tt_metal::to_dtype"
+        },
+        {
+            "id": 204,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 205,
+            "name": "Tensor::pad"
+        },
+        {
+            "id": 206,
+            "name": "Tensor::to_layout"
+        },
+        {
+            "id": 207,
+            "name": "tt::tt_metal::to_dtype"
+        },
+        {
+            "id": 208,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 209,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 210,
+            "name": "MatmulDeviceOperation"
+        },
+        {
+            "id": 211,
+            "name": "BinaryDeviceOperation"
+        },
+        {
+            "id": 212,
+            "name": "Tensor::to_layout"
+        },
+        {
+            "id": 213,
+            "name": "tt::tt_metal::to_dtype"
+        },
+        {
+            "id": 214,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 215,
+            "name": "Tensor::pad"
+        },
+        {
+            "id": 216,
+            "name": "Tensor::to_layout"
+        },
+        {
+            "id": 217,
+            "name": "tt::tt_metal::to_dtype"
+        },
+        {
+            "id": 218,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 219,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 220,
+            "name": "MatmulDeviceOperation"
+        },
+        {
+            "id": 221,
+            "name": "Tensor::to_layout"
+        },
+        {
+            "id": 222,
+            "name": "tt::tt_metal::to_dtype"
+        },
+        {
+            "id": 223,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 224,
+            "name": "Tensor::pad"
+        },
+        {
+            "id": 225,
+            "name": "Tensor::to_layout"
+        },
+        {
+            "id": 226,
+            "name": "tt::tt_metal::to_dtype"
+        },
+        {
+            "id": 227,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 228,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 229,
+            "name": "HaloDeviceOperation"
+        },
+        {
+            "id": 230,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 231,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 232,
+            "name": "Conv2dDeviceOperation"
+        },
+        {
+            "id": 233,
+            "name": "Tensor::to_layout"
+        },
+        {
+            "id": 234,
+            "name": "tt::tt_metal::to_dtype"
+        },
+        {
+            "id": 235,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 236,
+            "name": "Tensor::pad"
+        },
+        {
+            "id": 237,
+            "name": "Tensor::to_layout"
+        },
+        {
+            "id": 238,
+            "name": "tt::tt_metal::to_dtype"
+        },
+        {
+            "id": 239,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 240,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 241,
+            "name": "MatmulDeviceOperation"
+        },
+        {
+            "id": 242,
+            "name": "BinaryDeviceOperation"
+        },
+        {
+            "id": 243,
+            "name": "Tensor::to_layout"
+        },
+        {
+            "id": 244,
+            "name": "tt::tt_metal::to_dtype"
+        },
+        {
+            "id": 245,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 246,
+            "name": "Tensor::pad"
+        },
+        {
+            "id": 247,
+            "name": "Tensor::to_layout"
+        },
+        {
+            "id": 248,
+            "name": "tt::tt_metal::to_dtype"
+        },
+        {
+            "id": 249,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 250,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 251,
+            "name": "MatmulDeviceOperation"
+        },
+        {
+            "id": 252,
+            "name": "Tensor::to_layout"
+        },
+        {
+            "id": 253,
+            "name": "tt::tt_metal::to_dtype"
+        },
+        {
+            "id": 254,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 255,
+            "name": "Tensor::pad"
+        },
+        {
+            "id": 256,
+            "name": "Tensor::to_layout"
+        },
+        {
+            "id": 257,
+            "name": "tt::tt_metal::to_dtype"
+        },
+        {
+            "id": 258,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 259,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 260,
+            "name": "HaloDeviceOperation"
+        },
+        {
+            "id": 261,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 262,
+            "name": "Conv2dDeviceOperation"
+        },
+        {
+            "id": 263,
+            "name": "Tensor::to_layout"
+        },
+        {
+            "id": 264,
+            "name": "tt::tt_metal::to_dtype"
+        },
+        {
+            "id": 265,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 266,
+            "name": "Tensor::pad"
+        },
+        {
+            "id": 267,
+            "name": "Tensor::to_layout"
+        },
+        {
+            "id": 268,
+            "name": "tt::tt_metal::to_dtype"
+        },
+        {
+            "id": 269,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 270,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 271,
+            "name": "MatmulDeviceOperation"
+        },
+        {
+            "id": 272,
+            "name": "BinaryDeviceOperation"
+        },
+        {
+            "id": 273,
+            "name": "Tensor::to_layout"
+        },
+        {
+            "id": 274,
+            "name": "tt::tt_metal::to_dtype"
+        },
+        {
+            "id": 275,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 276,
+            "name": "Tensor::pad"
+        },
+        {
+            "id": 277,
+            "name": "Tensor::to_layout"
+        },
+        {
+            "id": 278,
+            "name": "tt::tt_metal::to_dtype"
+        },
+        {
+            "id": 279,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 280,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 281,
+            "name": "MatmulDeviceOperation"
+        },
+        {
+            "id": 282,
+            "name": "Tensor::to_layout"
+        },
+        {
+            "id": 283,
+            "name": "tt::tt_metal::to_dtype"
+        },
+        {
+            "id": 284,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 285,
+            "name": "Tensor::pad"
+        },
+        {
+            "id": 286,
+            "name": "Tensor::to_layout"
+        },
+        {
+            "id": 287,
+            "name": "tt::tt_metal::to_dtype"
+        },
+        {
+            "id": 288,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 289,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 290,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 291,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 292,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 293,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 294,
+            "name": "HaloDeviceOperation"
+        },
+        {
+            "id": 295,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 296,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 297,
+            "name": "Conv2dDeviceOperation"
+        },
+        {
+            "id": 298,
+            "name": "Tensor::to_layout"
+        },
+        {
+            "id": 299,
+            "name": "tt::tt_metal::to_dtype"
+        },
+        {
+            "id": 300,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 301,
+            "name": "Tensor::pad"
+        },
+        {
+            "id": 302,
+            "name": "Tensor::to_layout"
+        },
+        {
+            "id": 303,
+            "name": "tt::tt_metal::to_dtype"
+        },
+        {
+            "id": 304,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 305,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 306,
+            "name": "MatmulDeviceOperation"
+        },
+        {
+            "id": 307,
+            "name": "Tensor::to_layout"
+        },
+        {
+            "id": 308,
+            "name": "tt::tt_metal::to_dtype"
+        },
+        {
+            "id": 309,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 310,
+            "name": "Tensor::pad"
+        },
+        {
+            "id": 311,
+            "name": "Tensor::to_layout"
+        },
+        {
+            "id": 312,
+            "name": "tt::tt_metal::to_dtype"
+        },
+        {
+            "id": 313,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 314,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 315,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 316,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 317,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 318,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 319,
+            "name": "HaloDeviceOperation"
+        },
+        {
+            "id": 320,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 321,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 322,
+            "name": "Conv2dDeviceOperation"
+        },
+        {
+            "id": 323,
+            "name": "BinaryDeviceOperation"
+        },
+        {
+            "id": 324,
+            "name": "Tensor::to_layout"
+        },
+        {
+            "id": 325,
+            "name": "tt::tt_metal::to_dtype"
+        },
+        {
+            "id": 326,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 327,
+            "name": "Tensor::pad"
+        },
+        {
+            "id": 328,
+            "name": "Tensor::to_layout"
+        },
+        {
+            "id": 329,
+            "name": "tt::tt_metal::to_dtype"
+        },
+        {
+            "id": 330,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 331,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 332,
+            "name": "MatmulDeviceOperation"
+        },
+        {
+            "id": 333,
+            "name": "Tensor::to_layout"
+        },
+        {
+            "id": 334,
+            "name": "tt::tt_metal::to_dtype"
+        },
+        {
+            "id": 335,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 336,
+            "name": "Tensor::pad"
+        },
+        {
+            "id": 337,
+            "name": "Tensor::to_layout"
+        },
+        {
+            "id": 338,
+            "name": "tt::tt_metal::to_dtype"
+        },
+        {
+            "id": 339,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 340,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 341,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 342,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 343,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 344,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 345,
+            "name": "HaloDeviceOperation"
+        },
+        {
+            "id": 346,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 347,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 348,
+            "name": "Conv2dDeviceOperation"
+        },
+        {
+            "id": 349,
+            "name": "Tensor::to_layout"
+        },
+        {
+            "id": 350,
+            "name": "tt::tt_metal::to_dtype"
+        },
+        {
+            "id": 351,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 352,
+            "name": "Tensor::pad"
+        },
+        {
+            "id": 353,
+            "name": "Tensor::to_layout"
+        },
+        {
+            "id": 354,
+            "name": "tt::tt_metal::to_dtype"
+        },
+        {
+            "id": 355,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 356,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 357,
+            "name": "MatmulDeviceOperation"
+        },
+        {
+            "id": 358,
+            "name": "BinaryDeviceOperation"
+        },
+        {
+            "id": 359,
+            "name": "Tensor::to_layout"
+        },
+        {
+            "id": 360,
+            "name": "tt::tt_metal::to_dtype"
+        },
+        {
+            "id": 361,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 362,
+            "name": "Tensor::pad"
+        },
+        {
+            "id": 363,
+            "name": "Tensor::to_layout"
+        },
+        {
+            "id": 364,
+            "name": "tt::tt_metal::to_dtype"
+        },
+        {
+            "id": 365,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 366,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 367,
+            "name": "MatmulDeviceOperation"
+        },
+        {
+            "id": 368,
+            "name": "Tensor::to_layout"
+        },
+        {
+            "id": 369,
+            "name": "tt::tt_metal::to_dtype"
+        },
+        {
+            "id": 370,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 371,
+            "name": "Tensor::pad"
+        },
+        {
+            "id": 372,
+            "name": "Tensor::to_layout"
+        },
+        {
+            "id": 373,
+            "name": "tt::tt_metal::to_dtype"
+        },
+        {
+            "id": 374,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 375,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 376,
+            "name": "HaloDeviceOperation"
+        },
+        {
+            "id": 377,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 378,
+            "name": "Conv2dDeviceOperation"
+        },
+        {
+            "id": 379,
+            "name": "Tensor::to_layout"
+        },
+        {
+            "id": 380,
+            "name": "tt::tt_metal::to_dtype"
+        },
+        {
+            "id": 381,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 382,
+            "name": "Tensor::pad"
+        },
+        {
+            "id": 383,
+            "name": "Tensor::to_layout"
+        },
+        {
+            "id": 384,
+            "name": "tt::tt_metal::to_dtype"
+        },
+        {
+            "id": 385,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 386,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 387,
+            "name": "MatmulDeviceOperation"
+        },
+        {
+            "id": 388,
+            "name": "BinaryDeviceOperation"
+        },
+        {
+            "id": 389,
+            "name": "Tensor::to_layout"
+        },
+        {
+            "id": 390,
+            "name": "tt::tt_metal::to_dtype"
+        },
+        {
+            "id": 391,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 392,
+            "name": "Tensor::pad"
+        },
+        {
+            "id": 393,
+            "name": "Tensor::to_layout"
+        },
+        {
+            "id": 394,
+            "name": "tt::tt_metal::to_dtype"
+        },
+        {
+            "id": 395,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 396,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 397,
+            "name": "MatmulDeviceOperation"
+        },
+        {
+            "id": 398,
+            "name": "Tensor::to_layout"
+        },
+        {
+            "id": 399,
+            "name": "tt::tt_metal::to_dtype"
+        },
+        {
+            "id": 400,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 401,
+            "name": "Tensor::pad"
+        },
+        {
+            "id": 402,
+            "name": "Tensor::to_layout"
+        },
+        {
+            "id": 403,
+            "name": "tt::tt_metal::to_dtype"
+        },
+        {
+            "id": 404,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 405,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 406,
+            "name": "HaloDeviceOperation"
+        },
+        {
+            "id": 407,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 408,
+            "name": "Conv2dDeviceOperation"
+        },
+        {
+            "id": 409,
+            "name": "Tensor::to_layout"
+        },
+        {
+            "id": 410,
+            "name": "tt::tt_metal::to_dtype"
+        },
+        {
+            "id": 411,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 412,
+            "name": "Tensor::pad"
+        },
+        {
+            "id": 413,
+            "name": "Tensor::to_layout"
+        },
+        {
+            "id": 414,
+            "name": "tt::tt_metal::to_dtype"
+        },
+        {
+            "id": 415,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 416,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 417,
+            "name": "MatmulDeviceOperation"
+        },
+        {
+            "id": 418,
+            "name": "BinaryDeviceOperation"
+        },
+        {
+            "id": 419,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 420,
+            "name": "ReshardDeviceOperation"
+        },
+        {
+            "id": 421,
+            "name": "Tensor::to_layout"
+        },
+        {
+            "id": 422,
+            "name": "tt::tt_metal::to_dtype"
+        },
+        {
+            "id": 423,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 424,
+            "name": "Tensor::pad"
+        },
+        {
+            "id": 425,
+            "name": "Tensor::to_layout"
+        },
+        {
+            "id": 426,
+            "name": "tt::tt_metal::to_dtype"
+        },
+        {
+            "id": 427,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 428,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 429,
+            "name": "MatmulDeviceOperation"
+        },
+        {
+            "id": 430,
+            "name": "Tensor::to_layout"
+        },
+        {
+            "id": 431,
+            "name": "tt::tt_metal::to_dtype"
+        },
+        {
+            "id": 432,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 433,
+            "name": "Tensor::pad"
+        },
+        {
+            "id": 434,
+            "name": "Tensor::to_layout"
+        },
+        {
+            "id": 435,
+            "name": "tt::tt_metal::to_dtype"
+        },
+        {
+            "id": 436,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 437,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 438,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 439,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 440,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 441,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 442,
+            "name": "HaloDeviceOperation"
+        },
+        {
+            "id": 443,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 444,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 445,
+            "name": "Conv2dDeviceOperation"
+        },
+        {
+            "id": 446,
+            "name": "Tensor::to_layout"
+        },
+        {
+            "id": 447,
+            "name": "tt::tt_metal::to_dtype"
+        },
+        {
+            "id": 448,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 449,
+            "name": "Tensor::pad"
+        },
+        {
+            "id": 450,
+            "name": "Tensor::to_layout"
+        },
+        {
+            "id": 451,
+            "name": "tt::tt_metal::to_dtype"
+        },
+        {
+            "id": 452,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 453,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 454,
+            "name": "MatmulDeviceOperation"
+        },
+        {
+            "id": 455,
+            "name": "Tensor::to_layout"
+        },
+        {
+            "id": 456,
+            "name": "tt::tt_metal::to_dtype"
+        },
+        {
+            "id": 457,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 458,
+            "name": "Tensor::pad"
+        },
+        {
+            "id": 459,
+            "name": "Tensor::to_layout"
+        },
+        {
+            "id": 460,
+            "name": "tt::tt_metal::to_dtype"
+        },
+        {
+            "id": 461,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 462,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 463,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 464,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 465,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 466,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 467,
+            "name": "HaloDeviceOperation"
+        },
+        {
+            "id": 468,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 469,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 470,
+            "name": "Conv2dDeviceOperation"
+        },
+        {
+            "id": 471,
+            "name": "BinaryDeviceOperation"
+        },
+        {
+            "id": 472,
+            "name": "Tensor::to_layout"
+        },
+        {
+            "id": 473,
+            "name": "tt::tt_metal::to_dtype"
+        },
+        {
+            "id": 474,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 475,
+            "name": "Tensor::pad"
+        },
+        {
+            "id": 476,
+            "name": "Tensor::to_layout"
+        },
+        {
+            "id": 477,
+            "name": "tt::tt_metal::to_dtype"
+        },
+        {
+            "id": 478,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 479,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 480,
+            "name": "MatmulDeviceOperation"
+        },
+        {
+            "id": 481,
+            "name": "Tensor::to_layout"
+        },
+        {
+            "id": 482,
+            "name": "tt::tt_metal::to_dtype"
+        },
+        {
+            "id": 483,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 484,
+            "name": "Tensor::pad"
+        },
+        {
+            "id": 485,
+            "name": "Tensor::to_layout"
+        },
+        {
+            "id": 486,
+            "name": "tt::tt_metal::to_dtype"
+        },
+        {
+            "id": 487,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 488,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 489,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 490,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 491,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 492,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 493,
+            "name": "HaloDeviceOperation"
+        },
+        {
+            "id": 494,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 495,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 496,
+            "name": "Conv2dDeviceOperation"
+        },
+        {
+            "id": 497,
+            "name": "Tensor::to_layout"
+        },
+        {
+            "id": 498,
+            "name": "tt::tt_metal::to_dtype"
+        },
+        {
+            "id": 499,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 500,
+            "name": "Tensor::pad"
+        },
+        {
+            "id": 501,
+            "name": "Tensor::to_layout"
+        },
+        {
+            "id": 502,
+            "name": "tt::tt_metal::to_dtype"
+        },
+        {
+            "id": 503,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 504,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 505,
+            "name": "MatmulDeviceOperation"
+        },
+        {
+            "id": 506,
+            "name": "BinaryDeviceOperation"
+        },
+        {
+            "id": 507,
+            "name": "Tensor::to_layout"
+        },
+        {
+            "id": 508,
+            "name": "tt::tt_metal::to_dtype"
+        },
+        {
+            "id": 509,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 510,
+            "name": "Tensor::pad"
+        },
+        {
+            "id": 511,
+            "name": "Tensor::to_layout"
+        },
+        {
+            "id": 512,
+            "name": "tt::tt_metal::to_dtype"
+        },
+        {
+            "id": 513,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 514,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 515,
+            "name": "MatmulDeviceOperation"
+        },
+        {
+            "id": 516,
+            "name": "Tensor::to_layout"
+        },
+        {
+            "id": 517,
+            "name": "tt::tt_metal::to_dtype"
+        },
+        {
+            "id": 518,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 519,
+            "name": "Tensor::pad"
+        },
+        {
+            "id": 520,
+            "name": "Tensor::to_layout"
+        },
+        {
+            "id": 521,
+            "name": "tt::tt_metal::to_dtype"
+        },
+        {
+            "id": 522,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 523,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 524,
+            "name": "HaloDeviceOperation"
+        },
+        {
+            "id": 525,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 526,
+            "name": "Conv2dDeviceOperation"
+        },
+        {
+            "id": 527,
+            "name": "Tensor::to_layout"
+        },
+        {
+            "id": 528,
+            "name": "tt::tt_metal::to_dtype"
+        },
+        {
+            "id": 529,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 530,
+            "name": "Tensor::pad"
+        },
+        {
+            "id": 531,
+            "name": "Tensor::to_layout"
+        },
+        {
+            "id": 532,
+            "name": "tt::tt_metal::to_dtype"
+        },
+        {
+            "id": 533,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 534,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 535,
+            "name": "MatmulDeviceOperation"
+        },
+        {
+            "id": 536,
+            "name": "BinaryDeviceOperation"
+        },
+        {
+            "id": 537,
+            "name": "Tensor::to_layout"
+        },
+        {
+            "id": 538,
+            "name": "tt::tt_metal::to_dtype"
+        },
+        {
+            "id": 539,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 540,
+            "name": "Tensor::pad"
+        },
+        {
+            "id": 541,
+            "name": "Tensor::to_layout"
+        },
+        {
+            "id": 542,
+            "name": "tt::tt_metal::to_dtype"
+        },
+        {
+            "id": 543,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 544,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 545,
+            "name": "MatmulDeviceOperation"
+        },
+        {
+            "id": 546,
+            "name": "Tensor::to_layout"
+        },
+        {
+            "id": 547,
+            "name": "tt::tt_metal::to_dtype"
+        },
+        {
+            "id": 548,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 549,
+            "name": "Tensor::pad"
+        },
+        {
+            "id": 550,
+            "name": "Tensor::to_layout"
+        },
+        {
+            "id": 551,
+            "name": "tt::tt_metal::to_dtype"
+        },
+        {
+            "id": 552,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 553,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 554,
+            "name": "HaloDeviceOperation"
+        },
+        {
+            "id": 555,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 556,
+            "name": "Conv2dDeviceOperation"
+        },
+        {
+            "id": 557,
+            "name": "Tensor::to_layout"
+        },
+        {
+            "id": 558,
+            "name": "tt::tt_metal::to_dtype"
+        },
+        {
+            "id": 559,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 560,
+            "name": "Tensor::pad"
+        },
+        {
+            "id": 561,
+            "name": "Tensor::to_layout"
+        },
+        {
+            "id": 562,
+            "name": "tt::tt_metal::to_dtype"
+        },
+        {
+            "id": 563,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 564,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 565,
+            "name": "MatmulDeviceOperation"
+        },
+        {
+            "id": 566,
+            "name": "BinaryDeviceOperation"
+        },
+        {
+            "id": 567,
+            "name": "Tensor::to_layout"
+        },
+        {
+            "id": 568,
+            "name": "tt::tt_metal::to_dtype"
+        },
+        {
+            "id": 569,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 570,
+            "name": "Tensor::pad"
+        },
+        {
+            "id": 571,
+            "name": "Tensor::to_layout"
+        },
+        {
+            "id": 572,
+            "name": "tt::tt_metal::to_dtype"
+        },
+        {
+            "id": 573,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 574,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 575,
+            "name": "MatmulDeviceOperation"
+        },
+        {
+            "id": 576,
+            "name": "Tensor::to_layout"
+        },
+        {
+            "id": 577,
+            "name": "tt::tt_metal::to_dtype"
+        },
+        {
+            "id": 578,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 579,
+            "name": "Tensor::pad"
+        },
+        {
+            "id": 580,
+            "name": "Tensor::to_layout"
+        },
+        {
+            "id": 581,
+            "name": "tt::tt_metal::to_dtype"
+        },
+        {
+            "id": 582,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 583,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 584,
+            "name": "HaloDeviceOperation"
+        },
+        {
+            "id": 585,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 586,
+            "name": "Conv2dDeviceOperation"
+        },
+        {
+            "id": 587,
+            "name": "Tensor::to_layout"
+        },
+        {
+            "id": 588,
+            "name": "tt::tt_metal::to_dtype"
+        },
+        {
+            "id": 589,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 590,
+            "name": "Tensor::pad"
+        },
+        {
+            "id": 591,
+            "name": "Tensor::to_layout"
+        },
+        {
+            "id": 592,
+            "name": "tt::tt_metal::to_dtype"
+        },
+        {
+            "id": 593,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 594,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 595,
+            "name": "MatmulDeviceOperation"
+        },
+        {
+            "id": 596,
+            "name": "BinaryDeviceOperation"
+        },
+        {
+            "id": 597,
+            "name": "Tensor::to_layout"
+        },
+        {
+            "id": 598,
+            "name": "tt::tt_metal::to_dtype"
+        },
+        {
+            "id": 599,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 600,
+            "name": "Tensor::pad"
+        },
+        {
+            "id": 601,
+            "name": "Tensor::to_layout"
+        },
+        {
+            "id": 602,
+            "name": "tt::tt_metal::to_dtype"
+        },
+        {
+            "id": 603,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 604,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 605,
+            "name": "MatmulDeviceOperation"
+        },
+        {
+            "id": 606,
+            "name": "Tensor::to_layout"
+        },
+        {
+            "id": 607,
+            "name": "tt::tt_metal::to_dtype"
+        },
+        {
+            "id": 608,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 609,
+            "name": "Tensor::pad"
+        },
+        {
+            "id": 610,
+            "name": "Tensor::to_layout"
+        },
+        {
+            "id": 611,
+            "name": "tt::tt_metal::to_dtype"
+        },
+        {
+            "id": 612,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 613,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 614,
+            "name": "HaloDeviceOperation"
+        },
+        {
+            "id": 615,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 616,
+            "name": "Conv2dDeviceOperation"
+        },
+        {
+            "id": 617,
+            "name": "Tensor::to_layout"
+        },
+        {
+            "id": 618,
+            "name": "tt::tt_metal::to_dtype"
+        },
+        {
+            "id": 619,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 620,
+            "name": "Tensor::pad"
+        },
+        {
+            "id": 621,
+            "name": "Tensor::to_layout"
+        },
+        {
+            "id": 622,
+            "name": "tt::tt_metal::to_dtype"
+        },
+        {
+            "id": 623,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 624,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 625,
+            "name": "MatmulDeviceOperation"
+        },
+        {
+            "id": 626,
+            "name": "BinaryDeviceOperation"
+        },
+        {
+            "id": 627,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 628,
+            "name": "ReshardDeviceOperation"
+        },
+        {
+            "id": 629,
+            "name": "Tensor::to_layout"
+        },
+        {
+            "id": 630,
+            "name": "tt::tt_metal::to_dtype"
+        },
+        {
+            "id": 631,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 632,
+            "name": "Tensor::pad"
+        },
+        {
+            "id": 633,
+            "name": "Tensor::to_layout"
+        },
+        {
+            "id": 634,
+            "name": "tt::tt_metal::to_dtype"
+        },
+        {
+            "id": 635,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 636,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 637,
+            "name": "MatmulDeviceOperation"
+        },
+        {
+            "id": 638,
+            "name": "Tensor::to_layout"
+        },
+        {
+            "id": 639,
+            "name": "tt::tt_metal::to_dtype"
+        },
+        {
+            "id": 640,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 641,
+            "name": "Tensor::pad"
+        },
+        {
+            "id": 642,
+            "name": "Tensor::to_layout"
+        },
+        {
+            "id": 643,
+            "name": "tt::tt_metal::to_dtype"
+        },
+        {
+            "id": 644,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 645,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 646,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 647,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 648,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 649,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 650,
+            "name": "HaloDeviceOperation"
+        },
+        {
+            "id": 651,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 652,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 653,
+            "name": "Conv2dDeviceOperation"
+        },
+        {
+            "id": 654,
+            "name": "Tensor::to_layout"
+        },
+        {
+            "id": 655,
+            "name": "tt::tt_metal::to_dtype"
+        },
+        {
+            "id": 656,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 657,
+            "name": "Tensor::pad"
+        },
+        {
+            "id": 658,
+            "name": "Tensor::to_layout"
+        },
+        {
+            "id": 659,
+            "name": "tt::tt_metal::to_dtype"
+        },
+        {
+            "id": 660,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 661,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 662,
+            "name": "MatmulDeviceOperation"
+        },
+        {
+            "id": 663,
+            "name": "Tensor::to_layout"
+        },
+        {
+            "id": 664,
+            "name": "tt::tt_metal::to_dtype"
+        },
+        {
+            "id": 665,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 666,
+            "name": "Tensor::pad"
+        },
+        {
+            "id": 667,
+            "name": "Tensor::to_layout"
+        },
+        {
+            "id": 668,
+            "name": "tt::tt_metal::to_dtype"
+        },
+        {
+            "id": 669,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 670,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 671,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 672,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 673,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 674,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 675,
+            "name": "HaloDeviceOperation"
+        },
+        {
+            "id": 676,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 677,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 678,
+            "name": "Conv2dDeviceOperation"
+        },
+        {
+            "id": 679,
+            "name": "BinaryDeviceOperation"
+        },
+        {
+            "id": 680,
+            "name": "Tensor::to_layout"
+        },
+        {
+            "id": 681,
+            "name": "tt::tt_metal::to_dtype"
+        },
+        {
+            "id": 682,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 683,
+            "name": "Tensor::pad"
+        },
+        {
+            "id": 684,
+            "name": "Tensor::to_layout"
+        },
+        {
+            "id": 685,
+            "name": "tt::tt_metal::to_dtype"
+        },
+        {
+            "id": 686,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 687,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 688,
+            "name": "MatmulDeviceOperation"
+        },
+        {
+            "id": 689,
+            "name": "Tensor::to_layout"
+        },
+        {
+            "id": 690,
+            "name": "tt::tt_metal::to_dtype"
+        },
+        {
+            "id": 691,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 692,
+            "name": "Tensor::pad"
+        },
+        {
+            "id": 693,
+            "name": "Tensor::to_layout"
+        },
+        {
+            "id": 694,
+            "name": "tt::tt_metal::to_dtype"
+        },
+        {
+            "id": 695,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 696,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 697,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 698,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 699,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 700,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 701,
+            "name": "HaloDeviceOperation"
+        },
+        {
+            "id": 702,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 703,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 704,
+            "name": "Conv2dDeviceOperation"
+        },
+        {
+            "id": 705,
+            "name": "Tensor::to_layout"
+        },
+        {
+            "id": 706,
+            "name": "tt::tt_metal::to_dtype"
+        },
+        {
+            "id": 707,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 708,
+            "name": "Tensor::pad"
+        },
+        {
+            "id": 709,
+            "name": "Tensor::to_layout"
+        },
+        {
+            "id": 710,
+            "name": "tt::tt_metal::to_dtype"
+        },
+        {
+            "id": 711,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 712,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 713,
+            "name": "MatmulDeviceOperation"
+        },
+        {
+            "id": 714,
+            "name": "BinaryDeviceOperation"
+        },
+        {
+            "id": 715,
+            "name": "Tensor::to_layout"
+        },
+        {
+            "id": 716,
+            "name": "tt::tt_metal::to_dtype"
+        },
+        {
+            "id": 717,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 718,
+            "name": "Tensor::pad"
+        },
+        {
+            "id": 719,
+            "name": "Tensor::to_layout"
+        },
+        {
+            "id": 720,
+            "name": "tt::tt_metal::to_dtype"
+        },
+        {
+            "id": 721,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 722,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 723,
+            "name": "MatmulDeviceOperation"
+        },
+        {
+            "id": 724,
+            "name": "Tensor::to_layout"
+        },
+        {
+            "id": 725,
+            "name": "tt::tt_metal::to_dtype"
+        },
+        {
+            "id": 726,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 727,
+            "name": "Tensor::pad"
+        },
+        {
+            "id": 728,
+            "name": "Tensor::to_layout"
+        },
+        {
+            "id": 729,
+            "name": "tt::tt_metal::to_dtype"
+        },
+        {
+            "id": 730,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 731,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 732,
+            "name": "HaloDeviceOperation"
+        },
+        {
+            "id": 733,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 734,
+            "name": "Conv2dDeviceOperation"
+        },
+        {
+            "id": 735,
+            "name": "Tensor::to_layout"
+        },
+        {
+            "id": 736,
+            "name": "tt::tt_metal::to_dtype"
+        },
+        {
+            "id": 737,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 738,
+            "name": "Tensor::pad"
+        },
+        {
+            "id": 739,
+            "name": "Tensor::to_layout"
+        },
+        {
+            "id": 740,
+            "name": "tt::tt_metal::to_dtype"
+        },
+        {
+            "id": 741,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 742,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 743,
+            "name": "MatmulDeviceOperation"
+        },
+        {
+            "id": 744,
+            "name": "BinaryDeviceOperation"
+        },
+        {
+            "id": 745,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 746,
+            "name": "ReshardDeviceOperation"
+        },
+        {
+            "id": 747,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 748,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 749,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 750,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 751,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 752,
+            "name": "HaloDeviceOperation"
+        },
+        {
+            "id": 753,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 754,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 755,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 756,
+            "name": "Pool2D"
+        },
+        {
+            "id": 757,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 758,
+            "name": "ReshardDeviceOperation"
+        },
+        {
+            "id": 759,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 760,
+            "name": "MatmulDeviceOperation"
+        },
+        {
+            "id": 761,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 762,
+            "name": "UntilizeWithUnpaddingDeviceOperation"
+        },
+        {
+            "id": 763,
+            "name": "Tensor::reshape"
+        },
+        {
+            "id": 764,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 765,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 766,
+            "name": "PadDeviceOperation"
+        },
+        {
+            "id": 767,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 768,
+            "name": "TransposeDeviceOperation"
+        },
+        {
+            "id": 769,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 770,
+            "name": "PadDeviceOperation"
+        },
+        {
+            "id": 771,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 772,
+            "name": "TransposeDeviceOperation"
+        },
+        {
+            "id": 773,
+            "name": "Tensor::reshape"
+        },
+        {
+            "id": 774,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 775,
+            "name": "TransposeDeviceOperation"
+        },
+        {
+            "id": 776,
+            "name": "Tensor::reshape"
+        },
+        {
+            "id": 777,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 778,
+            "name": "TransposeDeviceOperation"
+        },
+        {
+            "id": 779,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 780,
+            "name": "SliceDeviceOperation"
+        },
+        {
+            "id": 781,
+            "name": "Tensor::reshape"
+        },
+        {
+            "id": 782,
+            "name": "Tensor::reshape"
+        },
+        {
+            "id": 783,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 784,
+            "name": "HaloDeviceOperation"
+        },
+        {
+            "id": 785,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 786,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 787,
+            "name": "Conv2dDeviceOperation"
+        },
+        {
+            "id": 788,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 789,
+            "name": "HaloDeviceOperation"
+        },
+        {
+            "id": 790,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 791,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 792,
+            "name": "Pool2D"
+        },
+        {
+            "id": 793,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 794,
+            "name": "ReshardDeviceOperation"
+        },
+        {
+            "id": 795,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 796,
+            "name": "TilizeDeviceOperation"
+        },
+        {
+            "id": 797,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 798,
+            "name": "MatmulDeviceOperation"
+        },
+        {
+            "id": 799,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 800,
+            "name": "HaloDeviceOperation"
+        },
+        {
+            "id": 801,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 802,
+            "name": "Conv2dDeviceOperation"
+        },
+        {
+            "id": 803,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 804,
+            "name": "MatmulDeviceOperation"
+        },
+        {
+            "id": 805,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 806,
+            "name": "MatmulDeviceOperation"
+        },
+        {
+            "id": 807,
+            "name": "BinaryDeviceOperation"
+        },
+        {
+            "id": 808,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 809,
+            "name": "MatmulDeviceOperation"
+        },
+        {
+            "id": 810,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 811,
+            "name": "HaloDeviceOperation"
+        },
+        {
+            "id": 812,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 813,
+            "name": "Conv2dDeviceOperation"
+        },
+        {
+            "id": 814,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 815,
+            "name": "MatmulDeviceOperation"
+        },
+        {
+            "id": 816,
+            "name": "BinaryDeviceOperation"
+        },
+        {
+            "id": 817,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 818,
+            "name": "MatmulDeviceOperation"
+        },
+        {
+            "id": 819,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 820,
+            "name": "HaloDeviceOperation"
+        },
+        {
+            "id": 821,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 822,
+            "name": "Conv2dDeviceOperation"
+        },
+        {
+            "id": 823,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 824,
+            "name": "MatmulDeviceOperation"
+        },
+        {
+            "id": 825,
+            "name": "BinaryDeviceOperation"
+        },
+        {
+            "id": 826,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 827,
+            "name": "MatmulDeviceOperation"
+        },
+        {
+            "id": 828,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 829,
+            "name": "HaloDeviceOperation"
+        },
+        {
+            "id": 830,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 831,
+            "name": "Conv2dDeviceOperation"
+        },
+        {
+            "id": 832,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 833,
+            "name": "MatmulDeviceOperation"
+        },
+        {
+            "id": 834,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 835,
+            "name": "HaloDeviceOperation"
+        },
+        {
+            "id": 836,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 837,
+            "name": "Conv2dDeviceOperation"
+        },
+        {
+            "id": 838,
+            "name": "BinaryDeviceOperation"
+        },
+        {
+            "id": 839,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 840,
+            "name": "MatmulDeviceOperation"
+        },
+        {
+            "id": 841,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 842,
+            "name": "HaloDeviceOperation"
+        },
+        {
+            "id": 843,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 844,
+            "name": "Conv2dDeviceOperation"
+        },
+        {
+            "id": 845,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 846,
+            "name": "MatmulDeviceOperation"
+        },
+        {
+            "id": 847,
+            "name": "BinaryDeviceOperation"
+        },
+        {
+            "id": 848,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 849,
+            "name": "MatmulDeviceOperation"
+        },
+        {
+            "id": 850,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 851,
+            "name": "HaloDeviceOperation"
+        },
+        {
+            "id": 852,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 853,
+            "name": "Conv2dDeviceOperation"
+        },
+        {
+            "id": 854,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 855,
+            "name": "MatmulDeviceOperation"
+        },
+        {
+            "id": 856,
+            "name": "BinaryDeviceOperation"
+        },
+        {
+            "id": 857,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 858,
+            "name": "MatmulDeviceOperation"
+        },
+        {
+            "id": 859,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 860,
+            "name": "HaloDeviceOperation"
+        },
+        {
+            "id": 861,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 862,
+            "name": "Conv2dDeviceOperation"
+        },
+        {
+            "id": 863,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 864,
+            "name": "MatmulDeviceOperation"
+        },
+        {
+            "id": 865,
+            "name": "BinaryDeviceOperation"
+        },
+        {
+            "id": 866,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 867,
+            "name": "ReshardDeviceOperation"
+        },
+        {
+            "id": 868,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 869,
+            "name": "MatmulDeviceOperation"
+        },
+        {
+            "id": 870,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 871,
+            "name": "HaloDeviceOperation"
+        },
+        {
+            "id": 872,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 873,
+            "name": "Conv2dDeviceOperation"
+        },
+        {
+            "id": 874,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 875,
+            "name": "MatmulDeviceOperation"
+        },
+        {
+            "id": 876,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 877,
+            "name": "HaloDeviceOperation"
+        },
+        {
+            "id": 878,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 879,
+            "name": "Conv2dDeviceOperation"
+        },
+        {
+            "id": 880,
+            "name": "BinaryDeviceOperation"
+        },
+        {
+            "id": 881,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 882,
+            "name": "MatmulDeviceOperation"
+        },
+        {
+            "id": 883,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 884,
+            "name": "HaloDeviceOperation"
+        },
+        {
+            "id": 885,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 886,
+            "name": "Conv2dDeviceOperation"
+        },
+        {
+            "id": 887,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 888,
+            "name": "MatmulDeviceOperation"
+        },
+        {
+            "id": 889,
+            "name": "BinaryDeviceOperation"
+        },
+        {
+            "id": 890,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 891,
+            "name": "MatmulDeviceOperation"
+        },
+        {
+            "id": 892,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 893,
+            "name": "HaloDeviceOperation"
+        },
+        {
+            "id": 894,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 895,
+            "name": "Conv2dDeviceOperation"
+        },
+        {
+            "id": 896,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 897,
+            "name": "MatmulDeviceOperation"
+        },
+        {
+            "id": 898,
+            "name": "BinaryDeviceOperation"
+        },
+        {
+            "id": 899,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 900,
+            "name": "MatmulDeviceOperation"
+        },
+        {
+            "id": 901,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 902,
+            "name": "HaloDeviceOperation"
+        },
+        {
+            "id": 903,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 904,
+            "name": "Conv2dDeviceOperation"
+        },
+        {
+            "id": 905,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 906,
+            "name": "MatmulDeviceOperation"
+        },
+        {
+            "id": 907,
+            "name": "BinaryDeviceOperation"
+        },
+        {
+            "id": 908,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 909,
+            "name": "MatmulDeviceOperation"
+        },
+        {
+            "id": 910,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 911,
+            "name": "HaloDeviceOperation"
+        },
+        {
+            "id": 912,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 913,
+            "name": "Conv2dDeviceOperation"
+        },
+        {
+            "id": 914,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 915,
+            "name": "MatmulDeviceOperation"
+        },
+        {
+            "id": 916,
+            "name": "BinaryDeviceOperation"
+        },
+        {
+            "id": 917,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 918,
+            "name": "MatmulDeviceOperation"
+        },
+        {
+            "id": 919,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 920,
+            "name": "HaloDeviceOperation"
+        },
+        {
+            "id": 921,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 922,
+            "name": "Conv2dDeviceOperation"
+        },
+        {
+            "id": 923,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 924,
+            "name": "MatmulDeviceOperation"
+        },
+        {
+            "id": 925,
+            "name": "BinaryDeviceOperation"
+        },
+        {
+            "id": 926,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 927,
+            "name": "ReshardDeviceOperation"
+        },
+        {
+            "id": 928,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 929,
+            "name": "MatmulDeviceOperation"
+        },
+        {
+            "id": 930,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 931,
+            "name": "HaloDeviceOperation"
+        },
+        {
+            "id": 932,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 933,
+            "name": "Conv2dDeviceOperation"
+        },
+        {
+            "id": 934,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 935,
+            "name": "MatmulDeviceOperation"
+        },
+        {
+            "id": 936,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 937,
+            "name": "HaloDeviceOperation"
+        },
+        {
+            "id": 938,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 939,
+            "name": "Conv2dDeviceOperation"
+        },
+        {
+            "id": 940,
+            "name": "BinaryDeviceOperation"
+        },
+        {
+            "id": 941,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 942,
+            "name": "MatmulDeviceOperation"
+        },
+        {
+            "id": 943,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 944,
+            "name": "HaloDeviceOperation"
+        },
+        {
+            "id": 945,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 946,
+            "name": "Conv2dDeviceOperation"
+        },
+        {
+            "id": 947,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 948,
+            "name": "MatmulDeviceOperation"
+        },
+        {
+            "id": 949,
+            "name": "BinaryDeviceOperation"
+        },
+        {
+            "id": 950,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 951,
+            "name": "MatmulDeviceOperation"
+        },
+        {
+            "id": 952,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 953,
+            "name": "HaloDeviceOperation"
+        },
+        {
+            "id": 954,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 955,
+            "name": "Conv2dDeviceOperation"
+        },
+        {
+            "id": 956,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 957,
+            "name": "MatmulDeviceOperation"
+        },
+        {
+            "id": 958,
+            "name": "BinaryDeviceOperation"
+        },
+        {
+            "id": 959,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 960,
+            "name": "ReshardDeviceOperation"
+        },
+        {
+            "id": 961,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 962,
+            "name": "HaloDeviceOperation"
+        },
+        {
+            "id": 963,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 964,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 965,
+            "name": "Pool2D"
+        },
+        {
+            "id": 966,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 967,
+            "name": "ReshardDeviceOperation"
+        },
+        {
+            "id": 968,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 969,
+            "name": "MatmulDeviceOperation"
+        },
+        {
+            "id": 970,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 971,
+            "name": "UntilizeWithUnpaddingDeviceOperation"
+        },
+        {
+            "id": 972,
+            "name": "Tensor::reshape"
+        },
+        {
+            "id": 973,
+            "name": "Tensor::to_device"
+        },
+        {
+            "id": 974,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 975,
+            "name": "PadDeviceOperation"
+        },
+        {
+            "id": 976,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 977,
+            "name": "TransposeDeviceOperation"
+        },
+        {
+            "id": 978,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 979,
+            "name": "PadDeviceOperation"
+        },
+        {
+            "id": 980,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 981,
+            "name": "TransposeDeviceOperation"
+        },
+        {
+            "id": 982,
+            "name": "Tensor::reshape"
+        },
+        {
+            "id": 983,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 984,
+            "name": "TransposeDeviceOperation"
+        },
+        {
+            "id": 985,
+            "name": "Tensor::reshape"
+        },
+        {
+            "id": 986,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 987,
+            "name": "TransposeDeviceOperation"
+        },
+        {
+            "id": 988,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 989,
+            "name": "SliceDeviceOperation"
+        },
+        {
+            "id": 990,
+            "name": "Tensor::reshape"
+        },
+        {
+            "id": 991,
+            "name": "Tensor::reshape"
+        },
+        {
+            "id": 992,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 993,
+            "name": "HaloDeviceOperation"
+        },
+        {
+            "id": 994,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 995,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 996,
+            "name": "Conv2dDeviceOperation"
+        },
+        {
+            "id": 997,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 998,
+            "name": "HaloDeviceOperation"
+        },
+        {
+            "id": 999,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 1000,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 1001,
+            "name": "Pool2D"
+        },
+        {
+            "id": 1002,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 1003,
+            "name": "ReshardDeviceOperation"
+        },
+        {
+            "id": 1004,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 1005,
+            "name": "TilizeDeviceOperation"
+        },
+        {
+            "id": 1006,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 1007,
+            "name": "MatmulDeviceOperation"
+        },
+        {
+            "id": 1008,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 1009,
+            "name": "HaloDeviceOperation"
+        },
+        {
+            "id": 1010,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 1011,
+            "name": "Conv2dDeviceOperation"
+        },
+        {
+            "id": 1012,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 1013,
+            "name": "MatmulDeviceOperation"
+        },
+        {
+            "id": 1014,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 1015,
+            "name": "MatmulDeviceOperation"
+        },
+        {
+            "id": 1016,
+            "name": "BinaryDeviceOperation"
+        },
+        {
+            "id": 1017,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 1018,
+            "name": "MatmulDeviceOperation"
+        },
+        {
+            "id": 1019,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 1020,
+            "name": "HaloDeviceOperation"
+        },
+        {
+            "id": 1021,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 1022,
+            "name": "Conv2dDeviceOperation"
+        },
+        {
+            "id": 1023,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 1024,
+            "name": "MatmulDeviceOperation"
+        },
+        {
+            "id": 1025,
+            "name": "BinaryDeviceOperation"
+        },
+        {
+            "id": 1026,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 1027,
+            "name": "MatmulDeviceOperation"
+        },
+        {
+            "id": 1028,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 1029,
+            "name": "HaloDeviceOperation"
+        },
+        {
+            "id": 1030,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 1031,
+            "name": "Conv2dDeviceOperation"
+        },
+        {
+            "id": 1032,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 1033,
+            "name": "MatmulDeviceOperation"
+        },
+        {
+            "id": 1034,
+            "name": "BinaryDeviceOperation"
+        },
+        {
+            "id": 1035,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 1036,
+            "name": "MatmulDeviceOperation"
+        },
+        {
+            "id": 1037,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 1038,
+            "name": "HaloDeviceOperation"
+        },
+        {
+            "id": 1039,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 1040,
+            "name": "Conv2dDeviceOperation"
+        },
+        {
+            "id": 1041,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 1042,
+            "name": "MatmulDeviceOperation"
+        },
+        {
+            "id": 1043,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 1044,
+            "name": "HaloDeviceOperation"
+        },
+        {
+            "id": 1045,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 1046,
+            "name": "Conv2dDeviceOperation"
+        },
+        {
+            "id": 1047,
+            "name": "BinaryDeviceOperation"
+        },
+        {
+            "id": 1048,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 1049,
+            "name": "MatmulDeviceOperation"
+        },
+        {
+            "id": 1050,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 1051,
+            "name": "HaloDeviceOperation"
+        },
+        {
+            "id": 1052,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 1053,
+            "name": "Conv2dDeviceOperation"
+        },
+        {
+            "id": 1054,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 1055,
+            "name": "MatmulDeviceOperation"
+        },
+        {
+            "id": 1056,
+            "name": "BinaryDeviceOperation"
+        },
+        {
+            "id": 1057,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 1058,
+            "name": "MatmulDeviceOperation"
+        },
+        {
+            "id": 1059,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 1060,
+            "name": "HaloDeviceOperation"
+        },
+        {
+            "id": 1061,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 1062,
+            "name": "Conv2dDeviceOperation"
+        },
+        {
+            "id": 1063,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 1064,
+            "name": "MatmulDeviceOperation"
+        },
+        {
+            "id": 1065,
+            "name": "BinaryDeviceOperation"
+        },
+        {
+            "id": 1066,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 1067,
+            "name": "MatmulDeviceOperation"
+        },
+        {
+            "id": 1068,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 1069,
+            "name": "HaloDeviceOperation"
+        },
+        {
+            "id": 1070,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 1071,
+            "name": "Conv2dDeviceOperation"
+        },
+        {
+            "id": 1072,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 1073,
+            "name": "MatmulDeviceOperation"
+        },
+        {
+            "id": 1074,
+            "name": "BinaryDeviceOperation"
+        },
+        {
+            "id": 1075,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 1076,
+            "name": "ReshardDeviceOperation"
+        },
+        {
+            "id": 1077,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 1078,
+            "name": "MatmulDeviceOperation"
+        },
+        {
+            "id": 1079,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 1080,
+            "name": "HaloDeviceOperation"
+        },
+        {
+            "id": 1081,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 1082,
+            "name": "Conv2dDeviceOperation"
+        },
+        {
+            "id": 1083,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 1084,
+            "name": "MatmulDeviceOperation"
+        },
+        {
+            "id": 1085,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 1086,
+            "name": "HaloDeviceOperation"
+        },
+        {
+            "id": 1087,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 1088,
+            "name": "Conv2dDeviceOperation"
+        },
+        {
+            "id": 1089,
+            "name": "BinaryDeviceOperation"
+        },
+        {
+            "id": 1090,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 1091,
+            "name": "MatmulDeviceOperation"
+        },
+        {
+            "id": 1092,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 1093,
+            "name": "HaloDeviceOperation"
+        },
+        {
+            "id": 1094,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 1095,
+            "name": "Conv2dDeviceOperation"
+        },
+        {
+            "id": 1096,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 1097,
+            "name": "MatmulDeviceOperation"
+        },
+        {
+            "id": 1098,
+            "name": "BinaryDeviceOperation"
+        },
+        {
+            "id": 1099,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 1100,
+            "name": "MatmulDeviceOperation"
+        },
+        {
+            "id": 1101,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 1102,
+            "name": "HaloDeviceOperation"
+        },
+        {
+            "id": 1103,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 1104,
+            "name": "Conv2dDeviceOperation"
+        },
+        {
+            "id": 1105,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 1106,
+            "name": "MatmulDeviceOperation"
+        },
+        {
+            "id": 1107,
+            "name": "BinaryDeviceOperation"
+        },
+        {
+            "id": 1108,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 1109,
+            "name": "MatmulDeviceOperation"
+        },
+        {
+            "id": 1110,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 1111,
+            "name": "HaloDeviceOperation"
+        },
+        {
+            "id": 1112,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 1113,
+            "name": "Conv2dDeviceOperation"
+        },
+        {
+            "id": 1114,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 1115,
+            "name": "MatmulDeviceOperation"
+        },
+        {
+            "id": 1116,
+            "name": "BinaryDeviceOperation"
+        },
+        {
+            "id": 1117,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 1118,
+            "name": "MatmulDeviceOperation"
+        },
+        {
+            "id": 1119,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 1120,
+            "name": "HaloDeviceOperation"
+        },
+        {
+            "id": 1121,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 1122,
+            "name": "Conv2dDeviceOperation"
+        },
+        {
+            "id": 1123,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 1124,
+            "name": "MatmulDeviceOperation"
+        },
+        {
+            "id": 1125,
+            "name": "BinaryDeviceOperation"
+        },
+        {
+            "id": 1126,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 1127,
+            "name": "MatmulDeviceOperation"
+        },
+        {
+            "id": 1128,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 1129,
+            "name": "HaloDeviceOperation"
+        },
+        {
+            "id": 1130,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 1131,
+            "name": "Conv2dDeviceOperation"
+        },
+        {
+            "id": 1132,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 1133,
+            "name": "MatmulDeviceOperation"
+        },
+        {
+            "id": 1134,
+            "name": "BinaryDeviceOperation"
+        },
+        {
+            "id": 1135,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 1136,
+            "name": "ReshardDeviceOperation"
+        },
+        {
+            "id": 1137,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 1138,
+            "name": "MatmulDeviceOperation"
+        },
+        {
+            "id": 1139,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 1140,
+            "name": "HaloDeviceOperation"
+        },
+        {
+            "id": 1141,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 1142,
+            "name": "Conv2dDeviceOperation"
+        },
+        {
+            "id": 1143,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 1144,
+            "name": "MatmulDeviceOperation"
+        },
+        {
+            "id": 1145,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 1146,
+            "name": "HaloDeviceOperation"
+        },
+        {
+            "id": 1147,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 1148,
+            "name": "Conv2dDeviceOperation"
+        },
+        {
+            "id": 1149,
+            "name": "BinaryDeviceOperation"
+        },
+        {
+            "id": 1150,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 1151,
+            "name": "MatmulDeviceOperation"
+        },
+        {
+            "id": 1152,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 1153,
+            "name": "HaloDeviceOperation"
+        },
+        {
+            "id": 1154,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 1155,
+            "name": "Conv2dDeviceOperation"
+        },
+        {
+            "id": 1156,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 1157,
+            "name": "MatmulDeviceOperation"
+        },
+        {
+            "id": 1158,
+            "name": "BinaryDeviceOperation"
+        },
+        {
+            "id": 1159,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 1160,
+            "name": "MatmulDeviceOperation"
+        },
+        {
+            "id": 1161,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 1162,
+            "name": "HaloDeviceOperation"
+        },
+        {
+            "id": 1163,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 1164,
+            "name": "Conv2dDeviceOperation"
+        },
+        {
+            "id": 1165,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 1166,
+            "name": "MatmulDeviceOperation"
+        },
+        {
+            "id": 1167,
+            "name": "BinaryDeviceOperation"
+        },
+        {
+            "id": 1168,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 1169,
+            "name": "ReshardDeviceOperation"
+        },
+        {
+            "id": 1170,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 1171,
+            "name": "HaloDeviceOperation"
+        },
+        {
+            "id": 1172,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 1173,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 1174,
+            "name": "Pool2D"
+        },
+        {
+            "id": 1175,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 1176,
+            "name": "ReshardDeviceOperation"
+        },
+        {
+            "id": 1177,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 1178,
+            "name": "MatmulDeviceOperation"
+        },
+        {
+            "id": 1179,
+            "name": "tt::tt_metal::create_device_tensor"
+        },
+        {
+            "id": 1180,
+            "name": "UntilizeWithUnpaddingDeviceOperation"
+        },
+        {
+            "id": 1181,
+            "name": "Tensor::reshape"
+        },
+        {
+            "id": 1182,
+            "name": "Tensor::cpu"
+        },
+        {
+            "id": 1183,
+            "name": "tt::tt_metal::detail::convert_tt_tensor_to_framework_tensor"
+        }
+    ]
+}
