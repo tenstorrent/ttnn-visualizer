@@ -36,7 +36,9 @@ const GraphView = () => {
     const filteredOperationList = useMemo(
         () =>
             selectedOperationRange
-                ? operationList?.filter((op) => selectedOperationRange[0] && op.id <= selectedOperationRange[1])
+                ? operationList?.filter(
+                      (op) => op.id >= selectedOperationRange[0] && op.id <= selectedOperationRange[1],
+                  )
                 : operationList,
         [operationList, selectedOperationRange],
     );
