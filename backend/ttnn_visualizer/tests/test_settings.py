@@ -90,6 +90,25 @@ def test_server_mode_accepts_a_strong_secret_key():
     )
 
 
+@pytest.mark.parametrize(
+    "length, accepted",
+    [(MIN_HOSTED_SECRET_KEY_BYTES - 1, False), (MIN_HOSTED_SECRET_KEY_BYTES, True)],
+)
+def test_server_mode_secret_key_length_boundary(length, accepted):
+    """Pins the floor itself, which the cases above only track relative to the constant.
+
+    The floor is a stopgap pending #2002, so a change to it should be a deliberate edit
+    here rather than something a parametrised case silently follows.
+    """
+    config = {"SERVER_MODE": True, "SECRET_KEY": "k" * length}
+
+    if accepted:
+        _validate_hosted_secret_key(config)
+    else:
+        with pytest.raises(RuntimeError, match="SERVER_MODE requires SECRET_KEY"):
+            _validate_hosted_secret_key(config)
+
+
 def test_local_mode_keeps_the_development_secret_key():
     _validate_hosted_secret_key(
         {"SERVER_MODE": False, "SECRET_KEY": DEFAULT_SECRET_KEY}

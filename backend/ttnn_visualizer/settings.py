@@ -214,7 +214,14 @@ class _EventLoggingActive:
 
 _DEFAULT_SSH_PORT = 22
 DEFAULT_SECRET_KEY = "90909"
-MIN_HOSTED_SECRET_KEY_BYTES = 32
+# A floor against an obviously-short key, not a strength check: it measures string
+# length rather than entropy. Lowered from 32 because the previous value was introduced
+# without a migration path for existing deployments, whose keys are provisioned outside
+# this repo and cannot be rotated without a cross-team change and a user-visible cookie
+# reset. Deliberately a stopgap: #2002 replaces the length test with a slow-KDF
+# derivation, which makes a short key expensive to brute-force without any deployment
+# having to change the key it already has.
+MIN_HOSTED_SECRET_KEY_BYTES = 8
 
 
 def _parse_max_content_length(env_value: str) -> Optional[int]:
