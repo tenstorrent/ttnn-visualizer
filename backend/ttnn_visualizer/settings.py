@@ -214,13 +214,10 @@ class _EventLoggingActive:
 
 _DEFAULT_SSH_PORT = 22
 DEFAULT_SECRET_KEY = "90909"
-# A floor against an obviously-short key, not a strength check: it measures string
-# length rather than entropy. Lowered from 32 because the previous value was introduced
-# without a migration path for existing deployments, whose keys are provisioned outside
-# this repo and cannot be rotated without a cross-team change and a user-visible cookie
-# reset. Deliberately a stopgap: #2002 replaces the length test with a slow-KDF
-# derivation, which makes a short key expensive to brute-force without any deployment
-# having to change the key it already has.
+# Counts UTF-8 bytes, not entropy — a floor against an obviously-short key, not a
+# strength check. Lowered to unblock deployments provisioned before the check existed.
+# Stopgap, superseded by #2002; the rationale lives with the validator that applies it,
+# in ``app.py::_validate_hosted_secret_key``.
 MIN_HOSTED_SECRET_KEY_BYTES = 8
 
 
