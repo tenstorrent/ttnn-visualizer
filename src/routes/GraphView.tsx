@@ -10,6 +10,7 @@ import { useAtomValue } from 'jotai';
 import { useGetDeviceOperationListPerf, useLinkedPerformanceReport, useOperationsList } from '../hooks/useAPI';
 import OperationGraph from '../components/operation-graph/OperationGraphReactFlow';
 import LoadingSpinner from '../components/LoadingSpinner';
+import { filterByOperationRange } from '../functions/filterByOperationRange';
 import useClearSelectedBuffer from '../hooks/useClearSelectedBuffer';
 import { activePerformanceReportFolderNameAtom, selectedOperationRangeAtom } from '../store/app';
 import { PerfOverlaySource } from '../functions/perfOverlay';
@@ -35,10 +36,8 @@ const GraphView = () => {
 
     const filteredOperationList = useMemo(
         () =>
-            selectedOperationRange
-                ? operationList?.filter(
-                      (op) => op.id >= selectedOperationRange[0] && op.id <= selectedOperationRange[1],
-                  )
+            selectedOperationRange && operationList
+                ? filterByOperationRange(operationList, selectedOperationRange)
                 : operationList,
         [operationList, selectedOperationRange],
     );
@@ -81,7 +80,9 @@ const GraphView = () => {
         <div className='data-padding'>
             <Helmet title='GraphTree' />
 
-            {isLoading || filteredOperationList === undefined || filteredOperationList.length === 0 ? (
+            {/* An empty list is a range that selected nothing, not a pending fetch: reading
+                it as loading left a spinner that never resolved. #1999 */}
+            {isLoading || filteredOperationList === undefined ? (
                 <div className='graph-tree-loader'>
                     <LoadingSpinner />
                 </div>
