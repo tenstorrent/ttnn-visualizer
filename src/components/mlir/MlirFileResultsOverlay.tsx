@@ -29,12 +29,12 @@ import getResponseError from '../../functions/getResponseError';
 import { getActiveMlirServer } from '../../functions/mlirServer';
 import { MlirFileResult, MlirLoadedReport } from '../../model/MLIRJsonModel';
 import mapConvertedMlirServerResult from '../../functions/mapConvertedMlirServerResult';
-import { ReportKind, ReportLoadFailureReason, ReportSource } from '../../definitions/UsageEvent';
+import { ReportKind, ReportLoadFailureReason, ReportSource } from '../../definitions/EventLogEvent';
 import {
     getReportLoadFailureReason,
     recordReportLoadFailed,
     recordReportLoaded,
-} from '../../functions/reportLoadUsage';
+} from '../../functions/reportLoadEvents';
 import 'styles/components/MlirFileResultsOverlay.scss';
 
 const MAX_MLIR_FILE_SELECTION = 2;

@@ -15,12 +15,7 @@ import {
     upsertReportLink,
 } from '../src/functions/reportLinks';
 import { FolderLinkState } from '../src/definitions/FolderLinkStatus';
-import {
-    compareByFolderLinkState,
-    getFolderLinkState,
-    shouldShowFolderLinkStatus,
-    sortByFolderLinkState,
-} from '../src/functions/folderLinkStatus';
+import { getFolderLinkState, shouldShowFolderLinkStatus } from '../src/functions/folderLinkStatus';
 
 const link = (
     profilerId: string,
@@ -77,30 +72,11 @@ describe('getFolderLinkState', () => {
     });
 });
 
-describe('compareByFolderLinkState', () => {
-    it('orders linked before unknown before unlinked', () => {
-        const linkedIds = new Set(['linked']);
-        const unlinkedIds = new Set(['unlinked']);
-
-        expect(compareByFolderLinkState('linked', 'unknown', linkedIds, unlinkedIds)).toBeLessThan(0);
-        expect(compareByFolderLinkState('unknown', 'unlinked', linkedIds, unlinkedIds)).toBeLessThan(0);
-        expect(compareByFolderLinkState('linked', 'unlinked', linkedIds, unlinkedIds)).toBeLessThan(0);
-        expect(compareByFolderLinkState('unlinked', 'linked', linkedIds, unlinkedIds)).toBeGreaterThan(0);
-    });
-});
-
-describe('shouldShowFolderLinkStatus / sortByFolderLinkState', () => {
+describe('shouldShowFolderLinkStatus', () => {
     it('hides badges when both sets are empty or null', () => {
         expect(shouldShowFolderLinkStatus(new Set(), new Set())).toBe(false);
         expect(shouldShowFolderLinkStatus(null, null)).toBe(false);
         expect(shouldShowFolderLinkStatus(new Set(['a']), new Set())).toBe(true);
-    });
-
-    it('sorts items by link state using getId', () => {
-        const items = [{ id: 'unknown' }, { id: 'unlinked' }, { id: 'linked' }];
-        const sorted = sortByFolderLinkState(items, (item) => item.id, new Set(['linked']), new Set(['unlinked']));
-
-        expect(sorted.map((item) => item.id)).toEqual(['linked', 'unknown', 'unlinked']);
     });
 });
 

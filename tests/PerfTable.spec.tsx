@@ -338,6 +338,38 @@ describe('PerfTable loading state', () => {
 });
 
 describe('PerfTable column visibility', () => {
+    it('renders the Sub Device column from the row value', () => {
+        renderTable([
+            baseRow({
+                id: 1,
+                raw_op_code: 'Matmul',
+                sub_device_id: 'subdevice-7',
+                available_cores: 108,
+            }),
+        ]);
+
+        const table = screen.getByRole('table');
+        expect(within(table).getByText('Sub Device')).toBeInTheDocument();
+        expect(within(table).getByText('subdevice-7')).toBeInTheDocument();
+        expect(within(table).getByText('Available Cores')).toBeInTheDocument();
+        expect(within(table).getByText('108')).toBeInTheDocument();
+    });
+
+    it('renders the Sub Device value on comparison rows', () => {
+        const comparisonRow = baseRow({
+            id: 99,
+            raw_op_code: 'Matmul',
+            sub_device_id: 'comparison-subdevice',
+            available_cores: 72,
+        });
+
+        renderTable([matmulRow], { comparisonData: [[comparisonRow]] });
+
+        const comparisonTableRow = screen.getByText('comparison-subdevice').closest('tr');
+        expect(comparisonTableRow).toHaveClass('comparison-row');
+        expect(within(comparisonTableRow as HTMLElement).getByText('72')).toBeInTheDocument();
+    });
+
     it('keeps OP Code visible even when it is listed as hidden', () => {
         renderTable([matmulRow], { hiddenColumns: [ColumnKeys.OpCode, ColumnKeys.DeviceTime] });
 
@@ -359,7 +391,7 @@ describe('PerfTable column visibility', () => {
         expect(footerSpanTotal).toBe(visibleHeaderCount - 1);
     });
 
-    it('gives OP Code a colspan that covers Flags under default columns', () => {
+    it('gives OP Code a colspan that covers the visible grouped columns', () => {
         renderTable([matmulRow]);
 
         const table = screen.getByRole('table');

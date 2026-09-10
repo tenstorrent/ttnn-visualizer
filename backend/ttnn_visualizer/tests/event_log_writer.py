@@ -2,7 +2,7 @@
 #
 # SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-"""Append usage events from a fresh interpreter, for the concurrency test.
+"""Append events from a fresh interpreter, for the concurrency test.
 
 ``_append_line``'s ``O_APPEND`` claim is about separate processes sharing one log, so
 the only way to exercise it is from outside the test process. This is a real module
@@ -18,10 +18,10 @@ count that does not add up. Check the preconditions here and exit non-zero inste
 import sys
 from pathlib import Path
 
-from ttnn_visualizer import usage
-from ttnn_visualizer.usage import (
-    UsageEvent,
-    UsageView,
+from ttnn_visualizer import event_logging
+from ttnn_visualizer.event_logging import (
+    EventLogEvent,
+    EventLogView,
     is_recording_enabled,
     record_event,
     record_events,
@@ -39,15 +39,15 @@ def main(argv: list[str]) -> int:
     batch_size = int(argv[3]) if len(argv) > 3 else 1
 
     # ``monkeypatch`` does not cross process boundaries, so apply the same override
-    # the ``usage_directory`` fixture applies in-process.
-    usage.USAGE_DIRECTORY = directory
+    # the ``event_log_directory`` fixture applies in-process.
+    event_logging.EVENT_LOG_DIRECTORY = directory
 
     if not is_recording_enabled():
         print("recording is disabled; refusing to write", file=sys.stderr)
         return 1
 
     if batch_size > 1:
-        event = (UsageEvent.VIEW_OPENED, {"view": UsageView.OPERATIONS})
+        event = (EventLogEvent.VIEW_OPENED, {"view": EventLogView.OPERATIONS})
         # A final short batch rather than `count // batch_size` whole ones, which would
         # drop the remainder — and write nothing at all when the batch is bigger than the
         # count. The lower-bound check below would catch it, but as a confusing failure
@@ -58,10 +58,10 @@ def main(argv: list[str]) -> int:
             remaining -= min(batch_size, remaining)
     else:
         for _ in range(count):
-            record_event(UsageEvent.APP_START)
+            record_event(EventLogEvent.APP_START)
 
     try:
-        written = usage.get_usage_log_path().read_text(encoding="utf-8")
+        written = event_logging.get_event_log_path().read_text(encoding="utf-8")
     except OSError as error:
         print(f"could not read back the log: {error}", file=sys.stderr)
         return 1

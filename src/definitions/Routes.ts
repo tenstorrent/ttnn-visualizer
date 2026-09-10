@@ -15,7 +15,7 @@ const ROUTES = Object.freeze({
     CLUSTER: '/cluster',
 });
 
-// Parameterised shapes are shared by React Router and usage-view matching. Keeping them
+// Parameterised shapes are shared by React Router and event-log-view matching. Keeping them
 // here means changing a route cannot silently leave instrumentation matching its old URL.
 export const ROUTE_PATTERNS = Object.freeze({
     OPERATION_DETAILS: `${ROUTES.OPERATIONS}/:operationId`,

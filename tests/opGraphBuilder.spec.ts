@@ -2,10 +2,12 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { getDeviceEdgeId, getDeviceNodeId } from '../src/components/operation-graph/opGraphDeviceSubgraph';
 import { formatBlockMeta } from '../src/components/operation-graph/opGraphBlockMeta';
 import { buildOpGraph } from '../src/components/operation-graph/opGraphBuilder';
+import { OpGraphBlockKind, OpGraphGrouping } from '../src/components/operation-graph/opGraphTypes';
 import {
     type OpGraphDeviceSubgraph,
     OpGraphNodeType,
@@ -122,6 +124,27 @@ describe('buildOpGraph', () => {
                 ],
                 false,
             );
+
+            expect(operationIdsOf(graph)).toEqual([1, 2]);
+        });
+
+        it('uses the candidate edges it was handed instead of walking them again', () => {
+            // The walk is ops x outputs x consumers and the worker already runs it once
+            // per source for detection, so it hands the same pass over rather than
+            // making every uncached layout — every frame of an op-range drag — repeat it.
+            // Proved by supplying a set that omits a real edge: if the build recollected,
+            // ops 3 and 4 would be connected and drawn.
+            const operations = [
+                operation({ id: 1, outputs: [{ consumers: [2] }] }),
+                operation({ id: 2 }),
+                operation({ id: 3, outputs: [{ consumers: [4] }] }),
+                operation({ id: 4 }),
+            ];
+            const graph = buildOpGraph(operations, {
+                hideDeallocate: false,
+                deviceSubgraphs: [],
+                candidates: [{ source: 1, target: 2, label: '[1, 32]', tensorId: 1 }],
+            });
 
             expect(operationIdsOf(graph)).toEqual([1, 2]);
         });
@@ -406,6 +429,209 @@ describe('buildOpGraph', () => {
         });
     });
 
+    describe('block kinds', () => {
+        it('marks a repeat, a layer and a weight fan with different classes', () => {
+            // The three detectors all render the same node type, so without this the only
+            // way to tell them apart is to read the labels. #1982
+            // Prefix and suffix included: the window scan needs the run to be bounded
+            // before it reads as a repeat.
+            const repeats = buildOpGraph(
+                [
+                    operation({ id: 1, name: 'prefix', outputs: [{ consumers: [2] }] }),
+                    operation({ id: 2, name: 'layer_a', outputs: [{ consumers: [3] }] }),
+                    operation({ id: 3, name: 'layer_b', outputs: [{ consumers: [4] }] }),
+                    operation({ id: 4, name: 'layer_a', outputs: [{ consumers: [5] }] }),
+                    operation({ id: 5, name: 'layer_b', outputs: [{ consumers: [6] }] }),
+                    operation({ id: 6, name: 'suffix' }),
+                ],
+                { hideDeallocate: false, deviceSubgraphs: [], expandedBlockIds: [] },
+            );
+            const layers = buildOpGraph(
+                [
+                    operation({
+                        id: 1,
+                        name: 'ttnn.transformer.scaled_dot_product_attention',
+                        outputs: [{ consumers: [2] }],
+                    }),
+                    operation({ id: 2, name: 'ttnn.layer_norm' }),
+                ],
+                {
+                    hideDeallocate: false,
+                    deviceSubgraphs: [],
+                    expandedBlockIds: [],
+                    grouping: OpGraphGrouping.LAYERS,
+                },
+            );
+            const fans = buildOpGraph(
+                [
+                    operation({ id: 1, name: 'ttnn.to_device', outputs: [{ consumers: [3] }] }),
+                    operation({ id: 2, name: 'ttnn.to_device', outputs: [{ consumers: [3] }] }),
+                    operation({ id: 3, name: 'ttnn.linear', outputs: [{ consumers: [4] }] }),
+                    operation({ id: 4, name: 'ttnn.layer_norm' }),
+                ],
+                { hideDeallocate: false, deviceSubgraphs: [], collapseWeightLoads: true },
+            );
+
+            const classOf = (graph: ReturnType<typeof buildOpGraph>, id: string) =>
+                graph.nodes.find((node) => node.id === id)?.className;
+
+            expect(classOf(repeats, 'block:0:2')).toBe('op-graph-block-repeat');
+            expect(classOf(layers, 'layer:attention:1')).toBe('op-graph-block-layer');
+            expect(classOf(fans, 'weights:1')).toBe('op-graph-block-weights');
+        });
+
+        it('gives every kind of block an expander pill that matches its own border', () => {
+            // Overrides were added for layer and weights and not for repeat, so a repeat
+            // pill kept the legacy `--graph-block-border` while its ring had moved to
+            // `--graph-block-repeat-border` — a different blue. Asserted through the
+            // class, since the stylesheet is what carries the colour. #1982
+            const stylesheet = readFileSync('src/scss/components/OperationGraphReactFlow.scss', 'utf8');
+
+            for (const kind of ['repeat', 'layer', 'weights']) {
+                expect(stylesheet).toContain(
+                    `.react-flow__node-blockNode.op-graph-block-${kind} > .op-graph-node-expander`,
+                );
+            }
+        });
+
+        it('lets the I/O highlight outrank the kind colour on a block', () => {
+            // The kind rules match the shared I/O rule on specificity (three classes
+            // each), so source order decides, and the shared rule sits higher up the
+            // file: a block that was an input or output of the selection silently kept
+            // its own fill and dropped a highlight that shipped with #1195. The block
+            // rule carries its own I/O override, and it has to stay below the three kind
+            // rules for that to hold. #1982
+            const stylesheet = readFileSync('src/scss/components/OperationGraphReactFlow.scss', 'utf8');
+            const lastKindRule = Math.max(
+                ...['repeat', 'layer', 'weights'].map((kind) => stylesheet.indexOf(`&.op-graph-block-${kind} {`)),
+            );
+
+            for (const relation of ['input', 'output']) {
+                const override = stylesheet.indexOf(`&.op-graph-node-${relation} {`);
+                expect(override).toBeGreaterThan(lastKindRule);
+            }
+        });
+
+        it('carries the kind on the node data as well as the class', () => {
+            // The class paints it; the kind is what a panel or a test can reason about
+            // without parsing a string.
+            const fans = buildOpGraph(
+                [
+                    operation({ id: 1, name: 'ttnn.to_device', outputs: [{ consumers: [3] }] }),
+                    operation({ id: 2, name: 'ttnn.to_device', outputs: [{ consumers: [3] }] }),
+                    operation({ id: 3, name: 'ttnn.linear' }),
+                ],
+                { hideDeallocate: false, deviceSubgraphs: [], collapseWeightLoads: true },
+            );
+
+            expect(nodeById(fans, 'weights:1').data.blockKind).toBe(OpGraphBlockKind.WEIGHTS);
+        });
+    });
+
+    describe('weight-load fans', () => {
+        // Three loaders feeding one consumer, plus a downstream op so the consumer is
+        // not itself a source.
+        const FAN_CHAIN = [
+            operation({ id: 1, name: 'ttnn.to_device', outputs: [{ label: '[1, 768]', consumers: [4] }] }),
+            operation({ id: 2, name: 'ttnn.to_device', outputs: [{ label: '[768, 3072]', consumers: [4] }] }),
+            operation({ id: 3, name: 'ttnn.to_device', outputs: [{ label: '[1, 3072]', consumers: [4] }] }),
+            operation({ id: 4, name: 'ttnn.linear', outputs: [{ consumers: [5] }] }),
+            operation({ id: 5, name: 'ttnn.layer_norm' }),
+        ];
+
+        const FAN_ID = 'weights:1';
+
+        it('draws one node for the fan and keeps its consumer', () => {
+            const graph = buildOpGraph(FAN_CHAIN, {
+                hideDeallocate: false,
+                deviceSubgraphs: [],
+                collapseWeightLoads: true,
+            });
+
+            expect(graph.nodes.map((node) => node.id)).toEqual([FAN_ID, '4', '5']);
+            expect(nodeById(graph, FAN_ID).data.filterString).toBe('3 weight loads');
+        });
+
+        it('joins the fan to its consumer with a single unlabelled edge', () => {
+            // Three tensors of different shapes between the same two nodes are one
+            // dependency drawn once. The labels would be three shapes on one line. #1980
+            const graph = buildOpGraph(FAN_CHAIN, {
+                hideDeallocate: false,
+                deviceSubgraphs: [],
+                collapseWeightLoads: true,
+            });
+            const intoConsumer = graph.edges.filter((edge) => edge.target === '4');
+
+            expect(intoConsumer).toHaveLength(1);
+            expect(intoConsumer[0].source).toBe(FAN_ID);
+            expect(intoConsumer[0].label).toBeUndefined();
+        });
+
+        it('leaves every member and its labelled edge when switched off', () => {
+            const graph = buildOpGraph(FAN_CHAIN, { hideDeallocate: false, deviceSubgraphs: [] });
+
+            expect(graph.nodes.map((node) => node.id)).toEqual(['1', '2', '3', '4', '5']);
+            expect(graph.edges.filter((edge) => edge.target === '4')).toHaveLength(3);
+            expect(edgeBetweenOperations(graph, 2, 4).label).toBe('[768, 3072]');
+        });
+
+        it('unfolds a fan the expansion set names', () => {
+            // The reported bug: the expander pill rendered and clicking it did nothing,
+            // because the fan was rebuilt and folded regardless of what had been asked
+            // for. #1980
+            const graph = buildOpGraph(FAN_CHAIN, {
+                hideDeallocate: false,
+                deviceSubgraphs: [],
+                collapseWeightLoads: true,
+                expandedBlockIds: [FAN_ID],
+            });
+
+            expect(graph.nodes.map((node) => node.id)).toEqual(['1', '2', '3', '4', '5']);
+            expect(edgeBetweenOperations(graph, 2, 4).label).toBe('[768, 3072]');
+        });
+
+        it('folds a fan the expansion set does not name', () => {
+            // Absence means folded for a fan, the opposite of grouping's #1977 default:
+            // the switch is on, so an unnamed fan has not been asked for.
+            const graph = buildOpGraph(FAN_CHAIN, {
+                hideDeallocate: false,
+                deviceSubgraphs: [],
+                collapseWeightLoads: true,
+                expandedBlockIds: [],
+            });
+
+            expect(graph.nodes.map((node) => node.id)).toEqual([FAN_ID, '4', '5']);
+        });
+
+        it('keeps the fan out of the blocks the toolbar counts', () => {
+            // Grouping owns that count; a fan is plumbing, not a detected layer, and
+            // Fold / Unroll-all must go on meaning what they meant. #1980
+            const graph = buildOpGraph(FAN_CHAIN, {
+                hideDeallocate: false,
+                deviceSubgraphs: [],
+                collapseWeightLoads: true,
+            });
+
+            expect(graph.blocks ?? []).toHaveLength(0);
+        });
+
+        it('does not collapse loaders that feed different consumers', () => {
+            const shared = [
+                operation({ id: 1, name: 'ttnn.to_device', outputs: [{ consumers: [3] }] }),
+                operation({ id: 2, name: 'ttnn.to_device', outputs: [{ consumers: [3, 4] }] }),
+                operation({ id: 3, name: 'ttnn.linear', outputs: [{ consumers: [4] }] }),
+                operation({ id: 4, name: 'ttnn.linear' }),
+            ];
+            const graph = buildOpGraph(shared, {
+                hideDeallocate: false,
+                deviceSubgraphs: [],
+                collapseWeightLoads: true,
+            });
+
+            expect(graph.nodes.map((node) => node.id)).toEqual(['1', '2', '3', '4']);
+        });
+    });
+
     describe('repeat blocks', () => {
         const REPEAT_CHAIN = [
             operation({ id: 1, name: 'prefix', outputs: [{ consumers: [2] }] }),
@@ -431,11 +657,17 @@ describe('buildOpGraph', () => {
         const FIRST_BLOCK_ID = 'block:0:2';
         const SECOND_BLOCK_ID = 'block:0:4';
 
+        // Repeats render unrolled unless something folds them, so a test about the
+        // collapsed rendering has to ask for the fold: an empty expansion set is
+        // "fold every instance", where absent means "nothing folded yet". #1977
+        const buildFolded = (operations: OpGraphSourceOperation[], hideDeallocate: boolean) =>
+            buildOpGraph(operations, { hideDeallocate, deviceSubgraphs: [], expandedBlockIds: [] });
+
         const typesOf = (graph: ReturnType<typeof buildOpGraph>) =>
             graph.nodes.map((node) => ({ id: node.id, type: node.type, operationId: node.data.operationId }));
 
         it('replaces each collapsed copy with a block node and hides the members', () => {
-            const graph = build(REPEAT_CHAIN, false);
+            const graph = buildFolded(REPEAT_CHAIN, false);
 
             expect(typesOf(graph)).toEqual([
                 { id: '1', type: OpGraphNodeType.OP, operationId: 1 },
@@ -450,7 +682,7 @@ describe('buildOpGraph', () => {
             // The node's meta line and the panel's stats rows are on screen at the
             // same time; they were derived twice, by independent paths, so drift
             // would have shown as the two disagreeing about one block.
-            const graph = build(REPEAT_CHAIN, false);
+            const graph = buildFolded(REPEAT_CHAIN, false);
             const node = nodeById(graph, FIRST_BLOCK_ID);
             const summary = graph.blocks?.find((block) => block.instanceId === FIRST_BLOCK_ID);
 
@@ -467,7 +699,7 @@ describe('buildOpGraph', () => {
         });
 
         it('sums duration and memory onto the collapsed node', () => {
-            const graph = build(REPEAT_CHAIN, false);
+            const graph = buildFolded(REPEAT_CHAIN, false);
             const first = nodeById(graph, FIRST_BLOCK_ID);
 
             expect(first.data.opCount).toBe(2);
@@ -480,7 +712,7 @@ describe('buildOpGraph', () => {
         });
 
         it('reroutes crossing edges onto the block and drops edges inside it', () => {
-            const graph = build(REPEAT_CHAIN, false);
+            const graph = buildFolded(REPEAT_CHAIN, false);
 
             expect(edgeBetweenOperations(graph, 1, 2).source).toBe('1');
             expect(edgeBetweenOperations(graph, 1, 2).target).toBe(FIRST_BLOCK_ID);
@@ -540,7 +772,7 @@ describe('buildOpGraph', () => {
                 }),
                 operation({ id: 5, name: 'suffix' }),
             ];
-            const graph = build(twoTensors, false);
+            const graph = buildFolded(twoTensors, false);
             const between = graph.edges.filter((edge) => edge.source === 'block:0:1' && edge.target === 'block:0:3');
 
             expect(between).toHaveLength(1);
@@ -552,6 +784,7 @@ describe('buildOpGraph', () => {
             const graph = buildOpGraph(REPEAT_CHAIN, {
                 hideDeallocate: false,
                 deviceSubgraphs: [deviceSubgraph({ operationId: 2 })],
+                expandedBlockIds: [],
             });
 
             expect(graph.nodes.some((node) => node.type === OpGraphNodeType.DEVICE_GROUP)).toBe(false);
@@ -573,9 +806,11 @@ describe('buildOpGraph', () => {
                 operation({ id: 6, name: 'suffix' }),
             ];
 
-            expect(build(withDeallocate, false).nodes.every((node) => node.type === OpGraphNodeType.OP)).toBe(true);
+            expect(
+                buildFolded(withDeallocate, false).nodes.filter((node) => node.type === OpGraphNodeType.BLOCK),
+            ).toHaveLength(0);
 
-            const hidden = build(withDeallocate, true);
+            const hidden = buildFolded(withDeallocate, true);
             expect(hidden.nodes.filter((node) => node.type === OpGraphNodeType.BLOCK)).toHaveLength(2);
             expect(hidden.nodes.some((node) => node.data.filterString === 'ttnn.deallocate')).toBe(false);
         });

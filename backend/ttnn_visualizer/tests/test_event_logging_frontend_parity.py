@@ -2,10 +2,10 @@
 #
 # SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-"""Pins the frontend usage vocabulary to this package's.
+"""Pins the frontend event-log vocabulary to this package's.
 
 The client validates nothing — it cannot, since anything ``ALLOWED_ORIGINS`` permits could
-post — so ``usage.py`` is the authority and ``src/definitions/UsageEvent.ts`` is a copy.
+post — so ``event_logging.py`` is the authority and ``src/definitions/EventLogEvent.ts`` is a copy.
 Nothing at runtime would report them diverging: the endpoint answers 422 and the client
 swallows it by design. This module is the only thing that notices.
 
@@ -24,37 +24,37 @@ from pathlib import Path
 from typing import Dict, Set, Type
 
 import pytest
-from ttnn_visualizer import usage
-from ttnn_visualizer.usage import (
+from ttnn_visualizer import event_logging
+from ttnn_visualizer.event_logging import (
     _DETAIL_FIELD_ENUMS,
     CLIENT_EVENT_DETAIL_FIELDS,
     DETAILS_FIELD,
     EVENT_FIELD,
-    MAX_USAGE_BATCH_EVENTS,
+    MAX_EVENT_LOG_BATCH_EVENTS,
+    EventLogEvent,
+    EventLogView,
     ReportKind,
     ReportLoadFailureReason,
     ReportSource,
-    UsageEvent,
-    UsageView,
 )
 
 _REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
-_DEFINITIONS = _REPOSITORY_ROOT / "src" / "definitions" / "UsageEvent.ts"
-_RECORD_USAGE = _REPOSITORY_ROOT / "src" / "functions" / "recordUsage.ts"
+_DEFINITIONS = _REPOSITORY_ROOT / "src" / "definitions" / "EventLogEvent.ts"
+_RECORD_EVENT = _REPOSITORY_ROOT / "src" / "functions" / "recordEvent.ts"
 _ENDPOINTS = _REPOSITORY_ROOT / "src" / "definitions" / "Endpoints.ts"
 
-# Declared in ``usage.py`` but never posted by a client: they describe the machine this
+# Declared in ``event_logging.py`` but never posted by a client: they describe the machine this
 # process runs on, and only the server can know them. Named here so that adding a
 # client-facing enum without a TypeScript copy fails
 # :func:`test_every_client_facing_enum_is_paired`, rather than going unnoticed.
 _SERVER_ONLY_ENUMS = frozenset({"DeploymentMode", "LaunchMode", "OperatingSystem"})
 
 _PAIRED_ENUMS: Dict[str, Type[Enum]] = {
-    "UsageEvent": UsageEvent,
+    "EventLogEvent": EventLogEvent,
     "ReportKind": ReportKind,
     "ReportSource": ReportSource,
     "ReportLoadFailureReason": ReportLoadFailureReason,
-    "UsageView": UsageView,
+    "EventLogView": EventLogView,
 }
 
 
@@ -107,13 +107,13 @@ def _enum_values(source: str, name: str) -> Set[str]:
     return values
 
 
-def _payload_detail_keys(source: str, event: UsageEvent) -> Set[str]:
-    """The keys of the `details` object in the `UsageEventPayload` branch for one event."""
+def _payload_detail_keys(source: str, event: EventLogEvent) -> Set[str]:
+    """The keys of the `details` object in the `EventLogEventPayload` branch for one event."""
     branch = _require_match(
-        rf"event:\s*UsageEvent\.{event.name};\s*\n?\s*details:\s*{{(.*?)}}",
+        rf"event:\s*EventLogEvent\.{event.name};\s*\n?\s*details:\s*{{(.*?)}}",
         source,
         re.DOTALL,
-        f"No UsageEventPayload branch for {event.name}",
+        f"No EventLogEventPayload branch for {event.name}",
     )
 
     return set(re.findall(r"(\w+)\s*:", branch.group(1)))
@@ -124,7 +124,7 @@ def test_every_enum_matches_its_typescript_copy(name, enumeration):
     values = _enum_values(_read(_DEFINITIONS), name)
 
     assert values == {member.value for member in enumeration}, (
-        f"{name} has diverged from usage.py. The client would emit events this endpoint "
+        f"{name} has diverged from event_logging.py. The client would emit events this endpoint "
         f"rejects, and both sides are silent about it."
     )
 
@@ -140,13 +140,13 @@ def test_every_client_event_declares_exactly_the_expected_details(event):
 
 
 def test_the_client_payload_cannot_express_a_server_only_event():
-    # `app_start` is a real `UsageEvent` member, so it has to be in the TS enum — but a
+    # `app_start` is a real `EventLogEvent` member, so it has to be in the TS enum — but a
     # payload branch for it would let a page forge the population every other figure is
     # read against.
     source = _read(_DEFINITIONS)
 
-    assert UsageEvent.APP_START not in CLIENT_EVENT_DETAIL_FIELDS
-    assert f"UsageEvent.{UsageEvent.APP_START.name};" not in source
+    assert EventLogEvent.APP_START not in CLIENT_EVENT_DETAIL_FIELDS
+    assert f"EventLogEvent.{EventLogEvent.APP_START.name};" not in source
 
 
 def test_the_client_batch_cap_matches_the_write_atomicity_cap():
@@ -154,16 +154,16 @@ def test_the_client_batch_cap_matches_the_write_atomicity_cap():
     # batches this endpoint refuses wholesale.
     declared = _require_match(
         r"const MAX_BUFFERED_EVENTS = (\d+);",
-        _read(_RECORD_USAGE),
+        _read(_RECORD_EVENT),
         0,
-        "No MAX_BUFFERED_EVENTS in recordUsage.ts",
+        "No MAX_BUFFERED_EVENTS in recordEvent.ts",
     )
 
-    assert int(declared.group(1)) == MAX_USAGE_BATCH_EVENTS
+    assert int(declared.group(1)) == MAX_EVENT_LOG_BATCH_EVENTS
 
 
 def test_every_client_facing_enum_is_paired():
-    """A new enum in ``usage.py`` must gain a TypeScript copy or be declared server-only.
+    """A new enum in ``event_logging.py`` must gain a TypeScript copy or be declared server-only.
 
     ``_PAIRED_ENUMS`` is hand-maintained, so without this the failure mode the parity tests
     exist to prevent reappears one level up: an enum added here and forgotten in the client
@@ -171,7 +171,7 @@ def test_every_client_facing_enum_is_paired():
     """
     declared = {
         name
-        for name, value in vars(usage).items()
+        for name, value in vars(event_logging).items()
         if isinstance(value, type) and issubclass(value, Enum) and value is not Enum
     }
 
@@ -187,7 +187,10 @@ def test_the_client_posts_to_the_route_the_blueprint_registers():
     from ttnn_visualizer.app import create_app
 
     declared = _require_match(
-        r"USAGE = '([^']+)'", _read(_ENDPOINTS), 0, "No USAGE member in Endpoints.ts"
+        r"EVENT_LOGGING = '([^']+)'",
+        _read(_ENDPOINTS),
+        0,
+        "No EVENT_LOGGING member in Endpoints.ts",
     ).group(1)
 
     rules = {
@@ -200,28 +203,28 @@ def test_the_client_posts_to_the_route_the_blueprint_registers():
 
 
 def test_the_client_envelope_key_matches_the_route():
-    """``{ events }`` in the sender against ``_USAGE_EVENTS_FIELD`` in the route.
+    """``{ events }`` in the sender against ``_EVENT_LOG_EVENTS_FIELD`` in the route.
 
     Renaming one leaves the other posting a body the handler reads as empty, answered with
     a 400 the client never surfaces.
     """
-    from ttnn_visualizer.views import _USAGE_EVENTS_FIELD
+    from ttnn_visualizer.views import _EVENT_LOG_EVENTS_FIELD
 
     declared = _require_match(
-        r"axiosInstance\s*\.post\(Endpoints\.USAGE,\s*\{\s*(\w+)\s*\}\)",
-        _read(_RECORD_USAGE),
+        r"axiosInstance\s*\.post\(Endpoints\.EVENT_LOGGING,\s*\{\s*(\w+)\s*\}\)",
+        _read(_RECORD_EVENT),
         re.DOTALL,
-        "No axiosInstance.post(Endpoints.USAGE, { ... }) in recordUsage.ts",
+        "No axiosInstance.post(Endpoints.EVENT_LOGGING, { ... }) in recordEvent.ts",
     ).group(1)
 
-    assert declared == _USAGE_EVENTS_FIELD
+    assert declared == _EVENT_LOG_EVENTS_FIELD
 
 
 def test_a_full_batch_of_the_largest_events_fits_the_request_cap():
     """The client knows the count cap but not the byte cap; this is what defends it.
 
-    ``MAX_USAGE_BATCH_EVENTS`` is mirrored in ``recordUsage.ts`` and pinned above, so an
-    oversized *batch* is unreachable from this client. ``MAX_USAGE_REQUEST_BYTES`` is not
+    ``MAX_EVENT_LOG_BATCH_EVENTS`` is mirrored in ``recordEvent.ts`` and pinned above, so an
+    oversized *batch* is unreachable from this client. ``MAX_EVENT_LOG_REQUEST_BYTES`` is not
     mirrored anywhere in ``src/``, and the endpoint enforces it as a 413 that the client
     swallows by design — so consuming the headroom would surface as events quietly going
     missing, not as a failure.
@@ -229,7 +232,10 @@ def test_a_full_batch_of_the_largest_events_fits_the_request_cap():
     Built from the enums rather than a fixed string so that widening any of them, or adding
     a detail field, is what moves the number.
     """
-    from ttnn_visualizer.views import _USAGE_EVENTS_FIELD, MAX_USAGE_REQUEST_BYTES
+    from ttnn_visualizer.views import (
+        _EVENT_LOG_EVENTS_FIELD,
+        MAX_EVENT_LOG_REQUEST_BYTES,
+    )
 
     def widest(field: str) -> str:
         return max((member.value for member in _DETAIL_FIELD_ENUMS[field]), key=len)
@@ -245,10 +251,10 @@ def test_a_full_batch_of_the_largest_events_fits_the_request_cap():
         key=lambda entry: len(json.dumps(entry)),
     )
 
-    body = json.dumps({_USAGE_EVENTS_FIELD: [largest] * MAX_USAGE_BATCH_EVENTS})
+    body = json.dumps({_EVENT_LOG_EVENTS_FIELD: [largest] * MAX_EVENT_LOG_BATCH_EVENTS})
 
-    assert len(body.encode("utf-8")) < MAX_USAGE_REQUEST_BYTES, (
+    assert len(body.encode("utf-8")) < MAX_EVENT_LOG_REQUEST_BYTES, (
         "A full batch of the largest event the client can express no longer fits "
-        "MAX_USAGE_REQUEST_BYTES. The endpoint would answer 413 and the client would "
+        "MAX_EVENT_LOG_REQUEST_BYTES. The endpoint would answer 413 and the client would "
         "swallow it, so the events would simply stop arriving."
     )

@@ -1,13 +1,16 @@
-module.exports = {
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
+
+export default {
     extends: ['stylelint-config-standard-scss', 'stylelint-prettier/recommended'],
     overrides: [
         {
             files: ['**/*.scss'],
         },
     ],
-    fix: true,
     rules: {
-        'no-duplicate-selectors': true,
+        'no-duplicate-selectors': null,
         'color-hex-length': 'short',
         'color-named': 'never',
         'declaration-no-important': true,

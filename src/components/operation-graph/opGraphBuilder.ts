@@ -10,9 +10,11 @@ import {
     layoutDeviceSubgraph,
     layoutOpGraph,
 } from './opGraphLayout';
-import { detectRepeatBlocks } from './opGraphRepeatBlocks';
+import { detectorFor } from './opGraphBlockDetectors';
+import { detectWeightFans } from './opGraphWeightFans';
 import { formatBlockMeta } from './opGraphBlockMeta';
 import { sumOptional } from '../../functions/math';
+import { OpGraphBlockKind } from './opGraphTypes';
 import {
     type OpGraphBlockSummary,
     type OpGraphBuildOptions,
@@ -33,6 +35,17 @@ export interface CandidateEdge {
     label: string;
     tensorId: number;
 }
+
+/**
+ * One class per detector, so a reader can tell a repeated subgraph from a named layer
+ * from a fan of weight loads at a glance. The colours themselves are `--graph-block-*`
+ * tokens in `_base.scss`; nothing here knows a hex value. #1982
+ */
+const BLOCK_KIND_CLASS: Readonly<Record<OpGraphBlockKind, string>> = {
+    [OpGraphBlockKind.REPEAT]: 'op-graph-block-repeat',
+    [OpGraphBlockKind.LAYER]: 'op-graph-block-layer',
+    [OpGraphBlockKind.WEIGHTS]: 'op-graph-block-weights',
+};
 
 const isDeallocate = (name: string): boolean => DEALLOCATE_OP_NAME_LIST.includes(name.toLowerCase());
 
@@ -75,9 +88,17 @@ export function getKeptOperations(
 
 export function buildOpGraph(
     operations: OpGraphSourceOperation[],
-    { hideDeallocate, deviceSubgraphs, expandedBlockIds = [], detectedBlocks: providedBlocks }: OpGraphBuildOptions,
+    {
+        hideDeallocate,
+        deviceSubgraphs,
+        expandedBlockIds,
+        grouping,
+        collapseWeightLoads,
+        detectedBlocks: providedBlocks,
+        candidates: providedCandidates,
+    }: OpGraphBuildOptions,
 ): OpGraphBuiltGraph {
-    const candidates = collectCandidateEdges(operations);
+    const candidates = providedCandidates ?? collectCandidateEdges(operations);
 
     const subgraphByOperationId = new Map<number, OpGraphDeviceSubgraph>(
         deviceSubgraphs.map((subgraph) => [subgraph.operationId, subgraph]),
@@ -102,11 +123,16 @@ export function buildOpGraph(
     const operationById = new Map<number, OpGraphSourceOperation>(
         keptOperations.map((operation) => [operation.id, operation]),
     );
-    const detectedBlocks = providedBlocks ?? detectRepeatBlocks(keptOperations);
-    const expandedBlocks = new Set<string>(expandedBlockIds);
+    const detectedBlocks = providedBlocks ?? detectorFor(grouping)(keptOperations);
+    // Detections are still reported when nothing has been folded, so the toolbar can
+    // offer Fold; they are just not applied. Folding on first render decided for the
+    // user, and it cannot be expressed as an id list because the ids only exist once
+    // detection has run. #1977
+    const hasFoldDecision = expandedBlockIds !== undefined;
+    const expandedBlocks = new Set<string>(expandedBlockIds ?? []);
     const collapsedInstanceByOpId = new Map<number, RepeatBlockInstance>();
     for (const instance of detectedBlocks) {
-        if (!expandedBlocks.has(instance.instanceId)) {
+        if (hasFoldDecision && !expandedBlocks.has(instance.instanceId)) {
             for (const operationId of instance.operationIds) {
                 collapsedInstanceByOpId.set(operationId, instance);
             }
@@ -115,6 +141,33 @@ export function buildOpGraph(
 
     const renderedNodeIdOf = (operationId: number): string =>
         collapsedInstanceByOpId.get(operationId)?.instanceId ?? String(operationId);
+
+    // Added to the same map grouping uses, which is the whole integration: `renderedNodeIdOf`
+    // then resolves a member to its fan, and the edge path below already suppresses the
+    // label and dedupes parallel edges across a collapsed boundary. Detected here rather
+    // than in a pre-pass because "the same rendered node" depends on what grouping just
+    // folded. #1980
+    if (collapseWeightLoads) {
+        const fans = detectWeightFans({
+            keptOperations,
+            candidates,
+            kept,
+            renderedNodeIdOf,
+            isClaimed: (operationId) => collapsedInstanceByOpId.has(operationId),
+        });
+        for (const fan of fans) {
+            // Unlike a grouping block, a fan's absence from the expansion set means
+            // folded: the switch is on by default, so "no decision" is the folded state
+            // rather than the unrolled one #1977 gives grouping. Without this the
+            // expander pill rendered, incremented the set, and the fan folded anyway.
+            // #1980
+            if (!expandedBlocks.has(fan.instanceId)) {
+                for (const operationId of fan.operationIds) {
+                    collapsedInstanceByOpId.set(operationId, fan);
+                }
+            }
+        }
+    }
 
     const nodes: OpGraphFlowNode[] = [];
     const deviceOpNodes: OpGraphFlowNode[] = [];
@@ -137,6 +190,9 @@ export function buildOpGraph(
                 nodes.push({
                     id: collapsedInstance.instanceId,
                     type: OpGraphNodeType.BLOCK,
+                    // Static, so it rides on the built node rather than being recomputed
+                    // by the restyle memo on every selection and filter keystroke. #1982
+                    className: BLOCK_KIND_CLASS[collapsedInstance.kind],
                     position: { x: 0, y: 0 },
                     ...size,
                     data: {
@@ -150,6 +206,7 @@ export function buildOpGraph(
                         filterString: collapsedInstance.label,
                         deviceOperationCount: 0,
                         blockInstanceId: collapsedInstance.instanceId,
+                        blockKind: collapsedInstance.kind,
                         memberNames: members.map((member) => member.name),
                         memberOperationIds: collapsedInstance.operationIds,
                         opCount,

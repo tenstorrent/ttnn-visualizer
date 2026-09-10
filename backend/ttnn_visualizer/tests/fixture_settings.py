@@ -22,7 +22,7 @@ from ttnn_visualizer.settings import (
 # Settings an exported environment variable would otherwise reach through
 # ``DefaultConfig``. Every name in ``test_settings._OVERRIDABLE_SETTINGS`` was exported
 # individually against the full suite; these are the ones that changed a behaviour the
-# suite asserts, plus the three the shared fixture already set. Kept in step with
+# suite asserts, plus the values the shared fixture already set. Kept in step with
 # ``_INHERITED_BY_TEST_FIXTURES`` by ``test_the_test_fixtures_pin_every_env_reachable_setting``.
 PINNED_ENV_SETTINGS = frozenset(
     {
@@ -30,6 +30,7 @@ PINNED_ENV_SETTINGS = frozenset(
         "DEBUG",
         "MALWARE_SCANNER",
         "MAX_CONTENT_LENGTH",
+        "SECRET_KEY",
         "SERVER_MODE",
         "SESSION_MAX_UPLOADED_REPORTS",
         "SSH_DEFAULT_PERFORMANCE_PATH",
@@ -82,6 +83,7 @@ def base_test_settings(tmpdir: str, **overrides: Any) -> Dict[str, Any]:
         "TESTING": True,
         "SQLALCHEMY_DATABASE_URI": f"sqlite:///{Path(tmpdir) / 'app.db'}",
         "SERVER_MODE": True,
+        "SECRET_KEY": "test-secret-key-with-at-least-32-bytes",
         "USE_WEBSOCKETS": True,
         "TT_METAL_HOME": None,
         "MALWARE_SCANNER": None,

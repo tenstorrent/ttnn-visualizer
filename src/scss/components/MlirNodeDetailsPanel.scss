@@ -189,7 +189,7 @@
     margin: 0;
     color: $tt-grey-7;
     font-size: 11px;
-    word-break: break-word;
+    overflow-wrap: anywhere;
     min-width: 0;
 }
 
@@ -223,7 +223,7 @@
     font-family: monospace;
     font-size: 10px;
     color: $tt-grey-7;
-    word-break: break-word;
+    overflow-wrap: anywhere;
 }
 
 .mlir-attr-empty {

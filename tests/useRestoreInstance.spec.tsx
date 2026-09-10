@@ -35,7 +35,7 @@ vi.mock('../src/hooks/useRemote', () => ({
     }),
 }));
 
-vi.mock('../src/functions/reportLoadUsage', () => ({
+vi.mock('../src/functions/reportLoadEvents', () => ({
     recordReportLoaded,
     recordReportLoadFailed,
 }));

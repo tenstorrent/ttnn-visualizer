@@ -9,6 +9,7 @@ import { IconNames } from '@blueprintjs/icons';
 import { Link } from 'react-router';
 import { BoundType, ColumnDefinition, ColumnKeys } from '../definitions/PerfTable';
 import { TypedPerfTableRow } from '../model/PerfTable';
+import { isFlagEnabled } from './getServerConfig';
 import { MIN_TOTAL_PERCENT } from '../definitions/PerfHeuristics';
 import { OperationDescription } from '../model/APIData';
 import { formatMemorySize, formatPercentage, formatSize, toSecondsPretty } from './math';
@@ -78,7 +79,7 @@ export const formatCell = (
     }
 
     const value = row[key];
-    let formatted: string | boolean | string[];
+    let formatted: string;
 
     if (value === null || value === '' || Number.isNaN(value)) {
         return '';
@@ -355,7 +356,7 @@ export const getCellColour = (row: TypedPerfTableRow, key: ColumnKeys): CellColo
     }
 
     if (key === ColumnKeys.Cores && keyValue != null) {
-        return getCoreColour(keyValue);
+        return getCoreColour(keyValue, row.available_cores, row.dram_sharded);
     }
 
     if (key === ColumnKeys.OpCode) {
@@ -430,15 +431,30 @@ export const getKernelRiscColour = (riscUs: number, deviceKernelUs: number | nul
     return share >= KERNEL_CRITICAL_PATH_SHARE ? CellColour.Blue : DEFAULT_COLOUR;
 };
 
-export const getCoreColour = (value: string | string[] | boolean | number): CellColour => {
-    const cores = (typeof value === 'string' ? parseInt(value, 10) : value) as number;
+export const getCoreColour = (
+    value: string | string[] | boolean | number,
+    availableCores: string | number | null | undefined = null,
+    dramSharded: boolean | string | null | undefined = null,
+): CellColour => {
+    const parsedCores = typeof value === 'string' ? parseInt(value, 10) : value;
+    const cores = typeof parsedCores === 'number' && !Number.isNaN(parsedCores) ? parsedCores : null;
+    const parsedAvailableCores = typeof availableCores === 'string' ? parseInt(availableCores, 10) : availableCores;
+    const normalisedAvailableCores =
+        typeof parsedAvailableCores === 'number' && !Number.isNaN(parsedAvailableCores) ? parsedAvailableCores : null;
+    const isDramSharded = isFlagEnabled(dramSharded);
 
     if (cores != null) {
-        if (cores < 10) {
+        const usesLittleOfBudget = normalisedAvailableCores == null || cores < normalisedAvailableCores / 2;
+
+        if (isDramSharded) {
+            return CellColour.Green;
+        }
+
+        if (cores < 10 && usesLittleOfBudget) {
             return CellColour.Red;
         }
 
-        if (cores === 64) {
+        if (normalisedAvailableCores != null && cores === normalisedAvailableCores) {
             return CellColour.Green;
         }
     }

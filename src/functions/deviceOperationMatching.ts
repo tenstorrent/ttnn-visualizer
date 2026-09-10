@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import { PerfTableRow } from '../model/PerfTable';
-import { DeviceOperationMapping } from '../model/DeviceOperationMapping';
+import { DeviceOperationMapping, DeviceOperationOrderCandidates } from '../model/DeviceOperationMapping';
 import { OpType } from '../definitions/Performance';
 
 /**
@@ -83,6 +83,26 @@ const alignToPerfRows = (
 const alignableRowsOf = (perfRows: PerfTableRow[]): PerfTableRow[] =>
     perfRows.filter((perfRow) => perfRow.op_type !== OpType.SIGNPOST);
 
+const alignCollapsedToPerfRows = (
+    deviceOperations: DeviceOperationMapping[],
+    perfRows: PerfTableRow[],
+    numDevices: number,
+): DeviceOperationMapping[] => {
+    if (numDevices <= 1) {
+        return [];
+    }
+
+    const collapsedOperations = collapseMultideviceOperations(deviceOperations, numDevices);
+
+    // A valid per-device list contributes every operation exactly once per
+    // device. A smaller subset can prefix-match and falsely mark a report linked.
+    if (collapsedOperations.length * numDevices !== deviceOperations.length) {
+        return [];
+    }
+
+    return alignToPerfRows(collapsedOperations, perfRows);
+};
+
 /**
  * @description Match a memory report's device operations against a performance
  * report's rows, returning the mappings when the two sequences describe the same
@@ -104,11 +124,76 @@ export const matchDeviceOperationsToPerf = (
         return directMatch;
     }
 
-    // With nothing to collapse on, the fallback would repeat the pass that just
-    // failed.
-    if (numDevices <= 1) {
+    return alignCollapsedToPerfRows(deviceOperations, alignableRows, numDevices);
+};
+
+const hasSameDeviceOperations = (
+    functionStartOperations: DeviceOperationMapping[],
+    functionEndOperations: DeviceOperationMapping[],
+): boolean => {
+    if (functionStartOperations.length !== functionEndOperations.length) {
+        return false;
+    }
+
+    const operationCountByKey = new Map<string, number>();
+
+    for (const { id, name } of functionStartOperations) {
+        const key = JSON.stringify([id, name]);
+        operationCountByKey.set(key, (operationCountByKey.get(key) ?? 0) + 1);
+    }
+
+    for (const { id, name } of functionEndOperations) {
+        const key = JSON.stringify([id, name]);
+        const remaining = operationCountByKey.get(key);
+
+        if (!remaining) {
+            return false;
+        }
+
+        operationCountByKey.set(key, remaining - 1);
+    }
+
+    return true;
+};
+
+/**
+ * TODO: remove once memory and performance reports carry a shared run id (#1800)
+ * @description Match nested device operations whose profiler events can be
+ * child-first because a child's workload is enqueued before its parent's. Start
+ * order remains preferred for reports whose profiler rows are parent-first;
+ * end order is the fallback when the same operations are child-first. Raw orders
+ * are tried before either multi-device collapse so a spurious collapsed prefix
+ * cannot suppress the complete end-order match. See #1860.
+ */
+export const matchDeviceOperationOrdersToPerf = (
+    { functionStartOperations, functionEndOperations }: DeviceOperationOrderCandidates,
+    perfRows: PerfTableRow[],
+    numDevices: number,
+): DeviceOperationMapping[] => {
+    const alignableRows = alignableRowsOf(perfRows);
+    const functionStartMatch = alignToPerfRows(functionStartOperations, alignableRows);
+
+    if (functionStartMatch.length > 0) {
+        return functionStartMatch;
+    }
+
+    // An interrupted capture can omit function-end events. Since alignment
+    // tolerates trailing perf rows, only a complete reordering is safe to retry.
+    if (!hasSameDeviceOperations(functionStartOperations, functionEndOperations)) {
         return [];
     }
 
-    return alignToPerfRows(collapseMultideviceOperations(deviceOperations, numDevices), alignableRows);
+    const functionEndMatch = alignToPerfRows(functionEndOperations, alignableRows);
+
+    if (functionEndMatch.length > 0) {
+        return functionEndMatch;
+    }
+
+    const collapsedFunctionStartMatch = alignCollapsedToPerfRows(functionStartOperations, alignableRows, numDevices);
+
+    if (collapsedFunctionStartMatch.length > 0) {
+        return collapsedFunctionStartMatch;
+    }
+
+    return alignCollapsedToPerfRows(functionEndOperations, alignableRows, numDevices);
 };

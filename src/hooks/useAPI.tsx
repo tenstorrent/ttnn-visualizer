@@ -30,8 +30,8 @@ import parseMemoryConfig, { memoryConfigPattern } from '../functions/parseMemory
 import { MemoryConfig } from '../model/MemoryConfig';
 import getServerConfig from '../functions/getServerConfig';
 import { PerfTableRow } from '../model/PerfTable';
-import { DeviceOperationMapping } from '../model/DeviceOperationMapping';
-import { matchDeviceOperationsToPerf } from '../functions/deviceOperationMatching';
+import { DeviceOperationMapping, DeviceOperationOrderCandidates } from '../model/DeviceOperationMapping';
+import { matchDeviceOperationOrdersToPerf } from '../functions/deviceOperationMatching';
 import memoiseLatest from '../functions/memoiseLatest';
 import {
     PerformanceReportParams,
@@ -184,21 +184,22 @@ const fetchOperationDetails = async (id: number | null): Promise<OperationDetail
     };
 };
 
+type DeviceOperationNodeType = NodeType.function_start | NodeType.function_end;
+
+const getDeviceOperationNameList = (operation: OperationDescription, nodeType: DeviceOperationNodeType): string[] => {
+    if (!Array.isArray(operation.device_operations)) {
+        return [];
+    }
+
+    return operation.device_operations
+        .filter((op) => op.node_type === nodeType && isDeviceOperation(op.params.name))
+        .map((op) => (op.params as DeviceOperationParams).name);
+};
+
 const fetchOperations = async (): Promise<OperationDescription[]> => {
     const tensorList: Map<number, Tensor> = new Map<number, Tensor>();
     const response = await axiosInstance.get<OperationDescription[]>(Endpoints.OPERATIONS_LIST);
     const operationList = response.data;
-
-    const getDeviceOperationNameList = (operation: OperationDescription) => {
-        if (!Array.isArray(operation.device_operations)) {
-            return [];
-        }
-        return operation.device_operations
-            .filter((op) => {
-                return op.node_type === NodeType.function_start && isDeviceOperation(op.params.name);
-            })
-            .map((op) => (op.params as DeviceOperationParams).name);
-    };
 
     return operationList.map((operation: OperationDescription) => {
         updateDeviceOperationId(operation.device_operations);
@@ -241,7 +242,7 @@ const fetchOperations = async (): Promise<OperationDescription[]> => {
             outputs,
             inputs,
             arguments: argumentsWithParsedValues,
-            deviceOperationNameList: getDeviceOperationNameList(operation),
+            deviceOperationNameList: getDeviceOperationNameList(operation, NodeType.function_start),
             processedConnections: processInputsOutputs(operation.device_operations),
         } as OperationDescription;
     });
@@ -853,26 +854,43 @@ export const useGetDeviceOperationsListByOp = () => {
     }, [operations]);
 };
 
-// Memoised across call sites, not per hook invocation: both derived values are
-// read by a handful of hooks and by one component instance per virtualised row,
-// and `useMemo` would run the flatMap and the O(rows) match once for each. The
-// inputs are React Query results, so their identity is shared by every caller in
-// a render pass. Callers must not mutate the results — they share them now.
-const getDeviceOperationsList = memoiseLatest((operations?: OperationDescription[]): DeviceOperationMapping[] => {
-    if (!operations) {
-        return [];
-    }
+// Memoised across call sites, not per hook invocation:
+// `useGetDeviceOperationListPerf` is read by several hooks and by one component
+// instance per virtualised row, so `useMemo` would rebuild both order candidates
+// and rerun the O(rows) match for each. The inputs are shared React Query results.
+// Callers must not mutate the derived values — they share them now.
+const getDeviceOperationOrderCandidates = memoiseLatest(
+    (operations?: OperationDescription[]): DeviceOperationOrderCandidates => {
+        const functionStartOperations: DeviceOperationMapping[] = [];
+        const functionEndOperations: DeviceOperationMapping[] = [];
 
-    return operations.flatMap((operation) =>
-        operation.deviceOperationNameList.map((name) => ({
-            name,
-            id: operation.id,
-            operationName: operation.name,
-        })),
-    );
-});
+        if (!operations) {
+            return { functionStartOperations, functionEndOperations };
+        }
 
-const getDeviceOperationListPerf = memoiseLatest(matchDeviceOperationsToPerf);
+        for (const operation of operations) {
+            for (const name of operation.deviceOperationNameList) {
+                functionStartOperations.push({
+                    name,
+                    id: operation.id,
+                    operationName: operation.name,
+                });
+            }
+
+            for (const name of getDeviceOperationNameList(operation, NodeType.function_end)) {
+                functionEndOperations.push({
+                    name,
+                    id: operation.id,
+                    operationName: operation.name,
+                });
+            }
+        }
+
+        return { functionStartOperations, functionEndOperations };
+    },
+);
+
+const getDeviceOperationListPerf = memoiseLatest(matchDeviceOperationOrdersToPerf);
 
 const getOpToPerfIds = memoiseLatest((matched: DeviceOperationMapping[]) =>
     matched.map(({ id, perfData }) => ({ opId: id, perfId: perfData?.id })),
@@ -903,29 +921,23 @@ const getDeviceOperationListPerfByOpId = memoiseLatest((matched: DeviceOperation
  */
 export const clearReportCaches = (queryClient: QueryClient) => {
     queryClient.clear();
-    getDeviceOperationsList.reset();
+    getDeviceOperationOrderCandidates.reset();
     getDeviceOperationListPerf.reset();
     getOpToPerfIds.reset();
     getDeviceOperationListPerfByOpId.reset();
 };
 
-/**
- * @description Every device operation in the memory report, flattened in report
- * order. Multi-device collapsing happens at match time, not here, because only
- * the performance report reveals which shape this report has (#1810).
- */
-export const useGetDeviceOperationsList = (): DeviceOperationMapping[] => {
-    const { data: operations } = useOperationsList();
-
-    return getDeviceOperationsList(operations);
-};
-
 export const useGetDeviceOperationListPerf = () => {
-    const deviceOperations = useGetDeviceOperationsList();
+    const { data: operations } = useOperationsList();
+    const deviceOperationOrderCandidates = getDeviceOperationOrderCandidates(operations);
     const { data: devices } = useDevices();
     const { data } = useLinkedPerformanceReport();
 
-    return getDeviceOperationListPerf(deviceOperations, (data ?? EMPTY_PERF_RETURN).report, devices?.length ?? 0);
+    return getDeviceOperationListPerf(
+        deviceOperationOrderCandidates,
+        (data ?? EMPTY_PERF_RETURN).report,
+        devices?.length ?? 0,
+    );
 };
 
 /**

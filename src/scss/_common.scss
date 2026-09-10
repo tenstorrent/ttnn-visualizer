@@ -71,11 +71,11 @@ $row-background: $tt-grey-2;
         // Stops lengthy config values breaking the layout - https://github.com/tenstorrent/ttnn-visualizer/issues/809
         // Having this as the default behaviour because all our tables currently require this
         // and use vertical headings (first column) instead of horizontal headings (first row)
-        word-break: break-word;
+        overflow-wrap: anywhere;
 
         &:first-child {
             min-width: 160px; // Stops cells from being too narrow
-            word-break: normal;
+            overflow-wrap: normal;
             width: 160px; // Keeps first column width consistent when other columns have a lot of content
         }
     }

@@ -1,0 +1,376 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
+
+"""The tools themselves. Every one returns an aggregate or a bounded slice.
+
+A perf report is 10^4-10^5 rows of ~35 fields, so no tool returns the table: an
+agent's context is a tighter budget than the browser heap that already forced
+server-side windowing on the NPE view. #1995
+"""
+
+import contextlib
+import io
+import logging
+import sys
+from collections import defaultdict
+from typing import Dict, List, Optional
+
+from ttnn_visualizer.agent.handles import ReportRegistry
+from ttnn_visualizer.csv_queries import (
+    DeviceLogProfilerQueries,
+    OpsPerformanceReportQueries,
+)
+from ttnn_visualizer.models import Instance
+
+logger = logging.getLogger(__name__)
+
+# The projection every tool reads through, stated rather than defaulted.
+#
+# `get_performance_results_report` defaults `hide_host_ops` and `merge_devices`
+# to true and can narrow to a signpost range. Those are view choices: handed to
+# an agent unannounced they produce confident reasoning over a partial set,
+# which is how #1883 lost six features to a filtered link status.
+#
+# So nothing here drops a row. Host ops stay in, and `print_signposts` is true
+# because the name understates it: `filter_by_signpost` drops the signpost rows
+# themselves when it is false, rather than only omitting them from a printout
+# (`perf_report.py:480`). It is inert on this path today -- passing no signpost
+# range means `ignore_signposts`, which returns the frame before the strip can
+# run -- but a projection that exists to not filter should not declare a filter
+# it would honour the moment a tool took a range. Rows carry `op_type`, so an
+# agent can tell a marker from an operation.
+#
+# `merge_devices` is the one filter kept, and deliberately: unmerged rows report
+# the same op once per device, so a merged row is the unit an op is reported in
+# rather than a subset of the report. Every response repeats this projection.
+CANONICAL_PROJECTION: Dict[str, object] = {
+    "hide_host_ops": False,
+    "merge_devices": True,
+    "print_signposts": True,
+}
+
+# Sort keys an agent may ask for, mapped to the report's own field names.
+SORTABLE_METRICS: Dict[str, str] = {
+    "device_time": "device_time",
+    "op_to_op_gap": "op_to_op_gap",
+    "total_percent": "total_percent",
+    "flops": "flops",
+    "dram": "dram",
+    "cores": "cores",
+}
+
+# Metrics a report-level sum is meaningful for. `dram` is GB/s, `flops` is
+# TFLOPS and `cores` is a per-op allocation: adding them across operations
+# produces an authoritative-looking number that is dimensionally nonsense.
+ADDITIVE_METRICS = frozenset({"device_time", "op_to_op_gap", "total_percent"})
+
+DEFAULT_LIMIT = 10
+MAX_LIMIT = 100
+
+
+def _bounded(limit: Optional[int]) -> int:
+    if limit is None:
+        return DEFAULT_LIMIT
+    return max(1, min(int(limit), MAX_LIMIT))
+
+
+def _as_number(value: object) -> Optional[float]:
+    """Report cells arrive as strings, including the numeric ones."""
+    if isinstance(value, bool) or value is None or value == "":
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, str):
+        try:
+            return float(value)
+        except ValueError:
+            return None
+    return None
+
+
+def _rounded(value: Optional[float]) -> Optional[float]:
+    """Nanosecond precision is plenty, and a 17-digit float is context spent."""
+    return None if value is None else round(value, 3)
+
+
+def _canonical_report(registry: ReportRegistry, handle: str) -> Dict:
+    """One generated report per handle; see `ReportRegistry.cached_report`."""
+    return registry.cached_report(handle, _generate_canonical_report)
+
+
+def _generate_canonical_report(instance: Instance, **overrides: object) -> Dict:
+    """Run the report with stdout captured.
+
+    `tt_perf_report` prints its progress and the temp paths it writes to. On a
+    stdio transport that lands in the middle of a JSON-RPC frame and corrupts
+    the stream, so it is captured here rather than at the transport -- a tool
+    called in-process should not write to stdout either.
+    """
+    captured = io.StringIO()
+    with contextlib.redirect_stdout(captured):
+        report = OpsPerformanceReportQueries.generate_report(
+            instance, **{**CANONICAL_PROJECTION, **overrides}
+        )
+    if captured.getvalue().strip():
+        logger.debug("tt-perf-report output: %s", captured.getvalue().strip())
+    return report
+
+
+def _partitioned_caveat(rows: List[Dict]) -> Optional[str]:
+    """Totals assume ops ran sequentially, which a partitioned run breaks.
+
+    tt-perf-report prints this warning itself when a report carries more than one
+    sub-device, but it prints it to the terminal -- no tool response carries it.
+    An agent summing device time across subdevices that ran concurrently would
+    overstate the total and understate every op's share, so any tool reporting a
+    total says so here.
+    """
+    sub_devices = _sub_devices(rows)
+    if len(sub_devices) <= 1:
+        return None
+    return (
+        f"This report spans {len(sub_devices)} sub-devices "
+        f"({', '.join(sorted(sub_devices))}). Ops on different sub-devices can run "
+        "concurrently, so summed device time, total percentages and op-to-op gaps "
+        "overstate elapsed time. Compare ops within one sub-device instead."
+    )
+
+
+def _sub_devices(rows: List[Dict]) -> set:
+    return {
+        str(row.get("sub_device_id", "")).strip()
+        for row in rows
+        if str(row.get("sub_device_id", "")).strip()
+    }
+
+
+def top_ops(
+    registry: ReportRegistry,
+    handle: str,
+    by: str = "device_time",
+    limit: Optional[int] = None,
+) -> Dict[str, object]:
+    """The costliest ops by one metric, with the projection that produced them."""
+    if by not in SORTABLE_METRICS:
+        raise ValueError(
+            f"unknown metric {by!r}; expected one of {', '.join(sorted(SORTABLE_METRICS))}"
+        )
+
+    rows = _canonical_report(registry, handle).get("report", [])
+    field = SORTABLE_METRICS[by]
+
+    ranked = sorted(
+        (row for row in rows if _as_number(row.get(field)) is not None),
+        key=lambda row: _as_number(row.get(field)) or 0.0,
+        reverse=True,
+    )[: _bounded(limit)]
+
+    total: float = sum(_as_number(row.get(field)) or 0.0 for row in rows)
+    ops = [
+        {
+            "id": row.get("id"),
+            "op_code": row.get("op_code") or row.get("raw_op_code"),
+            by: _rounded(_as_number(row.get(field))),
+            "cores": _as_number(row.get("cores")),
+            "device": row.get("device"),
+            "sub_device_id": row.get("sub_device_id") or None,
+            "bound": row.get("bound") or None,
+            # The projection keeps signpost rows deliberately, so the field that
+            # tells a marker from an operation has to survive into the response.
+            "op_type": row.get("op_type") or None,
+        }
+        for row in ranked
+    ]
+
+    result: Dict[str, object] = {
+        "handle": handle,
+        "metric": by,
+        "op_count": len(rows),
+        "returned": len(ops),
+        "ops": ops,
+        "projection": dict(CANONICAL_PROJECTION),
+    }
+    if by in ADDITIVE_METRICS:
+        result[f"{by}_total"] = round(total, 3)
+    caveat = _partitioned_caveat(rows)
+    if caveat:
+        result["caveat"] = caveat
+    return result
+
+
+def zone_timings(
+    registry: ReportRegistry, handle: str, limit: Optional[int] = None
+) -> Dict[str, object]:
+    """Per-zone, per-RISC totals from the device profiler log."""
+    instance = registry.get(handle)
+    metadata = DeviceLogProfilerQueries.read_capture_metadata(instance)
+    clock_mhz = _as_number(metadata.get("CHIP_FREQ[MHz]"))
+
+    with DeviceLogProfilerQueries(instance, stream=True) as queries:
+        summary, pairing = queries.query_zone_summary(limit=_bounded(limit))
+
+    zones = []
+    for entry in summary:
+        total_cycles = entry["total_cycles"]
+        zones.append(
+            {
+                **entry,
+                # A megahertz clock ticks once per microsecond, so cycles over
+                # MHz is already microseconds.
+                # `is not None`, not truthiness: a zone that opened and closed
+                # on the same cycle is a measured zero, not a missing duration.
+                "total_us": (
+                    round(total_cycles / clock_mhz, 3)
+                    if total_cycles is not None and clock_mhz
+                    else None
+                ),
+            }
+        )
+
+    result: Dict[str, object] = {
+        "handle": handle,
+        "arch": metadata.get("ARCH"),
+        "clock_mhz": clock_mhz,
+        "returned": len(zones),
+        "zones": zones,
+        # Said plainly because the number invites the other reading: a zone on 130
+        # cores reports the sum of all 130, not how long the phase took.
+        "note": (
+            "Cycles are summed across every core that ran the zone, so these are "
+            "occupancy totals rather than elapsed time. Durations need the `type` "
+            "column to pair starts with ends; a capture without it reports "
+            "occurrences only."
+        ),
+    }
+    # A truncated capture leaves starts open and a capture that begins mid-zone
+    # leaves ends unmatched. Either way the totals describe only what paired,
+    # which is invisible from the totals themselves.
+    if any(pairing.values()):
+        caveat = (
+            f"{pairing['unmatched_starts']} zone starts and "
+            f"{pairing['unmatched_ends']} ends did not pair, so these totals "
+            "cover only the zones that did. A capture stopped mid-run is the "
+            "usual cause."
+        )
+        if pairing["dropped_starts"]:
+            caveat += (
+                f" A further {pairing['dropped_starts']} starts were dropped at "
+                "the open-zone ceiling, which a well-formed capture does not "
+                "reach — treat this log as malformed."
+            )
+        result["caveat"] = caveat
+    return result
+
+
+def diff_reports(
+    registry: ReportRegistry,
+    handle_a: str,
+    handle_b: str,
+    by: str = "device_time",
+    limit: Optional[int] = None,
+) -> Dict[str, object]:
+    """Per-op-code deltas between two reports.
+
+    Aggregated by op code rather than joined on op id: the question is "did my
+    change help", and a change that adds or reorders ops shifts every id after
+    it, so an id join would report a diff for ops that did not change.
+    """
+    if by not in SORTABLE_METRICS:
+        raise ValueError(
+            f"unknown metric {by!r}; expected one of {', '.join(sorted(SORTABLE_METRICS))}"
+        )
+    # Refused rather than aggregated some other way. A diff groups by op code and
+    # compares the two sides, so for a rate or an allocation every number in the
+    # response is a sum of them: one 10-TFLOPS matmul against two at 8 reads as
+    # 10 -> 16, an apparent gain where every invocation regressed. Whether the
+    # right comparison is a mean, a max, or per-invocation is a product question,
+    # and answering it wrongly is worse than not answering it.
+    if by not in ADDITIVE_METRICS:
+        raise ValueError(
+            f"{by!r} is a per-operation rate or allocation, so summing it across a "
+            f"report is not meaningful; diff_reports accepts "
+            f"{', '.join(sorted(ADDITIVE_METRICS))}. Use top_ops to rank by {by!r}."
+        )
+    field = SORTABLE_METRICS[by]
+
+    sub_devices: set = set()
+
+    def totals_by_op_code(handle: str) -> Dict[str, Dict[str, float]]:
+        rows = _canonical_report(registry, handle).get("report", [])
+        sub_devices.update(_sub_devices(rows))
+        totals: Dict[str, Dict[str, float]] = defaultdict(
+            lambda: {"total": 0.0, "count": 0.0}
+        )
+        for row in rows:
+            value = _as_number(row.get(field))
+            if value is None:
+                continue
+            op_code = str(row.get("op_code") or row.get("raw_op_code") or "").strip()
+            if not op_code:
+                continue
+            totals[op_code]["total"] += value
+            totals[op_code]["count"] += 1
+        return totals
+
+    before = totals_by_op_code(handle_a)
+    after = totals_by_op_code(handle_b)
+
+    changes = []
+    for op_code in set(before) | set(after):
+        before_total = before.get(op_code, {}).get("total", 0.0)
+        after_total = after.get(op_code, {}).get("total", 0.0)
+        changes.append(
+            {
+                "op_code": op_code,
+                f"{by}_before": round(before_total, 3),
+                f"{by}_after": round(after_total, 3),
+                "delta": round(after_total - before_total, 3),
+                "count_before": int(before.get(op_code, {}).get("count", 0)),
+                "count_after": int(after.get(op_code, {}).get("count", 0)),
+            }
+        )
+
+    # Largest movement in either direction: a regression matters as much as a win.
+    changes.sort(
+        key=lambda change: abs(_as_number(change["delta"]) or 0.0), reverse=True
+    )
+
+    result: Dict[str, object] = {
+        "metric": by,
+        "before": handle_a,
+        "after": handle_b,
+        "returned": min(len(changes), _bounded(limit)),
+        "changes": changes[: _bounded(limit)],
+        "projection": dict(CANONICAL_PROJECTION),
+        "grouped_by": "op_code",
+    }
+    result["delta_total"] = round(
+        sum(entry["total"] for entry in after.values())
+        - sum(entry["total"] for entry in before.values()),
+        3,
+    )
+    # A delta of two unsound totals is unsound the same way, and this is the
+    # response most likely to be acted on -- it answers "did my change help".
+    if len(sub_devices) > 1:
+        result["caveat"] = (
+            f"Either report spans {len(sub_devices)} sub-devices "
+            f"({', '.join(sorted(sub_devices))}). Ops on different sub-devices "
+            "can run concurrently, so these summed totals -- and the delta "
+            "between them -- overstate elapsed time."
+        )
+    return result
+
+
+def _stderr_log() -> None:
+    """Keep stdout clear for whatever transport imports this."""
+    logging.basicConfig(stream=sys.stderr, level=logging.INFO)
+
+
+__all__ = [
+    "CANONICAL_PROJECTION",
+    "SORTABLE_METRICS",
+    "diff_reports",
+    "top_ops",
+    "zone_timings",
+]

@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-import { ReportLoadFailureReason } from './UsageEvent';
+import { ReportLoadFailureReason } from './EventLogEvent';
 
 export enum MLIRValidationError {
     OK,

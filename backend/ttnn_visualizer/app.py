@@ -16,7 +16,7 @@ import webbrowser
 from http import HTTPStatus
 from os import environ
 from pathlib import Path
-from typing import cast
+from typing import Any, Mapping
 from urllib.error import URLError
 from urllib.request import urlopen
 
@@ -25,6 +25,20 @@ from dotenv import load_dotenv
 from flask import Flask, abort, jsonify
 from flask_cors import CORS
 from ttnn_visualizer.database_migrations import run_alembic_migrations
+from ttnn_visualizer.event_logging import (
+    RUN_ID_ENV_VAR,
+    compact_if_needed,
+    describe_opt_out,
+    describe_unrecognised_recording_disabled_value,
+    ensure_event_log_id,
+    get_event_log_path,
+    get_event_log_root,
+    get_recording_disabled_reason,
+    get_unrecognised_recording_disabled_value,
+    is_recording_enabled,
+    record_app_start,
+    start_run,
+)
 from ttnn_visualizer.exceptions import (
     DatabaseFileNotFoundException,
     InvalidProfilerPath,
@@ -34,21 +48,15 @@ from ttnn_visualizer.exceptions import (
 )
 from ttnn_visualizer.instances import create_instance_from_local_paths
 from ttnn_visualizer.settings import (
+    DEFAULT_SECRET_KEY,
+    MIN_HOSTED_SECRET_KEY_BYTES,
     Config,
     DefaultConfig,
     build_socketio_origin_check,
 )
-from ttnn_visualizer.usage import (
-    RUN_ID_ENV_VAR,
-    compact_if_needed,
-    describe_opt_out,
-    get_run_id,
-    get_usage_log_path,
-    is_recording_enabled,
-    record_app_start,
-)
 from ttnn_visualizer.utils import (
     find_gunicorn_path,
+    is_flag_enabled,
     migrate_old_data_directory,
     str_to_bool,
 )
@@ -57,6 +65,7 @@ from werkzeug.exceptions import HTTPException
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 logger = logging.getLogger(__name__)
+SENSITIVE_CONFIG_KEYS = frozenset({"SECRET_KEY"})
 
 
 def _get_client_username(server_mode: bool) -> str | None:
@@ -82,8 +91,8 @@ def _build_spa_client_config(app: Flask) -> dict:
         "REPORT_DATA_DIRECTORY": str(app.config["REPORT_DATA_DIRECTORY"]),
         "USERNAME": _get_client_username(server_mode),
         # Recomputed rather than read from ``app.config``: ``from_object`` resolves the
-        # ``_UsageRecordingActive`` descriptor before ``settings_override`` is applied,
-        # so the snapshot can claim recording is on for an app that is in server mode.
+        # ``_EventLoggingActive`` descriptor before ``settings_override`` is applied,
+        # so the snapshot may check the wrong posture's root-level disabled marker.
         # Published under both postures, unlike the local-only metadata below — a missing
         # key would be indistinguishable from a disabled switch, and the client needs to
         # tell those apart to decide whether to post at all.
@@ -106,6 +115,30 @@ def _serialize_spa_js_config(js_config: dict) -> str:
     """Embed client config in a ``<script>`` tag without ``</script>`` breakout."""
     payload = json.dumps(js_config).replace("<", "\\u003c")
     return f"window.TTNN_VISUALIZER_CONFIG = {payload};"
+
+
+def _validate_hosted_secret_key(config: Mapping[str, Any]) -> None:
+    if not is_flag_enabled(config.get("SERVER_MODE", False)):
+        return
+
+    secret_key = config.get("SECRET_KEY")
+    encoded = (
+        secret_key
+        if isinstance(secret_key, bytes)
+        else str(secret_key or "").encode("utf-8")
+    )
+    if secret_key == DEFAULT_SECRET_KEY or len(encoded) < MIN_HOSTED_SECRET_KEY_BYTES:
+        raise RuntimeError(
+            "SERVER_MODE requires SECRET_KEY to contain at least "
+            f"{MIN_HOSTED_SECRET_KEY_BYTES} bytes and not use the development default"
+        )
+
+
+def _print_environment(config: DefaultConfig) -> None:
+    print("\nENVIRONMENT:")
+    for key, value in config.to_dict().items():
+        rendered_value = "***REDACTED***" if key in SENSITIVE_CONFIG_KEYS else value
+        print(f"{key}={rendered_value}")
 
 
 def create_app(settings_override=None):
@@ -133,7 +166,7 @@ def create_app(settings_override=None):
 
     flask_env = environ.get("FLASK_ENV", "development")
 
-    config = cast(DefaultConfig, Config())
+    config = Config()
 
     app = Flask(
         __name__,
@@ -146,6 +179,11 @@ def create_app(settings_override=None):
     if settings_override:
         app.config.update(settings_override)
 
+    # Hosted session IDs identify the event log, so browsers must never send them over
+    # an unencrypted connection. ``settings_override`` bypasses Config's recomputation.
+    app.config["SESSION_COOKIE_SECURE"] = is_flag_enabled(app.config["SERVER_MODE"])
+
+    _validate_hosted_secret_key(app.config)
     middleware(app)
 
     app.register_blueprint(api, url_prefix=f"{app.config['BASE_PATH']}api")
@@ -169,6 +207,11 @@ def create_app(settings_override=None):
         def catch_all(path):
             if path.startswith("static/"):
                 abort(404)  # Pass control to Flask's static view
+
+            if is_flag_enabled(app.config["SERVER_MODE"]) and is_recording_enabled(
+                server_mode=True
+            ):
+                ensure_event_log_id()
 
             js = _serialize_spa_js_config(_build_spa_client_config(app))
 
@@ -422,7 +465,7 @@ def display_mode_info_without_db(config):
 
 
 def _record_launch(config):
-    """Record this launch locally, and say so.
+    """Record a local launch or report hosted recording status.
 
     Split out of ``main()`` because ``main()`` binds a socket and spawns gunicorn and
     so cannot be called from a test, which would leave the wiring — the part that
@@ -430,21 +473,39 @@ def _record_launch(config):
     """
     # Exported unconditionally so every gunicorn worker this launch spawns shares one
     # identifier, even if recording is switched on part-way through the session.
-    os.environ[RUN_ID_ENV_VAR] = get_run_id()
+    os.environ[RUN_ID_ENV_VAR] = start_run()
 
-    if not is_recording_enabled(config.SERVER_MODE):
+    server_mode = is_flag_enabled(config.SERVER_MODE)
+    disabled_reason = get_recording_disabled_reason(server_mode)
+    if disabled_reason is not None:
+        unrecognised_value = get_unrecognised_recording_disabled_value()
+        if unrecognised_value is not None:
+            print(
+                f"⚠️  {describe_unrecognised_recording_disabled_value(unrecognised_value)}"
+            )
+
+        print(f"📊 Event logging is DISABLED: {disabled_reason}.")
+        return
+
+    if server_mode:
+        print(
+            f"📊 Recording hosted events by browser session under "
+            f"{get_event_log_root(server_mode=True)}.\n"
+            f"   Session identifiers remain in file paths and are not exported.\n"
+            f"   {describe_opt_out(server_mode=True)}"
+        )
         return
 
     compact_if_needed()
-    record_app_start(config, server_mode=config.SERVER_MODE)
+    record_app_start(config, server_mode=server_mode)
 
     # `print` rather than `logger.info`: nothing has configured logging at this point
     # in `main()` — `create_app()` does that — and the last-resort handler drops
     # anything below WARNING, so an info line here would never be seen.
     print(
-        f"📊 Recording usage locally to {get_usage_log_path()}\n"
-        f"   Written on this machine only; the application transmits nothing. "
-        f"{describe_opt_out()}"
+        f"📊 Recording events locally to {get_event_log_path()}.\n"
+        f"   Written on this machine only; the application transmits nothing.\n"
+        f"   {describe_opt_out()}"
     )
 
 
@@ -494,7 +555,7 @@ def _config_after_cli_env(args: argparse.Namespace) -> DefaultConfig:
     )
 
     _apply_cli_env_overrides(args)
-    return cast(DefaultConfig, Config())
+    return Config()
 
 
 def main():
@@ -507,6 +568,7 @@ def main():
 
     # Priority: CLI args > env vars > auto-detection (in settings.py)
     config = _config_after_cli_env(args)
+    _validate_hosted_secret_key(config.to_dict())
 
     instance_id = None
 
@@ -566,9 +628,7 @@ def main():
 
     debug_mode = str_to_bool(os.environ.get("DEBUG", "false"))
     if config.PRINT_ENV:
-        print("\nENVIRONMENT:")
-        for key, value in config.to_dict().items():
-            print(f"{key}={value}")
+        _print_environment(config)
 
     # Warn if there's a gunicorn config file in current directory
     if Path("gunicorn.conf.py").exists():
@@ -630,7 +690,9 @@ def main():
     _record_launch(config)
 
     try:
-        subprocess.run(gunicorn_args)
+        result = subprocess.run(gunicorn_args)
+        if result.returncode != 0:
+            sys.exit(result.returncode)
     except KeyboardInterrupt:
         print("\nServer stopped by user (Ctrl+C)")
 

@@ -12,13 +12,15 @@ import {
 
 const OP_ID_INSERTION_POINT = 1;
 const L1_PRESSURE_INSERTION_POINT = 2;
-const HIGH_DISPATCH_INSERTION_POINT = 6;
+const HIGH_DISPATCH_INSERTION_POINT = Columns.findIndex((column) => column.key === ColumnKeys.BufferType);
 
 export interface EligiblePerfColumnsFlags {
     hasOpIds: boolean;
     hasL1PressureData: boolean;
     hiliteHighDispatch: boolean;
     hasNpe: boolean;
+    hasSubDeviceIds: boolean;
+    hasMultipleAvailableCoreBudgets: boolean;
 }
 
 export function getEligiblePerfColumns(flags: EligiblePerfColumnsFlags): ColumnDefinition[] {
@@ -27,7 +29,11 @@ export function getEligiblePerfColumns(flags: EligiblePerfColumnsFlags): ColumnD
         ...(flags.hasOpIds ? [{ name: 'OP', key: ColumnKeys.OP, sortable: true }] : []),
         ...Columns.slice(OP_ID_INSERTION_POINT, L1_PRESSURE_INSERTION_POINT),
         ...(flags.hasL1PressureData ? L1PressureColumns : []),
-        ...Columns.slice(L1_PRESSURE_INSERTION_POINT, HIGH_DISPATCH_INSERTION_POINT),
+        ...Columns.slice(L1_PRESSURE_INSERTION_POINT, HIGH_DISPATCH_INSERTION_POINT).filter(
+            (column) =>
+                (column.key !== ColumnKeys.SUB_DEVICE || flags.hasSubDeviceIds) &&
+                (column.key !== ColumnKeys.AVAILABLE_CORES || flags.hasMultipleAvailableCoreBudgets),
+        ),
         ...(flags.hiliteHighDispatch ? [{ name: 'Slow', key: ColumnKeys.HighDispatch }] : []),
         ...Columns.slice(HIGH_DISPATCH_INSERTION_POINT),
         ...(flags.hasNpe ? [{ name: 'NPE', key: ColumnKeys.GlobalCallCount }] : []),
