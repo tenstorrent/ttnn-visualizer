@@ -4,7 +4,12 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { boundsOfNodes, entryViewport } from '../src/components/operation-graph/opGraphRevealPan';
+import {
+    boundsOfNodes,
+    entryViewport,
+    intersectsPane,
+    revealPanShift,
+} from '../src/components/operation-graph/opGraphRevealPan';
 
 // Entry is the only moment the view picks a zoom for the user, so the arithmetic that
 // picks it is worth pinning directly rather than through a rendered graph. #2007
@@ -115,5 +120,72 @@ describe('entryViewport', () => {
         expect(Number.isFinite(zoom)).toBe(true);
         expect(Number.isFinite(x)).toBe(true);
         expect(Number.isFinite(y)).toBe(true);
+    });
+});
+
+describe('revealPanShift', () => {
+    const viewport = { x: 0, y: 0, zoom: 1 };
+    const TOOLBAR = 162;
+
+    it('does not move a target that is already clear of the chrome', () => {
+        const shift = revealPanShift(boundsOf(300, TOOLBAR + 100, 200, 60), viewport, PANE, TOOLBAR);
+
+        expect(shift).toEqual({ dx: 0, dy: 0 });
+    });
+
+    it('treats the band behind the floating toolbar as unusable', () => {
+        // Without the inset this answered "already in view" for a target sitting under
+        // the controls — and the filter input is in that toolbar, so stepping through
+        // matches could drop one behind the box it was typed into. #2008
+        const behindToolbar = boundsOf(300, 60, 200, 60);
+
+        expect(revealPanShift(behindToolbar, viewport, PANE).dy).toBe(0);
+        expect(revealPanShift(behindToolbar, viewport, PANE, TOOLBAR).dy).toBe(TOOLBAR + MARGIN - 60);
+    });
+
+    it('aligns a target above the viewport below the chrome, not at the pane edge', () => {
+        const above = boundsOf(300, -400, 200, 60);
+
+        expect(revealPanShift(above, viewport, PANE, TOOLBAR).dy).toBe(TOOLBAR + MARGIN + 400);
+    });
+
+    it('leaves the horizontal axis alone — the toolbar only eats the top', () => {
+        const offRight = boundsOf(PANE.width + 200, TOOLBAR + 100, 200, 60);
+
+        const withInset = revealPanShift(offRight, viewport, PANE, TOOLBAR);
+        const without = revealPanShift(offRight, viewport, PANE);
+
+        expect(withInset.dx).toBe(without.dx);
+        expect(withInset.dx).toBeLessThan(0);
+    });
+
+    it('aligns the near edge when the target is taller than the usable band', () => {
+        const tall = boundsOf(300, 0, 200, PANE.height * 2);
+
+        expect(revealPanShift(tall, viewport, PANE, TOOLBAR).dy).toBe(TOOLBAR + MARGIN);
+    });
+});
+
+describe('intersectsPane', () => {
+    it('sees a graph the viewport is sitting on', () => {
+        expect(intersectsPane(boundsOf(0, 0, 500, 500), { x: 0, y: 0, zoom: 1 }, PANE)).toBe(true);
+    });
+
+    it('sees a graph only partly on screen', () => {
+        expect(intersectsPane(boundsOf(0, 0, 500, 500), { x: -450, y: -450, zoom: 1 }, PANE)).toBe(true);
+    });
+
+    it('does not see a graph the reader has panned away from', () => {
+        // Narrowing the operation range relays the graph out at the origin while the
+        // viewport is still where the reader left it, which showed an empty pane. #2008
+        expect(intersectsPane(boundsOf(0, 0, 500, 500), { x: -12000, y: 0, zoom: 1 }, PANE)).toBe(false);
+    });
+
+    it('accounts for zoom when deciding', () => {
+        const bounds = boundsOf(0, 0, 500, 500);
+
+        expect(intersectsPane(bounds, { x: -600, y: 0, zoom: 1 }, PANE)).toBe(false);
+        expect(intersectsPane(bounds, { x: -600, y: 0, zoom: 0.3 }, PANE)).toBe(false);
+        expect(intersectsPane(bounds, { x: -100, y: 0, zoom: 0.3 }, PANE)).toBe(true);
     });
 });

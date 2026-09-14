@@ -1440,8 +1440,7 @@ describe('OperationGraphReactFlow repeat blocks', () => {
         renderGraph();
 
         // Keyed on the zoom, not the call count: a pan writes the viewport's existing
-        // zoom back, so only the entry frame writes one it computed. The pane is 0x0
-        // under jsdom, which clamps the fit to the overview floor.
+        // zoom back, so only the entry frame writes one it computed.
         expect(framedZooms()).toEqual([ENTRY_FITTED_ZOOM]);
     });
 
@@ -1488,6 +1487,48 @@ describe('OperationGraphReactFlow repeat blocks', () => {
         });
 
         expect(setViewport).not.toHaveBeenCalled();
+    });
+
+    it('pans to the URL operation again after the segment is cleared and renamed', () => {
+        // The latch held the old id when the segment went away, so returning to the same
+        // op in one mount looked already handled and never moved. #2008
+        const { rerender } = renderGraph(OPERATION_LIST, undefined, 3);
+        const atNamed = (id?: number) => (
+            <MemoryRouter>
+                <OperationGraphReactFlow
+                    operationList={OPERATION_LIST}
+                    isPerfReportLoaded={false}
+                    operationId={id}
+                />
+            </MemoryRouter>
+        );
+
+        rerender(atNamed(undefined));
+        setViewport.mockClear();
+        rerender(atNamed(3));
+
+        expect(setViewport).toHaveBeenCalled();
+    });
+
+    it('preserves the zoom on every move that is not entry', () => {
+        // The other half of the policy: a later move may reposition, never rescale.
+        const { rerender } = renderGraph(OPERATION_LIST, undefined, 1);
+        setViewport.mockClear();
+
+        rerender(
+            <MemoryRouter>
+                <OperationGraphReactFlow
+                    operationList={OPERATION_LIST}
+                    isPerfReportLoaded={false}
+                    operationId={5}
+                />
+            </MemoryRouter>,
+        );
+
+        expect(setViewport).toHaveBeenCalled();
+        for (const [viewport] of setViewport.mock.calls as unknown as [{ zoom: number }][]) {
+            expect(viewport.zoom).toBe(PANNED_ZOOM);
+        }
     });
 
     it('holds the viewport across a rebuild', () => {

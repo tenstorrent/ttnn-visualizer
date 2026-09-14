@@ -10,7 +10,9 @@
 // as long as they are open. The next toggle replaces the set, so exactly one group
 // is ever marked. #1944
 export const REVEALED_NODE_CLASS = 'op-graph-node-revealed';
-// Keeps a revealed node off the very edge of the pane, where it reads as clipped.
+// Keeps a revealed node off the edge of the usable pane, where it reads as clipped.
+// `topInset` extends that on the vertical axis for chrome that floats over the pane
+// rather than shrinking it, so a target never lands behind the toolbar. #2007
 const REVEAL_MARGIN_PX = 48;
 
 /**
@@ -26,14 +28,15 @@ export const revealPanShift = (
     bounds: { minX: number; minY: number; maxX: number; maxY: number },
     viewport: { x: number; y: number; zoom: number },
     pane: { width: number; height: number },
+    topInset = 0,
 ): { dx: number; dy: number } => {
     const left = bounds.minX * viewport.zoom + viewport.x;
     const top = bounds.minY * viewport.zoom + viewport.y;
     const right = bounds.maxX * viewport.zoom + viewport.x;
     const bottom = bounds.maxY * viewport.zoom + viewport.y;
 
-    const axis = (nearEdge: number, farEdge: number, extent: number): number => {
-        const lowLimit = REVEAL_MARGIN_PX;
+    const axis = (nearEdge: number, farEdge: number, extent: number, inset = 0): number => {
+        const lowLimit = inset + REVEAL_MARGIN_PX;
         const highLimit = extent - REVEAL_MARGIN_PX;
         if (farEdge - nearEdge > highLimit - lowLimit) {
             // Too large to fit: align the near edge and let the rest run off.
@@ -48,7 +51,7 @@ export const revealPanShift = (
         return 0;
     };
 
-    return { dx: axis(left, right, pane.width), dy: axis(top, bottom, pane.height) };
+    return { dx: axis(left, right, pane.width), dy: axis(top, bottom, pane.height, topInset) };
 };
 
 interface PannableNode {
@@ -121,3 +124,19 @@ export const entryViewport = (
         y: topInset + REVEAL_MARGIN_PX - anchor.minY * zoom,
     };
 };
+
+/**
+ * Whether any part of `bounds` is on screen at all.
+ *
+ * Deliberately not "is it comfortably visible": the only thing this decides is
+ * whether the alternative to moving is an empty pane.
+ */
+export const intersectsPane = (
+    bounds: { minX: number; minY: number; maxX: number; maxY: number },
+    viewport: { x: number; y: number; zoom: number },
+    pane: { width: number; height: number },
+): boolean =>
+    bounds.maxX * viewport.zoom + viewport.x > 0 &&
+    bounds.minX * viewport.zoom + viewport.x < pane.width &&
+    bounds.maxY * viewport.zoom + viewport.y > 0 &&
+    bounds.minY * viewport.zoom + viewport.y < pane.height;

@@ -137,10 +137,20 @@ describe('GraphView named operation', () => {
         expect(graph.operationId).toBeUndefined();
     });
 
-    it('names no operation for a segment that is not a number', () => {
-        // The behaviour this change actually fixes: `parseInt` yielded NaN, which is
-        // neither a valid id nor "none named".
-        const graph = expectGraphRendered(renderRoute(operationsFrom(1, 10), null, '/graphtree/latest'));
+    it.each(['latest', '5abc', '1.5', '-3', '1e5', '  7', '99999999999999999999'])(
+        'names no operation for the malformed segment %s',
+        (segment) => {
+            // `parseInt` read a numeric prefix, so `5abc` selected op 5 and `1.5` op 1 —
+            // a real node for a malformed path. The whole segment has to be an id.
+            const graph = expectGraphRendered(renderRoute(operationsFrom(1, 10), null, `/graphtree/${segment}`));
+
+            expect(graph.operationId).toBeUndefined();
+        },
+    );
+
+    it('names no operation for an empty trailing segment', () => {
+        // Kept separate: this is the "no id named" path rather than a malformed one.
+        const graph = expectGraphRendered(renderRoute(operationsFrom(1, 10), null, '/graphtree'));
 
         expect(graph.operationId).toBeUndefined();
     });

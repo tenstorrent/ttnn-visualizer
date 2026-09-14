@@ -57,7 +57,7 @@ import {
     getQuantisedPerfZoom,
 } from './opGraphPerfOverlay';
 import { EMPTY_CRITICAL_PATH, findCriticalPath } from './opGraphCriticalPath';
-import { REVEALED_NODE_CLASS, boundsOfNodes, entryViewport, revealPanShift } from './opGraphRevealPan';
+import { REVEALED_NODE_CLASS, boundsOfNodes, entryViewport, intersectsPane, revealPanShift } from './opGraphRevealPan';
 import { buildPositionByOperationId, getAdjacentOperationIds } from './opGraphNavigation';
 import { tensorBytes } from '../../functions/math';
 import { useOpGraphLayoutWorker } from './useOpGraphLayoutWorker';
@@ -610,7 +610,12 @@ const OperationGraphInner = ({
             }
             // Deferred to `nodes`: no layout exists on the mount that reads `operationId`.
             // An expand or collapse has an anchor waiting that would otherwise fight it.
-            if (framedProfilerPathRef.current !== profilerReportPath && pendingViewportAnchorRef.current === null) {
+            // The anchor guard ignores an anchor left over from another report: the node
+            // effect below discards those without triggering a build, so letting one block
+            // the frame leaves the new report at the old report's viewport.
+            const anchor = pendingViewportAnchorRef.current;
+            const hasLiveAnchor = anchor !== null && isSameReportScope(anchor.reportScope, reportScope);
+            if (framedProfilerPathRef.current !== profilerReportPath && !hasLiveAnchor) {
                 // Keyed on what the build actually rendered, not on the selection's
                 // presence above: the two diverge as soon as the user clicks a node.
                 const entryTarget =
@@ -622,7 +627,7 @@ const OperationGraphInner = ({
                 }
             }
         },
-        [setNodes, setEdges, operationId, profilerReportPath],
+        [setNodes, setEdges, operationId, profilerReportPath, reportScope],
     );
 
     const { runBuild, isBuilding } = useOpGraphLayoutWorker(sourceOperations, onBuilt);
@@ -646,6 +651,14 @@ const OperationGraphInner = ({
         runBuild(buildOptions);
     }, [runBuild, sourceOperations, buildOptions]);
 
+    // The toolbar floats over the pane, so the band it covers is unusable for both
+    // movers below. Measured from its bottom edge rather than its height: it sits at
+    // `top: 12px`, and it grows a row when the report has blocks.
+    const paneChromeInset = useCallback((pane: DOMRect): number => {
+        const toolbar = containerRef.current?.querySelector('.op-graph-toolbar')?.getBoundingClientRect();
+        return toolbar === undefined ? 0 : Math.max(0, toolbar.bottom - pane.top);
+    }, []);
+
     // Pans, never zooms, and does nothing when the target is already on screen: the
     // viewport is the user's place in the graph, and only they may change its scale.
     const panIntoView = useCallback(
@@ -655,13 +668,13 @@ const OperationGraphInner = ({
                 return;
             }
             const viewport = getViewport();
-            const { dx, dy } = revealPanShift(bounds, viewport, pane);
+            const { dx, dy } = revealPanShift(bounds, viewport, pane, paneChromeInset(pane));
             if (dx === 0 && dy === 0) {
                 return;
             }
             void setViewport({ ...viewport, x: viewport.x + dx, y: viewport.y + dy }, { duration: FOCUS_DURATION_MS });
         },
-        [getViewport, setViewport],
+        [getViewport, setViewport, paneChromeInset],
     );
 
     const focusOperation = useCallback(
@@ -689,13 +702,12 @@ const OperationGraphInner = ({
                 return false;
             }
             const start = startNode === undefined ? graph : (boundsOfNodes([startNode]) ?? graph);
-            // Measured, not assumed: the toolbar grows a row when the report has blocks.
-            const toolbarHeight =
-                containerRef.current?.querySelector('.op-graph-toolbar')?.getBoundingClientRect().height ?? 0;
-            void setViewport(entryViewport(graph, start, pane, toolbarHeight), { duration: FOCUS_DURATION_MS });
+            void setViewport(entryViewport(graph, start, pane, paneChromeInset(pane)), {
+                duration: FOCUS_DURATION_MS,
+            });
             return true;
         },
-        [setViewport],
+        [setViewport, paneChromeInset],
     );
 
     useEffect(() => {
@@ -710,6 +722,26 @@ const OperationGraphInner = ({
         // the zoom the frame just chose.
         focusedUrlOperationRef.current = operationId ?? null;
     }, [nodes, frameOnEntry, profilerReportPath, operationId]);
+
+    // A rebuild that replaces the node set rather than re-laying it out — narrowing the
+    // operation range — lays the new graph out from the origin while the reader is
+    // panned elsewhere, leaving an empty pane. Pan, never zoom, and only when the
+    // alternative is showing nothing. #2008
+    useEffect(() => {
+        const pane = containerRef.current?.getBoundingClientRect();
+        const bounds = boundsOfNodes(nodes);
+        if (
+            bounds === null ||
+            pane === undefined ||
+            pendingEntryFrameRef.current !== null ||
+            pendingViewportAnchorRef.current !== null ||
+            pendingRevealRef.current !== null ||
+            intersectsPane(bounds, getViewport(), pane)
+        ) {
+            return;
+        }
+        panIntoView(bounds);
+    }, [nodes, getViewport, panIntoView]);
 
     // Read from the committed array rather than `getNode`, which trails `setNodes`
     // by a tick and would translate against the pre-rebuild position.
@@ -756,7 +788,7 @@ const OperationGraphInner = ({
             if (revealed.length > 0 && pane !== undefined) {
                 const bounds = boundsOfNodes(revealed);
                 if (bounds !== null) {
-                    const { dx, dy } = revealPanShift(bounds, viewport, pane);
+                    const { dx, dy } = revealPanShift(bounds, viewport, pane, paneChromeInset(pane));
                     viewport = { ...viewport, x: viewport.x + dx, y: viewport.y + dy };
                 }
             }
@@ -769,7 +801,7 @@ const OperationGraphInner = ({
         }
 
         void setViewport(viewport, { duration: FOCUS_DURATION_MS });
-    }, [nodes, reportScope, getViewport, setViewport]);
+    }, [nodes, reportScope, getViewport, setViewport, paneChromeInset]);
 
     const armViewportAnchor = useCallback(
         (nodeId: string, fallbackNodeId: string) => {
@@ -916,7 +948,12 @@ const OperationGraphInner = ({
     // identity changes on every build (a fresh `nodeIdByOperationId`), so without the
     // latch every rebuild panned back to it against a stale layout.
     useEffect(() => {
-        if (operationId === undefined || focusedUrlOperationRef.current === operationId) {
+        if (operationId === undefined) {
+            // Leaving the latch set would make a return to the same op look handled.
+            focusedUrlOperationRef.current = null;
+            return;
+        }
+        if (focusedUrlOperationRef.current === operationId) {
             return;
         }
         focusedUrlOperationRef.current = operationId;

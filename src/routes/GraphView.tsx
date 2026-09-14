@@ -34,14 +34,15 @@ const GraphView = () => {
 
     useClearSelectedBuffer();
 
-    // A non-numeric segment used to reach the graph as `NaN`, which is neither an id
-    // nor "none named". The route param is a string, so `0` was never the problem. #2007
+    // The whole segment, not a numeric prefix: `parseInt` turned `/graphtree/5abc`
+    // into op 5 and `/graphtree/1.5` into op 1, selecting a real node for a malformed
+    // path, and a bare non-numeric segment reached the graph as `NaN`. #2007
     const namedOperationId = useMemo(() => {
-        if (operationId === undefined) {
+        if (operationId === undefined || !/^\d+$/.test(operationId)) {
             return undefined;
         }
-        const parsed = Number.parseInt(operationId, 10);
-        return Number.isInteger(parsed) ? parsed : undefined;
+        const parsed = Number(operationId);
+        return Number.isSafeInteger(parsed) ? parsed : undefined;
     }, [operationId]);
 
     const filteredOperationList = useMemo(
