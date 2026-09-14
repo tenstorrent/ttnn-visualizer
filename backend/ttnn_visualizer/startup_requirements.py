@@ -198,7 +198,7 @@ _HOSTED_SECRET_KEY = StartupRequirement(
     id="hosted-secret-key",
     env_vars=("SECRET_KEY",),
     summary=(
-        f"Under SERVER_MODE, SECRET_KEY must be non-default and at least "
+        "Under SERVER_MODE, SECRET_KEY must be non-default and at least "
         f"{MIN_HOSTED_SECRET_KEY_BYTES} bytes."
     ),
     hosted_only=True,

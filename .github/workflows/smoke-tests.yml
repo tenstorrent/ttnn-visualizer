@@ -186,17 +186,19 @@ jobs:
 
       - name: Preflight refuses an environment the release cannot start in
         run: |
-          set -uo pipefail
-          # Deliberately under the floor. If this ever exits 0 the preflight contract is
-          # broken, and a deploy gate reading the exit code would wave through a
-          # deployment that cannot boot.
-          SECRET_KEY=short /tmp/hosted-venv/bin/ttnn-visualizer --check-config
-          status=$?
-          if [ "${status}" -eq 0 ]; then
+          set -euo pipefail
+          # Deliberately under the floor. GitHub runs this as `bash -e`, so the
+          # expected-to-fail command has to sit in an `if` condition — as a bare
+          # statement it aborts the step before its exit code can be read, and a
+          # `set -uo pipefail` line does not clear the `-e` the shell was invoked with.
+          #
+          # If this command ever succeeds the preflight contract is broken, and a deploy
+          # gate reading the exit code would wave through a deployment that cannot boot.
+          if SECRET_KEY=short /tmp/hosted-venv/bin/ttnn-visualizer --check-config; then
             echo "::error::--check-config exited 0 for an environment that cannot start."
             exit 1
           fi
-          echo "✅ Preflight rejected the non-conforming environment (exit ${status})"
+          echo "✅ Preflight rejected the non-conforming environment"
 
       - name: Start ttnn-visualizer in hosted posture
         run: |
