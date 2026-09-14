@@ -74,7 +74,22 @@ DEV_ARGS = {
 
 @pytest.mark.parametrize(
     "secret_key",
-    [None, "", DEFAULT_SECRET_KEY, "short", b"short"],
+    [
+        None,
+        "",
+        DEFAULT_SECRET_KEY,
+        # The ``bytes`` default used to reach only the floor, so it was refused for
+        # being five bytes rather than for being the default. See #2006.
+        DEFAULT_SECRET_KEY.encode("utf-8"),
+        "short",
+        b"short",
+        # Long enough to clear the floor unstripped, which is why these are written
+        # against the constant: the cases stay all-whitespace-over-the-floor whatever
+        # the floor becomes.
+        " " * MIN_HOSTED_SECRET_KEY_BYTES,
+        "\t" * MIN_HOSTED_SECRET_KEY_BYTES,
+        b" " * MIN_HOSTED_SECRET_KEY_BYTES,
+    ],
 )
 def test_server_mode_refuses_an_insecure_secret_key(secret_key):
     with pytest.raises(RuntimeError, match="SERVER_MODE requires SECRET_KEY"):
@@ -86,6 +101,20 @@ def test_server_mode_accepts_a_strong_secret_key():
         {
             "SERVER_MODE": True,
             "SECRET_KEY": "x" * MIN_HOSTED_SECRET_KEY_BYTES,
+        }
+    )
+
+
+def test_server_mode_accepts_a_key_padded_with_whitespace():
+    """Trimming decides the floor, so a key an env file wrapped in space still boots.
+
+    The refusal cases cover whitespace standing in *for* a key; this covers whitespace
+    around one, which a ``.env`` line or a copy-paste produces by accident.
+    """
+    _validate_hosted_secret_key(
+        {
+            "SERVER_MODE": True,
+            "SECRET_KEY": f"  {'x' * MIN_HOSTED_SECRET_KEY_BYTES}\n",
         }
     )
 

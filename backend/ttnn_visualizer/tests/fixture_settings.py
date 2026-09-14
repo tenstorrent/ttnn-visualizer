@@ -83,7 +83,7 @@ def base_test_settings(tmpdir: str, **overrides: Any) -> Dict[str, Any]:
         "TESTING": True,
         "SQLALCHEMY_DATABASE_URI": f"sqlite:///{Path(tmpdir) / 'app.db'}",
         "SERVER_MODE": True,
-        "SECRET_KEY": "test-secret-key-with-at-least-32-bytes",
+        "SECRET_KEY": "test-secret-key-that-is-not-the-development-default",
         "USE_WEBSOCKETS": True,
         "TT_METAL_HOME": None,
         "MALWARE_SCANNER": None,

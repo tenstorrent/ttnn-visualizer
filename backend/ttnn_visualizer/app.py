@@ -127,6 +127,11 @@ def _validate_hosted_secret_key(config: Mapping[str, Any]) -> None:
     catches an unset or placeholder key, and nothing more. Do not read it as
     establishing key strength.
 
+    Both tests run on the encoded form so that a ``bytes`` key is judged the same as
+    the equivalent ``str``, and the floor measures what survives ``bytes.strip()``,
+    because eight spaces are not a short key but are not a key at all. Trimming covers
+    ASCII whitespace only; a run of non-breaking spaces still counts toward the floor.
+
     #2002 tracks replacing the length test with a key-derivation step, which raises the
     cost of attacking a weak key without any deployment having to change the key it
     already has.
@@ -140,10 +145,14 @@ def _validate_hosted_secret_key(config: Mapping[str, Any]) -> None:
         if isinstance(secret_key, bytes)
         else str(secret_key or "").encode("utf-8")
     )
-    if secret_key == DEFAULT_SECRET_KEY or len(encoded) < MIN_HOSTED_SECRET_KEY_BYTES:
+    if (
+        encoded == DEFAULT_SECRET_KEY.encode("utf-8")
+        or len(encoded.strip()) < MIN_HOSTED_SECRET_KEY_BYTES
+    ):
         raise RuntimeError(
             "SERVER_MODE requires SECRET_KEY to contain at least "
-            f"{MIN_HOSTED_SECRET_KEY_BYTES} bytes and not use the development default"
+            f"{MIN_HOSTED_SECRET_KEY_BYTES} bytes once surrounding whitespace is "
+            "trimmed, and not use the development default"
         )
 
 
