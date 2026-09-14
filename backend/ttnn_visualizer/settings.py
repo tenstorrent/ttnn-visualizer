@@ -214,7 +214,11 @@ class _EventLoggingActive:
 
 _DEFAULT_SSH_PORT = 22
 DEFAULT_SECRET_KEY = "90909"
-MIN_HOSTED_SECRET_KEY_BYTES = 32
+# Counts UTF-8 bytes, not entropy — a floor against an obviously-short key, not a
+# strength check. Lowered to unblock deployments provisioned before the check existed.
+# Stopgap, superseded by #2002; the rationale lives with the validator that applies it,
+# in ``app.py::_validate_hosted_secret_key``.
+MIN_HOSTED_SECRET_KEY_BYTES = 8
 
 
 def _parse_max_content_length(env_value: str) -> Optional[int]:

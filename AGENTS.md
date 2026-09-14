@@ -197,7 +197,7 @@ Applies on touch to views that draw data-proportional visuals (NPE chip cluster 
 - **The unload beacon must send a `Blob` typed `application/json`** — that content type is what keeps the request non-simple, and a bare-string beacon goes as `text/plain` and is refused.
 - **Failures are silent and batches are never re-buffered.** The only diagnostic is a `console.warn` under `import.meta.env.DEV` carrying the status, never a response body.
 - **Hosted log identity comes only from the signed Flask session.** Never accept it from `instanceId`, request parameters, or event data; it stays in the path and is not exported.
-- **Hosted admission is bounded at three layers:** startup requires a strong `SECRET_KEY`, cross-worker reservation caps and rate-limits new log files, and per-log batch rates are bounded in each worker. Deployment retention and edge limits remain part of the hosted contract.
+- **Hosted admission is bounded at three layers:** startup requires a non-default `SECRET_KEY` above a minimum length (a floor, not a strength check — see #2002), cross-worker reservation caps and rate-limits new log files, and per-log batch rates are bounded in each worker. Deployment retention and edge limits remain part of the hosted contract.
 
 ### File organization and modules
 

@@ -118,6 +118,19 @@ def _serialize_spa_js_config(js_config: dict) -> str:
 
 
 def _validate_hosted_secret_key(config: Mapping[str, Any]) -> None:
+    """Refuse a hosted start on a default, empty or obviously-short ``SECRET_KEY``.
+
+    What makes the signed session cookie an integrity boundary across workers and
+    restarts is that the key is *stable and non-default*; the byte floor contributes
+    nothing to that property. The floor counts UTF-8 bytes rather than entropy, so it
+    admits a short dictionary word as readily as a random value of the same size — it
+    catches an unset or placeholder key, and nothing more. Do not read it as
+    establishing key strength.
+
+    #2002 tracks replacing the length test with a key-derivation step, which raises the
+    cost of attacking a weak key without any deployment having to change the key it
+    already has.
+    """
     if not is_flag_enabled(config.get("SERVER_MODE", False)):
         return
 
