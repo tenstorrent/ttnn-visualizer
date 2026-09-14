@@ -34,6 +34,16 @@ const GraphView = () => {
 
     useClearSelectedBuffer();
 
+    // A non-numeric segment used to reach the graph as `NaN`, which is neither an id
+    // nor "none named". The route param is a string, so `0` was never the problem. #2007
+    const namedOperationId = useMemo(() => {
+        if (operationId === undefined) {
+            return undefined;
+        }
+        const parsed = Number.parseInt(operationId, 10);
+        return Number.isInteger(parsed) ? parsed : undefined;
+    }, [operationId]);
+
     const filteredOperationList = useMemo(
         () =>
             selectedOperationRange && operationList
@@ -89,7 +99,7 @@ const GraphView = () => {
             ) : (
                 <OperationGraph
                     operationList={filteredOperationList}
-                    operationId={operationId ? parseInt(operationId, 10) : undefined}
+                    operationId={namedOperationId}
                     perfRows={perfOverlayRows}
                     isPerfReportLoaded={isPerfReportLoaded}
                 />

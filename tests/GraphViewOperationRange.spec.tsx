@@ -5,7 +5,7 @@
 import '@testing-library/jest-dom/vitest';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen } from '@testing-library/react';
-import { MemoryRouter } from 'react-router';
+import { MemoryRouter, Route, Routes } from 'react-router';
 import { Provider, createStore } from 'jotai';
 import type { NumberRange } from '@blueprintjs/core';
 
@@ -19,7 +19,7 @@ const { mockUseOperationsList, mockUseLinkedPerformanceReport, mockUseMatchedPer
     mockUseOperationsList: vi.fn(),
     mockUseLinkedPerformanceReport: vi.fn(),
     mockUseMatchedPerfOps: vi.fn(),
-    graphProps: [] as { operationList: OperationDescription[] }[],
+    graphProps: [] as { operationList: OperationDescription[]; operationId: number | undefined }[],
 }));
 
 vi.mock('react-helmet-async', () => ({ Helmet: () => null }));
@@ -30,7 +30,7 @@ vi.mock('../src/hooks/useAPI', () => ({
     useGetDeviceOperationListPerf: () => mockUseMatchedPerfOps(),
 }));
 vi.mock('../src/components/operation-graph/OperationGraphReactFlow', () => ({
-    default: (props: { operationList: OperationDescription[] }) => {
+    default: (props: { operationList: OperationDescription[]; operationId: number | undefined }) => {
         graphProps.push(props);
         return <div data-testid='op-graph' />;
     },
@@ -42,7 +42,7 @@ const operationsFrom = (firstId: number, count: number) =>
         name: 'ttnn.matmul',
     })) as unknown as OperationDescription[];
 
-const renderRoute = (operations: OperationDescription[], range: NumberRange | null) => {
+const renderRoute = (operations: OperationDescription[], range: NumberRange | null, path = '/graphtree') => {
     const store = createStore();
     store.set(selectedOperationRangeAtom, range);
     mockUseOperationsList.mockReturnValue({ data: operations, isLoading: false });
@@ -51,8 +51,13 @@ const renderRoute = (operations: OperationDescription[], range: NumberRange | nu
 
     render(
         <Provider store={store}>
-            <MemoryRouter>
-                <GraphView />
+            <MemoryRouter initialEntries={[path]}>
+                <Routes>
+                    <Route
+                        path='/graphtree/:operationId?'
+                        element={<GraphView />}
+                    />
+                </Routes>
             </MemoryRouter>
         </Provider>,
     );
@@ -63,7 +68,9 @@ const renderRoute = (operations: OperationDescription[], range: NumberRange | nu
 // The graph is stubbed, so its absence means the route rendered the spinner instead —
 // which is the failure the zero-based case exists to catch. Say so, rather than
 // letting it surface as a property read on undefined.
-const expectGraphRendered = (graph: { operationList: OperationDescription[] } | undefined) => {
+const expectGraphRendered = (
+    graph: { operationList: OperationDescription[]; operationId: number | undefined } | undefined,
+) => {
     expect(graph).toBeDefined();
     return graph!;
 };
@@ -106,5 +113,35 @@ describe('GraphView operation range', () => {
         const graph = expectGraphRendered(renderRoute(operationsFrom(1, 100), [2000, 50]));
 
         expect(graph.operationList).toHaveLength(0);
+    });
+});
+
+describe('GraphView named operation', () => {
+    it('passes through operation 0', () => {
+        // Guards the id that reads as absent everywhere else in this view; the route
+        // param is a string, so the previous truthiness check happened to be safe here.
+        const graph = expectGraphRendered(renderRoute(operationsFrom(0, 10), null, '/graphtree/0'));
+
+        expect(graph.operationId).toBe(0);
+    });
+
+    it('passes through an ordinary id', () => {
+        const graph = expectGraphRendered(renderRoute(operationsFrom(1, 10), null, '/graphtree/5'));
+
+        expect(graph.operationId).toBe(5);
+    });
+
+    it('names no operation when the route names none', () => {
+        const graph = expectGraphRendered(renderRoute(operationsFrom(1, 10), null, '/graphtree'));
+
+        expect(graph.operationId).toBeUndefined();
+    });
+
+    it('names no operation for a segment that is not a number', () => {
+        // The behaviour this change actually fixes: `parseInt` yielded NaN, which is
+        // neither a valid id nor "none named".
+        const graph = expectGraphRendered(renderRoute(operationsFrom(1, 10), null, '/graphtree/latest'));
+
+        expect(graph.operationId).toBeUndefined();
     });
 });

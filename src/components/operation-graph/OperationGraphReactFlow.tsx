@@ -57,7 +57,7 @@ import {
     getQuantisedPerfZoom,
 } from './opGraphPerfOverlay';
 import { EMPTY_CRITICAL_PATH, findCriticalPath } from './opGraphCriticalPath';
-import { REVEALED_NODE_CLASS, revealPanShift } from './opGraphRevealPan';
+import { REVEALED_NODE_CLASS, boundsOfNodes, entryViewport, revealPanShift } from './opGraphRevealPan';
 import { buildPositionByOperationId, getAdjacentOperationIds } from './opGraphNavigation';
 import { tensorBytes } from '../../functions/math';
 import { useOpGraphLayoutWorker } from './useOpGraphLayoutWorker';
@@ -131,7 +131,6 @@ const bothEndsMatched = (
 // A large report only fits at extreme zoom-out; 3 caps zoom-in as vis did.
 const MAX_ZOOM = 3;
 const MIN_ZOOM = 0.02;
-const FOCUS_ZOOM = 1;
 // Matches MLIR's `localJump`: stepping through matches retargets the tween on
 // every press, so a longer one never settles and the camera reads as lagging.
 const FOCUS_DURATION_MS = 200;
@@ -365,7 +364,16 @@ const OperationGraphInner = ({
     const pendingRevealRef = useRef<{ nodeIds: Set<string>; reportScope: ReportScope } | null>(null);
     const [revealedNodeIds, setRevealedNodeIds] = useState<Set<string> | null>(null);
     const [revealedOperationId, setRevealedOperationId] = useState<number | null>(null);
-    const { setCenter, getNode, getViewport, setViewport } = useReactFlow<OpGraphFlowNode, OpGraphFlowEdge>();
+    // Framed once per profiler report — the only one the layout depends on — and
+    // nothing else may move the viewport unasked. A path, not a flag: a flag would need
+    // clearing during render, which `react-hooks/refs` forbids. #2007
+    // `undefined` is "not framed yet": `null` is a legitimate path (no profiler report
+    // selected), so it cannot double as the sentinel.
+    const framedProfilerPathRef = useRef<string | null | undefined>(undefined);
+    const pendingEntryFrameRef = useRef<number | null>(null);
+    // The op the URL last moved to, so a rebuild does not pan back to it.
+    const focusedUrlOperationRef = useRef<number | null>(null);
+    const { getNode, getViewport, setViewport } = useReactFlow<OpGraphFlowNode, OpGraphFlowEdge>();
     const flowStore = useStoreApi();
 
     // Path, not the `ReportFolder` object: a rebuilt-but-equivalent object would
@@ -415,10 +423,6 @@ const OperationGraphInner = ({
     useEffect(() => {
         selectedOperationIdRef.current = selectedOperationId;
     }, [selectedOperationId]);
-
-    // `getNode` reads the React Flow store, a tick behind `setNodes`, so a focus
-    // requested mid-build has to wait for the commit.
-    const pendingFocusRef = useRef<number | null>(null);
 
     const sourceOperations = useMemo<OpGraphSourceOperation[]>(
         () =>
@@ -585,13 +589,14 @@ const OperationGraphInner = ({
             }
             setNodeIndex(indexEntries);
             setNodeIdByOperationId(renderedByOpId);
-            // A new array with the same detections rebuilds `deviceSubgraphs` and
-            // `runBuild` loops; each pass restarts the focus tween toward op 0.
+            // A new array with the same detections rebuilds `deviceSubgraphs`, and
+            // `runBuild` then loops.
             const nextBlocks = graph.blocks && graph.blocks.length > 0 ? graph.blocks : NO_BLOCKS;
             setDetectedBlocks((previous) => (areSameBlockSummaries(previous, nextBlocks) ? previous : nextBlocks));
 
             // An op can drop out between builds (isolated, or filtered as a
-            // deallocate), so selection falls back rather than point at nothing.
+            // deallocate). Clear rather than fall back: a selection is only ever what
+            // the user clicked or the URL named, so inventing one is wrong. #2007
             const desired = selectedOperationIdRef.current;
             const isPresent =
                 desired !== null &&
@@ -600,17 +605,24 @@ const OperationGraphInner = ({
                         node.data.operationId === desired ||
                         (node.data.memberOperationIds !== undefined && node.data.memberOperationIds.includes(desired)),
                 );
-            const target = isPresent ? desired : (graph.nodes[0]?.data.operationId ?? null);
-            if (target !== desired) {
-                setSelectedOperationId(target);
+            if (desired !== null && !isPresent) {
+                setSelectedOperationId(null);
             }
-            // An expand or collapse has an anchor waiting, and recentring on the
-            // selection would overrule it — the two would fight for the viewport.
-            if (pendingViewportAnchorRef.current === null) {
-                pendingFocusRef.current = target;
+            // Deferred to `nodes`: no layout exists on the mount that reads `operationId`.
+            // An expand or collapse has an anchor waiting that would otherwise fight it.
+            if (framedProfilerPathRef.current !== profilerReportPath && pendingViewportAnchorRef.current === null) {
+                // Keyed on what the build actually rendered, not on the selection's
+                // presence above: the two diverge as soon as the user clicks a node.
+                const entryTarget =
+                    operationId !== undefined && renderedByOpId.has(operationId)
+                        ? operationId
+                        : (graph.nodes[0]?.data.operationId ?? null);
+                if (entryTarget !== null) {
+                    pendingEntryFrameRef.current = entryTarget;
+                }
             }
         },
-        [setNodes, setEdges],
+        [setNodes, setEdges, operationId, profilerReportPath],
     );
 
     const { runBuild, isBuilding } = useOpGraphLayoutWorker(sourceOperations, onBuilt);
@@ -634,28 +646,70 @@ const OperationGraphInner = ({
         runBuild(buildOptions);
     }, [runBuild, sourceOperations, buildOptions]);
 
+    // Pans, never zooms, and does nothing when the target is already on screen: the
+    // viewport is the user's place in the graph, and only they may change its scale.
+    const panIntoView = useCallback(
+        (bounds: { minX: number; minY: number; maxX: number; maxY: number } | null) => {
+            const pane = containerRef.current?.getBoundingClientRect();
+            if (bounds === null || pane === undefined) {
+                return;
+            }
+            const viewport = getViewport();
+            const { dx, dy } = revealPanShift(bounds, viewport, pane);
+            if (dx === 0 && dy === 0) {
+                return;
+            }
+            void setViewport({ ...viewport, x: viewport.x + dx, y: viewport.y + dy }, { duration: FOCUS_DURATION_MS });
+        },
+        [getViewport, setViewport],
+    );
+
     const focusOperation = useCallback(
         (id: number) => {
             const node = getNode(nodeIdByOperationId.get(id) ?? String(id));
-            if (!node) {
-                return;
-            }
-            void setCenter(node.position.x + (node.width ?? 0) / 2, node.position.y + (node.height ?? 0) / 2, {
-                zoom: FOCUS_ZOOM,
-                duration: FOCUS_DURATION_MS,
-            });
+            panIntoView(node === undefined ? null : boundsOfNodes([node]));
         },
-        [getNode, setCenter, nodeIdByOperationId],
+        [getNode, nodeIdByOperationId, panIntoView],
+    );
+
+    // The only place a zoom is chosen for the user. Reads the committed array, not
+    // `getNode`, which trails `setNodes` and on entry silently framed nothing.
+    const frameOnEntry = useCallback(
+        (allNodes: readonly OpGraphFlowNode[], startId: number): boolean => {
+            const graph = boundsOfNodes(allNodes);
+            const startNode = allNodes.find(
+                (node) =>
+                    node.data.operationId === startId ||
+                    (node.data.memberOperationIds !== undefined && node.data.memberOperationIds.includes(startId)),
+            );
+            const pane = containerRef.current?.getBoundingClientRect();
+            // A zero-size pane (mounted inside a collapsed or transitioning panel) would
+            // clamp to the overview floor and latch the report there with no retry.
+            if (graph === null || pane === undefined || pane.width === 0 || pane.height === 0) {
+                return false;
+            }
+            const start = startNode === undefined ? graph : (boundsOfNodes([startNode]) ?? graph);
+            // Measured, not assumed: the toolbar grows a row when the report has blocks.
+            const toolbarHeight =
+                containerRef.current?.querySelector('.op-graph-toolbar')?.getBoundingClientRect().height ?? 0;
+            void setViewport(entryViewport(graph, start, pane, toolbarHeight), { duration: FOCUS_DURATION_MS });
+            return true;
+        },
+        [setViewport],
     );
 
     useEffect(() => {
-        const target = pendingFocusRef.current;
-        if (target === null || nodes.length === 0) {
+        const target = pendingEntryFrameRef.current;
+        if (target === null || nodes.length === 0 || !frameOnEntry(nodes, target)) {
             return;
         }
-        pendingFocusRef.current = null;
-        focusOperation(target);
-    }, [nodes, focusOperation]);
+        pendingEntryFrameRef.current = null;
+        framedProfilerPathRef.current = profilerReportPath;
+        // The frame already put the named op in view, so the effect below must not
+        // pan to it as well — the pan reads the pre-tween viewport and would undo
+        // the zoom the frame just chose.
+        focusedUrlOperationRef.current = operationId ?? null;
+    }, [nodes, frameOnEntry, profilerReportPath, operationId]);
 
     // Read from the committed array rather than `getNode`, which trails `setNodes`
     // by a tick and would translate against the pre-rebuild position.
@@ -700,17 +754,11 @@ const OperationGraphInner = ({
             const revealed = nodes.filter((node) => reveal.nodeIds.has(node.id));
             const pane = containerRef.current?.getBoundingClientRect();
             if (revealed.length > 0 && pane !== undefined) {
-                const bounds = revealed.reduce(
-                    (acc, node) => ({
-                        minX: Math.min(acc.minX, node.position.x),
-                        minY: Math.min(acc.minY, node.position.y),
-                        maxX: Math.max(acc.maxX, node.position.x + (node.width ?? node.measured?.width ?? 0)),
-                        maxY: Math.max(acc.maxY, node.position.y + (node.height ?? node.measured?.height ?? 0)),
-                    }),
-                    { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity },
-                );
-                const { dx, dy } = revealPanShift(bounds, viewport, pane);
-                viewport = { ...viewport, x: viewport.x + dx, y: viewport.y + dy };
+                const bounds = boundsOfNodes(revealed);
+                if (bounds !== null) {
+                    const { dx, dy } = revealPanShift(bounds, viewport, pane);
+                    viewport = { ...viewport, x: viewport.x + dx, y: viewport.y + dy };
+                }
             }
 
             // No timer: the ring pulses for attention and then rests faint, and the
@@ -864,12 +912,15 @@ const OperationGraphInner = ({
         }
     }
 
-    // Recentre on the operation the URL names. A no-op on first mount, where the
-    // graph hasn't been laid out yet and `onBuilt`'s pending focus does the work.
+    // Pan to the operation the URL names, once per named op. `focusOperation`'s
+    // identity changes on every build (a fresh `nodeIdByOperationId`), so without the
+    // latch every rebuild panned back to it against a stale layout.
     useEffect(() => {
-        if (operationId !== undefined) {
-            focusOperation(operationId);
+        if (operationId === undefined || focusedUrlOperationRef.current === operationId) {
+            return;
         }
+        focusedUrlOperationRef.current = operationId;
+        focusOperation(operationId);
     }, [operationId, focusOperation]);
 
     const selectOperation = useCallback(
