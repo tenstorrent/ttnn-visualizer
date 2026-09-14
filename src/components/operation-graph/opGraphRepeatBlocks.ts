@@ -4,6 +4,7 @@
 
 /* eslint-disable no-continue -- window scan skips consumed spans instead of nesting four levels */
 
+import { shortOperationName } from './opGraphOpNames';
 import type { OpGraphSourceOperation, RepeatBlockInstance } from './opGraphTypes';
 import { OpGraphBlockKind } from './opGraphTypes';
 
@@ -116,15 +117,6 @@ const uniqueFileStems = (operations: readonly OpGraphSourceOperation[], dropPlum
         stems.push(stem);
     }
     return stems;
-};
-
-const shortOperationName = (name: string): string => {
-    const trimmed = name.trim();
-    if (!trimmed) {
-        return '';
-    }
-    const parts = trimmed.split(/::|\./);
-    return parts[parts.length - 1] || trimmed;
 };
 
 const uniqueShortOpNames = (operations: readonly OpGraphSourceOperation[]): string[] => {
