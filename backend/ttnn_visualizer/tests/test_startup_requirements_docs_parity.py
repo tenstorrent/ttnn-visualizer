@@ -1,0 +1,112 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
+
+"""Pins the operator-facing startup-requirements page to the registry.
+
+A startup requirement is a demand on someone else's environment, and the only place
+that audience can read it is the documentation. Tying the page to the registry means a
+requirement cannot be added, retimed or tightened without the operator-facing text
+changing in the same commit — which also makes it visible in review as a documentation
+diff rather than as a threshold buried in a validator (#2004).
+"""
+
+import re
+from pathlib import Path
+from typing import Dict, List
+
+import pytest
+from ttnn_visualizer.startup_requirements import STARTUP_REQUIREMENTS
+
+_REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
+_STARTUP_DOCS = _REPOSITORY_ROOT / "docs" / "src" / "startup-requirements.md"
+_DOCS_INDEX = _REPOSITORY_ROOT / "docs" / "index.rst"
+_CONVENTIONS = _REPOSITORY_ROOT / "CONVENTIONS.md"
+
+
+def _read(path: Path) -> str:
+    if not path.exists():
+        pytest.fail(
+            f"{path.name} is missing. Startup requirements are demands on an "
+            "operator's environment, so their documentation is part of the change."
+        )
+
+    return path.read_text(encoding="utf-8")
+
+
+def _documented_requirements() -> List[Dict[str, str]]:
+    """Rows of the "Current requirements" table, keyed by column."""
+    source = _read(_STARTUP_DOCS)
+    rows = re.findall(
+        r"^\| `([a-z0-9-]+)` \| (.+?) \| (.+?) \| (.+?) \| (.+?) \| (.+?) \|$",
+        source,
+        re.MULTILINE,
+    )
+    if not rows:
+        raise AssertionError(
+            f"No requirement rows found in {_STARTUP_DOCS.name}. The table's shape is "
+            "part of the contract this test enforces."
+        )
+
+    return [
+        {
+            "id": row[0],
+            "env_vars": row[1],
+            "condition": row[2],
+            "introduced_in": row[3],
+            "enforced_from": row[4],
+            "posture": row[5],
+        }
+        for row in rows
+    ]
+
+
+def test_the_docs_list_exactly_the_declared_requirements():
+    documented = {row["id"] for row in _documented_requirements()}
+    declared = {requirement.id for requirement in STARTUP_REQUIREMENTS}
+
+    assert documented == declared, (
+        "The startup-requirements page and the registry disagree about which "
+        "requirements exist. Operators cannot read the registry; update "
+        f"{_STARTUP_DOCS.name}."
+    )
+
+
+def test_each_documented_requirement_states_the_registry_values():
+    documented = {row["id"]: row for row in _documented_requirements()}
+
+    for requirement in STARTUP_REQUIREMENTS:
+        row = documented[requirement.id]
+
+        for env_var in requirement.env_vars:
+            assert f"`{env_var}`" in row["env_vars"], (
+                f"{requirement.id} is checked against {env_var}, which its "
+                "documented row does not name."
+            )
+
+        assert row["condition"] == requirement.summary
+        assert row["introduced_in"] == requirement.introduced_in
+        assert row["enforced_from"] == requirement.enforced_from
+        assert row["posture"] == ("Hosted" if requirement.hosted_only else "All")
+
+
+def test_the_docs_explain_the_staged_rollout_and_the_preflight_contract():
+    """The two things an operator needs that no single table row carries."""
+    source = _read(_STARTUP_DOCS)
+
+    assert "--check-config" in source
+    assert "Enforced from" in source
+    assert "exits `0`" in source
+
+
+def test_the_startup_requirements_page_is_published():
+    """A page absent from the toctree is not documentation anyone will find."""
+    assert "src/startup-requirements" in _read(_DOCS_INDEX)
+
+
+def test_the_rollout_convention_is_recorded_for_maintainers():
+    """The operator page defers to CONVENTIONS.md; that section has to exist."""
+    conventions = _read(_CONVENTIONS)
+
+    assert "## Startup requirements" in conventions
+    assert "enforced_from" in conventions

@@ -21,11 +21,7 @@ from pathlib import Path
 
 import pytest
 from ttnn_visualizer import event_logging
-from ttnn_visualizer.app import (
-    _print_environment,
-    _validate_hosted_secret_key,
-    create_app,
-)
+from ttnn_visualizer.app import _print_environment, create_app
 from ttnn_visualizer.event_logging import (
     DISABLED_MARKER_NAME,
     RECORDING_DISABLED_ENV_VAR,
@@ -72,57 +68,9 @@ DEV_ARGS = {
 }
 
 
-@pytest.mark.parametrize(
-    "secret_key",
-    [None, "", DEFAULT_SECRET_KEY, "short", b"short"],
-)
-def test_server_mode_refuses_an_insecure_secret_key(secret_key):
-    with pytest.raises(RuntimeError, match="SERVER_MODE requires SECRET_KEY"):
-        _validate_hosted_secret_key({"SERVER_MODE": True, "SECRET_KEY": secret_key})
-
-
-def test_server_mode_accepts_a_strong_secret_key():
-    _validate_hosted_secret_key(
-        {
-            "SERVER_MODE": True,
-            "SECRET_KEY": "x" * MIN_HOSTED_SECRET_KEY_BYTES,
-        }
-    )
-
-
-@pytest.mark.parametrize("length, accepted", [(7, False), (8, True)])
-def test_server_mode_secret_key_length_boundary(length, accepted):
-    """Pins the floor with literals rather than deriving it from the constant.
-
-    Written as ``MIN_HOSTED_SECRET_KEY_BYTES - 1`` and ``MIN_HOSTED_SECRET_KEY_BYTES``,
-    these cases would move with the constant and keep passing — the failure mode the
-    test exists to prevent, and the one that let #2003 change the floor without a single
-    case failing. See #2004.
-    """
-    config = {"SERVER_MODE": True, "SECRET_KEY": "k" * length}
-
-    if accepted:
-        _validate_hosted_secret_key(config)
-    else:
-        with pytest.raises(RuntimeError, match="SERVER_MODE requires SECRET_KEY"):
-            _validate_hosted_secret_key(config)
-
-
-def test_hosted_secret_key_floor_is_the_pinned_value():
-    """Fails if the constant moves away from the boundary pinned above.
-
-    The two live together deliberately: the literals catch a validator that stops
-    honouring the floor, and this catches a floor that changes without the literals
-    being reconsidered. Changing the floor means editing both, which is the point —
-    it is a policy decision, currently a stopgap pending #2002.
-    """
-    assert MIN_HOSTED_SECRET_KEY_BYTES == 8
-
-
-def test_local_mode_keeps_the_development_secret_key():
-    _validate_hosted_secret_key(
-        {"SERVER_MODE": False, "SECRET_KEY": DEFAULT_SECRET_KEY}
-    )
+# The hosted SECRET_KEY condition is one entry in the startup-requirement registry, and
+# its cases live with the rest of that machinery in ``test_startup_requirements.py``.
+# What stays here is the wiring: that ``create_app`` actually applies the registry.
 
 
 def test_environment_output_redacts_the_secret_key(capsys):

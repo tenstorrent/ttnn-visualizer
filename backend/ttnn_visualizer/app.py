@@ -48,12 +48,12 @@ from ttnn_visualizer.exceptions import (
 )
 from ttnn_visualizer.instances import create_instance_from_local_paths
 from ttnn_visualizer.settings import (
-    DEFAULT_SECRET_KEY,
-    MIN_HOSTED_SECRET_KEY_BYTES,
     Config,
     DefaultConfig,
     build_socketio_origin_check,
 )
+from ttnn_visualizer.startup_requirements import enforce
+from ttnn_visualizer.startup_requirements import report as report_startup_requirements
 from ttnn_visualizer.utils import (
     find_gunicorn_path,
     is_flag_enabled,
@@ -117,34 +117,16 @@ def _serialize_spa_js_config(js_config: dict) -> str:
     return f"window.TTNN_VISUALIZER_CONFIG = {payload};"
 
 
-def _validate_hosted_secret_key(config: Mapping[str, Any]) -> None:
-    """Refuse a hosted start on a default, empty or obviously-short ``SECRET_KEY``.
+def _validate_startup_requirements(config: Mapping[str, Any]) -> None:
+    """Apply every declared condition on operator-supplied configuration.
 
-    What makes the signed session cookie an integrity boundary across workers and
-    restarts is that the key is *stable and non-default*; the byte floor contributes
-    nothing to that property. The floor counts UTF-8 bytes rather than entropy, so it
-    admits a short dictionary word as readily as a random value of the same size — it
-    catches an unset or placeholder key, and nothing more. Do not read it as
-    establishing key strength.
-
-    #2002 tracks replacing the length test with a key-derivation step, which raises the
-    cost of attacking a weak key without any deployment having to change the key it
-    already has.
+    The conditions themselves, and the convention for introducing a new one without
+    breaking deployments provisioned before it existed, live in
+    ``startup_requirements.py``. Keeping them out of here is the point: an inline check
+    is invisible to review as anything other than an ordinary diff, and #2004 is what
+    that costs.
     """
-    if not is_flag_enabled(config.get("SERVER_MODE", False)):
-        return
-
-    secret_key = config.get("SECRET_KEY")
-    encoded = (
-        secret_key
-        if isinstance(secret_key, bytes)
-        else str(secret_key or "").encode("utf-8")
-    )
-    if secret_key == DEFAULT_SECRET_KEY or len(encoded) < MIN_HOSTED_SECRET_KEY_BYTES:
-        raise RuntimeError(
-            "SERVER_MODE requires SECRET_KEY to contain at least "
-            f"{MIN_HOSTED_SECRET_KEY_BYTES} bytes and not use the development default"
-        )
+    enforce(config)
 
 
 def _print_environment(config: DefaultConfig) -> None:
@@ -196,7 +178,7 @@ def create_app(settings_override=None):
     # an unencrypted connection. ``settings_override`` bypasses Config's recomputation.
     app.config["SESSION_COOKIE_SECURE"] = is_flag_enabled(app.config["SERVER_MODE"])
 
-    _validate_hosted_secret_key(app.config)
+    _validate_startup_requirements(app.config)
     middleware(app)
 
     app.register_blueprint(api, url_prefix=f"{app.config['BASE_PATH']}api")
@@ -433,7 +415,50 @@ def parse_args():
         action="store_true",
         help="Run the server as a daemon process",
     )
+    parser.add_argument(
+        "--check-config",
+        action="store_true",
+        help=(
+            "Check this environment against this release's startup requirements and "
+            "exit, without starting the server. Exit 0 means it would start. Combine "
+            "with --server to check the hosted posture"
+        ),
+    )
     return parser.parse_args()
+
+
+def run_preflight(args: argparse.Namespace) -> int:
+    """Answer "would this release start here?" without starting or stopping anything.
+
+    The gap this closes: a deploy replaces the service and restarts it, and the first
+    thing to evaluate whether the new release can run in that environment is the
+    service itself, in production, after the old one is gone. Run this against the
+    target environment *before* the swap and an unsatisfiable requirement is a failed
+    preflight rather than a restart loop (#2004).
+
+    It has to build the config the way ``main`` does — same CLI overrides, same
+    singleton, same override loop — or it would be checking a different environment
+    than the one that boots. A value the loop cannot read raises ``ValueError`` there,
+    which is a failed preflight for the same reason an unmet requirement is: the
+    server would not have started either.
+
+    Settings parsed in the ``DefaultConfig`` class body (``MAX_CONTENT_LENGTH``) fail
+    earlier still, when this module imports ``settings``, so they never reach this
+    function. That is not a hole in the contract — the process exits non-zero with the
+    message on stderr, which is what a deploy gate reads.
+    """
+    try:
+        config = _config_after_cli_env(args)
+    except ValueError as error:
+        print(f"❌ {error}", file=sys.stderr)
+        print(
+            "This release will NOT start in this environment: a setting could not be "
+            "read.",
+            file=sys.stderr,
+        )
+        return 1
+
+    return report_startup_requirements(config.to_dict())
 
 
 def display_mode_info_without_db(config):
@@ -579,9 +604,15 @@ def main():
 
     args = parse_args()
 
+    # Before anything that touches the filesystem, migrates data or binds a socket:
+    # --check-config is a question about the environment, and must not be answerable
+    # only as a side effect of a partial start.
+    if args.check_config:
+        sys.exit(run_preflight(args))
+
     # Priority: CLI args > env vars > auto-detection (in settings.py)
     config = _config_after_cli_env(args)
-    _validate_hosted_secret_key(config.to_dict())
+    _validate_startup_requirements(config.to_dict())
 
     instance_id = None
 
