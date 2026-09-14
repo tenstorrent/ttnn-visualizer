@@ -39,6 +39,7 @@ import OperationPerfRowBar from './OperationPerfRowBar';
 import SearchField from './SearchField';
 import SimpleMultiselect from './SimpleMultiselect';
 import { useOpPerfRowScores } from '../hooks/useOpPerfRowScores';
+import { filterByOperationRange } from '../functions/filterByOperationRange';
 
 const PLACEHOLDER_ARRAY_SIZE = 50;
 const OPERATION_EL_HEIGHT = 39; // Height in px of each list item
@@ -68,9 +69,7 @@ const OperationList = () => {
 
     const operationsWithRange = useMemo(() => {
         if (fetchedOperations && selectedOperationRange) {
-            return fetchedOperations.filter(
-                (op) => op.id >= selectedOperationRange[0] && op.id <= selectedOperationRange[1],
-            );
+            return filterByOperationRange(fetchedOperations, selectedOperationRange);
         }
 
         return fetchedOperations;

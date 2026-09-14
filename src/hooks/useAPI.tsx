@@ -44,6 +44,7 @@ import { buildL1PressureResult } from '../functions/l1Pressure';
 import { StackedPerfRow } from '../definitions/StackedPerfTable';
 import { isDeviceOperation } from '../functions/filterOperations';
 import { normalizeBufferPagesResponse } from '../functions/normalizeBufferPagesResponse';
+import { filterByOperationRange } from '../functions/filterByOperationRange';
 import {
     activeMlirJsonAtom,
     activeNpeOpTraceAtom,
@@ -1135,9 +1136,7 @@ export const useBuffers = (bufferType: BufferType | null, useRange?: boolean) =>
 
     return useMemo(() => {
         if (response.data && range && useRange) {
-            const filteredData = response.data.filter(
-                (operation) => operation.id >= range[0] && operation.id <= range[1],
-            );
+            const filteredData = filterByOperationRange(response.data, range);
 
             return {
                 ...response,
