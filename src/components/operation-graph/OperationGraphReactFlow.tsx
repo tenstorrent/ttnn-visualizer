@@ -378,6 +378,11 @@ const OperationGraphInner = ({
     // selected), so it cannot double as the sentinel.
     const framedProfilerPathRef = useRef<string | null | undefined>(undefined);
     const pendingEntryFrameRef = useRef<number | null>(null);
+    // Set by the entry frame, consumed by the empty-pane guard below. The guard
+    // cannot read `pendingEntryFrameRef` for this: the frame clears it before
+    // returning, and both effects run on the same commit with the guard second, so
+    // by then it always says "no frame pending". #2008
+    const justFramedRef = useRef(false);
     // The op the URL last moved to, so a rebuild does not pan back to it.
     const focusedUrlOperationRef = useRef<number | null>(null);
     const { getNode, getViewport, setViewport } = useReactFlow<OpGraphFlowNode, OpGraphFlowEdge>();
@@ -742,6 +747,7 @@ const OperationGraphInner = ({
             return;
         }
         pendingEntryFrameRef.current = null;
+        justFramedRef.current = true;
         framedProfilerPathRef.current = profilerReportPath;
         // The frame already put the named op in view, so the effect below must not
         // pan to it as well — the pan reads the pre-tween viewport and would undo
@@ -756,7 +762,14 @@ const OperationGraphInner = ({
     useEffect(() => {
         const pane = containerRef.current?.getBoundingClientRect();
         const bounds = boundsOfNodes(nodes);
+        // Read and cleared first, so a commit the frame handled is skipped exactly
+        // once. `getViewport` is still pre-tween here — the same fact the URL pan
+        // above defers to — so panning from it would write the old zoom back over
+        // the one the frame just chose.
+        const justFramed = justFramedRef.current;
+        justFramedRef.current = false;
         if (
+            justFramed ||
             bounds === null ||
             pane === undefined ||
             pendingEntryFrameRef.current !== null ||

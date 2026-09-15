@@ -78,10 +78,17 @@ const flowTransform: { current: [number, number, number] } = { current: [0, 0, 1
 // moved to has to measure against this and not against `lastFlowRender()`.
 const STORE_NODE = { width: 100, height: 40 };
 
-const { setCenter, setViewport, knownNodeIds, flowStoreLag } = vi.hoisted(() => ({
+const { setCenter, setViewport, knownNodeIds, flowStoreLag, viewportState } = vi.hoisted(() => ({
     setCenter: vi.fn(() => Promise.resolve()),
     setViewport: vi.fn(() => Promise.resolve()),
     knownNodeIds: new Set<string>(),
+    // Configurable, because a viewport pinned at the origin cannot tell "did not
+    // need to move" apart from "moved wrongly against a stale read" — every graph
+    // intersects the pane there. Twice now the interesting bug has been on the far
+    // side of that line. `setViewport` deliberately does *not* write back to it:
+    // the real one tweens, so an effect on the same commit reads the pre-tween
+    // value, and that lag is the thing under test. #2008
+    viewportState: { current: { x: 0, y: 0, zoom: 0.5 } },
     // React Flow's store trails `setNodes`, so a `getNode` in an effect that runs on
     // the same commit answers `undefined`. This harness repopulates `knownNodeIds`
     // during render, which hides that entirely — code reading `getNode` on entry was
@@ -117,7 +124,7 @@ vi.mock('@xyflow/react', async () => {
             !flowStoreLag.isBlind && knownNodeIds.has(id)
                 ? { id, position: { x: 0, y: 0 }, width: STORE_NODE.width, height: STORE_NODE.height }
                 : undefined,
-        getViewport: () => ({ x: 0, y: 0, zoom: PANNED_ZOOM }),
+        getViewport: () => ({ ...viewportState.current }),
         setViewport,
     };
     // Stable like `flowApi`: the zoom effect lists the store as a dependency, so
@@ -493,6 +500,7 @@ beforeEach(() => {
     setViewport.mockClear();
     knownNodeIds.clear();
     flowStoreLag.isBlind = false;
+    viewportState.current = { x: 0, y: 0, zoom: PANNED_ZOOM };
     vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function measured(this: Element) {
         return this.classList?.contains('op-graph-toolbar')
             ? stubRect(PANE.width, TOOLBAR_HEIGHT)
@@ -1619,6 +1627,74 @@ describe('OperationGraphReactFlow repeat blocks', () => {
         });
 
         expect(setViewport).toHaveBeenCalledTimes(1);
+    });
+
+    it('frames the new report without the empty-pane guard writing the old zoom back', () => {
+        // The guard and the entry frame run on the same commit, the guard second.
+        // The frame clears `pendingEntryFrameRef` before returning, so the guard's
+        // check on it passes — and `getViewport` is still pre-tween, so the guard
+        // saw the old viewport, decided the new graph was off screen, and panned
+        // from it, putting the old zoom back over the one the frame chose. Only
+        // visible with the reader panned away, which is why the fixed origin hid
+        // it. #2008
+        renderGraph();
+        viewportState.current = { x: -11861, y: -3000, zoom: PANNED_ZOOM };
+        setViewport.mockClear();
+
+        act(() => {
+            getDefaultStore().set(activeProfilerReportAtom, { path: '/reports/second' } as ReportFolder);
+        });
+        act(() => {
+            harness.onBuilt?.(
+                buildOpGraph(harness.sourceOperations ?? sourceFor(OPERATION_LIST), {
+                    hideDeallocate: true,
+                    deviceSubgraphs: [],
+                }),
+            );
+        });
+
+        const zooms = (setViewport.mock.calls as unknown as [{ zoom: number }][]).map(([viewport]) => viewport.zoom);
+        // One write, and not the stale zoom: the frame picks the entry scale and
+        // nothing may follow it with the pre-tween one.
+        expect(zooms).toHaveLength(1);
+        expect(zooms[0]).not.toBe(PANNED_ZOOM);
+    });
+
+    it('pans to a narrowed graph the reader can no longer see', () => {
+        // The other side of the guard above: it must still fire when the rebuild
+        // really does leave an empty pane. A range change lays the new graph out
+        // near the origin while the reader is panned far away, and pinning the
+        // harness viewport at the origin meant no test could tell the guard
+        // working from the guard never running. #2008
+        renderGraph();
+        viewportState.current = { x: -11861, y: -3000, zoom: PANNED_ZOOM };
+        setViewport.mockClear();
+
+        const narrowed = OPERATION_LIST.slice(0, 3);
+        harness.sourceOperations = sourceFor(narrowed);
+        act(() => {
+            harness.onBuilt?.(buildOpGraph(sourceFor(narrowed), { hideDeallocate: true, deviceSubgraphs: [] }));
+        });
+
+        expect(setViewport).toHaveBeenCalledTimes(1);
+        const [viewport] = setViewport.mock.calls[0] as unknown as [{ zoom: number }];
+        // Pans, never rescales: this is not entry.
+        expect(viewport.zoom).toBe(PANNED_ZOOM);
+    });
+
+    it('leaves a graph the reader can still see where it is', () => {
+        // The guard's whole premise. Same rebuild, viewport left at the origin
+        // where the new graph is plainly visible, so nothing may move.
+        renderGraph();
+        setViewport.mockClear();
+
+        const narrowed = OPERATION_LIST.slice(0, 3);
+        harness.sourceOperations = sourceFor(narrowed);
+        act(() => {
+            harness.onBuilt?.(buildOpGraph(sourceFor(narrowed), { hideDeallocate: true, deviceSubgraphs: [] }));
+        });
+
+        expect(setViewport).not.toHaveBeenCalled();
     });
 
     it('holds the viewport on an unroll instead of recentring on the selection', () => {
