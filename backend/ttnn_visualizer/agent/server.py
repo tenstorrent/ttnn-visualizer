@@ -18,7 +18,8 @@ import logging
 import sys
 from typing import Callable, Dict, List, Optional, TextIO
 
-from ttnn_visualizer.agent import tools
+from ttnn_visualizer.agent import operations, tools
+from ttnn_visualizer.agent.bounds import MAX_LIMIT
 from ttnn_visualizer.agent.handles import (
     ReportRegistry,
     UnknownHandleError,
@@ -37,12 +38,19 @@ MAX_LINE_BYTES = 1_000_000
 
 _LIMIT_SCHEMA = {
     "type": "integer",
-    "description": f"Rows to return, capped at {tools.MAX_LIMIT}.",
+    "description": f"Rows to return, capped at {MAX_LIMIT}.",
 }
 _METRIC_SCHEMA = {
     "type": "string",
     "enum": sorted(tools.SORTABLE_METRICS),
     "description": "Which metric to rank by.",
+}
+_RANK_SCHEMA = {
+    "type": "integer",
+    "description": (
+        "Host rank to read, on a multi-host report. Defaults to 0; ids restart "
+        "per rank, so reading every rank at once collides them."
+    ),
 }
 _ADDITIVE_METRIC_SCHEMA = {
     "type": "string",
@@ -130,6 +138,88 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
                 "required": ["handle_a", "handle_b"],
             },
             "handler": lambda arguments: tools.diff_reports(registry, **arguments),
+        },
+        "find_operations": {
+            "description": (
+                "Find operations by name substring, returning ids to ask about. "
+                "Durations here are host wall time from the profiler report; for "
+                "device time use top_ops."
+            ),
+            "schema": {
+                "type": "object",
+                "properties": {
+                    "handle": {"type": "string"},
+                    "name_contains": {
+                        "type": "string",
+                        "description": "Case-insensitive substring, e.g. 'matmul'.",
+                    },
+                    "limit": _LIMIT_SCHEMA,
+                    "rank": _RANK_SCHEMA,
+                },
+                "required": ["handle"],
+            },
+            "handler": lambda arguments: operations.find_operations(
+                registry, **arguments
+            ),
+        },
+        "operation_detail": {
+            "description": (
+                "One operation: its input and output tensors with shape, dtype and "
+                "layout, and what it had allocated. Tensor sizes are bytes; "
+                "allocation sizes are bytes per bank -- the two are not comparable."
+            ),
+            "schema": {
+                "type": "object",
+                "properties": {
+                    "handle": {"type": "string"},
+                    "operation_id": {"type": "integer"},
+                    "rank": _RANK_SCHEMA,
+                },
+                "required": ["handle", "operation_id"],
+            },
+            "handler": lambda arguments: operations.operation_detail(
+                registry, **arguments
+            ),
+        },
+        "memory_profile": {
+            "description": (
+                "Memory footprint per operation, largest first, with the run's peak "
+                "by buffer type and the device's L1 geometry. Sizes are bytes per "
+                "bank: comparable to l1_bank_size, not to a device-wide total. The "
+                "report carries no DRAM capacity."
+            ),
+            "schema": {
+                "type": "object",
+                "properties": {
+                    "handle": {"type": "string"},
+                    "buffer_type": {
+                        "type": "string",
+                        "description": "Restrict to one of DRAM, L1, L1_SMALL.",
+                    },
+                    "limit": _LIMIT_SCHEMA,
+                    "rank": _RANK_SCHEMA,
+                },
+                "required": ["handle"],
+            },
+            "handler": lambda arguments: operations.memory_profile(
+                registry, **arguments
+            ),
+        },
+        "tensor_flow": {
+            "description": (
+                "The operation that produced a tensor and the operations that "
+                "consumed it, with the tensor's shape, dtype, layout and size."
+            ),
+            "schema": {
+                "type": "object",
+                "properties": {
+                    "handle": {"type": "string"},
+                    "tensor_id": {"type": "integer"},
+                    "rank": _RANK_SCHEMA,
+                },
+                "required": ["handle", "tensor_id"],
+            },
+            "handler": lambda arguments: operations.tensor_flow(registry, **arguments),
         },
     }
 

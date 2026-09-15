@@ -6,9 +6,9 @@ SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 # Agent tools (MCP)
 
-TT-NN Visualizer ships a Model Context Protocol server so a coding agent can ask a
-performance report the questions a person asks it during model bring-up: which operations
-dominate, where the time went inside them, and whether a change helped.
+TT-NN Visualizer ships a Model Context Protocol server so a coding agent can ask a report
+the questions a person asks it during model bring-up: which operations dominate, where the
+time went inside them, whether a change helped, and what the run allocated.
 
 It is a read-only surface over the same report readers the web application uses. It starts
 no web server, opens no port, and writes nothing to a report.
@@ -38,15 +38,25 @@ server needs no database and no running application.
 | `top_ops` | The costliest operations by device time, op-to-op gap, total percentage, FLOPS, DRAM bandwidth or core count. |
 | `zone_timings` | Per-zone, per-RISC totals from `profile_log_device.csv` — firmware and kernel phases, as measured on device. |
 | `diff_reports` | Per-operation-code deltas between two reports, largest movement first. |
+| `find_operations` | Operations matching a name substring, with the ids `operation_detail` takes. |
+| `operation_detail` | One operation: its input and output tensors with shape, dtype and layout, and what it had allocated. |
+| `memory_profile` | Memory footprint per operation, largest first, with the run's peak by buffer type and the device's L1 geometry. |
+| `tensor_flow` | Which operation produced a tensor and which ones consumed it. |
+
+The first four read the performance CSVs; the last four read the profiler report's SQLite
+database. A capture can carry either, both, or — as far as these tools are concerned —
+neither, which is what makes `load_report`'s answer worth reading first.
 
 Call `load_report` first. It reports what is answerable rather than making you discover it
 one failed call at a time, because the report kinds are independent: a performance-only
 capture has no operation graph and no tensor data, and a report with no device profiler log
-cannot answer `zone_timings`.
+cannot answer `zone_timings`. It checks that the profiler database is readable rather than
+merely present, so a truncated capture is reported as unanswerable instead of failing four
+calls later.
 
 ## What the answers mean
 
-Three properties are deliberate, and worth knowing before you act on a number.
+Five properties are deliberate, and worth knowing before you act on a number.
 
 **Every tool returns an aggregate or a bounded slice, never the table.** A performance
 report runs to tens of thousands of rows of about thirty-five fields. Limits are capped
@@ -61,6 +71,27 @@ One filter is applied, deliberately: per-device rows are **merged**, so an opera
 ran on eight devices is one row rather than eight. That is the unit an operation is
 reported in rather than a subset of the report — but it is a choice, so every response
 repeats the projection it used and you can see it.
+
+**Allocation figures are per bank, and tensor sizes are not.** `memory_profile` and the
+allocations in `operation_detail` come from the report's `max_size_per_bank` column, so an
+L1 figure is comparable to the `l1_bank_size` reported beside it — multiply by
+`l1_num_banks` for the device-wide total. A tensor's `size`, in the same response, is a
+true byte count for the whole tensor. The two are in different units and cannot be added
+or compared, so each says which unit it is in. The report carries no DRAM capacity at all,
+which is stated rather than left as a gap: a DRAM figure has nothing here to divide by.
+
+`memory_profile` groups by operation because the report records what was live *at* each
+operation rather than what that operation allocated. A per-operation sum is therefore the
+footprint at that point in the run, and the largest of them is the run's peak — which is
+the question an out-of-memory failure asks. Per-type peaks are the largest footprint of
+that type at any one operation, never a sum across the run: buffers persist across
+operations, and adding them would count one allocation once per operation it stayed live
+through.
+
+**A multi-host report is read one rank at a time.** Operation ids restart at 1 per rank, so
+reading every rank at once would collide operations that merely share an id. The database
+tools default to rank 0, take a `rank` argument, and name the rank they read in every
+response along with a caveat saying the figures describe that rank rather than the job.
 
 **A total on a partitioned run carries a caveat.** When a report spans more than one
 sub-device, operations on different sub-devices can run concurrently, so summed device
@@ -81,6 +112,10 @@ reports occurrence counts only, and a capture that stopped mid-zone reports how 
 and ends failed to pair so a partial total does not read as a complete one.
 
 ## Limitations
+
+Page-level memory questions — fragmentation, or the per-bank detail behind the web
+application's memory plot — are not exposed. That data runs to millions of rows on an
+ordinary capture and needs a different shape than a tool response.
 
 Device profiler logs carry named zones only where a kernel was instrumented to emit them.
 Most captures contain only the default firmware and kernel zones — `BRISC-FW`,

@@ -19,6 +19,7 @@ from unittest.mock import patch
 import pytest
 from ttnn_visualizer import csv_queries
 from ttnn_visualizer.agent import server, tools
+from ttnn_visualizer.agent.bounds import MAX_LIMIT
 from ttnn_visualizer.agent.handles import (
     ReportRegistry,
     UnknownHandleError,
@@ -97,14 +98,19 @@ class TestReportInventory:
 
         assert loaded["handle"] == "report-1"
         assert set(loaded["answerable"]) == {"top_ops", "zone_timings"}
-        assert loaded["unanswerable"] == []
+        assert set(loaded["unanswerable"]) == {
+            "find_operations",
+            "operation_detail",
+            "memory_profile",
+            "tensor_flow",
+        }
         assert loaded["capture"]["ARCH"] == "wormhole_b0"
         assert loaded["performance_csv"] == "ops_perf_results_x.csv"
 
     def test_it_never_names_a_tool_that_is_not_registered(self, tmp_path):
         """`operations` was listed whenever a `db.sqlite` was present, but no such
-        tool exists — so an agent reading the list had a name it could not call.
-        Data the report holds is reported separately from what can be asked."""
+        tool existed — so an agent reading the list had a name it could not call.
+        Every name in either list must be one the transport registers."""
         write_device_log(tmp_path, MODERN_HEADER, [])
         profiler = tmp_path / "profiler"
         profiler.mkdir()
@@ -118,7 +124,23 @@ class TestReportInventory:
 
         registered = set(server._tool_table(ReportRegistry()))
         assert set(loaded["answerable"]) | set(loaded["unanswerable"]) <= registered
-        assert loaded["data_present_without_tools"] == ["operations_database"]
+        assert loaded["data_present_without_tools"] == []
+
+    def test_an_empty_database_file_is_not_answerable(self, tmp_path):
+        """A zero-byte `db.sqlite` opens as a valid empty database.
+
+        Checking only that the file exists advertised all four database tools and
+        then failed each of them with "no such table", which is the same broken
+        promise as naming an unregistered tool. #2012
+        """
+        profiler = tmp_path / "profiler"
+        profiler.mkdir()
+        (profiler / "db.sqlite").write_text("", encoding="utf-8")
+
+        loaded = load_report(ReportRegistry(), profiler_path=str(profiler))
+
+        assert loaded["answerable"] == []
+        assert "find_operations" in loaded["unanswerable"]
 
     def test_a_missing_directory_is_refused_with_the_path(self, tmp_path):
         with pytest.raises(ValueError, match="performance_path is not a directory"):
@@ -201,7 +223,7 @@ class TestTopOps:
         ):
             result = tools.top_ops(registry, "report-1", limit=10_000)
 
-        assert result["returned"] == tools.MAX_LIMIT
+        assert result["returned"] == MAX_LIMIT
         assert result["op_count"] == 500
 
     def test_it_ranks_by_the_requested_metric(self, tmp_path):
@@ -705,7 +727,16 @@ class TestTransport:
         )
 
         advertised = {tool["name"] for tool in response["result"]["tools"]}
-        assert advertised == {"load_report", "top_ops", "zone_timings", "diff_reports"}
+        assert advertised == {
+            "load_report",
+            "top_ops",
+            "zone_timings",
+            "diff_reports",
+            "find_operations",
+            "operation_detail",
+            "memory_profile",
+            "tensor_flow",
+        }
         assert all(
             tool["inputSchema"]["type"] == "object"
             for tool in response["result"]["tools"]

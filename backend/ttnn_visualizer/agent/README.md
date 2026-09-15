@@ -13,7 +13,9 @@ This file covers only what a person changing the code needs.
 | Module | Holds |
 |---|---|
 | `handles.py` | Path → handle registry, and the inventory `load_report` returns. No database and no app context: `Instance` is a plain model of two paths, which is what lets the tools read the query classes directly. |
-| `tools.py` | The tools, `CANONICAL_PROJECTION`, and the caveat logic. |
+| `tools.py` | The performance-report tools, `CANONICAL_PROJECTION`, and the caveat logic. |
+| `operations.py` | The profiler-database tools. Opens its own read-only connection: `LocalQueryRunner` reads `Instance.profiler_path` as the SQLite file, while a handle holds the directory the caller named. |
+| `bounds.py` | The one result cap, shared because `server` quotes it to an agent in every limit schema. |
 | `server.py` | Newline-delimited JSON-RPC on stdio. Nothing above it imports from here. |
 
 ## Running it from a source checkout
@@ -32,6 +34,16 @@ printf '%s\n' \
   | uv run ttnn-visualizer-mcp
 ```
 
+The database tools take a profiler directory instead, and a report with both is loaded in
+one call:
+
+```bash
+printf '%s\n' \
+  '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"load_report","arguments":{"profiler_path":"/path/to/profiler/report"}}}' \
+  '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"memory_profile","arguments":{"handle":"report-1","buffer_type":"L1","limit":5}}}' \
+  | uv run ttnn-visualizer-mcp
+```
+
 ## Three things to know before editing
 
 **`stdout` is protocol.** Logs go to stderr, and `tools._generate_canonical_report`
@@ -40,6 +52,12 @@ land mid-frame and corrupt the stream.
 
 **Report cells are strings.** `device_time` arrives as `"16.478"` and `cores` as `"110"`,
 so everything numeric goes through `_as_number` rather than being compared directly.
+
+**Two size units share one response.** `buffers.max_size_per_bank` is per bank and
+`tensors.size` is a whole-tensor byte count, so `operations.py` labels both rather than
+letting the field names imply they are comparable. The HTTP serializers re-expose the
+per-bank column as plain `size` (`serializers.py:309`), which is how easy the misreading
+is.
 
 **Adding a tool means adding it to `_tool_table`**, with a description carrying the caveats
 an agent needs *before* choosing it — not only in the response.
