@@ -16,6 +16,7 @@ import sys
 from collections import defaultdict
 from typing import Dict, List, Optional
 
+from ttnn_visualizer.agent.bounds import bounded
 from ttnn_visualizer.agent.handles import ReportRegistry
 from ttnn_visualizer.csv_queries import (
     DeviceLogProfilerQueries,
@@ -64,15 +65,6 @@ SORTABLE_METRICS: Dict[str, str] = {
 # TFLOPS and `cores` is a per-op allocation: adding them across operations
 # produces an authoritative-looking number that is dimensionally nonsense.
 ADDITIVE_METRICS = frozenset({"device_time", "op_to_op_gap", "total_percent"})
-
-DEFAULT_LIMIT = 10
-MAX_LIMIT = 100
-
-
-def _bounded(limit: Optional[int]) -> int:
-    if limit is None:
-        return DEFAULT_LIMIT
-    return max(1, min(int(limit), MAX_LIMIT))
 
 
 def _as_number(value: object) -> Optional[float]:
@@ -164,7 +156,7 @@ def top_ops(
         (row for row in rows if _as_number(row.get(field)) is not None),
         key=lambda row: _as_number(row.get(field)) or 0.0,
         reverse=True,
-    )[: _bounded(limit)]
+    )[: bounded(limit)]
 
     total: float = sum(_as_number(row.get(field)) or 0.0 for row in rows)
     ops = [
@@ -208,7 +200,7 @@ def zone_timings(
     clock_mhz = _as_number(metadata.get("CHIP_FREQ[MHz]"))
 
     with DeviceLogProfilerQueries(instance, stream=True) as queries:
-        summary, pairing = queries.query_zone_summary(limit=_bounded(limit))
+        summary, pairing = queries.query_zone_summary(limit=bounded(limit))
 
     zones = []
     for entry in summary:
@@ -340,8 +332,8 @@ def diff_reports(
         "metric": by,
         "before": handle_a,
         "after": handle_b,
-        "returned": min(len(changes), _bounded(limit)),
-        "changes": changes[: _bounded(limit)],
+        "returned": min(len(changes), bounded(limit)),
+        "changes": changes[: bounded(limit)],
         "projection": dict(CANONICAL_PROJECTION),
         "grouped_by": "op_code",
     }

@@ -118,7 +118,7 @@ def _serialize_spa_js_config(js_config: dict) -> str:
 
 
 def _validate_hosted_secret_key(config: Mapping[str, Any]) -> None:
-    """Refuse a hosted start on a default, empty or obviously-short ``SECRET_KEY``.
+    r"""Refuse a hosted start on a ``SECRET_KEY`` that is the default, or short trimmed.
 
     What makes the signed session cookie an integrity boundary across workers and
     restarts is that the key is *stable and non-default*; the byte floor contributes
@@ -126,6 +126,38 @@ def _validate_hosted_secret_key(config: Mapping[str, Any]) -> None:
     admits a short dictionary word as readily as a random value of the same size — it
     catches an unset or placeholder key, and nothing more. Do not read it as
     establishing key strength.
+
+    The rule lives here, and not beside the constants it reads, because it has to see
+    ``settings_override``. ``settings.py``'s own cross-key hosted guard,
+    ``_refuse_debug_under_server_mode``, runs inside ``Config.__init__`` — before
+    ``create_app`` applies the override, which is why ``fixture_settings.py`` has to pin
+    ``DEBUG`` by hand rather than leave it to that guard. A settings-side secret-key
+    validator would inherit the same defect, and
+    ``test_create_app_refuses_the_development_secret_in_server_mode``, which reaches
+    this function *through* ``settings_override``, would stop exercising the real path.
+
+    The default clause is load-bearing only if ``MIN_HOSTED_SECRET_KEY_BYTES`` drops
+    below six or ``DEFAULT_SECRET_KEY`` grows: at five bytes against a floor of eight,
+    the default already fails on length, so nothing observable rests on the clause
+    today. It stays because #2002 may move or remove the floor, and
+    ``test_the_development_default_is_refused_independently_of_the_floor`` patches the
+    floor down to keep it honest in the meantime.
+
+    The floor measures what survives a trim, because eight spaces are not a short key
+    but are not a key at all. The trim decides admission only — Flask signs with the
+    configured value, whitespace included, so ``"key12345"`` and ``" key12345 "`` stay
+    two different signing keys whose cookies do not interchange. Normalising the value
+    itself would rotate the key for every deployment carrying stray whitespace, which
+    is the session loss this check exists to avoid.
+
+    Which whitespace trims is a consequence of that ordering rather than a property of
+    trimming. A ``str`` — every operator-facing path, since ``os.getenv`` returns one —
+    is trimmed before encoding, so everything ``str.isspace`` accepts goes, including
+    non-breaking and ideographic spaces. A ``bytes`` or ``bytearray`` key, reachable
+    only through ``settings_override``, loses exactly the six bytes in
+    ``b" \t\n\r\x0b\x0c"``, because arbitrary bytes cannot be decoded to find the rest.
+    A byte-order mark is not whitespace to Python on either path, so a run of U+FEFF
+    counts toward the floor whatever the type.
 
     #2002 tracks replacing the length test with a key-derivation step, which raises the
     cost of attacking a weak key without any deployment having to change the key it
@@ -135,15 +167,19 @@ def _validate_hosted_secret_key(config: Mapping[str, Any]) -> None:
         return
 
     secret_key = config.get("SECRET_KEY")
-    encoded = (
-        secret_key
-        if isinstance(secret_key, bytes)
-        else str(secret_key or "").encode("utf-8")
+    trimmed = (
+        bytes(secret_key).strip()
+        if isinstance(secret_key, (bytes, bytearray))
+        else str(secret_key or "").strip().encode("utf-8")
     )
-    if secret_key == DEFAULT_SECRET_KEY or len(encoded) < MIN_HOSTED_SECRET_KEY_BYTES:
+    if (
+        trimmed == DEFAULT_SECRET_KEY.encode("utf-8")
+        or len(trimmed) < MIN_HOSTED_SECRET_KEY_BYTES
+    ):
         raise RuntimeError(
             "SERVER_MODE requires SECRET_KEY to contain at least "
-            f"{MIN_HOSTED_SECRET_KEY_BYTES} bytes and not use the development default"
+            f"{MIN_HOSTED_SECRET_KEY_BYTES} bytes excluding surrounding whitespace, "
+            "and not use the development default"
         )
 
 

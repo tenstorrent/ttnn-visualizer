@@ -177,17 +177,17 @@ describe('findCriticalPath', () => {
         const path = findCriticalPath(
             [
                 { id: '1', operationId: 1 },
-                { id: 'block:0:2', operationId: 2, memberOperationIds: [2, 3, 4] },
+                { id: 'block:2', operationId: 2, memberOperationIds: [2, 3, 4] },
                 { id: '5', operationId: 5 },
             ],
             [
-                { id: '1-2-0', source: '1', target: 'block:0:2' },
-                { id: '2-5-0', source: 'block:0:2', target: '5' },
+                { id: '1-2-0', source: '1', target: 'block:2' },
+                { id: '2-5-0', source: 'block:2', target: '5' },
             ],
             weights([1, 10], [2, 100], [3, 100], [4, 100], [5, 10]),
         );
 
-        expect(path.nodeIds.has('block:0:2')).toBe(true);
+        expect(path.nodeIds.has('block:2')).toBe(true);
         expect(path.totalNs).toBe(320);
         expect(path.opCount).toBe(5);
     });
