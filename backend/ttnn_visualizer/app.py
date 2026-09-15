@@ -48,12 +48,12 @@ from ttnn_visualizer.exceptions import (
 )
 from ttnn_visualizer.instances import create_instance_from_local_paths
 from ttnn_visualizer.settings import (
-    DEFAULT_SECRET_KEY,
-    MIN_HOSTED_SECRET_KEY_BYTES,
     Config,
     DefaultConfig,
     build_socketio_origin_check,
 )
+from ttnn_visualizer.startup_requirements import enforce
+from ttnn_visualizer.startup_requirements import report as report_startup_requirements
 from ttnn_visualizer.utils import (
     find_gunicorn_path,
     is_flag_enabled,
@@ -117,70 +117,16 @@ def _serialize_spa_js_config(js_config: dict) -> str:
     return f"window.TTNN_VISUALIZER_CONFIG = {payload};"
 
 
-def _validate_hosted_secret_key(config: Mapping[str, Any]) -> None:
-    r"""Refuse a hosted start on a ``SECRET_KEY`` that is the default, or short trimmed.
+def _validate_startup_requirements(config: Mapping[str, Any]) -> None:
+    """Apply every declared condition on operator-supplied configuration.
 
-    What makes the signed session cookie an integrity boundary across workers and
-    restarts is that the key is *stable and non-default*; the byte floor contributes
-    nothing to that property. The floor counts UTF-8 bytes rather than entropy, so it
-    admits a short dictionary word as readily as a random value of the same size — it
-    catches an unset or placeholder key, and nothing more. Do not read it as
-    establishing key strength.
-
-    The rule lives here, and not beside the constants it reads, because it has to see
-    ``settings_override``. ``settings.py``'s own cross-key hosted guard,
-    ``_refuse_debug_under_server_mode``, runs inside ``Config.__init__`` — before
-    ``create_app`` applies the override, which is why ``fixture_settings.py`` has to pin
-    ``DEBUG`` by hand rather than leave it to that guard. A settings-side secret-key
-    validator would inherit the same defect, and
-    ``test_create_app_refuses_the_development_secret_in_server_mode``, which reaches
-    this function *through* ``settings_override``, would stop exercising the real path.
-
-    The default clause is load-bearing only if ``MIN_HOSTED_SECRET_KEY_BYTES`` drops
-    below six or ``DEFAULT_SECRET_KEY`` grows: at five bytes against a floor of eight,
-    the default already fails on length, so nothing observable rests on the clause
-    today. It stays because #2002 may move or remove the floor, and
-    ``test_the_development_default_is_refused_independently_of_the_floor`` patches the
-    floor down to keep it honest in the meantime.
-
-    The floor measures what survives a trim, because eight spaces are not a short key
-    but are not a key at all. The trim decides admission only — Flask signs with the
-    configured value, whitespace included, so ``"key12345"`` and ``" key12345 "`` stay
-    two different signing keys whose cookies do not interchange. Normalising the value
-    itself would rotate the key for every deployment carrying stray whitespace, which
-    is the session loss this check exists to avoid.
-
-    Which whitespace trims is a consequence of that ordering rather than a property of
-    trimming. A ``str`` — every operator-facing path, since ``os.getenv`` returns one —
-    is trimmed before encoding, so everything ``str.isspace`` accepts goes, including
-    non-breaking and ideographic spaces. A ``bytes`` or ``bytearray`` key, reachable
-    only through ``settings_override``, loses exactly the six bytes in
-    ``b" \t\n\r\x0b\x0c"``, because arbitrary bytes cannot be decoded to find the rest.
-    A byte-order mark is not whitespace to Python on either path, so a run of U+FEFF
-    counts toward the floor whatever the type.
-
-    #2002 tracks replacing the length test with a key-derivation step, which raises the
-    cost of attacking a weak key without any deployment having to change the key it
-    already has.
+    The conditions themselves, and the convention for introducing a new one without
+    breaking deployments provisioned before it existed, live in
+    ``startup_requirements.py``. Keeping them out of here is the point: an inline check
+    is invisible to review as anything other than an ordinary diff, and #2004 is what
+    that costs.
     """
-    if not is_flag_enabled(config.get("SERVER_MODE", False)):
-        return
-
-    secret_key = config.get("SECRET_KEY")
-    trimmed = (
-        bytes(secret_key).strip()
-        if isinstance(secret_key, (bytes, bytearray))
-        else str(secret_key or "").strip().encode("utf-8")
-    )
-    if (
-        trimmed == DEFAULT_SECRET_KEY.encode("utf-8")
-        or len(trimmed) < MIN_HOSTED_SECRET_KEY_BYTES
-    ):
-        raise RuntimeError(
-            "SERVER_MODE requires SECRET_KEY to contain at least "
-            f"{MIN_HOSTED_SECRET_KEY_BYTES} bytes excluding surrounding whitespace, "
-            "and not use the development default"
-        )
+    enforce(config)
 
 
 def _print_environment(config: DefaultConfig) -> None:
@@ -232,7 +178,7 @@ def create_app(settings_override=None):
     # an unencrypted connection. ``settings_override`` bypasses Config's recomputation.
     app.config["SESSION_COOKIE_SECURE"] = is_flag_enabled(app.config["SERVER_MODE"])
 
-    _validate_hosted_secret_key(app.config)
+    _validate_startup_requirements(app.config)
     middleware(app)
 
     app.register_blueprint(api, url_prefix=f"{app.config['BASE_PATH']}api")
@@ -469,7 +415,50 @@ def parse_args():
         action="store_true",
         help="Run the server as a daemon process",
     )
+    parser.add_argument(
+        "--check-config",
+        action="store_true",
+        help=(
+            "Check this environment against this release's startup requirements and "
+            "exit, without starting the server. Exit 0 means it would start. Combine "
+            "with --server to check the hosted posture"
+        ),
+    )
     return parser.parse_args()
+
+
+def run_preflight(args: argparse.Namespace) -> int:
+    """Answer "would this release start here?" without starting or stopping anything.
+
+    The gap this closes: a deploy replaces the service and restarts it, and the first
+    thing to evaluate whether the new release can run in that environment is the
+    service itself, in production, after the old one is gone. Run this against the
+    target environment *before* the swap and an unsatisfiable requirement is a failed
+    preflight rather than a restart loop (#2004).
+
+    It has to build the config the way ``main`` does — same CLI overrides, same
+    singleton, same override loop — or it would be checking a different environment
+    than the one that boots. A value the loop cannot read raises ``ValueError`` there,
+    which is a failed preflight for the same reason an unmet requirement is: the
+    server would not have started either.
+
+    Settings parsed in the ``DefaultConfig`` class body (``MAX_CONTENT_LENGTH``) fail
+    earlier still, when this module imports ``settings``, so they never reach this
+    function. That is not a hole in the contract — the process exits non-zero with the
+    message on stderr, which is what a deploy gate reads.
+    """
+    try:
+        config = _config_after_cli_env(args)
+    except ValueError as error:
+        print(f"❌ {error}", file=sys.stderr)
+        print(
+            "This release will NOT start in this environment: a setting could not be "
+            "read.",
+            file=sys.stderr,
+        )
+        return 1
+
+    return report_startup_requirements(config.to_dict())
 
 
 def display_mode_info_without_db(config):
@@ -615,9 +604,15 @@ def main():
 
     args = parse_args()
 
+    # Before anything that touches the filesystem, migrates data or binds a socket:
+    # --check-config is a question about the environment, and must not be answerable
+    # only as a side effect of a partial start.
+    if args.check_config:
+        sys.exit(run_preflight(args))
+
     # Priority: CLI args > env vars > auto-detection (in settings.py)
     config = _config_after_cli_env(args)
-    _validate_hosted_secret_key(config.to_dict())
+    _validate_startup_requirements(config.to_dict())
 
     instance_id = None
 

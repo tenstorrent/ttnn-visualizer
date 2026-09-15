@@ -13,7 +13,6 @@ from unittest.mock import patch
 
 import pytest
 from ttnn_visualizer import event_logging
-from ttnn_visualizer.app import _validate_hosted_secret_key
 from ttnn_visualizer.event_logging import (
     _DETAIL_FIELD_ENUMS,
     CLIENT_EVENT_DETAIL_FIELDS,
@@ -35,6 +34,7 @@ from ttnn_visualizer.event_logging import (
     EventLogEvent,
 )
 from ttnn_visualizer.settings import MIN_HOSTED_SECRET_KEY_BYTES
+from ttnn_visualizer.startup_requirements import enforce
 from ttnn_visualizer.utils import FALSE_VALUES, TRUE_VALUES
 
 # The one spelling of the floor, shared by the user reference and the refusal message
@@ -276,7 +276,7 @@ def test_the_hosted_secret_key_floor_reads_the_same_in_the_docs_and_the_refusal(
     clause going missing from either one.
     """
     with pytest.raises(RuntimeError) as refusal:
-        _validate_hosted_secret_key({"SERVER_MODE": True, "SECRET_KEY": "short"})
+        enforce({"SERVER_MODE": True, "SECRET_KEY": "short"})
 
     assert _HOSTED_SECRET_KEY_FLOOR_PHRASE in str(refusal.value)
     assert _HOSTED_SECRET_KEY_FLOOR_PHRASE in _read(_EVENT_LOGGING_DOCS)

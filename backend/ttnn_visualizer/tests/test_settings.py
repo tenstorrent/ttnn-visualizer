@@ -22,11 +22,7 @@ from pathlib import Path
 import pytest
 from ttnn_visualizer import app as app_module
 from ttnn_visualizer import event_logging
-from ttnn_visualizer.app import (
-    _print_environment,
-    _validate_hosted_secret_key,
-    create_app,
-)
+from ttnn_visualizer.app import _print_environment, create_app
 from ttnn_visualizer.event_logging import (
     DISABLED_MARKER_NAME,
     RECORDING_DISABLED_ENV_VAR,
@@ -73,151 +69,9 @@ DEV_ARGS = {
 }
 
 
-# Two idioms live in the secret-key cases below, and the rule for choosing is: a case
-# whose invariant *is* the floor's position writes the number as a bare literal, so it
-# fails when the floor moves — that is
-# ``test_server_mode_secret_key_length_boundary`` and nothing else. Every other case
-# derives from ``MIN_HOSTED_SECRET_KEY_BYTES``, because its invariant is a relationship
-# to the floor (over it, one under it, all-whitespace above it) that has to survive the
-# floor changing. See #2004.
-
-
-@pytest.mark.parametrize(
-    "secret_key",
-    [
-        None,
-        "",
-        DEFAULT_SECRET_KEY,
-        DEFAULT_SECRET_KEY.encode("utf-8"),
-        bytearray(DEFAULT_SECRET_KEY.encode("utf-8")),
-        "short",
-        b"short",
-        # Whitespace standing in for a key: long enough to clear the floor untrimmed,
-        # so only the trim refuses them.
-        " " * MIN_HOSTED_SECRET_KEY_BYTES,
-        "\t" * MIN_HOSTED_SECRET_KEY_BYTES,
-        b" " * MIN_HOSTED_SECRET_KEY_BYTES,
-        # Non-ASCII whitespace, which reaches the floor as multi-byte UTF-8 and so is
-        # refused only because the ``str`` path trims before encoding. See #2006.
-        "\u00a0" * MIN_HOSTED_SECRET_KEY_BYTES,
-        "\u3000" * MIN_HOSTED_SECRET_KEY_BYTES,
-        # A sub-floor core with whitespace on one side only. These are the PR's
-        # deliberate behaviour change, and the only cases that distinguish ``strip``
-        # from ``lstrip`` and ``rstrip`` — the whitespace-only runs above are symmetric,
-        # so any of the three reduces them to nothing and refuses them regardless.
-        # Both paths need the pair: the trim is a different call on each.
-        f"{'x' * (MIN_HOSTED_SECRET_KEY_BYTES - 1)} ",
-        f" {'x' * (MIN_HOSTED_SECRET_KEY_BYTES - 1)}",
-        b"x" * (MIN_HOSTED_SECRET_KEY_BYTES - 1) + b" ",
-        b" " + b"x" * (MIN_HOSTED_SECRET_KEY_BYTES - 1),
-    ],
-)
-def test_server_mode_refuses_an_insecure_secret_key(secret_key):
-    with pytest.raises(RuntimeError, match="SERVER_MODE requires SECRET_KEY"):
-        _validate_hosted_secret_key({"SERVER_MODE": True, "SECRET_KEY": secret_key})
-
-
-@pytest.mark.parametrize(
-    "secret_key",
-    [
-        DEFAULT_SECRET_KEY,
-        DEFAULT_SECRET_KEY.encode("utf-8"),
-        f"  {DEFAULT_SECRET_KEY} ",
-    ],
-)
-def test_the_development_default_is_refused_independently_of_the_floor(
-    monkeypatch, secret_key
-):
-    """Isolates the default clause, which the floor otherwise masks in every other case.
-
-    ``DEFAULT_SECRET_KEY`` is shorter than the floor, so the default fails on length
-    alone: deleting the default clause, or pointing it at a bogus literal, leaves the
-    whole suite green. Dropping the floor to 1 is the only way to make the clause
-    observable — and it is the case that matters, because #2002 may move or remove the
-    floor, at which point this clause is all that still refuses the default.
-
-    The floor is patched on ``app`` rather than ``settings`` because the validator
-    imports the name directly. See #2006.
-    """
-    monkeypatch.setattr(app_module, "MIN_HOSTED_SECRET_KEY_BYTES", 1)
-
-    with pytest.raises(RuntimeError, match="SERVER_MODE requires SECRET_KEY"):
-        _validate_hosted_secret_key({"SERVER_MODE": True, "SECRET_KEY": secret_key})
-
-
-def test_server_mode_accepts_a_strong_secret_key():
-    _validate_hosted_secret_key(
-        {
-            "SERVER_MODE": True,
-            "SECRET_KEY": "x" * MIN_HOSTED_SECRET_KEY_BYTES,
-        }
-    )
-
-
-def test_server_mode_accepts_a_key_padded_with_whitespace():
-    """Trimming decides the floor, so a key an env file wrapped in space still boots.
-
-    The refusal cases cover whitespace standing in *for* a key; this covers whitespace
-    around one, which a ``.env`` line or a copy-paste produces by accident. It also
-    stops the trim later growing into "strip, then also refuse padded keys".
-    """
-    _validate_hosted_secret_key(
-        {
-            "SERVER_MODE": True,
-            "SECRET_KEY": f"  {'x' * MIN_HOSTED_SECRET_KEY_BYTES}\n",
-        }
-    )
-
-
-def test_a_padded_key_is_admitted_on_the_trim_but_signs_with_its_whitespace():
-    """The trim decides admission only; the configured value is what Flask signs.
-
-    Pinned because the refusal message tells operators that padding does not count
-    toward the floor, and an operator who reads that as "padding is ignored" and tidies
-    their ``.env`` rotates the signing key — dropping every session.
-    """
-    padded = f"  {'x' * MIN_HOSTED_SECRET_KEY_BYTES}  "
-    config = {"SERVER_MODE": True, "SECRET_KEY": padded}
-
-    _validate_hosted_secret_key(config)
-
-    assert config["SECRET_KEY"] == padded
-    assert len(config["SECRET_KEY"]) > MIN_HOSTED_SECRET_KEY_BYTES
-
-
-@pytest.mark.parametrize("length, accepted", [(7, False), (8, True)])
-def test_server_mode_secret_key_length_boundary(length, accepted):
-    """Pins the floor with literals rather than deriving it from the constant.
-
-    Written as ``MIN_HOSTED_SECRET_KEY_BYTES - 1`` and ``MIN_HOSTED_SECRET_KEY_BYTES``,
-    these cases would move with the constant and keep passing — the failure mode the
-    test exists to prevent, and the one that let #2003 change the floor without a single
-    case failing. See #2004.
-    """
-    config = {"SERVER_MODE": True, "SECRET_KEY": "k" * length}
-
-    if accepted:
-        _validate_hosted_secret_key(config)
-    else:
-        with pytest.raises(RuntimeError, match="SERVER_MODE requires SECRET_KEY"):
-            _validate_hosted_secret_key(config)
-
-
-def test_hosted_secret_key_floor_is_the_pinned_value():
-    """Fails if the constant moves away from the boundary pinned above.
-
-    The two live together deliberately: the literals catch a validator that stops
-    honouring the floor, and this catches a floor that changes without the literals
-    being reconsidered. Changing the floor means editing both, which is the point —
-    it is a policy decision, currently a stopgap pending #2002.
-    """
-    assert MIN_HOSTED_SECRET_KEY_BYTES == 8
-
-
-def test_local_mode_keeps_the_development_secret_key():
-    _validate_hosted_secret_key(
-        {"SERVER_MODE": False, "SECRET_KEY": DEFAULT_SECRET_KEY}
-    )
+# The hosted SECRET_KEY condition is one entry in the startup-requirement registry, and
+# its cases live with the rest of that machinery in ``test_startup_requirements.py``.
+# What stays here is the wiring: that ``create_app`` actually applies the registry.
 
 
 def test_environment_output_redacts_the_secret_key(capsys):
