@@ -39,7 +39,7 @@ server needs no database and no running application.
 | `zone_timings` | Per-zone, per-RISC totals from `profile_log_device.csv` — firmware and kernel phases, as measured on device. |
 | `diff_reports` | Per-operation-code deltas between two reports, largest movement first. |
 | `find_operations` | Operations matching a name substring, with the ids `operation_detail` takes. |
-| `operation_detail` | One operation: its input and output tensors with shape, dtype and layout, and what it had allocated. |
+| `operation_detail` | One operation: its input and output tensors with shape, dtype, layout and memory config, and what it had allocated. |
 | `memory_profile` | Memory footprint per operation, keyed by buffer type and ranked within each, with each type's peak and the device's L1 geometry. |
 | `tensor_flow` | Which operation produced a tensor and which ones consumed it. |
 
@@ -50,9 +50,10 @@ neither, which is what makes `load_report`'s answer worth reading first.
 Call `load_report` first. It reports what is answerable rather than making you discover it
 one failed call at a time, because the report kinds are independent: a performance-only
 capture has no operation graph and no tensor data, and a report with no device profiler log
-cannot answer `zone_timings`. It checks that the profiler database is readable rather than
-merely present, so a truncated capture is reported as unanswerable instead of failing four
-calls later.
+cannot answer `zone_timings`. Each database tool is checked against the tables it actually
+reads, so a truncated capture that holds `operations` but not `buffers` is reported as
+answering `find_operations` and nothing else, rather than advertising four tools and
+failing three of them.
 
 ## What the answers mean
 
@@ -87,6 +88,11 @@ capture the operation holding the L1 peak uses 56 of 64 banks, so multiplying ov
 it by 14%, and 16-bank operations in the same report by 4x. How many banks a buffer
 actually occupies lives in page-level data that no tool exposes. The report carries no
 DRAM capacity at all, which is likewise stated rather than left as a gap.
+
+What `operation_detail` does give you is each tensor's `memory_config`, whose
+`memory_layout` says whether a tensor is interleaved or sharded, and whose `shard_spec`
+carries the grid and shape when it is — so you can tell *why* a per-bank figure does not
+scale by the device's bank count, rather than only being told that it doesn't.
 
 A tensor's `size` is a whole-tensor byte count — *where the report carries that column*.
 Where it does not, which is the common case, the report's own query substitutes the

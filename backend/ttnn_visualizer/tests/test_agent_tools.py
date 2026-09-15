@@ -13,6 +13,7 @@ and that a zone pairing survives the chunk boundary it is invisible across.
 See #1995.
 """
 
+import sqlite3
 from pathlib import Path
 from unittest.mock import patch
 
@@ -125,6 +126,28 @@ class TestReportInventory:
         registered = set(server._tool_table(ReportRegistry()))
         assert set(loaded["answerable"]) | set(loaded["unanswerable"]) <= registered
         assert loaded["data_present_without_tools"] == []
+
+    def test_a_partial_database_answers_only_what_it_can(self, tmp_path):
+        """A truncated capture can hold `operations` and not `buffers`. Probing
+        one table advertised all four tools and then failed three of them with
+        "no such table" -- the same broken promise as naming an unregistered
+        tool, for the same reason. #2012
+        """
+        profiler = tmp_path / "profiler"
+        profiler.mkdir()
+        connection = sqlite3.connect(profiler / "db.sqlite")
+        connection.executescript(
+            "CREATE TABLE operations (operation_id int, name text, duration float);"
+        )
+        connection.commit()
+        connection.close()
+
+        loaded = load_report(ReportRegistry(), profiler_path=str(profiler))
+
+        assert loaded["answerable"] == ["find_operations"]
+        assert {"memory_profile", "operation_detail", "tensor_flow"} <= set(
+            loaded["unanswerable"]
+        )
 
     def test_an_empty_database_file_is_not_answerable(self, tmp_path):
         """A zero-byte `db.sqlite` opens as a valid empty database.

@@ -125,6 +125,15 @@ def _rank_scope(queries: DatabaseQueries, rank: Optional[int]) -> RankScope:
         except (TypeError, ValueError):
             raise ValueError(f"rank must be a whole number, not {rank!r}") from None
     multi_host = queries.report_has_rank_column()
+    # A report with no rank column represents rank 0 only, so asking for another
+    # one cannot be answered -- and returning rank-0 rows labelled `rank: null`
+    # serves different data than was asked for. `views._rank_query_param`
+    # answers 400 for the same request.
+    if requested not in (None, 0) and not multi_host:
+        raise ValueError(
+            f"this report has no rank column, so it holds rank 0 only; "
+            f"rank {requested} cannot be read"
+        )
     return RankScope(
         multi_host=multi_host,
         rank=(0 if requested is None else requested) if multi_host else None,
@@ -326,6 +335,10 @@ def operation_detail(
             "shape": tensor.shape,
             "dtype": tensor.dtype,
             "layout": tensor.layout,
+            # Carries `memory_layout`, so an agent can tell a sharded tensor
+            # from an interleaved one -- which is exactly what decides whether
+            # the per-bank figures below span every bank or a shard grid.
+            "memory_config": tensor.memory_config,
             "size": tensor.size,
             "buffer_type": (
                 _buffer_type_name(tensor.buffer_type)
@@ -567,6 +580,7 @@ def tensor_flow(
             "shape": tensor.shape,
             "dtype": tensor.dtype,
             "layout": tensor.layout,
+            "memory_config": tensor.memory_config,
             "size": tensor.size,
             "size_unit": tensor_size_unit,
             "buffer_type": (

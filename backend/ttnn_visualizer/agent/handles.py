@@ -94,36 +94,53 @@ def _resolved_directory(label: str, path: Optional[str]) -> Optional[str]:
     return str(resolved)
 
 
-def _has_operations_table(profiler_path: Optional[str]) -> bool:
-    """Whether the profiler database can actually be read, not merely that it exists.
+# The tables each database tool reads, so answerability is decided per tool
+# rather than from one probe. Kept here, beside the inventory that consumes it,
+# because `agent.operations` imports this module; it has to stay in step with
+# the queries those tools actually run.
+TOOL_TABLES: Dict[str, frozenset] = {
+    "find_operations": frozenset({"operations"}),
+    "memory_profile": frozenset({"buffers", "operations"}),
+    "operation_detail": frozenset(
+        {"operations", "buffers", "tensors", "input_tensors", "output_tensors"}
+    ),
+    "tensor_flow": frozenset(
+        {"operations", "tensors", "input_tensors", "output_tensors"}
+    ),
+}
 
-    Presence of the file is not enough: a zero-byte `db.sqlite` opens as a valid
-    empty database, so a presence check advertised all four database tools and
-    then failed each with "no such table" -- the precise thing this function
-    exists to avoid. One `sqlite_master` lookup is cheaper than the call an agent
-    would otherwise spend finding out.
+
+def _readable_tables(profiler_path: Optional[str]) -> frozenset:
+    """The tables a profiler database actually holds, or nothing.
+
+    Presence of the file is not enough, twice over. A zero-byte `db.sqlite`
+    opens as a valid empty database, and a truncated capture can hold
+    `operations` while missing `buffers` or `tensors` -- either way a presence
+    check advertised all four tools and then failed them with "no such table",
+    the precise thing this function exists to avoid. One `sqlite_master` read
+    answers for every tool and is cheaper than the calls an agent would
+    otherwise spend finding out.
     """
     if profiler_path is None:
-        return False
+        return frozenset()
     db_file = Path(profiler_path, PROFILER_DB_FILE)
     if not db_file.is_file():
-        return False
+        return frozenset()
     try:
         connection = sqlite3.connect(f"file:{db_file}?mode=ro", uri=True)
     except sqlite3.Error:
-        return False
+        return frozenset()
     try:
-        return (
-            connection.execute(
-                "SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?",
-                ("operations",),
-            ).fetchone()
-            is not None
+        return frozenset(
+            name
+            for (name,) in connection.execute(
+                "SELECT name FROM sqlite_master WHERE type = 'table'"
+            )
         )
     except sqlite3.Error:
         # A truncated or non-SQLite file reaching this point is a broken capture,
         # and "cannot answer" is the honest inventory entry for it.
-        return False
+        return frozenset()
     finally:
         connection.close()
 
@@ -163,17 +180,12 @@ def _inventory(instance: Instance) -> Dict[str, object]:
         and Path(performance_path, DeviceLogProfilerQueries.DEVICE_LOG_FILE).is_file(),
     )
 
-    # One database answers all four of these, so they are recorded together
-    # rather than probed per tool: a report either carries it or carries none of
-    # them.
-    has_database = _has_operations_table(profiler_path)
-    for tool_name in (
-        "find_operations",
-        "operation_detail",
-        "memory_profile",
-        "tensor_flow",
-    ):
-        record(tool_name, has_database)
+    # Per tool, against the tables it reads. A partial capture can answer
+    # `find_operations` and none of the rest, and saying so is the whole point
+    # of this list.
+    tables = _readable_tables(profiler_path)
+    for tool_name, required in TOOL_TABLES.items():
+        record(tool_name, required <= tables)
 
     return {
         # Tool names only. `operations` used to appear here whenever a `db.sqlite`

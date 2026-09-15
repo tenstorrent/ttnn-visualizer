@@ -85,10 +85,19 @@ INSERT INTO buffers VALUES
     (2, 0, 300, 512, 'L1_SMALL', 0),
     (1, 0, 100, 1000, 'DRAM', 0);
 
+-- Tensor 11 is sharded and 10 interleaved, which is what decides whether a
+-- per-bank figure spans every bank or a shard grid. These are TTNN's own
+-- `MemoryConfig(...)` strings, verbatim from a capture, because
+-- `parse_memory_config` parses that format rather than JSON.
 INSERT INTO tensors VALUES
-    (10, 'Shape([1, 1, 32, 32])', 'DataType.BFLOAT16', 'Layout.TILE', '{}', 0, 100, 'DRAM', 2048),
-    (11, 'Shape([1, 1, 64, 64])', 'DataType.FLOAT32', 'Layout.ROW_MAJOR', '{}', 0, 200, 'L1', 16384),
-    (12, 'Shape([1, 1, 32, 64])', 'DataType.BFLOAT8_B', 'Layout.TILE', '{}', 0, 300, 'L1', 4096);
+    (10, 'Shape([1, 1, 32, 32])', 'DataType.BFLOAT16', 'Layout.TILE',
+     'MemoryConfig(memory_layout=TensorMemoryLayout::INTERLEAVED,buffer_type=BufferType::DRAM,shard_spec=std::nullopt)',
+     0, 100, 'DRAM', 2048),
+    (11, 'Shape([1, 1, 64, 64])', 'DataType.FLOAT32', 'Layout.ROW_MAJOR',
+     'MemoryConfig(memory_layout=TensorMemoryLayout::BLOCK_SHARDED,buffer_type=BufferType::L1,shard_spec=ShardSpec(grid={[(x=0,y=0) - (x=2,y=1)]},shape={224, 64},orientation=ShardOrientation::ROW_MAJOR,halo=0))',
+     0, 200, 'L1', 16384),
+    (12, 'Shape([1, 1, 32, 64])', 'DataType.BFLOAT8_B', 'Layout.TILE',
+     '', 0, 300, 'L1', 4096);
 
 INSERT INTO input_tensors VALUES (2, 0, 10), (2, 1, 11);
 INSERT INTO output_tensors VALUES (1, 0, 10), (2, 0, 12);
@@ -428,7 +437,7 @@ def _wide_report_sql(rows: int) -> str:
     )
 
 
-def write_report(directory: Path, sql: str = _REPORT_SQL) -> str:
+def _write_report(directory: Path, sql: str = _REPORT_SQL) -> str:
     """Build a profiler report directory and return its path."""
     directory.mkdir(parents=True, exist_ok=True)
     connection = sqlite3.connect(directory / "db.sqlite")
@@ -446,7 +455,7 @@ def loaded(tmp_path):
 
     def _loaded(sql: str = _REPORT_SQL, name: str = "profiler"):
         registry = ReportRegistry()
-        path = write_report(tmp_path / name, sql)
+        path = _write_report(tmp_path / name, sql)
         handle = load_report(registry, profiler_path=path)["handle"]
         return registry, handle
 
@@ -616,6 +625,26 @@ class TestOperationDetail:
         assert result["inputs"][1]["dtype"] == "DataType.FLOAT32"
         assert result["inputs"][1]["layout"] == "Layout.ROW_MAJOR"
         assert result["outputs"][0]["tensor_id"] == 12
+
+    def test_it_reports_each_tensor_memory_layout(self, loaded):
+        """Sharded or interleaved is what decides whether the per-bank figures
+        in the same response span every bank or a shard grid, so the response
+        that carries the caveat also carries the means to act on it."""
+        registry, handle = loaded()
+
+        result = agent_operations.operation_detail(registry, handle, 2)
+
+        interleaved, sharded = result["inputs"]
+        assert interleaved["memory_config"]["memory_layout"] == (
+            "TensorMemoryLayout::INTERLEAVED"
+        )
+        assert interleaved["memory_config"]["shard_spec"] == "std::nullopt"
+        assert sharded["memory_config"]["memory_layout"] == (
+            "TensorMemoryLayout::BLOCK_SHARDED"
+        )
+        # The grid is the reason the per-bank caveat matters: this tensor
+        # occupies a 3x2 shard grid, not every bank on the device.
+        assert sharded["memory_config"]["shard_spec"]["shape"] == [224, 64]
 
     def test_the_two_size_fields_are_in_different_units(self, loaded):
         """`tensors.size` is a whole-tensor byte count and an allocation total is
@@ -813,6 +842,19 @@ class TestRankScope:
         with pytest.raises(ValueError, match="rank must be a whole number"):
             agent_operations.find_operations(registry, handle, rank="x")
 
+    def test_a_rank_is_refused_on_a_report_with_no_rank_column(self, loaded):
+        """A report with no rank column represents rank 0 only. Returning its
+        rows labelled `rank: null` serves different data than was asked for."""
+        registry, handle = loaded()
+
+        with pytest.raises(ValueError, match="holds rank 0 only"):
+            agent_operations.find_operations(registry, handle, rank=7)
+
+        # Rank 0 is the one rank such a report does hold, so it is answerable.
+        assert (
+            agent_operations.find_operations(registry, handle, rank=0)["rank"] is None
+        )
+
     def test_a_single_host_report_carries_no_rank_caveat(self, loaded):
         """A caveat on every response is one an agent learns to skip."""
         registry, handle = loaded()
@@ -839,7 +881,7 @@ class TestProfilerDatabase:
 
     def test_the_report_is_opened_read_only(self, tmp_path):
         """A tool surface has no business writing to a capture."""
-        path = write_report(tmp_path / "profiler")
+        path = _write_report(tmp_path / "profiler")
         registry = ReportRegistry()
         handle = load_report(registry, profiler_path=path)["handle"]
         agent_operations.memory_profile(registry, handle)
