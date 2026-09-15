@@ -8,7 +8,7 @@ import { getAdjacentOperationIds } from '../src/components/operation-graph/opGra
 import type { OpGraphNodeIndexEntry } from '../src/components/operation-graph/opGraphTypes';
 
 const entry = (operationId: number, memberOperationIds?: number[]): OpGraphNodeIndexEntry => ({
-    id: memberOperationIds ? `block:0:${operationId}` : String(operationId),
+    id: memberOperationIds ? `block:${operationId}` : String(operationId),
     operationId,
     name: `op ${operationId}`,
     memberOperationIds,

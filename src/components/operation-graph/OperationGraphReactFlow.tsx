@@ -196,9 +196,36 @@ const withoutGroupingBlocks = (
 
 const NO_BLOCKS: OpGraphBlockSummary[] = [];
 
+/**
+ * Re-expresses an all-unrolled decision against the instances a rebuild produced.
+ *
+ * Only fires when every instance the previous detection found was unrolled, which
+ * is the one decision whose id list is incidental — every other set names specific
+ * instances the reader chose, and those are left exactly as they are so a surviving
+ * id keeps its state. Returns `previous` unchanged otherwise, including when no
+ * decision has been made (`null` already renders unrolled).
+ */
+const carryUnrollAll = (
+    previous: ReadonlySet<string> | null,
+    previousBlocks: readonly OpGraphBlockSummary[],
+    nextBlocks: readonly OpGraphBlockSummary[],
+): ReadonlySet<string> | null => {
+    if (previous === null || previousBlocks.length === 0) {
+        return previous;
+    }
+    if (!previousBlocks.every((block) => previous.has(block.instanceId))) {
+        return previous;
+    }
+    const next = new Set(previous);
+    for (const block of nextBlocks) {
+        next.add(block.instanceId);
+    }
+    return next.size === previous.size ? previous : next;
+};
+
 // Folding a block makes its members' device-op expansions unreachable, so they are
-// dropped with it. Shared by the three places that fold: one block, all blocks, and
-// the deallocate filter (which re-runs detection and invalidates every instance).
+// dropped with it. Shared by the places that fold on a deliberate ask: one block,
+// all blocks, and a grouping switch.
 const withoutBlockMembers = (
     expandedOperationIds: ReadonlySet<number>,
     blocks: readonly OpGraphBlockSummary[],
@@ -416,6 +443,16 @@ const OperationGraphInner = ({
         selectedOperationIdRef.current = selectedOperationId;
     }, [selectedOperationId]);
 
+    // Read by `onBuilt` to compare the detection it is replacing against the one it
+    // was handed. Through a ref rather than the dependency array: `onBuilt` listing
+    // `detectedBlocks` would give it a new identity on every detection, and the
+    // build effect depends on its stability — that loop is what the comment on
+    // `setDetectedBlocks` is guarding.
+    const detectedBlocksRef = useRef(detectedBlocks);
+    useEffect(() => {
+        detectedBlocksRef.current = detectedBlocks;
+    }, [detectedBlocks]);
+
     // `getNode` reads the React Flow store, a tick behind `setNodes`, so a focus
     // requested mid-build has to wait for the commit.
     const pendingFocusRef = useRef<number | null>(null);
@@ -588,6 +625,14 @@ const OperationGraphInner = ({
             // A new array with the same detections rebuilds `deviceSubgraphs` and
             // `runBuild` loops; each pass restarts the focus tween toward op 0.
             const nextBlocks = graph.blocks && graph.blocks.length > 0 ? graph.blocks : NO_BLOCKS;
+            // "Fold all" is `[]`, which names no instance and so cannot go stale.
+            // "Unroll all" is a list of ids, and that asymmetry is a bug: a rebuild
+            // that renames an instance -- a deallocate first in a repeating unit, or
+            // one right after a layer delimiter, both change a span's first member --
+            // makes every held id miss, and a miss reads as folded. So unroll-all
+            // flipped to fold-all, the mirror of #2015. Carried forward as the intent
+            // it was rather than as the ids it happened to be. #2015
+            setExpandedBlockIds((previous) => carryUnrollAll(previous, detectedBlocksRef.current, nextBlocks));
             setDetectedBlocks((previous) => (areSameBlockSummaries(previous, nextBlocks) ? previous : nextBlocks));
 
             // An op can drop out between builds (isolated, or filtered as a
@@ -839,28 +884,12 @@ const OperationGraphInner = ({
         [grouping, detectedBlocks, detectedBlockIds],
     );
 
-    const handleHideDeallocateChange = useCallback((next: boolean) => {
-        setHideDeallocate(next);
-        // The fold decision is kept. #1977 dropped it here on the grounds that
-        // re-running detection would leave the held ids naming instances that no
-        // longer exist — but an instance id is `block:<run>:<first member>` or
-        // `layer:<name>:<first member>`, and hiding deallocates changes neither for
-        // any report where the deallocate sits between repeating units, which is
-        // where they sit. Measured on both detectors: the ids come back identical.
-        //
-        // Where it *can* differ — a deallocate inside the repeating unit — the run
-        // stops being detected at all, so the held ids name nothing and change
-        // nothing: `isBlockExpanded` only consults them for a detected block. The
-        // one residual case is an instance that survives under a new id, which
-        // reads as folded rather than unrolled, and that is the right reading of
-        // "I had folded these".
-        //
-        // So the reset cost every reader their collapse on an unrelated filter to
-        // guard a case that is benign. `collapseWeightLoads`, the other filter that
-        // re-runs detection, never dropped it. The report-change reset above stays:
-        // ids there belong to a different report. #2015
-        setRevealedNodeIds(null);
-    }, []);
+    // Nothing to reset: this filter re-runs detection, but an id that survives it
+    // keeps its state and `carryUnrollAll` re-expresses the one decision whose ids
+    // are incidental. #1977 dropped the whole decision here instead, which cost
+    // every reader their collapse on an unrelated filter. `collapseWeightLoads`,
+    // the other filter that re-runs detection, never did. #2015
+    const handleHideDeallocateChange = setHideDeallocate;
 
     if (operationId !== undefined && revealedOperationId !== operationId && detectedBlocks.length > 0) {
         setRevealedOperationId(operationId);

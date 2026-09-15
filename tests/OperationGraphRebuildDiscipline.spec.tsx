@@ -1327,8 +1327,8 @@ describe('OperationGraphReactFlow repeat blocks', () => {
         operation(6, 'suffix', []),
     ];
 
-    const FIRST_BLOCK_ID = 'block:0:2';
-    const SECOND_BLOCK_ID = 'block:0:4';
+    const FIRST_BLOCK_ID = 'block:2';
+    const SECOND_BLOCK_ID = 'block:4';
 
     const deliver = (operations: OperationDescription[], options: Partial<OpGraphBuildOptions> = {}) => {
         act(() => {
@@ -1739,10 +1739,74 @@ describe('OperationGraphReactFlow repeat blocks', () => {
         );
     });
 
+    // Deallocate first in each repeating unit, so hiding it changes every span's
+    // first member and therefore every instance id. Nothing else in this file
+    // contains a deallocate op, which is why the plumbing tests above cannot see
+    // what a real toggle does to detection. #2015
+    const RENAMING_OPERATION_LIST: OperationDescription[] = [
+        operation(1, 'ttnn.embedding', [2]),
+        operation(2, 'ttnn.deallocate', [3]),
+        operation(3, 'ttnn.linear', [4]),
+        operation(4, 'ttnn.relu', [5]),
+        operation(5, 'ttnn.deallocate', [6]),
+        operation(6, 'ttnn.linear', [7]),
+        operation(7, 'ttnn.relu', [8]),
+        operation(8, 'ttnn.deallocate', [9]),
+        operation(9, 'ttnn.linear', [10]),
+        operation(10, 'ttnn.relu', [11]),
+        operation(11, 'ttnn.softmax', []),
+    ];
+
+    it('keeps an unrolled graph unrolled when the rebuild renames every instance', () => {
+        // The mirror of the reported bug, and the one the fold-set cannot express by
+        // id: "fold all" is `[]` and names nothing, while "unroll all" is a list, so
+        // only it can be lost. Every id here changes across the filter, every held
+        // id misses, and a miss reads as folded — so this came back fully folded,
+        // the opposite of the reader's last instruction. #2015
+        // Fold first: from the unrolled default the decision is still `null`, which
+        // survives any rebuild by itself. The bug needs an explicit set naming every
+        // instance, which is what fold-then-unroll produces.
+        renderFolded(RENAMING_OPERATION_LIST);
+        fireEvent.click(screen.getByRole('button', { name: 'Unroll all repeats' }));
+        const unrolled = (runBuild.mock.calls.at(-1)?.[0] as OpGraphBuildOptions).expandedBlockIds;
+        expect(unrolled).toEqual(expect.arrayContaining(['block:3', 'block:6', 'block:9']));
+
+        runBuild.mockClear();
+        // The post-toggle build: same operations, deallocates shown, so the detector
+        // returns the same three instances under different ids.
+        deliver(RENAMING_OPERATION_LIST, { hideDeallocate: false, expandedBlockIds: unrolled });
+
+        const carried = (runBuild.mock.calls.at(-1)?.[0] as OpGraphBuildOptions).expandedBlockIds;
+        expect(carried).toEqual(expect.arrayContaining(['block:2', 'block:5', 'block:8']));
+        // And the toolbar agrees the graph is unrolled: Unroll all is what goes
+        // disabled when every detected instance is open.
+        expect(screen.getByRole('button', { name: 'Unroll all repeats' })).toBeDisabled();
+    });
+
+    it('does not turn a partial fold into an unroll-all when instances are renamed', () => {
+        // The carry-forward applies to one decision only. A reader who unrolled some
+        // instances chose those specific ones, so a rebuild must not read that as
+        // "unroll everything" — the ids that survive keep their state and nothing
+        // else is invented.
+        renderFolded(RENAMING_OPERATION_LIST);
+        fireEvent.click(screen.getAllByRole('button', { name: 'Unroll 2 operations' })[0]);
+        const partial = (runBuild.mock.calls.at(-1)?.[0] as OpGraphBuildOptions).expandedBlockIds;
+        expect(partial).toHaveLength(1);
+
+        runBuild.mockClear();
+        deliver(RENAMING_OPERATION_LIST, { hideDeallocate: false, expandedBlockIds: partial });
+
+        // Untouched, which is visible as the absence of a rebuild: the carry-forward
+        // returns the same set by reference for every decision but unroll-all, so a
+        // partial fold cannot even provoke a spurious layout.
+        expect(runBuild).not.toHaveBeenCalled();
+    });
+
     it('keeps the fold decision when weight-load collapsing is toggled', () => {
-        // The other filter that re-runs detection. It never dropped the decision,
-        // which is half the argument that deallocate should not either — so the
-        // consistency is worth pinning rather than left as a reading of the code.
+        // A regression pin rather than a proof: this path never dropped the
+        // decision, on this branch or before it. It is here so the two filters
+        // cannot drift apart again, since their disagreement is what made the
+        // deallocate reset look deliberate rather than accidental.
         renderFolded();
         runBuild.mockClear();
 
@@ -1754,20 +1818,28 @@ describe('OperationGraphReactFlow repeat blocks', () => {
     });
 
     it('keeps the fold decision when the operation range narrows', () => {
-        // A range change replaces the node set outright, which is a stronger
-        // rebuild than either filter, and the fold still belongs to the reader.
+        // A range change replaces the node set outright, which is a stronger rebuild
+        // than either filter. Asserting the option alone would pass even if the prop
+        // were ignored, so the narrowing is pinned too: the view must have re-derived
+        // a shorter source *and* kept the fold.
         const { rerender } = renderFolded();
+        const wholeGraph = harness.sourceOperations?.length ?? 0;
+        expect(wholeGraph).toBe(REPEAT_OPERATION_LIST.length);
         runBuild.mockClear();
 
+        const narrowed = REPEAT_OPERATION_LIST.slice(0, 5);
         rerender(
             <MemoryRouter>
                 <OperationGraphReactFlow
-                    operationList={REPEAT_OPERATION_LIST.slice(0, 5)}
+                    operationList={narrowed}
                     isPerfReportLoaded={false}
                 />
             </MemoryRouter>,
         );
+        // The narrowed graph, delivered, so detection really re-runs against it.
+        deliver(narrowed, { expandedBlockIds: [] });
 
+        expect(harness.sourceOperations).toHaveLength(narrowed.length);
         expect(runBuild.mock.calls.at(-1)?.[0]).toEqual(expect.objectContaining({ expandedBlockIds: [] }));
     });
 
