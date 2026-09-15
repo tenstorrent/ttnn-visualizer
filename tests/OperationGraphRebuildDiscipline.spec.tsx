@@ -1680,10 +1680,10 @@ describe('OperationGraphReactFlow repeat blocks', () => {
 
     it('keeps the fold decision and the expansions when deallocate hiding changes', () => {
         // #1977 dropped both here, on the grounds that re-running detection would
-        // leave the held ids naming nothing. It does not: instance ids key on the
-        // run index and first member, which hiding deallocates leaves alone. So the
-        // reset cost a reader their collapse — and their open device operations — on
-        // an unrelated filter. #2015
+        // leave the held ids naming nothing. Sometimes it does — see the renaming
+        // fixture two tests below — but an id that survives keeps its state, and
+        // dropping the decision outright cost a reader their collapse, and their
+        // open device operations, on an unrelated filter. #2015
         const operations = REPEAT_OPERATION_LIST.map((op) =>
             op.id === 2
                 ? withDeviceOperations(op, ['AlphaDeviceOperation', 'BetaDeviceOperation', 'GammaDeviceOperation'])
@@ -1783,6 +1783,33 @@ describe('OperationGraphReactFlow repeat blocks', () => {
         expect(screen.getByRole('button', { name: 'Unroll all repeats' })).toBeDisabled();
     });
 
+    it('costs one extra build and one wrong frame when instances are renamed', () => {
+        // Documents a known limitation rather than asserting the ideal. The
+        // carry-forward corrects the decision in `onBuilt`, which is *after* the
+        // build carrying the stale ids has already been committed — so the reader
+        // gets one frame of the folded graph before the corrected one lands, and
+        // pays two layouts.
+        //
+        // The clean fix is to make unroll-all nameless, the way fold-all is `[]`.
+        // It cannot be a sentinel mapping to `undefined` on the wire, because
+        // `opGraphBuilder.ts:164` folds a weight fan on `!expandedBlocks.has(id)`
+        // with no `hasFoldDecision` guard — so `undefined` would fold every open
+        // fan. The two sets need separating in the build options first, which is a
+        // protocol change. Tracked separately; this test flips when it lands. #2017
+        renderFolded(RENAMING_OPERATION_LIST);
+        fireEvent.click(screen.getByRole('button', { name: 'Unroll all repeats' }));
+        const unrolled = (runBuild.mock.calls.at(-1)?.[0] as OpGraphBuildOptions).expandedBlockIds;
+
+        runBuild.mockClear();
+        deliver(RENAMING_OPERATION_LIST, { hideDeallocate: false, expandedBlockIds: unrolled });
+
+        // The frame the reader actually sees first: folded, because every held id
+        // missed. Five nodes rather than the eleven of the unrolled graph.
+        expect(lastFlowRender().nodes).toHaveLength(5);
+        // And one more build, which converges on the right graph.
+        expect(runBuild).toHaveBeenCalledTimes(1);
+    });
+
     it('does not turn a partial fold into an unroll-all when instances are renamed', () => {
         // The carry-forward applies to one decision only. A reader who unrolled some
         // instances chose those specific ones, so a rebuild must not read that as
@@ -1803,10 +1830,11 @@ describe('OperationGraphReactFlow repeat blocks', () => {
     });
 
     it('keeps the fold decision when weight-load collapsing is toggled', () => {
-        // A regression pin rather than a proof: this path never dropped the
-        // decision, on this branch or before it. It is here so the two filters
-        // cannot drift apart again, since their disagreement is what made the
-        // deallocate reset look deliberate rather than accidental.
+        // A regression pin, not evidence: this path never dropped the decision and
+        // never could have needed to. Detection is keyed on
+        // `${sourceVersion}:${hideDeallocate}:${grouping}` in the layout worker, so
+        // weight-load collapsing never reaches the detector and cannot rename an
+        // instance — measured: the same ids either side of the switch.
         renderFolded();
         runBuild.mockClear();
 
@@ -1819,7 +1847,7 @@ describe('OperationGraphReactFlow repeat blocks', () => {
 
     it('keeps the fold decision when the operation range narrows', () => {
         // A range change replaces the node set outright, which is a stronger rebuild
-        // than either filter. Asserting the option alone would pass even if the prop
+        // than the weight-load filter. Asserting the option alone would pass even if the prop
         // were ignored, so the narrowing is pinned too: the view must have re-derived
         // a shorter source *and* kept the fold.
         const { rerender } = renderFolded();

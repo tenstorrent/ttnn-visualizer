@@ -884,11 +884,16 @@ const OperationGraphInner = ({
         [grouping, detectedBlocks, detectedBlockIds],
     );
 
-    // Nothing to reset: this filter re-runs detection, but an id that survives it
-    // keeps its state and `carryUnrollAll` re-expresses the one decision whose ids
-    // are incidental. #1977 dropped the whole decision here instead, which cost
-    // every reader their collapse on an unrelated filter. `collapseWeightLoads`,
-    // the other filter that re-runs detection, never did. #2015
+    // Nothing to reset: an id that survives this filter keeps its state, and
+    // `carryUnrollAll` re-expresses the one decision whose ids are incidental.
+    // #1977 dropped the whole decision here instead, which cost every reader their
+    // collapse on an unrelated filter.
+    //
+    // This is the only control that can rename an instance. Detection is keyed on
+    // `${sourceVersion}:${hideDeallocate}:${grouping}` in the layout worker, so
+    // weight-load collapsing and device subgraphs never reach the detector at all
+    // and cannot invalidate an id — which is why neither of those ever needed a
+    // reset either. #2015
     const handleHideDeallocateChange = setHideDeallocate;
 
     if (operationId !== undefined && revealedOperationId !== operationId && detectedBlocks.length > 0) {
