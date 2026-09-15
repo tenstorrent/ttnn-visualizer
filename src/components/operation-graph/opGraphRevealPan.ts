@@ -54,6 +54,32 @@ export const revealPanShift = (
     return { dx: axis(left, right, pane.width), dy: axis(top, bottom, pane.height, topInset) };
 };
 
+/**
+ * The pan that puts `bounds` in the middle of the usable pane.
+ *
+ * Distinct from `revealPanShift` because the gestures are: a reveal is the view
+ * moving on its own and stays minimal, so it does nothing when the target
+ * already fits. Recenter is the user asking, and answering "it was already
+ * roughly visible, so nothing happened" makes the button look broken — which is
+ * what it did. Still pans only; the zoom stays the user's. #2007
+ */
+export const centerPanShift = (
+    bounds: { minX: number; minY: number; maxX: number; maxY: number },
+    viewport: { x: number; y: number; zoom: number },
+    pane: { width: number; height: number },
+    topInset = 0,
+): { dx: number; dy: number } => {
+    const centerX = ((bounds.minX + bounds.maxX) / 2) * viewport.zoom + viewport.x;
+    const centerY = ((bounds.minY + bounds.maxY) / 2) * viewport.zoom + viewport.y;
+
+    return {
+        dx: pane.width / 2 - centerX,
+        // Centred in the band the toolbar leaves, not the raw pane, so a recentred
+        // node sits where the eye is rather than tucked under the controls.
+        dy: topInset + (pane.height - topInset) / 2 - centerY,
+    };
+};
+
 interface PannableNode {
     position: { x: number; y: number };
     width?: number | null;

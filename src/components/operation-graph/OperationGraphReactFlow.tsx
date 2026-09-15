@@ -57,7 +57,14 @@ import {
     getQuantisedPerfZoom,
 } from './opGraphPerfOverlay';
 import { EMPTY_CRITICAL_PATH, findCriticalPath } from './opGraphCriticalPath';
-import { REVEALED_NODE_CLASS, boundsOfNodes, entryViewport, intersectsPane, revealPanShift } from './opGraphRevealPan';
+import {
+    REVEALED_NODE_CLASS,
+    boundsOfNodes,
+    centerPanShift,
+    entryViewport,
+    intersectsPane,
+    revealPanShift,
+} from './opGraphRevealPan';
 import { buildPositionByOperationId, getAdjacentOperationIds } from './opGraphNavigation';
 import { tensorBytes } from '../../functions/math';
 import { useOpGraphLayoutWorker } from './useOpGraphLayoutWorker';
@@ -683,6 +690,25 @@ const OperationGraphInner = ({
             panIntoView(node === undefined ? null : boundsOfNodes([node]));
         },
         [getNode, nodeIdByOperationId, panIntoView],
+    );
+
+    // What the panel's Recenter button does, and the one mover that acts on an
+    // already-visible target. `panIntoView` is minimal by design and returns no
+    // shift once the node fits, so routing this through it made the button do
+    // nothing in exactly the case it is pressed: while reading that node's panel.
+    const centerOperation = useCallback(
+        (id: number) => {
+            const node = getNode(nodeIdByOperationId.get(id) ?? String(id));
+            const pane = containerRef.current?.getBoundingClientRect();
+            const bounds = node === undefined ? null : boundsOfNodes([node]);
+            if (bounds === null || pane === undefined) {
+                return;
+            }
+            const viewport = getViewport();
+            const { dx, dy } = centerPanShift(bounds, viewport, pane, paneChromeInset(pane));
+            void setViewport({ ...viewport, x: viewport.x + dx, y: viewport.y + dy }, { duration: FOCUS_DURATION_MS });
+        },
+        [getNode, nodeIdByOperationId, getViewport, setViewport, paneChromeInset],
     );
 
     // The only place a zoom is chosen for the user. Reads the committed array, not
@@ -1641,7 +1667,7 @@ const OperationGraphInner = ({
                     operationId={selectedOperationId}
                     operationById={operationById}
                     operationNamesById={operationNamesById}
-                    onLocateOperation={focusOperation}
+                    onLocateOperation={centerOperation}
                     isPerfOverlayActive={isPerfOverlayActive}
                     perfDeviceTimeNs={selectedPerfDeviceTimeNs}
                     perfColor={

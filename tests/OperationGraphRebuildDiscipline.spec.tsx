@@ -73,6 +73,11 @@ const flowTransform: { current: [number, number, number] } = { current: [0, 0, 1
 // branch extends, and it was unobservable. `knownNodeIds` is populated by every
 // delivered graph so `getNode` can tell a live id from a stale one. Hoisted
 // because the `@xyflow/react` factory below is, and it reads them eagerly.
+// What the stubbed store answers `getNode` with, at the origin. The movers read
+// the store rather than the rendered array, so a test checking where a node was
+// moved to has to measure against this and not against `lastFlowRender()`.
+const STORE_NODE = { width: 100, height: 40 };
+
 const { setCenter, setViewport, knownNodeIds, flowStoreLag } = vi.hoisted(() => ({
     setCenter: vi.fn(() => Promise.resolve()),
     setViewport: vi.fn(() => Promise.resolve()),
@@ -110,7 +115,7 @@ vi.mock('@xyflow/react', async () => {
         // answered for any id at all made that fallback unfalsifiable.
         getNode: (id: string) =>
             !flowStoreLag.isBlind && knownNodeIds.has(id)
-                ? { id, position: { x: 0, y: 0 }, width: 100, height: 40 }
+                ? { id, position: { x: 0, y: 0 }, width: STORE_NODE.width, height: STORE_NODE.height }
                 : undefined,
         getViewport: () => ({ x: 0, y: 0, zoom: PANNED_ZOOM }),
         setViewport,
@@ -1529,6 +1534,33 @@ describe('OperationGraphReactFlow repeat blocks', () => {
         for (const [viewport] of setViewport.mock.calls as unknown as [{ zoom: number }][]) {
             expect(viewport.zoom).toBe(PANNED_ZOOM);
         }
+    });
+
+    it('recenters an already-visible node when the user asks', () => {
+        // The reveal movers are minimal, which is the right policy for the view
+        // moving on its own: they nudge a target to the nearest usable edge and do
+        // nothing once it fits. Recenter went through that path, so the button
+        // either did nothing or shoved the node into a corner. What it promises is
+        // the middle. The already-fits half of that is pinned directly on
+        // `centerPanShift` in opGraphEntryViewport.spec. #2007
+        renderGraph();
+        emitNodeChanges([{ type: 'select', id: '3', selected: true }]);
+
+        const recenter = screen.getByLabelText('Recenter on operation 3');
+        setViewport.mockClear();
+        fireEvent.click(recenter);
+
+        expect(setViewport).toHaveBeenCalledTimes(1);
+        const [viewport] = setViewport.mock.calls[0] as unknown as [{ x: number; y: number; zoom: number }];
+        // Pans only. Recenter is an explicit request to move, not a licence to
+        // rescale: the zoom stays wherever the user left it.
+        expect(viewport.zoom).toBe(PANNED_ZOOM);
+        // The node's centre lands in the middle of the band the toolbar leaves,
+        // rather than the middle of the raw pane.
+        const centreX = (STORE_NODE.width / 2) * PANNED_ZOOM;
+        const centreY = (STORE_NODE.height / 2) * PANNED_ZOOM;
+        expect(viewport.x + centreX).toBeCloseTo(PANE.width / 2, 5);
+        expect(viewport.y + centreY).toBeCloseTo(TOOLBAR_HEIGHT + (PANE.height - TOOLBAR_HEIGHT) / 2, 5);
     });
 
     it('holds the viewport across a rebuild', () => {

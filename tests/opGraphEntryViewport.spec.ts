@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
     boundsOfNodes,
+    centerPanShift,
     entryViewport,
     intersectsPane,
     revealPanShift,
@@ -120,6 +121,53 @@ describe('entryViewport', () => {
         expect(Number.isFinite(zoom)).toBe(true);
         expect(Number.isFinite(x)).toBe(true);
         expect(Number.isFinite(y)).toBe(true);
+    });
+});
+
+describe('centerPanShift', () => {
+    const viewport = { x: 0, y: 0, zoom: 1 };
+    const TOOLBAR = 162;
+
+    it('moves a target that revealPanShift would leave alone', () => {
+        // The two differ on exactly this input, and the difference is the bug: the
+        // Recenter button went through the minimal reveal, so pressing it while
+        // reading an already-visible node's panel did nothing at all. #2007
+        const alreadyVisible = boundsOf(300, TOOLBAR + 100, 200, 60);
+
+        expect(revealPanShift(alreadyVisible, viewport, PANE, TOOLBAR)).toEqual({ dx: 0, dy: 0 });
+        expect(centerPanShift(alreadyVisible, viewport, PANE, TOOLBAR)).not.toEqual({ dx: 0, dy: 0 });
+    });
+
+    it('puts the target in the middle of the band the toolbar leaves', () => {
+        const bounds = boundsOf(300, TOOLBAR + 100, 200, 60);
+        const { dx, dy } = centerPanShift(bounds, viewport, PANE, TOOLBAR);
+
+        const centreX = (bounds.minX + bounds.maxX) / 2 + dx;
+        const centreY = (bounds.minY + bounds.maxY) / 2 + dy;
+        expect(centreX).toBeCloseTo(PANE.width / 2, 5);
+        expect(centreY).toBeCloseTo(TOOLBAR + (PANE.height - TOOLBAR) / 2, 5);
+    });
+
+    it('accounts for the zoom the user left the viewport at', () => {
+        const bounds = boundsOf(1000, 1000, 200, 60);
+        const zoomed = { x: 0, y: 0, zoom: 0.25 };
+        const { dx, dy } = centerPanShift(bounds, zoomed, PANE, TOOLBAR);
+
+        // Graph coordinates scale by the zoom before centring, so the shift is in
+        // screen pixels: a quarter-scale graph needs a quarter of the pan.
+        expect(((bounds.minX + bounds.maxX) / 2) * zoomed.zoom + dx).toBeCloseTo(PANE.width / 2, 5);
+        expect(((bounds.minY + bounds.maxY) / 2) * zoomed.zoom + dy).toBeCloseTo(
+            TOOLBAR + (PANE.height - TOOLBAR) / 2,
+            5,
+        );
+    });
+
+    it('centres a target that is off screen entirely', () => {
+        const offScreen = boundsOf(-4000, -3000, 200, 60);
+        const { dx, dy } = centerPanShift(offScreen, viewport, PANE, TOOLBAR);
+
+        expect((offScreen.minX + offScreen.maxX) / 2 + dx).toBeCloseTo(PANE.width / 2, 5);
+        expect((offScreen.minY + offScreen.maxY) / 2 + dy).toBeCloseTo(TOOLBAR + (PANE.height - TOOLBAR) / 2, 5);
     });
 });
 
