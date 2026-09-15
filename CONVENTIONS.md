@@ -34,6 +34,7 @@ Companion to [`AGENTS.md`](./AGENTS.md). `AGENTS.md` states each convention in o
 - [Toolchain and package management](#toolchain-and-package-management)
 - [Database schema changes](#database-schema-changes)
 - [Backend conventions](#backend-conventions)
+- [Startup requirements](#startup-requirements)
 - [Known inconsistencies](#known-inconsistencies)
 
 ---
@@ -613,7 +614,7 @@ The event list exists to answer Q1–Q5 in #1819, not to accumulate counters. Ev
 
 The event-logging endpoint is the narrow exception to `@local_only`: hosted clients may post the same closed event vocabulary, but they never choose where it lands. `event_logging.py::ensure_event_log_id` mints a 32-character UUID hex log partition key inside Flask's signed session, and path resolution requires that exact form plus containment under `/data/usage`. It is neither Flask's session identifier nor a user identity. Never use the caller-controlled `instanceId`, a query parameter, request JSON, or the raw signed cookie value.
 
-One hosted session gets one directory; the identifier is not copied into logfmt and the collector must not export directory names or per-user series. Minting it does not make a session permanent, although the existing upload flow can later make the whole cookie permanent for Flask's default 31-day lifetime. `create_app` refuses `SERVER_MODE` unless `SECRET_KEY` is non-default and at least 32 bytes. The writer caps hosted logs at 1,024, serialises cross-worker reservations under `.quota.lock`, limits new logs to 60 per minute across workers, and limits each worker to 120 batches per log per minute. The 10 MiB per-file cap therefore has a bounded aggregate worst case; deployment retention reclaims slots after collection, while edge controls absorb rates above the worker-aware application limits.
+One hosted session gets one directory; the identifier is not copied into logfmt and the collector must not export directory names or per-user series. Minting it does not make a session permanent, although the existing upload flow can later make the whole cookie permanent for Flask's default 31-day lifetime. `create_app` refuses `SERVER_MODE` unless `SECRET_KEY` is non-default and meets the minimum byte length stated in `docs/src/event-logging.md` (declared as a startup requirement — read [Startup requirements](#startup-requirements) before changing it), which is the canonical copy of that number and the one `test_event_logging_docs_parity.py` reads — a floor against an obviously-short key, not a strength check, and a stopgap pending #2002. The writer caps hosted logs at 1,024, serialises cross-worker reservations under `.quota.lock`, limits new logs to 60 per minute across workers, and limits each worker to 120 batches per log per minute. The 10 MiB per-file cap therefore has a bounded aggregate worst case; deployment retention reclaims slots after collection, while edge controls absorb rates above the worker-aware application limits.
 
 ### Three caps, and each pair has to stay consistent
 
@@ -1414,6 +1415,57 @@ When raising or catching application errors, use the dedicated classes:
 - `DatabaseFileNotFoundException`, `RemoteFileReadException` for specific not-found cases.
 
 Don't `raise Exception("...")` — there's an existing class for almost every case.
+
+---
+
+## Startup requirements
+
+A **startup requirement** is a condition on an operator-supplied value that has already parsed — a predicate over the resolved config, checked after `Config` is built. They are declared as data in `backend/ttnn_visualizer/startup_requirements.py`, not as `raise` statements in `create_app`, and `docs/src/startup-requirements.md` is the operator-facing copy.
+
+### What the registry does not cover
+
+Settings that fail while they are being *parsed* are outside it, and the registry cannot reach them: they raise inside `Config.__init__`, before `create_app` exists to apply anything. Two do this today — a value in `_STRICT_BOOLEANS` (currently `SERVER_MODE` alone) that is not a recognised boolean, and a `MAX_CONTENT_LENGTH` that is not a byte count.
+
+**They are the same class of change, with none of the controls.** Adding a name to `_STRICT_BOOLEANS` makes a previously-acceptable operator configuration fatal at import — #2004 exactly — and every test in `test_startup_requirements.py` passes, because nothing in the registry describes it. There is no staging, no preflight entry and no release-diff row.
+
+So when you tighten one of those parses, do by hand what the registry would have done: say so in `docs/src/startup-requirements.md`, and satisfy yourself that every deployment already supplies a value the new parse accepts, because no test here will tell you. Prefer keeping the parse lenient and expressing the condition as a registry entry, which is the only route that gets a rollout window. `--check-config` still exits non-zero for a parse failure, so a deploy gate reading the exit code needs no special case — it simply reports them differently from a registry finding.
+
+### Why this class of change is not testable here
+
+Our suites verify that a validator behaves correctly *given an input*. The input comes from a deployment's environment, which lives outside this repository, so CI supplies its own conforming value and passes no matter what real deployments hold. **A change that makes a previously-acceptable operator configuration fatal is therefore invisible to CI by construction**, and no amount of test coverage fixes that.
+
+That is not hypothetical. `v0.102.0` added the hosted `SECRET_KEY` check with five direct tests, a docs-parity test, and the whole backend suite already running in hosted posture. Every test passed, before and after. Hosted deployments provisioned before the requirement existed did not satisfy it, every gunicorn worker raised at import, and systemd restart-looped ~27 times before anyone noticed (#2004).
+
+### The rollout convention
+
+New requirements ship staged. Set `enforced_from` to a **later release** than the one you are introducing the requirement in, unless you can show every deployment that exists today already complies. Until that release, a non-complying environment starts and logs a warning on every boot, which is the window operators need to change a value provisioned elsewhere.
+
+`introduced_in` and `enforced_from` being equal is a deliberate, reviewable claim that no deployment needs to change — not the default.
+
+Both fields must be an exact `MAJOR.MINOR.PATCH`; `StartupRequirement.__post_init__` refuses anything else at import. The version comparison is deliberately lenient about the *running* version, so a local `0.103.0.dev1` build compares as the release it precedes — but applied to registry metadata that leniency decides whether a requirement is fatal without saying so. An `enforced_from` of `next` parses to nothing and enforces immediately; `1.x.0` truncates to `1` and compares as `1.0.0`. Failing closed is right for a version read at runtime, and wrong for a literal in this file.
+
+### The question review has to ask
+
+Documentation does not substitute for it: the `v0.102.0` requirement was documented in three files, with rationale. What review did not ask was:
+
+> **Does every deployment that exists today already satisfy this?**
+
+You cannot answer it from the diff or from CI. Answering it means checking the environments — and `ttnn-visualizer --check-config` is how, run against the target environment before the deploy replaces the running service.
+
+### What a change here touches
+
+Adding or tightening a requirement fails two tests until you update them, and that is the mechanism, not friction to route around:
+
+| File | Why it fails |
+|---|---|
+| `tests/test_startup_requirements.py` | Pins the registry's metadata *and* each checker's behaviour against literals. Its failure message is the question above. |
+| `tests/test_startup_requirements_docs_parity.py` | Pins `docs/src/startup-requirements.md` to the registry, and the rollout rule to both `AGENTS.md` and this file, so the operator-facing text changes in the same commit. |
+
+**Metadata is not the requirement.** `_PINNED_REGISTRY` pins `env_vars`, `hosted_only`, `summary`, `remedy` and both release fields; `_PINNED_BEHAVIOUR` pins what each checker accepts and rejects, as literal inputs. Without the second, a validator can be tightened while every copied field stays byte-identical — the pin passes, docs parity passes, and the release diff stays silent, which is the guarantee this whole section claims to provide. Every registered requirement must appear in both.
+
+**Thresholds that carry a policy decision need at least one test pinning the literal value.** Every `SECRET_KEY` case was written as `"x" * MIN_HOSTED_SECRET_KEY_BYTES`, so when #2003 changed the constant, none of them failed. A test derived from the constant under test cannot detect a change to it.
+
+**The release PR reports enforcement boundaries, not just row edits.** `scripts/startup_requirements_diff.py` compares the documented table *and* the release version at each ref. A requirement staged in `1.0.0` with `enforced_from: 2.0.0` has an identical row on both sides; the release that bumps the version to `2.0.0` is the one it starts refusing boots on, and it is announced under **Now enforced** with nothing in the diff to trigger it.
 
 ---
 

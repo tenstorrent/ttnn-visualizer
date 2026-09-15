@@ -57,7 +57,14 @@ import {
     getQuantisedPerfZoom,
 } from './opGraphPerfOverlay';
 import { EMPTY_CRITICAL_PATH, findCriticalPath } from './opGraphCriticalPath';
-import { REVEALED_NODE_CLASS, revealPanShift } from './opGraphRevealPan';
+import {
+    REVEALED_NODE_CLASS,
+    boundsOfNodes,
+    centerPanShift,
+    entryViewport,
+    intersectsPane,
+    revealPanShift,
+} from './opGraphRevealPan';
 import { buildPositionByOperationId, getAdjacentOperationIds } from './opGraphNavigation';
 import { tensorBytes } from '../../functions/math';
 import { useOpGraphLayoutWorker } from './useOpGraphLayoutWorker';
@@ -131,7 +138,6 @@ const bothEndsMatched = (
 // A large report only fits at extreme zoom-out; 3 caps zoom-in as vis did.
 const MAX_ZOOM = 3;
 const MIN_ZOOM = 0.02;
-const FOCUS_ZOOM = 1;
 // Matches MLIR's `localJump`: stepping through matches retargets the tween on
 // every press, so a longer one never settles and the camera reads as lagging.
 const FOCUS_DURATION_MS = 200;
@@ -196,9 +202,36 @@ const withoutGroupingBlocks = (
 
 const NO_BLOCKS: OpGraphBlockSummary[] = [];
 
+/**
+ * Re-expresses an all-unrolled decision against the instances a rebuild produced.
+ *
+ * Only fires when every instance the previous detection found was unrolled, which
+ * is the one decision whose id list is incidental — every other set names specific
+ * instances the reader chose, and those are left exactly as they are so a surviving
+ * id keeps its state. Returns `previous` unchanged otherwise, including when no
+ * decision has been made (`null` already renders unrolled).
+ */
+const carryUnrollAll = (
+    previous: ReadonlySet<string> | null,
+    previousBlocks: readonly OpGraphBlockSummary[],
+    nextBlocks: readonly OpGraphBlockSummary[],
+): ReadonlySet<string> | null => {
+    if (previous === null || previousBlocks.length === 0) {
+        return previous;
+    }
+    if (!previousBlocks.every((block) => previous.has(block.instanceId))) {
+        return previous;
+    }
+    const next = new Set(previous);
+    for (const block of nextBlocks) {
+        next.add(block.instanceId);
+    }
+    return next.size === previous.size ? previous : next;
+};
+
 // Folding a block makes its members' device-op expansions unreachable, so they are
-// dropped with it. Shared by the three places that fold: one block, all blocks, and
-// the deallocate filter (which re-runs detection and invalidates every instance).
+// dropped with it. Shared by the places that fold on a deliberate ask: one block,
+// all blocks, and a grouping switch.
 const withoutBlockMembers = (
     expandedOperationIds: ReadonlySet<number>,
     blocks: readonly OpGraphBlockSummary[],
@@ -365,7 +398,30 @@ const OperationGraphInner = ({
     const pendingRevealRef = useRef<{ nodeIds: Set<string>; reportScope: ReportScope } | null>(null);
     const [revealedNodeIds, setRevealedNodeIds] = useState<Set<string> | null>(null);
     const [revealedOperationId, setRevealedOperationId] = useState<number | null>(null);
-    const { setCenter, getNode, getViewport, setViewport } = useReactFlow<OpGraphFlowNode, OpGraphFlowEdge>();
+    // Framed once per profiler report — the only one the layout depends on — and
+    // nothing else may move the viewport unasked. A path, not a flag: a flag would need
+    // clearing during render, which `react-hooks/refs` forbids. #2007
+    // `undefined` is "not framed yet": `null` is a legitimate path (no profiler report
+    // selected), so it cannot double as the sentinel.
+    const framedProfilerPathRef = useRef<string | null | undefined>(undefined);
+    const pendingEntryFrameRef = useRef<number | null>(null);
+    // Set by the entry frame, consumed by the empty-pane guard below. The guard
+    // cannot read `pendingEntryFrameRef` for this: the frame clears it before
+    // returning, and both effects run on the same commit with the guard second, so
+    // by then it always says "no frame pending". #2008
+    const justFramedRef = useRef(false);
+    // Armed in `onBuilt`, where a rebuild is a known fact, and consumed on the
+    // nodes commit that follows it. Every other mover here is armed that way; the
+    // empty-pane guard keyed on `nodes` changing instead, and `nodes` changes for
+    // reasons that are not rebuilds — React Flow replaces the array again once it
+    // has measured the new nodes, a frame or two after mount and so still inside
+    // the tween, where `getViewport` is short of where the frame is taking it.
+    // Guarding that with a longer-lived flag would mean reasoning about tween
+    // duration; arming it like everything else means the question never arises.
+    const pendingEmptyPaneCheckRef = useRef(false);
+    // The op the URL last moved to, so a rebuild does not pan back to it.
+    const focusedUrlOperationRef = useRef<number | null>(null);
+    const { getNode, getViewport, setViewport } = useReactFlow<OpGraphFlowNode, OpGraphFlowEdge>();
     const flowStore = useStoreApi();
 
     // Path, not the `ReportFolder` object: a rebuilt-but-equivalent object would
@@ -416,9 +472,15 @@ const OperationGraphInner = ({
         selectedOperationIdRef.current = selectedOperationId;
     }, [selectedOperationId]);
 
-    // `getNode` reads the React Flow store, a tick behind `setNodes`, so a focus
-    // requested mid-build has to wait for the commit.
-    const pendingFocusRef = useRef<number | null>(null);
+    // Read by `onBuilt` to compare the detection it is replacing against the one it
+    // was handed. Through a ref rather than the dependency array: `onBuilt` listing
+    // `detectedBlocks` would give it a new identity on every detection, and the
+    // build effect depends on its stability — that loop is what the comment on
+    // `setDetectedBlocks` is guarding.
+    const detectedBlocksRef = useRef(detectedBlocks);
+    useEffect(() => {
+        detectedBlocksRef.current = detectedBlocks;
+    }, [detectedBlocks]);
 
     const sourceOperations = useMemo<OpGraphSourceOperation[]>(
         () =>
@@ -585,13 +647,23 @@ const OperationGraphInner = ({
             }
             setNodeIndex(indexEntries);
             setNodeIdByOperationId(renderedByOpId);
-            // A new array with the same detections rebuilds `deviceSubgraphs` and
-            // `runBuild` loops; each pass restarts the focus tween toward op 0.
+            // A new array with the same detections rebuilds `deviceSubgraphs`, and
+            // `runBuild` then loops.
+            pendingEmptyPaneCheckRef.current = true;
             const nextBlocks = graph.blocks && graph.blocks.length > 0 ? graph.blocks : NO_BLOCKS;
+            // "Fold all" is `[]`, which names no instance and so cannot go stale.
+            // "Unroll all" is a list of ids, and that asymmetry is a bug: a rebuild
+            // that renames an instance -- a deallocate first in a repeating unit, or
+            // one right after a layer delimiter, both change a span's first member --
+            // makes every held id miss, and a miss reads as folded. So unroll-all
+            // flipped to fold-all, the mirror of #2015. Carried forward as the intent
+            // it was rather than as the ids it happened to be. #2015
+            setExpandedBlockIds((previous) => carryUnrollAll(previous, detectedBlocksRef.current, nextBlocks));
             setDetectedBlocks((previous) => (areSameBlockSummaries(previous, nextBlocks) ? previous : nextBlocks));
 
             // An op can drop out between builds (isolated, or filtered as a
-            // deallocate), so selection falls back rather than point at nothing.
+            // deallocate). Clear rather than fall back: a selection is only ever what
+            // the user clicked or the URL named, so inventing one is wrong. #2007
             const desired = selectedOperationIdRef.current;
             const isPresent =
                 desired !== null &&
@@ -600,17 +672,29 @@ const OperationGraphInner = ({
                         node.data.operationId === desired ||
                         (node.data.memberOperationIds !== undefined && node.data.memberOperationIds.includes(desired)),
                 );
-            const target = isPresent ? desired : (graph.nodes[0]?.data.operationId ?? null);
-            if (target !== desired) {
-                setSelectedOperationId(target);
+            if (desired !== null && !isPresent) {
+                setSelectedOperationId(null);
             }
-            // An expand or collapse has an anchor waiting, and recentring on the
-            // selection would overrule it — the two would fight for the viewport.
-            if (pendingViewportAnchorRef.current === null) {
-                pendingFocusRef.current = target;
+            // Deferred to `nodes`: no layout exists on the mount that reads `operationId`.
+            // An expand or collapse has an anchor waiting that would otherwise fight it.
+            // The anchor guard ignores an anchor left over from another report: the node
+            // effect below discards those without triggering a build, so letting one block
+            // the frame leaves the new report at the old report's viewport.
+            const anchor = pendingViewportAnchorRef.current;
+            const hasLiveAnchor = anchor !== null && isSameReportScope(anchor.reportScope, reportScope);
+            if (framedProfilerPathRef.current !== profilerReportPath && !hasLiveAnchor) {
+                // Keyed on what the build actually rendered, not on the selection's
+                // presence above: the two diverge as soon as the user clicks a node.
+                const entryTarget =
+                    operationId !== undefined && renderedByOpId.has(operationId)
+                        ? operationId
+                        : (graph.nodes[0]?.data.operationId ?? null);
+                if (entryTarget !== null) {
+                    pendingEntryFrameRef.current = entryTarget;
+                }
             }
         },
-        [setNodes, setEdges],
+        [setNodes, setEdges, operationId, profilerReportPath, reportScope],
     );
 
     const { runBuild, isBuilding } = useOpGraphLayoutWorker(sourceOperations, onBuilt);
@@ -634,28 +718,128 @@ const OperationGraphInner = ({
         runBuild(buildOptions);
     }, [runBuild, sourceOperations, buildOptions]);
 
+    // The toolbar floats over the pane, so the band it covers is unusable for both
+    // movers below. Measured from its bottom edge rather than its height: it sits at
+    // `top: 12px`, and it grows a row when the report has blocks.
+    const paneChromeInset = useCallback((pane: DOMRect): number => {
+        const toolbar = containerRef.current?.querySelector('.op-graph-toolbar')?.getBoundingClientRect();
+        return toolbar === undefined ? 0 : Math.max(0, toolbar.bottom - pane.top);
+    }, []);
+
+    // Pans, never zooms, and does nothing when the target is already on screen: the
+    // viewport is the user's place in the graph, and only they may change its scale.
+    const panIntoView = useCallback(
+        (bounds: { minX: number; minY: number; maxX: number; maxY: number } | null) => {
+            const pane = containerRef.current?.getBoundingClientRect();
+            if (bounds === null || pane === undefined) {
+                return;
+            }
+            const viewport = getViewport();
+            const { dx, dy } = revealPanShift(bounds, viewport, pane, paneChromeInset(pane));
+            if (dx === 0 && dy === 0) {
+                return;
+            }
+            void setViewport({ ...viewport, x: viewport.x + dx, y: viewport.y + dy }, { duration: FOCUS_DURATION_MS });
+        },
+        [getViewport, setViewport, paneChromeInset],
+    );
+
     const focusOperation = useCallback(
         (id: number) => {
             const node = getNode(nodeIdByOperationId.get(id) ?? String(id));
-            if (!node) {
+            panIntoView(node === undefined ? null : boundsOfNodes([node]));
+        },
+        [getNode, nodeIdByOperationId, panIntoView],
+    );
+
+    // What the panel's Recenter button does, and the one mover that acts on an
+    // already-visible target. `panIntoView` is minimal by design and returns no
+    // shift once the node fits, so routing this through it made the button do
+    // nothing in exactly the case it is pressed: while reading that node's panel.
+    const centerOperation = useCallback(
+        (id: number) => {
+            const node = getNode(nodeIdByOperationId.get(id) ?? String(id));
+            const pane = containerRef.current?.getBoundingClientRect();
+            const bounds = node === undefined ? null : boundsOfNodes([node]);
+            if (bounds === null || pane === undefined) {
                 return;
             }
-            void setCenter(node.position.x + (node.width ?? 0) / 2, node.position.y + (node.height ?? 0) / 2, {
-                zoom: FOCUS_ZOOM,
+            const viewport = getViewport();
+            const { dx, dy } = centerPanShift(bounds, viewport, pane, paneChromeInset(pane));
+            void setViewport({ ...viewport, x: viewport.x + dx, y: viewport.y + dy }, { duration: FOCUS_DURATION_MS });
+        },
+        [getNode, nodeIdByOperationId, getViewport, setViewport, paneChromeInset],
+    );
+
+    // The only place a zoom is chosen for the user. Reads the committed array, not
+    // `getNode`, which trails `setNodes` and on entry silently framed nothing.
+    const frameOnEntry = useCallback(
+        (allNodes: readonly OpGraphFlowNode[], startId: number): boolean => {
+            const graph = boundsOfNodes(allNodes);
+            const startNode = allNodes.find(
+                (node) =>
+                    node.data.operationId === startId ||
+                    (node.data.memberOperationIds !== undefined && node.data.memberOperationIds.includes(startId)),
+            );
+            const pane = containerRef.current?.getBoundingClientRect();
+            // A zero-size pane (mounted inside a collapsed or transitioning panel) would
+            // clamp to the overview floor and latch the report there with no retry.
+            if (graph === null || pane === undefined || pane.width === 0 || pane.height === 0) {
+                return false;
+            }
+            const start = startNode === undefined ? graph : (boundsOfNodes([startNode]) ?? graph);
+            void setViewport(entryViewport(graph, start, pane, paneChromeInset(pane)), {
                 duration: FOCUS_DURATION_MS,
             });
+            return true;
         },
-        [getNode, setCenter, nodeIdByOperationId],
+        [setViewport, paneChromeInset],
     );
 
     useEffect(() => {
-        const target = pendingFocusRef.current;
-        if (target === null || nodes.length === 0) {
+        const target = pendingEntryFrameRef.current;
+        if (target === null || nodes.length === 0 || !frameOnEntry(nodes, target)) {
             return;
         }
-        pendingFocusRef.current = null;
-        focusOperation(target);
-    }, [nodes, focusOperation]);
+        pendingEntryFrameRef.current = null;
+        justFramedRef.current = true;
+        framedProfilerPathRef.current = profilerReportPath;
+        // The frame already put the named op in view, so the effect below must not
+        // pan to it as well — the pan reads the pre-tween viewport and would undo
+        // the zoom the frame just chose.
+        focusedUrlOperationRef.current = operationId ?? null;
+    }, [nodes, frameOnEntry, profilerReportPath, operationId]);
+
+    // A rebuild that replaces the node set rather than re-laying it out — narrowing the
+    // operation range — lays the new graph out from the origin while the reader is
+    // panned elsewhere, leaving an empty pane. Pan, never zoom, and only when the
+    // alternative is showing nothing. #2008
+    useEffect(() => {
+        const pane = containerRef.current?.getBoundingClientRect();
+        const bounds = boundsOfNodes(nodes);
+        // Both read and cleared first. `isRebuildCommit` keeps a measurement commit
+        // out entirely; `justFramed` covers the rebuild commit the entry frame
+        // already handled, where `getViewport` is still pre-tween — the same fact
+        // the URL pan above defers to — so panning from it would write the old zoom
+        // back over the one the frame just chose.
+        const isRebuildCommit = pendingEmptyPaneCheckRef.current;
+        pendingEmptyPaneCheckRef.current = false;
+        const justFramed = justFramedRef.current;
+        justFramedRef.current = false;
+        if (
+            !isRebuildCommit ||
+            justFramed ||
+            bounds === null ||
+            pane === undefined ||
+            pendingEntryFrameRef.current !== null ||
+            pendingViewportAnchorRef.current !== null ||
+            pendingRevealRef.current !== null ||
+            intersectsPane(bounds, getViewport(), pane)
+        ) {
+            return;
+        }
+        panIntoView(bounds);
+    }, [nodes, getViewport, panIntoView]);
 
     // Read from the committed array rather than `getNode`, which trails `setNodes`
     // by a tick and would translate against the pre-rebuild position.
@@ -700,17 +884,11 @@ const OperationGraphInner = ({
             const revealed = nodes.filter((node) => reveal.nodeIds.has(node.id));
             const pane = containerRef.current?.getBoundingClientRect();
             if (revealed.length > 0 && pane !== undefined) {
-                const bounds = revealed.reduce(
-                    (acc, node) => ({
-                        minX: Math.min(acc.minX, node.position.x),
-                        minY: Math.min(acc.minY, node.position.y),
-                        maxX: Math.max(acc.maxX, node.position.x + (node.width ?? node.measured?.width ?? 0)),
-                        maxY: Math.max(acc.maxY, node.position.y + (node.height ?? node.measured?.height ?? 0)),
-                    }),
-                    { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity },
-                );
-                const { dx, dy } = revealPanShift(bounds, viewport, pane);
-                viewport = { ...viewport, x: viewport.x + dx, y: viewport.y + dy };
+                const bounds = boundsOfNodes(revealed);
+                if (bounds !== null) {
+                    const { dx, dy } = revealPanShift(bounds, viewport, pane, paneChromeInset(pane));
+                    viewport = { ...viewport, x: viewport.x + dx, y: viewport.y + dy };
+                }
             }
 
             // No timer: the ring pulses for attention and then rests faint, and the
@@ -721,7 +899,7 @@ const OperationGraphInner = ({
         }
 
         void setViewport(viewport, { duration: FOCUS_DURATION_MS });
-    }, [nodes, reportScope, getViewport, setViewport]);
+    }, [nodes, reportScope, getViewport, setViewport, paneChromeInset]);
 
     const armViewportAnchor = useCallback(
         (nodeId: string, fallbackNodeId: string) => {
@@ -839,22 +1017,17 @@ const OperationGraphInner = ({
         [grouping, detectedBlocks, detectedBlockIds],
     );
 
-    const handleHideDeallocateChange = useCallback(
-        (next: boolean) => {
-            setHideDeallocate(next);
-            // Detection re-runs on this filter, so the ids held here would name
-            // instances that may no longer exist. The decision is dropped rather than
-            // remapped, which returns the graph to the unrolled default. #1977
-            setExpandedBlockIds(null);
-            // Only block members: their expansions were opened inside a fold that this
-            // drops, while an expansion on an op belonging to no block is untouched by
-            // the filter and was kept before this feature existed.
-            setExpandedOperationIds((previous) => withoutBlockMembers(previous, detectedBlocks));
-            // Nothing is folded open any more, so nothing was "just opened".
-            setRevealedNodeIds(null);
-        },
-        [detectedBlocks],
-    );
+    // Nothing to reset: an id that survives this filter keeps its state, and
+    // `carryUnrollAll` re-expresses the one decision whose ids are incidental.
+    // #1977 dropped the whole decision here instead, which cost every reader their
+    // collapse on an unrelated filter.
+    //
+    // This is the only control that can rename an instance. Detection is keyed on
+    // `${sourceVersion}:${hideDeallocate}:${grouping}` in the layout worker, so
+    // weight-load collapsing and device subgraphs never reach the detector at all
+    // and cannot invalidate an id — which is why neither of those ever needed a
+    // reset either. #2015
+    const handleHideDeallocateChange = setHideDeallocate;
 
     if (operationId !== undefined && revealedOperationId !== operationId && detectedBlocks.length > 0) {
         setRevealedOperationId(operationId);
@@ -864,12 +1037,20 @@ const OperationGraphInner = ({
         }
     }
 
-    // Recentre on the operation the URL names. A no-op on first mount, where the
-    // graph hasn't been laid out yet and `onBuilt`'s pending focus does the work.
+    // Pan to the operation the URL names, once per named op. `focusOperation`'s
+    // identity changes on every build (a fresh `nodeIdByOperationId`), so without the
+    // latch every rebuild panned back to it against a stale layout.
     useEffect(() => {
-        if (operationId !== undefined) {
-            focusOperation(operationId);
+        if (operationId === undefined) {
+            // Leaving the latch set would make a return to the same op look handled.
+            focusedUrlOperationRef.current = null;
+            return;
         }
+        if (focusedUrlOperationRef.current === operationId) {
+            return;
+        }
+        focusedUrlOperationRef.current = operationId;
+        focusOperation(operationId);
     }, [operationId, focusOperation]);
 
     const selectOperation = useCallback(
@@ -1553,7 +1734,7 @@ const OperationGraphInner = ({
                     operationId={selectedOperationId}
                     operationById={operationById}
                     operationNamesById={operationNamesById}
-                    onLocateOperation={focusOperation}
+                    onLocateOperation={centerOperation}
                     isPerfOverlayActive={isPerfOverlayActive}
                     perfDeviceTimeNs={selectedPerfDeviceTimeNs}
                     perfColor={

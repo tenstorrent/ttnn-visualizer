@@ -98,8 +98,76 @@ describe('detectRepeatBlocks', () => {
         expect(instances.map((instance) => instance.instanceIndex)).toEqual([0, 1]);
         expect(instances[0].instanceCount).toBe(2);
         expect(instances[0].patternId).toBe(instances[1].patternId);
-        expect(instances[0].instanceId).toBe('block:0:2');
-        expect(instances[1].instanceId).toBe('block:0:4');
+        expect(instances[0].instanceId).toBe('block:2');
+        expect(instances[1].instanceId).toBe('block:4');
+    });
+
+    it('keys an instance on its first member, so an earlier run cannot rename it', () => {
+        // `runIndex` used to lead the id, and it is the index into runs sorted by
+        // start — so a run detected earlier in op order renumbered every later
+        // instance. Hiding deallocate ops does exactly that: four consecutive ones
+        // ahead of a real run become a run of their own, and the id the reader had
+        // folded stopped naming anything. The fold then read as its opposite. #2015
+        const withoutLeadingRun = detectRepeatBlocks(
+            chain([
+                { id: 5, name: 'ttnn.linear' },
+                { id: 6, name: 'ttnn.relu' },
+                { id: 7, name: 'ttnn.linear' },
+                { id: 8, name: 'ttnn.relu' },
+                { id: 9, name: 'ttnn.linear' },
+                { id: 10, name: 'ttnn.relu' },
+                // A suffix, so the last window has an outgoing edge like its
+                // siblings — without one its structural fingerprint differs and the
+                // third instance is not detected at all.
+                { id: 11, name: 'ttnn.softmax' },
+            ]),
+        );
+        const withLeadingRun = detectRepeatBlocks(
+            chain([
+                { id: 1, name: 'ttnn.deallocate' },
+                { id: 2, name: 'ttnn.deallocate' },
+                { id: 3, name: 'ttnn.deallocate' },
+                { id: 4, name: 'ttnn.deallocate' },
+                { id: 5, name: 'ttnn.linear' },
+                { id: 6, name: 'ttnn.relu' },
+                { id: 7, name: 'ttnn.linear' },
+                { id: 8, name: 'ttnn.relu' },
+                { id: 9, name: 'ttnn.linear' },
+                { id: 10, name: 'ttnn.relu' },
+                { id: 11, name: 'ttnn.softmax' },
+            ]),
+        );
+
+        // The leading run is detected, so the later instances really did shift
+        // position — and kept their ids anyway.
+        expect(withLeadingRun.length).toBeGreaterThan(withoutLeadingRun.length);
+        const survivors = new Set(withoutLeadingRun.map((instance) => instance.instanceId));
+        expect([...survivors]).toEqual(['block:5', 'block:7', 'block:9']);
+        for (const id of survivors) {
+            expect(withLeadingRun.map((instance) => instance.instanceId)).toContain(id);
+        }
+    });
+
+    it('gives every instance a distinct id, which is what lets the index go', () => {
+        // Dropping `runIndex` is only safe because runs are disjoint and consumed,
+        // so an instance's first member is unique across the whole detection.
+        const instances = detectRepeatBlocks(
+            chain([
+                { id: 1, name: 'ttnn.linear' },
+                { id: 2, name: 'ttnn.relu' },
+                { id: 3, name: 'ttnn.linear' },
+                { id: 4, name: 'ttnn.relu' },
+                { id: 5, name: 'ttnn.softmax' },
+                { id: 6, name: 'ttnn.matmul' },
+                { id: 7, name: 'ttnn.gelu' },
+                { id: 8, name: 'ttnn.matmul' },
+                { id: 9, name: 'ttnn.gelu' },
+            ]),
+        );
+
+        const ids = instances.map((instance) => instance.instanceId);
+        expect(ids.length).toBeGreaterThan(1);
+        expect(new Set(ids).size).toBe(ids.length);
     });
 
     it('does not collapse the same window when a different op sits between the copies', () => {

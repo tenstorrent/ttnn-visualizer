@@ -60,9 +60,26 @@ jobs:
         run: |
           echo "An open PR from dev to main already exists (#${{ steps.existing_pr.outputs.number }}). Skipping."
 
-      - name: Fetch main for Copilot comparison
+      - name: Fetch main for release comparisons
         if: steps.existing_pr.outputs.has_open_pr == 'false'
         run: git fetch origin main
+
+      - name: Detect startup requirements new in this release
+        id: requirements
+        if: steps.existing_pr.outputs.has_open_pr == 'false'
+        run: |
+          set -euo pipefail
+          # Gap 4 of #2004: nothing in the release flow said "this version requires
+          # configuration that previous versions did not". The v0.102.0 requirement was
+          # documented in three files and still shipped unnoticed, because documentation
+          # nobody is prompted to read is not a release control. This puts it on the PR.
+          python3 scripts/startup_requirements_diff.py \
+            --base origin/main \
+            --head HEAD \
+            --output "${RUNNER_TEMP}/startup-requirements.md"
+          if [ -s "${RUNNER_TEMP}/startup-requirements.md" ]; then
+            echo "::warning::This release changes its startup requirements. Preflight every target environment with 'ttnn-visualizer --check-config' before deploying."
+          fi
 
       - name: Set up Node.js
         if: steps.existing_pr.outputs.has_open_pr == 'false'
@@ -122,9 +139,17 @@ jobs:
           fi
           body_file="${RUNNER_TEMP}/pr-body.md"
           summary_path="${RUNNER_TEMP}/copilot-pr-summary.md"
+          requirements_path="${RUNNER_TEMP}/startup-requirements.md"
           {
             printf '%s\n\n' "${intro}"
             printf '%s\n' "**package.json version on \`dev\`:** ${version}"
+            # Above the generated summary deliberately: this is the one item that can
+            # stop a deployment from starting, and it must not be something a reader
+            # scrolls past.
+            if [ -s "${requirements_path}" ]; then
+              printf '\n---\n\n'
+              cat "${requirements_path}"
+            fi
             if [ -s "${summary_path}" ]; then
               printf '\n---\n\n## Copilot generated summary\n\n'
               cat "${summary_path}"
