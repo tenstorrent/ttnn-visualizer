@@ -103,10 +103,13 @@ DEV_ARGS = {
         "\u3000" * MIN_HOSTED_SECRET_KEY_BYTES,
         # A sub-floor core with whitespace on one side only. These are the PR's
         # deliberate behaviour change, and the only cases that distinguish ``strip``
-        # from ``lstrip`` and ``rstrip`` — the whitespace-only runs above die to any of
-        # the three.
+        # from ``lstrip`` and ``rstrip`` — the whitespace-only runs above are symmetric,
+        # so any of the three reduces them to nothing and refuses them regardless.
+        # Both paths need the pair: the trim is a different call on each.
         f"{'x' * (MIN_HOSTED_SECRET_KEY_BYTES - 1)} ",
         f" {'x' * (MIN_HOSTED_SECRET_KEY_BYTES - 1)}",
+        b"x" * (MIN_HOSTED_SECRET_KEY_BYTES - 1) + b" ",
+        b" " + b"x" * (MIN_HOSTED_SECRET_KEY_BYTES - 1),
     ],
 )
 def test_server_mode_refuses_an_insecure_secret_key(secret_key):

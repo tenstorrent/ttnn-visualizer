@@ -136,6 +136,13 @@ def _validate_hosted_secret_key(config: Mapping[str, Any]) -> None:
     ``test_create_app_refuses_the_development_secret_in_server_mode``, which reaches
     this function *through* ``settings_override``, would stop exercising the real path.
 
+    The default clause is load-bearing only if ``MIN_HOSTED_SECRET_KEY_BYTES`` drops
+    below six or ``DEFAULT_SECRET_KEY`` grows: at five bytes against a floor of eight,
+    the default already fails on length, so nothing observable rests on the clause
+    today. It stays because #2002 may move or remove the floor, and
+    ``test_the_development_default_is_refused_independently_of_the_floor`` patches the
+    floor down to keep it honest in the meantime.
+
     The floor measures what survives a trim, because eight spaces are not a short key
     but are not a key at all. The trim decides admission only — Flask signs with the
     configured value, whitespace included, so ``"key12345"`` and ``" key12345 "`` stay
