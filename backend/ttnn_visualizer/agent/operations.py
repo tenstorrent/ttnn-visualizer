@@ -18,7 +18,7 @@ import sqlite3
 from collections import defaultdict
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Dict, Iterator, List, NamedTuple, Optional, Set
+from typing import Dict, Iterator, List, NamedTuple, Optional, Set, Tuple
 
 from ttnn_visualizer.agent.bounds import MAX_LIMIT, bounded
 from ttnn_visualizer.agent.handles import PROFILER_DB_FILE, ReportRegistry
@@ -97,6 +97,13 @@ class RankScope(NamedTuple):
 
     multi_host: bool
     rank: Optional[int]
+    # Every rank the report holds, so the guards below can tell a report that
+    # merely carries the column from one with figures on more than one rank.
+    ranks: Tuple[int, ...] = ()
+
+    def as_response(self) -> Dict[str, object]:
+        """The projection fields a response repeats. `ranks` is machinery."""
+        return {"multi_host": self.multi_host, "rank": self.rank}
 
 
 def _scoped(
@@ -134,35 +141,50 @@ def _rank_scope(queries: DatabaseQueries, rank: Optional[int]) -> RankScope:
             f"this report has no rank column, so it holds rank 0 only; "
             f"rank {requested} cannot be read"
         )
-    return RankScope(
+    ranks = tuple(queries.query_operation_ranks())
+    scope = RankScope(
         multi_host=multi_host,
         rank=(0 if requested is None else requested) if multi_host else None,
+        ranks=ranks,
     )
-
-
-def _refuse_absent_rank(
-    queries: DatabaseQueries, scope: RankScope, requested: Optional[int]
-) -> None:
-    """Refuse a rank the report has no rows for, rather than answering empty.
-
-    "No operations at rank 9" reads as a fact about the run instead of "there is
-    no rank 9" -- the same misreading the buffer-type guard above exists to
-    prevent. `views._rank_query_param` answers 400 for this on the HTTP side.
-    """
-    if requested is None or not scope.multi_host:
-        return
-    known = sorted(
-        {
-            operation.rank
-            for operation in queries.query_operations(
-                filters=queries.merge_rank_filter("operations", {}, None)
-            )
-        }
-    )
-    if scope.rank not in known:
+    # An empty answer at rank 9 reads as a fact about the run instead of "there is
+    # no rank 9" -- the same misreading the buffer-type guard prevents.
+    # `views._rank_query_param` answers 400 for this on the HTTP side.
+    if requested is not None and scope.rank is not None and scope.rank not in ranks:
         raise ValueError(
             f"this report has no rank {scope.rank}; it holds "
-            f"{', '.join(str(entry) for entry in known)}"
+            f"{', '.join(str(entry) for entry in ranks)}"
+        )
+    return scope
+
+
+def _refuse_unattributable(
+    queries: DatabaseQueries, scope: RankScope, *tables: str
+) -> None:
+    """Refuse figures that cannot be attributed to the rank the response names.
+
+    `merge_rank_filter` no-ops for a table without a `rank` column, which is what
+    keeps an older schema from raising. But when `operations` carries the column
+    and the table holding the numbers does not, the rows union every rank and
+    collide on `operation_id` -- while the response still says `rank: N` and
+    carries a caveat claiming the figures describe that rank. That is #1842
+    inside the allocation numbers, and a caveat pointing the wrong way is worse
+    than none (the rule this module states at `BUFFER_SIZE_UNIT`).
+
+    Only refused when the report genuinely holds more than one rank: a single-rank
+    report cannot misattribute anything, and no local capture carries the mix at
+    all -- 84 of 86 have no rank column and the other two have it on every table.
+    So this is insurance against schema drift, not a live failure. #2014
+    """
+    if scope.rank is None or len(scope.ranks) <= 1:
+        return
+    unfiltered = [table for table in tables if not queries.table_has_rank_column(table)]
+    if unfiltered:
+        raise ValueError(
+            f"this report carries `rank` on `operations` but not on "
+            f"{', '.join(f'`{table}`' for table in unfiltered)}, so its rows span "
+            f"ranks {', '.join(str(entry) for entry in scope.ranks)} and cannot be "
+            f"attributed to rank {scope.rank}"
         )
 
 
@@ -226,8 +248,8 @@ def find_operations(
     instance = registry.get(handle)
     with _profiler_db(instance) as queries:
         scope = _rank_scope(queries, rank)
-        _refuse_absent_rank(queries, scope, rank)
         needle = (name_contains or "").strip().lower()
+        # Only `operations`, which carries the column by definition here.
         matches = [
             operation
             for operation in queries.query_operations(
@@ -253,7 +275,7 @@ def find_operations(
         # Host-side wall time for the op, not device time. The two differ, and
         # `top_ops` is the tool that answers the device question.
         "duration_unit": "host_seconds",
-        **scope._asdict(),
+        **scope.as_response(),
         **_caveats(scope),
     }
 
@@ -268,7 +290,9 @@ def operation_detail(
     instance = registry.get(handle)
     with _profiler_db(instance) as queries:
         scope = _rank_scope(queries, rank)
-        _refuse_absent_rank(queries, scope, rank)
+        _refuse_unattributable(
+            queries, scope, "buffers", "tensors", "input_tensors", "output_tensors"
+        )
         wanted_operation = int(operation_id)
 
         operations = list(
@@ -318,12 +342,21 @@ def operation_detail(
         wanted_ids = sorted(
             {item.tensor_id for item in inputs} | {item.tensor_id for item in outputs}
         )
-        tensors = {
-            tensor.tensor_id: tensor
-            for tensor in queries.query_tensors(
-                filters=_scoped(queries, "tensors", scope, tensor_id=wanted_ids)
-            )
-        }
+        # Short-circuited: `_query_table` and `query_tensors` both skip a
+        # zero-length list, so `tensor_id=[]` drops the filter and reads the whole
+        # table -- parsing every other tensor's memory config on the way past,
+        # which is the cost this scoping exists to avoid. An operation with no
+        # input or output rows takes that path.
+        tensors = (
+            {
+                tensor.tensor_id: tensor
+                for tensor in queries.query_tensors(
+                    filters=_scoped(queries, "tensors", scope, tensor_id=wanted_ids)
+                )
+            }
+            if wanted_ids
+            else {}
+        )
 
     def described(tensor_id: int, index: int) -> Dict[str, object]:
         tensor = tensors.get(tensor_id)
@@ -378,7 +411,7 @@ def operation_detail(
         # does not, where the tensor figure is the per-bank allocation itself.
         "allocation_size_unit": BUFFER_SIZE_UNIT,
         "tensor_size_unit": tensor_size_unit,
-        **scope._asdict(),
+        **scope.as_response(),
         **_caveats(scope, {buffer.device_id for buffer in buffers}),
     }
 
@@ -418,7 +451,7 @@ def memory_profile(
     instance = registry.get(handle)
     with _profiler_db(instance) as queries:
         scope = _rank_scope(queries, rank)
-        _refuse_absent_rank(queries, scope, rank)
+        _refuse_unattributable(queries, scope, "buffers")
         grouped = queries.query_buffer_totals_by_operation(rank=scope.rank)
         names = {
             operation.operation_id: operation.name
@@ -431,18 +464,22 @@ def memory_profile(
     # `(operation_id, buffer_type, device_id, total, count)`, already summed in
     # SQL. Devices are re-summed here rather than in the query so that adding
     # them is a visible step the caveat can describe.
-    devices = {row[2] for row in grouped}
     present = sorted({_buffer_type_name(row[1]) for row in grouped})
     if wanted is not None and wanted not in present and present:
         raise ValueError(
             f"no {wanted} buffers in this report; it holds {', '.join(present)}"
         )
 
+    # Derived from the rows that survived the filter, not from every row: a
+    # multi-device caveat inherited from an excluded buffer type would describe a
+    # total that added nothing together.
+    devices: Set[int] = set()
     by_type: Dict[str, Dict[int, int]] = defaultdict(lambda: defaultdict(int))
-    for operation_id, raw_type, _device_id, total, _count in grouped:
+    for operation_id, raw_type, device_id, total, _count in grouped:
         type_name = _buffer_type_name(raw_type)
         if wanted is not None and type_name != wanted:
             continue
+        devices.add(device_id)
         by_type[type_name][operation_id] += total
 
     cap = bounded(limit)
@@ -507,7 +544,7 @@ def memory_profile(
             "buffer occupies, which only page-level data records. The report "
             "carries no DRAM capacity at all."
         ),
-        **scope._asdict(),
+        **scope.as_response(),
         **_caveats(scope, devices=devices),
     }
 
@@ -522,7 +559,9 @@ def tensor_flow(
     instance = registry.get(handle)
     with _profiler_db(instance) as queries:
         scope = _rank_scope(queries, rank)
-        _refuse_absent_rank(queries, scope, rank)
+        _refuse_unattributable(
+            queries, scope, "tensors", "input_tensors", "output_tensors"
+        )
         wanted = int(tensor_id)
         edges = [
             entry
@@ -547,12 +586,18 @@ def tensor_flow(
                 for operation_id in (*entry.producers, *entry.consumers)
             }
         )
-        names = {
-            operation.operation_id: operation.name
-            for operation in queries.query_operations(
-                filters=_scoped(queries, "operations", scope, operation_id=touching)
-            )
-        }
+        # Same short-circuit: a tensor with no producers and no consumers would
+        # otherwise read every operation in the report to label nothing.
+        names = (
+            {
+                operation.operation_id: operation.name
+                for operation in queries.query_operations(
+                    filters=_scoped(queries, "operations", scope, operation_id=touching)
+                )
+            }
+            if touching
+            else {}
+        )
 
     if not edges:
         raise ValueError(f"no tensor {wanted} in this report")
@@ -572,7 +617,7 @@ def tensor_flow(
         "consumers": labelled(edge.consumers),
         "producer_count": len(edge.producers),
         "consumer_count": len(edge.consumers),
-        **scope._asdict(),
+        **scope.as_response(),
         **_caveats(scope),
     }
     if tensor is not None:

@@ -316,6 +316,33 @@ class DatabaseQueries:
         query += " GROUP BY operation_id, buffer_type, device_id"
         return self.query_runner.execute_query(query, params)
 
+    def table_has_rank_column(self, table_name: str) -> bool:
+        """
+        True if ``table_name`` carries ``rank``, so a rank filter can reach it.
+
+        ``merge_rank_filter`` no-ops silently for a table without the column,
+        which is what keeps an older schema from raising -- but a caller that
+        *reports* a rank alongside the rows needs to know the filter was dropped,
+        or it attributes one rank's figures to another. #1842
+        """
+        return "rank" in self._get_table_columns(table_name)
+
+    def query_operation_ranks(self) -> List[int]:
+        """
+        The distinct ranks ``operations`` holds, ascending, or ``[]`` without the
+        column.
+
+        A ``SELECT DISTINCT`` rather than a read through ``query_operations``,
+        which builds an ``Operation`` dataclass per row across every rank to
+        produce a handful of integers.
+        """
+        if not self.table_has_rank_column("operations"):
+            return []
+        rows = self.query_runner.execute_query(
+            "SELECT DISTINCT rank FROM operations ORDER BY rank"
+        )
+        return [int(row[0]) for row in rows if row[0] is not None]
+
     def report_has_tensor_size_column(self) -> bool:
         """
         True if ``tensors`` carries its own ``size``, which is a whole-tensor

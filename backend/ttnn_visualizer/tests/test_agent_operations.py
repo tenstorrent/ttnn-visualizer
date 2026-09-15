@@ -12,11 +12,13 @@ coupling the tools deliberately do not have.
 
 import sqlite3
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 from ttnn_visualizer.agent import operations as agent_operations
 from ttnn_visualizer.agent.bounds import MAX_LIMIT
 from ttnn_visualizer.agent.handles import ReportRegistry, load_report
+from ttnn_visualizer.models import Tensor
 
 # Column order follows a real report's `.schema`; `buffer_type` is text here and
 # an integer in `_INTEGER_BUFFER_TYPE_SQL` below, because captures exist with
@@ -353,6 +355,106 @@ INSERT INTO devices (
 ) VALUES (0, 1499136, 64, 1370848, 64);
 """
 
+# `rank` on `operations` but NOT on `buffers`/`tensors`, with figures on two ranks.
+# `merge_rank_filter` no-ops for the unranked tables, so their rows union both ranks
+# and collide on `operation_id` — while the response would still name a rank.
+_UNATTRIBUTABLE_RANK_SQL = """
+CREATE TABLE operations (
+    operation_id int, name text, duration float, rank int NOT NULL DEFAULT 0
+);
+CREATE TABLE buffers (
+    operation_id int,
+    device_id int,
+    address int,
+    max_size_per_bank int,
+    buffer_type text,
+    buffer_layout int
+);
+CREATE TABLE tensors (
+    tensor_id int UNIQUE,
+    shape text,
+    dtype text,
+    layout text,
+    memory_config text,
+    device_id int,
+    address int,
+    buffer_type text,
+    size int
+);
+CREATE TABLE input_tensors (operation_id int, input_index int, tensor_id int);
+CREATE TABLE output_tensors (operation_id int, output_index int, tensor_id int);
+CREATE TABLE devices (
+    device_id int,
+    num_y_cores int,
+    num_x_cores int,
+    num_y_compute_cores int,
+    num_x_compute_cores int,
+    worker_l1_size int,
+    l1_num_banks int,
+    l1_bank_size int,
+    address_at_first_l1_bank int,
+    address_at_first_l1_cb_buffer int,
+    num_banks_per_storage_core int,
+    num_compute_cores int,
+    num_storage_cores int,
+    total_l1_memory int,
+    total_l1_for_tensors int,
+    total_l1_for_interleaved_buffers int,
+    total_l1_for_sharded_buffers int,
+    cb_limit int
+);
+
+INSERT INTO operations VALUES (1, 'op_rank0', 1.0, 0), (1, 'op_rank1', 2.0, 1);
+-- Rank 0 allocated 1000, rank 1 allocated 9000. Neither is attributable.
+INSERT INTO buffers VALUES (1, 0, 100, 1000, 'L1', 0), (1, 0, 200, 9000, 'L1', 0);
+INSERT INTO devices (
+    device_id, worker_l1_size, l1_num_banks, l1_bank_size, num_compute_cores
+) VALUES (0, 1499136, 64, 1370848, 64);
+"""
+
+# DRAM on two devices, L1 on one, so a filtered call must not inherit the other
+# type's multi-device caveat.
+_SPLIT_DEVICE_SQL = """
+CREATE TABLE operations (operation_id int UNIQUE, name text, duration float);
+CREATE TABLE buffers (
+    operation_id int,
+    device_id int,
+    address int,
+    max_size_per_bank int,
+    buffer_type text,
+    buffer_layout int
+);
+CREATE TABLE devices (
+    device_id int,
+    num_y_cores int,
+    num_x_cores int,
+    num_y_compute_cores int,
+    num_x_compute_cores int,
+    worker_l1_size int,
+    l1_num_banks int,
+    l1_bank_size int,
+    address_at_first_l1_bank int,
+    address_at_first_l1_cb_buffer int,
+    num_banks_per_storage_core int,
+    num_compute_cores int,
+    num_storage_cores int,
+    total_l1_memory int,
+    total_l1_for_tensors int,
+    total_l1_for_interleaved_buffers int,
+    total_l1_for_sharded_buffers int,
+    cb_limit int
+);
+
+INSERT INTO operations VALUES (1, 'ttnn.all_gather', 1.0);
+INSERT INTO buffers VALUES
+    (1, 0, 100, 1000, 'DRAM', 0),
+    (1, 1, 200, 1000, 'DRAM', 0),
+    (1, 0, 300, 4096, 'L1', 0);
+INSERT INTO devices (
+    device_id, worker_l1_size, l1_num_banks, l1_bank_size, num_compute_cores
+) VALUES (0, 1499136, 64, 1370848, 64), (1, 1499136, 64, 1370848, 64);
+"""
+
 # A report with no `devices` table at all.
 _NO_DEVICES_SQL = """
 CREATE TABLE operations (operation_id int UNIQUE, name text, duration float);
@@ -588,6 +690,20 @@ class TestMemoryProfile:
         assert l1["returned"] == MAX_LIMIT
         assert len(l1["operations"]) == MAX_LIMIT
 
+    def test_a_filtered_call_does_not_inherit_another_type_s_device_caveat(
+        self, loaded
+    ):
+        """The caveat was derived from every grouped row, before the buffer_type
+        filter. DRAM spans two devices here and L1 sits on one, so an L1 call
+        claimed its total added two devices together when it added nothing."""
+        registry, handle = loaded(_SPLIT_DEVICE_SQL, name="split")
+
+        l1 = agent_operations.memory_profile(registry, handle, buffer_type="L1")
+        dram = agent_operations.memory_profile(registry, handle, buffer_type="DRAM")
+
+        assert "caveat" not in l1
+        assert "span 2 devices" in dram["caveat"]
+
     def test_buffers_across_devices_say_the_total_adds_them(self, loaded):
         registry, handle = loaded(_TWO_DEVICE_SQL, name="two-device")
 
@@ -697,6 +813,28 @@ class TestOperationDetail:
 
         assert result["memory_by_buffer_type"]["L1"]["peak"] == 4096
         assert result["device"] == {"devices": 0, "dram_capacity": None}
+
+    def test_an_operation_with_no_tensors_does_not_read_the_whole_table(self, loaded):
+        """`_query_table` skips a zero-length list rather than matching nothing, so
+        `tensor_id=[]` dropped the filter and read every tensor in the report —
+        parsing each one's memory config on the way past. Operation 3 has no input
+        or output rows and took exactly that path."""
+        registry, handle = loaded()
+        built = 0
+        original = Tensor.__post_init__
+
+        def counting(self):
+            nonlocal built
+            built += 1
+            return original(self)
+
+        with patch.object(Tensor, "__post_init__", counting):
+            result = agent_operations.operation_detail(registry, handle, 3)
+
+        assert result["inputs"] == []
+        assert result["outputs"] == []
+        # The report holds three tensors; none of them belong to this operation.
+        assert built == 0
 
     def test_an_unknown_operation_is_refused(self, loaded):
         registry, handle = loaded()
@@ -854,6 +992,42 @@ class TestRankScope:
         assert (
             agent_operations.find_operations(registry, handle, rank=0)["rank"] is None
         )
+
+    def test_figures_that_cannot_be_attributed_to_a_rank_are_refused(self, loaded):
+        """`merge_rank_filter` no-ops for a table without the column, which is what
+        keeps an older schema from raising. But with `rank` on `operations` and not
+        on `buffers`, the rows union both ranks and collide on `operation_id` while
+        the response still says `rank: N` — so a peak of 10000 was reported to each
+        rank where the truth was 1000 and 9000, under a caveat claiming the figures
+        described that rank. A caveat pointing the wrong way is worse than none."""
+        registry, handle = loaded(_UNATTRIBUTABLE_RANK_SQL, name="unattributable")
+
+        for rank in (0, 1):
+            with pytest.raises(ValueError, match="cannot be attributed to rank"):
+                agent_operations.memory_profile(registry, handle, rank=rank)
+            with pytest.raises(ValueError, match="cannot be attributed to rank"):
+                agent_operations.operation_detail(registry, handle, 1, rank=rank)
+
+        # `find_operations` reads only `operations`, which carries the column, so it
+        # can still answer — and does, per rank.
+        assert [
+            operation["name"]
+            for operation in agent_operations.find_operations(registry, handle, rank=1)[
+                "operations"
+            ]
+        ] == ["op_rank1"]
+
+    def test_a_single_rank_report_with_the_same_mix_still_answers(self, loaded):
+        """The mix cannot misattribute anything when there is only one rank, and no
+        local capture carries it at all — 84 of 86 have no rank column and the other
+        two have it on every table. Refusing there would cost an answer for nothing.
+        """
+        registry, handle = loaded(_MIXED_RANK_SQL, name="mixed-single")
+
+        result = agent_operations.memory_profile(registry, handle)
+
+        assert result["memory_by_buffer_type"]["L1"]["peak"] == 4096
+        assert result["rank"] == 0
 
     def test_a_single_host_report_carries_no_rank_caveat(self, loaded):
         """A caveat on every response is one an agent learns to skip."""

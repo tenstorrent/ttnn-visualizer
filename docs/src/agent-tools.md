@@ -43,8 +43,9 @@ server needs no database and no running application.
 | `memory_profile` | Memory footprint per operation, keyed by buffer type and ranked within each, with each type's peak and the device's L1 geometry. |
 | `tensor_flow` | Which operation produced a tensor and which ones consumed it. |
 
-The first four read the performance CSVs; the last four read the profiler report's SQLite
-database. A capture can carry either, both, or — as far as these tools are concerned —
+The last four read the profiler report's SQLite database and the middle three read the
+performance CSVs; `load_report` opens both, since its whole job is saying which of the
+others apply. A capture can carry either, both, or — as far as these tools are concerned —
 neither, which is what makes `load_report`'s answer worth reading first.
 
 Call `load_report` first. It reports what is answerable rather than making you discover it
@@ -108,12 +109,16 @@ operation it stayed live through. Because resident memory barely moves, a peak i
 shared by many operations, and `operations_at_peak` says how many — the difference between
 a single operation you can go and fix and a plateau across the whole run.
 
-**A multi-host report is read one rank at a time.** Operation ids restart at 1 per rank, so
+**A multi-host report is read one rank at a time**, and refuses rather than guess. Operation ids restart at 1 per rank, so
 reading every rank at once would collide operations that merely share an id. The database
 tools default to rank 0, take a `rank` argument, and name the rank they read in every
 response along with a caveat saying the figures describe that rank rather than the job. A
 rank the report has no rows for is refused rather than answered empty, since "no
-operations at rank 9" otherwise reads as a fact about the run.
+operations at rank 9" otherwise reads as a fact about the run. And where a report carries
+`rank` on its operations but not on the table holding the figures — a schema mix that
+would silently union every rank and attribute the total to whichever rank you asked for —
+the call is refused instead, because a caveat naming a rank the numbers do not describe is
+worse than no answer.
 
 **A total on a partitioned run carries a caveat.** When a report spans more than one
 sub-device, operations on different sub-devices can run concurrently, so summed device
