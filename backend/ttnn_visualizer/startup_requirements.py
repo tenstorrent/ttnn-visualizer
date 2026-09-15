@@ -34,6 +34,7 @@ show every existing deployment already satisfies it.
 """
 
 import logging
+import re
 import sys
 from dataclasses import dataclass
 from enum import Enum
@@ -44,6 +45,11 @@ from ttnn_visualizer.settings import DEFAULT_SECRET_KEY, MIN_HOSTED_SECRET_KEY_B
 from ttnn_visualizer.utils import is_flag_enabled
 
 logger = logging.getLogger(__name__)
+
+# Registry metadata names one of our own releases, and is held to that exactly. See
+# :meth:`StartupRequirement.__post_init__` for why this is stricter than
+# :func:`_version_key`, which reads the *running* version.
+_RELEASE_PATTERN = re.compile(r"^\d+\.\d+\.\d+$")
 
 
 class Severity(Enum):
@@ -71,6 +77,37 @@ class StartupRequirement:
     enforced_from: str
     remedy: str
     check: Callable[[Mapping[str, Any]], Optional[str]]
+
+    def __post_init__(self) -> None:
+        """Reject metadata that does not name a release, at import rather than at boot.
+
+        ``_version_key`` is deliberately lenient, because the *running* version can be a
+        local build like ``0.103.0.dev1``. That leniency must not reach these two fields.
+        An ``enforced_from`` of ``"next"`` parses to nothing, :func:`_at_least` answers
+        ``True`` for an unparseable side, and a requirement someone meant to stage ships
+        fatal — #2004 reintroduced by a typo. ``"1.x.0"`` is quieter still: it truncates
+        to ``1`` and compares as ``1.0.0``, so it is wrong without ever looking unset.
+
+        Failing closed is the right answer for a version we read at runtime and cannot
+        parse. It is the wrong answer for a literal in this file, which a person wrote
+        and CI can reject outright.
+        """
+        for field in ("introduced_in", "enforced_from"):
+            value = getattr(self, field)
+            if not isinstance(value, str) or not _RELEASE_PATTERN.match(value):
+                raise ValueError(
+                    f"{self.id}: {field} is {value!r}, which does not name a release. "
+                    "Startup-requirement metadata must be an exact MAJOR.MINOR.PATCH "
+                    "version; anything else silently decides whether this requirement "
+                    "is fatal."
+                )
+
+        if not _at_least(self.enforced_from, self.introduced_in):
+            raise ValueError(
+                f"{self.id}: enforced_from {self.enforced_from} precedes introduced_in "
+                f"{self.introduced_in}. A requirement cannot be fatal in a release that "
+                "shipped before it existed."
+            )
 
     def applies_to(self, config: Mapping[str, Any]) -> bool:
         """Whether this requirement is in scope for the posture ``config`` describes.
@@ -100,7 +137,7 @@ class Finding:
 
 
 def _version_key(version: str) -> Optional[Tuple[int, ...]]:
-    """Leading numeric components of a version, or ``None`` if there are none.
+    """Leading numeric components of the *running* version, or ``None`` if none.
 
     Deliberately not ``packaging.version``: that arrives only as a transitive dependency
     here, and the comparison this needs is over our own ``MAJOR.MINOR.PATCH`` releases.
@@ -121,8 +158,10 @@ def _version_key(version: str) -> Optional[Tuple[int, ...]]:
 def _at_least(version: str, floor: str) -> bool:
     """Whether ``version`` is at or past ``floor``, padding to a common length.
 
-    ``None`` for ``version`` means we could not determine what release this is, and the
-    answer is ``True``: see :func:`severity_for` for why unknown fails closed.
+    ``floor`` comes from registry metadata, which
+    :meth:`StartupRequirement.__post_init__` has already held to an exact
+    ``MAJOR.MINOR.PATCH``, so only ``version`` — read at runtime — can be unparseable.
+    That case answers ``True``: see :func:`severity_for` for why unknown fails closed.
     """
     running = _version_key(version)
     required = _version_key(floor)

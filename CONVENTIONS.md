@@ -1434,6 +1434,8 @@ New requirements ship staged. Set `enforced_from` to a **later release** than th
 
 `introduced_in` and `enforced_from` being equal is a deliberate, reviewable claim that no deployment needs to change — not the default.
 
+Both fields must be an exact `MAJOR.MINOR.PATCH`; `StartupRequirement.__post_init__` refuses anything else at import. The version comparison is deliberately lenient about the *running* version, so a local `0.103.0.dev1` build compares as the release it precedes — but applied to registry metadata that leniency decides whether a requirement is fatal without saying so. An `enforced_from` of `next` parses to nothing and enforces immediately; `1.x.0` truncates to `1` and compares as `1.0.0`. Failing closed is right for a version read at runtime, and wrong for a literal in this file.
+
 ### The question review has to ask
 
 Documentation does not substitute for it: the `v0.102.0` requirement was documented in three files, with rationale. What review did not ask was:
@@ -1448,10 +1450,14 @@ Adding or tightening a requirement fails two tests until you update them, and th
 
 | File | Why it fails |
 |---|---|
-| `tests/test_startup_requirements.py` | Pins the whole registry against literals. Its failure message is the question above. |
-| `tests/test_startup_requirements_docs_parity.py` | Pins `docs/src/startup-requirements.md` to the registry, so the operator-facing text changes in the same commit. |
+| `tests/test_startup_requirements.py` | Pins the registry's metadata *and* each checker's behaviour against literals. Its failure message is the question above. |
+| `tests/test_startup_requirements_docs_parity.py` | Pins `docs/src/startup-requirements.md` to the registry, and the rollout rule to both `AGENTS.md` and this file, so the operator-facing text changes in the same commit. |
+
+**Metadata is not the requirement.** `_PINNED_REGISTRY` pins `env_vars`, `hosted_only`, `summary`, `remedy` and both release fields; `_PINNED_BEHAVIOUR` pins what each checker accepts and rejects, as literal inputs. Without the second, a validator can be tightened while every copied field stays byte-identical — the pin passes, docs parity passes, and the release diff stays silent, which is the guarantee this whole section claims to provide. Every registered requirement must appear in both.
 
 **Thresholds that carry a policy decision need at least one test pinning the literal value.** Every `SECRET_KEY` case was written as `"x" * MIN_HOSTED_SECRET_KEY_BYTES`, so when #2003 changed the constant, none of them failed. A test derived from the constant under test cannot detect a change to it.
+
+**The release PR reports enforcement boundaries, not just row edits.** `scripts/startup_requirements_diff.py` compares the documented table *and* the release version at each ref. A requirement staged in `1.0.0` with `enforced_from: 2.0.0` has an identical row on both sides; the release that bumps the version to `2.0.0` is the one it starts refusing boots on, and it is announced under **Now enforced** with nothing in the diff to trigger it.
 
 ---
 

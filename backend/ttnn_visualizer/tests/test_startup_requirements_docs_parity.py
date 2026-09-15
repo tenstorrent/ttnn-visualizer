@@ -22,6 +22,7 @@ _REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 _STARTUP_DOCS = _REPOSITORY_ROOT / "docs" / "src" / "startup-requirements.md"
 _DOCS_INDEX = _REPOSITORY_ROOT / "docs" / "index.rst"
 _CONVENTIONS = _REPOSITORY_ROOT / "CONVENTIONS.md"
+_AGENTS = _REPOSITORY_ROOT / "AGENTS.md"
 
 
 def _read(path: Path) -> str:
@@ -110,3 +111,19 @@ def test_the_rollout_convention_is_recorded_for_maintainers():
 
     assert "## Startup requirements" in conventions
     assert "enforced_from" in conventions
+
+
+def test_the_rollout_convention_is_stated_in_agents_md_too():
+    """CONVENTIONS.md's maintenance contract requires every convention in both files.
+
+    Not pedantry about where a rule is filed. AGENTS.md is the entry point a contributor
+    or agent reads before touching anything; a rollout convention reachable only by
+    following a link out of an unrelated SECRET_KEY bullet is one nobody meets until
+    they are already editing that particular gate. The rule has to be encounterable
+    before the decision it governs.
+    """
+    agents = _read(_AGENTS)
+
+    assert "### Startup requirements" in agents
+    assert "enforced_from" in agents
+    assert "CONVENTIONS.md#startup-requirements" in agents

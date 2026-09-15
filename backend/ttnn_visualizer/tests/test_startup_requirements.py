@@ -32,12 +32,51 @@ from ttnn_visualizer.startup_requirements import (
 # Every requirement, spelled out. Deriving this from ``STARTUP_REQUIREMENTS`` would make
 # the test agree with whatever the registry says and detect nothing — the exact failure
 # that let #2003 move the SECRET_KEY floor without a single case failing.
+#
+# ``summary`` and ``remedy`` are pinned as literals rather than skipped as prose: they
+# are the whole of what an operator is told, in the preflight report and in the
+# documentation table, so a threshold that moves in them has moved for the audience that
+# has to act on it.
 _PINNED_REGISTRY = {
     "hosted-secret-key": {
         "env_vars": ("SECRET_KEY",),
         "hosted_only": True,
         "introduced_in": "0.102.0",
         "enforced_from": "0.102.0",
+        "summary": (
+            "Under SERVER_MODE, SECRET_KEY must be non-default and at least 8 bytes."
+        ),
+        "remedy": (
+            "Set SECRET_KEY to a stable random value, the same one on every worker: "
+            "python3 -c 'import secrets; print(secrets.token_urlsafe(48))'"
+        ),
+    },
+}
+
+# What each registered checker accepts and rejects, as literal inputs. Metadata alone is
+# not the requirement: a validator can be tightened while ``env_vars``, ``hosted_only``
+# and both release fields stay byte-identical, and the pin above, the docs-parity test
+# and the release diff would all stay quiet. These vectors are what makes "tightening a
+# requirement fails CI" true of the condition itself rather than only of its label.
+#
+# Written as literals for the reason in #2004: every SECRET_KEY case was once spelled
+# ``"x" * MIN_HOSTED_SECRET_KEY_BYTES``, so when #2003 moved the constant, none of them
+# failed. A vector derived from the thing under test cannot detect a change to it.
+_PINNED_BEHAVIOUR = {
+    "hosted-secret-key": {
+        "rejected": (
+            {},
+            {"SECRET_KEY": None},
+            {"SECRET_KEY": ""},
+            {"SECRET_KEY": DEFAULT_SECRET_KEY},
+            {"SECRET_KEY": "k" * 7},
+            {"SECRET_KEY": b"k" * 7},
+        ),
+        "accepted": (
+            {"SECRET_KEY": "k" * 8},
+            {"SECRET_KEY": b"k" * 8},
+            {"SECRET_KEY": "H4sBq2wXm9ZrT7vN1cKdLpYeUg3fRjA8"},
+        ),
     },
 }
 
@@ -57,6 +96,22 @@ hosted deployment met and restart-looped every worker (#2004).
 If the answer is no, or you do not know, set `enforced_from` to a later release than
 the one you are shipping in. The condition then logs a warning and the app starts,
 which is the window operators need to change a value they provision elsewhere.
+
+See docs/src/startup-requirements.md.
+"""
+
+_BEHAVIOUR_CHANGED = """
+A registered checker no longer accepts and rejects what this test pins it to.
+
+The registry metadata can be identical and still describe a different condition —
+`env_vars`, `hosted_only`, `introduced_in` and `enforced_from` say nothing about where
+a validator draws its line. If you moved that line, the question in _REGISTRY_CHANGED
+applies unchanged:
+
+    Does every deployment that exists today already satisfy this condition?
+
+A tightened validator is a new requirement wearing the old one's metadata. Stage it the
+same way: give it a later `enforced_from` unless you can show every deployment complies.
 
 See docs/src/startup-requirements.md.
 """
@@ -85,11 +140,57 @@ def test_the_declared_requirements_match_the_pin():
             "hosted_only": requirement.hosted_only,
             "introduced_in": requirement.introduced_in,
             "enforced_from": requirement.enforced_from,
+            "summary": requirement.summary,
+            "remedy": requirement.remedy,
         }
         for requirement in STARTUP_REQUIREMENTS
     }
 
     assert declared == _PINNED_REGISTRY, _REGISTRY_CHANGED
+
+
+def test_every_registered_checker_has_pinned_input_vectors():
+    """A requirement added without vectors is a condition nothing in CI describes.
+
+    The metadata pin would still fail for it — but its failure message asks whether
+    deployments comply with a *summary*, and the summary is not what runs at boot.
+    """
+    assert {requirement.id for requirement in STARTUP_REQUIREMENTS} == set(
+        _PINNED_BEHAVIOUR
+    ), _BEHAVIOUR_CHANGED
+
+    for requirement_id, vectors in _PINNED_BEHAVIOUR.items():
+        assert vectors["accepted"], f"{requirement_id} pins no accepted input"
+        assert vectors["rejected"], f"{requirement_id} pins no rejected input"
+
+
+def _pinned_vectors():
+    for requirement_id, vectors in _PINNED_BEHAVIOUR.items():
+        for outcome, accepted in (("accepted", True), ("rejected", False)):
+            for index, config in enumerate(vectors[outcome]):
+                yield pytest.param(
+                    requirement_id,
+                    config,
+                    accepted,
+                    id=f"{requirement_id}-{outcome}-{index}",
+                )
+
+
+@pytest.mark.parametrize("requirement_id, config, accepted", list(_pinned_vectors()))
+def test_each_registered_checker_matches_its_pinned_vectors(
+    requirement_id, config, accepted
+):
+    """Where each validator actually draws its line, pinned against literal inputs.
+
+    This is the case #2003 needed and did not have: the floor moved, every derived
+    assertion moved with it, and nothing failed. The 7-byte and 8-byte vectors above are
+    the boundary as a policy decision, written as the numbers they are.
+    """
+    requirement = {candidate.id: candidate for candidate in STARTUP_REQUIREMENTS}[
+        requirement_id
+    ]
+
+    assert (requirement.check(config) is None) is accepted, _BEHAVIOUR_CHANGED
 
 
 def test_every_requirement_is_enforced_no_earlier_than_it_was_introduced():
@@ -104,6 +205,41 @@ def test_every_requirement_is_enforced_no_earlier_than_it_was_introduced():
             f"{requirement.enforced_from}, before it was introduced in "
             f"{requirement.introduced_in}"
         )
+
+
+@pytest.mark.parametrize(
+    "field, value",
+    [
+        # Parses to nothing, so `_at_least` would answer True for either side and a
+        # requirement meant to be staged would ship fatal.
+        ("enforced_from", "next"),
+        ("enforced_from", "TBD"),
+        ("enforced_from", ""),
+        # Worse than unparseable: truncates to `1` and silently compares as `1.0.0`.
+        ("enforced_from", "1.x.0"),
+        ("enforced_from", "0.103.0.dev1"),
+        ("introduced_in", "next"),
+        ("introduced_in", "1.x.0"),
+        ("enforced_from", None),
+        ("introduced_in", 1.0),
+    ],
+)
+def test_registry_metadata_that_does_not_name_a_release_is_refused(field, value):
+    """Leniency about the running version must not extend to these two literals.
+
+    `_version_key` drops trailing non-numeric components so a local `0.103.0.dev1`
+    build compares as the release it precedes. Applied to registry metadata the same
+    leniency decides, without saying so, whether a requirement is fatal — which is the
+    #2004 failure with a typo in place of a review oversight.
+    """
+    with pytest.raises(ValueError, match="does not name a release"):
+        _requirement(**{field: value})
+
+
+def test_a_requirement_cannot_be_enforced_before_it_was_introduced():
+    """Structural, not merely asserted over the registry: the object cannot exist."""
+    with pytest.raises(ValueError, match="precedes introduced_in"):
+        _requirement(introduced_in="2.0.0", enforced_from="1.0.0")
 
 
 def test_every_requirement_names_the_variables_an_operator_must_set():
@@ -252,19 +388,16 @@ def test_report_distinguishes_a_skipped_requirement_from_a_satisfied_one():
     assert "not applicable to this posture" in stream.getvalue()
 
 
-@pytest.mark.parametrize(
-    "secret_key",
-    [None, "", DEFAULT_SECRET_KEY, "short", b"short"],
-)
-def test_the_hosted_secret_key_requirement_refuses_an_insecure_value(secret_key):
-    findings = evaluate({"SERVER_MODE": True, "SECRET_KEY": secret_key})
+def test_the_hosted_secret_key_requirement_is_wired_into_the_registry_as_fatal():
+    """What the checker decides is pinned by the vectors above; this is the wiring.
+
+    That the entry is reached through ``evaluate`` at all, in hosted posture, and that
+    this release treats it as fatal rather than staged.
+    """
+    findings = evaluate({"SERVER_MODE": True, "SECRET_KEY": DEFAULT_SECRET_KEY})
 
     assert [finding.requirement.id for finding in findings] == ["hosted-secret-key"]
     assert findings[0].is_fatal
-
-
-def test_the_hosted_secret_key_requirement_accepts_a_conforming_value():
-    assert evaluate({"SERVER_MODE": True, "SECRET_KEY": "x" * 8}) == []
 
 
 def test_a_local_install_keeps_the_development_secret_key():
@@ -284,25 +417,11 @@ def test_enforcing_the_hosted_secret_key_requirement_raises_the_documented_messa
         enforce({"SERVER_MODE": True, "SECRET_KEY": DEFAULT_SECRET_KEY})
 
 
-@pytest.mark.parametrize("length, accepted", [(7, False), (8, True)])
-def test_the_hosted_secret_key_floor_is_pinned_with_literals(length, accepted):
-    """Pins the floor with literals rather than deriving it from the constant.
-
-    Written as ``MIN_HOSTED_SECRET_KEY_BYTES - 1`` and ``MIN_HOSTED_SECRET_KEY_BYTES``,
-    these cases would move with the constant and keep passing — the failure mode the
-    test exists to prevent, and the one that let #2003 change the floor without a
-    single case failing. See #2004.
-    """
-    findings = evaluate({"SERVER_MODE": True, "SECRET_KEY": "k" * length})
-
-    assert (findings == []) is accepted
-
-
 def test_the_hosted_secret_key_floor_constant_matches_the_pinned_boundary():
-    """Fails if the constant moves away from the boundary pinned above.
+    """Fails if the constant moves away from the boundary pinned in _PINNED_BEHAVIOUR.
 
-    The two live together deliberately: the literals catch a validator that stops
-    honouring the floor, and this catches a floor that changes without the literals
+    The two live together deliberately: the vectors catch a validator that stops
+    honouring the floor, and this catches a floor that changes without the vectors
     being reconsidered. Changing the floor means editing both, which is the point —
     it is a policy decision, currently a stopgap pending #2002.
     """
