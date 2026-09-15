@@ -1660,6 +1660,43 @@ describe('OperationGraphReactFlow repeat blocks', () => {
         expect(zooms[0]).not.toBe(PANNED_ZOOM);
     });
 
+    it('ignores a nodes commit that is not a rebuild, mid-tween', () => {
+        // The other half of the window. React Flow measures the new nodes and
+        // pushes `dimensions` changes for them, so the array is replaced again a
+        // frame or two after mount — still inside `FOCUS_DURATION_MS`, where
+        // `getViewport` is short of where the frame is taking it. A one-shot flag
+        // consumed on the frame's own commit is already spent by then, so the guard
+        // ran and wrote the mid-tween zoom back.
+        //
+        // Driving `setNodes` stands in for that: `applyNodeChanges` is a bare mock,
+        // so `emitNodeChanges` never replaces the array, and array identity is the
+        // only thing this effect keys on. #2008
+        renderGraph();
+        viewportState.current = { x: -11861, y: -3000, zoom: PANNED_ZOOM };
+        setViewport.mockClear();
+
+        act(() => {
+            getDefaultStore().set(activeProfilerReportAtom, { path: '/reports/second' } as ReportFolder);
+        });
+        act(() => {
+            harness.onBuilt?.(
+                buildOpGraph(harness.sourceOperations ?? sourceFor(OPERATION_LIST), {
+                    hideDeallocate: true,
+                    deviceSubgraphs: [],
+                }),
+            );
+        });
+        act(() => {
+            harness.setNodes?.((previous) => [...previous]);
+        });
+
+        const zooms = (setViewport.mock.calls as unknown as [{ zoom: number }][]).map(([viewport]) => viewport.zoom);
+        // Still exactly the frame's write. A measurement commit is not a rebuild and
+        // must not reach the guard at all.
+        expect(zooms).toHaveLength(1);
+        expect(zooms[0]).not.toBe(PANNED_ZOOM);
+    });
+
     it('pans to a narrowed graph the reader can no longer see', () => {
         // The other side of the guard above: it must still fire when the rebuild
         // really does leave an empty pane. A range change lays the new graph out

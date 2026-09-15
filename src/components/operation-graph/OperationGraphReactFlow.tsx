@@ -383,6 +383,15 @@ const OperationGraphInner = ({
     // returning, and both effects run on the same commit with the guard second, so
     // by then it always says "no frame pending". #2008
     const justFramedRef = useRef(false);
+    // Armed in `onBuilt`, where a rebuild is a known fact, and consumed on the
+    // nodes commit that follows it. Every other mover here is armed that way; the
+    // empty-pane guard keyed on `nodes` changing instead, and `nodes` changes for
+    // reasons that are not rebuilds — React Flow replaces the array again once it
+    // has measured the new nodes, a frame or two after mount and so still inside
+    // the tween, where `getViewport` is short of where the frame is taking it.
+    // Guarding that with a longer-lived flag would mean reasoning about tween
+    // duration; arming it like everything else means the question never arises.
+    const pendingEmptyPaneCheckRef = useRef(false);
     // The op the URL last moved to, so a rebuild does not pan back to it.
     const focusedUrlOperationRef = useRef<number | null>(null);
     const { getNode, getViewport, setViewport } = useReactFlow<OpGraphFlowNode, OpGraphFlowEdge>();
@@ -603,6 +612,7 @@ const OperationGraphInner = ({
             setNodeIdByOperationId(renderedByOpId);
             // A new array with the same detections rebuilds `deviceSubgraphs`, and
             // `runBuild` then loops.
+            pendingEmptyPaneCheckRef.current = true;
             const nextBlocks = graph.blocks && graph.blocks.length > 0 ? graph.blocks : NO_BLOCKS;
             setDetectedBlocks((previous) => (areSameBlockSummaries(previous, nextBlocks) ? previous : nextBlocks));
 
@@ -762,13 +772,17 @@ const OperationGraphInner = ({
     useEffect(() => {
         const pane = containerRef.current?.getBoundingClientRect();
         const bounds = boundsOfNodes(nodes);
-        // Read and cleared first, so a commit the frame handled is skipped exactly
-        // once. `getViewport` is still pre-tween here — the same fact the URL pan
-        // above defers to — so panning from it would write the old zoom back over
-        // the one the frame just chose.
+        // Both read and cleared first. `isRebuildCommit` keeps a measurement commit
+        // out entirely; `justFramed` covers the rebuild commit the entry frame
+        // already handled, where `getViewport` is still pre-tween — the same fact
+        // the URL pan above defers to — so panning from it would write the old zoom
+        // back over the one the frame just chose.
+        const isRebuildCommit = pendingEmptyPaneCheckRef.current;
+        pendingEmptyPaneCheckRef.current = false;
         const justFramed = justFramedRef.current;
         justFramedRef.current = false;
         if (
+            !isRebuildCommit ||
             justFramed ||
             bounds === null ||
             pane === undefined ||
