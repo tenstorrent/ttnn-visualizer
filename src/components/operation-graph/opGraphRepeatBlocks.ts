@@ -342,7 +342,7 @@ export function detectRepeatBlocks(keptOperations: readonly OpGraphSourceOperati
     const collisionCountBySummary = new Map<string, number>();
     const anonymousCount = { value: 0 };
     const instances: RepeatBlockInstance[] = [];
-    runs.forEach((run, runIndex) => {
+    runs.forEach((run) => {
         const patternId = `${ids.slice(run.start, run.start + run.length).join(',')}#${windowStructure(run.start, run.length, outgoing)}`;
         const members = keptOperations.slice(run.start, run.start + run.length);
         const patternLabel = labelForPattern(
@@ -358,7 +358,15 @@ export function detectRepeatBlocks(keptOperations: readonly OpGraphSourceOperati
             const memberIds = operationIds.slice(instanceStart, instanceStart + run.length);
             instances.push({
                 kind: OpGraphBlockKind.REPEAT,
-                instanceId: `block:${runIndex}:${memberIds[0]}`,
+                // Keyed on the first member alone, like the layer detector, and for
+                // the reason it gives: `runIndex` is the index into `runs` sorted by
+                // start, so a run detected earlier in op order renumbers every later
+                // instance. Showing deallocates does exactly that -- four consecutive
+                // ones ahead of a real run become a run at index 0 -- which renamed
+                // every held id and flipped a reader's unrolled graph to folded. Runs
+                // are disjoint and consumed, so the first member is already unique.
+                // #2015
+                instanceId: `block:${memberIds[0]}`,
                 patternId,
                 label: `${patternLabel} × ${run.repeatCount}`,
                 patternLabel,

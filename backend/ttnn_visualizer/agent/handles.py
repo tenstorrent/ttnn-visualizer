@@ -7,9 +7,12 @@
 The HTTP API keys reports on an `instanceId` the browser holds and `@with_instance`
 resolves from the database. A tool call has neither, so a report is loaded once by
 path and addressed afterwards by an opaque handle. Nothing here touches the
-database or a Flask app context -- the query classes only need a path. #1995
+application's database or a Flask app context -- the query classes only need a
+path. (The report's own SQLite file is read, to answer what a report can
+answer; that is the capture, not the app's session.) #1995
 """
 
+import sqlite3
 from pathlib import Path
 from typing import Callable, Dict, List, Optional
 
@@ -20,8 +23,9 @@ from ttnn_visualizer.csv_queries import (
 from ttnn_visualizer.models import Instance
 
 # The SQLite database a profiler report carries. Named here rather than imported
-# because the agent surface reads no tables yet; its presence is what tells an
-# agent whether the operation and tensor questions are answerable at all.
+# because the agent surface once read no tables; its presence is what makes the
+# operation, memory and tensor questions answerable, and `agent.operations`
+# opens it read-only by this name. #2012
 PROFILER_DB_FILE = "db.sqlite"
 
 
@@ -90,6 +94,57 @@ def _resolved_directory(label: str, path: Optional[str]) -> Optional[str]:
     return str(resolved)
 
 
+# The tables each database tool reads, so answerability is decided per tool
+# rather than from one probe. Kept here, beside the inventory that consumes it,
+# because `agent.operations` imports this module; it has to stay in step with
+# the queries those tools actually run.
+TOOL_TABLES: Dict[str, frozenset] = {
+    "find_operations": frozenset({"operations"}),
+    "memory_profile": frozenset({"buffers", "operations"}),
+    "operation_detail": frozenset(
+        {"operations", "buffers", "tensors", "input_tensors", "output_tensors"}
+    ),
+    "tensor_flow": frozenset(
+        {"operations", "tensors", "input_tensors", "output_tensors"}
+    ),
+}
+
+
+def _readable_tables(profiler_path: Optional[str]) -> frozenset:
+    """The tables a profiler database actually holds, or nothing.
+
+    Presence of the file is not enough, twice over. A zero-byte `db.sqlite`
+    opens as a valid empty database, and a truncated capture can hold
+    `operations` while missing `buffers` or `tensors` -- either way a presence
+    check advertised all four tools and then failed them with "no such table",
+    the precise thing this function exists to avoid. One `sqlite_master` read
+    answers for every tool and is cheaper than the calls an agent would
+    otherwise spend finding out.
+    """
+    if profiler_path is None:
+        return frozenset()
+    db_file = Path(profiler_path, PROFILER_DB_FILE)
+    if not db_file.is_file():
+        return frozenset()
+    try:
+        connection = sqlite3.connect(f"file:{db_file}?mode=ro", uri=True)
+    except sqlite3.Error:
+        return frozenset()
+    try:
+        return frozenset(
+            name
+            for (name,) in connection.execute(
+                "SELECT name FROM sqlite_master WHERE type = 'table'"
+            )
+        )
+    except sqlite3.Error:
+        # A truncated or non-SQLite file reaching this point is a broken capture,
+        # and "cannot answer" is the honest inventory entry for it.
+        return frozenset()
+    finally:
+        connection.close()
+
+
 def _inventory(instance: Instance) -> Dict[str, object]:
     """What this report can actually answer.
 
@@ -124,21 +179,25 @@ def _inventory(instance: Instance) -> Dict[str, object]:
         performance_path is not None
         and Path(performance_path, DeviceLogProfilerQueries.DEVICE_LOG_FILE).is_file(),
     )
+
+    # Per tool, against the tables it reads. A partial capture can answer
+    # `find_operations` and none of the rest, and saying so is the whole point
+    # of this list.
+    tables = _readable_tables(profiler_path)
+    for tool_name, required in TOOL_TABLES.items():
+        record(tool_name, required <= tables)
+
     return {
         # Tool names only. `operations` used to appear here whenever a `db.sqlite`
-        # was present, but no such tool is registered — so the list handed an
+        # was present, but no such tool was registered — so the list handed an
         # agent a name it could not call.
         "answerable": available,
         "unanswerable": missing,
         "performance_csv": perf_csv.name if perf_csv else None,
-        # Data the report holds that no tool exposes yet. Kept apart from the
-        # names above so the two cannot be read as the same kind of thing.
-        "data_present_without_tools": (
-            ["operations_database"]
-            if profiler_path is not None
-            and Path(profiler_path, PROFILER_DB_FILE).is_file()
-            else []
-        ),
+        # Kept as a key, and now empty: the database questions have tools. What
+        # stays unexposed is page-level (`buffer_pages`), which is millions of rows
+        # on an ordinary capture and needs a different shape than a tool response.
+        "data_present_without_tools": [],
     }
 
 

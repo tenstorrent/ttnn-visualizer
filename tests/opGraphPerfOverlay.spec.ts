@@ -186,12 +186,12 @@ describe('buildRenderedPerfStyling', () => {
         const blockOverlay = buildOpGraphPerfOverlay(rows([1, 10], [2, 1_000], [3, 1_000]), true, [1, 2, 3]);
         const { styleByNodeId } = buildRenderedPerfStyling(blockOverlay, true, [
             { id: '1', operationId: 1 },
-            { id: 'block:0:2', operationId: 2, memberOperationIds: [2, 3] },
+            { id: 'block:2', operationId: 2, memberOperationIds: [2, 3] },
         ])!;
 
-        expect(styleByNodeId.has('block:0:2')).toBe(true);
+        expect(styleByNodeId.has('block:2')).toBe(true);
         expect(styleByNodeId?.has('2')).toBe(false);
-        expect(customProps(styleByNodeId?.get('block:0:2'))[PERF_BAR_SCALE_VAR]).toBe(1);
+        expect(customProps(styleByNodeId?.get('block:2'))[PERF_BAR_SCALE_VAR]).toBe(1);
     });
 
     it('ranks folded blocks against each other rather than clamping them all hot (#1944)', () => {
@@ -204,12 +204,12 @@ describe('buildRenderedPerfStyling', () => {
             [1, 2, 3, 4, 5, 6, 7, 8, 9],
         );
         const { styleByNodeId } = buildRenderedPerfStyling(blockOverlay, true, [
-            { id: 'block:0:1', operationId: 1, memberOperationIds: [1, 2, 3] },
-            { id: 'block:1:4', operationId: 4, memberOperationIds: [4, 5, 6, 7, 8, 9] },
+            { id: 'block:1', operationId: 1, memberOperationIds: [1, 2, 3] },
+            { id: 'block:4', operationId: 4, memberOperationIds: [4, 5, 6, 7, 8, 9] },
         ])!;
 
-        const small = customProps(styleByNodeId?.get('block:0:1'))[PERF_BAR_SCALE_VAR] as number;
-        const large = customProps(styleByNodeId?.get('block:1:4'))[PERF_BAR_SCALE_VAR] as number;
+        const small = customProps(styleByNodeId?.get('block:1'))[PERF_BAR_SCALE_VAR] as number;
+        const large = customProps(styleByNodeId?.get('block:4'))[PERF_BAR_SCALE_VAR] as number;
         expect(small).toBe(0);
         expect(large).toBe(1);
     });
@@ -220,11 +220,11 @@ describe('buildRenderedPerfStyling', () => {
         const blockOverlay = buildOpGraphPerfOverlay(rows([1, 100], [2, 100], [3, 100], [4, 100]), true, [1, 2, 3, 4]);
         const { styleByNodeId } = buildRenderedPerfStyling(blockOverlay, true, [
             { id: '1', operationId: 1 },
-            { id: 'block:0:2', operationId: 2, memberOperationIds: [2, 3, 4] },
+            { id: 'block:2', operationId: 2, memberOperationIds: [2, 3, 4] },
         ])!;
 
         expect(customProps(styleByNodeId.get('1'))[PERF_BAR_SCALE_VAR]).toBe(0);
-        expect(customProps(styleByNodeId?.get('block:0:2'))[PERF_BAR_SCALE_VAR]).toBe(1);
+        expect(customProps(styleByNodeId?.get('block:2'))[PERF_BAR_SCALE_VAR]).toBe(1);
     });
 
     it('colours the bar with the same ramp the side panel swatch uses', () => {
@@ -242,7 +242,7 @@ describe('buildRenderedPerfStyling range', () => {
 
         const styling = buildRenderedPerfStyling(overlay, true, [
             { id: '1', operationId: 1 },
-            { id: 'block:0:2', operationId: 2, memberOperationIds: [2, 3] },
+            { id: 'block:2', operationId: 2, memberOperationIds: [2, 3] },
         ])!;
 
         expect(styling.minNs).toBe(100 * 1_000);

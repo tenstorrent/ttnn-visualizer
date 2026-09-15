@@ -15,6 +15,7 @@ import logging
 from typing import Any, Dict
 
 import pytest
+from ttnn_visualizer import startup_requirements
 from ttnn_visualizer.event_logging import UNKNOWN_VALUE
 from ttnn_visualizer.settings import DEFAULT_SECRET_KEY, MIN_HOSTED_SECRET_KEY_BYTES
 from ttnn_visualizer.startup_requirements import (
@@ -44,7 +45,8 @@ _PINNED_REGISTRY = {
         "introduced_in": "0.102.0",
         "enforced_from": "0.102.0",
         "summary": (
-            "Under SERVER_MODE, SECRET_KEY must be non-default and at least 8 bytes."
+            "Under SERVER_MODE, SECRET_KEY must be non-default and at least 8 bytes "
+            "excluding surrounding whitespace."
         ),
         "remedy": (
             "Set SECRET_KEY to a stable random value, the same one on every worker: "
@@ -69,12 +71,39 @@ _PINNED_BEHAVIOUR = {
             {"SECRET_KEY": None},
             {"SECRET_KEY": ""},
             {"SECRET_KEY": DEFAULT_SECRET_KEY},
+            {"SECRET_KEY": DEFAULT_SECRET_KEY.encode("utf-8")},
+            {"SECRET_KEY": bytearray(DEFAULT_SECRET_KEY.encode("utf-8"))},
+            # The default with padding: refused by the default clause only because the
+            # comparison happens after the trim.
+            {"SECRET_KEY": f"  {DEFAULT_SECRET_KEY} "},
             {"SECRET_KEY": "k" * 7},
             {"SECRET_KEY": b"k" * 7},
+            # Whitespace standing in *for* a key — long enough to clear the floor
+            # untrimmed, so only the trim refuses them (#2009).
+            {"SECRET_KEY": " " * 8},
+            {"SECRET_KEY": "\t" * 8},
+            {"SECRET_KEY": b" " * 8},
+            # Non-ASCII whitespace, which reaches the floor as multi-byte UTF-8 and so
+            # is refused only because the ``str`` path trims before encoding.
+            {"SECRET_KEY": "\u00a0" * 8},
+            {"SECRET_KEY": "\u3000" * 8},
+            # A sub-floor core padded on one side only: the cases that distinguish
+            # ``strip`` from ``lstrip`` and ``rstrip``, on both the str and bytes paths.
+            {"SECRET_KEY": "kkkkkkk "},
+            {"SECRET_KEY": " kkkkkkk"},
+            {"SECRET_KEY": b"kkkkkkk "},
+            {"SECRET_KEY": b" kkkkkkk"},
         ),
         "accepted": (
             {"SECRET_KEY": "k" * 8},
             {"SECRET_KEY": b"k" * 8},
+            # A key an ``.env`` line or a copy-paste wrapped in whitespace still boots:
+            # the trim decides admission, and the core clears the floor.
+            {"SECRET_KEY": "  kkkkkkkk\n"},
+            {"SECRET_KEY": b"  kkkkkkkk\n"},
+            # A byte-order mark is not whitespace to Python on either path, so it
+            # counts toward the floor rather than trimming away.
+            {"SECRET_KEY": "\ufeff" * 8},
             # Deliberately low-entropy and obviously not a credential: the floor
             # counts UTF-8 bytes, so a long dictionary phrase passes it exactly as a
             # random value of the same length would. Writing the vector this way
@@ -419,6 +448,44 @@ def test_enforcing_the_hosted_secret_key_requirement_raises_the_documented_messa
     """
     with pytest.raises(RuntimeError, match="SERVER_MODE requires SECRET_KEY"):
         enforce({"SERVER_MODE": True, "SECRET_KEY": DEFAULT_SECRET_KEY})
+
+
+def test_the_development_default_is_refused_independently_of_the_floor(monkeypatch):
+    """Isolates the default clause, which the floor otherwise masks in every case.
+
+    ``DEFAULT_SECRET_KEY`` is shorter than the floor, so the default fails on length
+    alone: deleting the default clause, or pointing it at a bogus literal, leaves the
+    whole suite green. Dropping the floor to 1 is the only way to make the clause
+    observable — and it is the case that matters, because #2002 may move or remove the
+    floor, at which point this clause is all that still refuses the default.
+
+    The floor is patched on ``startup_requirements`` rather than ``settings`` because
+    the checker imports the name directly. See #2006.
+    """
+    monkeypatch.setattr(startup_requirements, "MIN_HOSTED_SECRET_KEY_BYTES", 1)
+
+    for secret_key in (
+        DEFAULT_SECRET_KEY,
+        DEFAULT_SECRET_KEY.encode("utf-8"),
+        f"  {DEFAULT_SECRET_KEY} ",
+    ):
+        findings = evaluate({"SERVER_MODE": True, "SECRET_KEY": secret_key})
+
+        assert [finding.requirement.id for finding in findings] == ["hosted-secret-key"]
+
+
+def test_a_padded_key_is_admitted_on_the_trim_but_signs_with_its_whitespace():
+    """The trim decides admission only; the configured value is what Flask signs.
+
+    Pinned because the refusal message tells operators that padding does not count
+    toward the floor, and an operator who reads that as "padding is ignored" and tidies
+    their ``.env`` rotates the signing key — dropping every session.
+    """
+    padded = "  kkkkkkkk  "
+    config = {"SERVER_MODE": True, "SECRET_KEY": padded}
+
+    assert evaluate(config) == []
+    assert config["SECRET_KEY"] == padded
 
 
 def test_the_hosted_secret_key_floor_constant_matches_the_pinned_boundary():

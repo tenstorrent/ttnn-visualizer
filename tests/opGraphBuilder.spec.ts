@@ -475,7 +475,7 @@ describe('buildOpGraph', () => {
             const classOf = (graph: ReturnType<typeof buildOpGraph>, id: string) =>
                 graph.nodes.find((node) => node.id === id)?.className;
 
-            expect(classOf(repeats, 'block:0:2')).toBe('op-graph-block-repeat');
+            expect(classOf(repeats, 'block:2')).toBe('op-graph-block-repeat');
             expect(classOf(layers, 'layer:attention:1')).toBe('op-graph-block-layer');
             expect(classOf(fans, 'weights:1')).toBe('op-graph-block-weights');
         });
@@ -654,8 +654,8 @@ describe('buildOpGraph', () => {
             operation({ id: 6, name: 'suffix' }),
         ];
 
-        const FIRST_BLOCK_ID = 'block:0:2';
-        const SECOND_BLOCK_ID = 'block:0:4';
+        const FIRST_BLOCK_ID = 'block:2';
+        const SECOND_BLOCK_ID = 'block:4';
 
         // Repeats render unrolled unless something folds them, so a test about the
         // collapsed rendering has to ask for the fold: an empty expansion set is
@@ -773,7 +773,7 @@ describe('buildOpGraph', () => {
                 operation({ id: 5, name: 'suffix' }),
             ];
             const graph = buildFolded(twoTensors, false);
-            const between = graph.edges.filter((edge) => edge.source === 'block:0:1' && edge.target === 'block:0:3');
+            const between = graph.edges.filter((edge) => edge.source === 'block:1' && edge.target === 'block:3');
 
             expect(between).toHaveLength(1);
             expect(between[0].label).toBeUndefined();

@@ -37,7 +37,7 @@ service behind it.
 ttnn-visualizer 0.102.0 startup requirements
 Posture: hosted (SERVER_MODE enabled)
 
-  ❌ hosted-secret-key: SERVER_MODE requires SECRET_KEY to contain at least 8 bytes and not use the development default
+  ❌ hosted-secret-key: SERVER_MODE requires SECRET_KEY to contain at least 8 bytes excluding surrounding whitespace, and not use the development default
       Set: SECRET_KEY
       Set SECRET_KEY to a stable random value, the same one on every worker: python3 -c 'import secrets; print(secrets.token_urlsafe(48))'
 
@@ -51,12 +51,17 @@ rather than only of what broke.
 
 | Requirement | Environment variables | Condition | Introduced in | Enforced from | Posture |
 |---|---|---|---|---|---|
-| `hosted-secret-key` | `SECRET_KEY` | Under SERVER_MODE, SECRET_KEY must be non-default and at least 8 bytes. | 0.102.0 | 0.102.0 | Hosted |
+| `hosted-secret-key` | `SECRET_KEY` | Under SERVER_MODE, SECRET_KEY must be non-default and at least 8 bytes excluding surrounding whitespace. | 0.102.0 | 0.102.0 | Hosted |
 
 The byte floor is a floor against an obviously-short key, not a strength check — it
 counts UTF-8 bytes rather than entropy. Supply a long random value regardless of the
 number. What makes the signed session cookie an integrity boundary across workers and
 restarts is that the key is *stable and non-default*.
+
+Surrounding whitespace does not count toward the floor, and is not removed either. The
+value as configured is what signs the cookie, so a key accepted with padding keeps that
+padding in its signature — tidying it out later rotates the key and drops every
+session.
 
 ## How a new requirement is introduced
 

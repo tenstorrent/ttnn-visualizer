@@ -53,7 +53,7 @@ describe('op graph panel heading tooltips', () => {
     it('carries the whole block label as a tooltip', () => {
         const label = 'self_attention + self_output + intermediate + output';
         renderPanel({
-            instanceId: 'block:0:187',
+            instanceId: 'block:187',
             operationIds: [187, 188],
             label,
             patternLabel: label,

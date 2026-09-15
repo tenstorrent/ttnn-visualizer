@@ -20,6 +20,7 @@ import sys
 from pathlib import Path
 
 import pytest
+from ttnn_visualizer import app as app_module
 from ttnn_visualizer import event_logging
 from ttnn_visualizer.app import _print_environment, create_app
 from ttnn_visualizer.event_logging import (

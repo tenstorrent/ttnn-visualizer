@@ -25,7 +25,7 @@ const operation = (id: number): OperationDescription =>
     }) as unknown as OperationDescription;
 
 const block = (durationSeconds: number, memoryDeltaBytes: number): OpGraphBlockSummary => ({
-    instanceId: 'block:0:2',
+    instanceId: 'block:2',
     operationIds: [2, 3],
     label: 'layer_a + layer_b',
     patternLabel: 'layer_a + layer_b',
