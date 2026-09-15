@@ -1739,6 +1739,38 @@ describe('OperationGraphReactFlow repeat blocks', () => {
         );
     });
 
+    it('keeps the fold decision when weight-load collapsing is toggled', () => {
+        // The other filter that re-runs detection. It never dropped the decision,
+        // which is half the argument that deallocate should not either — so the
+        // consistency is worth pinning rather than left as a reading of the code.
+        renderFolded();
+        runBuild.mockClear();
+
+        fireEvent.click(screen.getByLabelText('Collapse weight loads'));
+
+        expect(runBuild.mock.calls.at(-1)?.[0]).toEqual(
+            expect.objectContaining({ collapseWeightLoads: false, expandedBlockIds: [] }),
+        );
+    });
+
+    it('keeps the fold decision when the operation range narrows', () => {
+        // A range change replaces the node set outright, which is a stronger
+        // rebuild than either filter, and the fold still belongs to the reader.
+        const { rerender } = renderFolded();
+        runBuild.mockClear();
+
+        rerender(
+            <MemoryRouter>
+                <OperationGraphReactFlow
+                    operationList={REPEAT_OPERATION_LIST.slice(0, 5)}
+                    isPerfReportLoaded={false}
+                />
+            </MemoryRouter>,
+        );
+
+        expect(runBuild.mock.calls.at(-1)?.[0]).toEqual(expect.objectContaining({ expandedBlockIds: [] }));
+    });
+
     it('forgets unrolled instances when the profiler report changes', () => {
         renderFolded();
         fireEvent.click(screen.getByRole('button', { name: 'Unroll all repeats' }));
