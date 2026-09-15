@@ -839,22 +839,28 @@ const OperationGraphInner = ({
         [grouping, detectedBlocks, detectedBlockIds],
     );
 
-    const handleHideDeallocateChange = useCallback(
-        (next: boolean) => {
-            setHideDeallocate(next);
-            // Detection re-runs on this filter, so the ids held here would name
-            // instances that may no longer exist. The decision is dropped rather than
-            // remapped, which returns the graph to the unrolled default. #1977
-            setExpandedBlockIds(null);
-            // Only block members: their expansions were opened inside a fold that this
-            // drops, while an expansion on an op belonging to no block is untouched by
-            // the filter and was kept before this feature existed.
-            setExpandedOperationIds((previous) => withoutBlockMembers(previous, detectedBlocks));
-            // Nothing is folded open any more, so nothing was "just opened".
-            setRevealedNodeIds(null);
-        },
-        [detectedBlocks],
-    );
+    const handleHideDeallocateChange = useCallback((next: boolean) => {
+        setHideDeallocate(next);
+        // The fold decision is kept. #1977 dropped it here on the grounds that
+        // re-running detection would leave the held ids naming instances that no
+        // longer exist — but an instance id is `block:<run>:<first member>` or
+        // `layer:<name>:<first member>`, and hiding deallocates changes neither for
+        // any report where the deallocate sits between repeating units, which is
+        // where they sit. Measured on both detectors: the ids come back identical.
+        //
+        // Where it *can* differ — a deallocate inside the repeating unit — the run
+        // stops being detected at all, so the held ids name nothing and change
+        // nothing: `isBlockExpanded` only consults them for a detected block. The
+        // one residual case is an instance that survives under a new id, which
+        // reads as folded rather than unrolled, and that is the right reading of
+        // "I had folded these".
+        //
+        // So the reset cost every reader their collapse on an unrelated filter to
+        // guard a case that is benign. `collapseWeightLoads`, the other filter that
+        // re-runs detection, never dropped it. The report-change reset above stays:
+        // ids there belong to a different report. #2015
+        setRevealedNodeIds(null);
+    }, []);
 
     if (operationId !== undefined && revealedOperationId !== operationId && detectedBlocks.length > 0) {
         setRevealedOperationId(operationId);

@@ -1678,7 +1678,12 @@ describe('OperationGraphReactFlow repeat blocks', () => {
         expect(runBuild.mock.calls.at(-1)?.[0]).toEqual(expect.objectContaining({ expandedBlockIds: [] }));
     });
 
-    it('drops the fold decision and member device-op expansion when deallocate hiding changes', () => {
+    it('keeps the fold decision and the expansions when deallocate hiding changes', () => {
+        // #1977 dropped both here, on the grounds that re-running detection would
+        // leave the held ids naming nothing. It does not: instance ids key on the
+        // run index and first member, which hiding deallocates leaves alone. So the
+        // reset cost a reader their collapse — and their open device operations — on
+        // an unrelated filter. #2015
         const operations = REPEAT_OPERATION_LIST.map((op) =>
             op.id === 2
                 ? withDeviceOperations(op, ['AlphaDeviceOperation', 'BetaDeviceOperation', 'GammaDeviceOperation'])
@@ -1696,10 +1701,23 @@ describe('OperationGraphReactFlow repeat blocks', () => {
         runBuild.mockClear();
         fireEvent.click(screen.getByLabelText('Hide deallocate ops'));
 
-        // Toggling the filter drops the fold decision as well as the expansions, so
-        // the rebuilt graph opens unrolled again rather than folded. #1977
+        const rebuilt = runBuild.mock.calls.at(-1)?.[0] as OpGraphBuildOptions;
+        expect(rebuilt.hideDeallocate).toBe(false);
+        expect(rebuilt.expandedBlockIds).toEqual(unrolled.expandedBlockIds);
+        expect(rebuilt.deviceSubgraphs).toHaveLength(1);
+    });
+
+    it('keeps a fold-all across a deallocate toggle', () => {
+        // The reported case: everything collapsed, an unrelated filter flipped, and
+        // the graph came back fully unrolled. A fold-all is the one decision that
+        // cannot go stale — `[]` names no instance at all. #2015
+        renderFolded();
+        runBuild.mockClear();
+
+        fireEvent.click(screen.getByLabelText('Hide deallocate ops'));
+
         expect(runBuild.mock.calls.at(-1)?.[0]).toEqual(
-            expect.objectContaining({ hideDeallocate: false, deviceSubgraphs: [], expandedBlockIds: undefined }),
+            expect.objectContaining({ hideDeallocate: false, expandedBlockIds: [] }),
         );
     });
 
@@ -1747,6 +1765,30 @@ describe('OperationGraphReactFlow repeat blocks', () => {
         operation(5, 'ttnn.gelu', [6]),
         operation(6, 'ttnn.layer_norm', []),
     ];
+
+    it('keeps layers collapsed when deallocate hiding is toggled', () => {
+        // The reported path exactly: pick Layers — which folds what it detects —
+        // then flip an unrelated filter. Both halves of the complaint followed from
+        // the reset: nothing stayed collapsed, and Layers could not re-collapse it
+        // because re-picking the active mode is deliberately not a second ask
+        // (#1977), so recovering meant a round trip through Repeats. #2015
+        renderGraph(LAYER_OPERATION_LIST);
+        fireEvent.click(screen.getByRole('button', { name: 'Group by layers' }));
+        const folded = runBuild.mock.calls.at(-1)?.[0] as OpGraphBuildOptions;
+        expect(folded).toEqual(expect.objectContaining({ grouping: OpGraphGrouping.LAYERS, expandedBlockIds: [] }));
+        deliver(LAYER_OPERATION_LIST, { grouping: OpGraphGrouping.LAYERS, expandedBlockIds: [] });
+
+        runBuild.mockClear();
+        fireEvent.click(screen.getByLabelText('Hide deallocate ops'));
+
+        expect(runBuild.mock.calls.at(-1)?.[0]).toEqual(
+            expect.objectContaining({
+                grouping: OpGraphGrouping.LAYERS,
+                hideDeallocate: false,
+                expandedBlockIds: [],
+            }),
+        );
+    });
 
     it('finds nothing to fold by repetition in a graph with no repeats', () => {
         renderGraph(LAYER_OPERATION_LIST);
