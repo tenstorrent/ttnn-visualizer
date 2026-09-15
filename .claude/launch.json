@@ -3,14 +3,20 @@
     "configurations": [
         {
             "name": "backend",
-            "runtimeExecutable": "uv",
-            "runtimeArgs": ["run", "python", "-m", "ttnn_visualizer.app"],
+            "runtimeExecutable": "bash",
+            "runtimeArgs": [
+                "-c",
+                "DEBUG=true exec uv run python -m ttnn_visualizer.app"
+            ],
             "port": 8000
         },
         {
             "name": "frontend",
-            "runtimeExecutable": "pnpm",
-            "runtimeArgs": ["run", "dev"],
+            "runtimeExecutable": "bash",
+            "runtimeArgs": [
+                "-c",
+                "export NVM_DIR=\"${NVM_DIR:-$HOME/.nvm}\"; [ -s \"$NVM_DIR/nvm.sh\" ] && . \"$NVM_DIR/nvm.sh\" && nvm use >/dev/null 2>&1; exec pnpm run dev"
+            ],
             "port": 5173
         }
     ]
