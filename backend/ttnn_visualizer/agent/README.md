@@ -12,7 +12,7 @@ This file covers only what a person changing the code needs.
 
 | Module | Holds |
 |---|---|
-| `handles.py` | Path → handle registry, and the inventory `load_report` returns. No database and no app context: `Instance` is a plain model of two paths, which is what lets the tools read the query classes directly. |
+| `handles.py` | Path → handle registry, and the inventory `load_report` returns. No app database and no app context: `Instance` is a plain model of two paths, which is what lets the tools read the query classes directly. It does open the report's own SQLite file, to report what the report can answer. |
 | `tools.py` | The performance-report tools, `CANONICAL_PROJECTION`, and the caveat logic. |
 | `operations.py` | The profiler-database tools. Opens its own read-only connection: `LocalQueryRunner` reads `Instance.profiler_path` as the SQLite file, while a handle holds the directory the caller named. |
 | `bounds.py` | The one result cap, shared because `server` quotes it to an agent in every limit schema. |

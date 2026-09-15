@@ -165,8 +165,9 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
         "operation_detail": {
             "description": (
                 "One operation: its input and output tensors with shape, dtype and "
-                "layout, and what it had allocated. Tensor sizes are bytes; "
-                "allocation sizes are bytes per bank -- the two are not comparable."
+                "layout, and what it had allocated. Read tensor_size_unit: a "
+                "tensor size is whole-tensor bytes only where the report carries "
+                "that column, and per bank otherwise."
             ),
             "schema": {
                 "type": "object",
@@ -183,10 +184,12 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
         },
         "memory_profile": {
             "description": (
-                "Memory footprint per operation, largest first, with the run's peak "
-                "by buffer type and the device's L1 geometry. Sizes are bytes per "
-                "bank: comparable to l1_bank_size, not to a device-wide total. The "
-                "report carries no DRAM capacity."
+                "Memory footprint per operation, keyed by buffer type and ranked "
+                "within each type, with that type's peak and the device's L1 "
+                "geometry. Sizes are bytes per bank and are never added across "
+                "memory types, whose bank counts differ. Comparable to "
+                "l1_bank_size; a device-wide total cannot be derived from the "
+                "response, and the report carries no DRAM capacity."
             ),
             "schema": {
                 "type": "object",
@@ -194,7 +197,8 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
                     "handle": {"type": "string"},
                     "buffer_type": {
                         "type": "string",
-                        "description": "Restrict to one of DRAM, L1, L1_SMALL.",
+                        "enum": list(operations.BUFFER_TYPE_NAMES),
+                        "description": "Restrict to one buffer type.",
                     },
                     "limit": _LIMIT_SCHEMA,
                     "rank": _RANK_SCHEMA,

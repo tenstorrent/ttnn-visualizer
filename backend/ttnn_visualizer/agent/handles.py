@@ -7,7 +7,9 @@
 The HTTP API keys reports on an `instanceId` the browser holds and `@with_instance`
 resolves from the database. A tool call has neither, so a report is loaded once by
 path and addressed afterwards by an opaque handle. Nothing here touches the
-database or a Flask app context -- the query classes only need a path. #1995
+application's database or a Flask app context -- the query classes only need a
+path. (The report's own SQLite file is read, to answer what a report can
+answer; that is the capture, not the app's session.) #1995
 """
 
 import sqlite3

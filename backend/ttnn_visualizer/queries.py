@@ -286,6 +286,48 @@ class DatabaseQueries:
             return False
         return "rank" in self._get_table_columns("operations")
 
+    def query_buffer_totals_by_operation(self, rank: Optional[int] = None) -> List[Any]:
+        """Allocation totals per operation and buffer type, summed in SQL.
+
+        Returns ``(operation_id, buffer_type, device_id, total_size, buffer_count)``
+        rows. ``device_id`` is grouped rather than summed over, so a caller that
+        adds devices together knows it did.
+
+        Aggregated here rather than by the caller, for the reason
+        ``query_zone_summary`` is: ``buffers`` is the largest table in a report
+        after ``buffer_pages`` -- 1.17M rows on a 287 MB capture, 11.7M on a
+        report ten times that -- and materialising it as dataclasses to sum it
+        costs ~390 bytes of process memory per row with no bound. The GROUP BY
+        returns a few thousand rows regardless of report size.
+
+        ``max_size_per_bank`` is per bank, and the bank count differs by memory
+        type, so totals are grouped by ``buffer_type`` and never summed across
+        it.
+        """
+        filters = self.merge_rank_filter("buffers", {}, rank)
+        query = (
+            "SELECT operation_id, buffer_type, device_id, "
+            "SUM(max_size_per_bank), COUNT(*) FROM buffers WHERE 1=1"
+        )
+        params: List[Any] = []
+        if "rank" in filters:
+            query += " AND rank = ?"
+            params.append(filters["rank"])
+        query += " GROUP BY operation_id, buffer_type, device_id"
+        return self.query_runner.execute_query(query, params)
+
+    def report_has_tensor_size_column(self) -> bool:
+        """
+        True if ``tensors`` carries its own ``size``, which is a whole-tensor
+        byte count.
+
+        When it does not, ``query_tensors`` substitutes
+        ``b.max_size_per_bank AS size`` -- a per-bank figure in the same unit as
+        a buffer allocation. Callers that report the unit have to tell the two
+        apart, so the probe is here rather than in each of them.
+        """
+        return "size" in self._get_table_columns("tensors")
+
     def query_device_operations(
         self, filters: Optional[Dict[str, Union[Any, List[Any]]]] = None
     ) -> List[DeviceOperation]:
@@ -789,6 +831,11 @@ class DatabaseQueries:
     def query_devices(
         self, filters: Optional[Dict[str, Any]] = None
     ) -> Generator[Device, None, None]:
+        # Guarded like `query_device_operations` and `query_source_files`. A
+        # report missing this table otherwise fails the caller outright, and the
+        # agent tools pay a full buffers scan before finding out.
+        if not self._check_table_exists("devices"):
+            return
         select_clause = self._dataclass_select_clause(
             "devices",
             Device,

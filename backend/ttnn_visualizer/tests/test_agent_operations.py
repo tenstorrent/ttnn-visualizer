@@ -74,13 +74,16 @@ INSERT INTO operations VALUES
 -- Op 2 holds the largest footprint, and the 1000-byte DRAM buffer at address
 -- 100 stays live across all three: a sum across operations would count it three
 -- times, which is what makes the per-type peak a maximum rather than a total.
+-- Inserted with operation 3 first so that row order does not match id order:
+-- the tie between the three DRAM footprints is then only resolved by the
+-- explicit tiebreak, not by the order rows happen to arrive in.
 INSERT INTO buffers VALUES
-    (1, 0, 100, 1000, 'DRAM', 0),
+    (3, 0, 100, 1000, 'DRAM', 0),
+    (3, 0, 400, 2048, 'L1', 0),
     (2, 0, 100, 1000, 'DRAM', 0),
     (2, 0, 200, 4096, 'L1', 0),
     (2, 0, 300, 512, 'L1_SMALL', 0),
-    (3, 0, 100, 1000, 'DRAM', 0),
-    (3, 0, 400, 2048, 'L1', 0);
+    (1, 0, 100, 1000, 'DRAM', 0);
 
 INSERT INTO tensors VALUES
     (10, 'Shape([1, 1, 32, 32])', 'DataType.BFLOAT16', 'Layout.TILE', '{}', 0, 100, 'DRAM', 2048),
@@ -215,10 +218,145 @@ INSERT INTO operations VALUES
 INSERT INTO buffers VALUES
     (1, 0, 100, 1024, 'L1', 0, 0),
     (1, 0, 100, 8192, 'L1', 0, 1);
+-- One device per rank, so a job-wide count (2) differs from the rank-scoped
+-- one (1) that belongs beside rank-scoped figures.
 INSERT INTO devices (
     device_id, worker_l1_size, l1_num_banks, l1_bank_size,
     num_compute_cores, total_l1_for_tensors, rank
-) VALUES (0, 1499136, 64, 1370848, 64, 0, 0);
+) VALUES (0, 1499136, 64, 1370848, 64, 0, 0),
+         (0, 1499136, 64, 1370848, 64, 0, 1);
+"""
+
+# `rank` on `operations` but not on `buffers` or `tensors`. `report_has_rank_column`
+# inspects `operations` alone, so a report shaped like this is what separates
+# asking the query layer per table from applying the rank everywhere.
+_MIXED_RANK_SQL = """
+CREATE TABLE operations (
+    operation_id int, name text, duration float, rank int NOT NULL DEFAULT 0
+);
+CREATE TABLE buffers (
+    operation_id int,
+    device_id int,
+    address int,
+    max_size_per_bank int,
+    buffer_type text,
+    buffer_layout int
+);
+CREATE TABLE tensors (
+    tensor_id int UNIQUE,
+    shape text,
+    dtype text,
+    layout text,
+    memory_config text,
+    device_id int,
+    address int,
+    buffer_type text,
+    size int
+);
+CREATE TABLE input_tensors (operation_id int, input_index int, tensor_id int);
+CREATE TABLE output_tensors (operation_id int, output_index int, tensor_id int);
+CREATE TABLE devices (
+    device_id int,
+    num_y_cores int,
+    num_x_cores int,
+    num_y_compute_cores int,
+    num_x_compute_cores int,
+    worker_l1_size int,
+    l1_num_banks int,
+    l1_bank_size int,
+    address_at_first_l1_bank int,
+    address_at_first_l1_cb_buffer int,
+    num_banks_per_storage_core int,
+    num_compute_cores int,
+    num_storage_cores int,
+    total_l1_memory int,
+    total_l1_for_tensors int,
+    total_l1_for_interleaved_buffers int,
+    total_l1_for_sharded_buffers int,
+    cb_limit int
+);
+
+INSERT INTO operations VALUES (1, 'ttnn.conv2d', 1.0, 0);
+INSERT INTO buffers VALUES (1, 0, 100, 4096, 'L1', 0);
+INSERT INTO tensors VALUES
+    (10, 'Shape([1])', 'DataType.BFLOAT16', 'Layout.TILE', '{}', 0, 100, 'L1', 256);
+INSERT INTO input_tensors VALUES (1, 0, 10);
+INSERT INTO devices (
+    device_id, worker_l1_size, l1_num_banks, l1_bank_size, num_compute_cores
+) VALUES (0, 1499136, 64, 1370848, 64);
+"""
+
+# No `size` on `tensors`, which is the common shape: of 86 local captures only
+# 5 carry the column. `query_tensors` then substitutes
+# `b.max_size_per_bank AS size`, so the tensor figure is per bank.
+_NO_TENSOR_SIZE_SQL = """
+CREATE TABLE operations (operation_id int UNIQUE, name text, duration float);
+CREATE TABLE buffers (
+    operation_id int,
+    device_id int,
+    address int,
+    max_size_per_bank int,
+    buffer_type text,
+    buffer_layout int
+);
+CREATE TABLE tensors (
+    tensor_id int UNIQUE,
+    shape text,
+    dtype text,
+    layout text,
+    memory_config text,
+    device_id int,
+    address int,
+    buffer_type text
+);
+CREATE TABLE input_tensors (operation_id int, input_index int, tensor_id int);
+CREATE TABLE output_tensors (operation_id int, output_index int, tensor_id int);
+CREATE TABLE devices (
+    device_id int,
+    num_y_cores int,
+    num_x_cores int,
+    num_y_compute_cores int,
+    num_x_compute_cores int,
+    worker_l1_size int,
+    l1_num_banks int,
+    l1_bank_size int,
+    address_at_first_l1_bank int,
+    address_at_first_l1_cb_buffer int,
+    num_banks_per_storage_core int,
+    num_compute_cores int,
+    num_storage_cores int,
+    total_l1_memory int,
+    total_l1_for_tensors int,
+    total_l1_for_interleaved_buffers int,
+    total_l1_for_sharded_buffers int,
+    cb_limit int
+);
+
+INSERT INTO operations VALUES (1, 'ttnn.conv2d', 1.0);
+-- The tensor's address, so the fallback join finds this row.
+INSERT INTO buffers VALUES (1, 0, 4096, 60928, 'L1', 0);
+INSERT INTO tensors VALUES
+    (10, 'Shape([1, 1, 50176, 64])', 'DataType.BFLOAT8_B', 'Layout.TILE',
+     '{}', 0, 4096, 'L1');
+INSERT INTO input_tensors VALUES (1, 0, 10);
+INSERT INTO devices (
+    device_id, worker_l1_size, l1_num_banks, l1_bank_size, num_compute_cores
+) VALUES (0, 1499136, 64, 1370848, 64);
+"""
+
+# A report with no `devices` table at all.
+_NO_DEVICES_SQL = """
+CREATE TABLE operations (operation_id int UNIQUE, name text, duration float);
+CREATE TABLE buffers (
+    operation_id int,
+    device_id int,
+    address int,
+    max_size_per_bank int,
+    buffer_type text,
+    buffer_layout int
+);
+INSERT INTO operations VALUES (1, 'ttnn.conv2d', 1.0);
+INSERT INTO buffers VALUES (1, 0, 100, 4096, 'L1', 0);
 """
 
 # Buffers on two devices, so a summed total spans them.
@@ -261,6 +399,22 @@ INSERT INTO devices (
 """
 
 
+def _every_number(payload: object) -> set:
+    """Every integer anywhere in a response, so a test can assert one is absent."""
+    found: set = set()
+    if isinstance(payload, bool):
+        return found
+    if isinstance(payload, int):
+        return {payload}
+    if isinstance(payload, dict):
+        for value in payload.values():
+            found |= _every_number(value)
+    elif isinstance(payload, (list, tuple)):
+        for value in payload:
+            found |= _every_number(value)
+    return found
+
+
 def _wide_report_sql(rows: int) -> str:
     """`_REPORT_SQL` plus enough operations to exceed the cap.
 
@@ -300,19 +454,35 @@ def loaded(tmp_path):
 
 
 class TestMemoryProfile:
-    def test_it_ranks_operations_by_footprint(self, loaded):
+    def test_it_ranks_operations_within_each_memory_type(self, loaded):
         registry, handle = loaded()
 
         result = agent_operations.memory_profile(registry, handle)
 
-        assert [op["operation_id"] for op in result["operations"]] == [2, 3, 1]
-        assert result["operations"][0]["total"] == 1000 + 4096 + 512
-        assert result["operations"][0]["by_buffer_type"] == {
-            "DRAM": 1000,
-            "L1": 4096,
-            "L1_SMALL": 512,
-        }
-        assert result["operation_count"] == 3
+        assert set(result["memory_by_buffer_type"]) == {"DRAM", "L1", "L1_SMALL"}
+        l1 = result["memory_by_buffer_type"]["L1"]
+        assert [op["operation_id"] for op in l1["operations"]] == [2, 3]
+        assert [op["size"] for op in l1["operations"]] == [4096, 2048]
+        assert l1["operation_count"] == 2
+        dram = result["memory_by_buffer_type"]["DRAM"]
+        assert [op["operation_id"] for op in dram["operations"]] == [1, 2, 3]
+        assert result["buffer_types_present"] == ["DRAM", "L1", "L1_SMALL"]
+
+    def test_no_figure_adds_one_memory_type_to_another(self, loaded):
+        """`max_size_per_bank` is divided by the bank count of its own memory
+        type and those counts differ, so DRAM-per-bank plus L1-per-bank is two
+        denominators in one integer rather than a quantity. Operation 2 holds
+        1000 + 4096 + 512; no key in the response is allowed to say 5608."""
+        registry, handle = loaded()
+
+        result = agent_operations.memory_profile(registry, handle)
+
+        assert 5608 not in _every_number(result)
+        assert "total" not in result
+        for entry in result["memory_by_buffer_type"].values():
+            assert "total" not in entry
+            for operation in entry["operations"]:
+                assert "total" not in operation
 
     def test_a_peak_is_the_largest_footprint_not_a_sum_across_the_run(self, loaded):
         """Buffers stay live across operations, so the report lists the same
@@ -320,13 +490,33 @@ class TestMemoryProfile:
         DRAM peak of 3000 for a single 1000-byte buffer."""
         registry, handle = loaded()
 
-        result = agent_operations.memory_profile(registry, handle)
+        memory = agent_operations.memory_profile(registry, handle)[
+            "memory_by_buffer_type"
+        ]
 
-        assert result["peak_by_buffer_type"] == {
-            "DRAM": 1000,
-            "L1": 4096,
-            "L1_SMALL": 512,
-        }
+        assert memory["DRAM"]["peak"] == 1000
+        assert memory["L1"]["peak"] == 4096
+        assert memory["L1_SMALL"]["peak"] == 512
+
+    def test_a_shared_peak_says_how_many_operations_hold_it(self, loaded):
+        """Resident allocations barely move, so the peak is routinely a plateau.
+        The DRAM buffer here is live across all three operations; naming one of
+        them as the peak without saying so sends an agent to an arbitrary pick.
+
+        The id ordering below is what the query returns rather than something
+        this test pins -- the explicit tiebreak in `memory_profile` guards an
+        ordering SQLite does not promise, and no test can observe it while it
+        does."""
+        registry, handle = loaded()
+
+        memory = agent_operations.memory_profile(registry, handle)[
+            "memory_by_buffer_type"
+        ]
+
+        assert memory["DRAM"]["operations_at_peak"] == 3
+        assert [op["operation_id"] for op in memory["DRAM"]["operations"]] == [1, 2, 3]
+        # L1 is a genuine single spike, which has to read differently.
+        assert memory["L1"]["operations_at_peak"] == 1
 
     def test_sizes_carry_the_unit_and_the_geometry_to_read_them_against(self, loaded):
         """A per-bank figure divided by a device-wide capacity understates usage
@@ -351,8 +541,14 @@ class TestMemoryProfile:
         result = agent_operations.memory_profile(registry, handle, buffer_type="l1")
 
         assert result["buffer_type"] == "L1"
-        assert result["peak_by_buffer_type"] == {"L1": 4096}
-        assert [op["operation_id"] for op in result["operations"]] == [2, 3]
+        # Keyed by type either way, so one selected type is one key rather than
+        # a second response shape.
+        assert list(result["memory_by_buffer_type"]) == ["L1"]
+        assert result["memory_by_buffer_type"]["L1"]["peak"] == 4096
+        assert [
+            op["operation_id"]
+            for op in result["memory_by_buffer_type"]["L1"]["operations"]
+        ] == [2, 3]
 
     def test_a_buffer_type_the_report_lacks_is_refused_with_what_it_holds(self, loaded):
         """An empty result would read as "this report allocates no TRACE memory"
@@ -362,21 +558,35 @@ class TestMemoryProfile:
         with pytest.raises(ValueError, match="DRAM, L1, L1_SMALL"):
             agent_operations.memory_profile(registry, handle, buffer_type="TRACE")
 
+    def test_a_buffer_type_that_is_not_one_is_refused_up_front(self, loaded):
+        """A typo must not be indistinguishable from a report that allocates
+        none of that type, which is what matching free text against the report's
+        own strings gives you."""
+        registry, handle = loaded()
+
+        with pytest.raises(ValueError, match="unknown buffer_type 'L2'"):
+            agent_operations.memory_profile(registry, handle, buffer_type="L2")
+
     def test_a_limit_is_capped_rather_than_honoured(self, loaded):
         registry, handle = loaded(_wide_report_sql(MAX_LIMIT + 50), name="wide")
 
-        result = agent_operations.memory_profile(registry, handle, limit=10_000)
+        result = agent_operations.memory_profile(
+            registry, handle, buffer_type="L1", limit=10_000
+        )
 
-        assert result["operation_count"] == MAX_LIMIT + 53
-        assert result["returned"] == MAX_LIMIT
-        assert len(result["operations"]) == MAX_LIMIT
+        l1 = result["memory_by_buffer_type"]["L1"]
+        assert l1["operation_count"] == MAX_LIMIT + 52
+        assert l1["returned"] == MAX_LIMIT
+        assert len(l1["operations"]) == MAX_LIMIT
 
     def test_buffers_across_devices_say_the_total_adds_them(self, loaded):
         registry, handle = loaded(_TWO_DEVICE_SQL, name="two-device")
 
         result = agent_operations.memory_profile(registry, handle)
 
-        assert result["operations"][0]["total"] == 2048
+        # One operation, one type, two devices: the per-bank figures are added
+        # across them, which the caveat has to say.
+        assert result["memory_by_buffer_type"]["L1"]["operations"][0]["size"] == 2048
         assert "span 2 devices" in result["caveat"]
         # Device 1 is the first row in this fixture, so this pins that the
         # geometry names the device it came from rather than assuming zero.
@@ -389,7 +599,7 @@ class TestMemoryProfile:
 
         result = agent_operations.memory_profile(registry, handle)
 
-        assert result["peak_by_buffer_type"] == {"L1": 4096}
+        assert result["memory_by_buffer_type"]["L1"]["peak"] == 4096
 
 
 class TestOperationDetail:
@@ -435,6 +645,29 @@ class TestOperationDetail:
 
         assert result["input_count"] == MAX_LIMIT + 5
         assert len(result["inputs"]) == MAX_LIMIT
+
+    def test_a_tensor_size_that_is_really_per_bank_is_labelled_per_bank(self, loaded):
+        """Where `tensors` has no `size`, `query_tensors` substitutes
+        `b.max_size_per_bank AS size`. Calling that `bytes` told an agent the
+        tensor figure and the allocation figure were incommensurable when they
+        were the same number -- a caveat pointing the wrong way."""
+        registry, handle = loaded(_NO_TENSOR_SIZE_SQL, name="nosize")
+
+        result = agent_operations.operation_detail(registry, handle, 1)
+
+        assert result["inputs"][0]["size"] == 60928
+        assert result["tensor_size_unit"] == "bytes_per_bank"
+        assert result["allocation_size_unit"] == "bytes_per_bank"
+
+    def test_a_report_without_a_devices_table_still_answers(self, loaded):
+        """The table is absent on some captures, and losing the whole tool over
+        it wastes the work already done to answer."""
+        registry, handle = loaded(_NO_DEVICES_SQL, name="nodevices")
+
+        result = agent_operations.memory_profile(registry, handle)
+
+        assert result["memory_by_buffer_type"]["L1"]["peak"] == 4096
+        assert result["device"] == {"devices": 0, "dram_capacity": None}
 
     def test_an_unknown_operation_is_refused(self, loaded):
         registry, handle = loaded()
@@ -543,8 +776,42 @@ class TestRankScope:
         zero = agent_operations.memory_profile(registry, handle)
         one = agent_operations.memory_profile(registry, handle, rank=1)
 
-        assert zero["peak_by_buffer_type"] == {"L1": 1024}
-        assert one["peak_by_buffer_type"] == {"L1": 8192}
+        assert zero["memory_by_buffer_type"]["L1"]["peak"] == 1024
+        assert one["memory_by_buffer_type"]["L1"]["peak"] == 8192
+        # The device block is rank-scoped too. Unfiltered it would count both
+        # ranks' devices and answer a different question than the rest of the
+        # response it sits in.
+        assert zero["device"]["devices"] == 1
+        assert one["device"]["devices"] == 1
+
+    def test_a_rank_column_on_one_table_is_not_applied_to_the_others(self, loaded):
+        """`report_has_rank_column` only inspects `operations`, so deciding once
+        and filtering every table with it asked `buffers` for a column it has
+        not got -- `no such column: rank`, handed to the agent as a failure."""
+        registry, handle = loaded(_MIXED_RANK_SQL, name="mixed")
+
+        profile = agent_operations.memory_profile(registry, handle)
+        detail = agent_operations.operation_detail(registry, handle, 1)
+
+        assert profile["rank"] == 0
+        assert profile["memory_by_buffer_type"]["L1"]["peak"] == 4096
+        assert [item["tensor_id"] for item in detail["inputs"]] == [10]
+
+    def test_a_rank_the_report_does_not_have_is_refused(self, loaded):
+        """An empty answer at rank 9 reads as a fact about the run rather than
+        as "there is no rank 9". The HTTP routes answer 400 for this."""
+        registry, handle = loaded(_RANKED_REPORT_SQL, name="ranked")
+
+        with pytest.raises(ValueError, match="no rank 9; it holds 0, 1"):
+            agent_operations.find_operations(registry, handle, rank=9)
+
+    def test_a_rank_that_is_not_a_number_is_refused_on_any_report(self, loaded):
+        """The coercion used to sit inside the multi-host branch, so the same
+        bad argument was accepted or rejected depending on the capture."""
+        registry, handle = loaded()
+
+        with pytest.raises(ValueError, match="rank must be a whole number"):
+            agent_operations.find_operations(registry, handle, rank="x")
 
     def test_a_single_host_report_carries_no_rank_caveat(self, loaded):
         """A caveat on every response is one an agent learns to skip."""

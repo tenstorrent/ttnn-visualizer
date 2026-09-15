@@ -18,7 +18,7 @@ import sqlite3
 from collections import defaultdict
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Dict, Iterator, List, NamedTuple, Optional
+from typing import Dict, Iterator, List, NamedTuple, Optional, Set
 
 from ttnn_visualizer.agent.bounds import MAX_LIMIT, bounded
 from ttnn_visualizer.agent.handles import PROFILER_DB_FILE, ReportRegistry
@@ -35,9 +35,19 @@ from ttnn_visualizer.queries import DatabaseQueries
 # would understate usage by the bank count.
 BUFFER_SIZE_UNIT = "bytes_per_bank"
 
-# `tensors.size` is a true byte count for the whole tensor, so the two cannot be
-# added together or compared. Named differently for that reason alone.
+# `tensors.size` is a whole-tensor byte count -- but only where the column
+# exists. Where it does not, `query_tensors` substitutes
+# `b.max_size_per_bank AS size` (`queries.py:590`), which is per bank: the same
+# figure as an allocation total rather than a quantity to compare against one.
+# Of 86 local captures only 5 carry the column, so the fallback is the common
+# case, and labelling it `bytes` told an agent the two numbers were
+# incommensurable when they were the same number -- a caveat pointing the wrong
+# way, which is worse than none. `report_has_tensor_size_column` decides which.
 TENSOR_SIZE_UNIT = "bytes"
+
+# The buffer types a report can hold, from the enum rather than from whatever
+# strings a given capture happens to contain.
+BUFFER_TYPE_NAMES = tuple(sorted(member.name for member in BufferType))
 
 
 class ProfilerDatabaseMissingError(ValueError):
@@ -88,25 +98,73 @@ class RankScope(NamedTuple):
     multi_host: bool
     rank: Optional[int]
 
-    @property
-    def filters(self) -> Dict[str, int]:
-        return {} if self.rank is None else {"rank": self.rank}
+
+def _scoped(
+    queries: DatabaseQueries, table: str, scope: RankScope, **filters: object
+) -> Dict[str, object]:
+    """Rank-filter one table, asking the query layer whether it can be.
+
+    `report_has_rank_column` inspects `operations` alone (`queries.py:280`), and
+    a report can carry `rank` there while an older `buffers` has none -- which is
+    why `views.py` calls `merge_rank_filter` once per table rather than building
+    one filter dict for all of them, and why `query_tensors` re-derives the flag
+    per joined table. Applying the rank everywhere raised `no such column: rank`
+    on exactly that mix.
+    """
+    return queries.merge_rank_filter(table, filters, scope.rank)
 
 
 def _rank_scope(queries: DatabaseQueries, rank: Optional[int]) -> RankScope:
+    # Coerced before the `multi_host` branch, not inside it: a non-numeric rank
+    # used to pass silently on a single-host report and raise on a multi-host
+    # one, so the same call was valid or not depending on the capture.
+    requested: Optional[int] = None
+    if rank is not None:
+        try:
+            requested = int(rank)
+        except (TypeError, ValueError):
+            raise ValueError(f"rank must be a whole number, not {rank!r}") from None
     multi_host = queries.report_has_rank_column()
     return RankScope(
         multi_host=multi_host,
-        rank=(0 if rank is None else int(rank)) if multi_host else None,
+        rank=(0 if requested is None else requested) if multi_host else None,
     )
 
 
-def _buffer_type_name(value: object) -> str:
-    """`buffers.buffer_type` is the text column, whatever the annotation says.
+def _refuse_absent_rank(
+    queries: DatabaseQueries, scope: RankScope, requested: Optional[int]
+) -> None:
+    """Refuse a rank the report has no rows for, rather than answering empty.
 
-    `_dataclass_select_clause` reads the column straight, so `Buffer.buffer_type`
-    arrives as `'DRAM'` rather than as the `BufferType` it is annotated to be.
-    Older captures may hold the integer instead, hence the name lookup.
+    "No operations at rank 9" reads as a fact about the run instead of "there is
+    no rank 9" -- the same misreading the buffer-type guard above exists to
+    prevent. `views._rank_query_param` answers 400 for this on the HTTP side.
+    """
+    if requested is None or not scope.multi_host:
+        return
+    known = sorted(
+        {
+            operation.rank
+            for operation in queries.query_operations(
+                filters=queries.merge_rank_filter("operations", {}, None)
+            )
+        }
+    )
+    if scope.rank not in known:
+        raise ValueError(
+            f"this report has no rank {scope.rank}; it holds "
+            f"{', '.join(str(entry) for entry in known)}"
+        )
+
+
+def _buffer_type_name(value: object) -> str:
+    """`buffers.buffer_type` arrives as the column's own value, not a `BufferType`.
+
+    `_dataclass_select_clause` reads the column straight, so despite the
+    annotation the value is whatever the capture stored. Both forms are common
+    locally -- integers (`0`, `1`, `3`) in most reports, including every
+    `SCHEMA_V*` fixture, and text (`'DRAM'`, `'L1'`) in newer ones -- so neither
+    is the fallback case.
     """
     if isinstance(value, int) and not isinstance(value, bool):
         try:
@@ -117,7 +175,7 @@ def _buffer_type_name(value: object) -> str:
     return str(name if name is not None else value)
 
 
-def _device_capacity(queries: DatabaseQueries) -> Dict[str, object]:
+def _device_capacity(queries: DatabaseQueries, scope: RankScope) -> Dict[str, object]:
     """L1 geometry, so a per-bank figure can be read against something.
 
     The report carries no DRAM capacity at all, which is said explicitly: an
@@ -127,7 +185,10 @@ def _device_capacity(queries: DatabaseQueries) -> Dict[str, object]:
     The geometry is one device's, and which one is named in the response rather
     than left as an assumption about them being identical.
     """
-    devices = list(queries.query_devices())
+    # Rank-scoped like the figures beside it: on a multi-host report an
+    # unfiltered read counts every rank's devices, which answers a different
+    # question than the rest of the response.
+    devices = list(queries.query_devices(filters=_scoped(queries, "devices", scope)))
     if not devices:
         return {"devices": 0, "dram_capacity": None}
     device = devices[0]
@@ -156,10 +217,13 @@ def find_operations(
     instance = registry.get(handle)
     with _profiler_db(instance) as queries:
         scope = _rank_scope(queries, rank)
+        _refuse_absent_rank(queries, scope, rank)
         needle = (name_contains or "").strip().lower()
         matches = [
             operation
-            for operation in queries.query_operations(filters=scope.filters)
+            for operation in queries.query_operations(
+                filters=_scoped(queries, "operations", scope)
+            )
             if not needle or needle in (operation.name or "").lower()
         ]
 
@@ -195,9 +259,16 @@ def operation_detail(
     instance = registry.get(handle)
     with _profiler_db(instance) as queries:
         scope = _rank_scope(queries, rank)
-        filters = {**scope.filters, "operation_id": int(operation_id)}
+        _refuse_absent_rank(queries, scope, rank)
+        wanted_operation = int(operation_id)
 
-        operations = list(queries.query_operations(filters=filters))
+        operations = list(
+            queries.query_operations(
+                filters=_scoped(
+                    queries, "operations", scope, operation_id=wanted_operation
+                )
+            )
+        )
         if not operations:
             raise ValueError(
                 f"no operation {operation_id} in this report"
@@ -205,9 +276,32 @@ def operation_detail(
             )
         operation = operations[0]
 
-        inputs = list(queries.query_input_tensors(filters=filters))
-        outputs = list(queries.query_output_tensors(filters=filters))
-        buffers = list(queries.query_buffers(filters=filters))
+        tensor_size_unit = (
+            TENSOR_SIZE_UNIT
+            if queries.report_has_tensor_size_column()
+            else BUFFER_SIZE_UNIT
+        )
+        inputs = list(
+            queries.query_input_tensors(
+                filters=_scoped(
+                    queries, "input_tensors", scope, operation_id=wanted_operation
+                )
+            )
+        )
+        outputs = list(
+            queries.query_output_tensors(
+                filters=_scoped(
+                    queries, "output_tensors", scope, operation_id=wanted_operation
+                )
+            )
+        )
+        buffers = list(
+            queries.query_buffers(
+                filters=_scoped(
+                    queries, "buffers", scope, operation_id=wanted_operation
+                )
+            )
+        )
 
         # Only the tensors this operation refers to. Reading the report's whole
         # tensor table to describe a handful parses every other tensor's memory
@@ -218,7 +312,7 @@ def operation_detail(
         tensors = {
             tensor.tensor_id: tensor
             for tensor in queries.query_tensors(
-                filters={**scope.filters, "tensor_id": wanted_ids}
+                filters=_scoped(queries, "tensors", scope, tensor_id=wanted_ids)
             )
         }
 
@@ -266,12 +360,13 @@ def operation_detail(
         "input_count": len(inputs),
         "output_count": len(outputs),
         "allocations": dict(sorted(allocations.items())),
-        # The two size fields in this response are not in the same unit, and
-        # nothing about the field names says so.
+        # Reported rather than asserted: these two are in different units on a
+        # report that carries `tensors.size`, and in the *same* unit on one that
+        # does not, where the tensor figure is the per-bank allocation itself.
         "allocation_size_unit": BUFFER_SIZE_UNIT,
-        "tensor_size_unit": TENSOR_SIZE_UNIT,
+        "tensor_size_unit": tensor_size_unit,
         **scope._asdict(),
-        **_caveats(scope, buffers),
+        **_caveats(scope, {buffer.device_id for buffer in buffers}),
     }
 
 
@@ -282,86 +377,125 @@ def memory_profile(
     limit: Optional[int] = None,
     rank: Optional[int] = None,
 ) -> Dict[str, object]:
-    """Where the run's memory went, and which operation held the most.
+    """Where the run's memory went, one memory type at a time.
 
     `buffers` holds what was live *at* each operation rather than what that
     operation allocated, so a per-operation sum is the footprint at that point
     and the largest of them is the run's peak -- which is the question an
     out-of-memory failure actually asks.
+
+    Nothing here adds one memory type to another. `max_size_per_bank` is divided
+    by the bank count of its own memory type, and those counts differ, so a
+    DRAM figure plus an L1 figure is not a quantity -- it is two different
+    denominators in one integer. Round one refused the same arithmetic for
+    rates and core counts (`tools.ADDITIVE_METRICS`); this is that rule applied
+    to allocations. The report carries no DRAM bank count at all, so one of the
+    two denominators is not even knowable here.
     """
+    wanted = (buffer_type or "").strip().upper() or None
+    # Refused up front, the way `top_ops` refuses an unknown metric. Matching
+    # free text against whatever strings the report happens to hold makes a
+    # typo indistinguishable from a report that allocates none of that type.
+    if wanted is not None and wanted not in BUFFER_TYPE_NAMES:
+        raise ValueError(
+            f"unknown buffer_type {wanted!r}; expected one of "
+            f"{', '.join(BUFFER_TYPE_NAMES)}"
+        )
+
     instance = registry.get(handle)
     with _profiler_db(instance) as queries:
         scope = _rank_scope(queries, rank)
-        buffers = list(queries.query_buffers(filters=scope.filters))
+        _refuse_absent_rank(queries, scope, rank)
+        grouped = queries.query_buffer_totals_by_operation(rank=scope.rank)
         names = {
             operation.operation_id: operation.name
-            for operation in queries.query_operations(filters=scope.filters)
+            for operation in queries.query_operations(
+                filters=_scoped(queries, "operations", scope)
+            )
         }
-        capacity = _device_capacity(queries)
+        capacity = _device_capacity(queries, scope)
 
-    wanted = (buffer_type or "").strip().upper() or None
-    selected = [
-        buffer
-        for buffer in buffers
-        if wanted is None or _buffer_type_name(buffer.buffer_type) == wanted
-    ]
-    if wanted is not None and not selected and buffers:
-        present = sorted({_buffer_type_name(b.buffer_type) for b in buffers})
+    # `(operation_id, buffer_type, device_id, total, count)`, already summed in
+    # SQL. Devices are re-summed here rather than in the query so that adding
+    # them is a visible step the caveat can describe.
+    devices = {row[2] for row in grouped}
+    present = sorted({_buffer_type_name(row[1]) for row in grouped})
+    if wanted is not None and wanted not in present and present:
         raise ValueError(
             f"no {wanted} buffers in this report; it holds {', '.join(present)}"
         )
 
-    per_operation: Dict[int, Dict[str, int]] = defaultdict(lambda: defaultdict(int))
-    for buffer in selected:
-        type_name = _buffer_type_name(buffer.buffer_type)
-        per_operation[buffer.operation_id][type_name] += buffer.max_size_per_bank
-        per_operation[buffer.operation_id]["total"] += buffer.max_size_per_bank
+    by_type: Dict[str, Dict[int, int]] = defaultdict(lambda: defaultdict(int))
+    for operation_id, raw_type, _device_id, total, _count in grouped:
+        type_name = _buffer_type_name(raw_type)
+        if wanted is not None and type_name != wanted:
+            continue
+        by_type[type_name][operation_id] += total
 
-    # Per-type peak is the largest footprint of that type at any one operation,
-    # not the sum across the run: buffers persist across operations, so adding
-    # them would count one allocation once per operation it stayed live through.
-    type_peaks: Dict[str, int] = defaultdict(int)
-    for operation_id, totals in per_operation.items():
-        for type_name, size in totals.items():
-            if type_name != "total":
-                type_peaks[type_name] = max(type_peaks[type_name], size)
-
-    ranked = sorted(
-        per_operation.items(), key=lambda item: item[1]["total"], reverse=True
-    )
     cap = bounded(limit)
+    memory: Dict[str, object] = {}
+    for type_name in sorted(by_type):
+        footprints = by_type[type_name]
+        # Ties broken by operation id so the same report answers the same way
+        # twice: resident allocations barely move, so the peak is routinely
+        # shared by hundreds of operations. SQLite's GROUP BY happens to return
+        # rows ordered by its leading key, which makes this belt-and-braces
+        # today rather than load-bearing -- but that ordering is not guaranteed,
+        # and an arbitrary pick among hundreds is what `operations_at_peak`
+        # exists to keep an agent from chasing.
+        ranked = sorted(footprints.items(), key=lambda item: (-item[1], item[0]))
+        # The peak is a maximum, never a sum across the run: a buffer that stays
+        # live is listed under every operation it survived, so adding those
+        # reports one allocation once per operation it lived through.
+        peak = ranked[0][1] if ranked else 0
+        memory[type_name] = {
+            "peak": peak,
+            # How many operations hold that peak. A plateau of hundreds is the
+            # normal shape for resident memory, and naming one of them as "the"
+            # peak without this sends an agent to investigate an arbitrary pick.
+            "operations_at_peak": sum(
+                1 for _, size in ranked if size == peak and peak > 0
+            ),
+            "operation_count": len(footprints),
+            "returned": min(len(ranked), cap),
+            "operations": [
+                {
+                    "operation_id": operation_id,
+                    "name": names.get(operation_id),
+                    "size": size,
+                }
+                for operation_id, size in ranked[:cap]
+            ],
+        }
 
     return {
         "handle": handle,
         "buffer_type": wanted,
-        "operation_count": len(per_operation),
-        "returned": min(len(ranked), cap),
-        "peak_by_buffer_type": dict(sorted(type_peaks.items())),
-        "operations": [
-            {
-                "operation_id": operation_id,
-                "name": names.get(operation_id),
-                "total": totals["total"],
-                "by_buffer_type": {
-                    type_name: size
-                    for type_name, size in sorted(totals.items())
-                    if type_name != "total"
-                },
-            }
-            for operation_id, totals in ranked[:cap]
-        ],
+        # Keyed by memory type even when one was selected, so a caller reads one
+        # response shape rather than two.
+        "memory_by_buffer_type": memory,
+        "buffer_types_present": present,
         "size_unit": BUFFER_SIZE_UNIT,
         "device": capacity,
-        # Stated rather than left to the unit name, because this is the number an
-        # agent will divide by a capacity.
+        # Deliberately does not say "multiply by the bank count". That holds only
+        # for a buffer interleaved across every bank, and most are not: on a
+        # local resnet50 capture the operation named here as the L1 peak holds
+        # two 56-bank buffers, so multiplying by the device's 64 overstates it by
+        # 14%, and 16-bank operations in the same report by 4x. How many banks a
+        # buffer actually occupies lives in `buffer_pages`, which no tool
+        # exposes -- so the honest statement is that this response cannot give a
+        # device-wide total, not a formula that is usually wrong.
         "note": (
-            "Sizes are per bank, as `buffers.max_size_per_bank` holds them. An L1 "
-            "figure is comparable to `device.l1_bank_size`; multiply by "
-            "`device.l1_num_banks` for the device-wide total. The report carries "
-            "no DRAM capacity, so a DRAM figure has nothing here to divide by."
+            "Sizes are per bank, as `buffers.max_size_per_bank` holds them, and "
+            "are never added across memory types -- the bank count differs by "
+            "type. A per-bank figure is comparable to `device.l1_bank_size` for "
+            "L1, which is a conservative bound. A device-wide total cannot be "
+            "derived from this response: it depends on how many banks each "
+            "buffer occupies, which only page-level data records. The report "
+            "carries no DRAM capacity at all."
         ),
         **scope._asdict(),
-        **_caveats(scope, selected),
+        **_caveats(scope, devices=devices),
     }
 
 
@@ -375,6 +509,7 @@ def tensor_flow(
     instance = registry.get(handle)
     with _profiler_db(instance) as queries:
         scope = _rank_scope(queries, rank)
+        _refuse_absent_rank(queries, scope, rank)
         wanted = int(tensor_id)
         edges = [
             entry
@@ -384,9 +519,14 @@ def tensor_flow(
         tensors = {
             tensor.tensor_id: tensor
             for tensor in queries.query_tensors(
-                filters={**scope.filters, "tensor_id": [wanted]}
+                filters=_scoped(queries, "tensors", scope, tensor_id=[wanted])
             )
         }
+        tensor_size_unit = (
+            TENSOR_SIZE_UNIT
+            if queries.report_has_tensor_size_column()
+            else BUFFER_SIZE_UNIT
+        )
         touching = sorted(
             {
                 operation_id
@@ -397,7 +537,7 @@ def tensor_flow(
         names = {
             operation.operation_id: operation.name
             for operation in queries.query_operations(
-                filters={**scope.filters, "operation_id": touching}
+                filters=_scoped(queries, "operations", scope, operation_id=touching)
             )
         }
 
@@ -428,7 +568,7 @@ def tensor_flow(
             "dtype": tensor.dtype,
             "layout": tensor.layout,
             "size": tensor.size,
-            "size_unit": TENSOR_SIZE_UNIT,
+            "size_unit": tensor_size_unit,
             "buffer_type": (
                 _buffer_type_name(tensor.buffer_type)
                 if tensor.buffer_type is not None
@@ -438,16 +578,14 @@ def tensor_flow(
     return result
 
 
-def _caveats(
-    scope: RankScope, buffers: Optional[List[Buffer]] = None
-) -> Dict[str, str]:
+def _caveats(scope: RankScope, devices: Optional[Set[int]] = None) -> Dict[str, str]:
     """The caveats a response needs, composed from what it actually returned.
 
     The rank one applies to every tool here, because all of them key on an
     operation id that restarts per rank. The device one applies only where
-    allocations were summed, so it is derived from the buffers rather than
-    stated unconditionally -- a caveat that is always present is one an agent
-    learns to skip.
+    allocations were summed, so it is derived from the devices those allocations
+    came from rather than stated unconditionally -- a caveat that is always
+    present is one an agent learns to skip.
     """
     caveats: List[str] = []
     if scope.multi_host and scope.rank is not None:
@@ -456,7 +594,7 @@ def _caveats(
             "Operation ids restart per rank, so figures here describe that rank "
             "rather than the job."
         )
-    devices = {buffer.device_id for buffer in buffers or []}
+    devices = devices or set()
     if len(devices) > 1:
         caveats.append(
             f"These buffers span {len(devices)} devices "
@@ -469,6 +607,7 @@ def _caveats(
 
 __all__ = [
     "BUFFER_SIZE_UNIT",
+    "BUFFER_TYPE_NAMES",
     "RankScope",
     "TENSOR_SIZE_UNIT",
     "ProfilerDatabaseMissingError",
