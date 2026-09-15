@@ -167,7 +167,18 @@ def test_the_release_version_is_read_from_package_json():
 
 
 @pytest.mark.parametrize(
-    "version", ["0.102.0", "1.2", "0.103.0.dev1", "unknown", "", None]
+    "version",
+    [
+        "0.102.0",
+        "1.2",
+        "0.103.0.dev1",
+        "0.102.1rc1",
+        "0.102.1+dirty",
+        "0.102.1-1-gabcdef0",
+        "unknown",
+        "",
+        None,
+    ],
 )
 def test_the_version_reader_agrees_with_the_one_that_decides_severity(version):
     """The script duplicates ``_version_key`` to stay stdlib-only; pin them together.

@@ -41,6 +41,7 @@ DOCS_PATH = "docs/src/startup-requirements.md"
 # The release version of record, read at each ref for the same reason the table is:
 # no checkout, install or import of that revision.
 VERSION_PATH = "package.json"
+_LEADING_DIGITS = re.compile(r"\d+")
 
 _ROW = re.compile(
     r"^\| `(?P<id>[a-z0-9-]+)` \| (?P<env_vars>.+?) \| (?P<condition>.+?) \| "
@@ -117,10 +118,13 @@ def _version_key(version: Optional[str]) -> Optional[Tuple[int, ...]]:
 
     components: List[int] = []
     for part in str(version).split("."):
-        if not part.isdigit():
+        leading = _LEADING_DIGITS.match(part)
+        if leading is None:
             break
 
-        components.append(int(part))
+        components.append(int(leading.group()))
+        if leading.end() != len(part):
+            break
 
     return tuple(components) if components else None
 

@@ -23,6 +23,7 @@ from ttnn_visualizer.startup_requirements import (
     Severity,
     StartupRequirement,
     _at_least,
+    _hosted_secret_key_failure,
     _version_key,
     enforce,
     evaluate,
@@ -289,6 +290,13 @@ def test_every_requirement_names_the_variables_an_operator_must_set():
         # A local build's suffix compares as the release it is a pre-release of rather
         # than falling into the unknown branch and being treated as fully enforced.
         ("0.103.0.dev1", (0, 103, 0)),
+        # Fused suffixes keep the component they are attached to. Dropping it read
+        # these as (0, 102) — below 0.102.1 — so a candidate of the enforcing release
+        # only warned where the release refused, and the release diff stayed silent.
+        ("0.102.1rc1", (0, 102, 1)),
+        ("0.102.1b2", (0, 102, 1)),
+        ("0.102.1+dirty", (0, 102, 1)),
+        ("0.102.1-1-gabcdef0", (0, 102, 1)),
         ("unknown", None),
         ("", None),
     ],
@@ -308,6 +316,14 @@ def test_version_key_reads_leading_numeric_components(version, expected):
         ("1.0", "1.0.1", False),
         # Numeric, not lexicographic: "0.9.0" must not sort above "0.102.0".
         ("0.9.0", "0.102.0", False),
+        # A candidate of the enforcing release enforces, rather than warning: these
+        # decide only whether a requirement is due, and the recoverable direction is
+        # refusing one release early.
+        ("0.102.1rc1", "0.102.1", True),
+        ("0.102.1-1-gabcdef0", "0.102.1", True),
+        # Still below a later floor, so the leading-digit rule has not simply made
+        # everything enforce.
+        ("0.102.1rc1", "0.102.2", False),
         ("unknown", "0.102.0", True),
     ],
 )
@@ -379,7 +395,8 @@ def test_report_exits_zero_when_the_environment_satisfies_the_release():
     )
 
     assert exit_code == 0
-    assert "✓ This release's startup requirements are satisfied." in stream.getvalue()
+    assert "✓ This release's startup requirements are satisfied" in stream.getvalue()
+    assert "1 of 1 evaluated" in stream.getvalue()
 
 
 def test_report_exits_nonzero_when_the_release_would_not_start():
@@ -421,6 +438,46 @@ def test_report_distinguishes_a_skipped_requirement_from_a_satisfied_one():
     assert "not applicable to this posture" in stream.getvalue()
 
 
+def test_report_says_it_checked_nothing_rather_than_reporting_success():
+    """A local run must not read as a hosted clearance.
+
+    The exit code stays 0, and correctly: it promises that this release starts in the
+    posture that was checked, and a local install genuinely has nothing to satisfy.
+    What made that dangerous was the summary line, which said "requirements are
+    satisfied" after evaluating none of them — so a deploy gate that did not inherit
+    SERVER_MODE got a green light for a hosted box that would refuse to boot.
+    """
+    stream = io.StringIO()
+
+    exit_code = report(
+        {"SERVER_MODE": False},
+        version="1.0.0",
+        requirements=[_requirement(hosted_only=True)],
+        stream=stream,
+    )
+    output = stream.getvalue()
+
+    assert exit_code == 0
+    assert "0 of 1 requirement(s) apply to this posture" in output
+    assert "says nothing about a hosted deployment" in output
+    assert "satisfied" not in output
+
+
+def test_report_counts_what_it_evaluated_when_some_requirements_are_skipped():
+    """The summary distinguishes "all of them" from "the ones that applied"."""
+    stream = io.StringIO()
+
+    exit_code = report(
+        {"SERVER_MODE": False, "TEST_VAR": "set"},
+        version="1.0.0",
+        requirements=[_requirement(), _requirement(id="hosted", hosted_only=True)],
+        stream=stream,
+    )
+
+    assert exit_code == 0
+    assert "1 of 2 evaluated" in stream.getvalue()
+
+
 def test_the_hosted_secret_key_requirement_is_wired_into_the_registry_as_fatal():
     """What the checker decides is pinned by the vectors above; this is the wiring.
 
@@ -448,6 +505,118 @@ def test_enforcing_the_hosted_secret_key_requirement_raises_the_documented_messa
     """
     with pytest.raises(RuntimeError, match="SERVER_MODE requires SECRET_KEY"):
         enforce({"SERVER_MODE": True, "SECRET_KEY": DEFAULT_SECRET_KEY})
+
+
+def _documented_hosted_secret_key_failure(value):
+    """The condition as `docs/src/startup-requirements.md` and the summary state it.
+
+    Written out independently of the checker, from the documented rule rather than from
+    the implementation, so the two can disagree.
+    """
+    trimmed = (
+        bytes(value).strip()
+        if isinstance(value, (bytes, bytearray))
+        else str(value or "").strip().encode("utf-8")
+    )
+    return (
+        trimmed == DEFAULT_SECRET_KEY.encode("utf-8")
+        or len(trimmed) < MIN_HOSTED_SECRET_KEY_BYTES
+    )
+
+
+def _hosted_secret_key_corpus():
+    """Cores x padding x type, so the comparison is over a space rather than a list."""
+    cores = [
+        "",
+        "k",
+        "kkkkkkk",
+        "kkkkkkkk",
+        "kkkkkkkkk",
+        DEFAULT_SECRET_KEY,
+        f"{DEFAULT_SECRET_KEY}x",
+        "password",
+        "key12345",
+        "KEY12345",
+        "correct horse battery staple",
+        "\ufeff\ufeff\ufeff\ufeff\ufeff\ufeff\ufeff\ufeff",
+        "\u00e9\u00e9\u00e9\u00e9",
+    ]
+    pads = ["", " ", "  ", "\t", "\n", " \t\n", "\u00a0", "\u3000"]
+
+    for core in cores:
+        for left in pads:
+            for right in pads:
+                text = f"{left}{core}{right}"
+                yield text
+                try:
+                    encoded = text.encode("utf-8")
+                except UnicodeEncodeError:  # pragma: no cover - defensive
+                    continue
+
+                yield encoded
+                yield bytearray(encoded)
+
+    yield None
+
+
+def test_the_hosted_checker_equals_its_documented_condition_over_a_corpus():
+    """Pins the checker to its documented predicate, not to chosen sample inputs.
+
+    `_PINNED_BEHAVIOUR` fixes the condition at a few dozen literals, which is readable
+    documentation of intent but only catches a tightening that happens to land on one
+    of them. A blocklist clause, a character-class rule or a future entropy check all
+    carve out values no listed vector names, so "adding or tightening a requirement
+    fails CI" held for the listed inputs rather than for tightenings in general.
+
+    Asserting equality over a generated space closes that. The mutant this exists to
+    catch — refusing `key12345` and `password` with a byte-identical message — passes
+    every literal vector and fails here.
+    """
+    mismatches = [
+        value
+        for value in _hosted_secret_key_corpus()
+        if (_hosted_secret_key_failure({"SECRET_KEY": value}) is not None)
+        != _documented_hosted_secret_key_failure(value)
+    ]
+
+    assert mismatches == [], (
+        f"{len(mismatches)} input(s) where the checker and its documented condition "
+        f"disagree, first {mismatches[:3]!r}. If the change was deliberate, update "
+        "_documented_hosted_secret_key_failure, the summary, and the documented row "
+        "together — and answer the question in _REGISTRY_CHANGED before you do."
+    )
+
+
+def test_the_corpus_detects_a_tightening_that_every_literal_vector_admits():
+    """Guards the guard: a corpus that could not fail is not a control.
+
+    The blocklist below is the shape a real tightening takes — a clause that refuses
+    values the documented condition accepts, carrying the same message so nothing else
+    notices. Every entry in `_PINNED_BEHAVIOUR` still passes against it.
+    """
+
+    def tightened(config):
+        secret_key = config.get("SECRET_KEY")
+        if isinstance(secret_key, str) and secret_key.strip().lower() in {
+            "key12345",
+            "password",
+        }:
+            return "refused"
+
+        return _hosted_secret_key_failure(config)
+
+    for vectors in _PINNED_BEHAVIOUR.values():
+        for config in vectors["accepted"]:
+            assert tightened(config) is None, config
+
+    caught = [
+        value
+        for value in _hosted_secret_key_corpus()
+        if (tightened({"SECRET_KEY": value}) is not None)
+        != _documented_hosted_secret_key_failure(value)
+    ]
+
+    assert caught, "the corpus admits a tightening it is supposed to catch"
 
 
 def test_the_development_default_is_refused_independently_of_the_floor(monkeypatch):

@@ -113,6 +113,30 @@ def test_the_rollout_convention_is_recorded_for_maintainers():
     assert "enforced_from" in conventions
 
 
+def test_both_guidance_files_scope_the_convention_away_from_parse_time_failures():
+    """The registry's claim has to stop where the registry's reach stops.
+
+    `_STRICT_BOOLEANS` and the `MAX_CONTENT_LENGTH` parser raise inside
+    `Config.__init__`, before `create_app` can apply anything — so tightening one is
+    the #2004 class with none of these controls, and every test in this package still
+    passes. A maintainer who reads "a condition on operator-supplied configuration that
+    the app refuses to start without" concludes, reasonably and wrongly, that they are
+    covered. Both files have to say where the boundary is, or the convention over-claims
+    exactly where it is most expensive to be wrong.
+    """
+    for path in (_CONVENTIONS, _AGENTS):
+        source = _read(path)
+
+        assert "_STRICT_BOOLEANS" in source, (
+            f"{path.name} does not name the parse-time settings the registry cannot "
+            "reach, so its description of a startup requirement over-claims."
+        )
+        assert "MAX_CONTENT_LENGTH" in source, (
+            f"{path.name} does not name the parse-time settings the registry cannot "
+            "reach, so its description of a startup requirement over-claims."
+        )
+
+
 def test_the_rollout_convention_is_stated_in_agents_md_too():
     """CONVENTIONS.md's maintenance contract requires every convention in both files.
 

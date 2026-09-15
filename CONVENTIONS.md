@@ -1420,7 +1420,15 @@ Don't `raise Exception("...")` — there's an existing class for almost every ca
 
 ## Startup requirements
 
-A **startup requirement** is a condition on operator-supplied configuration that the app refuses to start without. They are declared as data in `backend/ttnn_visualizer/startup_requirements.py`, not as `raise` statements in `create_app`, and `docs/src/startup-requirements.md` is the operator-facing copy.
+A **startup requirement** is a condition on an operator-supplied value that has already parsed — a predicate over the resolved config, checked after `Config` is built. They are declared as data in `backend/ttnn_visualizer/startup_requirements.py`, not as `raise` statements in `create_app`, and `docs/src/startup-requirements.md` is the operator-facing copy.
+
+### What the registry does not cover
+
+Settings that fail while they are being *parsed* are outside it, and the registry cannot reach them: they raise inside `Config.__init__`, before `create_app` exists to apply anything. Two do this today — a value in `_STRICT_BOOLEANS` (currently `SERVER_MODE` alone) that is not a recognised boolean, and a `MAX_CONTENT_LENGTH` that is not a byte count.
+
+**They are the same class of change, with none of the controls.** Adding a name to `_STRICT_BOOLEANS` makes a previously-acceptable operator configuration fatal at import — #2004 exactly — and every test in `test_startup_requirements.py` passes, because nothing in the registry describes it. There is no staging, no preflight entry and no release-diff row.
+
+So when you tighten one of those parses, do by hand what the registry would have done: say so in `docs/src/startup-requirements.md`, and satisfy yourself that every deployment already supplies a value the new parse accepts, because no test here will tell you. Prefer keeping the parse lenient and expressing the condition as a registry entry, which is the only route that gets a rollout window. `--check-config` still exits non-zero for a parse failure, so a deploy gate reading the exit code needs no special case — it simply reports them differently from a registry finding.
 
 ### Why this class of change is not testable here
 

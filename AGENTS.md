@@ -32,11 +32,12 @@ See [CONVENTIONS.md](./CONVENTIONS.md#trust-boundaries) for what each boundary d
 
 ### Startup requirements
 
-A **startup requirement** is a condition on operator-supplied configuration that the app refuses to start without. They are declared as data in `backend/ttnn_visualizer/startup_requirements.py`, never as a `raise` in `create_app`. [Full rules and rationale](./CONVENTIONS.md#startup-requirements).
+A **startup requirement** is a condition on an operator-supplied value that has already parsed, checked after `Config` is built. They are declared as data in `backend/ttnn_visualizer/startup_requirements.py`, never as a `raise` in `create_app`. [Full rules and rationale](./CONVENTIONS.md#startup-requirements).
 
 - **New requirements ship staged.** Set `enforced_from` to a *later* release than the one you introduce the requirement in, unless you can show every deployment that exists today already complies. Until that release an environment that does not comply starts and logs a warning, which is the window operators need to change a value provisioned outside this repository. `introduced_in == enforced_from` is a deliberate, reviewable claim, not the default.
 - **CI cannot catch this class of change, by construction.** Our suites check a validator against an input CI supplies; real deployments supply their own. `v0.102.0` made a new condition fatal at boot, every test passed, and every hosted worker restart-looped (#2004). Adding or tightening a requirement means answering *"does every deployment that exists today already satisfy this?"* from outside the diff.
 - **Adding or tightening one touches four places on purpose:** the registry, its literal pin and input vectors in `tests/test_startup_requirements.py`, the operator-facing table in `docs/src/startup-requirements.md` (a parity test enforces it), and — for a threshold that carries a policy decision — a test pinning the literal value rather than the constant.
+- **Settings that fail while *parsing* are outside the registry and have none of its controls.** `_STRICT_BOOLEANS` and the `MAX_CONTENT_LENGTH` parser raise inside `Config.__init__`, before `create_app` can apply anything, so tightening one is the #2004 class with no staging, no preflight row and no test that notices. Prefer a lenient parse plus a registry entry; if you must tighten a parse, document it and verify deployments by hand.
 - **`ttnn-visualizer --check-config` answers "will this release boot here?"** against a target environment without starting anything; exit `0` is the contract a deploy gate reads.
 
 ## Python environment

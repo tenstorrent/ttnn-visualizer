@@ -50,6 +50,9 @@ logger = logging.getLogger(__name__)
 # :meth:`StartupRequirement.__post_init__` for why this is stricter than
 # :func:`_version_key`, which reads the *running* version.
 _RELEASE_PATTERN = re.compile(r"^\d+\.\d+\.\d+$")
+# Leading digits of one dotted component, so a fused suffix costs the suffix
+# rather than the number it is attached to. See :func:`_version_key`.
+_LEADING_DIGITS = re.compile(r"\d+")
 
 
 class Severity(Enum):
@@ -144,13 +147,31 @@ def _version_key(version: str) -> Optional[Tuple[int, ...]]:
     Trailing non-numeric components are dropped rather than rejected so a local
     ``0.103.0.dev1`` build compares as ``0.103.0`` instead of falling into the unknown
     branch and being treated as fully enforced.
+
+    A component's *leading digits* count even when a suffix is fused to them, which is
+    the difference between failing closed and failing open. Discarding the whole
+    component read ``0.102.1rc1`` as ``(0, 102)`` — below ``0.102.1`` — so a release
+    candidate of the enforcing release warned where the release itself refused, and the
+    release-PR diff, which calls the same comparison, printed no notice. PEP 440 fuses
+    pre-release segments (``1rc1``, ``1b2``) and ``describe`` output fuses a commit
+    suffix, so this is the normal shape of a version between tags, not a malformed one.
+
+    A candidate therefore compares equal to the release it precedes rather than below
+    it. That is deliberate in this direction: these values decide only whether a
+    requirement is *enforced*, and enforcing one release early is recoverable, where
+    starting a candidate that the release itself would have refused is the #2004
+    failure in miniature.
     """
     components: List[int] = []
     for part in str(version).split("."):
-        if not part.isdigit():
+        leading = _LEADING_DIGITS.match(part)
+        if leading is None:
             break
 
-        components.append(int(part))
+        components.append(int(leading.group()))
+        # A fused suffix ends the version: what follows it is not another component.
+        if leading.end() != len(part):
+            break
 
     return tuple(components) if components else None
 
@@ -388,10 +409,15 @@ def report(
     print(f"Posture: {_posture(config)}", file=out)
     print("", file=out)
 
+    evaluated = 0
+    skipped = 0
     for requirement in requirements:
         if not requirement.applies_to(config):
+            skipped += 1
             print(f"  –  {requirement.id}: not applicable to this posture", file=out)
             continue
+
+        evaluated += 1
 
         finding = findings.get(requirement.id)
         if finding is None:
@@ -423,10 +449,31 @@ def report(
     if staged:
         print(
             f"⚠️  Starts, with {staged} requirement(s) not yet satisfied that a later "
-            "release will enforce.",
+            f"release will enforce. {evaluated} of {len(requirements)} requirement(s) "
+            "evaluated in this posture.",
+            file=out,
+        )
+    elif evaluated:
+        print(
+            f"✓ This release's startup requirements are satisfied "
+            f"({evaluated} of {len(requirements)} evaluated in this posture).",
             file=out,
         )
     else:
-        print("✓ This release's startup requirements are satisfied.", file=out)
+        # Exit stays 0: this release genuinely will start in *this* posture, which is
+        # what the exit code promises, and a local install has nothing to check. But
+        # "satisfied" read as a hosted clearance is how a deploy gate that forgot
+        # SERVER_MODE gets a green light for a box that will refuse to boot, so the
+        # summary says what was checked rather than implying everything was.
+        print(
+            f"✓ Nothing to check: 0 of {len(requirements)} requirement(s) apply to "
+            f"this posture ({skipped} skipped).",
+            file=out,
+        )
+        print(
+            "  This says nothing about a hosted deployment. Re-run with --server, or "
+            "SERVER_MODE=true, to check that posture.",
+            file=out,
+        )
 
     return 0
