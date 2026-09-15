@@ -75,7 +75,11 @@ _PINNED_BEHAVIOUR = {
         "accepted": (
             {"SECRET_KEY": "k" * 8},
             {"SECRET_KEY": b"k" * 8},
-            {"SECRET_KEY": "H4sBq2wXm9ZrT7vN1cKdLpYeUg3fRjA8"},
+            # Deliberately low-entropy and obviously not a credential: the floor
+            # counts UTF-8 bytes, so a long dictionary phrase passes it exactly as a
+            # random value of the same length would. Writing the vector this way
+            # documents that, and keeps secret scanners off a test fixture.
+            {"SECRET_KEY": "this-is-not-a-secret-just-a-long-enough-value"},
         ),
     },
 }
