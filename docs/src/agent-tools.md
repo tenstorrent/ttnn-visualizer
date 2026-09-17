@@ -38,14 +38,16 @@ server needs no database and no running application.
 | `top_ops` | The costliest operations by device time, op-to-op gap, total percentage, FLOPS, DRAM bandwidth or core count. |
 | `zone_timings` | Per-zone, per-RISC totals from `profile_log_device.csv` — firmware and kernel phases, as measured on device. |
 | `diff_reports` | Per-operation-code deltas between two reports, largest movement first. |
-| `find_operations` | Operations matching a name substring, with the ids `operation_detail` takes. |
+| `find_operations` | Operations matching a name substring or a call-stack substring, with the ids `operation_detail` takes. |
 | `operation_detail` | One operation: its input and output tensors with shape, dtype, layout and memory config, and what it had allocated. |
 | `memory_profile` | Memory footprint per operation, keyed by buffer type and ranked within each, with each type's peak and the device's L1 geometry. |
 | `tensor_flow` | Which operation produced a tensor and which ones consumed it. |
+| `operation_provenance` | What one operation was called with, and where in the model code it came from. |
 
-The last four read the profiler report's SQLite database and the middle three read the
-performance CSVs; `load_report` opens both, since its whole job is saying which of the
-others apply. A capture can carry either, both, or — as far as these tools are concerned —
+`top_ops`, `zone_timings` and `diff_reports` read the performance CSVs; the five
+operation tools — `find_operations`, `operation_detail`, `memory_profile`,
+`tensor_flow` and `operation_provenance` — read the profiler report's SQLite database;
+`load_report` opens both, since its whole job is saying which of the others apply. A capture can carry either, both, or — as far as these tools are concerned —
 neither, which is what makes `load_report`'s answer worth reading first.
 
 Call `load_report` first. It reports what is answerable rather than making you discover it
@@ -53,8 +55,8 @@ one failed call at a time, because the report kinds are independent: a performan
 capture has no operation graph and no tensor data, and a report with no device profiler log
 cannot answer `zone_timings`. Each database tool is checked against the tables it actually
 reads, so a truncated capture that holds `operations` but not `buffers` is reported as
-answering `find_operations` and nothing else, rather than advertising four tools and
-failing three of them.
+answering `find_operations` and nothing else, rather than advertising every tool and
+failing most of them.
 
 ## What the answers mean
 
@@ -138,7 +140,42 @@ need the device log's `type` column to pair zone starts with ends; a capture wit
 reports occurrence counts only, and a capture that stopped mid-zone reports how many starts
 and ends failed to pair so a partial total does not read as a complete one.
 
+**An operation id is not the end of the answer.** `memory_profile` names the operation
+holding the peak, and `operation_provenance` turns that id into the two things you need
+to act on it: the arguments it was called with, and the innermost stack frame's file,
+line, function and source line.
+
+`top_ops` and `diff_reports` name an operation too, but their `id` is a row of the
+performance CSV and does not belong here — see the id-space note above. Cross by
+searching for the name with `find_operations`, which returns database ids. Frames are recorded innermost first, so the call site is the `ttnn.<op>`
+call in the model code with no guessing about which frame is yours, and it is the same
+frame the operation details panel shows for that operation.
+
+Argument values are capped, with `truncated` and `full_length` set when one was cut, and
+`truncated_count` saying how many of them were: truncation is the normal case rather than
+the exception — 28% of the argument values across the local captures run past the cap,
+and the longest is 177,717 characters, because a tensor repr or a `Conv2dConfig` lands in
+one.
+
+Two different absences are reported apart. A capture that records no trace for an
+operation says so. A capture that records a trace this parser cannot read — a native C++
+backtrace, which 8 of 86 local captures write for every operation — says the call site is
+*unknown* rather than absent, because those are different facts and only one of them is
+about the operation.
+
+`operation_provenance` takes a `limit` for the outward chain. The call site is reported
+separately and never counted in it, so a small number is usually right: a real trace runs
+to tens of frames, most of them the test harness that invoked the model.
+
+`find_operations` takes `called_from` for the inverse question, which is the one that
+follows: not "what about this operation" but "what about every operation from that
+helper". It matches anywhere in the stack, so a layer module finds the operations it
+called through helpers rather than only those it called directly.
+
 ## Limitations
+
+Accuracy questions are not answerable. Both tensor-comparison tables exist in every
+local capture and are empty in every one, so there is nothing to build a PCC tool on.
 
 Page-level memory questions — fragmentation, or the per-bank detail behind the web
 application's memory plot — are not exposed. That data runs to millions of rows on an

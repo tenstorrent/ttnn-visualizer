@@ -343,6 +343,59 @@ class DatabaseQueries:
         )
         return [int(row[0]) for row in rows if row[0] is not None]
 
+    def query_operation_ids_by_stack_trace(
+        self, needle: str, rank: Optional[int] = None
+    ) -> List[int]:
+        """Operation ids whose stack trace contains ``needle``, matched in SQL.
+
+        Filtered here rather than by the caller, for the reason
+        ``query_buffer_totals_by_operation`` aggregates here: a trace averages
+        7 KB and the largest local report holds 70 MB of them, so reading the
+        column into Python to substring-match it costs the whole table in
+        resident memory -- measured at 808 MB on a report ten times that size,
+        against 32 MB for this query. The text never crosses the boundary.
+
+        ``LIKE`` with a ``%…%`` pattern is already case-insensitive for ASCII;
+        ``lower()`` on both sides says so rather than relying on it. Returns
+        ``[]`` when the table is absent, which is a fact about the capture
+        rather than an error.
+        """
+        if not self._check_table_exists("stack_traces"):
+            return []
+        filters = self.merge_rank_filter("stack_traces", {}, rank)
+        # Escaped, because the caller passes a substring and `LIKE` reads a pattern.
+        # `_` matches any single character and it is in every Python function name,
+        # so `run_downsample_if_req` also matched `runXdownsampleYifZreq`; a needle
+        # of `%` matched every operation while the response still named the filter.
+        escaped = (
+            needle.lower().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        )
+        query = (
+            "SELECT DISTINCT operation_id FROM stack_traces "
+            "WHERE lower(stack_trace) LIKE ? ESCAPE '\\'"
+        )
+        params: List[Any] = [f"%{escaped}%"]
+        if "rank" in filters:
+            query += " AND rank = ?"
+            params.append(filters["rank"])
+        rows = self.query_runner.execute_query(query, params)
+        return [int(row[0]) for row in rows if row[0] is not None]
+
+    def report_records_stack_traces(self) -> bool:
+        """Whether this capture holds any stack trace at all.
+
+        Lets a caller tell "no operation came from there" apart from "this capture
+        cannot say", which are different answers to a `called_from` search. An
+        ``EXISTS`` rather than a count: the question is only whether the table has
+        a row, and the column is the largest text in the report.
+        """
+        if not self._check_table_exists("stack_traces"):
+            return False
+        rows = self.query_runner.execute_query(
+            "SELECT EXISTS(SELECT 1 FROM stack_traces WHERE stack_trace IS NOT NULL)"
+        )
+        return bool(rows and rows[0][0])
+
     def report_has_tensor_size_column(self) -> bool:
         """
         True if ``tensors`` carries its own ``size``, which is a whole-tensor
@@ -395,6 +448,11 @@ class DatabaseQueries:
     def query_stack_traces(
         self, filters: Optional[Dict[str, Any]] = None
     ) -> Generator[StackTrace, None, None]:
+        # Guarded like `query_source_files` and `query_devices`: a capture without
+        # the table is a capture that records no call sites, and a caller asking
+        # for one should hear that rather than a raw `no such table`.
+        if not self._check_table_exists("stack_traces"):
+            return
         select_clause = self._dataclass_select_clause("stack_traces", StackTrace)
         rows = self._query_table("stack_traces", filters, select_clause=select_clause)
         for row in rows:
