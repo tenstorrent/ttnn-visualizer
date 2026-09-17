@@ -222,16 +222,29 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
             "description": (
                 "What one operation was called with, and where in the model code it "
                 "came from: its arguments as name/value pairs, and the innermost "
-                "stack frame's file, line, function and source line. This is the "
-                "step from an operation id that top_ops or memory_profile named to "
-                "the code you would change. Older captures record no stack trace, "
-                "and the response says so rather than returning an empty call site."
+                "stack frame's file, line, function and source line. Takes the "
+                "profiler database's operation_id, the same id memory_profile, "
+                "operation_detail and find_operations use -- NOT the id from "
+                "top_ops or diff_reports, which number rows of the performance "
+                "CSV and do not share this id space. Older captures record no "
+                "stack trace, and the response says so rather than returning an "
+                "empty call site."
             ),
             "schema": {
                 "type": "object",
                 "properties": {
                     "handle": {"type": "string"},
                     "operation_id": {"type": "integer"},
+                    "limit": {
+                        "type": "integer",
+                        "description": (
+                            "Frames of the outward chain to return, capped at "
+                            f"{MAX_LIMIT}. The call site is reported separately and "
+                            "is never counted here, so a small number is usually "
+                            "right: a real trace runs to tens of frames, most of "
+                            "them the test harness that invoked the model."
+                        ),
+                    },
                     "rank": _RANK_SCHEMA,
                 },
                 "required": ["handle", "operation_id"],

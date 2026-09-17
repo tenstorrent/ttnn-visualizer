@@ -238,10 +238,14 @@ def _device_capacity(queries: DatabaseQueries, scope: RankScope) -> Dict[str, ob
     }
 
 
-# How much of one argument value is returned. Values are mostly short -- the median
-# is 6 characters -- with a tail that carries the interesting part: a `Conv2dConfig`
-# or a tensor repr lands in one, and the longest locally is 844. Capped with a flag
-# rather than passed through, because "the longest we have seen" is not a bound.
+# How much of one argument value is returned. The tail is much heavier than one
+# capture suggests: across the 204,636 argument values in 86 local reports, 28% run
+# past this cap and the longest is 177,717 characters -- a tensor repr or a
+# `Conv2dConfig`. One report has 60% of its values over the cap. So truncation is
+# the normal case rather than the exception, which is why the count of truncated
+# values is reported alongside them: an agent reading one value cannot see that
+# most of the response was cut, and raising the cap enough to matter would put tens
+# of kilobytes in a response that is supposed to be bounded.
 MAX_ARGUMENT_VALUE_CHARS = 500
 
 # One frame of a Python traceback. Deliberately the same shape
@@ -269,14 +273,17 @@ def _parse_frames(trace: str) -> List[Dict[str, object]]:
         if match is None:
             continue
         # The source line the capture indents under the frame, when it wrote one.
-        code = next(
-            (
-                candidate.strip()
-                for candidate in lines[index + 1 : index + 3]
-                if candidate.strip() and _TRACE_FRAME.match(candidate) is None
-            ),
-            None,
-        )
+        # The first non-blank line under the frame, and only if it is not itself a
+        # frame. The window used to look two lines ahead past an intervening `File`
+        # line, so a frame with no source line borrowed its neighbour's -- and since
+        # the call site is frame 0, that pointed at another file's code.
+        code = None
+        for candidate in lines[index + 1 :]:
+            if not candidate.strip():
+                continue
+            if _TRACE_FRAME.match(candidate) is None:
+                code = candidate.strip()
+            break
         frames.append(
             {
                 "file": match.group("file"),
@@ -288,9 +295,21 @@ def _parse_frames(trace: str) -> List[Dict[str, object]]:
     return frames
 
 
-def _truncated(value: str) -> Dict[str, object]:
-    """One argument value, capped, saying so when it was cut."""
-    text = value if value is not None else ""
+def _joined(existing: object, addition: str) -> str:
+    """Append to the response's one caveat field rather than inventing another."""
+    return f"{existing} {addition}" if existing else addition
+
+
+def _truncated(value: Optional[str]) -> Dict[str, object]:
+    """One argument value, capped, saying so when it was cut.
+
+    A NULL value is reported as absent rather than as an empty string: "not
+    recorded" and "recorded as empty" are different facts, and this module keeps
+    that distinction for the call site too.
+    """
+    if value is None:
+        return {"value": None, "recorded": False}
+    text = str(value)
     if len(text) <= MAX_ARGUMENT_VALUE_CHARS:
         return {"value": text}
     return {
@@ -304,6 +323,7 @@ def operation_provenance(
     registry: ReportRegistry,
     handle: str,
     operation_id: int,
+    limit: Optional[int] = None,
     rank: Optional[int] = None,
 ) -> Dict[str, object]:
     """What an operation was called with, and where in the model code it came from.
@@ -315,7 +335,13 @@ def operation_provenance(
     instance = registry.get(handle)
     with _profiler_db(instance) as queries:
         scope = _rank_scope(queries, rank)
-        _refuse_unattributable(queries, scope, "operations")
+        # The tables the answer is read *from*, not just the one the rank scope was
+        # decided on: `operations` is the table `report_has_rank_column` inspects, so
+        # naming only it can never fire. These two are where `merge_rank_filter`
+        # silently no-ops on a schema that carries `rank` unevenly, and a call site
+        # from another host under a `rank: 0` caveat is the caveat pointing the wrong
+        # way that this module refuses elsewhere.
+        _refuse_unattributable(queries, scope, "operation_arguments", "stack_traces")
         wanted = int(operation_id)
         filters = _scoped(queries, "operations", scope, operation_id=wanted)
 
@@ -340,7 +366,12 @@ def operation_provenance(
             )
         )
 
-    frames = _parse_frames(traces[0].stack_trace) if traces else []
+    # `or ""` on the value, not just a check on the row: a NULL column reached
+    # `splitlines` and gave the agent an AttributeError. The `called_from` path
+    # guarded this and this one did not.
+    raw_trace = (traces[0].stack_trace or "") if traces else ""
+    frames = _parse_frames(raw_trace)
+    cap = bounded(limit)
     result: Dict[str, object] = {
         "handle": handle,
         "operation_id": operation.operation_id,
@@ -350,23 +381,46 @@ def operation_provenance(
             for argument in arguments[:MAX_LIMIT]
         ],
         "argument_count": len(arguments),
-        "value_cap": MAX_ARGUMENT_VALUE_CHARS,
+        "value_cap_chars": MAX_ARGUMENT_VALUE_CHARS,
+        # Reported because truncation is common rather than rare: an agent looking
+        # at one value cannot tell that most of the rest was cut too.
+        "truncated_count": sum(
+            1
+            for argument in arguments[:MAX_LIMIT]
+            if argument.value is not None
+            and len(str(argument.value)) > MAX_ARGUMENT_VALUE_CHARS
+        ),
         # The innermost frame, which is the `ttnn.<op>` call in the model code. Named
         # separately from the chain because it is the answer to the question; the
         # chain is how you got there.
         "call_site": frames[0] if frames else None,
-        "frames": frames[1 : MAX_LIMIT + 1],
-        "frame_count": len(frames),
+        # The chain outward, without repeating the call site, and capped: a real
+        # trace runs to 43 frames of which 31 were the pytest harness that invoked
+        # the model, which is context spent on the opposite of what was asked.
+        "frames": frames[1 : cap + 1],
+        # Counts the chain this response returned, so comparing it against
+        # `len(frames)` detects the cap. `call_site` is reported separately and is
+        # not in either number.
+        "returned_frames": max(len(frames) - 1, 0),
+        "chain_length": max(len(frames) - 1, 0),
         **scope.as_response(),
         **_caveats(scope),
     }
-    if not traces:
-        # Said rather than left as a null: 8 of 86 local captures write no trace, and
-        # "this operation has no recorded call site" is a fact about the capture, not
-        # about the operation.
-        result["call_site_note"] = (
+    # Two different absences, said apart. A missing row is a capture that records
+    # no call sites; a row that yields no frame is a trace this parser does not
+    # read, and calling that "no stack trace recorded" would be false.
+    if not raw_trace.strip():
+        result["caveat"] = _joined(
+            result.get("caveat"),
             "This capture recorded no stack trace for this operation, so it has no "
-            "call site. Older reports omit them."
+            "call site. Older reports omit them.",
+        )
+    elif not frames:
+        result["caveat"] = _joined(
+            result.get("caveat"),
+            "A stack trace is recorded for this operation but holds no frame this "
+            "tool could read, so the call site is unknown rather than absent. The "
+            "parser expects CPython traceback text.",
         )
     return result
 
@@ -389,20 +443,23 @@ def find_operations(
     with _profiler_db(instance) as queries:
         scope = _rank_scope(queries, rank)
         needle = (name_contains or "").strip().lower()
-        origin = (called_from or "").strip().lower()
+        origin = (called_from or "").strip()
+        if called_from is not None and not origin:
+            # Refused rather than dropped: returning every operation under a
+            # response that echoes the filter claims a narrowing that did not
+            # happen, which is the reading `buffer_type` is refused to avoid.
+            raise ValueError("called_from is empty; omit it to search every operation")
 
         # Matched against the whole trace rather than the call site alone: asking for
         # a helper's name should find the operations it called *through* other
         # frames too, which is the shape of a model built out of layer modules.
-        from_origin: Optional[set] = None
+        # Matched in SQL, because the traces are the largest text in the report.
+        from_origin: Optional[Set[int]] = None
         if origin:
-            from_origin = {
-                trace.operation_id
-                for trace in queries.query_stack_traces(
-                    filters=_scoped(queries, "stack_traces", scope)
-                )
-                if origin in (trace.stack_trace or "").lower()
-            }
+            _refuse_unattributable(queries, scope, "stack_traces")
+            from_origin = set(
+                queries.query_operation_ids_by_stack_trace(origin, rank=scope.rank)
+            )
 
         # Only `operations`, which carries the column by definition here.
         matches = [

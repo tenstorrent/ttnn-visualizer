@@ -145,10 +145,16 @@ class TestReportInventory:
 
         loaded = load_report(ReportRegistry(), profiler_path=str(profiler))
 
-        assert loaded["answerable"] == ["find_operations"]
-        assert {"memory_profile", "operation_detail", "tensor_flow"} <= set(
-            loaded["unanswerable"]
-        )
+        # `find_operations` needs `stack_traces` for `called_from`, so a capture
+        # holding only `operations` can answer nothing here.
+        assert loaded["answerable"] == []
+        assert {
+            "find_operations",
+            "memory_profile",
+            "operation_detail",
+            "tensor_flow",
+            "operation_provenance",
+        } <= set(loaded["unanswerable"])
 
     def test_an_empty_database_file_is_not_answerable(self, tmp_path):
         """A zero-byte `db.sqlite` opens as a valid empty database.

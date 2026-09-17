@@ -99,7 +99,10 @@ def _resolved_directory(label: str, path: Optional[str]) -> Optional[str]:
 # because `agent.operations` imports this module; it has to stay in step with
 # the queries those tools actually run.
 TOOL_TABLES: Dict[str, frozenset] = {
-    "find_operations": frozenset({"operations"}),
+    # `called_from` reads `stack_traces`, so the tool needs it declared even though
+    # the name search alone does not. Omitting it advertised a filter that failed
+    # with a raw `no such table`.
+    "find_operations": frozenset({"operations", "stack_traces"}),
     "memory_profile": frozenset({"buffers", "operations"}),
     "operation_detail": frozenset(
         {"operations", "buffers", "tensors", "input_tensors", "output_tensors"}
@@ -107,10 +110,12 @@ TOOL_TABLES: Dict[str, frozenset] = {
     "tensor_flow": frozenset(
         {"operations", "tensors", "input_tensors", "output_tensors"}
     ),
-    # `stack_traces` is not required: 8 of 86 local captures hold the table with no
-    # rows, and the tool answers the argument half regardless, saying in the response
-    # that the capture recorded no call site. Requiring it would report the tool
-    # unanswerable on a report it can partly answer. #2021
+    # `stack_traces` is not required, because the tool answers the argument half
+    # without it and says in the response that the capture recorded no call site --
+    # 8 of 86 local captures hold the table with no rows. That reasoning covers a
+    # table that is empty; a table that is *absent* is handled in `queries.py`,
+    # where `query_stack_traces` now guards like its neighbours rather than letting
+    # SQLite's `no such table` reach the agent. #2021
     "operation_provenance": frozenset({"operations", "operation_arguments"}),
 }
 

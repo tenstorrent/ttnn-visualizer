@@ -10,6 +10,7 @@ neither an app nor a database session -- reaching for the fixture would test a
 coupling the tools deliberately do not have.
 """
 
+import re
 import sqlite3
 from pathlib import Path
 from unittest.mock import patch
@@ -909,9 +910,11 @@ class TestOperationProvenance:
             "function": "run_downsample_if_req",
             "code": "ds_out = ttnn.conv2d(",
         }
-        # The chain outward, without repeating the call site.
+        # The chain outward, without repeating the call site, and counted as what
+        # the response returned so the cap is detectable.
         assert [frame["function"] for frame in result["frames"]] == ["__call__", "run"]
-        assert result["frame_count"] == 3
+        assert result["chain_length"] == 2
+        assert result["returned_frames"] == 2
 
     def test_a_long_argument_value_is_capped_and_says_so(self, loaded):
         """Values are mostly six characters with a tail that carries the interesting
@@ -952,15 +955,174 @@ class TestOperationProvenance:
         result = agent_operations.operation_provenance(registry, handle, 3)
 
         assert result["call_site"] is None
-        assert result["frame_count"] == 0
+        assert result["chain_length"] == 0
         assert result["argument_count"] == 1
-        assert "recorded no stack trace" in result["call_site_note"]
+        assert "recorded no stack trace" in result["caveat"]
 
     def test_an_unknown_operation_is_refused(self, loaded):
         registry, handle = loaded(_PROVENANCE_SQL, name="prov")
 
         with pytest.raises(ValueError, match="no operation 99"):
             agent_operations.operation_provenance(registry, handle, 99)
+
+    def test_a_null_trace_reads_as_no_call_site_rather_than_crashing(self, loaded):
+        """The row existed and the column was NULL, so the truthiness check on the
+        row passed and `splitlines` reached `None` — the least helpful message on
+        the surface. The `called_from` path guarded this and this one did not."""
+        sql = _PROVENANCE_SQL + "INSERT INTO stack_traces VALUES (4, NULL);"
+        sql = sql.replace(
+            "INSERT INTO operations VALUES",
+            "INSERT INTO operations VALUES (4, 'ttnn.relu', 0.1),",
+            1,
+        )
+        registry, handle = loaded(sql, name="prov-null")
+
+        result = agent_operations.operation_provenance(registry, handle, 4)
+
+        assert result["call_site"] is None
+        assert "recorded no stack trace" in result["caveat"]
+
+    def test_a_trace_with_no_readable_frame_says_so_differently(self, loaded):
+        """Two different absences. A missing row is a capture that records no call
+        sites; a row that yields no frame is a trace this parser cannot read, and
+        calling that "no stack trace recorded" would be false."""
+        sql = _PROVENANCE_SQL + (
+            "INSERT INTO stack_traces VALUES (5, '#0 0x7f in ttnn::operations::run()');"
+        )
+        sql = sql.replace(
+            "INSERT INTO operations VALUES",
+            "INSERT INTO operations VALUES (5, 'ttnn.gelu', 0.1),",
+            1,
+        )
+        registry, handle = loaded(sql, name="prov-cpp")
+
+        result = agent_operations.operation_provenance(registry, handle, 5)
+
+        assert result["call_site"] is None
+        assert "no frame this tool could read" in result["caveat"]
+        assert "recorded no stack trace" not in result["caveat"]
+
+    def test_the_outward_chain_is_capped(self, loaded):
+        """A real trace runs to tens of frames, most of them the harness that
+        invoked the model, and this was the one tool with no limit — its default
+        response was the size the others reach only at their ceiling."""
+        frames = "".join(
+            f'  File "/m/f{index}.py", line {index}, in fn{index}\n    call{index}()\n\n'
+            for index in range(30)
+        )
+        sql = _PROVENANCE_SQL.replace(
+            "INSERT INTO stack_traces VALUES",
+            f"INSERT INTO stack_traces VALUES (6, '{frames}'),",
+            1,
+        ).replace(
+            "INSERT INTO operations VALUES",
+            "INSERT INTO operations VALUES (6, 'ttnn.deep', 0.1),",
+            1,
+        )
+        registry, handle = loaded(sql, name="prov-deep")
+
+        result = agent_operations.operation_provenance(registry, handle, 6, limit=5)
+
+        assert result["call_site"]["function"] == "fn0"
+        assert len(result["frames"]) == 5
+        # The untruncated chain, so the cap is detectable.
+        assert result["chain_length"] == 29
+
+    def test_a_null_argument_value_is_not_an_empty_string(self, loaded):
+        """ "Not recorded" and "recorded as empty" are different facts, and this
+        module keeps that distinction for the call site."""
+        sql = (
+            _PROVENANCE_SQL + "INSERT INTO operation_arguments VALUES (1, 'opt', NULL);"
+        )
+        registry, handle = loaded(sql, name="prov-nullarg")
+
+        argument = agent_operations.operation_provenance(registry, handle, 1)[
+            "arguments"
+        ][0]
+
+        assert argument["value"] is None
+        assert argument["recorded"] is False
+
+
+class TestFramePariy:
+    """`_parse_frames` against the rule `src/functions/stackTraceSource.ts` applies.
+
+    The frontend takes the first `File "..."` and the first `line N,` for the
+    operation details panel. The claim in `_parse_frames`' comment is that the call
+    site here is that frame, so these pin where the two agree -- and, for the inputs
+    where the frontend's looser regexes would answer differently, which answer this
+    side gives. Three prose claims of parity with nothing enforcing them was the
+    worst of the available shapes. #2021
+    """
+
+    # The frontend's two regexes, transcribed. Separate patterns over the whole
+    # trace, so its file and its line number need not come from the same frame.
+    _TS_FILE = re.compile(r'File "(.*)"')
+    _TS_LINE = re.compile(r"line (\d*),")
+
+    def _frontend(self, trace: str):
+        file_match = self._TS_FILE.search(trace)
+        line_match = self._TS_LINE.search(trace)
+        return (
+            file_match.group(1) if file_match else "",
+            int(line_match.group(1)) if line_match and line_match.group(1) else None,
+        )
+
+    def test_they_agree_on_a_real_traceback(self):
+        trace = (
+            '  File "/m/models/resnet.py", line 135, in run_downsample_if_req\n'
+            "    ds_out = ttnn.conv2d(\n\n"
+            '  File "/m/tests/infra.py", line 317, in run\n'
+            "    self.output = self.model(\n"
+        )
+        call_site = agent_operations._parse_frames(trace)[0]
+
+        assert (call_site["file"], call_site["line"]) == self._frontend(trace)
+
+    def test_a_frame_line_without_a_function_is_skipped_here(self):
+        """The frontend's `File "(.*)"` does not require `, line N, in fn`, so it
+        accepts a line this parser skips. Recorded rather than resolved: a line that
+        names no line number and no function is not a frame, and a call site of
+        `("/m/partial.py", None)` would be worse than none."""
+        trace = '  File "/m/partial.py"\n  File "/m/real.py", line 7, in fn\n    x()\n'
+
+        frames = agent_operations._parse_frames(trace)
+
+        assert [frame["file"] for frame in frames] == ["/m/real.py"]
+        assert self._frontend(trace)[0] == "/m/partial.py"
+
+    def test_a_quote_in_the_path_is_read_as_no_frame_at_all(self):
+        """The one divergence that matters. `File "(.*)"` is greedy, so the frontend
+        reports the path up to the last quote; `[^"]*` cannot span a quote, so this
+        anchored pattern matches nothing and reports no frame.
+
+        That is the honest outcome — a path this parser cannot delimit is not a
+        location it should assert — but it has to reach the agent as "unknown",
+        which is why the unparseable-trace caveat keys on the absence of frames
+        rather than the absence of a row."""
+        trace = '  File "/m/we"ird.py", line 20, in f\n    x()\n'
+
+        assert agent_operations._parse_frames(trace) == []
+        assert self._frontend(trace) == ('/m/we"ird.py', 20)
+
+    def test_a_source_line_is_never_taken_from_another_frame(self):
+        """Compact tracebacks put frames on adjacent lines. The window used to look
+        two lines ahead past an intervening `File` line, so a frame with no source
+        borrowed its neighbour's — and the call site is frame 0."""
+        trace = (
+            '  File "/m/outer.py", line 1, in outer\n'
+            '  File "/m/inner.py", line 2, in inner\n'
+            "    x = ttnn.matmul(a, b)\n"
+        )
+
+        frames = agent_operations._parse_frames(trace)
+
+        assert frames[0]["code"] is None
+        assert frames[1]["code"] == "x = ttnn.matmul(a, b)"
+
+    def test_it_reads_nothing_out_of_a_non_python_trace(self):
+        assert agent_operations._parse_frames("#0 0x7f in ttnn::run()") == []
+        assert agent_operations._parse_frames("") == []
 
 
 class TestFindOperations:

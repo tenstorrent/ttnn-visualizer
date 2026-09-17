@@ -147,10 +147,21 @@ source line. Frames are recorded innermost first, so the call site is the `ttnn.
 call in the model code with no guessing about which frame is yours, and it is the same
 frame the operation details panel shows for that operation.
 
-Argument values are capped, with `truncated` and `full_length` set when one was cut —
-most are a few characters, but a `Conv2dConfig` or a tensor repr lands in one. Older
-captures record no stack trace at all; the response says so rather than returning an
-empty call site.
+Argument values are capped, with `truncated` and `full_length` set when one was cut, and
+`truncated_count` saying how many of them were: truncation is the normal case rather than
+the exception — 28% of the argument values across the local captures run past the cap,
+and the longest is 177,717 characters, because a tensor repr or a `Conv2dConfig` lands in
+one.
+
+Two different absences are reported apart. A capture that records no trace for an
+operation says so. A capture that records a trace this parser cannot read — a native C++
+backtrace, which 8 of 86 local captures write for every operation — says the call site is
+*unknown* rather than absent, because those are different facts and only one of them is
+about the operation.
+
+`operation_provenance` takes a `limit` for the outward chain. The call site is reported
+separately and never counted in it, so a small number is usually right: a real trace runs
+to tens of frames, most of them the test harness that invoked the model.
 
 `find_operations` takes `called_from` for the inverse question, which is the one that
 follows: not "what about this operation" but "what about every operation from that
