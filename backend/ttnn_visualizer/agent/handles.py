@@ -107,6 +107,11 @@ TOOL_TABLES: Dict[str, frozenset] = {
     "tensor_flow": frozenset(
         {"operations", "tensors", "input_tensors", "output_tensors"}
     ),
+    # `stack_traces` is not required: 8 of 86 local captures hold the table with no
+    # rows, and the tool answers the argument half regardless, saying in the response
+    # that the capture recorded no call site. Requiring it would report the tool
+    # unanswerable on a report it can partly answer. #2021
+    "operation_provenance": frozenset({"operations", "operation_arguments"}),
 }
 
 

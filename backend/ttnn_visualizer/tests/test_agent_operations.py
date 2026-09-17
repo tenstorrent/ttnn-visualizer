@@ -455,6 +455,41 @@ INSERT INTO devices (
 ) VALUES (0, 1499136, 64, 1370848, 64), (1, 1499136, 64, 1370848, 64);
 """
 
+# Arguments and a real traceback, copied in shape from a capture: frames innermost
+# first, each with the source line indented under it. Operation 2 has both; operation
+# 3 has arguments and no trace, which 8 of 86 local captures look like.
+_PROVENANCE_SQL = _REPORT_SQL + """
+CREATE TABLE operation_arguments (operation_id int, name text, value text);
+CREATE TABLE stack_traces (operation_id int, stack_trace text);
+
+INSERT INTO operation_arguments VALUES
+    (2, 'in_channels', '64'),
+    (2, 'out_channels', '256'),
+    (2, 'kernel_size', '(1, 1)'),
+    (2, 'conv_config', 'Conv2dConfig(WEIGHTS)'),
+    (3, 'dim', '-1');
+
+-- Operation 1 has a trace from a *different* helper. Without a second origin,
+-- "match the needle" and "match every op that has a trace" return the same set,
+-- and the filter is unfalsifiable.
+INSERT INTO stack_traces VALUES
+    (1, '  File "/m/models/embed.py", line 20, in build_embedding
+    out = ttnn.embedding(
+
+  File "/m/tests/infra.py", line 300, in prepare
+    self.embed = build_embedding(
+'),
+    (2, '  File "/m/models/resnet.py", line 135, in run_downsample_if_req
+    ds_out = ttnn.conv2d(
+
+  File "/m/models/resnet.py", line 314, in __call__
+    ds_out = self.run_downsample_if_req(
+
+  File "/m/tests/infra.py", line 317, in run
+    self.output = self.model(
+');
+"""
+
 # A report with no `devices` table at all.
 _NO_DEVICES_SQL = """
 CREATE TABLE operations (operation_id int UNIQUE, name text, duration float);
@@ -843,6 +878,91 @@ class TestOperationDetail:
             agent_operations.operation_detail(registry, handle, 99)
 
 
+class TestOperationProvenance:
+    def test_it_answers_what_the_operation_was_called_with(self, loaded):
+        registry, handle = loaded(_PROVENANCE_SQL, name="prov")
+
+        result = agent_operations.operation_provenance(registry, handle, 2)
+
+        assert result["name"] == "ttnn.conv2d"
+        assert result["argument_count"] == 4
+        assert [argument["name"] for argument in result["arguments"]] == [
+            "in_channels",
+            "out_channels",
+            "kernel_size",
+            "conv_config",
+        ]
+        assert result["arguments"][0]["value"] == "64"
+
+    def test_the_call_site_is_the_innermost_frame(self, loaded):
+        """Frames are written innermost first, so frame 0 is the `ttnn.<op>` call in
+        the model code — which is also the frame `stackTraceSource.ts` takes for the
+        operation details panel. Two answers to "where is this op from" that
+        disagreed would be worse than one."""
+        registry, handle = loaded(_PROVENANCE_SQL, name="prov")
+
+        result = agent_operations.operation_provenance(registry, handle, 2)
+
+        assert result["call_site"] == {
+            "file": "/m/models/resnet.py",
+            "line": 135,
+            "function": "run_downsample_if_req",
+            "code": "ds_out = ttnn.conv2d(",
+        }
+        # The chain outward, without repeating the call site.
+        assert [frame["function"] for frame in result["frames"]] == ["__call__", "run"]
+        assert result["frame_count"] == 3
+
+    def test_a_long_argument_value_is_capped_and_says_so(self, loaded):
+        """Values are mostly six characters with a tail that carries the interesting
+        part, so the cap has to be visible rather than silent."""
+        long_value = "x" * (agent_operations.MAX_ARGUMENT_VALUE_CHARS + 50)
+        sql = _PROVENANCE_SQL + (
+            f"INSERT INTO operation_arguments VALUES (1, 'memory_config', '{long_value}');"
+        )
+        registry, handle = loaded(sql, name="prov-long")
+
+        argument = agent_operations.operation_provenance(registry, handle, 1)[
+            "arguments"
+        ][0]
+
+        assert len(argument["value"]) == agent_operations.MAX_ARGUMENT_VALUE_CHARS
+        assert argument["truncated"] is True
+        assert argument["full_length"] == agent_operations.MAX_ARGUMENT_VALUE_CHARS + 50
+
+    def test_two_operations_from_different_helpers_get_different_call_sites(
+        self, loaded
+    ):
+        registry, handle = loaded(_PROVENANCE_SQL, name="prov")
+
+        first = agent_operations.operation_provenance(registry, handle, 1)["call_site"]
+        second = agent_operations.operation_provenance(registry, handle, 2)["call_site"]
+
+        assert first["function"] == "build_embedding"
+        assert first["line"] == 20
+        assert second["function"] == "run_downsample_if_req"
+        assert second["line"] == 135
+
+    def test_a_capture_with_no_trace_still_answers_the_arguments(self, loaded):
+        """8 of 86 local captures hold the table with no rows. "No call site
+        recorded" is a fact about the capture, not about the operation, so it is
+        stated rather than returned as a bare null."""
+        registry, handle = loaded(_PROVENANCE_SQL, name="prov")
+
+        result = agent_operations.operation_provenance(registry, handle, 3)
+
+        assert result["call_site"] is None
+        assert result["frame_count"] == 0
+        assert result["argument_count"] == 1
+        assert "recorded no stack trace" in result["call_site_note"]
+
+    def test_an_unknown_operation_is_refused(self, loaded):
+        registry, handle = loaded(_PROVENANCE_SQL, name="prov")
+
+        with pytest.raises(ValueError, match="no operation 99"):
+            agent_operations.operation_provenance(registry, handle, 99)
+
+
 class TestFindOperations:
     def test_it_matches_a_name_case_insensitively(self, loaded):
         """Op names are spelled `ttnn.MatMul` in some captures and
@@ -874,6 +994,71 @@ class TestFindOperations:
         assert result["match_count"] == MAX_LIMIT + 53
         assert result["returned"] == MAX_LIMIT
         assert len(result["operations"]) == MAX_LIMIT
+
+    def test_it_finds_the_operations_a_helper_called(self, loaded):
+        """The inverse of provenance, and the question that follows the first one:
+        never about that operation alone, but about every operation from the same
+        helper."""
+        registry, handle = loaded(_PROVENANCE_SQL, name="prov")
+
+        result = agent_operations.find_operations(
+            registry, handle, called_from="run_downsample_if_req"
+        )
+
+        assert result["called_from"] == "run_downsample_if_req"
+        assert [op["operation_id"] for op in result["operations"]] == [2]
+
+        # Advertised as case-insensitive in the tool schema, because an agent types
+        # the name as it appeared in a traceback, a log or a diff.
+        assert [
+            op["operation_id"]
+            for op in agent_operations.find_operations(
+                registry, handle, called_from="RUN_DOWNSAMPLE_IF_REQ"
+            )["operations"]
+        ] == [2]
+
+    def test_it_matches_a_frame_anywhere_in_the_stack(self, loaded):
+        """A layer module calls through helpers, so matching the call site alone
+        would miss the operations it is responsible for."""
+        registry, handle = loaded(_PROVENANCE_SQL, name="prov")
+
+        # `infra.py` appears in both traces, so it must return both — and
+        # `resnet.py`, in one, must return only that one.
+        assert [
+            op["operation_id"]
+            for op in agent_operations.find_operations(
+                registry, handle, called_from="infra.py"
+            )["operations"]
+        ] == [1, 2]
+        assert [
+            op["operation_id"]
+            for op in agent_operations.find_operations(
+                registry, handle, called_from="resnet.py"
+            )["operations"]
+        ] == [2]
+
+    def test_the_two_filters_narrow_together(self, loaded):
+        registry, handle = loaded(_PROVENANCE_SQL, name="prov")
+
+        assert (
+            agent_operations.find_operations(
+                registry,
+                handle,
+                called_from="run_downsample_if_req",
+                name_contains="matmul",
+            )["match_count"]
+            == 0
+        )
+
+    def test_an_operation_with_no_trace_is_not_matched(self, loaded):
+        """Absence of a trace must read as "not from there", not as a wildcard."""
+        registry, handle = loaded(_PROVENANCE_SQL, name="prov")
+
+        result = agent_operations.find_operations(
+            registry, handle, called_from="resnet.py"
+        )
+
+        assert 3 not in [op["operation_id"] for op in result["operations"]]
 
     def test_the_duration_is_labelled_as_host_time(self, loaded):
         """`operations.duration` is host wall time; `top_ops` answers the device

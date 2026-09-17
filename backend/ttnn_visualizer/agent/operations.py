@@ -14,6 +14,7 @@ alone is millions of rows on an ordinary capture -- and a number whose unit
 invites the wrong reading carries the unit where it is returned.
 """
 
+import re
 import sqlite3
 from collections import defaultdict
 from contextlib import contextmanager
@@ -237,31 +238,187 @@ def _device_capacity(queries: DatabaseQueries, scope: RankScope) -> Dict[str, ob
     }
 
 
+# How much of one argument value is returned. Values are mostly short -- the median
+# is 6 characters -- with a tail that carries the interesting part: a `Conv2dConfig`
+# or a tensor repr lands in one, and the longest locally is 844. Capped with a flag
+# rather than passed through, because "the longest we have seen" is not a bound.
+MAX_ARGUMENT_VALUE_CHARS = 500
+
+# One frame of a Python traceback. Deliberately the same shape
+# `src/functions/stackTraceSource.ts` reads: it takes the *first* `File "..."` and
+# the first `line N`, so the call site here is the frame the operation details panel
+# already shows for the same operation. Two answers to "where is this op from" that
+# disagreed would be worse than one.
+_TRACE_FRAME = re.compile(
+    r'^[ \t]*File "(?P<file>[^"]*)", line (?P<line>\d+), in (?P<function>.*)$'
+)
+
+
+def _parse_frames(trace: str) -> List[Dict[str, object]]:
+    """The traceback's frames, innermost first, each with the source line under it.
+
+    Innermost first is the order the capture writes: frame 0 is the `ttnn.<op>` call
+    in the model code, and the chain runs outward to the entry point. So the call
+    site needs no heuristic about which frame belongs to the user -- which is the
+    same reason the frontend can take the first match and stop.
+    """
+    lines = trace.splitlines()
+    frames: List[Dict[str, object]] = []
+    for index, line in enumerate(lines):
+        match = _TRACE_FRAME.match(line)
+        if match is None:
+            continue
+        # The source line the capture indents under the frame, when it wrote one.
+        code = next(
+            (
+                candidate.strip()
+                for candidate in lines[index + 1 : index + 3]
+                if candidate.strip() and _TRACE_FRAME.match(candidate) is None
+            ),
+            None,
+        )
+        frames.append(
+            {
+                "file": match.group("file"),
+                "line": int(match.group("line")),
+                "function": match.group("function").strip(),
+                "code": code,
+            }
+        )
+    return frames
+
+
+def _truncated(value: str) -> Dict[str, object]:
+    """One argument value, capped, saying so when it was cut."""
+    text = value if value is not None else ""
+    if len(text) <= MAX_ARGUMENT_VALUE_CHARS:
+        return {"value": text}
+    return {
+        "value": text[:MAX_ARGUMENT_VALUE_CHARS],
+        "truncated": True,
+        "full_length": len(text),
+    }
+
+
+def operation_provenance(
+    registry: ReportRegistry,
+    handle: str,
+    operation_id: int,
+    rank: Optional[int] = None,
+) -> Dict[str, object]:
+    """What an operation was called with, and where in the model code it came from.
+
+    The other tools answer with an operation id -- `top_ops` names the costliest,
+    `memory_profile` names the one holding the peak -- and nothing turned that id
+    into something actionable in the code being edited. This is that step. #2021
+    """
+    instance = registry.get(handle)
+    with _profiler_db(instance) as queries:
+        scope = _rank_scope(queries, rank)
+        _refuse_unattributable(queries, scope, "operations")
+        wanted = int(operation_id)
+        filters = _scoped(queries, "operations", scope, operation_id=wanted)
+
+        operations = list(queries.query_operations(filters=filters))
+        if not operations:
+            raise ValueError(
+                f"no operation {wanted} in this report"
+                + (f" at rank {scope.rank}" if scope.rank is not None else "")
+            )
+        operation = operations[0]
+
+        arguments = list(
+            queries.query_operation_arguments(
+                filters=_scoped(
+                    queries, "operation_arguments", scope, operation_id=wanted
+                )
+            )
+        )
+        traces = list(
+            queries.query_stack_traces(
+                filters=_scoped(queries, "stack_traces", scope, operation_id=wanted)
+            )
+        )
+
+    frames = _parse_frames(traces[0].stack_trace) if traces else []
+    result: Dict[str, object] = {
+        "handle": handle,
+        "operation_id": operation.operation_id,
+        "name": operation.name,
+        "arguments": [
+            {"name": argument.name, **_truncated(argument.value)}
+            for argument in arguments[:MAX_LIMIT]
+        ],
+        "argument_count": len(arguments),
+        "value_cap": MAX_ARGUMENT_VALUE_CHARS,
+        # The innermost frame, which is the `ttnn.<op>` call in the model code. Named
+        # separately from the chain because it is the answer to the question; the
+        # chain is how you got there.
+        "call_site": frames[0] if frames else None,
+        "frames": frames[1 : MAX_LIMIT + 1],
+        "frame_count": len(frames),
+        **scope.as_response(),
+        **_caveats(scope),
+    }
+    if not traces:
+        # Said rather than left as a null: 8 of 86 local captures write no trace, and
+        # "this operation has no recorded call site" is a fact about the capture, not
+        # about the operation.
+        result["call_site_note"] = (
+            "This capture recorded no stack trace for this operation, so it has no "
+            "call site. Older reports omit them."
+        )
+    return result
+
+
 def find_operations(
     registry: ReportRegistry,
     handle: str,
     name_contains: Optional[str] = None,
+    called_from: Optional[str] = None,
     limit: Optional[int] = None,
     rank: Optional[int] = None,
 ) -> Dict[str, object]:
-    """Locate operations by name, so a following call has an id to ask about."""
+    """Locate operations by name or by where they were called from.
+
+    `called_from` is the inverse of `operation_provenance`, and it is how a session
+    proceeds once one operation is slow: the next question is never about that
+    operation alone but about every operation from the same helper. #2021
+    """
     instance = registry.get(handle)
     with _profiler_db(instance) as queries:
         scope = _rank_scope(queries, rank)
         needle = (name_contains or "").strip().lower()
+        origin = (called_from or "").strip().lower()
+
+        # Matched against the whole trace rather than the call site alone: asking for
+        # a helper's name should find the operations it called *through* other
+        # frames too, which is the shape of a model built out of layer modules.
+        from_origin: Optional[set] = None
+        if origin:
+            from_origin = {
+                trace.operation_id
+                for trace in queries.query_stack_traces(
+                    filters=_scoped(queries, "stack_traces", scope)
+                )
+                if origin in (trace.stack_trace or "").lower()
+            }
+
         # Only `operations`, which carries the column by definition here.
         matches = [
             operation
             for operation in queries.query_operations(
                 filters=_scoped(queries, "operations", scope)
             )
-            if not needle or needle in (operation.name or "").lower()
+            if (not needle or needle in (operation.name or "").lower())
+            and (from_origin is None or operation.operation_id in from_origin)
         ]
 
     cap = bounded(limit)
     return {
         "handle": handle,
         "name_contains": name_contains or None,
+        "called_from": called_from or None,
         "match_count": len(matches),
         "returned": min(len(matches), cap),
         "operations": [
@@ -666,6 +823,7 @@ def _caveats(scope: RankScope, devices: Optional[Set[int]] = None) -> Dict[str, 
 
 __all__ = [
     "BUFFER_SIZE_UNIT",
+    "MAX_ARGUMENT_VALUE_CHARS",
     "BUFFER_TYPE_NAMES",
     "RankScope",
     "TENSOR_SIZE_UNIT",
@@ -673,5 +831,6 @@ __all__ = [
     "find_operations",
     "memory_profile",
     "operation_detail",
+    "operation_provenance",
     "tensor_flow",
 ]

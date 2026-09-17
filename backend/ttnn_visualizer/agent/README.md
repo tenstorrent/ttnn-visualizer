@@ -14,7 +14,7 @@ This file covers only what a person changing the code needs.
 |---|---|
 | `handles.py` | Path → handle registry, and the inventory `load_report` returns. No app database and no app context: `Instance` is a plain model of two paths, which is what lets the tools read the query classes directly. It does open the report's own SQLite file, to report what the report can answer. |
 | `tools.py` | The performance-report tools, `CANONICAL_PROJECTION`, and the caveat logic. |
-| `operations.py` | The profiler-database tools. Opens its own read-only connection: `LocalQueryRunner` reads `Instance.profiler_path` as the SQLite file, while a handle holds the directory the caller named. |
+| `operations.py` | The profiler-database tools, including provenance (arguments and call site). Opens its own read-only connection: `LocalQueryRunner` reads `Instance.profiler_path` as the SQLite file, while a handle holds the directory the caller named. |
 | `bounds.py` | The one result cap, shared because `server` quotes it to an agent in every limit schema. |
 | `server.py` | Newline-delimited JSON-RPC on stdio. Nothing above it imports from here. |
 
@@ -52,6 +52,12 @@ land mid-frame and corrupt the stream.
 
 **Report cells are strings.** `device_time` arrives as `"16.478"` and `cores` as `"110"`,
 so everything numeric goes through `_as_number` rather than being compared directly.
+
+**The call-site parse has a second implementation.** `_parse_frames` must agree with
+`src/functions/stackTraceSource.ts`, which takes the first `File "..."` and the first
+`line N` for the operation details panel. Two answers to "where is this op from" that
+disagreed would be worse than one, so the parity is checked against all 302 traces in
+a local capture rather than assumed.
 
 **Two size units share one response.** `buffers.max_size_per_bank` is per bank and
 `tensors.size` is a whole-tensor byte count, so `operations.py` labels both rather than

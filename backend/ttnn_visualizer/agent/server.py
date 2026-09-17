@@ -153,6 +153,15 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
                         "type": "string",
                         "description": "Case-insensitive substring, e.g. 'matmul'.",
                     },
+                    "called_from": {
+                        "type": "string",
+                        "description": (
+                            "Case-insensitive substring of the call stack: a file "
+                            "name or a function, e.g. 'run_downsample_if_req'. "
+                            "Matches anywhere in the stack, so a layer module finds "
+                            "the operations it called through helpers."
+                        ),
+                    },
                     "limit": _LIMIT_SCHEMA,
                     "rank": _RANK_SCHEMA,
                 },
@@ -206,6 +215,28 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
                 "required": ["handle"],
             },
             "handler": lambda arguments: operations.memory_profile(
+                registry, **arguments
+            ),
+        },
+        "operation_provenance": {
+            "description": (
+                "What one operation was called with, and where in the model code it "
+                "came from: its arguments as name/value pairs, and the innermost "
+                "stack frame's file, line, function and source line. This is the "
+                "step from an operation id that top_ops or memory_profile named to "
+                "the code you would change. Older captures record no stack trace, "
+                "and the response says so rather than returning an empty call site."
+            ),
+            "schema": {
+                "type": "object",
+                "properties": {
+                    "handle": {"type": "string"},
+                    "operation_id": {"type": "integer"},
+                    "rank": _RANK_SCHEMA,
+                },
+                "required": ["handle", "operation_id"],
+            },
+            "handler": lambda arguments: operations.operation_provenance(
                 registry, **arguments
             ),
         },

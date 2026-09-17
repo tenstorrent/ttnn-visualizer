@@ -104,6 +104,7 @@ class TestReportInventory:
             "operation_detail",
             "memory_profile",
             "tensor_flow",
+            "operation_provenance",
         }
         assert loaded["capture"]["ARCH"] == "wormhole_b0"
         assert loaded["performance_csv"] == "ops_perf_results_x.csv"
@@ -759,6 +760,7 @@ class TestTransport:
             "operation_detail",
             "memory_profile",
             "tensor_flow",
+            "operation_provenance",
         }
         assert all(
             tool["inputSchema"]["type"] == "object"

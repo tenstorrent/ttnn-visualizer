@@ -38,10 +38,11 @@ server needs no database and no running application.
 | `top_ops` | The costliest operations by device time, op-to-op gap, total percentage, FLOPS, DRAM bandwidth or core count. |
 | `zone_timings` | Per-zone, per-RISC totals from `profile_log_device.csv` — firmware and kernel phases, as measured on device. |
 | `diff_reports` | Per-operation-code deltas between two reports, largest movement first. |
-| `find_operations` | Operations matching a name substring, with the ids `operation_detail` takes. |
+| `find_operations` | Operations matching a name substring or a call-stack substring, with the ids `operation_detail` takes. |
 | `operation_detail` | One operation: its input and output tensors with shape, dtype, layout and memory config, and what it had allocated. |
 | `memory_profile` | Memory footprint per operation, keyed by buffer type and ranked within each, with each type's peak and the device's L1 geometry. |
 | `tensor_flow` | Which operation produced a tensor and which ones consumed it. |
+| `operation_provenance` | What one operation was called with, and where in the model code it came from. |
 
 The last four read the profiler report's SQLite database and the middle three read the
 performance CSVs; `load_report` opens both, since its whole job is saying which of the
@@ -138,7 +139,28 @@ need the device log's `type` column to pair zone starts with ends; a capture wit
 reports occurrence counts only, and a capture that stopped mid-zone reports how many starts
 and ends failed to pair so a partial total does not read as a complete one.
 
+**An operation id is not the end of the answer.** `top_ops` names the costliest
+operation and `memory_profile` names the one holding the peak — both hand back an id.
+`operation_provenance` turns that id into the two things you need to act on it: the
+arguments it was called with, and the innermost stack frame's file, line, function and
+source line. Frames are recorded innermost first, so the call site is the `ttnn.<op>`
+call in the model code with no guessing about which frame is yours, and it is the same
+frame the operation details panel shows for that operation.
+
+Argument values are capped, with `truncated` and `full_length` set when one was cut —
+most are a few characters, but a `Conv2dConfig` or a tensor repr lands in one. Older
+captures record no stack trace at all; the response says so rather than returning an
+empty call site.
+
+`find_operations` takes `called_from` for the inverse question, which is the one that
+follows: not "what about this operation" but "what about every operation from that
+helper". It matches anywhere in the stack, so a layer module finds the operations it
+called through helpers rather than only those it called directly.
+
 ## Limitations
+
+Accuracy questions are not answerable. Both tensor-comparison tables exist in every
+local capture and are empty in every one, so there is nothing to build a PCC tool on.
 
 Page-level memory questions — fragmentation, or the per-bank detail behind the web
 application's memory plot — are not exposed. That data runs to millions of rows on an
