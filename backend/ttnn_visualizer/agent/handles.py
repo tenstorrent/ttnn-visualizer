@@ -99,10 +99,14 @@ def _resolved_directory(label: str, path: Optional[str]) -> Optional[str]:
 # because `agent.operations` imports this module; it has to stay in step with
 # the queries those tools actually run.
 TOOL_TABLES: Dict[str, frozenset] = {
-    # `called_from` reads `stack_traces`, so the tool needs it declared even though
-    # the name search alone does not. Omitting it advertised a filter that failed
-    # with a raw `no such table`.
-    "find_operations": frozenset({"operations", "stack_traces"}),
+    # Not `stack_traces`, even though `called_from` reads it: the raw `no such
+    # table` that justified requiring it cannot happen any more, because
+    # `query_operation_ids_by_stack_trace` and `query_stack_traces` each guard for
+    # the table now. Requiring it withdrew the name search from a capture that can
+    # answer it, which is the opposite of the call made for `operation_provenance`
+    # below — and that call is the better one. A `called_from` search on a capture
+    # with no traces says so in its caveat instead.
+    "find_operations": frozenset({"operations"}),
     "memory_profile": frozenset({"buffers", "operations"}),
     "operation_detail": frozenset(
         {"operations", "buffers", "tensors", "input_tensors", "output_tensors"}

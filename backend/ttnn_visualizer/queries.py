@@ -363,16 +363,38 @@ class DatabaseQueries:
         if not self._check_table_exists("stack_traces"):
             return []
         filters = self.merge_rank_filter("stack_traces", {}, rank)
+        # Escaped, because the caller passes a substring and `LIKE` reads a pattern.
+        # `_` matches any single character and it is in every Python function name,
+        # so `run_downsample_if_req` also matched `runXdownsampleYifZreq`; a needle
+        # of `%` matched every operation while the response still named the filter.
+        escaped = (
+            needle.lower().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        )
         query = (
             "SELECT DISTINCT operation_id FROM stack_traces "
-            "WHERE lower(stack_trace) LIKE ?"
+            "WHERE lower(stack_trace) LIKE ? ESCAPE '\\'"
         )
-        params: List[Any] = [f"%{needle.lower()}%"]
+        params: List[Any] = [f"%{escaped}%"]
         if "rank" in filters:
             query += " AND rank = ?"
             params.append(filters["rank"])
         rows = self.query_runner.execute_query(query, params)
         return [int(row[0]) for row in rows if row[0] is not None]
+
+    def report_records_stack_traces(self) -> bool:
+        """Whether this capture holds any stack trace at all.
+
+        Lets a caller tell "no operation came from there" apart from "this capture
+        cannot say", which are different answers to a `called_from` search. An
+        ``EXISTS`` rather than a count: the question is only whether the table has
+        a row, and the column is the largest text in the report.
+        """
+        if not self._check_table_exists("stack_traces"):
+            return False
+        rows = self.query_runner.execute_query(
+            "SELECT EXISTS(SELECT 1 FROM stack_traces WHERE stack_trace IS NOT NULL)"
+        )
+        return bool(rows and rows[0][0])
 
     def report_has_tensor_size_column(self) -> bool:
         """

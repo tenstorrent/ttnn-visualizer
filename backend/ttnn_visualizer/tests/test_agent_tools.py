@@ -145,11 +145,8 @@ class TestReportInventory:
 
         loaded = load_report(ReportRegistry(), profiler_path=str(profiler))
 
-        # `find_operations` needs `stack_traces` for `called_from`, so a capture
-        # holding only `operations` can answer nothing here.
-        assert loaded["answerable"] == []
+        assert loaded["answerable"] == ["find_operations"]
         assert {
-            "find_operations",
             "memory_profile",
             "operation_detail",
             "tensor_flow",

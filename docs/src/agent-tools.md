@@ -44,9 +44,10 @@ server needs no database and no running application.
 | `tensor_flow` | Which operation produced a tensor and which ones consumed it. |
 | `operation_provenance` | What one operation was called with, and where in the model code it came from. |
 
-The last four read the profiler report's SQLite database and the middle three read the
-performance CSVs; `load_report` opens both, since its whole job is saying which of the
-others apply. A capture can carry either, both, or — as far as these tools are concerned —
+`top_ops`, `zone_timings` and `diff_reports` read the performance CSVs; the five
+operation tools — `find_operations`, `operation_detail`, `memory_profile`,
+`tensor_flow` and `operation_provenance` — read the profiler report's SQLite database;
+`load_report` opens both, since its whole job is saying which of the others apply. A capture can carry either, both, or — as far as these tools are concerned —
 neither, which is what makes `load_report`'s answer worth reading first.
 
 Call `load_report` first. It reports what is answerable rather than making you discover it
@@ -54,8 +55,8 @@ one failed call at a time, because the report kinds are independent: a performan
 capture has no operation graph and no tensor data, and a report with no device profiler log
 cannot answer `zone_timings`. Each database tool is checked against the tables it actually
 reads, so a truncated capture that holds `operations` but not `buffers` is reported as
-answering `find_operations` and nothing else, rather than advertising four tools and
-failing three of them.
+answering `find_operations` and nothing else, rather than advertising every tool and
+failing most of them.
 
 ## What the answers mean
 
@@ -139,11 +140,14 @@ need the device log's `type` column to pair zone starts with ends; a capture wit
 reports occurrence counts only, and a capture that stopped mid-zone reports how many starts
 and ends failed to pair so a partial total does not read as a complete one.
 
-**An operation id is not the end of the answer.** `top_ops` names the costliest
-operation and `memory_profile` names the one holding the peak — both hand back an id.
-`operation_provenance` turns that id into the two things you need to act on it: the
-arguments it was called with, and the innermost stack frame's file, line, function and
-source line. Frames are recorded innermost first, so the call site is the `ttnn.<op>`
+**An operation id is not the end of the answer.** `memory_profile` names the operation
+holding the peak, and `operation_provenance` turns that id into the two things you need
+to act on it: the arguments it was called with, and the innermost stack frame's file,
+line, function and source line.
+
+`top_ops` and `diff_reports` name an operation too, but their `id` is a row of the
+performance CSV and does not belong here — see the id-space note above. Cross by
+searching for the name with `find_operations`, which returns database ids. Frames are recorded innermost first, so the call site is the `ttnn.<op>`
 call in the model code with no guessing about which frame is yours, and it is the same
 frame the operation details panel shows for that operation.
 

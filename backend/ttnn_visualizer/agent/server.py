@@ -156,10 +156,12 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
                     "called_from": {
                         "type": "string",
                         "description": (
-                            "Case-insensitive substring of the call stack: a file "
-                            "name or a function, e.g. 'run_downsample_if_req'. "
-                            "Matches anywhere in the stack, so a layer module finds "
-                            "the operations it called through helpers."
+                            "Case-insensitive substring of the recorded stack "
+                            "trace, e.g. 'run_downsample_if_req'. Matched against "
+                            "the whole trace text -- frames and the source lines "
+                            "under them -- so a layer module finds the operations "
+                            "it called through helpers, and a needle that names a "
+                            "call also matches traces that merely show it."
                         ),
                     },
                     "limit": _LIMIT_SCHEMA,

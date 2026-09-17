@@ -1025,7 +1025,10 @@ class TestOperationProvenance:
 
         assert result["call_site"]["function"] == "fn0"
         assert len(result["frames"]) == 5
-        # The untruncated chain, so the cap is detectable.
+        # What was returned and what the trace holds, which differ exactly when the
+        # cap bound. Asserting only `chain_length` let both fields be the same
+        # expression, so the cap the field exists to expose was invisible.
+        assert result["returned_frames"] == 5
         assert result["chain_length"] == 29
 
     def test_a_null_argument_value_is_not_an_empty_string(self, loaded):
@@ -1044,7 +1047,7 @@ class TestOperationProvenance:
         assert argument["recorded"] is False
 
 
-class TestFramePariy:
+class TestFrameParity:
     """`_parse_frames` against the rule `src/functions/stackTraceSource.ts` applies.
 
     The frontend takes the first `File "..."` and the first `line N,` for the
@@ -1221,6 +1224,89 @@ class TestFindOperations:
         )
 
         assert 3 not in [op["operation_id"] for op in result["operations"]]
+
+    def test_an_absent_table_does_not_refuse_a_ranked_report(self, loaded):
+        """A table that is absent holds no rows, so there is nothing to attribute
+        to the wrong rank. Treating it as "a table without `rank`" refused every
+        call to a tool that was advertised and would have answered."""
+        sql = """
+CREATE TABLE operations (
+    operation_id int, name text, duration float, rank int NOT NULL DEFAULT 0
+);
+CREATE TABLE operation_arguments (
+    operation_id int, name text, value text, rank int NOT NULL DEFAULT 0
+);
+INSERT INTO operations VALUES (1, 'ttnn.conv2d', 1.0, 0), (1, 'ttnn.conv2d', 1.0, 1);
+INSERT INTO operation_arguments VALUES (1, 'dim', '-1', 0), (1, 'dim', '-2', 1);
+"""
+        registry, handle = loaded(sql, name="ranked-notable")
+
+        result = agent_operations.operation_provenance(registry, handle, 1, rank=0)
+
+        assert result["argument_count"] == 1
+        assert result["arguments"][0]["value"] == "-1"
+        assert "recorded no stack trace" in result["caveat"]
+
+    def test_a_capture_with_no_traces_says_so_rather_than_answering_zero(self, loaded):
+        """8 of 86 local captures record no trace at all. A bare `match_count: 0`
+        with the filter echoed back reads as "no operation came from there", when
+        the honest answer is that the capture cannot say. `operation_provenance`
+        already draws this distinction for a single operation."""
+        sql = _REPORT_SQL + (
+            "CREATE TABLE operation_arguments (operation_id int, name text, value text);"
+            "CREATE TABLE stack_traces (operation_id int, stack_trace text);"
+        )
+        registry, handle = loaded(sql, name="notraces")
+
+        result = agent_operations.find_operations(
+            registry, handle, called_from="run_downsample_if_req"
+        )
+
+        assert result["match_count"] == 0
+        assert "records no stack traces" in result["caveat"]
+        assert "not evidence" in result["caveat"]
+
+        # And a name search on the same capture is unaffected, which is why the
+        # tool does not require the table.
+        assert agent_operations.find_operations(registry, handle)["match_count"] == 3
+
+    def test_a_capture_without_the_table_says_the_same_thing(self, loaded):
+        """Empty table and absent table are the same fact to a caller — the
+        capture records no call sites — and both must reach the agent as a caveat
+        rather than as a bare zero or a raw `no such table`."""
+        registry, handle = loaded(_REPORT_SQL, name="notable")
+
+        result = agent_operations.find_operations(
+            registry, handle, called_from="run_downsample_if_req"
+        )
+
+        assert result["match_count"] == 0
+        assert "records no stack traces" in result["caveat"]
+
+    def test_the_needle_is_a_substring_not_a_like_pattern(self, loaded):
+        """`_` matches any single character in `LIKE`, and it is in every Python
+        function name, so `run_downsample_if_req` also matched
+        `runXdownsampleYifZreq`. A needle of `%` matched every operation while the
+        response still named the filter."""
+        sql = _PROVENANCE_SQL.replace(
+            "INSERT INTO stack_traces VALUES",
+            "INSERT INTO stack_traces VALUES"
+            " (7, '  File \"/m/other.py\", line 1, in runXdownsampleYifZreq\n    x()\n'),",
+            1,
+        ).replace(
+            "INSERT INTO operations VALUES",
+            "INSERT INTO operations VALUES (7, 'ttnn.other', 0.1),",
+            1,
+        )
+        registry, handle = loaded(sql, name="prov-like")
+
+        exact = agent_operations.find_operations(
+            registry, handle, called_from="run_downsample_if_req"
+        )
+        wildcard = agent_operations.find_operations(registry, handle, called_from="%")
+
+        assert [op["operation_id"] for op in exact["operations"]] == [2]
+        assert wildcard["match_count"] == 0
 
     def test_the_duration_is_labelled_as_host_time(self, loaded):
         """`operations.duration` is host wall time; `top_ops` answers the device

@@ -179,7 +179,16 @@ def _refuse_unattributable(
     """
     if scope.rank is None or len(scope.ranks) <= 1:
         return
-    unfiltered = [table for table in tables if not queries.table_has_rank_column(table)]
+    # A table that is absent holds no rows, so there is nothing to attribute to the
+    # wrong rank. Treating it as "a table without `rank`" refused every call to a
+    # tool that was advertised as answerable and would have answered — the
+    # arguments, plus the caveat saying no call site was recorded.
+    unfiltered = [
+        table
+        for table in tables
+        if queries._check_table_exists(table)
+        and not queries.table_has_rank_column(table)
+    ]
     if unfiltered:
         raise ValueError(
             f"this report carries `rank` on `operations` but not on "
@@ -328,9 +337,16 @@ def operation_provenance(
 ) -> Dict[str, object]:
     """What an operation was called with, and where in the model code it came from.
 
-    The other tools answer with an operation id -- `top_ops` names the costliest,
-    `memory_profile` names the one holding the peak -- and nothing turned that id
-    into something actionable in the code being edited. This is that step. #2021
+    Takes the profiler database's `operation_id`, the same one `memory_profile`,
+    `operation_detail` and `find_operations` use -- *not* the `id` from `top_ops`
+    or `diff_reports`, which number rows of the performance CSV. The two are small
+    integers in overlapping ranges, so passing a CSV row number here does not
+    refuse; it answers about a different operation. `find_operations` is how to
+    cross from a name to a database id.
+
+    This is the step that was missing: `memory_profile` names the operation holding
+    the peak, and nothing turned that id into something actionable in the code
+    being edited. #2021
     """
     instance = registry.get(handle)
     with _profiler_db(instance) as queries:
@@ -372,6 +388,7 @@ def operation_provenance(
     raw_trace = (traces[0].stack_trace or "") if traces else ""
     frames = _parse_frames(raw_trace)
     cap = bounded(limit)
+    chain = frames[1 : cap + 1]
     result: Dict[str, object] = {
         "handle": handle,
         "operation_id": operation.operation_id,
@@ -397,11 +414,13 @@ def operation_provenance(
         # The chain outward, without repeating the call site, and capped: a real
         # trace runs to 43 frames of which 31 were the pytest harness that invoked
         # the model, which is context spent on the opposite of what was asked.
-        "frames": frames[1 : cap + 1],
-        # Counts the chain this response returned, so comparing it against
-        # `len(frames)` detects the cap. `call_site` is reported separately and is
-        # not in either number.
-        "returned_frames": max(len(frames) - 1, 0),
+        "frames": chain,
+        # `returned_frames` counts what this response holds and `chain_length` what
+        # the trace holds, so the two differ exactly when the cap bound. They were
+        # the same expression, which made the cap invisible and the comment here
+        # claim the opposite of what the field did. `call_site` is reported
+        # separately and is in neither number.
+        "returned_frames": len(chain),
         "chain_length": max(len(frames) - 1, 0),
         **scope.as_response(),
         **_caveats(scope),
@@ -455,8 +474,15 @@ def find_operations(
         # frames too, which is the shape of a model built out of layer modules.
         # Matched in SQL, because the traces are the largest text in the report.
         from_origin: Optional[Set[int]] = None
+        no_traces_recorded = False
         if origin:
             _refuse_unattributable(queries, scope, "stack_traces")
+            # Asked before the search, so a capture that records no call sites can
+            # be told apart from one where nothing matched. `operation_provenance`
+            # already says this for a single operation; a bare `match_count: 0`
+            # here, with the filter echoed back, reads as evidence that no
+            # operation came from that helper.
+            no_traces_recorded = not queries.report_records_stack_traces()
             from_origin = set(
                 queries.query_operation_ids_by_stack_trace(origin, rank=scope.rank)
             )
@@ -472,7 +498,7 @@ def find_operations(
         ]
 
     cap = bounded(limit)
-    return {
+    result: Dict[str, object] = {
         "handle": handle,
         "name_contains": name_contains or None,
         "called_from": called_from or None,
@@ -492,6 +518,14 @@ def find_operations(
         **scope.as_response(),
         **_caveats(scope),
     }
+    if no_traces_recorded:
+        result["caveat"] = _joined(
+            result.get("caveat"),
+            "This capture records no stack traces, so `called_from` can match "
+            "nothing. An empty result here is not evidence that no operation came "
+            "from there.",
+        )
+    return result
 
 
 def operation_detail(
@@ -880,8 +914,8 @@ def _caveats(scope: RankScope, devices: Optional[Set[int]] = None) -> Dict[str, 
 
 __all__ = [
     "BUFFER_SIZE_UNIT",
-    "MAX_ARGUMENT_VALUE_CHARS",
     "BUFFER_TYPE_NAMES",
+    "MAX_ARGUMENT_VALUE_CHARS",
     "RankScope",
     "TENSOR_SIZE_UNIT",
     "ProfilerDatabaseMissingError",

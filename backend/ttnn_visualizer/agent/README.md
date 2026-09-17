@@ -56,7 +56,7 @@ so everything numeric goes through `_as_number` rather than being compared direc
 **The call-site parse has a second implementation.** `_parse_frames` must agree with
 `src/functions/stackTraceSource.ts`, which takes the first `File "..."` and the first
 `line N` for the operation details panel — two answers to "where is this op from" that
-disagreed would be worse than one. `TestFramePariy` pins where they agree and, for the
+disagreed would be worse than one. `TestFrameParity` pins where they agree and, for the
 inputs where the frontend's looser regexes answer differently, which answer this side
 gives. They diverge only on a quote inside the path or the function name, which
 CPython does not write for ordinary code; on 15,374 real traces there is no difference.
