@@ -11,6 +11,8 @@
  * #1976
  */
 
+import { shortOperationName } from './opGraphOpNames';
+
 /** Roles a span can be identified as. Ordered by classification priority. */
 export enum OpSemanticRole {
     ATTENTION = 'attention',
@@ -53,13 +55,6 @@ export interface OpRoleSourceOperation {
      */
     fusedActivation?: string;
 }
-
-/**
- * Anchors match on the name's leaf: ResNet arrives as
- * `ttnn.experimental.quasar.conv2d`, so an exact-string table misses whole
- * architectures.
- */
-const leafNameOf = (name: string): string => name.slice(name.lastIndexOf('.') + 1);
 
 /**
  * A span this large does not mean the layer is big — it means the partition failed,
@@ -306,7 +301,9 @@ const classifySpan = (anchorLeaves: readonly string[]): SpanClassification | nul
  * delimiters are already unambiguous and give each op exactly one owner.
  */
 export const detectOpRoleGroups = (operations: readonly OpRoleSourceOperation[]): OpRoleGroup[] => {
-    const leaves = operations.map((operation) => leafNameOf(operation.name));
+    // Anchors match the leaf: ResNet arrives as `ttnn.experimental.quasar.conv2d`,
+    // so an exact-string table on the full name misses whole architectures.
+    const leaves = operations.map((operation) => shortOperationName(operation.name));
     const fusedActivations = operations.map((operation) => operation.fusedActivation);
     const delimiters = delimitersFor(leaves);
 

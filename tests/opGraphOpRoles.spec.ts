@@ -12,6 +12,7 @@ import {
 } from '../src/components/operation-graph/opGraphOpRoles';
 import { DEALLOCATE_OP_NAME_LIST } from '../src/definitions/Deallocate';
 import bgeM3 from './data/opRoles/bge_m3.json';
+import cppNamespaced from './data/opRoles/cpp_namespaced.json';
 import moe from './data/opRoles/moe.json';
 import resnet50 from './data/opRoles/resnet50.json';
 import sentenceBert from './data/opRoles/sentence_bert.json';
@@ -515,6 +516,57 @@ describe('detectOpRoleGroups', () => {
 
         it('returns nothing for an empty graph', () => {
             expect(detectOpRoleGroups([])).toHaveLength(0);
+        });
+    });
+
+    describe('names spelled with C++ namespaces', () => {
+        // Reports arrive in both spellings, so a rule that knows only `.` stops matching
+        // on half the corpus — which is what left a `::` report with no layers. #1990
+        const respell = (operations: readonly OpRoleSourceOperation[]): OpRoleSourceOperation[] =>
+            operations.map((candidate) => ({ ...candidate, name: candidate.name.replace(/\./g, '::') }));
+
+        it.each([
+            ['bge_m3', bgeM3.operations],
+            ['sentence_bert', sentenceBert.operations],
+            ['resnet50', resnet50.operations],
+            ['moe', moe.operations],
+        ])('groups %s identically whichever separator the report uses', (_label, operations) => {
+            // Identity, not a count: namespace-agnostic anchors must not move a single
+            // boundary, role or confidence when only the separator changes.
+            expect(detectOpRoleGroups(respell(operations))).toEqual(detectOpRoleGroups(operations));
+        });
+
+        it('reads an anchor through its namespace', () => {
+            // The `it.each` above fails on a dot-only split as a diff over dozens of
+            // groups; this names the case #1990 was reported with.
+            const groups = detectOpRoleGroups([
+                operation(1, 'ttnn::transformer::scaled_dot_product_attention'),
+                operation(2, 'ttnn::layer_norm'),
+            ]);
+
+            expect(groups).toHaveLength(1);
+            expect(groups[0].role).toBe(OpSemanticRole.ATTENTION);
+            expect(groups[0].anchorName).toBe('scaled_dot_product_attention');
+        });
+    });
+
+    describe('a device-op-level capture (graph_report_device_ops)', () => {
+        const CONV_DEVICE_OP = 'Conv2dDeviceOperation';
+        // A window small enough to clear `MIN_LAYER_SPAN_ALLOWANCE`, so the span reaches
+        // classification instead of being rejected for covering the whole graph.
+        const CLASSIFIABLE_WINDOW = cppNamespaced.operations.slice(149, 181);
+
+        it('matches no anchor against real C++ device-op names', () => {
+            // The conv ops are the risk: widening an anchor to catch a
+            // `Conv2dDeviceOperation` spelling would claim conv blocks here.
+            expect(CLASSIFIABLE_WINDOW.filter((candidate) => candidate.name === CONV_DEVICE_OP)).not.toHaveLength(0);
+            expect(detectOpRoleGroups(CLASSIFIABLE_WINDOW)).toHaveLength(0);
+        });
+
+        it('reports no layers for the capture as a whole', () => {
+            // What a user sees on this report. Insensitive to the anchor tables by
+            // itself — the whole-graph span is rejected on size before they are read.
+            expect(detectOpRoleGroups(cppNamespaced.operations)).toHaveLength(0);
         });
     });
 

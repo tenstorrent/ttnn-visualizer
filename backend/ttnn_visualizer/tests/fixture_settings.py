@@ -15,8 +15,20 @@ from typing import Any, Dict
 
 from ttnn_visualizer.settings import (
     _DEFAULT_SESSION_MAX_UPLOADED_REPORTS,
+    DEFAULT_SECRET_KEY,
+    MIN_HOSTED_SECRET_KEY_BYTES,
     DefaultConfig,
     _build_allowed_origins,
+)
+
+# The hosted validator needs two properties of this value, so both are named here
+# rather than encoded in a literal: it must not be the development default, and it must
+# clear the byte floor once trimmed. Composing it from ``DEFAULT_SECRET_KEY`` keeps the
+# first true if the default changes, and the pad keeps the second true if the floor
+# rises past the prefix — the staleness the superseded "at-least-32-bytes" literal in
+# this slot demonstrated by surviving #2003 with nothing failing. See #2006.
+HOSTED_TEST_SECRET_KEY = f"test-secret-key-that-is-not-{DEFAULT_SECRET_KEY}".ljust(
+    MIN_HOSTED_SECRET_KEY_BYTES, "x"
 )
 
 # Settings an exported environment variable would otherwise reach through
@@ -83,7 +95,7 @@ def base_test_settings(tmpdir: str, **overrides: Any) -> Dict[str, Any]:
         "TESTING": True,
         "SQLALCHEMY_DATABASE_URI": f"sqlite:///{Path(tmpdir) / 'app.db'}",
         "SERVER_MODE": True,
-        "SECRET_KEY": "test-secret-key-with-at-least-32-bytes",
+        "SECRET_KEY": HOSTED_TEST_SECRET_KEY,
         "USE_WEBSOCKETS": True,
         "TT_METAL_HOME": None,
         "MALWARE_SCANNER": None,

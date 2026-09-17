@@ -396,7 +396,7 @@ describe('opGraphLayoutWorker', () => {
 
             send(build(1, true));
             drain();
-            send(build(2, true, 1, [], ['block:0:2']));
+            send(build(2, true, 1, [], ['block:2']));
             drain();
 
             expect(buildOpGraph).toHaveBeenCalledTimes(2);
@@ -408,9 +408,9 @@ describe('opGraphLayoutWorker', () => {
             const send = await loadWorker();
             send(setGraph(1));
 
-            send(build(1, true, 1, [], ['block:0:2']));
+            send(build(1, true, 1, [], ['block:2']));
             drain();
-            send(build(2, true, 1, [], ['block:0:2', 'block:0:4']));
+            send(build(2, true, 1, [], ['block:2', 'block:4']));
             drain();
 
             expect(buildOpGraph).toHaveBeenCalledTimes(2);
@@ -420,9 +420,9 @@ describe('opGraphLayoutWorker', () => {
             const send = await loadWorker();
             send(setGraph(1));
 
-            send(build(1, true, 1, [], ['block:0:2', 'block:0:4']));
+            send(build(1, true, 1, [], ['block:2', 'block:4']));
             drain();
-            send(build(2, true, 1, [], ['block:0:4', 'block:0:2']));
+            send(build(2, true, 1, [], ['block:4', 'block:2']));
             drain();
 
             expect(buildOpGraph).toHaveBeenCalledTimes(1);
@@ -434,7 +434,7 @@ describe('opGraphLayoutWorker', () => {
 
             send(build(1, true));
             drain();
-            send(build(2, true, 1, [], ['block:0:2']));
+            send(build(2, true, 1, [], ['block:2']));
             drain();
 
             expect(buildOpGraph.mock.calls[0][1].detectedBlocks).toBe(buildOpGraph.mock.calls[1][1].detectedBlocks);
@@ -444,11 +444,11 @@ describe('opGraphLayoutWorker', () => {
             const send = await loadWorker();
             send(setGraph(1));
 
-            send(build(1, true, 1, [], ['block:0:2']));
+            send(build(1, true, 1, [], ['block:2']));
             drain();
-            send(build(2, true, 1, [], ['block:0:4']));
+            send(build(2, true, 1, [], ['block:4']));
             drain();
-            send(build(3, true, 1, [], ['block:0:2']));
+            send(build(3, true, 1, [], ['block:2']));
             drain();
 
             expect(buildOpGraph).toHaveBeenCalledTimes(2);
@@ -481,7 +481,7 @@ describe('opGraphLayoutWorker', () => {
 
             send(build(1, true));
             drain();
-            send(build(2, true, 1, [], ['block:0:2']));
+            send(build(2, true, 1, [], ['block:2']));
             drain();
 
             expect(collectCandidateEdges).toHaveBeenCalledTimes(1);

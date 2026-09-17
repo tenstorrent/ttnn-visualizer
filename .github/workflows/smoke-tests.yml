@@ -126,3 +126,115 @@ jobs:
           # Also kill any ttnn-visualizer processes that might be running
           pkill -f "ttnn-visualizer" 2>/dev/null || true
           pkill -f "gunicorn.*ttnn_visualizer" 2>/dev/null || true
+
+  hosted-smoke-test:
+    # `smoke-test` above starts the wheel with no environment, so SERVER_MODE is false
+    # and the hosted boot path has never been exercised end to end in CI. That is the
+    # path that broke in v0.102.0 (#2004): every gunicorn worker raised at import and
+    # the arbiter halted, and nothing here would have noticed.
+    #
+    # This cannot catch a requirement that existing *deployments* fail — CI supplies a
+    # conforming value by construction, and that limit is the reason the registry and
+    # `--check-config` exist. What it does catch is a hosted-only boot regression, and
+    # it pins the preflight contract a deploy gate depends on: exit 0 means it starts.
+    name: Hosted Smoke Test
+    runs-on: ubuntu-latest
+    needs: build-wheel
+
+    env:
+      SERVER_MODE: 'true'
+      # Hosted event logs are written under /data/usage, which a runner has no reason
+      # to provide. Recording is orthogonal to the boot path under test, so switch it
+      # off rather than provisioning a directory the test does not assert on.
+      USAGE_RECORDING_DISABLED: 'true'
+      LAUNCH_BROWSER_ON_START: 'false'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Read .python-version
+        id: python
+        run: echo "PYTHON_VERSION=$(cat .python-version)" >> $GITHUB_OUTPUT
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v10.0.1
+        with:
+          python-version: ${{ steps.python.outputs.PYTHON_VERSION }}
+          enable-cache: true
+
+      - name: Download wheel artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: python-wheel
+          path: dist/
+
+      - name: Install wheel
+        run: |
+          uv venv /tmp/hosted-venv
+          uv pip install --python /tmp/hosted-venv dist/*.whl
+
+      - name: Generate a conforming SECRET_KEY
+        run: |
+          set -euo pipefail
+          echo "SECRET_KEY=$(python3 -c 'import secrets; print(secrets.token_urlsafe(48))')" >> "${GITHUB_ENV}"
+
+      - name: Preflight accepts a conforming hosted environment
+        run: |
+          set -euo pipefail
+          /tmp/hosted-venv/bin/ttnn-visualizer --check-config
+
+      - name: Preflight refuses an environment the release cannot start in
+        run: |
+          set -euo pipefail
+          # Deliberately under the floor. GitHub runs this as `bash -e`, so the
+          # expected-to-fail command has to sit in an `if` condition — as a bare
+          # statement it aborts the step before its exit code can be read, and a
+          # `set -uo pipefail` line does not clear the `-e` the shell was invoked with.
+          #
+          # If this command ever succeeds the preflight contract is broken, and a deploy
+          # gate reading the exit code would wave through a deployment that cannot boot.
+          if SECRET_KEY=short /tmp/hosted-venv/bin/ttnn-visualizer --check-config; then
+            echo "::error::--check-config exited 0 for an environment that cannot start."
+            exit 1
+          fi
+          echo "✅ Preflight rejected the non-conforming environment"
+
+      - name: Start ttnn-visualizer in hosted posture
+        run: |
+          set -euo pipefail
+          /tmp/hosted-venv/bin/ttnn-visualizer &
+          echo "SERVER_PID=$!" >> "${GITHUB_ENV}"
+
+          echo "Waiting for the hosted server to start..."
+          for i in {1..30}; do
+            if curl -fsS http://localhost:8000 >/dev/null 2>&1; then
+              echo "✅ Hosted server is serving"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "::error::Hosted server failed to start within 30 seconds."
+          exit 1
+
+      - name: Local-only endpoints are refused under SERVER_MODE
+        run: |
+          set -euo pipefail
+          # Boots *and* boots into the right posture. A hosted start that silently fell
+          # back to local would pass the step above while un-gating every @local_only
+          # endpoint, which is the failure worth catching here.
+          status="$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8000/api/remote/ssh-config-hosts)"
+          if [ "${status}" != "403" ]; then
+            echo "::error::Expected 403 from a @local_only endpoint under SERVER_MODE, got ${status}."
+            exit 1
+          fi
+          echo "✅ @local_only endpoint returned 403"
+
+      - name: Cleanup
+        if: always()
+        run: |
+          if [ -n "${SERVER_PID:-}" ]; then
+            kill "${SERVER_PID}" 2>/dev/null || true
+          fi
+          pkill -f "ttnn-visualizer" 2>/dev/null || true
+          pkill -f "gunicorn.*ttnn_visualizer" 2>/dev/null || true

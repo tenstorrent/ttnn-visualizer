@@ -73,12 +73,40 @@ const flowTransform: { current: [number, number, number] } = { current: [0, 0, 1
 // branch extends, and it was unobservable. `knownNodeIds` is populated by every
 // delivered graph so `getNode` can tell a live id from a stale one. Hoisted
 // because the `@xyflow/react` factory below is, and it reads them eagerly.
-const { setCenter, setViewport, knownNodeIds } = vi.hoisted(() => ({
+// What the stubbed store answers `getNode` with, at the origin. The movers read
+// the store rather than the rendered array, so a test checking where a node was
+// moved to has to measure against this and not against `lastFlowRender()`.
+const STORE_NODE = { width: 100, height: 40 };
+
+const { setCenter, setViewport, knownNodeIds, flowStoreLag, viewportState } = vi.hoisted(() => ({
     setCenter: vi.fn(() => Promise.resolve()),
     setViewport: vi.fn(() => Promise.resolve()),
     knownNodeIds: new Set<string>(),
+    // Configurable, because a viewport pinned at the origin cannot tell "did not
+    // need to move" apart from "moved wrongly against a stale read" — every graph
+    // intersects the pane there. Twice now the interesting bug has been on the far
+    // side of that line. `setViewport` deliberately does *not* write back to it:
+    // the real one tweens, so an effect on the same commit reads the pre-tween
+    // value, and that lag is the thing under test. #2008
+    viewportState: { current: { x: 0, y: 0, zoom: 0.5 } },
+    // React Flow's store trails `setNodes`, so a `getNode` in an effect that runs on
+    // the same commit answers `undefined`. This harness repopulates `knownNodeIds`
+    // during render, which hides that entirely — code reading `getNode` on entry was
+    // green here and did nothing in the app. Set this to model the lag. #2007
+    flowStoreLag: { isBlind: false },
 }));
 const flowStoreListeners = new Set<(state: { transform: [number, number, number] }) => void>();
+
+// Not 1: a pan writes the viewport's existing zoom back, so a mutant that overwrites
+// the scale is only visible when the existing scale is distinctive. #2007
+const PANNED_ZOOM = 0.5;
+// jsdom measures every element as 0x0, which made `entryViewport` clamp to its floor in
+// every test and the toolbar inset always 0 — so neither the fit nor the inset was
+// under test. These are the shapes the real view has.
+const PANE = { width: 1000, height: 800 };
+const TOOLBAR_HEIGHT = 150;
+const stubRect = (width: number, height: number) =>
+    ({ x: 0, y: 0, top: 0, left: 0, right: width, bottom: height, width, height, toJSON: () => ({}) }) as DOMRect;
 
 vi.mock('@xyflow/react', async () => {
     const { useState, createElement, Fragment } = await import('react');
@@ -93,8 +121,10 @@ vi.mock('@xyflow/react', async () => {
         // block id and its first member id across a fold, and a getNode that
         // answered for any id at all made that fallback unfalsifiable.
         getNode: (id: string) =>
-            knownNodeIds.has(id) ? { id, position: { x: 0, y: 0 }, width: 100, height: 40 } : undefined,
-        getViewport: () => ({ x: 0, y: 0, zoom: 1 }),
+            !flowStoreLag.isBlind && knownNodeIds.has(id)
+                ? { id, position: { x: 0, y: 0 }, width: STORE_NODE.width, height: STORE_NODE.height }
+                : undefined,
+        getViewport: () => ({ ...viewportState.current }),
         setViewport,
     };
     // Stable like `flowApi`: the zoom effect lists the store as a dependency, so
@@ -271,13 +301,14 @@ const sourceFor = (operations: OperationDescription[]) =>
         deviceOperationCount: countDeviceOperations(op),
     }));
 
-const renderGraph = (operations = OPERATION_LIST, perfRows?: PerfOverlaySource[]) => {
+const renderGraph = (operations = OPERATION_LIST, perfRows?: PerfOverlaySource[], operationId?: number) => {
     const view = render(
         <MemoryRouter>
             <OperationGraphReactFlow
                 operationList={operations}
                 perfRows={perfRows}
                 isPerfReportLoaded={perfRows !== undefined}
+                operationId={operationId}
             />
         </MemoryRouter>,
     );
@@ -468,6 +499,13 @@ beforeEach(() => {
     setCenter.mockClear();
     setViewport.mockClear();
     knownNodeIds.clear();
+    flowStoreLag.isBlind = false;
+    viewportState.current = { x: 0, y: 0, zoom: PANNED_ZOOM };
+    vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function measured(this: Element) {
+        return this.classList?.contains('op-graph-toolbar')
+            ? stubRect(PANE.width, TOOLBAR_HEIGHT)
+            : stubRect(PANE.width, PANE.height);
+    });
     harness.setNodes = null;
     harness.setEdges = null;
     harness.onNodeClick = null;
@@ -1153,9 +1191,12 @@ describe('OperationGraphReactFlow critical path rendering', () => {
 describe('OperationGraphReactFlow dim unrelated edges', () => {
     it('flags the container so the stylesheet can dim edges off the selection', () => {
         const { container } = renderGraph();
+        // Dimming is relative to a selection, and entering the graph selects nothing,
+        // so the switch alone cannot raise the flag. #2007
+        fireEvent.click(screen.getByLabelText('Dim unrelated edges'));
         expect(container.querySelector('.op-graph-dim-unrelated-edges')).toBeNull();
 
-        fireEvent.click(screen.getByLabelText('Dim unrelated edges'));
+        emitNodeChanges([{ type: 'select', id: '3', selected: true }]);
 
         expect(container.querySelector('.op-graph-dim-unrelated-edges')).not.toBeNull();
     });
@@ -1163,6 +1204,7 @@ describe('OperationGraphReactFlow dim unrelated edges', () => {
     it('drops the flag when nothing is selected', () => {
         const { container } = renderGraph();
         fireEvent.click(screen.getByLabelText('Dim unrelated edges'));
+        emitNodeChanges([{ type: 'select', id: '3', selected: true }]);
         expect(container.querySelector('.op-graph-dim-unrelated-edges')).not.toBeNull();
 
         act(() => {
@@ -1327,8 +1369,8 @@ describe('OperationGraphReactFlow repeat blocks', () => {
         operation(6, 'suffix', []),
     ];
 
-    const FIRST_BLOCK_ID = 'block:0:2';
-    const SECOND_BLOCK_ID = 'block:0:4';
+    const FIRST_BLOCK_ID = 'block:2';
+    const SECOND_BLOCK_ID = 'block:4';
 
     const deliver = (operations: OperationDescription[], options: Partial<OpGraphBuildOptions> = {}) => {
         act(() => {
@@ -1396,6 +1438,300 @@ describe('OperationGraphReactFlow repeat blocks', () => {
         // Only the op that declared one, and the raw argument string is not forwarded.
         expect(mapped.find((candidate) => candidate.id === 1)?.fusedActivation).toBeUndefined();
         expect(JSON.stringify(mapped)).not.toContain('UnaryWithParam');
+    });
+
+    it('selects nothing when the graph is entered without a named operation', () => {
+        // The fallback that covers an op dropping out between builds also fired when
+        // nothing was selected at all, so entry always selected the first node. #2007
+        renderGraph();
+
+        expect(lastFlowRender().nodes.some((node) => node.selected === true)).toBe(false);
+        expect(document.querySelector('.op-graph-panel')).toBeNull();
+    });
+
+    it('frames the viewport once on entry, choosing a zoom', () => {
+        renderGraph();
+
+        // Keyed on the zoom, not the call count: a pan writes the viewport's existing
+        // zoom back, so only the entry frame writes one it computed.
+        expect(framedZooms()).toEqual([ENTRY_FITTED_ZOOM]);
+    });
+
+    it('frames without consulting getNode, which trails setNodes', () => {
+        // The framing read `getNode` first and silently did nothing on entry, where the
+        // store is still empty — green against a harness that answers, broken in the
+        // app. Framing has to read the array it was handed. #2007
+        flowStoreLag.isBlind = true;
+        renderGraph();
+
+        expect(framedZooms()).toEqual([ENTRY_FITTED_ZOOM]);
+    });
+
+    // The five-op fixture fits the pane, so the fit clamps at 1:1 rather than the floor.
+    const ENTRY_FITTED_ZOOM = 1;
+    // Only the entry frame computes a zoom; every pan writes `PANNED_ZOOM` back.
+    const framedZooms = () =>
+        (setViewport.mock.calls as unknown as [{ zoom: number }][])
+            .map(([viewport]) => viewport.zoom)
+            .filter((zoom) => zoom !== PANNED_ZOOM);
+
+    it('frames on the operation the URL names, not the first node', () => {
+        renderGraph(OPERATION_LIST, undefined, 3);
+
+        // One move, and it is the frame: the pan that used to follow it read the
+        // pre-tween viewport and put the zoom back to whatever it had been. #2007
+        expect(framedZooms()).toEqual([ENTRY_FITTED_ZOOM]);
+        expect(setViewport).toHaveBeenCalledTimes(1);
+    });
+
+    it('holds the viewport across a rebuild when the URL names an operation', () => {
+        // `focusOperation`'s identity changes every build, so the URL effect re-ran and
+        // panned back on every rebuild — against the pre-rebuild layout. #2007
+        renderGraph(OPERATION_LIST, undefined, 3);
+        setViewport.mockClear();
+
+        act(() => {
+            harness.onBuilt?.(
+                buildOpGraph(harness.sourceOperations ?? sourceFor(OPERATION_LIST), {
+                    hideDeallocate: false,
+                    deviceSubgraphs: [],
+                }),
+            );
+        });
+
+        expect(setViewport).not.toHaveBeenCalled();
+    });
+
+    it('pans to the URL operation again after the segment is cleared and renamed', () => {
+        // The latch held the old id when the segment went away, so returning to the same
+        // op in one mount looked already handled and never moved. #2008
+        const { rerender } = renderGraph(OPERATION_LIST, undefined, 3);
+        const atNamed = (id?: number) => (
+            <MemoryRouter>
+                <OperationGraphReactFlow
+                    operationList={OPERATION_LIST}
+                    isPerfReportLoaded={false}
+                    operationId={id}
+                />
+            </MemoryRouter>
+        );
+
+        rerender(atNamed(undefined));
+        setViewport.mockClear();
+        rerender(atNamed(3));
+
+        expect(setViewport).toHaveBeenCalled();
+    });
+
+    it('preserves the zoom on every move that is not entry', () => {
+        // The other half of the policy: a later move may reposition, never rescale.
+        const { rerender } = renderGraph(OPERATION_LIST, undefined, 1);
+        setViewport.mockClear();
+
+        rerender(
+            <MemoryRouter>
+                <OperationGraphReactFlow
+                    operationList={OPERATION_LIST}
+                    isPerfReportLoaded={false}
+                    operationId={5}
+                />
+            </MemoryRouter>,
+        );
+
+        expect(setViewport).toHaveBeenCalled();
+        for (const [viewport] of setViewport.mock.calls as unknown as [{ zoom: number }][]) {
+            expect(viewport.zoom).toBe(PANNED_ZOOM);
+        }
+    });
+
+    it('recenters an already-visible node when the user asks', () => {
+        // The reveal movers are minimal, which is the right policy for the view
+        // moving on its own: they nudge a target to the nearest usable edge and do
+        // nothing once it fits. Recenter went through that path, so the button
+        // either did nothing or shoved the node into a corner. What it promises is
+        // the middle. The already-fits half of that is pinned directly on
+        // `centerPanShift` in opGraphEntryViewport.spec. #2007
+        renderGraph();
+        emitNodeChanges([{ type: 'select', id: '3', selected: true }]);
+
+        const recenter = screen.getByLabelText('Recenter on operation 3');
+        setViewport.mockClear();
+        fireEvent.click(recenter);
+
+        expect(setViewport).toHaveBeenCalledTimes(1);
+        const [viewport] = setViewport.mock.calls[0] as unknown as [{ x: number; y: number; zoom: number }];
+        // Pans only. Recenter is an explicit request to move, not a licence to
+        // rescale: the zoom stays wherever the user left it.
+        expect(viewport.zoom).toBe(PANNED_ZOOM);
+        // The node's centre lands in the middle of the band the toolbar leaves,
+        // rather than the middle of the raw pane.
+        const centreX = (STORE_NODE.width / 2) * PANNED_ZOOM;
+        const centreY = (STORE_NODE.height / 2) * PANNED_ZOOM;
+        expect(viewport.x + centreX).toBeCloseTo(PANE.width / 2, 5);
+        expect(viewport.y + centreY).toBeCloseTo(TOOLBAR_HEIGHT + (PANE.height - TOOLBAR_HEIGHT) / 2, 5);
+    });
+
+    it('holds the viewport across a rebuild', () => {
+        // Every rebuild re-armed the focus, so toggling a filter yanked the viewport
+        // back and reset the zoom, discarding wherever the user had panned. #2007
+        renderGraph();
+        setViewport.mockClear();
+
+        act(() => {
+            harness.onBuilt?.(
+                buildOpGraph(harness.sourceOperations ?? sourceFor(OPERATION_LIST), {
+                    hideDeallocate: false,
+                    deviceSubgraphs: [],
+                }),
+            );
+        });
+
+        expect(setViewport).not.toHaveBeenCalled();
+    });
+
+    it('clears a selection the rebuild dropped rather than choosing another', () => {
+        renderGraph();
+        emitNodeChanges([{ type: 'select', id: '3', selected: true }]);
+        expect(lastFlowRender().nodes.find((node) => node.id === '3')?.selected).toBe(true);
+
+        // An op can go on a rebuild — isolated, or filtered as a deallocate.
+        harness.sourceOperations = sourceFor(OPERATION_LIST.filter((op) => op.id !== 3));
+        act(() => {
+            harness.onBuilt?.(
+                buildOpGraph(harness.sourceOperations ?? [], { hideDeallocate: true, deviceSubgraphs: [] }),
+            );
+        });
+
+        expect(lastFlowRender().nodes.some((node) => node.selected === true)).toBe(false);
+        // Read through the panel too: with the node itself gone, the flow array alone
+        // cannot tell a cleared selection from a selection pointing at nothing.
+        expect(document.querySelector('.op-graph-panel')).toBeNull();
+    });
+
+    it('frames again when the report changes, having survived the remount it never gets', () => {
+        // The latch is a ref and this component is not remounted on a report change, so
+        // the second report opened wherever the first was left. #2007
+        renderGraph();
+        setViewport.mockClear();
+
+        act(() => {
+            getDefaultStore().set(activeProfilerReportAtom, { path: '/reports/second' } as ReportFolder);
+        });
+        act(() => {
+            harness.onBuilt?.(
+                buildOpGraph(harness.sourceOperations ?? sourceFor(OPERATION_LIST), {
+                    hideDeallocate: true,
+                    deviceSubgraphs: [],
+                }),
+            );
+        });
+
+        expect(setViewport).toHaveBeenCalledTimes(1);
+    });
+
+    it('frames the new report without the empty-pane guard writing the old zoom back', () => {
+        // The guard and the entry frame run on the same commit, the guard second.
+        // The frame clears `pendingEntryFrameRef` before returning, so the guard's
+        // check on it passes — and `getViewport` is still pre-tween, so the guard
+        // saw the old viewport, decided the new graph was off screen, and panned
+        // from it, putting the old zoom back over the one the frame chose. Only
+        // visible with the reader panned away, which is why the fixed origin hid
+        // it. #2008
+        renderGraph();
+        viewportState.current = { x: -11861, y: -3000, zoom: PANNED_ZOOM };
+        setViewport.mockClear();
+
+        act(() => {
+            getDefaultStore().set(activeProfilerReportAtom, { path: '/reports/second' } as ReportFolder);
+        });
+        act(() => {
+            harness.onBuilt?.(
+                buildOpGraph(harness.sourceOperations ?? sourceFor(OPERATION_LIST), {
+                    hideDeallocate: true,
+                    deviceSubgraphs: [],
+                }),
+            );
+        });
+
+        const zooms = (setViewport.mock.calls as unknown as [{ zoom: number }][]).map(([viewport]) => viewport.zoom);
+        // One write, and not the stale zoom: the frame picks the entry scale and
+        // nothing may follow it with the pre-tween one.
+        expect(zooms).toHaveLength(1);
+        expect(zooms[0]).not.toBe(PANNED_ZOOM);
+    });
+
+    it('ignores a nodes commit that is not a rebuild, mid-tween', () => {
+        // The other half of the window. React Flow measures the new nodes and
+        // pushes `dimensions` changes for them, so the array is replaced again a
+        // frame or two after mount — still inside `FOCUS_DURATION_MS`, where
+        // `getViewport` is short of where the frame is taking it. A one-shot flag
+        // consumed on the frame's own commit is already spent by then, so the guard
+        // ran and wrote the mid-tween zoom back.
+        //
+        // Driving `setNodes` stands in for that: `applyNodeChanges` is a bare mock,
+        // so `emitNodeChanges` never replaces the array, and array identity is the
+        // only thing this effect keys on. #2008
+        renderGraph();
+        viewportState.current = { x: -11861, y: -3000, zoom: PANNED_ZOOM };
+        setViewport.mockClear();
+
+        act(() => {
+            getDefaultStore().set(activeProfilerReportAtom, { path: '/reports/second' } as ReportFolder);
+        });
+        act(() => {
+            harness.onBuilt?.(
+                buildOpGraph(harness.sourceOperations ?? sourceFor(OPERATION_LIST), {
+                    hideDeallocate: true,
+                    deviceSubgraphs: [],
+                }),
+            );
+        });
+        act(() => {
+            harness.setNodes?.((previous) => [...previous]);
+        });
+
+        const zooms = (setViewport.mock.calls as unknown as [{ zoom: number }][]).map(([viewport]) => viewport.zoom);
+        // Still exactly the frame's write. A measurement commit is not a rebuild and
+        // must not reach the guard at all.
+        expect(zooms).toHaveLength(1);
+        expect(zooms[0]).not.toBe(PANNED_ZOOM);
+    });
+
+    it('pans to a narrowed graph the reader can no longer see', () => {
+        // The other side of the guard above: it must still fire when the rebuild
+        // really does leave an empty pane. A range change lays the new graph out
+        // near the origin while the reader is panned far away, and pinning the
+        // harness viewport at the origin meant no test could tell the guard
+        // working from the guard never running. #2008
+        renderGraph();
+        viewportState.current = { x: -11861, y: -3000, zoom: PANNED_ZOOM };
+        setViewport.mockClear();
+
+        const narrowed = OPERATION_LIST.slice(0, 3);
+        harness.sourceOperations = sourceFor(narrowed);
+        act(() => {
+            harness.onBuilt?.(buildOpGraph(sourceFor(narrowed), { hideDeallocate: true, deviceSubgraphs: [] }));
+        });
+
+        expect(setViewport).toHaveBeenCalledTimes(1);
+        const [viewport] = setViewport.mock.calls[0] as unknown as [{ zoom: number }];
+        // Pans, never rescales: this is not entry.
+        expect(viewport.zoom).toBe(PANNED_ZOOM);
+    });
+
+    it('leaves a graph the reader can still see where it is', () => {
+        // The guard's whole premise. Same rebuild, viewport left at the origin
+        // where the new graph is plainly visible, so nothing may move.
+        renderGraph();
+        setViewport.mockClear();
+
+        const narrowed = OPERATION_LIST.slice(0, 3);
+        harness.sourceOperations = sourceFor(narrowed);
+        act(() => {
+            harness.onBuilt?.(buildOpGraph(sourceFor(narrowed), { hideDeallocate: true, deviceSubgraphs: [] }));
+        });
+
+        expect(setViewport).not.toHaveBeenCalled();
     });
 
     it('holds the viewport on an unroll instead of recentring on the selection', () => {
@@ -1678,7 +2014,12 @@ describe('OperationGraphReactFlow repeat blocks', () => {
         expect(runBuild.mock.calls.at(-1)?.[0]).toEqual(expect.objectContaining({ expandedBlockIds: [] }));
     });
 
-    it('drops the fold decision and member device-op expansion when deallocate hiding changes', () => {
+    it('keeps the fold decision and the expansions when deallocate hiding changes', () => {
+        // #1977 dropped both here, on the grounds that re-running detection would
+        // leave the held ids naming nothing. Sometimes it does — see the renaming
+        // fixture two tests below — but an id that survives keeps its state, and
+        // dropping the decision outright cost a reader their collapse, and their
+        // open device operations, on an unrelated filter. #2015
         const operations = REPEAT_OPERATION_LIST.map((op) =>
             op.id === 2
                 ? withDeviceOperations(op, ['AlphaDeviceOperation', 'BetaDeviceOperation', 'GammaDeviceOperation'])
@@ -1696,10 +2037,23 @@ describe('OperationGraphReactFlow repeat blocks', () => {
         runBuild.mockClear();
         fireEvent.click(screen.getByLabelText('Hide deallocate ops'));
 
-        // Toggling the filter drops the fold decision as well as the expansions, so
-        // the rebuilt graph opens unrolled again rather than folded. #1977
+        const rebuilt = runBuild.mock.calls.at(-1)?.[0] as OpGraphBuildOptions;
+        expect(rebuilt.hideDeallocate).toBe(false);
+        expect(rebuilt.expandedBlockIds).toEqual(unrolled.expandedBlockIds);
+        expect(rebuilt.deviceSubgraphs).toHaveLength(1);
+    });
+
+    it('keeps a fold-all across a deallocate toggle', () => {
+        // The reported case: everything collapsed, an unrelated filter flipped, and
+        // the graph came back fully unrolled. A fold-all is the one decision that
+        // cannot go stale — `[]` names no instance at all. #2015
+        renderFolded();
+        runBuild.mockClear();
+
+        fireEvent.click(screen.getByLabelText('Hide deallocate ops'));
+
         expect(runBuild.mock.calls.at(-1)?.[0]).toEqual(
-            expect.objectContaining({ hideDeallocate: false, deviceSubgraphs: [], expandedBlockIds: undefined }),
+            expect.objectContaining({ hideDeallocate: false, expandedBlockIds: [] }),
         );
     });
 
@@ -1719,6 +2073,138 @@ describe('OperationGraphReactFlow repeat blocks', () => {
         expect(runBuild.mock.calls.at(-1)?.[0]).toEqual(
             expect.objectContaining({ expandedBlockIds: [FIRST_BLOCK_ID] }),
         );
+    });
+
+    // Deallocate first in each repeating unit, so hiding it changes every span's
+    // first member and therefore every instance id. Nothing else in this file
+    // contains a deallocate op, which is why the plumbing tests above cannot see
+    // what a real toggle does to detection. #2015
+    const RENAMING_OPERATION_LIST: OperationDescription[] = [
+        operation(1, 'ttnn.embedding', [2]),
+        operation(2, 'ttnn.deallocate', [3]),
+        operation(3, 'ttnn.linear', [4]),
+        operation(4, 'ttnn.relu', [5]),
+        operation(5, 'ttnn.deallocate', [6]),
+        operation(6, 'ttnn.linear', [7]),
+        operation(7, 'ttnn.relu', [8]),
+        operation(8, 'ttnn.deallocate', [9]),
+        operation(9, 'ttnn.linear', [10]),
+        operation(10, 'ttnn.relu', [11]),
+        operation(11, 'ttnn.softmax', []),
+    ];
+
+    it('keeps an unrolled graph unrolled when the rebuild renames every instance', () => {
+        // The mirror of the reported bug, and the one the fold-set cannot express by
+        // id: "fold all" is `[]` and names nothing, while "unroll all" is a list, so
+        // only it can be lost. Every id here changes across the filter, every held
+        // id misses, and a miss reads as folded — so this came back fully folded,
+        // the opposite of the reader's last instruction. #2015
+        // Fold first: from the unrolled default the decision is still `null`, which
+        // survives any rebuild by itself. The bug needs an explicit set naming every
+        // instance, which is what fold-then-unroll produces.
+        renderFolded(RENAMING_OPERATION_LIST);
+        fireEvent.click(screen.getByRole('button', { name: 'Unroll all repeats' }));
+        const unrolled = (runBuild.mock.calls.at(-1)?.[0] as OpGraphBuildOptions).expandedBlockIds;
+        expect(unrolled).toEqual(expect.arrayContaining(['block:3', 'block:6', 'block:9']));
+
+        runBuild.mockClear();
+        // The post-toggle build: same operations, deallocates shown, so the detector
+        // returns the same three instances under different ids.
+        deliver(RENAMING_OPERATION_LIST, { hideDeallocate: false, expandedBlockIds: unrolled });
+
+        const carried = (runBuild.mock.calls.at(-1)?.[0] as OpGraphBuildOptions).expandedBlockIds;
+        expect(carried).toEqual(expect.arrayContaining(['block:2', 'block:5', 'block:8']));
+        // And the toolbar agrees the graph is unrolled: Unroll all is what goes
+        // disabled when every detected instance is open.
+        expect(screen.getByRole('button', { name: 'Unroll all repeats' })).toBeDisabled();
+    });
+
+    it('costs one extra build and one wrong frame when instances are renamed', () => {
+        // Documents a known limitation rather than asserting the ideal. The
+        // carry-forward corrects the decision in `onBuilt`, which is *after* the
+        // build carrying the stale ids has already been committed — so the reader
+        // gets one frame of the folded graph before the corrected one lands, and
+        // pays two layouts.
+        //
+        // The clean fix is to make unroll-all nameless, the way fold-all is `[]`.
+        // It cannot be a sentinel mapping to `undefined` on the wire, because
+        // `opGraphBuilder.ts:164` folds a weight fan on `!expandedBlocks.has(id)`
+        // with no `hasFoldDecision` guard — so `undefined` would fold every open
+        // fan. The two sets need separating in the build options first, which is a
+        // protocol change. Tracked separately; this test flips when it lands. #2017
+        renderFolded(RENAMING_OPERATION_LIST);
+        fireEvent.click(screen.getByRole('button', { name: 'Unroll all repeats' }));
+        const unrolled = (runBuild.mock.calls.at(-1)?.[0] as OpGraphBuildOptions).expandedBlockIds;
+
+        runBuild.mockClear();
+        deliver(RENAMING_OPERATION_LIST, { hideDeallocate: false, expandedBlockIds: unrolled });
+
+        // The frame the reader actually sees first: folded, because every held id
+        // missed. Five nodes rather than the eleven of the unrolled graph.
+        expect(lastFlowRender().nodes).toHaveLength(5);
+        // And one more build, which converges on the right graph.
+        expect(runBuild).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not turn a partial fold into an unroll-all when instances are renamed', () => {
+        // The carry-forward applies to one decision only. A reader who unrolled some
+        // instances chose those specific ones, so a rebuild must not read that as
+        // "unroll everything" — the ids that survive keep their state and nothing
+        // else is invented.
+        renderFolded(RENAMING_OPERATION_LIST);
+        fireEvent.click(screen.getAllByRole('button', { name: 'Unroll 2 operations' })[0]);
+        const partial = (runBuild.mock.calls.at(-1)?.[0] as OpGraphBuildOptions).expandedBlockIds;
+        expect(partial).toHaveLength(1);
+
+        runBuild.mockClear();
+        deliver(RENAMING_OPERATION_LIST, { hideDeallocate: false, expandedBlockIds: partial });
+
+        // Untouched, which is visible as the absence of a rebuild: the carry-forward
+        // returns the same set by reference for every decision but unroll-all, so a
+        // partial fold cannot even provoke a spurious layout.
+        expect(runBuild).not.toHaveBeenCalled();
+    });
+
+    it('keeps the fold decision when weight-load collapsing is toggled', () => {
+        // A regression pin, not evidence: this path never dropped the decision and
+        // never could have needed to. Detection is keyed on
+        // `${sourceVersion}:${hideDeallocate}:${grouping}` in the layout worker, so
+        // weight-load collapsing never reaches the detector and cannot rename an
+        // instance — measured: the same ids either side of the switch.
+        renderFolded();
+        runBuild.mockClear();
+
+        fireEvent.click(screen.getByLabelText('Collapse weight loads'));
+
+        expect(runBuild.mock.calls.at(-1)?.[0]).toEqual(
+            expect.objectContaining({ collapseWeightLoads: false, expandedBlockIds: [] }),
+        );
+    });
+
+    it('keeps the fold decision when the operation range narrows', () => {
+        // A range change replaces the node set outright, which is a stronger rebuild
+        // than the weight-load filter. Asserting the option alone would pass even if the prop
+        // were ignored, so the narrowing is pinned too: the view must have re-derived
+        // a shorter source *and* kept the fold.
+        const { rerender } = renderFolded();
+        const wholeGraph = harness.sourceOperations?.length ?? 0;
+        expect(wholeGraph).toBe(REPEAT_OPERATION_LIST.length);
+        runBuild.mockClear();
+
+        const narrowed = REPEAT_OPERATION_LIST.slice(0, 5);
+        rerender(
+            <MemoryRouter>
+                <OperationGraphReactFlow
+                    operationList={narrowed}
+                    isPerfReportLoaded={false}
+                />
+            </MemoryRouter>,
+        );
+        // The narrowed graph, delivered, so detection really re-runs against it.
+        deliver(narrowed, { expandedBlockIds: [] });
+
+        expect(harness.sourceOperations).toHaveLength(narrowed.length);
+        expect(runBuild.mock.calls.at(-1)?.[0]).toEqual(expect.objectContaining({ expandedBlockIds: [] }));
     });
 
     it('forgets unrolled instances when the profiler report changes', () => {
@@ -1747,6 +2233,30 @@ describe('OperationGraphReactFlow repeat blocks', () => {
         operation(5, 'ttnn.gelu', [6]),
         operation(6, 'ttnn.layer_norm', []),
     ];
+
+    it('keeps layers collapsed when deallocate hiding is toggled', () => {
+        // The reported path exactly: pick Layers — which folds what it detects —
+        // then flip an unrelated filter. Both halves of the complaint followed from
+        // the reset: nothing stayed collapsed, and Layers could not re-collapse it
+        // because re-picking the active mode is deliberately not a second ask
+        // (#1977), so recovering meant a round trip through Repeats. #2015
+        renderGraph(LAYER_OPERATION_LIST);
+        fireEvent.click(screen.getByRole('button', { name: 'Group by layers' }));
+        const folded = runBuild.mock.calls.at(-1)?.[0] as OpGraphBuildOptions;
+        expect(folded).toEqual(expect.objectContaining({ grouping: OpGraphGrouping.LAYERS, expandedBlockIds: [] }));
+        deliver(LAYER_OPERATION_LIST, { grouping: OpGraphGrouping.LAYERS, expandedBlockIds: [] });
+
+        runBuild.mockClear();
+        fireEvent.click(screen.getByLabelText('Hide deallocate ops'));
+
+        expect(runBuild.mock.calls.at(-1)?.[0]).toEqual(
+            expect.objectContaining({
+                grouping: OpGraphGrouping.LAYERS,
+                hideDeallocate: false,
+                expandedBlockIds: [],
+            }),
+        );
+    });
 
     it('finds nothing to fold by repetition in a graph with no repeats', () => {
         renderGraph(LAYER_OPERATION_LIST);

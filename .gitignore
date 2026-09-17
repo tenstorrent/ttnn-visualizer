@@ -26,6 +26,12 @@ package-lock.json
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
+# Same shape as .vscode above: agent config is machine-local except the one
+# tracked launch config. Without the allowlist, `settings.local.json` (local
+# permission rules and absolute paths) and `worktrees/` sit uncovered beside a
+# tracked file.
+.claude/*
+!.claude/launch.json
 .idea
 .DS_Store
 *.suo
