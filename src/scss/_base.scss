@@ -21,14 +21,19 @@
     // L1 peak composition series. Four classes, ordered by how much a user can do
     // about them: circular buffers and intermediates are the op's own cost, persistent
     // is carried state, stale is the only freeable class and so reads as a warning.
-    // Four hues far enough apart to read as distinct bands when stacked, drawn from the
-    // house palette: violet, cyan, yellow, vermilion. An earlier set put violet, blue and
-    // teal within ~50 degrees of each other and the bands were not separable.
+    // Stack order is cb, intermediate, persistent, stale -- violet 248, yellow 41, teal 195,
+    // vermilion 10. Adjacent pairs are >150 degrees apart, which is what matters for reading
+    // a stacked band. The widest-apart set is not achievable here: yellow and vermilion sit
+    // 30 degrees apart and become adjacent whenever persistent is zero, which two of the
+    // corpus reports do -- they stay distinguishable on lightness rather than hue.
     --l1-peak-cb: #{$tt-purple-accent};
     --l1-peak-intermediate: #{$tt-yellow};
     --l1-peak-persistent: #{$tt-teal};
     --l1-peak-stale: #{$tt-red-accent};
-    --l1-peak-capacity: #{$tt-red};
+
+    // Deliberately not a red tint: the reference line crosses the stale band at the top of
+    // the stack, and $tt-red shares vermilion's hue exactly.
+    --l1-peak-capacity: #{$tt-grey-5};
     --graph-focused-node: #f6bc42;
 
     /* Magenta so it stays separable from the warm perf ramp it draws on top of,

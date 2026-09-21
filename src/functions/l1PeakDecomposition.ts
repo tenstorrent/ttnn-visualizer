@@ -125,8 +125,10 @@ export interface L1PeakDecompositionResult {
      * run under a single `captured_graph` row, gives all 288 of its L1 `buffer_deallocate`
      * nodes a null address, and omits `max_size_per_bank`; with nothing matchable to free
      * and one operation boundary at the very end, the replay accumulates every allocation
-     * ever made and reports 324,188,384 B — 216x a bank. `traces_51674_report` is degenerate
-     * in a different way. Rather than guess at a repair, say the number is unusable.
+     * ever made and reports 324,188,384 B — 216x a bank. Rather than guess at a repair, say the
+     * number is unusable. Note this catches only captures that overshoot: `traces_51674_report`
+     * is degenerate in a different way — all eight of its buffer rows sit at address 0, so the
+     * snapshot collapses to one slot — and stays under the budget, so it is reported normally.
      */
     exceedsCapacity: boolean;
 }
@@ -305,7 +307,7 @@ function measure(
         staleTensorBytes,
         precision:
             state.circularBuffers.size + state.tensors.size > 1 ? L1PeakPrecision.UpperBound : L1PeakPrecision.Exact,
-        contributors: contributors.sort((left, right) => right.bytes - left.bytes),
+        contributors,
     };
 }
 
@@ -392,12 +394,21 @@ export function buildL1PeakDecomposition({
         const best =
             tightest === null || afterReconciliation.totalBytes > tightest.totalBytes ? afterReconciliation : tightest;
 
-        if (best.totalBytes > 0) {
-            const decomposition: L1PeakDecomposition = { ...best, reconciledAwayCount: reconciledAwayHere };
+        {
+            const decomposition: L1PeakDecomposition = {
+                ...best,
+                // Sorted here rather than inside `measure`: only the winning instant's order is
+                // ever read, and `measure` runs once per state-changing node.
+                contributors: [...best.contributors].sort((left, right) => right.bytes - left.bytes),
+                reconciledAwayCount: reconciledAwayHere,
+            };
 
             byOperationId.set(operation.id, decomposition);
 
-            if (peak === null || decomposition.totalBytes > peak.totalBytes) {
+            // Strictly greater, so the peak names the FIRST operation to reach it. Ties are the
+            // norm, not an edge case: resnet50_aug06 reaches its peak at both 146 and 257, and
+            // segformer at both 219 and 283.
+            if (decomposition.totalBytes > 0 && (peak === null || decomposition.totalBytes > peak.totalBytes)) {
                 peak = decomposition;
             }
         }

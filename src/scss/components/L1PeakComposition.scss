@@ -2,8 +2,6 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-@use '../definitions/colours' as *;
-
 .l1-peak-composition {
     display: flex;
     flex-direction: column;
@@ -86,6 +84,12 @@
             }
 
             // The name is the part that varies in length, so it is the part that gives way.
+            .l1-peak-repeats {
+                margin-left: 8px;
+                opacity: 0.5;
+                font-variant-numeric: tabular-nums;
+            }
+
             .l1-peak-operation-name {
                 overflow: hidden;
                 text-overflow: ellipsis;

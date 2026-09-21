@@ -419,10 +419,52 @@ describe('buildL1PeakDecomposition', () => {
         expect(result.capacityBytes).toBeNull();
     });
 
-    it('reports no peak for a run with no L1 activity', () => {
-        const result = build([{ id: 1, device_operations: [allocate(1000, 400, BufferType.DRAM)] }]);
+    it('reports no peak for a run with no L1 activity, but still measures every operation', () => {
+        // Every operation gets an entry even at zero, so a series over operation index has no
+        // invented gaps — bge_m3 otherwise plots 23 points for a 943-operation run and a reader
+        // cannot tell "measured as empty" from "not measured".
+        const result = build([
+            { id: 1, device_operations: [allocate(1000, 400, BufferType.DRAM)] },
+            { id: 2, device_operations: [] },
+        ]);
 
         expect(result.peak).toBeNull();
-        expect(result.byOperationId.size).toBe(0);
+        expect(result.byOperationId.size).toBe(2);
+        expect(result.byOperationId.get(1)?.totalBytes).toBe(0);
+    });
+
+    it('names the first operation to reach the peak when several tie', () => {
+        // Ties are the norm: resnet50_aug06 reaches its peak at both 146 and 257, segformer at
+        // both 219 and 283. Which one the headline names must not depend on iteration order.
+        const result = build([
+            { id: 1, device_operations: [allocate(1000, 400), free(1000)] },
+            { id: 2, device_operations: [allocate(2000, 400), free(2000)] },
+        ]);
+
+        expect(result.peak?.totalBytes).toBe(400);
+        expect(result.peak?.operationId).toBe(1);
+    });
+
+    it('refuses only above the budget, not at it', () => {
+        const operations = [{ id: 1, device_operations: [allocate(1000, 400)] }];
+
+        expect(buildL1PeakDecomposition({ ...paramsFor(operations), capacityBytes: 400 }).exceedsCapacity).toBe(false);
+        expect(buildL1PeakDecomposition({ ...paramsFor(operations), capacityBytes: 399 }).exceedsCapacity).toBe(true);
+    });
+
+    it('counts L1_SMALL in the snapshot it reconciles against, not only in the replay', () => {
+        // Dropping L1_SMALL from the snapshot filter moves resnet50's peak by 1,680 B and its
+        // reconciled count from 32 to 98, because every L1_SMALL allocation is then dropped at
+        // each boundary as though the snapshot had freed it.
+        const result = build(
+            [
+                { id: 1, device_operations: [allocate(1000, 400), allocate(2000, 64, BufferType.L1_SMALL)] },
+                { id: 2, device_operations: [allocate(3000, 100)] },
+            ],
+            { 1: [buffer(1000, 400), buffer(2000, 64, BufferType.L1_SMALL)] },
+        );
+
+        expect(result.byOperationId.get(1)?.reconciledAwayCount).toBe(0);
+        expect(result.byOperationId.get(2)?.totalBytes).toBe(564);
     });
 });
