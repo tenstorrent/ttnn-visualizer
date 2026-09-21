@@ -4,6 +4,7 @@
 
 import { Callout, Intent, Tag } from '@blueprintjs/core';
 import { useAtomValue } from 'jotai';
+import { Link } from 'react-router';
 import { PlotData } from 'plotly.js';
 import { useMemo } from 'react';
 import Plot from '../../libs/PlotComponent';
@@ -14,6 +15,8 @@ import { L1_DEFAULT_MEMORY_SIZE } from '../../definitions/L1MemorySize';
 import { L1_PEAK_COLORS } from '../../definitions/GraphColors';
 import { getPerfChartChrome } from '../../definitions/PlotConfigurations';
 import { useL1PeakDecomposition } from '../../hooks/useL1PeakDecomposition';
+import { useOperationsList } from '../../hooks/useAPI';
+import ROUTES from '../../definitions/Routes';
 import 'styles/components/L1PeakComposition.scss';
 
 const TOP_OPERATION_COUNT = 10;
@@ -34,11 +37,17 @@ const KIND_LABEL: Record<L1ResidentKind, string> = {
 
 function L1PeakComposition() {
     const { result, isLoading } = useL1PeakDecomposition();
+    const { data: operations } = useOperationsList();
     // Same address presentation as the memory legends, including the hex preference. #2025
     const showHex = useAtomValue(showHexAtom);
     // Resolved on use, not at import: these read from the stylesheet, which may not have
     // applied when the module first evaluates.
     const chrome = getPerfChartChrome();
+
+    const operationNamesById = useMemo(
+        () => new Map<number, string>((operations ?? []).map((operation) => [operation.id, operation.name])),
+        [operations],
+    );
 
     const ordered = useMemo(
         () => [...result.byOperationId.values()].sort((left, right) => left.operationId - right.operationId),
@@ -199,7 +208,17 @@ function L1PeakComposition() {
 
                         return (
                             <tr key={entry.operationId}>
-                                <td>{entry.operationId}</td>
+                                <td className='l1-peak-operation'>
+                                    <Link
+                                        to={`${ROUTES.OPERATIONS}/${entry.operationId}`}
+                                        title={operationNamesById.get(entry.operationId) ?? undefined}
+                                    >
+                                        <span className='l1-peak-operation-id'>{entry.operationId}</span>
+                                        <span className='l1-peak-operation-name'>
+                                            {operationNamesById.get(entry.operationId) ?? ''}
+                                        </span>
+                                    </Link>
+                                </td>
                                 <td className='l1-peak-total'>{formatMemorySize(entry.totalBytes, 2)}</td>
                                 {SERIES.map(({ key }) => (
                                     <td key={key}>{entry[key] === 0 ? '—' : formatMemorySize(entry[key], 2)}</td>

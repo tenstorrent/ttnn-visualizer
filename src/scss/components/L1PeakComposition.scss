@@ -69,6 +69,30 @@
         .l1-peak-total {
             font-weight: 600;
         }
+
+        .l1-peak-operation {
+            max-width: 26ch;
+
+            a {
+                display: flex;
+                gap: 8px;
+                align-items: baseline;
+                overflow: hidden;
+            }
+
+            .l1-peak-operation-id {
+                flex: 0 0 auto;
+                font-variant-numeric: tabular-nums;
+            }
+
+            // The name is the part that varies in length, so it is the part that gives way.
+            .l1-peak-operation-name {
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+                opacity: 0.75;
+            }
+        }
     }
 }
 
