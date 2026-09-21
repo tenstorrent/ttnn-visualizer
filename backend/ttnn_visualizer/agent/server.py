@@ -153,6 +153,17 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
                         "type": "string",
                         "description": "Case-insensitive substring, e.g. 'matmul'.",
                     },
+                    "called_from": {
+                        "type": "string",
+                        "description": (
+                            "Case-insensitive substring of the recorded stack "
+                            "trace, e.g. 'run_downsample_if_req'. Matched against "
+                            "the whole trace text -- frames and the source lines "
+                            "under them -- so a layer module finds the operations "
+                            "it called through helpers, and a needle that names a "
+                            "call also matches traces that merely show it."
+                        ),
+                    },
                     "limit": _LIMIT_SCHEMA,
                     "rank": _RANK_SCHEMA,
                 },
@@ -206,6 +217,41 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
                 "required": ["handle"],
             },
             "handler": lambda arguments: operations.memory_profile(
+                registry, **arguments
+            ),
+        },
+        "operation_provenance": {
+            "description": (
+                "What one operation was called with, and where in the model code it "
+                "came from: its arguments as name/value pairs, and the innermost "
+                "stack frame's file, line, function and source line. Takes the "
+                "profiler database's operation_id, the same id memory_profile, "
+                "operation_detail and find_operations use -- NOT the id from "
+                "top_ops or diff_reports, which number rows of the performance "
+                "CSV and do not share this id space. Older captures record no "
+                "stack trace, and the response says so rather than returning an "
+                "empty call site."
+            ),
+            "schema": {
+                "type": "object",
+                "properties": {
+                    "handle": {"type": "string"},
+                    "operation_id": {"type": "integer"},
+                    "limit": {
+                        "type": "integer",
+                        "description": (
+                            "Frames of the outward chain to return, capped at "
+                            f"{MAX_LIMIT}. The call site is reported separately and "
+                            "is never counted here, so a small number is usually "
+                            "right: a real trace runs to tens of frames, most of "
+                            "them the test harness that invoked the model."
+                        ),
+                    },
+                    "rank": _RANK_SCHEMA,
+                },
+                "required": ["handle", "operation_id"],
+            },
+            "handler": lambda arguments: operations.operation_provenance(
                 registry, **arguments
             ),
         },
