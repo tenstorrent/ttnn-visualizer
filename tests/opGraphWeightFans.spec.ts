@@ -164,14 +164,26 @@ describe('detectWeightFans', () => {
         expect(weightFanMembersOf('block:7')).toBeNull();
         expect(weightFanMembersOf('layer:attention:4')).toBeNull();
 
-        // "Any", not "all". A remembered fan whose members only partly overlap is
-        // still the reader having opened part of this one — membership shifts as
-        // sources are claimed and released by grouping folds, so requiring every
-        // remembered member to survive would drop the decision on the first shift.
+        // Containment either way, which is how a fold reshapes a fan: absorbed into a
+        // larger one, or broken into smaller ones.
         expect(weightFanIdCovers('weights:2-3', [1, 2, 3])).toBe(true);
-        expect(weightFanIdCovers('weights:2-9', [1, 2, 3])).toBe(true);
+        expect(weightFanIdCovers('weights:1-2-3-4', [1, 4])).toBe(true);
+        // Sharing one member is not containment, and the difference is the point: a
+        // decision about {1,2} must not unroll a later {1,7,8} the reader left folded.
+        expect(weightFanIdCovers('weights:1-2', [1, 7, 8])).toBe(false);
         expect(weightFanIdCovers('weights:8-9', [1, 2, 3])).toBe(false);
         expect(weightFanIdCovers('block:2', [1, 2, 3])).toBe(false);
+
+        // The decoder rejects what it cannot read rather than guessing. `''.split('-')`
+        // is `['']` and `Number('')` is 0, so each of these used to parse to a member
+        // list containing operation 0 and then "cover" any fan holding it.
+        for (const malformed of ['weights:', 'weights:1-', 'weights:1--2', 'weights:-1-2']) {
+            expect(weightFanMembersOf(malformed)).toBeNull();
+            expect(weightFanIdCovers(malformed, [0, 1, 2])).toBe(false);
+        }
+        // `Number` also accepts these, so the pattern has to reject them first.
+        expect(weightFanMembersOf('weights:1e3-2')).toBeNull();
+        expect(weightFanMembersOf('weights:0x10')).toBeNull();
     });
 
     it('never claims an operation a grouping block already owns', () => {

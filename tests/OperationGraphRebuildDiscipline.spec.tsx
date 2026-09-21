@@ -1803,6 +1803,43 @@ describe('OperationGraphReactFlow repeat blocks', () => {
         expect((runBuild.mock.calls.at(-1)?.[0] as OpGraphBuildOptions).expandedBlockIds).toEqual(['weights:7-8']);
     });
 
+    it('has no route to fold an unrolled fan, which is why nothing cleans up after one', () => {
+        // The builder treats a remembered id that contains a fan's members as "the
+        // reader opened this", so folding a fan would have to drop those ids or the
+        // next build re-opens it. `toggleBlockExpansion` does not, deliberately:
+        // `blockInstanceId` is set only on a collapsed block node and
+        // `blockByMemberOperationId` is built from `detectedBlocks`, which holds no
+        // fans, so an unrolled fan's members link back to nothing.
+        //
+        // This pins that property rather than the absence of code. #1987 is slated to
+        // make fans first-class, and when it lands this test fails and the cleanup
+        // has to arrive with it. #1988
+        const withFan: OperationDescription[] = [
+            operation(1, 'ttnn.to_device', [3]),
+            operation(2, 'ttnn.to_device', [3]),
+            operation(3, 'ttnn.linear', [4]),
+            operation(4, 'ttnn.layer_norm', []),
+        ];
+        renderGraph(withFan);
+        deliver(withFan, { collapseWeightLoads: true });
+
+        // Open it, then deliver the graph that produces — members as plain nodes.
+        act(() => {
+            harness.onNodeDoubleClick?.(null, nodeById(lastFlowRender().nodes, 'weights:1-2'));
+        });
+        deliver(withFan, { collapseWeightLoads: true, expandedBlockIds: ['weights:1-2'] });
+        const member = nodeById(lastFlowRender().nodes, '1');
+        expect(member.data.blockInstanceId).toBeUndefined();
+
+        runBuild.mockClear();
+        act(() => {
+            harness.onNodeDoubleClick?.(null, member);
+        });
+
+        // Nothing folded, so nothing rebuilt: the member is not a route back.
+        expect(runBuild).not.toHaveBeenCalled();
+    });
+
     it('asks to unfold a weight fan when its expander is clicked', () => {
         // The reported bug had two halves and this is the one in the view: with grouping
         // unrolled by default the expansion set is `null`, which read as "everything is

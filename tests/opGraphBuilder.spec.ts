@@ -584,6 +584,52 @@ describe('buildOpGraph', () => {
             ]);
         });
 
+        it('leaves a fan folded when a remembered decision merely shares a member', () => {
+            // The carry is containment, not intersection, and this is the difference.
+            // Ops 1 and 2 fed different consumers, the reader opened neither, and a
+            // later fold puts 1 alongside 7 and 8 — sources belonging to a fan they
+            // left folded. Sharing operation 1 is not "the fan I opened became this
+            // one", and unrolling on it would show weight loads nobody asked for.
+            const chain = [
+                operation({ id: 1, name: 'ttnn.to_device', outputs: [{ consumers: [10] }] }),
+                operation({ id: 7, name: 'ttnn.to_device', outputs: [{ consumers: [10] }] }),
+                operation({ id: 8, name: 'ttnn.to_device', outputs: [{ consumers: [10] }] }),
+                operation({ id: 10, name: 'ttnn.linear' }),
+            ];
+
+            const merged = buildOpGraph(chain, {
+                hideDeallocate: false,
+                deviceSubgraphs: [],
+                collapseWeightLoads: true,
+                expandedBlockIds: ['weights:1-2'],
+            });
+
+            expect(merged.nodes.filter((node) => node.id.startsWith('weights:')).map((n) => n.id)).toEqual([
+                'weights:1-7-8',
+            ]);
+        });
+
+        it('keeps a fan unrolled when a fold splits it into smaller ones', () => {
+            // The other direction of the same rule: unfolding a grouping block breaks
+            // one fan into several, and each piece is still part of what was opened.
+            const chain = [
+                operation({ id: 1, name: 'ttnn.to_device', outputs: [{ consumers: [10] }] }),
+                operation({ id: 2, name: 'ttnn.to_device', outputs: [{ consumers: [10] }] }),
+                operation({ id: 10, name: 'ttnn.linear' }),
+            ];
+
+            const split = buildOpGraph(chain, {
+                hideDeallocate: false,
+                deviceSubgraphs: [],
+                collapseWeightLoads: true,
+                expandedBlockIds: ['weights:1-2-3-4'],
+            });
+
+            expect(split.nodes.filter((node) => node.id.startsWith('weights:'))).toEqual([]);
+            expect(split.nodes.some((node) => node.id === '1')).toBe(true);
+            expect(split.nodes.some((node) => node.id === '2')).toBe(true);
+        });
+
         it('carries the kind on the node data as well as the class', () => {
             // The class paints it; the kind is what a panel or a test can reason about
             // without parsing a string.

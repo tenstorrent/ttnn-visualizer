@@ -24,6 +24,8 @@ import { OpGraphBlockKind } from './opGraphTypes';
 const MIN_FAN_MEMBERS = 2;
 
 const FAN_ID_PREFIX = 'weights:';
+/** At least one member, each a run of digits, separated by single hyphens. */
+const FAN_ID_PATTERN = /^weights:\d+(?:-\d+)*$/;
 
 /**
  * Keyed on the whole membership, ascending, rather than on the first member.
@@ -41,10 +43,12 @@ const FAN_ID_PREFIX = 'weights:';
  * forward without keeping any history of the previous build — see
  * `weightFanMembersOf`.
  *
- * Spelled out rather than hashed because fans are small: the largest across the local
- * captures holds three members, and #1980's own example is six per attention span. A
- * graph folded to a single block is the pathological case, where every source in the
- * report merges into one fan and the id grows with it.
+ * Spelled out rather than hashed because fans are ordinarily small: the largest across
+ * the local captures holds three members, and #1980's own example is six per attention
+ * span. The bound is the report, though, not that observation — fold a graph to one
+ * block and every source in it merges into a single fan, which on `sentence_bert`'s
+ * 149 weight loads is a node id of roughly 700 characters. Legible ids were judged
+ * worth that; a digest is the fallback if it stops being true.
  */
 const fanIdOf = (memberOperationIds: readonly number[]): string =>
     `${FAN_ID_PREFIX}${[...memberOperationIds].sort((left, right) => left - right).join('-')}`;
@@ -57,22 +61,36 @@ const fanIdOf = (memberOperationIds: readonly number[]): string =>
  * membership overlaps.
  */
 export const weightFanMembersOf = (instanceId: string): number[] | null => {
-    if (!instanceId.startsWith(FAN_ID_PREFIX)) {
+    // Matched whole rather than split and checked: `''.split('-')` is `['']` and
+    // `Number('')` is 0, so a bare `weights:` parsed to `[0]` and then "covered" every
+    // fan holding operation 0, and `weights:1--2` parsed to `[1, 0, 2]`.
+    if (!FAN_ID_PATTERN.test(instanceId)) {
         return null;
     }
-    const members = instanceId
+    return instanceId
         .slice(FAN_ID_PREFIX.length)
         .split('-')
         .map((part) => Number(part));
-    return members.length > 0 && members.every((member) => Number.isSafeInteger(member)) ? members : null;
 };
 
 /**
  * Whether a remembered fan decision covers any of `memberOperationIds`.
  *
- * "Any", not "all": a merge makes one fan out of two, so the reader who opened either
- * of them opened part of this one, and re-folding it under them would be the failure
- * this is here to prevent.
+ * One membership contains the other, in either direction — which is exactly the two
+ * ways a fold reshapes a fan. A merge absorbs the remembered fan into a larger one
+ * (`{2,3}` into `{1,2,3}`), and a split breaks it into smaller ones (`{1,4}` out of
+ * `{1,2,3,4}`); both are still the fan the reader opened, so re-folding either under
+ * them is the failure this is here to prevent.
+ *
+ * Bare intersection is too wide, and the difference is reachable: a decision about
+ * `{1,2}` would unroll a later `{1,7,8}` that shares only operation 1, showing weight
+ * loads the reader had deliberately left folded. Containment says "the fan I opened
+ * became this one"; sharing a member says nothing.
+ *
+ * What containment keeps, deliberately, is the merge of two fans with opposite
+ * decisions: they become one node and the open one wins, so sources left folded come
+ * with it. One node cannot be half open, and showing the graph as captured is the
+ * safer direction.
  */
 export const weightFanIdCovers = (instanceId: string, memberOperationIds: readonly number[]): boolean => {
     const remembered = weightFanMembersOf(instanceId);
@@ -80,7 +98,11 @@ export const weightFanIdCovers = (instanceId: string, memberOperationIds: readon
         return false;
     }
     const members = new Set(memberOperationIds);
-    return remembered.some((member) => members.has(member));
+    const rememberedSet = new Set(remembered);
+    return (
+        remembered.every((member) => members.has(member)) ||
+        memberOperationIds.every((member) => rememberedSet.has(member))
+    );
 };
 
 export interface WeightFanInput {
