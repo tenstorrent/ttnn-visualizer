@@ -11,7 +11,8 @@ import {
     layoutOpGraph,
 } from './opGraphLayout';
 import { detectorFor } from './opGraphBlockDetectors';
-import { detectWeightFans, weightFanIdCovers, weightFanMembersOf } from './opGraphWeightFans';
+import type { RememberedFan } from './opGraphWeightFans';
+import { detectWeightFans, rememberedDecision, weightFanMembersCover, weightFanMembersOf } from './opGraphWeightFans';
 import { formatBlockMeta } from './opGraphBlockMeta';
 import { sumOptional } from '../../functions/math';
 import { OpGraphBlockKind } from './opGraphTypes';
@@ -148,15 +149,17 @@ export function buildOpGraph(
     // than in a pre-pass because "the same rendered node" depends on what grouping just
     // folded. #1980
     if (collapseWeightLoads) {
-        // Decoded once rather than per fan: the check below runs for every fan, and
-        // re-spreading the set and re-splitting each id inside that loop is the shape
-        // this file works to keep linear. Kept as one entry per remembered fan rather
-        // than a union of members, because containment is per fan — a union would be
-        // the bare intersection this deliberately avoids.
-        const rememberedFans: string[] = [];
+        // Decoded once for the whole build, not per fan: the check below runs for
+        // every fan, and parsing the id and allocating a set inside that loop made the
+        // work grow with fans × remembered ids × membership. Kept as one entry per
+        // remembered fan rather than collapsed to a union of members, because
+        // containment is per fan and a union would be the bare intersection this
+        // deliberately avoids.
+        const rememberedFans: RememberedFan[] = [];
         for (const remembered of expandedBlocks) {
-            if (weightFanMembersOf(remembered) !== null) {
-                rememberedFans.push(remembered);
+            const members = weightFanMembersOf(remembered);
+            if (members !== null) {
+                rememberedFans.push(rememberedDecision(members));
             }
         }
         const fans = detectWeightFans({
@@ -178,9 +181,10 @@ export function buildOpGraph(
             // The reader who opened either opened part of this one, so re-folding it
             // under them is the failure #1988 describes. Reading the remembered ids
             // for their members is why the id spells them out.
+            const fanMemberSet = new Set(fan.operationIds);
             const wasUnrolled =
                 expandedBlocks.has(fan.instanceId) ||
-                rememberedFans.some((remembered) => weightFanIdCovers(remembered, fan.operationIds));
+                rememberedFans.some((remembered) => weightFanMembersCover(remembered, fan.operationIds, fanMemberSet));
             if (!wasUnrolled) {
                 for (const operationId of fan.operationIds) {
                     collapsedInstanceByOpId.set(operationId, fan);
