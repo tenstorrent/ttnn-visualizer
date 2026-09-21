@@ -1,0 +1,78 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
+
+@use '../definitions/colours' as *;
+
+.l1-peak-composition {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    padding-top: 12px;
+
+    .l1-peak-headline {
+        display: flex;
+        align-items: baseline;
+        gap: 12px;
+    }
+
+    .l1-peak-figure {
+        display: flex;
+        flex-direction: column;
+    }
+
+    .l1-peak-value {
+        font-size: 32px;
+        font-weight: 600;
+        line-height: 1.1;
+    }
+
+    .l1-peak-caption,
+    .l1-peak-note {
+        opacity: 0.7;
+        font-size: 12px;
+        max-width: 90ch;
+    }
+
+    .l1-peak-note {
+        margin: 0;
+    }
+
+    .l1-peak-plot {
+        width: 100%;
+    }
+
+    .l1-peak-table {
+        border-collapse: collapse;
+        font-size: 12px;
+
+        th,
+        td {
+            padding: 4px 12px 4px 0;
+            text-align: right;
+            white-space: nowrap;
+        }
+
+        th:first-child,
+        td:first-child,
+        th:last-child,
+        td:last-child {
+            text-align: left;
+        }
+
+        thead th {
+            border-bottom: 1px solid rgb(255 255 255 / 20%);
+            opacity: 0.7;
+            font-weight: 400;
+        }
+
+        .l1-peak-total {
+            font-weight: 600;
+        }
+    }
+}
+
+.l1-peak-empty {
+    opacity: 0.7;
+    padding-top: 12px;
+}

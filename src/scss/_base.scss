@@ -17,6 +17,15 @@
     --graph-input-edge: #6bcf8e;
     --graph-output-edge: #f6bc42;
     --graph-normal: #e0e0e0;
+
+    // L1 peak composition series. Four classes, ordered by how much a user can do
+    // about them: circular buffers and intermediates are the op's own cost, persistent
+    // is carried state, stale is the only freeable class and so reads as a warning.
+    --l1-peak-cb: #7b61ff;
+    --l1-peak-intermediate: #2ea3a3;
+    --l1-peak-persistent: #4a7ebb;
+    --l1-peak-stale: #e0a33e;
+    --l1-peak-capacity: #d4574f;
     --graph-focused-node: #f6bc42;
 
     /* Magenta so it stays separable from the warm perf ramp it draws on top of,

@@ -73,6 +73,12 @@ const buffer = (address: number, size: number, bufferType = BufferType.L1, devic
     device_id: deviceId,
 });
 
+const paramsFor = (operations: { id: number; device_operations: Node[] }[]) => ({
+    operations,
+    snapshotByOperationId: new Map<number, readonly Buffer[]>(),
+    lastUseByAddress: new Map<number, number>(),
+});
+
 const build = (
     operations: { id: number; device_operations: Node[] }[],
     snapshot: Record<number, Buffer[]> = {},
@@ -393,6 +399,24 @@ describe('buildL1PeakDecomposition', () => {
 
         expect(build(operations, {}, {}, 120).peak?.totalBytes).toBe(100);
         expect(build(operations).peak?.totalBytes).toBe(187.5);
+    });
+
+    it('flags a peak that exceeds the device L1, and stays quiet when it does not', () => {
+        // visualizer_db files a 1,184-operation run under one captured_graph row, gives all 288
+        // L1 deallocate nodes a null address and omits max_size_per_bank, so the replay frees
+        // nothing and reports 216x a bank. The number is unusable and has to say so.
+        const operations = [{ id: 1, device_operations: [allocate(1000, 400), cb(10, 900)] }];
+
+        expect(buildL1PeakDecomposition({ ...paramsFor(operations), capacityBytes: 1000 }).exceedsCapacity).toBe(true);
+        expect(buildL1PeakDecomposition({ ...paramsFor(operations), capacityBytes: 5000 }).exceedsCapacity).toBe(false);
+        expect(buildL1PeakDecomposition({ ...paramsFor(operations), capacityBytes: 1000 }).capacityBytes).toBe(1000);
+    });
+
+    it('cannot judge plausibility without a capacity, and says so rather than guessing', () => {
+        const result = build([{ id: 1, device_operations: [allocate(1000, 999999999)] }]);
+
+        expect(result.exceedsCapacity).toBe(false);
+        expect(result.capacityBytes).toBeNull();
     });
 
     it('reports no peak for a run with no L1 activity', () => {

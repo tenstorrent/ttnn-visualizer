@@ -12,6 +12,7 @@ export enum SECTION_IDS {
 export enum TAB_IDS {
     L1 = 'L1',
     DRAM = 'DRAM',
+    PEAK = 'peak',
 }
 
 export enum ColumnKeys {

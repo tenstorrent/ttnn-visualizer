@@ -98,6 +98,11 @@ export interface L1PeakDecompositionParams {
      * Pass `devices[].l1_num_banks`; it is 120, not 64, on 10x13 grids.
      */
     bankCount?: number;
+    /**
+     * Per-core L1 budget, i.e. `devices[].worker_l1_size`. Used only to judge whether the
+     * result is believable — see `exceedsCapacity`.
+     */
+    capacityBytes?: number;
 }
 
 export interface L1PeakDecompositionResult {
@@ -110,6 +115,20 @@ export interface L1PeakDecompositionResult {
      * the next is counted too.
      */
     reconciledAwayCount: number;
+    /** The per-core L1 budget the peak was judged against, when the caller supplied one. */
+    capacityBytes: number | null;
+    /**
+     * The peak exceeds the device's own L1, so the replay did not describe reachable state
+     * and no figure here should be presented as a measurement.
+     *
+     * A capture can make this unavoidable. `visualizer_db` files an entire 1,184-operation
+     * run under a single `captured_graph` row, gives all 288 of its L1 `buffer_deallocate`
+     * nodes a null address, and omits `max_size_per_bank`; with nothing matchable to free
+     * and one operation boundary at the very end, the replay accumulates every allocation
+     * ever made and reports 324,188,384 B — 216x a bank. `traces_51674_report` is degenerate
+     * in a different way. Rather than guess at a repair, say the number is unusable.
+     */
+    exceedsCapacity: boolean;
 }
 
 /** The union of params carried by the memory-bearing graph nodes. */
@@ -303,6 +322,7 @@ export function buildL1PeakDecomposition({
     snapshotByOperationId,
     lastUseByAddress,
     bankCount = L1_NUM_CORES,
+    capacityBytes,
 }: L1PeakDecompositionParams): L1PeakDecompositionResult {
     const context: ReplayContext = { bankCount, intermediates: findIntermediates(operations) };
     const byOperationId = new Map<number, L1PeakDecomposition>();
@@ -383,5 +403,11 @@ export function buildL1PeakDecomposition({
         }
     }
 
-    return { byOperationId, peak, reconciledAwayCount };
+    return {
+        byOperationId,
+        peak,
+        reconciledAwayCount,
+        capacityBytes: capacityBytes ?? null,
+        exceedsCapacity: capacityBytes !== undefined && peak !== null && peak.totalBytes > capacityBytes,
+    };
 }

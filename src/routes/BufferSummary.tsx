@@ -13,6 +13,7 @@ import BufferSummaryTab from '../components/buffer-summary/BufferSummaryTab';
 import 'styles/components/BufferSummary.scss';
 import { SECTION_IDS, TAB_IDS } from '../definitions/BufferSummary';
 import { selectedBufferSummaryTabAtom } from '../store/app';
+import L1PeakComposition from '../components/buffer-summary/L1PeakComposition';
 
 function BufferSummary() {
     const { activeToast, resetToasts } = useBufferFocus();
@@ -66,6 +67,13 @@ function BufferSummary() {
                     title='L1'
                     icon={IconNames.PAGE_LAYOUT}
                     panel={<BufferSummaryTab />}
+                />
+
+                <Tab
+                    id={TAB_IDS.PEAK}
+                    title='Peak composition'
+                    icon={IconNames.TIMELINE_AREA_CHART}
+                    panel={<L1PeakComposition />}
                 />
 
                 <Tab
