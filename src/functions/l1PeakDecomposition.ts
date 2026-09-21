@@ -294,10 +294,9 @@ function measure(
  * Replay every operation's captured graph and report, per operation, the tightest
  * instant: total per-bank L1 occupancy split by what it is made of.
  *
- * Circular buffers are 46-100% of peak L1 across the local report corpus, and
- * intra-op intermediates a further 32-38% on resnet50, so a decomposition built
- * from the post-op `buffers` table alone would describe a minority of the peak.
- * #2025
+ * Circular buffers and intra-op intermediates are a large share of peak L1 across the
+ * local report corpus and appear nowhere in the post-op `buffers` table, so a
+ * decomposition built from that table alone describes a minority of the peak. #2025
  */
 export function buildL1PeakDecomposition({
     operations,
@@ -323,6 +322,18 @@ export function buildL1PeakDecomposition({
                 }
             }
         }
+
+        // A program's circular buffers stop occupying L1 when it stops executing, so they do
+        // not carry into the next operation. The capture says otherwise -- tt-metal emits
+        // `circular_buffer_deallocate_all` at the *start of the next program*
+        // (`GraphProcessor::track_program`), and real release is tied to `~ProgramImpl` -- but
+        // that is bookkeeping, not residency. CB addresses never enter the L1 buffer allocator:
+        // each program lays its own out from `base_cb_address`, and
+        // `ProgramImpl::validate_circular_buffer_region` guards only the program being prepared
+        // against the *live* buffer allocator, never against another program's CBs. Proof from
+        // the corpus: resnet50 op 9 allocates a tensor at 724,192, 67,360 B inside the region
+        // op 8's CBs nominally still hold. Counting the carry inflated op 9's peak by 687,808 B.
+        state.circularBuffers.clear();
 
         // The snapshot is what actually survived, so anything the graph left live
         // but the snapshot omits was freed without a node.

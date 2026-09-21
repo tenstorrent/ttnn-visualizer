@@ -261,17 +261,19 @@ describe('buildL1PeakDecomposition', () => {
         expect(result.peak?.persistentTensorBytes).toBe(400);
     });
 
-    it('carries circular buffers into later operations, because tt-metal frees them at the next program', () => {
-        // Measured: no operation ever clears its own CBs; `deallocate_all` arrives at the start
-        // of the NEXT device op (median carry 1 operation, max 6 across the corpus). Clearing at
-        // the boundary would understate the peak, because the bytes are still physically resident.
+    it('does not carry circular buffers into a later operation', () => {
+        // The capture only reports a program's CBs as freed when the NEXT program starts, but a
+        // finished program's CBs no longer occupy L1: they never enter the buffer allocator, and
+        // tt-metal's own collision check ignores them. Counting the carry inflated resnet50 op 9
+        // by 687,808 B -- and put a tensor 67,360 B inside a region it claimed was occupied.
         const result = build([
             { id: 1, device_operations: [cb(10, 500)] },
             { id: 2, device_operations: [allocate(1000, 400)] },
         ]);
 
-        expect(result.byOperationId.get(2)?.circularBufferBytes).toBe(500);
-        expect(result.peak?.totalBytes).toBe(900);
+        expect(result.byOperationId.get(2)?.circularBufferBytes).toBe(0);
+        expect(result.byOperationId.get(2)?.totalBytes).toBe(400);
+        expect(result.peak?.totalBytes).toBe(500);
     });
 
     it('does not treat a no-consumer sentinel as a last use', () => {
