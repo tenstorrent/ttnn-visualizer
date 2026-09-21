@@ -23,16 +23,65 @@ import { OpGraphBlockKind } from './opGraphTypes';
  */
 const MIN_FAN_MEMBERS = 2;
 
+const FAN_ID_PREFIX = 'weights:';
+
 /**
- * Keyed on the fan's first member rather than on the node it feeds, whose *rendered*
- * id is exactly the value a grouping fold moves.
+ * Keyed on the whole membership, ascending, rather than on the first member.
  *
- * Members are not outside grouping blocks — every `bge_m3` attention span contains
- * six `from_torch` sources — so the invariant is narrower than "the id cannot move":
- * an operation id is stable, but which sources are unclaimed is fold-dependent, so a
- * fold that merges two fans still renames the survivor. #1980
+ * A fan's members are grouped by the node they feed, and *which* node that is depends
+ * on what grouping just folded — so a fold that merges two consumers into one block
+ * merges their fans. Keyed on the first member, the survivor of `[2,3]` + `[1]`
+ * renamed itself from `weights:2` to `weights:1`, which is the same defect the re-key
+ * was meant to end, reached by a different route: the reader's unrolled fan re-folded
+ * and the old id was stranded in a set nothing prunes. #1988
+ *
+ * Two properties follow, and both are load-bearing. The id changes exactly when the
+ * membership changes, so it can never silently name a different fan. And the members
+ * are recoverable from the id, which is what lets a merge carry the reader's decision
+ * forward without keeping any history of the previous build — see
+ * `weightFanMembersOf`.
+ *
+ * Spelled out rather than hashed because fans are small: the largest across the local
+ * captures holds three members, and #1980's own example is six per attention span. A
+ * graph folded to a single block is the pathological case, where every source in the
+ * report merges into one fan and the id grows with it.
  */
-const fanIdOf = (firstMemberOperationId: number): string => `weights:${firstMemberOperationId}`;
+const fanIdOf = (memberOperationIds: readonly number[]): string =>
+    `${FAN_ID_PREFIX}${[...memberOperationIds].sort((left, right) => left - right).join('-')}`;
+
+/**
+ * The operations a fan id names, or `null` for an id that is not a fan's.
+ *
+ * Callers use this to ask whether a remembered decision is about *these* operations,
+ * which is the question that survives a merge — the id will not match, but the
+ * membership overlaps.
+ */
+export const weightFanMembersOf = (instanceId: string): number[] | null => {
+    if (!instanceId.startsWith(FAN_ID_PREFIX)) {
+        return null;
+    }
+    const members = instanceId
+        .slice(FAN_ID_PREFIX.length)
+        .split('-')
+        .map((part) => Number(part));
+    return members.length > 0 && members.every((member) => Number.isSafeInteger(member)) ? members : null;
+};
+
+/**
+ * Whether a remembered fan decision covers any of `memberOperationIds`.
+ *
+ * "Any", not "all": a merge makes one fan out of two, so the reader who opened either
+ * of them opened part of this one, and re-folding it under them would be the failure
+ * this is here to prevent.
+ */
+export const weightFanIdCovers = (instanceId: string, memberOperationIds: readonly number[]): boolean => {
+    const remembered = weightFanMembersOf(instanceId);
+    if (remembered === null) {
+        return false;
+    }
+    const members = new Set(memberOperationIds);
+    return remembered.some((member) => members.has(member));
+};
 
 export interface WeightFanInput {
     keptOperations: readonly OpGraphSourceOperation[];
@@ -93,7 +142,7 @@ export const detectWeightFans = ({
         if (operationIds.length >= MIN_FAN_MEMBERS) {
             fans.push({
                 kind: OpGraphBlockKind.WEIGHTS,
-                instanceId: fanIdOf(operationIds[0]),
+                instanceId: fanIdOf(operationIds),
                 patternId: 'weights',
                 label: `${operationIds.length} weight loads`,
                 patternLabel: 'Weight loads',

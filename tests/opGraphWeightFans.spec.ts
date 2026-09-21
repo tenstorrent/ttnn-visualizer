@@ -3,7 +3,11 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import { describe, expect, it } from 'vitest';
-import { detectWeightFans } from '../src/components/operation-graph/opGraphWeightFans';
+import {
+    detectWeightFans,
+    weightFanIdCovers,
+    weightFanMembersOf,
+} from '../src/components/operation-graph/opGraphWeightFans';
 import type { CandidateEdge } from '../src/components/operation-graph/opGraphBuilder';
 import type { OpGraphSourceOperation } from '../src/components/operation-graph/opGraphTypes';
 
@@ -50,7 +54,7 @@ describe('detectWeightFans', () => {
         expect(fans).toHaveLength(1);
         expect(fans[0].operationIds).toEqual([1, 2, 3]);
         expect(fans[0].label).toBe('3 weight loads');
-        expect(fans[0].instanceId).toBe('weights:1');
+        expect(fans[0].instanceId).toBe('weights:1-2-3');
     });
 
     it('matches on topology, not on the op name', () => {
@@ -104,10 +108,10 @@ describe('detectWeightFans', () => {
 
         expect(fans).toHaveLength(1);
         expect(fans[0].operationIds).toEqual([1, 2]);
-        expect(fans[0].instanceId).toBe('weights:1');
+        expect(fans[0].instanceId).toBe('weights:1-2');
     });
 
-    it('keys the fan on a member, so its id does not move when its consumer folds', () => {
+    it('keys the fan on its members, so its id does not move when its consumer folds', () => {
         // The consumer's rendered id is exactly what a grouping fold changes, so keying
         // on it meant a fan the user had unrolled re-folded itself the moment its layer
         // was folded — and left a dead id behind in a set nothing prunes. Reproduced
@@ -123,8 +127,51 @@ describe('detectWeightFans', () => {
         const unrolled = fansOf({ operations, edges });
         const folded = fansOf({ operations, edges, renderedAs: { 3: 'layer:attention:3' } });
 
-        expect(unrolled[0].instanceId).toBe('weights:1');
+        expect(unrolled[0].instanceId).toBe('weights:1-2');
         expect(folded[0].instanceId).toBe(unrolled[0].instanceId);
+    });
+
+    it('renames itself when a fold merges it with another fan', () => {
+        // Membership is fold-dependent: the members are grouped by the node they feed,
+        // so folding two consumers into one block makes one fan out of two. Keyed on
+        // the first member the survivor of [2,3] + [1] silently became `weights:1`,
+        // which is a different fan wearing an id the reader had opened. The id is a
+        // function of the membership now, so a merge reads as a merge. #1988
+        const operations = [
+            operation(1, 'ttnn.to_device'),
+            operation(2, 'ttnn.to_device'),
+            operation(3, 'ttnn.to_device'),
+            operation(4, 'ttnn.linear'),
+            operation(5, 'ttnn.linear'),
+        ];
+        const edges = [edge(1, 5), edge(2, 4), edge(3, 4)];
+
+        const separate = fansOf({ operations, edges });
+        const merged = fansOf({
+            operations,
+            edges,
+            renderedAs: { 4: 'block:4', 5: 'block:4' },
+        });
+
+        expect(separate.map((fan) => fan.instanceId)).toEqual(['weights:2-3']);
+        expect(merged.map((fan) => fan.instanceId)).toEqual(['weights:1-2-3']);
+    });
+
+    it("recovers a fan id's members, which is what survives a merge", () => {
+        // The id spells out its membership so a remembered decision can be matched
+        // against a fan that did not exist when it was made — no history kept.
+        expect(weightFanMembersOf('weights:1-2-3')).toEqual([1, 2, 3]);
+        expect(weightFanMembersOf('block:7')).toBeNull();
+        expect(weightFanMembersOf('layer:attention:4')).toBeNull();
+
+        // "Any", not "all". A remembered fan whose members only partly overlap is
+        // still the reader having opened part of this one — membership shifts as
+        // sources are claimed and released by grouping folds, so requiring every
+        // remembered member to survive would drop the decision on the first shift.
+        expect(weightFanIdCovers('weights:2-3', [1, 2, 3])).toBe(true);
+        expect(weightFanIdCovers('weights:2-9', [1, 2, 3])).toBe(true);
+        expect(weightFanIdCovers('weights:8-9', [1, 2, 3])).toBe(false);
+        expect(weightFanIdCovers('block:2', [1, 2, 3])).toBe(false);
     });
 
     it('never claims an operation a grouping block already owns', () => {

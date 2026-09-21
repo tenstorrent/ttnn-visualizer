@@ -967,9 +967,17 @@ const OperationGraphInner = ({
                 const next = new Set(previous ?? detectedBlocks.map((entry) => entry.instanceId));
                 if (isUnrolling) {
                     next.add(instanceId);
-                } else {
-                    next.delete(instanceId);
+                    return next;
                 }
+                next.delete(instanceId);
+                // No fan cleanup here on purpose. Folding an unrolled fan has no route
+                // through this handler: `blockInstanceId` is set only on the collapsed
+                // block node, and `blockByMemberOperationId` is built from
+                // `detectedBlocks`, which holds no fans — so an unrolled fan's members
+                // link back to nothing. When #1987 makes fans first-class this becomes
+                // reachable, and the remembered ids that cover the folded fan's members
+                // have to be dropped with it, or the builder's merge carry re-opens it
+                // on the next build. #1988
                 return next;
             });
             if (!isUnrolling && block !== undefined) {

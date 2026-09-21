@@ -11,7 +11,7 @@ import {
     layoutOpGraph,
 } from './opGraphLayout';
 import { detectorFor } from './opGraphBlockDetectors';
-import { detectWeightFans } from './opGraphWeightFans';
+import { detectWeightFans, weightFanIdCovers } from './opGraphWeightFans';
 import { formatBlockMeta } from './opGraphBlockMeta';
 import { sumOptional } from '../../functions/math';
 import { OpGraphBlockKind } from './opGraphTypes';
@@ -161,7 +161,16 @@ export function buildOpGraph(
             // rather than the unrolled one #1977 gives grouping. Without this the
             // expander pill rendered, incremented the set, and the fan folded anyway.
             // #1980
-            if (!expandedBlocks.has(fan.instanceId)) {
+            //
+            // Matched on membership as well as on the id, because a grouping fold can
+            // merge two fans into one and the merged fan's id names neither of them.
+            // The reader who opened either opened part of this one, so re-folding it
+            // under them is the failure #1988 describes. Reading the remembered ids
+            // for their members is why the id spells them out.
+            const wasUnrolled =
+                expandedBlocks.has(fan.instanceId) ||
+                [...expandedBlocks].some((remembered) => weightFanIdCovers(remembered, fan.operationIds));
+            if (!wasUnrolled) {
                 for (const operationId of fan.operationIds) {
                     collapsedInstanceByOpId.set(operationId, fan);
                 }

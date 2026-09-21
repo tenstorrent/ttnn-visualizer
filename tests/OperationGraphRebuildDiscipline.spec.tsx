@@ -1766,13 +1766,13 @@ describe('OperationGraphReactFlow repeat blocks', () => {
         deliver(withFanAndRepeats, { collapseWeightLoads: true, expandedBlockIds: [] });
 
         act(() => {
-            harness.onNodeDoubleClick?.(null, nodeById(lastFlowRender().nodes, 'weights:7'));
+            harness.onNodeDoubleClick?.(null, nodeById(lastFlowRender().nodes, 'weights:7-8'));
         });
         runBuild.mockClear();
         fireEvent.click(screen.getByRole('button', { name: 'Unroll all repeats' }));
 
         expect((runBuild.mock.calls.at(-1)?.[0] as OpGraphBuildOptions).expandedBlockIds).toEqual(
-            expect.arrayContaining(['weights:7']),
+            expect.arrayContaining(['weights:7-8']),
         );
     });
 
@@ -1791,16 +1791,16 @@ describe('OperationGraphReactFlow repeat blocks', () => {
         // fan, then fold the repeats away to read the model's shape.
         deliver(withFanAndRepeats, { collapseWeightLoads: true });
         act(() => {
-            harness.onNodeDoubleClick?.(null, nodeById(lastFlowRender().nodes, 'weights:7'));
+            harness.onNodeDoubleClick?.(null, nodeById(lastFlowRender().nodes, 'weights:7-8'));
         });
         const opened = (runBuild.mock.calls.at(-1)?.[0] as OpGraphBuildOptions).expandedBlockIds;
-        expect(opened).toEqual(expect.arrayContaining(['weights:7']));
+        expect(opened).toEqual(expect.arrayContaining(['weights:7-8']));
         deliver(withFanAndRepeats, { collapseWeightLoads: true, expandedBlockIds: opened });
 
         runBuild.mockClear();
         fireEvent.click(screen.getByRole('button', { name: 'Fold all repeats' }));
 
-        expect((runBuild.mock.calls.at(-1)?.[0] as OpGraphBuildOptions).expandedBlockIds).toEqual(['weights:7']);
+        expect((runBuild.mock.calls.at(-1)?.[0] as OpGraphBuildOptions).expandedBlockIds).toEqual(['weights:7-8']);
     });
 
     it('asks to unfold a weight fan when its expander is clicked', () => {
@@ -1821,11 +1821,11 @@ describe('OperationGraphReactFlow repeat blocks', () => {
         runBuild.mockClear();
 
         act(() => {
-            harness.onNodeDoubleClick?.(null, nodeById(lastFlowRender().nodes, 'weights:1'));
+            harness.onNodeDoubleClick?.(null, nodeById(lastFlowRender().nodes, 'weights:1-2'));
         });
 
         expect(runBuild.mock.calls.at(-1)?.[0]).toEqual(
-            expect.objectContaining({ expandedBlockIds: expect.arrayContaining(['weights:1']) }),
+            expect.objectContaining({ expandedBlockIds: expect.arrayContaining(['weights:1-2']) }),
         );
     });
 
