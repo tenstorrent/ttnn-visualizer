@@ -12,6 +12,7 @@ import { formatMemorySize, prettyPrintAddress } from '../../functions/math';
 import { showHexAtom } from '../../store/app';
 import { L1_DEFAULT_MEMORY_SIZE } from '../../definitions/L1MemorySize';
 import { L1_PEAK_COLORS } from '../../definitions/GraphColors';
+import { getPerfChartChrome } from '../../definitions/PlotConfigurations';
 import { useL1PeakDecomposition } from '../../hooks/useL1PeakDecomposition';
 import 'styles/components/L1PeakComposition.scss';
 
@@ -35,6 +36,9 @@ function L1PeakComposition() {
     const { result, isLoading } = useL1PeakDecomposition();
     // Same address presentation as the memory legends, including the hex preference. #2025
     const showHex = useAtomValue(showHexAtom);
+    // Resolved on use, not at import: these read from the stylesheet, which may not have
+    // applied when the module first evaluates.
+    const chrome = getPerfChartChrome();
 
     const ordered = useMemo(
         () => [...result.byOperationId.values()].sort((left, right) => left.operationId - right.operationId),
@@ -123,9 +127,36 @@ function L1PeakComposition() {
                     margin: { l: 70, r: 20, t: 10, b: 45 },
                     paper_bgcolor: 'transparent',
                     plot_bgcolor: 'transparent',
-                    font: { color: '#ccc' },
-                    xaxis: { title: { text: 'Operation' }, gridcolor: '#333' },
-                    yaxis: { title: { text: 'Bytes per core' }, gridcolor: '#333', rangemode: 'tozero' },
+                    font: { color: chrome.text },
+                    xaxis: {
+                        title: { text: 'Operation' },
+                        gridcolor: chrome.line,
+                        linecolor: chrome.line,
+                        color: chrome.text,
+                        zeroline: false,
+                        // Unified hover draws a spike line; the default is a thick opaque bar
+                        // that hides the very columns it is pointing at.
+                        showspikes: true,
+                        spikecolor: chrome.line,
+                        spikethickness: 1,
+                        spikedash: 'dot',
+                        spikemode: 'across',
+                    },
+                    yaxis: {
+                        title: { text: 'Bytes per core' },
+                        gridcolor: chrome.line,
+                        linecolor: chrome.line,
+                        color: chrome.text,
+                        rangemode: 'tozero',
+                        zeroline: false,
+                    },
+                    // Plotly's default hover label is a light surface, which on this page
+                    // renders pale grey text on white.
+                    hoverlabel: {
+                        bgcolor: chrome.surface,
+                        bordercolor: chrome.line,
+                        font: { color: chrome.text },
+                    },
                     legend: { orientation: 'h', y: -0.2 },
                     // A stacked composition is only readable if hovering reports every class at
                     // that operation. Per-trace hover picks whichever band is nearest, which on a
