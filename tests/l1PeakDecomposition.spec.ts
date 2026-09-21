@@ -4,8 +4,9 @@
 
 import { describe, expect, it } from 'vitest';
 import { L1PeakPrecision, L1ResidentKind, buildL1PeakDecomposition } from '../src/functions/l1PeakDecomposition';
+import { NO_CONSUMER_OPERATION_ID } from '../src/functions/lateDeallocation';
 import { Buffer, Node, NodeType } from '../src/model/APIData';
-import { BufferType } from '../src/model/BufferType';
+import { BufferType, StringBufferType } from '../src/model/BufferType';
 
 interface NodeOverrides {
     address?: number;
@@ -16,6 +17,13 @@ interface NodeOverrides {
     deviceId?: number;
     globallyAllocated?: '0' | '1';
 }
+
+const TYPE_FOR: Record<number, string> = {
+    [BufferType.DRAM]: StringBufferType.DRAM,
+    [BufferType.L1]: StringBufferType.L1,
+    // tt-metal spells an L1_SMALL node's `type` as 'L1'; only `buffer_type` distinguishes it.
+    [BufferType.L1_SMALL]: StringBufferType.L1,
+};
 
 const node = (nodeType: NodeType, overrides: NodeOverrides = {}): Node => {
     const {
@@ -39,6 +47,7 @@ const node = (nodeType: NodeType, overrides: NodeOverrides = {}): Node => {
             address: String(address),
             size: String(size),
             num_cores: String(numCores),
+            type: TYPE_FOR[bufferType],
             buffer_type: bufferType,
             device_id: deviceId,
             ...(maxSizePerBank === undefined ? {} : { max_size_per_bank: String(maxSizePerBank) }),
@@ -68,13 +77,13 @@ const build = (
     operations: { id: number; device_operations: Node[] }[],
     snapshot: Record<number, Buffer[]> = {},
     lastUse: Record<number, number> = {},
-    deviceId: number | null = null,
+    bankCount?: number,
 ) =>
     buildL1PeakDecomposition({
         operations,
         snapshotByOperationId: new Map(Object.entries(snapshot).map(([k, v]) => [Number(k), v])),
         lastUseByAddress: new Map(Object.entries(lastUse).map(([k, v]) => [Number(k), v])),
-        deviceId,
+        bankCount,
     });
 
 describe('buildL1PeakDecomposition', () => {
@@ -188,14 +197,16 @@ describe('buildL1PeakDecomposition', () => {
         ]);
     });
 
-    it('marks a mixed peak as an upper bound and a single-class peak as exact', () => {
+    it('is exact only for a single resident, because nothing proves two residents share cores', () => {
         const mixed = build([{ id: 1, device_operations: [allocate(1000, 400), cb(10, 250)] }]);
-        const cbsOnly = build([{ id: 1, device_operations: [cb(10, 250)] }]);
-        const tensorsOnly = build([{ id: 1, device_operations: [allocate(1000, 400)] }]);
+        const twoCbs = build([{ id: 1, device_operations: [cb(10, 250), cb(20, 250)] }]);
+        const twoTensors = build([{ id: 1, device_operations: [allocate(1000, 400), allocate(2000, 300)] }]);
+        const one = build([{ id: 1, device_operations: [allocate(1000, 400)] }]);
 
         expect(mixed.peak?.precision).toBe(L1PeakPrecision.UpperBound);
-        expect(cbsOnly.peak?.precision).toBe(L1PeakPrecision.Exact);
-        expect(tensorsOnly.peak?.precision).toBe(L1PeakPrecision.Exact);
+        expect(twoCbs.peak?.precision).toBe(L1PeakPrecision.UpperBound);
+        expect(twoTensors.peak?.precision).toBe(L1PeakPrecision.UpperBound);
+        expect(one.peak?.precision).toBe(L1PeakPrecision.Exact);
     });
 
     it('counts L1_SMALL against L1 and ignores DRAM', () => {
@@ -228,20 +239,158 @@ describe('buildL1PeakDecomposition', () => {
         expect(result.peak?.totalBytes).toBe(400);
     });
 
-    it('accounts for one device when asked, and every device when not', () => {
-        const operations = [
+    it('ignores node device_id, because no capture labels allocate and deallocate_all consistently', () => {
+        // bge_m3 and sentence_bert allocate CBs on device 0 and clear them on device 1;
+        // test_ttnn_moe allocates on 0-31 and clears only on 0. Filtering on any one device
+        // means the clear never fires and CBs accumulate for the whole run.
+        const result = build([
             {
                 id: 1,
                 device_operations: [
-                    node(NodeType.buffer_allocate, { address: 1000, maxSizePerBank: 400, deviceId: 0 }),
-                    node(NodeType.buffer_allocate, { address: 2000, maxSizePerBank: 300, deviceId: 1 }),
+                    node(NodeType.circular_buffer_allocate, { address: 10, size: 300, deviceId: 0 }),
+                    node(NodeType.circular_buffer_deallocate_all, { deviceId: 1 }),
+                    node(NodeType.circular_buffer_allocate, { address: 20, size: 300, deviceId: 2 }),
+                    node(NodeType.buffer_allocate, { address: 1000, maxSizePerBank: 400, deviceId: 7 }),
                 ],
             },
+        ]);
+
+        // Honouring device_id would skip the device-1 clear and leave both CBs live: 1000.
+        expect(result.peak?.totalBytes).toBe(700);
+        expect(result.peak?.circularBufferBytes).toBe(300);
+        expect(result.peak?.persistentTensorBytes).toBe(400);
+    });
+
+    it('carries circular buffers into later operations, because tt-metal frees them at the next program', () => {
+        // Measured: no operation ever clears its own CBs; `deallocate_all` arrives at the start
+        // of the NEXT device op (median carry 1 operation, max 6 across the corpus). Clearing at
+        // the boundary would understate the peak, because the bytes are still physically resident.
+        const result = build([
+            { id: 1, device_operations: [cb(10, 500)] },
+            { id: 2, device_operations: [allocate(1000, 400)] },
+        ]);
+
+        expect(result.byOperationId.get(2)?.circularBufferBytes).toBe(500);
+        expect(result.peak?.totalBytes).toBe(900);
+    });
+
+    it('does not treat a no-consumer sentinel as a last use', () => {
+        // getLastValidConsumer returns -1 when a tensor's only consumers are deallocate calls.
+        const operations = [
+            { id: 1, device_operations: [allocate(1000, 400)] },
+            { id: 2, device_operations: [allocate(2000, 300)] },
         ];
 
-        expect(build(operations, {}, {}, 0).peak?.totalBytes).toBe(400);
-        expect(build(operations, {}, {}, 1).peak?.totalBytes).toBe(300);
-        expect(build(operations, {}, {}, null).peak?.totalBytes).toBe(700);
+        const result = build(operations, {}, { 1000: NO_CONSUMER_OPERATION_ID });
+
+        expect(result.byOperationId.get(2)?.staleTensorBytes).toBe(0);
+        expect(result.byOperationId.get(2)?.persistentTensorBytes).toBe(700);
+    });
+
+    it('measures an operation whose only L1 state arrives through the snapshot', () => {
+        // Reconciliation can ADD residents, so an operation running no L1 node of its own can
+        // still hold the peak. Measuring only inside the node loop dropped 56% of segformer's ops.
+        const result = build([{ id: 1, device_operations: [] }], { 1: [buffer(1000, 900)] });
+
+        expect(result.byOperationId.get(1)?.totalBytes).toBe(900);
+        expect(result.peak?.totalBytes).toBe(900);
+    });
+
+    it('seeds a snapshot survivor the replay never allocated', () => {
+        const result = build([{ id: 1, device_operations: [allocate(1000, 400)] }], {
+            1: [buffer(1000, 400), buffer(5000, 250)],
+        });
+
+        expect(result.byOperationId.get(1)?.totalBytes).toBe(650);
+    });
+
+    it('keeps DRAM and non-L1 buffers out of the reconciled live set', () => {
+        const result = build([{ id: 1, device_operations: [allocate(1000, 400)] }], {
+            1: [buffer(1000, 400), buffer(9000, 9999, BufferType.DRAM)],
+        });
+
+        expect(result.byOperationId.get(1)?.totalBytes).toBe(400);
+    });
+
+    it('reports how many allocations each operation boundary reconciled away', () => {
+        const result = build(
+            [
+                {
+                    id: 1,
+                    device_operations: [allocate(1000, 400), allocate(2000, 300), allocate(4000, 50)],
+                },
+                { id: 2, device_operations: [allocate(3000, 100)] },
+            ],
+            { 1: [buffer(1000, 400)], 2: [buffer(1000, 400), buffer(3000, 100)] },
+        );
+
+        // Two dropped at op 1's boundary, so a count that assigns rather than accumulates is visible.
+        expect(result.byOperationId.get(1)?.reconciledAwayCount).toBe(2);
+        expect(result.byOperationId.get(2)?.reconciledAwayCount).toBe(0);
+        expect(result.reconciledAwayCount).toBe(2);
+    });
+
+    it('re-seeds a snapshot survivor as persistent, never as an intermediate', () => {
+        // The graph allocated and freed 1000 inside op 1, so op 1 sees an intermediate; the
+        // snapshot then says it survived, and from op 2 it is an ordinary persistent tensor.
+        const result = build(
+            [
+                { id: 1, device_operations: [allocate(1000, 400), free(1000)] },
+                { id: 2, device_operations: [allocate(2000, 100)] },
+            ],
+            { 1: [buffer(1000, 400)] },
+        );
+
+        expect(result.byOperationId.get(1)?.intermediateTensorBytes).toBe(400);
+        expect(result.byOperationId.get(2)?.intermediateTensorBytes).toBe(0);
+        expect(result.byOperationId.get(2)?.persistentTensorBytes).toBe(500);
+    });
+
+    it('only calls a buffer intermediate when the same operation allocated it', () => {
+        // op 2 frees an address allocated by op 1 and then reuses it. The free does not make
+        // the later allocation an intermediate — nothing in op 2 freed *that* allocation.
+        const result = build([
+            { id: 1, device_operations: [allocate(1000, 400)] },
+            { id: 2, device_operations: [free(1000), allocate(1000, 400)] },
+        ]);
+
+        expect(result.byOperationId.get(2)?.persistentTensorBytes).toBe(400);
+        expect(result.byOperationId.get(2)?.intermediateTensorBytes).toBe(0);
+    });
+
+    it('carries the snapshot size forward when the graph disagrees for the same address', () => {
+        // Measured: 54 of 258 matched (operation, address) pairs disagree on resnet50_jul28.
+        // The allocating operation keeps the graph's figure, since that is what was live during
+        // it; every later operation sees the snapshot's.
+        const result = build(
+            [
+                { id: 1, device_operations: [allocate(1000, 160)] },
+                { id: 2, device_operations: [allocate(2000, 100)] },
+            ],
+            { 1: [buffer(1000, 148)] },
+        );
+
+        expect(result.byOperationId.get(1)?.totalBytes).toBe(160);
+        expect(result.byOperationId.get(2)?.totalBytes).toBe(248);
+    });
+
+    it('names each contributor with the operation that last used it', () => {
+        const result = build([{ id: 1, device_operations: [allocate(1000, 400), cb(10, 250)] }], {}, { 1000: 5 });
+        const tensor = result.peak?.contributors.find((c) => c.address === 1000);
+        const buf = result.peak?.contributors.find((c) => c.address === 10);
+
+        expect(tensor?.lastUsedByOperationId).toBe(5);
+        expect(buf?.lastUsedByOperationId).toBeNull();
+    });
+
+    it('uses the device bank count, not 64, for the per-bank fallback', () => {
+        // multihost_poc and test_ttnn_moe run 10x13 grids with l1_num_banks of 120.
+        const operations = [
+            { id: 1, device_operations: [node(NodeType.buffer_allocate, { address: 1000, size: 12000, numCores: 0 })] },
+        ];
+
+        expect(build(operations, {}, {}, 120).peak?.totalBytes).toBe(100);
+        expect(build(operations).peak?.totalBytes).toBe(187.5);
     });
 
     it('reports no peak for a run with no L1 activity', () => {

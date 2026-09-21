@@ -2,12 +2,27 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
+import { NO_CONSUMER_OPERATION_ID } from './lateDeallocation';
 import { Buffer, Node, NodeType } from '../model/APIData';
-import { BufferType } from '../model/BufferType';
+import { BufferType, StringBufferType } from '../model/BufferType';
 import { L1_NUM_CORES } from '../definitions/L1MemorySize';
 
-/** Buffer types that take space in a core's L1, as opposed to DRAM or host memory. */
+/**
+ * Buffer types that take space in a core's L1, as opposed to DRAM or host memory.
+ * Used for the post-op snapshot, whose `buffer_type` is a real column.
+ */
 const L1_RESIDENT_BUFFER_TYPES: ReadonlySet<BufferType> = new Set([BufferType.L1, BufferType.L1_SMALL]);
+
+/**
+ * Graph nodes are keyed on `type`, not `buffer_type`. Two of the ten local captures
+ * (segformer_encoder, visualizer_db) omit `buffer_type` from every one of their
+ * buffer nodes while emitting `type` on all of them, so keying on the numeric field
+ * silently reports those reports as having no tensors at all. `processMemoryAllocations`
+ * reads `type` for the same reason. Both `L1` and `L1_SMALL` occupy L1; tt-metal spells
+ * an L1_SMALL node's `type` as `'L1'` and distinguishes it only via `buffer_type`.
+ */
+const isL1ResidentNode = (params: { type?: string } | null): boolean =>
+    params?.type === StringBufferType.L1 || params?.type === StringBufferType.L1_SMALL;
 
 /** What a resident is, which decides whether anything can be done about it. */
 export enum L1ResidentKind {
@@ -20,10 +35,15 @@ export enum L1ResidentKind {
 }
 
 /**
- * Whether a total is a measurement or a ceiling. A CB carries a `core_range_set`,
- * but a `buffer_allocate` node carries only `num_cores`, so when both classes are
- * resident we cannot prove they share cores and can only add their per-bank bytes.
- * #2027
+ * Whether a total is a measurement or a ceiling.
+ *
+ * Summing per-bank bytes assumes the residents share cores. A `buffer_allocate` node
+ * carries only `num_cores`, never which cores (#2027), and this module does not yet
+ * resolve a CB's `core_range_set`, so *any* two live residents are added without proof
+ * that they stack on one core. Only a single resident is therefore exact. An earlier
+ * version reserved the ceiling for a mixed CB+tensor peak, which labelled a
+ * tensors-only sum `Exact` even though resnet50 spreads 306 of its 538 L1 buffers
+ * across 56 of 64 banks.
  */
 export enum L1PeakPrecision {
     Exact = 'exact',
@@ -48,6 +68,8 @@ export interface L1PeakDecomposition {
     staleTensorBytes: number;
     precision: L1PeakPrecision;
     contributors: readonly L1PeakContributor[];
+    /** Allocations dropped at THIS operation's boundary because the snapshot had freed them. */
+    reconciledAwayCount: number;
 }
 
 export interface L1PeakDecompositionParams {
@@ -60,23 +82,40 @@ export interface L1PeakDecompositionParams {
      * accumulates allocations that were in fact freed. #2025
      */
     snapshotByOperationId: ReadonlyMap<number, readonly Buffer[]>;
-    /** Last operation that genuinely used the tensor at an address, excluding deallocate calls. */
+    /**
+     * Last operation that genuinely used the tensor at an address, excluding deallocate
+     * calls — build it from `getLastValidConsumer` so staleness means the same thing here
+     * as it does behind Buffer Summary's hatching.
+     *
+     * Addresses are recycled: 160 of resnet50's 226 L1 addresses are used by more than one
+     * tensor and one is used by 77, so an entry is the last use of whichever tensor the
+     * caller resolved last, not of the tensor currently resident. Staleness is therefore
+     * indicative, not authoritative. Tracked in #2029.
+     */
     lastUseByAddress: ReadonlyMap<number, number>;
-    /** Which device to account for; null accounts for every node, for single-device reports. */
-    deviceId: number | null;
+    /**
+     * Bank count for the `size / num_cores` fallback when a node omits `max_size_per_bank`.
+     * Pass `devices[].l1_num_banks`; it is 120, not 64, on 10x13 grids.
+     */
+    bankCount?: number;
 }
 
 export interface L1PeakDecompositionResult {
     byOperationId: Map<number, L1PeakDecomposition>;
     /** The highest per-operation peak in the run. */
     peak: L1PeakDecomposition | null;
-    /** Allocations the graph never freed, dropped when reconciling against the snapshot. */
+    /**
+     * Allocations dropped across the whole run when reconciling against the snapshot. Not
+     * purely "the graph never freed these": a tensor seeded from one snapshot and gone by
+     * the next is counted too.
+     */
     reconciledAwayCount: number;
 }
 
 /** The union of params carried by the memory-bearing graph nodes. */
 interface GraphMemoryParams {
     address?: string;
+    type?: string;
     buffer_type?: BufferType;
     device_id?: number | string;
     size: string;
@@ -86,7 +125,8 @@ interface GraphMemoryParams {
 }
 
 interface ReplayContext {
-    deviceId: number | null;
+    /** Bank count used only when a node omits `max_size_per_bank`. */
+    bankCount: number;
     /** Addresses an operation both allocates and frees, keyed `operationId:address`. */
     intermediates: ReadonlySet<string>;
 }
@@ -97,36 +137,25 @@ interface ResidentTensor {
     intermediate: boolean;
 }
 
-/**
- * tt-metal emits `device_id` as a number in some captures and a string in others,
- * and omits it entirely in older ones. #1844
- */
-const matchesDevice = (raw: number | string | undefined, deviceId: number | null): boolean => {
-    if (deviceId === null || raw === undefined) {
-        return true;
-    }
-    return Number(raw) === deviceId;
-};
-
-const isL1Resident = (bufferType: BufferType | undefined): boolean =>
+const isL1ResidentBuffer = (bufferType: BufferType | undefined): boolean =>
     bufferType !== undefined && L1_RESIDENT_BUFFER_TYPES.has(bufferType);
 
 /**
- * Per-bank bytes. `max_size_per_bank` is absent on some captures, and `num_cores`
- * is `'0'` on a handful of nodes, so neither can be trusted without a fallback.
+ * Per-bank bytes. `max_size_per_bank` is absent on some captures, and `num_cores` is
+ * `0` (integer in most captures, the string `'0'` in visualizer_db) on a handful of
+ * nodes, so neither can be trusted without a fallback. The fallback bank count comes
+ * from the device because it is not always 64 — multihost_poc and test_ttnn_moe run
+ * 10x13 grids with `l1_num_banks` of 120.
  */
-const perBankBytes = (params: GraphMemoryParams): number => {
+const perBankBytes = (params: GraphMemoryParams, bankCount: number): number => {
     if (params.max_size_per_bank !== undefined) {
         return Number(params.max_size_per_bank);
     }
-    const cores = Number(params.num_cores) || L1_NUM_CORES;
+    const cores = Number(params.num_cores) || bankCount;
     return Number(params.size) / cores;
 };
 
-const findIntermediates = (
-    operations: readonly { id: number; device_operations: Node[] }[],
-    deviceId: number | null,
-): ReadonlySet<string> => {
+const findIntermediates = (operations: readonly { id: number; device_operations: Node[] }[]): ReadonlySet<string> => {
     const intermediates = new Set<string>();
 
     for (const operation of operations) {
@@ -135,12 +164,7 @@ const findIntermediates = (
         for (const node of operation.device_operations ?? []) {
             const params = node.params as GraphMemoryParams | null;
 
-            const relevant =
-                params !== null &&
-                params !== undefined &&
-                params.address !== undefined &&
-                isL1Resident(params.buffer_type) &&
-                matchesDevice(params.device_id, deviceId);
+            const relevant = params?.address !== undefined && isL1ResidentNode(params);
 
             if (relevant && node.node_type === NodeType.buffer_allocate) {
                 allocatedHere.add(Number(params.address));
@@ -157,15 +181,6 @@ const findIntermediates = (
     return intermediates;
 };
 
-/**
- * Replay every operation's captured graph and report, per operation, the tightest
- * instant: total per-bank L1 occupancy split by what it is made of.
- *
- * Circular buffers are 46–100% of peak L1 across the local report corpus, and
- * intra-op intermediates a further 32–38% on resnet50, so a decomposition built
- * from the post-op `buffers` table alone would describe a minority of the peak.
- * #2025
- */
 interface ReplayState {
     tensors: Map<number, ResidentTensor>;
     circularBuffers: Map<number, number>;
@@ -184,35 +199,31 @@ function applyNode(node: Node, state: ReplayState, operationId: number, context:
     }
 
     if (node.node_type === NodeType.circular_buffer_deallocate_all) {
-        if (!matchesDevice(params.device_id, context.deviceId) || state.circularBuffers.size === 0) {
+        if (state.circularBuffers.size === 0) {
             return false;
         }
         state.circularBuffers.clear();
         return true;
     }
 
-    if (!matchesDevice(params.device_id, context.deviceId)) {
-        return false;
-    }
-
     if (node.node_type === NodeType.circular_buffer_allocate) {
         // A `globally_allocated` CB is a kernel-side view onto an L1 tensor already
         // counted as a buffer, not a fresh allocation. #1651
-        if (params.globally_allocated === '1' || Number(params.globally_allocated) === 1) {
+        if (Number(params.globally_allocated) === 1 || params.address === undefined) {
             return false;
         }
         state.circularBuffers.set(Number(params.address), Number(params.size));
         return true;
     }
 
-    if (!isL1Resident(params.buffer_type) || params.address === undefined) {
+    if (!isL1ResidentNode(params) || params.address === undefined) {
         return false;
     }
     const address = Number(params.address);
 
     if (node.node_type === NodeType.buffer_allocate) {
         state.tensors.set(address, {
-            bytes: perBankBytes(params),
+            bytes: perBankBytes(params, context.bankCount),
             intermediate: context.intermediates.has(`${operationId}:${address}`),
         });
         return true;
@@ -226,7 +237,13 @@ function applyNode(node: Node, state: ReplayState, operationId: number, context:
 }
 
 /** Occupancy at one instant, split by what a user could do about each part. */
-function measure(state: ReplayState, operationId: number, lastUseByAddress: ReadonlyMap<number, number>) {
+type MeasuredInstant = Omit<L1PeakDecomposition, 'reconciledAwayCount'>;
+
+function measure(
+    state: ReplayState,
+    operationId: number,
+    lastUseByAddress: ReadonlyMap<number, number>,
+): MeasuredInstant {
     const contributors: L1PeakContributor[] = [];
     let circularBufferBytes = 0;
     let intermediateTensorBytes = 0;
@@ -242,7 +259,11 @@ function measure(state: ReplayState, operationId: number, lastUseByAddress: Read
         const lastUse = lastUseByAddress.get(address) ?? null;
         let kind: L1ResidentKind;
 
-        if (lastUse !== null && lastUse < operationId) {
+        // `getLastValidConsumer` returns NO_CONSUMER_OPERATION_ID for a tensor whose only
+        // consumers are deallocate calls. It has no last *use* to be late relative to, so it
+        // is not stale — without this guard every such tensor lands in the one class the UI
+        // tells people to act on. `lateDeallocation.ts` shipped that bug once already.
+        if (lastUse !== null && lastUse > NO_CONSUMER_OPERATION_ID && lastUse < operationId) {
             kind = L1ResidentKind.StaleTensor;
             staleTensorBytes += tensor.bytes;
         } else if (tensor.intermediate) {
@@ -263,12 +284,8 @@ function measure(state: ReplayState, operationId: number, lastUseByAddress: Read
         intermediateTensorBytes,
         persistentTensorBytes,
         staleTensorBytes,
-        // Two classes of resident can only be added, not reconciled, without
-        // knowing whether they share cores.
         precision:
-            state.circularBuffers.size > 0 && state.tensors.size > 0
-                ? L1PeakPrecision.UpperBound
-                : L1PeakPrecision.Exact,
+            state.circularBuffers.size + state.tensors.size > 1 ? L1PeakPrecision.UpperBound : L1PeakPrecision.Exact,
         contributors: contributors.sort((left, right) => right.bytes - left.bytes),
     };
 }
@@ -286,16 +303,16 @@ export function buildL1PeakDecomposition({
     operations,
     snapshotByOperationId,
     lastUseByAddress,
-    deviceId,
+    bankCount = L1_NUM_CORES,
 }: L1PeakDecompositionParams): L1PeakDecompositionResult {
-    const context: ReplayContext = { deviceId, intermediates: findIntermediates(operations, deviceId) };
+    const context: ReplayContext = { bankCount, intermediates: findIntermediates(operations) };
     const byOperationId = new Map<number, L1PeakDecomposition>();
     const state: ReplayState = { tensors: new Map(), circularBuffers: new Map() };
     let reconciledAwayCount = 0;
     let peak: L1PeakDecomposition | null = null;
 
     for (const operation of operations) {
-        let tightest: L1PeakDecomposition | null = null;
+        let tightest: MeasuredInstant | null = null;
 
         for (const node of operation.device_operations ?? []) {
             if (applyNode(node, state, operation.id, context)) {
@@ -307,23 +324,16 @@ export function buildL1PeakDecomposition({
             }
         }
 
-        if (tightest !== null) {
-            byOperationId.set(operation.id, tightest);
-
-            if (peak === null || tightest.totalBytes > peak.totalBytes) {
-                peak = tightest;
-            }
-        }
-
         // The snapshot is what actually survived, so anything the graph left live
         // but the snapshot omits was freed without a node.
         const snapshot = snapshotByOperationId.get(operation.id);
+        let reconciledAwayHere = 0;
 
         if (snapshot !== undefined) {
             const survivors = new Map<number, Buffer>();
 
             for (const buffer of snapshot) {
-                if (isL1Resident(buffer.buffer_type) && matchesDevice(buffer.device_id, deviceId)) {
+                if (isL1ResidentBuffer(buffer.buffer_type)) {
                     survivors.set(buffer.address, buffer);
                 }
             }
@@ -331,12 +341,33 @@ export function buildL1PeakDecomposition({
             for (const address of [...state.tensors.keys()]) {
                 if (!survivors.has(address)) {
                     state.tensors.delete(address);
-                    reconciledAwayCount += 1;
+                    reconciledAwayHere += 1;
                 }
             }
 
+            // A survivor the replay never saw is an allocation the graph dropped; seeding it
+            // is how a capture with no usable graph tensors still reports a real figure.
             for (const [address, buffer] of survivors) {
                 state.tensors.set(address, { bytes: buffer.size, intermediate: false });
+            }
+        }
+
+        reconciledAwayCount += reconciledAwayHere;
+
+        // Reconciliation can ADD residents, so an operation that ran no L1 node of its own can
+        // still be holding the run's peak. Measuring only inside the node loop dropped 56% of
+        // segformer's operations, every one of which had live L1.
+        const afterReconciliation = measure(state, operation.id, lastUseByAddress);
+        const best =
+            tightest === null || afterReconciliation.totalBytes > tightest.totalBytes ? afterReconciliation : tightest;
+
+        if (best.totalBytes > 0) {
+            const decomposition: L1PeakDecomposition = { ...best, reconciledAwayCount: reconciledAwayHere };
+
+            byOperationId.set(operation.id, decomposition);
+
+            if (peak === null || decomposition.totalBytes > peak.totalBytes) {
+                peak = decomposition;
             }
         }
     }
