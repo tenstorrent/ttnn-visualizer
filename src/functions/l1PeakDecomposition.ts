@@ -28,12 +28,26 @@ const L1_RESIDENT_BUFFER_TYPES: ReadonlySet<BufferType> = new Set([BufferType.L1
  * reads `type` for the same reason. Both `L1` and `L1_SMALL` occupy L1; tt-metal spells
  * an L1_SMALL node's `type` as `'L1'` and distinguishes it only via `buffer_type`.
  */
+const addressOf = (params: GraphMemoryParams | null): number | null => {
+    if (params?.address === undefined || params.address === null) {
+        return null;
+    }
+    const address = Number(params.address);
+
+    return Number.isFinite(address) ? address : null;
+};
+
 const isL1ResidentNode = (params: { type?: string } | null): boolean =>
     params?.type === StringBufferType.L1 || params?.type === StringBufferType.L1_SMALL;
 
 /** The union of params carried by the memory-bearing graph nodes. */
 interface GraphMemoryParams {
-    address?: string;
+    /**
+     * Null on 276 of segformer's and 288 of visualizer_db's L1 deallocate nodes. `Number(null)`
+     * is 0 and `null !== undefined`, so a guard that only rejects `undefined` lets a null
+     * through as address 0 — and traces_51674 has eight real buffers there.
+     */
+    address?: string | null;
     type?: string;
     buffer_type?: BufferType;
     device_id?: number | string;
@@ -78,23 +92,30 @@ const findIntermediates = (operations: readonly { id: number; device_operations:
     const intermediates = new Set<string>();
 
     for (const operation of operations) {
-        const allocatedHere = new Set<number>();
+        const allocatedHere = new Map<number, number>();
 
-        for (const node of operation.device_operations ?? []) {
+        operation.device_operations?.forEach((node) => {
             const params = node.params as GraphMemoryParams | null;
 
-            const relevant = params?.address !== undefined && isL1ResidentNode(params);
+            const address = isL1ResidentNode(params) ? addressOf(params) : null;
 
-            if (relevant && node.node_type === NodeType.buffer_allocate) {
-                allocatedHere.add(Number(params.address));
-            } else if (relevant && node.node_type === NodeType.buffer_deallocate) {
-                const address = Number(params.address);
+            if (address === null) {
+                return;
+            }
+            if (node.node_type === NodeType.buffer_allocate) {
+                allocatedHere.set(address, (allocatedHere.get(address) ?? 0) + 1);
+            } else if (node.node_type === NodeType.buffer_deallocate) {
+                const allocatedTimes = allocatedHere.get(address) ?? 0;
 
-                if (allocatedHere.has(address)) {
-                    intermediates.add(`${operation.id}:${address}`);
+                if (allocatedTimes > 0) {
+                    // Keyed by occurrence, not by address: `allocate(A) free(A) allocate(A)`
+                    // within one operation leaves the SECOND allocation live, and an
+                    // operation-wide flag would call that survivor intermediate.
+                    intermediates.add(`${operation.id}:${address}:${allocatedTimes}`);
+                    allocatedHere.set(address, allocatedTimes - 1);
                 }
             }
-        }
+        });
     }
 
     return intermediates;
@@ -103,6 +124,8 @@ const findIntermediates = (operations: readonly { id: number; device_operations:
 interface ReplayState {
     tensors: Map<number, ResidentTensor>;
     circularBuffers: Map<number, number>;
+    /** Allocations per address within the current operation, to match `findIntermediates`. */
+    allocationsSeen: Map<number, number>;
 }
 
 /**
@@ -128,22 +151,28 @@ function applyNode(node: Node, state: ReplayState, operationId: number, context:
     if (node.node_type === NodeType.circular_buffer_allocate) {
         // A `globally_allocated` CB is a kernel-side view onto an L1 tensor already
         // counted as a buffer, not a fresh allocation. #1651
-        if (Number(params.globally_allocated) === 1 || params.address === undefined) {
+        const cbAddress = addressOf(params);
+
+        if (Number(params.globally_allocated) === 1 || cbAddress === null) {
             return false;
         }
-        state.circularBuffers.set(Number(params.address), Number(params.size));
+        state.circularBuffers.set(cbAddress, Number(params.size));
         return true;
     }
 
-    if (!isL1ResidentNode(params) || params.address === undefined) {
+    const address = isL1ResidentNode(params) ? addressOf(params) : null;
+
+    if (address === null) {
         return false;
     }
-    const address = Number(params.address);
 
     if (node.node_type === NodeType.buffer_allocate) {
+        const occurrence = (state.allocationsSeen.get(address) ?? 0) + 1;
+
+        state.allocationsSeen.set(address, occurrence);
         state.tensors.set(address, {
             bytes: perBankBytes(params, context.bankCount),
-            intermediate: context.intermediates.has(`${operationId}:${address}`),
+            intermediate: context.intermediates.has(`${operationId}:${address}:${occurrence}`),
         });
         return true;
     }
@@ -171,7 +200,7 @@ function measure(
 
     for (const [address, bytes] of state.circularBuffers) {
         circularBufferBytes += bytes;
-        contributors.push({ address, bytes, kind: L1ResidentKind.CircularBuffer, lastUsedByOperationId: null });
+        contributors.push({ address, bytes, kind: L1ResidentKind.CIRCULAR_BUFFER, lastUsedByOperationId: null });
     }
 
     for (const [address, tensor] of state.tensors) {
@@ -183,13 +212,13 @@ function measure(
         // is not stale — without this guard every such tensor lands in the one class the UI
         // tells people to act on. `lateDeallocation.ts` shipped that bug once already.
         if (lastUse !== null && lastUse > NO_CONSUMER_OPERATION_ID && lastUse < operationId) {
-            kind = L1ResidentKind.StaleTensor;
+            kind = L1ResidentKind.STALE_TENSOR;
             staleTensorBytes += tensor.bytes;
         } else if (tensor.intermediate) {
-            kind = L1ResidentKind.IntermediateTensor;
+            kind = L1ResidentKind.INTERMEDIATE_TENSOR;
             intermediateTensorBytes += tensor.bytes;
         } else {
-            kind = L1ResidentKind.PersistentTensor;
+            kind = L1ResidentKind.PERSISTENT_TENSOR;
             persistentTensorBytes += tensor.bytes;
         }
 
@@ -204,7 +233,7 @@ function measure(
         persistentTensorBytes,
         staleTensorBytes,
         precision:
-            state.circularBuffers.size + state.tensors.size > 1 ? L1PeakPrecision.UpperBound : L1PeakPrecision.Exact,
+            state.circularBuffers.size + state.tensors.size > 1 ? L1PeakPrecision.UPPER_BOUND : L1PeakPrecision.EXACT,
         contributors,
     };
 }
@@ -226,12 +255,17 @@ export function buildL1PeakDecomposition({
 }: L1PeakDecompositionParams): L1PeakDecompositionResult {
     const context: ReplayContext = { bankCount, intermediates: findIntermediates(operations) };
     const byOperationId = new Map<number, L1PeakDecomposition>();
-    const state: ReplayState = { tensors: new Map(), circularBuffers: new Map() };
+    const state: ReplayState = { tensors: new Map(), circularBuffers: new Map(), allocationsSeen: new Map() };
     let reconciledAwayCount = 0;
     let peak: L1PeakDecomposition | null = null;
 
     for (const operation of operations) {
-        let tightest: MeasuredInstant | null = null;
+        state.allocationsSeen.clear();
+
+        // Seeded from the state the operation is entered with: residents carried from the
+        // previous snapshot are live before the first node runs, so an operation whose first
+        // node is a free would otherwise never have its tightest instant measured.
+        let tightest: MeasuredInstant | null = measure(state, operation.id, lastUseByAddress);
 
         for (const node of operation.device_operations ?? []) {
             if (applyNode(node, state, operation.id, context)) {

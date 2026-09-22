@@ -128,21 +128,27 @@ export const useL1PeakDecomposition = (): L1PeakDecompositionState => {
         const empty = { data: null, unattributableStaleAddressCount: 0 };
 
         if (activeProfilerReport === null) {
-            return { status: L1PeakStatus.Unavailable, ...empty };
+            return { status: L1PeakStatus.UNAVAILABLE, ...empty };
         }
         if (isError) {
-            return { status: L1PeakStatus.Error, ...empty };
+            return { status: L1PeakStatus.ERROR, ...empty };
         }
         if (isLoading || !operationsQuery.data || !devicesQuery.data) {
-            return { status: L1PeakStatus.Loading, ...empty };
+            return { status: L1PeakStatus.LOADING, ...empty };
         }
 
-        // A report with no `devices` row cannot be judged against a budget, and the engine says
-        // so via a null capacity rather than reporting every figure as plausible.
+        // `fetchDevices` returns [] with only a toast when a report has no devices row, and an
+        // empty array is truthy — the guard above does not catch it. Without a device there is
+        // no bank count and no budget, so the plausibility refusal would be switched off
+        // exactly when the figures are least trustworthy.
         const device = devicesQuery.data[0];
 
+        if (device === undefined) {
+            return { status: L1PeakStatus.ERROR, ...empty };
+        }
+
         return {
-            status: L1PeakStatus.Ready,
+            status: L1PeakStatus.READY,
             data: buildL1PeakDecomposition({
                 operations: operationsQuery.data,
                 snapshotByOperationId,

@@ -27,25 +27,29 @@ function BufferSummary() {
 
             <h1 className='page-title'>Buffers by operation</h1>
 
-            <ButtonGroup className='sticky-nav'>
-                <AnchorButton
-                    intent={Intent.PRIMARY}
-                    href={`${ROUTES.BUFFERS}#${SECTION_IDS.PLOT}`}
-                    icon={IconNames.HORIZONTAL_BAR_CHART}
-                    variant={activeSection !== SECTION_IDS.PLOT ? ButtonVariant.OUTLINED : undefined}
-                >
-                    Plot view
-                </AnchorButton>
+            {/* Plot and Table are sections of the buffer-type panels; the peak composition
+                renders neither, so on that tab both anchors scroll to nothing. */}
+            {selectedTabId !== TAB_IDS.PEAK && (
+                <ButtonGroup className='sticky-nav'>
+                    <AnchorButton
+                        intent={Intent.PRIMARY}
+                        href={`${ROUTES.BUFFERS}#${SECTION_IDS.PLOT}`}
+                        icon={IconNames.HORIZONTAL_BAR_CHART}
+                        variant={activeSection !== SECTION_IDS.PLOT ? ButtonVariant.OUTLINED : undefined}
+                    >
+                        Plot view
+                    </AnchorButton>
 
-                <AnchorButton
-                    intent={Intent.PRIMARY}
-                    href={`${ROUTES.BUFFERS}#${SECTION_IDS.TABLE}`}
-                    icon={IconNames.TH}
-                    variant={activeSection !== SECTION_IDS.TABLE ? ButtonVariant.OUTLINED : undefined}
-                >
-                    Table view
-                </AnchorButton>
-            </ButtonGroup>
+                    <AnchorButton
+                        intent={Intent.PRIMARY}
+                        href={`${ROUTES.BUFFERS}#${SECTION_IDS.TABLE}`}
+                        icon={IconNames.TH}
+                        variant={activeSection !== SECTION_IDS.TABLE ? ButtonVariant.OUTLINED : undefined}
+                    >
+                        Table view
+                    </AnchorButton>
+                </ButtonGroup>
+            )}
 
             {activeToast && (
                 // eslint-disable-next-line jsx-a11y/click-events-have-key-events,jsx-a11y/no-static-element-interactions

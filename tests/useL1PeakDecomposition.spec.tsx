@@ -116,12 +116,12 @@ describe('useL1PeakDecomposition', () => {
 
     it('reports Unavailable when no report is selected', () => {
         mockQueries({});
-        expect(render(false).result.current.status).toBe(L1PeakStatus.Unavailable);
+        expect(render(false).result.current.status).toBe(L1PeakStatus.UNAVAILABLE);
     });
 
     it('reports Loading until every query it reads has settled', () => {
         mockQueries({ operations: loading });
-        expect(render().result.current.status).toBe(L1PeakStatus.Loading);
+        expect(render().result.current.status).toBe(L1PeakStatus.LOADING);
     });
 
     it('waits for devices, rather than replaying at the default bank count without a budget', () => {
@@ -130,7 +130,7 @@ describe('useL1PeakDecomposition', () => {
         // visualizer_db rendered 309 MiB as a headline figure with no warning.
         mockQueries({ operations: settled([operation(1, 'op')]), devices: loading });
 
-        expect(render().result.current.status).toBe(L1PeakStatus.Loading);
+        expect(render().result.current.status).toBe(L1PeakStatus.LOADING);
         expect(render().result.current.data).toBeNull();
     });
 
@@ -140,7 +140,7 @@ describe('useL1PeakDecomposition', () => {
             devices: { data: [{ l1_num_banks: 64, worker_l1_size: 1000 }], isLoading: true, isError: false },
         });
 
-        expect(render().result.current.status).toBe(L1PeakStatus.Loading);
+        expect(render().result.current.status).toBe(L1PeakStatus.LOADING);
     });
 
     it('does not build when devices settles with nothing, which leaves no budget to judge against', () => {
@@ -152,7 +152,7 @@ describe('useL1PeakDecomposition', () => {
             devices: { data: undefined, isLoading: false, isError: false },
         });
 
-        expect(render().result.current.status).toBe(L1PeakStatus.Loading);
+        expect(render().result.current.status).toBe(L1PeakStatus.LOADING);
     });
 
     it('reports Error rather than an empty decomposition when a query fails', () => {
@@ -163,7 +163,7 @@ describe('useL1PeakDecomposition', () => {
 
         const { status, data } = render().result.current;
 
-        expect(status).toBe(L1PeakStatus.Error);
+        expect(status).toBe(L1PeakStatus.ERROR);
         expect(data).toBeNull();
     });
 
@@ -278,7 +278,7 @@ describe('useL1PeakDecomposition', () => {
         expect(render().result.current.data?.peak?.contributors[0]).toMatchObject({
             address: 1000,
             bytes: 400,
-            kind: L1ResidentKind.PersistentTensor,
+            kind: L1ResidentKind.PERSISTENT_TENSOR,
         });
     });
 });

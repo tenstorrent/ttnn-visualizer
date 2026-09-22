@@ -20,7 +20,7 @@ import { showHexAtom } from '../../store/app';
 import { L1_DEFAULT_MEMORY_SIZE } from '../../definitions/L1MemorySize';
 import { getPerfChartChrome } from '../../definitions/PlotConfigurations';
 import { useL1PeakDecomposition } from '../../hooks/useL1PeakDecomposition';
-import { useOperationsList } from '../../hooks/useAPI';
+import { useDevices, useOperationsList } from '../../hooks/useAPI';
 import ROUTES from '../../definitions/Routes';
 import 'styles/components/L1PeakComposition.scss';
 
@@ -29,6 +29,7 @@ const TOP_OPERATION_COUNT = 10;
 function L1PeakComposition() {
     const { status, data: result, unattributableStaleAddressCount } = useL1PeakDecomposition();
     const { data: operations } = useOperationsList();
+    const { data: devices } = useDevices();
     // Same address presentation as the memory legends, including the hex preference. #2025
     const showHex = useAtomValue(showHexAtom);
     // Resolved on use, not at import: these read from the stylesheet, which may not have
@@ -49,7 +50,7 @@ function L1PeakComposition() {
         // resnet50 runs the same layer stack three times, so an undeduped ranking spends all
         // ten rows on one loop body — operations 130 and 229 are byte-identical. Keep the first
         // occurrence of each distinct composition and note how many it stands for.
-        const byComposition = new Map<string, { entry: (typeof ordered)[number]; repeats: number }>();
+        const byComposition = new Map<string, { entry: (typeof ordered)[number]; alsoAt: number[] }>();
 
         [...ordered]
             .sort((left, right) => right.totalBytes - left.totalBytes)
@@ -64,14 +65,20 @@ function L1PeakComposition() {
                 const seen = byComposition.get(key);
 
                 if (seen) {
-                    seen.repeats += 1;
+                    seen.alsoAt.push(entry.operationId);
                 } else {
-                    byComposition.set(key, { entry, repeats: 1 });
+                    byComposition.set(key, { entry, alsoAt: [] });
                 }
             });
 
         return [...byComposition.values()].slice(0, TOP_OPERATION_COUNT);
     }, [ordered]);
+
+    // Every plotted and listed value carries its own precision, and a lower operation can be a
+    // ceiling while the peak happens to have one resident.
+    const anyUpperBound = ordered.some((entry) => entry.precision === L1PeakPrecision.UPPER_BOUND);
+
+    const hasRepeats = topOperations.some(({ alsoAt }) => alsoAt.length > 0);
 
     const chartData = useMemo<Partial<PlotData>[]>(() => {
         const x = ordered.map((entry) => entry.operationId);
@@ -93,15 +100,15 @@ function L1PeakComposition() {
         }));
     }, [ordered, colours]);
 
-    if (status === L1PeakStatus.Unavailable) {
+    if (status === L1PeakStatus.UNAVAILABLE) {
         return <p className='l1-peak-empty'>Select a memory report to see its L1 peak composition.</p>;
     }
 
-    if (status === L1PeakStatus.Loading) {
+    if (status === L1PeakStatus.LOADING) {
         return <p className='l1-peak-empty'>Replaying captured graphs…</p>;
     }
 
-    if (status === L1PeakStatus.Error || result === null) {
+    if (status === L1PeakStatus.ERROR || result === null) {
         return (
             <Callout
                 intent={Intent.WARNING}
@@ -118,23 +125,27 @@ function L1PeakComposition() {
         return <p className='l1-peak-empty'>This report records no L1 activity.</p>;
     }
 
-    const { peak, capacityBytes, exceedsCapacity } = result;
+    // A refusal that still prints the figures underneath is not a refusal.
+    if (result.exceedsCapacity) {
+        return (
+            <Callout
+                intent={Intent.DANGER}
+                title='These figures are not usable'
+            >
+                The replay reports {formatMemorySize(result.peak.totalBytes, 2)} against a per-core L1 of{' '}
+                {formatMemorySize(result.capacityBytes ?? 0, 2)}. Either the capture does not carry enough information
+                to reconstruct its state — typically an entire run filed under one operation, or deallocate records with
+                no address — or its residents occupy disjoint cores, which this model does not yet represent (#2027).
+                Both mean the total is not a per-core figure, so it is withheld rather than shown.
+            </Callout>
+        );
+    }
+
+    const { peak, capacityBytes } = result;
     const percentOfCapacity = capacityBytes ? Math.round((peak.totalBytes / capacityBytes) * 100) : null;
 
     return (
         <div className='l1-peak-composition'>
-            {exceedsCapacity && (
-                <Callout
-                    intent={Intent.DANGER}
-                    title='These figures are not usable'
-                >
-                    The replay reports {formatMemorySize(peak.totalBytes, 2)} against a per-core L1 of{' '}
-                    {formatMemorySize(capacityBytes ?? 0, 2)}, which is not reachable state. This capture does not carry
-                    enough information to reconstruct it — typically an entire run filed under one operation, or
-                    deallocate records with no address, leaving nothing to free and no boundary to correct at.
-                </Callout>
-            )}
-
             <div className='l1-peak-headline'>
                 <div className='l1-peak-figure'>
                     <span className='l1-peak-value'>{formatMemorySize(peak.totalBytes, 2)}</span>
@@ -147,13 +158,13 @@ function L1PeakComposition() {
 
                 <Tag
                     minimal
-                    intent={peak.precision === L1PeakPrecision.Exact ? Intent.SUCCESS : Intent.WARNING}
+                    intent={peak.precision === L1PeakPrecision.EXACT ? Intent.SUCCESS : Intent.WARNING}
                 >
-                    {peak.precision === L1PeakPrecision.Exact ? 'Exact' : 'Upper bound'}
+                    {peak.precision === L1PeakPrecision.EXACT ? 'Exact' : 'Upper bound'}
                 </Tag>
             </div>
 
-            {peak.precision === L1PeakPrecision.UpperBound && (
+            {anyUpperBound && (
                 <p className='l1-peak-note'>
                     Summing residents assumes they share cores. A buffer allocation records how many cores it spans but
                     not which, so a total covering more than one resident is a ceiling, not a measurement.
@@ -236,7 +247,7 @@ function L1PeakComposition() {
                     </tr>
                 </thead>
                 <tbody>
-                    {topOperations.map(({ entry, repeats }) => {
+                    {topOperations.map(({ entry, alsoAt }) => {
                         const largest = entry.contributors[0];
 
                         return (
@@ -251,12 +262,12 @@ function L1PeakComposition() {
                                             {operationNamesById.get(entry.operationId) ?? ''}
                                         </span>
                                     </Link>
-                                    {repeats > 1 && (
+                                    {alsoAt.length > 0 && (
                                         <span
                                             className='l1-peak-repeats'
-                                            title={`${repeats} operations share this composition, so only the first is listed`}
+                                            title={`Identical composition at ${alsoAt.join(', ')}`}
                                         >
-                                            ×{repeats}
+                                            +{alsoAt.length} like it
                                         </span>
                                     )}
                                 </td>
@@ -281,11 +292,32 @@ function L1PeakComposition() {
                 </tbody>
             </table>
 
+            {(devices?.length ?? 0) > 1 && (
+                <Callout
+                    intent={Intent.WARNING}
+                    title='Multi-device report'
+                >
+                    This report covers {devices?.length} devices. The replay cannot separate them — captures label
+                    circular-buffer allocation and release with different device ids, so filtering on one drops a whole
+                    class of resident — and the budget above is one device&apos;s. The occupancy is therefore summed
+                    across devices and the percentage is not meaningful.
+                </Callout>
+            )}
+
+            {hasRepeats && (
+                <p className='l1-peak-note'>
+                    A model that runs the same layer stack more than once produces operations with identical
+                    compositions. Those are listed once, marked with how many others match — hover the marker for their
+                    operation ids.
+                </p>
+            )}
+
             {unattributableStaleAddressCount > 0 && (
                 <p className='l1-peak-note'>
                     Stale is a floor. {unattributableStaleAddressCount} addresses are reused by more than one tensor,
-                    and nothing in the report says which of them is resident at a given operation, so those are left
-                    unclassified rather than guessed at.
+                    and nothing in the report says which of them is resident at a given operation. Rather than guess a
+                    last use, those residents are counted as persistent — so some of what is shown as persistent may in
+                    fact be freeable.
                 </p>
             )}
 

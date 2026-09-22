@@ -6,12 +6,12 @@ import { cssVar } from '../functions/colour';
 
 /** What a resident is, which decides whether anything can be done about it. */
 export enum L1ResidentKind {
-    CircularBuffer = 'circular-buffer',
+    CIRCULAR_BUFFER = 'circular-buffer',
     /** Allocated and freed inside one operation — never visible in a post-op snapshot. */
-    IntermediateTensor = 'intermediate-tensor',
-    PersistentTensor = 'persistent-tensor',
+    INTERMEDIATE_TENSOR = 'intermediate-tensor',
+    PERSISTENT_TENSOR = 'persistent-tensor',
     /** Still allocated after its last real consumer; the only freeable class. */
-    StaleTensor = 'stale-tensor',
+    STALE_TENSOR = 'stale-tensor',
 }
 
 /**
@@ -23,27 +23,28 @@ export enum L1ResidentKind {
  * that they stack on one core. Only a single resident is therefore exact.
  */
 export enum L1PeakPrecision {
-    Exact = 'exact',
-    UpperBound = 'upper-bound',
+    EXACT = 'exact',
+    UPPER_BOUND = 'upper-bound',
 }
 
 /**
- * Mirrors `L1PressureStatus`: a consumer has to tell "still fetching", "no report",
+ * Same four states as `L1PressureStatus`, which is a PascalCase enum this does not copy —
+ * new enum members are SCREAMING_SNAKE_CASE. A consumer has to tell "still fetching", "no report",
  * "the fetch failed" and "this report genuinely has no L1" apart, and a bare empty result
  * makes all four look like the last one.
  */
 export enum L1PeakStatus {
-    Unavailable = 'unavailable',
-    Loading = 'loading',
-    Error = 'error',
-    Ready = 'ready',
+    UNAVAILABLE = 'unavailable',
+    LOADING = 'loading',
+    ERROR = 'error',
+    READY = 'ready',
 }
 
 export const L1_RESIDENT_KIND_LABEL: Readonly<Record<L1ResidentKind, string>> = {
-    [L1ResidentKind.CircularBuffer]: 'Circular buffer',
-    [L1ResidentKind.IntermediateTensor]: 'Intermediate',
-    [L1ResidentKind.PersistentTensor]: 'Persistent',
-    [L1ResidentKind.StaleTensor]: 'Stale',
+    [L1ResidentKind.CIRCULAR_BUFFER]: 'Circular buffer',
+    [L1ResidentKind.INTERMEDIATE_TENSOR]: 'Intermediate',
+    [L1ResidentKind.PERSISTENT_TENSOR]: 'Persistent',
+    [L1ResidentKind.STALE_TENSOR]: 'Stale',
 };
 
 /**
@@ -52,10 +53,10 @@ export const L1_RESIDENT_KIND_LABEL: Readonly<Record<L1ResidentKind, string>> = 
  * `getPerfChartChrome` is a function.
  */
 export const getL1PeakColours = (): Readonly<Record<L1ResidentKind | 'capacity', string>> => ({
-    [L1ResidentKind.CircularBuffer]: cssVar(`--l1-peak-cb`),
-    [L1ResidentKind.IntermediateTensor]: cssVar(`--l1-peak-intermediate`),
-    [L1ResidentKind.PersistentTensor]: cssVar(`--l1-peak-persistent`),
-    [L1ResidentKind.StaleTensor]: cssVar(`--l1-peak-stale`),
+    [L1ResidentKind.CIRCULAR_BUFFER]: cssVar(`--l1-peak-cb`),
+    [L1ResidentKind.INTERMEDIATE_TENSOR]: cssVar(`--l1-peak-intermediate`),
+    [L1ResidentKind.PERSISTENT_TENSOR]: cssVar(`--l1-peak-persistent`),
+    [L1ResidentKind.STALE_TENSOR]: cssVar(`--l1-peak-stale`),
     capacity: cssVar(`--l1-peak-capacity`),
 });
 
@@ -64,8 +65,8 @@ export const getL1PeakColours = (): Readonly<Record<L1ResidentKind | 'capacity',
  * `L1ResidentKind` so a new class cannot be added to the enum and silently omitted here.
  */
 export const L1_PEAK_SERIES: readonly { kind: L1ResidentKind; field: string; label: string }[] = [
-    { kind: L1ResidentKind.CircularBuffer, field: 'circularBufferBytes', label: 'Circular buffers' },
-    { kind: L1ResidentKind.IntermediateTensor, field: 'intermediateTensorBytes', label: 'Intermediate tensors' },
-    { kind: L1ResidentKind.PersistentTensor, field: 'persistentTensorBytes', label: 'Persistent tensors' },
-    { kind: L1ResidentKind.StaleTensor, field: 'staleTensorBytes', label: 'Stale tensors' },
+    { kind: L1ResidentKind.CIRCULAR_BUFFER, field: 'circularBufferBytes', label: 'Circular buffers' },
+    { kind: L1ResidentKind.INTERMEDIATE_TENSOR, field: 'intermediateTensorBytes', label: 'Intermediate tensors' },
+    { kind: L1ResidentKind.PERSISTENT_TENSOR, field: 'persistentTensorBytes', label: 'Persistent tensors' },
+    { kind: L1ResidentKind.STALE_TENSOR, field: 'staleTensorBytes', label: 'Stale tensors' },
 ];

@@ -78,11 +78,19 @@
             align-items: baseline;
             max-width: 34ch;
 
+            // Blueprint's default link colour is too dim against this surface for a dense
+            // table; the underline carries the affordance and the hover tint the feedback.
             a {
                 display: flex;
                 gap: 8px;
                 align-items: baseline;
                 min-width: 0;
+                color: var(--perf-chart-text);
+
+                &:hover {
+                    color: var(--l1-peak-persistent);
+                    text-decoration: underline;
+                }
             }
 
             .l1-peak-operation-id {
@@ -101,7 +109,8 @@
             .l1-peak-repeats {
                 flex: 0 0 auto;
                 opacity: 0.6;
-                font-variant-numeric: tabular-nums;
+                font-size: 11px;
+                white-space: nowrap;
             }
         }
     }

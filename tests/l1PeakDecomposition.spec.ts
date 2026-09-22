@@ -199,8 +199,8 @@ describe('buildL1PeakDecomposition', () => {
         const result = build([{ id: 1, device_operations: [allocate(1000, 400), cb(10, 250)] }]);
 
         expect(result.peak?.contributors.map((c) => [c.kind, c.bytes])).toEqual([
-            [L1ResidentKind.PersistentTensor, 400],
-            [L1ResidentKind.CircularBuffer, 250],
+            [L1ResidentKind.PERSISTENT_TENSOR, 400],
+            [L1ResidentKind.CIRCULAR_BUFFER, 250],
         ]);
     });
 
@@ -210,10 +210,10 @@ describe('buildL1PeakDecomposition', () => {
         const twoTensors = build([{ id: 1, device_operations: [allocate(1000, 400), allocate(2000, 300)] }]);
         const one = build([{ id: 1, device_operations: [allocate(1000, 400)] }]);
 
-        expect(mixed.peak?.precision).toBe(L1PeakPrecision.UpperBound);
-        expect(twoCbs.peak?.precision).toBe(L1PeakPrecision.UpperBound);
-        expect(twoTensors.peak?.precision).toBe(L1PeakPrecision.UpperBound);
-        expect(one.peak?.precision).toBe(L1PeakPrecision.Exact);
+        expect(mixed.peak?.precision).toBe(L1PeakPrecision.UPPER_BOUND);
+        expect(twoCbs.peak?.precision).toBe(L1PeakPrecision.UPPER_BOUND);
+        expect(twoTensors.peak?.precision).toBe(L1PeakPrecision.UPPER_BOUND);
+        expect(one.peak?.precision).toBe(L1PeakPrecision.EXACT);
     });
 
     it('counts L1_SMALL against L1 and ignores DRAM', () => {
@@ -353,6 +353,43 @@ describe('buildL1PeakDecomposition', () => {
         expect(result.byOperationId.get(1)?.intermediateTensorBytes).toBe(400);
         expect(result.byOperationId.get(2)?.intermediateTensorBytes).toBe(0);
         expect(result.byOperationId.get(2)?.persistentTensorBytes).toBe(500);
+    });
+
+    it('rejects a null deallocate address rather than reading it as address 0', () => {
+        // 276 of segformer's and 288 of visualizer_db's L1 deallocate nodes carry a null
+        // address. `Number(null)` is 0 and `null !== undefined`, so a guard that only rejects
+        // undefined frees whatever sits at address 0 — and traces_51674 has eight buffers there.
+        const nullFree = { ...free(0), params: { ...(free(0) as never as { params: object }).params, address: null } };
+        const result = build([
+            { id: 1, device_operations: [allocate(0, 400), nullFree as never, allocate(5000, 100)] },
+        ]);
+
+        expect(result.byOperationId.get(1)?.totalBytes).toBe(500);
+    });
+
+    it('measures the state an operation is entered with, before its first node runs', () => {
+        // An operation whose first node is a free was previously measured only after that free,
+        // so the residents carried in from the previous snapshot were never its tightest instant.
+        const result = build(
+            [
+                { id: 1, device_operations: [allocate(1000, 400)] },
+                { id: 2, device_operations: [free(1000)] },
+            ],
+            { 1: [buffer(1000, 400)] },
+        );
+
+        expect(result.byOperationId.get(2)?.totalBytes).toBe(400);
+    });
+
+    it('does not call a reallocation intermediate because an earlier one at that address was freed', () => {
+        // allocate(A) free(A) allocate(A) inside one operation leaves the SECOND allocation
+        // live; an operation-wide address flag called that survivor intermediate.
+        // The second allocation is the larger, so it is the tightest instant and the one the
+        // stored decomposition describes.
+        const result = build([{ id: 1, device_operations: [allocate(1000, 400), free(1000), allocate(1000, 600)] }]);
+
+        expect(result.byOperationId.get(1)?.persistentTensorBytes).toBe(600);
+        expect(result.byOperationId.get(1)?.intermediateTensorBytes).toBe(0);
     });
 
     it('only calls a buffer intermediate when the same operation allocated it', () => {
