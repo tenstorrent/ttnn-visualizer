@@ -20,14 +20,6 @@ import { L1_NUM_CORES } from '../definitions/L1MemorySize';
  */
 const L1_RESIDENT_BUFFER_TYPES: ReadonlySet<BufferType> = new Set([BufferType.L1, BufferType.L1_SMALL]);
 
-/**
- * Graph nodes are keyed on `type`, not `buffer_type`. Two of the ten local captures
- * (segformer_encoder, visualizer_db) omit `buffer_type` from every one of their
- * buffer nodes while emitting `type` on all of them, so keying on the numeric field
- * silently reports those reports as having no tensors at all. `processMemoryAllocations`
- * reads `type` for the same reason. Both `L1` and `L1_SMALL` occupy L1; tt-metal spells
- * an L1_SMALL node's `type` as `'L1'` and distinguishes it only via `buffer_type`.
- */
 const addressOf = (params: GraphMemoryParams | null): number | null => {
     if (params?.address === undefined || params.address === null) {
         return null;
@@ -37,6 +29,14 @@ const addressOf = (params: GraphMemoryParams | null): number | null => {
     return Number.isFinite(address) ? address : null;
 };
 
+/**
+ * Graph nodes are keyed on `type`, not `buffer_type`. Two of the ten local captures
+ * (segformer_encoder, visualizer_db) omit `buffer_type` from every one of their
+ * buffer nodes while emitting `type` on all of them, so keying on the numeric field
+ * silently reports those reports as having no tensors at all. `processMemoryAllocations`
+ * reads `type` for the same reason. Both `L1` and `L1_SMALL` occupy L1; tt-metal spells
+ * an L1_SMALL node's `type` as `'L1'` and distinguishes it only via `buffer_type`.
+ */
 const isL1ResidentNode = (params: { type?: string } | null): boolean =>
     params?.type === StringBufferType.L1 || params?.type === StringBufferType.L1_SMALL;
 
@@ -304,8 +304,6 @@ export function buildL1PeakDecomposition({
         // against the *live* buffer allocator, never against another program's CBs. Proof from
         // the corpus: resnet50 op 9 allocates a tensor at 724,192, 67,360 B inside the region
         // op 8's CBs nominally still hold. Counting the carry inflated op 9's peak by 687,808 B.
-        state.circularBuffers.clear();
-
         // The snapshot is what actually survived, so anything the graph left live
         // but the snapshot omits was freed without a node.
         const snapshot = snapshotByOperationId.get(operation.id);
@@ -340,6 +338,8 @@ export function buildL1PeakDecomposition({
         // still be holding the run's peak. Measuring only inside the node loop dropped 56% of
         // segformer's operations, every one of which had live L1.
         const afterReconciliation = measure(state, operation.id, lastUseByAddress);
+
+        state.circularBuffers.clear();
         const best =
             tightest === null || afterReconciliation.totalBytes > tightest.totalBytes ? afterReconciliation : tightest;
 

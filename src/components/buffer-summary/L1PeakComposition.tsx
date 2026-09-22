@@ -85,7 +85,7 @@ function L1PeakComposition() {
 
         return L1_PEAK_SERIES.map(({ kind, field, label }) => ({
             x,
-            y: ordered.map((entry) => entry[field as keyof typeof entry] as number),
+            y: ordered.map((entry) => entry[field]),
             type: 'scatter',
             mode: 'lines',
             stackgroup: 'l1',
@@ -307,7 +307,7 @@ function L1PeakComposition() {
                                 </td>
                                 <td className='l1-peak-total'>{formatMemorySize(entry.totalBytes, 2)}</td>
                                 {L1_PEAK_SERIES.map(({ field }) => {
-                                    const bytes = entry[field as keyof typeof entry] as number;
+                                    const bytes = entry[field];
 
                                     return <td key={field}>{bytes === 0 ? '—' : formatMemorySize(bytes, 2)}</td>;
                                 })}

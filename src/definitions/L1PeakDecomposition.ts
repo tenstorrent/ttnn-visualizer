@@ -61,10 +61,31 @@ export const getL1PeakColours = (): Readonly<Record<L1ResidentKind | 'capacity',
 });
 
 /**
- * Stack order, bottom to top, paired with the field each band reads. Keyed by
- * `L1ResidentKind` so a new class cannot be added to the enum and silently omitted here.
+ * The four per-band byte counts, which is what a series may read — `totalBytes` is the sum
+ * of them and would stack the chart against itself.
+ *
+ * Spelled out rather than derived from `L1PeakDecomposition`: `definitions/` holds the
+ * primitives that `model/` builds on, so importing the shape here would close a cycle.
+ * Nothing is unchecked by that — `L1PeakComposition` indexes a decomposition with this
+ * type, so a name that is not a field of it fails to compile at the read.
  */
-export const L1_PEAK_SERIES: readonly { kind: L1ResidentKind; field: string; label: string }[] = [
+type L1PeakSeriesField =
+    | 'circularBufferBytes'
+    | 'intermediateTensorBytes'
+    | 'persistentTensorBytes'
+    | 'staleTensorBytes';
+
+/**
+ * Stack order, bottom to top, paired with the field each band reads.
+ *
+ * Adding a member to `L1ResidentKind` already fails to compile, but in
+ * `L1_RESIDENT_KIND_LABEL` and `getL1PeakColours` above rather than here — an array cannot
+ * be exhaustive over an enum. `L1PeakSeriesField` rejects a field that is not a band, and
+ * `L1PeakComposition.spec.tsx` pins that this list covers every kind and every band exactly
+ * once. Between them a new class cannot be added and silently omitted; the type alone
+ * would not have caught it.
+ */
+export const L1_PEAK_SERIES: readonly { kind: L1ResidentKind; field: L1PeakSeriesField; label: string }[] = [
     { kind: L1ResidentKind.CIRCULAR_BUFFER, field: 'circularBufferBytes', label: 'Circular buffers' },
     { kind: L1ResidentKind.INTERMEDIATE_TENSOR, field: 'intermediateTensorBytes', label: 'Intermediate tensors' },
     { kind: L1ResidentKind.PERSISTENT_TENSOR, field: 'persistentTensorBytes', label: 'Persistent tensors' },

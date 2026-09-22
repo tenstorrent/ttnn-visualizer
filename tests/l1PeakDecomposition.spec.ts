@@ -213,6 +213,22 @@ describe('buildL1PeakDecomposition', () => {
         expect(result.byOperationId.get(2)?.staleTensorBytes).toBe(0);
     });
 
+    it('counts circular buffers alongside a survivor the graph never allocated', () => {
+        // Two candidates decide an operation's composition: the tightest instant inside the
+        // node loop, which sees circular buffers, and the state after reconciliation, which
+        // sees snapshot survivors the graph emitted no allocate for. Clearing the circular
+        // buffers before reconciliation meant the second candidate could never see them, so
+        // whenever it won, the whole CB contribution vanished from the total and the split —
+        // against the residency argument made directly above that clear. 89 of segformer's
+        // 870 operations took that branch.
+        const result = build([{ id: 1, device_operations: [cb(900, 300)] }], { 1: [buffer(100, 500)] });
+        const operation = result.byOperationId.get(1);
+
+        expect(operation?.totalBytes).toBe(800);
+        expect(operation?.circularBufferBytes).toBe(300);
+        expect(operation?.persistentTensorBytes).toBe(500);
+    });
+
     it('names the contributors at the peak, largest first', () => {
         const result = build([{ id: 1, device_operations: [allocate(1000, 400), cb(10, 250)] }]);
 

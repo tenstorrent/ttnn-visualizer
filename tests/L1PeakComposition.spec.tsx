@@ -9,7 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import L1PeakComposition from '../src/components/buffer-summary/L1PeakComposition';
 import { useL1PeakDecomposition } from '../src/hooks/useL1PeakDecomposition';
 import { useDevices, useOperationsList } from '../src/hooks/useAPI';
-import { L1PeakPrecision, L1PeakStatus, L1ResidentKind } from '../src/definitions/L1PeakDecomposition';
+import { L1PeakPrecision, L1PeakStatus, L1ResidentKind, L1_PEAK_SERIES } from '../src/definitions/L1PeakDecomposition';
 import { L1PeakDecomposition, L1PeakDecompositionResult } from '../src/model/L1PeakDecomposition';
 
 vi.mock('../src/hooks/useL1PeakDecomposition', () => ({ useL1PeakDecomposition: vi.fn() }));
@@ -97,6 +97,19 @@ describe('L1PeakComposition', () => {
         expect(screen.getByText(/not usable/i)).toBeInTheDocument();
         expect(screen.queryByText(/peak L1 per core/i)).not.toBeInTheDocument();
         expect(screen.queryByText('Tightest operations')).not.toBeInTheDocument();
+    });
+
+    it('draws one band per resident kind, covering every kind and every byte field once', () => {
+        // The comment on L1_PEAK_SERIES used to claim the list could not fall behind the enum.
+        // An array cannot be exhaustive over an enum, so that is this test's job: the Records
+        // in the same file catch a new kind, and this catches the band that was never added
+        // for it, which would otherwise render as a silently missing slice of the total.
+        const kinds = L1_PEAK_SERIES.map((series) => series.kind);
+        const fields = L1_PEAK_SERIES.map((series) => series.field);
+
+        expect(new Set(kinds)).toEqual(new Set(Object.values(L1ResidentKind)));
+        expect(kinds).toHaveLength(Object.values(L1ResidentKind).length);
+        expect(new Set(fields).size).toBe(fields.length);
     });
 
     it('names multi-device aggregation among the causes when the refusal fires on such a report', () => {
