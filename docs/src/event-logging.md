@@ -110,13 +110,13 @@ The reason is deliberately classified rather than copied from an error message.
 
 Recorded when a counted application view is opened.
 
-- `view`: `reports`, `operations`, `operation_details`, `tensors`, `buffers`, `graph`, `performance`, `npe`, `mlir`, `topology`.
+- `view`: `reports`, `operations`, `operation_details`, `tensors`, `buffers`, `graph`, `performance`, `npe`, `mlir`, `topology`, `mcp`.
 
 ### `view_engaged`
 
 Defined for a deliberate interaction with a view after it has remained open. The current frontend does not yet emit this event.
 
-- `view`: `reports`, `operations`, `operation_details`, `tensors`, `buffers`, `graph`, `performance`, `npe`, `mlir`, `topology`.
+- `view`: `reports`, `operations`, `operation_details`, `tensors`, `buffers`, `graph`, `performance`, `npe`, `mlir`, `topology`, `mcp`.
 
 ## Information that is not recorded
 
