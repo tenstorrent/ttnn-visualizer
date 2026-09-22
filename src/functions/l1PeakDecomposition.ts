@@ -294,16 +294,6 @@ export function buildL1PeakDecomposition({
             }
         }
 
-        // A program's circular buffers stop occupying L1 when it stops executing, so they do
-        // not carry into the next operation. The capture says otherwise -- tt-metal emits
-        // `circular_buffer_deallocate_all` at the *start of the next program*
-        // (`GraphProcessor::track_program`), and real release is tied to `~ProgramImpl` -- but
-        // that is bookkeeping, not residency. CB addresses never enter the L1 buffer allocator:
-        // each program lays its own out from `base_cb_address`, and
-        // `ProgramImpl::validate_circular_buffer_region` guards only the program being prepared
-        // against the *live* buffer allocator, never against another program's CBs. Proof from
-        // the corpus: resnet50 op 9 allocates a tensor at 724,192, 67,360 B inside the region
-        // op 8's CBs nominally still hold. Counting the carry inflated op 9's peak by 687,808 B.
         // The snapshot is what actually survived, so anything the graph left live
         // but the snapshot omits was freed without a node.
         const snapshot = snapshotByOperationId.get(operation.id);
@@ -339,7 +329,18 @@ export function buildL1PeakDecomposition({
         // segformer's operations, every one of which had live L1.
         const afterReconciliation = measure(state, operation.id, lastUseByAddress);
 
+        // A program's circular buffers stop occupying L1 when it stops executing, so they do
+        // not carry into the next operation. The capture says otherwise -- tt-metal emits
+        // `circular_buffer_deallocate_all` at the *start of the next program*
+        // (`GraphProcessor::track_program`), and real release is tied to `~ProgramImpl` -- but
+        // that is bookkeeping, not residency. CB addresses never enter the L1 buffer allocator:
+        // each program lays its own out from `base_cb_address`, and
+        // `ProgramImpl::validate_circular_buffer_region` guards only the program being prepared
+        // against the *live* buffer allocator, never against another program's CBs. Proof from
+        // the corpus: resnet50 op 9 allocates a tensor at 724,192, 67,360 B inside the region
+        // op 8's CBs nominally still hold. Counting the carry inflated op 9's peak by 687,808 B.
         state.circularBuffers.clear();
+
         const best =
             tightest === null || afterReconciliation.totalBytes > tightest.totalBytes ? afterReconciliation : tightest;
 
