@@ -73,7 +73,10 @@ per-bank column as plain `size` (`serializers.py:309`), which is how easy the mi
 is.
 
 **Adding a tool means adding it to `_tool_table`**, with a description carrying the caveats
-an agent needs *before* choosing it — not only in the response.
+an agent needs *before* choosing it — not only in the response. It also means a row in the
+tool table of [`docs/src/agent-tools.md`](../../../docs/src/agent-tools.md), in the same
+change: that page is the only description of this surface a client's reader gets, and #2035
+puts it inside the application, so a tool missing from it goes missing for the user too.
 
 ## Swapping in the official SDK
 
