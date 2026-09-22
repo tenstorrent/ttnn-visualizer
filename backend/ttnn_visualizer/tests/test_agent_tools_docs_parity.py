@@ -46,6 +46,15 @@ def _documented_tools() -> Dict[str, str]:
             "| answer |` row or update this parser."
         )
 
+    names = [name for name, _ in rows]
+    duplicates = sorted({name for name in names if names.count(name) > 1})
+    if duplicates:
+        raise AssertionError(
+            f"{_AGENT_DOCS.name} lists {duplicates} more than once. Every comparison "
+            "below is against a set, so a duplicate row would survive all of them; it "
+            "is rejected here instead."
+        )
+
     return dict(rows)
 
 
@@ -78,8 +87,14 @@ def test_the_agent_tools_page_is_published():
     ), "The page is only useful if it is built. Add it to the toctree in index.rst."
 
 
-def test_agents_md_requires_new_tools_to_be_documented():
-    # #2036: the obligation is stated where someone adding a tool will read it.
+def test_agents_md_points_at_the_agent_tools_page():
+    """The pointer, and only the pointer.
+
+    Naming this after #2036 would overclaim: that issue asks for AGENTS.md to *require*
+    a new tool be documented, and the section still introduces the page as reference
+    material. Writing that rule is #2036's own change (#2038). What this pins is the
+    reference the rule hangs off, so the section cannot stop naming the page at all.
+    """
     guidance = _read(_AGENTS)
     section = guidance[guidance.index("### Agent-facing tools") :]
     section = section[: section.index("###", len("### Agent-facing tools"))]
