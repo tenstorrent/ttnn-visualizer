@@ -17,6 +17,7 @@ from typing import Dict, List
 
 import pytest
 from ttnn_visualizer.startup_requirements import STARTUP_REQUIREMENTS
+from ttnn_visualizer.tests.docs_parity import reject_duplicates
 
 _REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 _STARTUP_DOCS = _REPOSITORY_ROOT / "docs" / "src" / "startup-requirements.md"
@@ -48,6 +49,10 @@ def _documented_requirements() -> List[Dict[str, str]]:
             f"No requirement rows found in {_STARTUP_DOCS.name}. The table's shape is "
             "part of the contract this test enforces."
         )
+
+    reject_duplicates(
+        (row[0] for row in rows), page=_STARTUP_DOCS.name, plural="requirements"
+    )
 
     return [
         {

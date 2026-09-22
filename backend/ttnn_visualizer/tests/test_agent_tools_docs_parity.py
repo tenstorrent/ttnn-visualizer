@@ -19,6 +19,7 @@ from typing import Dict, Set
 import pytest
 from ttnn_visualizer.agent import server
 from ttnn_visualizer.agent.handles import ReportRegistry
+from ttnn_visualizer.tests.docs_parity import reject_duplicates
 
 _REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 _AGENT_DOCS = _REPOSITORY_ROOT / "docs" / "src" / "agent-tools.md"
@@ -51,14 +52,7 @@ def _documented_tools() -> Dict[str, str]:
             "| answer |` row or update this parser."
         )
 
-    names = [name for name, _ in rows]
-    duplicates = sorted({name for name in names if names.count(name) > 1})
-    if duplicates:
-        raise AssertionError(
-            f"{_AGENT_DOCS.name} lists {duplicates} more than once. Every comparison "
-            "below is against a set, so a duplicate row would survive all of them; it "
-            "is rejected here instead."
-        )
+    reject_duplicates((name for name, _ in rows), page=_AGENT_DOCS.name, plural="tools")
 
     return dict(rows)
 
