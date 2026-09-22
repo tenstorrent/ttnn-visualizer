@@ -104,4 +104,13 @@ export const NAVIGATION_ITEMS: readonly NavigationItem[] = Object.freeze([
         badge: 'beta',
         hiddenInServerMode: true,
     },
+    {
+        label: 'MCP',
+        route: ROUTES.MCP,
+        icon: IconNames.Console,
+        className: 'mcp-button',
+        // Reference material about a server the reader runs themselves, so no report is
+        // needed and none is implied — it sits last for the same reason. #2035
+        requirement: NavRequirement.NONE,
+    },
 ]);

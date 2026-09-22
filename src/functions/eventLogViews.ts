@@ -35,6 +35,7 @@ export const EVENT_LOG_VIEW_BY_ROUTE = Object.freeze({
     [ROUTES.NPE]: { view: EventLogView.NPE, pattern: ROUTE_PATTERNS.NPE },
     [ROUTES.MLIR]: { view: EventLogView.MLIR, pattern: ROUTE_PATTERNS.MLIR },
     [ROUTES.CLUSTER]: { view: EventLogView.TOPOLOGY, requiresModalBackground: true },
+    [ROUTES.MCP]: { view: EventLogView.MCP },
 }) satisfies Readonly<Record<RoutePath, RouteEventLogViewDefinition | null>>;
 
 const ROUTE_EVENT_LOG_VIEW_ENTRIES = Object.entries(EVENT_LOG_VIEW_BY_ROUTE) as [

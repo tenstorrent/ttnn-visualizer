@@ -13,6 +13,7 @@ const ROUTES = Object.freeze({
     NPE: '/npe',
     MLIR: '/mlir',
     CLUSTER: '/cluster',
+    MCP: '/mcp',
 });
 
 // Parameterised shapes are shared by React Router and event-log-view matching. Keeping them

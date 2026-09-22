@@ -295,7 +295,7 @@ class EventLogView(str, Enum):
     ``OPERATION_DETAILS`` is a real route and is owned by ``view_opened``. A future
     ``drilldown_opened`` event must exclude it, or one navigation would be counted
     as two different actions. It counts once per operation viewed rather than once
-    per visit to the surface, so its total is not comparable to the other nine and
+    per visit to the surface, so its total is not comparable to the other ten and
     should be read per-session or deduplicated.
     """
 
@@ -309,6 +309,7 @@ class EventLogView(str, Enum):
     NPE = "npe"
     MLIR = "mlir"
     TOPOLOGY = "topology"
+    MCP = "mcp"
 
 
 # Where every detail value a client may post has to come from. `_SAFE_VALUE_PATTERN`
