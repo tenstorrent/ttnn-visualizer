@@ -109,6 +109,16 @@ export const MemoryLegendElement = ({
         ...(Number.isNaN(chunk.address) && { backgroundColor: 'white' }),
     };
 
+    // One string for the tooltip and the accessible name, which were separate ternaries
+    // and could drift. It says what the marker *means* rather than only what it points
+    // at: the old wording named the aliased tensor, so a reader who did not already know
+    // the concept learned the target and not why the row contributes no bytes. The
+    // per-core modal already explained it and the legend did not. #2032
+    const aliasTarget = derivedTensor
+        ? `Tensor ${derivedTensor.id} ${toReadableShape(derivedTensor.shape)} ${toReadableType(derivedTensor.dtype)}`
+        : `the L1 tensor at ${prettyPrintAddress(chunk.address, memSize, showHex)}`;
+    const globallyAllocatedDescription = `Globally allocated \u2014 a view onto ${aliasTarget}, not a separate allocation, so it adds nothing to the CB total.`;
+
     const isMatchingBufferColour = isGloballyAllocated
         ? resolvedColour === selectedBufferColour
         : memorySquare.backgroundColor === selectedBufferColour;
@@ -174,27 +184,10 @@ export const MemoryLegendElement = ({
                     <>
                         {formatMemorySize(chunk.size, 2)}
                         {isGloballyAllocated && (
-                            <Tooltip
-                                content={
-                                    derivedTensor ? (
-                                        <span>
-                                            Aliased to Tensor {derivedTensor.id} {toReadableShape(derivedTensor.shape)}{' '}
-                                            {toReadableType(derivedTensor.dtype)}
-                                        </span>
-                                    ) : (
-                                        <span>
-                                            Aliased to tensor @ {prettyPrintAddress(chunk.address, memSize, showHex)}
-                                        </span>
-                                    )
-                                }
-                            >
+                            <Tooltip content={globallyAllocatedDescription}>
                                 <span
                                     className='globally-allocated-marker'
-                                    aria-label={
-                                        derivedTensor
-                                            ? `Globally allocated — aliased to Tensor ${derivedTensor.id} ${toReadableShape(derivedTensor.shape)} ${toReadableType(derivedTensor.dtype)}`
-                                            : 'Globally allocated — aliased to tensor at this address'
-                                    }
+                                    aria-label={globallyAllocatedDescription}
                                 >
                                     <Icon
                                         icon={IconNames.LINK}

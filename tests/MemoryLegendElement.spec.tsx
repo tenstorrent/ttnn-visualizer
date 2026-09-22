@@ -174,10 +174,24 @@ describe('MemoryLegendElement globally_allocated marker (#1651)', () => {
 
         expect(screen.getByText('Globally allocated')).toBeInTheDocument();
         const marker = container.querySelector('.globally-allocated-marker');
-        expect(marker).toHaveAttribute('aria-label', expect.stringMatching(/Globally allocated.*aliased to tensor/i));
+        expect(marker).toHaveAttribute('aria-label', expect.stringMatching(/Globally allocated.*view onto/i));
 
         const row = container.querySelector('.legend-item');
         expect(row).toHaveClass('globally-allocated');
+    });
+
+    it('explains what the marker means, not only which tensor it points at', () => {
+        // The icon is the only thing most readers see — the "Globally allocated" label is
+        // hidden at the widths this legend renders at. Naming the target tensor tells
+        // someone who already knows the concept which tensor it is, and tells someone who
+        // does not nothing at all. #2032
+        const container = renderLegendElement(chunk, { isGloballyAllocated: true });
+        const description = container.querySelector('.globally-allocated-marker')?.getAttribute('aria-label');
+
+        expect(description).toMatch(/not a separate allocation/i);
+        // The consequence is the part a reader acts on: it is why the row carries bytes
+        // that the CB total does not count.
+        expect(description).toMatch(/adds nothing to the CB total/i);
     });
 
     it('surfaces the aliased tensor id/shape/dtype in the marker tooltip when a tensor is resolved', () => {
