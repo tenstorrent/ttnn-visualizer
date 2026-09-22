@@ -267,7 +267,7 @@ class ReportLoadFailureReason(str, Enum):
 
 
 class EventLogView(str, Enum):
-    """The navigable surfaces worth counting: the ten proposed in #1819.
+    """The navigable surfaces worth counting: the ten proposed in #1819, plus ``MCP``.
 
     ``TOPOLOGY`` is a **modal route**, and that is a trap worth stating rather than
     rediscovering. ``ROUTES.CLUSTER`` carries ``element: null`` in
@@ -287,6 +287,12 @@ class EventLogView(str, Enum):
 
     ``styleguide`` is excluded and stays excluded: a development surface, so counting it
     would pollute reach.
+
+    ``MCP`` is counted rather than excluded the way ``styleguide`` is, and it is the
+    first member that did not come from #1819. The page documents a server the reader
+    runs themselves, which is the argument for treating it as reference material — but
+    whether anyone finds it is the question adding it was meant to answer (#2035), and
+    an excluded surface cannot answer that.
 
     ``REPORTS`` is the index route ``/`` rather than a named route, and ``GRAPH``
     and ``BUFFERS`` deliberately differ in name from their paths (``/graphtree``,

@@ -38,7 +38,12 @@ def _read(path: Path) -> str:
 
 def _documented_tools() -> Dict[str, str]:
     """Rows of the tool table: name → what it answers."""
-    rows = re.findall(r"^\| `([a-z_]+)` \| (.+?) \|$", _read(_AGENT_DOCS), re.MULTILINE)
+    # `[a-z0-9_]` and a tolerant line end on purpose: a digit in a tool name or a
+    # trailing space on the row would otherwise drop it from this mapping, and the
+    # failure would report a documented tool as undocumented — pointing at the wrong fix.
+    rows = re.findall(
+        r"^\| `([a-z0-9_]+)` \| (.+?) \|\s*$", _read(_AGENT_DOCS), re.MULTILINE
+    )
     if not rows:
         raise AssertionError(
             f"No tool rows found in {_AGENT_DOCS.name}. The table's shape is part of "
@@ -74,6 +79,9 @@ def test_the_docs_table_lists_exactly_the_registered_tools():
 
 def test_every_documented_tool_says_what_it_answers():
     # A name on its own does not help an agent choose, which is the table's whole job.
+    # This catches a whitespace-only cell. A genuinely empty one (`| `x` |  |`) does not
+    # match the row pattern at all, so it drops out of the mapping and the set comparison
+    # above reports it as undocumented — the right answer by a different route.
     blank = [
         name for name, answers in _documented_tools().items() if not answers.strip()
     ]
