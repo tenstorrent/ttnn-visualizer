@@ -35,6 +35,7 @@ from ttnn_visualizer.event_logging import (
 )
 from ttnn_visualizer.settings import MIN_HOSTED_SECRET_KEY_BYTES
 from ttnn_visualizer.startup_requirements import enforce
+from ttnn_visualizer.tests.docs_parity import reject_duplicates
 from ttnn_visualizer.utils import FALSE_VALUES, TRUE_VALUES
 
 # The one spelling of the floor, shared by the user reference and the refusal message
@@ -99,6 +100,8 @@ def _documented_fields(section: str) -> Set[str]:
             f"Duplicate field declarations found in {_EVENT_LOGGING_DOCS.name}"
         )
 
+    reject_duplicates(fields, page=_EVENT_LOGGING_DOCS.name, noun="the field")
+
     return set(fields)
 
 
@@ -126,7 +129,16 @@ def _documented_value_sets(source: str, field: str) -> List[Set[str]]:
     if not declarations:
         raise AssertionError(f"No `{field}` field found in {_EVENT_LOGGING_DOCS.name}")
 
-    return [set(re.findall(r"`([^`]+)`", declaration)) for declaration in declarations]
+    value_sets = []
+
+    for declaration in declarations:
+        values = re.findall(r"`([^`]+)`", declaration)
+        reject_duplicates(
+            values, page=_EVENT_LOGGING_DOCS.name, noun=f"`{field}` value"
+        )
+        value_sets.append(set(values))
+
+    return value_sets
 
 
 def _documented_values_matching(
@@ -136,7 +148,10 @@ def _documented_values_matching(
     if match is None:
         raise AssertionError(f"No {description} found in {_EVENT_LOGGING_DOCS.name}")
 
-    return set(re.findall(r"`([^`]+)`", match.group(1)))
+    values = re.findall(r"`([^`]+)`", match.group(1))
+    reject_duplicates(values, page=_EVENT_LOGGING_DOCS.name, noun=description)
+
+    return set(values)
 
 
 def test_the_event_logging_docs_page_is_in_the_resources_toctree():
