@@ -68,33 +68,40 @@
             font-weight: 600;
         }
 
+        // The cell is the flex row, not the anchor: the repeat badge is a sibling of the
+        // link, and with the anchor as the only flex container the badge wrapped onto its
+        // own line. The id stays inside the link so its accessible name identifies which
+        // operation, and is fixed-width so the numbers form a column.
         .l1-peak-operation {
-            max-width: 26ch;
+            display: flex;
+            gap: 8px;
+            align-items: baseline;
+            max-width: 34ch;
 
             a {
                 display: flex;
                 gap: 8px;
                 align-items: baseline;
-                overflow: hidden;
+                min-width: 0;
             }
 
             .l1-peak-operation-id {
-                flex: 0 0 auto;
+                flex: 0 0 4ch;
+                text-align: right;
                 font-variant-numeric: tabular-nums;
             }
 
-            // The name is the part that varies in length, so it is the part that gives way.
-            .l1-peak-repeats {
-                margin-left: 8px;
-                opacity: 0.5;
-                font-variant-numeric: tabular-nums;
-            }
-
+            // The name varies in length, so it is the part that gives way.
             .l1-peak-operation-name {
                 overflow: hidden;
                 text-overflow: ellipsis;
                 white-space: nowrap;
-                opacity: 0.75;
+            }
+
+            .l1-peak-repeats {
+                flex: 0 0 auto;
+                opacity: 0.6;
+                font-variant-numeric: tabular-nums;
             }
         }
     }

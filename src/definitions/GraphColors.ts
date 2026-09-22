@@ -19,19 +19,6 @@ export const GRAPH_COLORS = {
     selected: cssVar(`--graph-selected`),
 };
 
-/**
- * Resolved on use, not captured at import: `cssVar` reads the computed style, which is not
- * guaranteed to have applied when this module first evaluates. Same reason
- * `getPerfChartChrome` is a function. The object literals above predate that rule.
- */
-export const getL1PeakColours = () => ({
-    circularBuffer: cssVar(`--l1-peak-cb`),
-    intermediateTensor: cssVar(`--l1-peak-intermediate`),
-    persistentTensor: cssVar(`--l1-peak-persistent`),
-    staleTensor: cssVar(`--l1-peak-stale`),
-    capacity: cssVar(`--l1-peak-capacity`),
-});
-
 // Perf overlay bins (#1515). Hardcoded hex — tuned to read against the graph's
 // node fills. Since #1880 the ramp is one of two dimensions: it colours an inset
 // bar whose width carries the same score, so magnitude survives where colour

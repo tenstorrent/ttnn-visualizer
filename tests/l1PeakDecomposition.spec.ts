@@ -3,7 +3,8 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import { describe, expect, it } from 'vitest';
-import { L1PeakPrecision, L1ResidentKind, buildL1PeakDecomposition } from '../src/functions/l1PeakDecomposition';
+import { buildL1PeakDecomposition } from '../src/functions/l1PeakDecomposition';
+import { L1PeakPrecision, L1ResidentKind } from '../src/definitions/L1PeakDecomposition';
 import { NO_CONSUMER_OPERATION_ID } from '../src/functions/lateDeallocation';
 import { Buffer, Node, NodeType } from '../src/model/APIData';
 import { BufferType, StringBufferType } from '../src/model/BufferType';

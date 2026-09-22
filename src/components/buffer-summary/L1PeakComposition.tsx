@@ -8,33 +8,23 @@ import { Link } from 'react-router';
 import { PlotData } from 'plotly.js';
 import { useMemo } from 'react';
 import Plot from '../../libs/PlotComponent';
-import { L1PeakPrecision, L1ResidentKind } from '../../functions/l1PeakDecomposition';
+import {
+    L1PeakPrecision,
+    L1PeakStatus,
+    L1_PEAK_SERIES,
+    L1_RESIDENT_KIND_LABEL,
+    getL1PeakColours,
+} from '../../definitions/L1PeakDecomposition';
 import { formatMemorySize, prettyPrintAddress } from '../../functions/math';
 import { showHexAtom } from '../../store/app';
 import { L1_DEFAULT_MEMORY_SIZE } from '../../definitions/L1MemorySize';
-import { getL1PeakColours } from '../../definitions/GraphColors';
 import { getPerfChartChrome } from '../../definitions/PlotConfigurations';
 import { useL1PeakDecomposition } from '../../hooks/useL1PeakDecomposition';
-import { L1PeakStatus } from '../../model/L1PeakDecomposition';
 import { useOperationsList } from '../../hooks/useAPI';
 import ROUTES from '../../definitions/Routes';
 import 'styles/components/L1PeakComposition.scss';
 
 const TOP_OPERATION_COUNT = 10;
-
-const SERIES = [
-    { key: 'circularBufferBytes', label: 'Circular buffers', token: 'circularBuffer' },
-    { key: 'intermediateTensorBytes', label: 'Intermediate tensors', token: 'intermediateTensor' },
-    { key: 'persistentTensorBytes', label: 'Persistent tensors', token: 'persistentTensor' },
-    { key: 'staleTensorBytes', label: 'Stale tensors', token: 'staleTensor' },
-] as const;
-
-const KIND_LABEL: Record<L1ResidentKind, string> = {
-    [L1ResidentKind.CircularBuffer]: 'Circular buffer',
-    [L1ResidentKind.IntermediateTensor]: 'Intermediate',
-    [L1ResidentKind.PersistentTensor]: 'Persistent',
-    [L1ResidentKind.StaleTensor]: 'Stale',
-};
 
 function L1PeakComposition() {
     const { status, data: result, unattributableStaleAddressCount } = useL1PeakDecomposition();
@@ -86,15 +76,15 @@ function L1PeakComposition() {
     const chartData = useMemo<Partial<PlotData>[]>(() => {
         const x = ordered.map((entry) => entry.operationId);
 
-        return SERIES.map(({ key, label, token }) => ({
+        return L1_PEAK_SERIES.map(({ kind, field, label }) => ({
             x,
-            y: ordered.map((entry) => entry[key]),
+            y: ordered.map((entry) => entry[field as keyof typeof entry] as number),
             type: 'scatter',
             mode: 'lines',
             stackgroup: 'l1',
             name: label,
-            line: { width: 0, color: colours[token] },
-            fillcolor: colours[token],
+            line: { width: 0, color: colours[kind] },
+            fillcolor: colours[kind],
             // Unified hover below, so the trace name is the row label and the box already
             // carries the operation. Repeating either would print it four times.
             // `.0f`: a per-bank figure derived as size/num_cores is not always whole, and a
@@ -239,8 +229,8 @@ function L1PeakComposition() {
                     <tr>
                         <th>Operation</th>
                         <th>Total</th>
-                        {SERIES.map(({ key, label }) => (
-                            <th key={key}>{label}</th>
+                        {L1_PEAK_SERIES.map(({ field, label }) => (
+                            <th key={field}>{label}</th>
                         ))}
                         <th>Largest resident</th>
                     </tr>
@@ -271,12 +261,14 @@ function L1PeakComposition() {
                                     )}
                                 </td>
                                 <td className='l1-peak-total'>{formatMemorySize(entry.totalBytes, 2)}</td>
-                                {SERIES.map(({ key }) => (
-                                    <td key={key}>{entry[key] === 0 ? '—' : formatMemorySize(entry[key], 2)}</td>
-                                ))}
+                                {L1_PEAK_SERIES.map(({ field }) => {
+                                    const bytes = entry[field as keyof typeof entry] as number;
+
+                                    return <td key={field}>{bytes === 0 ? '—' : formatMemorySize(bytes, 2)}</td>;
+                                })}
                                 <td>
                                     {largest
-                                        ? `${KIND_LABEL[largest.kind]} @${prettyPrintAddress(
+                                        ? `${L1_RESIDENT_KIND_LABEL[largest.kind]} @${prettyPrintAddress(
                                               largest.address,
                                               capacityBytes ?? L1_DEFAULT_MEMORY_SIZE,
                                               showHex,

@@ -9,13 +9,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import L1PeakComposition from '../src/components/buffer-summary/L1PeakComposition';
 import { useL1PeakDecomposition } from '../src/hooks/useL1PeakDecomposition';
 import { useOperationsList } from '../src/hooks/useAPI';
-import { L1PeakStatus } from '../src/model/L1PeakDecomposition';
-import {
-    L1PeakDecomposition,
-    L1PeakDecompositionResult,
-    L1PeakPrecision,
-    L1ResidentKind,
-} from '../src/functions/l1PeakDecomposition';
+import { L1PeakPrecision, L1PeakStatus, L1ResidentKind } from '../src/definitions/L1PeakDecomposition';
+import { L1PeakDecomposition, L1PeakDecompositionResult } from '../src/model/L1PeakDecomposition';
 
 vi.mock('../src/hooks/useL1PeakDecomposition', () => ({ useL1PeakDecomposition: vi.fn() }));
 vi.mock('../src/hooks/useAPI', () => ({ useOperationsList: vi.fn() }));
