@@ -195,6 +195,24 @@ describe('buildL1PeakDecomposition', () => {
         expect(result.byOperationId.get(1)?.staleTensorBytes).toBe(0);
     });
 
+    it('calls a scratch buffer intermediate even where an older tensor died at its address', () => {
+        // Operation 2 allocates 1000 and frees it inside itself, so it is that operation's own
+        // scratch. Address 1000 also carries a lifetime from an earlier tensor that last ran at
+        // operation 1 — `resolveAddressLifetimes` reads operation inputs and outputs, where an
+        // intra-op allocation never appears, so the address can outlive the tensor that gave it
+        // a lifetime. Checking staleness first filed this under the one class the UI tells
+        // people to act on, when nothing is leaking: the operation frees it.
+        const operations = [
+            { id: 1, device_operations: [allocate(2000, 300)] },
+            { id: 2, device_operations: [allocate(1000, 400), free(1000)] },
+        ];
+
+        const result = build(operations, {}, { 1000: 1 });
+
+        expect(result.byOperationId.get(2)?.intermediateTensorBytes).toBe(400);
+        expect(result.byOperationId.get(2)?.staleTensorBytes).toBe(0);
+    });
+
     it('names the contributors at the peak, largest first', () => {
         const result = build([{ id: 1, device_operations: [allocate(1000, 400), cb(10, 250)] }]);
 

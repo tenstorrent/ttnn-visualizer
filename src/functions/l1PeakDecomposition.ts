@@ -217,16 +217,23 @@ function measure(
         const lastUse = lastUseByAddress.get(address) ?? null;
         let kind: L1ResidentKind;
 
-        // `getLastValidConsumer` returns NO_CONSUMER_OPERATION_ID for a tensor whose only
-        // consumers are deallocate calls. It has no last *use* to be late relative to, so it
-        // is not stale — without this guard every such tensor lands in the one class the UI
-        // tells people to act on. `lateDeallocation.ts` shipped that bug once already.
-        if (lastUse !== null && lastUse > NO_CONSUMER_OPERATION_ID && lastUse < operationId) {
-            kind = L1ResidentKind.STALE_TENSOR;
-            staleTensorBytes += tensor.bytes;
-        } else if (tensor.intermediate) {
+        // Intermediate first, because the two claims are not equally well founded. This
+        // operation's graph shows it allocating and freeing this exact occurrence, while
+        // `lastUse` is inferred from a *different* tensor that once sat at this address:
+        // `resolveAddressLifetimes` reads operation inputs and outputs, where an intra-op
+        // scratch buffer never appears. Checking staleness first let the older tensor's
+        // lifetime win and filed a buffer this operation frees itself under the one class
+        // the UI tells people to go and act on.
+        if (tensor.intermediate) {
             kind = L1ResidentKind.INTERMEDIATE_TENSOR;
             intermediateTensorBytes += tensor.bytes;
+            // `getLastValidConsumer` returns NO_CONSUMER_OPERATION_ID for a tensor whose only
+            // consumers are deallocate calls. It has no last *use* to be late relative to, so it
+            // is not stale — without this guard every such tensor lands in the one class the UI
+            // tells people to act on. `lateDeallocation.ts` shipped that bug once already.
+        } else if (lastUse !== null && lastUse > NO_CONSUMER_OPERATION_ID && lastUse < operationId) {
+            kind = L1ResidentKind.STALE_TENSOR;
+            staleTensorBytes += tensor.bytes;
         } else {
             kind = L1ResidentKind.PERSISTENT_TENSOR;
             persistentTensorBytes += tensor.bytes;
