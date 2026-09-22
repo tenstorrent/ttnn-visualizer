@@ -52,9 +52,7 @@ def _documented_tools() -> Dict[str, str]:
             "| answer |` row or update this parser."
         )
 
-    reject_duplicates(
-        (name for name, _ in rows), page=_AGENT_DOCS.name, noun="the tool"
-    )
+    reject_duplicates((name for name, _ in rows), page=_AGENT_DOCS.name, plural="tools")
 
     return dict(rows)
 

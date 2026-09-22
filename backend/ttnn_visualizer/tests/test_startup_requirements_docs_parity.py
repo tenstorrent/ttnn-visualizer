@@ -51,7 +51,7 @@ def _documented_requirements() -> List[Dict[str, str]]:
         )
 
     reject_duplicates(
-        (row[0] for row in rows), page=_STARTUP_DOCS.name, noun="the requirement"
+        (row[0] for row in rows), page=_STARTUP_DOCS.name, plural="requirements"
     )
 
     return [

@@ -70,11 +70,11 @@ def _event_sections(source: str) -> Dict[str, str]:
     if not matches:
         raise AssertionError(f"No event sections found in {_EVENT_LOGGING_DOCS.name}")
 
-    events = [event for event, _ in matches]
-    if len(events) != len(set(events)):
-        raise AssertionError(
-            f"Duplicate event sections found in {_EVENT_LOGGING_DOCS.name}"
-        )
+    reject_duplicates(
+        (event for event, _ in matches),
+        page=_EVENT_LOGGING_DOCS.name,
+        plural="event sections",
+    )
 
     return dict(matches)
 
@@ -95,12 +95,8 @@ def _heading_section(source: str, heading: str) -> str:
 
 def _documented_fields(section: str) -> Set[str]:
     fields = re.findall(r"^- `([^`]+)`:", section, re.MULTILINE)
-    if len(fields) != len(set(fields)):
-        raise AssertionError(
-            f"Duplicate field declarations found in {_EVENT_LOGGING_DOCS.name}"
-        )
 
-    reject_duplicates(fields, page=_EVENT_LOGGING_DOCS.name, noun="the field")
+    reject_duplicates(fields, page=_EVENT_LOGGING_DOCS.name, plural="fields")
 
     return set(fields)
 
@@ -134,7 +130,7 @@ def _documented_value_sets(source: str, field: str) -> List[Set[str]]:
     for declaration in declarations:
         values = re.findall(r"`([^`]+)`", declaration)
         reject_duplicates(
-            values, page=_EVENT_LOGGING_DOCS.name, noun=f"`{field}` value"
+            values, page=_EVENT_LOGGING_DOCS.name, plural=f"`{field}` values"
         )
         value_sets.append(set(values))
 
@@ -149,7 +145,7 @@ def _documented_values_matching(
         raise AssertionError(f"No {description} found in {_EVENT_LOGGING_DOCS.name}")
 
     values = re.findall(r"`([^`]+)`", match.group(1))
-    reject_duplicates(values, page=_EVENT_LOGGING_DOCS.name, noun=description)
+    reject_duplicates(values, page=_EVENT_LOGGING_DOCS.name, plural=description)
 
     return set(values)
 
