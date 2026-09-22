@@ -100,6 +100,24 @@ function L1PeakComposition() {
         }));
     }, [ordered, colours]);
 
+    const deviceCount = devices?.length ?? 0;
+    // Declared above the early returns because the refusal below needs it: summing residents
+    // across devices is a third way for the total to clear one device's budget, and a notice
+    // only reachable past the refusal would leave the refusal naming the two causes that are
+    // left. It carries no reference to "above" for the same reason — in that branch there is
+    // no figure above it.
+    const multiDeviceNotice = deviceCount > 1 && (
+        <Callout
+            intent={Intent.WARNING}
+            title='Multi-device report'
+        >
+            This report covers {deviceCount} devices. The replay cannot separate them — captures label circular-buffer
+            allocation and release with different device ids, so filtering on one drops a whole class of resident —
+            while the budget it is judged against is one device&apos;s. The occupancy is therefore summed across devices
+            and the percentage is not meaningful.
+        </Callout>
+    );
+
     if (status === L1PeakStatus.UNAVAILABLE) {
         return <p className='l1-peak-empty'>Select a memory report to see its L1 peak composition.</p>;
     }
@@ -128,16 +146,32 @@ function L1PeakComposition() {
     // A refusal that still prints the figures underneath is not a refusal.
     if (result.exceedsCapacity) {
         return (
-            <Callout
-                intent={Intent.DANGER}
-                title='These figures are not usable'
-            >
-                The replay reports {formatMemorySize(result.peak.totalBytes, 2)} against a per-core L1 of{' '}
-                {formatMemorySize(result.capacityBytes ?? 0, 2)}. Either the capture does not carry enough information
-                to reconstruct its state — typically an entire run filed under one operation, or deallocate records with
-                no address — or its residents occupy disjoint cores, which this model does not yet represent (#2027).
-                Both mean the total is not a per-core figure, so it is withheld rather than shown.
-            </Callout>
+            <>
+                {multiDeviceNotice}
+                <Callout
+                    intent={Intent.DANGER}
+                    title='These figures are not usable'
+                >
+                    <p>
+                        The replay reports {formatMemorySize(result.peak.totalBytes, 2)} against a per-core L1 of{' '}
+                        {formatMemorySize(result.capacityBytes ?? 0, 2)}. More than one thing produces that, and none of
+                        them leave a per-core figure, so it is withheld rather than shown:
+                    </p>
+                    <ul>
+                        {deviceCount > 1 && (
+                            <li>
+                                the occupancy is summed across this report&apos;s {deviceCount} devices, as the note
+                                above says, while the budget is a single device&apos;s;
+                            </li>
+                        )}
+                        <li>
+                            the capture does not carry enough information to reconstruct its state — typically an entire
+                            run filed under one operation, or deallocate records with no address;
+                        </li>
+                        <li>its residents occupy disjoint cores, which this model does not yet represent (#2027).</li>
+                    </ul>
+                </Callout>
+            </>
         );
     }
 
@@ -292,17 +326,7 @@ function L1PeakComposition() {
                 </tbody>
             </table>
 
-            {(devices?.length ?? 0) > 1 && (
-                <Callout
-                    intent={Intent.WARNING}
-                    title='Multi-device report'
-                >
-                    This report covers {devices?.length} devices. The replay cannot separate them — captures label
-                    circular-buffer allocation and release with different device ids, so filtering on one drops a whole
-                    class of resident — and the budget above is one device&apos;s. The occupancy is therefore summed
-                    across devices and the percentage is not meaningful.
-                </Callout>
-            )}
+            {multiDeviceNotice}
 
             {hasRepeats && (
                 <p className='l1-peak-note'>

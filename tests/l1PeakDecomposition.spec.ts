@@ -392,6 +392,21 @@ describe('buildL1PeakDecomposition', () => {
         expect(result.byOperationId.get(1)?.intermediateTensorBytes).toBe(0);
     });
 
+    it('calls a reallocation intermediate when that reallocation is itself freed', () => {
+        // The counterpart to the case above. `allocate free allocate free` frees the second
+        // allocation too, so it is an intermediate — but counting occurrences down on free
+        // reissued number 1 to it, and the replay, which only ever counts up, looked for
+        // number 2 and missed. resnet50 does this in 12 operations: op 9 allocates 724192,
+        // frees it, allocates it again and frees that, and the 423,040 bytes per bank read
+        // as carried state rather than as the operation's own scratch.
+        const result = build([
+            { id: 1, device_operations: [allocate(1000, 400), free(1000), allocate(1000, 600), free(1000)] },
+        ]);
+
+        expect(result.byOperationId.get(1)?.intermediateTensorBytes).toBe(600);
+        expect(result.byOperationId.get(1)?.persistentTensorBytes).toBe(0);
+    });
+
     it('only calls a buffer intermediate when the same operation allocated it', () => {
         // op 2 frees an address allocated by op 1 and then reuses it. The free does not make
         // the later allocation an intermediate — nothing in op 2 freed *that* allocation.

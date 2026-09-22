@@ -143,10 +143,24 @@ describe('useL1PeakDecomposition', () => {
         expect(render().result.current.status).toBe(L1PeakStatus.LOADING);
     });
 
-    it('does not build when devices settles with nothing, which leaves no budget to judge against', () => {
-        // `fetchDevices` returns [] with only a toast when a report has no devices row, and
-        // undefined data reads as settled. Building anyway yields capacityBytes null and
-        // exceedsCapacity false — the refusal fails open rather than closed.
+    it('reports Error when devices settles empty, which leaves no budget to judge against', () => {
+        // The value that matters: `fetchDevices` resolves to [] with only a toast when a report
+        // has no devices row, and an empty array is truthy, so the `!devicesQuery.data` gate does
+        // not catch it. Building anyway yields capacityBytes null and exceedsCapacity false — the
+        // refusal fails open at exactly the moment the figures are least trustworthy. Asserting
+        // LOADING against `data: undefined` pinned the gate above instead and left this uncovered.
+        mockQueries({
+            operations: settled([operation(1, 'op', [allocate(1000, 400)])]),
+            devices: settled([]),
+        });
+
+        const { status, data } = render().result.current;
+
+        expect(status).toBe(L1PeakStatus.ERROR);
+        expect(data).toBeNull();
+    });
+
+    it('does not build when devices settles undefined, which would dereference nothing', () => {
         mockQueries({
             operations: settled([operation(1, 'op', [allocate(1000, 400)])]),
             devices: { data: undefined, isLoading: false, isError: false },

@@ -92,7 +92,16 @@ const findIntermediates = (operations: readonly { id: number; device_operations:
     const intermediates = new Set<string>();
 
     for (const operation of operations) {
-        const allocatedHere = new Map<number, number>();
+        // Keyed by occurrence, not by address: `allocate(A) free(A) allocate(A)` within one
+        // operation leaves the SECOND allocation live, and an operation-wide flag would call
+        // that survivor intermediate. Two counters, because the occurrence number has to be the
+        // one `applyNode` will compute: `allocationsSeen` only ever climbs, while the live entry
+        // is dropped on free. Counting down a single counter instead reissues occurrence 1 to the
+        // second allocation of `allocate free allocate free`, so the replay's occurrence 2 misses
+        // the set and a tensor freed inside the operation is billed as persistent. resnet50 does
+        // this 12 times, including 1,360,480 at operation 8.
+        const allocationsSeen = new Map<number, number>();
+        const liveOccurrence = new Map<number, number>();
 
         operation.device_operations?.forEach((node) => {
             const params = node.params as GraphMemoryParams | null;
@@ -103,16 +112,17 @@ const findIntermediates = (operations: readonly { id: number; device_operations:
                 return;
             }
             if (node.node_type === NodeType.buffer_allocate) {
-                allocatedHere.set(address, (allocatedHere.get(address) ?? 0) + 1);
-            } else if (node.node_type === NodeType.buffer_deallocate) {
-                const allocatedTimes = allocatedHere.get(address) ?? 0;
+                const occurrence = (allocationsSeen.get(address) ?? 0) + 1;
 
-                if (allocatedTimes > 0) {
-                    // Keyed by occurrence, not by address: `allocate(A) free(A) allocate(A)`
-                    // within one operation leaves the SECOND allocation live, and an
-                    // operation-wide flag would call that survivor intermediate.
-                    intermediates.add(`${operation.id}:${address}:${allocatedTimes}`);
-                    allocatedHere.set(address, allocatedTimes - 1);
+                allocationsSeen.set(address, occurrence);
+                // Last allocation wins, mirroring `state.tensors`, which is also keyed by address.
+                liveOccurrence.set(address, occurrence);
+            } else if (node.node_type === NodeType.buffer_deallocate) {
+                const occurrence = liveOccurrence.get(address);
+
+                if (occurrence !== undefined) {
+                    intermediates.add(`${operation.id}:${address}:${occurrence}`);
+                    liveOccurrence.delete(address);
                 }
             }
         });

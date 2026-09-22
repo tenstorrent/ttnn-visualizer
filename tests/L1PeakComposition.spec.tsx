@@ -99,6 +99,24 @@ describe('L1PeakComposition', () => {
         expect(screen.queryByText('Tightest operations')).not.toBeInTheDocument();
     });
 
+    it('names multi-device aggregation among the causes when the refusal fires on such a report', () => {
+        // The refusal used to return before the multi-device notice could render and offer two
+        // causes as the only two. Summing residents across devices is a third, and on a mesh
+        // report it is the likeliest — leaving it out misdiagnoses the result.
+        mount({ data: result({ exceedsCapacity: true, capacityBytes: 500 }) }, [{}, {}, {}]);
+
+        expect(screen.getByText(/not usable/i)).toBeInTheDocument();
+        expect(screen.getByText(/covers 3 devices/i)).toBeInTheDocument();
+        expect(screen.getByText(/summed across this report's 3 devices/i)).toBeInTheDocument();
+    });
+
+    it('offers only the causes that apply when a single-device report is refused', () => {
+        mount({ data: result({ exceedsCapacity: true, capacityBytes: 500 }) }, [{}]);
+
+        expect(screen.getByText(/not usable/i)).toBeInTheDocument();
+        expect(screen.queryByText(/devices/i)).not.toBeInTheDocument();
+    });
+
     it('caveats an upper bound found anywhere in the run, not only at the peak', () => {
         const exactPeak = decomposition({ precision: L1PeakPrecision.EXACT });
         const boundedElsewhere = decomposition({
