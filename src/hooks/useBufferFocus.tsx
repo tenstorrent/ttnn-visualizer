@@ -8,7 +8,7 @@ import { useAtom } from 'jotai';
 import { createToast, dismissToast } from '../functions/createToastNotification';
 import { getBufferColor, getTensorColor } from '../functions/colorGenerator';
 import isValidNumber from '../functions/isValidNumber';
-import ToastTensorMessage from '../components/operation-details/ToastTensorMessage';
+import ToastTensorMessage, { ToastDeselectButton } from '../components/operation-details/ToastTensorMessage';
 import { activeToastAtom, selectedAddressAtom, selectedBufferColourAtom, selectedTensorIdAtom } from '../store/app';
 
 const useBufferFocus = () => {
@@ -50,6 +50,10 @@ const useBufferFocus = () => {
                     autoClose: false,
                     hideProgressBar: true,
                     onClick: resetToasts,
+                    // Per toast rather than on the container in `Layout.tsx`: this is the
+                    // only toast that owns state outside itself, so it is the only one
+                    // whose dismissal has to mean something. The rest close themselves.
+                    closeButton: <ToastDeselectButton onDeselect={resetToasts} />,
                 },
             );
 
