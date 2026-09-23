@@ -144,6 +144,23 @@ describe('useBufferFocus', () => {
         expect(dismiss).toHaveBeenLastCalledWith(undefined);
     });
 
+    it('clears the selection from the toast\u2019s own close button', () => {
+        // The component spec renders the button on its own, so it passes whether or not
+        // the hook ever hands it to the toast. Removing the `closeButton` option, or
+        // wiring it to a callback that does nothing, left all 2804 tests green.
+        const result = focusBuffer();
+        const { closeButton } = lastToastCall()[1]!;
+        const { getByRole } = render(closeButton as ReactElement);
+
+        act(() => getByRole('button', { name: /deselect/i }).click());
+
+        expect(result.current.activeToast).toBeNull();
+        expect(result.current.selectedAddress).toBeNull();
+        expect(result.current.selectedTensorId).toBeNull();
+        expect(result.current.selectedBufferColour).toBeNull();
+        expect(dismiss).toHaveBeenLastCalledWith(undefined);
+    });
+
     it('dismisses every toast when the selection is reset', () => {
         const result = focusBuffer();
 

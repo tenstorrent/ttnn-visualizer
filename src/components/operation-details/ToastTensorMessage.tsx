@@ -44,7 +44,11 @@ const ToastTensorMessage = ({ tensorId, address, colour }: ToastTensorMessagePro
  * empty part of the page. Dismissing the toast without dropping the selection would be
  * worse than either: the highlight would stay with nothing left to explain it. #2042
  */
-export const ToastDeselectButton = ({ onDeselect }: { onDeselect: () => void }) => (
+interface ToastDeselectButtonProps {
+    onDeselect: () => void;
+}
+
+export const ToastDeselectButton = ({ onDeselect }: ToastDeselectButtonProps) => (
     <button
         type='button'
         className='toast-deselect'
