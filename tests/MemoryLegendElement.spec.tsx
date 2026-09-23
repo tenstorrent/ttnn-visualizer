@@ -180,6 +180,20 @@ describe('MemoryLegendElement globally_allocated marker (#1651)', () => {
         expect(row).toHaveClass('globally-allocated');
     });
 
+    it('puts the slot class on the tooltip anchor, not on the marker inside it', () => {
+        // Device Operations positions the marker into a reserved slot. Applied to the
+        // inner span it collapsed the wrapper Blueprint measures to 0x0, twelve pixels
+        // from the drawn icon, and the tooltip anchored somewhere the cursor was not —
+        // it opened and shut as the pointer moved. jsdom computes no layout, so what is
+        // pinned here is the hook the stylesheet needs: the class has to be on the
+        // anchor for the slot rule to move the anchor with the icon. #2032
+        const container = renderLegendElement(chunk, { isGloballyAllocated: true });
+        const marker = container.querySelector('.globally-allocated-marker');
+
+        expect(marker?.closest('.globally-allocated-anchor')).not.toBeNull();
+        expect(marker).not.toHaveClass('globally-allocated-anchor');
+    });
+
     it('focuses the tensor the row is coloured by, not the bare address', () => {
         // The row takes its colour from the tensor resolved at the address whenever the
         // chunk carries no `tensorId` of its own, which is how Device Operations builds

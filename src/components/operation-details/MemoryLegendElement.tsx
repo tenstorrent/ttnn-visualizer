@@ -191,7 +191,16 @@ export const MemoryLegendElement = ({
                     <>
                         {formatMemorySize(chunk.size, 2)}
                         {isGloballyAllocated && (
-                            <Tooltip content={globallyAllocatedDescription}>
+                            <Tooltip
+                                // Blueprint measures this wrapper to place the tooltip, so
+                                // anything that moves the icon has to move the wrapper with
+                                // it. Device Operations positions the marker into a reserved
+                                // slot, and doing that to the inner span collapsed the
+                                // wrapper to 0x0 twelve pixels away — the tooltip anchored
+                                // to a point nobody was pointing at. #2032
+                                className='globally-allocated-anchor'
+                                content={globallyAllocatedDescription}
+                            >
                                 <span
                                     className='globally-allocated-marker'
                                     aria-label={globallyAllocatedDescription}
