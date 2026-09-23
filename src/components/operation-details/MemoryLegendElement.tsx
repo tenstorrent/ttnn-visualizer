@@ -110,14 +110,12 @@ export const MemoryLegendElement = ({
     };
 
     // One string for the tooltip and the accessible name, which were separate ternaries
-    // and could drift. It says what the marker *means* rather than only what it points
-    // at: the old wording named the aliased tensor, so a reader who did not already know
-    // the concept learned the target and not why the row contributes no bytes. The
-    // per-core modal already explained it and the legend did not. #2032
-    const aliasTarget = derivedTensor
-        ? `Tensor ${derivedTensor.id} ${toReadableShape(derivedTensor.shape)} ${toReadableType(derivedTensor.dtype)}`
-        : `the L1 tensor at ${prettyPrintAddress(chunk.address, memSize, showHex)}`;
-    const globallyAllocatedDescription = `Globally allocated \u2014 a view onto ${aliasTarget}, not a separate allocation, so it adds nothing to the CB total.`;
+    // spelling the same fact differently. Deliberately short: this sits beside a dense
+    // column of addresses and sizes, and a sentence long enough to explain the concept
+    // covers the rows underneath it. #2032
+    const globallyAllocatedDescription = derivedTensor
+        ? `Aliased to Tensor ${derivedTensor.id} ${toReadableShape(derivedTensor.shape)} ${toReadableType(derivedTensor.dtype)}`
+        : `Aliased to tensor @ ${prettyPrintAddress(chunk.address, memSize, showHex)}`;
 
     const isMatchingBufferColour = isGloballyAllocated
         ? resolvedColour === selectedBufferColour
@@ -169,7 +167,16 @@ export const MemoryLegendElement = ({
             {...(!chunk.empty && !isLegendMarker
                 ? {
                       type: 'button',
-                      onClick: () => onLegendClick(chunk.address, chunk.tensorId, colorVariance),
+                      // Fall back to the tensor resolved from the address, because the row's
+                      // own colour already does: `resolvedColour` reads `derivedTensor.id`
+                      // when the chunk carries no `tensorId`, while the click sent
+                      // `undefined` and made `updateBufferFocus` derive a colour from the
+                      // address instead. The two never matched, so `isMatchingBufferColour`
+                      // was false and the row dimmed itself while a toast claimed it was
+                      // selected. Device Operations builds CB chunks as `{address, size}`,
+                      // so every CB row whose address resolves a tensor took that path —
+                      // 16 of the 20 globally allocated rows on resnet50_may08 op 13. #2032
+                      onClick: () => onLegendClick(chunk.address, chunk.tensorId ?? derivedTensor?.id, colorVariance),
                   }
                 : {})}
         >

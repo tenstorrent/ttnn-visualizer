@@ -174,24 +174,38 @@ describe('MemoryLegendElement globally_allocated marker (#1651)', () => {
 
         expect(screen.getByText('Globally allocated')).toBeInTheDocument();
         const marker = container.querySelector('.globally-allocated-marker');
-        expect(marker).toHaveAttribute('aria-label', expect.stringMatching(/Globally allocated.*view onto/i));
+        expect(marker).toHaveAttribute('aria-label', expect.stringMatching(/Aliased to tensor/i));
 
         const row = container.querySelector('.legend-item');
         expect(row).toHaveClass('globally-allocated');
     });
 
-    it('explains what the marker means, not only which tensor it points at', () => {
-        // The icon is the only thing most readers see — the "Globally allocated" label is
-        // hidden at the widths this legend renders at. Naming the target tensor tells
-        // someone who already knows the concept which tensor it is, and tells someone who
-        // does not nothing at all. #2032
-        const container = renderLegendElement(chunk, { isGloballyAllocated: true });
-        const description = container.querySelector('.globally-allocated-marker')?.getAttribute('aria-label');
+    it('focuses the tensor the row is coloured by, not the bare address', () => {
+        // The row takes its colour from the tensor resolved at the address whenever the
+        // chunk carries no `tensorId` of its own, which is how Device Operations builds
+        // every CB chunk. Sending `undefined` here made `updateBufferFocus` derive a
+        // different colour from the address, so nothing ever matched: the row dimmed
+        // itself and a toast said it was selected. #2032
+        const aliasedTensor = { id: 188, shape: 'Shape([1, 32, 64, 64])', dtype: 'DataType.BFLOAT16' };
+        const opDetails = { getTensorForAddress: () => aliasedTensor } as unknown as OperationDetails;
+        onLegendClick.mockClear();
 
-        expect(description).toMatch(/not a separate allocation/i);
-        // The consequence is the part a reader acts on: it is why the row carries bytes
-        // that the CB total does not count.
-        expect(description).toMatch(/adds nothing to the CB total/i);
+        const { container } = render(
+            <TestProviders>
+                <MemoryLegendElement
+                    chunk={{ address: 0x1000, size: 128 }}
+                    memSize={1024}
+                    selectedTensorAddress={null}
+                    operationDetails={opDetails}
+                    onLegendClick={onLegendClick}
+                    isGloballyAllocated
+                />
+            </TestProviders>,
+        );
+
+        (container.querySelector('.legend-item') as HTMLElement).click();
+
+        expect(onLegendClick).toHaveBeenCalledWith(0x1000, 188, undefined);
     });
 
     it('surfaces the aliased tensor id/shape/dtype in the marker tooltip when a tensor is resolved', () => {
@@ -221,7 +235,7 @@ describe('MemoryLegendElement globally_allocated marker (#1651)', () => {
         const marker = document.querySelector('.globally-allocated-marker');
         expect(marker).toHaveAttribute(
             'aria-label',
-            expect.stringMatching(/Globally allocated.*Tensor 188.*\[1, 32, 64, 64\].*bf16/),
+            expect.stringMatching(/Aliased to Tensor 188.*\[1, 32, 64, 64\].*bf16/),
         );
     });
 });
