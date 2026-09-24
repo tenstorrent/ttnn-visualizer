@@ -196,9 +196,13 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
         "memory_profile": {
             "description": (
                 "Memory footprint per operation, keyed by buffer type and ranked "
-                "within each type, with that type's peak and the device's L1 "
-                "geometry. Sizes are bytes per bank and are never added across "
-                "memory types, whose bank counts differ. Comparable to "
+                "within each type, with that type's largest footprint and the "
+                "device's L1 geometry. A floor, not the peak: the buffers table "
+                "records tensor allocations only, so circular buffers and tensors "
+                "allocated and freed inside one operation are absent -- do not use "
+                "it to answer "
+                "an out-of-memory question. Sizes are bytes per bank and are never "
+                "added across memory types, whose bank counts differ. Comparable to "
                 "l1_bank_size; a device-wide total cannot be derived from the "
                 "response, and the report carries no DRAM capacity."
             ),
