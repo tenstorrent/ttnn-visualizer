@@ -675,8 +675,19 @@ def memory_profile(
 
     `buffers` holds what was live *at* each operation rather than what that
     operation allocated, so a per-operation sum is the footprint at that point
-    and the largest of them is the run's peak -- which is the question an
-    out-of-memory failure actually asks.
+    and the largest of them is the largest of those footprints.
+
+    It is a floor, not the peak, and the gap is not small. `buffers` records
+    tensor allocations only: a circular buffer never enters it, and neither does
+    a tensor allocated and freed inside one operation. On `resnet50_may08_1841`
+    this reports 487,424, a figure eighteen operations share, where replaying
+    the captured graph gives 1,159,840 at operation 29 -- 2.4x out, and not the
+    same operations.
+    Across the local corpus circular buffers are 52-100% of the real L1 peak
+    wherever a peak has any, and intra-op tensors a further 24-38%. Two reports
+    hold almost no L1 tensors at all, so this reports a peak near zero for a
+    model saturating L1. Saying it answers the out-of-memory question, as this
+    docstring once did, is the one thing it must not say. #2034
 
     Nothing here adds one memory type to another. `max_size_per_bank` is divided
     by the bank count of its own memory type, and those counts differ, so a
@@ -783,7 +794,18 @@ def memory_profile(
         # buffer actually occupies lives in `buffer_pages`, which no tool
         # exposes -- so the honest statement is that this response cannot give a
         # device-wide total, not a formula that is usually wrong.
+        # In `note` rather than `caveat` on purpose: `_caveats` is for what varies
+        # with the request, and its own docstring says a caveat that is always
+        # present is one an agent learns to skip. This exclusion is a property of
+        # the table, true of every response. #2034
         "note": (
+            "This is a floor, not the peak. `buffers` records tensor "
+            "allocations only, so circular buffers and tensors allocated and "
+            "freed inside one operation are absent -- on the local corpus those "
+            "are 52-100% and 24-38% of the real L1 peak respectively, and a "
+            "model whose L1 is mostly circular buffers reports a peak near "
+            "zero. Neither the true peak nor the operation holding it can be "
+            "derived from this response. "
             "Sizes are per bank, as `buffers.max_size_per_bank` holds them, and "
             "are never added across memory types -- the bank count differs by "
             "type. A per-bank figure is comparable to `device.l1_bank_size` for "

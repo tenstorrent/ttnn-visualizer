@@ -615,6 +615,25 @@ class TestMemoryProfile:
         assert [op["operation_id"] for op in dram["operations"]] == [1, 2, 3]
         assert result["buffer_types_present"] == ["DRAM", "L1", "L1_SMALL"]
 
+    def test_the_response_says_the_peak_is_a_floor(self, loaded):
+        """The one thing this number must not be read as is the OOM answer.
+
+        `buffers` records tensor allocations, so circular buffers and tensors
+        freed inside one operation are absent -- 52-100% and 24-38% of the real
+        L1 peak across the local corpus. An agent has no second number on screen
+        to disagree with, so the response has to say so itself. It goes in
+        `note` rather than `caveat` because it is true of every response, and
+        `_caveats` is for what varies with the request. #2034
+        """
+        registry, handle = loaded()
+
+        note = agent_operations.memory_profile(registry, handle)["note"]
+
+        assert "floor" in note
+        assert "circular buffer" in note
+        # The exclusion is only actionable if the response names what is missing.
+        assert "freed inside one operation" in note
+
     def test_no_figure_adds_one_memory_type_to_another(self, loaded):
         """`max_size_per_bank` is divided by the bank count of its own memory
         type and those counts differ, so DRAM-per-bank plus L1-per-bank is two
