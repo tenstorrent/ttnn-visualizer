@@ -31,7 +31,7 @@ from ttnn_visualizer.queries import DatabaseQueries
 # holds, and the HTTP serializers already re-expose it as plain `size`
 # (`serializers.py:309`) -- so reading it as a device-wide byte count is one
 # rename away rather than a hypothetical. It is per bank: on a local resnet50
-# capture the peak L1 footprint sums to 487,424 against an `l1_bank_size` of
+# capture the largest L1 footprint sums to 487,424 against an `l1_bank_size` of
 # 1,370,848 across 64 banks, and an agent comparing those two numbers directly
 # would understate usage by the bank count.
 BUFFER_SIZE_UNIT = "bytes_per_bank"
@@ -344,9 +344,9 @@ def operation_provenance(
     refuse; it answers about a different operation. `find_operations` is how to
     cross from a name to a database id.
 
-    This is the step that was missing: `memory_profile` names the operation holding
-    the peak, and nothing turned that id into something actionable in the code
-    being edited. #2021
+    This is the step that was missing: `memory_profile` names the operations
+    holding its largest footprint, and nothing turned those ids into something
+    actionable in the code being edited. #2021
     """
     instance = registry.get(handle)
     with _profiler_db(instance) as queries:
@@ -685,9 +685,9 @@ def memory_profile(
     same operations.
     Across the local corpus circular buffers are 52-100% of the real L1 peak
     wherever a peak has any, and intra-op tensors a further 24-38%. Two reports
-    hold almost no L1 tensors at all, so this reports a peak near zero for a
-    model saturating L1. Saying it answers the out-of-memory question, as this
-    docstring once did, is the one thing it must not say. #2034
+    hold almost no L1 tensors at all, so this reports a figure near zero for a
+    model saturating L1. Neither the true peak nor the operation holding it can
+    be derived from this response. #2034
 
     Nothing here adds one memory type to another. `max_size_per_bank` is divided
     by the bank count of its own memory type, and those counts differ, so a

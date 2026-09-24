@@ -151,8 +151,8 @@ need the device log's `type` column to pair zone starts with ends; a capture wit
 reports occurrence counts only, and a capture that stopped mid-zone reports how many starts
 and ends failed to pair so a partial total does not read as a complete one.
 
-**An operation id is not the end of the answer.** `memory_profile` names the operation
-holding the peak, and `operation_provenance` turns that id into the two things you need
+**An operation id is not the end of the answer.** `memory_profile` names the operations
+holding its largest footprint, and `operation_provenance` turns such an id into the two things you need
 to act on it: the arguments it was called with, and the innermost stack frame's file,
 line, function and source line.
 
