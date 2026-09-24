@@ -43,7 +43,7 @@ server needs no database and no running application.
 | `diff_reports` | Per-operation-code deltas between two reports, largest movement first. |
 | `find_operations` | Operations matching a name substring or a call-stack substring, with the ids `operation_detail` takes. |
 | `operation_detail` | One operation: its input and output tensors with shape, dtype, layout and memory config, and what it had allocated. |
-| `memory_profile` | Memory footprint per operation, keyed by buffer type and ranked within each, with each type's peak and the device's L1 geometry. |
+| `memory_profile` | Memory footprint per operation, keyed by buffer type and ranked within each, with each type's largest footprint and the device's L1 geometry. A floor rather than the peak — see below. |
 | `tensor_flow` | Which operation produced a tensor and which ones consumed it. |
 | `operation_provenance` | What one operation was called with, and where in the model code it came from. |
 
@@ -90,7 +90,7 @@ A per-bank L1 figure is comparable to the `l1_bank_size` returned beside it, whi
 conservative bound. **A device-wide total cannot be derived from the response**, and the
 response says so rather than offering a formula: multiplying by the bank count is only
 right for a buffer interleaved across every bank, and most are not — on a local resnet50
-capture the operation holding the L1 peak uses 56 of 64 banks, so multiplying overstates
+capture the operation holding the largest L1 footprint uses 56 of 64 banks, so multiplying overstates
 it by 14%, and 16-bank operations in the same report by 4x. How many banks a buffer
 actually occupies lives in page-level data that no tool exposes. The report carries no
 DRAM capacity at all, which is likewise stated rather than left as a gap.
@@ -105,13 +105,24 @@ Where it does not, which is the common case, the report's own query substitutes 
 per-bank allocation figure, and the response labels it `bytes_per_bank` accordingly. So
 read `tensor_size_unit` rather than assuming the two figures are in different units.
 
+**`memory_profile` reports a floor, not the peak.** It reads the `buffers` table, which
+records tensor allocations only. A circular buffer never appears there, and neither does a
+tensor allocated and freed inside a single operation. Across the local captures circular
+buffers are 52–100% of the real L1 peak wherever a peak has any, and intra-op tensors a
+further 24–38%; on `resnet50_may08_1841` the tool reports 487,424 — a figure eighteen
+operations share — where replaying the captured graph gives 1,159,840 at operation 29,
+2.4x out and not the same operations. Two of the local reports hold almost no L1 tensors at
+all, so the tool reports a figure near zero for a model that is saturating L1. Do not use
+this figure to answer an out-of-memory question; neither the true peak nor the operation
+holding it can be derived from it.
+
 `memory_profile` groups by operation because the report records what was live *at* each
 operation rather than what that operation allocated. A per-operation sum is therefore the
-footprint at that point in the run, and the largest of them is that type's peak — which is
-the question an out-of-memory failure asks. A peak is a maximum and never a sum across the
+footprint at that point in the run, and the largest of them is that type's largest
+footprint. It is a maximum and never a sum across the
 run: buffers persist across operations, so adding them would count one allocation once per
-operation it stayed live through. Because resident memory barely moves, a peak is usually
-shared by many operations, and `operations_at_peak` says how many — the difference between
+operation it stayed live through. Because resident memory barely moves, that figure is
+usually shared by many operations, and `operations_at_peak` says how many — the difference between
 a single operation you can go and fix and a plateau across the whole run.
 
 **A multi-host report is read one rank at a time**, and refuses rather than guess. Operation ids restart at 1 per rank, so
@@ -143,8 +154,8 @@ need the device log's `type` column to pair zone starts with ends; a capture wit
 reports occurrence counts only, and a capture that stopped mid-zone reports how many starts
 and ends failed to pair so a partial total does not read as a complete one.
 
-**An operation id is not the end of the answer.** `memory_profile` names the operation
-holding the peak, and `operation_provenance` turns that id into the two things you need
+**An operation id is not the end of the answer.** `memory_profile` names the operations
+holding its largest footprint, and `operation_provenance` turns such an id into the two things you need
 to act on it: the arguments it was called with, and the innermost stack frame's file,
 line, function and source line.
 
