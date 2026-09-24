@@ -32,6 +32,7 @@ from ttnn_visualizer.event_logging import (
     RECORDING_DISABLED_ENV_VAR,
     RUN_ID_ENV_VAR,
     RUN_ID_FIELD,
+    SERVER_EVENT_DETAIL_FIELDS,
     DeploymentMode,
     EventLogEvent,
     EventLogView,
@@ -933,13 +934,14 @@ def test_record_launch_reports_hosted_root_and_records_no_app_start(
 def test_every_client_postable_event_has_a_validation_rule():
     """A new event without a rule must fail here, not be rejected in production.
 
-    ``app_start`` is the one exclusion, and it is deliberate: the server records launches
-    itself, so a client able to post one could forge the deployment population every
-    other figure is read against.
+    Server-only events are the exclusion: the process records them itself, so a
+    client able to post one could forge the denominators those events exist to
+    measure.
     """
-    assert set(CLIENT_EVENT_DETAIL_FIELDS) == set(EventLogEvent) - {
-        EventLogEvent.APP_START
-    }
+    assert set(CLIENT_EVENT_DETAIL_FIELDS).isdisjoint(SERVER_EVENT_DETAIL_FIELDS)
+    assert set(CLIENT_EVENT_DETAIL_FIELDS) | set(SERVER_EVENT_DETAIL_FIELDS) == set(
+        EventLogEvent
+    )
 
 
 def test_every_detail_field_draws_from_an_enum():

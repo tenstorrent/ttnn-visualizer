@@ -15,6 +15,7 @@ tt-perf-report's own printing for the same reason.
 
 import json
 import logging
+import os
 import sys
 from typing import Callable, Dict, List, Optional, TextIO
 
@@ -24,6 +25,14 @@ from ttnn_visualizer.agent.handles import (
     ReportRegistry,
     UnknownHandleError,
     load_report,
+)
+from ttnn_visualizer.event_logging import (
+    RUN_ID_ENV_VAR,
+    EventLogEvent,
+    McpToolName,
+    McpToolOutcome,
+    record_event,
+    start_run,
 )
 
 logger = logging.getLogger(__name__)
@@ -278,6 +287,27 @@ def _result(request_id: object, payload: Dict) -> Dict:
     return {"jsonrpc": "2.0", "id": request_id, "result": payload}
 
 
+def _record_tool_call(name: str, outcome: McpToolOutcome) -> None:
+    """Usage line plus stderr, without arguments or paths.
+
+    ``record_event`` only checks logfmt safety, not enums, so ``tool`` and
+    ``outcome`` must be members. An unknown tool name is client free-form and
+    must not enter the log.
+    """
+    logger.info("%s %s", name, outcome.value)
+    try:
+        tool = McpToolName(name)
+    except ValueError:
+        return
+
+    record_event(
+        EventLogEvent.MCP_TOOL_CALLED,
+        server_mode=False,
+        tool=tool,
+        outcome=outcome,
+    )
+
+
 def _error(request_id: object, code: int, message: str) -> Dict:
     return {
         "jsonrpc": "2.0",
@@ -362,6 +392,7 @@ def handle_message(message: object, table: Dict[str, Dict]) -> Optional[Dict]:
         name = str(params.get("name") or "")
         entry = table.get(name)
         if entry is None:
+            logger.info("unknown tool")
             return _tool_failure(request_id, f"unknown tool {name!r}")
 
         raw_arguments = params.get("arguments")
@@ -373,15 +404,19 @@ def handle_message(message: object, table: Dict[str, Dict]) -> Optional[Dict]:
         try:
             payload = entry["handler"](arguments)
         except (UnknownHandleError, ValueError) as error:
+            _record_tool_call(name, McpToolOutcome.REFUSED)
             return _tool_failure(request_id, str(error))
         except TypeError as error:
+            _record_tool_call(name, McpToolOutcome.REFUSED)
             return _tool_failure(request_id, f"bad arguments for {name}: {error}")
         except (
             Exception
         ) as error:  # noqa: BLE001 - the model gets the reason, the log gets the trace
             logger.exception("%s failed", name)
+            _record_tool_call(name, McpToolOutcome.ERROR)
             return _tool_failure(request_id, f"{name} failed: {error}")
 
+        _record_tool_call(name, McpToolOutcome.OK)
         return _result(
             request_id,
             {
@@ -424,6 +459,7 @@ def serve(
 
 def main() -> None:
     logging.basicConfig(stream=sys.stderr, level=logging.INFO)
+    os.environ[RUN_ID_ENV_VAR] = start_run()
     serve(sys.stdin, sys.stdout)
 
 

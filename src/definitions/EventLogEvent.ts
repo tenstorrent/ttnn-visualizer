@@ -26,6 +26,9 @@ export enum EventLogEvent {
     REPORT_LOAD_FAILED = 'report_load_failed',
     VIEW_OPENED = 'view_opened',
     VIEW_ENGAGED = 'view_engaged',
+    // Recorded by `ttnn-visualizer-mcp` on each tools/call. The HTTP route refuses it
+    // for the same reason as `app_start`: a page able to post tool use could forge Q4.
+    MCP_TOOL_CALLED = 'mcp_tool_called',
 }
 
 export enum ReportKind {

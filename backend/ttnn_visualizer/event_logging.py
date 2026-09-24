@@ -145,6 +145,13 @@ KIND_FIELD = "kind"
 SOURCE_FIELD = "source"
 REASON_CLASS_FIELD = "reason_class"
 VIEW_FIELD = "view"
+TOOL_FIELD = "tool"
+OUTCOME_FIELD = "outcome"
+VERSION_FIELD = "version"
+DEPLOYMENT_MODE_FIELD = "deployment_mode"
+LAUNCH_MODE_FIELD = "launch_mode"
+OS_FIELD = "os"
+PYTHON_VERSION_FIELD = "python_version"
 
 # The wire shape of one posted event. ``EVENT_FIELD`` doubles as its name on the wire and
 # so is not restated; ``DETAILS_FIELD`` has no log equivalent, since details are flattened
@@ -213,6 +220,7 @@ class EventLogEvent(str, Enum):
     REPORT_LOAD_FAILED = "report_load_failed"
     VIEW_OPENED = "view_opened"
     VIEW_ENGAGED = "view_engaged"
+    MCP_TOOL_CALLED = "mcp_tool_called"
 
 
 class DeploymentMode(str, Enum):
@@ -318,14 +326,37 @@ class EventLogView(str, Enum):
     MCP = "mcp"
 
 
-# Where every detail value a client may post has to come from. `_SAFE_VALUE_PATTERN`
-# is not enough on its own: it would happily accept `kind=totally-made-up`, and the
-# bounded contents of this file are the entire promise being made.
+class McpToolName(str, Enum):
+    """Registered ``ttnn-visualizer-mcp`` tools. Values match ``_tool_table`` keys."""
+
+    LOAD_REPORT = "load_report"
+    TOP_OPS = "top_ops"
+    ZONE_TIMINGS = "zone_timings"
+    DIFF_REPORTS = "diff_reports"
+    FIND_OPERATIONS = "find_operations"
+    OPERATION_DETAIL = "operation_detail"
+    MEMORY_PROFILE = "memory_profile"
+    TENSOR_FLOW = "tensor_flow"
+    OPERATION_PROVENANCE = "operation_provenance"
+
+
+class McpToolOutcome(str, Enum):
+    OK = "ok"
+    REFUSED = "refused"
+    ERROR = "error"
+
+
+# Closed vocabularies for detail fields that are enums. Client-posted fields are
+# validated against this map; server-written fields use it so the docs page and
+# ``_SAFE_VALUE_PATTERN`` checks have one source. `version` and `python_version`
+# stay off it: they are constrained strings, not closed sets.
 _DETAIL_FIELD_ENUMS: Mapping[str, Type[Enum]] = {
     KIND_FIELD: ReportKind,
     SOURCE_FIELD: ReportSource,
     REASON_CLASS_FIELD: ReportLoadFailureReason,
     VIEW_FIELD: EventLogView,
+    TOOL_FIELD: McpToolName,
+    OUTCOME_FIELD: McpToolOutcome,
 }
 
 # What a client may post, and the exact detail fields each event carries. Exported so
@@ -333,14 +364,25 @@ _DETAIL_FIELD_ENUMS: Mapping[str, Type[Enum]] = {
 # transcribed — a silent divergence there means events the client emits and the server
 # rejects, which the client is designed not to notice.
 #
-# `APP_START` is deliberately absent: the server records launches itself, and a client
-# able to post one could forge the deployment population every other figure is read
-# against.
+# Server-only events live in ``SERVER_EVENT_DETAIL_FIELDS``. A client able to post
+# ``app_start`` or ``mcp_tool_called`` could forge the denominators those events
+# exist to measure.
 CLIENT_EVENT_DETAIL_FIELDS: Mapping[EventLogEvent, Tuple[str, ...]] = {
     EventLogEvent.REPORT_LOADED: (KIND_FIELD, SOURCE_FIELD),
     EventLogEvent.REPORT_LOAD_FAILED: (KIND_FIELD, REASON_CLASS_FIELD),
     EventLogEvent.VIEW_OPENED: (VIEW_FIELD,),
     EventLogEvent.VIEW_ENGAGED: (VIEW_FIELD,),
+}
+
+SERVER_EVENT_DETAIL_FIELDS: Mapping[EventLogEvent, Tuple[str, ...]] = {
+    EventLogEvent.APP_START: (
+        VERSION_FIELD,
+        DEPLOYMENT_MODE_FIELD,
+        LAUNCH_MODE_FIELD,
+        OS_FIELD,
+        PYTHON_VERSION_FIELD,
+    ),
+    EventLogEvent.MCP_TOOL_CALLED: (TOOL_FIELD, OUTCOME_FIELD),
 }
 
 

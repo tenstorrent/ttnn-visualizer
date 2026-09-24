@@ -31,6 +31,7 @@ from ttnn_visualizer.event_logging import (
     DETAILS_FIELD,
     EVENT_FIELD,
     MAX_EVENT_LOG_BATCH_EVENTS,
+    SERVER_EVENT_DETAIL_FIELDS,
     EventLogEvent,
     EventLogView,
     ReportKind,
@@ -47,7 +48,15 @@ _ENDPOINTS = _REPOSITORY_ROOT / "src" / "definitions" / "Endpoints.ts"
 # process runs on, and only the server can know them. Named here so that adding a
 # client-facing enum without a TypeScript copy fails
 # :func:`test_every_client_facing_enum_is_paired`, rather than going unnoticed.
-_SERVER_ONLY_ENUMS = frozenset({"DeploymentMode", "LaunchMode", "OperatingSystem"})
+_SERVER_ONLY_ENUMS = frozenset(
+    {
+        "DeploymentMode",
+        "LaunchMode",
+        "OperatingSystem",
+        "McpToolName",
+        "McpToolOutcome",
+    }
+)
 
 _PAIRED_ENUMS: Dict[str, Type[Enum]] = {
     "EventLogEvent": EventLogEvent,
@@ -139,14 +148,14 @@ def test_every_client_event_declares_exactly_the_expected_details(event):
     )
 
 
-def test_the_client_payload_cannot_express_a_server_only_event():
-    # `app_start` is a real `EventLogEvent` member, so it has to be in the TS enum — but a
-    # payload branch for it would let a page forge the population every other figure is
-    # read against.
+@pytest.mark.parametrize("event", sorted(SERVER_EVENT_DETAIL_FIELDS, key=str))
+def test_the_client_payload_cannot_express_a_server_only_event(event):
+    # Server-only events still live in the TS enum so the copies cannot diverge, but a
+    # payload branch would let a page forge the figures those events exist to measure.
     source = _read(_DEFINITIONS)
 
-    assert EventLogEvent.APP_START not in CLIENT_EVENT_DETAIL_FIELDS
-    assert f"EventLogEvent.{EventLogEvent.APP_START.name};" not in source
+    assert event not in CLIENT_EVENT_DETAIL_FIELDS
+    assert f"EventLogEvent.{event.name};" not in source
 
 
 def test_the_client_batch_cap_matches_the_write_atomicity_cap():

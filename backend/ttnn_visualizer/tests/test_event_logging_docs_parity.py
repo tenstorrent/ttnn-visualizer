@@ -30,6 +30,7 @@ from ttnn_visualizer.event_logging import (
     RUN_ID_LENGTH,
     SCHEMA_VERSION,
     SCHEMA_VERSION_FIELD,
+    SERVER_EVENT_DETAIL_FIELDS,
     TIMESTAMP_FIELD,
     EventLogEvent,
 )
@@ -186,11 +187,13 @@ def test_every_event_log_event_has_exactly_one_documented_section():
 @pytest.mark.parametrize("event", sorted(EventLogEvent, key=str))
 def test_every_event_documents_exactly_its_specific_fields(event):
     section = _event_sections(_read(_EVENT_LOGGING_DOCS))[event.value]
-    expected_fields = (
-        set(_app_start_details())
-        if event is EventLogEvent.APP_START
-        else set(CLIENT_EVENT_DETAIL_FIELDS[event])
-    )
+    if event is EventLogEvent.APP_START:
+        expected_fields = set(_app_start_details())
+        assert expected_fields == set(SERVER_EVENT_DETAIL_FIELDS[event])
+    elif event in SERVER_EVENT_DETAIL_FIELDS:
+        expected_fields = set(SERVER_EVENT_DETAIL_FIELDS[event])
+    else:
+        expected_fields = set(CLIENT_EVENT_DETAIL_FIELDS[event])
 
     assert _documented_fields(section) == expected_fields
 
@@ -218,6 +221,12 @@ def test_every_closed_server_detail_field_documents_exactly_its_enum():
             assert _documented_value_sets(source, field) == [
                 {member.value for member in type(value)}
             ]
+
+    for field in SERVER_EVENT_DETAIL_FIELDS[EventLogEvent.MCP_TOOL_CALLED]:
+        enumeration = _DETAIL_FIELD_ENUMS[field]
+        assert _documented_value_sets(source, field) == [
+            {member.value for member in enumeration}
+        ]
 
 
 def test_the_event_logging_docs_name_every_common_log_field():

@@ -27,6 +27,12 @@ from ttnn_visualizer.agent.handles import (
     load_report,
 )
 from ttnn_visualizer.csv_queries import DeviceLogProfilerQueries
+from ttnn_visualizer.event_logging import (
+    RECORDING_DISABLED_ENV_VAR,
+    EventLogEvent,
+    McpToolName,
+    McpToolOutcome,
+)
 from ttnn_visualizer.exceptions import DataFormatError
 from ttnn_visualizer.models import Instance
 from ttnn_visualizer.tests.test_device_log_columns import (
@@ -847,3 +853,85 @@ class TestTransport:
 
         assert response["result"]["capabilities"] == {"tools": {}}
         assert response["result"]["serverInfo"]["name"] == "ttnn-visualizer"
+
+    def test_a_successful_call_is_recorded(self):
+        table = self._table()
+        table["load_report"]["handler"] = lambda arguments: {"handle": "report-1"}
+
+        with patch.object(server, "record_event") as record:
+            response = server.handle_message(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "tools/call",
+                    "params": {"name": "load_report", "arguments": {}},
+                },
+                table,
+            )
+
+        assert "error" not in response
+        record.assert_called_once_with(
+            EventLogEvent.MCP_TOOL_CALLED,
+            server_mode=False,
+            tool=McpToolName.LOAD_REPORT,
+            outcome=McpToolOutcome.OK,
+        )
+
+    def test_a_refused_call_is_recorded(self):
+        with patch.object(server, "record_event") as record:
+            server.handle_message(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 2,
+                    "method": "tools/call",
+                    "params": {"name": "top_ops", "arguments": {"handle": "absent"}},
+                },
+                self._table(),
+            )
+
+        record.assert_called_once_with(
+            EventLogEvent.MCP_TOOL_CALLED,
+            server_mode=False,
+            tool=McpToolName.TOP_OPS,
+            outcome=McpToolOutcome.REFUSED,
+        )
+
+    def test_an_unknown_tool_is_not_recorded(self):
+        with patch.object(server, "record_event") as record:
+            server.handle_message(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 3,
+                    "method": "tools/call",
+                    "params": {"name": "not_a_tool", "arguments": {}},
+                },
+                self._table(),
+            )
+
+        record.assert_not_called()
+
+    def test_a_disabled_recorder_still_answers(self, monkeypatch, event_log_directory):
+        monkeypatch.setenv(RECORDING_DISABLED_ENV_VAR, "true")
+        table = self._table()
+        table["load_report"]["handler"] = lambda arguments: {"handle": "report-1"}
+
+        response = server.handle_message(
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "tools/call",
+                "params": {"name": "load_report", "arguments": {}},
+            },
+            table,
+        )
+
+        assert response["result"]["content"][0]["text"]
+        assert "error" not in response
+
+
+def test_registered_tools_are_the_mcp_tool_name_vocabulary():
+    """A new tool without an enum member would write a raw string, which the log
+    would accept and the collector could not label."""
+    assert {member.value for member in McpToolName} == set(
+        server._tool_table(ReportRegistry())
+    )

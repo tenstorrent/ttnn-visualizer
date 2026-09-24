@@ -11,7 +11,10 @@ the questions a person asks it during model bring-up: which operations dominate,
 time went inside them, whether a change helped, and what the run allocated.
 
 It is a read-only surface over the same report readers the web application uses. It starts
-no web server, opens no port, and writes nothing to a report.
+no web server, opens no port, and writes nothing to a report. By default it appends usage
+events to `~/.ttnn-visualizer/usage/events.log` (tool name and outcome only). Set
+`USAGE_RECORDING_DISABLED=true` or create the marker file under that directory to opt out;
+see the [event logging](./event-logging.md) reference.
 
 ## Running it
 
