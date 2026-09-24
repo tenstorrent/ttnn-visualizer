@@ -219,8 +219,10 @@ describe('Layout toast transition', () => {
         expect(node).toHaveClass('toast-exit-immediate');
         expect(node).not.toHaveClass('no-toast-animation');
 
-        // jsdom does not run CSS animations; this is the event the library waits
-        // on before done().
+        // jsdom never fires animationend from CSS, so this only checks that
+        // done() unmounts once the library's exit listener runs — not the
+        // #2044 leak (display:none skipping the event). That guard is the
+        // stylesheet spec.
         act(() => {
             node!.dispatchEvent(new Event('animationend'));
         });

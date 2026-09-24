@@ -14,7 +14,12 @@
     --toastify-toast-bd-radius: 2px; // Makes the toast borders less round
 }
 
-// 1ms so animationend still fires; 0s is skipped in some engines. #2044
-.toast-exit-immediate {
+// (0,2,0) beats `.Toastify--animate` (library sheet is injected later and
+// otherwise keeps the 0.5s enter duration on a mid-enter dismiss). Opacity
+// hides on the first frame; bounce-out has no 0% stop so fill-mode:both
+// would otherwise stay opaque until React unmounts. #2044
+/* stylelint-disable-next-line selector-class-pattern */
+.Toastify__toast.toast-exit-immediate {
     animation-duration: 1ms;
+    opacity: 0;
 }
