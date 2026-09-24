@@ -788,12 +788,12 @@ def memory_profile(
         "device": capacity,
         # Deliberately does not say "multiply by the bank count". That holds only
         # for a buffer interleaved across every bank, and most are not: on a
-        # local resnet50 capture the operation named here as the L1 peak holds
-        # two 56-bank buffers, so multiplying by the device's 64 overstates it by
-        # 14%, and 16-bank operations in the same report by 4x. How many banks a
-        # buffer actually occupies lives in `buffer_pages`, which no tool
-        # exposes -- so the honest statement is that this response cannot give a
-        # device-wide total, not a formula that is usually wrong.
+        # local resnet50 capture the operation named here as holding the largest
+        # L1 footprint holds two 56-bank buffers, so multiplying by the device's
+        # 64 overstates it by 14%, and 16-bank operations in the same report by
+        # 4x. How many banks a buffer actually occupies lives in `buffer_pages`,
+        # which no tool exposes -- so the honest statement is that this response
+        # cannot give a device-wide total, not a formula that is usually wrong.
         # In `note` rather than `caveat` on purpose: `_caveats` is for what varies
         # with the request, and its own docstring says a caveat that is always
         # present is one an agent learns to skip. This exclusion is a property of

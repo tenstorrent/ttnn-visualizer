@@ -87,7 +87,7 @@ A per-bank L1 figure is comparable to the `l1_bank_size` returned beside it, whi
 conservative bound. **A device-wide total cannot be derived from the response**, and the
 response says so rather than offering a formula: multiplying by the bank count is only
 right for a buffer interleaved across every bank, and most are not — on a local resnet50
-capture the operation holding the L1 peak uses 56 of 64 banks, so multiplying overstates
+capture the operation holding the largest L1 footprint uses 56 of 64 banks, so multiplying overstates
 it by 14%, and 16-bank operations in the same report by 4x. How many banks a buffer
 actually occupies lives in page-level data that no tool exposes. The report carries no
 DRAM capacity at all, which is likewise stated rather than left as a gap.
