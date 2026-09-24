@@ -746,22 +746,22 @@ def memory_profile(
     for type_name in sorted(by_type):
         footprints = by_type[type_name]
         # Ties broken by operation id so the same report answers the same way
-        # twice: resident allocations barely move, so the peak is routinely
-        # shared by hundreds of operations. SQLite's GROUP BY happens to return
+        # twice: resident allocations barely move, so the largest footprint is
+        # routinely shared by hundreds of operations. SQLite's GROUP BY happens to return
         # rows ordered by its leading key, which makes this belt-and-braces
         # today rather than load-bearing -- but that ordering is not guaranteed,
         # and an arbitrary pick among hundreds is what `operations_at_peak`
         # exists to keep an agent from chasing.
         ranked = sorted(footprints.items(), key=lambda item: (-item[1], item[0]))
-        # The peak is a maximum, never a sum across the run: a buffer that stays
+        # It is a maximum, never a sum across the run: a buffer that stays
         # live is listed under every operation it survived, so adding those
         # reports one allocation once per operation it lived through.
         peak = ranked[0][1] if ranked else 0
         memory[type_name] = {
             "peak": peak,
-            # How many operations hold that peak. A plateau of hundreds is the
+            # How many operations share that figure. A plateau of hundreds is the
             # normal shape for resident memory, and naming one of them as "the"
-            # peak without this sends an agent to investigate an arbitrary pick.
+            # answer without this sends an agent to investigate an arbitrary pick.
             "operations_at_peak": sum(
                 1 for _, size in ranked if size == peak and peak > 0
             ),
@@ -801,11 +801,10 @@ def memory_profile(
         "note": (
             "This is a floor, not the peak. `buffers` records tensor "
             "allocations only, so circular buffers and tensors allocated and "
-            "freed inside one operation are absent -- on the local corpus those "
-            "are 52-100% and 24-38% of the real L1 peak respectively, and a "
-            "model whose L1 is mostly circular buffers reports a peak near "
-            "zero. Neither the true peak nor the operation holding it can be "
-            "derived from this response. "
+            "freed inside one operation are absent, and both are large. A model "
+            "whose L1 is mostly circular buffers reports a figure near zero. "
+            "Neither the true peak nor the operation holding it can be derived "
+            "from this response. "
             "Sizes are per bank, as `buffers.max_size_per_bank` holds them, and "
             "are never added across memory types -- the bank count differs by "
             "type. A per-bank figure is comparable to `device.l1_bank_size` for "

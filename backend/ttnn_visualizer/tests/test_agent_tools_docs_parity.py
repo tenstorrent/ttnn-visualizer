@@ -83,6 +83,26 @@ def test_every_documented_tool_says_what_it_answers():
     assert not blank, f"tool rows with no description: {sorted(blank)}"
 
 
+def test_the_page_carries_the_memory_profile_floor_caveat():
+    """Parity name-checks the table against `_tool_table` and nothing else.
+
+    The docstring and the registered description are each pinned by a test in
+    `test_agent_operations.py`, so a revert of those fails. The same prose on
+    this page had nothing holding it, and the page is what a person reads —
+    and, once #2035 renders it, what they read inside the application. #2034
+
+    Phrases, not the whole paragraph: the wording should be free to improve.
+    Deliberately no assertion that "out-of-memory question" is absent — the
+    paragraph says "do not use this figure to answer an out-of-memory
+    question", and a substring cannot tell an assertion from its negation.
+    """
+    page = _read(_AGENT_DOCS)
+
+    assert "floor, not the peak" in page
+    assert "circular buffer" in page
+    assert "tensor allocated and freed inside a single operation" in page
+
+
 def test_the_agent_tools_page_is_published():
     assert "src/agent-tools" in _read(
         _DOCS_INDEX

@@ -108,18 +108,18 @@ tensor allocated and freed inside a single operation. Across the local captures 
 buffers are 52–100% of the real L1 peak wherever a peak has any, and intra-op tensors a
 further 24–38%; on `resnet50_may08_1841` the tool reports 487,424 — a figure eighteen
 operations share — where replaying the captured graph gives 1,159,840 at operation 29,
-2.4x out and not the same operations. Two of the local reports hold almost no L1 tensors at all, so the tool reports
-a peak near zero for a model that is saturating L1. Do not use this figure to answer an
-out-of-memory question; neither the true peak nor the operation holding it can be derived
-from it. #2034
+2.4x out and not the same operations. Two of the local reports hold almost no L1 tensors at
+all, so the tool reports a figure near zero for a model that is saturating L1. Do not use
+this figure to answer an out-of-memory question; neither the true peak nor the operation
+holding it can be derived from it.
 
 `memory_profile` groups by operation because the report records what was live *at* each
 operation rather than what that operation allocated. A per-operation sum is therefore the
 footprint at that point in the run, and the largest of them is that type's largest
 footprint. It is a maximum and never a sum across the
 run: buffers persist across operations, so adding them would count one allocation once per
-operation it stayed live through. Because resident memory barely moves, a peak is usually
-shared by many operations, and `operations_at_peak` says how many — the difference between
+operation it stayed live through. Because resident memory barely moves, that figure is
+usually shared by many operations, and `operations_at_peak` says how many — the difference between
 a single operation you can go and fix and a plateau across the whole run.
 
 **A multi-host report is read one rank at a time**, and refuses rather than guess. Operation ids restart at 1 per rank, so

@@ -630,7 +630,7 @@ class TestMemoryProfile:
 
         note = agent_operations.memory_profile(registry, handle)["note"]
 
-        assert "floor" in note
+        assert "floor, not the peak" in note
         assert "circular buffer" in note
         # The exclusion is only actionable if the response names what is missing.
         assert "freed inside one operation" in note
