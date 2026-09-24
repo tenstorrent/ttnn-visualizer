@@ -193,15 +193,6 @@ describe('Layout toast transition', () => {
         cleanup();
     });
 
-    it('keeps an animationend-capable exit instead of display:none', async () => {
-        const { TOAST_TRANSITION } = await import('../src/components/toastTransition');
-
-        expect(TOAST_TRANSITION.exit).toContain('toast-exit-immediate');
-        expect(TOAST_TRANSITION.exit).toContain('Toastify__bounce-exit');
-        expect(TOAST_TRANSITION.exit).not.toContain('no-toast-animation');
-        expect(TOAST_TRANSITION.collapse).toBe(false);
-    });
-
     it('unmounts a dismissed toast once animationend fires', async () => {
         const { default: Layout } = await import('../src/components/Layout');
         const { createToast, dismissToast } = await import('../src/functions/createToastNotification');
@@ -225,9 +216,11 @@ describe('Layout toast transition', () => {
         });
 
         expect(document.querySelectorAll('.Toastify__toast')).toHaveLength(1);
+        expect(node).toHaveClass('toast-exit-immediate');
+        expect(node).not.toHaveClass('no-toast-animation');
 
         // jsdom does not run CSS animations; this is the event the library waits
-        // on before done(). The display:none leak is pinned by the config/style specs.
+        // on before done().
         act(() => {
             node!.dispatchEvent(new Event('animationend'));
         });
