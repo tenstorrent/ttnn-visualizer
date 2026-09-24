@@ -477,7 +477,7 @@ describe('buildOpGraph', () => {
 
             expect(classOf(repeats, 'block:2')).toBe('op-graph-block-repeat');
             expect(classOf(layers, 'layer:attention:1')).toBe('op-graph-block-layer');
-            expect(classOf(fans, 'weights:1')).toBe('op-graph-block-weights');
+            expect(classOf(fans, 'weights:1-2')).toBe('op-graph-block-weights');
         });
 
         it('gives every kind of block an expander pill that matches its own border', () => {
@@ -512,6 +512,124 @@ describe('buildOpGraph', () => {
             }
         });
 
+        it('keeps a fan unrolled when a grouping fold merges it with another', () => {
+            // Membership is fold-dependent: the members are grouped by the node they
+            // feed, so folding two consumers into one block makes one fan out of two.
+            // The reader who unrolled `weights:2-3` gets a fan called `weights:1-2-3`
+            // back, which their decision does not name — so it re-folded under them,
+            // and the id they had opened was stranded in a set nothing prunes. #1988
+            const chain = [
+                operation({ id: 1, name: 'ttnn.to_device', outputs: [{ consumers: [11] }] }),
+                operation({ id: 2, name: 'ttnn.to_device', outputs: [{ consumers: [12] }] }),
+                operation({ id: 3, name: 'ttnn.to_device', outputs: [{ consumers: [12] }] }),
+                operation({ id: 11, name: 'ttnn.linear', outputs: [{ consumers: [12] }] }),
+                operation({ id: 12, name: 'ttnn.relu', outputs: [{ consumers: [21] }] }),
+                operation({ id: 21, name: 'ttnn.linear', outputs: [{ consumers: [22] }] }),
+                operation({ id: 22, name: 'ttnn.relu', outputs: [{ consumers: [30] }] }),
+                operation({ id: 30, name: 'ttnn.softmax' }),
+            ];
+            const buildChain = (expandedBlockIds?: string[]) =>
+                buildOpGraph(chain, {
+                    hideDeallocate: true,
+                    deviceSubgraphs: [],
+                    collapseWeightLoads: true,
+                    grouping: OpGraphGrouping.REPEATS,
+                    ...(expandedBlockIds === undefined ? {} : { expandedBlockIds }),
+                });
+            const fanIds = (graph: ReturnType<typeof buildOpGraph>) =>
+                graph.nodes.filter((node) => node.id.startsWith('weights:')).map((node) => node.id);
+            const drawsOperation = (graph: ReturnType<typeof buildOpGraph>, id: string) =>
+                graph.nodes.some((node) => node.id === id);
+
+            // Ops 11 and 12 render apart, so 2 and 3 are one fan and 1 is a singleton.
+            expect(fanIds(buildChain())).toEqual(['weights:2-3']);
+
+            // The reader opens it, then folds the grouping blocks — which merges the
+            // two consumers into one node and so merges the fans.
+            const merged = buildChain(['weights:2-3']);
+
+            // The members stay on screen: the merged fan inherits the decision that
+            // covers them rather than folding itself over the top of it.
+            expect(fanIds(merged)).toEqual([]);
+            expect(drawsOperation(merged, '2')).toBe(true);
+            expect(drawsOperation(merged, '3')).toBe(true);
+            // And op 1, which joined the merge, comes with them rather than being
+            // stranded inside a fan node that no longer exists.
+            expect(drawsOperation(merged, '1')).toBe(true);
+        });
+
+        it('folds a merged fan for a reader who has not opened any of it', () => {
+            // The other direction, so the carry cannot be "always unrolled": a
+            // decision naming a different fan entirely leaves this one folded.
+            const chain = [
+                operation({ id: 1, name: 'ttnn.to_device', outputs: [{ consumers: [11] }] }),
+                operation({ id: 2, name: 'ttnn.to_device', outputs: [{ consumers: [12] }] }),
+                operation({ id: 3, name: 'ttnn.to_device', outputs: [{ consumers: [12] }] }),
+                operation({ id: 11, name: 'ttnn.linear', outputs: [{ consumers: [12] }] }),
+                operation({ id: 12, name: 'ttnn.relu', outputs: [{ consumers: [21] }] }),
+                operation({ id: 21, name: 'ttnn.linear', outputs: [{ consumers: [22] }] }),
+                operation({ id: 22, name: 'ttnn.relu', outputs: [{ consumers: [30] }] }),
+                operation({ id: 30, name: 'ttnn.softmax' }),
+            ];
+            const merged = buildOpGraph(chain, {
+                hideDeallocate: true,
+                deviceSubgraphs: [],
+                collapseWeightLoads: true,
+                grouping: OpGraphGrouping.REPEATS,
+                expandedBlockIds: ['weights:99-100'],
+            });
+
+            expect(merged.nodes.filter((node) => node.id.startsWith('weights:')).map((n) => n.id)).toEqual([
+                'weights:1-2-3',
+            ]);
+        });
+
+        it('leaves a fan folded when a remembered decision merely shares a member', () => {
+            // The carry is containment, not intersection, and this is the difference.
+            // Ops 1 and 2 fed different consumers, the reader opened neither, and a
+            // later fold puts 1 alongside 7 and 8 — sources belonging to a fan they
+            // left folded. Sharing operation 1 is not "the fan I opened became this
+            // one", and unrolling on it would show weight loads nobody asked for.
+            const chain = [
+                operation({ id: 1, name: 'ttnn.to_device', outputs: [{ consumers: [10] }] }),
+                operation({ id: 7, name: 'ttnn.to_device', outputs: [{ consumers: [10] }] }),
+                operation({ id: 8, name: 'ttnn.to_device', outputs: [{ consumers: [10] }] }),
+                operation({ id: 10, name: 'ttnn.linear' }),
+            ];
+
+            const merged = buildOpGraph(chain, {
+                hideDeallocate: false,
+                deviceSubgraphs: [],
+                collapseWeightLoads: true,
+                expandedBlockIds: ['weights:1-2'],
+            });
+
+            expect(merged.nodes.filter((node) => node.id.startsWith('weights:')).map((n) => n.id)).toEqual([
+                'weights:1-7-8',
+            ]);
+        });
+
+        it('keeps a fan unrolled when a fold splits it into smaller ones', () => {
+            // The other direction of the same rule: unfolding a grouping block breaks
+            // one fan into several, and each piece is still part of what was opened.
+            const chain = [
+                operation({ id: 1, name: 'ttnn.to_device', outputs: [{ consumers: [10] }] }),
+                operation({ id: 2, name: 'ttnn.to_device', outputs: [{ consumers: [10] }] }),
+                operation({ id: 10, name: 'ttnn.linear' }),
+            ];
+
+            const split = buildOpGraph(chain, {
+                hideDeallocate: false,
+                deviceSubgraphs: [],
+                collapseWeightLoads: true,
+                expandedBlockIds: ['weights:1-2-3-4'],
+            });
+
+            expect(split.nodes.filter((node) => node.id.startsWith('weights:'))).toEqual([]);
+            expect(split.nodes.some((node) => node.id === '1')).toBe(true);
+            expect(split.nodes.some((node) => node.id === '2')).toBe(true);
+        });
+
         it('carries the kind on the node data as well as the class', () => {
             // The class paints it; the kind is what a panel or a test can reason about
             // without parsing a string.
@@ -524,7 +642,7 @@ describe('buildOpGraph', () => {
                 { hideDeallocate: false, deviceSubgraphs: [], collapseWeightLoads: true },
             );
 
-            expect(nodeById(fans, 'weights:1').data.blockKind).toBe(OpGraphBlockKind.WEIGHTS);
+            expect(nodeById(fans, 'weights:1-2').data.blockKind).toBe(OpGraphBlockKind.WEIGHTS);
         });
     });
 
@@ -539,7 +657,7 @@ describe('buildOpGraph', () => {
             operation({ id: 5, name: 'ttnn.layer_norm' }),
         ];
 
-        const FAN_ID = 'weights:1';
+        const FAN_ID = 'weights:1-2-3';
 
         it('draws one node for the fan and keeps its consumer', () => {
             const graph = buildOpGraph(FAN_CHAIN, {

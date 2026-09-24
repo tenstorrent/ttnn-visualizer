@@ -104,6 +104,7 @@ class TestReportInventory:
             "operation_detail",
             "memory_profile",
             "tensor_flow",
+            "operation_provenance",
         }
         assert loaded["capture"]["ARCH"] == "wormhole_b0"
         assert loaded["performance_csv"] == "ops_perf_results_x.csv"
@@ -145,9 +146,12 @@ class TestReportInventory:
         loaded = load_report(ReportRegistry(), profiler_path=str(profiler))
 
         assert loaded["answerable"] == ["find_operations"]
-        assert {"memory_profile", "operation_detail", "tensor_flow"} <= set(
-            loaded["unanswerable"]
-        )
+        assert {
+            "memory_profile",
+            "operation_detail",
+            "tensor_flow",
+            "operation_provenance",
+        } <= set(loaded["unanswerable"])
 
     def test_an_empty_database_file_is_not_answerable(self, tmp_path):
         """A zero-byte `db.sqlite` opens as a valid empty database.
@@ -759,6 +763,7 @@ class TestTransport:
             "operation_detail",
             "memory_profile",
             "tensor_flow",
+            "operation_provenance",
         }
         assert all(
             tool["inputSchema"]["type"] == "object"

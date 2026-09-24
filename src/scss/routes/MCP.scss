@@ -1,0 +1,90 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
+
+@use '../definitions/colours' as *;
+@use '../definitions/variables' as variables;
+
+// The page is the rendered `docs/src/agent-tools.md`, so the selectors are the elements
+// markdown produces rather than app-owned classnames. Everything is scoped under
+// `.mcp-page` to keep that necessity from leaking into the rest of the app. #2035
+.mcp-page {
+    // Prose, not a data view: a measure rather than the full window width.
+    max-width: 900px;
+
+    h1 {
+        margin-top: 0;
+    }
+
+    h2 {
+        margin-top: 40px;
+        padding-top: 16px;
+        border-top: 1px solid $tt-grey-5;
+    }
+
+    p,
+    li {
+        line-height: 1.6;
+        color: $tt-grey-6;
+    }
+
+    strong {
+        color: $tt-white;
+    }
+
+    // $tt-grey-2 is the page background, so a code surface has to step away from it
+    // rather than match it. Black reads as inset against the body.
+    code {
+        font-family: variables.$monospace-font;
+        font-size: 13px;
+        background-color: $tt-black;
+        border-radius: 3px;
+        padding: 1px 5px;
+    }
+
+    pre {
+        background-color: $tt-black;
+        border-radius: 4px;
+        padding: 12px 16px;
+        overflow-x: auto;
+
+        // The block already carries the surface, so the span inside must not double it.
+        code {
+            background-color: transparent;
+            padding: 0;
+        }
+    }
+
+    table {
+        border-collapse: collapse;
+        width: 100%;
+        margin: 16px 0;
+    }
+
+    th,
+    td {
+        text-align: left;
+        vertical-align: top;
+        padding: 8px 12px;
+        border-bottom: 1px solid $tt-grey-5;
+    }
+
+    th {
+        color: $tt-white;
+        border-bottom-color: $tt-grey-4;
+    }
+
+    td {
+        color: $tt-grey-6;
+    }
+
+    // The tool tables lead with a name in code; keeping it off a second line stops the
+    // first column collapsing to one character per row on a narrow window.
+    td:first-child code {
+        white-space: nowrap;
+    }
+
+    .bp6-callout {
+        margin-bottom: 24px;
+    }
+}

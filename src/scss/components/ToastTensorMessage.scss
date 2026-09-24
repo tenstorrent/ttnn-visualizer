@@ -2,6 +2,8 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
+@use '../definitions/colours' as *;
+
 .toast-tensor-message {
     display: flex;
     align-items: center;
@@ -9,5 +11,25 @@
 
     .light {
         font-weight: 400;
+    }
+}
+
+// Pinned to the corner of the toast rather than sitting after the text, where it read as
+// punctuation on the sentence. The toast is the app's one light surface, so this cannot
+// inherit the usual ink either.
+.toast-deselect {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    display: flex;
+    align-items: center;
+    padding: 2px;
+    color: $tt-grey-4;
+    opacity: 0.7;
+
+    &:hover,
+    &:focus-visible {
+        opacity: 1;
+        color: $tt-black;
     }
 }

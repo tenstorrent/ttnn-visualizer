@@ -14,6 +14,7 @@ import NPE from './NPE';
 import ROUTES, { ROUTE_PATTERNS } from '../definitions/Routes';
 import { NAVIGATION_ITEMS, NavRequirement } from '../definitions/NavigationItems';
 import MLIR from './MLIR';
+import MCP from './MCP';
 
 // Allows us to keep absolute paths in ROUTES while using relative paths in route objects
 const stripFirstSlash = (path: string) => {
@@ -60,6 +61,10 @@ export const routeObjectList = [
     {
         path: stripFirstSlash(ROUTE_PATTERNS.MLIR),
         element: <MLIR />,
+    },
+    {
+        path: stripFirstSlash(ROUTES.MCP),
+        element: <MCP />,
     },
     {
         path: stripFirstSlash(ROUTES.CLUSTER),

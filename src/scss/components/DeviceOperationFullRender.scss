@@ -200,12 +200,18 @@
                 padding-right: variables.$legend-marker-slot;
             }
 
-            .globally-allocated-marker {
+            // The tooltip's anchor takes the slot, not the marker inside it. Positioning
+            // the marker collapsed the anchor Blueprint measures, so the tooltip was placed
+            // against a zero-sized box offset from the icon. #2032
+            .globally-allocated-anchor {
                 position: absolute;
                 top: 50%;
                 right: 0;
-                margin-left: 0;
                 transform: translateY(-50%);
+            }
+
+            .globally-allocated-marker {
+                margin-left: 0;
             }
         }
 

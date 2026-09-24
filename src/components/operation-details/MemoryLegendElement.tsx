@@ -109,6 +109,14 @@ export const MemoryLegendElement = ({
         ...(Number.isNaN(chunk.address) && { backgroundColor: 'white' }),
     };
 
+    // One string for the tooltip and the accessible name, which were separate ternaries
+    // spelling the same fact differently. Deliberately short: this sits beside a dense
+    // column of addresses and sizes, and a sentence long enough to explain the concept
+    // covers the rows underneath it. #2032
+    const globallyAllocatedDescription = derivedTensor
+        ? `Aliased to Tensor ${derivedTensor.id} ${toReadableShape(derivedTensor.shape)} ${toReadableType(derivedTensor.dtype)}`
+        : `Aliased to tensor @ ${prettyPrintAddress(chunk.address, memSize, showHex)}`;
+
     const isMatchingBufferColour = isGloballyAllocated
         ? resolvedColour === selectedBufferColour
         : memorySquare.backgroundColor === selectedBufferColour;
@@ -159,7 +167,16 @@ export const MemoryLegendElement = ({
             {...(!chunk.empty && !isLegendMarker
                 ? {
                       type: 'button',
-                      onClick: () => onLegendClick(chunk.address, chunk.tensorId, colorVariance),
+                      // Fall back to the tensor resolved from the address, because the row's
+                      // own colour already does: `resolvedColour` reads `derivedTensor.id`
+                      // when the chunk carries no `tensorId`, while the click sent
+                      // `undefined` and made `updateBufferFocus` derive a colour from the
+                      // address instead. The two never matched, so `isMatchingBufferColour`
+                      // was false and the row dimmed itself while a toast claimed it was
+                      // selected. Device Operations builds CB chunks as `{address, size}`,
+                      // so every CB row whose address resolves a tensor took that path —
+                      // 16 of the 20 globally allocated rows on resnet50_may08 op 13. #2032
+                      onClick: () => onLegendClick(chunk.address, chunk.tensorId ?? derivedTensor?.id, colorVariance),
                   }
                 : {})}
         >
@@ -175,26 +192,18 @@ export const MemoryLegendElement = ({
                         {formatMemorySize(chunk.size, 2)}
                         {isGloballyAllocated && (
                             <Tooltip
-                                content={
-                                    derivedTensor ? (
-                                        <span>
-                                            Aliased to Tensor {derivedTensor.id} {toReadableShape(derivedTensor.shape)}{' '}
-                                            {toReadableType(derivedTensor.dtype)}
-                                        </span>
-                                    ) : (
-                                        <span>
-                                            Aliased to tensor @ {prettyPrintAddress(chunk.address, memSize, showHex)}
-                                        </span>
-                                    )
-                                }
+                                // Blueprint measures this wrapper to place the tooltip, so
+                                // anything that moves the icon has to move the wrapper with
+                                // it. Device Operations positions the marker into a reserved
+                                // slot, and doing that to the inner span collapsed the
+                                // wrapper to 0x0 twelve pixels away — the tooltip anchored
+                                // to a point nobody was pointing at. #2032
+                                className='globally-allocated-anchor'
+                                content={globallyAllocatedDescription}
                             >
                                 <span
                                     className='globally-allocated-marker'
-                                    aria-label={
-                                        derivedTensor
-                                            ? `Globally allocated — aliased to Tensor ${derivedTensor.id} ${toReadableShape(derivedTensor.shape)} ${toReadableType(derivedTensor.dtype)}`
-                                            : 'Globally allocated — aliased to tensor at this address'
-                                    }
+                                    aria-label={globallyAllocatedDescription}
                                 >
                                     <Icon
                                         icon={IconNames.LINK}

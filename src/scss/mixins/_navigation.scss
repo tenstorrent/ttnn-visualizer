@@ -89,6 +89,10 @@
         @include button-colours($tt-mlir, $tt-mlir-active, 'layout');
     }
 
+    &.mcp-button {
+        @include button-colours($tt-mcp, $tt-mcp-active, 'console');
+    }
+
     // A modal route is already showing, so re-entering it would stack it on itself.
     &.modal {
         &.bp6-active {

@@ -174,10 +174,52 @@ describe('MemoryLegendElement globally_allocated marker (#1651)', () => {
 
         expect(screen.getByText('Globally allocated')).toBeInTheDocument();
         const marker = container.querySelector('.globally-allocated-marker');
-        expect(marker).toHaveAttribute('aria-label', expect.stringMatching(/Globally allocated.*aliased to tensor/i));
+        expect(marker).toHaveAttribute('aria-label', expect.stringMatching(/Aliased to tensor/i));
 
         const row = container.querySelector('.legend-item');
         expect(row).toHaveClass('globally-allocated');
+    });
+
+    it('puts the slot class on the tooltip anchor, not on the marker inside it', () => {
+        // Device Operations positions the marker into a reserved slot. Applied to the
+        // inner span it collapsed the wrapper Blueprint measures to 0x0, twelve pixels
+        // from the drawn icon, and the tooltip anchored somewhere the cursor was not —
+        // it opened and shut as the pointer moved. jsdom computes no layout, so what is
+        // pinned here is the hook the stylesheet needs: the class has to be on the
+        // anchor for the slot rule to move the anchor with the icon. #2032
+        const container = renderLegendElement(chunk, { isGloballyAllocated: true });
+        const marker = container.querySelector('.globally-allocated-marker');
+
+        expect(marker?.closest('.globally-allocated-anchor')).not.toBeNull();
+        expect(marker).not.toHaveClass('globally-allocated-anchor');
+    });
+
+    it('focuses the tensor the row is coloured by, not the bare address', () => {
+        // The row takes its colour from the tensor resolved at the address whenever the
+        // chunk carries no `tensorId` of its own, which is how Device Operations builds
+        // every CB chunk. Sending `undefined` here made `updateBufferFocus` derive a
+        // different colour from the address, so nothing ever matched: the row dimmed
+        // itself and a toast said it was selected. #2032
+        const aliasedTensor = { id: 188, shape: 'Shape([1, 32, 64, 64])', dtype: 'DataType.BFLOAT16' };
+        const opDetails = { getTensorForAddress: () => aliasedTensor } as unknown as OperationDetails;
+        onLegendClick.mockClear();
+
+        const { container } = render(
+            <TestProviders>
+                <MemoryLegendElement
+                    chunk={{ address: 0x1000, size: 128 }}
+                    memSize={1024}
+                    selectedTensorAddress={null}
+                    operationDetails={opDetails}
+                    onLegendClick={onLegendClick}
+                    isGloballyAllocated
+                />
+            </TestProviders>,
+        );
+
+        (container.querySelector('.legend-item') as HTMLElement).click();
+
+        expect(onLegendClick).toHaveBeenCalledWith(0x1000, 188, undefined);
     });
 
     it('surfaces the aliased tensor id/shape/dtype in the marker tooltip when a tensor is resolved', () => {
@@ -207,7 +249,7 @@ describe('MemoryLegendElement globally_allocated marker (#1651)', () => {
         const marker = document.querySelector('.globally-allocated-marker');
         expect(marker).toHaveAttribute(
             'aria-label',
-            expect.stringMatching(/Globally allocated.*Tensor 188.*\[1, 32, 64, 64\].*bf16/),
+            expect.stringMatching(/Aliased to Tensor 188.*\[1, 32, 64, 64\].*bf16/),
         );
     });
 });

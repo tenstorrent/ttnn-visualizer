@@ -172,7 +172,26 @@ $row-background: $tt-grey-2;
     }
 }
 
-// Element to trigger onClick to dismiss focussed buffer
+// Element to trigger onClick to dismiss focussed buffer.
+//
+// `left` is unset on purpose and is load-bearing. A fixed element with `left: auto` keeps
+// the horizontal position it would have had in flow, so this starts just after the
+// navigation rail and follows it: 195px with the rail expanded, 71px collapsed, each the
+// rail's width plus `main`'s padding. A literal `left` would have to be re-derived on
+// every collapse.
+//
+// The cost is that `width: 100%` resolves against the viewport rather than the space
+// that is left, so the rail's width hangs off the right edge. That is inert -- it adds no
+// horizontal scrolling, and the overlay loses the hit test to page content anyway.
+//
+// Two repairs that look obvious and are not. `inset: 0` covers the rail, and the overlay
+// then wins the hit test there, so every navigation button stops responding while a
+// buffer is focused. `right: 0` with `left` still auto makes the width shrink-to-fit on
+// an empty div, collapsing it to nothing so it catches no clicks at all. Both verified.
+//
+// The gap this leaves -- a click on blank rail space does not dismiss -- cannot be closed
+// by geometry, because covering the rail is what breaks it. It needs a click-outside
+// listener instead of an overlay. #2042
 .outside-click {
     background-color: rgb(255 0 0 / 47%);
     opacity: 0;

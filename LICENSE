@@ -132,6 +132,7 @@ The following separate and independent dependencies are utilized by this project
 - jotai-family - MIT - https://github.com/jotaijs/jotai-family/blob/main/LICENSE
 - jsdom - MIT - https://github.com/jsdom/jsdom/blob/main/LICENSE.txt
 - lint-staged - MIT - https://github.com/lint-staged/lint-staged/blob/main/LICENSE
+- markdown-to-jsx - MIT - https://github.com/quantizor/markdown-to-jsx/blob/main/LICENSE
 - mini-svg-data-uri - MIT - https://github.com/tigt/mini-svg-data-uri/blob/master/LICENSE
 - normalize.css - MIT - https://github.com/necolas/normalize.css/blob/master/LICENSE.md
 - only-allow - MIT - https://github.com/pnpm/only-allow/blob/master/LICENSE

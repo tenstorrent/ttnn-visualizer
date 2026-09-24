@@ -1,0 +1,122 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
+
+.l1-peak-composition {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    padding-top: 12px;
+
+    .l1-peak-headline {
+        display: flex;
+        align-items: baseline;
+        gap: 12px;
+    }
+
+    .l1-peak-figure {
+        display: flex;
+        flex-direction: column;
+    }
+
+    .l1-peak-value {
+        font-size: 32px;
+        font-weight: 600;
+        line-height: 1.1;
+    }
+
+    .l1-peak-caption,
+    .l1-peak-note {
+        opacity: 0.7;
+        font-size: 12px;
+        max-width: 90ch;
+    }
+
+    .l1-peak-note {
+        margin: 0;
+    }
+
+    .l1-peak-plot {
+        width: 100%;
+    }
+
+    .l1-peak-table {
+        border-collapse: collapse;
+        font-size: 12px;
+
+        th,
+        td {
+            padding: 4px 12px 4px 0;
+            text-align: right;
+            white-space: nowrap;
+        }
+
+        th:first-child,
+        td:first-child,
+        th:last-child,
+        td:last-child {
+            text-align: left;
+        }
+
+        thead th {
+            border-bottom: 1px solid rgb(255 255 255 / 20%);
+            opacity: 0.7;
+            font-weight: 400;
+        }
+
+        .l1-peak-total {
+            font-weight: 600;
+        }
+
+        // The cell is the flex row, not the anchor: the repeat badge is a sibling of the
+        // link, and with the anchor as the only flex container the badge wrapped onto its
+        // own line. The id stays inside the link so its accessible name identifies which
+        // operation, and is fixed-width so the numbers form a column.
+        .l1-peak-operation {
+            display: flex;
+            gap: 8px;
+            align-items: baseline;
+            max-width: 34ch;
+
+            // Blueprint's default link colour is too dim against this surface for a dense
+            // table; the underline carries the affordance and the hover tint the feedback.
+            a {
+                display: flex;
+                gap: 8px;
+                align-items: baseline;
+                min-width: 0;
+                color: var(--perf-chart-text);
+
+                &:hover {
+                    color: var(--l1-peak-persistent);
+                    text-decoration: underline;
+                }
+            }
+
+            .l1-peak-operation-id {
+                flex: 0 0 4ch;
+                text-align: right;
+                font-variant-numeric: tabular-nums;
+            }
+
+            // The name varies in length, so it is the part that gives way.
+            .l1-peak-operation-name {
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+            }
+
+            .l1-peak-repeats {
+                flex: 0 0 auto;
+                opacity: 0.6;
+                font-size: 11px;
+                white-space: nowrap;
+            }
+        }
+    }
+}
+
+.l1-peak-empty {
+    opacity: 0.7;
+    padding-top: 12px;
+}

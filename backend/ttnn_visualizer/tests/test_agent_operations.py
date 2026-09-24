@@ -10,6 +10,7 @@ neither an app nor a database session -- reaching for the fixture would test a
 coupling the tools deliberately do not have.
 """
 
+import re
 import sqlite3
 from pathlib import Path
 from unittest.mock import patch
@@ -455,6 +456,41 @@ INSERT INTO devices (
 ) VALUES (0, 1499136, 64, 1370848, 64), (1, 1499136, 64, 1370848, 64);
 """
 
+# Arguments and a real traceback, copied in shape from a capture: frames innermost
+# first, each with the source line indented under it. Operation 2 has both; operation
+# 3 has arguments and no trace, which 8 of 86 local captures look like.
+_PROVENANCE_SQL = _REPORT_SQL + """
+CREATE TABLE operation_arguments (operation_id int, name text, value text);
+CREATE TABLE stack_traces (operation_id int, stack_trace text);
+
+INSERT INTO operation_arguments VALUES
+    (2, 'in_channels', '64'),
+    (2, 'out_channels', '256'),
+    (2, 'kernel_size', '(1, 1)'),
+    (2, 'conv_config', 'Conv2dConfig(WEIGHTS)'),
+    (3, 'dim', '-1');
+
+-- Operation 1 has a trace from a *different* helper. Without a second origin,
+-- "match the needle" and "match every op that has a trace" return the same set,
+-- and the filter is unfalsifiable.
+INSERT INTO stack_traces VALUES
+    (1, '  File "/m/models/embed.py", line 20, in build_embedding
+    out = ttnn.embedding(
+
+  File "/m/tests/infra.py", line 300, in prepare
+    self.embed = build_embedding(
+'),
+    (2, '  File "/m/models/resnet.py", line 135, in run_downsample_if_req
+    ds_out = ttnn.conv2d(
+
+  File "/m/models/resnet.py", line 314, in __call__
+    ds_out = self.run_downsample_if_req(
+
+  File "/m/tests/infra.py", line 317, in run
+    self.output = self.model(
+');
+"""
+
 # A report with no `devices` table at all.
 _NO_DEVICES_SQL = """
 CREATE TABLE operations (operation_id int UNIQUE, name text, duration float);
@@ -843,6 +879,255 @@ class TestOperationDetail:
             agent_operations.operation_detail(registry, handle, 99)
 
 
+class TestOperationProvenance:
+    def test_it_answers_what_the_operation_was_called_with(self, loaded):
+        registry, handle = loaded(_PROVENANCE_SQL, name="prov")
+
+        result = agent_operations.operation_provenance(registry, handle, 2)
+
+        assert result["name"] == "ttnn.conv2d"
+        assert result["argument_count"] == 4
+        assert [argument["name"] for argument in result["arguments"]] == [
+            "in_channels",
+            "out_channels",
+            "kernel_size",
+            "conv_config",
+        ]
+        assert result["arguments"][0]["value"] == "64"
+
+    def test_the_call_site_is_the_innermost_frame(self, loaded):
+        """Frames are written innermost first, so frame 0 is the `ttnn.<op>` call in
+        the model code — which is also the frame `stackTraceSource.ts` takes for the
+        operation details panel. Two answers to "where is this op from" that
+        disagreed would be worse than one."""
+        registry, handle = loaded(_PROVENANCE_SQL, name="prov")
+
+        result = agent_operations.operation_provenance(registry, handle, 2)
+
+        assert result["call_site"] == {
+            "file": "/m/models/resnet.py",
+            "line": 135,
+            "function": "run_downsample_if_req",
+            "code": "ds_out = ttnn.conv2d(",
+        }
+        # The chain outward, without repeating the call site, and counted as what
+        # the response returned so the cap is detectable.
+        assert [frame["function"] for frame in result["frames"]] == ["__call__", "run"]
+        assert result["chain_length"] == 2
+        assert result["returned_frames"] == 2
+
+    def test_a_long_argument_value_is_capped_and_says_so(self, loaded):
+        """Values are mostly six characters with a tail that carries the interesting
+        part, so the cap has to be visible rather than silent."""
+        long_value = "x" * (agent_operations.MAX_ARGUMENT_VALUE_CHARS + 50)
+        sql = _PROVENANCE_SQL + (
+            f"INSERT INTO operation_arguments VALUES (1, 'memory_config', '{long_value}');"
+        )
+        registry, handle = loaded(sql, name="prov-long")
+
+        argument = agent_operations.operation_provenance(registry, handle, 1)[
+            "arguments"
+        ][0]
+
+        assert len(argument["value"]) == agent_operations.MAX_ARGUMENT_VALUE_CHARS
+        assert argument["truncated"] is True
+        assert argument["full_length"] == agent_operations.MAX_ARGUMENT_VALUE_CHARS + 50
+
+    def test_two_operations_from_different_helpers_get_different_call_sites(
+        self, loaded
+    ):
+        registry, handle = loaded(_PROVENANCE_SQL, name="prov")
+
+        first = agent_operations.operation_provenance(registry, handle, 1)["call_site"]
+        second = agent_operations.operation_provenance(registry, handle, 2)["call_site"]
+
+        assert first["function"] == "build_embedding"
+        assert first["line"] == 20
+        assert second["function"] == "run_downsample_if_req"
+        assert second["line"] == 135
+
+    def test_a_capture_with_no_trace_still_answers_the_arguments(self, loaded):
+        """8 of 86 local captures hold the table with no rows. "No call site
+        recorded" is a fact about the capture, not about the operation, so it is
+        stated rather than returned as a bare null."""
+        registry, handle = loaded(_PROVENANCE_SQL, name="prov")
+
+        result = agent_operations.operation_provenance(registry, handle, 3)
+
+        assert result["call_site"] is None
+        assert result["chain_length"] == 0
+        assert result["argument_count"] == 1
+        assert "recorded no stack trace" in result["caveat"]
+
+    def test_an_unknown_operation_is_refused(self, loaded):
+        registry, handle = loaded(_PROVENANCE_SQL, name="prov")
+
+        with pytest.raises(ValueError, match="no operation 99"):
+            agent_operations.operation_provenance(registry, handle, 99)
+
+    def test_a_null_trace_reads_as_no_call_site_rather_than_crashing(self, loaded):
+        """The row existed and the column was NULL, so the truthiness check on the
+        row passed and `splitlines` reached `None` — the least helpful message on
+        the surface. The `called_from` path guarded this and this one did not."""
+        sql = _PROVENANCE_SQL + "INSERT INTO stack_traces VALUES (4, NULL);"
+        sql = sql.replace(
+            "INSERT INTO operations VALUES",
+            "INSERT INTO operations VALUES (4, 'ttnn.relu', 0.1),",
+            1,
+        )
+        registry, handle = loaded(sql, name="prov-null")
+
+        result = agent_operations.operation_provenance(registry, handle, 4)
+
+        assert result["call_site"] is None
+        assert "recorded no stack trace" in result["caveat"]
+
+    def test_a_trace_with_no_readable_frame_says_so_differently(self, loaded):
+        """Two different absences. A missing row is a capture that records no call
+        sites; a row that yields no frame is a trace this parser cannot read, and
+        calling that "no stack trace recorded" would be false."""
+        sql = _PROVENANCE_SQL + (
+            "INSERT INTO stack_traces VALUES (5, '#0 0x7f in ttnn::operations::run()');"
+        )
+        sql = sql.replace(
+            "INSERT INTO operations VALUES",
+            "INSERT INTO operations VALUES (5, 'ttnn.gelu', 0.1),",
+            1,
+        )
+        registry, handle = loaded(sql, name="prov-cpp")
+
+        result = agent_operations.operation_provenance(registry, handle, 5)
+
+        assert result["call_site"] is None
+        assert "no frame this tool could read" in result["caveat"]
+        assert "recorded no stack trace" not in result["caveat"]
+
+    def test_the_outward_chain_is_capped(self, loaded):
+        """A real trace runs to tens of frames, most of them the harness that
+        invoked the model, and this was the one tool with no limit — its default
+        response was the size the others reach only at their ceiling."""
+        frames = "".join(
+            f'  File "/m/f{index}.py", line {index}, in fn{index}\n    call{index}()\n\n'
+            for index in range(30)
+        )
+        sql = _PROVENANCE_SQL.replace(
+            "INSERT INTO stack_traces VALUES",
+            f"INSERT INTO stack_traces VALUES (6, '{frames}'),",
+            1,
+        ).replace(
+            "INSERT INTO operations VALUES",
+            "INSERT INTO operations VALUES (6, 'ttnn.deep', 0.1),",
+            1,
+        )
+        registry, handle = loaded(sql, name="prov-deep")
+
+        result = agent_operations.operation_provenance(registry, handle, 6, limit=5)
+
+        assert result["call_site"]["function"] == "fn0"
+        assert len(result["frames"]) == 5
+        # What was returned and what the trace holds, which differ exactly when the
+        # cap bound. Asserting only `chain_length` let both fields be the same
+        # expression, so the cap the field exists to expose was invisible.
+        assert result["returned_frames"] == 5
+        assert result["chain_length"] == 29
+
+    def test_a_null_argument_value_is_not_an_empty_string(self, loaded):
+        """ "Not recorded" and "recorded as empty" are different facts, and this
+        module keeps that distinction for the call site."""
+        sql = (
+            _PROVENANCE_SQL + "INSERT INTO operation_arguments VALUES (1, 'opt', NULL);"
+        )
+        registry, handle = loaded(sql, name="prov-nullarg")
+
+        argument = agent_operations.operation_provenance(registry, handle, 1)[
+            "arguments"
+        ][0]
+
+        assert argument["value"] is None
+        assert argument["recorded"] is False
+
+
+class TestFrameParity:
+    """`_parse_frames` against the rule `src/functions/stackTraceSource.ts` applies.
+
+    The frontend takes the first `File "..."` and the first `line N,` for the
+    operation details panel. The claim in `_parse_frames`' comment is that the call
+    site here is that frame, so these pin where the two agree -- and, for the inputs
+    where the frontend's looser regexes would answer differently, which answer this
+    side gives. Three prose claims of parity with nothing enforcing them was the
+    worst of the available shapes. #2021
+    """
+
+    # The frontend's two regexes, transcribed. Separate patterns over the whole
+    # trace, so its file and its line number need not come from the same frame.
+    _TS_FILE = re.compile(r'File "(.*)"')
+    _TS_LINE = re.compile(r"line (\d*),")
+
+    def _frontend(self, trace: str):
+        file_match = self._TS_FILE.search(trace)
+        line_match = self._TS_LINE.search(trace)
+        return (
+            file_match.group(1) if file_match else "",
+            int(line_match.group(1)) if line_match and line_match.group(1) else None,
+        )
+
+    def test_they_agree_on_a_real_traceback(self):
+        trace = (
+            '  File "/m/models/resnet.py", line 135, in run_downsample_if_req\n'
+            "    ds_out = ttnn.conv2d(\n\n"
+            '  File "/m/tests/infra.py", line 317, in run\n'
+            "    self.output = self.model(\n"
+        )
+        call_site = agent_operations._parse_frames(trace)[0]
+
+        assert (call_site["file"], call_site["line"]) == self._frontend(trace)
+
+    def test_a_frame_line_without_a_function_is_skipped_here(self):
+        """The frontend's `File "(.*)"` does not require `, line N, in fn`, so it
+        accepts a line this parser skips. Recorded rather than resolved: a line that
+        names no line number and no function is not a frame, and a call site of
+        `("/m/partial.py", None)` would be worse than none."""
+        trace = '  File "/m/partial.py"\n  File "/m/real.py", line 7, in fn\n    x()\n'
+
+        frames = agent_operations._parse_frames(trace)
+
+        assert [frame["file"] for frame in frames] == ["/m/real.py"]
+        assert self._frontend(trace)[0] == "/m/partial.py"
+
+    def test_a_quote_in_the_path_is_read_as_no_frame_at_all(self):
+        """The one divergence that matters. `File "(.*)"` is greedy, so the frontend
+        reports the path up to the last quote; `[^"]*` cannot span a quote, so this
+        anchored pattern matches nothing and reports no frame.
+
+        That is the honest outcome — a path this parser cannot delimit is not a
+        location it should assert — but it has to reach the agent as "unknown",
+        which is why the unparseable-trace caveat keys on the absence of frames
+        rather than the absence of a row."""
+        trace = '  File "/m/we"ird.py", line 20, in f\n    x()\n'
+
+        assert agent_operations._parse_frames(trace) == []
+        assert self._frontend(trace) == ('/m/we"ird.py', 20)
+
+    def test_a_source_line_is_never_taken_from_another_frame(self):
+        """Compact tracebacks put frames on adjacent lines. The window used to look
+        two lines ahead past an intervening `File` line, so a frame with no source
+        borrowed its neighbour's — and the call site is frame 0."""
+        trace = (
+            '  File "/m/outer.py", line 1, in outer\n'
+            '  File "/m/inner.py", line 2, in inner\n'
+            "    x = ttnn.matmul(a, b)\n"
+        )
+
+        frames = agent_operations._parse_frames(trace)
+
+        assert frames[0]["code"] is None
+        assert frames[1]["code"] == "x = ttnn.matmul(a, b)"
+
+    def test_it_reads_nothing_out_of_a_non_python_trace(self):
+        assert agent_operations._parse_frames("#0 0x7f in ttnn::run()") == []
+        assert agent_operations._parse_frames("") == []
+
+
 class TestFindOperations:
     def test_it_matches_a_name_case_insensitively(self, loaded):
         """Op names are spelled `ttnn.MatMul` in some captures and
@@ -874,6 +1159,154 @@ class TestFindOperations:
         assert result["match_count"] == MAX_LIMIT + 53
         assert result["returned"] == MAX_LIMIT
         assert len(result["operations"]) == MAX_LIMIT
+
+    def test_it_finds_the_operations_a_helper_called(self, loaded):
+        """The inverse of provenance, and the question that follows the first one:
+        never about that operation alone, but about every operation from the same
+        helper."""
+        registry, handle = loaded(_PROVENANCE_SQL, name="prov")
+
+        result = agent_operations.find_operations(
+            registry, handle, called_from="run_downsample_if_req"
+        )
+
+        assert result["called_from"] == "run_downsample_if_req"
+        assert [op["operation_id"] for op in result["operations"]] == [2]
+
+        # Advertised as case-insensitive in the tool schema, because an agent types
+        # the name as it appeared in a traceback, a log or a diff.
+        assert [
+            op["operation_id"]
+            for op in agent_operations.find_operations(
+                registry, handle, called_from="RUN_DOWNSAMPLE_IF_REQ"
+            )["operations"]
+        ] == [2]
+
+    def test_it_matches_a_frame_anywhere_in_the_stack(self, loaded):
+        """A layer module calls through helpers, so matching the call site alone
+        would miss the operations it is responsible for."""
+        registry, handle = loaded(_PROVENANCE_SQL, name="prov")
+
+        # `infra.py` appears in both traces, so it must return both — and
+        # `resnet.py`, in one, must return only that one.
+        assert [
+            op["operation_id"]
+            for op in agent_operations.find_operations(
+                registry, handle, called_from="infra.py"
+            )["operations"]
+        ] == [1, 2]
+        assert [
+            op["operation_id"]
+            for op in agent_operations.find_operations(
+                registry, handle, called_from="resnet.py"
+            )["operations"]
+        ] == [2]
+
+    def test_the_two_filters_narrow_together(self, loaded):
+        registry, handle = loaded(_PROVENANCE_SQL, name="prov")
+
+        assert (
+            agent_operations.find_operations(
+                registry,
+                handle,
+                called_from="run_downsample_if_req",
+                name_contains="matmul",
+            )["match_count"]
+            == 0
+        )
+
+    def test_an_operation_with_no_trace_is_not_matched(self, loaded):
+        """Absence of a trace must read as "not from there", not as a wildcard."""
+        registry, handle = loaded(_PROVENANCE_SQL, name="prov")
+
+        result = agent_operations.find_operations(
+            registry, handle, called_from="resnet.py"
+        )
+
+        assert 3 not in [op["operation_id"] for op in result["operations"]]
+
+    def test_an_absent_table_does_not_refuse_a_ranked_report(self, loaded):
+        """A table that is absent holds no rows, so there is nothing to attribute
+        to the wrong rank. Treating it as "a table without `rank`" refused every
+        call to a tool that was advertised and would have answered."""
+        sql = """
+CREATE TABLE operations (
+    operation_id int, name text, duration float, rank int NOT NULL DEFAULT 0
+);
+CREATE TABLE operation_arguments (
+    operation_id int, name text, value text, rank int NOT NULL DEFAULT 0
+);
+INSERT INTO operations VALUES (1, 'ttnn.conv2d', 1.0, 0), (1, 'ttnn.conv2d', 1.0, 1);
+INSERT INTO operation_arguments VALUES (1, 'dim', '-1', 0), (1, 'dim', '-2', 1);
+"""
+        registry, handle = loaded(sql, name="ranked-notable")
+
+        result = agent_operations.operation_provenance(registry, handle, 1, rank=0)
+
+        assert result["argument_count"] == 1
+        assert result["arguments"][0]["value"] == "-1"
+        assert "recorded no stack trace" in result["caveat"]
+
+    def test_a_capture_with_no_traces_says_so_rather_than_answering_zero(self, loaded):
+        """8 of 86 local captures record no trace at all. A bare `match_count: 0`
+        with the filter echoed back reads as "no operation came from there", when
+        the honest answer is that the capture cannot say. `operation_provenance`
+        already draws this distinction for a single operation."""
+        sql = _REPORT_SQL + (
+            "CREATE TABLE operation_arguments (operation_id int, name text, value text);"
+            "CREATE TABLE stack_traces (operation_id int, stack_trace text);"
+        )
+        registry, handle = loaded(sql, name="notraces")
+
+        result = agent_operations.find_operations(
+            registry, handle, called_from="run_downsample_if_req"
+        )
+
+        assert result["match_count"] == 0
+        assert "records no stack traces" in result["caveat"]
+        assert "not evidence" in result["caveat"]
+
+        # And a name search on the same capture is unaffected, which is why the
+        # tool does not require the table.
+        assert agent_operations.find_operations(registry, handle)["match_count"] == 3
+
+    def test_a_capture_without_the_table_says_the_same_thing(self, loaded):
+        """Empty table and absent table are the same fact to a caller — the
+        capture records no call sites — and both must reach the agent as a caveat
+        rather than as a bare zero or a raw `no such table`."""
+        registry, handle = loaded(_REPORT_SQL, name="notable")
+
+        result = agent_operations.find_operations(
+            registry, handle, called_from="run_downsample_if_req"
+        )
+
+        assert result["match_count"] == 0
+        assert "records no stack traces" in result["caveat"]
+
+    def test_the_needle_is_a_substring_not_a_like_pattern(self, loaded):
+        """`_` matches any single character in `LIKE`, and it is in every Python
+        function name, so `run_downsample_if_req` also matched
+        `runXdownsampleYifZreq`. A needle of `%` matched every operation while the
+        response still named the filter."""
+        sql = _PROVENANCE_SQL.replace(
+            "INSERT INTO stack_traces VALUES",
+            "INSERT INTO stack_traces VALUES"
+            " (7, '  File \"/m/other.py\", line 1, in runXdownsampleYifZreq\n    x()\n'),",
+            1,
+        ).replace(
+            "INSERT INTO operations VALUES",
+            "INSERT INTO operations VALUES (7, 'ttnn.other', 0.1),",
+            1,
+        )
+        registry, handle = loaded(sql, name="prov-like")
+
+        exact = agent_operations.find_operations(
+            registry, handle, called_from="run_downsample_if_req"
+        )
+        wildcard = agent_operations.find_operations(registry, handle, called_from="%")
+
+        assert [op["operation_id"] for op in exact["operations"]] == [2]
+        assert wildcard["match_count"] == 0
 
     def test_the_duration_is_labelled_as_host_time(self, loaded):
         """`operations.duration` is host wall time; `top_ops` answers the device
