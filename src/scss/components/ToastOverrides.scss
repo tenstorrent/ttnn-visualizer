@@ -13,3 +13,8 @@
 .Toastify__toast {
     --toastify-toast-bd-radius: 2px; // Makes the toast borders less round
 }
+
+// 1ms so animationend still fires; 0s is skipped in some engines. #2044
+.toast-exit-immediate {
+    animation-duration: 1ms;
+}

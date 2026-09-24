@@ -3,8 +3,8 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import '@testing-library/jest-dom/vitest';
-import { cleanup, render, screen } from '@testing-library/react';
-import { StrictMode } from 'react';
+import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { StrictMode, act } from 'react';
 import type { ComponentType } from 'react';
 import { HelmetProvider } from 'react-helmet-async';
 import { type InitialEntry, MemoryRouter } from 'react-router';
@@ -180,5 +180,60 @@ describe('Layout topology overlay', () => {
         ]);
 
         expect(screen.getByTestId('stub-cluster-renderer')).toBeInTheDocument();
+    });
+});
+
+describe('Layout toast transition', () => {
+    beforeEach(async () => {
+        await resetViewOpenedMemory();
+        vi.clearAllMocks();
+    });
+
+    afterEach(() => {
+        cleanup();
+    });
+
+    it('keeps an animationend-capable exit instead of display:none', async () => {
+        const { TOAST_TRANSITION } = await import('../src/components/toastTransition');
+
+        expect(TOAST_TRANSITION.exit).toContain('toast-exit-immediate');
+        expect(TOAST_TRANSITION.exit).toContain('Toastify__bounce-exit');
+        expect(TOAST_TRANSITION.exit).not.toContain('no-toast-animation');
+        expect(TOAST_TRANSITION.collapse).toBe(false);
+    });
+
+    it('unmounts a dismissed toast once animationend fires', async () => {
+        const { default: Layout } = await import('../src/components/Layout');
+        const { createToast, dismissToast } = await import('../src/functions/createToastNotification');
+
+        renderLayout(Layout);
+
+        act(() => {
+            createToast('toast-leak-probe');
+        });
+
+        const body = await screen.findByText('toast-leak-probe');
+        const node = body.closest('.Toastify__toast');
+        expect(node).not.toBeNull();
+
+        act(() => {
+            node!.dispatchEvent(new Event('animationend'));
+        });
+
+        act(() => {
+            dismissToast();
+        });
+
+        expect(document.querySelectorAll('.Toastify__toast')).toHaveLength(1);
+
+        // jsdom does not run CSS animations; this is the event the library waits
+        // on before done(). The display:none leak is pinned by the config/style specs.
+        act(() => {
+            node!.dispatchEvent(new Event('animationend'));
+        });
+
+        await waitFor(() => {
+            expect(document.querySelectorAll('.Toastify__toast')).toHaveLength(0);
+        });
     });
 });
