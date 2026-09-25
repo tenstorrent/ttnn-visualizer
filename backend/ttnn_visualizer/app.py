@@ -66,6 +66,7 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 
 logger = logging.getLogger(__name__)
 SENSITIVE_CONFIG_KEYS = frozenset({"SECRET_KEY"})
+_HOSTED_MAX_CONTENT_LENGTH = 1 * 1024 * 1024 * 1024
 
 
 def _get_client_username(server_mode: bool) -> str | None:
@@ -173,6 +174,9 @@ def create_app(settings_override=None):
 
     if settings_override:
         app.config.update(settings_override)
+
+    if is_flag_enabled(app.config["SERVER_MODE"]):
+        app.config["MAX_CONTENT_LENGTH"] = _HOSTED_MAX_CONTENT_LENGTH
 
     # Hosted session IDs identify the event log, so browsers must never send them over
     # an unencrypted connection. ``settings_override`` bypasses Config's recomputation.

@@ -222,7 +222,7 @@ MIN_HOSTED_SECRET_KEY_BYTES = 8
 
 
 def _parse_max_content_length(env_value: str) -> Optional[int]:
-    """Empty means no limit — the bare form ``.env.sample`` documents.
+    """Empty means no global request limit — the bare form ``.env.sample`` documents.
 
     Anything else unreadable raises, for the reason ``SERVER_MODE`` is strict: the
     value to fall back on is *no limit*, so guessing would drop an upload cap the

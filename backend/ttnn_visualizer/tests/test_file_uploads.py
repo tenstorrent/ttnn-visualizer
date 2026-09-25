@@ -332,6 +332,25 @@ def test_validate_files_skips_consistency_check_when_folder_name_is_explicit():
 # ---- End-to-end regression: profiler/performance uploads keep folder layout ---
 
 
+def test_profiler_upload_rejects_a_body_over_the_configured_limit(
+    app, client, make_report
+):
+    """The hosted app-wide Flask cap must reject multipart uploads before writing."""
+    assert app.config["SERVER_MODE"] is True
+    assert app.config["MAX_CONTENT_LENGTH"] == 1 * 1024 * 1024 * 1024
+    app.config["MAX_CONTENT_LENGTH"] = 1
+
+    response = client.post(
+        "/api/local/upload/profiler",
+        query_string={"instanceId": make_report()},
+        data={"files": [(BytesIO(b"sqlite-bytes"), "limited-report/db.sqlite")]},
+        content_type="multipart/form-data",
+    )
+
+    assert response.status_code == HTTPStatus.REQUEST_ENTITY_TOO_LARGE
+    assert isinstance(response.get_json()["error"], str)
+
+
 def test_profiler_upload_chromium_style_lands_under_report_folder(
     app, client, make_report
 ):

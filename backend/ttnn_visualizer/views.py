@@ -174,10 +174,11 @@ api = Blueprint("api", __name__)
 _NOSNIFF_HEADERS = {"X-Content-Type-Options": "nosniff"}
 
 # What one permitted page may write into a privacy-reviewed artefact in a single request.
-# Not inherited: `MAX_CONTENT_LENGTH` defaults to no limit at all (`settings.py`), so the
-# limit has to be set per request. It has to stay consistent with `MAX_EVENT_LOG_BATCH_EVENTS`,
-# which lives in `event_logging.py` beside the write-atomicity guarantee it bounds — a full batch
-# of the largest permitted event must still fit inside this.
+# Not inherited: hosted uploads have a global cap sized for report data and local installs have
+# no global cap, so event logging sets a much tighter per-request limit. It has to stay
+# consistent with `MAX_EVENT_LOG_BATCH_EVENTS`, which lives in `event_logging.py` beside the
+# write-atomicity guarantee it bounds — a full batch of the largest permitted event must still
+# fit inside this.
 MAX_EVENT_LOG_REQUEST_BYTES = 16 * 1024
 
 # Module-private, unlike the cap above: that is part of the contract the tests pin, this
