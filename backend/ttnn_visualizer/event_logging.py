@@ -1470,9 +1470,8 @@ def compact_if_needed() -> None:
         logger.debug("Skipping event log compaction: file locking is unavailable")
         return
 
-    log_path = get_event_log_path()
-
     try:
+        log_path = get_event_log_path()
         if not log_path.exists() or log_path.stat().st_size <= MAX_LOG_BYTES:
             return
 
@@ -1493,13 +1492,15 @@ def compact_if_needed() -> None:
                 _invalidate_size_check()
             finally:
                 fcntl.flock(lock_file, fcntl.LOCK_UN)
-    except OSError as error:
+    except (OSError, RuntimeError) as error:
+        # RuntimeError: Path.home() when HOME is unset. Compaction is launch-only
+        # telemetry and must not prevent the process from serving.
         logger.warning("Unable to compact the event log: %s", error)
 
 
 def _compact(log_path: Path) -> None:
     # `errors="replace"` rather than a strict read: a `UnicodeDecodeError` is a
-    # `ValueError`, so the `OSError` handler around this would not catch one, and
+    # `ValueError`, so the handler around this would not catch one, and
     # compaction runs from `main()` before gunicorn is spawned — a corrupted log
     # would stop the server starting rather than cost us a line.
     lines = log_path.read_text(encoding="utf-8", errors="replace").splitlines()

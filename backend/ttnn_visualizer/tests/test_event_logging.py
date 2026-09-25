@@ -830,6 +830,20 @@ def test_a_log_under_the_cap_is_left_alone(event_log_directory):
     assert read_event_log_lines(event_log_directory) == lines
 
 
+def test_compaction_does_not_raise_when_home_cannot_be_resolved(monkeypatch, caplog):
+    monkeypatch.setattr(event_logging, "EVENT_LOG_DIRECTORY", None)
+
+    def raise_no_home():
+        raise RuntimeError("Could not determine home directory.")
+
+    monkeypatch.setattr(Path, "home", staticmethod(raise_no_home))
+
+    with caplog.at_level("WARNING"):
+        event_logging.compact_if_needed()
+
+    assert "Unable to compact the event log" in caplog.text
+
+
 def test_compaction_skips_rewrite_when_nothing_is_summarisable(
     event_log_directory, monkeypatch
 ):

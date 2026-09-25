@@ -468,18 +468,24 @@ def serve(
 def main() -> None:
     logging.basicConfig(stream=sys.stderr, level=logging.INFO)
     start_run()
-    compact_if_needed()
-    if is_recording_enabled():
-        logger.info(
-            "Recording tool usage to %s. %s",
-            get_event_log_path(),
-            describe_opt_out(),
-        )
-    else:
-        logger.info(
-            "Event logging is DISABLED: %s.",
-            get_recording_disabled_reason(),
-        )
+    # Path.home() raises RuntimeError when HOME is unset and the uid is absent from
+    # passwd. Compaction and the disclosure banner both resolve that path, and must
+    # not keep serve() from starting — including when the operator already opted out.
+    try:
+        if is_recording_enabled():
+            compact_if_needed()
+            logger.info(
+                "Recording tool usage to %s. %s",
+                get_event_log_path(),
+                describe_opt_out(),
+            )
+        else:
+            logger.info(
+                "Event logging is DISABLED: %s.",
+                get_recording_disabled_reason(),
+            )
+    except Exception:
+        logger.exception("Event-log startup failed; serving without recording")
     serve(sys.stdin, sys.stdout)
 
 

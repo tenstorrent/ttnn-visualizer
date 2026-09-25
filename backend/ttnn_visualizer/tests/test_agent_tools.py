@@ -1003,7 +1003,7 @@ def test_registered_tools_are_the_mcp_tool_name_vocabulary():
     )
 
 
-def test_main_compacts_then_serves(monkeypatch):
+def test_main_skips_compaction_when_recording_is_disabled(monkeypatch):
     order = []
     monkeypatch.setattr(server, "compact_if_needed", lambda: order.append("compact"))
     monkeypatch.setattr(server, "serve", lambda *args, **kwargs: order.append("serve"))
@@ -1012,4 +1012,31 @@ def test_main_compacts_then_serves(monkeypatch):
 
     server.main()
 
+    assert order == ["serve"]
+
+
+def test_main_compacts_then_serves_when_recording_is_enabled(monkeypatch):
+    order = []
+    monkeypatch.setattr(server, "compact_if_needed", lambda: order.append("compact"))
+    monkeypatch.setattr(server, "serve", lambda *args, **kwargs: order.append("serve"))
+    monkeypatch.setattr(server, "is_recording_enabled", lambda: True)
+    monkeypatch.setattr(server, "get_event_log_path", lambda: "/tmp/events.log")
+    monkeypatch.setattr(server, "describe_opt_out", lambda: "opt-out")
+
+    server.main()
+
     assert order == ["compact", "serve"]
+
+
+def test_main_serves_when_event_log_startup_raises(monkeypatch):
+    def raise_no_home():
+        raise RuntimeError("Could not determine home directory.")
+
+    order = []
+    monkeypatch.setattr(server, "is_recording_enabled", raise_no_home)
+    monkeypatch.setattr(server, "compact_if_needed", lambda: order.append("compact"))
+    monkeypatch.setattr(server, "serve", lambda *args, **kwargs: order.append("serve"))
+
+    server.main()
+
+    assert order == ["serve"]
