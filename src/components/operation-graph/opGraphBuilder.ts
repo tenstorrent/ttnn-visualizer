@@ -143,6 +143,26 @@ export function buildOpGraph(
     const renderedNodeIdOf = (operationId: number): string =>
         collapsedInstanceByOpId.get(operationId)?.instanceId ?? String(operationId);
 
+    // A weight load is a source: nothing that survived the filter feeds it. The same
+    // test `detectWeightFans` opens with, and matched on shape rather than name for
+    // its reason -- two of the local reports disagree about the name. Both ends kept,
+    // so an edge from a hidden op does not count as feeding one.
+    //
+    // This counts weight-load *operations*, which is a superset of the ones that end
+    // up in fans: a fan additionally needs a single consumer and at least two members,
+    // so a source feeding two layers, or one with no partner, is counted here and
+    // draws as a plain node when unrolled. On `bge_m3` that is 295 against 290 in
+    // fans. Counting operations is the right answer for a block -- the question is
+    // how much of this block is weight loading, not how much of it would pill up.
+    const hasIncomingEdge = new Set<number>();
+    for (const candidate of candidates) {
+        if (kept.has(candidate.source) && kept.has(candidate.target)) {
+            hasIncomingEdge.add(candidate.target);
+        }
+    }
+    const weightLoadsIn = (operationIds: readonly number[]): number =>
+        operationIds.reduce((count, id) => (hasIncomingEdge.has(id) ? count : count + 1), 0);
+
     // An unrolled fan's members are drawn, and keep their own edges and tensor labels —
     // that is what unrolling is for. They are just no longer top-level: they become
     // children of a container node, so Dagre has to rank the container in their place.
@@ -242,7 +262,18 @@ export function buildOpGraph(
                 const opCount = collapsedInstance.operationIds.length;
                 const durationSeconds = sumOptional(members.map((member) => member.durationSeconds));
                 const memoryDeltaBytes = sumOptional(members.map((member) => member.memoryDeltaBytes));
-                const meta = formatBlockMeta(opCount, durationSeconds, memoryDeltaBytes);
+                // Not on a weight fan itself, where every member is one and the
+                // count would restate the label. Only while the feature is on: with
+                // it off the reader is not thinking in weight loads, and the word
+                // would arrive unexplained.
+                const meta = formatBlockMeta(
+                    opCount,
+                    durationSeconds,
+                    memoryDeltaBytes,
+                    collapseWeightLoads && collapsedInstance.kind !== OpGraphBlockKind.WEIGHTS
+                        ? weightLoadsIn(collapsedInstance.operationIds)
+                        : 0,
+                );
                 const size = estimateBlockNodeSize(collapsedInstance.label, meta);
                 nodes.push({
                     id: collapsedInstance.instanceId,

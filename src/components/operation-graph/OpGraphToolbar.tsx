@@ -250,7 +250,7 @@ const OpGraphToolbar = memo(
 
                 <Tooltip
                     placement={PopoverPosition.BOTTOM}
-                    content='Draw each fan of weight loads feeding one node as a single node'
+                    content='Draw each fan of weight loads feeding one node as a single node. A weight load inside a folded grouping block stays in that block — the block counts it instead.'
                 >
                     <Switch
                         className='op-graph-toolbar-switch op-graph-switch-weights'
