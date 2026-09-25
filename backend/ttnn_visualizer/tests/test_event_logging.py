@@ -1127,7 +1127,7 @@ def test_hosted_recording_resumes_after_external_compaction(
     assert record_events([event], server_mode=True, event_log_id=event_log_id) is False
 
     log_path.write_text("", encoding="utf-8")
-    now += event_logging.HOSTED_FULL_LOG_RECHECK_SECONDS
+    now += event_logging.FULL_LOG_RECHECK_SECONDS
 
     assert record_events([event], server_mode=True, event_log_id=event_log_id) is True
     assert len(read_event_log_lines(event_log_directory / event_log_id)) == 1
@@ -1149,7 +1149,7 @@ def test_local_recording_resumes_after_external_compaction(
     assert len(read_event_log_lines(event_log_directory)) == 1
 
     get_event_log_path().write_text("", encoding="utf-8")
-    now += event_logging.HOSTED_FULL_LOG_RECHECK_SECONDS
+    now += event_logging.FULL_LOG_RECHECK_SECONDS
 
     record_event(EventLogEvent.APP_START)
     assert len(read_event_log_lines(event_log_directory)) == 1
@@ -1186,7 +1186,7 @@ def test_full_hosted_log_rechecks_on_a_bounded_interval(
         )
     assert stat_calls == 0
 
-    now += event_logging.HOSTED_FULL_LOG_RECHECK_SECONDS
+    now += event_logging.FULL_LOG_RECHECK_SECONDS
     assert record_events([event], server_mode=True, event_log_id=event_log_id) is False
     assert stat_calls == 1
 

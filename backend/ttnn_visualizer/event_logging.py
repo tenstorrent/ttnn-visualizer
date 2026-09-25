@@ -126,7 +126,7 @@ MAX_HOSTED_EVENT_LOGS = 1024
 MAX_HOSTED_BATCHES_PER_MINUTE = 120
 MAX_HOSTED_EVENT_LOG_CREATIONS_PER_MINUTE = 60
 HOSTED_RATE_WINDOW_SECONDS = 60.0
-HOSTED_FULL_LOG_RECHECK_SECONDS = 60.0
+FULL_LOG_RECHECK_SECONDS = 60.0
 HOSTED_QUOTA_LOCK_NAME = ".quota.lock"
 HOSTED_CREATION_RATE_NAME = ".creation-rate"
 
@@ -1018,7 +1018,7 @@ def _append_line(
         os.close(descriptor)
 
 
-def _is_log_full(log_path: Path, state: _EventLogState, hosted: bool = False) -> bool:
+def _is_log_full(log_path: Path, state: _EventLogState) -> bool:
     """Whether the log has reached its cap, re-measured at most once per interval.
 
     Refusing appends is the only correct answer at the cap. Trimming here is what makes
@@ -1060,9 +1060,7 @@ def _is_log_full(log_path: Path, state: _EventLogState, hosted: bool = False) ->
         state.log_full = False
 
     state.bytes_since_size_check = 0
-    state.next_full_check_at = (
-        now + HOSTED_FULL_LOG_RECHECK_SECONDS if state.log_full else 0.0
-    )
+    state.next_full_check_at = now + FULL_LOG_RECHECK_SECONDS if state.log_full else 0.0
 
     if state.log_full and not was_full:
         # Once, on the way in. Everything after this point is dropped and answered 204,
@@ -1167,7 +1165,7 @@ def _write_events(
             return False
     state = _state_for_log(log_path, hosted)
 
-    if _is_log_full(log_path, state, hosted=hosted):
+    if _is_log_full(log_path, state):
         return False
 
     timestamp = _get_timestamp()
