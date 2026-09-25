@@ -5,11 +5,12 @@
 import { useEffect } from 'react';
 import { useLocation } from 'react-router';
 import { Helmet } from 'react-helmet-async';
-import { Theme, ToastContainer, ToastPosition, cssTransition } from 'react-toastify';
+import { Theme, ToastContainer, ToastPosition } from 'react-toastify';
 import 'styles/components/ToastOverrides.scss';
 
 import SideNavigation from './SideNavigation';
 import ServerModeBanner from './ServerModeBanner';
+import { BounceIn } from './toastTransition';
 import ROUTES from '../definitions/Routes';
 import FooterInfobar from './FooterInfobar';
 import ClusterRenderer from './cluster/ClusterRenderer';
@@ -20,14 +21,6 @@ import MlirFileResultsOverlay from './mlir/MlirFileResultsOverlay';
 import { initEventLogging } from '../functions/recordEvent';
 import useRecordViewOpened from '../hooks/useRecordViewOpened';
 import { isModalOpen } from '../functions/modalRoute';
-
-const BounceIn = cssTransition({
-    enter: `Toastify--animate Toastify__bounce-enter`,
-    exit: ` no-toast-animation Toastify__bounce-exit`,
-    appendPosition: true,
-    collapseDuration: 0,
-    collapse: true,
-});
 
 function Layout() {
     const location = useLocation();
