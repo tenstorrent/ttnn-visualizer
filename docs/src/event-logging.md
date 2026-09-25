@@ -120,7 +120,7 @@ Defined for a deliberate interaction with a view after it has remained open. The
 
 ### `mcp_tool_called`
 
-Recorded by `ttnn-visualizer-mcp` after a `tools/call`, not by the SPA. It answers which tools are chosen and how often they refuse or fail (Q4 and Q5 in #1819). It does not fire on `initialize`, `ping`, or `tools/list`: a client that connects and never calls a tool is invisible.
+Recorded by `ttnn-visualizer-mcp` when a registered tool reaches its handler, not by the SPA. It answers which tools are chosen and how often they refuse or fail (Q4 and Q5 in #1819). It does not fire on `initialize`, `ping`, `tools/list`, unknown tool names, or malformed `params`/`arguments`: only calls that get as far as a handler are counted.
 
 - `tool`: `load_report`, `top_ops`, `zone_timings`, `diff_reports`, `find_operations`, `operation_detail`, `memory_profile`, `tensor_flow`, `operation_provenance`.
 - `outcome`: `ok`, `refused`, `error`.

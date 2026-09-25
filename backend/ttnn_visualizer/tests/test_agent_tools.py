@@ -910,6 +910,33 @@ class TestTransport:
 
         record.assert_not_called()
 
+    def test_an_unexpected_failure_is_recorded_as_error(self):
+        table = self._table()
+
+        def fail(_arguments):
+            raise RuntimeError("boom")
+
+        table["load_report"]["handler"] = fail
+
+        with patch.object(server, "record_event") as record:
+            response = server.handle_message(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 5,
+                    "method": "tools/call",
+                    "params": {"name": "load_report", "arguments": {}},
+                },
+                table,
+            )
+
+        assert response["result"]["isError"] is True
+        record.assert_called_once_with(
+            EventLogEvent.MCP_TOOL_CALLED,
+            server_mode=False,
+            tool=McpToolName.LOAD_REPORT,
+            outcome=McpToolOutcome.ERROR,
+        )
+
     def test_a_disabled_recorder_still_answers(self, monkeypatch, event_log_directory):
         monkeypatch.setenv(RECORDING_DISABLED_ENV_VAR, "true")
         table = self._table()
