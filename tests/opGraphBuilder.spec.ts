@@ -512,6 +512,92 @@ describe('buildOpGraph', () => {
             }
         });
 
+        describe('a folded block says how much of it is weight loading (#2028)', () => {
+            // A block handed in rather than detected: what is being pinned is what a
+            // block reports about the operations it holds, not which detector put
+            // them there. Two loaders sit inside it, so folding absorbs them and
+            // `Collapse weight loads` has nothing left to draw -- the silent no-op
+            // this exists for.
+            const CLAIMED = [
+                operation({ id: 1, name: 'ttnn.to_device', outputs: [{ consumers: [11] }] }),
+                operation({ id: 2, name: 'ttnn.to_device', outputs: [{ consumers: [11] }] }),
+                operation({ id: 11, name: 'ttnn.linear', outputs: [{ consumers: [12] }] }),
+                operation({ id: 12, name: 'ttnn.relu' }),
+            ];
+            const blockOver = (operationIds: number[]) => [
+                {
+                    kind: OpGraphBlockKind.LAYER,
+                    instanceId: 'layer:attention:1',
+                    patternId: 'layer:attention',
+                    label: 'Attention',
+                    patternLabel: 'Attention',
+                    operationIds,
+                    instanceIndex: 0,
+                    instanceCount: 1,
+                },
+            ];
+            const metaOf = (collapseWeightLoads: boolean) => {
+                const graph = buildOpGraph(CLAIMED, {
+                    hideDeallocate: false,
+                    deviceSubgraphs: [],
+                    collapseWeightLoads,
+                    detectedBlocks: blockOver([1, 2, 11, 12]),
+                    expandedBlockIds: [],
+                });
+                expect(
+                    graph.nodes.some((node) => node.id.startsWith('weights:')),
+                    'the fold should have absorbed every fan',
+                ).toBe(false);
+                return nodeById(graph, 'layer:attention:1').data.metaLine;
+            };
+
+            it('counts the weight loads the fold absorbed', () => {
+                expect(metaOf(true)).toContain('(2 weight)');
+            });
+
+            it('says nothing about weights when the feature is off', () => {
+                // Off, the reader is not thinking in weight loads and the word would
+                // arrive unexplained.
+                expect(metaOf(false)).not.toContain('weight');
+            });
+
+            it('counts operations nothing feeds, not fan membership', () => {
+                // A source with two consumers never becomes a fan -- it belongs to
+                // neither -- but it is still a weight load sitting in the block, so
+                // the count is a superset of what unrolling would pill up.
+                const shared = [
+                    operation({ id: 1, name: 'ttnn.to_device', outputs: [{ consumers: [11, 12] }] }),
+                    operation({ id: 11, name: 'ttnn.linear', outputs: [{ consumers: [12] }] }),
+                    operation({ id: 12, name: 'ttnn.relu' }),
+                ];
+                const graph = buildOpGraph(shared, {
+                    hideDeallocate: false,
+                    deviceSubgraphs: [],
+                    collapseWeightLoads: true,
+                    detectedBlocks: blockOver([1, 11, 12]),
+                    expandedBlockIds: [],
+                });
+
+                expect(graph.nodes.some((node) => node.id.startsWith('weights:'))).toBe(false);
+                expect(nodeById(graph, 'layer:attention:1').data.metaLine).toContain('(1 weight)');
+            });
+
+            it('does not restate the count on a weight fan itself', () => {
+                // Every member of a fan is one, so `3 ops (3 weight)` says it twice.
+                const fanned = buildOpGraph(
+                    [
+                        operation({ id: 1, name: 'ttnn.to_device', outputs: [{ consumers: [4] }] }),
+                        operation({ id: 2, name: 'ttnn.to_device', outputs: [{ consumers: [4] }] }),
+                        operation({ id: 4, name: 'ttnn.linear', outputs: [{ consumers: [5] }] }),
+                        operation({ id: 5, name: 'ttnn.layer_norm' }),
+                    ],
+                    { hideDeallocate: false, deviceSubgraphs: [], collapseWeightLoads: true },
+                );
+
+                expect(nodeById(fanned, 'weights:1-2').data.metaLine).not.toContain('weight)');
+            });
+        });
+
         it('keeps a fan unrolled when a grouping fold merges it with another', () => {
             // Membership is fold-dependent: the members are grouped by the node they
             // feed, so folding two consumers into one block makes one fan out of two.
@@ -549,8 +635,10 @@ describe('buildOpGraph', () => {
             const merged = buildChain(['weights:2-3']);
 
             // The members stay on screen: the merged fan inherits the decision that
-            // covers them rather than folding itself over the top of it.
-            expect(fanIds(merged)).toEqual([]);
+            // covers them rather than folding itself over the top of it. The fan id is
+            // still drawn — as the container holding them, which is what carries the
+            // fold affordance now. #2028
+            expect(fanIds(merged)).toEqual(['weights:1-2-3']);
             expect(drawsOperation(merged, '2')).toBe(true);
             expect(drawsOperation(merged, '3')).toBe(true);
             // And op 1, which joined the merge, comes with them rather than being
@@ -625,7 +713,11 @@ describe('buildOpGraph', () => {
                 expandedBlockIds: ['weights:1-2-3-4'],
             });
 
-            expect(split.nodes.filter((node) => node.id.startsWith('weights:'))).toEqual([]);
+            // The surviving fan id is the container around the members, not a folded
+            // pill over the top of them — the members are still drawn. #2028
+            expect(split.nodes.filter((node) => node.id.startsWith('weights:')).map((node) => node.id)).toEqual([
+                'weights:1-2',
+            ]);
             expect(split.nodes.some((node) => node.id === '1')).toBe(true);
             expect(split.nodes.some((node) => node.id === '2')).toBe(true);
         });
@@ -704,8 +796,88 @@ describe('buildOpGraph', () => {
                 expandedBlockIds: [FAN_ID],
             });
 
-            expect(graph.nodes.map((node) => node.id)).toEqual(['1', '2', '3', '4', '5']);
+            // Members last, behind the container that now holds them: React Flow
+            // resolves `parentId` against nodes it has already seen. #2028
+            expect(graph.nodes.map((node) => node.id).sort()).toEqual(['1', '2', '3', '4', '5', FAN_ID].sort());
             expect(edgeBetweenOperations(graph, 2, 4).label).toBe('[768, 3072]');
+        });
+
+        describe('an unrolled fan keeps somewhere to fold from (#2028)', () => {
+            const unrolled = () =>
+                buildOpGraph(FAN_CHAIN, {
+                    hideDeallocate: false,
+                    deviceSubgraphs: [],
+                    collapseWeightLoads: true,
+                    expandedBlockIds: [FAN_ID],
+                });
+
+            it('draws a container carrying the fan id, so the fold pill has a node to sit on', () => {
+                // The reported bug: unrolling replaced the only node that could fold
+                // the fan, leaving the toolbar switch — which resets every fan — as
+                // the way back.
+                const container = nodeById(unrolled(), FAN_ID);
+
+                expect(container.type).toBe(OpGraphNodeType.WEIGHT_GROUP);
+                expect(container.data.blockInstanceId).toBe(FAN_ID);
+                expect(container.data.opCount).toBe(3);
+            });
+
+            it('parents every member to the container', () => {
+                const graph = unrolled();
+
+                for (const memberId of ['1', '2', '3']) {
+                    expect(nodeById(graph, memberId).parentId, `member ${memberId}`).toBe(FAN_ID);
+                    expect(nodeById(graph, memberId).extent).toBe('parent');
+                }
+            });
+
+            it('leaves the consumer alone', () => {
+                expect(nodeById(unrolled(), '4').parentId).toBeUndefined();
+            });
+
+            it('keeps each member edge and its own tensor label', () => {
+                // What unrolling is for. Folded, the three collapse to one unlabelled
+                // edge; unrolled, each shape is back.
+                const graph = unrolled();
+
+                expect(graph.edges.filter((edge) => edge.target === '4')).toHaveLength(3);
+                expect(edgeBetweenOperations(graph, 1, 4).label).toBe('[1, 768]');
+                expect(edgeBetweenOperations(graph, 2, 4).label).toBe('[768, 3072]');
+                expect(edgeBetweenOperations(graph, 3, 4).label).toBe('[1, 3072]');
+            });
+
+            it('sizes the container to hold its members', () => {
+                const container = nodeById(unrolled(), FAN_ID);
+
+                expect(container.width ?? 0).toBeGreaterThan(0);
+                expect(container.height ?? 0).toBeGreaterThan(0);
+            });
+
+            it('ranks the container against the consumer, not the members inside it', () => {
+                // Dagre only knows top-level nodes, so an edge handed to it naming a
+                // child is an edge it drops -- and a dropped edge is a dependency it
+                // never ranks. The members keep their own edges for drawing; only the
+                // layout copy is rewritten to the container. Left unrewritten the
+                // container lands beside its consumer and the two overlap.
+                const graph = unrolled();
+                const container = nodeById(graph, FAN_ID);
+                const consumer = nodeById(graph, '4');
+
+                expect(container.position.y + (container.height ?? 0)).toBeLessThanOrEqual(consumer.position.y);
+            });
+
+            it('folds back to the pill when the decision is dropped', () => {
+                // The round trip the bug made impossible.
+                const refolded = buildOpGraph(FAN_CHAIN, {
+                    hideDeallocate: false,
+                    deviceSubgraphs: [],
+                    collapseWeightLoads: true,
+                    expandedBlockIds: [],
+                });
+
+                expect(nodeById(refolded, FAN_ID).type).toBe(OpGraphNodeType.BLOCK);
+                expect(refolded.nodes.map((node) => node.id)).toEqual([FAN_ID, '4', '5']);
+            });
         });
 
         it('folds a fan the expansion set does not name', () => {

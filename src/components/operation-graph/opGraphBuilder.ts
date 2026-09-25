@@ -143,6 +143,35 @@ export function buildOpGraph(
     const renderedNodeIdOf = (operationId: number): string =>
         collapsedInstanceByOpId.get(operationId)?.instanceId ?? String(operationId);
 
+    // A weight load is a source: nothing that survived the filter feeds it. The same
+    // test `detectWeightFans` opens with, and matched on shape rather than name for
+    // its reason -- two of the local reports disagree about the name. Both ends kept,
+    // so an edge from a hidden op does not count as feeding one.
+    //
+    // This counts weight-load *operations*, which is a superset of the ones that end
+    // up in fans: a fan additionally needs a single consumer and at least two members,
+    // so a source feeding two layers, or one with no partner, is counted here and
+    // draws as a plain node when unrolled. On `bge_m3` that is 295 against 290 in
+    // fans. Counting operations is the right answer for a block -- the question is
+    // how much of this block is weight loading, not how much of it would pill up.
+    const hasIncomingEdge = new Set<number>();
+    for (const candidate of candidates) {
+        if (kept.has(candidate.source) && kept.has(candidate.target)) {
+            hasIncomingEdge.add(candidate.target);
+        }
+    }
+    const weightLoadsIn = (operationIds: readonly number[]): number =>
+        operationIds.reduce((count, id) => (hasIncomingEdge.has(id) ? count : count + 1), 0);
+
+    // An unrolled fan's members are drawn, and keep their own edges and tensor labels —
+    // that is what unrolling is for. They are just no longer top-level: they become
+    // children of a container node, so Dagre has to rank the container in their place.
+    // Hence two ids per operation, one for the edge and one for the layout. #2028
+    const unrolledFanByOpId = new Map<number, RepeatBlockInstance>();
+    const unrolledFanById = new Map<string, RepeatBlockInstance>();
+    const layoutNodeIdOf = (operationId: number): string =>
+        unrolledFanByOpId.get(operationId)?.instanceId ?? renderedNodeIdOf(operationId);
+
     // Added to the same map grouping uses, which is the whole integration: `renderedNodeIdOf`
     // then resolves a member to its fan, and the edge path below already suppresses the
     // label and dedupes parallel edges across a collapsed boundary. Detected here rather
@@ -189,6 +218,16 @@ export function buildOpGraph(
                 for (const operationId of fan.operationIds) {
                     collapsedInstanceByOpId.set(operationId, fan);
                 }
+            } else {
+                // Kept so the members can be drawn inside a container that carries the
+                // fan's id, which is the only thing the reader can click to fold it
+                // again. Recorded against the fan detected *this* build, not the
+                // remembered id that matched it: a merge renames the fan, and folding
+                // has to name what is on screen now. #2028
+                for (const operationId of fan.operationIds) {
+                    unrolledFanByOpId.set(operationId, fan);
+                }
+                unrolledFanById.set(fan.instanceId, fan);
             }
         }
     }
@@ -197,6 +236,20 @@ export function buildOpGraph(
     const deviceOpNodes: OpGraphFlowNode[] = [];
     const deviceOpEdges: OpGraphFlowEdge[] = [];
     const emittedBlockIds = new Set<string>();
+
+    // Built exactly as they would be at top level, then diverted: a member inside a
+    // container is the same node, so nothing downstream that is keyed by node id --
+    // perf styling, the critical path, focus, selection -- needs to know. #2028
+    const fanMemberNodes = new Map<string, OpGraphFlowNode[]>();
+    const nodesFor = (operationId: number): OpGraphFlowNode[] => {
+        const fan = unrolledFanByOpId.get(operationId);
+        if (fan === undefined) {
+            return nodes;
+        }
+        const bucket = fanMemberNodes.get(fan.instanceId) ?? [];
+        fanMemberNodes.set(fan.instanceId, bucket);
+        return bucket;
+    };
 
     for (const operation of keptOperations) {
         const collapsedInstance = collapsedInstanceByOpId.get(operation.id);
@@ -209,7 +262,18 @@ export function buildOpGraph(
                 const opCount = collapsedInstance.operationIds.length;
                 const durationSeconds = sumOptional(members.map((member) => member.durationSeconds));
                 const memoryDeltaBytes = sumOptional(members.map((member) => member.memoryDeltaBytes));
-                const meta = formatBlockMeta(opCount, durationSeconds, memoryDeltaBytes);
+                // Not on a weight fan itself, where every member is one and the
+                // count would restate the label. Only while the feature is on: with
+                // it off the reader is not thinking in weight loads, and the word
+                // would arrive unexplained.
+                const meta = formatBlockMeta(
+                    opCount,
+                    durationSeconds,
+                    memoryDeltaBytes,
+                    collapseWeightLoads && collapsedInstance.kind !== OpGraphBlockKind.WEIGHTS
+                        ? weightLoadsIn(collapsedInstance.operationIds)
+                        : 0,
+                );
                 const size = estimateBlockNodeSize(collapsedInstance.label, meta);
                 nodes.push({
                     id: collapsedInstance.instanceId,
@@ -254,7 +318,7 @@ export function buildOpGraph(
             const subgraph = subgraphByOperationId.get(operation.id);
 
             if (subgraph === undefined) {
-                nodes.push({
+                nodesFor(operation.id).push({
                     id: String(operation.id),
                     type: OpGraphNodeType.OP,
                     position: { x: 0, y: 0 },
@@ -275,7 +339,7 @@ export function buildOpGraph(
                 // node id — the perf style patches, the critical path's node set, focus
                 // and selection — then needs no notion of expansion at all, and the
                 // edges already pointing here stay pointing here. #1195
-                nodes.push({
+                nodesFor(operation.id).push({
                     id: String(operation.id),
                     type: OpGraphNodeType.DEVICE_GROUP,
                     position: { x: 0, y: 0 },
@@ -322,8 +386,69 @@ export function buildOpGraph(
         }
     }
 
+    // The container is sized from its members and is at least as wide as the pill it
+    // replaces, so folding and unrolling do not jump the node's left edge around.
+    for (const [instanceId, memberNodes] of fanMemberNodes) {
+        // `fanMemberNodes` only gains a key when a member is routed into it, so an
+        // entry always has both a fan and at least one node; the lookup narrows the
+        // type rather than guarding against a state the loop above can produce.
+        const fan = unrolledFanById.get(instanceId);
+        if (fan !== undefined && memberNodes.length > 0) {
+            const members = fan.operationIds
+                .map((id) => operationById.get(id))
+                .filter((member): member is OpGraphSourceOperation => member !== undefined);
+            const opCount = fan.operationIds.length;
+            const meta = formatBlockMeta(
+                opCount,
+                sumOptional(members.map((member) => member.durationSeconds)),
+                sumOptional(members.map((member) => member.memoryDeltaBytes)),
+            );
+            // No edges between members: a fan is sources feeding one consumer, so they
+            // have none by construction and Dagre lays them out on a single rank.
+            const memberLayout = layoutDeviceSubgraph(
+                memberNodes.map((member) => ({
+                    id: member.id,
+                    width: member.width ?? 0,
+                    height: member.height ?? 0,
+                })),
+                [],
+                estimateBlockNodeSize(fan.label, meta).width,
+            );
+            nodes.push({
+                id: instanceId,
+                type: OpGraphNodeType.WEIGHT_GROUP,
+                className: BLOCK_KIND_CLASS[fan.kind],
+                position: { x: 0, y: 0 },
+                width: memberLayout.width,
+                height: memberLayout.height,
+                data: {
+                    operationId: fan.operationIds[0],
+                    label: fan.label,
+                    fileIdentifier: '',
+                    filterString: fan.label,
+                    deviceOperationCount: 0,
+                    metaLine: meta,
+                    blockInstanceId: instanceId,
+                    blockKind: fan.kind,
+                    memberNames: members.map((member) => member.name),
+                    memberOperationIds: fan.operationIds,
+                    opCount,
+                },
+            });
+            for (const member of memberNodes) {
+                deviceOpNodes.push({
+                    ...member,
+                    parentId: instanceId,
+                    extent: 'parent',
+                    position: memberLayout.positions.get(member.id) ?? { x: 0, y: 0 },
+                });
+            }
+        }
+    }
+
     const parallelCountByPair = new Map<string, number>();
     const layoutPairSeen = new Set<string>();
+    const layoutEdgeSeen = new Set<string>();
     const edges: OpGraphFlowEdge[] = [];
     // Ranking is between operations, so an edge that renders into an expanded node
     // still has to be handed to Dagre as reaching the node itself. Dagre drops edges
@@ -360,7 +485,18 @@ export function buildOpGraph(
                     });
                     if (!layoutPairSeen.has(pair)) {
                         layoutPairSeen.add(pair);
-                        layoutEdges.push({ source: renderedSource, target: renderedTarget });
+                        // Dagre only knows top-level nodes, so a member inside a fan
+                        // container is ranked as the container. Several members of one
+                        // fan feed the same consumer, which collapses to one layout
+                        // edge — deduped separately from `pair`, which stays per member
+                        // so each keeps its own edge and tensor label. #2028
+                        const layoutSource = layoutNodeIdOf(candidate.source);
+                        const layoutTarget = layoutNodeIdOf(candidate.target);
+                        const layoutPair = `${layoutSource}->${layoutTarget}`;
+                        if (layoutSource !== layoutTarget && !layoutEdgeSeen.has(layoutPair)) {
+                            layoutEdgeSeen.add(layoutPair);
+                            layoutEdges.push({ source: layoutSource, target: layoutTarget });
+                        }
                     }
                 }
             }
