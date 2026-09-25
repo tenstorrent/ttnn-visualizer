@@ -156,6 +156,20 @@ interface SearchFieldProps {
 export default function SearchField({ placeholder, onSearch }: SearchFieldProps) { … }
 ```
 
+### Default-export the primary component; named extras are fine
+
+Primary React UI in `src/components` and route pages in `src/routes` **default-export** the main component. That is the existing tree, not a migration target: most component `.tsx` files already do `export default function SearchField`, `const Foo = …; export default Foo;`, or `export default memo(Foo)`.
+
+Named co-exports on the same module are expected — types, constants, small subcomponents. `ToastTensorMessage` default-exports the toast body and named-exports `ToastDeselectButton`; `Collapsible` named-exports `COLLAPSIBLE_EMPTY_CLASS` beside the default.
+
+Do **not** add a default export to a module that is already a named surface. `useAPI.tsx`, `formatting.ts`, and `routeObjectList.tsx` stay named-only. A handful of component helpers (`OperationLinks.tsx`, `MemoryLegendElement.tsx`, and similar) are named-only today; leave them. New primary widgets follow default export.
+
+Hooks and `src/functions` are mixed on purpose. A module with several public symbols stays **named**. A single-purpose helper or single-hook file may default-export (`getServerConfig`, `memoiseLatest`). `import/prefer-default-export` is off in `eslint.config.cjs` so that split stays legal — do not turn it on.
+
+Do not convert a file's export style when editing it for another reason.
+
+The `SocketProvider` snippet in the next subsection is a `src/libs` provider and is named on purpose. It is not a `src/components` widget; do not read it as an exception to default-exporting primary UI.
+
 ### Don't use `React.FC` / `FC` for component typing
 
 `React.FC` is deprecated by the React team and the codebase has standardised on typing props on the function signature instead. ESLint bans `FC`, `React.FC`, `FunctionComponent`, and `React.FunctionComponent` via `no-restricted-syntax` in `eslint.config.cjs`.
@@ -1485,5 +1499,4 @@ These exist in the codebase today and don't yet have a single canonical answer. 
 
 - **Two accessors for CSS-custom-property colours.** `GRAPH_COLORS` resolves at module load; `getPerfChartChrome()` re-reads per call. Both are legitimate and both keep the literal in `_base.scss` — pick per [No hex literals in TS/TSX](#no-hex-literals-in-tstsx), and don't add a third mechanism. (#1911)
 - **Upload size cap.** `MAX_CONTENT_LENGTH` is a real, honoured setting but **unset by default**, so out of the box large uploads succeed until they exhaust memory. Choosing a shipped default is tracked separately. (#1915)
-- **Default-export vs named-export of components.** Components are predominantly default-exported, hooks and utilities named-exported. Mirror the file you're editing. (#1916)
 - **`DEBUG` and `FLASK_DEBUG` are different knobs with confusable names.** `FLASK_DEBUG` feeds the `DEBUG` *config* value (Flask's debug mode); the `DEBUG` *environment variable* raises the root log level and is what `pnpm flask:start-debug` sets. Both are in `.env.sample`. Read the name at the call site rather than assuming. (#1922)
