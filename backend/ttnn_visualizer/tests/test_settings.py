@@ -118,18 +118,52 @@ def _wsgi_environ(host: str, scheme: str = "http", **headers: str) -> dict:
     return {"wsgi.url_scheme": scheme, "HTTP_HOST": host, **headers}
 
 
+def test_only_hosted_apps_apply_the_global_upload_cap(tmp_path):
+    configured_cap = 1024
+    hosted_app = create_app(
+        settings_override=base_test_settings(
+            str(tmp_path / "hosted"),
+            MAX_CONTENT_LENGTH=configured_cap,
+        )
+    )
+    local_app = create_app(
+        settings_override=base_test_settings(
+            str(tmp_path / "local"),
+            SERVER_MODE="false",
+            MAX_CONTENT_LENGTH=configured_cap,
+        )
+    )
+
+    assert hosted_app.config["MAX_CONTENT_LENGTH"] == 1 * 1024 * 1024 * 1024
+    assert local_app.config["MAX_CONTENT_LENGTH"] == configured_cap
+
+
 def _import_settings_with(
-    code: str = "import ttnn_visualizer.settings", **env: str
+    code: str = "import ttnn_visualizer.settings",
+    *,
+    absent_env: tuple[str, ...] = (),
+    ignore_dotenv: bool = False,
+    **env: str,
 ) -> subprocess.CompletedProcess:
     """Import ``settings`` in a fresh interpreter under the given environment.
 
     The class body runs once per process and this one imported the module before the
     first test, so an import-time decision can only be exercised from outside it.
-    ``load_dotenv`` reads the repo's ``.env`` on import, so the variables under test are
-    also cleared from what the child inherits — otherwise a developer checkout that
-    configures one would decide the result.
+    Variables in ``env`` override a developer ``.env``. ``absent_env`` instead removes
+    a variable entirely; combined with ``ignore_dotenv``, it tests a genuine coded
+    default without a checkout's ``.env`` deciding the result.
     """
-    child_env = {key: value for key, value in os.environ.items() if key not in env}
+    child_env = {
+        key: value
+        for key, value in os.environ.items()
+        if key not in env and key not in absent_env
+    }
+    if ignore_dotenv:
+        code = (
+            "import dotenv; "
+            "dotenv.load_dotenv = lambda *args, **kwargs: False; "
+            f"{code}"
+        )
 
     return subprocess.run(
         [sys.executable, "-c", code],
@@ -557,6 +591,30 @@ def test_a_max_content_length_is_parsed_as_an_integer(monkeypatch):
     config.override_with_env_variables()
 
     assert config.MAX_CONTENT_LENGTH == 1048576
+
+
+def test_importing_settings_leaves_max_content_length_unlimited_by_default():
+    result = _import_settings_with(
+        "import ttnn_visualizer.settings as settings; "
+        "print(settings.DefaultConfig.MAX_CONTENT_LENGTH)",
+        absent_env=("MAX_CONTENT_LENGTH",),
+        ignore_dotenv=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "None"
+
+
+def test_importing_settings_allows_an_empty_max_content_length():
+    result = _import_settings_with(
+        "import ttnn_visualizer.settings as settings; "
+        "print(settings.DefaultConfig.MAX_CONTENT_LENGTH)",
+        ignore_dotenv=True,
+        MAX_CONTENT_LENGTH="",
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "None"
 
 
 @pytest.mark.parametrize("env_value", ["abc", "  ", "1.5", "10MB"])
