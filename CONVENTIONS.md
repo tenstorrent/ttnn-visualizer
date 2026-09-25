@@ -1148,7 +1148,7 @@ New tools go in that package and follow both. Adding one to a Flask route instea
 
 So registration is half of adding a tool. The other half is the row in that table saying what it answers, and, where the answer needs one to be read correctly, the caveat in the prose. A tool that is registered but undocumented is invisible to the client that would have chosen it; a caveat that reaches only the response is one an agent has already acted without by the time it reads it.
 
-Two things make this sharper than ordinary documentation drift. #2035 puts that page inside the application, at which point a missing row is a hole a user sees rather than a stale file in a repository. And the surface has drifted here before: #2034 is a caveat that is *wrong on the page itself* — `agent-tools.md` tells an agent that `memory_profile`'s peak answers the out-of-memory question, which it does not, because the table it reads holds neither circular buffers nor tensors allocated and freed inside one operation.
+Two things make this sharper than ordinary documentation drift. #2035 puts that page inside the application, at which point a missing row is a hole a user sees rather than a stale file in a repository. And the surface has drifted here before: #2034 was a caveat that was *wrong on the page itself* — `agent-tools.md` told an agent that `memory_profile`'s peak answered the out-of-memory question, which it did not, because the table it reads holds neither circular buffers nor tensors allocated and freed inside one operation.
 
 That sets the bar. What is owed is an accurate row and an accurate caveat, not merely a present one — a missing tool is one an agent never calls, while a wrong caveat is one it acts on.
 
