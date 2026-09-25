@@ -549,8 +549,10 @@ describe('buildOpGraph', () => {
             const merged = buildChain(['weights:2-3']);
 
             // The members stay on screen: the merged fan inherits the decision that
-            // covers them rather than folding itself over the top of it.
-            expect(fanIds(merged)).toEqual([]);
+            // covers them rather than folding itself over the top of it. The fan id is
+            // still drawn — as the container holding them, which is what carries the
+            // fold affordance now. #2028
+            expect(fanIds(merged)).toEqual(['weights:1-2-3']);
             expect(drawsOperation(merged, '2')).toBe(true);
             expect(drawsOperation(merged, '3')).toBe(true);
             // And op 1, which joined the merge, comes with them rather than being
@@ -625,7 +627,11 @@ describe('buildOpGraph', () => {
                 expandedBlockIds: ['weights:1-2-3-4'],
             });
 
-            expect(split.nodes.filter((node) => node.id.startsWith('weights:'))).toEqual([]);
+            // The surviving fan id is the container around the members, not a folded
+            // pill over the top of them — the members are still drawn. #2028
+            expect(split.nodes.filter((node) => node.id.startsWith('weights:')).map((node) => node.id)).toEqual([
+                'weights:1-2',
+            ]);
             expect(split.nodes.some((node) => node.id === '1')).toBe(true);
             expect(split.nodes.some((node) => node.id === '2')).toBe(true);
         });
@@ -704,7 +710,9 @@ describe('buildOpGraph', () => {
                 expandedBlockIds: [FAN_ID],
             });
 
-            expect(graph.nodes.map((node) => node.id)).toEqual(['1', '2', '3', '4', '5']);
+            // Members last, behind the container that now holds them: React Flow
+            // resolves `parentId` against nodes it has already seen. #2028
+            expect(graph.nodes.map((node) => node.id).sort()).toEqual(['1', '2', '3', '4', '5', FAN_ID].sort());
             expect(edgeBetweenOperations(graph, 2, 4).label).toBe('[768, 3072]');
         });
 

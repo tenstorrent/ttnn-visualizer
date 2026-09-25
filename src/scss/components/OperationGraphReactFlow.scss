@@ -46,6 +46,7 @@ $minimap-width: 200px;
     // device operations. #1195
     .react-flow__node-opNode,
     .react-flow__node-deviceGroupNode,
+    .react-flow__node-weightGroupNode,
     .react-flow__node-blockNode {
         display: flex;
         flex-direction: column;
@@ -208,6 +209,49 @@ $minimap-width: 200px;
         &::after {
             border-bottom-left-radius: 14px;
         }
+    }
+
+    // An unrolled weight fan. Deliberately the collapsed pill's own border and fill
+    // rather than the device group's grey dash: folded and unrolled are the same
+    // object, and the reader has to recognise it across the toggle to know what the
+    // fold pill will put back. Content stacks from the top so the header — which
+    // carries that pill — stays put as the body grows. #2028
+    .react-flow__node-weightGroupNode {
+        justify-content: flex-start;
+        padding: 0;
+
+        // 4px to match the collapsed pill, for the reason stated there: a 2px dash
+        // is a hairline by 0.3 zoom. The inset ring is dropped — on a container this
+        // size it reads as a second border rather than as weight on one.
+        border: 4px dashed var(--graph-block-weights-border);
+        border-radius: 8px;
+        background-color: var(--graph-block-weights);
+
+        // Draggable since it is expanded, the same affordance the device group gives.
+        cursor: grab;
+
+        &:active {
+            cursor: grabbing;
+        }
+
+        // Restated because the `border` shorthand resets what the shared rule sets.
+        &.op-graph-node-selected {
+            border-color: var(--graph-selected);
+        }
+
+        &.op-graph-node-input {
+            border-style: solid;
+            border-color: var(--graph-input-node);
+        }
+
+        &.op-graph-node-output {
+            border-style: solid;
+            border-color: var(--graph-output-node);
+        }
+    }
+
+    .react-flow__node-weightGroupNode > .op-graph-group-header .op-graph-node-expander {
+        background-color: var(--graph-block-weights-border);
     }
 
     .op-graph-group-header {

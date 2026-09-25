@@ -16,6 +16,12 @@ export enum OpGraphNodeType {
     DEVICE_OP = 'deviceOpNode',
     /** A collapsed repeat-window instance. #1583 */
     BLOCK = 'blockNode',
+    /**
+     * An unrolled weight fan, holding its members. The fold affordance lives on a
+     * collapsed block node, which stops existing the moment the fan is unrolled —
+     * so an unrolled fan kept nothing that could fold it again. #2028
+     */
+    WEIGHT_GROUP = 'weightGroupNode',
 }
 
 export enum OpGraphEdgeType {

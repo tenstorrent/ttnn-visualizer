@@ -42,6 +42,7 @@ import PerfOverlayLegend from '../perf-overlay/PerfOverlayLegend';
 import CriticalPathAnnotation from './CriticalPathAnnotation';
 import OpGraphBlockNode from './OpGraphBlockNode';
 import OpGraphDeviceGroupNode from './OpGraphDeviceGroupNode';
+import OpGraphWeightGroupNode from './OpGraphWeightGroupNode';
 import OpGraphDeviceOpNode from './OpGraphDeviceOpNode';
 import OpGraphEdge from './OpGraphEdge';
 import OpGraphInfoPanel from './OpGraphInfoPanel';
@@ -89,6 +90,7 @@ const NODE_TYPES = {
     [OpGraphNodeType.DEVICE_GROUP]: OpGraphDeviceGroupNode,
     [OpGraphNodeType.DEVICE_OP]: OpGraphDeviceOpNode,
     [OpGraphNodeType.BLOCK]: OpGraphBlockNode,
+    [OpGraphNodeType.WEIGHT_GROUP]: OpGraphWeightGroupNode,
 };
 const EDGE_TYPES = { [OpGraphEdgeType.OP]: OpGraphEdge };
 
