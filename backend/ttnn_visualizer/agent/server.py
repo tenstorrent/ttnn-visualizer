@@ -25,6 +25,18 @@ from ttnn_visualizer.agent.handles import (
     UnknownHandleError,
     load_report,
 )
+from ttnn_visualizer.agent.tool_names import McpToolName
+from ttnn_visualizer.event_logging import (
+    EventLogEvent,
+    McpToolOutcome,
+    compact_if_needed,
+    describe_opt_out,
+    get_event_log_path,
+    get_recording_disabled_reason,
+    is_recording_enabled,
+    record_event,
+    start_run,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -66,7 +78,7 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
     only in the response: which projection it reads, and what the numbers mean.
     """
     return {
-        "load_report": {
+        McpToolName.LOAD_REPORT: {
             "description": (
                 "Register a report directory and list what it can answer. Call this "
                 "first; every other tool takes the handle it returns."
@@ -89,7 +101,7 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
             },
             "handler": lambda arguments: load_report(registry, **arguments),
         },
-        "top_ops": {
+        McpToolName.TOP_OPS: {
             "description": (
                 "The costliest operations by one metric. Reads the report unfiltered "
                 "-- host ops included, no signpost range -- and returns the projection "
@@ -106,7 +118,7 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
             },
             "handler": lambda arguments: tools.top_ops(registry, **arguments),
         },
-        "zone_timings": {
+        McpToolName.ZONE_TIMINGS: {
             "description": (
                 "Per-zone, per-RISC totals from profile_log_device.csv: what the "
                 "hardware actually spent, by firmware and kernel phase. Cycles are "
@@ -119,7 +131,7 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
             },
             "handler": lambda arguments: tools.zone_timings(registry, **arguments),
         },
-        "diff_reports": {
+        McpToolName.DIFF_REPORTS: {
             "description": (
                 "Per-op-code deltas between two reports, largest movement first. "
                 "Grouped by op code rather than joined on op id, so a change that "
@@ -139,7 +151,7 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
             },
             "handler": lambda arguments: tools.diff_reports(registry, **arguments),
         },
-        "find_operations": {
+        McpToolName.FIND_OPERATIONS: {
             "description": (
                 "Find operations by name substring, returning ids to ask about. "
                 "Durations here are host wall time from the profiler report; for "
@@ -173,7 +185,7 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
                 registry, **arguments
             ),
         },
-        "operation_detail": {
+        McpToolName.OPERATION_DETAIL: {
             "description": (
                 "One operation: its input and output tensors with shape, dtype and "
                 "layout, and what it had allocated. Read tensor_size_unit: a "
@@ -193,7 +205,7 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
                 registry, **arguments
             ),
         },
-        "memory_profile": {
+        McpToolName.MEMORY_PROFILE: {
             "description": (
                 "Memory footprint per operation, keyed by buffer type and ranked "
                 "within each type, with that type's largest footprint and the "
@@ -224,7 +236,7 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
                 registry, **arguments
             ),
         },
-        "operation_provenance": {
+        McpToolName.OPERATION_PROVENANCE: {
             "description": (
                 "What one operation was called with, and where in the model code it "
                 "came from: its arguments as name/value pairs, and the innermost "
@@ -259,7 +271,7 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
                 registry, **arguments
             ),
         },
-        "tensor_flow": {
+        McpToolName.TENSOR_FLOW: {
             "description": (
                 "The operation that produced a tensor and the operations that "
                 "consumed it, with the tensor's shape, dtype, layout and size."
@@ -280,6 +292,27 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
 
 def _result(request_id: object, payload: Dict) -> Dict:
     return {"jsonrpc": "2.0", "id": request_id, "result": payload}
+
+
+def _record_tool_call(name: str, outcome: McpToolOutcome) -> None:
+    """Usage line plus stderr, without arguments or paths.
+
+    ``record_event`` only checks logfmt safety, not enums, so ``tool`` and
+    ``outcome`` must be members. An unknown tool name is client free-form and
+    must not enter the log.
+    """
+    logger.info("%s %s", name, outcome.value)
+    try:
+        tool = McpToolName(name)
+    except ValueError:
+        return
+
+    record_event(
+        EventLogEvent.MCP_TOOL_CALLED,
+        server_mode=False,
+        tool=tool,
+        outcome=outcome,
+    )
 
 
 def _error(request_id: object, code: int, message: str) -> Dict:
@@ -366,6 +399,7 @@ def handle_message(message: object, table: Dict[str, Dict]) -> Optional[Dict]:
         name = str(params.get("name") or "")
         entry = table.get(name)
         if entry is None:
+            logger.info("unknown tool")
             return _tool_failure(request_id, f"unknown tool {name!r}")
 
         raw_arguments = params.get("arguments")
@@ -377,15 +411,20 @@ def handle_message(message: object, table: Dict[str, Dict]) -> Optional[Dict]:
         try:
             payload = entry["handler"](arguments)
         except (UnknownHandleError, ValueError) as error:
+            _record_tool_call(name, McpToolOutcome.REFUSED)
             return _tool_failure(request_id, str(error))
         except TypeError as error:
+            logger.exception("%s failed", name)
+            _record_tool_call(name, McpToolOutcome.REFUSED)
             return _tool_failure(request_id, f"bad arguments for {name}: {error}")
         except (
             Exception
         ) as error:  # noqa: BLE001 - the model gets the reason, the log gets the trace
             logger.exception("%s failed", name)
+            _record_tool_call(name, McpToolOutcome.ERROR)
             return _tool_failure(request_id, f"{name} failed: {error}")
 
+        _record_tool_call(name, McpToolOutcome.OK)
         return _result(
             request_id,
             {
@@ -428,6 +467,25 @@ def serve(
 
 def main() -> None:
     logging.basicConfig(stream=sys.stderr, level=logging.INFO)
+    start_run()
+    # Path.home() raises RuntimeError when HOME is unset and the uid is absent from
+    # passwd. Compaction and the disclosure banner both resolve that path, and must
+    # not keep serve() from starting — including when the operator already opted out.
+    try:
+        if is_recording_enabled():
+            compact_if_needed()
+            logger.info(
+                "Recording tool usage to %s. %s",
+                get_event_log_path(),
+                describe_opt_out(),
+            )
+        else:
+            logger.info(
+                "Event logging is DISABLED: %s.",
+                get_recording_disabled_reason(),
+            )
+    except Exception:
+        logger.exception("Event-log startup failed; serving without recording")
     serve(sys.stdin, sys.stdout)
 
 

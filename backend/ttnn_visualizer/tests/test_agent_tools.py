@@ -27,8 +27,22 @@ from ttnn_visualizer.agent.handles import (
     load_report,
 )
 from ttnn_visualizer.csv_queries import DeviceLogProfilerQueries
+from ttnn_visualizer.event_logging import (
+    EVENT_FIELD,
+    EVENT_LOG_FILENAME,
+    OUTCOME_FIELD,
+    RECORDING_DISABLED_ENV_VAR,
+    TOOL_FIELD,
+    EventLogEvent,
+    McpToolName,
+    McpToolOutcome,
+)
 from ttnn_visualizer.exceptions import DataFormatError
 from ttnn_visualizer.models import Instance
+from ttnn_visualizer.tests.event_log_readers import (
+    parse_event_log_line,
+    read_event_log_lines,
+)
 from ttnn_visualizer.tests.test_device_log_columns import (
     MODERN_HEADER,
     PREAMBLE,
@@ -745,6 +759,10 @@ class TestZeroDuration:
 
 
 class TestTransport:
+    @pytest.fixture(autouse=True)
+    def _never_touch_the_real_event_log(self, event_log_directory):
+        """Any tools/call reaches the recorder now; none may write outside tmp_path."""
+
     def _table(self):
         return server._tool_table(ReportRegistry())
 
@@ -847,3 +865,178 @@ class TestTransport:
 
         assert response["result"]["capabilities"] == {"tools": {}}
         assert response["result"]["serverInfo"]["name"] == "ttnn-visualizer"
+
+    def test_a_successful_call_is_recorded(self):
+        table = self._table()
+        table["load_report"]["handler"] = lambda arguments: {"handle": "report-1"}
+
+        with patch.object(server, "record_event") as record:
+            response = server.handle_message(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "tools/call",
+                    "params": {"name": "load_report", "arguments": {}},
+                },
+                table,
+            )
+
+        assert "error" not in response
+        record.assert_called_once_with(
+            EventLogEvent.MCP_TOOL_CALLED,
+            server_mode=False,
+            tool=McpToolName.LOAD_REPORT,
+            outcome=McpToolOutcome.OK,
+        )
+
+    def test_a_refused_call_is_recorded(self):
+        with patch.object(server, "record_event") as record:
+            server.handle_message(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 2,
+                    "method": "tools/call",
+                    "params": {"name": "top_ops", "arguments": {"handle": "absent"}},
+                },
+                self._table(),
+            )
+
+        record.assert_called_once_with(
+            EventLogEvent.MCP_TOOL_CALLED,
+            server_mode=False,
+            tool=McpToolName.TOP_OPS,
+            outcome=McpToolOutcome.REFUSED,
+        )
+
+    def test_an_unknown_tool_is_not_recorded(self):
+        with patch.object(server, "record_event") as record:
+            server.handle_message(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 3,
+                    "method": "tools/call",
+                    "params": {"name": "not_a_tool", "arguments": {}},
+                },
+                self._table(),
+            )
+
+        record.assert_not_called()
+
+    def test_an_unexpected_failure_is_recorded_as_error(self):
+        table = self._table()
+
+        def fail(_arguments):
+            raise RuntimeError("boom")
+
+        table["load_report"]["handler"] = fail
+
+        with patch.object(server, "record_event") as record:
+            response = server.handle_message(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 5,
+                    "method": "tools/call",
+                    "params": {"name": "load_report", "arguments": {}},
+                },
+                table,
+            )
+
+        assert response["result"]["isError"] is True
+        record.assert_called_once_with(
+            EventLogEvent.MCP_TOOL_CALLED,
+            server_mode=False,
+            tool=McpToolName.LOAD_REPORT,
+            outcome=McpToolOutcome.ERROR,
+        )
+
+    def test_a_disabled_recorder_still_answers(self, monkeypatch, event_log_directory):
+        monkeypatch.setenv(RECORDING_DISABLED_ENV_VAR, "true")
+        table = self._table()
+        table["load_report"]["handler"] = lambda arguments: {"handle": "report-1"}
+
+        response = server.handle_message(
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "tools/call",
+                "params": {"name": "load_report", "arguments": {}},
+            },
+            table,
+        )
+
+        assert response["result"]["content"][0]["text"]
+        assert "error" not in response
+        assert not (event_log_directory / EVENT_LOG_FILENAME).exists()
+
+    def test_an_unregistered_name_is_not_recorded_by_the_helper(self):
+        with patch.object(server, "record_event") as record:
+            server._record_tool_call("not_a_tool", McpToolOutcome.OK)
+
+        record.assert_not_called()
+
+    def test_a_successful_call_writes_a_schema_line(self, event_log_directory):
+        table = self._table()
+        table["load_report"]["handler"] = lambda arguments: {"handle": "report-1"}
+
+        server.handle_message(
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "tools/call",
+                "params": {"name": "load_report", "arguments": {}},
+            },
+            table,
+        )
+
+        (line,) = read_event_log_lines(event_log_directory)
+        fields = parse_event_log_line(line)
+
+        assert fields[EVENT_FIELD] == EventLogEvent.MCP_TOOL_CALLED.value
+        assert fields[TOOL_FIELD] == McpToolName.LOAD_REPORT.value
+        assert fields[OUTCOME_FIELD] == McpToolOutcome.OK.value
+
+
+def test_registered_tools_are_the_mcp_tool_name_vocabulary():
+    """A handwritten table can still omit an enum member, or sneak in a string key."""
+    assert {member.value for member in McpToolName} == set(
+        server._tool_table(ReportRegistry())
+    )
+
+
+def test_main_skips_compaction_when_recording_is_disabled(monkeypatch):
+    order = []
+    monkeypatch.setattr(server, "compact_if_needed", lambda: order.append("compact"))
+    monkeypatch.setattr(server, "serve", lambda *args, **kwargs: order.append("serve"))
+    monkeypatch.setattr(server, "is_recording_enabled", lambda: False)
+    monkeypatch.setattr(server, "get_recording_disabled_reason", lambda: "opt-out")
+
+    server.main()
+
+    assert order == ["serve"]
+
+
+def test_main_compacts_then_serves_when_recording_is_enabled(monkeypatch):
+    order = []
+    monkeypatch.setattr(server, "compact_if_needed", lambda: order.append("compact"))
+    monkeypatch.setattr(server, "serve", lambda *args, **kwargs: order.append("serve"))
+    monkeypatch.setattr(server, "is_recording_enabled", lambda: True)
+    monkeypatch.setattr(server, "get_event_log_path", lambda: "/tmp/events.log")
+    monkeypatch.setattr(server, "describe_opt_out", lambda: "opt-out")
+
+    server.main()
+
+    assert order == ["compact", "serve"]
+
+
+def test_main_serves_when_event_log_startup_raises(monkeypatch):
+    def raise_no_home():
+        raise RuntimeError("Could not determine home directory.")
+
+    order = []
+    monkeypatch.setattr(server, "is_recording_enabled", raise_no_home)
+    monkeypatch.setattr(server, "compact_if_needed", lambda: order.append("compact"))
+    monkeypatch.setattr(server, "serve", lambda *args, **kwargs: order.append("serve"))
+
+    server.main()
+
+    assert order == ["serve"]

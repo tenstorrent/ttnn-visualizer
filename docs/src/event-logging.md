@@ -66,7 +66,7 @@ Under `SERVER_MODE`, create `/data/usage/disabled` instead. The marker applies t
 Ordinary event lines contain these common fields:
 
 - `ts`: the UTC time at which the server wrote the event, in `YYYY-MM-DDTHH:MM:SSZ` form. Frontend events are buffered, so this can be later than the interaction.
-- `event`: one of `app_start`, `report_loaded`, `report_load_failed`, `view_opened`, or `view_engaged`.
+- `event`: one of `app_start`, `report_loaded`, `report_load_failed`, `view_opened`, `view_engaged`, or `mcp_tool_called`.
 - `schema_version`: the log format version, currently `1`.
 - `run_id`: a random `8`-character identifier generated for each backend launch and shared by its server workers. It is not persisted between launches and is never exported by the out-of-band collector. Hosted browser-session identity comes from the containing directory, not this field.
 
@@ -117,6 +117,15 @@ Recorded when a counted application view is opened.
 Defined for a deliberate interaction with a view after it has remained open. The current frontend does not yet emit this event.
 
 - `view`: `reports`, `operations`, `operation_details`, `tensors`, `buffers`, `graph`, `performance`, `npe`, `mlir`, `topology`, `mcp`.
+
+### `mcp_tool_called`
+
+Recorded by `ttnn-visualizer-mcp` when a registered tool reaches its handler, not by the SPA. It answers which tools are chosen and how often they refuse or fail (Q4 and Q5 in #1819). It does not fire on `initialize`, `ping`, `tools/list`, unknown tool names, or malformed `params`/`arguments`: only calls that get as far as a handler are counted.
+
+- `tool`: `load_report`, `top_ops`, `zone_timings`, `diff_reports`, `find_operations`, `operation_detail`, `memory_profile`, `tensor_flow`, `operation_provenance`.
+- `outcome`: `ok`, `refused`, `error`.
+
+`refused` is a tool declining a well-formed call it cannot answer (unknown handle, argument out of range). `error` is an unexpected failure the server did not anticipate.
 
 ## Information that is not recorded
 

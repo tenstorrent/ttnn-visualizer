@@ -32,6 +32,7 @@ from ttnn_visualizer.event_logging import (
     RECORDING_DISABLED_ENV_VAR,
     RUN_ID_ENV_VAR,
     RUN_ID_FIELD,
+    SERVER_EVENT_DETAIL_FIELDS,
     DeploymentMode,
     EventLogEvent,
     EventLogView,
@@ -829,6 +830,20 @@ def test_a_log_under_the_cap_is_left_alone(event_log_directory):
     assert read_event_log_lines(event_log_directory) == lines
 
 
+def test_compaction_does_not_raise_when_home_cannot_be_resolved(monkeypatch, caplog):
+    monkeypatch.setattr(event_logging, "EVENT_LOG_DIRECTORY", None)
+
+    def raise_no_home():
+        raise RuntimeError("Could not determine home directory.")
+
+    monkeypatch.setattr(Path, "home", staticmethod(raise_no_home))
+
+    with caplog.at_level("WARNING"):
+        event_logging.compact_if_needed()
+
+    assert "Unable to compact the event log" in caplog.text
+
+
 def test_compaction_skips_rewrite_when_nothing_is_summarisable(
     event_log_directory, monkeypatch
 ):
@@ -933,13 +948,14 @@ def test_record_launch_reports_hosted_root_and_records_no_app_start(
 def test_every_client_postable_event_has_a_validation_rule():
     """A new event without a rule must fail here, not be rejected in production.
 
-    ``app_start`` is the one exclusion, and it is deliberate: the server records launches
-    itself, so a client able to post one could forge the deployment population every
-    other figure is read against.
+    Server-only events are the exclusion: the process records them itself, so a
+    client able to post one could forge the denominators those events exist to
+    measure.
     """
-    assert set(CLIENT_EVENT_DETAIL_FIELDS) == set(EventLogEvent) - {
-        EventLogEvent.APP_START
-    }
+    assert set(CLIENT_EVENT_DETAIL_FIELDS).isdisjoint(SERVER_EVENT_DETAIL_FIELDS)
+    assert set(CLIENT_EVENT_DETAIL_FIELDS) | set(SERVER_EVENT_DETAIL_FIELDS) == set(
+        EventLogEvent
+    )
 
 
 def test_every_detail_field_draws_from_an_enum():
@@ -1111,10 +1127,32 @@ def test_hosted_recording_resumes_after_external_compaction(
     assert record_events([event], server_mode=True, event_log_id=event_log_id) is False
 
     log_path.write_text("", encoding="utf-8")
-    now += event_logging.HOSTED_FULL_LOG_RECHECK_SECONDS
+    now += event_logging.FULL_LOG_RECHECK_SECONDS
 
     assert record_events([event], server_mode=True, event_log_id=event_log_id) is True
     assert len(read_event_log_lines(event_log_directory / event_log_id)) == 1
+
+
+def test_local_recording_resumes_after_external_compaction(
+    event_log_directory, monkeypatch
+):
+    """A long-lived MCP process must notice a compact from another process."""
+    now = 100.0
+    monkeypatch.setattr(event_logging.time, "monotonic", lambda: now)
+    record_event(EventLogEvent.APP_START)
+
+    monkeypatch.setattr(event_logging, "MAX_LOG_BYTES", 0)
+    event_logging._local_log_state.bytes_since_size_check = (
+        LOG_SIZE_CHECK_INTERVAL_BYTES
+    )
+    record_event(EventLogEvent.APP_START)
+    assert len(read_event_log_lines(event_log_directory)) == 1
+
+    get_event_log_path().write_text("", encoding="utf-8")
+    now += event_logging.FULL_LOG_RECHECK_SECONDS
+
+    record_event(EventLogEvent.APP_START)
+    assert len(read_event_log_lines(event_log_directory)) == 1
 
 
 def test_full_hosted_log_rechecks_on_a_bounded_interval(
@@ -1148,7 +1186,7 @@ def test_full_hosted_log_rechecks_on_a_bounded_interval(
         )
     assert stat_calls == 0
 
-    now += event_logging.HOSTED_FULL_LOG_RECHECK_SECONDS
+    now += event_logging.FULL_LOG_RECHECK_SECONDS
     assert record_events([event], server_mode=True, event_log_id=event_log_id) is False
     assert stat_calls == 1
 
