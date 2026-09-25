@@ -125,6 +125,8 @@ Recorded by `ttnn-visualizer-mcp` when a registered tool reaches its handler, no
 - `tool`: `load_report`, `top_ops`, `zone_timings`, `diff_reports`, `find_operations`, `operation_detail`, `memory_profile`, `tensor_flow`, `operation_provenance`.
 - `outcome`: `ok`, `refused`, `error`.
 
+`refused` is a tool declining a well-formed call it cannot answer (unknown handle, argument out of range). `error` is an unexpected failure the server did not anticipate.
+
 ## Information that is not recorded
 
 TT-NN Visualizer does not record:

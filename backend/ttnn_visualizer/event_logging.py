@@ -63,6 +63,7 @@ from importlib.metadata import version as distribution_version
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple, Type
 
+from ttnn_visualizer.agent.tool_names import McpToolName
 from ttnn_visualizer.utils import (
     FALSE_VALUES,
     TRUE_VALUES,
@@ -326,21 +327,14 @@ class EventLogView(str, Enum):
     MCP = "mcp"
 
 
-class McpToolName(str, Enum):
-    """Registered ``ttnn-visualizer-mcp`` tools. Values match ``_tool_table`` keys."""
-
-    LOAD_REPORT = "load_report"
-    TOP_OPS = "top_ops"
-    ZONE_TIMINGS = "zone_timings"
-    DIFF_REPORTS = "diff_reports"
-    FIND_OPERATIONS = "find_operations"
-    OPERATION_DETAIL = "operation_detail"
-    MEMORY_PROFILE = "memory_profile"
-    TENSOR_FLOW = "tensor_flow"
-    OPERATION_PROVENANCE = "operation_provenance"
-
-
 class McpToolOutcome(str, Enum):
+    """How a registered MCP tool call ended.
+
+    ``refused`` is a tool declining a well-formed call it cannot answer (unknown
+    handle, argument out of range). ``error`` is an unexpected failure the
+    server did not anticipate.
+    """
+
     OK = "ok"
     REFUSED = "refused"
     ERROR = "error"
@@ -1032,7 +1026,8 @@ def _is_log_full(log_path: Path, state: _EventLogState, hosted: bool = False) ->
     extrapolates — losing history and inventing activity at once. Compacting here is no
     better: ``_compact`` reads the whole file, and this runs on a request path.
     Local compaction at the next launch summarises the older half and appends resume;
-    hosted logs are re-checked after external compaction.
+    hosted logs, and long-lived local writers such as the MCP server, re-check after
+    a bound interval so an external compaction can unstick them.
 
     Between measurements the previous verdict is returned rather than recomputed, and that
     is load-bearing rather than an optimisation. The state's byte counter counts bytes
@@ -1050,7 +1045,7 @@ def _is_log_full(log_path: Path, state: _EventLogState, hosted: bool = False) ->
     """
     now = time.monotonic()
     if state.log_full:
-        if not hosted or now < state.next_full_check_at:
+        if now < state.next_full_check_at:
             return True
     elif state.bytes_since_size_check < LOG_SIZE_CHECK_INTERVAL_BYTES:
         return False
@@ -1066,7 +1061,7 @@ def _is_log_full(log_path: Path, state: _EventLogState, hosted: bool = False) ->
 
     state.bytes_since_size_check = 0
     state.next_full_check_at = (
-        now + HOSTED_FULL_LOG_RECHECK_SECONDS if hosted and state.log_full else 0.0
+        now + HOSTED_FULL_LOG_RECHECK_SECONDS if state.log_full else 0.0
     )
 
     if state.log_full and not was_full:

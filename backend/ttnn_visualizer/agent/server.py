@@ -15,7 +15,6 @@ tt-perf-report's own printing for the same reason.
 
 import json
 import logging
-import os
 import sys
 from typing import Callable, Dict, List, Optional, TextIO
 
@@ -26,11 +25,15 @@ from ttnn_visualizer.agent.handles import (
     UnknownHandleError,
     load_report,
 )
+from ttnn_visualizer.agent.tool_names import McpToolName
 from ttnn_visualizer.event_logging import (
-    RUN_ID_ENV_VAR,
     EventLogEvent,
-    McpToolName,
     McpToolOutcome,
+    compact_if_needed,
+    describe_opt_out,
+    get_event_log_path,
+    get_recording_disabled_reason,
+    is_recording_enabled,
     record_event,
     start_run,
 )
@@ -75,7 +78,7 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
     only in the response: which projection it reads, and what the numbers mean.
     """
     return {
-        "load_report": {
+        McpToolName.LOAD_REPORT: {
             "description": (
                 "Register a report directory and list what it can answer. Call this "
                 "first; every other tool takes the handle it returns."
@@ -98,7 +101,7 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
             },
             "handler": lambda arguments: load_report(registry, **arguments),
         },
-        "top_ops": {
+        McpToolName.TOP_OPS: {
             "description": (
                 "The costliest operations by one metric. Reads the report unfiltered "
                 "-- host ops included, no signpost range -- and returns the projection "
@@ -115,7 +118,7 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
             },
             "handler": lambda arguments: tools.top_ops(registry, **arguments),
         },
-        "zone_timings": {
+        McpToolName.ZONE_TIMINGS: {
             "description": (
                 "Per-zone, per-RISC totals from profile_log_device.csv: what the "
                 "hardware actually spent, by firmware and kernel phase. Cycles are "
@@ -128,7 +131,7 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
             },
             "handler": lambda arguments: tools.zone_timings(registry, **arguments),
         },
-        "diff_reports": {
+        McpToolName.DIFF_REPORTS: {
             "description": (
                 "Per-op-code deltas between two reports, largest movement first. "
                 "Grouped by op code rather than joined on op id, so a change that "
@@ -148,7 +151,7 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
             },
             "handler": lambda arguments: tools.diff_reports(registry, **arguments),
         },
-        "find_operations": {
+        McpToolName.FIND_OPERATIONS: {
             "description": (
                 "Find operations by name substring, returning ids to ask about. "
                 "Durations here are host wall time from the profiler report; for "
@@ -182,7 +185,7 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
                 registry, **arguments
             ),
         },
-        "operation_detail": {
+        McpToolName.OPERATION_DETAIL: {
             "description": (
                 "One operation: its input and output tensors with shape, dtype and "
                 "layout, and what it had allocated. Read tensor_size_unit: a "
@@ -202,7 +205,7 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
                 registry, **arguments
             ),
         },
-        "memory_profile": {
+        McpToolName.MEMORY_PROFILE: {
             "description": (
                 "Memory footprint per operation, keyed by buffer type and ranked "
                 "within each type, with that type's largest footprint and the "
@@ -233,7 +236,7 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
                 registry, **arguments
             ),
         },
-        "operation_provenance": {
+        McpToolName.OPERATION_PROVENANCE: {
             "description": (
                 "What one operation was called with, and where in the model code it "
                 "came from: its arguments as name/value pairs, and the innermost "
@@ -268,7 +271,7 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
                 registry, **arguments
             ),
         },
-        "tensor_flow": {
+        McpToolName.TENSOR_FLOW: {
             "description": (
                 "The operation that produced a tensor and the operations that "
                 "consumed it, with the tensor's shape, dtype, layout and size."
@@ -411,6 +414,7 @@ def handle_message(message: object, table: Dict[str, Dict]) -> Optional[Dict]:
             _record_tool_call(name, McpToolOutcome.REFUSED)
             return _tool_failure(request_id, str(error))
         except TypeError as error:
+            logger.exception("%s failed", name)
             _record_tool_call(name, McpToolOutcome.REFUSED)
             return _tool_failure(request_id, f"bad arguments for {name}: {error}")
         except (
@@ -463,7 +467,19 @@ def serve(
 
 def main() -> None:
     logging.basicConfig(stream=sys.stderr, level=logging.INFO)
-    os.environ[RUN_ID_ENV_VAR] = start_run()
+    start_run()
+    compact_if_needed()
+    if is_recording_enabled():
+        logger.info(
+            "Recording tool usage to %s. %s",
+            get_event_log_path(),
+            describe_opt_out(),
+        )
+    else:
+        logger.info(
+            "Event logging is DISABLED: %s.",
+            get_recording_disabled_reason(),
+        )
     serve(sys.stdin, sys.stdout)
 
 

@@ -28,13 +28,21 @@ from ttnn_visualizer.agent.handles import (
 )
 from ttnn_visualizer.csv_queries import DeviceLogProfilerQueries
 from ttnn_visualizer.event_logging import (
+    EVENT_FIELD,
+    EVENT_LOG_FILENAME,
+    OUTCOME_FIELD,
     RECORDING_DISABLED_ENV_VAR,
+    TOOL_FIELD,
     EventLogEvent,
     McpToolName,
     McpToolOutcome,
 )
 from ttnn_visualizer.exceptions import DataFormatError
 from ttnn_visualizer.models import Instance
+from ttnn_visualizer.tests.event_log_readers import (
+    parse_event_log_line,
+    read_event_log_lines,
+)
 from ttnn_visualizer.tests.test_device_log_columns import (
     MODERN_HEADER,
     PREAMBLE,
@@ -751,6 +759,10 @@ class TestZeroDuration:
 
 
 class TestTransport:
+    @pytest.fixture(autouse=True)
+    def _never_touch_the_real_event_log(self, event_log_directory):
+        """Any tools/call reaches the recorder now; none may write outside tmp_path."""
+
     def _table(self):
         return server._tool_table(ReportRegistry())
 
@@ -954,11 +966,50 @@ class TestTransport:
 
         assert response["result"]["content"][0]["text"]
         assert "error" not in response
+        assert not (event_log_directory / EVENT_LOG_FILENAME).exists()
+
+    def test_an_unregistered_name_is_not_recorded_by_the_helper(self):
+        with patch.object(server, "record_event") as record:
+            server._record_tool_call("not_a_tool", McpToolOutcome.OK)
+
+        record.assert_not_called()
+
+    def test_a_successful_call_writes_a_schema_line(self, event_log_directory):
+        table = self._table()
+        table["load_report"]["handler"] = lambda arguments: {"handle": "report-1"}
+
+        server.handle_message(
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "tools/call",
+                "params": {"name": "load_report", "arguments": {}},
+            },
+            table,
+        )
+
+        (line,) = read_event_log_lines(event_log_directory)
+        fields = parse_event_log_line(line)
+
+        assert fields[EVENT_FIELD] == EventLogEvent.MCP_TOOL_CALLED.value
+        assert fields[TOOL_FIELD] == McpToolName.LOAD_REPORT.value
+        assert fields[OUTCOME_FIELD] == McpToolOutcome.OK.value
 
 
 def test_registered_tools_are_the_mcp_tool_name_vocabulary():
-    """A new tool without an enum member would write a raw string, which the log
-    would accept and the collector could not label."""
+    """A handwritten table can still omit an enum member, or sneak in a string key."""
     assert {member.value for member in McpToolName} == set(
         server._tool_table(ReportRegistry())
     )
+
+
+def test_main_compacts_then_serves(monkeypatch):
+    order = []
+    monkeypatch.setattr(server, "compact_if_needed", lambda: order.append("compact"))
+    monkeypatch.setattr(server, "serve", lambda *args, **kwargs: order.append("serve"))
+    monkeypatch.setattr(server, "is_recording_enabled", lambda: False)
+    monkeypatch.setattr(server, "get_recording_disabled_reason", lambda: "opt-out")
+
+    server.main()
+
+    assert order == ["compact", "serve"]

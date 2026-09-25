@@ -155,7 +155,7 @@ def test_the_client_payload_cannot_express_a_server_only_event(event):
     source = _read(_DEFINITIONS)
 
     assert event not in CLIENT_EVENT_DETAIL_FIELDS
-    assert f"EventLogEvent.{event.name};" not in source
+    assert re.search(rf"EventLogEvent\.{event.name}[;,]", source) is None
 
 
 def test_the_client_batch_cap_matches_the_write_atomicity_cap():

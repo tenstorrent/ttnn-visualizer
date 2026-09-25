@@ -222,11 +222,14 @@ def test_every_closed_server_detail_field_documents_exactly_its_enum():
                 {member.value for member in type(value)}
             ]
 
-    for field in SERVER_EVENT_DETAIL_FIELDS[EventLogEvent.MCP_TOOL_CALLED]:
-        enumeration = _DETAIL_FIELD_ENUMS[field]
-        assert _documented_value_sets(source, field) == [
-            {member.value for member in enumeration}
-        ]
+    for event, fields in SERVER_EVENT_DETAIL_FIELDS.items():
+        if event is EventLogEvent.APP_START:
+            continue
+        for field in fields:
+            enumeration = _DETAIL_FIELD_ENUMS[field]
+            assert _documented_value_sets(source, field) == [
+                {member.value for member in enumeration}
+            ]
 
 
 def test_the_event_logging_docs_name_every_common_log_field():

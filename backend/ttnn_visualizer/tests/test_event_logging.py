@@ -1119,6 +1119,28 @@ def test_hosted_recording_resumes_after_external_compaction(
     assert len(read_event_log_lines(event_log_directory / event_log_id)) == 1
 
 
+def test_local_recording_resumes_after_external_compaction(
+    event_log_directory, monkeypatch
+):
+    """A long-lived MCP process must notice a compact from another process."""
+    now = 100.0
+    monkeypatch.setattr(event_logging.time, "monotonic", lambda: now)
+    record_event(EventLogEvent.APP_START)
+
+    monkeypatch.setattr(event_logging, "MAX_LOG_BYTES", 0)
+    event_logging._local_log_state.bytes_since_size_check = (
+        LOG_SIZE_CHECK_INTERVAL_BYTES
+    )
+    record_event(EventLogEvent.APP_START)
+    assert len(read_event_log_lines(event_log_directory)) == 1
+
+    get_event_log_path().write_text("", encoding="utf-8")
+    now += event_logging.HOSTED_FULL_LOG_RECHECK_SECONDS
+
+    record_event(EventLogEvent.APP_START)
+    assert len(read_event_log_lines(event_log_directory)) == 1
+
+
 def test_full_hosted_log_rechecks_on_a_bounded_interval(
     event_log_directory, monkeypatch
 ):
