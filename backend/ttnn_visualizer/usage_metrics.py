@@ -27,6 +27,7 @@ logger = logging.getLogger(__name__)
 
 PROMETHEUS_CONTENT_TYPE = "text/plain; version=0.0.4; charset=utf-8"
 _READ_CHUNK_BYTES = 64 * 1024
+MAX_EVENT_LOG_LINE_BYTES = 4 * 1024
 MetricLabels = Tuple[Tuple[str, str], ...]
 MetricKey = Tuple[str, MetricLabels]
 
@@ -39,6 +40,7 @@ class _MetricsState:
     inode: Optional[int] = None
     offset: int = 0
     pending: bytes = b""
+    discarding_overlong_line: bool = False
     totals: DefaultDict[MetricKey, int] = field(
         default_factory=lambda: defaultdict(int)
     )
@@ -129,21 +131,28 @@ def _update_metrics(
                 log_file.seek(state.offset)
 
                 pending = state.pending
+                discarding_overlong_line = state.discarding_overlong_line
                 additions: DefaultDict[MetricKey, int] = defaultdict(int)
                 parse_errors = 0
                 while appended := log_file.read(_READ_CHUNK_BYTES):
-                    buffered = pending + appended
-                    chunks = buffered.split(b"\n")
-                    pending = (
-                        chunks.pop()
-                        if buffered and not buffered.endswith(b"\n")
-                        else b""
-                    )
-                    lines = (
-                        chunk.decode("utf-8", errors="replace")
-                        for chunk in chunks
-                        if chunk
-                    )
+                    lines = []
+                    segments = appended.split(b"\n")
+                    for index, segment in enumerate(segments):
+                        terminated = index < len(segments) - 1
+                        if discarding_overlong_line:
+                            if terminated:
+                                discarding_overlong_line = False
+                            continue
+                        if len(pending) + len(segment) > MAX_EVENT_LOG_LINE_BYTES:
+                            pending = b""
+                            parse_errors += 1
+                            discarding_overlong_line = not terminated
+                            continue
+                        pending += segment
+                        if terminated:
+                            if pending:
+                                lines.append(pending.decode("utf-8", errors="replace"))
+                            pending = b""
                     chunk_additions, chunk_errors = _summarise(lines, machine_id)
                     for key, value in chunk_additions.items():
                         additions[key] += value
@@ -160,6 +169,7 @@ def _update_metrics(
             state.totals[key] += value
         state.parse_errors += parse_errors
         state.pending = pending
+        state.discarding_overlong_line = discarding_overlong_line
         state.offset = new_offset
 
         return dict(state.totals), state.parse_errors, 1, 0

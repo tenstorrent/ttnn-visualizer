@@ -64,6 +64,14 @@ ttnn-visualizer-prometheus-config \
   --output docker/prometheus/prometheus.generated.yml
 ```
 
+If the visualizer uses a non-root `BASE_PATH`, the renderer reads it from the environment. It can also be passed explicitly:
+
+```shell
+ttnn-visualizer-prometheus-config \
+  --base-path /visualizer/ \
+  --output docker/prometheus/prometheus.generated.yml
+```
+
 Start Prometheus:
 
 ```shell

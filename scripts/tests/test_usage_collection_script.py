@@ -53,7 +53,11 @@ def test_renderer_initialises_local_collection_when_config_is_missing(tmp_path):
         check=False,
         capture_output=True,
         text=True,
-        env=os.environ | {"HOME": str(tmp_path)},
+        env=os.environ
+        | {
+            "BASE_PATH": "/visualizer/",
+            "HOME": str(tmp_path),
+        },
     )
 
     assert result.returncode == 0, result.stderr
@@ -66,6 +70,10 @@ def test_renderer_initialises_local_collection_when_config_is_missing(tmp_path):
     assert collection_config["enabled"] is True
     assert len(collection_config["machine_id"]) == 32
     assert "remote_write" not in prometheus_config
+    assert (
+        prometheus_config["scrape_configs"][0]["metrics_path"]
+        == "/visualizer/api/metrics"
+    )
 
 
 @pytest.mark.skipif(not _HAS_DOCKER_COMPOSE, reason="Docker Compose is unavailable")

@@ -23,6 +23,7 @@ logger = logging.getLogger(__name__)
 COLLECTION_CONFIG_FILENAME = "collection.json"
 GENERATED_PROMETHEUS_FILENAME = "prometheus.generated.yml"
 DEFAULT_PROMETHEUS_TARGET = "host.docker.internal:8000"
+DEFAULT_BASE_PATH = "/"
 MACHINE_ID_LABEL = "machine_id"
 
 # Tests replace this so they never inspect or modify the developer's real config.
@@ -172,6 +173,7 @@ def build_prometheus_config(
     config: UsageCollectionConfig,
     *,
     app_target: str = DEFAULT_PROMETHEUS_TARGET,
+    base_path: str = DEFAULT_BASE_PATH,
 ) -> Dict[str, Any]:
     if not app_target or any(character.isspace() for character in app_target):
         raise ValueError("app target must be a non-empty host:port without whitespace")
@@ -190,13 +192,23 @@ def build_prometheus_config(
         or parsed_target.fragment
     ):
         raise ValueError("app target must be a host:port")
+    if (
+        not base_path.startswith("/")
+        or any(character.isspace() for character in base_path)
+        or "?" in base_path
+        or "#" in base_path
+    ):
+        raise ValueError("base path must be an absolute URL path")
+    # Match Flask's direct ``BASE_PATH + "api"`` blueprint mount exactly, including
+    # legacy configurations that omit the conventional trailing slash.
+    metrics_path = f"{base_path}api/metrics"
 
     rendered: Dict[str, Any] = {
         "global": {"scrape_interval": "1m"},
         "scrape_configs": [
             {
                 "job_name": "ttnn-visualizer",
-                "metrics_path": "/api/metrics",
+                "metrics_path": metrics_path,
                 "static_configs": [{"targets": [app_target]}],
             }
         ],
@@ -216,6 +228,7 @@ def render_prometheus_config(
     output_path: Path,
     *,
     app_target: str = DEFAULT_PROMETHEUS_TARGET,
+    base_path: str = DEFAULT_BASE_PATH,
     initialise_missing: bool = False,
 ) -> Path:
     config = (
@@ -223,7 +236,11 @@ def render_prometheus_config(
         if initialise_missing
         else load_usage_collection_config()
     )
-    rendered = build_prometheus_config(config, app_target=app_target)
+    rendered = build_prometheus_config(
+        config,
+        app_target=app_target,
+        base_path=base_path,
+    )
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(
         yaml.safe_dump(rendered, sort_keys=False),
@@ -243,12 +260,16 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         default=Path(GENERATED_PROMETHEUS_FILENAME),
     )
     parser.add_argument("--app-target", default=DEFAULT_PROMETHEUS_TARGET)
+    parser.add_argument(
+        "--base-path", default=os.getenv("BASE_PATH", DEFAULT_BASE_PATH)
+    )
     args = parser.parse_args(argv)
 
     try:
         output = render_prometheus_config(
             args.output,
             app_target=args.app_target,
+            base_path=args.base_path,
             initialise_missing=True,
         )
     except ValueError as error:

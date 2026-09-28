@@ -4,12 +4,13 @@
 
 import '@testing-library/jest-dom/vitest';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { StrictMode } from 'react';
-import { MemoryRouter, useNavigate } from 'react-router';
+import { StrictMode, useRef } from 'react';
+import { MemoryRouter, useLocation, useNavigate } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ROUTES from '../src/definitions/Routes';
 import { EventLogView } from '../src/definitions/EventLogEvent';
 import useRecordViewEngaged, { VIEW_ENGAGEMENT_THRESHOLD_MS } from '../src/hooks/useRecordViewEngaged';
+import { modalNavigationState } from '../src/functions/modalRoute';
 
 const { recordViewEngaged } = vi.hoisted(() => ({ recordViewEngaged: vi.fn() }));
 
@@ -19,7 +20,9 @@ vi.mock('../src/functions/eventLogViews', async (importOriginal) => {
 });
 
 function EngagementHarness() {
-    useRecordViewEngaged();
+    const viewContainerRef = useRef<HTMLElement>(null);
+    useRecordViewEngaged(viewContainerRef);
+    const location = useLocation();
     const navigate = useNavigate();
 
     return (
@@ -32,10 +35,25 @@ function EngagementHarness() {
             </button>
             <button
                 type='button'
-                onClick={() => navigate(`${ROUTES.OPERATIONS}?filter=active`)}
+                onClick={() => navigate(ROUTES.CLUSTER, modalNavigationState(location))}
             >
-                Change query
+                Open topology
             </button>
+            <main ref={viewContainerRef}>
+                <button
+                    type='button'
+                    onClick={() => navigate(`${ROUTES.OPERATIONS}?filter=active`)}
+                >
+                    Change query
+                </button>
+                <button type='button'>View action</button>
+                <button
+                    type='button'
+                    onClick={() => navigate(-1)}
+                >
+                    Close topology
+                </button>
+            </main>
         </>
     );
 }
@@ -62,7 +80,7 @@ describe('useRecordViewEngaged', () => {
 
     it('records after an interaction followed by ten seconds open', () => {
         renderRecorder(ROUTES.OPERATIONS);
-        fireEvent.pointerDown(document);
+        fireEvent.pointerDown(screen.getByRole('button', { name: 'View action' }));
 
         act(() => {
             vi.advanceTimersByTime(VIEW_ENGAGEMENT_THRESHOLD_MS);
@@ -80,7 +98,7 @@ describe('useRecordViewEngaged', () => {
 
         expect(recordViewEngaged).not.toHaveBeenCalled();
 
-        fireEvent.keyDown(document, { key: 'Enter' });
+        fireEvent.keyDown(screen.getByRole('button', { name: 'View action' }), { key: 'Enter' });
 
         expect(recordViewEngaged).toHaveBeenCalledTimes(1);
         expect(recordViewEngaged).toHaveBeenCalledWith(EventLogView.PERFORMANCE);
@@ -92,8 +110,9 @@ describe('useRecordViewEngaged', () => {
             vi.advanceTimersByTime(VIEW_ENGAGEMENT_THRESHOLD_MS);
         });
 
-        fireEvent.pointerDown(document);
-        fireEvent.keyDown(document, { key: 'Enter' });
+        const viewAction = screen.getByRole('button', { name: 'View action' });
+        fireEvent.pointerDown(viewAction);
+        fireEvent.keyDown(viewAction, { key: 'Enter' });
 
         expect(recordViewEngaged).toHaveBeenCalledTimes(1);
     });
@@ -104,18 +123,20 @@ describe('useRecordViewEngaged', () => {
             vi.advanceTimersByTime(VIEW_ENGAGEMENT_THRESHOLD_MS);
         });
 
-        fireEvent.mouseMove(document);
-        fireEvent.mouseOver(document);
-        fireEvent.scroll(document);
+        const viewAction = screen.getByRole('button', { name: 'View action' });
+        fireEvent.mouseMove(viewAction);
+        fireEvent.mouseOver(viewAction);
+        fireEvent.scroll(viewAction);
 
         expect(recordViewEngaged).not.toHaveBeenCalled();
     });
 
     it('removes interaction listeners after the first interaction', () => {
-        const removeEventListener = vi.spyOn(document, 'removeEventListener');
         renderRecorder(ROUTES.OPERATIONS);
+        const viewContainer = screen.getByRole('main');
+        const removeEventListener = vi.spyOn(viewContainer, 'removeEventListener');
 
-        fireEvent.pointerDown(document);
+        fireEvent.pointerDown(screen.getByRole('button', { name: 'View action' }));
 
         expect(removeEventListener).toHaveBeenCalledWith('pointerdown', expect.any(Function));
         expect(removeEventListener).toHaveBeenCalledWith('keydown', expect.any(Function));
@@ -124,7 +145,7 @@ describe('useRecordViewEngaged', () => {
 
     it('resets the threshold when the pathname changes', () => {
         renderRecorder(ROUTES.OPERATIONS);
-        fireEvent.pointerDown(document);
+        fireEvent.pointerDown(screen.getByRole('button', { name: 'View action' }));
         act(() => {
             vi.advanceTimersByTime(VIEW_ENGAGEMENT_THRESHOLD_MS - 1);
         });
@@ -136,7 +157,7 @@ describe('useRecordViewEngaged', () => {
 
         expect(recordViewEngaged).not.toHaveBeenCalled();
 
-        fireEvent.pointerDown(document);
+        fireEvent.pointerDown(screen.getByRole('button', { name: 'View action' }));
         act(() => {
             vi.advanceTimersByTime(VIEW_ENGAGEMENT_THRESHOLD_MS - 1);
         });
@@ -147,7 +168,7 @@ describe('useRecordViewEngaged', () => {
 
     it('does not reset for a query-only change', () => {
         renderRecorder(ROUTES.OPERATIONS);
-        fireEvent.pointerDown(document);
+        fireEvent.pointerDown(screen.getByRole('button', { name: 'View action' }));
         act(() => {
             vi.advanceTimersByTime(VIEW_ENGAGEMENT_THRESHOLD_MS - 1);
         });
@@ -163,7 +184,7 @@ describe('useRecordViewEngaged', () => {
 
     it('does not record excluded routes', () => {
         renderRecorder(ROUTES.STYLEGUIDE);
-        fireEvent.pointerDown(document);
+        fireEvent.pointerDown(screen.getByRole('button', { name: 'View action' }));
         act(() => {
             vi.advanceTimersByTime(VIEW_ENGAGEMENT_THRESHOLD_MS);
         });
@@ -173,7 +194,7 @@ describe('useRecordViewEngaged', () => {
 
     it('cancels the threshold when unmounted', () => {
         const { unmount } = renderRecorder(ROUTES.OPERATIONS);
-        fireEvent.pointerDown(document);
+        fireEvent.pointerDown(screen.getByRole('button', { name: 'View action' }));
 
         unmount();
         act(() => {
@@ -181,5 +202,49 @@ describe('useRecordViewEngaged', () => {
         });
 
         expect(recordViewEngaged).not.toHaveBeenCalled();
+    });
+
+    it('ignores interaction with global navigation', () => {
+        renderRecorder(ROUTES.OPERATIONS);
+        act(() => {
+            vi.advanceTimersByTime(VIEW_ENGAGEMENT_THRESHOLD_MS);
+        });
+
+        const openTensors = screen.getByRole('button', { name: 'Open tensors' });
+        fireEvent.pointerDown(openTensors);
+        fireEvent.click(openTensors);
+
+        expect(recordViewEngaged).not.toHaveBeenCalled();
+    });
+
+    it('preserves the background visit when returning from a modal', () => {
+        renderRecorder(ROUTES.OPERATIONS);
+        fireEvent.pointerDown(screen.getByRole('button', { name: 'View action' }));
+        act(() => {
+            vi.advanceTimersByTime(VIEW_ENGAGEMENT_THRESHOLD_MS - 1_000);
+        });
+
+        fireEvent.click(screen.getByRole('button', { name: 'Open topology' }));
+        act(() => {
+            vi.advanceTimersByTime(VIEW_ENGAGEMENT_THRESHOLD_MS);
+        });
+        fireEvent.click(screen.getByRole('button', { name: 'Close topology' }));
+        act(() => {
+            vi.advanceTimersByTime(999);
+        });
+
+        expect(recordViewEngaged).not.toHaveBeenCalled();
+
+        act(() => {
+            vi.advanceTimersByTime(1);
+        });
+        expect(recordViewEngaged).toHaveBeenCalledTimes(1);
+        expect(recordViewEngaged).toHaveBeenCalledWith(EventLogView.OPERATIONS);
+
+        fireEvent.click(screen.getByRole('button', { name: 'Open topology' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Close topology' }));
+        fireEvent.pointerDown(screen.getByRole('button', { name: 'View action' }));
+
+        expect(recordViewEngaged).toHaveBeenCalledTimes(1);
     });
 });

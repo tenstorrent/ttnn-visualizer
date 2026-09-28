@@ -98,7 +98,7 @@ describe('Layout event logging wiring', () => {
         renderLayout(Layout);
         recordEvent.mockClear();
 
-        fireEvent.pointerDown(document);
+        fireEvent.pointerDown(screen.getByRole('main'));
         act(() => {
             vi.advanceTimersByTime(VIEW_ENGAGEMENT_THRESHOLD_MS);
         });

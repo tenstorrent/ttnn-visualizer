@@ -114,7 +114,7 @@ Recorded when a counted application view is opened.
 
 ### `view_engaged`
 
-Recorded once when a counted view has remained open for 10 seconds and receives at least one deliberate pointer or keyboard interaction. Pointer movement, hover, and scrolling do not qualify. The interaction can happen before or after the 10-second threshold.
+Recorded once when a counted view has remained open for 10 seconds and receives at least one deliberate pointer or keyboard interaction within the active view content. Global navigation, pointer movement, hover, and scrolling do not qualify. The interaction can happen before or after the 10-second threshold.
 
 This is the intentionally revisable v1 definition of deliberate activity used for reach and repeat-use decisions (Q1 and Q2 in #1819). Changing the threshold affects future events only.
 
