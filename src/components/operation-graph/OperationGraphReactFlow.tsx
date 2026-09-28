@@ -162,6 +162,20 @@ interface OpGraphMatches {
     buriedCountById: Map<string, number>;
 }
 
+/**
+ * Whether a weight fan's container encloses a filter match.
+ *
+ * It can never match on its own: it is chrome, deliberately absent from the index
+ * the matches are computed over, so `matchedIds` will never hold its id. Asking the
+ * id for its membership is the only route left, and it is the one the id was made
+ * legible for. Only ever called for a container, of which at most a handful are on
+ * screen -- unrolled fans -- so the decode is not on any hot path.
+ */
+const fanContainerEnclosesMatch = (nodeId: string, matchedIds: ReadonlySet<string>): boolean => {
+    const members = weightFanMembersOf(nodeId);
+    return members !== null && members.some((member) => matchedIds.has(String(member)));
+};
+
 // Shared so an idle filter yields one stable identity instead of a fresh empty
 // set per render, which would invalidate every memo downstream.
 const EMPTY_MATCHES: OpGraphMatches = {
@@ -1045,7 +1059,18 @@ const OperationGraphInner = ({
 
     const toggleBlockExpansion = useCallback(
         (instanceId: string) => {
-            const block = detectedBlocks.find((entry) => entry.instanceId === instanceId);
+            // Both lists, because both reach this handler: the toolbar and a grouping
+            // block's pill name a `detectedBlocks` entry, and a fan's container pill
+            // and a double-click on a member name a fan. Looking in one of them left
+            // `block` undefined for every fan, which cost three things below -- the
+            // anchor fell back to the container id, unrolling revealed the container
+            // rather than the members it produces, and folding skipped the device-op
+            // cleanup, stranding a member's subgraph in `expandedOperationIds` where
+            // nothing draws it and every later build still ships it to the worker.
+            // Newly reachable here: before #2028 an unrolled fan could not be folded.
+            const block =
+                detectedBlocks.find((entry) => entry.instanceId === instanceId) ??
+                weightFans.find((entry) => entry.instanceId === instanceId);
             const firstOpId = block?.operationIds[0];
             armViewportAnchor(instanceId, firstOpId === undefined ? instanceId : String(firstOpId));
             // Highlight what this toggle *produces*: the member operations when
@@ -1092,7 +1117,7 @@ const OperationGraphInner = ({
                 setExpandedOperationIds((previous) => withoutBlockMembers(previous, [block]));
             }
         },
-        [armViewportAnchor, detectedBlocks, isBlockExpanded, reportScope],
+        [armViewportAnchor, detectedBlocks, weightFans, isBlockExpanded, reportScope],
     );
 
     const expandAllBlocks = useCallback(() => {
@@ -1145,11 +1170,32 @@ const OperationGraphInner = ({
     // reset either. #2015
     const handleHideDeallocateChange = setHideDeallocate;
 
-    if (operationId !== undefined && revealedOperationId !== operationId && detectedBlocks.length > 0) {
+    // A URL naming an operation inside a folded owner has to open that owner, or the
+    // link lands on a node the reader did not ask for and cannot see past. Both kinds
+    // of owner: a fan buries an operation exactly as a grouping block does, and asking
+    // only `detectedBlocks` meant a link into a folded fan showed the fan. Innermost
+    // first, so a member of a fan inside a block opens the fan. #2028
+    // Gated on a build having landed, because the latch below fires once: run before
+    // the first graph arrives and it records the op as handled while there is nothing
+    // to unroll it out of.
+    if (
+        operationId !== undefined &&
+        revealedOperationId !== operationId &&
+        (detectedBlocks.length > 0 || weightFans.length > 0)
+    ) {
         setRevealedOperationId(operationId);
-        const buried = blockByMemberOperationId.get(operationId);
-        if (buried !== undefined && !isBlockExpanded(buried.instanceId)) {
-            setExpandedBlockIds(new Set([...(expandedBlockIds ?? []), buried.instanceId]));
+        const buried = ownersOf(operationId).find((owner) => !isBlockExpanded(owner.instanceId));
+        if (buried !== undefined) {
+            // `null` is "nothing has been folded", which renders every grouping block
+            // unrolled -- so writing a set naming only this owner folds all of them.
+            // The same materialisation `toggleBlockExpansion` does, and for the same
+            // reason. Unreachable while only a grouping block could be the buried
+            // owner, because a folded one already implies a non-null set; a fan is
+            // folded by default and gets here with `null` still in place. #2028
+            setExpandedBlockIds(
+                (previous) =>
+                    new Set([...(previous ?? detectedBlocks.map((entry) => entry.instanceId)), buried.instanceId]),
+            );
         }
     }
 
@@ -1508,11 +1554,17 @@ const OperationGraphInner = ({
             // operation holding it — React Flow renders children as siblings, so
             // without this they would dim inside a lit parent and read as a
             // rendering fault rather than as "these didn't match".
+            //
+            // A fan's container follows its members, which is the same clause read
+            // the other way up: the container is chrome and cannot match, so a search
+            // for a weight load left a ghost box at 18% around two fully lit nodes.
+            // #2028
             if (
                 matchedIds &&
                 (isSelected ||
                     matchedIds.has(node.id) ||
-                    (node.type === OpGraphNodeType.DEVICE_OP && matchedIds.has(String(node.data.operationId))))
+                    (node.type === OpGraphNodeType.DEVICE_OP && matchedIds.has(String(node.data.operationId))) ||
+                    (node.type === OpGraphNodeType.WEIGHT_GROUP && fanContainerEnclosesMatch(node.id, matchedIds)))
             ) {
                 classNames.push(MATCHED_NODE_CLASS);
             }

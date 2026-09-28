@@ -199,9 +199,11 @@ export interface OpGraphBuiltGraph {
     weightFans?: OpGraphBlockSummary[];
 }
 
-// Rebuilt only when the worker delivers a graph, in canvas order. The filter and
-// prev/next walk this instead of the React Flow `nodes` array, which gets a fresh
-// identity on every drag frame.
+// Rebuilt only when the worker delivers a graph, sorted by operation id. The filter
+// and prev/next walk this instead of the React Flow `nodes` array, which gets a fresh
+// identity on every drag frame. Emission order was close enough to the operation
+// sequence to pass for it until a fan's members had to be emitted after their
+// container, which put them at the end of the graph. #2028
 export interface OpGraphNodeIndexEntry {
     id: string;
     operationId: number;
