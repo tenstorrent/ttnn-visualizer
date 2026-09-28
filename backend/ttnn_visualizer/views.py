@@ -137,6 +137,10 @@ from ttnn_visualizer.stack_trace_source import (
     read_stack_source_remote,
     stack_source_response,
 )
+from ttnn_visualizer.usage_metrics import (
+    PROMETHEUS_CONTENT_TYPE,
+    render_usage_metrics,
+)
 from ttnn_visualizer.utils import (
     PERFORMANCE_OPS_PERF_PREFIX,
     PERFORMANCE_REPORT_REQUIRED_FILES,
@@ -2492,6 +2496,12 @@ def use_remote_folder():
 @api.route("/up", methods=["GET", "HEAD"])
 def health_check():
     return Response(status=HTTPStatus.OK)
+
+
+@api.route("/metrics", methods=["GET"])
+@local_only
+def usage_metrics():
+    return Response(render_usage_metrics(), content_type=PROMETHEUS_CONTENT_TYPE)
 
 
 @api.route("/instance", methods=["GET"])

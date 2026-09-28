@@ -145,6 +145,11 @@ KIND_FIELD = "kind"
 SOURCE_FIELD = "source"
 REASON_CLASS_FIELD = "reason_class"
 VIEW_FIELD = "view"
+VERSION_FIELD = "version"
+DEPLOYMENT_MODE_FIELD = "deployment_mode"
+LAUNCH_MODE_FIELD = "launch_mode"
+OS_FIELD = "os"
+PYTHON_VERSION_FIELD = "python_version"
 
 # The wire shape of one posted event. ``EVENT_FIELD`` doubles as its name on the wire and
 # so is not restated; ``DETAILS_FIELD`` has no log equivalent, since details are flattened
@@ -172,6 +177,7 @@ _UNSUMMARISABLE_FIELDS = (TIMESTAMP_FIELD, RUN_ID_FIELD, COUNT_FIELD)
 # Every line this module writes carries these, and so does every summary line, so a
 # line without them is an interleaved fragment rather than an event.
 _REQUIRED_FIELDS = (TIMESTAMP_FIELD, EVENT_FIELD, SCHEMA_VERSION_FIELD)
+_COMMON_FIELDS = frozenset((*_REQUIRED_FIELDS, RUN_ID_FIELD, COUNT_FIELD))
 
 _run_id: Optional[str] = None
 
@@ -326,6 +332,9 @@ _DETAIL_FIELD_ENUMS: Mapping[str, Type[Enum]] = {
     SOURCE_FIELD: ReportSource,
     REASON_CLASS_FIELD: ReportLoadFailureReason,
     VIEW_FIELD: EventLogView,
+    DEPLOYMENT_MODE_FIELD: DeploymentMode,
+    LAUNCH_MODE_FIELD: LaunchMode,
+    OS_FIELD: OperatingSystem,
 }
 
 # What a client may post, and the exact detail fields each event carries. Exported so
@@ -342,6 +351,34 @@ CLIENT_EVENT_DETAIL_FIELDS: Mapping[EventLogEvent, Tuple[str, ...]] = {
     EventLogEvent.VIEW_OPENED: (VIEW_FIELD,),
     EventLogEvent.VIEW_ENGAGED: (VIEW_FIELD,),
 }
+SERVER_EVENT_DETAIL_FIELDS: Mapping[EventLogEvent, Tuple[str, ...]] = {
+    EventLogEvent.APP_START: (
+        VERSION_FIELD,
+        DEPLOYMENT_MODE_FIELD,
+        LAUNCH_MODE_FIELD,
+        OS_FIELD,
+        PYTHON_VERSION_FIELD,
+    )
+}
+EVENT_DETAIL_FIELDS: Mapping[EventLogEvent, Tuple[str, ...]] = {
+    **SERVER_EVENT_DETAIL_FIELDS,
+    **CLIENT_EVENT_DETAIL_FIELDS,
+}
+
+
+def is_valid_event_detail_value(field: str, value: str) -> bool:
+    """Whether a stored detail remains inside the schema's bounded vocabulary."""
+    enum_type = _DETAIL_FIELD_ENUMS.get(field)
+    if enum_type is not None:
+        try:
+            enum_type(value)
+        except ValueError:
+            return False
+        return True
+
+    # Application and Python versions are server-derived constrained strings rather
+    # than closed enums; they are the only exceptions in the event schema.
+    return field in {VERSION_FIELD, PYTHON_VERSION_FIELD} and _is_safe_value(value)
 
 
 class EventLogEventRejected(Exception):
@@ -1338,7 +1375,7 @@ def record_app_start(config: Any, server_mode: Optional[Any] = None) -> None:
         )
 
 
-def _parse_line(line: str) -> Optional[Dict[str, str]]:
+def parse_event_log_line(line: str) -> Optional[Dict[str, str]]:
     """Split a logfmt line into fields, or ``None`` if it is not one."""
     fields: Dict[str, str] = {}
 
@@ -1353,6 +1390,48 @@ def _parse_line(line: str) -> Optional[Dict[str, str]]:
         fields[key] = value
 
     return fields or None
+
+
+def parse_event_count(fields: Mapping[str, str]) -> Optional[int]:
+    """Return a positive event count, defaulting an omitted count to one."""
+    try:
+        count = int(fields.get(COUNT_FIELD, "1"))
+    except ValueError:
+        return None
+    return count if count > 0 else None
+
+
+def parse_known_event_fields(
+    fields: Mapping[str, str],
+) -> Optional[Tuple[EventLogEvent, Dict[str, str], int]]:
+    """Validate a stored event against the current bounded event schema."""
+    if any(name not in fields for name in _REQUIRED_FIELDS):
+        return None
+    if fields[SCHEMA_VERSION_FIELD] != str(SCHEMA_VERSION):
+        return None
+    if not fields[TIMESTAMP_FIELD] or not _is_safe_value(fields[TIMESTAMP_FIELD]):
+        return None
+
+    try:
+        event = EventLogEvent(fields[EVENT_FIELD])
+    except ValueError:
+        return None
+
+    expected_fields = EVENT_DETAIL_FIELDS[event]
+    if set(fields) - _COMMON_FIELDS != set(expected_fields):
+        return None
+
+    details = {name: fields[name] for name in expected_fields}
+    if any(
+        not value or not is_valid_event_detail_value(name, value)
+        for name, value in details.items()
+    ):
+        return None
+
+    count = parse_event_count(fields)
+    if count is None:
+        return None
+    return event, details, count
 
 
 def _summarise(lines: List[str]) -> List[str]:
@@ -1373,7 +1452,7 @@ def _summarise(lines: List[str]) -> List[str]:
     unparsed: List[str] = []
 
     for line in lines:
-        fields = _parse_line(line)
+        fields = parse_event_log_line(line)
         # An NFS-interleaved fragment that happens to start on a key boundary parses
         # cleanly but has no timestamp or event, and summarising it would render an
         # empty `ts=` and a fabricated `event=unknown` — a garbled line dressed up as
@@ -1382,9 +1461,8 @@ def _summarise(lines: List[str]) -> List[str]:
             unparsed.append(line)
             continue
 
-        try:
-            count = int(fields.get(COUNT_FIELD, "1"))
-        except ValueError:
+        count = parse_event_count(fields)
+        if count is None:
             unparsed.append(line)
             continue
 

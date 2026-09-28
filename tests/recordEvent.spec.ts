@@ -183,7 +183,7 @@ describe('recordEvent batching', () => {
         post.mockResolvedValue({ status: 204 });
 
         // The shape a VIEW_ENGAGED wired to scroll would produce on a large table.
-        for (let index = 0; index < 5_000; index++) {
+        for (let index = 0; index < 10_000; index++) {
             recordEvent(VIEW_OPENED);
         }
 

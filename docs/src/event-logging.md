@@ -114,7 +114,9 @@ Recorded when a counted application view is opened.
 
 ### `view_engaged`
 
-Defined for a deliberate interaction with a view after it has remained open. The current frontend does not yet emit this event.
+Recorded once when a counted view has remained open for 10 seconds and receives at least one deliberate pointer or keyboard interaction. Pointer movement, hover, and scrolling do not qualify. The interaction can happen before or after the 10-second threshold.
+
+This is the intentionally revisable v1 definition of deliberate activity used for reach and repeat-use decisions (Q1 and Q2 in #1819). Changing the threshold affects future events only.
 
 - `view`: `reports`, `operations`, `operation_details`, `tensors`, `buffers`, `graph`, `performance`, `npe`, `mlir`, `topology`, `mcp`.
 
@@ -131,11 +133,21 @@ TT-NN Visualizer does not record:
 - raw counts that could identify a specific workload;
 - client-supplied free-form event details. Client detail fields use closed enums; server-generated version fields are validated before they are written.
 
-## Out-of-band collection
+## Local Prometheus collection
 
-The TT-NN Visualizer backend only writes the logs; it does not forward or export them and has no knowledge of whether another process reads the files. Under `SERVER_MODE`, the browser-to-backend event request is necessarily a network request to the hosted application.
+The TT-NN Visualizer backend never forwards raw events. A local-only `GET /api/metrics` endpoint can project the local log into cumulative Prometheus counters, and a separately running local Prometheus can scrape those counters and forward them with `remote_write`. Collection is disabled by default and is unavailable under `SERVER_MODE`.
 
-An independently operated collector can read the logs and export aggregate counters. The collector must not export timestamps, `run_id`, hosted session directory names, per-event rows, or per-user series. Hosted retention and compaction are collector/deployment responsibilities; the application neither enumerates session logs at startup nor compacts them on a request path. Deleting or disabling a log is independent of that collector and does not remove aggregates it has already exported.
+The opt-in file is:
+
+```text
+~/.ttnn-visualizer/app/collection.json
+```
+
+It contains the explicit `enabled` flag, an optional Prometheus remote-write endpoint, and a random persistent `machine_id`. The ID is generated when collection is first enabled; it is not derived from a hostname, username, path, or IP address. Omitting the endpoint keeps collection local to the Docker Prometheus. Deleting the config disables collection and causes a new identity to be generated if collection is enabled again. A malformed config fails closed without preventing TT-NN Visualizer from starting.
+
+The metrics projection exports one `_total` counter per event name with only that event's documented fields as labels. It honours compacted `count` values. It never exports timestamps, `run_id`, hosted session directory names, raw event rows, usernames, hostnames, paths, or unknown fields. Collector health metrics distinguish a missing log, malformed lines, and a read failure. Deleting the event log resets the projected counters; compaction preserves them.
+
+For setup and lifecycle commands, see [Local Prometheus collection](./local-prometheus-collection.md).
 
 ## Documentation-site analytics
 
