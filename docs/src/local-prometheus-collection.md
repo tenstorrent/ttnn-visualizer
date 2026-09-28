@@ -37,7 +37,7 @@ This enables the local metrics endpoint and lets the Docker Prometheus retain sc
 }
 ```
 
-A remote-write endpoint must use HTTPS unless it is a loopback URL. Version 1 does not support credentials in the URL or a separate authentication secret.
+A remote-write endpoint must use HTTPS unless it is a loopback URL. Version 1 does not support URL query parameters, credentials in the URL, or a separate authentication secret.
 
 On the first successful read, TT-NN Visualizer adds a random `machine_id` to the file and restricts its mode to `0600`. This identifier is unrelated to the hostname, username, IP address, or report contents. Keep it to preserve one series identity across launches.
 

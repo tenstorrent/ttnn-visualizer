@@ -7,7 +7,8 @@
 Local installs append to one fixed file under the user's home directory. Hosted
 installs append to a separate file per anonymous Flask session under ``/data/usage``.
 The identifier stays in the path rather than entering event data. The application
-backend forwards nothing; an out-of-band collector may later read the files.
+backend never forwards raw events. Local opt-in collection exposes only aggregate
+metrics derived from the local log for Prometheus to scrape independently.
 
 Properties this file's consumers depend on, stated here because they are not
 obvious from the code that reads it:
@@ -366,7 +367,7 @@ EVENT_DETAIL_FIELDS: Mapping[EventLogEvent, Tuple[str, ...]] = {
 }
 
 
-def is_valid_event_detail_value(field: str, value: str) -> bool:
+def _is_valid_event_detail_value(field: str, value: str) -> bool:
     """Whether a stored detail remains inside the schema's bounded vocabulary."""
     enum_type = _DETAIL_FIELD_ENUMS.get(field)
     if enum_type is not None:
@@ -1392,7 +1393,7 @@ def parse_event_log_line(line: str) -> Optional[Dict[str, str]]:
     return fields or None
 
 
-def parse_event_count(fields: Mapping[str, str]) -> Optional[int]:
+def _parse_event_count(fields: Mapping[str, str]) -> Optional[int]:
     """Return a positive event count, defaulting an omitted count to one."""
     try:
         count = int(fields.get(COUNT_FIELD, "1"))
@@ -1423,12 +1424,12 @@ def parse_known_event_fields(
 
     details = {name: fields[name] for name in expected_fields}
     if any(
-        not value or not is_valid_event_detail_value(name, value)
+        not value or not _is_valid_event_detail_value(name, value)
         for name, value in details.items()
     ):
         return None
 
-    count = parse_event_count(fields)
+    count = _parse_event_count(fields)
     if count is None:
         return None
     return event, details, count
@@ -1461,7 +1462,7 @@ def _summarise(lines: List[str]) -> List[str]:
             unparsed.append(line)
             continue
 
-        count = parse_event_count(fields)
+        count = _parse_event_count(fields)
         if count is None:
             unparsed.append(line)
             continue

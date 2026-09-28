@@ -78,6 +78,19 @@ def test_default_config_path_is_fixed_under_the_user_app_directory(
     )
 
 
+def test_home_resolution_failure_disables_collection(monkeypatch):
+    def _raise_runtime_error():
+        raise RuntimeError("home unavailable")
+
+    monkeypatch.setattr(usage_collection, "COLLECTION_CONFIG_PATH", None)
+    monkeypatch.setattr(Path, "home", staticmethod(_raise_runtime_error))
+
+    config = usage_collection.load_usage_collection_config()
+
+    assert config.enabled is False
+    assert config.error == "home unavailable"
+
+
 def test_disabled_config_does_not_create_an_identity(usage_collection_config_path):
     _write_config(
         usage_collection_config_path,
@@ -129,6 +142,10 @@ def test_enabling_collection_creates_a_stable_random_identity(
         {
             "enabled": True,
             "remote_write_endpoint": "https://user:secret@metrics.example/write",
+        },
+        {
+            "enabled": True,
+            "remote_write_endpoint": "https://metrics.example/write?token=secret",
         },
         {
             "enabled": True,
@@ -299,6 +316,25 @@ def test_renderer_writes_valid_yaml(usage_collection_config_path, tmp_path):
     assert parsed["scrape_configs"][0]["metrics_path"] == "/api/metrics"
     assert parsed["remote_write"][0]["url"] == "https://metrics.example/write"
     assert stat.S_IMODE(output.stat().st_mode) == 0o600
+
+
+def test_renderer_preserves_existing_config_when_atomic_replace_fails(
+    usage_collection_config_path, tmp_path, monkeypatch
+):
+    _write_config(usage_collection_config_path, enabled=False)
+    output = tmp_path / "prometheus.yml"
+    output.write_text("existing configuration\n", encoding="utf-8")
+
+    def _raise_os_error(*_args):
+        raise OSError("replace failed")
+
+    monkeypatch.setattr(usage_collection.os, "replace", _raise_os_error)
+
+    with pytest.raises(OSError, match="replace failed"):
+        usage_collection.render_prometheus_config(output)
+
+    assert output.read_text(encoding="utf-8") == "existing configuration\n"
+    assert list(tmp_path.glob(".prometheus.yml.*")) == []
 
 
 def test_metrics_preserve_compacted_counts_and_drop_private_fields(tmp_path):

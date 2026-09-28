@@ -71,6 +71,8 @@ def _validate_remote_write_endpoint(value: Any) -> str:
         raise ValueError("remote_write_endpoint has an invalid port") from error
     if parsed.username is not None or parsed.password is not None:
         raise ValueError("remote_write_endpoint must not contain credentials")
+    if parsed.query:
+        raise ValueError("remote_write_endpoint must not contain query parameters")
     if parsed.fragment:
         raise ValueError("remote_write_endpoint must not contain a fragment")
     if parsed.scheme != "https" and not _is_loopback_host(parsed.hostname):
@@ -99,9 +101,7 @@ def _read_object(path: Path) -> Dict[str, Any]:
     return raw
 
 
-def _write_config(path: Path, data: Dict[str, Any]) -> None:
-    path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-    os.chmod(path.parent, 0o700)
+def _write_text_atomically(path: Path, content: str) -> None:
     descriptor, temporary_name = tempfile.mkstemp(
         dir=path.parent,
         prefix=f".{path.name}.",
@@ -110,21 +110,27 @@ def _write_config(path: Path, data: Dict[str, Any]) -> None:
     temporary_path = Path(temporary_name)
     try:
         with os.fdopen(descriptor, "w", encoding="utf-8") as temporary_file:
-            json.dump(data, temporary_file, indent=2, sort_keys=True)
-            temporary_file.write("\n")
+            temporary_file.write(content)
         os.chmod(temporary_path, 0o600)
         os.replace(temporary_path, path)
     finally:
         temporary_path.unlink(missing_ok=True)
 
 
+def _write_config(path: Path, data: Dict[str, Any]) -> None:
+    path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    os.chmod(path.parent, 0o700)
+    content = json.dumps(data, indent=2, sort_keys=True) + "\n"
+    _write_text_atomically(path, content)
+
+
 def load_usage_collection_config() -> UsageCollectionConfig:
     """Read the opt-in file, failing closed without breaking application startup."""
-    path = get_collection_config_path()
-    if not path.exists():
-        return UsageCollectionConfig()
-
     try:
+        path = get_collection_config_path()
+        if not path.exists():
+            return UsageCollectionConfig()
+
         os.chmod(path.parent, 0o700)
         os.chmod(path, 0o600)
         data = _read_object(path)
@@ -156,7 +162,7 @@ def load_usage_collection_config() -> UsageCollectionConfig:
             remote_write_endpoint=endpoint,
             machine_id=machine_id,
         )
-    except (OSError, ValueError, json.JSONDecodeError) as error:
+    except (OSError, RuntimeError, ValueError, json.JSONDecodeError) as error:
         logger.warning("Usage collection is disabled: %s", error)
         return UsageCollectionConfig(error=str(error))
 
@@ -242,11 +248,7 @@ def render_prometheus_config(
         base_path=base_path,
     )
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_text(
-        yaml.safe_dump(rendered, sort_keys=False),
-        encoding="utf-8",
-    )
-    os.chmod(output_path, 0o600)
+    _write_text_atomically(output_path, yaml.safe_dump(rendered, sort_keys=False))
     return output_path
 
 

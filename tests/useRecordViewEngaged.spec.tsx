@@ -53,6 +53,12 @@ function EngagementHarness() {
                 >
                     Close topology
                 </button>
+                <button
+                    type='button'
+                    onClick={() => navigate(-1)}
+                >
+                    Go back
+                </button>
             </main>
         </>
     );
@@ -166,6 +172,25 @@ describe('useRecordViewEngaged', () => {
         expect(recordViewEngaged).toHaveBeenCalledWith(EventLogView.TENSORS);
     });
 
+    it('records a new visit when returning to a pathname', () => {
+        renderRecorder(ROUTES.OPERATIONS);
+        fireEvent.pointerDown(screen.getByRole('button', { name: 'View action' }));
+        act(() => {
+            vi.advanceTimersByTime(VIEW_ENGAGEMENT_THRESHOLD_MS);
+        });
+
+        fireEvent.click(screen.getByRole('button', { name: 'Open tensors' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Go back' }));
+        fireEvent.pointerDown(screen.getByRole('button', { name: 'View action' }));
+        act(() => {
+            vi.advanceTimersByTime(VIEW_ENGAGEMENT_THRESHOLD_MS);
+        });
+
+        expect(recordViewEngaged).toHaveBeenCalledTimes(2);
+        expect(recordViewEngaged).toHaveBeenNthCalledWith(1, EventLogView.OPERATIONS);
+        expect(recordViewEngaged).toHaveBeenNthCalledWith(2, EventLogView.OPERATIONS);
+    });
+
     it('does not reset for a query-only change', () => {
         renderRecorder(ROUTES.OPERATIONS);
         fireEvent.pointerDown(screen.getByRole('button', { name: 'View action' }));
@@ -215,6 +240,19 @@ describe('useRecordViewEngaged', () => {
         fireEvent.click(openTensors);
 
         expect(recordViewEngaged).not.toHaveBeenCalled();
+    });
+
+    it('records topology engagement independently from its background view', () => {
+        renderRecorder(ROUTES.OPERATIONS);
+
+        fireEvent.click(screen.getByRole('button', { name: 'Open topology' }));
+        fireEvent.pointerDown(screen.getByRole('button', { name: 'View action' }));
+        act(() => {
+            vi.advanceTimersByTime(VIEW_ENGAGEMENT_THRESHOLD_MS);
+        });
+
+        expect(recordViewEngaged).toHaveBeenCalledTimes(1);
+        expect(recordViewEngaged).toHaveBeenCalledWith(EventLogView.TOPOLOGY);
     });
 
     it('preserves the background visit when returning from a modal', () => {
