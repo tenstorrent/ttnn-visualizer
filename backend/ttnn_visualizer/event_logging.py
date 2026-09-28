@@ -63,6 +63,7 @@ from importlib.metadata import version as distribution_version
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple, Type
 
+from ttnn_visualizer.agent.tool_names import McpToolName
 from ttnn_visualizer.utils import (
     FALSE_VALUES,
     TRUE_VALUES,
@@ -125,7 +126,7 @@ MAX_HOSTED_EVENT_LOGS = 1024
 MAX_HOSTED_BATCHES_PER_MINUTE = 120
 MAX_HOSTED_EVENT_LOG_CREATIONS_PER_MINUTE = 60
 HOSTED_RATE_WINDOW_SECONDS = 60.0
-HOSTED_FULL_LOG_RECHECK_SECONDS = 60.0
+FULL_LOG_RECHECK_SECONDS = 60.0
 HOSTED_QUOTA_LOCK_NAME = ".quota.lock"
 HOSTED_CREATION_RATE_NAME = ".creation-rate"
 
@@ -145,6 +146,13 @@ KIND_FIELD = "kind"
 SOURCE_FIELD = "source"
 REASON_CLASS_FIELD = "reason_class"
 VIEW_FIELD = "view"
+TOOL_FIELD = "tool"
+OUTCOME_FIELD = "outcome"
+VERSION_FIELD = "version"
+DEPLOYMENT_MODE_FIELD = "deployment_mode"
+LAUNCH_MODE_FIELD = "launch_mode"
+OS_FIELD = "os"
+PYTHON_VERSION_FIELD = "python_version"
 
 # The wire shape of one posted event. ``EVENT_FIELD`` doubles as its name on the wire and
 # so is not restated; ``DETAILS_FIELD`` has no log equivalent, since details are flattened
@@ -213,6 +221,7 @@ class EventLogEvent(str, Enum):
     REPORT_LOAD_FAILED = "report_load_failed"
     VIEW_OPENED = "view_opened"
     VIEW_ENGAGED = "view_engaged"
+    MCP_TOOL_CALLED = "mcp_tool_called"
 
 
 class DeploymentMode(str, Enum):
@@ -318,14 +327,30 @@ class EventLogView(str, Enum):
     MCP = "mcp"
 
 
-# Where every detail value a client may post has to come from. `_SAFE_VALUE_PATTERN`
-# is not enough on its own: it would happily accept `kind=totally-made-up`, and the
-# bounded contents of this file are the entire promise being made.
+class McpToolOutcome(str, Enum):
+    """How a registered MCP tool call ended.
+
+    ``refused`` is a tool declining a well-formed call it cannot answer (unknown
+    handle, argument out of range). ``error`` is an unexpected failure the
+    server did not anticipate.
+    """
+
+    OK = "ok"
+    REFUSED = "refused"
+    ERROR = "error"
+
+
+# Closed vocabularies for detail fields that are enums. Client-posted fields are
+# validated against this map; server-written fields use it so the docs page and
+# ``_SAFE_VALUE_PATTERN`` checks have one source. `version` and `python_version`
+# stay off it: they are constrained strings, not closed sets.
 _DETAIL_FIELD_ENUMS: Mapping[str, Type[Enum]] = {
     KIND_FIELD: ReportKind,
     SOURCE_FIELD: ReportSource,
     REASON_CLASS_FIELD: ReportLoadFailureReason,
     VIEW_FIELD: EventLogView,
+    TOOL_FIELD: McpToolName,
+    OUTCOME_FIELD: McpToolOutcome,
 }
 
 # What a client may post, and the exact detail fields each event carries. Exported so
@@ -333,14 +358,25 @@ _DETAIL_FIELD_ENUMS: Mapping[str, Type[Enum]] = {
 # transcribed — a silent divergence there means events the client emits and the server
 # rejects, which the client is designed not to notice.
 #
-# `APP_START` is deliberately absent: the server records launches itself, and a client
-# able to post one could forge the deployment population every other figure is read
-# against.
+# Server-only events live in ``SERVER_EVENT_DETAIL_FIELDS``. A client able to post
+# ``app_start`` or ``mcp_tool_called`` could forge the denominators those events
+# exist to measure.
 CLIENT_EVENT_DETAIL_FIELDS: Mapping[EventLogEvent, Tuple[str, ...]] = {
     EventLogEvent.REPORT_LOADED: (KIND_FIELD, SOURCE_FIELD),
     EventLogEvent.REPORT_LOAD_FAILED: (KIND_FIELD, REASON_CLASS_FIELD),
     EventLogEvent.VIEW_OPENED: (VIEW_FIELD,),
     EventLogEvent.VIEW_ENGAGED: (VIEW_FIELD,),
+}
+
+SERVER_EVENT_DETAIL_FIELDS: Mapping[EventLogEvent, Tuple[str, ...]] = {
+    EventLogEvent.APP_START: (
+        VERSION_FIELD,
+        DEPLOYMENT_MODE_FIELD,
+        LAUNCH_MODE_FIELD,
+        OS_FIELD,
+        PYTHON_VERSION_FIELD,
+    ),
+    EventLogEvent.MCP_TOOL_CALLED: (TOOL_FIELD, OUTCOME_FIELD),
 }
 
 
@@ -982,7 +1018,7 @@ def _append_line(
         os.close(descriptor)
 
 
-def _is_log_full(log_path: Path, state: _EventLogState, hosted: bool = False) -> bool:
+def _is_log_full(log_path: Path, state: _EventLogState) -> bool:
     """Whether the log has reached its cap, re-measured at most once per interval.
 
     Refusing appends is the only correct answer at the cap. Trimming here is what makes
@@ -990,7 +1026,8 @@ def _is_log_full(log_path: Path, state: _EventLogState, hosted: bool = False) ->
     extrapolates — losing history and inventing activity at once. Compacting here is no
     better: ``_compact`` reads the whole file, and this runs on a request path.
     Local compaction at the next launch summarises the older half and appends resume;
-    hosted logs are re-checked after external compaction.
+    hosted logs, and long-lived local writers such as the MCP server, re-check after
+    a bound interval so an external compaction can unstick them.
 
     Between measurements the previous verdict is returned rather than recomputed, and that
     is load-bearing rather than an optimisation. The state's byte counter counts bytes
@@ -1008,7 +1045,7 @@ def _is_log_full(log_path: Path, state: _EventLogState, hosted: bool = False) ->
     """
     now = time.monotonic()
     if state.log_full:
-        if not hosted or now < state.next_full_check_at:
+        if now < state.next_full_check_at:
             return True
     elif state.bytes_since_size_check < LOG_SIZE_CHECK_INTERVAL_BYTES:
         return False
@@ -1023,9 +1060,7 @@ def _is_log_full(log_path: Path, state: _EventLogState, hosted: bool = False) ->
         state.log_full = False
 
     state.bytes_since_size_check = 0
-    state.next_full_check_at = (
-        now + HOSTED_FULL_LOG_RECHECK_SECONDS if hosted and state.log_full else 0.0
-    )
+    state.next_full_check_at = now + FULL_LOG_RECHECK_SECONDS if state.log_full else 0.0
 
     if state.log_full and not was_full:
         # Once, on the way in. Everything after this point is dropped and answered 204,
@@ -1130,7 +1165,7 @@ def _write_events(
             return False
     state = _state_for_log(log_path, hosted)
 
-    if _is_log_full(log_path, state, hosted=hosted):
+    if _is_log_full(log_path, state):
         return False
 
     timestamp = _get_timestamp()
@@ -1433,9 +1468,8 @@ def compact_if_needed() -> None:
         logger.debug("Skipping event log compaction: file locking is unavailable")
         return
 
-    log_path = get_event_log_path()
-
     try:
+        log_path = get_event_log_path()
         if not log_path.exists() or log_path.stat().st_size <= MAX_LOG_BYTES:
             return
 
@@ -1456,13 +1490,15 @@ def compact_if_needed() -> None:
                 _invalidate_size_check()
             finally:
                 fcntl.flock(lock_file, fcntl.LOCK_UN)
-    except OSError as error:
+    except (OSError, RuntimeError) as error:
+        # RuntimeError: Path.home() when HOME is unset. Compaction is launch-only
+        # telemetry and must not prevent the process from serving.
         logger.warning("Unable to compact the event log: %s", error)
 
 
 def _compact(log_path: Path) -> None:
     # `errors="replace"` rather than a strict read: a `UnicodeDecodeError` is a
-    # `ValueError`, so the `OSError` handler around this would not catch one, and
+    # `ValueError`, so the handler around this would not catch one, and
     # compaction runs from `main()` before gunicorn is spawned — a corrupted log
     # would stop the server starting rather than cost us a line.
     lines = log_path.read_text(encoding="utf-8", errors="replace").splitlines()

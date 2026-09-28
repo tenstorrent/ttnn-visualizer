@@ -362,7 +362,14 @@ def test_accepted_batch_totals_the_way_the_collector_reads_it(
         pytest.param({"event": "not_an_event", "details": {}}, id="unknown_event"),
         pytest.param(
             {"event": EventLogEvent.APP_START.value, "details": {}},
-            id="server_owned_event",
+            id="server_owned_app_start",
+        ),
+        pytest.param(
+            {
+                "event": EventLogEvent.MCP_TOOL_CALLED.value,
+                "details": {"tool": "load_report", "outcome": "ok"},
+            },
+            id="server_owned_mcp_tool_called",
         ),
         pytest.param(
             {
