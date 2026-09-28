@@ -420,6 +420,13 @@ export function buildOpGraph(
                 id: instanceId,
                 type: OpGraphNodeType.WEIGHT_GROUP,
                 className: BLOCK_KIND_CLASS[fan.kind],
+                // Chrome, not a thing to select. An unrolled fan's content is its
+                // members, and they are on screen with their own ids -- selecting the
+                // box around them could only stand for one of them, which is what it
+                // used to do: clicking the container rang a member and described it.
+                // Cleared here rather than guarded at the click, so React Flow's own
+                // keyboard selection cannot reach it either. #2028
+                selectable: false,
                 position: { x: 0, y: 0 },
                 width: memberLayout.width,
                 height: memberLayout.height,

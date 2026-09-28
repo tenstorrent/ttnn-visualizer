@@ -831,6 +831,13 @@ describe('buildOpGraph', () => {
                 }
             });
 
+            it('marks the container unselectable, so it reads as chrome', () => {
+                // An unrolled fan's content is its members; the box around them can
+                // only stand for one of them, which is what selecting it used to do.
+                expect(nodeById(unrolled(), FAN_ID).selectable).toBe(false);
+                expect(nodeById(unrolled(), '1').selectable).toBeUndefined();
+            });
+
             it('leaves the consumer alone', () => {
                 expect(nodeById(unrolled(), '4').parentId).toBeUndefined();
             });

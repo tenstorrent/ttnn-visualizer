@@ -1558,6 +1558,13 @@ const OperationGraphInner = ({
 
     const handleNodeClick = useCallback(
         (_event: ReactMouseEvent, node: OpGraphFlowNode) => {
+            // React Flow still reports a click on a node it will not select, and the
+            // fan container's `operationId` is its first member — so without this the
+            // box answered for one of the nodes inside it. Its fold pill is the only
+            // thing on it that does anything. #2028
+            if (node.type === OpGraphNodeType.WEIGHT_GROUP) {
+                return;
+            }
             selectOperation(node.data.operationId);
         },
         [selectOperation],
