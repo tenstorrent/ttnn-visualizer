@@ -672,8 +672,14 @@ const OperationGraphInner = ({
             // from being scored as zero-cost operations. #1195
             const indexEntries: OpGraphNodeIndexEntry[] = [];
             const renderedByOpId = new Map<number, string>();
+            // A weight-fan container joins device operations in being left out. It is
+            // chrome around nodes that are themselves indexed, and its `operationId` is
+            // its first member's -- so indexing it put a second entry under that id and
+            // `buildPositionByOperationId` is first-wins, which parked the member's
+            // prev/next cursor on the container. Next from the member then named the
+            // member. Removing `memberOperationIds` was not enough on its own. #2028
             for (const node of graph.nodes) {
-                if (node.type !== OpGraphNodeType.DEVICE_OP) {
+                if (node.type !== OpGraphNodeType.DEVICE_OP && node.type !== OpGraphNodeType.WEIGHT_GROUP) {
                     indexEntries.push({
                         id: node.id,
                         operationId: node.data.operationId,
@@ -690,6 +696,13 @@ const OperationGraphInner = ({
                     }
                 }
             }
+            // Sorted rather than taken in array order. The comment above calls this
+            // the operation sequence, and it was one only by accident of the builder
+            // emitting top-level nodes in that order -- fan members are emitted last,
+            // because React Flow needs a parent ahead of its children, so stepping
+            // back from one jumped to the end of the graph. Sorting states the
+            // property the index is read for instead of inheriting it. #2028
+            indexEntries.sort((left, right) => left.operationId - right.operationId);
             setNodeIndex(indexEntries);
             setNodeIdByOperationId(renderedByOpId);
             // A new array with the same detections rebuilds `deviceSubgraphs`, and
