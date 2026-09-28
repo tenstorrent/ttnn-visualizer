@@ -33,6 +33,25 @@ test('reports the aggregate upload size limit before sending a request', () => {
     expect(getUploadSizeLimitError(createFiles(1024, 1025))).toBe('Selected upload exceeds the 4 KiB request limit.');
 });
 
+test('accepts a selection whose estimate lands exactly on the limit', () => {
+    // One file costs its size plus one per-file and one base margin of 1 KiB each.
+    serverConfig.MAX_CONTENT_LENGTH = 1024 + 1024 + 1024;
+
+    expect(getUploadSizeLimitError(createFiles(1024))).toBeNull();
+});
+
+test('rejects a selection one byte over the limit', () => {
+    serverConfig.MAX_CONTENT_LENGTH = 1024 + 1024 + 1024;
+
+    expect(getUploadSizeLimitError(createFiles(1025))).toBe('Selected upload exceeds the 3 KiB request limit.');
+});
+
+test.each([0, -1])('treats a non-positive limit (%i) as no limit rather than rejecting everything', (limit) => {
+    serverConfig.MAX_CONTENT_LENGTH = limit;
+
+    expect(getUploadSizeLimitError(createFiles(10))).toBeNull();
+});
+
 test('reserves room for the multipart envelope', () => {
     serverConfig.MAX_CONTENT_LENGTH = 2048;
 
