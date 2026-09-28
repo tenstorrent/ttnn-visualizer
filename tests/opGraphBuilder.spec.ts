@@ -853,11 +853,42 @@ describe('buildOpGraph', () => {
                 expect(edgeBetweenOperations(graph, 3, 4).label).toBe('[1, 3072]');
             });
 
-            it('sizes the container to hold its members', () => {
+            it('sizes the container to enclose its members', () => {
+                // `layoutDeviceSubgraph` returns non-zero for an empty node list, so
+                // asserting `> 0` passed against a container laid out from nothing.
+                const graph = unrolled();
+                const container = nodeById(graph, FAN_ID);
+
+                for (const memberId of ['1', '2', '3']) {
+                    const member = nodeById(graph, memberId);
+                    expect(member.position.x + (member.width ?? 0), `member ${memberId} width`).toBeLessThanOrEqual(
+                        container.width ?? 0,
+                    );
+                    expect(member.position.y + (member.height ?? 0), `member ${memberId} height`).toBeLessThanOrEqual(
+                        container.height ?? 0,
+                    );
+                }
+            });
+
+            it('stands for none of its members, so nothing double-counts them', () => {
+                // `memberOperationIdsOf` reads this field as "the operations this node
+                // stands for". The members are drawn with their own ids, so carrying
+                // them here gave the perf overlay a phantom bar, doubled its
+                // denominator, and made the filter call visible matches buried.
                 const container = nodeById(unrolled(), FAN_ID);
 
-                expect(container.width ?? 0).toBeGreaterThan(0);
-                expect(container.height ?? 0).toBeGreaterThan(0);
+                expect(container.data.memberOperationIds).toBeUndefined();
+                expect(container.data.memberNames).toBeUndefined();
+            });
+
+            it('emits the container, then its members, then their device operations', () => {
+                // React Flow resolves `parentId` against the nodes it has already
+                // seen; a child ahead of its parent renders at the pane origin.
+                const ids = unrolled().nodes.map((node) => node.id);
+
+                expect(ids.indexOf(FAN_ID)).toBeLessThan(ids.indexOf('1'));
+                expect(ids.indexOf(FAN_ID)).toBeLessThan(ids.indexOf('2'));
+                expect(ids.indexOf(FAN_ID)).toBeLessThan(ids.indexOf('3'));
             });
 
             it('ranks the container against the consumer, not the members inside it', () => {

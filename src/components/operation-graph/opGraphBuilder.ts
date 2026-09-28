@@ -12,7 +12,13 @@ import {
 } from './opGraphLayout';
 import { detectorFor } from './opGraphBlockDetectors';
 import type { RememberedFan } from './opGraphWeightFans';
-import { detectWeightFans, rememberedDecision, weightFanMembersCover, weightFanMembersOf } from './opGraphWeightFans';
+import {
+    detectWeightFans,
+    rememberedDecision,
+    sourceOperationIds,
+    weightFanMembersCover,
+    weightFanMembersOf,
+} from './opGraphWeightFans';
 import { formatBlockMeta } from './opGraphBlockMeta';
 import { sumOptional } from '../../functions/math';
 import { OpGraphBlockKind } from './opGraphTypes';
@@ -143,10 +149,11 @@ export function buildOpGraph(
     const renderedNodeIdOf = (operationId: number): string =>
         collapsedInstanceByOpId.get(operationId)?.instanceId ?? String(operationId);
 
-    // A weight load is a source: nothing that survived the filter feeds it. The same
-    // test `detectWeightFans` opens with, and matched on shape rather than name for
-    // its reason -- two of the local reports disagree about the name. Both ends kept,
-    // so an edge from a hidden op does not count as feeding one.
+    // A weight load is a source: nothing that survived the filter feeds it. One
+    // implementation, in the module that owns the rule, so a block's count and the
+    // detector cannot drift into disagreeing about what a weight load is. Matched on
+    // shape rather than name for its own reason -- two of the local reports disagree
+    // about the name.
     //
     // This counts weight-load *operations*, which is a superset of the ones that end
     // up in fans: a fan additionally needs a single consumer and at least two members,
@@ -154,12 +161,11 @@ export function buildOpGraph(
     // draws as a plain node when unrolled. On `bge_m3` that is 295 against 290 in
     // fans. Counting operations is the right answer for a block -- the question is
     // how much of this block is weight loading, not how much of it would pill up.
-    const hasIncomingEdge = new Set<number>();
-    for (const candidate of candidates) {
-        if (kept.has(candidate.source) && kept.has(candidate.target)) {
-            hasIncomingEdge.add(candidate.target);
-        }
-    }
+    // Built only when something reads it: the count below is the sole consumer and it
+    // is gated on `collapseWeightLoads`, so an ops x outputs x consumers walk on every
+    // build -- including every frame of an op-range drag -- would otherwise be paid for
+    // a number nobody asked for.
+    const hasIncomingEdge = collapseWeightLoads ? sourceOperationIds(candidates, kept) : new Set<number>();
     const weightLoadsIn = (operationIds: readonly number[]): number =>
         operationIds.reduce((count, id) => (hasIncomingEdge.has(id) ? count : count + 1), 0);
 
@@ -235,6 +241,11 @@ export function buildOpGraph(
     }
 
     const nodes: OpGraphFlowNode[] = [];
+    // Three tiers, because parenting is two deep: a fan member is a child of a
+    // top-level container and can itself be the parent of its device operations.
+    // React Flow resolves `parentId` against what it has already seen, so a member
+    // sharing an array with those device operations put them ahead of it. #2028
+    const parentedFanMembers: OpGraphFlowNode[] = [];
     const deviceOpNodes: OpGraphFlowNode[] = [];
     const deviceOpEdges: OpGraphFlowEdge[] = [];
     const emittedBlockIds = new Set<string>();
@@ -419,7 +430,10 @@ export function buildOpGraph(
             nodes.push({
                 id: instanceId,
                 type: OpGraphNodeType.WEIGHT_GROUP,
-                className: BLOCK_KIND_CLASS[fan.kind],
+                // No kind class: every `op-graph-block-*` rule is scoped under
+                // `.react-flow__node-blockNode`, so it matched nothing here and only
+                // looked like the colour's source. The container's own type selector
+                // carries it. #2028
                 // Chrome, not a thing to select. An unrolled fan's content is its
                 // members, and they are on screen with their own ids -- selecting the
                 // box around them could only stand for one of them, which is what it
@@ -438,14 +452,20 @@ export function buildOpGraph(
                     deviceOperationCount: 0,
                     metaLine: meta,
                     blockInstanceId: instanceId,
-                    blockKind: fan.kind,
-                    memberNames: members.map((member) => member.name),
-                    memberOperationIds: fan.operationIds,
+                    // No `memberOperationIds` or `memberNames`. `memberOperationIdsOf`
+                    // defines that field as the operations a node *stands for*, and an
+                    // unrolled fan's members are on screen with their own ids -- so the
+                    // container stands for none of them. Carrying them gave the perf
+                    // overlay a bar summing time the members were already drawing
+                    // (which then set the ramp's maximum and cooled every node in the
+                    // graph), doubled the `N/M` denominator, put an isolated weighted
+                    // node in the critical path, and made the filter report visible
+                    // matches as buried. #2028
                     opCount,
                 },
             });
             for (const member of memberNodes) {
-                deviceOpNodes.push({
+                parentedFanMembers.push({
                     ...member,
                     parentId: instanceId,
                     extent: 'parent',
@@ -544,6 +564,7 @@ export function buildOpGraph(
         // already seen, and a child ahead of its parent renders at the pane origin.
         nodes: [
             ...nodes.map((node) => ({ ...node, position: positions.get(node.id) ?? node.position })),
+            ...parentedFanMembers,
             ...deviceOpNodes,
         ],
         edges: [...edges, ...deviceOpEdges],

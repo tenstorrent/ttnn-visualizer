@@ -93,7 +93,10 @@ const NODE_TYPES = {
     [OpGraphNodeType.DEVICE_OP]: OpGraphDeviceOpNode,
     [OpGraphNodeType.BLOCK]: OpGraphBlockNode,
     [OpGraphNodeType.WEIGHT_GROUP]: OpGraphWeightGroupNode,
-};
+    // Total, and checked as such: a node type with no renderer falls back to React
+    // Flow's default and draws as an unstyled box, which is a runtime surprise where
+    // this is a compile error. `BLOCK_KIND_CLASS` keys its enum the same way.
+} satisfies Record<OpGraphNodeType, unknown>;
 const EDGE_TYPES = { [OpGraphEdgeType.OP]: OpGraphEdge };
 
 const EDGE_MARKER = { type: MarkerType.ArrowClosed, width: 18, height: 18 } as const;

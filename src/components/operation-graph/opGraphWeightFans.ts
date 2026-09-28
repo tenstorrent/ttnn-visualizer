@@ -150,6 +150,24 @@ export interface WeightFanInput {
  * the label and dedupes parallel edges across a collapsed boundary, which is the single
  * unlabelled edge this feature is for. Nothing new draws it.
  */
+/**
+ * Operations nothing kept feeds — the shape a weight load has.
+ *
+ * Exported because a grouping block needs the same question answered about the
+ * members it absorbed, and two implementations of "is a source" can drift into
+ * disagreeing about what a weight load is. Both ends have to survive the filter:
+ * an edge from a hidden op is not a feed. #2028
+ */
+export const sourceOperationIds = (candidates: readonly CandidateEdge[], kept: ReadonlySet<number>): Set<number> => {
+    const hasIncoming = new Set<number>();
+    for (const candidate of candidates) {
+        if (kept.has(candidate.source) && kept.has(candidate.target)) {
+            hasIncoming.add(candidate.target);
+        }
+    }
+    return hasIncoming;
+};
+
 export const detectWeightFans = ({
     keptOperations,
     candidates,
