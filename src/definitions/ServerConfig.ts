@@ -2,6 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
+// Same as _HOSTED_DEFAULT_MAX_CONTENT_LENGTH in settings.py
 export const HOSTED_DEFAULT_MAX_CONTENT_LENGTH = 1024 * 1024 * 1024;
 
 export interface ServerConfig {
