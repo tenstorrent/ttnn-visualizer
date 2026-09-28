@@ -164,7 +164,7 @@ Named co-exports on the same module are expected — types, constants, small sub
 
 Do **not** add a default export to a module that is already a named surface. `useAPI.tsx`, `formatting.ts`, and `routeObjectList.tsx` stay named-only. A handful of component helpers (`OperationLinks.tsx`, `MemoryLegendElement.tsx`, and similar) are named-only today; leave them. New primary widgets follow default export.
 
-Hooks and `src/functions` are mixed on purpose. A module with several public symbols stays **named**. A single-purpose helper or single-hook file may default-export (`getServerConfig`, `memoiseLatest`). `import/prefer-default-export` is off in `eslint.config.cjs` so that split stays legal — do not turn it on.
+Hooks and `src/functions` are mixed on purpose. A module whose public surface has one primary helper or hook may default-export it, with named extras alongside (`getServerConfig`, `createToastNotification`); a module of peer symbols stays **named**. A single-export helper may also default-export (`memoiseLatest`). `import/prefer-default-export` is off in `eslint.config.cjs` so that split stays legal — do not turn it on.
 
 Do not convert a file's export style when editing it for another reason.
 
