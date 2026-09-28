@@ -406,9 +406,11 @@ export function buildOpGraph(
     for (const [instanceId, memberNodes] of fanMemberNodes) {
         // `fanMemberNodes` only gains a key when a member is routed into it, so an
         // entry always has both a fan and at least one node; the lookup narrows the
-        // type rather than guarding against a state the loop above can produce.
+        // type rather than guarding against a state the loop above can produce. A
+        // `memberNodes.length` test alongside it narrowed nothing and read as though
+        // an empty bucket were reachable.
         const fan = unrolledFanById.get(instanceId);
-        if (fan !== undefined && memberNodes.length > 0) {
+        if (fan !== undefined) {
             const members = fan.operationIds
                 .map((id) => operationById.get(id))
                 .filter((member): member is OpGraphSourceOperation => member !== undefined);

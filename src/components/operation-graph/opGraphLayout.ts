@@ -119,6 +119,10 @@ export interface DeviceSubgraphLayout {
  *
  * `headerWidth` is the collapsed node's width — the group can be wider than its
  * contents but never narrower than its own label.
+ *
+ * Not only device operations, despite the name: an unrolled weight fan's members go
+ * through the same call with no edges, because the bargain is the same one — the
+ * enclosing layout sees the container and nothing inside it. #2028
  */
 export function layoutDeviceSubgraph(
     nodes: LayoutInputNode[],

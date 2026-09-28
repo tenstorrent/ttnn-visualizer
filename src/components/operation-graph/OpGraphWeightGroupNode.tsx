@@ -32,11 +32,17 @@ const OpGraphWeightGroupNode = memo(({ data }: NodeProps<OpGraphFlowNode>) => (
                     would make the fold pill look like it puts something else back. */}
                 <div className='op-graph-node-meta'>{data.metaLine}</div>
             </div>
-            <OpGraphBlockExpander
-                instanceId={data.blockInstanceId ?? ''}
-                opCount={data.opCount ?? 0}
-                isExpanded
-            />
+            {/* Conditional because `OpGraphNodeData` is one shape for every node
+                kind, so both fields are optional there while the builder always sets
+                them here. An `?? ''` default wired the pill to an instance id that
+                names nothing, and clicking it silently did nothing. */}
+            {data.blockInstanceId !== undefined && (
+                <OpGraphBlockExpander
+                    instanceId={data.blockInstanceId}
+                    opCount={data.opCount ?? 0}
+                    isExpanded
+                />
+            )}
         </div>
         <Handle
             type='source'
