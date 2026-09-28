@@ -567,7 +567,7 @@ def test_metrics_reject_lines_outside_the_stored_schema(tmp_path, line):
 
 def _record_every_event() -> None:
     record_app_start(SimpleNamespace(TT_METAL_HOME=None), server_mode=False)
-    remaining_event_fields = {
+    remaining_event_fields: dict[EventLogEvent, tuple[str, ...]] = {
         **CLIENT_EVENT_DETAIL_FIELDS,
         **{
             event: fields
