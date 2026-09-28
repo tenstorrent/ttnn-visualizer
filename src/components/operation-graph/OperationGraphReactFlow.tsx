@@ -60,6 +60,7 @@ import {
 import { EMPTY_CRITICAL_PATH, findCriticalPath } from './opGraphCriticalPath';
 import {
     REVEALED_NODE_CLASS,
+    absolutePositionsOf,
     boundsOfNodes,
     centerPanShift,
     entryViewport,
@@ -423,7 +424,7 @@ const OperationGraphInner = ({
     const pendingEmptyPaneCheckRef = useRef(false);
     // The op the URL last moved to, so a rebuild does not pan back to it.
     const focusedUrlOperationRef = useRef<number | null>(null);
-    const { getNode, getViewport, setViewport } = useReactFlow<OpGraphFlowNode, OpGraphFlowEdge>();
+    const { getInternalNode, getViewport, setViewport } = useReactFlow<OpGraphFlowNode, OpGraphFlowEdge>();
     const flowStore = useStoreApi();
 
     // Path, not the `ReportFolder` object: a rebuilt-but-equivalent object would
@@ -746,12 +747,23 @@ const OperationGraphInner = ({
         [getViewport, setViewport, paneChromeInset],
     );
 
+    // `getInternalNode` rather than `getNode`: a node inside a container carries a
+    // parent-relative `position`, and panning to that lands near the graph origin
+    // instead of on the node. The store already holds the resolved coordinate. #2028
+    const pannableNodeAt = useCallback(
+        (nodeId: string) => {
+            const internal = getInternalNode(nodeId);
+            return internal === undefined ? undefined : { ...internal, position: internal.internals.positionAbsolute };
+        },
+        [getInternalNode],
+    );
+
     const focusOperation = useCallback(
         (id: number) => {
-            const node = getNode(nodeIdByOperationId.get(id) ?? String(id));
+            const node = pannableNodeAt(nodeIdByOperationId.get(id) ?? String(id));
             panIntoView(node === undefined ? null : boundsOfNodes([node]));
         },
-        [getNode, nodeIdByOperationId, panIntoView],
+        [pannableNodeAt, nodeIdByOperationId, panIntoView],
     );
 
     // What the panel's Recenter button does, and the one mover that acts on an
@@ -760,7 +772,7 @@ const OperationGraphInner = ({
     // nothing in exactly the case it is pressed: while reading that node's panel.
     const centerOperation = useCallback(
         (id: number) => {
-            const node = getNode(nodeIdByOperationId.get(id) ?? String(id));
+            const node = pannableNodeAt(nodeIdByOperationId.get(id) ?? String(id));
             const pane = containerRef.current?.getBoundingClientRect();
             const bounds = node === undefined ? null : boundsOfNodes([node]);
             if (bounds === null || pane === undefined) {
@@ -770,14 +782,17 @@ const OperationGraphInner = ({
             const { dx, dy } = centerPanShift(bounds, viewport, pane, paneChromeInset(pane));
             void setViewport({ ...viewport, x: viewport.x + dx, y: viewport.y + dy }, { duration: FOCUS_DURATION_MS });
         },
-        [getNode, nodeIdByOperationId, getViewport, setViewport, paneChromeInset],
+        [pannableNodeAt, nodeIdByOperationId, getViewport, setViewport, paneChromeInset],
     );
 
     // The only place a zoom is chosen for the user. Reads the committed array, not
     // `getNode`, which trails `setNodes` and on entry silently framed nothing.
     const frameOnEntry = useCallback(
         (allNodes: readonly OpGraphFlowNode[], startId: number): boolean => {
-            const graph = boundsOfNodes(allNodes);
+            // Container children carry parent-relative positions, so the graph box
+            // and the start node both need resolving before they mean anything. #2028
+            const at = absolutePositionsOf(allNodes);
+            const graph = boundsOfNodes(allNodes, at);
             const startNode = allNodes.find(
                 (node) =>
                     node.data.operationId === startId ||
@@ -789,7 +804,7 @@ const OperationGraphInner = ({
             if (graph === null || pane === undefined || pane.width === 0 || pane.height === 0) {
                 return false;
             }
-            const start = startNode === undefined ? graph : (boundsOfNodes([startNode]) ?? graph);
+            const start = startNode === undefined ? graph : (boundsOfNodes([startNode], at) ?? graph);
             void setViewport(entryViewport(graph, start, pane, paneChromeInset(pane)), {
                 duration: FOCUS_DURATION_MS,
             });
@@ -818,7 +833,7 @@ const OperationGraphInner = ({
     // alternative is showing nothing. #2008
     useEffect(() => {
         const pane = containerRef.current?.getBoundingClientRect();
-        const bounds = boundsOfNodes(nodes);
+        const bounds = boundsOfNodes(nodes, absolutePositionsOf(nodes));
         // Both read and cleared first. `isRebuildCommit` keeps a measurement commit
         // out entirely; `justFramed` covers the rebuild commit the entry frame
         // already handled, where `getViewport` is still pre-tween — the same fact
@@ -886,7 +901,8 @@ const OperationGraphInner = ({
             const revealed = nodes.filter((node) => reveal.nodeIds.has(node.id));
             const pane = containerRef.current?.getBoundingClientRect();
             if (revealed.length > 0 && pane !== undefined) {
-                const bounds = boundsOfNodes(revealed);
+                // Unrolling a fan reveals its members, which are container children.
+                const bounds = boundsOfNodes(revealed, absolutePositionsOf(nodes));
                 if (bounds !== null) {
                     const { dx, dy } = revealPanShift(bounds, viewport, pane, paneChromeInset(pane));
                     viewport = { ...viewport, x: viewport.x + dx, y: viewport.y + dy };
@@ -905,7 +921,7 @@ const OperationGraphInner = ({
 
     const armViewportAnchor = useCallback(
         (nodeId: string, fallbackNodeId: string) => {
-            const node = getNode(nodeId) ?? getNode(fallbackNodeId);
+            const node = pannableNodeAt(nodeId) ?? pannableNodeAt(fallbackNodeId);
             if (!node) {
                 return;
             }
@@ -918,7 +934,7 @@ const OperationGraphInner = ({
                 reportScope,
             };
         },
-        [getNode, getViewport, reportScope],
+        [pannableNodeAt, getViewport, reportScope],
     );
 
     const toggleOperationExpansion = useCallback(

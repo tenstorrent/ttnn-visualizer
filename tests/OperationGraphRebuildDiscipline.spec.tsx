@@ -124,6 +124,20 @@ vi.mock('@xyflow/react', async () => {
             !flowStoreLag.isBlind && knownNodeIds.has(id)
                 ? { id, position: { x: 0, y: 0 }, width: STORE_NODE.width, height: STORE_NODE.height }
                 : undefined,
+        // The movers read this rather than `getNode`, because a node inside a
+        // container positions itself against the container and only the store
+        // holds the resolved coordinate. Same blindness gating, so the tests that
+        // assert framing survives an empty store still mean it. #2028
+        getInternalNode: (id: string) =>
+            !flowStoreLag.isBlind && knownNodeIds.has(id)
+                ? {
+                      id,
+                      position: { x: 0, y: 0 },
+                      internals: { positionAbsolute: { x: 0, y: 0 } },
+                      width: STORE_NODE.width,
+                      height: STORE_NODE.height,
+                  }
+                : undefined,
         getViewport: () => ({ ...viewportState.current }),
         setViewport,
     };
