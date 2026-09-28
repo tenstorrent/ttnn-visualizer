@@ -156,7 +156,7 @@ It contains the explicit `enabled` flag, an optional Prometheus remote-write end
 
 The metrics projection exports one `_total` counter per event name with only that event's documented fields as labels. It honours compacted `count` values. It never exports timestamps, `run_id`, hosted session directory names, raw event rows, usernames, hostnames, paths, or unknown fields. Collector health metrics distinguish a missing log, malformed lines, and a read failure. Deleting the event log resets the projected counters; compaction preserves them.
 
-The endpoint is unauthenticated, like every local-only endpoint, so any process on the machine can read the counts or inflate them by posting events. Treat per-machine counts as indicative rather than trustworthy.
+The endpoint is unauthenticated, like every local-only endpoint. `@local_only` disables it under `SERVER_MODE`; it does not restrict the source network address. With the default loopback binding, other processes on the machine can read the counts or inflate them by posting events. If a local install binds to a non-loopback address, including `0.0.0.0`, network clients that can reach the backend may do the same. Protect such bindings with an external access-control boundary. Treat per-machine counts as indicative rather than trustworthy.
 
 For setup and lifecycle commands, see [Local Prometheus collection](./local-prometheus-collection.md).
 

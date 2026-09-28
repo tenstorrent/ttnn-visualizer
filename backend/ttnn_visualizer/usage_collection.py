@@ -28,6 +28,10 @@ GENERATED_PROMETHEUS_FILENAME = "prometheus.generated.yml"
 DEFAULT_PROMETHEUS_TARGET = "host.docker.internal:8000"
 DEFAULT_BASE_PATH = "/"
 MACHINE_ID_LABEL = "machine_id"
+PRIVATE_FILE_MODE = 0o600
+CONTAINER_READABLE_FILE_MODE = 0o644
+EXPORTED_METRIC_PATTERN = "ttnn_visualizer_.*"
+TARGET_IDENTITY_LABEL_PATTERN = "job|instance"
 
 # Tests replace this so they never inspect or modify the developer's real config.
 COLLECTION_CONFIG_PATH: Optional[Path] = None
@@ -109,7 +113,9 @@ def _read_object(path: Path) -> Dict[str, Any]:
     return raw
 
 
-def _write_text_atomically(path: Path, content: str) -> None:
+def _write_text_atomically(
+    path: Path, content: str, mode: int = PRIVATE_FILE_MODE
+) -> None:
     descriptor, temporary_name = tempfile.mkstemp(
         dir=path.parent,
         prefix=f".{path.name}.",
@@ -119,7 +125,7 @@ def _write_text_atomically(path: Path, content: str) -> None:
     try:
         with os.fdopen(descriptor, "w", encoding="utf-8") as temporary_file:
             temporary_file.write(content)
-        os.chmod(temporary_path, 0o600)
+        os.chmod(temporary_path, mode)
         os.replace(temporary_path, path)
     finally:
         temporary_path.unlink(missing_ok=True)
@@ -262,7 +268,22 @@ def build_prometheus_config(
 
     rendered["global"]["external_labels"] = {MACHINE_ID_LABEL: config.machine_id}
     if config.remote_write_endpoint:
-        rendered["remote_write"] = [{"url": config.remote_write_endpoint}]
+        rendered["remote_write"] = [
+            {
+                "url": config.remote_write_endpoint,
+                "write_relabel_configs": [
+                    {
+                        "source_labels": ["__name__"],
+                        "regex": EXPORTED_METRIC_PATTERN,
+                        "action": "keep",
+                    },
+                    {
+                        "regex": TARGET_IDENTITY_LABEL_PATTERN,
+                        "action": "labeldrop",
+                    },
+                ],
+            }
+        ]
     return rendered
 
 
@@ -287,7 +308,11 @@ def render_prometheus_config(
         base_path=base_path,
     )
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    _write_text_atomically(output_path, yaml.safe_dump(rendered, sort_keys=False))
+    _write_text_atomically(
+        output_path,
+        yaml.safe_dump(rendered, sort_keys=False),
+        mode=CONTAINER_READABLE_FILE_MODE,
+    )
     return output_path
 
 

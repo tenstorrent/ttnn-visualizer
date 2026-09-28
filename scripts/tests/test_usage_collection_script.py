@@ -25,6 +25,12 @@ _HAS_DOCKER_COMPOSE = (
         capture_output=True,
     ).returncode
     == 0
+    and subprocess.run(
+        ["docker", "info"],
+        check=False,
+        capture_output=True,
+    ).returncode
+    == 0
 )
 
 
@@ -107,11 +113,22 @@ def test_renderer_and_compose_accept_an_enabled_config(tmp_path):
         {"targets": ["host.docker.internal:8123"]}
     ]
     assert prometheus_config["remote_write"] == [
-        {"url": "https://metrics.example/write"}
+        {
+            "url": "https://metrics.example/write",
+            "write_relabel_configs": [
+                {
+                    "source_labels": ["__name__"],
+                    "regex": "ttnn_visualizer_.*",
+                    "action": "keep",
+                },
+                {"regex": "job|instance", "action": "labeldrop"},
+            ],
+        }
     ]
     assert len(prometheus_config["global"]["external_labels"]["machine_id"]) == 32
-    assert stat.S_IMODE(output_path.stat().st_mode) == 0o600
+    assert stat.S_IMODE(output_path.stat().st_mode) == 0o644
 
+    compose_environment = os.environ | {"PROMETHEUS_CONFIG_FILE": str(output_path)}
     compose = subprocess.run(
         [
             "docker",
@@ -124,10 +141,34 @@ def test_renderer_and_compose_accept_an_enabled_config(tmp_path):
         check=False,
         capture_output=True,
         text=True,
-        env=os.environ | {"PROMETHEUS_CONFIG_FILE": str(output_path)},
+        env=compose_environment,
     )
 
     assert compose.returncode == 0, compose.stderr
+
+    promtool = subprocess.run(
+        [
+            "docker",
+            "compose",
+            "-f",
+            str(_REPOSITORY_ROOT / "docker" / "prometheus" / "docker-compose.yml"),
+            "run",
+            "--rm",
+            "--no-deps",
+            "--entrypoint",
+            "promtool",
+            "prometheus",
+            "check",
+            "config",
+            "/etc/prometheus/prometheus.yml",
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+        env=compose_environment,
+    )
+
+    assert promtool.returncode == 0, promtool.stderr
 
     linux_compose = subprocess.run(
         [
@@ -145,7 +186,7 @@ def test_renderer_and_compose_accept_an_enabled_config(tmp_path):
         check=False,
         capture_output=True,
         text=True,
-        env=os.environ | {"PROMETHEUS_CONFIG_FILE": str(output_path)},
+        env=compose_environment,
     )
 
     assert linux_compose.returncode == 0, linux_compose.stderr

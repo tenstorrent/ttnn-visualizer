@@ -16,3 +16,10 @@ scrape_configs:
           - host.docker.internal:8000
 remote_write:
   - url: https://prometheus.example/api/v1/write
+    write_relabel_configs:
+      - source_labels:
+          - __name__
+        regex: ttnn_visualizer_.*
+        action: keep
+      - regex: job|instance
+        action: labeldrop

@@ -17,6 +17,7 @@ from ttnn_visualizer.event_logging import (
     MAX_LOG_BYTES,
     RECORDING_DISABLED_ENV_VAR,
     RUN_ID_ENV_VAR,
+    SERVER_EVENT_DETAIL_FIELDS,
     EventLogEvent,
     EventLogView,
     _compact,
@@ -302,7 +303,19 @@ def test_prometheus_config_wires_target_identity_and_remote_write(
     assert rendered["scrape_configs"][0]["static_configs"] == [
         {"targets": ["host.docker.internal:8123"]}
     ]
-    assert rendered["remote_write"] == [{"url": "https://metrics.example/write"}]
+    assert rendered["remote_write"] == [
+        {
+            "url": "https://metrics.example/write",
+            "write_relabel_configs": [
+                {
+                    "source_labels": ["__name__"],
+                    "regex": "ttnn_visualizer_.*",
+                    "action": "keep",
+                },
+                {"regex": "job|instance", "action": "labeldrop"},
+            ],
+        }
+    ]
 
 
 def test_disabled_prometheus_config_omits_remote_write_and_identity():
@@ -372,7 +385,15 @@ def test_renderer_writes_valid_yaml(usage_collection_config_path, tmp_path):
     parsed = yaml.safe_load(output.read_text(encoding="utf-8"))
     assert parsed["scrape_configs"][0]["metrics_path"] == "/api/metrics"
     assert parsed["remote_write"][0]["url"] == "https://metrics.example/write"
-    assert stat.S_IMODE(output.stat().st_mode) == 0o600
+    assert parsed["remote_write"][0]["write_relabel_configs"] == [
+        {
+            "source_labels": ["__name__"],
+            "regex": "ttnn_visualizer_.*",
+            "action": "keep",
+        },
+        {"regex": "job|instance", "action": "labeldrop"},
+    ]
+    assert stat.S_IMODE(output.stat().st_mode) == 0o644
 
 
 def test_renderer_preserves_existing_config_when_atomic_replace_fails(
@@ -546,7 +567,15 @@ def test_metrics_reject_lines_outside_the_stored_schema(tmp_path, line):
 
 def _record_every_event() -> None:
     record_app_start(SimpleNamespace(TT_METAL_HOME=None), server_mode=False)
-    for event, fields in CLIENT_EVENT_DETAIL_FIELDS.items():
+    remaining_event_fields = {
+        **CLIENT_EVENT_DETAIL_FIELDS,
+        **{
+            event: fields
+            for event, fields in SERVER_EVENT_DETAIL_FIELDS.items()
+            if event is not EventLogEvent.APP_START
+        },
+    }
+    for event, fields in remaining_event_fields.items():
         details = {
             field: next(iter(_DETAIL_FIELD_ENUMS[field])).value for field in fields
         }

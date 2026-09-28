@@ -26,7 +26,7 @@ When `~/.ttnn-visualizer/app/collection.json` does not exist, the command create
 }
 ```
 
-An existing config is never overwritten, including one that is disabled or invalid. The renderer checks its `--app-target` and `--base-path` arguments first, so a run with invalid arguments creates nothing.
+The renderer never replaces an existing config with the default opt-in. Disabled and invalid contents are retained. A valid enabled config may be rewritten only to add a missing `machine_id`, normalise that ID to canonical UUID form, or harden file permissions. The renderer checks its `--app-target` and `--base-path` arguments first, so a run with invalid arguments creates nothing.
 
 This enables the local metrics endpoint and lets the Docker Prometheus retain scraped data locally. To forward those metrics to a centrally managed receiver, add its remote-write URL:
 
@@ -40,6 +40,8 @@ This enables the local metrics endpoint and lets the Docker Prometheus retain sc
 A remote-write endpoint must use HTTPS unless it is a loopback URL. Version 1 does not support URL query parameters, credentials in the URL, or a separate authentication secret.
 
 Remote-write requests are therefore unauthenticated. Until authentication is supported, place the receiver behind network controls such as a VPN, mutual TLS, or an IP allowlist. Anyone who can reach an unprotected receiver can write arbitrary series to it.
+
+Remote write keeps only `ttnn_visualizer_.*` metrics and removes Prometheus's `job` and `instance` target labels. Prometheus-generated scrape health series and the configured application target are not forwarded.
 
 The renderer, or the next TT-NN Visualizer launch, adds a random `machine_id` to the file and restricts its mode to `0600`. Until one of them has run, `/api/metrics` serves nothing for an enabled config, because every sample is labelled with that ID. This identifier is unrelated to the hostname, username, IP address, or report contents. Keep it to preserve one series identity across launches.
 
@@ -110,7 +112,7 @@ Open `http://localhost:9090/targets` and confirm that `ttnn-visualizer` is healt
 docker compose -f docker/prometheus/docker-compose.yml logs prometheus
 ```
 
-The generated configuration and Prometheus data are local state. `prometheus.generated.yml` is ignored by Git, and the TSDB uses a named Docker volume.
+The generated configuration and Prometheus data are local state. `prometheus.generated.yml` contains no credentials, is mode `0644` so the unprivileged Prometheus container can read it, and is ignored by Git. The TSDB uses a named Docker volume.
 
 ## Change or disable collection
 
