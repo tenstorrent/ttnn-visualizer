@@ -20,7 +20,7 @@ export function getViteMaxContentLength(value: unknown, serverMode: boolean): nu
         return serverMode ? HOSTED_DEFAULT_MAX_CONTENT_LENGTH : null;
     }
 
-    if (typeof value !== 'string' || value.trim() === '') {
+    if (typeof value !== 'string' || value === '') {
         return null;
     }
 

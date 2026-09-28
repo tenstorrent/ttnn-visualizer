@@ -349,7 +349,7 @@ def test_profiler_upload_rejects_a_body_over_the_configured_limit(
     assert response.status_code == HTTPStatus.REQUEST_ENTITY_TOO_LARGE
     assert (
         response.get_json()["error"]
-        == "Upload exceeds the maximum request size of 2 bytes."
+        == "Request exceeds the maximum request size of 2 bytes."
     )
 
 

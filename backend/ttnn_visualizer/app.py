@@ -297,13 +297,13 @@ def middleware(app: flask.Flask):
     @app.errorhandler(HTTPException)
     def handle_http_error(error: HTTPException):
         if error.code == HTTPStatus.REQUEST_ENTITY_TOO_LARGE:
-            max_content_length = app.config["MAX_CONTENT_LENGTH"]
+            max_content_length = flask.request.max_content_length
             if max_content_length is not None:
                 return (
                     jsonify(
                         {
                             "error": (
-                                "Upload exceeds the maximum request size of "
+                                "Request exceeds the maximum request size of "
                                 f"{max_content_length} bytes."
                             )
                         }

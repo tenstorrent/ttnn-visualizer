@@ -47,7 +47,7 @@ describe('getViteMaxContentLength', () => {
         expect(getViteMaxContentLength('', true)).toBeNull();
     });
 
-    it.each(['1.5', '1e3', 'many'])('rejects unreadable byte count %p', (value) => {
+    it.each(['   ', '1.5', '1e3', 'many'])('rejects unreadable byte count %p', (value) => {
         expect(() => getViteMaxContentLength(value, true)).toThrow('VITE_MAX_CONTENT_LENGTH');
     });
 });

@@ -775,6 +775,10 @@ def test_oversized_body_is_refused_before_it_is_parsed(client, event_log_directo
     )
 
     assert response.status_code == HTTPStatus.REQUEST_ENTITY_TOO_LARGE
+    assert response.get_json()["error"] == (
+        f"Request exceeds the maximum request size of "
+        f"{MAX_EVENT_LOG_REQUEST_BYTES} bytes."
+    )
     assert read_event_log_lines(event_log_directory) == []
 
 
