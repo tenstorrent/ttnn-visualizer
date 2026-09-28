@@ -11,7 +11,7 @@ import { type InitialEntry, MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ROUTES from '../src/definitions/Routes';
 import { EventLogEvent, EventLogView } from '../src/definitions/EventLogEvent';
-import { VIEW_ENGAGEMENT_THRESHOLD_MS } from '../src/hooks/useRecordViewEngaged';
+import { VIEW_ENGAGEMENT_THRESHOLD_MS } from '../src/definitions/ViewEngagement';
 
 /**
  * Covers the shell's wiring and the one structural invariant it asserts about itself.
@@ -103,10 +103,12 @@ describe('Layout event logging wiring', () => {
             vi.advanceTimersByTime(VIEW_ENGAGEMENT_THRESHOLD_MS);
         });
 
-        expect(recordEvent).toHaveBeenCalledWith({
-            event: EventLogEvent.VIEW_ENGAGED,
-            details: { view: EventLogView.REPORTS },
-        });
+        const engagedCalls = recordEvent.mock.calls.filter(
+            ([entry]) => (entry as { event: EventLogEvent }).event === EventLogEvent.VIEW_ENGAGED,
+        );
+        expect(engagedCalls).toEqual([
+            [{ event: EventLogEvent.VIEW_ENGAGED, details: { view: EventLogView.REPORTS } }],
+        ]);
     });
 
     it('balances every start with a teardown, including StrictMode remount', async () => {

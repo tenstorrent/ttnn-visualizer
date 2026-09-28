@@ -4,10 +4,13 @@
 
 import { type RefObject, useEffect, useRef } from 'react';
 import { type Location, useLocation } from 'react-router';
+import { VIEW_ENGAGEMENT_THRESHOLD_MS } from '../definitions/ViewEngagement';
 import { getEventLogView, recordViewEngaged } from '../functions/eventLogViews';
 import { getModalBackground, isReturningFromModal } from '../functions/modalRoute';
 
-export const VIEW_ENGAGEMENT_THRESHOLD_MS = 10_000;
+// One list for attaching and detaching, so an interaction added to one cannot be missed
+// by the other.
+const INTERACTION_EVENTS = ['pointerdown', 'keydown'] as const;
 
 interface EngagementState {
     interacted: boolean;
@@ -16,10 +19,20 @@ interface EngagementState {
     thresholdReached: boolean;
 }
 
+const createEngagementState = (): EngagementState => ({
+    interacted: false,
+    remainingThresholdMs: VIEW_ENGAGEMENT_THRESHOLD_MS,
+    recorded: false,
+    thresholdReached: false,
+});
+
 /**
  * Record one engagement after a countable view stays open and receives a deliberate
  * pointer or keyboard interaction. Movement, hover and scroll are excluded because
  * they are high-frequency and can happen without an intentional action.
+ *
+ * Listeners sit on the view container, so drawers, dialogs and popovers that portal to
+ * `document.body` do not count; opening one from the view already has.
  */
 export default function useRecordViewEngaged(viewContainerRef: RefObject<HTMLElement | null>): void {
     const location = useLocation();
@@ -35,9 +48,10 @@ export default function useRecordViewEngaged(viewContainerRef: RefObject<HTMLEle
         const previousLocation = previousLocationRef.current;
         const returningFromModal = previousLocation !== null && isReturningFromModal(previousLocation, location);
         const openingModal = previousLocation !== null && getModalBackground(location)?.key === previousLocation.key;
-        const continuingSamePath = previousLocation !== null && previousLocation.pathname === location.pathname;
+        const continuedFrom =
+            previousLocation !== null && previousLocation.pathname === location.pathname ? previousLocation : null;
         const engagementByVisitKey = engagementByVisitKeyRef.current;
-        if (!returningFromModal && !openingModal && !continuingSamePath) {
+        if (!returningFromModal && !openingModal && continuedFrom === null) {
             engagementByVisitKey.clear();
         }
         if (returningFromModal && previousLocation !== null) {
@@ -51,20 +65,9 @@ export default function useRecordViewEngaged(viewContainerRef: RefObject<HTMLEle
             return undefined;
         }
 
-        let engagementState =
-            continuingSamePath && previousLocation !== null
-                ? engagementByVisitKey.get(previousLocation.key)
-                : engagementByVisitKey.get(location.key);
-        if (engagementState === undefined) {
-            engagementState = {
-                interacted: false,
-                remainingThresholdMs: VIEW_ENGAGEMENT_THRESHOLD_MS,
-                recorded: false,
-                thresholdReached: false,
-            };
-        }
-        if (continuingSamePath && previousLocation !== null) {
-            engagementByVisitKey.delete(previousLocation.key);
+        const engagementState = engagementByVisitKey.get((continuedFrom ?? location).key) ?? createEngagementState();
+        if (continuedFrom !== null) {
+            engagementByVisitKey.delete(continuedFrom.key);
         }
         engagementByVisitKey.set(location.key, engagementState);
 
@@ -78,12 +81,14 @@ export default function useRecordViewEngaged(viewContainerRef: RefObject<HTMLEle
                 recordViewEngaged(view);
             }
         };
-        const handleInteraction = () => {
-            engagementState.interacted = true;
-            viewContainer.removeEventListener('pointerdown', handleInteraction);
-            viewContainer.removeEventListener('keydown', handleInteraction);
-            recordIfEngaged();
+        const detachInteractionListeners = () => {
+            INTERACTION_EVENTS.forEach((eventName) => viewContainer.removeEventListener(eventName, handleInteraction));
         };
+        function handleInteraction() {
+            engagementState.interacted = true;
+            detachInteractionListeners();
+            recordIfEngaged();
+        }
 
         if (!engagementState.recorded && !engagementState.thresholdReached) {
             timer = window.setTimeout(() => {
@@ -93,8 +98,7 @@ export default function useRecordViewEngaged(viewContainerRef: RefObject<HTMLEle
             }, engagementState.remainingThresholdMs);
         }
         if (!engagementState.recorded && !engagementState.interacted) {
-            viewContainer.addEventListener('pointerdown', handleInteraction);
-            viewContainer.addEventListener('keydown', handleInteraction);
+            INTERACTION_EVENTS.forEach((eventName) => viewContainer.addEventListener(eventName, handleInteraction));
         }
 
         return () => {
@@ -105,8 +109,7 @@ export default function useRecordViewEngaged(viewContainerRef: RefObject<HTMLEle
                 );
             }
             window.clearTimeout(timer);
-            viewContainer.removeEventListener('pointerdown', handleInteraction);
-            viewContainer.removeEventListener('keydown', handleInteraction);
+            detachInteractionListeners();
         };
     }, [location, viewContainerRef]);
 }

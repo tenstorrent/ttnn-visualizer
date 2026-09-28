@@ -56,7 +56,7 @@ from ttnn_visualizer.startup_requirements import enforce
 from ttnn_visualizer.startup_requirements import report as report_startup_requirements
 from ttnn_visualizer.usage_collection import (
     get_collection_config_path,
-    load_usage_collection_config,
+    prepare_usage_collection_config,
 )
 from ttnn_visualizer.utils import (
     find_gunicorn_path,
@@ -518,9 +518,14 @@ def _record_launch(config):
     os.environ[RUN_ID_ENV_VAR] = start_run()
 
     server_mode = is_flag_enabled(config.SERVER_MODE)
+    disabled_reason = get_recording_disabled_reason(server_mode)
     if not server_mode:
-        collection_config = load_usage_collection_config()
-        if collection_config.enabled:
+        collection_config = prepare_usage_collection_config()
+        if collection_config.enabled and disabled_reason is not None:
+            print(
+                "📈 Aggregate usage collection is DISABLED: event logging is disabled."
+            )
+        elif collection_config.enabled:
             print(
                 "📈 Aggregate usage collection is ENABLED.\n"
                 f"   Configuration: {get_collection_config_path()}"
@@ -536,7 +541,6 @@ def _record_launch(config):
                 f"   Opt in through {get_collection_config_path()}."
             )
 
-    disabled_reason = get_recording_disabled_reason(server_mode)
     if disabled_reason is not None:
         unrecognised_value = get_unrecognised_recording_disabled_value()
         if unrecognised_value is not None:

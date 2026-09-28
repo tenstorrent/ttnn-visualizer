@@ -5,11 +5,13 @@
 import '@testing-library/jest-dom/vitest';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { StrictMode, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { MemoryRouter, useLocation, useNavigate } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ROUTES from '../src/definitions/Routes';
 import { EventLogView } from '../src/definitions/EventLogEvent';
-import useRecordViewEngaged, { VIEW_ENGAGEMENT_THRESHOLD_MS } from '../src/hooks/useRecordViewEngaged';
+import { VIEW_ENGAGEMENT_THRESHOLD_MS } from '../src/definitions/ViewEngagement';
+import useRecordViewEngaged from '../src/hooks/useRecordViewEngaged';
 import { modalNavigationState } from '../src/functions/modalRoute';
 
 const { recordViewEngaged } = vi.hoisted(() => ({ recordViewEngaged: vi.fn() }));
@@ -59,6 +61,7 @@ function EngagementHarness() {
                 >
                     Go back
                 </button>
+                {createPortal(<button type='button'>Portaled action</button>, document.body)}
             </main>
         </>
     );
@@ -225,6 +228,19 @@ describe('useRecordViewEngaged', () => {
         act(() => {
             vi.advanceTimersByTime(VIEW_ENGAGEMENT_THRESHOLD_MS);
         });
+
+        expect(recordViewEngaged).not.toHaveBeenCalled();
+    });
+
+    it('ignores interaction inside content portaled out of the view', () => {
+        renderRecorder(ROUTES.OPERATIONS);
+        act(() => {
+            vi.advanceTimersByTime(VIEW_ENGAGEMENT_THRESHOLD_MS);
+        });
+
+        const portaledAction = screen.getByRole('button', { name: 'Portaled action' });
+        fireEvent.pointerDown(portaledAction);
+        fireEvent.keyDown(portaledAction, { key: 'Enter' });
 
         expect(recordViewEngaged).not.toHaveBeenCalled();
     });

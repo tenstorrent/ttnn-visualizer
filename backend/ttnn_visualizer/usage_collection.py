@@ -22,6 +22,9 @@ logger = logging.getLogger(__name__)
 
 COLLECTION_CONFIG_FILENAME = "collection.json"
 GENERATED_PROMETHEUS_FILENAME = "prometheus.generated.yml"
+# Mirror the ``PORT`` and ``BASE_PATH`` defaults in ``settings.Config``. The renderer is
+# a standalone CLI that runs without building ``Config``, so a change there must be
+# repeated here.
 DEFAULT_PROMETHEUS_TARGET = "host.docker.internal:8000"
 DEFAULT_BASE_PATH = "/"
 MACHINE_ID_LABEL = "machine_id"
@@ -69,6 +72,11 @@ def _validate_remote_write_endpoint(value: Any) -> str:
         parsed.port
     except ValueError as error:
         raise ValueError("remote_write_endpoint has an invalid port") from error
+    # TODO: Authenticate remote-write requests. Credentials are refused here because the
+    # URL is persisted in plain JSON and rendered into the generated Prometheus config,
+    # which leaves the receiver accepting anonymous writes from anyone who learns its
+    # URL. Support a secret read from a separate read-only file instead, rendered as
+    # Prometheus ``authorization.credentials_file`` or ``basic_auth.password_file``.
     if parsed.username is not None or parsed.password is not None:
         raise ValueError("remote_write_endpoint must not contain credentials")
     if parsed.query:
@@ -124,15 +132,19 @@ def _write_config(path: Path, data: Dict[str, Any]) -> None:
     _write_text_atomically(path, content)
 
 
-def load_usage_collection_config() -> UsageCollectionConfig:
-    """Read the opt-in file, failing closed without breaking application startup."""
+def _secure_config_permissions(path: Path) -> None:
+    os.chmod(path.parent, 0o700)
+    os.chmod(path, 0o600)
+
+
+def _load_config(persist: bool) -> UsageCollectionConfig:
     try:
         path = get_collection_config_path()
         if not path.exists():
             return UsageCollectionConfig()
 
-        os.chmod(path.parent, 0o700)
-        os.chmod(path, 0o600)
+        if persist:
+            _secure_config_permissions(path)
         data = _read_object(path)
         enabled = data.get("enabled", False)
         if not isinstance(enabled, bool):
@@ -147,12 +159,14 @@ def load_usage_collection_config() -> UsageCollectionConfig:
             else None
         )
         machine_id_value = data.get("machine_id")
-        if machine_id_value is None:
-            machine_id = uuid.uuid4().hex
-            data["machine_id"] = machine_id
-            _write_config(path, data)
-        else:
-            machine_id = _validate_machine_id(machine_id_value)
+        machine_id = (
+            _validate_machine_id(machine_id_value)
+            if machine_id_value is not None
+            else None
+        )
+        if persist:
+            if machine_id is None:
+                machine_id = uuid.uuid4().hex
             if machine_id != machine_id_value:
                 data["machine_id"] = machine_id
                 _write_config(path, data)
@@ -167,20 +181,34 @@ def load_usage_collection_config() -> UsageCollectionConfig:
         return UsageCollectionConfig(error=str(error))
 
 
+def load_usage_collection_config() -> UsageCollectionConfig:
+    """Read the opt-in file without modifying it, failing closed.
+
+    Read-only because it runs on every metrics scrape, a GET that any page can trigger
+    without reading the response. An enabled config that has not yet been prepared
+    has no ``machine_id``, and the metrics projection stays empty until it does.
+    """
+    return _load_config(persist=False)
+
+
+def prepare_usage_collection_config() -> UsageCollectionConfig:
+    """Load the opt-in file, restricting its permissions and persisting a machine ID.
+
+    Called at launch and by the renderer, the two places a user acts on collection.
+    """
+    return _load_config(persist=True)
+
+
 def initialise_usage_collection_config() -> UsageCollectionConfig:
     """Create the local-only opt-in on first explicit renderer invocation."""
     path = get_collection_config_path()
     if not path.exists():
         _write_config(path, {"enabled": True})
-    return load_usage_collection_config()
+    return prepare_usage_collection_config()
 
 
-def build_prometheus_config(
-    config: UsageCollectionConfig,
-    *,
-    app_target: str = DEFAULT_PROMETHEUS_TARGET,
-    base_path: str = DEFAULT_BASE_PATH,
-) -> Dict[str, Any]:
+def _get_metrics_path(app_target: str, base_path: str) -> str:
+    """Validate the scrape target and return the metrics path it is scraped at."""
     if not app_target or any(character.isspace() for character in app_target):
         raise ValueError("app target must be a non-empty host:port without whitespace")
     parsed_target = urlsplit(f"//{app_target}")
@@ -207,8 +235,16 @@ def build_prometheus_config(
         raise ValueError("base path must be an absolute URL path")
     # Match Flask's direct ``BASE_PATH + "api"`` blueprint mount exactly, including
     # legacy configurations that omit the conventional trailing slash.
-    metrics_path = f"{base_path}api/metrics"
+    return f"{base_path}api/metrics"
 
+
+def build_prometheus_config(
+    config: UsageCollectionConfig,
+    *,
+    app_target: str = DEFAULT_PROMETHEUS_TARGET,
+    base_path: str = DEFAULT_BASE_PATH,
+) -> Dict[str, Any]:
+    metrics_path = _get_metrics_path(app_target, base_path)
     rendered: Dict[str, Any] = {
         "global": {"scrape_interval": "1m"},
         "scrape_configs": [
@@ -237,10 +273,13 @@ def render_prometheus_config(
     base_path: str = DEFAULT_BASE_PATH,
     initialise_missing: bool = False,
 ) -> Path:
+    # Validated before initialising, so an invocation that fails does not opt the
+    # user in on its way to failing.
+    _get_metrics_path(app_target, base_path)
     config = (
         initialise_usage_collection_config()
         if initialise_missing
-        else load_usage_collection_config()
+        else prepare_usage_collection_config()
     )
     rendered = build_prometheus_config(
         config,

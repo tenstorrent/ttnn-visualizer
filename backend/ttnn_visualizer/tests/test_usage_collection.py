@@ -12,9 +12,17 @@ import pytest
 import yaml
 from ttnn_visualizer import usage_collection, usage_metrics
 from ttnn_visualizer.event_logging import (
+    _DETAIL_FIELD_ENUMS,
+    CLIENT_EVENT_DETAIL_FIELDS,
     MAX_LOG_BYTES,
+    RECORDING_DISABLED_ENV_VAR,
+    RUN_ID_ENV_VAR,
     EventLogEvent,
     EventLogView,
+    _compact,
+    get_disabled_marker_path,
+    get_event_log_path,
+    record_app_start,
     record_event,
 )
 from ttnn_visualizer.usage_metrics import (
@@ -26,7 +34,9 @@ _GOLDEN_METRICS_PATH = Path(__file__).parent / "data" / "usage_metrics.prom"
 
 
 @pytest.fixture(autouse=True)
-def reset_usage_metrics_state(monkeypatch):
+def reset_usage_metrics_state(monkeypatch, event_log_directory):
+    # Depends on ``event_log_directory`` so the recording opt-out the metrics honour is
+    # read from a temporary marker and a cleared variable, not the developer's own.
     monkeypatch.setattr(usage_metrics, "_metrics_state", usage_metrics._MetricsState())
 
 
@@ -116,13 +126,55 @@ def test_enabling_collection_creates_a_stable_random_identity(
         remote_write_endpoint="https://metrics.example/write",
     )
 
-    first = usage_collection.load_usage_collection_config()
-    second = usage_collection.load_usage_collection_config()
+    first = usage_collection.prepare_usage_collection_config()
+    second = usage_collection.prepare_usage_collection_config()
 
     assert first.enabled is True
     assert first.machine_id == second.machine_id
     assert uuid.UUID(first.machine_id or "").hex == first.machine_id
     assert stat.S_IMODE(usage_collection_config_path.stat().st_mode) == 0o600
+
+
+def test_loading_an_unprepared_config_does_not_modify_it(
+    usage_collection_config_path,
+):
+    _write_config(usage_collection_config_path, enabled=True)
+    usage_collection_config_path.chmod(0o644)
+    original = usage_collection_config_path.read_text(encoding="utf-8")
+
+    config = usage_collection.load_usage_collection_config()
+
+    assert config.enabled is True
+    assert config.machine_id is None
+    assert usage_collection_config_path.read_text(encoding="utf-8") == original
+    assert stat.S_IMODE(usage_collection_config_path.stat().st_mode) == 0o644
+
+
+def test_unprepared_config_renders_no_metrics(usage_collection_config_path, tmp_path):
+    _write_config(usage_collection_config_path, enabled=True)
+    log_path = tmp_path / "events.log"
+    log_path.write_text(
+        "ts=2026-09-28T10:00:00Z event=view_opened schema_version=1 "
+        "view=operations\n",
+        encoding="utf-8",
+    )
+
+    assert render_usage_metrics(log_path=log_path) == ""
+
+
+def test_preparing_normalises_a_hyphenated_machine_id(usage_collection_config_path):
+    machine_id = uuid.uuid4()
+    _write_config(
+        usage_collection_config_path, enabled=True, machine_id=str(machine_id)
+    )
+
+    config = usage_collection.prepare_usage_collection_config()
+
+    assert config.machine_id == machine_id.hex
+    assert json.loads(usage_collection_config_path.read_text(encoding="utf-8")) == {
+        "enabled": True,
+        "machine_id": machine_id.hex,
+    }
 
 
 @pytest.mark.parametrize(
@@ -192,11 +244,16 @@ def test_non_object_json_fails_closed(usage_collection_config_path):
     assert config.error
 
 
-def test_disabled_and_malformed_files_are_restricted(usage_collection_config_path):
-    _write_config(usage_collection_config_path, enabled=False)
+@pytest.mark.parametrize("contents", ['{"enabled": false}', "{not json"])
+def test_preparing_restricts_disabled_and_malformed_files(
+    usage_collection_config_path, contents
+):
+    usage_collection_config_path.parent.mkdir(parents=True)
+    usage_collection_config_path.write_text(contents, encoding="utf-8")
     usage_collection_config_path.chmod(0o644)
+    usage_collection_config_path.parent.chmod(0o755)
 
-    usage_collection.load_usage_collection_config()
+    usage_collection.prepare_usage_collection_config()
 
     assert stat.S_IMODE(usage_collection_config_path.stat().st_mode) == 0o600
     assert stat.S_IMODE(usage_collection_config_path.parent.stat().st_mode) == 0o700
@@ -217,7 +274,7 @@ def test_enabled_config_without_an_endpoint_collects_locally(
 ):
     _write_config(usage_collection_config_path, enabled=True)
 
-    config = usage_collection.load_usage_collection_config()
+    config = usage_collection.prepare_usage_collection_config()
     rendered = usage_collection.build_prometheus_config(config)
 
     assert config.enabled is True
@@ -337,6 +394,34 @@ def test_renderer_preserves_existing_config_when_atomic_replace_fails(
     assert list(tmp_path.glob(".prometheus.yml.*")) == []
 
 
+def test_renderer_with_invalid_arguments_does_not_opt_in(
+    usage_collection_config_path, tmp_path
+):
+    output = tmp_path / "prometheus.yml"
+
+    with pytest.raises(SystemExit) as exit_info:
+        usage_collection.main(["--app-target", "host", "--output", str(output)])
+
+    assert exit_info.value.code == 2
+    assert not output.exists()
+    assert not usage_collection_config_path.exists()
+
+
+def test_example_prometheus_config_matches_the_builder():
+    example_path = (
+        Path(__file__).parents[3] / "docker" / "prometheus" / "prometheus.example.yml"
+    )
+    config = usage_collection.UsageCollectionConfig(
+        enabled=True,
+        remote_write_endpoint="https://prometheus.example/api/v1/write",
+        machine_id="0" * 32,
+    )
+
+    assert yaml.safe_load(
+        example_path.read_text(encoding="utf-8")
+    ) == usage_collection.build_prometheus_config(config)
+
+
 def test_metrics_preserve_compacted_counts_and_drop_private_fields(tmp_path):
     machine_id = uuid.uuid4().hex
     log_path = tmp_path / "events.log"
@@ -429,6 +514,85 @@ def test_metrics_refuse_values_outside_the_event_schema(tmp_path, line, private_
     assert "ttnn_visualizer_usage_collector_parse_errors 1" in metrics
 
 
+@pytest.mark.parametrize(
+    "line",
+    [
+        "ts=2026-09-28T10:00:00Z event=view_opened schema_version=2 view=operations",
+        "ts=2026-09-28T10:00:00Z event=report_loaded schema_version=1 kind=profiler",
+        "ts= event=view_opened schema_version=1 view=operations",
+        "ts=2026-09-28T10:00:00Z event=view_opened schema_version=1 "
+        "view=operations count=0",
+        "ts=2026-09-28T10:00:00Z event=view_opened schema_version=1 "
+        "view=operations count=-1",
+        "ts=2026-09-28T10:00:00Z event=view_opened schema_version=1 "
+        "view=operations count=many",
+    ],
+)
+def test_metrics_reject_lines_outside_the_stored_schema(tmp_path, line):
+    log_path = tmp_path / "events.log"
+    log_path.write_text(f"{line}\n", encoding="utf-8")
+
+    metrics = render_usage_metrics(
+        usage_collection.UsageCollectionConfig(
+            enabled=True,
+            machine_id=uuid.uuid4().hex,
+        ),
+        log_path=log_path,
+    )
+
+    assert "_total{" not in metrics
+    assert "ttnn_visualizer_usage_collector_parse_errors 1" in metrics
+
+
+def _record_every_event() -> None:
+    record_app_start(SimpleNamespace(TT_METAL_HOME=None), server_mode=False)
+    for event, fields in CLIENT_EVENT_DETAIL_FIELDS.items():
+        details = {
+            field: next(iter(_DETAIL_FIELD_ENUMS[field])).value for field in fields
+        }
+        record_event(event, server_mode=False, **details)
+
+
+def test_every_recorded_event_is_projected(event_log_directory):
+    _record_every_event()
+
+    metrics = render_usage_metrics(
+        usage_collection.UsageCollectionConfig(
+            enabled=True,
+            machine_id=uuid.uuid4().hex,
+        ),
+        log_path=get_event_log_path(),
+    )
+
+    for event in EventLogEvent:
+        assert f"ttnn_visualizer_{event.value}_total{{" in metrics
+    assert "ttnn_visualizer_usage_collector_parse_errors 0" in metrics
+
+
+def test_compaction_preserves_projected_totals(event_log_directory):
+    config = usage_collection.UsageCollectionConfig(
+        enabled=True,
+        machine_id=uuid.uuid4().hex,
+    )
+    for _ in range(6):
+        record_event(
+            EventLogEvent.VIEW_OPENED,
+            server_mode=False,
+            view=EventLogView.OPERATIONS.value,
+        )
+    log_path = get_event_log_path()
+    before = render_usage_metrics(config, log_path=log_path)
+    lines_before = len(log_path.read_text(encoding="utf-8").splitlines())
+
+    _compact(log_path)
+    after = render_usage_metrics(config, log_path=log_path)
+
+    assert len(log_path.read_text(encoding="utf-8").splitlines()) < lines_before
+    assert after == before
+    assert 'view="operations"} 6' in after
+    assert "ttnn_visualizer_usage_collector_parse_errors 0" in after
+
+
 def test_metrics_match_the_privacy_reviewed_golden_output(tmp_path):
     log_path = tmp_path / "events.log"
     log_path.write_text(
@@ -457,6 +621,32 @@ def test_disabled_metrics_are_an_empty_exposition():
         render_usage_metrics(usage_collection.UsageCollectionConfig(enabled=False))
         == ""
     )
+
+
+def _enable_recording_opt_out(opt_out, monkeypatch):
+    if opt_out == "environment":
+        monkeypatch.setenv(RECORDING_DISABLED_ENV_VAR, "true")
+    else:
+        marker = get_disabled_marker_path()
+        marker.parent.mkdir(parents=True, exist_ok=True)
+        marker.touch()
+
+
+@pytest.mark.parametrize("opt_out", ["environment", "marker"])
+def test_metrics_endpoint_is_disabled_by_the_recording_opt_out(
+    client, app, usage_collection_config_path, monkeypatch, opt_out
+):
+    app.config["SERVER_MODE"] = False
+    _write_config(usage_collection_config_path, enabled=True)
+    usage_collection.prepare_usage_collection_config()
+    record_event(EventLogEvent.VIEW_OPENED, view=EventLogView.OPERATIONS)
+    assert b"ttnn_visualizer_view_opened_total" in client.get("/api/metrics").data
+
+    _enable_recording_opt_out(opt_out, monkeypatch)
+    response = client.get("/api/metrics")
+
+    assert response.status_code == 404
+    assert b"ttnn_visualizer_view_opened_total" not in response.data
 
 
 def test_missing_log_is_distinct_from_a_read_failure(tmp_path):
@@ -728,6 +918,7 @@ def test_local_metrics_endpoint_exports_recorded_events(
         enabled=True,
         remote_write_endpoint="https://metrics.example/write",
     )
+    usage_collection.prepare_usage_collection_config()
     record_event(EventLogEvent.VIEW_OPENED, view=EventLogView.OPERATIONS)
 
     response = client.get("/api/metrics")
@@ -754,11 +945,20 @@ def test_metrics_endpoint_is_forbidden_in_server_mode(client):
     assert response.status_code == 403
 
 
-def test_launch_reports_collection_without_printing_the_endpoint(
-    usage_collection_config_path, event_log_directory, capsys
-):
+def _record_launch_output(monkeypatch, capsys, server_mode=False) -> str:
     from ttnn_visualizer.app import _record_launch
 
+    # ``_record_launch`` writes the run ID straight into ``os.environ``. Setting it
+    # first makes monkeypatch record the variable, so it is removed afterwards rather
+    # than leaking into later tests.
+    monkeypatch.setenv(RUN_ID_ENV_VAR, "")
+    _record_launch(SimpleNamespace(SERVER_MODE=server_mode, TT_METAL_HOME=None))
+    return capsys.readouterr().out
+
+
+def test_launch_reports_collection_without_printing_the_endpoint(
+    usage_collection_config_path, monkeypatch, capsys
+):
     endpoint = "https://private-metrics.example/write"
     _write_config(
         usage_collection_config_path,
@@ -766,9 +966,60 @@ def test_launch_reports_collection_without_printing_the_endpoint(
         remote_write_endpoint=endpoint,
     )
 
-    _record_launch(SimpleNamespace(SERVER_MODE=False, TT_METAL_HOME=None))
+    output = _record_launch_output(monkeypatch, capsys)
 
-    output = capsys.readouterr().out
     assert "Aggregate usage collection is ENABLED" in output
     assert str(usage_collection_config_path) in output
     assert endpoint not in output
+    assert "machine_id" in json.loads(
+        usage_collection_config_path.read_text(encoding="utf-8")
+    )
+
+
+@pytest.mark.parametrize(
+    "contents, expected",
+    [
+        (None, "Aggregate usage collection is DISABLED.\n   Opt in through"),
+        ('{"enabled": false}', "Aggregate usage collection is DISABLED.\n   Opt in"),
+        (
+            '{"enabled": true, "remote_write_endpoint": "ftp://private.example/write"}',
+            "Aggregate usage collection is DISABLED: the collection config is invalid.",
+        ),
+    ],
+)
+def test_launch_reports_each_disabled_collection_state(
+    usage_collection_config_path, monkeypatch, capsys, contents, expected
+):
+    if contents is not None:
+        usage_collection_config_path.parent.mkdir(parents=True)
+        usage_collection_config_path.write_text(contents, encoding="utf-8")
+
+    output = _record_launch_output(monkeypatch, capsys)
+
+    assert expected in output
+    assert "private.example" not in output
+    assert "remote_write_endpoint must" not in output
+
+
+def test_launch_reports_collection_disabled_by_the_recording_opt_out(
+    usage_collection_config_path, monkeypatch, capsys
+):
+    _write_config(usage_collection_config_path, enabled=True)
+    monkeypatch.setenv(RECORDING_DISABLED_ENV_VAR, "true")
+
+    output = _record_launch_output(monkeypatch, capsys)
+
+    assert (
+        "Aggregate usage collection is DISABLED: event logging is disabled." in output
+    )
+    assert "Aggregate usage collection is ENABLED" not in output
+
+
+def test_hosted_launch_reports_no_collection_status(
+    usage_collection_config_path, monkeypatch, capsys
+):
+    _write_config(usage_collection_config_path, enabled=True)
+
+    output = _record_launch_output(monkeypatch, capsys, server_mode=True)
+
+    assert "Aggregate usage collection" not in output

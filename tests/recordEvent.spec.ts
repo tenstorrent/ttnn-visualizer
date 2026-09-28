@@ -190,7 +190,7 @@ describe('recordEvent batching', () => {
         vi.advanceTimersByTime(MIN_BATCH_WINDOW_MS);
 
         // One request for the window, not one per fifty events. Everything past the cap is
-        // dropped, which is the deliberate trade over issuing 100 posts mid-gesture.
+        // dropped, which is the deliberate trade over issuing 200 posts mid-gesture.
         expect(post).toHaveBeenCalledTimes(1);
         expect((post.mock.calls[0][1] as { events: unknown[] }).events).toHaveLength(MAX_BUFFERED_EVENTS);
     });

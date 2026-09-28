@@ -14,9 +14,9 @@ import pytest
 import yaml
 
 _REPOSITORY_ROOT = Path(__file__).parents[2]
-_SCRIPT = (
-    _REPOSITORY_ROOT / "scripts" / "usage-collection" / "render_prometheus_config.py"
-)
+# Runs the module rather than the ``ttnn-visualizer-prometheus-config`` entry point,
+# which is only on ``PATH`` once the package is installed into the active environment.
+_RENDERER = [sys.executable, "-m", "ttnn_visualizer.usage_collection"]
 _HAS_DOCKER_COMPOSE = (
     shutil.which("docker") is not None
     and subprocess.run(
@@ -30,7 +30,7 @@ _HAS_DOCKER_COMPOSE = (
 
 def test_prometheus_config_renderer_is_runnable():
     result = subprocess.run(
-        [sys.executable, str(_SCRIPT), "--help"],
+        [*_RENDERER, "--help"],
         check=False,
         capture_output=True,
         text=True,
@@ -44,12 +44,7 @@ def test_renderer_initialises_local_collection_when_config_is_missing(tmp_path):
     output_path = tmp_path / "prometheus.yml"
 
     result = subprocess.run(
-        [
-            sys.executable,
-            str(_SCRIPT),
-            "--output",
-            str(output_path),
-        ],
+        [*_RENDERER, "--output", str(output_path)],
         check=False,
         capture_output=True,
         text=True,
@@ -94,8 +89,7 @@ def test_renderer_and_compose_accept_an_enabled_config(tmp_path):
 
     rendered = subprocess.run(
         [
-            sys.executable,
-            str(_SCRIPT),
+            *_RENDERER,
             "--app-target",
             "host.docker.internal:8123",
             "--output",

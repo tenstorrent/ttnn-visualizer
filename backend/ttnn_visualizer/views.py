@@ -2501,6 +2501,11 @@ def health_check():
 @api.route("/metrics", methods=["GET"])
 @local_only
 def usage_metrics():
+    # Opting out of recording withdraws the endpoint too, so counts already in the log
+    # stop being reported under the machine ID without a separate collection opt-out.
+    if not is_recording_enabled():
+        return response_not_found("Event logging is disabled.")
+
     return Response(render_usage_metrics(), content_type=PROMETHEUS_CONTENT_TYPE)
 
 

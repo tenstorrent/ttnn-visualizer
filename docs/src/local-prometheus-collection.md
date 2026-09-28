@@ -26,7 +26,7 @@ When `~/.ttnn-visualizer/app/collection.json` does not exist, the command create
 }
 ```
 
-An existing config is never overwritten, including one that is disabled or invalid.
+An existing config is never overwritten, including one that is disabled or invalid. The renderer checks its `--app-target` and `--base-path` arguments first, so a run with invalid arguments creates nothing.
 
 This enables the local metrics endpoint and lets the Docker Prometheus retain scraped data locally. To forward those metrics to a centrally managed receiver, add its remote-write URL:
 
@@ -39,7 +39,9 @@ This enables the local metrics endpoint and lets the Docker Prometheus retain sc
 
 A remote-write endpoint must use HTTPS unless it is a loopback URL. Version 1 does not support URL query parameters, credentials in the URL, or a separate authentication secret.
 
-On the first successful read, TT-NN Visualizer adds a random `machine_id` to the file and restricts its mode to `0600`. This identifier is unrelated to the hostname, username, IP address, or report contents. Keep it to preserve one series identity across launches.
+Remote-write requests are therefore unauthenticated. Until authentication is supported, place the receiver behind network controls such as a VPN, mutual TLS, or an IP allowlist. Anyone who can reach an unprotected receiver can write arbitrary series to it.
+
+The renderer, or the next TT-NN Visualizer launch, adds a random `machine_id` to the file and restricts its mode to `0600`. Until one of them has run, `/api/metrics` serves nothing for an enabled config, because every sample is labelled with that ID. This identifier is unrelated to the hostname, username, IP address, or report contents. Keep it to preserve one series identity across launches.
 
 ## Start collection
 
@@ -120,6 +122,8 @@ docker compose -f docker/prometheus/docker-compose.yml restart prometheus
 ```
 
 To disable forwarding, set `"enabled": false`, rerender, and restart. The disabled generated configuration has no `remote_write` stanza, and `/api/metrics` returns an empty valid exposition.
+
+Opting out of event logging, with `USAGE_RECORDING_DISABLED=true` or the `~/.ttnn-visualizer/usage/disabled` marker, also disables `/api/metrics`: it returns `404` and serves nothing, including counts already in the log. The collection config is left unchanged, so removing the opt-out resumes collection under the same machine ID.
 
 Deleting `collection.json` also disables collection. If it is recreated and enabled later, a new machine ID is generated. Deleting `events.log` resets the projected counters but does not delete samples already accepted by the remote Prometheus.
 

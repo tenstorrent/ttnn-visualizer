@@ -40,7 +40,7 @@ obvious from the code that reads it:
   counter behind it is per-process, so a multi-worker deployment multiplies that
   overshoot by its worker count. Treat the cap as approximate. Local compaction at the
   next launch summarises the older half and appends resume; hosted retention and
-  compaction belong to the deployment collector.
+  compaction belong to the deployment's independently operated collector.
 
 Every recorded value comes from a closed enum, a bucketed value, or the
 application's own version. No report, file, directory, operation or host names,
@@ -62,7 +62,18 @@ from enum import Enum
 from importlib.metadata import PackageNotFoundError, distribution
 from importlib.metadata import version as distribution_version
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple, Type
+from typing import (
+    Any,
+    Dict,
+    FrozenSet,
+    Iterable,
+    List,
+    Mapping,
+    Optional,
+    Sequence,
+    Tuple,
+    Type,
+)
 
 from ttnn_visualizer.utils import (
     FALSE_VALUES,
@@ -365,6 +376,15 @@ EVENT_DETAIL_FIELDS: Mapping[EventLogEvent, Tuple[str, ...]] = {
     **SERVER_EVENT_DETAIL_FIELDS,
     **CLIENT_EVENT_DETAIL_FIELDS,
 }
+_EXPECTED_DETAIL_FIELD_SETS: Mapping[EventLogEvent, FrozenSet[str]] = {
+    event: frozenset(fields) for event, fields in EVENT_DETAIL_FIELDS.items()
+}
+
+# Application and Python versions are server-derived constrained strings rather than
+# closed enums; they are the only detail fields without an entry in
+# ``_DETAIL_FIELD_ENUMS``. A new ``app_start`` detail needs one or the other, or every
+# launch line is rejected when read back.
+_CONSTRAINED_STRING_DETAIL_FIELDS = frozenset((VERSION_FIELD, PYTHON_VERSION_FIELD))
 
 
 def _is_valid_event_detail_value(field: str, value: str) -> bool:
@@ -377,9 +397,7 @@ def _is_valid_event_detail_value(field: str, value: str) -> bool:
             return False
         return True
 
-    # Application and Python versions are server-derived constrained strings rather
-    # than closed enums; they are the only exceptions in the event schema.
-    return field in {VERSION_FIELD, PYTHON_VERSION_FIELD} and _is_safe_value(value)
+    return field in _CONSTRAINED_STRING_DETAIL_FIELDS and _is_safe_value(value)
 
 
 class EventLogEventRejected(Exception):
@@ -1393,6 +1411,10 @@ def parse_event_log_line(line: str) -> Optional[Dict[str, str]]:
     return fields or None
 
 
+def _has_required_fields(fields: Mapping[str, str]) -> bool:
+    return all(name in fields for name in _REQUIRED_FIELDS)
+
+
 def _parse_event_count(fields: Mapping[str, str]) -> Optional[int]:
     """Return a positive event count, defaulting an omitted count to one."""
     try:
@@ -1405,8 +1427,14 @@ def _parse_event_count(fields: Mapping[str, str]) -> Optional[int]:
 def parse_known_event_fields(
     fields: Mapping[str, str],
 ) -> Optional[Tuple[EventLogEvent, Dict[str, str], int]]:
-    """Validate a stored event against the current bounded event schema."""
-    if any(name not in fields for name in _REQUIRED_FIELDS):
+    """Validate a stored event against the current bounded event schema.
+
+    The read-side twin of :func:`validate_client_event`: both match detail keys exactly
+    against ``EVENT_DETAIL_FIELDS`` and values against ``_DETAIL_FIELD_ENUMS``, so a
+    schema change updates both. This one returns ``None`` rather than raising, because
+    a line that fails it is skipped rather than refused.
+    """
+    if not _has_required_fields(fields):
         return None
     if fields[SCHEMA_VERSION_FIELD] != str(SCHEMA_VERSION):
         return None
@@ -1419,7 +1447,7 @@ def parse_known_event_fields(
         return None
 
     expected_fields = EVENT_DETAIL_FIELDS[event]
-    if set(fields) - _COMMON_FIELDS != set(expected_fields):
+    if fields.keys() - _COMMON_FIELDS != _EXPECTED_DETAIL_FIELD_SETS[event]:
         return None
 
     details = {name: fields[name] for name in expected_fields}
@@ -1458,7 +1486,7 @@ def _summarise(lines: List[str]) -> List[str]:
         # cleanly but has no timestamp or event, and summarising it would render an
         # empty `ts=` and a fabricated `event=unknown` — a garbled line dressed up as
         # a well-formed one, which the collector can no longer tell to skip.
-        if fields is None or any(name not in fields for name in _REQUIRED_FIELDS):
+        if fields is None or not _has_required_fields(fields):
             unparsed.append(line)
             continue
 
