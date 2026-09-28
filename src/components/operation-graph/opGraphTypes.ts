@@ -188,6 +188,14 @@ export interface OpGraphBuiltGraph {
     nodes: OpGraphFlowNode[];
     edges: OpGraphFlowEdge[];
     blocks?: OpGraphBlockSummary[];
+    /**
+     * Weight fans, kept apart from `blocks` rather than folded into it. `blocks`
+     * drives the grouping controls — the fold/unroll-all predicates, the toolbar
+     * count, and the set `expandedBlockIds` is seeded from when it is `null` — and a
+     * fan in any of those inverts its own default, which is folded-unless-named where
+     * a grouping block is unrolled-unless-folded. The panel lookup wants both. #2028
+     */
+    weightFans?: OpGraphBlockSummary[];
 }
 
 // Rebuilt only when the worker delivers a graph, in canvas order. The filter and

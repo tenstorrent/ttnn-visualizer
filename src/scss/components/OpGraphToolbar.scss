@@ -108,6 +108,18 @@
 // switch in the app; `.bp6-control` is chained in to outrank Blueprint's own
 // checked-indicator rule on specificity rather than with `!important`, which this
 // stylesheet disallows. #1982
-.op-graph-toolbar-switch.op-graph-switch-weights.bp6-control input:checked ~ .bp6-control-indicator {
-    background-color: var(--graph-block-weights-border);
+//
+// `.bp6-switch` is chained in for the hover and active states specifically: Blueprint
+// darkens a checked switch from `.bp6-dark .bp6-control.bp6-switch:hover …`, which
+// outranks the base rule below, so without it the control snapped back to Blueprint's
+// blue under the cursor and read as a different switch. #2028
+.op-graph-toolbar-switch.op-graph-switch-weights.bp6-control {
+    input:checked ~ .bp6-control-indicator {
+        background-color: var(--graph-block-weights-border);
+    }
+
+    &.bp6-switch:hover input:checked ~ .bp6-control-indicator,
+    &.bp6-switch input:checked:not(:disabled):active ~ .bp6-control-indicator {
+        background-color: var(--graph-block-weights-border-hover);
+    }
 }

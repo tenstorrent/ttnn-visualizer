@@ -1817,17 +1817,15 @@ describe('OperationGraphReactFlow repeat blocks', () => {
         expect((runBuild.mock.calls.at(-1)?.[0] as OpGraphBuildOptions).expandedBlockIds).toEqual(['weights:7-8']);
     });
 
-    it('has no route to fold an unrolled fan, which is why nothing cleans up after one', () => {
-        // The builder treats a remembered id that contains a fan's members as "the
-        // reader opened this", so folding a fan would have to drop those ids or the
-        // next build re-opens it. `toggleBlockExpansion` does not, deliberately:
-        // `blockInstanceId` is set only on a collapsed block node and
-        // `blockByMemberOperationId` is built from `detectedBlocks`, which holds no
-        // fans, so an unrolled fan's members link back to nothing.
+    it('folds an unrolled fan from a member, dropping the ids that would re-open it', () => {
+        // This test used to pin the opposite — that no route existed — with a note
+        // saying it would fail once fans became first-class and the cleanup had to
+        // arrive with it. It did, so both halves are asserted here now.
         //
-        // This pins that property rather than the absence of code. #1987 is slated to
-        // make fans first-class, and when it lands this test fails and the cleanup
-        // has to arrive with it. #1988
+        // The builder reads any remembered id whose membership covers these operations
+        // as "the reader opened this", so deleting the fan's own id is not enough: a
+        // decision recorded under a pre-merge name survives and re-opens the fan on
+        // the next build. #1988, #2028
         const withFan: OperationDescription[] = [
             operation(1, 'ttnn.to_device', [3]),
             operation(2, 'ttnn.to_device', [3]),
@@ -1850,8 +1848,54 @@ describe('OperationGraphReactFlow repeat blocks', () => {
             harness.onNodeDoubleClick?.(null, member);
         });
 
-        // Nothing folded, so nothing rebuilt: the member is not a route back.
-        expect(runBuild).not.toHaveBeenCalled();
+        // The member is a route back, and the fold leaves nothing behind that covers it.
+        expect(runBuild).toHaveBeenCalled();
+        expect((runBuild.mock.calls.at(-1)?.[0] as OpGraphBuildOptions).expandedBlockIds).toEqual([]);
+    });
+
+    it('folds a fan whose id a grouping merge changed under the reader', () => {
+        // Fan identity is its membership, so folding the grouping blocks merges two
+        // fans into one under a name the expansion set has never seen. Asking that set
+        // by equality answered "not open", so the fold click computed unroll and the
+        // fan could not be closed; and deleting only the on-screen id leaves the
+        // pre-merge one behind for the builder to re-open from. #1988, #2028
+        const chain: OperationDescription[] = [
+            operation(1, 'ttnn.to_device', [11]),
+            operation(2, 'ttnn.to_device', [12]),
+            operation(3, 'ttnn.to_device', [12]),
+            operation(11, 'ttnn.linear', [12]),
+            operation(12, 'ttnn.relu', [21]),
+            operation(21, 'ttnn.linear', [22]),
+            operation(22, 'ttnn.relu', [30]),
+            operation(30, 'ttnn.softmax', []),
+        ];
+        renderGraph(chain);
+        // Repeats unrolled, so 11 and 12 draw apart and 2 and 3 are the only fan.
+        deliver(chain, { collapseWeightLoads: true, grouping: OpGraphGrouping.REPEATS });
+        act(() => {
+            harness.onNodeDoubleClick?.(null, nodeById(lastFlowRender().nodes, 'weights:2-3'));
+        });
+        const opened = (runBuild.mock.calls.at(-1)?.[0] as OpGraphBuildOptions).expandedBlockIds;
+        expect(opened).toEqual(expect.arrayContaining(['weights:2-3']));
+
+        // Folding the repeats merges 11 and 12, so op 1 joins the fan and it is
+        // rebuilt as `weights:1-2-3` — an id nothing remembers.
+        fireEvent.click(screen.getByRole('button', { name: 'Fold all repeats' }));
+        const folded = (runBuild.mock.calls.at(-1)?.[0] as OpGraphBuildOptions).expandedBlockIds;
+        deliver(chain, { collapseWeightLoads: true, grouping: OpGraphGrouping.REPEATS, expandedBlockIds: folded });
+        expect(lastFlowRender().nodes.map((node) => node.id)).toEqual(expect.arrayContaining(['weights:1-2-3']));
+
+        runBuild.mockClear();
+        act(() => {
+            harness.onNodeDoubleClick?.(null, nodeById(lastFlowRender().nodes, '2'));
+        });
+
+        // Folded, and the pre-merge id went with it — left behind, the next build
+        // reads it as "the reader opened this" and the fan reopens forever.
+        expect(runBuild).toHaveBeenCalled();
+        const after = (runBuild.mock.calls.at(-1)?.[0] as OpGraphBuildOptions).expandedBlockIds;
+        expect(after).not.toContain('weights:2-3');
+        expect(after).not.toContain('weights:1-2-3');
     });
 
     it('asks to unfold a weight fan when its expander is clicked', () => {

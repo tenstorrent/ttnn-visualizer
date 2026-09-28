@@ -83,6 +83,7 @@ import {
     type OpGraphSourceOperation,
 } from './opGraphTypes';
 import { fusedActivationOf } from './opGraphFusedActivation';
+import { weightFanIdCovers, weightFanMembersOf } from './opGraphWeightFans';
 import { OpGraphGrouping } from './opGraphTypes';
 import 'styles/components/OperationGraphReactFlow.scss';
 
@@ -345,6 +346,10 @@ const OperationGraphInner = ({
     // describes the graph; it does not get to decide how the graph opens. #1977
     const [expandedBlockIds, setExpandedBlockIds] = useState<ReadonlySet<string> | null>(null);
     const [detectedBlocks, setDetectedBlocks] = useState<OpGraphBlockSummary[]>(NO_BLOCKS);
+    // Deliberately not merged into `detectedBlocks`: that array drives the grouping
+    // controls and the seed for `expandedBlockIds`, and a fan in either inverts its
+    // own fold default. Only the panel lookup below reads both. #2028
+    const [weightFans, setWeightFans] = useState<OpGraphBlockSummary[]>(NO_BLOCKS);
     // A view preference like `hideDeallocate`, so it survives a report change: someone
     // comparing two reports by layer does not want the mode reset under them. #1976
     const [grouping, setGrouping] = useState<OpGraphGrouping>(OpGraphGrouping.REPEATS);
@@ -530,7 +535,24 @@ const OperationGraphInner = ({
             // Told apart by membership of `detectedBlocks` — fans are not in it — rather
             // than by sniffing the id, which would break for the next detector added.
             if (!detectedBlockIds.has(instanceId)) {
-                return expandedBlockIds?.has(instanceId) ?? false;
+                const members = weightFanMembersOf(instanceId);
+                if (members === null || expandedBlockIds === undefined || expandedBlockIds === null) {
+                    return expandedBlockIds?.has(instanceId) ?? false;
+                }
+                // Containment, not equality, because the builder decides the same
+                // question that way: a grouping fold merges or splits a fan and the
+                // id changes, so the decision the reader made is remembered under a
+                // name the fan no longer has. Asking by equality made the fold pill
+                // on a merged fan compute the wrong direction. #2028
+                if (expandedBlockIds.has(instanceId)) {
+                    return true;
+                }
+                for (const remembered of expandedBlockIds) {
+                    if (weightFanIdCovers(remembered, members)) {
+                        return true;
+                    }
+                }
+                return false;
             }
             return expandedBlockIds === null || expandedBlockIds.has(instanceId);
         },
@@ -575,6 +597,23 @@ const OperationGraphInner = ({
         }
         return byOperationId;
     }, [detectedBlocks]);
+
+    // Kept apart from the grouping map rather than merged into it. An operation can be
+    // named by both — a grouping block lists it whether or not that block is folded,
+    // and a fan forms from operations no *folded* block has claimed — so one map with
+    // one winner answers with whichever was inserted first, which on an unrolled
+    // grouping block is the owner that is not drawing anything. #2028
+    const fanByMemberOperationId = useMemo(() => {
+        const byOperationId = new Map<number, OpGraphBlockSummary>();
+        for (const fan of weightFans) {
+            for (const memberOpId of fan.operationIds) {
+                if (!byOperationId.has(memberOpId)) {
+                    byOperationId.set(memberOpId, fan);
+                }
+            }
+        }
+        return byOperationId;
+    }, [weightFans]);
 
     // Only the expanded operations are assembled: one operation's frame stream
     // runs to thousands of nodes, so deriving all of them up front would pay for
@@ -654,6 +693,7 @@ const OperationGraphInner = ({
             // `runBuild` then loops.
             pendingEmptyPaneCheckRef.current = true;
             const nextBlocks = graph.blocks && graph.blocks.length > 0 ? graph.blocks : NO_BLOCKS;
+            setWeightFans(graph.weightFans && graph.weightFans.length > 0 ? graph.weightFans : NO_BLOCKS);
             // "Fold all" is `[]`, which names no instance and so cannot go stale.
             // "Unroll all" is a list of ids, and that asymmetry is a bug: a rebuild
             // that renames an instance -- a deallocate first in a repeating unit, or
@@ -988,14 +1028,21 @@ const OperationGraphInner = ({
                     return next;
                 }
                 next.delete(instanceId);
-                // No fan cleanup here on purpose. Folding an unrolled fan has no route
-                // through this handler: `blockInstanceId` is set only on the collapsed
-                // block node, and `blockByMemberOperationId` is built from
-                // `detectedBlocks`, which holds no fans — so an unrolled fan's members
-                // link back to nothing. When #1987 makes fans first-class this becomes
-                // reachable, and the remembered ids that cover the folded fan's members
-                // have to be dropped with it, or the builder's merge carry re-opens it
-                // on the next build. #1988
+                // Deleting the id alone is not enough for a fan. The builder treats any
+                // remembered id whose membership covers these operations as "the reader
+                // opened this", so a decision recorded under the fan's pre-merge name
+                // survives the delete and re-opens it on the next build — the fan then
+                // never folds, however many times it is clicked. Both routes into this
+                // handler reach a fan now: the container's own pill, and a double-click
+                // on a member. #1988, #2028
+                const foldedFanMembers = weightFanMembersOf(instanceId);
+                if (foldedFanMembers !== null) {
+                    for (const remembered of [...next]) {
+                        if (weightFanIdCovers(remembered, foldedFanMembers)) {
+                            next.delete(remembered);
+                        }
+                    }
+                }
                 return next;
             });
             if (!isUnrolling && block !== undefined) {
@@ -1522,12 +1569,14 @@ const OperationGraphInner = ({
                 toggleBlockExpansion(node.data.blockInstanceId);
                 return;
             }
-            const instance = blockByMemberOperationId.get(node.data.operationId);
+            const instance =
+                blockByMemberOperationId.get(node.data.operationId) ??
+                fanByMemberOperationId.get(node.data.operationId);
             if (instance !== undefined && isBlockExpanded(instance.instanceId)) {
                 toggleBlockExpansion(instance.instanceId);
             }
         },
-        [blockByMemberOperationId, isBlockExpanded, toggleBlockExpansion],
+        [blockByMemberOperationId, fanByMemberOperationId, isBlockExpanded, toggleBlockExpansion],
     );
 
     const handlePaneClick = useCallback(() => {
@@ -1600,9 +1649,17 @@ const OperationGraphInner = ({
         if (selectedOperationId === null) {
             return null;
         }
-        const owner = blockByMemberOperationId.get(selectedOperationId);
-        return owner !== undefined && !isBlockExpanded(owner.instanceId) ? owner : null;
-    }, [selectedOperationId, blockByMemberOperationId, isBlockExpanded]);
+        // The folded one, not the first one: both a grouping block and a fan can name
+        // this operation, and only the folded owner is the node on screen. Picking by
+        // insertion order described a block the reader cannot see, so the panel fell
+        // through to the operation and a clicked fan reported its first member while
+        // the pill carried the selection ring.
+        const owners = [
+            blockByMemberOperationId.get(selectedOperationId),
+            fanByMemberOperationId.get(selectedOperationId),
+        ];
+        return owners.find((owner) => owner !== undefined && !isBlockExpanded(owner.instanceId)) ?? null;
+    }, [selectedOperationId, blockByMemberOperationId, fanByMemberOperationId, isBlockExpanded]);
 
     const selectedPerfAggregate =
         selectedOperationId === null ? undefined : perfOverlay.aggregatesByOpId.get(selectedOperationId);

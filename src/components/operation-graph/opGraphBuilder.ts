@@ -177,6 +177,7 @@ export function buildOpGraph(
     // label and dedupes parallel edges across a collapsed boundary. Detected here rather
     // than in a pre-pass because "the same rendered node" depends on what grouping just
     // folded. #1980
+    const detectedFans: RepeatBlockInstance[] = [];
     if (collapseWeightLoads) {
         // Decoded once for the whole build, not per fan: the check below runs for
         // every fan, and parsing the id and allocating a set inside that loop made the
@@ -198,6 +199,7 @@ export function buildOpGraph(
             renderedNodeIdOf,
             isClaimed: (operationId) => collapsedInstanceByOpId.has(operationId),
         });
+        detectedFans.push(...fans);
         for (const fan of fans) {
             // Unlike a grouping block, a fan's absence from the expansion set means
             // folded: the switch is on by default, so "no decision" is the folded state
@@ -508,7 +510,7 @@ export function buildOpGraph(
         layoutEdges,
     );
 
-    const blocks: OpGraphBlockSummary[] = detectedBlocks.map((instance) => {
+    const summarise = (instance: RepeatBlockInstance): OpGraphBlockSummary => {
         const members = instance.operationIds
             .map((id) => operationById.get(id))
             .filter((member): member is OpGraphSourceOperation => member !== undefined);
@@ -522,7 +524,13 @@ export function buildOpGraph(
             durationSeconds: sumOptional(members.map((member) => member.durationSeconds)),
             memoryDeltaBytes: sumOptional(members.map((member) => member.memoryDeltaBytes)),
         };
-    });
+    };
+    const blocks: OpGraphBlockSummary[] = detectedBlocks.map(summarise);
+    // Reported so a folded fan can describe itself in the panel the way a folded
+    // grouping block does. Without it the panel fell through to the fan's first
+    // member, so the pill carried the selection ring while the panel described one
+    // of the two operations inside it. #2028
+    const weightFans: OpGraphBlockSummary[] = detectedFans.map(summarise);
 
     return {
         // Children last: React Flow resolves `parentId` against the nodes it has
@@ -533,5 +541,6 @@ export function buildOpGraph(
         ],
         edges: [...edges, ...deviceOpEdges],
         blocks,
+        weightFans,
     };
 }
