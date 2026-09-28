@@ -2,9 +2,12 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
+export const HOSTED_DEFAULT_MAX_CONTENT_LENGTH = 1024 * 1024 * 1024;
+
 export interface ServerConfig {
     SERVER_MODE?: boolean;
     BASE_PATH?: string;
+    MAX_CONTENT_LENGTH?: number | null;
     TT_METAL_HOME?: string;
     REPORT_DATA_DIRECTORY?: string;
     USERNAME?: string;

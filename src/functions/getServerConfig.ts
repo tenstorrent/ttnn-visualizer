@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { DEFAULT_SSH_PORT } from '../definitions/RemoteConnection';
-import { ServerConfig } from '../definitions/ServerConfig';
+import { HOSTED_DEFAULT_MAX_CONTENT_LENGTH, ServerConfig } from '../definitions/ServerConfig';
 import { MAX_PORT } from '../definitions/SshConnectionFields';
 
 declare global {
@@ -13,6 +13,28 @@ declare global {
 }
 
 const MIN_SSH_PORT = 1;
+const BYTE_COUNT_PATTERN = /^[+-]?\d+$/;
+
+export function getViteMaxContentLength(value: unknown, serverMode: boolean): number | null {
+    if (value === undefined) {
+        return serverMode ? HOSTED_DEFAULT_MAX_CONTENT_LENGTH : null;
+    }
+
+    if (typeof value !== 'string' || value.trim() === '') {
+        return null;
+    }
+
+    const normalised = value.trim();
+    const parsedValue = Number(normalised);
+    if (!BYTE_COUNT_PATTERN.test(normalised) || !Number.isSafeInteger(parsedValue)) {
+        throw new Error(
+            `VITE_MAX_CONTENT_LENGTH=${JSON.stringify(value)} is not a safe whole number of bytes. ` +
+                'Set a byte count, or leave it empty for no limit.',
+        );
+    }
+
+    return parsedValue;
+}
 
 export function getValidSshDefaultPort(value: unknown): number {
     const parsedPort = Number(value);
@@ -99,10 +121,12 @@ const getServerConfig = (): ServerConfig => {
     // Dev mode configuration - use environment variables to simulate the server config
     if (import.meta.env.DEV) {
         warnOnUnrecognisedServerMode(import.meta.env.VITE_SERVER_MODE);
+        const serverMode = isServerModeEnabled(import.meta.env.VITE_SERVER_MODE);
 
         return {
             BASE_PATH: '/',
-            SERVER_MODE: isServerModeEnabled(import.meta.env.VITE_SERVER_MODE),
+            SERVER_MODE: serverMode,
+            MAX_CONTENT_LENGTH: getViteMaxContentLength(import.meta.env.VITE_MAX_CONTENT_LENGTH, serverMode),
             TT_METAL_HOME: import.meta.env.VITE_TT_METAL_HOME,
             REPORT_DATA_DIRECTORY: import.meta.env.VITE_REPORT_DATA_DIRECTORY || '/path/to/data/directory', // Default value for development
             // On, matching the backend default, because this is not the switch: `/api`
@@ -123,6 +147,7 @@ const getServerConfig = (): ServerConfig => {
 
     return {
         BASE_PATH: windowConfig?.BASE_PATH || '/',
+        MAX_CONTENT_LENGTH: windowConfig?.MAX_CONTENT_LENGTH,
         // Through the same predicate as the dev branch: `|| false` is the truthy-string
         // reading that made `SERVER_MODE` invertible in the first place, and this is the
         // branch the hosted deployment actually takes.

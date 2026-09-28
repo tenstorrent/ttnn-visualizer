@@ -118,8 +118,9 @@ def _wsgi_environ(host: str, scheme: str = "http", **headers: str) -> dict:
     return {"wsgi.url_scheme": scheme, "HTTP_HOST": host, **headers}
 
 
-def test_only_hosted_apps_apply_the_global_upload_cap(tmp_path):
+def test_hosted_default_upload_cap_preserves_operator_values(tmp_path, monkeypatch):
     configured_cap = 1024
+    monkeypatch.delenv("MAX_CONTENT_LENGTH", raising=False)
     hosted_app = create_app(
         settings_override=base_test_settings(
             str(tmp_path / "hosted"),
@@ -133,9 +134,18 @@ def test_only_hosted_apps_apply_the_global_upload_cap(tmp_path):
             MAX_CONTENT_LENGTH=configured_cap,
         )
     )
+    hosted_app_without_cap = create_app(
+        settings_override=base_test_settings(str(tmp_path / "hosted-unlimited"))
+    )
+    monkeypatch.setenv("MAX_CONTENT_LENGTH", "")
+    hosted_app_with_explicit_opt_out = create_app(
+        settings_override=base_test_settings(str(tmp_path / "hosted-opt-out"))
+    )
 
-    assert hosted_app.config["MAX_CONTENT_LENGTH"] == 1 * 1024 * 1024 * 1024
+    assert hosted_app.config["MAX_CONTENT_LENGTH"] == configured_cap
     assert local_app.config["MAX_CONTENT_LENGTH"] == configured_cap
+    assert hosted_app_without_cap.config["MAX_CONTENT_LENGTH"] == 1 * 1024 * 1024 * 1024
+    assert hosted_app_with_explicit_opt_out.config["MAX_CONTENT_LENGTH"] is None
 
 
 def _import_settings_with(
@@ -603,6 +613,21 @@ def test_importing_settings_leaves_max_content_length_unlimited_by_default():
 
     assert result.returncode == 0, result.stderr
     assert result.stdout.strip() == "None"
+
+
+def test_hosted_config_derives_the_default_max_content_length():
+    result = _import_settings_with(
+        "from ttnn_visualizer.settings import DefaultConfig; "
+        "config = DefaultConfig(); "
+        "config.override_with_env_variables(); "
+        "print(config.MAX_CONTENT_LENGTH)",
+        absent_env=("MAX_CONTENT_LENGTH",),
+        ignore_dotenv=True,
+        SERVER_MODE="true",
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "1073741824"
 
 
 def test_importing_settings_allows_an_empty_max_content_length():

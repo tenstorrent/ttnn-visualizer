@@ -335,10 +335,9 @@ def test_validate_files_skips_consistency_check_when_folder_name_is_explicit():
 def test_profiler_upload_rejects_a_body_over_the_configured_limit(
     app, client, make_report
 ):
-    """The hosted app-wide Flask cap must reject multipart uploads before writing."""
+    """A configured app-wide Flask cap rejects multipart uploads before writing."""
     assert app.config["SERVER_MODE"] is True
-    assert app.config["MAX_CONTENT_LENGTH"] == 1 * 1024 * 1024 * 1024
-    app.config["MAX_CONTENT_LENGTH"] = 1
+    app.config["MAX_CONTENT_LENGTH"] = 2
 
     response = client.post(
         "/api/local/upload/profiler",
@@ -348,7 +347,10 @@ def test_profiler_upload_rejects_a_body_over_the_configured_limit(
     )
 
     assert response.status_code == HTTPStatus.REQUEST_ENTITY_TOO_LARGE
-    assert isinstance(response.get_json()["error"], str)
+    assert (
+        response.get_json()["error"]
+        == "Upload exceeds the maximum request size of 2 bytes."
+    )
 
 
 def test_profiler_upload_chromium_style_lands_under_report_folder(

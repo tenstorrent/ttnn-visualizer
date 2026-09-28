@@ -51,6 +51,7 @@ from ttnn_visualizer.settings import (
     Config,
     DefaultConfig,
     build_socketio_origin_check,
+    get_effective_max_content_length,
 )
 from ttnn_visualizer.startup_requirements import enforce
 from ttnn_visualizer.startup_requirements import report as report_startup_requirements
@@ -66,7 +67,6 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 
 logger = logging.getLogger(__name__)
 SENSITIVE_CONFIG_KEYS = frozenset({"SECRET_KEY"})
-_HOSTED_MAX_CONTENT_LENGTH = 1 * 1024 * 1024 * 1024
 
 
 def _get_client_username(server_mode: bool) -> str | None:
@@ -88,6 +88,7 @@ def _build_spa_client_config(app: Flask) -> dict:
     js_config = {
         "SERVER_MODE": server_mode,
         "BASE_PATH": app.config["BASE_PATH"],
+        "MAX_CONTENT_LENGTH": app.config.get("MAX_CONTENT_LENGTH"),
         "TT_METAL_HOME": app.config["TT_METAL_HOME"],
         "REPORT_DATA_DIRECTORY": str(app.config["REPORT_DATA_DIRECTORY"]),
         "USERNAME": _get_client_username(server_mode),
@@ -175,8 +176,12 @@ def create_app(settings_override=None):
     if settings_override:
         app.config.update(settings_override)
 
-    if is_flag_enabled(app.config["SERVER_MODE"]):
-        app.config["MAX_CONTENT_LENGTH"] = _HOSTED_MAX_CONTENT_LENGTH
+    # Reapply the settings-owned derivation after test/programmatic overrides, which
+    # intentionally bypass Config.recompute_derived_settings().
+    app.config["MAX_CONTENT_LENGTH"] = get_effective_max_content_length(
+        is_flag_enabled(app.config["SERVER_MODE"]),
+        app.config["MAX_CONTENT_LENGTH"],
+    )
 
     # Hosted session IDs identify the event log, so browsers must never send them over
     # an unencrypted connection. ``settings_override`` bypasses Config's recomputation.
@@ -291,6 +296,21 @@ def middleware(app: flask.Flask):
 
     @app.errorhandler(HTTPException)
     def handle_http_error(error: HTTPException):
+        if error.code == HTTPStatus.REQUEST_ENTITY_TOO_LARGE:
+            max_content_length = app.config["MAX_CONTENT_LENGTH"]
+            if max_content_length is not None:
+                return (
+                    jsonify(
+                        {
+                            "error": (
+                                "Upload exceeds the maximum request size of "
+                                f"{max_content_length} bytes."
+                            )
+                        }
+                    ),
+                    error.code,
+                )
+
         message = error.description or error.name or "Request failed"
         return (
             jsonify({"error": message}),

@@ -29,6 +29,7 @@ import {
 import createToastNotification from '../../functions/createToastNotification';
 import { ToastType } from '../../definitions/ToastType';
 import getResponseError from '../../functions/getResponseError';
+import getUploadSizeLimitError from '../../functions/getUploadSizeLimitError';
 import isDirectReportMode from '../../functions/isDirectReportMode';
 import {
     PERFORMANCE_FOLDER_QUERY_KEY,
@@ -197,6 +198,13 @@ const LocalFolderOptions = () => {
             return;
         }
 
+        const uploadSizeLimitError = getUploadSizeLimitError(files);
+        if (uploadSizeLimitError) {
+            setProfilerFolder({ status: ConnectionTestStates.FAILED, message: uploadSizeLimitError });
+            recordReportLoadFailed(ReportKind.PROFILER, ReportLoadFailureReason.TOO_LARGE);
+            return;
+        }
+
         setIsUploadingReport(true);
         setProfilerUploadLabel(`${files.length} files selected.`);
 
@@ -247,6 +255,13 @@ const LocalFolderOptions = () => {
         if (!checkRequiredPerformanceFiles(files)) {
             setPerformanceFolder(invalidProfilerStatus);
             recordReportLoadFailed(ReportKind.PERFORMANCE, ReportLoadFailureReason.MISSING_FILE);
+            return;
+        }
+
+        const uploadSizeLimitError = getUploadSizeLimitError(files);
+        if (uploadSizeLimitError) {
+            setPerformanceFolder({ status: ConnectionTestStates.FAILED, message: uploadSizeLimitError });
+            recordReportLoadFailed(ReportKind.PERFORMANCE, ReportLoadFailureReason.TOO_LARGE);
             return;
         }
 
