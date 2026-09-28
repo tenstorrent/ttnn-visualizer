@@ -37,6 +37,10 @@ describe('getOptionalPathDefault', () => {
 });
 
 describe('getViteMaxContentLength', () => {
+    afterEach(() => {
+        vi.restoreAllMocks();
+    });
+
     it('uses the hosted default only when the value is absent', () => {
         expect(getViteMaxContentLength(undefined, true)).toBe(HOSTED_DEFAULT_MAX_CONTENT_LENGTH);
         expect(getViteMaxContentLength(undefined, false)).toBeNull();
@@ -47,9 +51,16 @@ describe('getViteMaxContentLength', () => {
         expect(getViteMaxContentLength('', true)).toBeNull();
     });
 
-    it.each(['   ', '1.5', '1e3', 'many'])('rejects unreadable byte count %p', (value) => {
-        expect(() => getViteMaxContentLength(value, true)).toThrow('VITE_MAX_CONTENT_LENGTH');
-    });
+    it.each(['   ', '1.5', '1e3', 'many', '0', '-1'])(
+        'warns and falls back to the default for unreadable byte count %p',
+        (value) => {
+            const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+            expect(getViteMaxContentLength(value, true)).toBe(HOSTED_DEFAULT_MAX_CONTENT_LENGTH);
+            expect(getViteMaxContentLength(value, false)).toBeNull();
+            expect(warn).toHaveBeenCalledWith(expect.stringContaining('VITE_MAX_CONTENT_LENGTH'));
+        },
+    );
 });
 
 describe('isServerModeEnabled', () => {

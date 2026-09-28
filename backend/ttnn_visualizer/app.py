@@ -181,6 +181,8 @@ def create_app(settings_override=None):
     app.config["MAX_CONTENT_LENGTH"] = get_effective_max_content_length(
         is_flag_enabled(app.config["SERVER_MODE"]),
         app.config["MAX_CONTENT_LENGTH"],
+        is_configured="MAX_CONTENT_LENGTH" in os.environ
+        or "MAX_CONTENT_LENGTH" in (settings_override or {}),
     )
 
     # Hosted session IDs identify the event log, so browsers must never send them over
@@ -297,8 +299,15 @@ def middleware(app: flask.Flask):
     @app.errorhandler(HTTPException)
     def handle_http_error(error: HTTPException):
         if error.code == HTTPStatus.REQUEST_ENTITY_TOO_LARGE:
+            # Werkzeug also raises 413 for too many form parts or an oversized form
+            # field, where quoting the byte limit would name one the request never hit.
             max_content_length = flask.request.max_content_length
-            if max_content_length is not None:
+            content_length = flask.request.content_length
+            if (
+                max_content_length is not None
+                and content_length is not None
+                and content_length > max_content_length
+            ):
                 return (
                     jsonify(
                         {

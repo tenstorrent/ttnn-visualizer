@@ -15,9 +15,14 @@ declare global {
 const MIN_SSH_PORT = 1;
 const BYTE_COUNT_PATTERN = /^[+-]?\d+$/;
 
+// Unlike the backend parser this warns rather than throws: `axiosInstance` reads the config
+// at module scope, so a throw here blanks the whole dev app, and the check this value feeds
+// is advisory — Flask behind the `/api` proxy still enforces its own limit.
 export function getViteMaxContentLength(value: unknown, serverMode: boolean): number | null {
+    const fallback = serverMode ? HOSTED_DEFAULT_MAX_CONTENT_LENGTH : null;
+
     if (value === undefined) {
-        return serverMode ? HOSTED_DEFAULT_MAX_CONTENT_LENGTH : null;
+        return fallback;
     }
 
     if (typeof value !== 'string' || value === '') {
@@ -26,11 +31,14 @@ export function getViteMaxContentLength(value: unknown, serverMode: boolean): nu
 
     const normalised = value.trim();
     const parsedValue = Number(normalised);
-    if (!BYTE_COUNT_PATTERN.test(normalised) || !Number.isSafeInteger(parsedValue)) {
-        throw new Error(
-            `VITE_MAX_CONTENT_LENGTH=${JSON.stringify(value)} is not a safe whole number of bytes. ` +
-                'Set a byte count, or leave it empty for no limit.',
+    if (!BYTE_COUNT_PATTERN.test(normalised) || !Number.isSafeInteger(parsedValue) || parsedValue <= 0) {
+        // eslint-disable-next-line no-console -- there is no UI yet at config-read time, and this branch is dev-only.
+        console.warn(
+            `VITE_MAX_CONTENT_LENGTH=${JSON.stringify(value)} is not a positive whole number of bytes, so the ` +
+                'default applies. Set a byte count above zero, or leave it empty for no limit.',
         );
+
+        return fallback;
     }
 
     return parsedValue;

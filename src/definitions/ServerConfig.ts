@@ -2,8 +2,9 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-// Same as _HOSTED_DEFAULT_MAX_CONTENT_LENGTH in settings.py
-export const HOSTED_DEFAULT_MAX_CONTENT_LENGTH = 1024 * 1024 * 1024;
+// Same as _HOSTED_DEFAULT_MAX_CONTENT_LENGTH in settings.py; test_server_config_frontend_parity.py
+// reads this as a product of integers, so keep it in that form.
+export const HOSTED_DEFAULT_MAX_CONTENT_LENGTH = 1 * 1024 * 1024 * 1024;
 
 export interface ServerConfig {
     SERVER_MODE?: boolean;

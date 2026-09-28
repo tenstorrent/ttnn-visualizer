@@ -118,34 +118,41 @@ def _wsgi_environ(host: str, scheme: str = "http", **headers: str) -> dict:
     return {"wsgi.url_scheme": scheme, "HTTP_HOST": host, **headers}
 
 
-def test_hosted_default_upload_cap_preserves_operator_values(tmp_path, monkeypatch):
-    configured_cap = 1024
-    monkeypatch.delenv("MAX_CONTENT_LENGTH", raising=False)
-    hosted_app = create_app(
-        settings_override=base_test_settings(
-            str(tmp_path / "hosted"),
-            MAX_CONTENT_LENGTH=configured_cap,
-        )
-    )
-    local_app = create_app(
-        settings_override=base_test_settings(
-            str(tmp_path / "local"),
-            SERVER_MODE="false",
-            MAX_CONTENT_LENGTH=configured_cap,
-        )
-    )
-    hosted_app_without_cap = create_app(
-        settings_override=base_test_settings(str(tmp_path / "hosted-unlimited"))
-    )
-    monkeypatch.setenv("MAX_CONTENT_LENGTH", "")
-    hosted_app_with_explicit_opt_out = create_app(
-        settings_override=base_test_settings(str(tmp_path / "hosted-opt-out"))
+_UNSET = object()
+
+
+@pytest.mark.parametrize(
+    ("server_mode", "override", "env_value", "expected"),
+    [
+        pytest.param(True, 1024, _UNSET, 1024, id="hosted-keeps-configured-cap"),
+        pytest.param(False, 1024, _UNSET, 1024, id="local-keeps-configured-cap"),
+        pytest.param(True, _UNSET, _UNSET, 1073741824, id="hosted-defaults-to-1-gib"),
+        # The claim that keeps this change from capping every existing local install.
+        pytest.param(False, _UNSET, _UNSET, None, id="local-stays-unlimited"),
+        pytest.param(True, None, _UNSET, None, id="hosted-override-opts-out"),
+        pytest.param(True, _UNSET, "", None, id="hosted-empty-variable-opts-out"),
+    ],
+)
+def test_the_effective_upload_cap(
+    tmp_path, monkeypatch, server_mode, override, env_value, expected
+):
+    if env_value is _UNSET:
+        monkeypatch.delenv("MAX_CONTENT_LENGTH", raising=False)
+    else:
+        monkeypatch.setenv("MAX_CONTENT_LENGTH", env_value)
+
+    # Dropping the key rather than pinning it is the "never configured" state under test.
+    app = create_app(
+        settings_override={
+            key: value
+            for key, value in base_test_settings(
+                str(tmp_path), SERVER_MODE=server_mode, MAX_CONTENT_LENGTH=override
+            ).items()
+            if value is not _UNSET
+        }
     )
 
-    assert hosted_app.config["MAX_CONTENT_LENGTH"] == configured_cap
-    assert local_app.config["MAX_CONTENT_LENGTH"] == configured_cap
-    assert hosted_app_without_cap.config["MAX_CONTENT_LENGTH"] == 1 * 1024 * 1024 * 1024
-    assert hosted_app_with_explicit_opt_out.config["MAX_CONTENT_LENGTH"] is None
+    assert app.config["MAX_CONTENT_LENGTH"] == expected
 
 
 def _import_settings_with(
@@ -642,7 +649,7 @@ def test_importing_settings_allows_an_empty_max_content_length():
     assert result.stdout.strip() == "None"
 
 
-@pytest.mark.parametrize("env_value", ["abc", "  ", "1.5", "10MB"])
+@pytest.mark.parametrize("env_value", ["abc", "  ", "1.5", "10MB", "0", "-1"])
 def test_an_unreadable_max_content_length_names_itself(env_value):
     # The class body calls this unguarded, so a typo aborts startup — right, since the
     # value it would otherwise fall back to is *no limit*, but only useful if the

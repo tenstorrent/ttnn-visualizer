@@ -230,28 +230,39 @@ def _parse_max_content_length(env_value: str) -> Optional[int]:
     operator asked for. The class-body call is unguarded, so this message is what
     they get in place of a bare ``int()`` traceback; the override loop catches it
     and keeps the declared limit instead.
+
+    Zero and negatives are refused too: Werkzeug would reject every request with a
+    body, while the SPA reads a non-positive limit as none at all and starts uploads
+    the server can only refuse.
     """
     if not env_value:
         return None
 
+    value: Optional[int]
     try:
-        return int(env_value)
+        value = int(env_value)
     except ValueError:
+        value = None
+
+    if value is None or value <= 0:
         raise ValueError(
-            f"MAX_CONTENT_LENGTH={env_value!r} is not a byte count. "
-            "Set a whole number of bytes, or leave it empty for no limit."
-        ) from None
+            f"MAX_CONTENT_LENGTH={env_value!r} is not a positive byte count. "
+            "Set a whole number of bytes above zero, or leave it empty for no limit."
+        )
+
+    return value
 
 
 def get_effective_max_content_length(
-    server_mode: bool, configured_value: Optional[int]
+    server_mode: bool, configured_value: Optional[int], is_configured: bool
 ) -> Optional[int]:
-    """Supply the hosted default without replacing an operator-provided value."""
-    if (
-        server_mode
-        and configured_value is None
-        and os.getenv("MAX_CONTENT_LENGTH") is None
-    ):
+    """Supply the hosted default without replacing an operator-provided value.
+
+    ``None`` means both "never configured" and "explicitly no limit", so the caller
+    says which it has rather than this function re-deriving it from the environment —
+    that is what lets ``settings_override`` pin a hosted app to no limit.
+    """
+    if server_mode and configured_value is None and not is_configured:
         return _HOSTED_DEFAULT_MAX_CONTENT_LENGTH
 
     return configured_value
@@ -772,7 +783,9 @@ class DefaultConfig(object):
         self.GUNICORN_BIND = f"{self.HOST}:{self.PORT}"
         self.SESSION_COOKIE_SECURE = self.SERVER_MODE
         self.MAX_CONTENT_LENGTH = get_effective_max_content_length(
-            self.SERVER_MODE, self.MAX_CONTENT_LENGTH
+            self.SERVER_MODE,
+            self.MAX_CONTENT_LENGTH,
+            is_configured="MAX_CONTENT_LENGTH" in os.environ,
         )
 
     def _refuse_debug_under_server_mode(self) -> None:

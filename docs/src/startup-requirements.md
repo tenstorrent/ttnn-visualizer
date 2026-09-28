@@ -92,6 +92,6 @@ raises at import and the arbiter reports `Worker failed to boot.` Run
 unmet without waiting on a restart loop.
 
 Settings that cannot be *parsed* — a `SERVER_MODE` that is not a recognised boolean, a
-`MAX_CONTENT_LENGTH` that is not a byte count — fail earlier than these checks, with
+`MAX_CONTENT_LENGTH` that is not a positive byte count — fail earlier than these checks, with
 their own message on stderr. `--check-config` still exits non-zero for them, so a deploy
 gate reading the exit code needs no special case.
