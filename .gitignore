@@ -57,3 +57,6 @@ build
 # Sphinx documentation build
 docs/output
 .pnpm-store
+
+# Generated local Prometheus configuration can contain a private remote-write endpoint.
+docker/prometheus/prometheus.generated.yml

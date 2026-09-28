@@ -18,6 +18,7 @@ import FeedbackButton from './FeedbackButton';
 import FileStatusOverlay from './FileStatusOverlay';
 import MlirFileResultsOverlay from './mlir/MlirFileResultsOverlay';
 import { initEventLogging } from '../functions/recordEvent';
+import useRecordViewEngaged from '../hooks/useRecordViewEngaged';
 import useRecordViewOpened from '../hooks/useRecordViewOpened';
 import { isModalOpen } from '../functions/modalRoute';
 
@@ -39,6 +40,7 @@ function Layout() {
     useEffect(() => initEventLogging(), []);
 
     useRecordViewOpened();
+    useRecordViewEngaged();
 
     return (
         <>

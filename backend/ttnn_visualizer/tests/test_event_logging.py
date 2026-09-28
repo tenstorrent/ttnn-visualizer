@@ -27,11 +27,13 @@ from ttnn_visualizer.event_logging import (
     _REQUIRED_FIELDS,
     CLIENT_EVENT_DETAIL_FIELDS,
     COUNT_FIELD,
+    EVENT_DETAIL_FIELDS,
     LOG_SIZE_CHECK_INTERVAL_BYTES,
     MAX_EVENT_LOG_BATCH_EVENTS,
     RECORDING_DISABLED_ENV_VAR,
     RUN_ID_ENV_VAR,
     RUN_ID_FIELD,
+    SERVER_EVENT_DETAIL_FIELDS,
     DeploymentMode,
     EventLogEvent,
     EventLogView,
@@ -764,6 +766,13 @@ def test_compaction_keeps_lines_it_cannot_parse(event_log_directory, monkeypatch
     assert "garbled" in read_event_log_lines(event_log_directory)
 
 
+@pytest.mark.parametrize("count", ["0", "-1", "not-a-number"])
+def test_summarising_preserves_lines_with_invalid_counts(count):
+    line = "ts=2026-08-01T10:00:00Z event=app_start schema_version=1 " f"count={count}"
+
+    assert event_logging._summarise([line]) == [line]
+
+
 def test_compaction_does_not_dress_up_a_fragment_as_a_summary(
     event_log_directory, monkeypatch
 ):
@@ -940,6 +949,8 @@ def test_every_client_postable_event_has_a_validation_rule():
     assert set(CLIENT_EVENT_DETAIL_FIELDS) == set(EventLogEvent) - {
         EventLogEvent.APP_START
     }
+    assert set(SERVER_EVENT_DETAIL_FIELDS) == {EventLogEvent.APP_START}
+    assert set(EVENT_DETAIL_FIELDS) == set(EventLogEvent)
 
 
 def test_every_detail_field_draws_from_an_enum():

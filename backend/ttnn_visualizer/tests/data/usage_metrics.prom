@@ -1,0 +1,17 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
+# HELP ttnn_visualizer_report_loaded_total Cumulative report_loaded events in the local usage log.
+# TYPE ttnn_visualizer_report_loaded_total counter
+ttnn_visualizer_report_loaded_total{kind="profiler",machine_id="00000000000000000000000000000001",source="upload"} 2
+# HELP ttnn_visualizer_view_opened_total Cumulative view_opened events in the local usage log.
+# TYPE ttnn_visualizer_view_opened_total counter
+ttnn_visualizer_view_opened_total{machine_id="00000000000000000000000000000001",view="operations"} 1
+# HELP ttnn_visualizer_usage_collector_files_found Whether the local usage event log exists.
+# TYPE ttnn_visualizer_usage_collector_files_found gauge
+ttnn_visualizer_usage_collector_files_found 1
+# HELP ttnn_visualizer_usage_collector_parse_errors Malformed or unsupported lines in the local usage event log.
+# TYPE ttnn_visualizer_usage_collector_parse_errors gauge
+ttnn_visualizer_usage_collector_parse_errors 0
+# HELP ttnn_visualizer_usage_collector_scan_errors Whether reading the local usage event log failed.
+# TYPE ttnn_visualizer_usage_collector_scan_errors gauge
+ttnn_visualizer_usage_collector_scan_errors 0

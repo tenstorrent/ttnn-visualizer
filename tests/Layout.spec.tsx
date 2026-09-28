@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import '@testing-library/jest-dom/vitest';
-import { cleanup, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { StrictMode } from 'react';
 import type { ComponentType } from 'react';
 import { HelmetProvider } from 'react-helmet-async';
@@ -11,6 +11,7 @@ import { type InitialEntry, MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ROUTES from '../src/definitions/Routes';
 import { EventLogEvent, EventLogView } from '../src/definitions/EventLogEvent';
+import { VIEW_ENGAGEMENT_THRESHOLD_MS } from '../src/hooks/useRecordViewEngaged';
 
 /**
  * Covers the shell's wiring and the one structural invariant it asserts about itself.
@@ -68,6 +69,7 @@ describe('Layout event logging wiring', () => {
 
     afterEach(() => {
         cleanup();
+        vi.useRealTimers();
     });
 
     it('starts event logging on mount', async () => {
@@ -86,6 +88,23 @@ describe('Layout event logging wiring', () => {
         expect(recordEvent).toHaveBeenCalledTimes(1);
         expect(recordEvent).toHaveBeenCalledWith({
             event: EventLogEvent.VIEW_OPENED,
+            details: { view: EventLogView.REPORTS },
+        });
+    });
+
+    it('records engagement through the mounted layout hook', async () => {
+        vi.useFakeTimers();
+        const { default: Layout } = await import('../src/components/Layout');
+        renderLayout(Layout);
+        recordEvent.mockClear();
+
+        fireEvent.pointerDown(document);
+        act(() => {
+            vi.advanceTimersByTime(VIEW_ENGAGEMENT_THRESHOLD_MS);
+        });
+
+        expect(recordEvent).toHaveBeenCalledWith({
+            event: EventLogEvent.VIEW_ENGAGED,
             details: { view: EventLogView.REPORTS },
         });
     });
