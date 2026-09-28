@@ -130,6 +130,22 @@ def test_build_spa_client_config_omits_ssh_defaults_under_server_mode():
     assert config["SERVER_MODE"] is True
 
 
+def test_build_spa_client_config_publishes_the_request_limit():
+    app = _FakeApp(
+        {
+            "SERVER_MODE": True,
+            "BASE_PATH": "/",
+            "MAX_CONTENT_LENGTH": 1024,
+            "TT_METAL_HOME": "/metal",
+            "REPORT_DATA_DIRECTORY": "/reports",
+        }
+    )
+
+    config = _build_spa_client_config(app)
+
+    assert config["MAX_CONTENT_LENGTH"] == 1024
+
+
 def test_serialize_spa_js_config_escapes_script_breakout():
     js = _serialize_spa_js_config(
         {

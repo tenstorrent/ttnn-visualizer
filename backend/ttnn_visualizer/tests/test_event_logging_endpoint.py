@@ -770,8 +770,8 @@ def test_oversized_body_is_refused_before_it_is_parsed(client, event_log_directo
     """413 from Werkzeug, not 400: asserted rather than assumed, as it is framework-owned.
 
     The body is well-formed and would otherwise be accepted, so only the byte cap can
-    reject it. ``MAX_CONTENT_LENGTH`` is unset on a default install, which is why the
-    route sets a limit per request.
+    reject it. Hosted ``MAX_CONTENT_LENGTH`` defaults to a report-sized cap, while
+    local installs can leave it unlimited, so this route sets its own request limit.
     """
     padding = "x" * MAX_EVENT_LOG_REQUEST_BYTES
 
@@ -782,6 +782,10 @@ def test_oversized_body_is_refused_before_it_is_parsed(client, event_log_directo
     )
 
     assert response.status_code == HTTPStatus.REQUEST_ENTITY_TOO_LARGE
+    assert response.get_json()["error"] == (
+        f"Request exceeds the maximum request size of "
+        f"{MAX_EVENT_LOG_REQUEST_BYTES} bytes."
+    )
     assert read_event_log_lines(event_log_directory) == []
 
 

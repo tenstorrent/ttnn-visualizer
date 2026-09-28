@@ -4,7 +4,13 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DEFAULT_SSH_PORT } from '../src/definitions/RemoteConnection';
-import { getOptionalPathDefault, getValidSshDefaultPort, isServerModeEnabled } from '../src/functions/getServerConfig';
+import { HOSTED_DEFAULT_MAX_CONTENT_LENGTH } from '../src/definitions/ServerConfig';
+import {
+    getOptionalPathDefault,
+    getValidSshDefaultPort,
+    getViteMaxContentLength,
+    isServerModeEnabled,
+} from '../src/functions/getServerConfig';
 
 describe('getValidSshDefaultPort', () => {
     it.each([0, 65536, -1, 'abc', '22.5', undefined, null, Number.NaN])(
@@ -28,6 +34,33 @@ describe('getOptionalPathDefault', () => {
         expect(getOptionalPathDefault(' /a/b ')).toBe('/a/b');
         expect(getOptionalPathDefault('   ')).toBe('');
     });
+});
+
+describe('getViteMaxContentLength', () => {
+    afterEach(() => {
+        vi.restoreAllMocks();
+    });
+
+    it('uses the hosted default only when the value is absent', () => {
+        expect(getViteMaxContentLength(undefined, true)).toBe(HOSTED_DEFAULT_MAX_CONTENT_LENGTH);
+        expect(getViteMaxContentLength(undefined, false)).toBeNull();
+    });
+
+    it('preserves an explicit byte limit and empty opt-out', () => {
+        expect(getViteMaxContentLength(' 2048 ', true)).toBe(2048);
+        expect(getViteMaxContentLength('', true)).toBeNull();
+    });
+
+    it.each(['   ', '1.5', '1e3', 'many', '0', '-1'])(
+        'warns and falls back to the default for unreadable byte count %p',
+        (value) => {
+            const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+            expect(getViteMaxContentLength(value, true)).toBe(HOSTED_DEFAULT_MAX_CONTENT_LENGTH);
+            expect(getViteMaxContentLength(value, false)).toBeNull();
+            expect(warn).toHaveBeenCalledWith(expect.stringContaining('VITE_MAX_CONTENT_LENGTH'));
+        },
+    );
 });
 
 describe('isServerModeEnabled', () => {
@@ -90,6 +123,16 @@ describe('getServerConfig (dev / Vite env)', () => {
         const { default: getServerConfig } = await import('../src/functions/getServerConfig');
 
         expect(getServerConfig().SERVER_MODE).toBe(expected);
+        expect(getServerConfig().MAX_CONTENT_LENGTH).toBe(expected ? HOSTED_DEFAULT_MAX_CONTENT_LENGTH : null);
+    });
+
+    it('uses an explicit VITE_MAX_CONTENT_LENGTH under either posture', async () => {
+        vi.stubEnv('VITE_SERVER_MODE', 'true');
+        vi.stubEnv('VITE_MAX_CONTENT_LENGTH', '2048');
+
+        const { default: getServerConfig } = await import('../src/functions/getServerConfig');
+
+        expect(getServerConfig().MAX_CONTENT_LENGTH).toBe(2048);
     });
 
     // No VITE_ counterpart on purpose: `/api` proxies to Flask, so the backend's own
@@ -174,6 +217,15 @@ describe('getServerConfig (shipped / inlined window config)', () => {
         const { default: getServerConfig } = await import('../src/functions/getServerConfig');
 
         expect(getServerConfig().USAGE_RECORDING_ACTIVE).toBe(expected);
+    });
+
+    it('keeps the backend-published request limit', async () => {
+        vi.stubEnv('DEV', false);
+        window.TTNN_VISUALIZER_CONFIG = { MAX_CONTENT_LENGTH: 1024 };
+
+        const { default: getServerConfig } = await import('../src/functions/getServerConfig');
+
+        expect(getServerConfig().MAX_CONTENT_LENGTH).toBe(1024);
     });
 
     it('defaults the rest of the config when nothing was inlined', async () => {

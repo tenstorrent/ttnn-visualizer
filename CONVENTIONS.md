@@ -1380,7 +1380,7 @@ A setting listed in **`_STRICT_BOOLEANS`** raises instead of warning. `SERVER_MO
 
 Strictness is registered per setting for the reason above: a flag only the class body honoured would leave `.env`-introduced typos selecting the local posture.
 
-`MAX_CONTENT_LENGTH` is the second setting that can abort startup, for the same reason by a different route: its class-body call to `_parse_max_content_length` is unguarded, and the value it would fall back to is *no limit at all*, so an unreadable upload cap stops the app rather than silently removing it. Both refusals name the variable and the accepted values, because they are what an operator sees instead of a traceback.
+`MAX_CONTENT_LENGTH` is the second setting that can abort startup, for the same reason by a different route: its class-body call to `_parse_max_content_length` is unguarded, and the value it would fall back to is *no limit at all*, so an unreadable upload cap stops the app rather than silently removing it. Both refusals name the variable and the accepted values, because they are what an operator sees instead of a traceback. Local installs remain unlimited unless an operator configures it. Hosted `SERVER_MODE` gets a 1 GiB default only when nothing configures the setting — neither the environment nor `settings_override` — so `get_effective_max_content_length` takes that presence as an argument rather than inferring it from a `None` that also means "no limit". A positive byte count overrides the default, and an explicitly empty value (or `None` in `settings_override`) remains the no-limit opt-out.
 
 The strict path is import-time, so nothing in-process can exercise it — pytest has already imported the module. `test_importing_settings_refuses_an_unreadable_server_mode` re-imports `settings` in a subprocess; without it, deleting `SERVER_MODE` from `_STRICT_BOOLEANS` leaves the whole suite green.
 
@@ -1448,7 +1448,7 @@ A **startup requirement** is a condition on an operator-supplied value that has 
 
 ### What the registry does not cover
 
-Settings that fail while they are being *parsed* are outside it, and the registry cannot reach them: they raise inside `Config.__init__`, before `create_app` exists to apply anything. Two do this today — a value in `_STRICT_BOOLEANS` (currently `SERVER_MODE` alone) that is not a recognised boolean, and a `MAX_CONTENT_LENGTH` that is not a byte count.
+Settings that fail while they are being *parsed* are outside it, and the registry cannot reach them: they raise inside `Config.__init__`, before `create_app` exists to apply anything. Two do this today — a value in `_STRICT_BOOLEANS` (currently `SERVER_MODE` alone) that is not a recognised boolean, and a `MAX_CONTENT_LENGTH` that is not a positive byte count.
 
 **They are the same class of change, with none of the controls.** Adding a name to `_STRICT_BOOLEANS` makes a previously-acceptable operator configuration fatal at import — #2004 exactly — and every test in `test_startup_requirements.py` passes, because nothing in the registry describes it. There is no staging, no preflight entry and no release-diff row.
 
@@ -1498,5 +1498,4 @@ Adding or tightening a requirement fails two tests until you update them, and th
 These exist in the codebase today and don't yet have a single canonical answer. Reviewers should flag new code that goes either direction without considering both. Each entry names the inconsistency, the direction new code takes, and its tracking issue; the rule itself lives in the section above that owns it.
 
 - **Two accessors for CSS-custom-property colours.** `GRAPH_COLORS` resolves at module load; `getPerfChartChrome()` re-reads per call. Both are legitimate and both keep the literal in `_base.scss` — pick per [No hex literals in TS/TSX](#no-hex-literals-in-tstsx), and don't add a third mechanism. (#1911)
-- **Upload size cap.** `MAX_CONTENT_LENGTH` is a real, honoured setting but **unset by default**, so out of the box large uploads succeed until they exhaust memory. Choosing a shipped default is tracked separately. (#1915)
 - **`DEBUG` and `FLASK_DEBUG` are different knobs with confusable names.** `FLASK_DEBUG` feeds the `DEBUG` *config* value (Flask's debug mode); the `DEBUG` *environment variable* raises the root log level and is what `pnpm flask:start-debug` sets. Both are in `.env.sample`. Read the name at the call site rather than assuming. (#1922)
