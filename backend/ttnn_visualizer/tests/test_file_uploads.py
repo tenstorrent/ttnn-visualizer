@@ -332,6 +332,53 @@ def test_validate_files_skips_consistency_check_when_folder_name_is_explicit():
 # ---- End-to-end regression: profiler/performance uploads keep folder layout ---
 
 
+def test_profiler_upload_rejects_a_body_over_the_configured_limit(
+    app, client, make_report
+):
+    """A configured app-wide Flask cap rejects multipart uploads before writing."""
+    assert app.config["SERVER_MODE"] is True
+    app.config["MAX_CONTENT_LENGTH"] = 2
+
+    response = client.post(
+        "/api/local/upload/profiler",
+        query_string={"instanceId": make_report()},
+        data={"files": [(BytesIO(b"sqlite-bytes"), "limited-report/db.sqlite")]},
+        content_type="multipart/form-data",
+    )
+
+    assert response.status_code == HTTPStatus.REQUEST_ENTITY_TOO_LARGE
+    assert (
+        response.get_json()["error"]
+        == "Request exceeds the maximum request size of 2 bytes."
+    )
+
+
+def test_a_413_from_the_form_part_limit_does_not_quote_the_byte_limit(
+    app, client, make_report
+):
+    """Werkzeug raises the same 413 for ``MAX_FORM_PARTS`` as for the byte cap.
+
+    A body far under the cap must not be told it exceeded it.
+    """
+    app.config["MAX_CONTENT_LENGTH"] = 1024 * 1024 * 1024
+    part_count = app.config["MAX_FORM_PARTS"] + 1
+
+    response = client.post(
+        "/api/local/upload/profiler",
+        query_string={"instanceId": make_report()},
+        data={
+            "files": [
+                (BytesIO(b"x"), f"many-parts/{index}.txt")
+                for index in range(part_count)
+            ]
+        },
+        content_type="multipart/form-data",
+    )
+
+    assert response.status_code == HTTPStatus.REQUEST_ENTITY_TOO_LARGE
+    assert "maximum request size" not in response.get_json()["error"]
+
+
 def test_profiler_upload_chromium_style_lands_under_report_folder(
     app, client, make_report
 ):

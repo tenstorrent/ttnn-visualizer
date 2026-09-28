@@ -17,6 +17,7 @@ from unittest.mock import patch
 
 import pytest
 from ttnn_visualizer.agent import operations as agent_operations
+from ttnn_visualizer.agent import server
 from ttnn_visualizer.agent.bounds import MAX_LIMIT
 from ttnn_visualizer.agent.handles import ReportRegistry, load_report
 from ttnn_visualizer.models import Tensor
@@ -614,6 +615,42 @@ class TestMemoryProfile:
         dram = result["memory_by_buffer_type"]["DRAM"]
         assert [op["operation_id"] for op in dram["operations"]] == [1, 2, 3]
         assert result["buffer_types_present"] == ["DRAM", "L1", "L1_SMALL"]
+
+    def test_the_response_says_the_peak_is_a_floor(self, loaded):
+        """The one thing this number must not be read as is the OOM answer.
+
+        `buffers` records tensor allocations, so circular buffers and tensors
+        freed inside one operation are absent -- 52-100% and 24-38% of the real
+        L1 peak across the local corpus. An agent has no second number on screen
+        to disagree with, so the response has to say so itself. It goes in
+        `note` rather than `caveat` because it is true of every response, and
+        `_caveats` is for what varies with the request. #2034
+        """
+        registry, handle = loaded()
+
+        note = agent_operations.memory_profile(registry, handle)["note"]
+
+        assert "floor, not the peak" in note
+        assert "circular buffer" in note
+        # The exclusion is only actionable if the response names what is missing.
+        assert "freed inside one operation" in note
+
+    def test_the_registered_description_says_it_too(self):
+        """The text an agent reads *before* it picks the tool.
+
+        `tools/list` publishes `_tool_table`'s `description`; the Python
+        docstring never leaves this process. The first pass at #2034 fixed the
+        docstring, the response and the docs page and left this one saying
+        "that type's peak", so an agent was told peak before calling and floor
+        after. The response test above cannot see that. #2034
+        """
+        table = server._tool_table(ReportRegistry())
+
+        description = table["memory_profile"]["description"]
+
+        assert "floor, not the peak" in description
+        assert "circular buffers" in description
+        assert "out-of-memory" in description
 
     def test_no_figure_adds_one_memory_type_to_another(self, loaded):
         """`max_size_per_bank` is divided by the bank count of its own memory
