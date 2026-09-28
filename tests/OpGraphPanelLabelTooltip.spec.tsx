@@ -9,6 +9,7 @@ import { MemoryRouter } from 'react-router';
 
 import OpGraphInfoPanel from '../src/components/operation-graph/OpGraphInfoPanel';
 import type { OpGraphBlockSummary } from '../src/components/operation-graph/opGraphTypes';
+import { OpGraphBlockKind } from '../src/components/operation-graph/opGraphTypes';
 import type { OperationDescription } from '../src/model/APIData';
 
 // No stack trace, so `SourceFileButton` never mounts and the panel stays a pure
@@ -54,6 +55,7 @@ describe('op graph panel heading tooltips', () => {
         const label = 'self_attention + self_output + intermediate + output';
         renderPanel({
             instanceId: 'block:187',
+            kind: OpGraphBlockKind.REPEAT,
             operationIds: [187, 188],
             label,
             patternLabel: label,

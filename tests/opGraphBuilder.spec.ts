@@ -883,12 +883,27 @@ describe('buildOpGraph', () => {
 
             it('emits the container, then its members, then their device operations', () => {
                 // React Flow resolves `parentId` against the nodes it has already
-                // seen; a child ahead of its parent renders at the pane origin.
-                const ids = unrolled().nodes.map((node) => node.id);
+                // seen; a child ahead of its parent renders at the pane origin. Three
+                // tiers, not two: a member can itself be a parent, and the first cut
+                // appended the members after the device operations they own.
+                const graph = buildOpGraph(
+                    FAN_CHAIN.map((op) => (op.id === 1 ? { ...op, deviceOperationCount: 2 } : op)),
+                    {
+                        hideDeallocate: false,
+                        deviceSubgraphs: [deviceSubgraph({ operationId: 1 })],
+                        collapseWeightLoads: true,
+                        expandedBlockIds: [FAN_ID],
+                    },
+                );
+                const ids = graph.nodes.map((node) => node.id);
+                const deviceChild = getDeviceNodeId(1, HEAD_FRAME_ID);
 
+                expect(ids).toContain(deviceChild);
+                expect(nodeById(graph, deviceChild).parentId).toBe('1');
                 expect(ids.indexOf(FAN_ID)).toBeLessThan(ids.indexOf('1'));
                 expect(ids.indexOf(FAN_ID)).toBeLessThan(ids.indexOf('2'));
                 expect(ids.indexOf(FAN_ID)).toBeLessThan(ids.indexOf('3'));
+                expect(ids.indexOf('1')).toBeLessThan(ids.indexOf(deviceChild));
             });
 
             it('ranks the container against the consumer, not the members inside it', () => {

@@ -9,6 +9,7 @@ import { MemoryRouter } from 'react-router';
 
 import OpGraphInfoPanel from '../src/components/operation-graph/OpGraphInfoPanel';
 import type { OpGraphBlockSummary } from '../src/components/operation-graph/opGraphTypes';
+import { OpGraphBlockKind } from '../src/components/operation-graph/opGraphTypes';
 import type { OperationDescription } from '../src/model/APIData';
 
 const operation = (id: number): OperationDescription =>
@@ -26,6 +27,7 @@ const operation = (id: number): OperationDescription =>
 
 const block = (durationSeconds: number, memoryDeltaBytes: number): OpGraphBlockSummary => ({
     instanceId: 'block:2',
+    kind: OpGraphBlockKind.REPEAT,
     operationIds: [2, 3],
     label: 'layer_a + layer_b',
     patternLabel: 'layer_a + layer_b',

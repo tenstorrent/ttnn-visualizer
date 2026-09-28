@@ -4,7 +4,7 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { revealPanShift } from '../src/components/operation-graph/opGraphRevealPan';
+import { absolutePositionsOf, boundsOfNodes, revealPanShift } from '../src/components/operation-graph/opGraphRevealPan';
 
 const PANE = { width: 1000, height: 700 };
 const AT_ORIGIN = { x: 0, y: 0, zoom: 1 };
@@ -70,5 +70,78 @@ describe('revealPanShift', () => {
         const far = revealPanShift(bounds, { x: 0, y: 0, zoom: 0.25 }, PANE);
 
         expect(Math.abs(far.dy)).toBeLessThan(Math.abs(near.dy));
+    });
+});
+
+// A container child carries an offset from its container, not from the pane, and
+// every mover here works in pane coordinates. Nothing in the component suite can
+// tell the two frames apart -- the React Flow mock's `getInternalNode` answers with
+// the same numbers for both -- so the arithmetic is pinned here. #2028
+describe('absolutePositionsOf', () => {
+    const at = (id: string, x: number, y: number, parentId?: string) => ({ id, position: { x, y }, parentId });
+
+    it('leaves a top-level node where it is', () => {
+        expect(absolutePositionsOf([at('a', 40, 90)]).get('a')).toEqual({ x: 40, y: 90 });
+    });
+
+    it('adds the container offset to a child', () => {
+        const positions = absolutePositionsOf([at('fan', 100, 200), at('1', 12, 8, 'fan')]);
+
+        expect(positions.get('1')).toEqual({ x: 112, y: 208 });
+    });
+
+    it('follows the chain two deep, so a device operation inside a fan member resolves', () => {
+        // The tier the fan container introduced: a member is both a child and a parent.
+        const positions = absolutePositionsOf([at('fan', 100, 200), at('1', 12, 8, 'fan'), at('1-dev', 3, 4, '1')]);
+
+        expect(positions.get('1-dev')).toEqual({ x: 115, y: 212 });
+    });
+
+    it('treats a missing parent as the pane origin rather than dropping the node', () => {
+        // Reachable between builds, when a child is committed before its container.
+        expect(absolutePositionsOf([at('1', 12, 8, 'gone')]).get('1')).toEqual({ x: 12, y: 8 });
+    });
+
+    it('terminates on a parent cycle instead of hanging the pane', () => {
+        const positions = absolutePositionsOf([at('a', 1, 2, 'b'), at('b', 10, 20, 'a')]);
+
+        expect(positions.size).toBe(2);
+    });
+});
+
+describe('boundsOfNodes', () => {
+    const sized = (id: string, x: number, y: number, parentId?: string) => ({
+        id,
+        position: { x, y },
+        parentId,
+        width: 50,
+        height: 20,
+    });
+
+    it('returns null for an empty set, so a caller can tell "nothing" from "at the origin"', () => {
+        expect(boundsOfNodes([])).toBeNull();
+    });
+
+    it('spans the nodes it is given', () => {
+        expect(boundsOfNodes([sized('a', 0, 0), sized('b', 100, 40)])).toEqual({
+            minX: 0,
+            minY: 0,
+            maxX: 150,
+            maxY: 60,
+        });
+    });
+
+    it('prefers the resolved positions over each node own, which is the whole point of passing them', () => {
+        const nodes = [sized('fan', 100, 200), sized('1', 12, 8, 'fan')];
+
+        // Read raw, the member looks like it sits near the origin and the box starts there.
+        expect(boundsOfNodes(nodes)?.minX).toBe(12);
+        expect(boundsOfNodes(nodes, absolutePositionsOf(nodes))?.minX).toBe(100);
+    });
+
+    it('falls back to a node own position when the map has no entry for it', () => {
+        const nodes = [sized('a', 30, 30)];
+
+        expect(boundsOfNodes(nodes, new Map())).toEqual({ minX: 30, minY: 30, maxX: 80, maxY: 50 });
     });
 });

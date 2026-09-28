@@ -14,8 +14,8 @@ import { detectorFor } from './opGraphBlockDetectors';
 import type { RememberedFan } from './opGraphWeightFans';
 import {
     detectWeightFans,
+    operationIdsWithIncomingEdge,
     rememberedDecision,
-    sourceOperationIds,
     weightFanMembersCover,
     weightFanMembersOf,
 } from './opGraphWeightFans';
@@ -165,7 +165,7 @@ export function buildOpGraph(
     // is gated on `collapseWeightLoads`, so an ops x outputs x consumers walk on every
     // build -- including every frame of an op-range drag -- would otherwise be paid for
     // a number nobody asked for.
-    const hasIncomingEdge = collapseWeightLoads ? sourceOperationIds(candidates, kept) : new Set<number>();
+    const hasIncomingEdge = collapseWeightLoads ? operationIdsWithIncomingEdge(candidates, kept) : new Set<number>();
     const weightLoadsIn = (operationIds: readonly number[]): number =>
         operationIds.reduce((count, id) => (hasIncomingEdge.has(id) ? count : count + 1), 0);
 
@@ -178,7 +178,8 @@ export function buildOpGraph(
     const layoutNodeIdOf = (operationId: number): string =>
         unrolledFanByOpId.get(operationId)?.instanceId ?? renderedNodeIdOf(operationId);
 
-    // Added to the same map grouping uses, which is the whole integration: `renderedNodeIdOf`
+    // Added to the same map grouping uses, which is the folded half of the integration
+    // -- the unrolled half is `unrolledFanByOpId` above. `renderedNodeIdOf`
     // then resolves a member to its fan, and the edge path below already suppresses the
     // label and dedupes parallel edges across a collapsed boundary. Detected here rather
     // than in a pre-pass because "the same rendered node" depends on what grouping just
@@ -202,6 +203,7 @@ export function buildOpGraph(
             keptOperations,
             candidates,
             kept,
+            hasIncomingEdge,
             renderedNodeIdOf,
             isClaimed: (operationId) => collapsedInstanceByOpId.has(operationId),
         });
@@ -438,8 +440,9 @@ export function buildOpGraph(
                 // members, and they are on screen with their own ids -- selecting the
                 // box around them could only stand for one of them, which is what it
                 // used to do: clicking the container rang a member and described it.
-                // Cleared here rather than guarded at the click, so React Flow's own
-                // keyboard selection cannot reach it either. #2028
+                // Cleared here as well as guarded in `handleNodeClick`, which is
+                // needed because React Flow still reports a click on a node it will
+                // not select. This half is what keeps keyboard selection out. #2028
                 selectable: false,
                 position: { x: 0, y: 0 },
                 width: memberLayout.width,
@@ -452,15 +455,20 @@ export function buildOpGraph(
                     deviceOperationCount: 0,
                     metaLine: meta,
                     blockInstanceId: instanceId,
-                    // No `memberOperationIds` or `memberNames`. `memberOperationIdsOf`
+                    // No `memberOperationIds` or `memberNames`: `memberOperationIdsOf`
                     // defines that field as the operations a node *stands for*, and an
-                    // unrolled fan's members are on screen with their own ids -- so the
-                    // container stands for none of them. Carrying them gave the perf
-                    // overlay a bar summing time the members were already drawing
-                    // (which then set the ramp's maximum and cooled every node in the
-                    // graph), doubled the `N/M` denominator, put an isolated weighted
-                    // node in the critical path, and made the filter report visible
-                    // matches as buried. #2028
+                    // unrolled fan's members are on screen with their own ids. Carrying
+                    // them gave the perf overlay a bar summing time the members were
+                    // already drawing (which then set the ramp's maximum and cooled
+                    // every node in the graph), doubled the `N/M` denominator, put an
+                    // isolated weighted node in the critical path, and made the filter
+                    // report visible matches as buried.
+                    //
+                    // Half the answer. `memberOperationIdsOf` falls back to
+                    // `[operationId]`, which is the first member's -- so the view also
+                    // keeps this type out of `nodeIndex`, which is what all four of
+                    // those are computed over. Dropping the fields here without that
+                    // leaves the container standing for one of its members. #2028
                     opCount,
                 },
             });
@@ -537,12 +545,17 @@ export function buildOpGraph(
         layoutEdges,
     );
 
+    // `kind` is carried so a summary still says what it is once it has been passed
+    // out of the array it came from. The two arrays are the safety property -- a
+    // grouping consumer cannot accidentally see a fan -- but provenance should not
+    // depend on remembering which variable held it.
     const summarise = (instance: RepeatBlockInstance): OpGraphBlockSummary => {
         const members = instance.operationIds
             .map((id) => operationById.get(id))
             .filter((member): member is OpGraphSourceOperation => member !== undefined);
         return {
             instanceId: instance.instanceId,
+            kind: instance.kind,
             operationIds: instance.operationIds,
             label: instance.label,
             patternLabel: instance.patternLabel,

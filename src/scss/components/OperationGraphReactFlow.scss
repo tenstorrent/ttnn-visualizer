@@ -234,20 +234,10 @@ $minimap-width: 200px;
             cursor: grabbing;
         }
 
-        // Restated because the `border` shorthand resets what the shared rule sets.
-        &.op-graph-node-selected {
-            border-color: var(--graph-selected);
-        }
-
-        &.op-graph-node-input {
-            border-style: solid;
-            border-color: var(--graph-input-node);
-        }
-
-        &.op-graph-node-output {
-            border-style: solid;
-            border-color: var(--graph-output-node);
-        }
+        // No selected / input / output variants. The container is chrome: it is
+        // `selectable: false`, and both the selection class and the I/O relation are
+        // keyed by node id, which resolves a member to the member. Rules for those
+        // states matched nothing and read as though they were what kept the colour.
     }
 
     .react-flow__node-weightGroupNode > .op-graph-group-header .op-graph-node-expander {

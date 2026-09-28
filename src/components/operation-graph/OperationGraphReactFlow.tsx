@@ -83,7 +83,7 @@ import {
     type OpGraphSourceOperation,
 } from './opGraphTypes';
 import { fusedActivationOf } from './opGraphFusedActivation';
-import { weightFanIdCovers, weightFanMembersOf } from './opGraphWeightFans';
+import { fanIdsCovering, weightFanMembersOf } from './opGraphWeightFans';
 import { OpGraphGrouping } from './opGraphTypes';
 import 'styles/components/OperationGraphReactFlow.scss';
 
@@ -351,7 +351,7 @@ const OperationGraphInner = ({
     const [detectedBlocks, setDetectedBlocks] = useState<OpGraphBlockSummary[]>(NO_BLOCKS);
     // Deliberately not merged into `detectedBlocks`: that array drives the grouping
     // controls and the seed for `expandedBlockIds`, and a fan in either inverts its
-    // own fold default. Only the panel lookup below reads both. #2028
+    // own fold default. The panel lookup and the fold gesture below read both. #2028
     const [weightFans, setWeightFans] = useState<OpGraphBlockSummary[]>(NO_BLOCKS);
     // A view preference like `hideDeallocate`, so it survives a report change: someone
     // comparing two reports by layer does not want the mode reset under them. #1976
@@ -539,7 +539,7 @@ const OperationGraphInner = ({
             // than by sniffing the id, which would break for the next detector added.
             if (!detectedBlockIds.has(instanceId)) {
                 const members = weightFanMembersOf(instanceId);
-                if (members === null || expandedBlockIds === undefined || expandedBlockIds === null) {
+                if (members === null || expandedBlockIds === null) {
                     return expandedBlockIds?.has(instanceId) ?? false;
                 }
                 // Containment, not equality, because the builder decides the same
@@ -547,15 +547,12 @@ const OperationGraphInner = ({
                 // id changes, so the decision the reader made is remembered under a
                 // name the fan no longer has. Asking by equality made the fold pill
                 // on a merged fan compute the wrong direction. #2028
-                if (expandedBlockIds.has(instanceId)) {
-                    return true;
-                }
-                for (const remembered of expandedBlockIds) {
-                    if (weightFanIdCovers(remembered, members)) {
-                        return true;
-                    }
-                }
-                return false;
+                //
+                // Only fan ids take this branch, and only from the click path and the
+                // panel lookup — the callers that walk `detectedBlocks` all pass ids
+                // that are in it and leave above. Called per node from a render pass
+                // it would be blocks x remembered ids of decoding per frame.
+                return expandedBlockIds.has(instanceId) || fanIdsCovering(expandedBlockIds, members).length > 0;
             }
             return expandedBlockIds === null || expandedBlockIds.has(instanceId);
         },
@@ -617,6 +614,21 @@ const OperationGraphInner = ({
         }
         return byOperationId;
     }, [weightFans]);
+
+    // Innermost first. A fan's members are drawn inside its container, and that
+    // container can sit inside a grouping block's span, so when both name an
+    // operation the fan is the nearer owner. Ordered once here because the two
+    // readers below both need the order and disagree about which end: a double-click
+    // folds the innermost *open* owner, and taking whichever map answered first folded
+    // the layer block instead of the fan drawn around the node the reader clicked. The
+    // panel takes the other end -- see `selectedBlock`. #2028
+    const ownersOf = useCallback(
+        (memberId: number): OpGraphBlockSummary[] =>
+            [fanByMemberOperationId.get(memberId), blockByMemberOperationId.get(memberId)].filter(
+                (owner): owner is OpGraphBlockSummary => owner !== undefined,
+            ),
+        [fanByMemberOperationId, blockByMemberOperationId],
+    );
 
     // Only the expanded operations are assembled: one operation's frame stream
     // runs to thousands of nodes, so deriving all of them up front would pay for
@@ -709,7 +721,11 @@ const OperationGraphInner = ({
             // `runBuild` then loops.
             pendingEmptyPaneCheckRef.current = true;
             const nextBlocks = graph.blocks && graph.blocks.length > 0 ? graph.blocks : NO_BLOCKS;
-            setWeightFans(graph.weightFans && graph.weightFans.length > 0 ? graph.weightFans : NO_BLOCKS);
+            const nextFans = graph.weightFans && graph.weightFans.length > 0 ? graph.weightFans : NO_BLOCKS;
+            // Same identity preservation as `detectedBlocks` below: a fresh array on
+            // every delivered build would churn `fanByMemberOperationId` and the two
+            // selectors reading it, on builds that changed nothing about fans.
+            setWeightFans((previous) => (areSameBlockSummaries(previous, nextFans) ? previous : nextFans));
             // "Fold all" is `[]`, which names no instance and so cannot go stale.
             // "Unroll all" is a list of ids, and that asymmetry is a bug: a rebuild
             // that renames an instance -- a deallocate first in a repeating unit, or
@@ -889,7 +905,6 @@ const OperationGraphInner = ({
     // alternative is showing nothing. #2008
     useEffect(() => {
         const pane = containerRef.current?.getBoundingClientRect();
-        const bounds = boundsOfNodes(nodes, absolutePositionsOf(nodes));
         // Both read and cleared first. `isRebuildCommit` keeps a measurement commit
         // out entirely; `justFramed` covers the rebuild commit the entry frame
         // already handled, where `getViewport` is still pre-tween — the same fact
@@ -902,13 +917,20 @@ const OperationGraphInner = ({
         if (
             !isRebuildCommit ||
             justFramed ||
-            bounds === null ||
             pane === undefined ||
             pendingEntryFrameRef.current !== null ||
             pendingViewportAnchorRef.current !== null ||
-            pendingRevealRef.current !== null ||
-            intersectsPane(bounds, getViewport(), pane)
+            pendingRevealRef.current !== null
         ) {
+            return;
+        }
+        // Measured below the bail rather than above it. This effect runs on every
+        // commit, including each drag frame -- `styledNodes` hands back a fresh array
+        // — and resolving the container chain is two maps and an object per node over
+        // a set that reaches into the thousands once a device subgraph is expanded.
+        // Only a rebuild commit gets that far. #2028
+        const bounds = boundsOfNodes(nodes, absolutePositionsOf(nodes));
+        if (bounds === null || intersectsPane(bounds, getViewport(), pane)) {
             return;
         }
         panIntoView(bounds);
@@ -937,15 +959,22 @@ const OperationGraphInner = ({
         pendingRevealRef.current = null;
 
         let viewport = getViewport();
-        if (anchor !== null) {
+        // Resolved rather than read off the node: `armViewportAnchor` recorded the
+        // pane point through `pannableNodeAt`, which is absolute, so a container
+        // child's parent-relative `position` here would translate by the container's
+        // own offset. Reachable by expanding the device subgraph of an operation that
+        // is a member of an unrolled fan. #2028
+        const positions = anchor === null ? null : absolutePositionsOf(nodes);
+        if (anchor !== null && positions !== null) {
             const anchored =
                 nodes.find((node) => node.id === anchor.nodeId) ??
                 nodes.find((node) => node.id === anchor.fallbackNodeId);
-            if (anchored !== undefined) {
+            const at = anchored === undefined ? undefined : (positions.get(anchored.id) ?? anchored.position);
+            if (at !== undefined) {
                 viewport = {
                     zoom: viewport.zoom,
-                    x: anchor.paneX - anchored.position.x * viewport.zoom,
-                    y: anchor.paneY - anchored.position.y * viewport.zoom,
+                    x: anchor.paneX - at.x * viewport.zoom,
+                    y: anchor.paneY - at.y * viewport.zoom,
                 };
             }
         }
@@ -958,7 +987,7 @@ const OperationGraphInner = ({
             const pane = containerRef.current?.getBoundingClientRect();
             if (revealed.length > 0 && pane !== undefined) {
                 // Unrolling a fan reveals its members, which are container children.
-                const bounds = boundsOfNodes(revealed, absolutePositionsOf(nodes));
+                const bounds = boundsOfNodes(revealed, positions ?? absolutePositionsOf(nodes));
                 if (bounds !== null) {
                     const { dx, dy } = revealPanShift(bounds, viewport, pane, paneChromeInset(pane));
                     viewport = { ...viewport, x: viewport.x + dx, y: viewport.y + dy };
@@ -1053,10 +1082,8 @@ const OperationGraphInner = ({
                 // on a member. #1988, #2028
                 const foldedFanMembers = weightFanMembersOf(instanceId);
                 if (foldedFanMembers !== null) {
-                    for (const remembered of [...next]) {
-                        if (weightFanIdCovers(remembered, foldedFanMembers)) {
-                            next.delete(remembered);
-                        }
+                    for (const remembered of fanIdsCovering(next, foldedFanMembers)) {
+                        next.delete(remembered);
                     }
                 }
                 return next;
@@ -1592,14 +1619,15 @@ const OperationGraphInner = ({
                 toggleBlockExpansion(node.data.blockInstanceId);
                 return;
             }
-            const instance =
-                blockByMemberOperationId.get(node.data.operationId) ??
-                fanByMemberOperationId.get(node.data.operationId);
-            if (instance !== undefined && isBlockExpanded(instance.instanceId)) {
+            // The innermost open owner. Taking the first map to answer folded the
+            // grouping block a fan member happened to sit in, rather than the fan
+            // whose container is drawn around the node the reader clicked.
+            const instance = ownersOf(node.data.operationId).find((owner) => isBlockExpanded(owner.instanceId));
+            if (instance !== undefined) {
                 toggleBlockExpansion(instance.instanceId);
             }
         },
-        [blockByMemberOperationId, fanByMemberOperationId, isBlockExpanded, toggleBlockExpansion],
+        [ownersOf, isBlockExpanded, toggleBlockExpansion],
     );
 
     const handlePaneClick = useCallback(() => {
@@ -1672,17 +1700,20 @@ const OperationGraphInner = ({
         if (selectedOperationId === null) {
             return null;
         }
-        // The folded one, not the first one: both a grouping block and a fan can name
-        // this operation, and only the folded owner is the node on screen. Picking by
+        // The folded owner, because only that one is the node on screen. Picking by
         // insertion order described a block the reader cannot see, so the panel fell
         // through to the operation and a clicked fan reported its first member while
         // the pill carried the selection ring.
-        const owners = [
-            blockByMemberOperationId.get(selectedOperationId),
-            fanByMemberOperationId.get(selectedOperationId),
-        ];
-        return owners.find((owner) => owner !== undefined && !isBlockExpanded(owner.instanceId)) ?? null;
-    }, [selectedOperationId, blockByMemberOperationId, fanByMemberOperationId, isBlockExpanded]);
+        //
+        // Outermost of them, the reverse of what the fold gesture wants, and the one
+        // case where the two differ: folding a grouping block updates
+        // `expandedBlockIds` a render before the rebuild that stops the fan forming,
+        // so for that render both owners are folded. The block is the answer there —
+        // it is what the reader just folded, and the fan is about to be absorbed into
+        // it. #2028
+        const folded = ownersOf(selectedOperationId).filter((owner) => !isBlockExpanded(owner.instanceId));
+        return folded.at(-1) ?? null;
+    }, [selectedOperationId, ownersOf, isBlockExpanded]);
 
     const selectedPerfAggregate =
         selectedOperationId === null ? undefined : perfOverlay.aggregatesByOpId.get(selectedOperationId);

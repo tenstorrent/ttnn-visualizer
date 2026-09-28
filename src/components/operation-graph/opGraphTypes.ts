@@ -172,6 +172,7 @@ export interface RepeatBlockInstance {
 
 export interface OpGraphBlockSummary {
     instanceId: string;
+    kind: OpGraphBlockKind;
     operationIds: number[];
     label: string;
     patternLabel: string;
