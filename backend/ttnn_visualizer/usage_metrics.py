@@ -97,6 +97,16 @@ def _update_metrics(
     path: Path, machine_id: str
 ) -> Tuple[Dict[MetricKey, int], int, int, int]:
     """Increment the cached aggregate from bytes appended since the previous scrape."""
+    # The first call after a worker starts reads the whole log while holding this lock;
+    # every later call reads only what was appended. That cold read is bounded by the
+    # log's size cap (`MAX_LOG_BYTES`) and took about 0.3 s at the cap against 0.1 ms
+    # warm. Under the default gevent worker a regular-file read does not yield, so it
+    # pauses the whole server for that long, once per worker start.
+    #
+    # Accepted: the endpoint is local-only and scraped every minute, and the counters
+    # are cumulative, so there is no history to skip. Priming at start-up would only
+    # move the pause, and slicing the read only helps if each slice yields to gevent.
+    # Revisit if the cap grows or a slower disk makes the pause visible.
     with _metrics_lock:
         state = _metrics_state
         if state.path != path or state.machine_id != machine_id:

@@ -387,6 +387,34 @@ def test_prometheus_config_matches_a_base_path_without_a_trailing_slash():
     assert rendered["scrape_configs"][0]["metrics_path"] == "/visualizerapi/metrics"
 
 
+@pytest.mark.parametrize("base_path", ["/", "/visualizer/", "/visualizer"])
+def test_the_renderer_scrapes_the_path_the_metrics_route_is_mounted_at(
+    tmp_path, base_path
+):
+    """The scrape path is composed by hand, so only the route itself can pin it.
+
+    The unit tests above compare the renderer with string literals, which a renamed or
+    remounted route would leave green while the generated config scraped a 404.
+    """
+    from ttnn_visualizer.app import create_app
+    from ttnn_visualizer.tests.fixture_settings import base_test_settings
+
+    app = create_app(
+        settings_override=base_test_settings(str(tmp_path), BASE_PATH=base_path)
+    )
+    mounted = {
+        rule.rule
+        for rule in app.url_map.iter_rules()
+        if rule.endpoint == "api.usage_metrics"
+    }
+    rendered = usage_collection.build_prometheus_config(
+        usage_collection.UsageCollectionConfig(enabled=False),
+        base_path=base_path,
+    )
+
+    assert mounted == {rendered["scrape_configs"][0]["metrics_path"]}
+
+
 @pytest.mark.parametrize("base_path", ["", "visualizer/", "/bad path/", "/path?x=1"])
 def test_prometheus_config_rejects_invalid_base_paths(base_path):
     with pytest.raises(ValueError):

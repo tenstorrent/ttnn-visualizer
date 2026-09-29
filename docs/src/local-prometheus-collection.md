@@ -110,6 +110,8 @@ Confirm that the visualizer is exposing aggregates:
 curl --fail http://localhost:8000/api/metrics
 ```
 
+A working setup always prints the three `ttnn_visualizer_usage_collector_*` health series, even before any event has been logged. An empty response is a `200`, so `curl --fail` treats it as success, but it means collection is not ready: the config is disabled, invalid, or enabled and not yet prepared by the renderer or a launch. Prometheus reports the same state as a healthy target with no series.
+
 Open `http://localhost:9090/targets` and confirm that `ttnn-visualizer` is healthy. Inspect forwarding errors without exposing response bodies:
 
 ```shell
