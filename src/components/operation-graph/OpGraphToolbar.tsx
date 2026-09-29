@@ -250,7 +250,11 @@ const OpGraphToolbar = memo(
 
                 <Tooltip
                     placement={PopoverPosition.BOTTOM}
-                    content='Draw each fan of weight loads feeding one node as a single node. A weight load inside a folded grouping block stays in that block — the block counts it instead.'
+                    // One clause, like the switches either side of it. The folded-block
+                    // caveat that used to follow it is on screen already: a folded block
+                    // reads `17 ops (6 weight)`, which says the same thing where the
+                    // reader is looking when the question comes up. #2028
+                    content='Draw each fan of weight loads feeding one node as a single node.'
                 >
                     <Switch
                         className='op-graph-toolbar-switch op-graph-switch-weights'
