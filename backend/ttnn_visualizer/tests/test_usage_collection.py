@@ -3,6 +3,7 @@
 # SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import json
+import re
 import stat
 import uuid
 from pathlib import Path
@@ -10,7 +11,7 @@ from types import SimpleNamespace
 
 import pytest
 import yaml
-from ttnn_visualizer import usage_collection, usage_metrics
+from ttnn_visualizer import event_logging, usage_collection, usage_metrics
 from ttnn_visualizer.event_logging import (
     _DETAIL_FIELD_ENUMS,
     CLIENT_EVENT_DETAIL_FIELDS,
@@ -78,14 +79,35 @@ def test_initialising_preserves_an_existing_disabled_config(
     }
 
 
-def test_default_config_path_is_fixed_under_the_user_app_directory(
+def test_default_config_path_is_fixed_beside_the_recording_opt_out(
     monkeypatch, tmp_path
 ):
     monkeypatch.setattr(usage_collection, "COLLECTION_CONFIG_PATH", None)
+    monkeypatch.setattr(event_logging, "EVENT_LOG_DIRECTORY", None)
     monkeypatch.setattr(Path, "home", staticmethod(lambda: tmp_path))
 
     assert usage_collection.get_collection_config_path() == (
-        tmp_path / ".ttnn-visualizer" / "app" / "collection.json"
+        tmp_path / ".ttnn-visualizer" / "usage" / "collection.json"
+    )
+    assert (
+        usage_collection.get_collection_config_path().parent
+        == event_logging.get_disabled_marker_path().parent
+    )
+
+
+def test_exported_metric_pattern_matches_every_rendered_metric_name():
+    for suffix in ("view_opened_total", "usage_collector_files_found"):
+        assert re.fullmatch(
+            usage_collection.EXPORTED_METRIC_PATTERN, usage_metrics._metric_name(suffix)
+        )
+
+
+def test_config_path_follows_the_event_log_root(monkeypatch, tmp_path):
+    monkeypatch.setattr(usage_collection, "COLLECTION_CONFIG_PATH", None)
+    monkeypatch.setattr(event_logging, "EVENT_LOG_DIRECTORY", tmp_path / "usage")
+
+    assert usage_collection.get_collection_config_path() == (
+        tmp_path / "usage" / "collection.json"
     )
 
 
@@ -94,6 +116,7 @@ def test_home_resolution_failure_disables_collection(monkeypatch):
         raise RuntimeError("home unavailable")
 
     monkeypatch.setattr(usage_collection, "COLLECTION_CONFIG_PATH", None)
+    monkeypatch.setattr(event_logging, "EVENT_LOG_DIRECTORY", None)
     monkeypatch.setattr(Path, "home", staticmethod(_raise_runtime_error))
 
     config = usage_collection.load_usage_collection_config()
@@ -257,7 +280,8 @@ def test_preparing_restricts_disabled_and_malformed_files(
     usage_collection.prepare_usage_collection_config()
 
     assert stat.S_IMODE(usage_collection_config_path.stat().st_mode) == 0o600
-    assert stat.S_IMODE(usage_collection_config_path.parent.stat().st_mode) == 0o700
+    # The directory is shared with the event log, so its mode is not ours to change.
+    assert stat.S_IMODE(usage_collection_config_path.parent.stat().st_mode) == 0o755
 
 
 def test_loopback_http_endpoint_is_allowed(usage_collection_config_path):

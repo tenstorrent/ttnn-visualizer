@@ -18,7 +18,7 @@ Running the configuration renderer is the explicit opt-in:
 pnpm prometheus:config
 ```
 
-When `~/.ttnn-visualizer/app/collection.json` does not exist, the command creates it with local collection enabled:
+When `~/.ttnn-visualizer/usage/collection.json` does not exist, the command creates it with local collection enabled:
 
 ```json
 {
@@ -68,7 +68,7 @@ ttnn-visualizer-prometheus-config \
   --output docker/prometheus/prometheus.generated.yml
 ```
 
-If the visualizer uses a non-root `BASE_PATH`, the renderer reads it from the environment. It can also be passed explicitly:
+If the visualizer uses a non-root `BASE_PATH`, pass it explicitly. The renderer reads neither `BASE_PATH` nor `PORT` from the environment:
 
 ```shell
 ttnn-visualizer-prometheus-config \

@@ -20,6 +20,7 @@ from ttnn_visualizer.event_logging import (
 )
 from ttnn_visualizer.usage_collection import (
     MACHINE_ID_LABEL,
+    METRIC_PREFIX,
     UsageCollectionConfig,
     load_usage_collection_config,
 )
@@ -29,7 +30,6 @@ logger = logging.getLogger(__name__)
 PROMETHEUS_CONTENT_TYPE = "text/plain; version=0.0.4; charset=utf-8"
 _READ_CHUNK_BYTES = 64 * 1024
 MAX_EVENT_LOG_LINE_BYTES = 4 * 1024
-_METRIC_PREFIX = "ttnn_visualizer_"
 MetricLabels = Tuple[Tuple[str, str], ...]
 # Keyed by event name rather than metric name, so the name is built in one place.
 MetricKey = Tuple[str, MetricLabels]
@@ -64,7 +64,7 @@ def _render_labels(labels: MetricLabels) -> str:
 
 
 def _metric_name(suffix: str) -> str:
-    return f"{_METRIC_PREFIX}{suffix}"
+    return f"{METRIC_PREFIX}{suffix}"
 
 
 def _aggregate_lines(

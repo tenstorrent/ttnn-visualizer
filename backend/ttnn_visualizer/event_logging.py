@@ -1450,9 +1450,12 @@ def parse_known_event_fields(
     """Validate a stored event against the current bounded event schema.
 
     The read-side twin of :func:`validate_client_event`: both match detail keys exactly
-    against ``EVENT_DETAIL_FIELDS`` and values against ``_DETAIL_FIELD_ENUMS``, so a
-    schema change updates both. This one returns ``None`` rather than raising, because
-    a line that fails it is skipped rather than refused.
+    and values against ``_DETAIL_FIELD_ENUMS``, so a schema change updates both. They
+    differ in the key set: this one matches ``EVENT_DETAIL_FIELDS``, the union of client
+    and server events, because a stored line may have been written by the server itself,
+    whereas ``validate_client_event`` matches ``CLIENT_EVENT_DETAIL_FIELDS`` so a client
+    cannot post a server-only event. This one returns ``None`` rather than raising,
+    because a line that fails it is skipped rather than refused.
     """
     if not _has_required_fields(fields):
         return None

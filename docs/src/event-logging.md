@@ -149,7 +149,7 @@ The TT-NN Visualizer backend never forwards raw events. A local-only `GET /api/m
 The opt-in file is:
 
 ```text
-~/.ttnn-visualizer/app/collection.json
+~/.ttnn-visualizer/usage/collection.json
 ```
 
 It contains the explicit `enabled` flag, an optional Prometheus remote-write endpoint, and a random persistent `machine_id`. The ID is generated when collection is first enabled; it is not derived from a hostname, username, path, or IP address. Omitting the endpoint keeps collection local to the Docker Prometheus. Deleting the config disables collection and causes a new identity to be generated if collection is enabled again. A malformed config fails closed without preventing TT-NN Visualizer from starting.

@@ -9,6 +9,7 @@ import ipaddress
 import json
 import logging
 import os
+import re
 import tempfile
 import uuid
 from dataclasses import dataclass
@@ -17,6 +18,7 @@ from typing import Any, Dict, Optional, Sequence
 from urllib.parse import urlsplit
 
 import yaml
+from ttnn_visualizer.event_logging import get_event_log_root
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +32,10 @@ DEFAULT_BASE_PATH = "/"
 MACHINE_ID_LABEL = "machine_id"
 PRIVATE_FILE_MODE = 0o600
 CONTAINER_READABLE_FILE_MODE = 0o644
-EXPORTED_METRIC_PATTERN = "ttnn_visualizer_.*"
+# One definition for both sides: the exporter names series with it and the ``keep``
+# relabel matches on it, so a drift would silently drop every forwarded series.
+METRIC_PREFIX = "ttnn_visualizer_"
+EXPORTED_METRIC_PATTERN = f"{re.escape(METRIC_PREFIX)}.*"
 TARGET_IDENTITY_LABEL_PATTERN = "job|instance"
 
 # Tests replace this so they never inspect or modify the developer's real config.
@@ -49,7 +54,9 @@ def get_collection_config_path() -> Path:
     if COLLECTION_CONFIG_PATH is not None:
         return COLLECTION_CONFIG_PATH
 
-    return Path.home() / ".ttnn-visualizer" / "app" / COLLECTION_CONFIG_FILENAME
+    # Beside the recording opt-out marker rather than in the app data directory: this is
+    # a usage-recording control, and that directory belongs to the report database.
+    return get_event_log_root() / COLLECTION_CONFIG_FILENAME
 
 
 def _is_loopback_host(hostname: Optional[str]) -> bool:
@@ -133,14 +140,13 @@ def _write_text_atomically(
 
 def _write_config(path: Path, data: Dict[str, Any]) -> None:
     path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-    os.chmod(path.parent, 0o700)
     content = json.dumps(data, indent=2, sort_keys=True) + "\n"
     _write_text_atomically(path, content)
 
 
 def _secure_config_permissions(path: Path) -> None:
-    os.chmod(path.parent, 0o700)
-    os.chmod(path, 0o600)
+    # Only the file: its directory is shared with the event log and its opt-out marker.
+    os.chmod(path, PRIVATE_FILE_MODE)
 
 
 def _load_config(persist: bool) -> UsageCollectionConfig:
@@ -326,9 +332,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         default=Path(GENERATED_PROMETHEUS_FILENAME),
     )
     parser.add_argument("--app-target", default=DEFAULT_PROMETHEUS_TARGET)
-    parser.add_argument(
-        "--base-path", default=os.getenv("BASE_PATH", DEFAULT_BASE_PATH)
-    )
+    parser.add_argument("--base-path", default=DEFAULT_BASE_PATH)
     args = parser.parse_args(argv)
 
     try:
