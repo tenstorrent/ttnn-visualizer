@@ -78,7 +78,7 @@ const flowTransform: { current: [number, number, number] } = { current: [0, 0, 1
 // moved to has to measure against this and not against `lastFlowRender()`.
 const STORE_NODE = { width: 100, height: 40 };
 
-const { setCenter, setViewport, knownNodeIds, flowStoreLag, viewportState } = vi.hoisted(() => ({
+const { setCenter, setViewport, knownNodeIds, flowStoreLag, viewportState, absolutePositionById } = vi.hoisted(() => ({
     setCenter: vi.fn(() => Promise.resolve()),
     setViewport: vi.fn(() => Promise.resolve()),
     knownNodeIds: new Set<string>(),
@@ -94,6 +94,12 @@ const { setCenter, setViewport, knownNodeIds, flowStoreLag, viewportState } = vi
     // during render, which hides that entirely — code reading `getNode` on entry was
     // green here and did nothing in the app. Set this to model the lag. #2007
     flowStoreLag: { isBlind: false },
+    // A container child's `position` is an offset from its container and only the
+    // store holds the resolved coordinate. With both frames at the origin no test
+    // could tell a mover reading one from a mover reading the other, which is the
+    // bug that threw the view across the graph on a fan member. Tests that care put
+    // the node's absolute position here; the rest keep both at the origin. #2028
+    absolutePositionById: new Map<string, { x: number; y: number }>(),
 }));
 const flowStoreListeners = new Set<(state: { transform: [number, number, number] }) => void>();
 
@@ -133,7 +139,7 @@ vi.mock('@xyflow/react', async () => {
                 ? {
                       id,
                       position: { x: 0, y: 0 },
-                      internals: { positionAbsolute: { x: 0, y: 0 } },
+                      internals: { positionAbsolute: absolutePositionById.get(id) ?? { x: 0, y: 0 } },
                       width: STORE_NODE.width,
                       height: STORE_NODE.height,
                   }
@@ -514,6 +520,7 @@ beforeEach(() => {
     setViewport.mockClear();
     knownNodeIds.clear();
     flowStoreLag.isBlind = false;
+    absolutePositionById.clear();
     viewportState.current = { x: 0, y: 0, zoom: PANNED_ZOOM };
     vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function measured(this: Element) {
         return this.classList?.contains('op-graph-toolbar')
@@ -2014,6 +2021,80 @@ describe('OperationGraphReactFlow repeat blocks', () => {
             expect(screen.queryByRole('heading', { name: '2 weight loads' })).toBeNull();
         });
 
+        // Both cases below need a fan and a grouping block in the same graph: with a
+        // fan-only fixture the two things they pin are indistinguishable from the
+        // behaviour they replaced.
+        // Identical source names, so the detector groups each pair as a repeat *and*
+        // each pair is still a fan while that block is unrolled -- which is the only
+        // way an operation has two owners at once. A folded block claims its members
+        // before any fan can form, so the overlap needs the block open.
+        const FAN_AND_REPEATS: OperationDescription[] = [
+            operation(1, 'ttnn.to_device', [11]),
+            operation(2, 'ttnn.to_device', [11]),
+            operation(3, 'ttnn.to_device', [12]),
+            operation(4, 'ttnn.to_device', [12]),
+            operation(11, 'ttnn.linear', [12]),
+            operation(12, 'ttnn.relu', [21]),
+            operation(21, 'ttnn.linear', [22]),
+            operation(22, 'ttnn.relu', [30]),
+            operation(30, 'ttnn.softmax', []),
+        ];
+
+        it('opens a folded fan from a URL without folding every grouping block with it', () => {
+            // `null` is "nothing has been folded", which renders every block unrolled,
+            // so writing a set naming only the fan folds all of them. On a fan-only
+            // graph `previous ?? []` and the materialisation agree, which is why the
+            // other URL test cannot fail for this.
+            // Mounted straight onto the graph the view actually asks for -- fans on.
+            // `renderGraph`'s own mount build leaves `collapseWeightLoads` off, and
+            // with grouping blocks present that is enough to open the gate and spend
+            // the once-only latch before any fan exists.
+            render(
+                <MemoryRouter>
+                    <OperationGraphReactFlow
+                        operationList={FAN_AND_REPEATS}
+                        isPerfReportLoaded={false}
+                        operationId={1}
+                    />
+                </MemoryRouter>,
+            );
+            runBuild.mockClear();
+            deliver(FAN_AND_REPEATS, { collapseWeightLoads: true });
+
+            const asked = (runBuild.mock.calls.at(-1)?.[0] as OpGraphBuildOptions).expandedBlockIds ?? [];
+
+            expect(asked).toEqual(expect.arrayContaining(['weights:1-2']));
+            // The grouping blocks carried in beside it. `previous ?? []` asks for the
+            // fan alone, and a set naming one instance folds every block not in it.
+            expect(asked.filter((id) => !id.startsWith('weights:')).length).toBeGreaterThan(0);
+        });
+
+        it('folds the fan a shared member sits in, not the block around it', () => {
+            // Operation 1 is in `block:1` and in `weights:1-2`, and with the block
+            // unrolled both own it. `ownersOf` is innermost-first so a double-click on
+            // the member folds the nearer owner -- the container drawn around the node
+            // the reader clicked -- and not the block it is also inside. Every other
+            // fold-from-member test uses a fan-only graph, where the order cannot show.
+            renderGraph(FAN_AND_REPEATS);
+            deliver(FAN_AND_REPEATS, { collapseWeightLoads: true });
+            act(() => {
+                harness.onNodeDoubleClick?.(null, nodeById(lastFlowRender().nodes, 'weights:1-2'));
+            });
+            const opened = (runBuild.mock.calls.at(-1)?.[0] as OpGraphBuildOptions).expandedBlockIds ?? [];
+            deliver(FAN_AND_REPEATS, { collapseWeightLoads: true, expandedBlockIds: opened });
+            const member = nodeById(lastFlowRender().nodes, '1');
+            expect(member.parentId, 'the member is inside the container').toBe('weights:1-2');
+
+            runBuild.mockClear();
+            act(() => {
+                harness.onNodeDoubleClick?.(null, member);
+            });
+
+            const after = (runBuild.mock.calls.at(-1)?.[0] as OpGraphBuildOptions).expandedBlockIds ?? [];
+            expect(after, 'the fan folded').not.toContain('weights:1-2');
+            expect(after, 'the block around it did not').toContain('block:1');
+        });
+
         it('folds one half of a split fan without taking the other half with it', () => {
             // A grouping fold merges two fans; the reader opens the merged one; the
             // grouping unrolls and it splits back into two, both held open by the one
@@ -2064,6 +2145,55 @@ describe('OperationGraphReactFlow repeat blocks', () => {
             const after = (runBuild.mock.calls.at(-1)?.[0] as OpGraphBuildOptions).expandedBlockIds ?? [];
             expect(after).not.toContain(containers[0]);
             expect(after).toContain(containers[1]);
+        });
+
+        it('folds from the container pill, the affordance this whole change is for', () => {
+            // Every other fold test goes through `onNodeDoubleClick`. The pill takes a
+            // different route -- `OpGraphBlockExpansionContext`, reached only when the
+            // WEIGHT_GROUP type is registered and the container renders one -- so
+            // unregistering the type or deleting the pill left the suite green.
+            unrolledFan();
+
+            fireEvent.click(screen.getByRole('button', { name: 'Fold 2 operations' }));
+
+            expect((runBuild.mock.calls.at(-1)?.[0] as OpGraphBuildOptions).expandedBlockIds).toEqual([]);
+        });
+
+        it('describes the fan, not its first member, when a folded one is selected', () => {
+            // The reported symptom: the pill carried the selection ring while the panel
+            // described one of the two operations inside it. `selectedBlock` reading
+            // grouping blocks alone leaves the whole suite green without this.
+            renderGraph(FAN_CHAIN);
+            deliver(FAN_CHAIN, { collapseWeightLoads: true });
+
+            act(() => {
+                harness.onNodeClick?.(null, nodeById(lastFlowRender().nodes, 'weights:1-2'));
+            });
+
+            const panel = screen.getByLabelText('Selected block details');
+            expect(panel).toHaveTextContent('2 weight loads');
+            expect(panel).toHaveTextContent('ops 1, 2');
+            expect(screen.queryByLabelText('Selected operation details')).toBeNull();
+        });
+
+        it('pans a fan member to where the store says it is, not to its offset from the container', () => {
+            // A child's `position` is relative to its container, and reading it as a
+            // flow coordinate sent the viewport to the top-left of the graph. Only the
+            // store knows the resolved value, so the mock has to hold the two apart or
+            // `pannableNodeAt` can go back to `getNode().position` unnoticed.
+            unrolledFan();
+            absolutePositionById.set('1', { x: 4000, y: 2000 });
+            act(() => {
+                harness.onNodeClick?.(null, nodeById(lastFlowRender().nodes, '1'));
+            });
+
+            setViewport.mockClear();
+            fireEvent.click(screen.getByLabelText('Recenter on operation 1'));
+
+            const [viewport] = setViewport.mock.calls[0] as unknown as [{ x: number; y: number }];
+            // Centred on the absolute position: read relatively the node looks like it
+            // sits at the origin and the pan lands a whole graph away.
+            expect(viewport.x + (4000 + STORE_NODE.width / 2) * PANNED_ZOOM).toBeCloseTo(PANE.width / 2, 5);
         });
 
         it('orders the sequence by operation id, not by the order nodes are emitted', () => {
