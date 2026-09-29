@@ -308,6 +308,12 @@ def render_prometheus_config(
         if initialise_missing
         else prepare_usage_collection_config()
     )
+    # A rejected config loads as disabled, which renders as a valid file that scrapes
+    # and forwards nothing. Written, it would pass `promtool` and leave the user
+    # restarting a healthy-looking Prometheus that collects nothing, so it is refused
+    # here instead of being rendered.
+    if config.error is not None:
+        raise ValueError(f"collection config is invalid: {config.error}")
     rendered = build_prometheus_config(
         config,
         app_target=app_target,
@@ -344,6 +350,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         )
     except ValueError as error:
         parser.error(str(error))
+    except OSError as error:
+        # Exit 1 rather than `parser.error`'s 2, which means bad usage; the arguments
+        # were fine and the filesystem was not.
+        parser.exit(1, f"{parser.prog}: error: {error}\n")
 
     print(output)
     return 0

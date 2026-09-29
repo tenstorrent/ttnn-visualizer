@@ -15,8 +15,8 @@ from typing import DefaultDict, Dict, Iterable, Optional, Tuple
 
 from ttnn_visualizer.event_logging import (
     get_event_log_path,
-    parse_event_log_line,
     parse_known_event_fields,
+    parse_logfmt_line,
 )
 from ttnn_visualizer.usage_collection import (
     MACHINE_ID_LABEL,
@@ -28,6 +28,8 @@ from ttnn_visualizer.usage_collection import (
 logger = logging.getLogger(__name__)
 
 PROMETHEUS_CONTENT_TYPE = "text/plain; version=0.0.4; charset=utf-8"
+GAUGE_TYPE = "gauge"
+COUNTER_TYPE = "counter"
 _READ_CHUNK_BYTES = 64 * 1024
 MAX_EVENT_LOG_LINE_BYTES = 4 * 1024
 MetricLabels = Tuple[Tuple[str, str], ...]
@@ -74,7 +76,7 @@ def _aggregate_lines(
     count_by_series: DefaultDict[MetricKey, int] = defaultdict(int)
     parse_errors = 0
     for line in lines:
-        fields = parse_event_log_line(line)
+        fields = parse_logfmt_line(line)
         parsed = parse_known_event_fields(fields) if fields is not None else None
         if parsed is None:
             parse_errors += 1
@@ -161,10 +163,12 @@ def _update_metrics(
         return dict(state.count_by_series), state.parse_errors, 1, 0
 
 
-def _render_health_metric(name: str, help_text: str, value: int) -> list[str]:
+def _render_health_metric(
+    name: str, help_text: str, value: int, metric_type: str = GAUGE_TYPE
+) -> list[str]:
     return [
         f"# HELP {name} {help_text}",
-        f"# TYPE {name} gauge",
+        f"# TYPE {name} {metric_type}",
         f"{name} {value}",
     ]
 
@@ -192,7 +196,7 @@ def render_usage_metrics(
         output.extend(
             [
                 f"# HELP {metric_name} Cumulative {event_name} events in the local usage log.",
-                f"# TYPE {metric_name} counter",
+                f"# TYPE {metric_name} {COUNTER_TYPE}",
             ]
         )
         output.extend(
@@ -208,10 +212,14 @@ def render_usage_metrics(
         )
     )
     output.extend(
+        # A counter, unlike its two siblings: `parse_errors` accumulates across scrapes
+        # for the life of the process, so declaring it a gauge would leave `increase()`
+        # unusable and make `rate()` extrapolate a reset it was never told about.
         _render_health_metric(
-            _metric_name("usage_collector_parse_errors"),
-            "Malformed or unsupported lines in the local usage event log.",
+            _metric_name("usage_collector_parse_errors_total"),
+            "Cumulative malformed or unsupported lines in the local usage event log.",
             parse_errors,
+            COUNTER_TYPE,
         )
     )
     output.extend(

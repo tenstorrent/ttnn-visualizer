@@ -452,6 +452,49 @@ def test_renderer_with_invalid_arguments_does_not_opt_in(
     assert not usage_collection_config_path.exists()
 
 
+@pytest.mark.parametrize(
+    "contents",
+    [
+        "{not json",
+        '{"enabled": true, "extra": "value"}',
+        '{"enabled": true, "remote_write_endpoint": "http://"}',
+    ],
+)
+def test_renderer_refuses_an_invalid_config(
+    usage_collection_config_path, tmp_path, capsys, contents
+):
+    # A rejected config loads as disabled, so rendering it would exit 0 with a valid
+    # file that collects nothing.
+    usage_collection_config_path.parent.mkdir(parents=True)
+    usage_collection_config_path.write_text(contents, encoding="utf-8")
+    output = tmp_path / "prometheus.yml"
+
+    with pytest.raises(SystemExit) as exit_info:
+        usage_collection.main(["--output", str(output)])
+
+    assert exit_info.value.code == 2
+    assert "collection config is invalid" in capsys.readouterr().err
+    assert not output.exists()
+    assert usage_collection_config_path.read_text(encoding="utf-8") == contents
+
+
+def test_renderer_reports_an_unwritable_output_as_a_failure(
+    usage_collection_config_path, tmp_path, monkeypatch, capsys
+):
+    _write_config(usage_collection_config_path, enabled=False)
+
+    def _raise_os_error(*_args):
+        raise OSError("replace failed")
+
+    monkeypatch.setattr(usage_collection.os, "replace", _raise_os_error)
+
+    with pytest.raises(SystemExit) as exit_info:
+        usage_collection.main(["--output", str(tmp_path / "prometheus.yml")])
+
+    assert exit_info.value.code == 1
+    assert "replace failed" in capsys.readouterr().err
+
+
 def test_example_prometheus_config_matches_the_builder():
     example_path = (
         Path(__file__).parents[3] / "docker" / "prometheus" / "prometheus.example.yml"
@@ -518,7 +561,7 @@ def test_metrics_skip_malformed_unknown_and_free_form_lines(tmp_path):
 
     assert "leaked" not in metrics
     assert "secret" not in metrics
-    assert "ttnn_visualizer_usage_collector_parse_errors 4" in metrics
+    assert "ttnn_visualizer_usage_collector_parse_errors_total 4" in metrics
 
 
 @pytest.mark.parametrize(
@@ -556,7 +599,7 @@ def test_metrics_refuse_values_outside_the_event_schema(tmp_path, line, private_
     )
 
     assert private_value not in metrics
-    assert "ttnn_visualizer_usage_collector_parse_errors 1" in metrics
+    assert "ttnn_visualizer_usage_collector_parse_errors_total 1" in metrics
 
 
 @pytest.mark.parametrize(
@@ -586,7 +629,7 @@ def test_metrics_reject_lines_outside_the_stored_schema(tmp_path, line):
     )
 
     assert "_total{" not in metrics
-    assert "ttnn_visualizer_usage_collector_parse_errors 1" in metrics
+    assert "ttnn_visualizer_usage_collector_parse_errors_total 1" in metrics
 
 
 def _record_every_event() -> None:
@@ -619,7 +662,7 @@ def test_every_recorded_event_is_projected(event_log_directory):
 
     for event in EventLogEvent:
         assert f"ttnn_visualizer_{event.value}_total{{" in metrics
-    assert "ttnn_visualizer_usage_collector_parse_errors 0" in metrics
+    assert "ttnn_visualizer_usage_collector_parse_errors_total 0" in metrics
 
 
 def test_compaction_preserves_projected_totals(event_log_directory):
@@ -643,7 +686,7 @@ def test_compaction_preserves_projected_totals(event_log_directory):
     assert len(log_path.read_text(encoding="utf-8").splitlines()) < lines_before
     assert after == before
     assert 'view="operations"} 6' in after
-    assert "ttnn_visualizer_usage_collector_parse_errors 0" in after
+    assert "ttnn_visualizer_usage_collector_parse_errors_total 0" in after
 
 
 def test_metrics_match_the_privacy_reviewed_golden_output(tmp_path):
@@ -820,7 +863,7 @@ def test_metrics_bound_an_overlong_unterminated_line(tmp_path):
     malformed_metrics = render_usage_metrics(config, log_path=log_path)
     unchanged_metrics = render_usage_metrics(config, log_path=log_path)
 
-    assert "ttnn_visualizer_usage_collector_parse_errors 1" in malformed_metrics
+    assert "ttnn_visualizer_usage_collector_parse_errors_total 1" in malformed_metrics
     assert unchanged_metrics == malformed_metrics
     assert len(usage_metrics._metrics_state.pending) <= (
         usage_metrics.MAX_EVENT_LOG_LINE_BYTES
@@ -834,7 +877,7 @@ def test_metrics_bound_an_overlong_unterminated_line(tmp_path):
     recovered_metrics = render_usage_metrics(config, log_path=log_path)
 
     assert 'view="operations"} 1' in recovered_metrics
-    assert "ttnn_visualizer_usage_collector_parse_errors 1" in recovered_metrics
+    assert "ttnn_visualizer_usage_collector_parse_errors_total 1" in recovered_metrics
 
 
 def test_metrics_reset_when_the_log_path_changes(tmp_path):

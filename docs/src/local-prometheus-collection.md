@@ -26,7 +26,11 @@ When `~/.ttnn-visualizer/usage/collection.json` does not exist, the command crea
 }
 ```
 
-The renderer never replaces an existing config with the default opt-in. Disabled and invalid contents are retained. A valid enabled config may be rewritten only to add a missing `machine_id`, normalise that ID to canonical UUID form, or harden file permissions. The renderer checks its `--app-target` and `--base-path` arguments first, so a run with invalid arguments creates nothing.
+The renderer never replaces an existing config with the default opt-in. A disabled config is kept as it is and renders a configuration with no `remote_write` stanza. An invalid config is kept as it is too, and the renderer refuses to render from it: it prints the reason, exits non-zero and writes no Prometheus configuration, so an error is never mistaken for a healthy setup that collects nothing.
+
+Only a valid enabled config is ever rewritten, and only to add a missing `machine_id` or to normalise an existing one to 32 lowercase hexadecimal characters without hyphens, so `550e8400-e29b-41d4-a716-446655440000` becomes `550e8400e29b41d4a716446655440000`. Separately, the renderer restricts any existing config file to mode `0600`, disabled and invalid ones included. Its directory is shared with the event log and is left alone.
+
+The renderer checks its `--app-target` and `--base-path` arguments first, so a run with invalid arguments creates nothing.
 
 This enables the local metrics endpoint and lets the Docker Prometheus retain scraped data locally. To forward those metrics to a centrally managed receiver, add its remote-write URL:
 
@@ -112,7 +116,7 @@ Open `http://localhost:9090/targets` and confirm that `ttnn-visualizer` is healt
 docker compose -f docker/prometheus/docker-compose.yml logs prometheus
 ```
 
-The generated configuration and Prometheus data are local state. `prometheus.generated.yml` contains no credentials, is mode `0644` so the unprivileged Prometheus container can read it, and is ignored by Git. The TSDB uses a named Docker volume.
+The generated configuration and Prometheus data are local state. `prometheus.generated.yml` contains no credentials, is mode `0644` so the unprivileged Prometheus container can read it, and is ignored by Git at the `docker/prometheus/` path used throughout this page. It does hold your `machine_id` and any remote-write URL, so do not commit a copy written elsewhere. The TSDB uses a named Docker volume.
 
 ## Change or disable collection
 

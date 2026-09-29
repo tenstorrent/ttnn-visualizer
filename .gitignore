@@ -58,5 +58,8 @@ build
 docs/output
 .pnpm-store
 
-# Generated local Prometheus configuration can contain a private remote-write endpoint.
+# Machine-specific: the generated Prometheus configuration carries this install's
+# machine_id and its remote-write URL. Neither is a credential, but neither belongs in
+# the repository. Anchored to where `pnpm prometheus:config` and the documented commands
+# write it; the CLI's bare default is the working directory and is not covered.
 docker/prometheus/prometheus.generated.yml

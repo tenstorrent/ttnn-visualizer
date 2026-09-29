@@ -770,7 +770,19 @@ def test_compaction_keeps_lines_it_cannot_parse(event_log_directory, monkeypatch
 def test_summarising_preserves_lines_with_invalid_counts(count):
     line = "ts=2026-08-01T10:00:00Z event=app_start schema_version=1 " f"count={count}"
 
-    assert event_logging._summarise([line]) == [line]
+    # Two identical lines, because a lone line comes back byte-identical whether it was
+    # summarised or preserved, so a single one cannot tell the two paths apart.
+    lines = [line, line]
+    assert event_logging._summarise(lines) == lines
+
+
+def test_summarising_merges_lines_with_valid_counts():
+    line = "ts=2026-08-01T10:00:00Z event=app_start schema_version=1 count=7"
+
+    summaries = event_logging._summarise([line, line])
+
+    assert len(summaries) == 1
+    assert total_event_log_events(summaries) == 14
 
 
 def test_compaction_does_not_dress_up_a_fragment_as_a_summary(

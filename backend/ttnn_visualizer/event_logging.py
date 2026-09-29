@@ -1414,7 +1414,7 @@ def record_app_start(config: Any, server_mode: Optional[Any] = None) -> None:
         )
 
 
-def parse_event_log_line(line: str) -> Optional[Dict[str, str]]:
+def parse_logfmt_line(line: str) -> Optional[Dict[str, str]]:
     """Split a logfmt line into fields, or ``None`` if it is not one."""
     fields: Dict[str, str] = {}
 
@@ -1504,7 +1504,7 @@ def _summarise(lines: List[str]) -> List[str]:
     unparsed: List[str] = []
 
     for line in lines:
-        fields = parse_event_log_line(line)
+        fields = parse_logfmt_line(line)
         # An NFS-interleaved fragment that happens to start on a key boundary parses
         # cleanly but has no timestamp or event, and summarising it would render an
         # empty `ts=` and a fabricated `event=unknown` — a garbled line dressed up as
