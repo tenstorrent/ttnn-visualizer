@@ -473,6 +473,12 @@ const OperationGraphInner = ({
         setExpandedOperationIds(NOTHING_EXPANDED);
         setExpandedBlockIds(null);
         setDetectedBlocks(NO_BLOCKS);
+        // Beside `detectedBlocks` for the same reason, and load-bearing since the
+        // URL reveal below learned to ask fans: the gate there is "a build has
+        // landed", and fans left over from the previous report answer it with the
+        // previous report's operation ids. The latch fires once, so it would be spent
+        // on a fan that no longer exists before the real build arrived. #2028
+        setWeightFans(NO_BLOCKS);
         setNodeIdByOperationId(EMPTY_NODE_ID_BY_OP);
         setRevealedOperationId(null);
         deviceSubgraphCache.clear();
@@ -1107,7 +1113,20 @@ const OperationGraphInner = ({
                 // on a member. #1988, #2028
                 const foldedFanMembers = weightFanMembersOf(instanceId);
                 if (foldedFanMembers !== null) {
-                    for (const remembered of fanIdsCovering(next, foldedFanMembers)) {
+                    const covering = fanIdsCovering(next, foldedFanMembers);
+                    // A covering id can be holding more than this fan open. The
+                    // reader unrolls a merged fan, a grouping unroll splits it back
+                    // into the two it was made of, and one remembered superset is now
+                    // the only thing keeping either open -- so dropping it to fold one
+                    // folded the other too, which is the graph-wide reset this whole
+                    // change exists to stop. Each sibling is re-recorded under the name
+                    // it has now, before the shared one goes. #2028
+                    for (const fan of weightFans) {
+                        if (fan.instanceId !== instanceId && fanIdsCovering(covering, fan.operationIds).length > 0) {
+                            next.add(fan.instanceId);
+                        }
+                    }
+                    for (const remembered of covering) {
                         next.delete(remembered);
                     }
                 }
@@ -1717,6 +1736,14 @@ const OperationGraphInner = ({
     }, [isPerfOverlayActive]);
 
     const handleNodeMouseEnter = useCallback((event: ReactMouseEvent, node: OpGraphFlowNode) => {
+        // The same reason the click path ignores it: the container's `operationId` is
+        // its first member's, so a hover over the box reported that member's duration
+        // and rank as though the box were an operation. Cleared rather than returned,
+        // so a tooltip the previous node left behind does not sit over chrome. #2028
+        if (node.type === OpGraphNodeType.WEIGHT_GROUP) {
+            setPerfHover(null);
+            return;
+        }
         const bounds = containerBoundsRef.current ?? containerRef.current?.getBoundingClientRect();
         if (!bounds) {
             return;

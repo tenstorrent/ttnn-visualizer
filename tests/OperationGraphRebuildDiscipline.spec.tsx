@@ -1967,6 +1967,105 @@ describe('OperationGraphReactFlow repeat blocks', () => {
             expect((runBuild.mock.calls.at(-1)?.[0] as OpGraphBuildOptions).deviceSubgraphs).toEqual([]);
         });
 
+        it('says nothing about an operation when the perf tooltip meets the container', () => {
+            // The click path treats the box as chrome; the hover path read
+            // `node.data.operationId` off every node it was given, and the container's
+            // is its first member's -- so the box reported that member's duration and
+            // rank as though it were an operation.
+            const perfRows: PerfOverlaySource[] = FAN_CHAIN.map((op) => ({ id: op.id, device_time: op.id * 10 }));
+            renderGraph(FAN_CHAIN, perfRows);
+            deliver(FAN_CHAIN, { collapseWeightLoads: true });
+            act(() => {
+                harness.onNodeDoubleClick?.(null, nodeById(lastFlowRender().nodes, 'weights:1-2'));
+            });
+            deliver(FAN_CHAIN, { collapseWeightLoads: true, expandedBlockIds: ['weights:1-2'] });
+            enableOverlay();
+
+            // A member answers, so the chip is reachable in this fixture at all.
+            hoverNode('1');
+            expect(document.querySelector('.op-graph-perf-hover')).not.toBeNull();
+
+            hoverNode('weights:1-2');
+
+            expect(document.querySelector('.op-graph-perf-hover')).toBeNull();
+        });
+
+        it('forgets its fans when the report changes', () => {
+            // Operation ids restart per report, so fans from the last one name
+            // operations in this one that have nothing to do with them. `detectedBlocks`
+            // was already cleared here; `weightFans` became load-bearing when the URL
+            // reveal learned to ask it, since that latch fires once and would spend
+            // itself on a fan the new report does not have.
+            unrolledFan();
+            expect(lastFlowRender().nodes.some((node) => node.id === 'weights:1-2')).toBe(true);
+
+            act(() => {
+                getDefaultStore().set(activeProfilerReportAtom, {
+                    path: '/reports/other',
+                    reportName: 'other',
+                } as ReportFolder);
+            });
+
+            // The panel is the visible reader of `weightFans`: with a stale list it
+            // still describes a fan of the previous report's operations.
+            act(() => {
+                harness.onNodeClick?.(null, nodeById(lastFlowRender().nodes, '1'));
+            });
+            expect(screen.queryByRole('heading', { name: '2 weight loads' })).toBeNull();
+        });
+
+        it('folds one half of a split fan without taking the other half with it', () => {
+            // A grouping fold merges two fans; the reader opens the merged one; the
+            // grouping unrolls and it splits back into two, both held open by the one
+            // remembered superset. Dropping that superset to fold one fan was the only
+            // thing keeping the other open, so both closed -- the graph-wide reset in
+            // miniature. #1988, #2028
+            const chain: OperationDescription[] = [
+                // Distinct source names, or the detector groups the two pairs as
+                // repeats and folding claims them before any fan can form.
+                operation(1, 'ttnn.to_device_a', [11]),
+                operation(2, 'ttnn.to_device_b', [11]),
+                operation(3, 'ttnn.to_device_c', [12]),
+                operation(4, 'ttnn.to_device_d', [12]),
+                operation(11, 'ttnn.linear', [12]),
+                operation(12, 'ttnn.relu', [21]),
+                operation(21, 'ttnn.linear', [22]),
+                operation(22, 'ttnn.relu', [30]),
+                operation(30, 'ttnn.softmax', []),
+            ];
+            renderGraph(chain);
+            // Folded grouping merges the two consumers, so all four sources are one fan.
+            fireEvent.click(screen.getByRole('button', { name: 'Fold all repeats' }));
+            deliver(chain, { collapseWeightLoads: true, expandedBlockIds: [] });
+            const merged = lastFlowRender().nodes.find((node) => node.id.startsWith('weights:'));
+            expect(merged, 'a merged fan').toBeDefined();
+            act(() => {
+                harness.onNodeDoubleClick?.(null, merged as OpGraphFlowNode);
+            });
+            const openedMerged = (runBuild.mock.calls.at(-1)?.[0] as OpGraphBuildOptions).expandedBlockIds ?? [];
+
+            // Unrolling the grouping splits it in two, both open under that one id.
+            fireEvent.click(screen.getByRole('button', { name: 'Unroll all repeats' }));
+            const openedSplit = (runBuild.mock.calls.at(-1)?.[0] as OpGraphBuildOptions).expandedBlockIds;
+            expect(openedSplit, 'the fan decision survives the grouping unroll').toEqual(
+                expect.arrayContaining([...openedMerged]),
+            );
+            deliver(chain, { collapseWeightLoads: true, expandedBlockIds: openedSplit });
+            const containers = lastFlowRender()
+                .nodes.filter((node) => node.id.startsWith('weights:'))
+                .map((node) => node.id);
+            expect(containers).toHaveLength(2);
+
+            runBuild.mockClear();
+            act(() => {
+                harness.onNodeDoubleClick?.(null, nodeById(lastFlowRender().nodes, containers[0]));
+            });
+
+            const after = (runBuild.mock.calls.at(-1)?.[0] as OpGraphBuildOptions).expandedBlockIds ?? [];
+            expect(after).not.toContain(containers[0]);
+            expect(after).toContain(containers[1]);
+        });
+
         it('orders the sequence by operation id, not by the order nodes are emitted', () => {
             // Members are emitted last, after their container, so in emission order
             // member 2 was the end of the graph and the consumer the start of it.

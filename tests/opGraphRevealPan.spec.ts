@@ -131,7 +131,7 @@ describe('boundsOfNodes', () => {
         });
     });
 
-    it('prefers the resolved positions over each node own, which is the whole point of passing them', () => {
+    it("prefers the resolved positions over each node's own, which is the whole point of passing them", () => {
         const nodes = [sized('fan', 100, 200), sized('1', 12, 8, 'fan')];
 
         // Read raw, the member looks like it sits near the origin and the box starts there.
@@ -139,7 +139,7 @@ describe('boundsOfNodes', () => {
         expect(boundsOfNodes(nodes, absolutePositionsOf(nodes))?.minX).toBe(100);
     });
 
-    it('falls back to a node own position when the map has no entry for it', () => {
+    it("falls back to a node's own position when the map has no entry for it", () => {
         const nodes = [sized('a', 30, 30)];
 
         expect(boundsOfNodes(nodes, new Map())).toEqual({ minX: 30, minY: 30, maxX: 80, maxY: 50 });
