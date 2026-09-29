@@ -9,6 +9,8 @@ import os
 import tempfile
 import traceback
 from collections import defaultdict
+from dataclasses import dataclass
+from functools import lru_cache
 from io import StringIO
 from pathlib import Path
 from typing import (
@@ -55,6 +57,31 @@ CSV_CHUNK_SIZE = 50_000
 # and still cannot be reached by a real log. Past it, starts are counted rather
 # than kept, so the total reports what it could pair and says what it dropped.
 MAX_OPEN_ZONE_STARTS = 200_000
+
+# A linked report plus the current view and two recently visited filter shapes covers
+# the common toggle-back path without retaining an unbounded number of large reports.
+MAX_CACHED_PERFORMANCE_REPORTS = 4
+
+
+@dataclass(frozen=True)
+class _PerformanceReportSource:
+    path: str
+    modified_ns: int
+    changed_ns: int
+    inode: int
+    size: int
+
+
+@dataclass(frozen=True)
+class _PerformanceReportOptions:
+    start_signpost: Optional[str]
+    end_signpost: Optional[str]
+    print_signposts: bool
+    hide_host_ops: bool
+    merge_devices: bool
+    tracing_mode: bool
+    group_by: Optional[str]
+    no_stacked_report: bool
 
 
 class LocalCSVQueryRunner:
@@ -972,7 +999,35 @@ class OpsPerformanceReportQueries:
 
     @classmethod
     def generate_report(cls, instance, **kwargs):
-        raw_csv = OpsPerformanceQueries.get_raw_csv(instance)
+        source_path = Path(
+            OpsPerformanceQueries.get_local_ops_perf_file_path(instance)
+        ).resolve()
+        source_stat = source_path.stat()
+        source = _PerformanceReportSource(
+            path=str(source_path),
+            modified_ns=source_stat.st_mtime_ns,
+            changed_ns=source_stat.st_ctime_ns,
+            inode=source_stat.st_ino,
+            size=source_stat.st_size,
+        )
+        options = _PerformanceReportOptions(
+            start_signpost=kwargs.get("start_signpost", cls.DEFAULT_START_SIGNPOST),
+            end_signpost=kwargs.get("end_signpost", cls.DEFAULT_END_SIGNPOST),
+            print_signposts=kwargs.get("print_signposts", cls.DEFAULT_PRINT_SIGNPOSTS),
+            hide_host_ops=kwargs.get("hide_host_ops", cls.DEFAULT_NO_HOST_OPS),
+            merge_devices=kwargs.get("merge_devices", cls.DEFAULT_MERGE_DEVICES),
+            tracing_mode=kwargs.get("tracing_mode", cls.DEFAULT_TRACING_MODE),
+            group_by=kwargs.get("group_by", cls.DEFAULT_GROUP_BY),
+            no_stacked_report=kwargs.get(
+                "no_stacked_report", cls.DEFAULT_NO_STACKED_REPORT
+            ),
+        )
+        return _cached_generate_performance_report(source, options)
+
+    @classmethod
+    def _generate_report_uncached(
+        cls, raw_csv: str, options: _PerformanceReportOptions
+    ):
         csv_file = StringIO(raw_csv)
 
         # Validate that we have CSV data with rows
@@ -986,9 +1041,7 @@ class OpsPerformanceReportQueries:
 
         # Determine if we should skip stacked report
         data_row_count = len(csv_lines) - 1
-        no_stacked_report = kwargs.get(
-            "no_stacked_report", cls.DEFAULT_NO_STACKED_REPORT
-        )
+        no_stacked_report = options.no_stacked_report
 
         if data_row_count <= 1:
             logger.info("Skipping stacked report generation: insufficient data rows")
@@ -1003,13 +1056,13 @@ class OpsPerformanceReportQueries:
             csv_summary_file.close()
             csv_output_file.close()
 
-            start_signpost = kwargs.get("start_signpost", cls.DEFAULT_START_SIGNPOST)
-            end_signpost = kwargs.get("end_signpost", cls.DEFAULT_END_SIGNPOST)
-            print_signposts = kwargs.get("print_signposts", cls.DEFAULT_PRINT_SIGNPOSTS)
-            no_host_ops = kwargs.get("hide_host_ops", cls.DEFAULT_NO_HOST_OPS)
-            merge_devices = kwargs.get("merge_devices", cls.DEFAULT_MERGE_DEVICES)
-            tracing_mode = kwargs.get("tracing_mode", cls.DEFAULT_TRACING_MODE)
-            group_by = kwargs.get("group_by", cls.DEFAULT_GROUP_BY)
+            start_signpost = options.start_signpost
+            end_signpost = options.end_signpost
+            print_signposts = options.print_signposts
+            no_host_ops = options.hide_host_ops
+            merge_devices = options.merge_devices
+            tracing_mode = options.tracing_mode
+            group_by = options.group_by
 
             if start_signpost or end_signpost:
                 ignore_signposts = False
@@ -1054,7 +1107,7 @@ class OpsPerformanceReportQueries:
 
             logger.info(f"Found {len(signposts)} signposts...")
 
-            report = []
+            report: List[Dict] = []
 
             try:
                 logger.info(f"Processing CSV output file: {csv_output_file.name}")
@@ -1134,7 +1187,7 @@ class OpsPerformanceReportQueries:
                 logger.error(f"Error processing CSV output file: {e}")
                 report = []
 
-            stacked_report = []
+            stacked_report: List[Dict] = []
 
             if not no_stacked_report:
                 try:
@@ -1195,3 +1248,15 @@ class OpsPerformanceReportQueries:
             cls.cleanup_temp_files(
                 [csv_output_file, summary_csv_path, summary_png_path, csv_summary_file]
             )
+
+
+@lru_cache(maxsize=MAX_CACHED_PERFORMANCE_REPORTS)
+def _cached_generate_performance_report(
+    source: _PerformanceReportSource, options: _PerformanceReportOptions
+):
+    raw_csv = Path(source.path).read_text()
+    return OpsPerformanceReportQueries._generate_report_uncached(raw_csv, options)
+
+
+def clear_performance_report_cache() -> None:
+    _cached_generate_performance_report.cache_clear()
