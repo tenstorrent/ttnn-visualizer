@@ -162,7 +162,7 @@ For setup and lifecycle commands, see [Local Prometheus collection](./local-prom
 
 ## Hosted collection
 
-Local Prometheus collection is unavailable under `SERVER_MODE`. An independently operated collector can read the hosted session logs and export aggregate counters. It must not export timestamps, `run_id`, hosted session directory names, per-event rows, or per-user series. Hosted retention and compaction are the deployment's responsibility; the application neither enumerates session logs at startup nor compacts them on a request path. Deleting or disabling a log is independent of that collector and does not remove aggregates it has already exported.
+The hosted app has no collection beyond the event log itself: Local Prometheus collection is unavailable under `SERVER_MODE`, and the application exports nothing from the session logs. Hosted retention and compaction are the deployment's responsibility; the application neither enumerates session logs at startup nor compacts them on a request path. Anything a deployment builds to read those logs must not export timestamps, `run_id`, hosted session directory names, per-event rows, or per-user series.
 
 ## Documentation-site analytics
 
