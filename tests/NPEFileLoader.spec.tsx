@@ -11,7 +11,10 @@ import { ConnectionTestStates } from '../src/definitions/ConnectionStatus';
 import { ReportKind, ReportLoadFailureReason } from '../src/definitions/EventLogEvent';
 
 const uploadNpeFile = vi.fn();
-const { recordReportLoadFailed } = vi.hoisted(() => ({ recordReportLoadFailed: vi.fn() }));
+const { getUploadSizeLimitError, recordReportLoadFailed } = vi.hoisted(() => ({
+    getUploadSizeLimitError: vi.fn(),
+    recordReportLoadFailed: vi.fn(),
+}));
 
 vi.mock('../src/hooks/useLocal', () => ({
     default: () => ({ uploadNpeFile }),
@@ -28,6 +31,8 @@ vi.mock('../src/functions/createToastNotification', async () => {
 
     return toastNotificationModuleMock();
 });
+
+vi.mock('../src/functions/getUploadSizeLimitError', () => ({ default: getUploadSizeLimitError }));
 
 afterEach(() => {
     cleanup();
@@ -59,6 +64,20 @@ describe('NPEFileLoader re-upload cache-bust', () => {
 
         expect(uploadNpeFile).not.toHaveBeenCalled();
         expect(recordReportLoadFailed).not.toHaveBeenCalled();
+    });
+
+    it('rejects an oversized file before uploading it', async () => {
+        getUploadSizeLimitError.mockReturnValueOnce('Selected upload exceeds the 1 GiB request limit.');
+        const { container } = renderLoader();
+        const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+
+        fireEvent.change(input, { target: { files: [new File(['x'], 'report.npeviz.zst')] } });
+
+        await waitFor(() =>
+            expect(container.textContent).toContain('Selected upload exceeds the 1 GiB request limit.'),
+        );
+        expect(uploadNpeFile).not.toHaveBeenCalled();
+        expect(recordReportLoadFailed).toHaveBeenCalledWith(ReportKind.NPE, ReportLoadFailureReason.TOO_LARGE);
     });
 
     it('drops the NPE summary / window / trace caches on a successful upload', async () => {

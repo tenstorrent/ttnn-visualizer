@@ -44,6 +44,8 @@ const {
     mockDeletePerformance,
     mockProfilerFolders,
     mockUploadLocalFolder,
+    mockUploadLocalPerformanceFolder,
+    getUploadSizeLimitError,
     recordReportLoaded,
     recordReportLoadFailed,
 } = vi.hoisted(() => ({
@@ -52,6 +54,8 @@ const {
     mockDeletePerformance: vi.fn(),
     mockProfilerFolders: [] as { path: string; reportName: string }[],
     mockUploadLocalFolder: vi.fn(),
+    mockUploadLocalPerformanceFolder: vi.fn(),
+    getUploadSizeLimitError: vi.fn(),
     recordReportLoaded: vi.fn(),
     recordReportLoadFailed: vi.fn(),
 }));
@@ -63,21 +67,7 @@ vi.mock('../src/hooks/useLocal', async () => {
         default: () => ({
             ...actual.default(),
             uploadLocalFolder: (...args: unknown[]) => mockUploadLocalFolder(...args),
-            uploadLocalPerformanceFolder: vi.fn().mockImplementation(() => {
-                // Add the uploaded folder to the mock list
-                const uploadedFolder = { path: MOCK_FOLDER, reportName: MOCK_FOLDER };
-                if (!mockPerfFolderList.some((f) => f.path === MOCK_FOLDER)) {
-                    mockPerfFolderList.push(uploadedFolder);
-                }
-                return {
-                    status: 200,
-                    data: {
-                        status: 3,
-                        detail: null,
-                        message: 'success',
-                    },
-                };
-            }),
+            uploadLocalPerformanceFolder: (...args: unknown[]) => mockUploadLocalPerformanceFolder(...args),
         }),
     };
 });
@@ -102,6 +92,8 @@ vi.mock('../src/functions/reportLoadEvents', async (importOriginal) => {
 
     return reportLoadEventsSpiesMock(importOriginal, recordReportLoaded, recordReportLoadFailed);
 });
+
+vi.mock('../src/functions/getUploadSizeLimitError', () => ({ default: getUploadSizeLimitError }));
 
 const defaultUpdateInstance = (updates: {
     active_report?: { profiler_name?: string | { path: string }; performance_name?: string | { path: string } };
@@ -137,6 +129,22 @@ beforeEach(() => {
     recordReportLoadFailed.mockClear();
     mockUploadLocalFolder.mockReset();
     mockUploadLocalFolder.mockResolvedValue({ status: 200, data: mockProfilerFolderList[0] });
+    mockUploadLocalPerformanceFolder.mockReset();
+    mockUploadLocalPerformanceFolder.mockImplementation(() => {
+        const uploadedFolder = { path: MOCK_FOLDER, reportName: MOCK_FOLDER };
+        if (!mockPerfFolderList.some((folder) => folder.path === MOCK_FOLDER)) {
+            mockPerfFolderList.push(uploadedFolder);
+        }
+        return {
+            status: 200,
+            data: {
+                status: ConnectionTestStates.OK,
+                detail: null,
+                message: 'success',
+            },
+        };
+    });
+    getUploadSizeLimitError.mockReset();
     // Restore both lists in place: the mock factories closed over these array references.
     mockProfilerFolders.splice(0, mockProfilerFolders.length, ...mockProfilerFolderList);
     mockPerfFolderList.splice(0, mockPerfFolderList.length, ...mockPerformanceReportFolders);
@@ -411,6 +419,27 @@ it('does not record cancelling a local file picker as a failed load', () => {
     expect(recordReportLoadFailed).not.toHaveBeenCalled();
 });
 
+it('rejects an oversized memory report before uploading it', async () => {
+    getUploadSizeLimitError.mockReturnValueOnce('Selected upload exceeds the 1 GiB request limit.');
+    render(
+        <TestProviders>
+            <LocalFolderSelector />
+        </TestProviders>,
+    );
+
+    fireEvent.change(screen.getByTestId(TEST_IDS.LOCAL_PROFILER_UPLOAD), {
+        target: { files: [createMockFile('db.sqlite', 'text/x-sqlite3')] },
+    });
+
+    await waitFor(() =>
+        expect(screen.getByTestId(TEST_IDS.LOCAL_PROFILER_STATUS).textContent).to.equal(
+            'Selected upload exceeds the 1 GiB request limit.',
+        ),
+    );
+    expect(mockUploadLocalFolder).not.toHaveBeenCalled();
+    expect(recordReportLoadFailed).toHaveBeenCalledWith(ReportKind.PROFILER, ReportLoadFailureReason.TOO_LARGE);
+});
+
 it('handles valid memory report upload', async () => {
     render(
         <TestProviders>
@@ -492,6 +521,32 @@ it('handles invalid performance report upload', async () => {
     );
     expect(recordReportLoadFailed).toHaveBeenCalledWith(ReportKind.PERFORMANCE, ReportLoadFailureReason.MISSING_FILE);
     expect(recordReportLoadFailed).toHaveBeenCalledTimes(1);
+});
+
+it('rejects an oversized performance report before uploading it', async () => {
+    getUploadSizeLimitError.mockReturnValueOnce('Selected upload exceeds the 1 GiB request limit.');
+    render(
+        <TestProviders>
+            <LocalFolderSelector />
+        </TestProviders>,
+    );
+
+    fireEvent.change(screen.getByTestId(TEST_IDS.LOCAL_PERFORMANCE_UPLOAD), {
+        target: {
+            files: [
+                createMockFile('ops_perf_results_2025_05_02_01_23_09.csv', 'text/csv'),
+                createMockFile('profile_log_device.csv', 'text/csv'),
+            ],
+        },
+    });
+
+    await waitFor(() =>
+        expect(screen.getByTestId(TEST_IDS.LOCAL_PERFORMANCE_STATUS).textContent).to.equal(
+            'Selected upload exceeds the 1 GiB request limit.',
+        ),
+    );
+    expect(mockUploadLocalPerformanceFolder).not.toHaveBeenCalled();
+    expect(recordReportLoadFailed).toHaveBeenCalledWith(ReportKind.PERFORMANCE, ReportLoadFailureReason.TOO_LARGE);
 });
 
 it('handles valid performance report upload', async () => {
