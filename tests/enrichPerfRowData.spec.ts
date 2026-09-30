@@ -8,6 +8,8 @@ import { PerfTableRow } from '../src/model/PerfTable';
 import { BufferType } from '../src/model/BufferType';
 import { DeviceOperationLayoutTypes } from '../src/model/APIData';
 import { OpType } from '../src/definitions/Performance';
+import { BoundAnalysis } from '../src/definitions/PerfTable';
+import { OperationCategories } from '../src/definitions/StackedPerfTable';
 
 // tt-perf-report emits a CSV whose columns (id, total_percent, bound, op_code, device, device_time,
 // op_to_op_gap, cores, dram, dram_percent, flops, flops_percent, ...) reach the frontend as strings.
@@ -67,6 +69,26 @@ describe('enrichRowData — typed conversion of tt-perf-report values', () => {
         expect(row.flops).toBe(88.8);
         expect(row.flops_percent).toBe(73.2);
         expect(row.pm_ideal_ns).toBe(1000);
+    });
+
+    it('parses the op category and bound analysis tt-perf-report 1.4.0 emits', () => {
+        const [row] = enrichRowData([makeRawRow({ op_category: 'CCL', bound_analysis: 'flops_only' })], [], null);
+
+        expect(row.op_category).toBe(OperationCategories.CCL);
+        expect(row.bound_analysis).toBe(BoundAnalysis.FLOPS_ONLY);
+    });
+
+    it('reads a missing or unrecognised op category and bound analysis as unknown', () => {
+        const [missing, unrecognised] = enrichRowData(
+            [makeRawRow(), makeRawRow({ op_category: 'Quantum', bound_analysis: 'partial' })],
+            [],
+            null,
+        );
+
+        expect(missing.op_category).toBeNull();
+        expect(missing.bound_analysis).toBeNull();
+        expect(unrecognised.op_category).toBeNull();
+        expect(unrecognised.bound_analysis).toBeNull();
     });
 
     it('maps empty optional numeric columns to null', () => {

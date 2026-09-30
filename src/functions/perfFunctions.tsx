@@ -25,6 +25,7 @@ import PerfHeuristicFlags from '../components/performance/PerfHeuristicFlags';
 import { MathFidelity } from '../definitions/MathFidelity';
 import { CellColour } from '../definitions/CellColour';
 import { isSlowDramDominant } from './perfBoundPredicates';
+import { NOT_ANALYSED_LABEL, getNotAnalysedReason } from './perfBoundAnalysis';
 
 const OPERATION_COLOURS: { [key: string]: CellColour } = {
     '(torch)': CellColour.Red,
@@ -82,7 +83,10 @@ export const formatCell = (
     let formatted: string;
 
     if (value === null || value === '' || Number.isNaN(value)) {
-        return '';
+        // Host ops keep their blanks: HOST in the Bound column already says why nothing was measured.
+        const notAnalysedReason = isHost ? null : getNotAnalysedReason(row, key);
+
+        return notAnalysedReason ? getNotAnalysedMarkup(notAnalysedReason) : '';
     }
 
     // L1 pressure values reflect a TTNN-op snapshot; suppress repeats inside the same op group.
@@ -252,6 +256,17 @@ export const formatCell = (
 
     return getCellMarkup(formatted, getCellColour(row, key), highlight);
 };
+
+// A native title rather than a Blueprint Tooltip: the table is not virtualised and an unanalysed
+// row has up to five of these cells, so a stateful popover per cell scales badly on large reports.
+const getNotAnalysedMarkup = (reason: string) => (
+    <span
+        className={classNames(FALLBACK_COLOUR, Classes.TOOLTIP_INDICATOR)}
+        title={reason}
+    >
+        {NOT_ANALYSED_LABEL}
+    </span>
+);
 
 export const getCellMarkup = (text: string, colour?: CellColour, highlight?: string | null) => {
     if (!text) {

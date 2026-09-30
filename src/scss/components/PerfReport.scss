@@ -138,6 +138,11 @@ $perf-table-max-height: calc(
         margin-bottom: 10px;
     }
 
+    .bound-analysis-coverage {
+        width: fit-content;
+        margin-bottom: 10px;
+    }
+
     .cell-header {
         text-align: left;
         vertical-align: initial;
