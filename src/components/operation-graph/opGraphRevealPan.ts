@@ -81,29 +81,87 @@ export const centerPanShift = (
 };
 
 interface PannableNode {
+    id?: string;
     position: { x: number; y: number };
+    parentId?: string;
     width?: number | null;
     height?: number | null;
     measured?: { width?: number | null; height?: number | null };
 }
 
 /**
+ * Where each node sits in flow coordinates, following `parentId`.
+ *
+ * React Flow positions a child relative to its parent, so a node inside a container
+ * — a device operation, or a weight fan's member — carries an offset from the
+ * container rather than from the pane. Every pan below works in flow coordinates, so
+ * reading `position` directly sends the viewport to the top-left of the graph plus a
+ * few pixels. Resolved once over the whole array rather than per call site, because
+ * the callers that need it are reading a freshly built array the React Flow store has
+ * not seen yet and so cannot answer for. #2028
+ */
+export const absolutePositionsOf = (nodes: readonly PannableNode[]): Map<string, { x: number; y: number }> => {
+    const byId = new Map<string, PannableNode>();
+    for (const node of nodes) {
+        if (node.id !== undefined) {
+            byId.set(node.id, node);
+        }
+    }
+
+    const resolved = new Map<string, { x: number; y: number }>();
+    // A parent chain is a tree in every graph this builds, but a cycle here would
+    // hang the pane rather than misplace a node, so it is worth the one set.
+    const inProgress = new Set<string>();
+
+    const resolve = (node: PannableNode): { x: number; y: number } => {
+        const { id } = node;
+        if (id === undefined) {
+            return node.position;
+        }
+        const seen = resolved.get(id);
+        if (seen !== undefined) {
+            return seen;
+        }
+        const parent = node.parentId === undefined || inProgress.has(id) ? undefined : byId.get(node.parentId);
+        inProgress.add(id);
+        const origin = parent === undefined ? { x: 0, y: 0 } : resolve(parent);
+        inProgress.delete(id);
+
+        const absolute = { x: origin.x + node.position.x, y: origin.y + node.position.y };
+        resolved.set(id, absolute);
+        return absolute;
+    };
+
+    for (const node of nodes) {
+        resolve(node);
+    }
+    return resolved;
+};
+
+/**
  * The rectangle enclosing `nodes`, or null when there are none. Reads `measured` as
  * a fallback because React Flow fills `width`/`height` only after it has laid out.
+ *
+ * `positions` overrides each node's own `position`, which a caller passes when the
+ * set may contain container children — see `absolutePositionsOf`.
  */
 export const boundsOfNodes = (
     nodes: readonly PannableNode[],
+    positions?: ReadonlyMap<string, { x: number; y: number }>,
 ): { minX: number; minY: number; maxX: number; maxY: number } | null => {
     if (nodes.length === 0) {
         return null;
     }
     return nodes.reduce(
-        (bounds, node) => ({
-            minX: Math.min(bounds.minX, node.position.x),
-            minY: Math.min(bounds.minY, node.position.y),
-            maxX: Math.max(bounds.maxX, node.position.x + (node.width ?? node.measured?.width ?? 0)),
-            maxY: Math.max(bounds.maxY, node.position.y + (node.height ?? node.measured?.height ?? 0)),
-        }),
+        (bounds, node) => {
+            const at = (node.id === undefined ? undefined : positions?.get(node.id)) ?? node.position;
+            return {
+                minX: Math.min(bounds.minX, at.x),
+                minY: Math.min(bounds.minY, at.y),
+                maxX: Math.max(bounds.maxX, at.x + (node.width ?? node.measured?.width ?? 0)),
+                maxY: Math.max(bounds.maxY, at.y + (node.height ?? node.measured?.height ?? 0)),
+            };
+        },
         { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity },
     );
 };

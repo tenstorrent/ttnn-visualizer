@@ -21,7 +21,7 @@ import MemoryConfigRow from '../MemoryConfigRow';
 import MemoryTag from '../MemoryTag';
 import SourceFileButton from '../operation-details/SourceFileButton';
 import PerfOverlayOpMetric from '../perf-overlay/PerfOverlayOpMetric';
-import type { OpGraphBlockSummary } from './opGraphTypes';
+import { OpGraphBlockKind, type OpGraphBlockSummary } from './opGraphTypes';
 
 interface ConnectedOpGroup {
     key: string;
@@ -72,6 +72,17 @@ const getConnectedOpGroups = (
 
     return Array.from(groupsByKey.values());
 };
+
+// Fold a graph down to one block and every source in it merges into a single fan,
+// which on `sentence_bert`'s 149 weight loads is a line no one reads. The cap is what
+// fits the panel column at the sizes the fans actually come in -- the largest across
+// the local captures holds three. #2028
+const MAX_LISTED_MEMBER_IDS = 8;
+
+const listOperationIds = (operationIds: readonly number[]): string =>
+    operationIds.length <= MAX_LISTED_MEMBER_IDS
+        ? operationIds.join(', ')
+        : `${operationIds.slice(0, MAX_LISTED_MEMBER_IDS).join(', ')} +${operationIds.length - MAX_LISTED_MEMBER_IDS} more`;
 
 const uniqueNameCounts = (names: readonly string[]): Array<{ name: string; count: number }> => {
     const counts: Array<{ name: string; count: number }> = [];
@@ -236,6 +247,14 @@ const OpGraphBlockPanel = ({
     const { durationSeconds, memoryDeltaBytes } = block;
     const firstOpId = block.operationIds[0];
     const lastOpId = block.operationIds[block.operationIds.length - 1];
+    // A range and an instance ordinal both assume a repeat or a layer. A fan is the
+    // weight loads feeding one consumer, wherever in the report they were captured, so
+    // `ops 1–92` claimed a span of 92 operations where there were three -- and a fan is
+    // always its own only instance, so "1 of 1" says nothing. #2028
+    const idLine =
+        block.kind === OpGraphBlockKind.WEIGHTS
+            ? `ops ${listOperationIds(block.operationIds)}`
+            : `ops ${firstOpId}–${lastOpId} · instance ${block.instanceIndex + 1} of ${block.instanceCount}`;
     const inputCount = inputGroups.reduce((total, group) => total + group.tensors.length, 0);
     const outputCount = outputGroups.reduce((total, group) => total + group.tensors.length, 0);
     const locateId = firstOpId;
@@ -253,9 +272,7 @@ const OpGraphBlockPanel = ({
                     >
                         {block.label}
                     </h2>
-                    <p className='op-graph-panel-id'>
-                        {`ops ${firstOpId}–${lastOpId} · instance ${block.instanceIndex + 1} of ${block.instanceCount}`}
-                    </p>
+                    <p className='op-graph-panel-id'>{idLine}</p>
                 </div>
                 {locateId !== undefined && (
                     <div className='op-graph-panel-actions'>
