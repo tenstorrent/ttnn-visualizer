@@ -23,7 +23,6 @@ export interface PerfTableRow {
     op_to_op_gap: string;
     cores: string;
     available_cores?: string | null;
-    // Optional: absent when the backend's tt-perf-report predates 1.4.0.
     op_category?: string | null;
     bound_analysis?: string | null;
     dram: string;
