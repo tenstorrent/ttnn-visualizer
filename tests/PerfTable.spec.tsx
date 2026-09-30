@@ -337,6 +337,25 @@ describe('PerfTable loading state', () => {
     });
 });
 
+describe('PerfTable layout', () => {
+    it('renders the table inside the focusable scroll region the sticky header pins to', () => {
+        renderTable([matmulRow]);
+
+        const region = screen.getByRole('region', { name: 'Performance table' });
+        const table = within(region).getByRole('table');
+        expect(region).toHaveClass('perf-table-scroll');
+        expect(region).toHaveAttribute('tabindex', '0');
+        expect(table.querySelector('thead')).toHaveClass('table-header');
+    });
+
+    it('renders no scroll region for the empty state', () => {
+        renderTable([]);
+
+        expect(screen.getByText('No data to display')).toBeInTheDocument();
+        expect(screen.queryByRole('region', { name: 'Performance table' })).toBeNull();
+    });
+});
+
 describe('PerfTable column visibility', () => {
     it('renders the Sub Device column from the row value', () => {
         renderTable([
@@ -368,12 +387,6 @@ describe('PerfTable column visibility', () => {
         const comparisonTableRow = screen.getByText('comparison-subdevice').closest('tr');
         expect(comparisonTableRow).toHaveClass('comparison-row');
         expect(within(comparisonTableRow as HTMLElement).getByText('72')).toBeInTheDocument();
-    });
-
-    it('renders the table inside the scroll box the sticky header pins to', () => {
-        renderTable([matmulRow]);
-
-        expect(screen.getByRole('table').parentElement).toHaveClass('perf-table-scroll');
     });
 
     it('keeps OP Code visible even when it is listed as hidden', () => {

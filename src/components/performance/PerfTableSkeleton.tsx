@@ -5,6 +5,7 @@
 import { Classes } from '@blueprintjs/core';
 import classNames from 'classnames';
 import { TEST_IDS } from '../../definitions/TestIds';
+import PerfTableFrame from './PerfTableFrame';
 
 const SKELETON_ROW_COUNT = 12;
 
@@ -20,53 +21,50 @@ function PerfTableSkeleton({
     hasLeadingColumn = false,
 }: PerfTableSkeletonProps) {
     return (
-        <div className='perf-table-scroll'>
-            <table
-                className='perf-table monospace'
-                aria-busy='true'
-                aria-label='Loading performance data'
-                data-testid={TEST_IDS.PERF_TABLE_SKELETON}
-            >
-                <thead className='table-header'>
-                    <tr>
+        <PerfTableFrame
+            aria-busy='true'
+            aria-label='Loading performance data'
+            data-testid={TEST_IDS.PERF_TABLE_SKELETON}
+        >
+            <thead className='table-header'>
+                <tr>
+                    {hasLeadingColumn && (
+                        <th
+                            className='cell-header'
+                            aria-hidden='true'
+                        />
+                    )}
+                    {headers.map((header) => (
+                        <th
+                            key={header}
+                            className='cell-header'
+                        >
+                            <span className='header-label no-button'>{header}</span>
+                        </th>
+                    ))}
+                </tr>
+            </thead>
+
+            <tbody>
+                {Array.from({ length: rowCount }, (_, rowIndex) => (
+                    <tr key={rowIndex}>
                         {hasLeadingColumn && (
-                            <th
-                                className='cell-header'
-                                aria-hidden='true'
-                            />
+                            <td className='cell'>
+                                <span className={classNames('skeleton-cell', Classes.SKELETON)} />
+                            </td>
                         )}
                         {headers.map((header) => (
-                            <th
+                            <td
                                 key={header}
-                                className='cell-header'
+                                className='cell'
                             >
-                                <span className='header-label no-button'>{header}</span>
-                            </th>
+                                <span className={classNames('skeleton-cell', Classes.SKELETON)} />
+                            </td>
                         ))}
                     </tr>
-                </thead>
-
-                <tbody>
-                    {Array.from({ length: rowCount }, (_, rowIndex) => (
-                        <tr key={rowIndex}>
-                            {hasLeadingColumn && (
-                                <td className='cell'>
-                                    <span className={classNames('skeleton-cell', Classes.SKELETON)} />
-                                </td>
-                            )}
-                            {headers.map((header) => (
-                                <td
-                                    key={header}
-                                    className='cell'
-                                >
-                                    <span className={classNames('skeleton-cell', Classes.SKELETON)} />
-                                </td>
-                            ))}
-                        </tr>
-                    ))}
-                </tbody>
-            </table>
-        </div>
+                ))}
+            </tbody>
+        </PerfTableFrame>
     );
 }
 
