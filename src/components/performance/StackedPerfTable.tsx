@@ -19,6 +19,7 @@ import { useGetNPEManifest } from '../../hooks/useAPI';
 import { formatStackedCell } from '../../functions/stackedPerfFunctions';
 import { formatSize } from '../../functions/math';
 import PerfDeviceArchitecture from './PerfDeviceArchitecture';
+import PerfTableFrame from './PerfTableFrame';
 import PerfTableSkeleton from './PerfTableSkeleton';
 import { PATTERN_COUNT } from '../../definitions/Performance';
 import { mergeDevicesAtom } from '../../store/app';
@@ -74,7 +75,7 @@ const StackedPerformanceTable = ({
         }
 
         return (
-            <table className='perf-table monospace'>
+            <PerfTableFrame scrollResetKey={tableFields}>
                 <thead className='table-header'>
                     <tr>
                         {computedTableColumns.map((column) => {
@@ -189,7 +190,7 @@ const StackedPerformanceTable = ({
                             ))}
                     </tr>
                 </tfoot>
-            </table>
+            </PerfTableFrame>
         );
     };
 
