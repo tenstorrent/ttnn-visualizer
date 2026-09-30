@@ -5,8 +5,11 @@
 import { OpType } from './Performance';
 
 enum OperationCategories {
+    CCL = 'CCL',
     Compute = 'Compute',
     DM = 'DM',
+    Host = 'Host',
+    Other = 'Other',
     TM = 'TM',
 }
 
