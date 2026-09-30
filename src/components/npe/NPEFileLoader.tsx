@@ -14,6 +14,7 @@ import { activeNpeOpTraceAtom } from '../../store/app';
 import createToastNotification from '../../functions/createToastNotification';
 import { ToastType } from '../../definitions/ToastType';
 import getResponseError from '../../functions/getResponseError';
+import getUploadSizeLimitError from '../../functions/getUploadSizeLimitError';
 import sanitiseFileName from '../../functions/sanitiseFileName';
 import { ReportKind, ReportLoadFailureReason } from '../../definitions/EventLogEvent';
 import { getReportLoadFailureReason, recordReportLoadFailed } from '../../functions/reportLoadEvents';
@@ -53,6 +54,14 @@ const NPEFileLoader = ({ onUploadAccepted }: NPEFileLoaderProps) => {
 
     const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
         if (!event.target.files?.length) {
+            return;
+        }
+
+        const uploadSizeLimitError = getUploadSizeLimitError(event.target.files);
+        if (uploadSizeLimitError) {
+            setUploadStatus(ConnectionTestStates.FAILED);
+            setStatusMessage(uploadSizeLimitError);
+            recordReportLoadFailed(ReportKind.NPE, ReportLoadFailureReason.TOO_LARGE);
             return;
         }
 

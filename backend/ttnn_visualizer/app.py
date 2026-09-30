@@ -51,9 +51,14 @@ from ttnn_visualizer.settings import (
     Config,
     DefaultConfig,
     build_socketio_origin_check,
+    get_effective_max_content_length,
 )
 from ttnn_visualizer.startup_requirements import enforce
 from ttnn_visualizer.startup_requirements import report as report_startup_requirements
+from ttnn_visualizer.usage_collection import (
+    get_collection_config_path,
+    prepare_usage_collection_config,
+)
 from ttnn_visualizer.utils import (
     find_gunicorn_path,
     is_flag_enabled,
@@ -87,6 +92,7 @@ def _build_spa_client_config(app: Flask) -> dict:
     js_config = {
         "SERVER_MODE": server_mode,
         "BASE_PATH": app.config["BASE_PATH"],
+        "MAX_CONTENT_LENGTH": app.config.get("MAX_CONTENT_LENGTH"),
         "TT_METAL_HOME": app.config["TT_METAL_HOME"],
         "REPORT_DATA_DIRECTORY": str(app.config["REPORT_DATA_DIRECTORY"]),
         "USERNAME": _get_client_username(server_mode),
@@ -173,6 +179,15 @@ def create_app(settings_override=None):
 
     if settings_override:
         app.config.update(settings_override)
+
+    # Reapply the settings-owned derivation after test/programmatic overrides, which
+    # intentionally bypass Config.recompute_derived_settings().
+    app.config["MAX_CONTENT_LENGTH"] = get_effective_max_content_length(
+        is_flag_enabled(app.config["SERVER_MODE"]),
+        app.config["MAX_CONTENT_LENGTH"],
+        is_configured="MAX_CONTENT_LENGTH" in os.environ
+        or "MAX_CONTENT_LENGTH" in (settings_override or {}),
+    )
 
     # Hosted session IDs identify the event log, so browsers must never send them over
     # an unencrypted connection. ``settings_override`` bypasses Config's recomputation.
@@ -287,6 +302,28 @@ def middleware(app: flask.Flask):
 
     @app.errorhandler(HTTPException)
     def handle_http_error(error: HTTPException):
+        if error.code == HTTPStatus.REQUEST_ENTITY_TOO_LARGE:
+            # Werkzeug also raises 413 for too many form parts or an oversized form
+            # field, where quoting the byte limit would name one the request never hit.
+            max_content_length = flask.request.max_content_length
+            content_length = flask.request.content_length
+            if (
+                max_content_length is not None
+                and content_length is not None
+                and content_length > max_content_length
+            ):
+                return (
+                    jsonify(
+                        {
+                            "error": (
+                                "Request exceeds the maximum request size of "
+                                f"{max_content_length} bytes."
+                            )
+                        }
+                    ),
+                    error.code,
+                )
+
         message = error.description or error.name or "Request failed"
         return (
             jsonify({"error": message}),
@@ -515,6 +552,28 @@ def _record_launch(config):
 
     server_mode = is_flag_enabled(config.SERVER_MODE)
     disabled_reason = get_recording_disabled_reason(server_mode)
+    if not server_mode:
+        collection_config = prepare_usage_collection_config()
+        if collection_config.enabled and disabled_reason is not None:
+            print(
+                "📈 Aggregate usage collection is DISABLED: event logging is disabled."
+            )
+        elif collection_config.enabled:
+            print(
+                "📈 Aggregate usage collection is ENABLED.\n"
+                f"   Configuration: {get_collection_config_path()}"
+            )
+        elif collection_config.error:
+            print(
+                "📈 Aggregate usage collection is DISABLED: "
+                "the collection config is invalid."
+            )
+        else:
+            print(
+                "📈 Aggregate usage collection is DISABLED.\n"
+                f"   Opt in through {get_collection_config_path()}."
+            )
+
     if disabled_reason is not None:
         unrecognised_value = get_unrecognised_recording_disabled_value()
         if unrecognised_value is not None:
@@ -542,7 +601,7 @@ def _record_launch(config):
     # anything below WARNING, so an info line here would never be seen.
     print(
         f"📊 Recording events locally to {get_event_log_path()}.\n"
-        f"   Written on this machine only; the application transmits nothing.\n"
+        f"   The application itself does not transmit raw events.\n"
         f"   {describe_opt_out()}"
     )
 

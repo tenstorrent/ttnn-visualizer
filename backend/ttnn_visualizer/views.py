@@ -137,6 +137,10 @@ from ttnn_visualizer.stack_trace_source import (
     read_stack_source_remote,
     stack_source_response,
 )
+from ttnn_visualizer.usage_metrics import (
+    PROMETHEUS_CONTENT_TYPE,
+    render_usage_metrics,
+)
 from ttnn_visualizer.utils import (
     PERFORMANCE_OPS_PERF_PREFIX,
     PERFORMANCE_REPORT_REQUIRED_FILES,
@@ -174,10 +178,11 @@ api = Blueprint("api", __name__)
 _NOSNIFF_HEADERS = {"X-Content-Type-Options": "nosniff"}
 
 # What one permitted page may write into a privacy-reviewed artefact in a single request.
-# Not inherited: `MAX_CONTENT_LENGTH` defaults to no limit at all (`settings.py`), so the
-# limit has to be set per request. It has to stay consistent with `MAX_EVENT_LOG_BATCH_EVENTS`,
-# which lives in `event_logging.py` beside the write-atomicity guarantee it bounds — a full batch
-# of the largest permitted event must still fit inside this.
+# Not inherited: hosted `MAX_CONTENT_LENGTH` defaults to a report-sized cap, while local
+# installs may leave it unlimited, so event logging sets a much tighter per-request limit. It
+# has to stay consistent with `MAX_EVENT_LOG_BATCH_EVENTS`, which lives in `event_logging.py`
+# beside the write-atomicity guarantee it bounds — a full batch of the largest permitted event
+# must still fit inside this.
 MAX_EVENT_LOG_REQUEST_BYTES = 16 * 1024
 
 # Module-private, unlike the cap above: that is part of the contract the tests pin, this
@@ -2492,6 +2497,17 @@ def use_remote_folder():
 @api.route("/up", methods=["GET", "HEAD"])
 def health_check():
     return Response(status=HTTPStatus.OK)
+
+
+@api.route("/metrics", methods=["GET"])
+@local_only
+def usage_metrics():
+    # Opting out of recording withdraws the endpoint too, so counts already in the log
+    # stop being reported under the machine ID without a separate collection opt-out.
+    if not is_recording_enabled():
+        return response_not_found("Event logging is disabled.")
+
+    return Response(render_usage_metrics(), content_type=PROMETHEUS_CONTENT_TYPE)
 
 
 @api.route("/instance", methods=["GET"])

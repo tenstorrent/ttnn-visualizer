@@ -33,6 +33,7 @@ const IGNORED_DIRS = [
     '.git',
     '.github',
     '.idea',
+    '.pnpm-store',
     '.venv',
     '.vscode',
     'backend/data/',

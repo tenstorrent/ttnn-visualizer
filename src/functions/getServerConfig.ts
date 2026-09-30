@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { DEFAULT_SSH_PORT } from '../definitions/RemoteConnection';
-import { ServerConfig } from '../definitions/ServerConfig';
+import { HOSTED_DEFAULT_MAX_CONTENT_LENGTH, ServerConfig } from '../definitions/ServerConfig';
 import { MAX_PORT } from '../definitions/SshConnectionFields';
 
 declare global {
@@ -13,6 +13,36 @@ declare global {
 }
 
 const MIN_SSH_PORT = 1;
+const BYTE_COUNT_PATTERN = /^[+-]?\d+$/;
+
+// Unlike the backend parser this warns rather than throws: `axiosInstance` reads the config
+// at module scope, so a throw here blanks the whole dev app, and the check this value feeds
+// is advisory — Flask behind the `/api` proxy still enforces its own limit.
+export function getViteMaxContentLength(value: unknown, serverMode: boolean): number | null {
+    const fallback = serverMode ? HOSTED_DEFAULT_MAX_CONTENT_LENGTH : null;
+
+    if (value === undefined) {
+        return fallback;
+    }
+
+    if (typeof value !== 'string' || value === '') {
+        return null;
+    }
+
+    const normalised = value.trim();
+    const parsedValue = Number(normalised);
+    if (!BYTE_COUNT_PATTERN.test(normalised) || !Number.isSafeInteger(parsedValue) || parsedValue <= 0) {
+        // eslint-disable-next-line no-console -- there is no UI yet at config-read time, and this branch is dev-only.
+        console.warn(
+            `VITE_MAX_CONTENT_LENGTH=${JSON.stringify(value)} is not a positive whole number of bytes, so the ` +
+                'default applies. Set a byte count above zero, or leave it empty for no limit.',
+        );
+
+        return fallback;
+    }
+
+    return parsedValue;
+}
 
 export function getValidSshDefaultPort(value: unknown): number {
     const parsedPort = Number(value);
@@ -99,10 +129,12 @@ const getServerConfig = (): ServerConfig => {
     // Dev mode configuration - use environment variables to simulate the server config
     if (import.meta.env.DEV) {
         warnOnUnrecognisedServerMode(import.meta.env.VITE_SERVER_MODE);
+        const serverMode = isServerModeEnabled(import.meta.env.VITE_SERVER_MODE);
 
         return {
             BASE_PATH: '/',
-            SERVER_MODE: isServerModeEnabled(import.meta.env.VITE_SERVER_MODE),
+            SERVER_MODE: serverMode,
+            MAX_CONTENT_LENGTH: getViteMaxContentLength(import.meta.env.VITE_MAX_CONTENT_LENGTH, serverMode),
             TT_METAL_HOME: import.meta.env.VITE_TT_METAL_HOME,
             REPORT_DATA_DIRECTORY: import.meta.env.VITE_REPORT_DATA_DIRECTORY || '/path/to/data/directory', // Default value for development
             // On, matching the backend default, because this is not the switch: `/api`
@@ -123,6 +155,7 @@ const getServerConfig = (): ServerConfig => {
 
     return {
         BASE_PATH: windowConfig?.BASE_PATH || '/',
+        MAX_CONTENT_LENGTH: windowConfig?.MAX_CONTENT_LENGTH,
         // Through the same predicate as the dev branch: `|| false` is the truthy-string
         // reading that made `SERVER_MODE` invertible in the first place, and this is the
         // branch the hosted deployment actually takes.

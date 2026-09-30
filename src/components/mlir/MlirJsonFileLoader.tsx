@@ -19,6 +19,7 @@ import {
 } from '../../store/app';
 import { GraphBundle, MlirFileResult } from '../../model/MLIRJsonModel';
 import getResponseError from '../../functions/getResponseError';
+import getUploadSizeLimitError from '../../functions/getUploadSizeLimitError';
 import sanitiseFileName from '../../functions/sanitiseFileName';
 import mapConvertedMlirServerResult from '../../functions/mapConvertedMlirServerResult';
 import relabelMlirGraphIds from '../../functions/relabelMlirGraphIds';
@@ -131,6 +132,15 @@ const MlirJsonFileLoader = ({ server = null, disabled = false }: MlirJsonFileLoa
 
         const { files } = event.target;
         const selectedFiles = Array.from(files);
+
+        // Only server conversion sends the files; local JSON is parsed in the browser.
+        const uploadSizeLimitError = server ? getUploadSizeLimitError(files) : null;
+        if (uploadSizeLimitError) {
+            setUploadStatus(ConnectionTestStates.FAILED);
+            setStatusMessage(uploadSizeLimitError);
+            selectedFiles.forEach(() => recordReportLoadFailed(ReportKind.MLIR, ReportLoadFailureReason.TOO_LARGE));
+            return;
+        }
 
         try {
             if (server) {

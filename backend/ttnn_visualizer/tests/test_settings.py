@@ -118,18 +118,69 @@ def _wsgi_environ(host: str, scheme: str = "http", **headers: str) -> dict:
     return {"wsgi.url_scheme": scheme, "HTTP_HOST": host, **headers}
 
 
+_UNSET = object()
+
+
+@pytest.mark.parametrize(
+    ("server_mode", "override", "env_value", "expected"),
+    [
+        pytest.param(True, 1024, _UNSET, 1024, id="hosted-keeps-configured-cap"),
+        pytest.param(False, 1024, _UNSET, 1024, id="local-keeps-configured-cap"),
+        pytest.param(True, _UNSET, _UNSET, 1073741824, id="hosted-defaults-to-1-gib"),
+        # The claim that keeps this change from capping every existing local install.
+        pytest.param(False, _UNSET, _UNSET, None, id="local-stays-unlimited"),
+        pytest.param(True, None, _UNSET, None, id="hosted-override-opts-out"),
+        pytest.param(True, _UNSET, "", None, id="hosted-empty-variable-opts-out"),
+    ],
+)
+def test_the_effective_upload_cap(
+    tmp_path, monkeypatch, server_mode, override, env_value, expected
+):
+    if env_value is _UNSET:
+        monkeypatch.delenv("MAX_CONTENT_LENGTH", raising=False)
+    else:
+        monkeypatch.setenv("MAX_CONTENT_LENGTH", env_value)
+
+    # Dropping the key rather than pinning it is the "never configured" state under test.
+    app = create_app(
+        settings_override={
+            key: value
+            for key, value in base_test_settings(
+                str(tmp_path), SERVER_MODE=server_mode, MAX_CONTENT_LENGTH=override
+            ).items()
+            if value is not _UNSET
+        }
+    )
+
+    assert app.config["MAX_CONTENT_LENGTH"] == expected
+
+
 def _import_settings_with(
-    code: str = "import ttnn_visualizer.settings", **env: str
+    code: str = "import ttnn_visualizer.settings",
+    *,
+    absent_env: tuple[str, ...] = (),
+    ignore_dotenv: bool = False,
+    **env: str,
 ) -> subprocess.CompletedProcess:
     """Import ``settings`` in a fresh interpreter under the given environment.
 
     The class body runs once per process and this one imported the module before the
     first test, so an import-time decision can only be exercised from outside it.
-    ``load_dotenv`` reads the repo's ``.env`` on import, so the variables under test are
-    also cleared from what the child inherits — otherwise a developer checkout that
-    configures one would decide the result.
+    Variables in ``env`` override a developer ``.env``. ``absent_env`` instead removes
+    a variable entirely; combined with ``ignore_dotenv``, it tests a genuine coded
+    default without a checkout's ``.env`` deciding the result.
     """
-    child_env = {key: value for key, value in os.environ.items() if key not in env}
+    child_env = {
+        key: value
+        for key, value in os.environ.items()
+        if key not in env and key not in absent_env
+    }
+    if ignore_dotenv:
+        code = (
+            "import dotenv; "
+            "dotenv.load_dotenv = lambda *args, **kwargs: False; "
+            f"{code}"
+        )
 
     return subprocess.run(
         [sys.executable, "-c", code],
@@ -559,7 +610,46 @@ def test_a_max_content_length_is_parsed_as_an_integer(monkeypatch):
     assert config.MAX_CONTENT_LENGTH == 1048576
 
 
-@pytest.mark.parametrize("env_value", ["abc", "  ", "1.5", "10MB"])
+def test_importing_settings_leaves_max_content_length_unlimited_by_default():
+    result = _import_settings_with(
+        "import ttnn_visualizer.settings as settings; "
+        "print(settings.DefaultConfig.MAX_CONTENT_LENGTH)",
+        absent_env=("MAX_CONTENT_LENGTH",),
+        ignore_dotenv=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "None"
+
+
+def test_hosted_config_derives_the_default_max_content_length():
+    result = _import_settings_with(
+        "from ttnn_visualizer.settings import DefaultConfig; "
+        "config = DefaultConfig(); "
+        "config.override_with_env_variables(); "
+        "print(config.MAX_CONTENT_LENGTH)",
+        absent_env=("MAX_CONTENT_LENGTH",),
+        ignore_dotenv=True,
+        SERVER_MODE="true",
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "1073741824"
+
+
+def test_importing_settings_allows_an_empty_max_content_length():
+    result = _import_settings_with(
+        "import ttnn_visualizer.settings as settings; "
+        "print(settings.DefaultConfig.MAX_CONTENT_LENGTH)",
+        ignore_dotenv=True,
+        MAX_CONTENT_LENGTH="",
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "None"
+
+
+@pytest.mark.parametrize("env_value", ["abc", "  ", "1.5", "10MB", "0", "-1"])
 def test_an_unreadable_max_content_length_names_itself(env_value):
     # The class body calls this unguarded, so a typo aborts startup — right, since the
     # value it would otherwise fall back to is *no limit*, but only useful if the
