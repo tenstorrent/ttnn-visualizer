@@ -58,8 +58,12 @@ CSV_CHUNK_SIZE = 50_000
 # than kept, so the total reports what it could pair and says what it dropped.
 MAX_OPEN_ZONE_STARTS = 200_000
 
-# A linked report plus the current view and two recently visited filter shapes covers
-# the common toggle-back path without retaining an unbounded number of large reports.
+# Generated reports kept per process. The cache is shared by every user, instance
+# and comparison report the worker serves, so four entries only cover one session's
+# toggle-back path (a linked report, the current view and two recent filter shapes)
+# when little else is being served. The bound is on count, not bytes: a 20k-row
+# report holds about 54 MB, so a worker can keep roughly 220 MB alive for its
+# lifetime. Each `group_by` value is its own entry with a full copy of the rows.
 MAX_CACHED_PERFORMANCE_REPORTS = 4
 
 
@@ -999,6 +1003,11 @@ class OpsPerformanceReportQueries:
 
     @classmethod
     def generate_report(cls, instance, **kwargs):
+        """Build the performance report, reusing a cached one when nothing changed.
+
+        A cache hit hands every caller the same dict and row dicts, across users,
+        so treat the result as read-only: copy before sorting or annotating it.
+        """
         source_path = Path(
             OpsPerformanceQueries.get_local_ops_perf_file_path(instance)
         ).resolve()
@@ -1022,7 +1031,10 @@ class OpsPerformanceReportQueries:
                 "no_stacked_report", cls.DEFAULT_NO_STACKED_REPORT
             ),
         )
-        return _cached_generate_performance_report(source, options)
+        try:
+            return _cached_generate_performance_report(source, options)
+        except _DegradedPerformanceReport as degraded:
+            return degraded.report
 
     @classmethod
     def _generate_report_uncached(
@@ -1046,6 +1058,10 @@ class OpsPerformanceReportQueries:
         if data_row_count <= 1:
             logger.info("Skipping stacked report generation: insufficient data rows")
             no_stacked_report = True
+
+        # A swallowed failure still returns a report, but one that may only be
+        # missing rows by chance (EMFILE, a full temp dir), so it must not be cached.
+        degraded = False
 
         try:
             csv_summary_file = tempfile.NamedTemporaryFile(delete=False)
@@ -1104,6 +1120,7 @@ class OpsPerformanceReportQueries:
                 logger.error(f"Error extracting signposts: {e}")
                 ops_perf_results = []
                 signposts = []
+                degraded = True
 
             logger.info(f"Found {len(signposts)} signposts...")
 
@@ -1186,6 +1203,7 @@ class OpsPerformanceReportQueries:
             except Exception as e:
                 logger.error(f"Error processing CSV output file: {e}")
                 report = []
+                degraded = True
 
             stacked_report: List[Dict] = []
 
@@ -1234,20 +1252,32 @@ class OpsPerformanceReportQueries:
                 except Exception as e:
                     logger.error(f"Error processing stacked report: {e}")
                     # Don't raise, just log - stacked report is optional
+                    degraded = True
             else:
                 logger.info("Skipping stacked report processing as per configuration")
 
-            return {
+            result = {
                 "report": report,
                 "stacked_report": stacked_report,
                 "signposts": signposts,
             }
+            if degraded:
+                raise _DegradedPerformanceReport(result)
+            return result
 
         finally:
             # Ensure cleanup always happens, even if exceptions are raised
             cls.cleanup_temp_files(
                 [csv_output_file, summary_csv_path, summary_png_path, csv_summary_file]
             )
+
+
+class _DegradedPerformanceReport(Exception):
+    """Carries a partial report past `lru_cache`, which only skips raised results."""
+
+    def __init__(self, report: Dict):
+        super().__init__("performance report generated with swallowed errors")
+        self.report = report
 
 
 @lru_cache(maxsize=MAX_CACHED_PERFORMANCE_REPORTS)
