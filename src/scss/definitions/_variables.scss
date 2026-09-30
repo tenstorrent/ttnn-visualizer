@@ -76,9 +76,10 @@ $main-padding: 15px;
 $main-padding-bottom: 30px;
 $data-padding-bottom: 20px;
 
-// Inset of the performance report and chart panels. Owned here because the perf table's
-// viewport-height cap subtracts it along with the gutters above.
+// Inset and fill of the performance report and chart panels. Owned here because the perf
+// table's viewport-height cap subtracts the inset, and its pinned header must match the fill.
 $perf-report-padding: 1rem;
+$perf-report-background: $tt-black;
 
 // Where React Flow docks its bottom-left panel. Both graph views lay their own
 // bottom-left chrome out from it, so it is owned here rather than copied into each.

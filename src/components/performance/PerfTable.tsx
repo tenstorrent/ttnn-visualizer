@@ -263,7 +263,7 @@ const PerformanceTable = ({
         }
 
         return (
-            <PerfTableFrame>
+            <PerfTableFrame scrollResetKey={tableFields}>
                 <thead className='table-header'>
                     <tr>
                         <th

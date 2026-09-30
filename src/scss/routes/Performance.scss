@@ -25,7 +25,7 @@
 
 .perf-report,
 .chart-tab {
-    background: $tt-black;
+    background: variables.$perf-report-background;
     padding: variables.$perf-report-padding;
 
     .title {

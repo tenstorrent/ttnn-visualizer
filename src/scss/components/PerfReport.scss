@@ -17,10 +17,14 @@ $header-footer-border: $header-footer-rule-width solid $header-footer-rule-colou
 $perf-table-min-width: 1240px;
 
 // The table scrolls inside its own box so the sticky header has a scroll container to pin
-// to; the document scrolls the report into view, then the box takes over. The cap fits the
-// whole box on screen once the page is scrolled to its end: `main`'s top gutter above it, and
-// below it the report's inset, `.data-padding` and `main`'s bottom gutter, which the fixed
-// footer bar sits inside. The rem inset can't fold into the px sum, so `calc` adds it.
+// to. The box is nested in the scrolling document, and wheel input goes to the innermost
+// scroller under the pointer: over the table the box scrolls first, and the page only moves
+// once the box hits its end and a fresh gesture starts. The cap is sized so that, with the
+// page at its end, the whole box fits on screen: `main`'s top gutter above it, and below it
+// the report's inset, `.data-padding` and `main`'s bottom gutter, which the fixed status bar
+// sits inside. That holds only while nothing renders below the table in the report, so
+// anything else the report shows goes above it. The rem inset can't fold into the px sum,
+// so `calc` adds it.
 $perf-table-max-height: calc(
     100vh - #{$main-padding + $data-padding-bottom + $main-padding-bottom} - #{$perf-report-padding}
 );
@@ -274,8 +278,14 @@ $perf-table-max-height: calc(
     }
 
     .perf-table-scroll {
+        // Keeps the pinned header's z-index local, so it can't paint over fixed app chrome
+        // such as the server-mode banner that shares its tier.
+        isolation: isolate;
         overflow: auto;
         max-height: $perf-table-max-height;
+
+        // Opaque, so Chromium can composite the scroll on 1x displays.
+        background-color: $perf-report-background;
     }
 
     // Sticky lives on the `th`s because older Safari ignores it on `thead`/`tr`. The rule
@@ -285,7 +295,7 @@ $perf-table-max-height: calc(
         position: sticky;
         top: 0;
         z-index: $z-index-2-interactive;
-        background-color: colours.$tt-background;
+        background-color: $perf-report-background;
         box-shadow: inset 0 (-$header-footer-rule-width) 0 $header-footer-rule-colour;
     }
 

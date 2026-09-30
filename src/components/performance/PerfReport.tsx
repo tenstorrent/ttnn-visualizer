@@ -632,6 +632,9 @@ const PerformanceReport = ({
                     )}
                 </div>
 
+                {/* Above the table: the table's height cap assumes nothing renders below it. */}
+                {hiliteHighDispatch && !isStackedView && calcHighDispatchOps(processedRows)}
+
                 <Tabs
                     selectedTabId={selectedTabId}
                     onChange={setSelectedTabId}
@@ -730,8 +733,6 @@ const PerformanceReport = ({
                         />
                     ))}
                 </Tabs>
-
-                {hiliteHighDispatch && !isStackedView && calcHighDispatchOps(processedRows)}
             </div>
         </>
     );

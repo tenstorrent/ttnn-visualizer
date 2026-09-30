@@ -75,7 +75,7 @@ const StackedPerformanceTable = ({
         }
 
         return (
-            <PerfTableFrame>
+            <PerfTableFrame scrollResetKey={tableFields}>
                 <thead className='table-header'>
                     <tr>
                         {computedTableColumns.map((column) => {
