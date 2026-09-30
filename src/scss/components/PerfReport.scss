@@ -14,6 +14,11 @@ $header-footer-border: 2px solid colours.$tt-grey-5;
 // Narrowest the columns stay readable at; below this the table scrolls horizontally.
 $perf-table-min-width: 1240px;
 
+// The table scrolls inside its own box so the sticky header has a scroll container to pin
+// to; `.perf-report` never scrolls vertically. The offset leaves room for the fixed footer
+// bar and the box's own margin so its bottom edge stays on screen.
+$perf-table-max-height: calc(100vh - 120px);
+
 .perf-report {
     color: #fff;
     overflow: auto;
@@ -50,7 +55,7 @@ $perf-table-min-width: 1240px;
         width: 100%;
 
         // The floor sits on the table rather than on `.perf-report` so a narrow viewport
-        // scrolls the table inside its own `overflow: auto` container instead of the whole
+        // scrolls the table inside `.perf-table-scroll` instead of the whole
         // document. Without it the table tracks the container, and every width change --
         // collapsing the navigation rail is one, on demand -- re-runs auto table layout
         // across every unvirtualised row.
@@ -262,8 +267,20 @@ $perf-table-min-width: 1240px;
         }
     }
 
-    .table-header {
-        border-bottom: $header-footer-border;
+    .perf-table-scroll {
+        overflow: auto;
+        max-height: $perf-table-max-height;
+    }
+
+    // Sticky lives on the `th`s because older Safari ignores it on `thead`/`tr`. The rule
+    // is an inset shadow rather than `border-bottom` since, under `border-collapse`, the
+    // border belongs to the table and scrolls away while the cells stay pinned.
+    .table-header th {
+        position: sticky;
+        top: 0;
+        z-index: $z-index-2-interactive;
+        background-color: colours.$tt-background;
+        box-shadow: inset 0 -2px 0 colours.$tt-grey-5;
     }
 
     .table-footer {

@@ -262,62 +262,63 @@ const PerformanceTable = ({
         }
 
         return (
-            <table className='perf-table monospace'>
-                <thead className='table-header'>
-                    <tr>
-                        <th
-                            className='cell-header'
-                            aria-label='Tensor details'
-                        />
-                        {visibleColumns.map((h) => {
-                            const targetSortDirection =
-                                // eslint-disable-next-line no-nested-ternary
-                                sortingColumn === h.key
-                                    ? sortDirection === SortingDirection.ASC
-                                        ? SortingDirection.DESC
-                                        : SortingDirection.ASC
-                                    : sortDirection;
+            <div className='perf-table-scroll'>
+                <table className='perf-table monospace'>
+                    <thead className='table-header'>
+                        <tr>
+                            <th
+                                className='cell-header'
+                                aria-label='Tensor details'
+                            />
+                            {visibleColumns.map((h) => {
+                                const targetSortDirection =
+                                    // eslint-disable-next-line no-nested-ternary
+                                    sortingColumn === h.key
+                                        ? sortDirection === SortingDirection.ASC
+                                            ? SortingDirection.DESC
+                                            : SortingDirection.ASC
+                                        : sortDirection;
 
-                            return (
-                                <th
-                                    key={h.key}
-                                    className='cell-header'
-                                >
-                                    {h.sortable ? (
-                                        <Button
-                                            onClick={() => changeSorting(h.key)(targetSortDirection)}
-                                            variant={ButtonVariant.MINIMAL}
-                                            size={Size.SMALL}
-                                        >
-                                            <span className='header-label'>{h.name}</span>
+                                return (
+                                    <th
+                                        key={h.key}
+                                        className='cell-header'
+                                    >
+                                        {h.sortable ? (
+                                            <Button
+                                                onClick={() => changeSorting(h.key)(targetSortDirection)}
+                                                variant={ButtonVariant.MINIMAL}
+                                                size={Size.SMALL}
+                                            >
+                                                <span className='header-label'>{h.name}</span>
 
-                                            {sortingColumn === h.key ? (
-                                                <Icon
-                                                    className={classNames(
-                                                        {
-                                                            'is-active': sortingColumn === h.key,
-                                                        },
-                                                        'sort-icon',
-                                                    )}
-                                                    icon={
-                                                        sortDirection === SortingDirection.ASC
-                                                            ? IconNames.CARET_UP
-                                                            : IconNames.CARET_DOWN
-                                                    }
-                                                />
-                                            ) : (
-                                                <Icon
-                                                    className={classNames('sort-icon')}
-                                                    icon={IconNames.CARET_DOWN}
-                                                />
-                                            )}
-                                        </Button>
-                                    ) : (
-                                        <span className='header-label no-button'>{h.name}</span>
-                                    )}
+                                                {sortingColumn === h.key ? (
+                                                    <Icon
+                                                        className={classNames(
+                                                            {
+                                                                'is-active': sortingColumn === h.key,
+                                                            },
+                                                            'sort-icon',
+                                                        )}
+                                                        icon={
+                                                            sortDirection === SortingDirection.ASC
+                                                                ? IconNames.CARET_UP
+                                                                : IconNames.CARET_DOWN
+                                                        }
+                                                    />
+                                                ) : (
+                                                    <Icon
+                                                        className={classNames('sort-icon')}
+                                                        icon={IconNames.CARET_DOWN}
+                                                    />
+                                                )}
+                                            </Button>
+                                        ) : (
+                                            <span className='header-label no-button'>{h.name}</span>
+                                        )}
 
-                                    {/* TODO: May want this in the near future */}
-                                    {/* {h?.filterable && (
+                                        {/* TODO: May want this in the near future */}
+                                        {/* {h?.filterable && (
                                                 <div className='column-filter'>
                                                     <InputGroup
                                                         asyncControl
@@ -328,131 +329,135 @@ const PerformanceTable = ({
                                                     />
                                                 </div>
                                             )} */}
-                                </th>
+                                    </th>
+                                );
+                            })}
+                        </tr>
+                    </thead>
+
+                    <tbody>
+                        {tableFields?.map((row, i) => {
+                            const isFirstOfOpRun = row.op === undefined || firstRowOfOpRun.has(row);
+                            const isSignpost = row.op_type === OpType.SIGNPOST;
+                            const isPrimarySelected = isPrimaryActiveReport && row.id === selectedPerfRowId;
+
+                            return (
+                                <Fragment key={i}>
+                                    <tr
+                                        className={classNames({
+                                            'missing-data': row.raw_op_code.includes('MISSING'),
+                                            'signpost-op': isSignpost,
+                                            'is-selected': isPrimarySelected,
+                                        })}
+                                    >
+                                        <td className='cell'>
+                                            {isPrimaryActiveReport && renderTensorDrawerTrigger(row)}
+                                        </td>
+                                        {visibleColumns.map((h) => (
+                                            <td
+                                                key={h.key}
+                                                className={classNames('cell', {
+                                                    'align-right': h.key === ColumnKeys.MathFidelity,
+                                                })}
+                                            >
+                                                {cellFormattingProxy(
+                                                    row,
+                                                    h,
+                                                    operationsList,
+                                                    filters?.[h.key],
+                                                    isFirstOfOpRun,
+                                                )}
+                                            </td>
+                                        ))}
+                                    </tr>
+
+                                    {comparisonDataTableFields?.length > 0 &&
+                                        comparisonDataTableFields.map((dataset, index) => {
+                                            const subRow = dataset[i];
+                                            const isActiveReportRow = index === activeReportComparisonIndex;
+                                            const isSubRowSelected =
+                                                isActiveReportRow && subRow?.id === selectedPerfRowId;
+
+                                            return (
+                                                <tr
+                                                    key={`comparison-${i}-${index}`}
+                                                    className={classNames(
+                                                        {
+                                                            'missing-data': subRow?.raw_op_code?.includes('MISSING'),
+                                                            'signpost-op': subRow?.op_type === OpType.SIGNPOST,
+                                                            'is-selected': isSubRowSelected,
+                                                        },
+                                                        'comparison-row',
+                                                        `pattern-${index >= PATTERN_COUNT ? index - PATTERN_COUNT : index}`,
+                                                    )}
+                                                >
+                                                    <td className='cell'>
+                                                        {isActiveReportRow && subRow
+                                                            ? renderTensorDrawerTrigger(subRow)
+                                                            : null}
+                                                    </td>
+                                                    {visibleColumns.map((h) => (
+                                                        <td
+                                                            key={h.key}
+                                                            className={classNames('cell', {
+                                                                'align-right': h.key === ColumnKeys.MathFidelity,
+                                                            })}
+                                                        >
+                                                            {comparisonKeys.includes(h.key) &&
+                                                                subRow &&
+                                                                formatCell(
+                                                                    subRow,
+                                                                    h,
+                                                                    operationsList,
+                                                                    filters?.[h.key],
+                                                                    true,
+                                                                )}
+                                                        </td>
+                                                    ))}
+                                                </tr>
+                                            );
+                                        })}
+                                    {provideMatmulAdvice && row.op_code.includes('Matmul') && (
+                                        <tr>
+                                            <td
+                                                colSpan={visibleColumns.length + 1}
+                                                className='cell advice'
+                                            >
+                                                <ul>
+                                                    {row?.advice.map((advice, j) => (
+                                                        <li key={`advice-${j}`}>{advice}</li>
+                                                    ))}
+                                                </ul>
+                                            </td>
+                                        </tr>
+                                    )}
+                                </Fragment>
                             );
                         })}
-                    </tr>
-                </thead>
+                    </tbody>
 
-                <tbody>
-                    {tableFields?.map((row, i) => {
-                        const isFirstOfOpRun = row.op === undefined || firstRowOfOpRun.has(row);
-                        const isSignpost = row.op_type === OpType.SIGNPOST;
-                        const isPrimarySelected = isPrimaryActiveReport && row.id === selectedPerfRowId;
-
-                        return (
-                            <Fragment key={i}>
-                                <tr
-                                    className={classNames({
-                                        'missing-data': row.raw_op_code.includes('MISSING'),
-                                        'signpost-op': isSignpost,
-                                        'is-selected': isPrimarySelected,
-                                    })}
-                                >
-                                    <td className='cell'>{isPrimaryActiveReport && renderTensorDrawerTrigger(row)}</td>
-                                    {visibleColumns.map((h) => (
+                    <tfoot className='table-footer'>
+                        <tr>
+                            <td />
+                            {footerColumns.length > 0 &&
+                                data?.length > 0 &&
+                                footerColumns
+                                    .filter((header) => header?.footerSpan !== 0)
+                                    .map((header) => (
                                         <td
-                                            key={h.key}
-                                            className={classNames('cell', {
-                                                'align-right': h.key === ColumnKeys.MathFidelity,
+                                            key={header.key}
+                                            className={classNames({
+                                                'pre-wrap': header.key === ColumnKeys.OpCode,
                                             })}
+                                            colSpan={header.footerSpan ?? undefined}
                                         >
-                                            {cellFormattingProxy(
-                                                row,
-                                                h,
-                                                operationsList,
-                                                filters?.[h.key],
-                                                isFirstOfOpRun,
-                                            )}
+                                            {footerTotals[header.key] ?? ''}
                                         </td>
                                     ))}
-                                </tr>
-
-                                {comparisonDataTableFields?.length > 0 &&
-                                    comparisonDataTableFields.map((dataset, index) => {
-                                        const subRow = dataset[i];
-                                        const isActiveReportRow = index === activeReportComparisonIndex;
-                                        const isSubRowSelected = isActiveReportRow && subRow?.id === selectedPerfRowId;
-
-                                        return (
-                                            <tr
-                                                key={`comparison-${i}-${index}`}
-                                                className={classNames(
-                                                    {
-                                                        'missing-data': subRow?.raw_op_code?.includes('MISSING'),
-                                                        'signpost-op': subRow?.op_type === OpType.SIGNPOST,
-                                                        'is-selected': isSubRowSelected,
-                                                    },
-                                                    'comparison-row',
-                                                    `pattern-${index >= PATTERN_COUNT ? index - PATTERN_COUNT : index}`,
-                                                )}
-                                            >
-                                                <td className='cell'>
-                                                    {isActiveReportRow && subRow
-                                                        ? renderTensorDrawerTrigger(subRow)
-                                                        : null}
-                                                </td>
-                                                {visibleColumns.map((h) => (
-                                                    <td
-                                                        key={h.key}
-                                                        className={classNames('cell', {
-                                                            'align-right': h.key === ColumnKeys.MathFidelity,
-                                                        })}
-                                                    >
-                                                        {comparisonKeys.includes(h.key) &&
-                                                            subRow &&
-                                                            formatCell(
-                                                                subRow,
-                                                                h,
-                                                                operationsList,
-                                                                filters?.[h.key],
-                                                                true,
-                                                            )}
-                                                    </td>
-                                                ))}
-                                            </tr>
-                                        );
-                                    })}
-                                {provideMatmulAdvice && row.op_code.includes('Matmul') && (
-                                    <tr>
-                                        <td
-                                            colSpan={visibleColumns.length + 1}
-                                            className='cell advice'
-                                        >
-                                            <ul>
-                                                {row?.advice.map((advice, j) => (
-                                                    <li key={`advice-${j}`}>{advice}</li>
-                                                ))}
-                                            </ul>
-                                        </td>
-                                    </tr>
-                                )}
-                            </Fragment>
-                        );
-                    })}
-                </tbody>
-
-                <tfoot className='table-footer'>
-                    <tr>
-                        <td />
-                        {footerColumns.length > 0 &&
-                            data?.length > 0 &&
-                            footerColumns
-                                .filter((header) => header?.footerSpan !== 0)
-                                .map((header) => (
-                                    <td
-                                        key={header.key}
-                                        className={classNames({
-                                            'pre-wrap': header.key === ColumnKeys.OpCode,
-                                        })}
-                                        colSpan={header.footerSpan ?? undefined}
-                                    >
-                                        {footerTotals[header.key] ?? ''}
-                                    </td>
-                                ))}
-                    </tr>
-                </tfoot>
-            </table>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
         );
     };
 

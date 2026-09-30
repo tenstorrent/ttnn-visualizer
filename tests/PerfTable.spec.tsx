@@ -370,6 +370,12 @@ describe('PerfTable column visibility', () => {
         expect(within(comparisonTableRow as HTMLElement).getByText('72')).toBeInTheDocument();
     });
 
+    it('renders the table inside the scroll box the sticky header pins to', () => {
+        renderTable([matmulRow]);
+
+        expect(screen.getByRole('table').parentElement).toHaveClass('perf-table-scroll');
+    });
+
     it('keeps OP Code visible even when it is listed as hidden', () => {
         renderTable([matmulRow], { hiddenColumns: [ColumnKeys.OpCode, ColumnKeys.DeviceTime] });
 
