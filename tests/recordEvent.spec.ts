@@ -183,14 +183,14 @@ describe('recordEvent batching', () => {
         post.mockResolvedValue({ status: 204 });
 
         // The shape a VIEW_ENGAGED wired to scroll would produce on a large table.
-        for (let index = 0; index < 5_000; index++) {
+        for (let index = 0; index < 10_000; index++) {
             recordEvent(VIEW_OPENED);
         }
 
         vi.advanceTimersByTime(MIN_BATCH_WINDOW_MS);
 
         // One request for the window, not one per fifty events. Everything past the cap is
-        // dropped, which is the deliberate trade over issuing 100 posts mid-gesture.
+        // dropped, which is the deliberate trade over issuing 200 posts mid-gesture.
         expect(post).toHaveBeenCalledTimes(1);
         expect((post.mock.calls[0][1] as { events: unknown[] }).events).toHaveLength(MAX_BUFFERED_EVENTS);
     });

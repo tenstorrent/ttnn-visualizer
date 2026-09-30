@@ -55,6 +55,10 @@ from ttnn_visualizer.settings import (
 )
 from ttnn_visualizer.startup_requirements import enforce
 from ttnn_visualizer.startup_requirements import report as report_startup_requirements
+from ttnn_visualizer.usage_collection import (
+    get_collection_config_path,
+    prepare_usage_collection_config,
+)
 from ttnn_visualizer.utils import (
     find_gunicorn_path,
     is_flag_enabled,
@@ -548,6 +552,28 @@ def _record_launch(config):
 
     server_mode = is_flag_enabled(config.SERVER_MODE)
     disabled_reason = get_recording_disabled_reason(server_mode)
+    if not server_mode:
+        collection_config = prepare_usage_collection_config()
+        if collection_config.enabled and disabled_reason is not None:
+            print(
+                "📈 Aggregate usage collection is DISABLED: event logging is disabled."
+            )
+        elif collection_config.enabled:
+            print(
+                "📈 Aggregate usage collection is ENABLED.\n"
+                f"   Configuration: {get_collection_config_path()}"
+            )
+        elif collection_config.error:
+            print(
+                "📈 Aggregate usage collection is DISABLED: "
+                "the collection config is invalid."
+            )
+        else:
+            print(
+                "📈 Aggregate usage collection is DISABLED.\n"
+                f"   Opt in through {get_collection_config_path()}."
+            )
+
     if disabled_reason is not None:
         unrecognised_value = get_unrecognised_recording_disabled_value()
         if unrecognised_value is not None:
@@ -575,7 +601,7 @@ def _record_launch(config):
     # anything below WARNING, so an info line here would never be seen.
     print(
         f"📊 Recording events locally to {get_event_log_path()}.\n"
-        f"   Written on this machine only; the application transmits nothing.\n"
+        f"   The application itself does not transmit raw events.\n"
         f"   {describe_opt_out()}"
     )
 

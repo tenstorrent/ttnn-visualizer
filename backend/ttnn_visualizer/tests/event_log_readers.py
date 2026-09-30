@@ -9,8 +9,9 @@ importing it across test modules can end up importing it under two names dependi
 rootdir and collection order. ``report_schemas.py`` and ``event_log_writer.py`` are the
 existing precedent for shared, non-fixture test code.
 
-These parse rather than reuse ``event_logging._parse_line``: a reader that derives its parsing
-from the code under test stops testing the format.
+These parse rather than reuse ``event_logging.parse_logfmt_line``: a reader that derives
+its parsing from the code under test stops testing the format. The two are named apart
+so an import cannot pick the production parser by accident.
 """
 
 from pathlib import Path

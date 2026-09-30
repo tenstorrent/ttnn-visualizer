@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import '@testing-library/jest-dom/vitest';
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { StrictMode, act } from 'react';
 import type { ComponentType } from 'react';
 import { HelmetProvider } from 'react-helmet-async';
@@ -11,6 +11,7 @@ import { type InitialEntry, MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ROUTES from '../src/definitions/Routes';
 import { EventLogEvent, EventLogView } from '../src/definitions/EventLogEvent';
+import { VIEW_ENGAGEMENT_THRESHOLD_MS } from '../src/definitions/ViewEngagement';
 
 /**
  * Covers the shell's wiring and the one structural invariant it asserts about itself.
@@ -68,6 +69,7 @@ describe('Layout event logging wiring', () => {
 
     afterEach(() => {
         cleanup();
+        vi.useRealTimers();
     });
 
     it('starts event logging on mount', async () => {
@@ -88,6 +90,25 @@ describe('Layout event logging wiring', () => {
             event: EventLogEvent.VIEW_OPENED,
             details: { view: EventLogView.REPORTS },
         });
+    });
+
+    it('records engagement through the mounted layout hook', async () => {
+        vi.useFakeTimers();
+        const { default: Layout } = await import('../src/components/Layout');
+        renderLayout(Layout);
+        recordEvent.mockClear();
+
+        fireEvent.pointerDown(screen.getByRole('main'));
+        act(() => {
+            vi.advanceTimersByTime(VIEW_ENGAGEMENT_THRESHOLD_MS);
+        });
+
+        const engagedCalls = recordEvent.mock.calls.filter(
+            ([entry]) => (entry as { event: EventLogEvent }).event === EventLogEvent.VIEW_ENGAGED,
+        );
+        expect(engagedCalls).toEqual([
+            [{ event: EventLogEvent.VIEW_ENGAGED, details: { view: EventLogView.REPORTS } }],
+        ]);
     });
 
     it('balances every start with a teardown, including StrictMode remount', async () => {
