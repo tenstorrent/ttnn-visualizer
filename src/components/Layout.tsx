@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useLocation } from 'react-router';
 import { Helmet } from 'react-helmet-async';
 import { Theme, ToastContainer, ToastPosition } from 'react-toastify';
@@ -19,12 +19,14 @@ import FeedbackButton from './FeedbackButton';
 import FileStatusOverlay from './FileStatusOverlay';
 import MlirFileResultsOverlay from './mlir/MlirFileResultsOverlay';
 import { initEventLogging } from '../functions/recordEvent';
+import useRecordViewEngaged from '../hooks/useRecordViewEngaged';
 import useRecordViewOpened from '../hooks/useRecordViewOpened';
 import { isModalOpen } from '../functions/modalRoute';
 
 function Layout() {
     const location = useLocation();
     const isTopologyOpen = isModalOpen(location, ROUTES.CLUSTER);
+    const viewContainerRef = useRef<HTMLElement>(null);
 
     // Starts the event-log flush lifecycle; it records nothing on its own. Here rather than at
     // module scope so importing the sender has no side effect, and so the listeners are
@@ -32,6 +34,7 @@ function Layout() {
     useEffect(() => initEventLogging(), []);
 
     useRecordViewOpened();
+    useRecordViewEngaged(viewContainerRef);
 
     return (
         <>
@@ -53,7 +56,7 @@ function Layout() {
             <div className='app-shell'>
                 <SideNavigation />
 
-                <main>
+                <main ref={viewContainerRef}>
                     <ModalAwareOutlet />
                     {isTopologyOpen && <ClusterRenderer />}
                 </main>

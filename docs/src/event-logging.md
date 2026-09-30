@@ -6,7 +6,7 @@ SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 # Event logging
 
-TT-NN Visualizer records a small, fixed set of events. Recording is on by default. The frontend posts events to the TT-NN Visualizer backend, which stores them on its own machine and does not forward or export them. On a local installation that request remains on the local machine; under `SERVER_MODE` it travels from the user's browser to the hosted backend.
+TT-NN Visualizer records a small, fixed set of events. Recording is on by default. The frontend posts events to the TT-NN Visualizer backend, which stores them on its own machine and never forwards raw events. Aggregate counts leave the machine only through opt-in [local Prometheus collection](#local-prometheus-collection). On a local installation that request remains on the local machine; under `SERVER_MODE` it travels from the user's browser to the hosted backend.
 
 ## Storage and inspection
 
@@ -24,7 +24,7 @@ An installation running in `SERVER_MODE` stores one log per anonymous browser se
 /data/usage/<event-log-id>/events.log
 ```
 
-The backend generates the 32-character event log ID and stores it inside the signed Flask session cookie. It is a log partition key, not Flask's session identifier or a user identity. It is never accepted from a request parameter or body, never written into an event line, and must not be exported by the collector. It normally lasts for the browser session; uploading a report makes the existing Flask session permanent for Flask's default 31-day lifetime.
+The backend generates the 32-character event log ID and stores it inside the signed Flask session cookie. It is a log partition key, not Flask's session identifier or a user identity. It is never accepted from a request parameter or body, never written into an event line, and must not be exported by any collector. It normally lasts for the browser session; uploading a report makes the existing Flask session permanent for Flask's default 31-day lifetime.
 
 `SERVER_MODE` refuses to start unless `SECRET_KEY` is non-default and at least 8 bytes excluding surrounding whitespace. Padding is not counted toward that floor, but it is not removed either — the configured value is what signs the cookie, so tidying whitespace out of an accepted key rotates the signing key and drops every session. That is a floor against an obviously-short key rather than a strength check, so operators should still supply a long random value. The application accepts at most 1,024 hosted event logs, at most 60 new event logs per minute across workers, and at most 120 batches per event log per minute in each worker. Combined with the 10 MiB per-file cap, the log-count limit bounds aggregate event-file storage to approximately 10 GiB. Hosted deployments must still mount writable persistent storage at `/data/usage`, remove collected session logs to reclaim quota, and apply edge-level request controls appropriate to their worker count and expected traffic.
 
@@ -68,7 +68,7 @@ Ordinary event lines contain these common fields:
 - `ts`: the UTC time at which the server wrote the event, in `YYYY-MM-DDTHH:MM:SSZ` form. Frontend events are buffered, so this can be later than the interaction.
 - `event`: one of `app_start`, `report_loaded`, `report_load_failed`, `view_opened`, `view_engaged`, or `mcp_tool_called`.
 - `schema_version`: the log format version, currently `1`.
-- `run_id`: a random `8`-character identifier generated for each backend launch and shared by its server workers. It is not persisted between launches and is never exported by the out-of-band collector. Hosted browser-session identity comes from the containing directory, not this field.
+- `run_id`: a random `8`-character identifier generated for each backend launch and shared by its server workers. It is not persisted between launches and is never exported, either by the local metrics projection or by a hosted collector. Hosted browser-session identity comes from the containing directory, not this field.
 
 After the log is compacted, a summary line can contain:
 
@@ -114,7 +114,9 @@ Recorded when a counted application view is opened.
 
 ### `view_engaged`
 
-Defined for a deliberate interaction with a view after it has remained open. The current frontend does not yet emit this event.
+Recorded once when a counted view has remained open for 10 seconds and receives at least one deliberate pointer or keyboard interaction within the active view content. Global navigation, pointer movement, hover, and scrolling do not qualify, and neither does interaction inside drawers, dialogs, and popovers that render outside the view content; opening one from the view already counts. The interaction can happen before or after the 10-second threshold.
+
+This is the intentionally revisable v1 definition of deliberate activity used for reach and repeat-use decisions (Q1 and Q2 in #1819). Changing the threshold affects future events only.
 
 - `view`: `reports`, `operations`, `operation_details`, `tensors`, `buffers`, `graph`, `performance`, `npe`, `mlir`, `topology`, `mcp`.
 
@@ -140,11 +142,27 @@ TT-NN Visualizer does not record:
 - raw counts that could identify a specific workload;
 - client-supplied free-form event details. Client detail fields use closed enums; server-generated version fields are validated before they are written.
 
-## Out-of-band collection
+## Local Prometheus collection
 
-The TT-NN Visualizer backend only writes the logs; it does not forward or export them and has no knowledge of whether another process reads the files. Under `SERVER_MODE`, the browser-to-backend event request is necessarily a network request to the hosted application.
+The TT-NN Visualizer backend never forwards raw events. A local-only `GET /api/metrics` endpoint can project the local log into cumulative Prometheus counters, and a separately running local Prometheus can scrape those counters and forward them with `remote_write`. Collection is disabled by default and is unavailable under `SERVER_MODE`. Either recording opt-out also disables the endpoint.
 
-An independently operated collector can read the logs and export aggregate counters. The collector must not export timestamps, `run_id`, hosted session directory names, per-event rows, or per-user series. Hosted retention and compaction are collector/deployment responsibilities; the application neither enumerates session logs at startup nor compacts them on a request path. Deleting or disabling a log is independent of that collector and does not remove aggregates it has already exported.
+The opt-in file is:
+
+```text
+~/.ttnn-visualizer/usage/collection.json
+```
+
+It contains the explicit `enabled` flag, an optional Prometheus remote-write endpoint, and a random persistent `machine_id`. The ID is generated when collection is first enabled; it is not derived from a hostname, username, path, or IP address. Omitting the endpoint keeps collection local to the Docker Prometheus. Deleting the config disables collection and causes a new identity to be generated if collection is enabled again. A malformed config fails closed without preventing TT-NN Visualizer from starting.
+
+The metrics projection exports one `_total` counter per event name with only that event's documented fields as labels. It honours compacted `count` values. It never exports timestamps, `run_id`, hosted session directory names, raw event rows, usernames, hostnames, paths, or unknown fields. Collector health metrics distinguish a missing log, malformed lines, and a read failure. Deleting the event log resets the projected counters; compaction preserves them.
+
+The endpoint is unauthenticated, like every local-only endpoint. `@local_only` disables it under `SERVER_MODE`; it does not restrict the source network address. With the default loopback binding, other processes on the machine can read the counts or inflate them by posting events. If a local install binds to a non-loopback address, including `0.0.0.0`, network clients that can reach the backend may do the same. Protect such bindings with an external access-control boundary. Treat per-machine counts as indicative rather than trustworthy.
+
+For setup and lifecycle commands, see [Local Prometheus collection](./local-prometheus-collection.md).
+
+## Hosted collection
+
+The hosted app has no collection beyond the event log itself: Local Prometheus collection is unavailable under `SERVER_MODE`, and the application exports nothing from the session logs. Hosted retention and compaction are the deployment's responsibility; the application neither enumerates session logs at startup nor compacts them on a request path. Anything a deployment builds to read those logs must not export timestamps, `run_id`, hosted session directory names, per-event rows, or per-user series.
 
 ## Documentation-site analytics
 
