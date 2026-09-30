@@ -10,18 +10,14 @@ export interface AdjacentOperationIds {
 }
 
 /**
- * @description The operations either side of the selection in render order, for
- * the toolbar's prev/next steppers. Both are `null` past the respective end.
+ * @description Position of every operation the index can be selected by: an entry's
+ * own id, plus each member id a folded block stands in for. Built once per index
+ * rather than scanned per stepper render.
  *
- * A folded block is indexed under its first member, but the selection may sit on
- * any member — the rebuild keeps a selected op when a block closes over it. An
- * exact-id lookup therefore missed the entry and `next` restarted from the
- * graph's first node, so a block matches on its members too. #1944
- */
-/**
- * @description Render position of every operation the index can be selected by:
- * an entry's own id, plus each member id a folded block stands in for. Built once
- * per index rather than scanned per stepper render.
+ * The index is sorted by operation id, so a position is a place in the operation
+ * sequence. It used to be emission order, which was that sequence only by accident
+ * of how the builder emitted top-level nodes — fan members come last, because React
+ * Flow needs a parent ahead of its children. #2028
  */
 export const buildPositionByOperationId = (nodeIndex: readonly OpGraphNodeIndexEntry[]): Map<number, number> => {
     const positionByOperationId = new Map<number, number>();
@@ -39,6 +35,15 @@ export const buildPositionByOperationId = (nodeIndex: readonly OpGraphNodeIndexE
     return positionByOperationId;
 };
 
+/**
+ * @description The operations either side of the selection, for the toolbar's
+ * prev/next steppers. Both are `null` past the respective end.
+ *
+ * A folded block is indexed under its first member, but the selection may sit on
+ * any member — the rebuild keeps a selected op when a block closes over it. An
+ * exact-id lookup therefore missed the entry and `next` restarted from the
+ * graph's first node, so a block matches on its members too. #1944
+ */
 export const getAdjacentOperationIds = (
     nodeIndex: readonly OpGraphNodeIndexEntry[],
     selectedOperationId: number | null,

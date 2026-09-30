@@ -9,6 +9,8 @@ import os
 import tempfile
 import traceback
 from collections import defaultdict
+from dataclasses import dataclass
+from functools import lru_cache
 from io import StringIO
 from pathlib import Path
 from typing import (
@@ -55,6 +57,35 @@ CSV_CHUNK_SIZE = 50_000
 # and still cannot be reached by a real log. Past it, starts are counted rather
 # than kept, so the total reports what it could pair and says what it dropped.
 MAX_OPEN_ZONE_STARTS = 200_000
+
+# Generated reports kept per process. The cache is shared by every user, instance
+# and comparison report the worker serves, so four entries only cover one session's
+# toggle-back path (a linked report, the current view and two recent filter shapes)
+# when little else is being served. The bound is on count, not bytes: a 20k-row
+# report holds about 54 MB, so a worker can keep roughly 220 MB alive for its
+# lifetime. Each `group_by` value is its own entry with a full copy of the rows.
+MAX_CACHED_PERFORMANCE_REPORTS = 4
+
+
+@dataclass(frozen=True)
+class _PerformanceReportSource:
+    path: str
+    modified_ns: int
+    changed_ns: int
+    inode: int
+    size: int
+
+
+@dataclass(frozen=True)
+class _PerformanceReportOptions:
+    start_signpost: Optional[str]
+    end_signpost: Optional[str]
+    print_signposts: bool
+    hide_host_ops: bool
+    merge_devices: bool
+    tracing_mode: bool
+    group_by: Optional[str]
+    no_stacked_report: bool
 
 
 class LocalCSVQueryRunner:
@@ -972,7 +1003,43 @@ class OpsPerformanceReportQueries:
 
     @classmethod
     def generate_report(cls, instance, **kwargs):
-        raw_csv = OpsPerformanceQueries.get_raw_csv(instance)
+        """Build the performance report, reusing a cached one when nothing changed.
+
+        A cache hit hands every caller the same dict and row dicts, across users,
+        so treat the result as read-only: copy before sorting or annotating it.
+        """
+        source_path = Path(
+            OpsPerformanceQueries.get_local_ops_perf_file_path(instance)
+        ).resolve()
+        source_stat = source_path.stat()
+        source = _PerformanceReportSource(
+            path=str(source_path),
+            modified_ns=source_stat.st_mtime_ns,
+            changed_ns=source_stat.st_ctime_ns,
+            inode=source_stat.st_ino,
+            size=source_stat.st_size,
+        )
+        options = _PerformanceReportOptions(
+            start_signpost=kwargs.get("start_signpost", cls.DEFAULT_START_SIGNPOST),
+            end_signpost=kwargs.get("end_signpost", cls.DEFAULT_END_SIGNPOST),
+            print_signposts=kwargs.get("print_signposts", cls.DEFAULT_PRINT_SIGNPOSTS),
+            hide_host_ops=kwargs.get("hide_host_ops", cls.DEFAULT_NO_HOST_OPS),
+            merge_devices=kwargs.get("merge_devices", cls.DEFAULT_MERGE_DEVICES),
+            tracing_mode=kwargs.get("tracing_mode", cls.DEFAULT_TRACING_MODE),
+            group_by=kwargs.get("group_by", cls.DEFAULT_GROUP_BY),
+            no_stacked_report=kwargs.get(
+                "no_stacked_report", cls.DEFAULT_NO_STACKED_REPORT
+            ),
+        )
+        try:
+            return _cached_generate_performance_report(source, options)
+        except _DegradedPerformanceReport as degraded:
+            return degraded.report
+
+    @classmethod
+    def _generate_report_uncached(
+        cls, raw_csv: str, options: _PerformanceReportOptions
+    ):
         csv_file = StringIO(raw_csv)
 
         # Validate that we have CSV data with rows
@@ -986,13 +1053,15 @@ class OpsPerformanceReportQueries:
 
         # Determine if we should skip stacked report
         data_row_count = len(csv_lines) - 1
-        no_stacked_report = kwargs.get(
-            "no_stacked_report", cls.DEFAULT_NO_STACKED_REPORT
-        )
+        no_stacked_report = options.no_stacked_report
 
         if data_row_count <= 1:
             logger.info("Skipping stacked report generation: insufficient data rows")
             no_stacked_report = True
+
+        # A swallowed failure still returns a report, but one that may only be
+        # missing rows by chance (EMFILE, a full temp dir), so it must not be cached.
+        degraded = False
 
         try:
             csv_summary_file = tempfile.NamedTemporaryFile(delete=False)
@@ -1003,13 +1072,13 @@ class OpsPerformanceReportQueries:
             csv_summary_file.close()
             csv_output_file.close()
 
-            start_signpost = kwargs.get("start_signpost", cls.DEFAULT_START_SIGNPOST)
-            end_signpost = kwargs.get("end_signpost", cls.DEFAULT_END_SIGNPOST)
-            print_signposts = kwargs.get("print_signposts", cls.DEFAULT_PRINT_SIGNPOSTS)
-            no_host_ops = kwargs.get("hide_host_ops", cls.DEFAULT_NO_HOST_OPS)
-            merge_devices = kwargs.get("merge_devices", cls.DEFAULT_MERGE_DEVICES)
-            tracing_mode = kwargs.get("tracing_mode", cls.DEFAULT_TRACING_MODE)
-            group_by = kwargs.get("group_by", cls.DEFAULT_GROUP_BY)
+            start_signpost = options.start_signpost
+            end_signpost = options.end_signpost
+            print_signposts = options.print_signposts
+            no_host_ops = options.hide_host_ops
+            merge_devices = options.merge_devices
+            tracing_mode = options.tracing_mode
+            group_by = options.group_by
 
             if start_signpost or end_signpost:
                 ignore_signposts = False
@@ -1051,10 +1120,11 @@ class OpsPerformanceReportQueries:
                 logger.error(f"Error extracting signposts: {e}")
                 ops_perf_results = []
                 signposts = []
+                degraded = True
 
             logger.info(f"Found {len(signposts)} signposts...")
 
-            report = []
+            report: List[Dict] = []
 
             try:
                 logger.info(f"Processing CSV output file: {csv_output_file.name}")
@@ -1133,8 +1203,9 @@ class OpsPerformanceReportQueries:
             except Exception as e:
                 logger.error(f"Error processing CSV output file: {e}")
                 report = []
+                degraded = True
 
-            stacked_report = []
+            stacked_report: List[Dict] = []
 
             if not no_stacked_report:
                 try:
@@ -1181,17 +1252,41 @@ class OpsPerformanceReportQueries:
                 except Exception as e:
                     logger.error(f"Error processing stacked report: {e}")
                     # Don't raise, just log - stacked report is optional
+                    degraded = True
             else:
                 logger.info("Skipping stacked report processing as per configuration")
 
-            return {
+            result = {
                 "report": report,
                 "stacked_report": stacked_report,
                 "signposts": signposts,
             }
+            if degraded:
+                raise _DegradedPerformanceReport(result)
+            return result
 
         finally:
             # Ensure cleanup always happens, even if exceptions are raised
             cls.cleanup_temp_files(
                 [csv_output_file, summary_csv_path, summary_png_path, csv_summary_file]
             )
+
+
+class _DegradedPerformanceReport(Exception):
+    """Carries a partial report past `lru_cache`, which only skips raised results."""
+
+    def __init__(self, report: Dict):
+        super().__init__("performance report generated with swallowed errors")
+        self.report = report
+
+
+@lru_cache(maxsize=MAX_CACHED_PERFORMANCE_REPORTS)
+def _cached_generate_performance_report(
+    source: _PerformanceReportSource, options: _PerformanceReportOptions
+):
+    raw_csv = Path(source.path).read_text()
+    return OpsPerformanceReportQueries._generate_report_uncached(raw_csv, options)
+
+
+def clear_performance_report_cache() -> None:
+    _cached_generate_performance_report.cache_clear()

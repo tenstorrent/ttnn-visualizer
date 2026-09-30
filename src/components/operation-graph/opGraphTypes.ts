@@ -16,6 +16,12 @@ export enum OpGraphNodeType {
     DEVICE_OP = 'deviceOpNode',
     /** A collapsed repeat-window instance. #1583 */
     BLOCK = 'blockNode',
+    /**
+     * An unrolled weight fan, holding its members. The fold affordance lives on a
+     * collapsed block node, which stops existing the moment the fan is unrolled —
+     * so an unrolled fan kept nothing that could fold it again. #2028
+     */
+    WEIGHT_GROUP = 'weightGroupNode',
 }
 
 export enum OpGraphEdgeType {
@@ -166,6 +172,7 @@ export interface RepeatBlockInstance {
 
 export interface OpGraphBlockSummary {
     instanceId: string;
+    kind: OpGraphBlockKind;
     operationIds: number[];
     label: string;
     patternLabel: string;
@@ -182,11 +189,21 @@ export interface OpGraphBuiltGraph {
     nodes: OpGraphFlowNode[];
     edges: OpGraphFlowEdge[];
     blocks?: OpGraphBlockSummary[];
+    /**
+     * Weight fans, kept apart from `blocks` rather than folded into it. `blocks`
+     * drives the grouping controls — the fold/unroll-all predicates, the toolbar
+     * count, and the set `expandedBlockIds` is seeded from when it is `null` — and a
+     * fan in any of those inverts its own default, which is folded-unless-named where
+     * a grouping block is unrolled-unless-folded. The panel lookup wants both. #2028
+     */
+    weightFans?: OpGraphBlockSummary[];
 }
 
-// Rebuilt only when the worker delivers a graph, in canvas order. The filter and
-// prev/next walk this instead of the React Flow `nodes` array, which gets a fresh
-// identity on every drag frame.
+// Rebuilt only when the worker delivers a graph, sorted by operation id. The filter
+// and prev/next walk this instead of the React Flow `nodes` array, which gets a fresh
+// identity on every drag frame. Emission order was close enough to the operation
+// sequence to pass for it until a fan's members had to be emitted after their
+// container, which put them at the end of the graph. #2028
 export interface OpGraphNodeIndexEntry {
     id: string;
     operationId: number;
