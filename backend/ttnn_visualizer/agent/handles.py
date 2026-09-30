@@ -65,13 +65,16 @@ class ReportRegistry:
             ) from None
 
     def cached_report(self, handle: str, build: Callable[[Instance], Dict]) -> Dict:
-        """Generate a report once per handle.
+        """Keep one report snapshot per handle.
 
         `generate_report` re-parses the CSV, shells through tt-perf-report and
         writes three temp files; an agent asking four questions of one report
-        should pay for that once. The cache lives here rather than in a module
-        global so its lifetime is the registry's — a fresh registry, in a test or
-        a new session, starts empty by construction.
+        should pay for that once. This cache pins one snapshot per handle for the
+        registry's lifetime: a loaded handle keeps answering from it even if the
+        source changes, and a fresh registry starts empty by construction. The
+        process-wide generation cache underneath only lets loading the same
+        unchanged file again skip regeneration; the MCP server runs in its own
+        process, so nothing here is shared with the HTTP app.
         """
         report = self._reports.get(handle)
         if report is None:

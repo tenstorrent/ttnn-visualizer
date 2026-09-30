@@ -25,6 +25,7 @@ import { hiddenPerfTableColumnsAtom, hideHostOpsAtom, mergeDevicesAtom, selected
 import PerfBoundAnalysisCoverage from './PerfBoundAnalysisCoverage';
 import PerfDeviceArchitecture from './PerfDeviceArchitecture';
 import PerfMultiDeviceNotice from './PerfMultiDeviceNotice';
+import PerfTableFrame from './PerfTableFrame';
 import PerfTableSkeleton from './PerfTableSkeleton';
 import PerfTensorDrawer from './PerfTensorDrawer';
 import PerfTableToolbar from './PerfTableToolbar';
@@ -263,7 +264,7 @@ const PerformanceTable = ({
         }
 
         return (
-            <table className='perf-table monospace'>
+            <PerfTableFrame scrollResetKey={tableFields}>
                 <thead className='table-header'>
                     <tr>
                         <th
@@ -453,7 +454,7 @@ const PerformanceTable = ({
                                 ))}
                     </tr>
                 </tfoot>
-            </table>
+            </PerfTableFrame>
         );
     };
 

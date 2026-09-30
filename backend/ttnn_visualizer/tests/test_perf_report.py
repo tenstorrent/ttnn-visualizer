@@ -5,6 +5,7 @@
 """Tests that the per-RISC kernel durations from the raw ops perf CSV are surfaced on
 the generated perf report rows (#1518)."""
 
+import contextlib
 import tempfile
 import unittest
 import zipfile
@@ -53,6 +54,13 @@ REPORT_HEADER = [
     "Advice",
     "Raw OP Code",
 ]
+
+
+@contextlib.contextmanager
+def _performance_instance(raw_csv):
+    with tempfile.TemporaryDirectory() as directory:
+        Path(directory, "ops_perf_results.csv").write_text(raw_csv)
+        yield Instance(instance_id="test", performance_path=directory)
 
 
 @unittest.skipUnless(DEMO_REPORT.exists(), "n300-llama demo report not available")
@@ -165,13 +173,8 @@ class TestPerfReportKernelDurationSchemaCompatibility(unittest.TestCase):
                     + "\n"
                 )
 
-        instance = Instance(instance_id="test", performance_path="/tmp")
-
         with (
-            mock.patch(
-                "ttnn_visualizer.csv_queries.OpsPerformanceQueries.get_raw_csv",
-                return_value=raw_csv,
-            ),
+            _performance_instance(raw_csv) as instance,
             mock.patch(
                 "ttnn_visualizer.csv_queries.perf_report.generate_perf_report",
                 side_effect=_fake_generate_perf_report,
@@ -274,13 +277,8 @@ class TestPerfReportKernelDurationSchemaCompatibility(unittest.TestCase):
                 output_file.write(",".join(report_header) + "\n")
                 output_file.write(",".join(report_row) + "\n")
 
-        instance = Instance(instance_id="test", performance_path="/tmp")
-
         with (
-            mock.patch(
-                "ttnn_visualizer.csv_queries.OpsPerformanceQueries.get_raw_csv",
-                return_value=raw_csv,
-            ),
+            _performance_instance(raw_csv) as instance,
             mock.patch(
                 "ttnn_visualizer.csv_queries.perf_report.generate_perf_report",
                 side_effect=_fake_generate_perf_report,
@@ -366,13 +364,8 @@ class TestPerfReportSignpostOpType(unittest.TestCase):
                 output_file.write(row("2", "tt_forward_START") + "\n")
                 output_file.write(row("3", "Matmul") + "\n")
 
-        instance = Instance(instance_id="test", performance_path="/tmp")
-
         with (
-            mock.patch(
-                "ttnn_visualizer.csv_queries.OpsPerformanceQueries.get_raw_csv",
-                return_value=raw_csv,
-            ),
+            _performance_instance(raw_csv) as instance,
             mock.patch(
                 "ttnn_visualizer.csv_queries.perf_report.generate_perf_report",
                 side_effect=_fake_generate_perf_report,
