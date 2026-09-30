@@ -25,6 +25,7 @@ import PerfHeuristicFlags from '../components/performance/PerfHeuristicFlags';
 import { MathFidelity } from '../definitions/MathFidelity';
 import { CellColour } from '../definitions/CellColour';
 import { isSlowDramDominant } from './perfBoundPredicates';
+import { NOT_ANALYSED_LABEL, getNotAnalysedReason } from './perfBoundAnalysis';
 
 const OPERATION_COLOURS: { [key: string]: CellColour } = {
     '(torch)': CellColour.Red,
@@ -82,7 +83,10 @@ export const formatCell = (
     let formatted: string;
 
     if (value === null || value === '' || Number.isNaN(value)) {
-        return '';
+        // Host ops keep their blanks: HOST in the Bound column already says why nothing was measured.
+        const notAnalysedReason = isHost ? null : getNotAnalysedReason(row, key);
+
+        return notAnalysedReason ? getNotAnalysedMarkup(notAnalysedReason) : '';
     }
 
     // L1 pressure values reflect a TTNN-op snapshot; suppress repeats inside the same op group.
@@ -252,6 +256,16 @@ export const formatCell = (
 
     return getCellMarkup(formatted, getCellColour(row, key), highlight);
 };
+
+const getNotAnalysedMarkup = (reason: string) => (
+    <Tooltip
+        content={reason}
+        popoverClassName='not-analysed-tooltip'
+        usePortal={false}
+    >
+        <span className={classNames(FALLBACK_COLOUR, Classes.TOOLTIP_INDICATOR)}>{NOT_ANALYSED_LABEL}</span>
+    </Tooltip>
+);
 
 export const getCellMarkup = (text: string, colour?: CellColour, highlight?: string | null) => {
     if (!text) {

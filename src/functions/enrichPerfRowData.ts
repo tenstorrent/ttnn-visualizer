@@ -3,6 +3,8 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import { PerfTableRow, TypedPerfTableRow } from '../model/PerfTable';
+import { BoundAnalysis } from '../definitions/PerfTable';
+import { OperationCategories } from '../definitions/StackedPerfTable';
 import { HIGH_DISPATCH_THRESHOLD_US } from '../definitions/Performance';
 import { BufferType } from '../model/BufferType';
 import { DeviceOperationLayoutTypes } from '../model/APIData';
@@ -24,6 +26,14 @@ const parseNullableInteger = (value: string | null | undefined): number | null =
     const parsed = parseInt(value, 10);
     return Number.isNaN(parsed) ? null : parsed;
 };
+
+// Narrows a CSV string to a member of a string enum, so an unrecognised value from a newer
+// tt-perf-report reads as unknown rather than being trusted as a known member.
+const parseEnumValue = <T extends string>(values: readonly T[], value: string | null | undefined): T | null =>
+    values.find((member) => member === value) ?? null;
+
+const BOUND_ANALYSIS_VALUES = Object.values(BoundAnalysis);
+const OPERATION_CATEGORY_VALUES = Object.values(OperationCategories);
 
 export const getRowAttributes = (row: PerfTableRow): RowAttributes => {
     const { buffer_type: bufferType, layout } = parsePerfRowTensorAttributes(row);
@@ -74,6 +84,8 @@ export const enrichRowData = (
             op_to_op_gap: opToOpGap,
             cores: parseInt(row.cores, 10),
             available_cores: parseNullableInteger(row.available_cores),
+            op_category: parseEnumValue(OPERATION_CATEGORY_VALUES, row.op_category),
+            bound_analysis: parseEnumValue(BOUND_ANALYSIS_VALUES, row.bound_analysis),
             dram: row.dram ? parseFloat(row.dram) : null,
             dram_percent: row.dram_percent ? parseFloat(row.dram_percent) : null,
             flops: row.flops ? parseFloat(row.flops) : null,

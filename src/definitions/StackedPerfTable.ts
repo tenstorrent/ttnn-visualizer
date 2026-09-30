@@ -4,7 +4,7 @@
 
 import { OpType } from './Performance';
 
-enum OperationCategories {
+export enum OperationCategories {
     CCL = 'CCL',
     Compute = 'Compute',
     DM = 'DM',

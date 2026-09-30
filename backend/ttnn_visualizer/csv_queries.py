@@ -790,6 +790,8 @@ class OpsPerformanceReportQueries:
         "global_call_count": "Global Call Count",
         "sub_device_id": "Sub Device ID",
         "available_cores": "Available Cores",
+        "op_category": "Op Category",
+        "bound_analysis": "Bound Analysis",
         "advice": "Advice",
         "raw_op_code": "Raw OP Code",
     }

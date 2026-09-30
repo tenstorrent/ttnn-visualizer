@@ -2,7 +2,8 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-import { BoundType } from '../definitions/PerfTable';
+import { BoundAnalysis, BoundType } from '../definitions/PerfTable';
+import { OperationCategories } from '../definitions/StackedPerfTable';
 import { PerfHeuristicFlag } from '../definitions/PerfHeuristics';
 import { OpType } from '../definitions/Performance';
 import { DeviceOperationLayoutTypes } from './APIData';
@@ -22,6 +23,9 @@ export interface PerfTableRow {
     op_to_op_gap: string;
     cores: string;
     available_cores?: string | null;
+    // Optional: absent when the backend's tt-perf-report predates 1.4.0.
+    op_category?: string | null;
+    bound_analysis?: string | null;
     dram: string;
     dram_percent: string;
     flops: string;
@@ -69,6 +73,8 @@ export interface TypedPerfTableRow extends Omit<
     | 'op_to_op_gap'
     | 'cores'
     | 'available_cores'
+    | 'op_category'
+    | 'bound_analysis'
     | 'dram'
     | 'dram_percent'
     | 'flops'
@@ -92,6 +98,8 @@ export interface TypedPerfTableRow extends Omit<
     op_to_op_gap: number | null;
     cores: number | null;
     available_cores: number | null;
+    op_category: OperationCategories | null;
+    bound_analysis: BoundAnalysis | null;
     dram: number | null;
     dram_percent: number | null;
     flops: number | null;
@@ -122,6 +130,8 @@ export const signpostRowDefaults = Object.freeze({
     global_call_count: null,
     sub_device_id: null,
     available_cores: null,
+    op_category: null,
+    bound_analysis: null,
     device_fw_start_cycle: null,
     device_fw_end_cycle: null,
     metal_trace_id: null,

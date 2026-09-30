@@ -103,6 +103,17 @@ class TestPerfReportKernelDurations(unittest.TestCase):
         for row in signposts:
             self.assertIn(row.get("brisc_kernel_duration"), (None, ""))
 
+    def test_every_row_records_which_bound_model_ran(self):
+        # The frontend reads bound_analysis to tell an unanalysed op from one measured and found
+        # fine (#2048), so a row without it would silently fall back to a misleading blank.
+        for row in self.report:
+            self.assertIn(row.get("bound_analysis"), ("full", "flops_only", "none"))
+
+        matmuls = [row for row in self.report if "Matmul" in row["raw_op_code"]]
+        self.assertGreater(len(matmuls), 0)
+        for row in matmuls:
+            self.assertEqual(row["bound_analysis"], "full")
+
 
 class TestPerfReportKernelDurationSchemaCompatibility(unittest.TestCase):
     def test_raw_csv_kernel_durations_are_passed_through(self):
@@ -216,6 +227,8 @@ class TestPerfReportKernelDurationSchemaCompatibility(unittest.TestCase):
             "Global Call Count",
             "Sub Device ID",
             "Available Cores",
+            "Op Category",
+            "Bound Analysis",
             "Advice",
             "Raw OP Code",
         ]
@@ -244,6 +257,8 @@ class TestPerfReportKernelDurationSchemaCompatibility(unittest.TestCase):
             "1",
             "subdevice-7",
             "108",
+            "Compute",
+            "full",
             "useful advice",
             "Matmul",
         ]
@@ -298,6 +313,8 @@ class TestPerfReportKernelDurationSchemaCompatibility(unittest.TestCase):
             "global_call_count": "1",
             "sub_device_id": "subdevice-7",
             "available_cores": "108",
+            "op_category": "Compute",
+            "bound_analysis": "full",
             "advice": ["useful advice"],
             "raw_op_code": "Matmul",
             "op_type": "tt_dnn_device",

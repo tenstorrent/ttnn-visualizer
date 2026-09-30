@@ -123,6 +123,16 @@ $perf-table-min-width: 1240px;
         margin-bottom: 10px;
     }
 
+    .bound-analysis-coverage {
+        width: fit-content;
+        margin-bottom: 10px;
+    }
+
+    .not-analysed-tooltip {
+        max-width: 320px;
+        white-space: normal;
+    }
+
     .cell-header {
         text-align: left;
         vertical-align: initial;

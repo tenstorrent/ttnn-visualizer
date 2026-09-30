@@ -21,6 +21,15 @@ export enum BoundType {
     HOST = 'HOST',
 }
 
+// Which roofline model tt-perf-report ran for an op ("Bound Analysis" column). Without it a blank
+// DRAM % or Bound reads the same whether the op was never analysed or measured and found fine
+// (#2048).
+export enum BoundAnalysis {
+    FULL = 'full',
+    FLOPS_ONLY = 'flops_only',
+    NONE = 'none',
+}
+
 export const MarkerColours = [
     'rgb(0, 128, 128)',
     'rgb(255, 215, 0)',
