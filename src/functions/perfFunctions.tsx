@@ -257,14 +257,15 @@ export const formatCell = (
     return getCellMarkup(formatted, getCellColour(row, key), highlight);
 };
 
+// A native title rather than a Blueprint Tooltip: the table is not virtualised and an unanalysed
+// row has up to five of these cells, so a stateful popover per cell scales badly on large reports.
 const getNotAnalysedMarkup = (reason: string) => (
-    <Tooltip
-        content={reason}
-        popoverClassName='not-analysed-tooltip'
-        usePortal={false}
+    <span
+        className={classNames(FALLBACK_COLOUR, Classes.TOOLTIP_INDICATOR)}
+        title={reason}
     >
-        <span className={classNames(FALLBACK_COLOUR, Classes.TOOLTIP_INDICATOR)}>{NOT_ANALYSED_LABEL}</span>
-    </Tooltip>
+        {NOT_ANALYSED_LABEL}
+    </span>
 );
 
 export const getCellMarkup = (text: string, colour?: CellColour, highlight?: string | null) => {

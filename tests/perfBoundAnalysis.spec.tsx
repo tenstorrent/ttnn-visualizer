@@ -4,6 +4,7 @@
 
 import { afterEach, describe, expect, it } from 'vitest';
 import { cleanup, render, screen } from '@testing-library/react';
+import { Classes } from '@blueprintjs/core';
 import { BoundAnalysis, BoundType, ColumnKeys, Columns } from '../src/definitions/PerfTable';
 import { OpType } from '../src/definitions/Performance';
 import { TEST_IDS } from '../src/definitions/TestIds';
@@ -92,6 +93,12 @@ describe('formatCell roofline blanks', () => {
         expect(renderCell(makeRow(), ColumnKeys.DramPercent)).toBe(NOT_ANALYSED_LABEL);
     });
 
+    it('exposes the reason on the n/a cell itself', () => {
+        render(<>{formatCell(makeRow(), getColumn(ColumnKeys.DramPercent))}</>);
+
+        expect(screen.getByTitle(NOT_MODELLED_REASON).textContent).toBe(NOT_ANALYSED_LABEL);
+    });
+
     it('still renders a measured figure, including a measured 0%', () => {
         const row = makeRow({ bound_analysis: BoundAnalysis.FULL, dram_percent: 0, bound: BoundType.SLOW });
 
@@ -154,6 +161,23 @@ describe('PerfBoundAnalysisCoverage', () => {
         expect(screen.getByTestId(TEST_IDS.PERF_BOUND_ANALYSIS_COVERAGE).textContent).toContain(
             'Bound analysis covers 7.3% of device time',
         );
+    });
+
+    it.each([
+        [49.9, Classes.INTENT_WARNING],
+        [50, Classes.INTENT_PRIMARY],
+        [50.1, Classes.INTENT_PRIMARY],
+    ])('at %s%% coverage uses %s', (analysedPercent, intentClass) => {
+        render(
+            <PerfBoundAnalysisCoverage
+                rows={[
+                    makeRow({ bound_analysis: BoundAnalysis.FULL, device_time: analysedPercent }),
+                    makeRow({ bound_analysis: BoundAnalysis.NONE, device_time: 100 - analysedPercent }),
+                ]}
+            />,
+        );
+
+        expect(screen.getByTestId(TEST_IDS.PERF_BOUND_ANALYSIS_COVERAGE).classList).toContain(intentClass);
     });
 
     it('renders nothing without bound analysis data', () => {

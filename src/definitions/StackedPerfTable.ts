@@ -6,10 +6,10 @@ import { OpType } from './Performance';
 
 export enum OperationCategories {
     CCL = 'CCL',
-    Compute = 'Compute',
+    COMPUTE = 'Compute',
     DM = 'DM',
-    Host = 'Host',
-    Other = 'Other',
+    HOST = 'Host',
+    OTHER = 'Other',
     TM = 'TM',
 }
 
