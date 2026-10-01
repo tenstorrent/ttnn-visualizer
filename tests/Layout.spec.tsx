@@ -3,14 +3,15 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import '@testing-library/jest-dom/vitest';
-import { cleanup, render, screen } from '@testing-library/react';
-import { StrictMode } from 'react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { StrictMode, act } from 'react';
 import type { ComponentType } from 'react';
 import { HelmetProvider } from 'react-helmet-async';
 import { type InitialEntry, MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ROUTES from '../src/definitions/Routes';
 import { EventLogEvent, EventLogView } from '../src/definitions/EventLogEvent';
+import { VIEW_ENGAGEMENT_THRESHOLD_MS } from '../src/definitions/ViewEngagement';
 
 /**
  * Covers the shell's wiring and the one structural invariant it asserts about itself.
@@ -68,6 +69,7 @@ describe('Layout event logging wiring', () => {
 
     afterEach(() => {
         cleanup();
+        vi.useRealTimers();
     });
 
     it('starts event logging on mount', async () => {
@@ -88,6 +90,25 @@ describe('Layout event logging wiring', () => {
             event: EventLogEvent.VIEW_OPENED,
             details: { view: EventLogView.REPORTS },
         });
+    });
+
+    it('records engagement through the mounted layout hook', async () => {
+        vi.useFakeTimers();
+        const { default: Layout } = await import('../src/components/Layout');
+        renderLayout(Layout);
+        recordEvent.mockClear();
+
+        fireEvent.pointerDown(screen.getByRole('main'));
+        act(() => {
+            vi.advanceTimersByTime(VIEW_ENGAGEMENT_THRESHOLD_MS);
+        });
+
+        const engagedCalls = recordEvent.mock.calls.filter(
+            ([entry]) => (entry as { event: EventLogEvent }).event === EventLogEvent.VIEW_ENGAGED,
+        );
+        expect(engagedCalls).toEqual([
+            [{ event: EventLogEvent.VIEW_ENGAGED, details: { view: EventLogView.REPORTS } }],
+        ]);
     });
 
     it('balances every start with a teardown, including StrictMode remount', async () => {
@@ -180,5 +201,55 @@ describe('Layout topology overlay', () => {
         ]);
 
         expect(screen.getByTestId('stub-cluster-renderer')).toBeInTheDocument();
+    });
+});
+
+describe('Layout toast transition', () => {
+    beforeEach(async () => {
+        await resetViewOpenedMemory();
+        vi.clearAllMocks();
+    });
+
+    afterEach(() => {
+        cleanup();
+    });
+
+    it('unmounts a dismissed toast once animationend fires', async () => {
+        const { default: Layout } = await import('../src/components/Layout');
+        const { createToast, dismissToast } = await import('../src/functions/createToastNotification');
+
+        renderLayout(Layout);
+
+        act(() => {
+            createToast('toast-leak-probe');
+        });
+
+        const body = await screen.findByText('toast-leak-probe');
+        const node = body.closest('.Toastify__toast');
+        expect(node).not.toBeNull();
+
+        act(() => {
+            node!.dispatchEvent(new Event('animationend'));
+        });
+
+        act(() => {
+            dismissToast();
+        });
+
+        expect(document.querySelectorAll('.Toastify__toast')).toHaveLength(1);
+        expect(node).toHaveClass('toast-exit-immediate');
+        expect(node).not.toHaveClass('no-toast-animation');
+
+        // jsdom never fires animationend from CSS, so this only checks that
+        // done() unmounts once the library's exit listener runs — not the
+        // #2044 leak (display:none skipping the event). That guard is the
+        // stylesheet spec.
+        act(() => {
+            node!.dispatchEvent(new Event('animationend'));
+        });
+
+        await waitFor(() => {
+            expect(document.querySelectorAll('.Toastify__toast')).toHaveLength(0);
+        });
     });
 });

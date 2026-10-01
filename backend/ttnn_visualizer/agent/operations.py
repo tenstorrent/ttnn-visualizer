@@ -31,7 +31,7 @@ from ttnn_visualizer.queries import DatabaseQueries
 # holds, and the HTTP serializers already re-expose it as plain `size`
 # (`serializers.py:309`) -- so reading it as a device-wide byte count is one
 # rename away rather than a hypothetical. It is per bank: on a local resnet50
-# capture the peak L1 footprint sums to 487,424 against an `l1_bank_size` of
+# capture the largest L1 footprint sums to 487,424 against an `l1_bank_size` of
 # 1,370,848 across 64 banks, and an agent comparing those two numbers directly
 # would understate usage by the bank count.
 BUFFER_SIZE_UNIT = "bytes_per_bank"
@@ -344,9 +344,9 @@ def operation_provenance(
     refuse; it answers about a different operation. `find_operations` is how to
     cross from a name to a database id.
 
-    This is the step that was missing: `memory_profile` names the operation holding
-    the peak, and nothing turned that id into something actionable in the code
-    being edited. #2021
+    This is the step that was missing: `memory_profile` names the operations
+    holding its largest footprint, and nothing turned those ids into something
+    actionable in the code being edited. #2021
     """
     instance = registry.get(handle)
     with _profiler_db(instance) as queries:
@@ -675,8 +675,19 @@ def memory_profile(
 
     `buffers` holds what was live *at* each operation rather than what that
     operation allocated, so a per-operation sum is the footprint at that point
-    and the largest of them is the run's peak -- which is the question an
-    out-of-memory failure actually asks.
+    and the largest of them is the largest of those footprints.
+
+    It is a floor, not the peak, and the gap is not small. `buffers` records
+    tensor allocations only: a circular buffer never enters it, and neither does
+    a tensor allocated and freed inside one operation. On `resnet50_may08_1841`
+    this reports 487,424, a figure eighteen operations share, where replaying
+    the captured graph gives 1,159,840 at operation 29 -- 2.4x out, and not the
+    same operations.
+    Across the local corpus circular buffers are 52-100% of the real L1 peak
+    wherever a peak has any, and intra-op tensors a further 24-38%. Two reports
+    hold almost no L1 tensors at all, so this reports a figure near zero for a
+    model saturating L1. Neither the true peak nor the operation holding it can
+    be derived from this response. #2034
 
     Nothing here adds one memory type to another. `max_size_per_bank` is divided
     by the bank count of its own memory type, and those counts differ, so a
@@ -735,22 +746,22 @@ def memory_profile(
     for type_name in sorted(by_type):
         footprints = by_type[type_name]
         # Ties broken by operation id so the same report answers the same way
-        # twice: resident allocations barely move, so the peak is routinely
-        # shared by hundreds of operations. SQLite's GROUP BY happens to return
+        # twice: resident allocations barely move, so the largest footprint is
+        # routinely shared by hundreds of operations. SQLite's GROUP BY happens to return
         # rows ordered by its leading key, which makes this belt-and-braces
         # today rather than load-bearing -- but that ordering is not guaranteed,
         # and an arbitrary pick among hundreds is what `operations_at_peak`
         # exists to keep an agent from chasing.
         ranked = sorted(footprints.items(), key=lambda item: (-item[1], item[0]))
-        # The peak is a maximum, never a sum across the run: a buffer that stays
+        # It is a maximum, never a sum across the run: a buffer that stays
         # live is listed under every operation it survived, so adding those
         # reports one allocation once per operation it lived through.
         peak = ranked[0][1] if ranked else 0
         memory[type_name] = {
             "peak": peak,
-            # How many operations hold that peak. A plateau of hundreds is the
+            # How many operations share that figure. A plateau of hundreds is the
             # normal shape for resident memory, and naming one of them as "the"
-            # peak without this sends an agent to investigate an arbitrary pick.
+            # answer without this sends an agent to investigate an arbitrary pick.
             "operations_at_peak": sum(
                 1 for _, size in ranked if size == peak and peak > 0
             ),
@@ -777,13 +788,23 @@ def memory_profile(
         "device": capacity,
         # Deliberately does not say "multiply by the bank count". That holds only
         # for a buffer interleaved across every bank, and most are not: on a
-        # local resnet50 capture the operation named here as the L1 peak holds
-        # two 56-bank buffers, so multiplying by the device's 64 overstates it by
-        # 14%, and 16-bank operations in the same report by 4x. How many banks a
-        # buffer actually occupies lives in `buffer_pages`, which no tool
-        # exposes -- so the honest statement is that this response cannot give a
-        # device-wide total, not a formula that is usually wrong.
+        # local resnet50 capture the operation named here as holding the largest
+        # L1 footprint holds two 56-bank buffers, so multiplying by the device's
+        # 64 overstates it by 14%, and 16-bank operations in the same report by
+        # 4x. How many banks a buffer actually occupies lives in `buffer_pages`,
+        # which no tool exposes -- so the honest statement is that this response
+        # cannot give a device-wide total, not a formula that is usually wrong.
+        # In `note` rather than `caveat` on purpose: `_caveats` is for what varies
+        # with the request, and its own docstring says a caveat that is always
+        # present is one an agent learns to skip. This exclusion is a property of
+        # the table, true of every response. #2034
         "note": (
+            "This is a floor, not the peak. `buffers` records tensor "
+            "allocations only, so circular buffers and tensors allocated and "
+            "freed inside one operation are absent, and both are large. A model "
+            "whose L1 is mostly circular buffers reports a figure near zero. "
+            "Neither the true peak nor the operation holding it can be derived "
+            "from this response. "
             "Sizes are per bank, as `buffers.max_size_per_bank` holds them, and "
             "are never added across memory types -- the bank count differs by "
             "type. A per-bank figure is comparable to `device.l1_bank_size` for "

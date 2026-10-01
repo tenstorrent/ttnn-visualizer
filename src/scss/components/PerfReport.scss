@@ -9,10 +9,25 @@
 $row-pattern-0: linear-gradient(90deg, transparent 50%, rgb(255 255 255 / 5%) 50%);
 $row-pattern-1: linear-gradient(0deg, transparent 50%, rgb(255 255 255 / 5%) 50%);
 $row-pattern-2: linear-gradient(45deg, transparent 50%, rgb(255 255 255 / 5%) 50%);
-$header-footer-border: 2px solid colours.$tt-grey-5;
+$header-footer-rule-width: 2px;
+$header-footer-rule-colour: colours.$tt-grey-5;
+$header-footer-border: $header-footer-rule-width solid $header-footer-rule-colour;
 
 // Narrowest the columns stay readable at; below this the table scrolls horizontally.
 $perf-table-min-width: 1240px;
+
+// The table scrolls inside its own box so the sticky header has a scroll container to pin
+// to. The box is nested in the scrolling document, and wheel input goes to the innermost
+// scroller under the pointer: over the table the box scrolls first, and the page only moves
+// once the box hits its end and a fresh gesture starts. The cap is sized so that, with the
+// page at its end, the whole box fits on screen: `main`'s top gutter above it, and below it
+// the report's inset, `.data-padding` and `main`'s bottom gutter, which the fixed status bar
+// sits inside. That holds only while nothing renders below the table in the report, so
+// anything else the report shows goes above it. The rem inset can't fold into the px sum,
+// so `calc` adds it.
+$perf-table-max-height: calc(
+    100vh - #{$main-padding + $data-padding-bottom + $main-padding-bottom} - #{$perf-report-padding}
+);
 
 .perf-report {
     color: #fff;
@@ -50,7 +65,7 @@ $perf-table-min-width: 1240px;
         width: 100%;
 
         // The floor sits on the table rather than on `.perf-report` so a narrow viewport
-        // scrolls the table inside its own `overflow: auto` container instead of the whole
+        // scrolls the table inside `.perf-table-scroll` instead of the whole
         // document. Without it the table tracks the container, and every width change --
         // collapsing the navigation rail is one, on demand -- re-runs auto table layout
         // across every unvirtualised row.
@@ -120,6 +135,11 @@ $perf-table-min-width: 1240px;
     .multi-device-note {
         width: auto;
         display: inline-block;
+        margin-bottom: 10px;
+    }
+
+    .bound-analysis-coverage {
+        width: fit-content;
         margin-bottom: 10px;
     }
 
@@ -262,8 +282,26 @@ $perf-table-min-width: 1240px;
         }
     }
 
-    .table-header {
-        border-bottom: $header-footer-border;
+    .perf-table-scroll {
+        // Keeps the pinned header's z-index local, so it can't paint over fixed app chrome
+        // such as the server-mode banner that shares its tier.
+        isolation: isolate;
+        overflow: auto;
+        max-height: $perf-table-max-height;
+
+        // Opaque, so Chromium can composite the scroll on 1x displays.
+        background-color: $perf-report-background;
+    }
+
+    // Sticky lives on the `th`s because older Safari ignores it on `thead`/`tr`. The rule
+    // is an inset shadow rather than `border-bottom` since, under `border-collapse`, the
+    // border belongs to the table and scrolls away while the cells stay pinned.
+    .table-header th {
+        position: sticky;
+        top: 0;
+        z-index: $z-index-2-interactive;
+        background-color: $perf-report-background;
+        box-shadow: inset 0 (-$header-footer-rule-width) 0 $header-footer-rule-colour;
     }
 
     .table-footer {

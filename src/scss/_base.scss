@@ -2,6 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
+@use 'sass:color';
 @use 'definitions/colours' as *;
 @use 'definitions/variables' as variables;
 
@@ -72,6 +73,12 @@
      * read as disabled rather than as plumbing. */
     --graph-block-weights: #{$tt-sand-tint-1};
     --graph-block-weights-border: #{$tt-sand-accent};
+
+    /* Blueprint darkens a checked switch on hover; the weight-load switch takes the
+     * fan colour, so it needs its own darker step or hovering it reads as the control
+     * losing its identity. Derived here rather than in the component sheet so the two
+     * shades cannot drift apart. */
+    --graph-block-weights-border-hover: #{color.adjust($tt-sand-accent, $lightness: -10%)};
     --graph-section-group: #9b59b6;
     --graph-selected: #{$tt-blue-accent};
 

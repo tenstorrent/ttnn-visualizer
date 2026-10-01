@@ -22,8 +22,10 @@ import { useGetNPEManifest, useOpToPerfIdFiltered, useOperationsList } from '../
 import useSortTable, { SortingDirection } from '../../hooks/useSortTable';
 import { OperationDescription } from '../../model/APIData';
 import { hiddenPerfTableColumnsAtom, hideHostOpsAtom, mergeDevicesAtom, selectedPerfRowIdAtom } from '../../store/app';
+import PerfBoundAnalysisCoverage from './PerfBoundAnalysisCoverage';
 import PerfDeviceArchitecture from './PerfDeviceArchitecture';
 import PerfMultiDeviceNotice from './PerfMultiDeviceNotice';
+import PerfTableFrame from './PerfTableFrame';
 import PerfTableSkeleton from './PerfTableSkeleton';
 import PerfTensorDrawer from './PerfTensorDrawer';
 import PerfTableToolbar from './PerfTableToolbar';
@@ -262,7 +264,7 @@ const PerformanceTable = ({
         }
 
         return (
-            <table className='perf-table monospace'>
+            <PerfTableFrame scrollResetKey={tableFields}>
                 <thead className='table-header'>
                     <tr>
                         <th
@@ -452,7 +454,7 @@ const PerformanceTable = ({
                                 ))}
                     </tr>
                 </tfoot>
-            </table>
+            </PerfTableFrame>
         );
     };
 
@@ -475,6 +477,8 @@ const PerformanceTable = ({
             />
 
             {mergeDevices && <PerfMultiDeviceNotice />}
+
+            <PerfBoundAnalysisCoverage rows={data} />
 
             <PerfTableToolbar eligibleColumns={eligibleColumns} />
 

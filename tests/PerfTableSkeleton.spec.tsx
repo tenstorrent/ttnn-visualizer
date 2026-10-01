@@ -69,4 +69,12 @@ describe('PerfTableSkeleton', () => {
         expect(skeleton).toHaveAttribute('aria-busy', 'true');
         expect(skeleton).toHaveAccessibleName('Loading performance data');
     });
+
+    it('sits in the same scroll region as the loaded table so nothing jumps on swap', () => {
+        render(<PerfTableSkeleton headers={HEADERS} />);
+
+        const region = screen.getByRole('region', { name: 'Performance table' });
+        expect(region).toHaveClass('perf-table-scroll');
+        expect(within(region).getByTestId(TEST_IDS.PERF_TABLE_SKELETON)).toBeInTheDocument();
+    });
 });

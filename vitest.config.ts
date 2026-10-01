@@ -13,6 +13,12 @@ export default defineConfig((configEnv) =>
             test: {
                 setupFiles: ['./vitest.setup.ts'],
                 environment: 'jsdom',
+                server: {
+                    deps: {
+                        // react-plotly.js imports 'plotly.js/dist/plotly' without an extension, which Node's ESM resolver rejects
+                        inline: ['react-plotly.js'],
+                    },
+                },
                 deps: {
                     optimizer: {
                         web: {

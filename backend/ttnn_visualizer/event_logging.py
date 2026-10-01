@@ -7,7 +7,8 @@
 Local installs append to one fixed file under the user's home directory. Hosted
 installs append to a separate file per anonymous Flask session under ``/data/usage``.
 The identifier stays in the path rather than entering event data. The application
-backend forwards nothing; an out-of-band collector may later read the files.
+backend never forwards raw events. Local opt-in collection exposes only aggregate
+metrics derived from the local log for Prometheus to scrape independently.
 
 Properties this file's consumers depend on, stated here because they are not
 obvious from the code that reads it:
@@ -39,7 +40,7 @@ obvious from the code that reads it:
   counter behind it is per-process, so a multi-worker deployment multiplies that
   overshoot by its worker count. Treat the cap as approximate. Local compaction at the
   next launch summarises the older half and appends resume; hosted retention and
-  compaction belong to the deployment collector.
+  compaction belong to the deployment's independently operated collector.
 
 Every recorded value comes from a closed enum, a bucketed value, or the
 application's own version. No report, file, directory, operation or host names,
@@ -61,8 +62,20 @@ from enum import Enum
 from importlib.metadata import PackageNotFoundError, distribution
 from importlib.metadata import version as distribution_version
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple, Type
+from typing import (
+    Any,
+    Dict,
+    FrozenSet,
+    Iterable,
+    List,
+    Mapping,
+    Optional,
+    Sequence,
+    Tuple,
+    Type,
+)
 
+from ttnn_visualizer.agent.tool_names import McpToolName
 from ttnn_visualizer.utils import (
     FALSE_VALUES,
     TRUE_VALUES,
@@ -125,7 +138,7 @@ MAX_HOSTED_EVENT_LOGS = 1024
 MAX_HOSTED_BATCHES_PER_MINUTE = 120
 MAX_HOSTED_EVENT_LOG_CREATIONS_PER_MINUTE = 60
 HOSTED_RATE_WINDOW_SECONDS = 60.0
-HOSTED_FULL_LOG_RECHECK_SECONDS = 60.0
+FULL_LOG_RECHECK_SECONDS = 60.0
 HOSTED_QUOTA_LOCK_NAME = ".quota.lock"
 HOSTED_CREATION_RATE_NAME = ".creation-rate"
 
@@ -145,6 +158,13 @@ KIND_FIELD = "kind"
 SOURCE_FIELD = "source"
 REASON_CLASS_FIELD = "reason_class"
 VIEW_FIELD = "view"
+TOOL_FIELD = "tool"
+OUTCOME_FIELD = "outcome"
+VERSION_FIELD = "version"
+DEPLOYMENT_MODE_FIELD = "deployment_mode"
+LAUNCH_MODE_FIELD = "launch_mode"
+OS_FIELD = "os"
+PYTHON_VERSION_FIELD = "python_version"
 
 # The wire shape of one posted event. ``EVENT_FIELD`` doubles as its name on the wire and
 # so is not restated; ``DETAILS_FIELD`` has no log equivalent, since details are flattened
@@ -172,6 +192,7 @@ _UNSUMMARISABLE_FIELDS = (TIMESTAMP_FIELD, RUN_ID_FIELD, COUNT_FIELD)
 # Every line this module writes carries these, and so does every summary line, so a
 # line without them is an interleaved fragment rather than an event.
 _REQUIRED_FIELDS = (TIMESTAMP_FIELD, EVENT_FIELD, SCHEMA_VERSION_FIELD)
+_COMMON_FIELDS = frozenset((*_REQUIRED_FIELDS, RUN_ID_FIELD, COUNT_FIELD))
 
 _run_id: Optional[str] = None
 
@@ -213,6 +234,7 @@ class EventLogEvent(str, Enum):
     REPORT_LOAD_FAILED = "report_load_failed"
     VIEW_OPENED = "view_opened"
     VIEW_ENGAGED = "view_engaged"
+    MCP_TOOL_CALLED = "mcp_tool_called"
 
 
 class DeploymentMode(str, Enum):
@@ -318,14 +340,33 @@ class EventLogView(str, Enum):
     MCP = "mcp"
 
 
-# Where every detail value a client may post has to come from. `_SAFE_VALUE_PATTERN`
-# is not enough on its own: it would happily accept `kind=totally-made-up`, and the
-# bounded contents of this file are the entire promise being made.
+class McpToolOutcome(str, Enum):
+    """How a registered MCP tool call ended.
+
+    ``refused`` is a tool declining a well-formed call it cannot answer (unknown
+    handle, argument out of range). ``error`` is an unexpected failure the
+    server did not anticipate.
+    """
+
+    OK = "ok"
+    REFUSED = "refused"
+    ERROR = "error"
+
+
+# Closed vocabularies for detail fields that are enums. Client-posted fields are
+# validated against this map; server-written fields use it so the docs page and
+# ``_SAFE_VALUE_PATTERN`` checks have one source. `version` and `python_version`
+# stay off it: they are constrained strings, not closed sets.
 _DETAIL_FIELD_ENUMS: Mapping[str, Type[Enum]] = {
     KIND_FIELD: ReportKind,
     SOURCE_FIELD: ReportSource,
     REASON_CLASS_FIELD: ReportLoadFailureReason,
     VIEW_FIELD: EventLogView,
+    DEPLOYMENT_MODE_FIELD: DeploymentMode,
+    LAUNCH_MODE_FIELD: LaunchMode,
+    OS_FIELD: OperatingSystem,
+    TOOL_FIELD: McpToolName,
+    OUTCOME_FIELD: McpToolOutcome,
 }
 
 # What a client may post, and the exact detail fields each event carries. Exported so
@@ -333,15 +374,51 @@ _DETAIL_FIELD_ENUMS: Mapping[str, Type[Enum]] = {
 # transcribed — a silent divergence there means events the client emits and the server
 # rejects, which the client is designed not to notice.
 #
-# `APP_START` is deliberately absent: the server records launches itself, and a client
-# able to post one could forge the deployment population every other figure is read
-# against.
+# Server-only events live in ``SERVER_EVENT_DETAIL_FIELDS``. A client able to post
+# ``app_start`` or ``mcp_tool_called`` could forge the denominators those events
+# exist to measure.
 CLIENT_EVENT_DETAIL_FIELDS: Mapping[EventLogEvent, Tuple[str, ...]] = {
     EventLogEvent.REPORT_LOADED: (KIND_FIELD, SOURCE_FIELD),
     EventLogEvent.REPORT_LOAD_FAILED: (KIND_FIELD, REASON_CLASS_FIELD),
     EventLogEvent.VIEW_OPENED: (VIEW_FIELD,),
     EventLogEvent.VIEW_ENGAGED: (VIEW_FIELD,),
 }
+SERVER_EVENT_DETAIL_FIELDS: Mapping[EventLogEvent, Tuple[str, ...]] = {
+    EventLogEvent.APP_START: (
+        VERSION_FIELD,
+        DEPLOYMENT_MODE_FIELD,
+        LAUNCH_MODE_FIELD,
+        OS_FIELD,
+        PYTHON_VERSION_FIELD,
+    ),
+    EventLogEvent.MCP_TOOL_CALLED: (TOOL_FIELD, OUTCOME_FIELD),
+}
+EVENT_DETAIL_FIELDS: Mapping[EventLogEvent, Tuple[str, ...]] = {
+    **SERVER_EVENT_DETAIL_FIELDS,
+    **CLIENT_EVENT_DETAIL_FIELDS,
+}
+_EXPECTED_DETAIL_FIELD_SETS: Mapping[EventLogEvent, FrozenSet[str]] = {
+    event: frozenset(fields) for event, fields in EVENT_DETAIL_FIELDS.items()
+}
+
+# Application and Python versions are server-derived constrained strings rather than
+# closed enums; they are the only detail fields without an entry in
+# ``_DETAIL_FIELD_ENUMS``. A new ``app_start`` detail needs one or the other, or every
+# launch line is rejected when read back.
+_CONSTRAINED_STRING_DETAIL_FIELDS = frozenset((VERSION_FIELD, PYTHON_VERSION_FIELD))
+
+
+def _is_valid_event_detail_value(field: str, value: str) -> bool:
+    """Whether a stored detail remains inside the schema's bounded vocabulary."""
+    enum_type = _DETAIL_FIELD_ENUMS.get(field)
+    if enum_type is not None:
+        try:
+            enum_type(value)
+        except ValueError:
+            return False
+        return True
+
+    return field in _CONSTRAINED_STRING_DETAIL_FIELDS and _is_safe_value(value)
 
 
 class EventLogEventRejected(Exception):
@@ -982,7 +1059,7 @@ def _append_line(
         os.close(descriptor)
 
 
-def _is_log_full(log_path: Path, state: _EventLogState, hosted: bool = False) -> bool:
+def _is_log_full(log_path: Path, state: _EventLogState) -> bool:
     """Whether the log has reached its cap, re-measured at most once per interval.
 
     Refusing appends is the only correct answer at the cap. Trimming here is what makes
@@ -990,7 +1067,8 @@ def _is_log_full(log_path: Path, state: _EventLogState, hosted: bool = False) ->
     extrapolates — losing history and inventing activity at once. Compacting here is no
     better: ``_compact`` reads the whole file, and this runs on a request path.
     Local compaction at the next launch summarises the older half and appends resume;
-    hosted logs are re-checked after external compaction.
+    hosted logs, and long-lived local writers such as the MCP server, re-check after
+    a bound interval so an external compaction can unstick them.
 
     Between measurements the previous verdict is returned rather than recomputed, and that
     is load-bearing rather than an optimisation. The state's byte counter counts bytes
@@ -1008,7 +1086,7 @@ def _is_log_full(log_path: Path, state: _EventLogState, hosted: bool = False) ->
     """
     now = time.monotonic()
     if state.log_full:
-        if not hosted or now < state.next_full_check_at:
+        if now < state.next_full_check_at:
             return True
     elif state.bytes_since_size_check < LOG_SIZE_CHECK_INTERVAL_BYTES:
         return False
@@ -1023,9 +1101,7 @@ def _is_log_full(log_path: Path, state: _EventLogState, hosted: bool = False) ->
         state.log_full = False
 
     state.bytes_since_size_check = 0
-    state.next_full_check_at = (
-        now + HOSTED_FULL_LOG_RECHECK_SECONDS if hosted and state.log_full else 0.0
-    )
+    state.next_full_check_at = now + FULL_LOG_RECHECK_SECONDS if state.log_full else 0.0
 
     if state.log_full and not was_full:
         # Once, on the way in. Everything after this point is dropped and answered 204,
@@ -1130,7 +1206,7 @@ def _write_events(
             return False
     state = _state_for_log(log_path, hosted)
 
-    if _is_log_full(log_path, state, hosted=hosted):
+    if _is_log_full(log_path, state):
         return False
 
     timestamp = _get_timestamp()
@@ -1338,7 +1414,7 @@ def record_app_start(config: Any, server_mode: Optional[Any] = None) -> None:
         )
 
 
-def _parse_line(line: str) -> Optional[Dict[str, str]]:
+def parse_logfmt_line(line: str) -> Optional[Dict[str, str]]:
     """Split a logfmt line into fields, or ``None`` if it is not one."""
     fields: Dict[str, str] = {}
 
@@ -1353,6 +1429,61 @@ def _parse_line(line: str) -> Optional[Dict[str, str]]:
         fields[key] = value
 
     return fields or None
+
+
+def _has_required_fields(fields: Mapping[str, str]) -> bool:
+    return all(name in fields for name in _REQUIRED_FIELDS)
+
+
+def _parse_event_count(fields: Mapping[str, str]) -> Optional[int]:
+    """Return a positive event count, defaulting an omitted count to one."""
+    try:
+        count = int(fields.get(COUNT_FIELD, "1"))
+    except ValueError:
+        return None
+    return count if count > 0 else None
+
+
+def parse_known_event_fields(
+    fields: Mapping[str, str],
+) -> Optional[Tuple[EventLogEvent, Dict[str, str], int]]:
+    """Validate a stored event against the current bounded event schema.
+
+    The read-side twin of :func:`validate_client_event`: both match detail keys exactly
+    and values against ``_DETAIL_FIELD_ENUMS``, so a schema change updates both. They
+    differ in the key set: this one matches ``EVENT_DETAIL_FIELDS``, the union of client
+    and server events, because a stored line may have been written by the server itself,
+    whereas ``validate_client_event`` matches ``CLIENT_EVENT_DETAIL_FIELDS`` so a client
+    cannot post a server-only event. This one returns ``None`` rather than raising,
+    because a line that fails it is skipped rather than refused.
+    """
+    if not _has_required_fields(fields):
+        return None
+    if fields[SCHEMA_VERSION_FIELD] != str(SCHEMA_VERSION):
+        return None
+    if not fields[TIMESTAMP_FIELD] or not _is_safe_value(fields[TIMESTAMP_FIELD]):
+        return None
+
+    try:
+        event = EventLogEvent(fields[EVENT_FIELD])
+    except ValueError:
+        return None
+
+    expected_fields = EVENT_DETAIL_FIELDS[event]
+    if fields.keys() - _COMMON_FIELDS != _EXPECTED_DETAIL_FIELD_SETS[event]:
+        return None
+
+    details = {name: fields[name] for name in expected_fields}
+    if any(
+        not value or not _is_valid_event_detail_value(name, value)
+        for name, value in details.items()
+    ):
+        return None
+
+    count = _parse_event_count(fields)
+    if count is None:
+        return None
+    return event, details, count
 
 
 def _summarise(lines: List[str]) -> List[str]:
@@ -1373,18 +1504,17 @@ def _summarise(lines: List[str]) -> List[str]:
     unparsed: List[str] = []
 
     for line in lines:
-        fields = _parse_line(line)
+        fields = parse_logfmt_line(line)
         # An NFS-interleaved fragment that happens to start on a key boundary parses
         # cleanly but has no timestamp or event, and summarising it would render an
         # empty `ts=` and a fabricated `event=unknown` — a garbled line dressed up as
         # a well-formed one, which the collector can no longer tell to skip.
-        if fields is None or any(name not in fields for name in _REQUIRED_FIELDS):
+        if fields is None or not _has_required_fields(fields):
             unparsed.append(line)
             continue
 
-        try:
-            count = int(fields.get(COUNT_FIELD, "1"))
-        except ValueError:
+        count = _parse_event_count(fields)
+        if count is None:
             unparsed.append(line)
             continue
 
@@ -1433,9 +1563,8 @@ def compact_if_needed() -> None:
         logger.debug("Skipping event log compaction: file locking is unavailable")
         return
 
-    log_path = get_event_log_path()
-
     try:
+        log_path = get_event_log_path()
         if not log_path.exists() or log_path.stat().st_size <= MAX_LOG_BYTES:
             return
 
@@ -1456,13 +1585,15 @@ def compact_if_needed() -> None:
                 _invalidate_size_check()
             finally:
                 fcntl.flock(lock_file, fcntl.LOCK_UN)
-    except OSError as error:
+    except (OSError, RuntimeError) as error:
+        # RuntimeError: Path.home() when HOME is unset. Compaction is launch-only
+        # telemetry and must not prevent the process from serving.
         logger.warning("Unable to compact the event log: %s", error)
 
 
 def _compact(log_path: Path) -> None:
     # `errors="replace"` rather than a strict read: a `UnicodeDecodeError` is a
-    # `ValueError`, so the `OSError` handler around this would not catch one, and
+    # `ValueError`, so the handler around this would not catch one, and
     # compaction runs from `main()` before gunicorn is spawned — a corrupted log
     # would stop the server starting rather than cost us a line.
     lines = log_path.read_text(encoding="utf-8", errors="replace").splitlines()

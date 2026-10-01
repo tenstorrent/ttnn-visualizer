@@ -13,8 +13,9 @@ from collections import OrderedDict
 from pathlib import Path
 
 import pytest
-from ttnn_visualizer import event_logging
+from ttnn_visualizer import event_logging, usage_collection
 from ttnn_visualizer.app import create_app
+from ttnn_visualizer.csv_queries import clear_performance_report_cache
 from ttnn_visualizer.event_logging import (
     RECORDING_DISABLED_ENV_VAR,
     RUN_ID_ENV_VAR,
@@ -46,6 +47,22 @@ def app():
 def client(app):
     """Flask test client for API requests (GET, POST, etc.)."""
     return app.test_client()
+
+
+@pytest.fixture(autouse=True)
+def _clear_performance_report_cache():
+    """The report cache is per process, so a cached real report would outlive its test."""
+    clear_performance_report_cache()
+    yield
+    clear_performance_report_cache()
+
+
+@pytest.fixture(autouse=True)
+def usage_collection_config_path(tmp_path, monkeypatch):
+    """Keep every config reader away from the developer's real opt-in file."""
+    path = tmp_path / "app" / usage_collection.COLLECTION_CONFIG_FILENAME
+    monkeypatch.setattr(usage_collection, "COLLECTION_CONFIG_PATH", path)
+    return path
 
 
 @pytest.fixture

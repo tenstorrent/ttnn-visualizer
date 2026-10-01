@@ -213,6 +213,7 @@ class _EventLoggingActive:
 
 
 _DEFAULT_SSH_PORT = 22
+_HOSTED_DEFAULT_MAX_CONTENT_LENGTH = 1 * 1024 * 1024 * 1024
 DEFAULT_SECRET_KEY = "90909"
 # Counts UTF-8 bytes, not entropy — a floor against an obviously-short key, not a
 # strength check. Lowered to unblock deployments provisioned before the check existed.
@@ -222,24 +223,49 @@ MIN_HOSTED_SECRET_KEY_BYTES = 8
 
 
 def _parse_max_content_length(env_value: str) -> Optional[int]:
-    """Empty means no limit — the bare form ``.env.sample`` documents.
+    """Empty means no global request limit — the bare form ``.env.sample`` documents.
 
     Anything else unreadable raises, for the reason ``SERVER_MODE`` is strict: the
     value to fall back on is *no limit*, so guessing would drop an upload cap the
     operator asked for. The class-body call is unguarded, so this message is what
     they get in place of a bare ``int()`` traceback; the override loop catches it
     and keeps the declared limit instead.
+
+    Zero and negatives are refused too: Werkzeug would reject every request with a
+    body, while the SPA reads a non-positive limit as none at all and starts uploads
+    the server can only refuse.
     """
     if not env_value:
         return None
 
+    value: Optional[int]
     try:
-        return int(env_value)
+        value = int(env_value)
     except ValueError:
+        value = None
+
+    if value is None or value <= 0:
         raise ValueError(
-            f"MAX_CONTENT_LENGTH={env_value!r} is not a byte count. "
-            "Set a whole number of bytes, or leave it empty for no limit."
-        ) from None
+            f"MAX_CONTENT_LENGTH={env_value!r} is not a positive byte count. "
+            "Set a whole number of bytes above zero, or leave it empty for no limit."
+        )
+
+    return value
+
+
+def get_effective_max_content_length(
+    server_mode: bool, configured_value: Optional[int], is_configured: bool
+) -> Optional[int]:
+    """Supply the hosted default without replacing an operator-provided value.
+
+    ``None`` means both "never configured" and "explicitly no limit", so the caller
+    says which it has rather than this function re-deriving it from the environment —
+    that is what lets ``settings_override`` pin a hosted app to no limit.
+    """
+    if server_mode and configured_value is None and not is_configured:
+        return _HOSTED_DEFAULT_MAX_CONTENT_LENGTH
+
+    return configured_value
 
 
 def _parse_ssh_port(env_value: Optional[str]) -> int:
@@ -720,7 +746,7 @@ class DefaultConfig(object):
         )
 
     def recompute_derived_settings(self) -> None:
-        """Rebuild every value computed from ``TT_METAL_HOME``, ``HOST`` and ``PORT``.
+        """Rebuild values derived from operator-controlled settings.
 
         The whole path tree hangs off ``TT_METAL_HOME``, which the class body reads at
         import and the override loop can read again later — ``create_app``'s
@@ -736,6 +762,9 @@ class DefaultConfig(object):
         ``APP_DATA_DIRECTORY`` / ``REPORT_DATA_DIRECTORY`` keep the precedence the class
         body gives them: an explicit variable wins over the derivation, and their
         children follow whichever value won.
+
+        The hosted request limit follows the same rule: an explicit value wins, while
+        an absent value derives the hosted default from ``SERVER_MODE``.
         """
         self.APP_DATA_DIRECTORY = os.getenv(
             "APP_DATA_DIRECTORY",
@@ -753,6 +782,11 @@ class DefaultConfig(object):
 
         self.GUNICORN_BIND = f"{self.HOST}:{self.PORT}"
         self.SESSION_COOKIE_SECURE = self.SERVER_MODE
+        self.MAX_CONTENT_LENGTH = get_effective_max_content_length(
+            self.SERVER_MODE,
+            self.MAX_CONTENT_LENGTH,
+            is_configured="MAX_CONTENT_LENGTH" in os.environ,
+        )
 
     def _refuse_debug_under_server_mode(self) -> None:
         """Hosted mode wins over debug mode, because ``DEBUG`` is not just verbosity.

@@ -133,9 +133,39 @@ export const weightFanMembersCover = (
     remembered.members.every((member) => memberSet.has(member)) ||
     memberOperationIds.every((member) => remembered.memberSet.has(member));
 
+/**
+ * The remembered decisions that cover `memberOperationIds`, by the rule above.
+ *
+ * The question both view-side readers ask, and they ask it about the same fan from
+ * opposite sides: "has the reader opened this one" is the list being non-empty, and
+ * folding it again is deleting every id on the list — a delete of the clicked id alone
+ * leaves the pre-merge name behind and the builder re-opens the fan from it. Written
+ * once because two loops that decide the same thing are two loops that can come to
+ * disagree, which is #1988 arriving by a third route.
+ *
+ * Decodes the queried membership once rather than per remembered id: that allocation
+ * is what the 6.2 ms in `RememberedFan` was.
+ */
+export const fanIdsCovering = (rememberedIds: Iterable<string>, memberOperationIds: readonly number[]): string[] => {
+    const memberSet = new Set(memberOperationIds);
+    const covering: string[] = [];
+    for (const rememberedId of rememberedIds) {
+        const remembered = weightFanMembersOf(rememberedId);
+        if (
+            remembered !== null &&
+            weightFanMembersCover(rememberedDecision(remembered), memberOperationIds, memberSet)
+        ) {
+            covering.push(rememberedId);
+        }
+    }
+    return covering;
+};
+
 export interface WeightFanInput {
     keptOperations: readonly OpGraphSourceOperation[];
     candidates: readonly CandidateEdge[];
+    /** From `operationIdsWithIncomingEdge`, so the walk happens once per build. */
+    hasIncomingEdge: ReadonlySet<number>;
     /** Kept ids, so an edge to a filtered-out op does not count as a consumer. */
     kept: ReadonlySet<number>;
     /** Resolves an operation to the node that currently draws it. */
@@ -143,6 +173,30 @@ export interface WeightFanInput {
     /** Operations a grouping block already owns; a fan must never claim one twice. */
     isClaimed: (operationId: number) => boolean;
 }
+
+/**
+ * Operations something kept feeds. A weight load is one of the others — the set is
+ * the complement, which is why this is named for what it holds rather than for the
+ * question it answers.
+ *
+ * One implementation, shared: `detectWeightFans` takes the result rather than
+ * rebuilding it, and a grouping block asks the same question about the members it
+ * absorbed. Two copies of "is a source" could drift into disagreeing about what a
+ * weight load is. Both ends have to survive the filter — an edge from a hidden op is
+ * not a feed. #2028
+ */
+export const operationIdsWithIncomingEdge = (
+    candidates: readonly CandidateEdge[],
+    kept: ReadonlySet<number>,
+): Set<number> => {
+    const hasIncoming = new Set<number>();
+    for (const candidate of candidates) {
+        if (kept.has(candidate.source) && kept.has(candidate.target)) {
+            hasIncoming.add(candidate.target);
+        }
+    }
+    return hasIncoming;
+};
 
 /**
  * Presented as `RepeatBlockInstance` so the fan reuses the folding machinery #1583
@@ -154,16 +208,15 @@ export const detectWeightFans = ({
     keptOperations,
     candidates,
     kept,
+    hasIncomingEdge,
     renderedNodeIdOf,
     isClaimed,
 }: WeightFanInput): RepeatBlockInstance[] => {
-    const hasIncoming = new Set<number>();
     const consumersOf = new Map<number, Set<string>>();
     for (const candidate of candidates) {
         // Both ends have to survive the filter: an edge to a hidden op is not a second
         // consumer, and counting it would disqualify an otherwise sound fan.
         if (kept.has(candidate.source) && kept.has(candidate.target)) {
-            hasIncoming.add(candidate.target);
             const seen = consumersOf.get(candidate.source) ?? new Set<string>();
             seen.add(renderedNodeIdOf(candidate.target));
             consumersOf.set(candidate.source, seen);
@@ -174,7 +227,7 @@ export const detectWeightFans = ({
     // is the earliest of them and the graph keeps its reading order.
     const membersByConsumer = new Map<string, number[]>();
     for (const operation of keptOperations) {
-        const isSource = !hasIncoming.has(operation.id) && !isClaimed(operation.id);
+        const isSource = !hasIncomingEdge.has(operation.id) && !isClaimed(operation.id);
         const consumers = isSource ? consumersOf.get(operation.id) : undefined;
         // Exactly one consumer is the safety condition, not an optimisation: a source
         // feeding two nodes belongs to neither, and collapsing it into one of them would

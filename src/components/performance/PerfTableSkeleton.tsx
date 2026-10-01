@@ -5,6 +5,7 @@
 import { Classes } from '@blueprintjs/core';
 import classNames from 'classnames';
 import { TEST_IDS } from '../../definitions/TestIds';
+import PerfTableFrame from './PerfTableFrame';
 
 const SKELETON_ROW_COUNT = 12;
 
@@ -20,8 +21,7 @@ function PerfTableSkeleton({
     hasLeadingColumn = false,
 }: PerfTableSkeletonProps) {
     return (
-        <table
-            className='perf-table monospace'
+        <PerfTableFrame
             aria-busy='true'
             aria-label='Loading performance data'
             data-testid={TEST_IDS.PERF_TABLE_SKELETON}
@@ -64,7 +64,7 @@ function PerfTableSkeleton({
                     </tr>
                 ))}
             </tbody>
-        </table>
+        </PerfTableFrame>
     );
 }
 

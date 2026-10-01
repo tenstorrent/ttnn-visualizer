@@ -5,6 +5,7 @@
 import { describe, expect, it } from 'vitest';
 import {
     detectWeightFans,
+    operationIdsWithIncomingEdge,
     weightFanIdCovers,
     weightFanMembersOf,
 } from '../src/components/operation-graph/opGraphWeightFans';
@@ -30,14 +31,19 @@ interface FanCase {
     renderedAs?: Record<number, string>;
 }
 
-const fansOf = ({ operations, edges, claimed = [], renderedAs = {} }: FanCase) =>
-    detectWeightFans({
+const fansOf = ({ operations, edges, claimed = [], renderedAs = {} }: FanCase) => {
+    const kept = new Set(operations.map((candidate) => candidate.id));
+    return detectWeightFans({
         keptOperations: operations,
         candidates: edges,
-        kept: new Set(operations.map((candidate) => candidate.id)),
+        kept,
+        // The real caller shares one pass with the builder; here the helper under test
+        // is the one that decides what counts as fed.
+        hasIncomingEdge: operationIdsWithIncomingEdge(edges, kept),
         renderedNodeIdOf: (operationId) => renderedAs[operationId] ?? String(operationId),
         isClaimed: (operationId) => claimed.includes(operationId),
     });
+};
 
 describe('detectWeightFans', () => {
     it('collapses sources that all feed one node', () => {
@@ -234,6 +240,7 @@ describe('detectWeightFans', () => {
             ],
             candidates: [edge(1, 3), edge(2, 3), edge(2, 99)],
             kept: new Set([1, 2, 3]),
+            hasIncomingEdge: operationIdsWithIncomingEdge([edge(1, 3), edge(2, 3), edge(2, 99)], new Set([1, 2, 3])),
             renderedNodeIdOf: (operationId) => String(operationId),
             isClaimed: () => false,
         });

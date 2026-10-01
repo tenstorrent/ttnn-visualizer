@@ -156,6 +156,20 @@ interface SearchFieldProps {
 export default function SearchField({ placeholder, onSearch }: SearchFieldProps) { … }
 ```
 
+### Default-export the primary component; named extras are fine
+
+Primary React UI in `src/components` and route pages in `src/routes` **default-export** the main component. That is the existing tree, not a migration target: most component `.tsx` files already do `export default function SearchField`, `const Foo = …; export default Foo;`, or `export default memo(Foo)`.
+
+Named co-exports on the same module are expected — types, constants, small subcomponents. `ToastTensorMessage` default-exports the toast body and named-exports `ToastDeselectButton`; `Collapsible` named-exports `COLLAPSIBLE_EMPTY_CLASS` beside the default.
+
+Do **not** add a default export to a module that is already a named surface. `useAPI.tsx`, `formatting.ts`, and `routeObjectList.tsx` stay named-only. A handful of component helpers (`OperationLinks.tsx`, `MemoryLegendElement.tsx`, and similar) are named-only today; leave them. New primary widgets follow default export.
+
+Hooks and `src/functions` are mixed on purpose. A module whose public surface has one primary helper or hook may default-export it, with named extras alongside (`getServerConfig`, `createToastNotification`); a module of peer symbols stays **named**. A single-export helper may also default-export (`memoiseLatest`). `import/prefer-default-export` is off in `eslint.config.cjs` so that split stays legal — do not turn it on.
+
+Do not convert a file's export style when editing it for another reason.
+
+The `SocketProvider` snippet in the next subsection is a `src/libs` provider and is named on purpose. It is not a `src/components` widget; do not read it as an exception to default-exporting primary UI.
+
 ### Don't use `React.FC` / `FC` for component typing
 
 `React.FC` is deprecated by the React team and the codebase has standardised on typing props on the function signature instead. ESLint bans `FC`, `React.FC`, `FunctionComponent`, and `React.FunctionComponent` via `no-restricted-syntax` in `eslint.config.cjs`.
@@ -600,7 +614,7 @@ Defaults belong on the `<ToastContainer>` in `Layout.tsx`, which is mounted once
 
 ## Event logging (frontend)
 
-`src/functions/recordEvent.ts` buffers events and posts them to `POST /api/event-log/events`. Local installs append to `~/.ttnn-visualizer/usage/events.log`; `SERVER_MODE` appends to `/data/usage/<event-log-id>/events.log`, where the server-derived log partition key lives in the signed Flask session cookie. The backend never forwards or exports the events; the browser-to-backend post is local only on a local installation and crosses the network under `SERVER_MODE`. The invariants below are not visible from either side alone.
+`src/functions/recordEvent.ts` buffers events and posts them to `POST /api/event-log/events`. Local installs append to `~/.ttnn-visualizer/usage/events.log`; `SERVER_MODE` appends to `/data/usage/<event-log-id>/events.log`, where the server-derived log partition key lives in the signed Flask session cookie. The backend never forwards raw events. The one export path is the local-only, opt-in `GET /api/metrics` aggregate projection (see [Local Prometheus collection](docs/src/event-logging.md#local-prometheus-collection)), which `@local_only` refuses under `SERVER_MODE`; hosted deployments have no collection beyond this log. The browser-to-backend post is local only on a local installation and crosses the network under `SERVER_MODE`. The invariants below are not visible from either side alone.
 
 ### `event_logging.py` owns the vocabulary; the frontend and user reference are copies
 
@@ -614,7 +628,7 @@ The event list exists to answer Q1–Q5 in #1819, not to accumulate counters. Ev
 
 The event-logging endpoint is the narrow exception to `@local_only`: hosted clients may post the same closed event vocabulary, but they never choose where it lands. `event_logging.py::ensure_event_log_id` mints a 32-character UUID hex log partition key inside Flask's signed session, and path resolution requires that exact form plus containment under `/data/usage`. It is neither Flask's session identifier nor a user identity. Never use the caller-controlled `instanceId`, a query parameter, request JSON, or the raw signed cookie value.
 
-One hosted session gets one directory; the identifier is not copied into logfmt and the collector must not export directory names or per-user series. Minting it does not make a session permanent, although the existing upload flow can later make the whole cookie permanent for Flask's default 31-day lifetime. `create_app` refuses `SERVER_MODE` unless `SECRET_KEY` is non-default and meets the minimum byte length stated in `docs/src/event-logging.md` (declared as a startup requirement — read [Startup requirements](#startup-requirements) before changing it), which is the canonical copy of that number and the one `test_event_logging_docs_parity.py` reads — a floor against an obviously-short key, not a strength check, and a stopgap pending #2002. The writer caps hosted logs at 1,024, serialises cross-worker reservations under `.quota.lock`, limits new logs to 60 per minute across workers, and limits each worker to 120 batches per log per minute. The 10 MiB per-file cap therefore has a bounded aggregate worst case; deployment retention reclaims slots after collection, while edge controls absorb rates above the worker-aware application limits.
+One hosted session gets one directory; the identifier is not copied into logfmt and nothing may export directory names or per-user series, and the hosted app has no collector of its own. Minting it does not make a session permanent, although the existing upload flow can later make the whole cookie permanent for Flask's default 31-day lifetime. `create_app` refuses `SERVER_MODE` unless `SECRET_KEY` is non-default and meets the minimum byte length stated in `docs/src/event-logging.md` (declared as a startup requirement — read [Startup requirements](#startup-requirements) before changing it), which is the canonical copy of that number and the one `test_event_logging_docs_parity.py` reads — a floor against an obviously-short key, not a strength check, and a stopgap pending #2002. The writer caps hosted logs at 1,024, serialises cross-worker reservations under `.quota.lock`, limits new logs to 60 per minute across workers, and limits each worker to 120 batches per log per minute. The 10 MiB per-file cap therefore has a bounded aggregate worst case; deployment retention reclaims slots after collection, while edge controls absorb rates above the worker-aware application limits.
 
 ### Three caps, and each pair has to stay consistent
 
@@ -1134,7 +1148,7 @@ New tools go in that package and follow both. Adding one to a Flask route instea
 
 So registration is half of adding a tool. The other half is the row in that table saying what it answers, and, where the answer needs one to be read correctly, the caveat in the prose. A tool that is registered but undocumented is invisible to the client that would have chosen it; a caveat that reaches only the response is one an agent has already acted without by the time it reads it.
 
-Two things make this sharper than ordinary documentation drift. #2035 puts that page inside the application, at which point a missing row is a hole a user sees rather than a stale file in a repository. And the surface has drifted here before: #2034 is a caveat that is *wrong on the page itself* — `agent-tools.md` tells an agent that `memory_profile`'s peak answers the out-of-memory question, which it does not, because the table it reads holds neither circular buffers nor tensors allocated and freed inside one operation.
+Two things make this sharper than ordinary documentation drift. #2035 puts that page inside the application, at which point a missing row is a hole a user sees rather than a stale file in a repository. And the surface has drifted here before: #2034 was a caveat that was *wrong on the page itself* — `agent-tools.md` told an agent that `memory_profile`'s peak answered the out-of-memory question, which it did not, because the table it reads holds neither circular buffers nor tensors allocated and freed inside one operation.
 
 That sets the bar. What is owed is an accurate row and an accurate caveat, not merely a present one — a missing tool is one an agent never calls, while a wrong caveat is one it acts on.
 
@@ -1366,7 +1380,7 @@ A setting listed in **`_STRICT_BOOLEANS`** raises instead of warning. `SERVER_MO
 
 Strictness is registered per setting for the reason above: a flag only the class body honoured would leave `.env`-introduced typos selecting the local posture.
 
-`MAX_CONTENT_LENGTH` is the second setting that can abort startup, for the same reason by a different route: its class-body call to `_parse_max_content_length` is unguarded, and the value it would fall back to is *no limit at all*, so an unreadable upload cap stops the app rather than silently removing it. Both refusals name the variable and the accepted values, because they are what an operator sees instead of a traceback.
+`MAX_CONTENT_LENGTH` is the second setting that can abort startup, for the same reason by a different route: its class-body call to `_parse_max_content_length` is unguarded, and the value it would fall back to is *no limit at all*, so an unreadable upload cap stops the app rather than silently removing it. Both refusals name the variable and the accepted values, because they are what an operator sees instead of a traceback. Local installs remain unlimited unless an operator configures it. Hosted `SERVER_MODE` gets a 1 GiB default only when nothing configures the setting — neither the environment nor `settings_override` — so `get_effective_max_content_length` takes that presence as an argument rather than inferring it from a `None` that also means "no limit". A positive byte count overrides the default, and an explicitly empty value (or `None` in `settings_override`) remains the no-limit opt-out.
 
 The strict path is import-time, so nothing in-process can exercise it — pytest has already imported the module. `test_importing_settings_refuses_an_unreadable_server_mode` re-imports `settings` in a subprocess; without it, deleting `SERVER_MODE` from `_STRICT_BOOLEANS` leaves the whole suite green.
 
@@ -1434,7 +1448,7 @@ A **startup requirement** is a condition on an operator-supplied value that has 
 
 ### What the registry does not cover
 
-Settings that fail while they are being *parsed* are outside it, and the registry cannot reach them: they raise inside `Config.__init__`, before `create_app` exists to apply anything. Two do this today — a value in `_STRICT_BOOLEANS` (currently `SERVER_MODE` alone) that is not a recognised boolean, and a `MAX_CONTENT_LENGTH` that is not a byte count.
+Settings that fail while they are being *parsed* are outside it, and the registry cannot reach them: they raise inside `Config.__init__`, before `create_app` exists to apply anything. Two do this today — a value in `_STRICT_BOOLEANS` (currently `SERVER_MODE` alone) that is not a recognised boolean, and a `MAX_CONTENT_LENGTH` that is not a positive byte count.
 
 **They are the same class of change, with none of the controls.** Adding a name to `_STRICT_BOOLEANS` makes a previously-acceptable operator configuration fatal at import — #2004 exactly — and every test in `test_startup_requirements.py` passes, because nothing in the registry describes it. There is no staging, no preflight entry and no release-diff row.
 
@@ -1484,6 +1498,4 @@ Adding or tightening a requirement fails two tests until you update them, and th
 These exist in the codebase today and don't yet have a single canonical answer. Reviewers should flag new code that goes either direction without considering both. Each entry names the inconsistency, the direction new code takes, and its tracking issue; the rule itself lives in the section above that owns it.
 
 - **Two accessors for CSS-custom-property colours.** `GRAPH_COLORS` resolves at module load; `getPerfChartChrome()` re-reads per call. Both are legitimate and both keep the literal in `_base.scss` — pick per [No hex literals in TS/TSX](#no-hex-literals-in-tstsx), and don't add a third mechanism. (#1911)
-- **Upload size cap.** `MAX_CONTENT_LENGTH` is a real, honoured setting but **unset by default**, so out of the box large uploads succeed until they exhaust memory. Choosing a shipped default is tracked separately. (#1915)
-- **Default-export vs named-export of components.** Components are predominantly default-exported, hooks and utilities named-exported. Mirror the file you're editing. (#1916)
 - **`DEBUG` and `FLASK_DEBUG` are different knobs with confusable names.** `FLASK_DEBUG` feeds the `DEBUG` *config* value (Flask's debug mode); the `DEBUG` *environment variable* raises the root log level and is what `pnpm flask:start-debug` sets. Both are in `.env.sample`. Read the name at the call site rather than assuming. (#1922)

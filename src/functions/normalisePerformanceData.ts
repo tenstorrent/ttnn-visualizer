@@ -28,6 +28,8 @@ const PLACEHOLDER: TypedPerfTableRow = {
     input_1_datatype: '',
     dram_sharded: null,
     available_cores: null,
+    op_category: null,
+    bound_analysis: null,
     device_fw_start_cycle: null,
     device_fw_end_cycle: null,
     metal_trace_id: null,

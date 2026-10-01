@@ -42,6 +42,7 @@ import PerfOverlayLegend from '../perf-overlay/PerfOverlayLegend';
 import CriticalPathAnnotation from './CriticalPathAnnotation';
 import OpGraphBlockNode from './OpGraphBlockNode';
 import OpGraphDeviceGroupNode from './OpGraphDeviceGroupNode';
+import OpGraphWeightGroupNode from './OpGraphWeightGroupNode';
 import OpGraphDeviceOpNode from './OpGraphDeviceOpNode';
 import OpGraphEdge from './OpGraphEdge';
 import OpGraphInfoPanel from './OpGraphInfoPanel';
@@ -59,6 +60,7 @@ import {
 import { EMPTY_CRITICAL_PATH, findCriticalPath } from './opGraphCriticalPath';
 import {
     REVEALED_NODE_CLASS,
+    absolutePositionsOf,
     boundsOfNodes,
     centerPanShift,
     entryViewport,
@@ -81,6 +83,7 @@ import {
     type OpGraphSourceOperation,
 } from './opGraphTypes';
 import { fusedActivationOf } from './opGraphFusedActivation';
+import { fanIdsCovering, weightFanMembersOf } from './opGraphWeightFans';
 import { OpGraphGrouping } from './opGraphTypes';
 import 'styles/components/OperationGraphReactFlow.scss';
 
@@ -89,7 +92,11 @@ const NODE_TYPES = {
     [OpGraphNodeType.DEVICE_GROUP]: OpGraphDeviceGroupNode,
     [OpGraphNodeType.DEVICE_OP]: OpGraphDeviceOpNode,
     [OpGraphNodeType.BLOCK]: OpGraphBlockNode,
-};
+    [OpGraphNodeType.WEIGHT_GROUP]: OpGraphWeightGroupNode,
+    // Total, and checked as such: a node type with no renderer falls back to React
+    // Flow's default and draws as an unstyled box, which is a runtime surprise where
+    // this is a compile error. `BLOCK_KIND_CLASS` keys its enum the same way.
+} satisfies Record<OpGraphNodeType, unknown>;
 const EDGE_TYPES = { [OpGraphEdgeType.OP]: OpGraphEdge };
 
 const EDGE_MARKER = { type: MarkerType.ArrowClosed, width: 18, height: 18 } as const;
@@ -154,6 +161,20 @@ interface OpGraphMatches {
     hiddenMatchCount: number;
     buriedCountById: Map<string, number>;
 }
+
+/**
+ * Whether a weight fan's container encloses a filter match.
+ *
+ * It can never match on its own: it is chrome, deliberately absent from the index
+ * the matches are computed over, so `matchedIds` will never hold its id. Asking the
+ * id for its membership is the only route left, and it is the one the id was made
+ * legible for. Only ever called for a container, of which at most a handful are on
+ * screen -- unrolled fans -- so the decode is not on any hot path.
+ */
+const fanContainerEnclosesMatch = (nodeId: string, matchedIds: ReadonlySet<string>): boolean => {
+    const members = weightFanMembersOf(nodeId);
+    return members !== null && members.some((member) => matchedIds.has(String(member)));
+};
 
 // Shared so an idle filter yields one stable identity instead of a fresh empty
 // set per render, which would invalidate every memo downstream.
@@ -342,6 +363,10 @@ const OperationGraphInner = ({
     // describes the graph; it does not get to decide how the graph opens. #1977
     const [expandedBlockIds, setExpandedBlockIds] = useState<ReadonlySet<string> | null>(null);
     const [detectedBlocks, setDetectedBlocks] = useState<OpGraphBlockSummary[]>(NO_BLOCKS);
+    // Deliberately not merged into `detectedBlocks`: that array drives the grouping
+    // controls and the seed for `expandedBlockIds`, and a fan in either inverts its
+    // own fold default. The panel lookup and the fold gesture below read both. #2028
+    const [weightFans, setWeightFans] = useState<OpGraphBlockSummary[]>(NO_BLOCKS);
     // A view preference like `hideDeallocate`, so it survives a report change: someone
     // comparing two reports by layer does not want the mode reset under them. #1976
     const [grouping, setGrouping] = useState<OpGraphGrouping>(OpGraphGrouping.REPEATS);
@@ -421,7 +446,7 @@ const OperationGraphInner = ({
     const pendingEmptyPaneCheckRef = useRef(false);
     // The op the URL last moved to, so a rebuild does not pan back to it.
     const focusedUrlOperationRef = useRef<number | null>(null);
-    const { getNode, getViewport, setViewport } = useReactFlow<OpGraphFlowNode, OpGraphFlowEdge>();
+    const { getInternalNode, getViewport, setViewport } = useReactFlow<OpGraphFlowNode, OpGraphFlowEdge>();
     const flowStore = useStoreApi();
 
     // Path, not the `ReportFolder` object: a rebuilt-but-equivalent object would
@@ -448,6 +473,12 @@ const OperationGraphInner = ({
         setExpandedOperationIds(NOTHING_EXPANDED);
         setExpandedBlockIds(null);
         setDetectedBlocks(NO_BLOCKS);
+        // Beside `detectedBlocks` for the same reason, and load-bearing since the
+        // URL reveal below learned to ask fans: the gate there is "a build has
+        // landed", and fans left over from the previous report answer it with the
+        // previous report's operation ids. The latch fires once, so it would be spent
+        // on a fan that no longer exists before the real build arrived. #2028
+        setWeightFans(NO_BLOCKS);
         setNodeIdByOperationId(EMPTY_NODE_ID_BY_OP);
         setRevealedOperationId(null);
         deviceSubgraphCache.clear();
@@ -527,7 +558,21 @@ const OperationGraphInner = ({
             // Told apart by membership of `detectedBlocks` — fans are not in it — rather
             // than by sniffing the id, which would break for the next detector added.
             if (!detectedBlockIds.has(instanceId)) {
-                return expandedBlockIds?.has(instanceId) ?? false;
+                const members = weightFanMembersOf(instanceId);
+                if (members === null || expandedBlockIds === null) {
+                    return expandedBlockIds?.has(instanceId) ?? false;
+                }
+                // Containment, not equality, because the builder decides the same
+                // question that way: a grouping fold merges or splits a fan and the
+                // id changes, so the decision the reader made is remembered under a
+                // name the fan no longer has. Asking by equality made the fold pill
+                // on a merged fan compute the wrong direction. #2028
+                //
+                // Only fan ids take this branch, and only from the click path and the
+                // panel lookup — the callers that walk `detectedBlocks` all pass ids
+                // that are in it and leave above. Called per node from a render pass
+                // it would be blocks x remembered ids of decoding per frame.
+                return expandedBlockIds.has(instanceId) || fanIdsCovering(expandedBlockIds, members).length > 0;
             }
             return expandedBlockIds === null || expandedBlockIds.has(instanceId);
         },
@@ -572,6 +617,38 @@ const OperationGraphInner = ({
         }
         return byOperationId;
     }, [detectedBlocks]);
+
+    // Kept apart from the grouping map rather than merged into it. An operation can be
+    // named by both — a grouping block lists it whether or not that block is folded,
+    // and a fan forms from operations no *folded* block has claimed — so one map with
+    // one winner answers with whichever was inserted first, which on an unrolled
+    // grouping block is the owner that is not drawing anything. #2028
+    const fanByMemberOperationId = useMemo(() => {
+        const byOperationId = new Map<number, OpGraphBlockSummary>();
+        for (const fan of weightFans) {
+            for (const memberOpId of fan.operationIds) {
+                if (!byOperationId.has(memberOpId)) {
+                    byOperationId.set(memberOpId, fan);
+                }
+            }
+        }
+        return byOperationId;
+    }, [weightFans]);
+
+    // Innermost first. A fan's members are drawn inside its container, and that
+    // container can sit inside a grouping block's span, so when both name an
+    // operation the fan is the nearer owner. Ordered once here because the two
+    // readers below both need the order and disagree about which end: a double-click
+    // folds the innermost *open* owner, and taking whichever map answered first folded
+    // the layer block instead of the fan drawn around the node the reader clicked. The
+    // panel takes the other end -- see `selectedBlock`. #2028
+    const ownersOf = useCallback(
+        (memberId: number): OpGraphBlockSummary[] =>
+            [fanByMemberOperationId.get(memberId), blockByMemberOperationId.get(memberId)].filter(
+                (owner): owner is OpGraphBlockSummary => owner !== undefined,
+            ),
+        [fanByMemberOperationId, blockByMemberOperationId],
+    );
 
     // Only the expanded operations are assembled: one operation's frame stream
     // runs to thousands of nodes, so deriving all of them up front would pay for
@@ -627,8 +704,14 @@ const OperationGraphInner = ({
             // from being scored as zero-cost operations. #1195
             const indexEntries: OpGraphNodeIndexEntry[] = [];
             const renderedByOpId = new Map<number, string>();
+            // A weight-fan container joins device operations in being left out. It is
+            // chrome around nodes that are themselves indexed, and its `operationId` is
+            // its first member's -- so indexing it put a second entry under that id and
+            // `buildPositionByOperationId` is first-wins, which parked the member's
+            // prev/next cursor on the container. Next from the member then named the
+            // member. Removing `memberOperationIds` was not enough on its own. #2028
             for (const node of graph.nodes) {
-                if (node.type !== OpGraphNodeType.DEVICE_OP) {
+                if (node.type !== OpGraphNodeType.DEVICE_OP && node.type !== OpGraphNodeType.WEIGHT_GROUP) {
                     indexEntries.push({
                         id: node.id,
                         operationId: node.data.operationId,
@@ -645,12 +728,24 @@ const OperationGraphInner = ({
                     }
                 }
             }
+            // Sorted rather than taken in array order. The comment above calls this
+            // the operation sequence, and it was one only by accident of the builder
+            // emitting top-level nodes in that order -- fan members are emitted last,
+            // because React Flow needs a parent ahead of its children, so stepping
+            // back from one jumped to the end of the graph. Sorting states the
+            // property the index is read for instead of inheriting it. #2028
+            indexEntries.sort((left, right) => left.operationId - right.operationId);
             setNodeIndex(indexEntries);
             setNodeIdByOperationId(renderedByOpId);
             // A new array with the same detections rebuilds `deviceSubgraphs`, and
             // `runBuild` then loops.
             pendingEmptyPaneCheckRef.current = true;
             const nextBlocks = graph.blocks && graph.blocks.length > 0 ? graph.blocks : NO_BLOCKS;
+            const nextFans = graph.weightFans && graph.weightFans.length > 0 ? graph.weightFans : NO_BLOCKS;
+            // Same identity preservation as `detectedBlocks` below: a fresh array on
+            // every delivered build would churn `fanByMemberOperationId` and the two
+            // selectors reading it, on builds that changed nothing about fans.
+            setWeightFans((previous) => (areSameBlockSummaries(previous, nextFans) ? previous : nextFans));
             // "Fold all" is `[]`, which names no instance and so cannot go stale.
             // "Unroll all" is a list of ids, and that asymmetry is a bug: a rebuild
             // that renames an instance -- a deallocate first in a repeating unit, or
@@ -744,12 +839,23 @@ const OperationGraphInner = ({
         [getViewport, setViewport, paneChromeInset],
     );
 
+    // `getInternalNode` rather than `getNode`: a node inside a container carries a
+    // parent-relative `position`, and panning to that lands near the graph origin
+    // instead of on the node. The store already holds the resolved coordinate. #2028
+    const pannableNodeAt = useCallback(
+        (nodeId: string) => {
+            const internal = getInternalNode(nodeId);
+            return internal === undefined ? undefined : { ...internal, position: internal.internals.positionAbsolute };
+        },
+        [getInternalNode],
+    );
+
     const focusOperation = useCallback(
         (id: number) => {
-            const node = getNode(nodeIdByOperationId.get(id) ?? String(id));
+            const node = pannableNodeAt(nodeIdByOperationId.get(id) ?? String(id));
             panIntoView(node === undefined ? null : boundsOfNodes([node]));
         },
-        [getNode, nodeIdByOperationId, panIntoView],
+        [pannableNodeAt, nodeIdByOperationId, panIntoView],
     );
 
     // What the panel's Recenter button does, and the one mover that acts on an
@@ -758,7 +864,7 @@ const OperationGraphInner = ({
     // nothing in exactly the case it is pressed: while reading that node's panel.
     const centerOperation = useCallback(
         (id: number) => {
-            const node = getNode(nodeIdByOperationId.get(id) ?? String(id));
+            const node = pannableNodeAt(nodeIdByOperationId.get(id) ?? String(id));
             const pane = containerRef.current?.getBoundingClientRect();
             const bounds = node === undefined ? null : boundsOfNodes([node]);
             if (bounds === null || pane === undefined) {
@@ -768,14 +874,17 @@ const OperationGraphInner = ({
             const { dx, dy } = centerPanShift(bounds, viewport, pane, paneChromeInset(pane));
             void setViewport({ ...viewport, x: viewport.x + dx, y: viewport.y + dy }, { duration: FOCUS_DURATION_MS });
         },
-        [getNode, nodeIdByOperationId, getViewport, setViewport, paneChromeInset],
+        [pannableNodeAt, nodeIdByOperationId, getViewport, setViewport, paneChromeInset],
     );
 
     // The only place a zoom is chosen for the user. Reads the committed array, not
     // `getNode`, which trails `setNodes` and on entry silently framed nothing.
     const frameOnEntry = useCallback(
         (allNodes: readonly OpGraphFlowNode[], startId: number): boolean => {
-            const graph = boundsOfNodes(allNodes);
+            // Container children carry parent-relative positions, so the graph box
+            // and the start node both need resolving before they mean anything. #2028
+            const at = absolutePositionsOf(allNodes);
+            const graph = boundsOfNodes(allNodes, at);
             const startNode = allNodes.find(
                 (node) =>
                     node.data.operationId === startId ||
@@ -787,7 +896,7 @@ const OperationGraphInner = ({
             if (graph === null || pane === undefined || pane.width === 0 || pane.height === 0) {
                 return false;
             }
-            const start = startNode === undefined ? graph : (boundsOfNodes([startNode]) ?? graph);
+            const start = startNode === undefined ? graph : (boundsOfNodes([startNode], at) ?? graph);
             void setViewport(entryViewport(graph, start, pane, paneChromeInset(pane)), {
                 duration: FOCUS_DURATION_MS,
             });
@@ -816,7 +925,6 @@ const OperationGraphInner = ({
     // alternative is showing nothing. #2008
     useEffect(() => {
         const pane = containerRef.current?.getBoundingClientRect();
-        const bounds = boundsOfNodes(nodes);
         // Both read and cleared first. `isRebuildCommit` keeps a measurement commit
         // out entirely; `justFramed` covers the rebuild commit the entry frame
         // already handled, where `getViewport` is still pre-tween — the same fact
@@ -829,13 +937,20 @@ const OperationGraphInner = ({
         if (
             !isRebuildCommit ||
             justFramed ||
-            bounds === null ||
             pane === undefined ||
             pendingEntryFrameRef.current !== null ||
             pendingViewportAnchorRef.current !== null ||
-            pendingRevealRef.current !== null ||
-            intersectsPane(bounds, getViewport(), pane)
+            pendingRevealRef.current !== null
         ) {
+            return;
+        }
+        // Measured below the bail rather than above it. This effect runs on every
+        // commit, including each drag frame -- `styledNodes` hands back a fresh array
+        // — and resolving the container chain is two maps and an object per node over
+        // a set that reaches into the thousands once a device subgraph is expanded.
+        // Only a rebuild commit gets that far. #2028
+        const bounds = boundsOfNodes(nodes, absolutePositionsOf(nodes));
+        if (bounds === null || intersectsPane(bounds, getViewport(), pane)) {
             return;
         }
         panIntoView(bounds);
@@ -864,15 +979,22 @@ const OperationGraphInner = ({
         pendingRevealRef.current = null;
 
         let viewport = getViewport();
-        if (anchor !== null) {
+        // Resolved rather than read off the node: `armViewportAnchor` recorded the
+        // pane point through `pannableNodeAt`, which is absolute, so a container
+        // child's parent-relative `position` here would translate by the container's
+        // own offset. Reachable by expanding the device subgraph of an operation that
+        // is a member of an unrolled fan. #2028
+        const positions = anchor === null ? null : absolutePositionsOf(nodes);
+        if (anchor !== null && positions !== null) {
             const anchored =
                 nodes.find((node) => node.id === anchor.nodeId) ??
                 nodes.find((node) => node.id === anchor.fallbackNodeId);
-            if (anchored !== undefined) {
+            const at = anchored === undefined ? undefined : (positions.get(anchored.id) ?? anchored.position);
+            if (at !== undefined) {
                 viewport = {
                     zoom: viewport.zoom,
-                    x: anchor.paneX - anchored.position.x * viewport.zoom,
-                    y: anchor.paneY - anchored.position.y * viewport.zoom,
+                    x: anchor.paneX - at.x * viewport.zoom,
+                    y: anchor.paneY - at.y * viewport.zoom,
                 };
             }
         }
@@ -884,7 +1006,8 @@ const OperationGraphInner = ({
             const revealed = nodes.filter((node) => reveal.nodeIds.has(node.id));
             const pane = containerRef.current?.getBoundingClientRect();
             if (revealed.length > 0 && pane !== undefined) {
-                const bounds = boundsOfNodes(revealed);
+                // Unrolling a fan reveals its members, which are container children.
+                const bounds = boundsOfNodes(revealed, positions ?? absolutePositionsOf(nodes));
                 if (bounds !== null) {
                     const { dx, dy } = revealPanShift(bounds, viewport, pane, paneChromeInset(pane));
                     viewport = { ...viewport, x: viewport.x + dx, y: viewport.y + dy };
@@ -903,7 +1026,7 @@ const OperationGraphInner = ({
 
     const armViewportAnchor = useCallback(
         (nodeId: string, fallbackNodeId: string) => {
-            const node = getNode(nodeId) ?? getNode(fallbackNodeId);
+            const node = pannableNodeAt(nodeId) ?? pannableNodeAt(fallbackNodeId);
             if (!node) {
                 return;
             }
@@ -916,7 +1039,7 @@ const OperationGraphInner = ({
                 reportScope,
             };
         },
-        [getNode, getViewport, reportScope],
+        [pannableNodeAt, getViewport, reportScope],
     );
 
     const toggleOperationExpansion = useCallback(
@@ -942,7 +1065,18 @@ const OperationGraphInner = ({
 
     const toggleBlockExpansion = useCallback(
         (instanceId: string) => {
-            const block = detectedBlocks.find((entry) => entry.instanceId === instanceId);
+            // Both lists, because both reach this handler: the toolbar and a grouping
+            // block's pill name a `detectedBlocks` entry, and a fan's container pill
+            // and a double-click on a member name a fan. Looking in one of them left
+            // `block` undefined for every fan, which cost three things below -- the
+            // anchor fell back to the container id, unrolling revealed the container
+            // rather than the members it produces, and folding skipped the device-op
+            // cleanup, stranding a member's subgraph in `expandedOperationIds` where
+            // nothing draws it and every later build still ships it to the worker.
+            // Newly reachable here: before #2028 an unrolled fan could not be folded.
+            const block =
+                detectedBlocks.find((entry) => entry.instanceId === instanceId) ??
+                weightFans.find((entry) => entry.instanceId === instanceId);
             const firstOpId = block?.operationIds[0];
             armViewportAnchor(instanceId, firstOpId === undefined ? instanceId : String(firstOpId));
             // Highlight what this toggle *produces*: the member operations when
@@ -970,21 +1104,39 @@ const OperationGraphInner = ({
                     return next;
                 }
                 next.delete(instanceId);
-                // No fan cleanup here on purpose. Folding an unrolled fan has no route
-                // through this handler: `blockInstanceId` is set only on the collapsed
-                // block node, and `blockByMemberOperationId` is built from
-                // `detectedBlocks`, which holds no fans — so an unrolled fan's members
-                // link back to nothing. When #1987 makes fans first-class this becomes
-                // reachable, and the remembered ids that cover the folded fan's members
-                // have to be dropped with it, or the builder's merge carry re-opens it
-                // on the next build. #1988
+                // Deleting the id alone is not enough for a fan. The builder treats any
+                // remembered id whose membership covers these operations as "the reader
+                // opened this", so a decision recorded under the fan's pre-merge name
+                // survives the delete and re-opens it on the next build — the fan then
+                // never folds, however many times it is clicked. Both routes into this
+                // handler reach a fan now: the container's own pill, and a double-click
+                // on a member. #1988, #2028
+                const foldedFanMembers = weightFanMembersOf(instanceId);
+                if (foldedFanMembers !== null) {
+                    const covering = fanIdsCovering(next, foldedFanMembers);
+                    // A covering id can be holding more than this fan open. The
+                    // reader unrolls a merged fan, a grouping unroll splits it back
+                    // into the two it was made of, and one remembered superset is now
+                    // the only thing keeping either open -- so dropping it to fold one
+                    // folded the other too, which is the graph-wide reset this whole
+                    // change exists to stop. Each sibling is re-recorded under the name
+                    // it has now, before the shared one goes. #2028
+                    for (const fan of weightFans) {
+                        if (fan.instanceId !== instanceId && fanIdsCovering(covering, fan.operationIds).length > 0) {
+                            next.add(fan.instanceId);
+                        }
+                    }
+                    for (const remembered of covering) {
+                        next.delete(remembered);
+                    }
+                }
                 return next;
             });
             if (!isUnrolling && block !== undefined) {
                 setExpandedOperationIds((previous) => withoutBlockMembers(previous, [block]));
             }
         },
-        [armViewportAnchor, detectedBlocks, isBlockExpanded, reportScope],
+        [armViewportAnchor, detectedBlocks, weightFans, isBlockExpanded, reportScope],
     );
 
     const expandAllBlocks = useCallback(() => {
@@ -1037,11 +1189,32 @@ const OperationGraphInner = ({
     // reset either. #2015
     const handleHideDeallocateChange = setHideDeallocate;
 
-    if (operationId !== undefined && revealedOperationId !== operationId && detectedBlocks.length > 0) {
+    // A URL naming an operation inside a folded owner has to open that owner, or the
+    // link lands on a node the reader did not ask for and cannot see past. Both kinds
+    // of owner: a fan buries an operation exactly as a grouping block does, and asking
+    // only `detectedBlocks` meant a link into a folded fan showed the fan. Innermost
+    // first, so a member of a fan inside a block opens the fan. #2028
+    // Gated on a build having landed, because the latch below fires once: run before
+    // the first graph arrives and it records the op as handled while there is nothing
+    // to unroll it out of.
+    if (
+        operationId !== undefined &&
+        revealedOperationId !== operationId &&
+        (detectedBlocks.length > 0 || weightFans.length > 0)
+    ) {
         setRevealedOperationId(operationId);
-        const buried = blockByMemberOperationId.get(operationId);
-        if (buried !== undefined && !isBlockExpanded(buried.instanceId)) {
-            setExpandedBlockIds(new Set([...(expandedBlockIds ?? []), buried.instanceId]));
+        const buried = ownersOf(operationId).find((owner) => !isBlockExpanded(owner.instanceId));
+        if (buried !== undefined) {
+            // `null` is "nothing has been folded", which renders every grouping block
+            // unrolled -- so writing a set naming only this owner folds all of them.
+            // The same materialisation `toggleBlockExpansion` does, and for the same
+            // reason. Unreachable while only a grouping block could be the buried
+            // owner, because a folded one already implies a non-null set; a fan is
+            // folded by default and gets here with `null` still in place. #2028
+            setExpandedBlockIds(
+                (previous) =>
+                    new Set([...(previous ?? detectedBlocks.map((entry) => entry.instanceId)), buried.instanceId]),
+            );
         }
     }
 
@@ -1400,11 +1573,17 @@ const OperationGraphInner = ({
             // operation holding it — React Flow renders children as siblings, so
             // without this they would dim inside a lit parent and read as a
             // rendering fault rather than as "these didn't match".
+            //
+            // A fan's container follows its members, which is the same clause read
+            // the other way up: the container is chrome and cannot match, so a search
+            // for a weight load left a ghost box at 18% around two fully lit nodes.
+            // #2028
             if (
                 matchedIds &&
                 (isSelected ||
                     matchedIds.has(node.id) ||
-                    (node.type === OpGraphNodeType.DEVICE_OP && matchedIds.has(String(node.data.operationId))))
+                    (node.type === OpGraphNodeType.DEVICE_OP && matchedIds.has(String(node.data.operationId))) ||
+                    (node.type === OpGraphNodeType.WEIGHT_GROUP && fanContainerEnclosesMatch(node.id, matchedIds)))
             ) {
                 classNames.push(MATCHED_NODE_CLASS);
             }
@@ -1493,6 +1672,13 @@ const OperationGraphInner = ({
 
     const handleNodeClick = useCallback(
         (_event: ReactMouseEvent, node: OpGraphFlowNode) => {
+            // React Flow still reports a click on a node it will not select, and the
+            // fan container's `operationId` is its first member — so without this the
+            // box answered for one of the nodes inside it. Its fold pill is the only
+            // thing on it that does anything. #2028
+            if (node.type === OpGraphNodeType.WEIGHT_GROUP) {
+                return;
+            }
             selectOperation(node.data.operationId);
         },
         [selectOperation],
@@ -1504,12 +1690,15 @@ const OperationGraphInner = ({
                 toggleBlockExpansion(node.data.blockInstanceId);
                 return;
             }
-            const instance = blockByMemberOperationId.get(node.data.operationId);
-            if (instance !== undefined && isBlockExpanded(instance.instanceId)) {
+            // The innermost open owner. Taking the first map to answer folded the
+            // grouping block a fan member happened to sit in, rather than the fan
+            // whose container is drawn around the node the reader clicked.
+            const instance = ownersOf(node.data.operationId).find((owner) => isBlockExpanded(owner.instanceId));
+            if (instance !== undefined) {
                 toggleBlockExpansion(instance.instanceId);
             }
         },
-        [blockByMemberOperationId, isBlockExpanded, toggleBlockExpansion],
+        [ownersOf, isBlockExpanded, toggleBlockExpansion],
     );
 
     const handlePaneClick = useCallback(() => {
@@ -1547,6 +1736,14 @@ const OperationGraphInner = ({
     }, [isPerfOverlayActive]);
 
     const handleNodeMouseEnter = useCallback((event: ReactMouseEvent, node: OpGraphFlowNode) => {
+        // The same reason the click path ignores it: the container's `operationId` is
+        // its first member's, so a hover over the box reported that member's duration
+        // and rank as though the box were an operation. Cleared rather than returned,
+        // so a tooltip the previous node left behind does not sit over chrome. #2028
+        if (node.type === OpGraphNodeType.WEIGHT_GROUP) {
+            setPerfHover(null);
+            return;
+        }
         const bounds = containerBoundsRef.current ?? containerRef.current?.getBoundingClientRect();
         if (!bounds) {
             return;
@@ -1582,9 +1779,20 @@ const OperationGraphInner = ({
         if (selectedOperationId === null) {
             return null;
         }
-        const owner = blockByMemberOperationId.get(selectedOperationId);
-        return owner !== undefined && !isBlockExpanded(owner.instanceId) ? owner : null;
-    }, [selectedOperationId, blockByMemberOperationId, isBlockExpanded]);
+        // The folded owner, because only that one is the node on screen. Picking by
+        // insertion order described a block the reader cannot see, so the panel fell
+        // through to the operation and a clicked fan reported its first member while
+        // the pill carried the selection ring.
+        //
+        // Outermost of them, the reverse of what the fold gesture wants, and the one
+        // case where the two differ: folding a grouping block updates
+        // `expandedBlockIds` a render before the rebuild that stops the fan forming,
+        // so for that render both owners are folded. The block is the answer there —
+        // it is what the reader just folded, and the fan is about to be absorbed into
+        // it. #2028
+        const folded = ownersOf(selectedOperationId).filter((owner) => !isBlockExpanded(owner.instanceId));
+        return folded.at(-1) ?? null;
+    }, [selectedOperationId, ownersOf, isBlockExpanded]);
 
     const selectedPerfAggregate =
         selectedOperationId === null ? undefined : perfOverlay.aggregatesByOpId.get(selectedOperationId);

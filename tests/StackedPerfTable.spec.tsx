@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import '@testing-library/jest-dom/vitest';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, render, screen, within } from '@testing-library/react';
 import { Mock, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import StackedPerformanceTable from '../src/components/performance/StackedPerfTable';
 import { StackedColumnKeys, TypedStackedPerfRow } from '../src/definitions/StackedPerfTable';
@@ -77,5 +77,15 @@ describe('StackedPerformanceTable loading state', () => {
 
         expect(screen.queryByTestId(TEST_IDS.PERF_TABLE_SKELETON)).toBeNull();
         expect(screen.getByText('No data to display')).toBeInTheDocument();
+    });
+});
+
+describe('StackedPerformanceTable layout', () => {
+    it('renders the table inside the scroll region the sticky header pins to', () => {
+        renderStacked({ stackedData: [stackedRow('Matmul')] });
+
+        const region = screen.getByRole('region', { name: 'Performance table' });
+        expect(region).toHaveClass('perf-table-scroll');
+        expect(within(region).getByRole('table').querySelector('thead')).toHaveClass('table-header');
     });
 });

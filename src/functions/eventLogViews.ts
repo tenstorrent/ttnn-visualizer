@@ -93,3 +93,7 @@ export function getEventLogView(location: Pick<Location, 'pathname' | 'state'>):
 export function recordViewOpened(view: EventLogView): void {
     recordEvent({ event: EventLogEvent.VIEW_OPENED, details: { view } });
 }
+
+export function recordViewEngaged(view: EventLogView): void {
+    recordEvent({ event: EventLogEvent.VIEW_ENGAGED, details: { view } });
+}
