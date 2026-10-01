@@ -4,6 +4,7 @@
 
 @use '../definitions/colours' as *;
 @use '../mixins/scrollShade' as scrollShade;
+@use '../mixins/lateDeallocMarker' as lateDeallocMarker;
 
 $label-width: 160px;
 $label-margin: 20px;
@@ -319,8 +320,7 @@ $badge-min-width: 22px;
 
     .late-dealloc-badge,
     .late-dealloc-rail-dot {
-        background-color: $tt-yellow;
-        color: $tt-black;
+        @include lateDeallocMarker.late-dealloc-marker-colours;
     }
 
     .list-container {

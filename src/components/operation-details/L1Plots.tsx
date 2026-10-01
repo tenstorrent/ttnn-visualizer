@@ -11,7 +11,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import MemoryPlotRenderer from './MemoryPlotRenderer';
 import { OperationDetails } from '../../model/OperationDetails';
 import { MemoryLegendElement } from './MemoryLegendElement';
-import { selectedAddressAtom, showMemoryRegionsAtom } from '../../store/app';
+import { selectedAddressAtom, showDeallocationReportAtom, showMemoryRegionsAtom } from '../../store/app';
 import {
     BufferRenderConfiguration,
     CBRenderConfiguration,
@@ -57,6 +57,7 @@ function L1Plots({
     const l1SmallMarker = useGetL1SmallMarker();
     const l1StartMarker = useGetL1StartMarker();
     const showMemoryRegions = useAtomValue(showMemoryRegionsAtom);
+    const showDeallocationReport = useAtomValue(showDeallocationReportAtom);
     const selectedAddress = useAtomValue(selectedAddressAtom);
     const { chartData, memory, fragmentation, cbChartData, cbChartDataByOperation, bufferChartDataByOperation } =
         operationDetails.memoryData();
@@ -132,6 +133,15 @@ function L1Plots({
     const memoryReportWithCB: FragmentationEntry[] = [...memoryReport, ...collapsedCbEntries].sort(
         (a, b) => a.address - b.address,
     );
+
+    // Resolved here rather than inside the legend element: DRAM rows share the same
+    // `operationDetails`, and the report only describes L1 tensors. CB rows are
+    // skipped because a globally allocated CB sits at its tensor's address, and
+    // marking it would report the one held tensor twice.
+    const getLegendLateDeallocation = (chunk: FragmentationEntry) =>
+        showDeallocationReport && chunk.markerType !== MarkerType.CB
+            ? (operationDetails.getLateDeallocationForAddress(chunk.address) ?? undefined)
+            : undefined;
 
     // keeping for now, to make sure nothing breaks
     // const bufferZoomRangeStart = Math.min(...bufferMemory.map((chunk) => chunk.address));
@@ -332,12 +342,14 @@ function L1Plots({
                             userL1ZoomRange={userL1ZoomRange}
                             isGloballyAllocated={chunk.globallyAllocated === true}
                             deviceCount={chunk.deviceCount}
+                            lateDeallocation={getLegendLateDeallocation(chunk)}
                         />
                     ))}
 
                 {!showCircularBuffer &&
                     memoryReport?.map((chunk, chunkIndex) => {
                         const group = groupedMemoryReport.get(chunk.address);
+                        const lateDeallocation = getLegendLateDeallocation(chunk);
 
                         return Array.isArray(group) && group?.length > 1 ? (
                             <MemoryLegendGroup
@@ -348,6 +360,7 @@ function L1Plots({
                                 operationDetails={operationDetails}
                                 onLegendClick={onLegendClick}
                                 userL1ZoomRange={userL1ZoomRange}
+                                lateDeallocation={lateDeallocation}
                             />
                         ) : (
                             <MemoryLegendElement
@@ -358,6 +371,7 @@ function L1Plots({
                                 operationDetails={operationDetails}
                                 onLegendClick={onLegendClick}
                                 userL1ZoomRange={userL1ZoomRange}
+                                lateDeallocation={lateDeallocation}
                             />
                         );
                     })}

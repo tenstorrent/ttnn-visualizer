@@ -31,7 +31,7 @@ import { scrollVirtualizerToIndex } from '../../functions/scrollVirtualizerToInd
 import { NavigationRailItem, RAIL_MAX_DOTS } from '../../definitions/NavigationRail';
 import NavigationRail from './NavigationRail';
 import LateDeallocationBadge from './LateDeallocationBadge';
-import LateDeallocationGlyph from './LateDeallocationGlyph';
+import LateDeallocationGlyph from '../LateDeallocationGlyph';
 import { TEST_IDS } from '../../definitions/TestIds';
 
 interface BufferSummaryVirtualizedListProps {

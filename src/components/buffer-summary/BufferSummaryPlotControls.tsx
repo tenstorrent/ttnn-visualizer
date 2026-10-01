@@ -2,9 +2,10 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { HTMLSelect, Intent, NumericInput, PopoverPosition, Switch, Tag, Tooltip } from '@blueprintjs/core';
+import { HTMLSelect, NumericInput, PopoverPosition, Switch, Tooltip } from '@blueprintjs/core';
 import { useAtom, useAtomValue } from 'jotai';
 import GlobalSwitch from '../GlobalSwitch';
+import LateDeallocationControl from '../LateDeallocationControl';
 import {
     renderMemoryLayoutAtom,
     selectedBufferSummaryTabAtom,
@@ -132,37 +133,15 @@ const BufferSummaryPlotControls = ({ lateDeallocationRunCount = 0 }: BufferSumma
             />
 
             {selectedTabId === TAB_IDS.L1 ? (
-                <div className='late-dealloc-control'>
-                    <GlobalSwitch
-                        label='Mark late tensor deallocations'
-                        checked={showDeallocationReport && hasLateDeallocations}
-                        onChange={() => {
-                            setShowDeallocationReport(!showDeallocationReport);
-                        }}
-                        disabled={!hasLateDeallocations}
-                    />
-                    <Tooltip
-                        content={lateDeallocationCountSummary}
-                        placement={PopoverPosition.BOTTOM}
-                    >
-                        <Tag
-                            // Warning colour asserts there is something to look
-                            // at, so a zero stays neutral rather than dressing
-                            // an all-clear as a finding.
-                            intent={hasLateDeallocations ? Intent.WARNING : Intent.NONE}
-                            minimal
-                            round
-                            // The tag renders a bare numeral, and the tooltip
-                            // that explains it only wires `aria-describedby`
-                            // while its popover is open — so without a name of
-                            // its own the count is announced as just a number.
-                            aria-label={lateDeallocationCountSummary}
-                            data-testid={TEST_IDS.LATE_DEALLOC_COUNT}
-                        >
-                            {lateDeallocationRunCount}
-                        </Tag>
-                    </Tooltip>
-                </div>
+                <LateDeallocationControl
+                    count={lateDeallocationRunCount}
+                    countSummary={lateDeallocationCountSummary}
+                    checked={showDeallocationReport && hasLateDeallocations}
+                    onChange={() => {
+                        setShowDeallocationReport(!showDeallocationReport);
+                    }}
+                    disabled={!hasLateDeallocations}
+                />
             ) : null}
 
             <GlobalSwitch

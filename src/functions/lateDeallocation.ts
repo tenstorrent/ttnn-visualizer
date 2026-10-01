@@ -301,6 +301,18 @@ export const getLateDeallocationCountSummary = (runStartCount: number): string =
         runStartCount === 1 ? 'operation' : 'operations'
     } where a tensor starts being held past its last use`;
 
+/**
+ * Tooltip for the count shown beside the Operation Details toggle.
+ *
+ * Counts tensors rather than run starts: one operation can't open a run, it
+ * can only be inside one, so the question there is how many tensors are being
+ * held at this point.
+ */
+export const getOperationLateDeallocationCountSummary = (tensorCount: number): string =>
+    `${tensorCount} ${tensorCount === 1 ? 'tensor' : 'tensors'} held past ${
+        tensorCount === 1 ? 'its' : 'their'
+    } last use at this operation`;
+
 export interface CoalesceLateDeallocationRunStartsParams {
     runStarts: readonly LateDeallocationRunStart[];
     /** Rows the rail spans; dots are placed by `rowIndex / rowCount`. */

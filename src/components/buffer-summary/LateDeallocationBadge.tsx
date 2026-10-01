@@ -7,7 +7,7 @@ import { Tooltip } from '@blueprintjs/core';
 import { TensorDeallocationReport } from '../../model/BufferSummary';
 import { getLateDeallocationSummary } from '../../functions/lateDeallocation';
 import { TEST_IDS } from '../../definitions/TestIds';
-import LateDeallocationGlyph from './LateDeallocationGlyph';
+import LateDeallocationGlyph from '../LateDeallocationGlyph';
 
 interface LateDeallocationBadgeProps {
     operationId: number;
