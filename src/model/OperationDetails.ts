@@ -59,7 +59,12 @@ export class OperationDetails implements Partial<OperationDetailsData> {
 
     private operations: OperationDescription[] = [];
 
-    private deallocationReport: TensorDeallocationReport[] = [];
+    /**
+     * Keyed by address because that is how buffers find their report. Built
+     * from L1 buffers only (`useCreateTensorsByOperationByIdList`), so other
+     * memory spaces must not consult it — an address there means something else.
+     */
+    private lateDeallocationByAddress: Map<number, TensorDeallocationReport> = new Map();
 
     public deviceOperations: DeviceOperation[] = [];
 
@@ -155,7 +160,7 @@ export class OperationDetails implements Partial<OperationDetailsData> {
         this.stack_trace = data.stack_trace;
         this.operations = operations;
         this.raw_device_operations = data.device_operations;
-        this.deallocationReport = deallocationReport;
+        this.lateDeallocationByAddress = new Map(deallocationReport.map((report) => [report.address, report]));
         // TODO: something in merge device ids is breaking the render. since we are not using device id atm its removed from the stack temporarily
         // this.device_operations = OperationDetails.mergeDevices(this.preprocessConnections(data.device_operations));
         this.device_operations = this.preprocessConnections(data.device_operations);
@@ -329,6 +334,16 @@ export class OperationDetails implements Partial<OperationDetailsData> {
         return this.l1_sizes?.[0] || L1_DEFAULT_MEMORY_SIZE;
     }
 
+    /** The L1 tensor at `address` still held past its last use, if any. */
+    getLateDeallocationForAddress(address: number): TensorDeallocationReport | null {
+        return this.lateDeallocationByAddress.get(address) ?? null;
+    }
+
+    /** Tensors held past their last use at this operation, counted once each. */
+    get lateDeallocationCount(): number {
+        return new Set([...this.lateDeallocationByAddress.values()].map((report) => report.id)).size;
+    }
+
     getTensorForAddress(address: number): Tensor | null {
         return this.tensorListByAddress.get(address) || null;
     }
@@ -398,9 +413,11 @@ export class OperationDetails implements Partial<OperationDetailsData> {
             this.buffers
                 ?.filter((buffer: BufferData) => buffer.buffer_type === bufferType)
                 .map((buffer: BufferData) => {
-                    const lateDeallocation = this.deallocationReport.some(
-                        (report) => report.address === buffer.address,
-                    );
+                    // The report only describes L1, so matching a DRAM or L1 Small
+                    // address against it hatched unrelated buffers that happened to
+                    // share an L1 tensor's address. #1862
+                    const lateDeallocation =
+                        bufferType === BufferType.L1 && this.lateDeallocationByAddress.has(buffer.address);
 
                     return {
                         address: buffer.address,

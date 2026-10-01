@@ -1,0 +1,13 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
+
+@use '../definitions/colours' as *;
+
+// Colour of every late-deallocation marker: the Buffer Summary gutter badge and
+// rail dots, and the Operation Details legend marker. One global switch draws
+// them all, so they share one identity here; shape stays with each widget.
+@mixin late-dealloc-marker-colours {
+    background-color: $tt-yellow;
+    color: $tt-black;
+}

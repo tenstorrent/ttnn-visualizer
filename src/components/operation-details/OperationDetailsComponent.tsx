@@ -33,6 +33,7 @@ import ProducerConsumersData from './ProducerConsumersData';
 import isValidNumber from '../../functions/isValidNumber';
 import TensorVisualisationComponent from '../tensor-sharding-visualization/TensorVisualisationComponent';
 import GlobalSwitch from '../GlobalSwitch';
+import LateDeallocationControl from '../LateDeallocationControl';
 import GraphComponent from './DeviceOperationsGraphComponent';
 import { BufferType } from '../../model/BufferType';
 import DRAMPlots from './DRAMPlots';
@@ -45,6 +46,7 @@ import { StackTraceLanguage } from '../../definitions/StackTrace';
 import { L1_DEFAULT_MEMORY_SIZE } from '../../definitions/L1MemorySize';
 import MemoryPlotRenderer from './MemoryPlotRenderer';
 import { getMemoryAddress } from '../../functions/math';
+import { getOperationLateDeallocationCountSummary } from '../../functions/lateDeallocation';
 import useMemoryZoomRange from '../../hooks/useMemoryZoomRange';
 
 interface OperationDetailsProps {
@@ -104,7 +106,7 @@ const OperationDetailsComponent = ({ operationId }: OperationDetailsProps) => {
     let memory: ZoomMemoryChunk[] = [];
 
     if (hasOperationDetails) {
-        const deallocationReport = lateDeallocationsByOperation.get(operation?.id || -1) || [];
+        const deallocationReport = lateDeallocationsByOperation.get(operationId) ?? [];
 
         details = new OperationDetails(
             operationDetails,
@@ -251,8 +253,12 @@ const OperationDetailsComponent = ({ operationId }: OperationDetailsProps) => {
                                     setShowCircularBuffer(!showCircularBuffer);
                                 }}
                             />
-                            <GlobalSwitch
-                                label='Mark late tensor deallocations'
+                            {/* Never disabled, unlike Buffer Summary's: the switch is global and
+                                this view shows one operation, so a clean operation would leave it
+                                reading "off" and untoggleable while it is on everywhere else. */}
+                            <LateDeallocationControl
+                                count={details.lateDeallocationCount}
+                                countSummary={getOperationLateDeallocationCountSummary(details.lateDeallocationCount)}
                                 checked={showDeallocationReport}
                                 onChange={() => {
                                     setShowDeallocationReport(!showDeallocationReport);

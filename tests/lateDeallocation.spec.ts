@@ -13,6 +13,7 @@ import {
     getLateDeallocationCountSummary,
     getLateDeallocationReport,
     getLateDeallocationSummary,
+    getOperationLateDeallocationCountSummary,
     selectLateDeallocationRunStarts,
 } from '../src/functions/lateDeallocation';
 import { LATE_DEALLOC_OPPORTUNITY_TEXT } from '../src/definitions/LateDeallocation';
@@ -515,5 +516,23 @@ describe('coalesceLateDeallocationRunStarts', () => {
         expect(
             coalesceLateDeallocationRunStarts({ runStarts: [buildRunStart(1, 0, 1)], rowCount: 0, maxDots: 300 }),
         ).toEqual([]);
+    });
+});
+
+describe('getOperationLateDeallocationCountSummary', () => {
+    it('uses the singular for one tensor', () => {
+        expect(getOperationLateDeallocationCountSummary(1)).toBe('1 tensor held past its last use at this operation');
+    });
+
+    it('uses the plural for several tensors', () => {
+        expect(getOperationLateDeallocationCountSummary(3)).toBe(
+            '3 tensors held past their last use at this operation',
+        );
+    });
+
+    it('uses the plural for zero, so a clean operation still explains the count', () => {
+        expect(getOperationLateDeallocationCountSummary(0)).toBe(
+            '0 tensors held past their last use at this operation',
+        );
     });
 });
