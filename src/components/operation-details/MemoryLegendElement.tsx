@@ -52,7 +52,7 @@ interface MemoryLegendElementProps {
      * The tensor at this row held past its last use. Resolved by the caller,
      * which knows the row's memory space — the report only describes L1 (#1862).
      */
-    lateDeallocation?: TensorDeallocationReport | null;
+    lateDeallocation?: TensorDeallocationReport;
 }
 
 export const MemoryLegendElement = ({
@@ -71,7 +71,7 @@ export const MemoryLegendElement = ({
     userL1ZoomRange,
     isGloballyAllocated = false,
     deviceCount = 1,
-    lateDeallocation = null,
+    lateDeallocation,
 }: MemoryLegendElementProps) => {
     const showHex = useAtomValue(showHexAtom);
     const selectedBufferColour = useAtomValue(selectedBufferColourAtom);

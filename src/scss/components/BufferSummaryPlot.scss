@@ -4,7 +4,7 @@
 
 @use '../definitions/colours' as *;
 @use '../mixins/scrollShade' as scrollShade;
-@use '../mixins/lateDeallocMarker';
+@use '../mixins/lateDeallocMarker' as lateDeallocMarker;
 
 $label-width: 160px;
 $label-margin: 20px;

@@ -19,7 +19,7 @@ interface MemoryLegendGroupProps {
     onLegendClick: (selectedTensorAddress: number, tensorId?: number, colorVariance?: number) => void;
     userL1ZoomRange?: [number, number];
     /** Marks the header only: the rows beneath are per-device copies of one tensor. */
-    lateDeallocation?: TensorDeallocationReport | null;
+    lateDeallocation?: TensorDeallocationReport;
 }
 
 export const MemoryLegendGroup = ({
@@ -30,7 +30,7 @@ export const MemoryLegendGroup = ({
     operationDetails,
     onLegendClick,
     userL1ZoomRange,
-    lateDeallocation = null,
+    lateDeallocation,
 }: MemoryLegendGroupProps) => {
     const [isOpen, setIsOpen] = useState(false);
 

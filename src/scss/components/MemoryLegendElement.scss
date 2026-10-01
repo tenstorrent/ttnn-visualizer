@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 @use '../definitions/colours' as *;
-@use '../mixins/lateDeallocMarker';
+@use '../mixins/lateDeallocMarker' as lateDeallocMarker;
 
 .group-header {
     display: inline-flex;

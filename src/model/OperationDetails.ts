@@ -413,9 +413,8 @@ export class OperationDetails implements Partial<OperationDetailsData> {
             this.buffers
                 ?.filter((buffer: BufferData) => buffer.buffer_type === bufferType)
                 .map((buffer: BufferData) => {
-                    // The report only describes L1, so matching a DRAM or L1 Small
-                    // address against it hatched unrelated buffers that happened to
-                    // share an L1 tensor's address. #1862
+                    // The report only describes L1: an address match in DRAM or
+                    // L1 Small is a coincidence, not a finding.
                     const lateDeallocation =
                         bufferType === BufferType.L1 && this.lateDeallocationByAddress.has(buffer.address);
 

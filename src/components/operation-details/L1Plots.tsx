@@ -140,8 +140,8 @@ function L1Plots({
     // marking it would report the one held tensor twice.
     const getLegendLateDeallocation = (chunk: FragmentationEntry) =>
         showDeallocationReport && chunk.markerType !== MarkerType.CB
-            ? operationDetails.getLateDeallocationForAddress(chunk.address)
-            : null;
+            ? (operationDetails.getLateDeallocationForAddress(chunk.address) ?? undefined)
+            : undefined;
 
     // keeping for now, to make sure nothing breaks
     // const bufferZoomRangeStart = Math.min(...bufferMemory.map((chunk) => chunk.address));

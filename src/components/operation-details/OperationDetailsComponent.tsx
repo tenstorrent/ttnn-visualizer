@@ -155,6 +155,7 @@ const OperationDetailsComponent = ({ operationId }: OperationDetailsProps) => {
         );
     }
     const l1Small = details.memoryData(BufferType.L1_SMALL);
+    const { lateDeallocationCount } = details;
     const { cbChartDataByOperation, chartData } = l1MemoryData;
 
     const onDramDeltaClick = (event: Readonly<PlotMouseEventCustom>): void => {
@@ -257,8 +258,8 @@ const OperationDetailsComponent = ({ operationId }: OperationDetailsProps) => {
                                 this view shows one operation, so a clean operation would leave it
                                 reading "off" and untoggleable while it is on everywhere else. */}
                             <LateDeallocationControl
-                                count={details.lateDeallocationCount}
-                                countSummary={getOperationLateDeallocationCountSummary(details.lateDeallocationCount)}
+                                count={lateDeallocationCount}
+                                countSummary={getOperationLateDeallocationCountSummary(lateDeallocationCount)}
                                 checked={showDeallocationReport}
                                 onChange={() => {
                                     setShowDeallocationReport(!showDeallocationReport);
