@@ -7,13 +7,14 @@ import { IconNames } from '@blueprintjs/icons';
 import { ChangeEvent, useEffect, useMemo, useState } from 'react';
 
 import { useQueryClient } from '@tanstack/react-query';
-import { useAtom } from 'jotai';
+import { useAtom, useSetAtom } from 'jotai';
 import useLocalConnection from '../../hooks/useLocal';
 import {
     activePerformanceReportAtom,
     activeProfilerReportAtom,
     performanceReportLocationAtom,
     profilerReportLocationAtom,
+    reportLinksAtom,
 } from '../../store/app';
 import { ConnectionStatus, ConnectionTestStates } from '../../definitions/ConnectionStatus';
 import {
@@ -44,6 +45,8 @@ import {
 } from '../../hooks/useAPI';
 import { useActivatingReport } from '../../hooks/useActivatingReport';
 import { useReportLinkBadgeIds } from '../../hooks/useReportLinkBadgeIds';
+import { getReportId, removeReportLinksFor } from '../../functions/reportLinks';
+import { ReportLinkRole } from '../../definitions/ReportLinks';
 import LocalFolderPicker from './LocalFolderPicker';
 import { ReportFolder, ReportLocation } from '../../definitions/Reports';
 import {
@@ -105,6 +108,7 @@ interface DeleteReportOptions {
     folderQueryKey: string;
     failedTitle: string;
     deletedTitle: string;
+    linkRole: ReportLinkRole;
     isActive: boolean;
     clearActive: () => void;
 }
@@ -116,6 +120,7 @@ const LocalFolderOptions = () => {
     const [activeProfilerReport, setActiveProfilerReport] = useAtom(activeProfilerReportAtom);
     const [activePerformanceReport, setActivePerformanceReport] = useAtom(activePerformanceReportAtom);
     const { isActivatingReport, withActivatingReport } = useActivatingReport();
+    const setReportLinks = useSetAtom(reportLinksAtom);
 
     const {
         uploadLocalFolder,
@@ -318,6 +323,10 @@ const LocalFolderOptions = () => {
             return;
         }
 
+        // Same id derivation as recording, so a synced folder prunes under its syncedName.
+        const reportId = getReportId(folder.syncedName, folder.path);
+        setReportLinks((links) => removeReportLinksFor(links, options.linkRole, reportId));
+
         await queryClient.invalidateQueries({ queryKey: [options.folderQueryKey] });
 
         createToastNotification(options.deletedTitle, folder.reportName, ToastType.INFO);
@@ -333,6 +342,7 @@ const LocalFolderOptions = () => {
             folderQueryKey: PROFILER_FOLDER_QUERY_KEY,
             failedTitle: MEMORY_REPORT_DELETE_FAILED_TOAST_TITLE,
             deletedTitle: MEMORY_REPORT_DELETED_TOAST_TITLE,
+            linkRole: ReportLinkRole.PROFILER,
             isActive: activeProfilerReport?.path === folder.path,
             clearActive: () => {
                 setActiveProfilerReport(null);
@@ -360,6 +370,7 @@ const LocalFolderOptions = () => {
             folderQueryKey: PERFORMANCE_FOLDER_QUERY_KEY,
             failedTitle: PERFORMANCE_REPORT_DELETE_FAILED_TOAST_TITLE,
             deletedTitle: PERFORMANCE_REPORT_DELETED_TOAST_TITLE,
+            linkRole: ReportLinkRole.PERFORMANCE,
             isActive: activePerformanceReport?.path === folder.path,
             clearActive: () => {
                 setActivePerformanceReport(null);
