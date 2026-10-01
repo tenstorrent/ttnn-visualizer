@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { defineConfig, mergeConfig } from 'vitest/config';
+import { configDefaults, defineConfig, mergeConfig } from 'vitest/config';
 import path from 'path';
 import viteConfig from './vite.config';
 
@@ -13,6 +13,9 @@ export default defineConfig((configEnv) =>
             test: {
                 setupFiles: ['./vitest.setup.ts'],
                 environment: 'jsdom',
+                // Setting `exclude` replaces Vitest's defaults, so keep them. Agent worktrees under
+                // .claude/worktrees are full checkouts whose specs would otherwise run alongside ours.
+                exclude: [...configDefaults.exclude, '.claude/worktrees/**'],
                 server: {
                     deps: {
                         // react-plotly.js imports 'plotly.js/dist/plotly' without an extension, which Node's ESM resolver rejects
