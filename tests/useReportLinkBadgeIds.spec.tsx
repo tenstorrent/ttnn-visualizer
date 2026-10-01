@@ -11,25 +11,16 @@ import { useReportLinkBadgeIds } from '../src/hooks/useReportLinkBadgeIds';
 import type { ReportLink } from '../src/model/ReportLinks';
 import { activePerformanceReportAtom, activeProfilerReportAtom, reportLinksAtom } from '../src/store/app';
 import { AtomProvider, type AtomProviderInitialValues } from './helpers/atomProvider';
+import { PERFORMANCE_REPORT, PROFILER_REPORT, createReportLink } from './helpers/reportLinkFixtures';
 
-const PROFILER = { path: '/data/local/profiler-reports/mem-run', reportName: 'mem-run' };
-const PERFORMANCE = { path: '/data/local/performance-reports/perf-run', reportName: 'perf-run' };
-
-function link(overrides: Partial<ReportLink>): ReportLink {
-    return {
-        profilerId: 'mem-run',
-        performanceId: 'perf-run',
-        status: ReportPairLinkStatus.LINKED,
-        recordedAt: 0,
-        ...overrides,
-    };
-}
+// Defaults to the active pair, so each case overrides only the side it is about.
+const link = (overrides: Partial<ReportLink>): ReportLink => createReportLink('mem-run', 'perf-run', overrides);
 
 function renderBadgeIds(links: ReportLink[], remoteHost?: string | null) {
     const initialValues = [
         [reportLinksAtom, links],
-        [activeProfilerReportAtom, PROFILER],
-        [activePerformanceReportAtom, PERFORMANCE],
+        [activeProfilerReportAtom, PROFILER_REPORT],
+        [activePerformanceReportAtom, PERFORMANCE_REPORT],
     ] as AtomProviderInitialValues;
 
     return renderHook(() => useReportLinkBadgeIds(remoteHost === undefined ? undefined : { remoteHost }), {

@@ -11,7 +11,8 @@ import getAllButtonsWithText from './helpers/getAllButtonsWithText';
 import mockInstanceEmpty from './data/mockInstanceEmpty.json';
 import mockProfilerFolderList from './data/mockProfilerFolderList.json';
 import mockPerformanceReportFolders from './data/mockPerformanceReportFolders.json';
-import { ReportFolder } from '../src/definitions/Reports';
+import { ReportFolder, ReportLocation } from '../src/definitions/Reports';
+import { getReportId } from '../src/functions/reportLinks';
 import LocalFolderSelector from '../src/components/report-selection/LocalFolderSelector';
 import { CONFIRM_DELETE_LABEL, ManagedEntity } from '../src/definitions/ManagedEntity';
 import {
@@ -24,7 +25,18 @@ import {
 import { ConnectionTestStates } from '../src/definitions/ConnectionStatus';
 import { TEST_IDS } from '../src/definitions/TestIds';
 import { getDeleteActionLabel } from '../src/functions/managedEntityLabels';
-import { isActivatingReportAtom } from '../src/store/app';
+import {
+    activePerformanceReportAtom,
+    activeProfilerReportAtom,
+    isActivatingReportAtom,
+    performanceReportLocationAtom,
+    profilerReportLocationAtom,
+    reportLinksAtom,
+} from '../src/store/app';
+import { ReportLinkMatchResult } from '../src/definitions/ReportLinks';
+import usePersistReportLinks from '../src/hooks/usePersistReportLinks';
+import { ReportLinksProbe } from './helpers/ReportLinksProbe';
+import { createReportLink, getProbedReportLinks } from './helpers/reportLinkFixtures';
 import testForPortal from './helpers/testForPortal';
 import createMockFile, { MOCK_FOLDER } from './helpers/createMockFile';
 import { ReportKind, ReportLoadFailureReason, ReportSource } from '../src/definitions/EventLogEvent';
@@ -52,7 +64,7 @@ const {
     mockUpdateInstance: vi.fn(),
     mockDeleteProfiler: vi.fn(),
     mockDeletePerformance: vi.fn(),
-    mockProfilerFolders: [] as { path: string; reportName: string }[],
+    mockProfilerFolders: [] as { path: string; reportName: string; syncedName?: string }[],
     mockUploadLocalFolder: vi.fn(),
     mockUploadLocalPerformanceFolder: vi.fn(),
     getUploadSizeLimitError: vi.fn(),
@@ -94,6 +106,9 @@ vi.mock('../src/functions/reportLoadEvents', async (importOriginal) => {
 });
 
 vi.mock('../src/functions/getUploadSizeLimitError', () => ({ default: getUploadSizeLimitError }));
+
+// Only the recorder harness below reads the match; the selector itself never does.
+vi.mock('../src/hooks/useReportLinkMatch', () => ({ useReportLinkMatch: () => ReportLinkMatchResult.LINKED }));
 
 const defaultUpdateInstance = (updates: {
     active_report?: { profiler_name?: string | { path: string }; performance_name?: string | { path: string } };
@@ -621,12 +636,30 @@ it('handles valid performance report upload without tracy', async () => {
     );
 });
 
-it('deletes memory report and updates state', async () => {
-    render(
-        <TestProviders>
+/** Links for the first memory and performance fixtures, plus one pair touching neither. */
+const linkFolders = (profiler: ReportFolder, performance: ReportFolder) =>
+    createReportLink(
+        getReportId(profiler.syncedName, profiler.path)!,
+        getReportId(performance.syncedName, performance.path)!,
+    );
+
+const SEEDED_LINKS = [
+    linkFolders(mockProfilerFolderList[0], mockPerformanceReportFolders[1]),
+    linkFolders(mockProfilerFolderList[1], mockPerformanceReportFolders[0]),
+    linkFolders(mockProfilerFolderList[2], mockPerformanceReportFolders[2]),
+];
+
+function renderWithLinks() {
+    return render(
+        <TestProviders initialAtomValues={[[reportLinksAtom, SEEDED_LINKS]]}>
             <LocalFolderSelector />
+            <ReportLinksProbe />
         </TestProviders>,
     );
+}
+
+it('deletes memory report and updates state', async () => {
+    renderWithLinks();
     const deletedFolder = mockProfilerFolderList[0];
     const profilerSelect = getAllButtonsWithText(SELECT_REPORT_TEXT)[0];
 
@@ -652,6 +685,7 @@ it('deletes memory report and updates state', async () => {
     expect(mockDeleteProfiler).toHaveBeenCalledTimes(1);
     expect(mockDeleteProfiler).toHaveBeenCalledWith(deletedFolder.path);
     expect(getAllButtonsWithText(SELECT_REPORT_TEXT)).toHaveLength(2);
+    expect(getProbedReportLinks()).toEqual([SEEDED_LINKS[1], SEEDED_LINKS[2]]);
 
     profilerSelect.click();
     await waitFor(testForPortal, WAIT_FOR_OPTIONS);
@@ -669,11 +703,7 @@ it('deletes memory report and updates state', async () => {
 });
 
 it('deletes performance report and updates state', async () => {
-    render(
-        <TestProviders>
-            <LocalFolderSelector />
-        </TestProviders>,
-    );
+    renderWithLinks();
     const deletedFolder = mockPerfFolderList[0];
     const performanceSelect = getAllButtonsWithText(SELECT_REPORT_TEXT)[1];
 
@@ -694,6 +724,7 @@ it('deletes performance report and updates state', async () => {
     expect(screen.getByText(PERFORMANCE_REPORT_DELETED_TOAST_TITLE)).not.toBeNull();
     expect(mockDeletePerformance).toHaveBeenCalledTimes(1);
     expect(mockDeletePerformance).toHaveBeenCalledWith(deletedFolder.path);
+    expect(getProbedReportLinks()).toEqual([SEEDED_LINKS[0], SEEDED_LINKS[2]]);
 
     performanceSelect.click();
     await waitFor(testForPortal, WAIT_FOR_OPTIONS);
@@ -704,6 +735,76 @@ it('deletes performance report and updates state', async () => {
 
     expect(menuRows).toHaveLength(mockPerformanceReportFolders.length - 1);
     expect(menuRows.some((row) => row?.includes(`/${deletedFolder.path}`))).toBe(false);
+});
+
+// Recording keys a synced folder by its syncedName, so the delete has to prune under that id
+// rather than the local path's basename or the badge outlives the report.
+it('prunes links for a synced folder under its syncedName', async () => {
+    const syncedFolder = { path: 'local-copy-of-run', reportName: 'synced_run', syncedName: 'remote-run' };
+    mockProfilerFolders.push(syncedFolder);
+
+    const syncedLink = linkFolders(syncedFolder, mockPerformanceReportFolders[0]);
+
+    render(
+        <TestProviders initialAtomValues={[[reportLinksAtom, [syncedLink, SEEDED_LINKS[2]]]]}>
+            <LocalFolderSelector />
+            <ReportLinksProbe />
+        </TestProviders>,
+    );
+
+    getAllButtonsWithText(SELECT_REPORT_TEXT)[0].click();
+    await waitFor(testForPortal, WAIT_FOR_OPTIONS);
+
+    fireEvent.click(screen.getByLabelText(getDeleteActionLabel(ManagedEntity.REPORT, syncedFolder.reportName)));
+    await waitFor(() => expect(document.querySelector('[role="alertdialog"]')).not.toBe(null), WAIT_FOR_OPTIONS);
+    fireEvent.click(screen.getByRole('button', { name: CONFIRM_DELETE_LABEL }));
+
+    await waitFor(() => expect(mockDeleteProfiler).toHaveBeenCalledWith(syncedFolder.path), WAIT_FOR_OPTIONS);
+    await waitFor(() => expect(getProbedReportLinks()).toEqual([SEEDED_LINKS[2]]), WAIT_FOR_OPTIONS);
+});
+
+function PersistReportLinks() {
+    usePersistReportLinks();
+
+    return null;
+}
+
+// The recorder is always mounted and keeps reporting LINKED for the active pair. The prune
+// must stick anyway: the recorder does not re-run on `reportLinksAtom`, and clearing the
+// deleted report as active then trips its both-reports guard.
+it('does not re-record the pair when the active, linked memory report is deleted', async () => {
+    const deletedFolder = mockProfilerFolderList[0];
+    const activePerformance = mockPerformanceReportFolders[1];
+
+    render(
+        <TestProviders
+            initialAtomValues={[
+                [reportLinksAtom, SEEDED_LINKS],
+                [activeProfilerReportAtom, deletedFolder],
+                [activePerformanceReportAtom, activePerformance],
+                [profilerReportLocationAtom, ReportLocation.LOCAL],
+                [performanceReportLocationAtom, ReportLocation.LOCAL],
+            ]}
+        >
+            <LocalFolderSelector />
+            <PersistReportLinks />
+            <ReportLinksProbe />
+        </TestProviders>,
+    );
+
+    // SEEDED_LINKS[0] is exactly the active pair, so recording it again is a no-op.
+    expect(getProbedReportLinks()).toEqual(SEEDED_LINKS);
+
+    getAllButtonsWithText(deletedFolder.reportName)[0].click();
+    await waitFor(testForPortal, WAIT_FOR_OPTIONS);
+
+    fireEvent.click(screen.getByLabelText(getDeleteActionLabel(ManagedEntity.REPORT, deletedFolder.reportName)));
+    await waitFor(() => expect(document.querySelector('[role="alertdialog"]')).not.toBe(null), WAIT_FOR_OPTIONS);
+    fireEvent.click(screen.getByRole('button', { name: CONFIRM_DELETE_LABEL }));
+
+    await waitFor(() => expect(getAllButtonsWithText(SELECT_REPORT_TEXT).length).toBeGreaterThan(0), WAIT_FOR_OPTIONS);
+
+    expect(getProbedReportLinks()).toEqual([SEEDED_LINKS[1], SEEDED_LINKS[2]]);
 });
 
 // A stand-in for whatever the server puts in the 403's `error` field, not a copy of it — the
@@ -739,17 +840,14 @@ async function confirmDeleteOf(select: HTMLElement, folder: ReportFolder) {
 it('surfaces an error toast and keeps the report when the memory delete fails', async () => {
     mockDeleteProfiler.mockRejectedValueOnce(refusedDelete());
 
-    render(
-        <TestProviders>
-            <LocalFolderSelector />
-        </TestProviders>,
-    );
+    renderWithLinks();
     const deletedFolder = mockProfilerFolderList[0];
     const profilerSelect = getAllButtonsWithText(SELECT_REPORT_TEXT)[0];
 
     await confirmDeleteOf(profilerSelect, deletedFolder);
 
     expect(screen.getByText(MEMORY_REPORT_DELETE_FAILED_TOAST_TITLE)).not.toBeNull();
+    expect(getProbedReportLinks()).toEqual(SEEDED_LINKS);
 
     profilerSelect.click();
     await waitFor(testForPortal, WAIT_FOR_OPTIONS);
@@ -763,17 +861,14 @@ it('surfaces an error toast and keeps the report when the memory delete fails', 
 it('surfaces an error toast and keeps the report when the performance delete fails', async () => {
     mockDeletePerformance.mockRejectedValueOnce(refusedDelete());
 
-    render(
-        <TestProviders>
-            <LocalFolderSelector />
-        </TestProviders>,
-    );
+    renderWithLinks();
     const deletedFolder = mockPerfFolderList[0];
     const performanceSelect = getAllButtonsWithText(SELECT_REPORT_TEXT)[1];
 
     await confirmDeleteOf(performanceSelect, deletedFolder);
 
     expect(screen.getByText(PERFORMANCE_REPORT_DELETE_FAILED_TOAST_TITLE)).not.toBeNull();
+    expect(getProbedReportLinks()).toEqual(SEEDED_LINKS);
     expect(mockDeletePerformance).toHaveBeenCalledWith(deletedFolder.path);
 
     performanceSelect.click();

@@ -2,21 +2,27 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
-import { useAtomValue } from 'jotai';
+import '@testing-library/jest-dom/vitest';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ReportLinkStatus from '../src/components/ReportLinkStatus';
 import { ReportLocation } from '../src/definitions/Reports';
-import { ReportLinkMatchResult, ReportPairLinkStatus } from '../src/definitions/ReportLinks';
+import {
+    REPORTS_LINKED_TOOLTIP,
+    REPORTS_UNLINKED_TOOLTIP,
+    ReportLinkMatchResult,
+} from '../src/definitions/ReportLinks';
+import { TEST_IDS } from '../src/definitions/TestIds';
 import {
     activePerformanceReportAtom,
     activeProfilerReportAtom,
     performanceReportLocationAtom,
     profilerReportLocationAtom,
     reportLinksAtom,
-    tracingModeAtom,
 } from '../src/store/app';
 import { TestProviders } from './helpers/TestProviders';
+import { ReportLinksProbe } from './helpers/ReportLinksProbe';
+import { PERFORMANCE_REPORT, PROFILER_REPORT, getProbedReportLinks } from './helpers/reportLinkFixtures';
 
 const matchState = vi.hoisted(() => ({
     result: 'pending' as string,
@@ -26,35 +32,19 @@ vi.mock('../src/hooks/useReportLinkMatch', () => ({
     useReportLinkMatch: () => matchState.result,
 }));
 
-vi.mock('../src/hooks/useRemote', () => ({
-    default: () => ({
-        persistentState: { selectedConnection: { host: 'n150' } },
-    }),
-}));
-
-const PROFILER = { path: '/data/local/profiler-reports/mem-run', reportName: 'mem-run' };
-const PERFORMANCE = { path: '/data/local/performance-reports/perf-run', reportName: 'perf-run' };
-
-function LinksProbe() {
-    const links = useAtomValue(reportLinksAtom);
-
-    return <pre data-testid='report-links'>{JSON.stringify(links)}</pre>;
-}
-
-function renderWithReports({ tracingMode = false }: { tracingMode?: boolean } = {}) {
+function renderWithReports() {
     return render(
         <TestProviders
             initialAtomValues={[
-                [activeProfilerReportAtom, PROFILER],
-                [activePerformanceReportAtom, PERFORMANCE],
+                [activeProfilerReportAtom, PROFILER_REPORT],
+                [activePerformanceReportAtom, PERFORMANCE_REPORT],
                 [profilerReportLocationAtom, ReportLocation.LOCAL],
                 [performanceReportLocationAtom, ReportLocation.LOCAL],
                 [reportLinksAtom, []],
-                [tracingModeAtom, tracingMode],
             ]}
         >
             <ReportLinkStatus />
-            <LinksProbe />
+            <ReportLinksProbe />
         </TestProviders>,
     );
 }
@@ -70,68 +60,33 @@ describe('ReportLinkStatus', () => {
         window.localStorage.clear();
     });
 
-    it('does not persist while match is PENDING', async () => {
-        matchState.result = ReportLinkMatchResult.PENDING;
-        renderWithReports();
-
-        await waitFor(() => {
-            expect(JSON.parse(screen.getByTestId('report-links').textContent ?? '[]')).toEqual([]);
-        });
-    });
-
-    it('does not persist when match is UNAVAILABLE', async () => {
-        matchState.result = ReportLinkMatchResult.UNAVAILABLE;
-        renderWithReports();
-
-        await waitFor(() => {
-            expect(JSON.parse(screen.getByTestId('report-links').textContent ?? '[]')).toEqual([]);
-        });
-    });
-
-    it('persists a LINKED pair once the comparison settles', async () => {
+    it('tells the user the reports are linked when they match', async () => {
         matchState.result = ReportLinkMatchResult.LINKED;
         renderWithReports();
 
-        await waitFor(() => {
-            const links = JSON.parse(screen.getByTestId('report-links').textContent ?? '[]');
-            expect(links).toHaveLength(1);
-            expect(links[0]).toMatchObject({
-                profilerId: 'mem-run',
-                performanceId: 'perf-run',
-                status: ReportPairLinkStatus.LINKED,
-            });
-        });
+        fireEvent.mouseEnter(screen.getByTestId(TEST_IDS.REPORT_LINK_STATUS));
+
+        expect(await screen.findByText(REPORTS_LINKED_TOOLTIP)).toBeInTheDocument();
+        expect(screen.queryByText(REPORTS_UNLINKED_TOOLTIP, { exact: false })).not.toBeInTheDocument();
     });
 
-    it('persists an UNLINKED pair so pickers can badge failed links', async () => {
+    it('tells the user the reports could not be linked when they do not match', async () => {
         matchState.result = ReportLinkMatchResult.UNLINKED;
         renderWithReports();
 
-        await waitFor(() => {
-            const links = JSON.parse(screen.getByTestId('report-links').textContent ?? '[]');
-            expect(links).toHaveLength(1);
-            expect(links[0]).toMatchObject({
-                profilerId: 'mem-run',
-                performanceId: 'perf-run',
-                status: ReportPairLinkStatus.UNLINKED,
-            });
-        });
+        fireEvent.mouseEnter(screen.getByTestId(TEST_IDS.REPORT_LINK_STATUS));
+
+        // The hint shares the element after a <br />, so match the headline as a substring.
+        expect(await screen.findByText(REPORTS_UNLINKED_TOOLTIP, { exact: false })).toBeInTheDocument();
+        expect(screen.queryByText(REPORTS_LINKED_TOOLTIP)).not.toBeInTheDocument();
     });
 
-    // Link resolution pins tracing mode off (#1812), so a verdict reached with the
-    // toggle on describes the reports just as one reached with it off does. This
-    // used to be suppressed, on the since-disproved premise that the toggle changed
-    // the row order the match ran against. Kept as the guard against that carve-out
-    // being reintroduced: it is the only case that would fail if `ReportLinkStatus`
-    // started reading `tracingModeAtom` again.
-    it('persists an UNLINKED reached with tracing mode on', async () => {
-        matchState.result = ReportLinkMatchResult.UNLINKED;
-        renderWithReports({ tracingMode: true });
+    // Persistence lives in `usePersistReportLinks`, mounted from `Layout`, so the icon can
+    // be moved or hidden without silently stopping link recording.
+    it('does not persist a settled match itself', () => {
+        matchState.result = ReportLinkMatchResult.LINKED;
+        renderWithReports();
 
-        await waitFor(() => {
-            const links = JSON.parse(screen.getByTestId('report-links').textContent ?? '[]');
-            expect(links).toHaveLength(1);
-            expect(links[0]).toMatchObject({ status: ReportPairLinkStatus.UNLINKED });
-        });
+        expect(getProbedReportLinks()).toEqual([]);
     });
 });

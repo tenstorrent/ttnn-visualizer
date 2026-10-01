@@ -30,6 +30,7 @@ import { VIEW_ENGAGEMENT_THRESHOLD_MS } from '../src/definitions/ViewEngagement'
 const teardown = vi.hoisted(() => vi.fn());
 const initEventLogging = vi.hoisted(() => vi.fn(() => teardown));
 const recordEvent = vi.hoisted(() => vi.fn());
+const persistReportLinks = vi.hoisted(() => vi.fn());
 
 vi.mock('../src/functions/recordEvent', () => ({ default: recordEvent, initEventLogging }));
 
@@ -43,6 +44,9 @@ vi.mock('../src/components/cluster/ClusterRenderer', () => ({
 }));
 vi.mock('../src/components/mlir/MlirFileResultsOverlay', () => ({ default: () => null }));
 vi.mock('../src/libs/ModalAwareOutlet', () => ({ ModalAwareOutlet: () => null }));
+// The real hook reads the query client and the report atoms; this spec only pins that
+// `Layout` mounts it (through `ReportLinkRecorder`), which is all that keeps report links recorded.
+vi.mock('../src/hooks/usePersistReportLinks', () => ({ default: persistReportLinks }));
 
 async function resetViewOpenedMemory() {
     const { resetRememberedViewPathname } = await import('../src/functions/eventLogViews');
@@ -90,6 +94,14 @@ describe('Layout event logging wiring', () => {
             event: EventLogEvent.VIEW_OPENED,
             details: { view: EventLogView.REPORTS },
         });
+    });
+
+    it('persists report links through the mounted layout hook', async () => {
+        const { default: Layout } = await import('../src/components/Layout');
+
+        renderLayout(Layout);
+
+        expect(persistReportLinks).toHaveBeenCalled();
     });
 
     it('records engagement through the mounted layout hook', async () => {
