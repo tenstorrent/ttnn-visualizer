@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-import { CommonInfo, NPEData, NoCType, NpeSummary, NpeWindow } from '../../src/model/NPEModel';
+import { type CommonInfo, type NPEData, NoCType, type NpeSummary, type NpeWindow } from '../../src/model/NPEModel';
 
 /** Minimal well-formed whole-file NPE payload for parse / validate / route specs. */
 export const minimalValidNpeData = {
