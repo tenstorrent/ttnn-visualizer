@@ -159,7 +159,11 @@ def rank_scope(queries: DatabaseQueries, rank: Optional[int]) -> RankScope:
     return scope
 
 
-def _refuse_unattributable(
+class UnattributableRankError(ValueError):
+    """Rows that cannot be attributed to the rank a response would name."""
+
+
+def refuse_unattributable(
     queries: DatabaseQueries, scope: RankScope, *tables: str
 ) -> None:
     """Refuse figures that cannot be attributed to the rank the response names.
@@ -190,7 +194,7 @@ def _refuse_unattributable(
         and not queries.table_has_rank_column(table)
     ]
     if unfiltered:
-        raise ValueError(
+        raise UnattributableRankError(
             f"this report carries `rank` on `operations` but not on "
             f"{', '.join(f'`{table}`' for table in unfiltered)}, so its rows span "
             f"ranks {', '.join(str(entry) for entry in scope.ranks)} and cannot be "
@@ -338,8 +342,8 @@ def operation_provenance(
     """What an operation was called with, and where in the model code it came from.
 
     Takes the profiler database's `operation_id`, the same one `memory_profile`,
-    `operation_detail` and `find_operations` use -- *not* the `id` from `top_ops`
-    or `diff_reports`, which number rows of the performance CSV. The two are small
+    `operation_detail` and `find_operations` use -- *not* the `id` from `top_ops`,
+    which numbers rows of the performance CSV. The two are small
     integers in overlapping ranges, so passing a CSV row number here does not
     refuse; it answers about a different operation. A `top_ops` row's
     `operation_id` (`linking.top_ops`) is how to cross from a performance row, and
@@ -358,7 +362,7 @@ def operation_provenance(
         # silently no-ops on a schema that carries `rank` unevenly, and a call site
         # from another host under a `rank: 0` caveat is the caveat pointing the wrong
         # way that this module refuses elsewhere.
-        _refuse_unattributable(queries, scope, "operation_arguments", "stack_traces")
+        refuse_unattributable(queries, scope, "operation_arguments", "stack_traces")
         wanted = int(operation_id)
         filters = scoped(queries, "operations", scope, operation_id=wanted)
 
@@ -477,7 +481,7 @@ def find_operations(
         from_origin: Optional[Set[int]] = None
         no_traces_recorded = False
         if origin:
-            _refuse_unattributable(queries, scope, "stack_traces")
+            refuse_unattributable(queries, scope, "stack_traces")
             # Asked before the search, so a capture that records no call sites can
             # be told apart from one where nothing matched. `operation_provenance`
             # already says this for a single operation; a bare `match_count: 0`
@@ -539,7 +543,7 @@ def operation_detail(
     instance = registry.get(handle)
     with profiler_db(instance) as queries:
         scope = rank_scope(queries, rank)
-        _refuse_unattributable(
+        refuse_unattributable(
             queries, scope, "buffers", "tensors", "input_tensors", "output_tensors"
         )
         wanted_operation = int(operation_id)
@@ -709,7 +713,7 @@ def memory_profile(
     instance = registry.get(handle)
     with profiler_db(instance) as queries:
         scope = rank_scope(queries, rank)
-        _refuse_unattributable(queries, scope, "buffers")
+        refuse_unattributable(queries, scope, "buffers")
         grouped = queries.query_buffer_totals_by_operation(rank=scope.rank)
         names = {
             operation.operation_id: operation.name
@@ -827,7 +831,7 @@ def tensor_flow(
     instance = registry.get(handle)
     with profiler_db(instance) as queries:
         scope = rank_scope(queries, rank)
-        _refuse_unattributable(
+        refuse_unattributable(
             queries, scope, "tensors", "input_tensors", "output_tensors"
         )
         wanted = int(tensor_id)

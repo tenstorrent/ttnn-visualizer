@@ -15,6 +15,7 @@ operation.
 import csv
 import json
 import sqlite3
+import tempfile
 from pathlib import Path
 from typing import Dict, List, Optional
 from unittest.mock import patch
@@ -22,7 +23,7 @@ from unittest.mock import patch
 import pytest
 from ttnn_visualizer.agent import linking, server, tools
 from ttnn_visualizer.agent.bounds import MAX_LIMIT
-from ttnn_visualizer.agent.handles import ReportRegistry, load_report
+from ttnn_visualizer.agent.handles import CacheVariant, ReportRegistry, load_report
 from ttnn_visualizer.agent.linking import DeviceOperation, LinkStatus, MatchedOn
 from ttnn_visualizer.tests.test_device_log_columns import (
     MODERN_HEADER,
@@ -623,12 +624,12 @@ class TestGraphReading:
         assert not link.operation_by_perf_id
         assert "operation 2" in caplog.text
 
-    def test_malformed_nodes_are_skipped(self, linked):
+    def test_nodes_that_are_not_lifecycle_nodes_are_skipped(self, linked):
         graph = json.dumps(
             [
                 "not a node",
-                {"node_type": "function_start", "params": None},
-                {"node_type": "function_start", "params": "text"},
+                {"node_type": "capture_start", "params": None},
+                {"node_type": "buffer_allocate", "params": "text"},
                 {"node_type": "function_start", "params": {"name": "Matmul"}},
                 {"node_type": "function_end", "params": {"name": "Matmul"}},
             ]
@@ -640,6 +641,23 @@ class TestGraphReading:
 
         assert link.status is LinkStatus.LINKED
         assert link.operation_by_perf_id == {"7": 2}
+
+    @pytest.mark.parametrize("params", [None, "text", {}, {"name": 7}])
+    @pytest.mark.parametrize("node_type", ["function_start", "function_end"])
+    def test_a_lifecycle_node_without_a_name_refuses_the_link(
+        self, linked, node_type, params
+    ):
+        """Dropping it shortens the order, and a prefix can still align wrongly."""
+        nodes = json.loads(_GRAPHS[2])
+        nodes.insert(1, {"node_type": node_type, "params": params})
+        registry, handle, _ = linked(graphs={**_GRAPHS, 2: json.dumps(nodes)})
+
+        link = linking.operation_link(registry, handle)
+
+        assert link.status is LinkStatus.UNAVAILABLE
+        assert "operation 2" in (link.reason or "")
+        assert node_type in (link.reason or "")
+        assert not link.operation_by_perf_id
 
     def test_a_child_first_capture_links_on_function_end(self, linked):
         """#1860: the child's workload is enqueued, and profiled, before its parent."""
@@ -666,6 +684,26 @@ class TestGraphReading:
 
         assert link.matched_on is MatchedOn.FUNCTION_START_COLLAPSED
         assert link.operation_by_perf_id == {"7": 2, "8": 3}
+
+    @pytest.mark.parametrize("table", ["captured_graph", "devices"])
+    def test_a_multi_host_table_without_rank_refuses_the_link(
+        self, linked, tmp_path, table
+    ):
+        """The rank filter no-ops on that table, so its rows would span both ranks."""
+        path = _write_ranked_profiler(tmp_path / "ranked", _GRAPHS)
+        connection = sqlite3.connect(Path(path) / "db.sqlite")
+        try:
+            connection.execute(f"ALTER TABLE {table} DROP COLUMN rank")
+            connection.commit()
+        finally:
+            connection.close()
+        registry, handle, _ = linked(profiler_path=path)
+
+        link = linking.operation_link(registry, handle)
+
+        assert link.status is LinkStatus.UNAVAILABLE
+        assert f"`{table}`" in (link.reason or "")
+        assert not link.operation_by_perf_id
 
 
 class TestOperationDetailLink:
@@ -777,3 +815,88 @@ class TestServerRouting:
 
         assert result["operation_link"]["status"] == LinkStatus.LINKED.value
         assert [row["id"] for row in result["perf_rows"]] == ["3"]
+
+
+class TestLinkCache:
+    def test_the_profiler_database_is_read_once_per_handle(self, linked):
+        """The link reads every captured graph, so it is paid for once."""
+        registry, handle, _ = linked()
+
+        with patch.object(
+            linking.operations,
+            "profiler_db",
+            wraps=linking.operations.profiler_db,
+        ) as opened:
+            linking.top_ops(registry, handle)
+            linking.top_ops(registry, handle, by="op_to_op_gap")
+            linking.operation_link(registry, handle)
+
+        opened.assert_called_once()
+
+    def test_a_failed_link_is_cached_too(self, linked, tmp_path):
+        """A broken file is reported once rather than re-read on every call."""
+        broken = tmp_path / "broken"
+        broken.mkdir()
+        (broken / "db.sqlite").write_bytes(b"this is not a database" * 100)
+        registry, handle, _ = linked(profiler_path=str(broken))
+
+        with patch.object(
+            linking.operations,
+            "profiler_db",
+            wraps=linking.operations.profiler_db,
+        ) as opened:
+            first = linking.operation_link(registry, handle)
+            second = linking.operation_link(registry, handle)
+
+        assert first.status is LinkStatus.UNAVAILABLE
+        assert second is first
+        opened.assert_called_once()
+
+    def test_variants_of_one_handle_are_cached_apart(self, linked):
+        registry, handle, _ = linked()
+        built: List[CacheVariant] = []
+
+        def build(variant):
+            def _build(instance):
+                built.append(variant)
+                return variant.value
+
+            return _build
+
+        for _ in range(2):
+            for variant in CacheVariant:
+                assert (
+                    registry.cached_report(handle, build(variant), variant=variant)
+                    == variant.value
+                )
+
+        assert sorted(built) == sorted(CacheVariant)
+
+        registry.clear()
+        assert not registry._reports
+
+
+class TestLinkBounds:
+    def test_a_captured_graph_past_the_bound_is_not_read(self, linked):
+        registry, handle, _ = linked()
+
+        with patch.object(linking, "MAX_CAPTURED_GRAPH_CHARS", 10):
+            link = linking.operation_link(registry, handle)
+
+        assert link.status is LinkStatus.UNAVAILABLE
+        assert "past the 10" in (link.reason or "")
+
+    def test_the_bound_is_far_past_any_real_capture(self):
+        """Pinned as a literal: lowering it is a policy change, not a refactor."""
+        assert linking.MAX_CAPTURED_GRAPH_CHARS == 1 << 30
+
+    def test_a_reason_does_not_carry_the_temp_directory(self, linked):
+        registry, handle, generate = linked()
+        generate.side_effect = ValueError(
+            f"cannot parse {tempfile.gettempdir()}/tmpabc123.csv"
+        )
+
+        reason = linking.operation_link(registry, handle).reason or ""
+
+        assert tempfile.gettempdir() not in reason
+        assert "<tmp>/tmpabc123.csv" in reason

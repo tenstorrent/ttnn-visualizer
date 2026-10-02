@@ -172,8 +172,8 @@ Every response that carries the link says how it went in `operation_link`:
   performance capture that stopped early — and every `operation_id` is then null rather
   than guessed.
 - `unavailable` means the match was never tried: one half is missing or cannot be read,
-  the profiler report records no captured graph, or one of its captured graphs is not
-  readable. A link that skipped an unreadable graph could still align and pair rows
+  the profiler report records no captured graph, one of its captured graphs is not
+  readable, or a multi-host report carries no `rank` on the graph or device tables. A link that skipped an unreadable graph could still align and pair rows
   with the wrong operations, so none is attempted.
 
 On a linked pair an `operation_id` is still null for a row with no profiler operation:
@@ -185,8 +185,8 @@ holding its largest footprint, and `operation_provenance` turns such an id into 
 to act on it: the arguments it was called with, and the innermost stack frame's file,
 line, function and source line.
 
-`top_ops` and `diff_reports` name an operation too, but their `id` is a row of the
-performance CSV and does not belong here: the two ids are small integers in overlapping
+`top_ops` names an operation too, but its `id` is a row of the performance CSV and does
+not belong here (`diff_reports` returns no id at all: it groups by op code): the two ids are small integers in overlapping
 ranges, so passing one where the other belongs answers about a different operation
 rather than refusing. Pass a `top_ops` row's `operation_id` instead, or search for the
 name with `find_operations`. Frames are recorded innermost first, so the call site is the `ttnn.<op>`

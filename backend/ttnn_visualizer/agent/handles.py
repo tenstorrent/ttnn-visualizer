@@ -13,6 +13,7 @@ answer; that is the capture, not the app's session.) #1995
 """
 
 import sqlite3
+from enum import Enum
 from pathlib import Path
 from typing import Callable, Dict, List, Optional, Tuple, TypeVar, cast
 
@@ -31,6 +32,13 @@ PROFILER_DB_FILE = "db.sqlite"
 Cached = TypeVar("Cached")
 
 
+class CacheVariant(str, Enum):
+    """What a handle caches. One builder per member, which is what types the cache."""
+
+    CANONICAL_REPORT = "canonical_report"
+    OPERATION_LINK = "operation_link"
+
+
 class UnknownHandleError(ValueError):
     """Raised when a tool is called with a handle that was never loaded."""
 
@@ -44,7 +52,7 @@ class ReportRegistry:
 
     def __init__(self) -> None:
         self._instances: Dict[str, Instance] = {}
-        self._reports: Dict[Tuple[str, str], object] = {}
+        self._reports: Dict[Tuple[str, CacheVariant], object] = {}
         self._next_id = 1
 
     def add(self, profiler_path: Optional[str], performance_path: Optional[str]) -> str:
@@ -70,7 +78,7 @@ class ReportRegistry:
         self,
         handle: str,
         build: Callable[[Instance], Cached],
-        variant: str = "canonical",
+        variant: CacheVariant = CacheVariant.CANONICAL_REPORT,
     ) -> Cached:
         """Keep one report snapshot per handle and variant.
 
@@ -83,10 +91,9 @@ class ReportRegistry:
         unchanged file again skip regeneration; the MCP server runs in its own
         process, so nothing here is shared with the HTTP app.
 
-        `variant` keeps a second projection of the same handle apart from the
-        canonical one: the operation link reads the report with host ops hidden,
-        and serving that snapshot to `top_ops` would drop the rows its projection
-        promises.
+        `variant` keeps what is derived from the report apart from the report
+        itself: the operation link reads every captured graph, so it is resolved
+        once per handle beside the snapshot it was matched against.
         """
         key = (handle, variant)
         if key not in self._reports:

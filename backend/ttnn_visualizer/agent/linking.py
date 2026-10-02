@@ -24,6 +24,7 @@ which is what keeps those two from importing each other.
 import json
 import logging
 import sqlite3
+import tempfile
 from collections import Counter
 from dataclasses import dataclass, field
 from enum import Enum
@@ -32,7 +33,8 @@ from typing import Dict, List, NamedTuple, Optional, Sequence, Tuple
 from tt_perf_report.perf_report import HOST_OP_MARKER
 from ttnn_visualizer.agent import operations, tools
 from ttnn_visualizer.agent.bounds import MAX_LIMIT
-from ttnn_visualizer.agent.handles import ReportRegistry
+from ttnn_visualizer.agent.handles import CacheVariant, ReportRegistry
+from ttnn_visualizer.csv_queries import SIGNPOST_OP_TYPE
 from ttnn_visualizer.models import Instance
 
 logger = logging.getLogger(__name__)
@@ -51,12 +53,14 @@ logger = logging.getLogger(__name__)
 # that nothing else about the canonical projection has drifted from the app's.
 LINK_VIEW: Dict[str, object] = {**tools.CANONICAL_PROJECTION, "hide_host_ops": True}
 
-_LINK_VARIANT = "operation_link"
-
-SIGNPOST_OP_TYPE = "signpost"
-
 # Microseconds, as tt-perf-report writes `device_time`.
 DEVICE_TIME_UNIT = "us"
+
+# The captured graph a link will read, summed across ranks. `query_device_operations`
+# holds every graph at once, so this is checked in SQL before any is loaded. Across 85
+# local captures the largest total is 55.6 MB, so the bound is ~18x anything seen:
+# it refuses a pathological file, never a real one.
+MAX_CAPTURED_GRAPH_CHARS = 1 << 30
 
 
 class LinkStatus(str, Enum):
@@ -225,6 +229,20 @@ class UnreadableGraphError(ValueError):
     """A captured graph that is not a JSON list of nodes."""
 
 
+class GraphTooLargeError(ValueError):
+    """More captured graph than the link will hold in memory to read."""
+
+
+def _redacted(error: Exception) -> str:
+    """An error's text with the system temp directory masked.
+
+    tt-perf-report works through temp files and names them when it fails. A reason is
+    returned to whoever called the tool, and where its temp files live is not part of
+    the answer; the full text goes to the log.
+    """
+    return str(error).replace(tempfile.gettempdir(), "<tmp>")
+
+
 def _device_operation_names(raw: Optional[str]) -> Dict[NodeOrder, List[str]]:
     """One operation's device operation names, in each captured order."""
     names: Dict[NodeOrder, List[str]] = {order: [] for order in NodeOrder}
@@ -243,9 +261,15 @@ def _device_operation_names(raw: Optional[str]) -> Dict[NodeOrder, List[str]]:
             order = NodeOrder(node.get("node_type"))
         except ValueError:
             continue
+        # A lifecycle node without a name is refused, not skipped: dropping it
+        # shortens the order, and a prefix match can still mark the link linked
+        # with later rows on the wrong operation. The app cannot read it either --
+        # `getDeviceOperationNameList` reads `params.name` unguarded.
         params = node.get("params")
         name = params.get("name") if isinstance(params, dict) else None
-        if isinstance(name, str) and is_device_operation(name):
+        if not isinstance(name, str):
+            raise UnreadableGraphError(f"a {order.value} node carries no name")
+        if is_device_operation(name):
             names[order].append(name)
     return names
 
@@ -289,6 +313,16 @@ def _read_profiler_side(
         # which host's operations it pairs with is the app's convention rather than
         # something the report states -- hence `rank` in the response.
         scope = operations.rank_scope(queries, None)
+        # Both tables are filtered to that rank below, and the filter no-ops on one
+        # without the column: graphs from every rank would then collide on id, and
+        # the device count would sum the ranks.
+        operations.refuse_unattributable(queries, scope, "captured_graph", "devices")
+        graph_size = queries.query_captured_graph_size()
+        if graph_size > MAX_CAPTURED_GRAPH_CHARS:
+            raise GraphTooLargeError(
+                f"this capture holds {graph_size:,} characters of captured graph, "
+                f"past the {MAX_CAPTURED_GRAPH_CHARS:,} the link will read"
+            )
         operation_ids = {
             operation.operation_id
             for operation in queries.query_operations(
@@ -346,8 +380,11 @@ def _build_link(
         logger.warning("profiler database unreadable for the link: %s", error)
         return OperationLink(
             LinkStatus.UNAVAILABLE,
-            reason=f"the profiler database could not be read: {error}",
+            reason=f"the profiler database could not be read: {_redacted(error)}",
         )
+    except (GraphTooLargeError, operations.UnattributableRankError) as error:
+        logger.warning("%s", error)
+        return OperationLink(LinkStatus.UNAVAILABLE, reason=str(error))
     except UnreadableGraphError as error:
         # Refused rather than skipped: dropping one operation's device ops shifts
         # every later one, and repeated names after it can still align -- a
@@ -376,7 +413,7 @@ def _build_link(
         return OperationLink(
             LinkStatus.UNAVAILABLE,
             rank=rank,
-            reason=f"the performance report could not be read: {error}",
+            reason=f"the performance report could not be read: {_redacted(error)}",
         )
 
     orders = device_operation_orders(names_by_operation)
@@ -417,7 +454,7 @@ def operation_link(registry: ReportRegistry, handle: str) -> OperationLink:
     return registry.cached_report(
         handle,
         lambda instance: _build_link(registry, handle, instance),
-        variant=_LINK_VARIANT,
+        variant=CacheVariant.OPERATION_LINK,
     )
 
 
@@ -485,6 +522,7 @@ def operation_detail(
 
 __all__ = [
     "DEVICE_TIME_UNIT",
+    "MAX_CAPTURED_GRAPH_CHARS",
     "LINK_VIEW",
     "TOP_OPS_LINK_NOTE",
     "DeviceOperation",
