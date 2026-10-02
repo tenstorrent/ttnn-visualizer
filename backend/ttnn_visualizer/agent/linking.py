@@ -359,7 +359,8 @@ def _read_profiler_side(
         # without the column: graphs from every rank would then collide on id, and
         # the device count would sum the ranks.
         operations.refuse_unattributable(queries, scope, "captured_graph", "devices")
-        graph_size = queries.query_captured_graph_size()
+        graph_filters = operations.scoped(queries, "captured_graph", scope)
+        graph_size = queries.query_captured_graph_size(filters=graph_filters)
         if graph_size > MAX_CAPTURED_GRAPH_CHARS:
             raise GraphTooLargeError(
                 f"this capture holds {graph_size:,} characters of captured graph, "
@@ -373,9 +374,7 @@ def _read_profiler_side(
         }
         names_by_operation: Dict[int, Dict[NodeOrder, List[str]]] = {}
         has_graph = False
-        for device_operation in queries.query_device_operations(
-            filters=operations.scoped(queries, "captured_graph", scope)
-        ):
+        for device_operation in queries.query_device_operations(filters=graph_filters):
             has_graph = True
             if device_operation.operation_id not in operation_ids:
                 continue

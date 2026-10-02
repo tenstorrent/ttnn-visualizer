@@ -954,6 +954,28 @@ class TestLinkBounds:
         assert link.status is LinkStatus.UNAVAILABLE
         assert "past the 10" in (link.reason or "")
 
+    def test_the_bound_counts_only_the_rank_the_link_reads(self, linked, tmp_path):
+        """The graph read is rank-filtered in SQL, so other ranks are never held.
+
+        Both ranks carry the same graphs, so a bound of exactly rank 0's size is
+        exceeded by the two together and met by the rank actually read.
+        """
+        path = _write_ranked_profiler(tmp_path / "ranked", _GRAPHS)
+        connection = sqlite3.connect(Path(path) / "db.sqlite")
+        try:
+            (rank_zero_size,) = connection.execute(
+                "SELECT SUM(LENGTH(captured_graph)) FROM captured_graph WHERE rank = 0"
+            ).fetchone()
+        finally:
+            connection.close()
+        registry, handle, _ = linked(profiler_path=path)
+
+        with patch.object(linking, "MAX_CAPTURED_GRAPH_CHARS", rank_zero_size):
+            link = linking.operation_link(registry, handle)
+
+        assert link.status is LinkStatus.LINKED
+        assert link.rank == 0
+
     def test_the_bound_is_far_past_any_real_capture(self):
         """Pinned as a literal: lowering it is a policy change, not a refactor."""
         assert linking.MAX_CAPTURED_GRAPH_CHARS == 1 << 30

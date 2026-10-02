@@ -417,17 +417,23 @@ class DatabaseQueries:
         rows = self._query_table("captured_graph", filters, select_clause=select_clause)
         return [DeviceOperation(*row) for row in rows]
 
-    def query_captured_graph_size(self) -> int:
-        """Characters of captured graph across every rank, without reading any.
+    def query_captured_graph_size(
+        self, filters: Optional[Dict[str, Union[Any, List[Any]]]] = None
+    ) -> int:
+        """Characters of captured graph the same `filters` would read, without reading any.
 
-        `query_device_operations` loads every graph at once, so a caller that must
-        bound memory asks this first. Every rank is counted because the bound is on
-        what the read would hold, which a rank filter only narrows.
+        `query_device_operations` loads every graph it matches at once, so a caller
+        that must bound memory asks this first -- with the filters it will read with.
+        They are applied in SQL, so a rank filter narrows what is loaded, and a bound
+        summed over ranks the read never holds would refuse a multi-host report whose
+        one rank fits.
         """
         if not self._check_table_exists("captured_graph"):
             return 0
-        rows = self.query_runner.execute_query(
-            "SELECT COALESCE(SUM(LENGTH(captured_graph)), 0) FROM captured_graph"
+        rows = self._query_table(
+            "captured_graph",
+            filters,
+            select_clause="COALESCE(SUM(LENGTH(captured_graph)), 0)",
         )
         return int(rows[0][0]) if rows else 0
 
