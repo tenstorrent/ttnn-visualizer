@@ -890,13 +890,18 @@ class TestLinkBounds:
         """Pinned as a literal: lowering it is a policy change, not a refactor."""
         assert linking.MAX_CAPTURED_GRAPH_CHARS == 1 << 30
 
-    def test_a_reason_does_not_carry_the_temp_directory(self, linked):
+    @pytest.mark.parametrize("directory", [tempfile.gettempdir(), "/tmp"])
+    def test_a_reason_does_not_carry_the_temp_directory(
+        self, linked, monkeypatch, directory
+    ):
+        """`/tmp` is Linux's, and prefixes the `tmpXXXX` names `tempfile` gives files."""
+        monkeypatch.setattr(linking.tempfile, "gettempdir", lambda: directory)
         registry, handle, generate = linked()
         generate.side_effect = ValueError(
-            f"cannot parse {tempfile.gettempdir()}/tmpabc123.csv"
+            f"cannot parse {directory}/tmpabc123.csv, nor /var{directory}/x"
         )
 
         reason = linking.operation_link(registry, handle).reason or ""
 
-        assert tempfile.gettempdir() not in reason
         assert "<tmp>/tmpabc123.csv" in reason
+        assert f"/var{directory}/x" in reason

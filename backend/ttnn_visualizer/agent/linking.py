@@ -23,6 +23,7 @@ which is what keeps those two from importing each other.
 
 import json
 import logging
+import re
 import sqlite3
 import tempfile
 from collections import Counter
@@ -239,8 +240,12 @@ def _redacted(error: Exception) -> str:
     tt-perf-report works through temp files and names them when it fails. A reason is
     returned to whoever called the tool, and where its temp files live is not part of
     the answer; the full text goes to the log.
+
+    Masked only as a whole path component: on Linux the directory is `/tmp`, and a
+    plain replace also ate the start of the `tmpXXXX` names `tempfile` gives its files.
     """
-    return str(error).replace(tempfile.gettempdir(), "<tmp>")
+    directory = re.escape(tempfile.gettempdir())
+    return re.sub(rf"(?<![\w.-]){directory}(?![\w.-])", "<tmp>", str(error))
 
 
 def _device_operation_names(raw: Optional[str]) -> Dict[NodeOrder, List[str]]:
