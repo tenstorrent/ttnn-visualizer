@@ -1265,9 +1265,26 @@ def update_last_synced(directory: Path) -> None:
 
 MEMORY_CONFIG_PATTERN = re.compile(r"MemoryConfig\((.*)\)$")
 MEMORY_LAYOUT_PATTERN = re.compile(r"memory_layout=([A-Za-z_:]+)")
+MEMORY_BUFFER_TYPE_PATTERN = re.compile(r"buffer_type=BufferType::([A-Z0-9_]+)")
 SHARD_SPEC_PATTERN = re.compile(
     r"shard_spec=ShardSpec\(grid=\{(\[.*?\])\},shape=\{(\d+),\s*(\d+)\},orientation=ShardOrientation::([A-Z_]+),halo=(\d+)\)"
 )
+
+
+def parse_memory_config_buffer_type(memory_config: object) -> Optional[str]:
+    """The buffer type a raw `MemoryConfig(...)` string declares, e.g. `'L1'`.
+
+    `parse_memory_config` drops it, because for an allocated tensor the
+    `tensors.buffer_type` column already says the same thing. It is kept here
+    for the tensors whose column cannot be trusted -- see `Tensor`.
+    """
+    if not isinstance(memory_config, str):
+        return None
+    memory_config_match = MEMORY_CONFIG_PATTERN.match(memory_config)
+    if not memory_config_match:
+        return None
+    buffer_type_match = MEMORY_BUFFER_TYPE_PATTERN.search(memory_config_match.group(1))
+    return buffer_type_match.group(1) if buffer_type_match else None
 
 
 def parse_memory_config(memory_config: Optional[str]) -> Optional[Dict[str, Any]]:

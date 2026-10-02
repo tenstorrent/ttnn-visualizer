@@ -14,7 +14,11 @@ from sqlalchemy import JSON, Column, Integer, String
 from sqlalchemy.ext.mutable import MutableDict
 from ttnn_visualizer.enums import ConnectionTestStates, HostKeyIssue
 from ttnn_visualizer.extensions import db
-from ttnn_visualizer.utils import SerializeableDataclass, parse_memory_config
+from ttnn_visualizer.utils import (
+    SerializeableDataclass,
+    parse_memory_config,
+    parse_memory_config_buffer_type,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -153,14 +157,27 @@ class Tensor(SerializeableDataclass):
     memory_config: str | dict[str, Any] | None
     device_id: int
     address: int
-    buffer_type: BufferType
+    buffer_type: Optional[BufferType]
     device_addresses: list[int]
     size: Optional[int] = None
     lifetime: Optional[TensorLifetime] = None
     rank: int = 0
 
     def __post_init__(self):
+        declared_buffer_type = parse_memory_config_buffer_type(self.memory_config)
         self.memory_config = parse_memory_config(self.memory_config)
+        # tt-metal's graph report writes `buffer_type` as `0` (DRAM) whenever the
+        # capture recorded none, which is every tensor without an address: host
+        # tensors, and device tensors whose address was never captured. The
+        # column is only meaningful beside an address, so without one the
+        # tensor's own memory config is the authority, and a tensor that
+        # declares no buffer type has none rather than a fabricated DRAM.
+        if self.address is None:
+            self.buffer_type = (
+                BufferType.__members__.get(declared_buffer_type)
+                if declared_buffer_type is not None
+                else None
+            )
 
 
 @dataclasses.dataclass
