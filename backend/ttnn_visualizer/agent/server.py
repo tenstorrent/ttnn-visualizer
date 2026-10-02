@@ -108,8 +108,10 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
                 "it used alongside the rows. Each row's id numbers the performance "
                 "CSV. When the handle also holds a profiler report, each row's "
                 "operation_id is the profiler database id for one rank, and "
-                "operation_link says whether the reports linked, at which rank, and "
-                "-- in its note -- when an operation_id is null."
+                "operation_link says whether the reports linked, at which rank, "
+                "which rows did not link and why -- including signposts and other "
+                "rows the ranking leaves out -- and, in its note, when an "
+                "operation_id is null."
             ),
             "schema": {
                 "type": "object",

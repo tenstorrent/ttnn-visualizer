@@ -87,6 +87,16 @@ class MatchedOn(str, Enum):
     FUNCTION_END_COLLAPSED = "function_end_collapsed"
 
 
+class UnlinkedReason(str, Enum):
+    """Why a row on a linked pair has no profiler operation. Exhaustive: host ops
+    and signposts are kept out of the alignment, and every other row either
+    aligned or came after the last one that did."""
+
+    SIGNPOST = "signpost"
+    HOST_OP = "host_op"
+    PAST_PROFILER_CAPTURE = "past_profiler_capture"
+
+
 class DeviceOperation(NamedTuple):
     """One device operation a profiler operation launched, in launch order."""
 
@@ -103,6 +113,10 @@ class OperationLink:
     matched_on: Optional[MatchedOn] = None
     operation_by_perf_id: Dict[str, int] = field(default_factory=dict)
     perf_rows_by_operation: Dict[int, List[Dict]] = field(default_factory=dict)
+    # Every row of a linked pair without an operation, in report order. Only
+    # `top_ops` returns them: the rows have no operation, so they belong to no
+    # one operation's detail.
+    unlinked_rows: List[Dict[str, object]] = field(default_factory=list)
 
     def as_response(self) -> Dict[str, object]:
         response: Dict[str, object] = {"status": self.status.value}
@@ -300,9 +314,32 @@ def is_host_op_row(row: Dict) -> bool:
     return HOST_OP_MARKER in str(row.get("op_code") or "")
 
 
-def _link_view_rows(registry: ReportRegistry, handle: str) -> List[Dict]:
-    report = tools.canonical_report(registry, handle)
-    return [row for row in report.get("report", []) if not is_host_op_row(row)]
+def _canonical_rows(registry: ReportRegistry, handle: str) -> List[Dict]:
+    return list(tools.canonical_report(registry, handle).get("report", []))
+
+
+def _unlinked_reason(row: Dict) -> UnlinkedReason:
+    if row.get("op_type") == SIGNPOST_OP_TYPE:
+        return UnlinkedReason.SIGNPOST
+    if is_host_op_row(row):
+        return UnlinkedReason.HOST_OP
+    return UnlinkedReason.PAST_PROFILER_CAPTURE
+
+
+def unlinked_rows(
+    rows: Sequence[Dict], operation_by_perf_id: Dict[str, int]
+) -> List[Dict[str, object]]:
+    """The rows a linked pair left without an operation, and why each was."""
+    return [
+        {
+            "id": str(row.get("id")),
+            "op_code": row.get("op_code"),
+            "op_type": row.get("op_type"),
+            "reason": _unlinked_reason(row).value,
+        }
+        for row in rows
+        if str(row.get("id")) not in operation_by_perf_id
+    ]
 
 
 def _read_profiler_side(
@@ -409,7 +446,7 @@ def _build_link(
         )
 
     try:
-        rows = _link_view_rows(registry, handle)
+        all_rows = _canonical_rows(registry, handle)
     # Broad on purpose: tt-perf-report raises whatever its parse hits, and a CSV it
     # cannot read must cost `operation_detail` its perf rows, not the whole answer
     # about a profiler operation that was read fine.
@@ -425,7 +462,7 @@ def _build_link(
     match = match_device_operations(
         orders[NodeOrder.FUNCTION_START],
         orders[NodeOrder.FUNCTION_END],
-        rows,
+        [row for row in all_rows if not is_host_op_row(row)],
         num_devices,
     )
     if match is None:
@@ -451,6 +488,7 @@ def _build_link(
         matched_on=match.matched_on,
         operation_by_perf_id=operation_by_perf_id,
         perf_rows_by_operation=perf_rows_by_operation,
+        unlinked_rows=unlinked_rows(all_rows, operation_by_perf_id),
     )
 
 
@@ -471,7 +509,9 @@ TOP_OPS_LINK_NOTE = (
     "operation_link. It is null on every row when the two reports did not link. On a "
     "linked pair it is null for a row with no profiler operation: a host op, a "
     "signpost, or a row past the end of a profiler capture that stopped before the "
-    "performance one did -- matched_rows says how many rows linked."
+    "performance one did -- matched_rows says how many rows linked, and "
+    "unlinked_rows names every row that did not and why, including rows the ranking "
+    "leaves out for having no value for the metric."
 )
 
 
@@ -487,7 +527,11 @@ def top_ops(
     ops = result.get("ops")
     for row in ops if isinstance(ops, list) else []:
         row["operation_id"] = link.operation_by_perf_id.get(str(row.get("id")))
-    result["operation_link"] = {**link.as_response(), "note": TOP_OPS_LINK_NOTE}
+    response = {**link.as_response(), "note": TOP_OPS_LINK_NOTE}
+    if link.status is LinkStatus.LINKED:
+        response["unlinked_rows"] = link.unlinked_rows[:MAX_LIMIT]
+        response["unlinked_row_count"] = len(link.unlinked_rows)
+    result["operation_link"] = response
     return result
 
 
@@ -535,6 +579,7 @@ __all__ = [
     "MatchedOn",
     "NodeOrder",
     "OperationLink",
+    "UnlinkedReason",
     "collapse_multidevice_operations",
     "device_operation_orders",
     "is_device_operation",
@@ -543,4 +588,5 @@ __all__ = [
     "operation_detail",
     "operation_link",
     "top_ops",
+    "unlinked_rows",
 ]

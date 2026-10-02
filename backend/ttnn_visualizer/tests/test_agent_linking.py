@@ -24,7 +24,12 @@ import pytest
 from ttnn_visualizer.agent import linking, server, tools
 from ttnn_visualizer.agent.bounds import MAX_LIMIT
 from ttnn_visualizer.agent.handles import CacheVariant, ReportRegistry, load_report
-from ttnn_visualizer.agent.linking import DeviceOperation, LinkStatus, MatchedOn
+from ttnn_visualizer.agent.linking import (
+    DeviceOperation,
+    LinkStatus,
+    MatchedOn,
+    UnlinkedReason,
+)
 from ttnn_visualizer.tests.test_device_log_columns import (
     MODERN_HEADER,
     write_device_log,
@@ -565,6 +570,69 @@ class TestTopOpsLink:
         assert "find_operations" in link["reason"]
         assert "matched_rows" not in link and "matched_on" not in link
         assert all(row["operation_id"] is None for row in result["ops"])
+
+    def test_every_unlinked_row_is_named_with_its_reason(self, linked):
+        """`top_ops` ranks only rows with a value for its metric, so a signpost
+        never appears among its rows; this is the only place it is accounted
+        for. Row 6 is past the last operation the profiler captured."""
+        registry, handle, _ = linked(
+            rows=[*_CANONICAL_ROWS, _perf_row("MatmulDeviceOperation", 6)]
+        )
+
+        link = linking.top_ops(registry, handle)["operation_link"]
+
+        assert link["unlinked_rows"] == [
+            {
+                "id": "2",
+                "op_code": "signpost-start",
+                "op_type": "signpost",
+                "reason": UnlinkedReason.SIGNPOST.value,
+            },
+            {
+                "id": "4",
+                "op_code": "aten::add (torch)",
+                "op_type": "python_fallback",
+                "reason": UnlinkedReason.HOST_OP.value,
+            },
+            {
+                "id": "6",
+                "op_code": "MatmulDeviceOperation",
+                "op_type": "tt_dnn_device",
+                "reason": UnlinkedReason.PAST_PROFILER_CAPTURE.value,
+            },
+        ]
+        assert link["unlinked_row_count"] == 3
+        assert link["matched_rows"] + link["unlinked_row_count"] == 5
+
+    def test_the_unlinked_rows_are_capped_and_counted(self, linked):
+        signposts = [
+            _perf_row(f"signpost-{index}", 100 + index, "signpost")
+            for index in range(MAX_LIMIT + 1)
+        ]
+        registry, handle, _ = linked(rows=[*_CANONICAL_ROWS, *signposts])
+
+        link = linking.top_ops(registry, handle)["operation_link"]
+
+        assert len(link["unlinked_rows"]) == MAX_LIMIT
+        assert link["unlinked_row_count"] == MAX_LIMIT + 3
+
+    def test_an_unlinked_pair_lists_no_unlinked_rows(self, linked):
+        """Every row is unlinked then, which `status` already says."""
+        registry, handle, _ = linked(
+            graphs={**_GRAPHS, 3: _graph("ttnn.add", "SomethingElse")}
+        )
+
+        link = linking.top_ops(registry, handle)["operation_link"]
+
+        assert "unlinked_rows" not in link and "unlinked_row_count" not in link
+
+    def test_operation_detail_carries_no_unlinked_rows(self, linked):
+        """They belong to no operation, so they are not any one operation's detail."""
+        registry, handle, _ = linked()
+
+        result = linking.operation_detail(registry, handle, operation_id=2)
+
+        assert "unlinked_rows" not in result["operation_link"]
 
     def test_a_performance_only_handle_still_answers(self, linked):
         registry, handle, _ = linked(profiler=False)
