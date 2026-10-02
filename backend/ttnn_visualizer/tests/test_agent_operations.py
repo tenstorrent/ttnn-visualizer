@@ -1531,6 +1531,6 @@ class TestProfilerDatabase:
         agent_operations.memory_profile(registry, handle)
 
         instance = registry.get(handle)
-        with agent_operations._profiler_db(instance) as queries:
+        with agent_operations.profiler_db(instance) as queries:
             with pytest.raises(sqlite3.OperationalError, match="readonly"):
                 queries.query_runner.execute_query("DELETE FROM buffers")

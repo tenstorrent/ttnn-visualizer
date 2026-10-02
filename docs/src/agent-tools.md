@@ -38,11 +38,11 @@ server needs no database and no running application.
 | Tool | Answers |
 |---|---|
 | `load_report` | What this report contains, and which of the tools below apply to it. Returns a handle the others take. |
-| `top_ops` | The costliest operations by device time, op-to-op gap, total percentage, FLOPS, DRAM bandwidth or core count. |
+| `top_ops` | The costliest operations by device time, op-to-op gap, total percentage, FLOPS, DRAM bandwidth or core count. Each row carries the profiler `operation_id` it links to, when the handle holds both reports — see below. |
 | `zone_timings` | Per-zone, per-RISC totals from `profile_log_device.csv` — firmware and kernel phases, as measured on device. |
 | `diff_reports` | Per-operation-code deltas between two reports, largest movement first. |
 | `find_operations` | Operations matching a name substring or a call-stack substring, with the ids `operation_detail` takes. |
-| `operation_detail` | One operation: its input and output tensors with shape, dtype, layout and memory config, and what it had allocated. |
+| `operation_detail` | One operation: its input and output tensors with shape, dtype, layout and memory config, and what it had allocated. With a linked performance report, also the performance rows it launched and their device time. |
 | `memory_profile` | Memory footprint per operation, keyed by buffer type and ranked within each, with each type's largest footprint and the device's L1 geometry. A floor rather than the peak — see below. |
 | `tensor_flow` | Which operation produced a tensor and which ones consumed it. |
 | `operation_provenance` | What one operation was called with, and where in the model code it came from. |
@@ -154,14 +154,47 @@ need the device log's `type` column to pair zone starts with ends; a capture wit
 reports occurrence counts only, and a capture that stopped mid-zone reports how many starts
 and ends failed to pair so a partial total does not read as a complete one.
 
+**A performance row and a profiler operation are linked by order, not by a shared id.**
+Neither report records the other's id, so when a handle is loaded with both, the tools
+align the device operations each profiler operation launched (from its captured graph)
+against the performance rows, in order — the same match the application uses to link a
+memory report to a performance report. `top_ops` then gives each row an `operation_id`,
+and `operation_detail` lists an operation's `perf_rows` with device time in microseconds;
+its own `duration` is host seconds.
+
+Every response that carries the link says how it went in `operation_link`:
+
+- `linked` names the rank the ids belong to — the CSV records no rank, and rank 0 is what
+  the application links against — and `matched_rows` says how many rows linked.
+  `operation_detail` read at any other rank reports `unavailable` and lists no
+  `perf_rows`, because ids restart per rank.
+- `unlinked` means the two sequences do not line up — usually two different runs, or a
+  performance capture that stopped early — and every `operation_id` is then null rather
+  than guessed.
+- `unavailable` means the match was never tried: one half is missing or cannot be read,
+  the profiler report records no captured graph, one of its captured graphs is not
+  readable, or a multi-host report carries no `rank` on the graph or device tables. A link that skipped an unreadable graph could still align and pair rows
+  with the wrong operations, so none is attempted.
+
+On a linked pair an `operation_id` is still null for a row with no profiler operation:
+a host op, a signpost, or a row past the end of a profiler capture that stopped before
+the performance one did. The match tolerates trailing rows, as the application's does.
+`top_ops` names each such row in `operation_link.unlinked_rows` with its `reason` —
+`signpost`, `host_op` or `past_profiler_capture` — and counts them in
+`unlinked_row_count`. Read the list there rather than looking for null ids among the
+ranked rows: the ranking leaves out any row with no value for its metric, which is every
+signpost, so `matched_rows` and the rows returned do not add up to the report.
+
 **An operation id is not the end of the answer.** `memory_profile` names the operations
 holding its largest footprint, and `operation_provenance` turns such an id into the two things you need
 to act on it: the arguments it was called with, and the innermost stack frame's file,
 line, function and source line.
 
-`top_ops` and `diff_reports` name an operation too, but their `id` is a row of the
-performance CSV and does not belong here — see the id-space note above. Cross by
-searching for the name with `find_operations`, which returns database ids. Frames are recorded innermost first, so the call site is the `ttnn.<op>`
+`top_ops` names an operation too, but its `id` is a row of the performance CSV and does
+not belong here (`diff_reports` returns no id at all: it groups by op code): the two ids are small integers in overlapping
+ranges, so passing one where the other belongs answers about a different operation
+rather than refusing. Pass a `top_ops` row's `operation_id` instead, or search for the
+name with `find_operations`. Frames are recorded innermost first, so the call site is the `ttnn.<op>`
 call in the model code with no guessing about which frame is yours, and it is the same
 frame the operation details panel shows for that operation.
 
