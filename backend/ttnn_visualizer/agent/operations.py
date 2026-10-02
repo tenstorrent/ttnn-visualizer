@@ -341,8 +341,9 @@ def operation_provenance(
     `operation_detail` and `find_operations` use -- *not* the `id` from `top_ops`
     or `diff_reports`, which number rows of the performance CSV. The two are small
     integers in overlapping ranges, so passing a CSV row number here does not
-    refuse; it answers about a different operation. `find_operations` is how to
-    cross from a name to a database id.
+    refuse; it answers about a different operation. A `top_ops` row's
+    `operation_id` (`linking.top_ops`) is how to cross from a performance row, and
+    `find_operations` from a name.
 
     This is the step that was missing: `memory_profile` names the operations
     holding its largest footprint, and nothing turned those ids into something

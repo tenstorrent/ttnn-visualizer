@@ -14,7 +14,7 @@ answer; that is the capture, not the app's session.) #1995
 
 import sqlite3
 from pathlib import Path
-from typing import Callable, Dict, List, Optional
+from typing import Callable, Dict, List, Optional, Tuple, TypeVar, cast
 
 from ttnn_visualizer.csv_queries import (
     DeviceLogProfilerQueries,
@@ -27,6 +27,8 @@ from ttnn_visualizer.models import Instance
 # operation, memory and tensor questions answerable, and `agent.operations`
 # opens it read-only by this name. #2012
 PROFILER_DB_FILE = "db.sqlite"
+
+Cached = TypeVar("Cached")
 
 
 class UnknownHandleError(ValueError):
@@ -42,7 +44,7 @@ class ReportRegistry:
 
     def __init__(self) -> None:
         self._instances: Dict[str, Instance] = {}
-        self._reports: Dict[str, Dict] = {}
+        self._reports: Dict[Tuple[str, str], object] = {}
         self._next_id = 1
 
     def add(self, profiler_path: Optional[str], performance_path: Optional[str]) -> str:
@@ -64,8 +66,13 @@ class ReportRegistry:
                 f"unknown handle {handle!r}; loaded handles: {known}"
             ) from None
 
-    def cached_report(self, handle: str, build: Callable[[Instance], Dict]) -> Dict:
-        """Keep one report snapshot per handle.
+    def cached_report(
+        self,
+        handle: str,
+        build: Callable[[Instance], Cached],
+        variant: str = "canonical",
+    ) -> Cached:
+        """Keep one report snapshot per handle and variant.
 
         `generate_report` re-parses the CSV, shells through tt-perf-report and
         writes three temp files; an agent asking four questions of one report
@@ -75,12 +82,17 @@ class ReportRegistry:
         process-wide generation cache underneath only lets loading the same
         unchanged file again skip regeneration; the MCP server runs in its own
         process, so nothing here is shared with the HTTP app.
+
+        `variant` keeps a second projection of the same handle apart from the
+        canonical one: the operation link reads the report with host ops hidden,
+        and serving that snapshot to `top_ops` would drop the rows its projection
+        promises.
         """
-        report = self._reports.get(handle)
-        if report is None:
-            report = build(self.get(handle))
-            self._reports[handle] = report
-        return report
+        key = (handle, variant)
+        if key not in self._reports:
+            self._reports[key] = build(self.get(handle))
+        # Each variant has one builder, so the key fixes the type it stored.
+        return cast(Cached, self._reports[key])
 
     def clear(self) -> None:
         self._instances.clear()

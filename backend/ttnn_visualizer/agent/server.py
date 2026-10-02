@@ -18,7 +18,7 @@ import logging
 import sys
 from typing import Callable, Dict, List, Optional, TextIO
 
-from ttnn_visualizer.agent import operations, tools
+from ttnn_visualizer.agent import linking, operations, tools
 from ttnn_visualizer.agent.bounds import MAX_LIMIT
 from ttnn_visualizer.agent.handles import (
     ReportRegistry,
@@ -105,7 +105,12 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
             "description": (
                 "The costliest operations by one metric. Reads the report unfiltered "
                 "-- host ops included, no signpost range -- and returns the projection "
-                "it used alongside the rows."
+                "it used alongside the rows. Each row's id numbers the performance "
+                "CSV; its operation_id, when the handle was loaded with a profiler "
+                "report too, is the profiler database id to pass to "
+                "operation_provenance or operation_detail. operation_link says "
+                "whether the two reports linked and at which rank; operation_id is "
+                "null on host ops, signposts, and every row of an unlinked pair."
             ),
             "schema": {
                 "type": "object",
@@ -116,7 +121,7 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
                 },
                 "required": ["handle"],
             },
-            "handler": lambda arguments: tools.top_ops(registry, **arguments),
+            "handler": lambda arguments: linking.top_ops(registry, **arguments),
         },
         McpToolName.ZONE_TIMINGS: {
             "description": (
@@ -190,7 +195,10 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
                 "One operation: its input and output tensors with shape, dtype and "
                 "layout, and what it had allocated. Read tensor_size_unit: a "
                 "tensor size is whole-tensor bytes only where the report carries "
-                "that column, and per bank otherwise."
+                "that column, and per bank otherwise. When the handle also holds a "
+                "linked performance report, perf_rows lists the device operations "
+                "it launched with their device time in microseconds; its own "
+                "duration is host seconds."
             ),
             "schema": {
                 "type": "object",
@@ -201,7 +209,7 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
                 },
                 "required": ["handle", "operation_id"],
             },
-            "handler": lambda arguments: operations.operation_detail(
+            "handler": lambda arguments: linking.operation_detail(
                 registry, **arguments
             ),
         },
@@ -244,7 +252,8 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
                 "profiler database's operation_id, the same id memory_profile, "
                 "operation_detail and find_operations use -- NOT the id from "
                 "top_ops or diff_reports, which number rows of the performance "
-                "CSV and do not share this id space. Older captures record no "
+                "CSV and do not share this id space. A top_ops row's operation_id "
+                "is the one to pass here. Older captures record no "
                 "stack trace, and the response says so rather than returning an "
                 "empty call site."
             ),
