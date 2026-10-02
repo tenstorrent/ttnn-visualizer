@@ -12,6 +12,7 @@ and leave every id null, because a guessed id answers confidently about the wron
 operation.
 """
 
+import csv
 import json
 import sqlite3
 from pathlib import Path
@@ -19,20 +20,21 @@ from typing import Dict, List, Optional
 from unittest.mock import patch
 
 import pytest
-from ttnn_visualizer.agent import linking, tools
+from ttnn_visualizer.agent import linking, server, tools
+from ttnn_visualizer.agent.bounds import MAX_LIMIT
 from ttnn_visualizer.agent.handles import ReportRegistry, load_report
-from ttnn_visualizer.agent.linking import DeviceOperation, LinkStatus
+from ttnn_visualizer.agent.linking import DeviceOperation, LinkStatus, MatchedOn
 from ttnn_visualizer.tests.test_device_log_columns import (
     MODERN_HEADER,
     write_device_log,
 )
 
 
-def op(name: str, operation_id: int) -> DeviceOperation:
+def _op(name: str, operation_id: int) -> DeviceOperation:
     return DeviceOperation(operation_id, name)
 
 
-def perf_row(name: str, row_id: int, op_type: Optional[str] = "tt_dnn_device"):
+def _perf_row(name: str, row_id: int, op_type: Optional[str] = "tt_dnn_device"):
     return {
         "id": str(row_id),
         "raw_op_code": name,
@@ -42,19 +44,19 @@ def perf_row(name: str, row_id: int, op_type: Optional[str] = "tt_dnn_device"):
     }
 
 
-def perf_rows_for(names: List[str]):
-    return [perf_row(name, index) for index, name in enumerate(names)]
+def _perf_rows_for(names: List[str]):
+    return [_perf_row(name, index) for index, name in enumerate(names)]
 
 
-def duplicated_per_device(names: List[str], num_devices: int):
+def _duplicated_per_device(names: List[str], num_devices: int):
     return [
-        op(name, index + 1)
+        _op(name, index + 1)
         for index, name in enumerate(names)
         for _ in range(num_devices)
     ]
 
 
-def matched(start, end, rows, num_devices):
+def _matched(start, end, rows, num_devices):
     match = linking.match_device_operations(start, end, rows, num_devices)
     if match is None:
         return []
@@ -68,80 +70,108 @@ class TestMatcherParity:
     """The frontend suite's cases, so the two joins cannot drift apart unnoticed."""
 
     def test_signposts_are_dropped_before_aligning(self):
-        rows = [perf_row("start", 0, "signpost"), *perf_rows_for(["Alpha"])]
-        rows[1]["id"] = "1"
-        assert matched([op("Alpha", 1)], [op("Alpha", 1)], rows, 1) == [
+        rows = [_perf_row("start", 0, "signpost"), _perf_row("Alpha", 1)]
+        assert _matched([_op("Alpha", 1)], [_op("Alpha", 1)], rows, 1) == [
             ("Alpha", 1, "1")
         ]
 
+    def test_signposts_are_dropped_on_the_collapsed_fallback_too(self):
+        ops = _duplicated_per_device(["Alpha", "Beta"], 2)
+        rows = [
+            _perf_row("start", 0, "signpost"),
+            _perf_row("Alpha", 1),
+            _perf_row("Beta", 2),
+        ]
+        assert _matched(ops, ops, rows, 2) == [("Alpha", 1, "1"), ("Beta", 2, "2")]
+
+    def test_a_report_that_disagrees_once_signposts_are_dropped_is_rejected(self):
+        ops = [_op("Alpha", 1), _op("Beta", 2)]
+        rows = [_perf_row("Alpha", 0), _perf_row("marker", 1, "signpost")]
+        assert _matched(ops, ops, rows, 1) == []
+
     def test_a_row_with_an_unresolved_op_type_is_kept(self):
-        rows = [perf_row("Alpha", 0, None)]
-        assert matched([op("Alpha", 1)], [op("Alpha", 1)], rows, 1) == [
+        rows = [_perf_row("Alpha", 0, None)]
+        assert _matched([_op("Alpha", 1)], [_op("Alpha", 1)], rows, 1) == [
             ("Alpha", 1, "0")
         ]
 
     def test_it_collapses_a_report_that_records_each_op_once_per_device(self):
-        ops = duplicated_per_device(["Alpha", "Beta", "Gamma"], 2)
-        assert matched(ops, ops, perf_rows_for(["Alpha", "Beta", "Gamma"]), 2) == [
+        ops = _duplicated_per_device(["Alpha", "Beta", "Gamma"], 2)
+        assert _matched(ops, ops, _perf_rows_for(["Alpha", "Beta", "Gamma"]), 2) == [
             ("Alpha", 1, "0"),
             ("Beta", 2, "1"),
             ("Gamma", 3, "2"),
         ]
 
+    def test_it_collapses_a_32_device_report_to_the_merged_rows(self):
+        ops = _duplicated_per_device(["Alpha", "Beta"], 32)
+        assert len(_matched(ops, ops, _perf_rows_for(["Alpha", "Beta"]), 32)) == 2
+
     def test_it_matches_when_the_devices_table_is_empty(self):
-        ops = [op("Alpha", 1), op("Beta", 2)]
-        assert len(matched(ops, ops, perf_rows_for(["Alpha", "Beta"]), 0)) == 2
+        ops = [_op("Alpha", 1), _op("Beta", 2)]
+        assert len(_matched(ops, ops, _perf_rows_for(["Alpha", "Beta"]), 0)) == 2
 
     def test_a_single_device_report_keeps_repeated_ops(self):
-        ops = [op("Alpha", 1), op("Alpha", 1), op("Beta", 2)]
-        assert len(matched(ops, ops, perf_rows_for(["Alpha", "Alpha", "Beta"]), 1)) == 3
+        ops = [_op("Alpha", 1), _op("Alpha", 1), _op("Beta", 2)]
+        rows = _perf_rows_for(["Alpha", "Alpha", "Beta"])
+        assert len(_matched(ops, ops, rows, 1)) == 3
 
     def test_trailing_rows_are_tolerated(self):
-        ops = [op("Alpha", 1)]
-        rows = perf_rows_for(["Alpha", "HostOp", "HostOp"])
-        assert matched(ops, ops, rows, 1) == [("Alpha", 1, "0")]
+        ops = [_op("Alpha", 1)]
+        rows = _perf_rows_for(["Alpha", "HostOp", "HostOp"])
+        assert _matched(ops, ops, rows, 1) == [("Alpha", 1, "0")]
 
     @pytest.mark.parametrize(
         "ops, names, num_devices",
         [
-            ([op("Alpha", 1), op("Beta", 2)], ["Alpha", "Gamma"], 1),
-            ([op("Alpha", 1), op("Beta", 2)], ["Alpha", "Gamma"], 2),
-            ([op("Alpha", 1), op("Beta", 2), op("Gamma", 3)], ["Alpha", "Beta"], 1),
+            ([_op("Alpha", 1), _op("Beta", 2)], ["Alpha", "Gamma"], 1),
+            ([_op("Alpha", 1), _op("Beta", 2)], ["Alpha", "Gamma"], 2),
+            (
+                [_op("Alpha", 1), _op("Beta", 2), _op("Gamma", 3)],
+                ["Alpha", "Beta"],
+                1,
+            ),
             ([], ["Alpha"], 1),
             # The direct pass agrees on a prefix, then the collapse rejects it.
-            (duplicated_per_device(["Alpha", "Beta"], 2), ["Alpha", "Alpha"], 2),
+            (_duplicated_per_device(["Alpha", "Beta"], 2), ["Alpha", "Alpha"], 2),
         ],
     )
     def test_no_partial_match_is_returned(self, ops, names, num_devices):
-        assert matched(ops, ops, perf_rows_for(names), num_devices) == []
+        assert _matched(ops, ops, _perf_rows_for(names), num_devices) == []
 
     def test_it_falls_back_to_function_end_order_for_nested_ops(self):
-        start = [op("SparseMatmulDeviceOperation", 59), op("UnaryDeviceOperation", 59)]
-        end = [op("UnaryDeviceOperation", 59), op("SparseMatmulDeviceOperation", 59)]
-        rows = perf_rows_for(["UnaryDeviceOperation", "SparseMatmulDeviceOperation"])
+        start = [
+            _op("SparseMatmulDeviceOperation", 59),
+            _op("UnaryDeviceOperation", 59),
+        ]
+        end = [
+            _op("UnaryDeviceOperation", 59),
+            _op("SparseMatmulDeviceOperation", 59),
+        ]
+        rows = _perf_rows_for(["UnaryDeviceOperation", "SparseMatmulDeviceOperation"])
 
         match = linking.match_device_operations(start, end, rows, 1)
 
-        assert match is not None and match.matched_on == "function_end"
+        assert match is not None and match.matched_on is MatchedOn.FUNCTION_END
 
     def test_complete_end_order_beats_a_spurious_collapsed_start_prefix(self):
         start = [
-            op("Pad", 1),
-            op("Pad", 1),
-            op("Matmul", 2),
-            op("Outer", 3),
-            op("Inner", 3),
+            _op("Pad", 1),
+            _op("Pad", 1),
+            _op("Matmul", 2),
+            _op("Outer", 3),
+            _op("Inner", 3),
         ]
         end = [
-            op("Pad", 1),
-            op("Pad", 1),
-            op("Matmul", 2),
-            op("Inner", 3),
-            op("Outer", 3),
+            _op("Pad", 1),
+            _op("Pad", 1),
+            _op("Matmul", 2),
+            _op("Inner", 3),
+            _op("Outer", 3),
         ]
-        rows = perf_rows_for(["Pad", "Pad", "Matmul", "Inner", "Outer"])
+        rows = _perf_rows_for(["Pad", "Pad", "Matmul", "Inner", "Outer"])
 
-        assert [name for name, _, _ in matched(start, end, rows, 2)] == [
+        assert [name for name, _, _ in _matched(start, end, rows, 2)] == [
             "Pad",
             "Pad",
             "Matmul",
@@ -150,11 +180,11 @@ class TestMatcherParity:
         ]
 
     def test_a_duplicated_nested_sequence_matches_on_the_collapsed_end_pass(self):
-        start = [op("Outer", 1), op("Outer", 1), op("Inner", 1), op("Inner", 1)]
-        end = [op("Inner", 1), op("Inner", 1), op("Outer", 1), op("Outer", 1)]
+        start = [_op("Outer", 1), _op("Outer", 1), _op("Inner", 1), _op("Inner", 1)]
+        end = [_op("Inner", 1), _op("Inner", 1), _op("Outer", 1), _op("Outer", 1)]
 
         match = linking.match_device_operations(
-            start, end, perf_rows_for(["Inner", "Outer"]), 2
+            start, end, _perf_rows_for(["Inner", "Outer"]), 2
         )
 
         assert match is not None
@@ -162,49 +192,55 @@ class TestMatcherParity:
             "Inner",
             "Outer",
         ]
-        assert match.matched_on == "function_end_collapsed"
+        assert match.matched_on is MatchedOn.FUNCTION_END_COLLAPSED
 
     def test_a_collapsed_end_prefix_omitting_unduplicated_ops_is_rejected(self):
         start = [
-            op("Outer", 1),
-            op("Inner", 1),
-            op("Outer", 1),
-            op("Inner", 1),
-            op("Matmul", 2),
+            _op("Outer", 1),
+            _op("Inner", 1),
+            _op("Outer", 1),
+            _op("Inner", 1),
+            _op("Matmul", 2),
         ]
         end = [
-            op("Inner", 1),
-            op("Outer", 1),
-            op("Inner", 1),
-            op("Outer", 1),
-            op("Matmul", 2),
+            _op("Inner", 1),
+            _op("Outer", 1),
+            _op("Inner", 1),
+            _op("Outer", 1),
+            _op("Matmul", 2),
         ]
+        rows = _perf_rows_for(["Inner", "Outer", "Matmul"])
 
-        assert matched(start, end, perf_rows_for(["Inner", "Outer", "Matmul"]), 2) == []
+        assert _matched(start, end, rows, 2) == []
 
     def test_start_order_is_preferred_when_both_align(self):
-        start = [op("Alpha", 10), op("Alpha", 20)]
-        end = [op("Alpha", 20), op("Alpha", 10)]
+        start = [_op("Alpha", 10), _op("Alpha", 20)]
+        end = [_op("Alpha", 20), _op("Alpha", 10)]
+        rows = _perf_rows_for(["Alpha", "Alpha"])
 
         assert [
-            operation_id
-            for _, operation_id, _ in matched(
-                start, end, perf_rows_for(["Alpha", "Alpha"]), 1
-            )
-        ] == [10, 20]
+            operation_id for _, operation_id, _ in _matched(start, end, rows, 1)
+        ] == [
+            10,
+            20,
+        ]
 
     @pytest.mark.parametrize(
         "start, end, names",
         [
-            ([op("Outer", 1), op("Inner", 1)], [op("Inner", 1)], ["Inner", "Outer"]),
             (
-                [op("Outer", 1), op("Inner", 1)],
-                [op("Inner", 1), op("Different", 1)],
+                [_op("Outer", 1), _op("Inner", 1)],
+                [_op("Inner", 1)],
+                ["Inner", "Outer"],
+            ),
+            (
+                [_op("Outer", 1), _op("Inner", 1)],
+                [_op("Inner", 1), _op("Different", 1)],
                 ["Inner", "Different"],
             ),
             (
-                [op("Alpha", 1), op("Alpha", 1), op("Beta", 1)],
-                [op("Alpha", 1), op("Beta", 1), op("Beta", 1)],
+                [_op("Alpha", 1), _op("Alpha", 1), _op("Beta", 1)],
+                [_op("Alpha", 1), _op("Beta", 1), _op("Beta", 1)],
                 ["Alpha", "Beta", "Beta"],
             ),
         ],
@@ -213,10 +249,10 @@ class TestMatcherParity:
     def test_end_order_is_refused_unless_it_holds_the_same_operations(
         self, start, end, names
     ):
-        assert matched(start, end, perf_rows_for(names), 1) == []
+        assert _matched(start, end, _perf_rows_for(names), 1) == []
 
     def test_collapse_keeps_only_keys_seen_once_per_device(self):
-        ops = [op("Alpha", 1), op("Alpha", 1), op("Beta", 2)]
+        ops = [_op("Alpha", 1), _op("Alpha", 1), _op("Beta", 2)]
         assert linking.collapse_multidevice_operations(ops, 1) == ops
         assert [o.name for o in linking.collapse_multidevice_operations(ops, 2)] == [
             "Alpha"
@@ -236,11 +272,73 @@ class TestMatcherParity:
         assert linking.is_device_operation(name) is expected
 
 
-def _graph(*names: str) -> str:
+class TestLinkView:
+    def test_it_is_the_apps_pinned_link_view(self):
+        """`LINKED_PERFORMANCE_REPORT_FILTERS`: merged, host ops hidden, no range.
+
+        Derived from the canonical projection, so a change there would move the link
+        view silently without this.
+        """
+        assert linking.LINK_VIEW["merge_devices"] is True
+        assert linking.LINK_VIEW["hide_host_ops"] is True
+        assert "start_signpost" not in linking.LINK_VIEW
+        assert "end_signpost" not in linking.LINK_VIEW
+
+
+class TestLinkViewEndToEnd:
+    """Filtering the canonical rows must equal what the app links against.
+
+    The mocked tests below hand both views identical ids by construction, so only the
+    real generator can show that tt-perf-report keeps each row's id through
+    `hide_host_ops` and drops nothing but host ops.
+    """
+
+    SMOKE_CAPTURE = Path("scripts/fixtures/smoke-performance-report")
+
+    def _capture_with_a_host_op(self, tmp_path) -> Path:
+        source = self.SMOKE_CAPTURE / "ops_perf_results.csv"
+        if not source.is_file():
+            pytest.skip(f"{source} is not present")
+        rows = list(csv.DictReader(source.open()))
+        # Mid-report, so a filter that renumbered would shift every later id.
+        host_op = {
+            **rows[len(rows) // 2],
+            "OP CODE": "aten::add (torch)",
+            "OP TYPE": "python_fallback",
+        }
+        rows.insert(len(rows) // 2, host_op)
+        destination = tmp_path / "with-host-op"
+        destination.mkdir()
+        with (destination / "ops_perf_results.csv").open("w", newline="") as out:
+            writer = csv.DictWriter(out, fieldnames=list(rows[0].keys()))
+            writer.writeheader()
+            writer.writerows(rows)
+        return destination
+
+    def test_the_filtered_canonical_rows_are_the_link_view(self, tmp_path):
+        registry = ReportRegistry()
+        capture = self._capture_with_a_host_op(tmp_path)
+        handle = load_report(registry, performance_path=str(capture))["handle"]
+        instance = registry.get(handle)
+
+        canonical = tools._generate_canonical_report(instance)["report"]
+        hidden = tools._generate_canonical_report(instance, hide_host_ops=True)[
+            "report"
+        ]
+        derived = [row for row in canonical if not linking.is_host_op_row(row)]
+
+        assert len(derived) < len(canonical)
+        assert [(row["id"], row.get("raw_op_code")) for row in derived] == [
+            (row["id"], row.get("raw_op_code")) for row in hidden
+        ]
+
+
+def _graph(*names: str, nested: bool = True) -> str:
+    """A captured graph; `nested` closes names in reverse, as a parent wraps a child."""
     nodes: List[Dict[str, object]] = [{"node_type": "capture_start", "params": None}]
     for name in names:
         nodes.append({"node_type": "function_start", "params": {"name": name}})
-    for name in reversed(names):
+    for name in reversed(names) if nested else names:
         nodes.append({"node_type": "function_end", "params": {"name": name}})
     return json.dumps(nodes)
 
@@ -260,23 +358,82 @@ CREATE TABLE tensors (
 CREATE TABLE input_tensors (operation_id int, input_index int, tensor_id int);
 CREATE TABLE output_tensors (operation_id int, output_index int, tensor_id int);
 INSERT INTO devices VALUES (0, 64, 1370848);
-INSERT INTO operations VALUES
-    (1, 'ttnn.from_torch', 0.1),
-    (2, 'ttnn.matmul', 0.2),
-    (3, 'ttnn.add', 0.3);
+"""
+
+_OPERATIONS = [(1, "ttnn.from_torch"), (2, "ttnn.matmul"), (3, "ttnn.add")]
+
+# The two rank-scoped columns `operation_detail` checks, plus the tables the link
+# itself reads, all carrying `rank` so a two-rank report is attributable.
+_RANKED_PROFILER_SQL = """
+CREATE TABLE operations (
+    operation_id int, name text, duration float, rank int NOT NULL DEFAULT 0
+);
+CREATE TABLE captured_graph (
+    operation_id int, captured_graph text, rank int NOT NULL DEFAULT 0
+);
+CREATE TABLE devices (
+    device_id int, l1_num_banks int, l1_bank_size int, rank int NOT NULL DEFAULT 0
+);
+CREATE TABLE buffers (
+    operation_id int, device_id int, address int, max_size_per_bank int,
+    buffer_type text, buffer_layout int, rank int NOT NULL DEFAULT 0
+);
+CREATE TABLE tensors (
+    tensor_id int, shape text, dtype text, layout text, memory_config text,
+    device_id int, address int, buffer_type text, rank int NOT NULL DEFAULT 0
+);
+CREATE TABLE input_tensors (
+    operation_id int, input_index int, tensor_id int, rank int NOT NULL DEFAULT 0
+);
+CREATE TABLE output_tensors (
+    operation_id int, output_index int, tensor_id int, rank int NOT NULL DEFAULT 0
+);
+INSERT INTO devices VALUES (0, 64, 1370848, 0), (0, 64, 1370848, 1);
 """
 
 
-def _write_profiler(directory: Path, graphs: Optional[dict]) -> str:
+def _write_profiler(
+    directory: Path,
+    graphs: Optional[dict],
+    operations=_OPERATIONS,
+    devices: int = 1,
+) -> str:
     directory.mkdir(parents=True, exist_ok=True)
     connection = sqlite3.connect(directory / "db.sqlite")
     try:
         connection.executescript(_PROFILER_SQL)
+        connection.executemany(
+            "INSERT INTO operations VALUES (?, ?, 0.1)", list(operations)
+        )
+        connection.executemany(
+            "INSERT INTO devices VALUES (?, 64, 1370848)",
+            [(device,) for device in range(1, devices)],
+        )
         if graphs is None:
             connection.execute("DROP TABLE captured_graph")
         else:
             connection.executemany(
                 "INSERT INTO captured_graph VALUES (?, ?)", list(graphs.items())
+            )
+        connection.commit()
+    finally:
+        connection.close()
+    return str(directory)
+
+
+def _write_ranked_profiler(directory: Path, graphs: dict) -> str:
+    directory.mkdir(parents=True, exist_ok=True)
+    connection = sqlite3.connect(directory / "db.sqlite")
+    try:
+        connection.executescript(_RANKED_PROFILER_SQL)
+        for rank in (0, 1):
+            connection.executemany(
+                "INSERT INTO operations VALUES (?, ?, 0.1, ?)",
+                [(operation_id, name, rank) for operation_id, name in _OPERATIONS],
+            )
+            connection.executemany(
+                "INSERT INTO captured_graph VALUES (?, ?, ?)",
+                [(operation_id, graph, rank) for operation_id, graph in graphs.items()],
             )
         connection.commit()
     finally:
@@ -292,129 +449,265 @@ _GRAPHS = {
 }
 
 # CSV row numbers, as tt-perf-report assigns them: not 1..n, and not the profiler's
-# ids, which is the whole reason the join is needed.
-_LINKED_ROWS = [
-    perf_row("signpost-start", 2, "signpost"),
-    perf_row("MatmulDeviceOperation", 3),
-    perf_row("BinaryNgDeviceOperation", 5),
-]
+# ids, which is the whole reason the join is needed. The host op sits mid-report, so
+# a link run over the canonical rows rather than the link view would fail.
 _CANONICAL_ROWS = [
-    _LINKED_ROWS[0],
-    _LINKED_ROWS[1],
-    {**perf_row("HostOnlyOp", 4, "tt_dnn_cpu"), "device_time": None},
-    {**_LINKED_ROWS[2], "device_time": "9.0"},
+    _perf_row("signpost-start", 2, "signpost"),
+    _perf_row("MatmulDeviceOperation", 3),
+    {**_perf_row("aten::add (torch)", 4, "python_fallback"), "device_time": "0.5"},
+    {**_perf_row("BinaryNgDeviceOperation", 5), "device_time": "9.0"},
 ]
 
 
-def _report_for(instance, **overrides):
-    rows = _LINKED_ROWS if overrides.get("hide_host_ops") else _CANONICAL_ROWS
-    return {"report": rows, "stacked_report": [], "signposts": []}
+def _report_for(rows):
+    def generate(instance, **overrides):
+        return {"report": rows, "stacked_report": [], "signposts": []}
+
+    return generate
 
 
 @pytest.fixture
 def linked(tmp_path):
-    def _linked(graphs: Optional[dict] = _GRAPHS, profiler=True, performance=True):
+    """A registry with one handle, and the canonical report patched in for it."""
+
+    patches = []
+
+    def _linked(
+        graphs: Optional[dict] = _GRAPHS,
+        profiler=True,
+        performance=True,
+        rows=_CANONICAL_ROWS,
+        profiler_path: Optional[str] = None,
+        **profiler_options,
+    ):
         registry = ReportRegistry()
         perf_dir = tmp_path / "perf"
         perf_dir.mkdir(exist_ok=True)
         write_device_log(perf_dir, MODERN_HEADER, [])
+        if profiler_path is None and profiler:
+            profiler_path = _write_profiler(
+                tmp_path / "profiler", graphs, **profiler_options
+            )
         handle = load_report(
             registry,
-            profiler_path=(
-                _write_profiler(tmp_path / "profiler", graphs) if profiler else None
-            ),
+            profiler_path=profiler_path,
             performance_path=str(perf_dir) if performance else None,
         )["handle"]
-        return registry, handle
+        patcher = patch.object(
+            tools, "_generate_canonical_report", side_effect=_report_for(rows)
+        )
+        patches.append(patcher)
+        generate = patcher.start()
+        return registry, handle, generate
 
-    return _linked
+    yield _linked
+    for patcher in patches:
+        patcher.stop()
 
 
 class TestTopOpsLink:
     def test_each_row_carries_its_profiler_operation_id(self, linked):
-        registry, handle = linked()
-        with patch.object(tools, "_generate_canonical_report", side_effect=_report_for):
-            result = linking.top_ops(registry, handle)
+        registry, handle, _ = linked()
+
+        result = linking.top_ops(registry, handle)
 
         by_id = {row["id"]: row["operation_id"] for row in result["ops"]}
         assert by_id["3"] == 2
         assert by_id["5"] == 3
         assert result["operation_link"]["status"] == LinkStatus.LINKED.value
         assert result["operation_link"]["matched_rows"] == 2
+        assert result["operation_link"]["matched_on"] == "function_start"
 
-    def test_the_match_reads_the_link_view_not_the_canonical_one(self, linked):
-        """A host op mid-report would shift every later row out of position."""
-        registry, handle = linked()
-        with patch.object(
-            tools, "_generate_canonical_report", side_effect=_report_for
-        ) as generate:
-            linking.top_ops(registry, handle)
-            linking.top_ops(registry, handle, by="op_to_op_gap")
+    def test_a_host_op_row_has_no_operation_id(self, linked):
+        registry, handle, _ = linked()
 
-        # Once per projection, however many questions are asked.
-        assert generate.call_count == 2
-        assert any(
-            call.kwargs.get("hide_host_ops") is True for call in generate.call_args_list
-        )
+        result = linking.top_ops(registry, handle)
+
+        assert {row["id"]: row["operation_id"] for row in result["ops"]}["4"] is None
+
+    def test_the_report_is_generated_once(self, linked):
+        """The link view is filtered from the canonical snapshot, not run again."""
+        registry, handle, generate = linked()
+
+        linking.top_ops(registry, handle)
+        linking.top_ops(registry, handle, by="op_to_op_gap")
+        linking.operation_detail(registry, handle, operation_id=2)
+
+        generate.assert_called_once()
 
     def test_the_canonical_projection_still_keeps_host_ops(self, linked):
-        """Caching the link view must not leak its filter into `top_ops`'s rows."""
-        registry, handle = linked()
-        with patch.object(tools, "_generate_canonical_report", side_effect=_report_for):
-            linking.operation_link(registry, handle)
-            result = linking.top_ops(registry, handle)
+        registry, handle, _ = linked()
+
+        linking.operation_link(registry, handle)
+        result = linking.top_ops(registry, handle)
 
         assert result["op_count"] == len(_CANONICAL_ROWS)
 
+    def test_operations_are_matched_in_id_order_not_table_order(self, linked):
+        """The app sorts `GET /operations` by id before matching (`views.py`)."""
+        registry, handle, _ = linked(operations=list(reversed(_OPERATIONS)))
+
+        result = linking.top_ops(registry, handle)
+
+        assert result["operation_link"]["status"] == LinkStatus.LINKED.value
+        assert {row["id"]: row["operation_id"] for row in result["ops"]}["3"] == 2
+
     def test_an_unlinked_pair_says_so_and_guesses_nothing(self, linked):
-        registry, handle = linked(
+        registry, handle, _ = linked(
             graphs={**_GRAPHS, 3: _graph("ttnn.add", "SomethingElse")}
         )
-        with patch.object(tools, "_generate_canonical_report", side_effect=_report_for):
-            result = linking.top_ops(registry, handle)
 
-        assert result["operation_link"]["status"] == LinkStatus.UNLINKED.value
-        assert "find_operations" in result["operation_link"]["reason"]
+        result = linking.top_ops(registry, handle)
+
+        link = result["operation_link"]
+        assert link["status"] == LinkStatus.UNLINKED.value
+        assert "find_operations" in link["reason"]
+        assert "matched_rows" not in link and "matched_on" not in link
         assert all(row["operation_id"] is None for row in result["ops"])
 
     def test_a_performance_only_handle_still_answers(self, linked):
-        registry, handle = linked(profiler=False)
-        with patch.object(tools, "_generate_canonical_report", side_effect=_report_for):
-            result = linking.top_ops(registry, handle)
+        registry, handle, _ = linked(profiler=False)
+
+        result = linking.top_ops(registry, handle)
 
         assert result["operation_link"]["status"] == LinkStatus.UNAVAILABLE.value
         assert result["ops"]
 
+    def test_a_profiler_directory_without_a_database_still_answers(
+        self, linked, tmp_path
+    ):
+        empty = tmp_path / "no-database"
+        empty.mkdir()
+        registry, handle, _ = linked(profiler_path=str(empty))
+
+        result = linking.top_ops(registry, handle)
+
+        assert result["ops"]
+        assert result["operation_link"]["status"] == LinkStatus.UNAVAILABLE.value
+        assert "db.sqlite" in result["operation_link"]["reason"]
+
+    def test_an_unreadable_profiler_database_still_answers(self, linked, tmp_path):
+        """A database `top_ops` never needed must not cost it its answer."""
+        broken = tmp_path / "broken"
+        broken.mkdir()
+        (broken / "db.sqlite").write_bytes(b"this is not a database" * 100)
+        registry, handle, _ = linked(profiler_path=str(broken))
+
+        result = linking.top_ops(registry, handle)
+
+        assert result["ops"]
+        assert result["operation_link"]["status"] == LinkStatus.UNAVAILABLE.value
+        assert "could not be read" in result["operation_link"]["reason"]
+
+
+class TestGraphReading:
     def test_a_capture_without_a_captured_graph_is_unavailable(self, linked):
-        registry, handle = linked(graphs=None)
-        with patch.object(tools, "_generate_canonical_report", side_effect=_report_for):
-            link = linking.operation_link(registry, handle)
+        registry, handle, _ = linked(graphs=None)
+
+        link = linking.operation_link(registry, handle)
 
         assert link.status is LinkStatus.UNAVAILABLE
         assert "captured graph" in (link.reason or "")
 
+    @pytest.mark.parametrize("graph", ["{not json", '{"node_type": "x"}'])
+    def test_an_unreadable_graph_refuses_the_link_rather_than_shifting_it(
+        self, linked, graph, caplog
+    ):
+        """Skipping one operation's device ops could still align, wrongly."""
+        registry, handle, _ = linked(graphs={**_GRAPHS, 2: graph})
+
+        link = linking.operation_link(registry, handle)
+
+        assert link.status is LinkStatus.UNAVAILABLE
+        assert "operation 2" in (link.reason or "")
+        assert not link.operation_by_perf_id
+        assert "operation 2" in caplog.text
+
+    def test_malformed_nodes_are_skipped(self, linked):
+        graph = json.dumps(
+            [
+                "not a node",
+                {"node_type": "function_start", "params": None},
+                {"node_type": "function_start", "params": "text"},
+                {"node_type": "function_start", "params": {"name": "Matmul"}},
+                {"node_type": "function_end", "params": {"name": "Matmul"}},
+            ]
+        )
+        rows = [_perf_row("Matmul", 7)]
+        registry, handle, _ = linked(graphs={2: graph}, rows=rows)
+
+        link = linking.operation_link(registry, handle)
+
+        assert link.status is LinkStatus.LINKED
+        assert link.operation_by_perf_id == {"7": 2}
+
+    def test_a_child_first_capture_links_on_function_end(self, linked):
+        """#1860: the child's workload is enqueued, and profiled, before its parent."""
+        rows = [_perf_row("Inner", 7), _perf_row("Outer", 8)]
+        registry, handle, _ = linked(
+            graphs={2: _graph("ttnn.matmul", "Outer", "Inner")}, rows=rows
+        )
+
+        link = linking.operation_link(registry, handle)
+
+        assert link.matched_on is MatchedOn.FUNCTION_END
+        assert link.operation_by_perf_id == {"7": 2, "8": 2}
+
+    def test_a_multi_device_capture_links_on_the_collapse(self, linked):
+        """The device count comes from the `devices` table, read at the link's rank."""
+        graphs = {
+            2: _graph("ttnn.matmul", "Matmul", "Matmul", nested=False),
+            3: _graph("ttnn.add", "Add", "Add", nested=False),
+        }
+        rows = [_perf_row("Matmul", 7), _perf_row("Add", 8)]
+        registry, handle, _ = linked(graphs=graphs, rows=rows, devices=2)
+
+        link = linking.operation_link(registry, handle)
+
+        assert link.matched_on is MatchedOn.FUNCTION_START_COLLAPSED
+        assert link.operation_by_perf_id == {"7": 2, "8": 3}
+
 
 class TestOperationDetailLink:
     def test_it_lists_the_rows_an_operation_launched(self, linked):
-        registry, handle = linked()
-        with patch.object(tools, "_generate_canonical_report", side_effect=_report_for):
-            result = linking.operation_detail(registry, handle, operation_id=2)
+        registry, handle, _ = linked()
 
-        assert [row["id"] for row in result["perf_rows"]] == ["3"]
+        result = linking.operation_detail(registry, handle, operation_id=3)
+
+        assert result["perf_rows"] == [
+            {
+                "id": "5",
+                "op_code": "BinaryNgDeviceOperation",
+                "device_time": 9.0,
+                "cores": None,
+                "bound": None,
+            }
+        ]
         assert result["perf_row_count"] == 1
-        assert result["device_time_unit"] == "us"
+        assert result["device_time_unit"] == linking.DEVICE_TIME_UNIT
         assert result["duration_unit"] == "host_seconds"
 
+    def test_perf_rows_are_capped_and_the_full_count_kept(self, linked):
+        count = MAX_LIMIT + 5
+        rows = [_perf_row("Matmul", index) for index in range(count)]
+        graph = _graph("ttnn.matmul", *(["Matmul"] * count), nested=False)
+        registry, handle, _ = linked(graphs={2: graph}, rows=rows)
+
+        result = linking.operation_detail(registry, handle, operation_id=2)
+
+        assert len(result["perf_rows"]) == MAX_LIMIT
+        assert result["perf_row_count"] == count
+
     def test_an_operation_that_launched_nothing_has_no_rows(self, linked):
-        registry, handle = linked()
-        with patch.object(tools, "_generate_canonical_report", side_effect=_report_for):
-            result = linking.operation_detail(registry, handle, operation_id=1)
+        registry, handle, _ = linked()
+
+        result = linking.operation_detail(registry, handle, operation_id=1)
 
         assert result["perf_rows"] == []
         assert result["operation_link"]["status"] == LinkStatus.LINKED.value
 
     def test_a_profiler_only_handle_omits_perf_rows(self, linked):
-        registry, handle = linked(performance=False)
+        registry, handle, _ = linked(performance=False)
 
         result = linking.operation_detail(registry, handle, operation_id=2)
 
@@ -422,12 +715,65 @@ class TestOperationDetailLink:
         assert result["operation_link"]["status"] == LinkStatus.UNAVAILABLE.value
 
     def test_an_unreadable_performance_report_costs_only_the_perf_rows(self, linked):
-        registry, handle = linked()
-        with patch.object(
-            tools, "_generate_canonical_report", side_effect=ValueError("bad csv")
-        ):
-            result = linking.operation_detail(registry, handle, operation_id=2)
+        registry, handle, generate = linked()
+        generate.side_effect = ValueError("bad csv")
+
+        result = linking.operation_detail(registry, handle, operation_id=2)
 
         assert result["name"] == "ttnn.matmul"
         assert "perf_rows" not in result
         assert "bad csv" in result["operation_link"]["reason"]
+
+    def test_another_ranks_operation_gets_no_perf_rows(self, linked, tmp_path):
+        """Ids restart per rank, so rank 1's operation 2 is not rank 0's."""
+        path = _write_ranked_profiler(tmp_path / "ranked", _GRAPHS)
+        registry, handle, _ = linked(profiler_path=path)
+
+        other = linking.operation_detail(registry, handle, operation_id=2, rank=1)
+        linked_rank = linking.operation_detail(registry, handle, operation_id=2, rank=0)
+
+        assert "perf_rows" not in other
+        assert other["operation_link"]["status"] == LinkStatus.UNAVAILABLE.value
+        assert "rank 0" in other["operation_link"]["reason"]
+        assert "rank 1" in other["operation_link"]["reason"]
+        assert [row["id"] for row in linked_rank["perf_rows"]] == ["3"]
+        assert linked_rank["operation_link"]["rank"] == 0
+
+
+class TestServerRouting:
+    """Reverting either handler to its unlinked tool must fail something."""
+
+    @pytest.fixture(autouse=True)
+    def _never_touch_the_real_event_log(self, event_log_directory):
+        """Any tools/call reaches the recorder; none may write outside tmp_path."""
+
+    def _call(self, registry, name, arguments):
+        response = server.handle_message(
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "tools/call",
+                "params": {"name": name, "arguments": arguments},
+            },
+            server._tool_table(registry),
+        )
+        assert response is not None and not response["result"].get("isError")
+        return json.loads(response["result"]["content"][0]["text"])
+
+    def test_top_ops_carries_the_link(self, linked):
+        registry, handle, _ = linked()
+
+        result = self._call(registry, "top_ops", {"handle": handle})
+
+        assert result["operation_link"]["status"] == LinkStatus.LINKED.value
+        assert all("operation_id" in row for row in result["ops"])
+
+    def test_operation_detail_carries_the_link(self, linked):
+        registry, handle, _ = linked()
+
+        result = self._call(
+            registry, "operation_detail", {"handle": handle, "operation_id": 2}
+        )
+
+        assert result["operation_link"]["status"] == LinkStatus.LINKED.value
+        assert [row["id"] for row in result["perf_rows"]] == ["3"]

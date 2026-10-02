@@ -14,8 +14,8 @@ The app already answers this for the report link, by aligning the sequence of de
 operations each profiler operation launched against the performance rows, in order.
 This is a port of that match (`src/functions/deviceOperationMatching.ts`) rather than a
 second answer to the same question: two joins that disagreed would send an agent and a
-person looking at the same report to different operations. `TestMatcherParity` pins
-the cases the frontend's own suite pins. A shared run id would replace both (#1800).
+person looking at the same report to different operations. `TestMatcherParity` restates
+the frontend suite's cases. A shared run id would replace both (#1800).
 
 This module sits above `tools` and `operations` and is the only one that reads both,
 which is what keeps those two from importing each other.
@@ -23,11 +23,13 @@ which is what keeps those two from importing each other.
 
 import json
 import logging
+import sqlite3
 from collections import Counter
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Dict, List, NamedTuple, Optional, Sequence
+from typing import Dict, List, NamedTuple, Optional, Sequence, Tuple
 
+from tt_perf_report.perf_report import HOST_OP_MARKER
 from ttnn_visualizer.agent import operations, tools
 from ttnn_visualizer.agent.bounds import MAX_LIMIT
 from ttnn_visualizer.agent.handles import ReportRegistry
@@ -35,18 +37,26 @@ from ttnn_visualizer.models import Instance
 
 logger = logging.getLogger(__name__)
 
-# The performance view the match runs against, which is the app's pinned link view
-# (`LINKED_PERFORMANCE_REPORT_FILTERS`) rather than `top_ops`'s canonical one. Host ops
-# have no device operation to pair with, and alignment is positional, so one host op
-# mid-report would shift every later row and fail the whole match. The ids survive the
-# filter -- tt-perf-report numbers rows by their CSV position -- so a linked id is the
-# same id `top_ops` returns.
-LINK_PROJECTION_OVERRIDES: Dict[str, object] = {"hide_host_ops": True}
+# The view the match runs against: the app's pinned link view
+# (`LINKED_PERFORMANCE_REPORT_FILTERS`) -- devices merged, host ops hidden, no signpost
+# range. Host ops have no device operation to pair with, and alignment is positional,
+# so one host op mid-report would shift every later row and fail the whole match.
+#
+# It is derived from `top_ops`'s canonical snapshot rather than generated again,
+# because `hide_host_ops` only drops rows: tt-perf-report filters on `HOST_OP_MARKER`
+# and keeps each surviving row's id, which is its CSV position. On three local
+# captures, one with 65 host ops, the filtered canonical rows equal a
+# `hide_host_ops=True` run on id, op code, op type, device time, cores and bound.
+# `TestLinkViewEndToEnd` pins that against the real generator, and this mapping pins
+# that nothing else about the canonical projection has drifted from the app's.
+LINK_VIEW: Dict[str, object] = {**tools.CANONICAL_PROJECTION, "hide_host_ops": True}
 
 _LINK_VARIANT = "operation_link"
-_LINKED_REPORT_VARIANT = "linked_report"
 
 SIGNPOST_OP_TYPE = "signpost"
+
+# Microseconds, as tt-perf-report writes `device_time`.
+DEVICE_TIME_UNIT = "us"
 
 
 class LinkStatus(str, Enum):
@@ -54,8 +64,22 @@ class LinkStatus(str, Enum):
     # Both halves were read and they do not describe the same run, or not in an order
     # this match can recover.
     UNLINKED = "unlinked"
-    # One half is missing, so whether they match was never asked.
+    # One half is missing or unreadable, so whether they match was never asked.
     UNAVAILABLE = "unavailable"
+
+
+class NodeOrder(str, Enum):
+    """Which captured order a device operation sequence was read in."""
+
+    FUNCTION_START = "function_start"
+    FUNCTION_END = "function_end"
+
+
+class MatchedOn(str, Enum):
+    FUNCTION_START = "function_start"
+    FUNCTION_END = "function_end"
+    FUNCTION_START_COLLAPSED = "function_start_collapsed"
+    FUNCTION_END_COLLAPSED = "function_end_collapsed"
 
 
 class DeviceOperation(NamedTuple):
@@ -71,7 +95,7 @@ class OperationLink:
     rank: Optional[int] = None
     reason: Optional[str] = None
     # Which captured order matched, for a reader asking why two reports linked.
-    matched_on: Optional[str] = None
+    matched_on: Optional[MatchedOn] = None
     operation_by_perf_id: Dict[str, int] = field(default_factory=dict)
     perf_rows_by_operation: Dict[int, List[Dict]] = field(default_factory=dict)
 
@@ -79,7 +103,7 @@ class OperationLink:
         response: Dict[str, object] = {"status": self.status.value}
         if self.status is LinkStatus.LINKED:
             response["rank"] = self.rank
-            response["matched_on"] = self.matched_on
+            response["matched_on"] = self.matched_on.value if self.matched_on else None
             response["matched_rows"] = len(self.operation_by_perf_id)
         if self.reason:
             response["reason"] = self.reason
@@ -135,27 +159,35 @@ def collapse_multidevice_operations(
     return collapsed
 
 
-def _align_collapsed(
-    device_operations: Sequence[DeviceOperation],
-    rows: Sequence[Dict],
-    num_devices: int,
-) -> List[Dict]:
-    if num_devices <= 1:
-        return []
-    collapsed = collapse_multidevice_operations(device_operations, num_devices)
-    # A smaller subset can prefix-match and falsely mark a report linked, so the
-    # collapse must account for every operation exactly once per device.
-    if len(collapsed) * num_devices != len(device_operations):
-        return []
-    return _align(collapsed, rows)
-
-
 class Match(NamedTuple):
     device_operations: List[DeviceOperation]
     rows: List[Dict]
-    matched_on: str
+    matched_on: MatchedOn
 
 
+def _attempt(
+    candidates: Sequence[DeviceOperation],
+    rows: Sequence[Dict],
+    matched_on: MatchedOn,
+    num_devices: Optional[int] = None,
+) -> Optional[Match]:
+    """One alignment, collapsed first when `num_devices` is given."""
+    if num_devices is None:
+        operations_to_align = list(candidates)
+    else:
+        if num_devices <= 1:
+            return None
+        operations_to_align = collapse_multidevice_operations(candidates, num_devices)
+        # A smaller subset can prefix-match and falsely mark a report linked, so the
+        # collapse must account for every operation exactly once per device.
+        if len(operations_to_align) * num_devices != len(candidates):
+            return None
+    aligned = _align(operations_to_align, rows)
+    return Match(operations_to_align, aligned, matched_on) if aligned else None
+
+
+# TODO(#1936): join on `operation_executions.global_call_count` where a capture
+# carries it, and keep this positional match as the fallback for older captures.
 def match_device_operations(
     function_start: Sequence[DeviceOperation],
     function_end: Sequence[DeviceOperation],
@@ -173,79 +205,120 @@ def match_device_operations(
     """
     alignable = [row for row in rows if row.get("op_type") != SIGNPOST_OP_TYPE]
 
-    def attempt(
-        candidates: Sequence[DeviceOperation], collapsed: bool, label: str
-    ) -> Optional[Match]:
-        if collapsed:
-            matched = _align_collapsed(candidates, alignable, num_devices)
-            operations_matched = collapse_multidevice_operations(
-                candidates, num_devices
-            )
-        else:
-            matched = _align(candidates, alignable)
-            operations_matched = list(candidates)
-        if not matched:
-            return None
-        return Match(operations_matched, matched, label)
-
-    first = attempt(function_start, False, "function_start")
+    first = _attempt(function_start, alignable, MatchedOn.FUNCTION_START)
     if first:
         return first
     if Counter(function_start) != Counter(function_end):
         return None
     return (
-        attempt(function_end, False, "function_end")
-        or attempt(function_start, True, "function_start_collapsed")
-        or attempt(function_end, True, "function_end_collapsed")
+        _attempt(function_end, alignable, MatchedOn.FUNCTION_END)
+        or _attempt(
+            function_start, alignable, MatchedOn.FUNCTION_START_COLLAPSED, num_devices
+        )
+        or _attempt(
+            function_end, alignable, MatchedOn.FUNCTION_END_COLLAPSED, num_devices
+        )
     )
 
 
-def _device_operation_orders(
-    captured_graphs: Dict[int, str], operation_ids: Sequence[int]
-) -> Dict[str, List[DeviceOperation]]:
-    """Both launch orders, walked in the order the operations list holds them.
+class UnreadableGraphError(ValueError):
+    """A captured graph that is not a JSON list of nodes."""
 
-    The frontend walks `GET /operations`, which is `operations` in table order, and
-    each operation's captured graph in node order. Ids are not re-sorted here for the
-    same reason: re-sorting would be a different match.
-    """
-    orders: Dict[str, List[DeviceOperation]] = {
-        "function_start": [],
-        "function_end": [],
-    }
-    for operation_id in operation_ids:
-        raw = captured_graphs.get(operation_id)
-        if not raw:
+
+def _device_operation_names(raw: Optional[str]) -> Dict[NodeOrder, List[str]]:
+    """One operation's device operation names, in each captured order."""
+    names: Dict[NodeOrder, List[str]] = {order: [] for order in NodeOrder}
+    if not raw:
+        return names
+    try:
+        nodes = json.loads(raw)
+    except ValueError as error:
+        raise UnreadableGraphError(str(error)) from None
+    if not isinstance(nodes, list):
+        raise UnreadableGraphError("not a list of nodes")
+    for node in nodes:
+        if not isinstance(node, dict):
             continue
         try:
-            nodes = json.loads(raw)
+            order = NodeOrder(node.get("node_type"))
         except ValueError:
-            # One unreadable graph drops that operation's device ops, which fails the
-            # positional match outright rather than shifting it silently.
-            logger.warning("captured graph for operation %s is not JSON", operation_id)
             continue
-        for node in nodes if isinstance(nodes, list) else []:
-            if not isinstance(node, dict):
-                continue
-            node_type = node.get("node_type")
-            if node_type not in orders:
-                continue
-            params = node.get("params")
-            name = params.get("name") if isinstance(params, dict) else None
-            if isinstance(name, str) and is_device_operation(name):
-                orders[node_type].append(DeviceOperation(operation_id, name))
+        params = node.get("params")
+        name = params.get("name") if isinstance(params, dict) else None
+        if isinstance(name, str) and is_device_operation(name):
+            names[order].append(name)
+    return names
+
+
+def device_operation_orders(
+    names_by_operation: Dict[int, Dict[NodeOrder, List[str]]],
+) -> Dict[NodeOrder, List[DeviceOperation]]:
+    """Both launch orders, with operations walked by id.
+
+    By id because that is the order the app matches in: `GET /operations` sorts on
+    `operation_id` (`views.py`) before the frontend builds either list, and table order
+    can differ from it. Within an operation, nodes keep their captured order.
+    """
+    orders: Dict[NodeOrder, List[DeviceOperation]] = {order: [] for order in NodeOrder}
+    for operation_id in sorted(names_by_operation):
+        for order, names in names_by_operation[operation_id].items():
+            orders[order].extend(DeviceOperation(operation_id, name) for name in names)
     return orders
 
 
-def _linked_rows(registry: ReportRegistry, handle: str) -> List[Dict]:
-    report = registry.cached_report(
-        handle,
-        lambda instance: tools._generate_canonical_report(
-            instance, **LINK_PROJECTION_OVERRIDES
-        ),
-        variant=_LINKED_REPORT_VARIANT,
-    )
-    return list(report.get("report", []))
+def is_host_op_row(row: Dict) -> bool:
+    """`perf_report.is_host_op`, applied to a row this package has already parsed."""
+    return HOST_OP_MARKER in str(row.get("op_code") or "")
+
+
+def _link_view_rows(registry: ReportRegistry, handle: str) -> List[Dict]:
+    report = tools.canonical_report(registry, handle)
+    return [row for row in report.get("report", []) if not is_host_op_row(row)]
+
+
+def _read_profiler_side(
+    instance: Instance,
+) -> Tuple[Optional[int], Dict[int, Dict[NodeOrder, List[str]]], int, bool]:
+    """Rank, device operation names per operation, device count, captured-graph flag.
+
+    Graphs are parsed as they are read and only the names kept: a captured graph is
+    the largest column in the report, and the match needs none of the rest.
+    """
+    with operations.profiler_db(instance) as queries:
+        # Rank 0, which is what the app links against. The CSV carries no rank, so
+        # which host's operations it pairs with is the app's convention rather than
+        # something the report states -- hence `rank` in the response.
+        scope = operations.rank_scope(queries, None)
+        operation_ids = {
+            operation.operation_id
+            for operation in queries.query_operations(
+                filters=operations.scoped(queries, "operations", scope)
+            )
+        }
+        names_by_operation: Dict[int, Dict[NodeOrder, List[str]]] = {}
+        has_graph = False
+        for device_operation in queries.query_device_operations(
+            filters=operations.scoped(queries, "captured_graph", scope)
+        ):
+            has_graph = True
+            if device_operation.operation_id not in operation_ids:
+                continue
+            try:
+                names_by_operation[device_operation.operation_id] = (
+                    _device_operation_names(device_operation.captured_graph)
+                )
+            except UnreadableGraphError as error:
+                raise UnreadableGraphError(
+                    f"the captured graph for operation "
+                    f"{device_operation.operation_id} cannot be read ({error})"
+                ) from None
+        num_devices = sum(
+            1
+            for _ in queries.query_devices(
+                filters=operations.scoped(queries, "devices", scope)
+            )
+        )
+    return scope.rank, names_by_operation, num_devices, has_graph
 
 
 def _build_link(
@@ -263,38 +336,30 @@ def _build_link(
         )
 
     try:
-        with operations._profiler_db(instance) as queries:
-            # Rank 0, which is what the app links against. The CSV carries no rank,
-            # so which host's operations it pairs with is the app's convention
-            # rather than something the report states -- hence `rank` in the
-            # response.
-            scope = operations._rank_scope(queries, None)
-            operation_ids = [
-                operation.operation_id
-                for operation in queries.query_operations(
-                    filters=operations._scoped(queries, "operations", scope)
-                )
-            ]
-            captured_graphs = {
-                device_operation.operation_id: device_operation.captured_graph
-                for device_operation in queries.query_device_operations(
-                    filters=operations._scoped(queries, "captured_graph", scope)
-                )
-            }
-            num_devices = len(
-                list(
-                    queries.query_devices(
-                        filters=operations._scoped(queries, "devices", scope)
-                    )
-                )
-            )
+        rank, names_by_operation, num_devices, has_graph = _read_profiler_side(instance)
     except operations.ProfilerDatabaseMissingError as error:
         return OperationLink(LinkStatus.UNAVAILABLE, reason=str(error))
-
-    if not captured_graphs:
+    # A profiler database `top_ops` never needed must not cost it its answer. Cached
+    # like any other outcome, so a broken file is reported once rather than re-read
+    # on every call.
+    except sqlite3.Error as error:
+        logger.warning("profiler database unreadable for the link: %s", error)
         return OperationLink(
             LinkStatus.UNAVAILABLE,
-            rank=scope.rank,
+            reason=f"the profiler database could not be read: {error}",
+        )
+    except UnreadableGraphError as error:
+        # Refused rather than skipped: dropping one operation's device ops shifts
+        # every later one, and repeated names after it can still align -- a
+        # misattribution that reads as a link. The app does not link this capture
+        # either; the graph breaks `GET /operations`.
+        logger.warning("%s", error)
+        return OperationLink(LinkStatus.UNAVAILABLE, reason=str(error))
+
+    if not has_graph:
+        return OperationLink(
+            LinkStatus.UNAVAILABLE,
+            rank=rank,
             reason=(
                 "this capture records no captured graph, so it holds no device "
                 "operations to align against the performance rows"
@@ -302,43 +367,45 @@ def _build_link(
         )
 
     try:
-        rows = _linked_rows(registry, handle)
+        rows = _link_view_rows(registry, handle)
     # Broad on purpose: tt-perf-report raises whatever its parse hits, and a CSV it
     # cannot read must cost `operation_detail` its perf rows, not the whole answer
     # about a profiler operation that was read fine.
     except Exception as error:
-        logger.warning("linked performance view failed: %s", error)
+        logger.warning("performance report unreadable for the link: %s", error)
         return OperationLink(
             LinkStatus.UNAVAILABLE,
-            rank=scope.rank,
+            rank=rank,
             reason=f"the performance report could not be read: {error}",
         )
 
-    orders = _device_operation_orders(captured_graphs, operation_ids)
+    orders = device_operation_orders(names_by_operation)
     match = match_device_operations(
-        orders["function_start"], orders["function_end"], rows, num_devices
+        orders[NodeOrder.FUNCTION_START],
+        orders[NodeOrder.FUNCTION_END],
+        rows,
+        num_devices,
     )
     if match is None:
         return OperationLink(
             LinkStatus.UNLINKED,
-            rank=scope.rank,
+            rank=rank,
             reason=(
                 "the device operations this profiler report launched do not line up, "
                 "in order, with the performance rows -- usually two different runs, or "
-                "a capture that stopped early. No id is guessed; use find_operations "
-                "with the op name instead."
+                "a performance capture that stopped early. No id is guessed; use "
+                "find_operations with the op name instead."
             ),
         )
 
     operation_by_perf_id: Dict[str, int] = {}
     perf_rows_by_operation: Dict[int, List[Dict]] = {}
     for operation, row in zip(match.device_operations, match.rows):
-        perf_id = str(row.get("id"))
-        operation_by_perf_id[perf_id] = operation.operation_id
+        operation_by_perf_id[str(row.get("id"))] = operation.operation_id
         perf_rows_by_operation.setdefault(operation.operation_id, []).append(row)
     return OperationLink(
         LinkStatus.LINKED,
-        rank=scope.rank,
+        rank=rank,
         matched_on=match.matched_on,
         operation_by_perf_id=operation_by_perf_id,
         perf_rows_by_operation=perf_rows_by_operation,
@@ -354,11 +421,15 @@ def operation_link(registry: ReportRegistry, handle: str) -> OperationLink:
     )
 
 
-_TOP_OPS_LINK_NOTE = (
+# The one full statement of what `operation_id` means; the tool description points
+# here rather than restating it, so the two cannot drift.
+TOP_OPS_LINK_NOTE = (
     "operation_id is the profiler database id for this row, to pass to "
-    "operation_provenance, operation_detail or memory_profile at the rank named in "
-    "operation_link. It is null for a row with no profiler operation -- a host op or "
-    "signpost -- and on every row when the two reports did not link."
+    "operation_provenance or operation_detail, and it belongs to the rank named in "
+    "operation_link. It is null on every row when the two reports did not link. On a "
+    "linked pair it is null for a row with no profiler operation: a host op, a "
+    "signpost, or a row past the end of a profiler capture that stopped before the "
+    "performance one did -- matched_rows says how many rows linked."
 )
 
 
@@ -374,7 +445,7 @@ def top_ops(
     ops = result.get("ops")
     for row in ops if isinstance(ops, list) else []:
         row["operation_id"] = link.operation_by_perf_id.get(str(row.get("id")))
-    result["operation_link"] = {**link.as_response(), "note": _TOP_OPS_LINK_NOTE}
+    result["operation_link"] = {**link.as_response(), "note": TOP_OPS_LINK_NOTE}
     return result
 
 
@@ -389,44 +460,42 @@ def operation_detail(
         registry, handle, operation_id=operation_id, rank=rank
     )
     link = operation_link(registry, handle)
-    response = link.as_response()
     if link.status is LinkStatus.LINKED and result.get("rank") != link.rank:
         # The link pairs the CSV with one rank's operations, and ids restart per rank,
         # so another rank's operation N is not the one these rows belong to.
-        response = {
-            "status": LinkStatus.UNAVAILABLE.value,
-            "reason": (
+        result["operation_link"] = OperationLink(
+            LinkStatus.UNAVAILABLE,
+            rank=link.rank,
+            reason=(
                 f"performance rows are linked to rank {link.rank} only; "
                 f"this operation was read at rank {result.get('rank')}"
             ),
-        }
-    elif link.status is LinkStatus.LINKED:
+        ).as_response()
+        return result
+    if link.status is LinkStatus.LINKED:
         rows = link.perf_rows_by_operation.get(int(operation_id), [])
-        result["perf_rows"] = [
-            {
-                "id": row.get("id"),
-                "op_code": row.get("op_code") or row.get("raw_op_code"),
-                "device_time": tools._rounded(tools._as_number(row.get("device_time"))),
-                "cores": tools._as_number(row.get("cores")),
-                "bound": row.get("bound") or None,
-            }
-            for row in rows[:MAX_LIMIT]
-        ]
+        result["perf_rows"] = [tools.project_row(row) for row in rows[:MAX_LIMIT]]
         result["perf_row_count"] = len(rows)
-        # Microseconds, as `top_ops` reports them. Stated because this response's
-        # other duration is host seconds, and the two invite being compared.
-        result["device_time_unit"] = "us"
-    result["operation_link"] = response
+        # Stated because this response's other duration is host seconds, and the two
+        # invite being compared.
+        result["device_time_unit"] = DEVICE_TIME_UNIT
+    result["operation_link"] = link.as_response()
     return result
 
 
 __all__ = [
-    "LINK_PROJECTION_OVERRIDES",
+    "DEVICE_TIME_UNIT",
+    "LINK_VIEW",
+    "TOP_OPS_LINK_NOTE",
     "DeviceOperation",
     "LinkStatus",
+    "MatchedOn",
+    "NodeOrder",
     "OperationLink",
     "collapse_multidevice_operations",
+    "device_operation_orders",
     "is_device_operation",
+    "is_host_op_row",
     "match_device_operations",
     "operation_detail",
     "operation_link",

@@ -56,7 +56,7 @@ class ProfilerDatabaseMissingError(ValueError):
 
 
 @contextmanager
-def _profiler_db(instance: Instance) -> Iterator[DatabaseQueries]:
+def profiler_db(instance: Instance) -> Iterator[DatabaseQueries]:
     """Open the report's database read-only, by path rather than by field.
 
     `LocalQueryRunner` treats `Instance.profiler_path` as the SQLite *file*
@@ -107,7 +107,7 @@ class RankScope(NamedTuple):
         return {"multi_host": self.multi_host, "rank": self.rank}
 
 
-def _scoped(
+def scoped(
     queries: DatabaseQueries, table: str, scope: RankScope, **filters: object
 ) -> Dict[str, object]:
     """Rank-filter one table, asking the query layer whether it can be.
@@ -122,7 +122,7 @@ def _scoped(
     return queries.merge_rank_filter(table, filters, scope.rank)
 
 
-def _rank_scope(queries: DatabaseQueries, rank: Optional[int]) -> RankScope:
+def rank_scope(queries: DatabaseQueries, rank: Optional[int]) -> RankScope:
     # Coerced before the `multi_host` branch, not inside it: a non-numeric rank
     # used to pass silently on a single-host report and raise on a multi-host
     # one, so the same call was valid or not depending on the capture.
@@ -229,7 +229,7 @@ def _device_capacity(queries: DatabaseQueries, scope: RankScope) -> Dict[str, ob
     # Rank-scoped like the figures beside it: on a multi-host report an
     # unfiltered read counts every rank's devices, which answers a different
     # question than the rest of the response.
-    devices = list(queries.query_devices(filters=_scoped(queries, "devices", scope)))
+    devices = list(queries.query_devices(filters=scoped(queries, "devices", scope)))
     if not devices:
         return {"devices": 0, "dram_capacity": None}
     device = devices[0]
@@ -350,8 +350,8 @@ def operation_provenance(
     actionable in the code being edited. #2021
     """
     instance = registry.get(handle)
-    with _profiler_db(instance) as queries:
-        scope = _rank_scope(queries, rank)
+    with profiler_db(instance) as queries:
+        scope = rank_scope(queries, rank)
         # The tables the answer is read *from*, not just the one the rank scope was
         # decided on: `operations` is the table `report_has_rank_column` inspects, so
         # naming only it can never fire. These two are where `merge_rank_filter`
@@ -360,7 +360,7 @@ def operation_provenance(
         # way that this module refuses elsewhere.
         _refuse_unattributable(queries, scope, "operation_arguments", "stack_traces")
         wanted = int(operation_id)
-        filters = _scoped(queries, "operations", scope, operation_id=wanted)
+        filters = scoped(queries, "operations", scope, operation_id=wanted)
 
         operations = list(queries.query_operations(filters=filters))
         if not operations:
@@ -372,14 +372,14 @@ def operation_provenance(
 
         arguments = list(
             queries.query_operation_arguments(
-                filters=_scoped(
+                filters=scoped(
                     queries, "operation_arguments", scope, operation_id=wanted
                 )
             )
         )
         traces = list(
             queries.query_stack_traces(
-                filters=_scoped(queries, "stack_traces", scope, operation_id=wanted)
+                filters=scoped(queries, "stack_traces", scope, operation_id=wanted)
             )
         )
 
@@ -460,8 +460,8 @@ def find_operations(
     operation alone but about every operation from the same helper. #2021
     """
     instance = registry.get(handle)
-    with _profiler_db(instance) as queries:
-        scope = _rank_scope(queries, rank)
+    with profiler_db(instance) as queries:
+        scope = rank_scope(queries, rank)
         needle = (name_contains or "").strip().lower()
         origin = (called_from or "").strip()
         if called_from is not None and not origin:
@@ -492,7 +492,7 @@ def find_operations(
         matches = [
             operation
             for operation in queries.query_operations(
-                filters=_scoped(queries, "operations", scope)
+                filters=scoped(queries, "operations", scope)
             )
             if (not needle or needle in (operation.name or "").lower())
             and (from_origin is None or operation.operation_id in from_origin)
@@ -537,8 +537,8 @@ def operation_detail(
 ) -> Dict[str, object]:
     """One operation: its tensors, and what it had allocated at that point."""
     instance = registry.get(handle)
-    with _profiler_db(instance) as queries:
-        scope = _rank_scope(queries, rank)
+    with profiler_db(instance) as queries:
+        scope = rank_scope(queries, rank)
         _refuse_unattributable(
             queries, scope, "buffers", "tensors", "input_tensors", "output_tensors"
         )
@@ -546,7 +546,7 @@ def operation_detail(
 
         operations = list(
             queries.query_operations(
-                filters=_scoped(
+                filters=scoped(
                     queries, "operations", scope, operation_id=wanted_operation
                 )
             )
@@ -565,23 +565,21 @@ def operation_detail(
         )
         inputs = list(
             queries.query_input_tensors(
-                filters=_scoped(
+                filters=scoped(
                     queries, "input_tensors", scope, operation_id=wanted_operation
                 )
             )
         )
         outputs = list(
             queries.query_output_tensors(
-                filters=_scoped(
+                filters=scoped(
                     queries, "output_tensors", scope, operation_id=wanted_operation
                 )
             )
         )
         buffers = list(
             queries.query_buffers(
-                filters=_scoped(
-                    queries, "buffers", scope, operation_id=wanted_operation
-                )
+                filters=scoped(queries, "buffers", scope, operation_id=wanted_operation)
             )
         )
 
@@ -600,7 +598,7 @@ def operation_detail(
             {
                 tensor.tensor_id: tensor
                 for tensor in queries.query_tensors(
-                    filters=_scoped(queries, "tensors", scope, tensor_id=wanted_ids)
+                    filters=scoped(queries, "tensors", scope, tensor_id=wanted_ids)
                 )
             }
             if wanted_ids
@@ -709,14 +707,14 @@ def memory_profile(
         )
 
     instance = registry.get(handle)
-    with _profiler_db(instance) as queries:
-        scope = _rank_scope(queries, rank)
+    with profiler_db(instance) as queries:
+        scope = rank_scope(queries, rank)
         _refuse_unattributable(queries, scope, "buffers")
         grouped = queries.query_buffer_totals_by_operation(rank=scope.rank)
         names = {
             operation.operation_id: operation.name
             for operation in queries.query_operations(
-                filters=_scoped(queries, "operations", scope)
+                filters=scoped(queries, "operations", scope)
             )
         }
         capacity = _device_capacity(queries, scope)
@@ -827,8 +825,8 @@ def tensor_flow(
 ) -> Dict[str, object]:
     """Which operation produced a tensor and which ones consumed it."""
     instance = registry.get(handle)
-    with _profiler_db(instance) as queries:
-        scope = _rank_scope(queries, rank)
+    with profiler_db(instance) as queries:
+        scope = rank_scope(queries, rank)
         _refuse_unattributable(
             queries, scope, "tensors", "input_tensors", "output_tensors"
         )
@@ -841,7 +839,7 @@ def tensor_flow(
         tensors = {
             tensor.tensor_id: tensor
             for tensor in queries.query_tensors(
-                filters=_scoped(queries, "tensors", scope, tensor_id=[wanted])
+                filters=scoped(queries, "tensors", scope, tensor_id=[wanted])
             )
         }
         tensor_size_unit = (
@@ -862,7 +860,7 @@ def tensor_flow(
             {
                 operation.operation_id: operation.name
                 for operation in queries.query_operations(
-                    filters=_scoped(queries, "operations", scope, operation_id=touching)
+                    filters=scoped(queries, "operations", scope, operation_id=touching)
                 )
             }
             if touching
@@ -945,5 +943,8 @@ __all__ = [
     "memory_profile",
     "operation_detail",
     "operation_provenance",
+    "profiler_db",
+    "rank_scope",
+    "scoped",
     "tensor_flow",
 ]

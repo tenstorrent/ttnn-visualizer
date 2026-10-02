@@ -106,11 +106,10 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
                 "The costliest operations by one metric. Reads the report unfiltered "
                 "-- host ops included, no signpost range -- and returns the projection "
                 "it used alongside the rows. Each row's id numbers the performance "
-                "CSV; its operation_id, when the handle was loaded with a profiler "
-                "report too, is the profiler database id to pass to "
-                "operation_provenance or operation_detail. operation_link says "
-                "whether the two reports linked and at which rank; operation_id is "
-                "null on host ops, signposts, and every row of an unlinked pair."
+                "CSV. When the handle also holds a profiler report, each row's "
+                "operation_id is the profiler database id for one rank, and "
+                "operation_link says whether the reports linked, at which rank, and "
+                "-- in its note -- when an operation_id is null."
             ),
             "schema": {
                 "type": "object",

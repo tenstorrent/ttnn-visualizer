@@ -162,13 +162,23 @@ memory report to a performance report. `top_ops` then gives each row an `operati
 and `operation_detail` lists an operation's `perf_rows` with device time in microseconds;
 its own `duration` is host seconds.
 
-Every response that carries the link says how it went in `operation_link`. `linked` names
-the rank the ids belong to: the CSV records no rank, and rank 0 is what the application
-links against. `unlinked` means the two sequences do not line up — usually two different
-runs, or a capture that stopped early — and every `operation_id` is then null rather than
-guessed. `unavailable` means one half is missing, or the profiler report records no
-captured graph. A row is null on a linked pair too when it has no profiler operation, as
-host ops and signposts do not.
+Every response that carries the link says how it went in `operation_link`:
+
+- `linked` names the rank the ids belong to — the CSV records no rank, and rank 0 is what
+  the application links against — and `matched_rows` says how many rows linked.
+  `operation_detail` read at any other rank reports `unavailable` and lists no
+  `perf_rows`, because ids restart per rank.
+- `unlinked` means the two sequences do not line up — usually two different runs, or a
+  performance capture that stopped early — and every `operation_id` is then null rather
+  than guessed.
+- `unavailable` means the match was never tried: one half is missing or cannot be read,
+  the profiler report records no captured graph, or one of its captured graphs is not
+  readable. A link that skipped an unreadable graph could still align and pair rows
+  with the wrong operations, so none is attempted.
+
+On a linked pair an `operation_id` is still null for a row with no profiler operation:
+a host op, a signpost, or a row past the end of a profiler capture that stopped before
+the performance one did. The match tolerates trailing rows, as the application's does.
 
 **An operation id is not the end of the answer.** `memory_profile` names the operations
 holding its largest footprint, and `operation_provenance` turns such an id into the two things you need
