@@ -7,7 +7,6 @@ import { cleanup, render, screen, within } from '@testing-library/react';
 import { Mock, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import StackedPerformanceTable from '../src/components/performance/StackedPerfTable';
 import { StackedColumnKeys, TypedStackedPerfRow } from '../src/definitions/StackedPerfTable';
-import { OpType } from '../src/definitions/Performance';
 import { TEST_IDS } from '../src/definitions/TestIds';
 import { useGetNPEManifest, usePerfMeta } from '../src/hooks/useAPI';
 import { TestProviders } from './helpers/TestProviders';
@@ -25,7 +24,6 @@ const stackedRow = (opCode: string): TypedStackedPerfRow =>
         [StackedColumnKeys.Device]: 0,
         [StackedColumnKeys.DeviceTimeSumUs]: 1,
         [StackedColumnKeys.OpsCount]: 1,
-        op_type: OpType.DEVICE_OP,
     }) as unknown as TypedStackedPerfRow;
 
 interface RenderOptions {
