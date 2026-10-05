@@ -1271,6 +1271,14 @@ SHARD_SPEC_PATTERN = re.compile(
 )
 
 
+def _memory_config_body(memory_config: object) -> Optional[str]:
+    """What sits inside a raw `MemoryConfig(...)` string, or None if it isn't one."""
+    if not isinstance(memory_config, str):
+        return None
+    memory_config_match = MEMORY_CONFIG_PATTERN.match(memory_config)
+    return memory_config_match.group(1) if memory_config_match else None
+
+
 def parse_memory_config_buffer_type(memory_config: object) -> Optional[str]:
     """The buffer type a raw `MemoryConfig(...)` string declares, e.g. `'L1'`.
 
@@ -1278,24 +1286,17 @@ def parse_memory_config_buffer_type(memory_config: object) -> Optional[str]:
     `tensors.buffer_type` column already says the same thing. It is kept here
     for the tensors whose column cannot be trusted -- see `Tensor`.
     """
-    if not isinstance(memory_config, str):
+    captured_string = _memory_config_body(memory_config)
+    if captured_string is None:
         return None
-    memory_config_match = MEMORY_CONFIG_PATTERN.match(memory_config)
-    if not memory_config_match:
-        return None
-    buffer_type_match = MEMORY_BUFFER_TYPE_PATTERN.search(memory_config_match.group(1))
+    buffer_type_match = MEMORY_BUFFER_TYPE_PATTERN.search(captured_string)
     return buffer_type_match.group(1) if buffer_type_match else None
 
 
 def parse_memory_config(memory_config: Optional[str]) -> Optional[Dict[str, Any]]:
-    if not memory_config:  # Handle None or empty string
+    captured_string = _memory_config_body(memory_config)
+    if captured_string is None:
         return None
-
-    memory_config_match = MEMORY_CONFIG_PATTERN.match(memory_config)
-    if not memory_config_match:
-        return None
-
-    captured_string = memory_config_match.group(1)
 
     memory_layout_match = MEMORY_LAYOUT_PATTERN.search(captured_string)
     memory_layout = memory_layout_match.group(1) if memory_layout_match else None
