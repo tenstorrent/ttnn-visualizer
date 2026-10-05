@@ -13,6 +13,7 @@ import ServerModeBanner from './ServerModeBanner';
 import { BounceIn } from './toastTransition';
 import ROUTES from '../definitions/Routes';
 import FooterInfobar from './FooterInfobar';
+import ReportLinkRecorder from './ReportLinkRecorder';
 import ClusterRenderer from './cluster/ClusterRenderer';
 import { ModalAwareOutlet } from '../libs/ModalAwareOutlet';
 import FeedbackButton from './FeedbackButton';
@@ -63,6 +64,8 @@ function Layout() {
             </div>
 
             <FooterInfobar />
+
+            <ReportLinkRecorder />
 
             <FeedbackButton />
 

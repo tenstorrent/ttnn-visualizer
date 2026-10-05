@@ -6,7 +6,7 @@ import { useAtomValue } from 'jotai';
 import { useMemo } from 'react';
 import { LinkedReportIdOptions } from '../definitions/ReportLinks';
 import {
-    getReportId,
+    getFolderReportId,
     linkedPerformanceIds,
     linkedProfilerIds,
     unlinkedPerformanceIds,
@@ -32,8 +32,8 @@ export const useReportLinkBadgeIds = (options?: LinkedReportIdOptions): ReportLi
     const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
     const remoteHost = options?.remoteHost ?? null;
 
-    const profilerId = getReportId(activeProfilerReport?.syncedName, activeProfilerReport?.path);
-    const performanceId = getReportId(activePerformanceReport?.syncedName, activePerformanceReport?.path);
+    const profilerId = getFolderReportId(activeProfilerReport);
+    const performanceId = getFolderReportId(activePerformanceReport);
 
     return useMemo(() => {
         return {
