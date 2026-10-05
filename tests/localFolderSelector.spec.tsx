@@ -12,7 +12,7 @@ import mockInstanceEmpty from './data/mockInstanceEmpty.json';
 import mockProfilerFolderList from './data/mockProfilerFolderList.json';
 import mockPerformanceReportFolders from './data/mockPerformanceReportFolders.json';
 import { ReportFolder, ReportLocation } from '../src/definitions/Reports';
-import { getReportId } from '../src/functions/reportLinks';
+import { getFolderReportId } from '../src/functions/reportLinks';
 import LocalFolderSelector from '../src/components/report-selection/LocalFolderSelector';
 import { CONFIRM_DELETE_LABEL, ManagedEntity } from '../src/definitions/ManagedEntity';
 import {
@@ -34,7 +34,7 @@ import {
     reportLinksAtom,
 } from '../src/store/app';
 import { ReportLinkMatchResult } from '../src/definitions/ReportLinks';
-import usePersistReportLinks from '../src/hooks/usePersistReportLinks';
+import ReportLinkRecorder from '../src/components/ReportLinkRecorder';
 import { ReportLinksProbe } from './helpers/ReportLinksProbe';
 import { createReportLink, getProbedReportLinks } from './helpers/reportLinkFixtures';
 import testForPortal from './helpers/testForPortal';
@@ -636,13 +636,11 @@ it('handles valid performance report upload without tracy', async () => {
     );
 });
 
-/** Links for the first memory and performance fixtures, plus one pair touching neither. */
+/** Link for two folders, keyed the way recording and pruning key them. */
 const linkFolders = (profiler: ReportFolder, performance: ReportFolder) =>
-    createReportLink(
-        getReportId(profiler.syncedName, profiler.path)!,
-        getReportId(performance.syncedName, performance.path)!,
-    );
+    createReportLink(getFolderReportId(profiler)!, getFolderReportId(performance)!);
 
+/** Links for the first memory and performance fixtures, plus one pair touching neither. */
 const SEEDED_LINKS = [
     linkFolders(mockProfilerFolderList[0], mockPerformanceReportFolders[1]),
     linkFolders(mockProfilerFolderList[1], mockPerformanceReportFolders[0]),
@@ -763,15 +761,9 @@ it('prunes links for a synced folder under its syncedName', async () => {
     await waitFor(() => expect(getProbedReportLinks()).toEqual([SEEDED_LINKS[2]]), WAIT_FOR_OPTIONS);
 });
 
-function PersistReportLinks() {
-    usePersistReportLinks();
-
-    return null;
-}
-
-// The recorder is always mounted and keeps reporting LINKED for the active pair. The prune
-// must stick anyway: the recorder does not re-run on `reportLinksAtom`, and clearing the
-// deleted report as active then trips its both-reports guard.
+// End to end: the recorder is always mounted and keeps reporting LINKED for the active pair,
+// yet the prune survives deleting that report. That the recorder ignores `reportLinksAtom`
+// itself is pinned deterministically in usePersistReportLinks.spec.
 it('does not re-record the pair when the active, linked memory report is deleted', async () => {
     const deletedFolder = mockProfilerFolderList[0];
     const activePerformance = mockPerformanceReportFolders[1];
@@ -787,7 +779,7 @@ it('does not re-record the pair when the active, linked memory report is deleted
             ]}
         >
             <LocalFolderSelector />
-            <PersistReportLinks />
+            <ReportLinkRecorder />
             <ReportLinksProbe />
         </TestProviders>,
     );

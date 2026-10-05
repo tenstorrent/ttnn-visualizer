@@ -5,7 +5,7 @@
 import { useAtomValue, useSetAtom } from 'jotai';
 import { useEffect } from 'react';
 import { ReportLinkMatchResult, ReportPairLinkStatus } from '../definitions/ReportLinks';
-import { createReportLinkAccess, getReportId, upsertReportLink } from '../functions/reportLinks';
+import { createReportLinkAccess, getFolderReportId, upsertReportLink } from '../functions/reportLinks';
 import useRemoteConnection from './useRemote';
 import { useReportLinkMatch } from './useReportLinkMatch';
 import {
@@ -40,8 +40,8 @@ export default function usePersistReportLinks(): void {
             return;
         }
 
-        const profilerId = getReportId(activeProfilerReport.syncedName, activeProfilerReport.path);
-        const performanceId = getReportId(activePerformanceReport.syncedName, activePerformanceReport.path);
+        const profilerId = getFolderReportId(activeProfilerReport);
+        const performanceId = getFolderReportId(activePerformanceReport);
 
         if (!profilerId || !performanceId) {
             return;

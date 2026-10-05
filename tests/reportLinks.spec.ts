@@ -8,6 +8,7 @@ import { MAX_REPORT_LINKS, ReportLinkRole, ReportPairLinkStatus } from '../src/d
 import { ReportLink } from '../src/model/ReportLinks';
 import {
     createReportLinkAccess,
+    getFolderReportId,
     getReportId,
     linkedPerformanceIds,
     linkedProfilerIds,
@@ -48,6 +49,17 @@ const link = (
               }
             : { location: ReportLocation.LOCAL, path: performanceId },
     });
+
+describe('getFolderReportId', () => {
+    it('prefers the synced folder name over the path', () => {
+        expect(getFolderReportId({ path: '/data/local/local-copy', syncedName: 'remote-run' })).toBe('remote-run');
+    });
+
+    it('falls back to the path basename, and to null without a folder', () => {
+        expect(getFolderReportId({ path: '/data/local/mem-run' })).toBe('mem-run');
+        expect(getFolderReportId(null)).toBeNull();
+    });
+});
 
 describe('getReportId', () => {
     it('uses the final path segment', () => {

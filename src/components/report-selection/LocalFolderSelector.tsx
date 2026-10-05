@@ -45,7 +45,7 @@ import {
 } from '../../hooks/useAPI';
 import { useActivatingReport } from '../../hooks/useActivatingReport';
 import { useReportLinkBadgeIds } from '../../hooks/useReportLinkBadgeIds';
-import { getReportId, removeReportLinksFor } from '../../functions/reportLinks';
+import { getFolderReportId, removeReportLinksFor } from '../../functions/reportLinks';
 import { ReportLinkRole } from '../../definitions/ReportLinks';
 import LocalFolderPicker from './LocalFolderPicker';
 import { ReportFolder, ReportLocation } from '../../definitions/Reports';
@@ -323,9 +323,7 @@ const LocalFolderOptions = () => {
             return;
         }
 
-        // Same id derivation as recording, so a synced folder prunes under its syncedName.
-        const reportId = getReportId(folder.syncedName, folder.path);
-        setReportLinks((links) => removeReportLinksFor(links, options.linkRole, reportId));
+        setReportLinks((links) => removeReportLinksFor(links, options.linkRole, getFolderReportId(folder)));
 
         await queryClient.invalidateQueries({ queryKey: [options.folderQueryKey] });
 

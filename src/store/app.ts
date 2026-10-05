@@ -13,7 +13,7 @@ import { PerfTabIds } from '../definitions/Performance';
 import { ReportFolder, ReportLocation } from '../definitions/Reports';
 import { ReportScope } from '../definitions/ReportScope';
 import { REPORT_LINKS_STORAGE_KEY } from '../definitions/ReportLinks';
-import { getReportId } from '../functions/reportLinks';
+import { getFolderReportId } from '../functions/reportLinks';
 import { ReportLink } from '../model/ReportLinks';
 import { ColumnKeys } from '../definitions/PerfTable';
 import { TypedPerfTableRow } from '../model/PerfTable';
@@ -74,9 +74,7 @@ export const activePerformanceReportAtom = atom<ReportFolder | null>(null);
  * qualifier that tells one rank of a launch from another.
  */
 export const activePerformanceReportFolderNameAtom = atom((get) => {
-    const activeReport = get(activePerformanceReportAtom);
-
-    return getReportId(activeReport?.syncedName, activeReport?.path);
+    return getFolderReportId(get(activePerformanceReportAtom));
 });
 /** True while a report select/mount is awaiting confirmation of the active report. */
 export const isActivatingReportAtom = atom(false);

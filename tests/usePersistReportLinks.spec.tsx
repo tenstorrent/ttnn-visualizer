@@ -2,9 +2,10 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-import { cleanup, render, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import usePersistReportLinks from '../src/hooks/usePersistReportLinks';
+import { useSetAtom } from 'jotai';
+import ReportLinkRecorder from '../src/components/ReportLinkRecorder';
 import { ReportFolder, ReportLocation } from '../src/definitions/Reports';
 import { ReportLinkMatchResult, ReportPairLinkStatus } from '../src/definitions/ReportLinks';
 import {
@@ -33,10 +34,20 @@ vi.mock('../src/hooks/useRemote', () => ({
     }),
 }));
 
-function PersistReportLinks() {
-    usePersistReportLinks();
+const CLEAR_REPORT_LINKS_LABEL = 'Clear report links';
 
-    return null;
+// Writes `reportLinksAtom` from outside the recorder, as a delete's prune does.
+function ReportLinksClearer() {
+    const setReportLinks = useSetAtom(reportLinksAtom);
+
+    return (
+        <button
+            type='button'
+            onClick={() => setReportLinks([])}
+        >
+            {CLEAR_REPORT_LINKS_LABEL}
+        </button>
+    );
 }
 
 interface RenderOptions {
@@ -64,7 +75,8 @@ function reportsTree({
                 [tracingModeAtom, tracingMode],
             ]}
         >
-            <PersistReportLinks />
+            <ReportLinkRecorder />
+            <ReportLinksClearer />
             <ReportLinksProbe />
         </TestProviders>
     );
@@ -110,6 +122,18 @@ describe('usePersistReportLinks', () => {
         rerender(reportsTree());
 
         expect(getProbedReportLinks()).toMatchObject([{ status: ReportPairLinkStatus.LINKED }]);
+    });
+
+    // A delete prunes the active pair while the match still reads LINKED. If the recorder
+    // re-ran on `reportLinksAtom`, it would write the pair straight back.
+    it('does not re-record a pair removed from outside while the match is unchanged', () => {
+        matchState.result = ReportLinkMatchResult.LINKED;
+        renderWithReports();
+        expect(getProbedReportLinks()).toHaveLength(1);
+
+        fireEvent.click(screen.getByRole('button', { name: CLEAR_REPORT_LINKS_LABEL }));
+
+        expect(getProbedReportLinks()).toEqual([]);
     });
 
     // Mounted from `Layout`, the hook runs on every route, including ones with one report.

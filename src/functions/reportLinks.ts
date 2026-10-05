@@ -8,7 +8,7 @@ import {
     ReportLinkRole,
     ReportPairLinkStatus,
 } from '../definitions/ReportLinks';
-import { ReportLocation } from '../definitions/Reports';
+import { ReportFolder, ReportLocation } from '../definitions/Reports';
 import { ReportLink, ReportLinkAccess } from '../model/ReportLinks';
 
 /**
@@ -27,6 +27,13 @@ export const getReportId = (...candidates: Array<string | null | undefined>): st
 
     return null;
 };
+
+/**
+ * Id of a local report folder. Recording, pruning and badging must all key a folder
+ * the same way, so a synced folder resolves to its `syncedName` before its `path`.
+ */
+export const getFolderReportId = (folder: Pick<ReportFolder, 'syncedName' | 'path'> | null | undefined) =>
+    getReportId(folder?.syncedName, folder?.path);
 
 const pathBasename = (value: string): string => {
     const normalised = value.replace(/\\/g, '/');
