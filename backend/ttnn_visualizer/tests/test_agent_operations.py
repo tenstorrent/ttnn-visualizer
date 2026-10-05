@@ -169,11 +169,13 @@ INSERT INTO devices (
 # tensor the capture recorded no address for, whatever its memory config says.
 # Tensor 21 is the real case from a DeepSeek MoE capture: declared L1, stored 0.
 # Tensor 22 is a host tensor with no memory config at all, and 20 an allocated
-# DRAM tensor whose column is trustworthy and must be left alone.
+# tensor whose column is trustworthy and must be left alone. Its memory config
+# deliberately disagrees with the column, so the test proves the column wins
+# whenever there is an address.
 _UNADDRESSED_TENSORS_SQL = _INTEGER_BUFFER_TYPE_SQL + """
 INSERT INTO tensors VALUES
     (20, 'Shape([1, 3200, 7168])', 'DataType.BFLOAT16', 'Layout.TILE',
-     'MemoryConfig(memory_layout=TensorMemoryLayout::INTERLEAVED,buffer_type=BufferType::DRAM,shard_spec=std::nullopt)',
+     'MemoryConfig(memory_layout=TensorMemoryLayout::INTERLEAVED,buffer_type=BufferType::L1,shard_spec=std::nullopt)',
      0, 100, 0),
     (21, 'Shape([1, 3200, 8])', 'DataType.UINT16', 'Layout.ROW_MAJOR',
      'MemoryConfig(memory_layout=TensorMemoryLayout::INTERLEAVED,buffer_type=BufferType::L1,shard_spec=std::nullopt)',

@@ -148,6 +148,26 @@ class TensorLifetime(SerializeableDataclass):
     last_use_source_line: Optional[int] = None
 
 
+def _coerce_buffer_type(value: Any) -> Any:
+    """A stored `buffer_type` as a `BufferType`, whichever form the column used.
+
+    Most reports store the enum's value (`1`), newer ones its name (`'L1'`).
+    Coercing both keeps one response from mixing the two once unaddressed
+    tensors are given a `BufferType`. An unrecognised value is passed through
+    rather than dropped.
+    """
+    if isinstance(value, BufferType):
+        return value
+    if isinstance(value, str):
+        return BufferType.__members__.get(value, value)
+    if isinstance(value, int) and not isinstance(value, bool):
+        try:
+            return BufferType(value)
+        except ValueError:
+            return value
+    return value
+
+
 @dataclasses.dataclass
 class Tensor(SerializeableDataclass):
     tensor_id: int
@@ -156,7 +176,7 @@ class Tensor(SerializeableDataclass):
     layout: str
     memory_config: str | dict[str, Any] | None
     device_id: int
-    address: int
+    address: Optional[int]
     buffer_type: Optional[BufferType]
     device_addresses: list[int]
     size: Optional[int] = None
@@ -164,8 +184,6 @@ class Tensor(SerializeableDataclass):
     rank: int = 0
 
     def __post_init__(self):
-        declared_buffer_type = parse_memory_config_buffer_type(self.memory_config)
-        self.memory_config = parse_memory_config(self.memory_config)
         # tt-metal's graph report writes `buffer_type` as `0` (DRAM) whenever the
         # capture recorded none, which is every tensor without an address: host
         # tensors, and device tensors whose address was never captured. The
@@ -173,11 +191,12 @@ class Tensor(SerializeableDataclass):
         # tensor's own memory config is the authority, and a tensor that
         # declares no buffer type has none rather than a fabricated DRAM.
         if self.address is None:
-            self.buffer_type = (
-                BufferType.__members__.get(declared_buffer_type)
-                if declared_buffer_type is not None
-                else None
+            self.buffer_type = BufferType.__members__.get(
+                parse_memory_config_buffer_type(self.memory_config)
             )
+        else:
+            self.buffer_type = _coerce_buffer_type(self.buffer_type)
+        self.memory_config = parse_memory_config(self.memory_config)
 
 
 @dataclasses.dataclass
