@@ -94,7 +94,8 @@ export const createReportLinkAccess = (
  * Drop every pair whose `role` side is `reportId`, e.g. after that report is deleted.
  * Ids are folder basenames, so this also drops pairs recorded against a remote copy of
  * the same run; those reappear the next time the pair is compared. Returns the same
- * array reference when nothing matches, so callers don't write storage for a no-op.
+ * array reference when nothing matches, which spares subscribers a re-render; the
+ * storage atom still writes `localStorage` on every set.
  */
 export const removeReportLinksFor = (
     links: ReportLink[],

@@ -96,14 +96,6 @@ describe('Layout event logging wiring', () => {
         });
     });
 
-    it('persists report links through the mounted layout hook', async () => {
-        const { default: Layout } = await import('../src/components/Layout');
-
-        renderLayout(Layout);
-
-        expect(persistReportLinks).toHaveBeenCalled();
-    });
-
     it('records engagement through the mounted layout hook', async () => {
         vi.useFakeTimers();
         const { default: Layout } = await import('../src/components/Layout');
@@ -263,5 +255,24 @@ describe('Layout toast transition', () => {
         await waitFor(() => {
             expect(document.querySelectorAll('.Toastify__toast')).toHaveLength(0);
         });
+    });
+});
+
+describe('Layout report-link wiring', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+    });
+
+    afterEach(() => {
+        cleanup();
+    });
+
+    // Recording must not depend on the footer icon being rendered, so `Layout` always mounts it.
+    it('mounts the report-link recorder', async () => {
+        const { default: Layout } = await import('../src/components/Layout');
+
+        renderLayout(Layout);
+
+        expect(persistReportLinks).toHaveBeenCalled();
     });
 });

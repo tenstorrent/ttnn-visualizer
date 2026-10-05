@@ -7,7 +7,6 @@ export const TEST_IDS = Object.freeze({
     SIDE_NAVIGATION: 'side-navigation',
     SIDE_NAVIGATION_TOGGLE: 'side-navigation-toggle',
     SERVER_MODE_BANNER: 'server-mode-banner',
-    REPORT_LINK_STATUS: 'report-link-status',
 
     // Local folder selector
     LOCAL_FOLDER_SELECTOR_BUTTON: 'local-folder-selector-button',

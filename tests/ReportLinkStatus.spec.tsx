@@ -10,9 +10,9 @@ import { ReportLocation } from '../src/definitions/Reports';
 import {
     REPORTS_LINKED_TOOLTIP,
     REPORTS_UNLINKED_TOOLTIP,
+    REPORTS_UNLINKED_TOOLTIP_HINT,
     ReportLinkMatchResult,
 } from '../src/definitions/ReportLinks';
-import { TEST_IDS } from '../src/definitions/TestIds';
 import {
     activePerformanceReportAtom,
     activeProfilerReportAtom,
@@ -24,8 +24,9 @@ import { TestProviders } from './helpers/TestProviders';
 import { ReportLinksProbe } from './helpers/ReportLinksProbe';
 import { PERFORMANCE_REPORT, PROFILER_REPORT, getProbedReportLinks } from './helpers/reportLinkFixtures';
 
+// Seeded in `beforeEach`: the enum isn't importable yet when `vi.hoisted` runs.
 const matchState = vi.hoisted(() => ({
-    result: 'pending' as string,
+    result: null as ReportLinkMatchResult | null,
 }));
 
 vi.mock('../src/hooks/useReportLinkMatch', () => ({
@@ -64,7 +65,7 @@ describe('ReportLinkStatus', () => {
         matchState.result = ReportLinkMatchResult.LINKED;
         renderWithReports();
 
-        fireEvent.mouseEnter(screen.getByTestId(TEST_IDS.REPORT_LINK_STATUS));
+        fireEvent.mouseEnter(screen.getByRole('img', { name: REPORTS_LINKED_TOOLTIP }));
 
         expect(await screen.findByText(REPORTS_LINKED_TOOLTIP)).toBeInTheDocument();
         expect(screen.queryByText(REPORTS_UNLINKED_TOOLTIP, { exact: false })).not.toBeInTheDocument();
@@ -74,15 +75,16 @@ describe('ReportLinkStatus', () => {
         matchState.result = ReportLinkMatchResult.UNLINKED;
         renderWithReports();
 
-        fireEvent.mouseEnter(screen.getByTestId(TEST_IDS.REPORT_LINK_STATUS));
+        fireEvent.mouseEnter(screen.getByRole('img', { name: REPORTS_UNLINKED_TOOLTIP }));
 
-        // The hint shares the element after a <br />, so match the headline as a substring.
+        // The hint shares the element after a <br />, so match each line as a substring.
         expect(await screen.findByText(REPORTS_UNLINKED_TOOLTIP, { exact: false })).toBeInTheDocument();
+        expect(screen.getByText(REPORTS_UNLINKED_TOOLTIP_HINT, { exact: false })).toBeInTheDocument();
         expect(screen.queryByText(REPORTS_LINKED_TOOLTIP)).not.toBeInTheDocument();
     });
 
-    // Persistence lives in `usePersistReportLinks`, mounted from `Layout`, so the icon can
-    // be moved or hidden without silently stopping link recording.
+    // Persistence lives in `usePersistReportLinks`, mounted via `ReportLinkRecorder` in
+    // `Layout`, so the icon can be moved or hidden without silently stopping link recording.
     it('does not persist a settled match itself', () => {
         matchState.result = ReportLinkMatchResult.LINKED;
         renderWithReports();

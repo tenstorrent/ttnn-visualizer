@@ -656,6 +656,18 @@ function renderWithLinks() {
     );
 }
 
+async function openPicker(select: HTMLElement) {
+    select.click();
+    await waitFor(testForPortal, WAIT_FOR_OPTIONS);
+}
+
+/** Deletes the named report from an open picker through the confirmation dialog. */
+async function confirmDeleteInOpenPicker(folder: ReportFolder) {
+    fireEvent.click(screen.getByLabelText(getDeleteActionLabel(ManagedEntity.REPORT, folder.reportName)));
+    await waitFor(() => expect(document.querySelector('[role="alertdialog"]')).not.toBe(null), WAIT_FOR_OPTIONS);
+    fireEvent.click(screen.getByRole('button', { name: CONFIRM_DELETE_LABEL }));
+}
+
 it('deletes memory report and updates state', async () => {
     renderWithLinks();
     const deletedFolder = mockProfilerFolderList[0];
@@ -668,11 +680,7 @@ it('deletes memory report and updates state', async () => {
         expect(screen.getByText(`/${folder.path}`)).not.toBeNull();
     });
 
-    fireEvent.click(screen.getByLabelText(getDeleteActionLabel(ManagedEntity.REPORT, deletedFolder.reportName)));
-
-    await waitFor(() => expect(document.querySelector('[role="alertdialog"]')).not.toBe(null), WAIT_FOR_OPTIONS);
-
-    fireEvent.click(screen.getByRole('button', { name: CONFIRM_DELETE_LABEL }));
+    await confirmDeleteInOpenPicker(deletedFolder);
 
     await waitFor(
         () => expect(screen.getByTestId(TEST_IDS.TOAST_FILENAME).textContent).to.contain(deletedFolder.reportName),
@@ -708,11 +716,7 @@ it('deletes performance report and updates state', async () => {
     performanceSelect.click();
     await waitFor(testForPortal, WAIT_FOR_OPTIONS);
 
-    fireEvent.click(screen.getByLabelText(getDeleteActionLabel(ManagedEntity.REPORT, deletedFolder.reportName)));
-
-    await waitFor(() => expect(document.querySelector('[role="alertdialog"]')).not.toBe(null), WAIT_FOR_OPTIONS);
-
-    fireEvent.click(screen.getByRole('button', { name: CONFIRM_DELETE_LABEL }));
+    await confirmDeleteInOpenPicker(deletedFolder);
 
     await waitFor(
         () => expect(screen.getByTestId(TEST_IDS.TOAST_FILENAME).textContent).to.contain(deletedFolder.reportName),
@@ -750,12 +754,8 @@ it('prunes links for a synced folder under its syncedName', async () => {
         </TestProviders>,
     );
 
-    getAllButtonsWithText(SELECT_REPORT_TEXT)[0].click();
-    await waitFor(testForPortal, WAIT_FOR_OPTIONS);
-
-    fireEvent.click(screen.getByLabelText(getDeleteActionLabel(ManagedEntity.REPORT, syncedFolder.reportName)));
-    await waitFor(() => expect(document.querySelector('[role="alertdialog"]')).not.toBe(null), WAIT_FOR_OPTIONS);
-    fireEvent.click(screen.getByRole('button', { name: CONFIRM_DELETE_LABEL }));
+    await openPicker(getAllButtonsWithText(SELECT_REPORT_TEXT)[0]);
+    await confirmDeleteInOpenPicker(syncedFolder);
 
     await waitFor(() => expect(mockDeleteProfiler).toHaveBeenCalledWith(syncedFolder.path), WAIT_FOR_OPTIONS);
     await waitFor(() => expect(getProbedReportLinks()).toEqual([SEEDED_LINKS[2]]), WAIT_FOR_OPTIONS);
@@ -787,12 +787,8 @@ it('does not re-record the pair when the active, linked memory report is deleted
     // SEEDED_LINKS[0] is exactly the active pair, so recording it again is a no-op.
     expect(getProbedReportLinks()).toEqual(SEEDED_LINKS);
 
-    getAllButtonsWithText(deletedFolder.reportName)[0].click();
-    await waitFor(testForPortal, WAIT_FOR_OPTIONS);
-
-    fireEvent.click(screen.getByLabelText(getDeleteActionLabel(ManagedEntity.REPORT, deletedFolder.reportName)));
-    await waitFor(() => expect(document.querySelector('[role="alertdialog"]')).not.toBe(null), WAIT_FOR_OPTIONS);
-    fireEvent.click(screen.getByRole('button', { name: CONFIRM_DELETE_LABEL }));
+    await openPicker(getAllButtonsWithText(deletedFolder.reportName)[0]);
+    await confirmDeleteInOpenPicker(deletedFolder);
 
     await waitFor(() => expect(getAllButtonsWithText(SELECT_REPORT_TEXT).length).toBeGreaterThan(0), WAIT_FOR_OPTIONS);
 
@@ -811,16 +807,10 @@ const refusedDelete = () => ({
     response: { status: HttpStatusCode.Forbidden, data: { error: SERVER_ERROR_DETAIL } },
 });
 
-/** Opens the picker, deletes the named report through the confirmation, and waits for the toast. */
-async function confirmDeleteOf(select: HTMLElement, folder: ReportFolder) {
-    select.click();
-    await waitFor(testForPortal, WAIT_FOR_OPTIONS);
-
-    fireEvent.click(screen.getByLabelText(getDeleteActionLabel(ManagedEntity.REPORT, folder.reportName)));
-
-    await waitFor(() => expect(document.querySelector('[role="alertdialog"]')).not.toBe(null), WAIT_FOR_OPTIONS);
-
-    fireEvent.click(screen.getByRole('button', { name: CONFIRM_DELETE_LABEL }));
+/** Opens the picker, deletes the named report through the confirmation, and waits for the error toast. */
+async function confirmFailedDeleteOf(select: HTMLElement, folder: ReportFolder) {
+    await openPicker(select);
+    await confirmDeleteInOpenPicker(folder);
 
     // The failure is what the user sees — without this the delete is silent.
     await waitFor(
@@ -836,7 +826,7 @@ it('surfaces an error toast and keeps the report when the memory delete fails', 
     const deletedFolder = mockProfilerFolderList[0];
     const profilerSelect = getAllButtonsWithText(SELECT_REPORT_TEXT)[0];
 
-    await confirmDeleteOf(profilerSelect, deletedFolder);
+    await confirmFailedDeleteOf(profilerSelect, deletedFolder);
 
     expect(screen.getByText(MEMORY_REPORT_DELETE_FAILED_TOAST_TITLE)).not.toBeNull();
     expect(getProbedReportLinks()).toEqual(SEEDED_LINKS);
@@ -857,7 +847,7 @@ it('surfaces an error toast and keeps the report when the performance delete fai
     const deletedFolder = mockPerfFolderList[0];
     const performanceSelect = getAllButtonsWithText(SELECT_REPORT_TEXT)[1];
 
-    await confirmDeleteOf(performanceSelect, deletedFolder);
+    await confirmFailedDeleteOf(performanceSelect, deletedFolder);
 
     expect(screen.getByText(PERFORMANCE_REPORT_DELETE_FAILED_TOAST_TITLE)).not.toBeNull();
     expect(getProbedReportLinks()).toEqual(SEEDED_LINKS);

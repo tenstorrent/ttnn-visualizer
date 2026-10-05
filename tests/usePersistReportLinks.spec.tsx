@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useSetAtom } from 'jotai';
 import ReportLinkRecorder from '../src/components/ReportLinkRecorder';
@@ -20,8 +20,9 @@ import { TestProviders } from './helpers/TestProviders';
 import { ReportLinksProbe } from './helpers/ReportLinksProbe';
 import { PERFORMANCE_REPORT, PROFILER_REPORT, getProbedReportLinks } from './helpers/reportLinkFixtures';
 
+// Seeded in `beforeEach`: the enum isn't importable yet when `vi.hoisted` runs.
 const matchState = vi.hoisted(() => ({
-    result: 'pending' as string,
+    result: null as ReportLinkMatchResult | null,
 }));
 
 vi.mock('../src/hooks/useReportLinkMatch', () => ({
@@ -95,8 +96,8 @@ describe('usePersistReportLinks', () => {
         window.localStorage.clear();
     });
 
-    // `render` flushes effects inside `act`, so the probe is final once it returns; a
-    // `waitFor` here would pass on its first attempt and prove nothing more.
+    // `render` flushes effects inside `act` and the match is mocked synchronously, so the
+    // probe is final once `render` returns; a `waitFor` would pass on its first attempt.
     it('does not persist while match is PENDING', () => {
         matchState.result = ReportLinkMatchResult.PENDING;
         renderWithReports();
@@ -136,7 +137,7 @@ describe('usePersistReportLinks', () => {
         expect(getProbedReportLinks()).toEqual([]);
     });
 
-    // Mounted from `Layout`, the hook runs on every route, including ones with one report.
+    // Mounted via `ReportLinkRecorder` in `Layout`, the hook runs on every route, including ones with one report.
     it('does not persist without both active reports', () => {
         matchState.result = ReportLinkMatchResult.LINKED;
         renderWithReports({ performance: null });
@@ -144,39 +145,20 @@ describe('usePersistReportLinks', () => {
         expect(getProbedReportLinks()).toEqual([]);
     });
 
-    it('persists a LINKED pair once the comparison settles', async () => {
-        matchState.result = ReportLinkMatchResult.LINKED;
+    // UNLINKED is persisted too, so pickers can badge failed links.
+    it.each([
+        [ReportLinkMatchResult.LINKED, ReportPairLinkStatus.LINKED],
+        [ReportLinkMatchResult.UNLINKED, ReportPairLinkStatus.UNLINKED],
+    ])('persists a %s match once the comparison settles', (result, status) => {
+        matchState.result = result;
         renderWithReports();
 
-        await waitFor(() => {
-            const links = getProbedReportLinks();
-            expect(links).toHaveLength(1);
-            expect(links[0]).toMatchObject({
-                profilerId: 'mem-run',
-                performanceId: 'perf-run',
-                status: ReportPairLinkStatus.LINKED,
-            });
-        });
-    });
-
-    it('persists an UNLINKED pair so pickers can badge failed links', async () => {
-        matchState.result = ReportLinkMatchResult.UNLINKED;
-        renderWithReports();
-
-        await waitFor(() => {
-            const links = getProbedReportLinks();
-            expect(links).toHaveLength(1);
-            expect(links[0]).toMatchObject({
-                profilerId: 'mem-run',
-                performanceId: 'perf-run',
-                status: ReportPairLinkStatus.UNLINKED,
-            });
-        });
+        expect(getProbedReportLinks()).toMatchObject([{ profilerId: 'mem-run', performanceId: 'perf-run', status }]);
     });
 
     // Pruning on delete derives the id the same way, so this is half of a shared contract:
     // if recording stopped preferring syncedName, deletes would silently stop pruning.
-    it('keys a synced report by its syncedName rather than its path', async () => {
+    it('keys a synced report by its syncedName rather than its path', () => {
         matchState.result = ReportLinkMatchResult.LINKED;
         renderWithReports({
             profiler: {
@@ -186,25 +168,21 @@ describe('usePersistReportLinks', () => {
             },
         });
 
-        await waitFor(() => {
-            expect(getProbedReportLinks()).toMatchObject([{ profilerId: 'remote-run', performanceId: 'perf-run' }]);
-        });
+        expect(getProbedReportLinks()).toMatchObject([{ profilerId: 'remote-run', performanceId: 'perf-run' }]);
     });
 
     // The remote picker's host scoping reads `host`, so a host on the wrong side would
     // badge reports from one remote machine as linked on another.
-    it('records the remote host only on the remote side', async () => {
+    it('records the remote host only on the remote side', () => {
         matchState.result = ReportLinkMatchResult.LINKED;
         renderWithReports({ profilerLocation: ReportLocation.REMOTE });
 
-        await waitFor(() => {
-            expect(getProbedReportLinks()).toMatchObject([
-                {
-                    profilerAccess: { location: ReportLocation.REMOTE, path: PROFILER_REPORT.path, host: 'n150' },
-                    performanceAccess: { location: ReportLocation.LOCAL, path: PERFORMANCE_REPORT.path, host: null },
-                },
-            ]);
-        });
+        expect(getProbedReportLinks()).toMatchObject([
+            {
+                profilerAccess: { location: ReportLocation.REMOTE, path: PROFILER_REPORT.path, host: 'n150' },
+                performanceAccess: { location: ReportLocation.LOCAL, path: PERFORMANCE_REPORT.path, host: null },
+            },
+        ]);
     });
 
     // Link resolution pins tracing mode off (#1812), so a verdict reached with the
@@ -213,14 +191,10 @@ describe('usePersistReportLinks', () => {
     // the row order the match ran against. Kept as the guard against that carve-out
     // being reintroduced: it is the only case that would fail if `usePersistReportLinks`
     // started reading `tracingModeAtom` again.
-    it('persists an UNLINKED reached with tracing mode on', async () => {
+    it('persists an UNLINKED reached with tracing mode on', () => {
         matchState.result = ReportLinkMatchResult.UNLINKED;
         renderWithReports({ tracingMode: true });
 
-        await waitFor(() => {
-            const links = getProbedReportLinks();
-            expect(links).toHaveLength(1);
-            expect(links[0]).toMatchObject({ status: ReportPairLinkStatus.UNLINKED });
-        });
+        expect(getProbedReportLinks()).toMatchObject([{ status: ReportPairLinkStatus.UNLINKED }]);
     });
 });

@@ -534,7 +534,7 @@ There are two hooks for the performance report, and picking the wrong one is a c
 - **`usePerformanceReport(name)`** — the report as the performance tab is displaying it, with every view filter applied. For rendering the tab.
 - **`useLinkedPerformanceReport()`** — the same report pinned to devices merged, host ops hidden, whole run, default grouping, tracing mode off. For *anything that decides whether two reports describe the same run*: the link badge, the perf-table Op column, L1-pressure columns, tensor-drawer gating, the graph perf overlay, top-N annotations.
 
-Link status is a property of the reports, not of the current view. Resolving it from the filtered query means toggling **Merge devices** flips the badge to "Failed to link" and drops every dependent feature with it — and `usePersistReportLinks` (mounted from `Layout`) persists that verdict to `localStorage`, so the failure outlives the toggle (#1812).
+Link status is a property of the reports, not of the current view. Resolving it from the filtered query means toggling **Merge devices** flips the badge to "Failed to link" and drops every dependent feature with it — and `usePersistReportLinks` (mounted via `ReportLinkRecorder` in `Layout`) persists that verdict to `localStorage`, so the failure outlives the toggle (#1812).
 
 Build both keys through `src/functions/performanceReportQueryKey.ts` rather than assembling one inline, so the two cannot drift into keying on different filters. **Every** filter is pinned, so `getLinkedPerformanceReportParams()` takes no arguments — a view control that needs threading through it is a sign the call site wants `usePerformanceReport` instead.
 

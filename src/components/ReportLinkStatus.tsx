@@ -11,7 +11,6 @@ import {
     REPORTS_UNLINKED_TOOLTIP_HINT,
     ReportLinkMatchResult,
 } from '../definitions/ReportLinks';
-import { TEST_IDS } from '../definitions/TestIds';
 import { useReportLinkMatch } from '../hooks/useReportLinkMatch';
 
 const ReportLinkStatus = () => {
@@ -33,8 +32,12 @@ const ReportLinkStatus = () => {
             content={tooltipContent}
             position={Position.TOP}
         >
+            {/* Blueprint hides a title-less icon from assistive tech; expose the link state
+                instead, without `title`, whose SVG <title> would add a native tooltip. */}
             <Icon
-                data-testid={TEST_IDS.REPORT_LINK_STATUS}
+                role='img'
+                aria-hidden={false}
+                aria-label={isLinked ? REPORTS_LINKED_TOOLTIP : REPORTS_UNLINKED_TOOLTIP}
                 className={classNames({ 'no-sync-status-icon': !isLinked })}
                 icon={isLinked ? IconNames.LINK : IconNames.UNLINK}
                 intent={isLinked ? Intent.SUCCESS : Intent.NONE}
