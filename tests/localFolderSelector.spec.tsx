@@ -4,7 +4,8 @@
 
 import { Classes } from '@blueprintjs/core';
 import { AxiosError, HttpStatusCode } from 'axios';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { QueryClient } from '@tanstack/react-query';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { TestProviders } from './helpers/TestProviders';
 import getAllButtonsWithText from './helpers/getAllButtonsWithText';
@@ -107,8 +108,13 @@ vi.mock('../src/functions/reportLoadEvents', async (importOriginal) => {
 
 vi.mock('../src/functions/getUploadSizeLimitError', () => ({ default: getUploadSizeLimitError }));
 
-// Only the recorder harness below reads the match; the selector itself never does.
-vi.mock('../src/hooks/useReportLinkMatch', () => ({ useReportLinkMatch: () => ReportLinkMatchResult.LINKED }));
+// Only the recorder harness below reads the match; the selector itself never does. Seeded in
+// `beforeEach`: the enum isn't importable yet when `vi.hoisted` runs.
+const matchState = vi.hoisted(() => ({
+    result: null as ReportLinkMatchResult | null,
+}));
+
+vi.mock('../src/hooks/useReportLinkMatch', () => ({ useReportLinkMatch: () => matchState.result }));
 
 const defaultUpdateInstance = (updates: {
     active_report?: { profiler_name?: string | { path: string }; performance_name?: string | { path: string } };
@@ -140,6 +146,7 @@ afterEach(() => {
 });
 
 beforeEach(() => {
+    matchState.result = ReportLinkMatchResult.LINKED;
     recordReportLoaded.mockClear();
     recordReportLoadFailed.mockClear();
     mockUploadLocalFolder.mockReset();
@@ -793,6 +800,60 @@ it('does not re-record the pair when the active, linked memory report is deleted
     await waitFor(() => expect(getAllButtonsWithText(SELECT_REPORT_TEXT).length).toBeGreaterThan(0), WAIT_FOR_OPTIONS);
 
     expect(getProbedReportLinks()).toEqual([SEEDED_LINKS[1], SEEDED_LINKS[2]]);
+});
+
+// The prune and clearing the active report land together, so a comparison that settles while
+// the folder list refreshes finds no active pair to record.
+it('does not re-record a pair whose comparison settles while the deleted report refreshes', async () => {
+    const deletedFolder = mockProfilerFolderList[0];
+    const activePerformance = mockPerformanceReportFolders[1];
+    let finishRefresh = () => {};
+    const invalidateQueries = vi.spyOn(QueryClient.prototype, 'invalidateQueries').mockImplementation(
+        () =>
+            new Promise<void>((resolve) => {
+                finishRefresh = resolve;
+            }),
+    );
+
+    matchState.result = ReportLinkMatchResult.PENDING;
+    // A fresh element per call: `rerender` with the same one lets React skip the recorder.
+    const tree = () => (
+        <TestProviders
+            initialAtomValues={[
+                [reportLinksAtom, SEEDED_LINKS],
+                [activeProfilerReportAtom, deletedFolder],
+                [activePerformanceReportAtom, activePerformance],
+                [profilerReportLocationAtom, ReportLocation.LOCAL],
+                [performanceReportLocationAtom, ReportLocation.LOCAL],
+            ]}
+        >
+            <LocalFolderSelector />
+            <ReportLinkRecorder />
+            <ReportLinksProbe />
+        </TestProviders>
+    );
+
+    try {
+        const { rerender } = render(tree());
+
+        await openPicker(getAllButtonsWithText(deletedFolder.reportName)[0]);
+        await confirmDeleteInOpenPicker(deletedFolder);
+        await waitFor(() => expect(invalidateQueries).toHaveBeenCalled(), WAIT_FOR_OPTIONS);
+
+        // Mid-refresh: the comparison settles and the recorder re-renders against it.
+        matchState.result = ReportLinkMatchResult.LINKED;
+        rerender(tree());
+        expect(getProbedReportLinks()).toEqual([SEEDED_LINKS[1], SEEDED_LINKS[2]]);
+
+        await act(() => {
+            finishRefresh();
+            return Promise.resolve();
+        });
+
+        expect(getProbedReportLinks()).toEqual([SEEDED_LINKS[1], SEEDED_LINKS[2]]);
+    } finally {
+        invalidateQueries.mockRestore();
+    }
 });
 
 // A stand-in for whatever the server puts in the 403's `error` field, not a copy of it — the

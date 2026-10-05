@@ -325,13 +325,15 @@ const LocalFolderOptions = () => {
 
         setReportLinks((links) => removeReportLinksFor(links, options.linkRole, getFolderReportId(folder)));
 
-        await queryClient.invalidateQueries({ queryKey: [options.folderQueryKey] });
-
-        createToastNotification(options.deletedTitle, folder.reportName, ToastType.INFO);
-
+        // In the same batch as the prune: while the report stays active, a comparison that
+        // settles during the refresh below would have the recorder write the pair back.
         if (options.isActive) {
             options.clearActive();
         }
+
+        await queryClient.invalidateQueries({ queryKey: [options.folderQueryKey] });
+
+        createToastNotification(options.deletedTitle, folder.reportName, ToastType.INFO);
     };
 
     const handleDeleteProfiler = (folder: ReportFolder) =>

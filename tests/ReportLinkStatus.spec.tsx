@@ -83,6 +83,17 @@ describe('ReportLinkStatus', () => {
         expect(screen.queryByText(REPORTS_LINKED_TOOLTIP)).not.toBeInTheDocument();
     });
 
+    // Announcing these would tell screen-reader users linking failed while it is still unknown.
+    it.each([ReportLinkMatchResult.PENDING, ReportLinkMatchResult.UNAVAILABLE])(
+        'hides the icon from assistive tech while the match is %s',
+        (result) => {
+            matchState.result = result;
+            renderWithReports();
+
+            expect(screen.queryByRole('img')).not.toBeInTheDocument();
+        },
+    );
+
     // Persistence lives in `usePersistReportLinks`, mounted via `ReportLinkRecorder` in
     // `Layout`, so the icon can be moved or hidden without silently stopping link recording.
     it('does not persist a settled match itself', () => {
