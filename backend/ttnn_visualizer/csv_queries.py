@@ -960,17 +960,6 @@ class OpsPerformanceReportQueries:
         return processed_row
 
     @staticmethod
-    def set_op_type_from_signposts(processed_row, signposts):
-        if "op_code" in processed_row and any(
-            processed_row["op_code"] in signpost["op_code"] for signpost in signposts
-        ):
-            processed_row["op_type"] = "signpost"
-        else:
-            processed_row["op_type"] = "unknown"
-
-        return processed_row
-
-    @staticmethod
     def cleanup_temp_files(files):
         for file in files:
             if isinstance(file, tempfile._TemporaryFileWrapper):
@@ -1238,10 +1227,6 @@ class OpsPerformanceReportQueries:
                                             "OP Code Joined"
                                         ]
                                         del processed_row["OP Code Joined"]
-
-                                    cls.set_op_type_from_signposts(
-                                        processed_row, signposts
-                                    )
 
                                     stacked_report.append(processed_row)
                         except csv.Error as e:
