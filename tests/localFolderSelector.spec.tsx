@@ -663,6 +663,36 @@ function renderWithLinks() {
     );
 }
 
+/** The first memory and performance fixtures active, which is exactly `SEEDED_LINKS[0]`'s pair. */
+const ACTIVE_PROFILER = mockProfilerFolderList[0];
+const ACTIVE_PERFORMANCE = mockPerformanceReportFolders[1];
+
+/**
+ * Selector plus the always-mounted recorder over the active pair. Returns a fresh element per
+ * call, since `rerender` with the same one lets React skip the recorder.
+ */
+const activePairTree = () => (
+    <TestProviders
+        initialAtomValues={[
+            [reportLinksAtom, SEEDED_LINKS],
+            [activeProfilerReportAtom, ACTIVE_PROFILER],
+            [activePerformanceReportAtom, ACTIVE_PERFORMANCE],
+            [profilerReportLocationAtom, ReportLocation.LOCAL],
+            [performanceReportLocationAtom, ReportLocation.LOCAL],
+        ]}
+    >
+        <LocalFolderSelector />
+        <ReportLinkRecorder />
+        <ReportLinksProbe />
+    </TestProviders>
+);
+
+/**
+ * Text of each open picker row. Scoped to the rows because a delete toast stays on screen with
+ * the report name in it, so an unscoped query would match it and hide a row's disappearance.
+ */
+const getPickerRowTexts = () => screen.getAllByTestId(TEST_IDS.FOLDER_PICKER_ROW).map((row) => row.textContent);
+
 async function openPicker(select: HTMLElement) {
     select.click();
     await waitFor(testForPortal, WAIT_FOR_OPTIONS);
@@ -680,8 +710,7 @@ it('deletes memory report and updates state', async () => {
     const deletedFolder = mockProfilerFolderList[0];
     const profilerSelect = getAllButtonsWithText(SELECT_REPORT_TEXT)[0];
 
-    profilerSelect.click();
-    await waitFor(testForPortal, WAIT_FOR_OPTIONS);
+    await openPicker(profilerSelect);
     mockProfilerFolderList.forEach((folder: ReportFolder) => {
         expect(screen.getByText(folder.reportName)).not.toBeNull();
         expect(screen.getByText(`/${folder.path}`)).not.toBeNull();
@@ -700,12 +729,9 @@ it('deletes memory report and updates state', async () => {
     expect(getAllButtonsWithText(SELECT_REPORT_TEXT)).toHaveLength(2);
     expect(getProbedReportLinks()).toEqual([SEEDED_LINKS[1], SEEDED_LINKS[2]]);
 
-    profilerSelect.click();
-    await waitFor(testForPortal, WAIT_FOR_OPTIONS);
+    await openPicker(profilerSelect);
 
-    // Scoped to the dropdown rows: the delete toast is still on screen and carries the report name
-    // too, so an unscoped query would match it and hide the row's disappearance.
-    const menuRows = screen.getAllByTestId(TEST_IDS.FOLDER_PICKER_ROW).map((row) => row.textContent);
+    const menuRows = getPickerRowTexts();
 
     expect(menuRows).toHaveLength(mockProfilerFolderList.length - 1);
     expect(menuRows.some((row) => row?.includes(`/${deletedFolder.path}`))).toBe(false);
@@ -720,8 +746,7 @@ it('deletes performance report and updates state', async () => {
     const deletedFolder = mockPerfFolderList[0];
     const performanceSelect = getAllButtonsWithText(SELECT_REPORT_TEXT)[1];
 
-    performanceSelect.click();
-    await waitFor(testForPortal, WAIT_FOR_OPTIONS);
+    await openPicker(performanceSelect);
 
     await confirmDeleteInOpenPicker(deletedFolder);
 
@@ -735,12 +760,9 @@ it('deletes performance report and updates state', async () => {
     expect(mockDeletePerformance).toHaveBeenCalledWith(deletedFolder.path);
     expect(getProbedReportLinks()).toEqual([SEEDED_LINKS[0], SEEDED_LINKS[2]]);
 
-    performanceSelect.click();
-    await waitFor(testForPortal, WAIT_FOR_OPTIONS);
+    await openPicker(performanceSelect);
 
-    // Scoped to the dropdown rows: the delete toast is still on screen and carries the report name
-    // too, so an unscoped query would match it and hide the row's disappearance.
-    const menuRows = screen.getAllByTestId(TEST_IDS.FOLDER_PICKER_ROW).map((row) => row.textContent);
+    const menuRows = getPickerRowTexts();
 
     expect(menuRows).toHaveLength(mockPerformanceReportFolders.length - 1);
     expect(menuRows.some((row) => row?.includes(`/${deletedFolder.path}`))).toBe(false);
@@ -772,24 +794,9 @@ it('prunes links for a synced folder under its syncedName', async () => {
 // yet the prune survives deleting that report. That the recorder ignores `reportLinksAtom`
 // itself is pinned deterministically in usePersistReportLinks.spec.
 it('does not re-record the pair when the active, linked memory report is deleted', async () => {
-    const deletedFolder = mockProfilerFolderList[0];
-    const activePerformance = mockPerformanceReportFolders[1];
+    const deletedFolder = ACTIVE_PROFILER;
 
-    render(
-        <TestProviders
-            initialAtomValues={[
-                [reportLinksAtom, SEEDED_LINKS],
-                [activeProfilerReportAtom, deletedFolder],
-                [activePerformanceReportAtom, activePerformance],
-                [profilerReportLocationAtom, ReportLocation.LOCAL],
-                [performanceReportLocationAtom, ReportLocation.LOCAL],
-            ]}
-        >
-            <LocalFolderSelector />
-            <ReportLinkRecorder />
-            <ReportLinksProbe />
-        </TestProviders>,
-    );
+    render(activePairTree());
 
     // SEEDED_LINKS[0] is exactly the active pair, so recording it again is a no-op.
     expect(getProbedReportLinks()).toEqual(SEEDED_LINKS);
@@ -803,58 +810,47 @@ it('does not re-record the pair when the active, linked memory report is deleted
 });
 
 // The prune and clearing the active report land together, so a comparison that settles while
-// the folder list refreshes finds no active pair to record.
-it('does not re-record a pair whose comparison settles while the deleted report refreshes', async () => {
-    const deletedFolder = mockProfilerFolderList[0];
-    const activePerformance = mockPerformanceReportFolders[1];
-    let finishRefresh = () => {};
-    const invalidateQueries = vi.spyOn(QueryClient.prototype, 'invalidateQueries').mockImplementation(
-        () =>
-            new Promise<void>((resolve) => {
-                finishRefresh = resolve;
-            }),
-    );
+// the folder list refreshes finds no active pair to record. Each side has its own `isActive`
+// and `clearActive`, so both are covered.
+it.each([
+    ['memory', ACTIVE_PROFILER],
+    ['performance', ACTIVE_PERFORMANCE],
+])(
+    'does not re-record a pair whose comparison settles while the deleted %s report refreshes',
+    async (_, deletedFolder) => {
+        let finishRefresh = () => {};
+        const invalidateQueries = vi.spyOn(QueryClient.prototype, 'invalidateQueries').mockImplementation(
+            () =>
+                new Promise<void>((resolve) => {
+                    finishRefresh = resolve;
+                }),
+        );
 
-    matchState.result = ReportLinkMatchResult.PENDING;
-    // A fresh element per call: `rerender` with the same one lets React skip the recorder.
-    const tree = () => (
-        <TestProviders
-            initialAtomValues={[
-                [reportLinksAtom, SEEDED_LINKS],
-                [activeProfilerReportAtom, deletedFolder],
-                [activePerformanceReportAtom, activePerformance],
-                [profilerReportLocationAtom, ReportLocation.LOCAL],
-                [performanceReportLocationAtom, ReportLocation.LOCAL],
-            ]}
-        >
-            <LocalFolderSelector />
-            <ReportLinkRecorder />
-            <ReportLinksProbe />
-        </TestProviders>
-    );
+        matchState.result = ReportLinkMatchResult.PENDING;
 
-    try {
-        const { rerender } = render(tree());
+        try {
+            const { rerender } = render(activePairTree());
 
-        await openPicker(getAllButtonsWithText(deletedFolder.reportName)[0]);
-        await confirmDeleteInOpenPicker(deletedFolder);
-        await waitFor(() => expect(invalidateQueries).toHaveBeenCalled(), WAIT_FOR_OPTIONS);
+            await openPicker(getAllButtonsWithText(deletedFolder.reportName)[0]);
+            await confirmDeleteInOpenPicker(deletedFolder);
+            await waitFor(() => expect(invalidateQueries).toHaveBeenCalled(), WAIT_FOR_OPTIONS);
 
-        // Mid-refresh: the comparison settles and the recorder re-renders against it.
-        matchState.result = ReportLinkMatchResult.LINKED;
-        rerender(tree());
-        expect(getProbedReportLinks()).toEqual([SEEDED_LINKS[1], SEEDED_LINKS[2]]);
+            // Mid-refresh: the comparison settles and the recorder re-renders against it.
+            matchState.result = ReportLinkMatchResult.LINKED;
+            rerender(activePairTree());
+            expect(getProbedReportLinks()).toEqual([SEEDED_LINKS[1], SEEDED_LINKS[2]]);
 
-        await act(() => {
-            finishRefresh();
-            return Promise.resolve();
-        });
+            await act(() => {
+                finishRefresh();
+                return Promise.resolve();
+            });
 
-        expect(getProbedReportLinks()).toEqual([SEEDED_LINKS[1], SEEDED_LINKS[2]]);
-    } finally {
-        invalidateQueries.mockRestore();
-    }
-});
+            expect(getProbedReportLinks()).toEqual([SEEDED_LINKS[1], SEEDED_LINKS[2]]);
+        } finally {
+            invalidateQueries.mockRestore();
+        }
+    },
+);
 
 // A stand-in for whatever the server puts in the 403's `error` field, not a copy of it — the
 // backend's exact wording is pinned where it is defined (test_report_deletion.py asserts against
@@ -892,10 +888,9 @@ it('surfaces an error toast and keeps the report when the memory delete fails', 
     expect(screen.getByText(MEMORY_REPORT_DELETE_FAILED_TOAST_TITLE)).not.toBeNull();
     expect(getProbedReportLinks()).toEqual(SEEDED_LINKS);
 
-    profilerSelect.click();
-    await waitFor(testForPortal, WAIT_FOR_OPTIONS);
+    await openPicker(profilerSelect);
 
-    const menuRows = screen.getAllByTestId(TEST_IDS.FOLDER_PICKER_ROW).map((row) => row.textContent);
+    const menuRows = getPickerRowTexts();
 
     expect(menuRows).toHaveLength(mockProfilerFolderList.length);
     expect(menuRows.some((row) => row?.includes(`/${deletedFolder.path}`))).toBe(true);
@@ -914,10 +909,9 @@ it('surfaces an error toast and keeps the report when the performance delete fai
     expect(getProbedReportLinks()).toEqual(SEEDED_LINKS);
     expect(mockDeletePerformance).toHaveBeenCalledWith(deletedFolder.path);
 
-    performanceSelect.click();
-    await waitFor(testForPortal, WAIT_FOR_OPTIONS);
+    await openPicker(performanceSelect);
 
-    const menuRows = screen.getAllByTestId(TEST_IDS.FOLDER_PICKER_ROW).map((row) => row.textContent);
+    const menuRows = getPickerRowTexts();
 
     expect(menuRows).toHaveLength(mockPerformanceReportFolders.length);
     expect(menuRows.some((row) => row?.includes(`/${deletedFolder.path}`))).toBe(true);

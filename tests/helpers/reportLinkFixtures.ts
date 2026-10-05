@@ -16,7 +16,7 @@ export const getProbedReportLinks = (): ReportLink[] =>
 export const PROFILER_REPORT = { path: '/data/local/profiler-reports/mem-run', reportName: 'mem-run' };
 export const PERFORMANCE_REPORT = { path: '/data/local/performance-reports/perf-run', reportName: 'perf-run' };
 
-/** Takes report ids, not paths: derive them with `getReportId` when starting from a folder. */
+/** Takes report ids, not paths: derive them with `getFolderReportId` when starting from a folder. */
 export const createReportLink = (
     profilerId: string,
     performanceId: string,

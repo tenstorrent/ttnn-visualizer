@@ -4,12 +4,18 @@
 
 import { describe, expect, it } from 'vitest';
 import { ReportLocation } from '../src/definitions/Reports';
-import { MAX_REPORT_LINKS, ReportLinkRole, ReportPairLinkStatus } from '../src/definitions/ReportLinks';
+import {
+    MAX_REPORT_LINKS,
+    ReportLinkMatchResult,
+    ReportLinkRole,
+    ReportPairLinkStatus,
+} from '../src/definitions/ReportLinks';
 import { ReportLink } from '../src/model/ReportLinks';
 import {
     createReportLinkAccess,
     getFolderReportId,
     getReportId,
+    isSettledLinkMatch,
     linkedPerformanceIds,
     linkedProfilerIds,
     removeReportLinksFor,
@@ -49,6 +55,17 @@ const link = (
               }
             : { location: ReportLocation.LOCAL, path: performanceId },
     });
+
+describe('isSettledLinkMatch', () => {
+    it.each([
+        [ReportLinkMatchResult.LINKED, true],
+        [ReportLinkMatchResult.UNLINKED, true],
+        [ReportLinkMatchResult.PENDING, false],
+        [ReportLinkMatchResult.UNAVAILABLE, false],
+    ])('treats %s as settled: %s', (result, settled) => {
+        expect(isSettledLinkMatch(result)).toBe(settled);
+    });
+});
 
 describe('getFolderReportId', () => {
     it('prefers the synced folder name over the path', () => {

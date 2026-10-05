@@ -11,20 +11,20 @@ import {
     REPORTS_UNLINKED_TOOLTIP_HINT,
     ReportLinkMatchResult,
 } from '../definitions/ReportLinks';
+import { isSettledLinkMatch } from '../functions/reportLinks';
 import { useReportLinkMatch } from '../hooks/useReportLinkMatch';
 
 const ReportLinkStatus = () => {
     const matchResult = useReportLinkMatch();
     const isLinked = matchResult === ReportLinkMatchResult.LINKED;
-    // Only a settled comparison has a state worth announcing; PENDING and UNAVAILABLE
-    // would otherwise read as "unable to link".
-    const isSettled = isLinked || matchResult === ReportLinkMatchResult.UNLINKED;
+    // One headline for the tooltip and the accessible name, so the two can't drift apart.
+    const statusLabel = isLinked ? REPORTS_LINKED_TOOLTIP : REPORTS_UNLINKED_TOOLTIP;
 
     const tooltipContent = isLinked ? (
-        REPORTS_LINKED_TOOLTIP
+        statusLabel
     ) : (
         <>
-            {REPORTS_UNLINKED_TOOLTIP}
+            {statusLabel}
             <br />
             {REPORTS_UNLINKED_TOOLTIP_HINT}
         </>
@@ -36,12 +36,13 @@ const ReportLinkStatus = () => {
             position={Position.TOP}
         >
             {/* Blueprint hides a title-less icon from assistive tech; expose a settled link
-                state instead, without `title`, whose SVG <title> would add a native tooltip. */}
+                state instead, without `title`, whose SVG <title> would add a native tooltip.
+                PENDING and UNAVAILABLE stay hidden rather than read as "unable to link". */}
             <Icon
-                {...(isSettled && {
+                {...(isSettledLinkMatch(matchResult) && {
                     role: 'img',
                     'aria-hidden': false,
-                    'aria-label': isLinked ? REPORTS_LINKED_TOOLTIP : REPORTS_UNLINKED_TOOLTIP,
+                    'aria-label': statusLabel,
                 })}
                 className={classNames({ 'no-sync-status-icon': !isLinked })}
                 icon={isLinked ? IconNames.LINK : IconNames.UNLINK}

@@ -5,6 +5,7 @@
 import {
     LinkedReportIdOptions,
     MAX_REPORT_LINKS,
+    ReportLinkMatchResult,
     ReportLinkRole,
     ReportPairLinkStatus,
 } from '../definitions/ReportLinks';
@@ -41,6 +42,13 @@ const pathBasename = (value: string): string => {
     // Empty after stripping separators (e.g. '/', '\\') — not a usable report id.
     return segments.length > 0 ? segments[segments.length - 1]! : '';
 };
+
+/**
+ * Whether a live comparison has reached a verdict. Only a settled match is recorded or
+ * announced; PENDING and UNAVAILABLE say nothing about whether the reports belong together.
+ */
+export const isSettledLinkMatch = (result: ReportLinkMatchResult): boolean =>
+    result === ReportLinkMatchResult.LINKED || result === ReportLinkMatchResult.UNLINKED;
 
 const isSamePair = (a: ReportLink, b: ReportLink): boolean =>
     a.profilerId === b.profilerId && a.performanceId === b.performanceId;
