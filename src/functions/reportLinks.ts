@@ -2,8 +2,14 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-import { LinkedReportIdOptions, MAX_REPORT_LINKS, ReportPairLinkStatus } from '../definitions/ReportLinks';
-import { ReportLocation } from '../definitions/Reports';
+import {
+    LinkedReportIdOptions,
+    MAX_REPORT_LINKS,
+    ReportLinkMatchResult,
+    ReportLinkRole,
+    ReportPairLinkStatus,
+} from '../definitions/ReportLinks';
+import { ReportFolder, ReportLocation } from '../definitions/Reports';
 import { ReportLink, ReportLinkAccess } from '../model/ReportLinks';
 
 /**
@@ -23,12 +29,26 @@ export const getReportId = (...candidates: Array<string | null | undefined>): st
     return null;
 };
 
+/**
+ * Id of a local report folder. Recording, pruning and badging must all key a folder
+ * the same way, so a synced folder resolves to its `syncedName` before its `path`.
+ */
+export const getFolderReportId = (folder: Pick<ReportFolder, 'syncedName' | 'path'> | null | undefined) =>
+    getReportId(folder?.syncedName, folder?.path);
+
 const pathBasename = (value: string): string => {
     const normalised = value.replace(/\\/g, '/');
     const segments = normalised.split('/').filter(Boolean);
     // Empty after stripping separators (e.g. '/', '\\') — not a usable report id.
     return segments.length > 0 ? segments[segments.length - 1]! : '';
 };
+
+/**
+ * Whether a live comparison has reached a verdict. Only a settled match is recorded or
+ * announced; PENDING and UNAVAILABLE say nothing about whether the reports belong together.
+ */
+export const isSettledLinkMatch = (result: ReportLinkMatchResult): boolean =>
+    result === ReportLinkMatchResult.LINKED || result === ReportLinkMatchResult.UNLINKED;
 
 const isSamePair = (a: ReportLink, b: ReportLink): boolean =>
     a.profilerId === b.profilerId && a.performanceId === b.performanceId;
@@ -54,6 +74,49 @@ export const upsertReportLink = (links: ReportLink[], next: ReportLink): ReportL
     return capReportLinks([...without, next]);
 };
 
+const getRoleId = (link: ReportLink, role: ReportLinkRole): string =>
+    role === ReportLinkRole.PROFILER ? link.profilerId : link.performanceId;
+
+const getRoleAccess = (link: ReportLink, role: ReportLinkRole): ReportLinkAccess | undefined =>
+    role === ReportLinkRole.PROFILER ? link.profilerAccess : link.performanceAccess;
+
+const getOppositeRole = (role: ReportLinkRole): ReportLinkRole =>
+    role === ReportLinkRole.PROFILER ? ReportLinkRole.PERFORMANCE : ReportLinkRole.PROFILER;
+
+/**
+ * How a report was reached when its pair was recorded. `host` is kept only for a remote
+ * side: host scoping treats a missing host as "matches anywhere", so a local report must
+ * not inherit whichever remote connection happens to be selected.
+ */
+export const createReportLinkAccess = (
+    location: ReportLocation,
+    path: string,
+    remoteHost: string | null,
+): ReportLinkAccess => ({
+    location,
+    path,
+    host: location === ReportLocation.REMOTE ? remoteHost : null,
+});
+
+/**
+ * Drop every pair whose `role` side is `reportId`, e.g. after that report is deleted.
+ * Ids are folder basenames, so this also drops pairs recorded against a remote copy of
+ * the same run; those reappear the next time the pair is compared. Returns the same
+ * array reference when nothing matches, which spares subscribers a re-render; the
+ * storage atom still writes `localStorage` on every set.
+ */
+export const removeReportLinksFor = (
+    links: ReportLink[],
+    role: ReportLinkRole,
+    reportId: string | null,
+): ReportLink[] => {
+    if (!reportId || !links.some((link) => getRoleId(link, role) === reportId)) {
+        return links;
+    }
+
+    return links.filter((link) => getRoleId(link, role) !== reportId);
+};
+
 const matchesHostScope = (access: ReportLinkAccess | undefined, remoteHost?: string | null): boolean => {
     if (!remoteHost) {
         return true;
@@ -66,39 +129,28 @@ const matchesHostScope = (access: ReportLinkAccess | undefined, remoteHost?: str
     return access.host === remoteHost;
 };
 
-const idsForActiveProfiler = (
+/**
+ * Ids on the opposite side of every `status` pair whose `activeRole` side is `activeId`.
+ * Host scoping checks the counterpart's access, since that is the report being badged.
+ */
+const counterpartIds = (
     links: ReportLink[],
     status: ReportPairLinkStatus,
-    profilerId: string | null | undefined,
+    activeRole: ReportLinkRole,
+    activeId: string | null | undefined,
     options?: LinkedReportIdOptions,
 ): Set<string> => {
-    if (!profilerId) {
+    if (!activeId) {
         return new Set();
     }
 
-    return new Set(
-        links
-            .filter((link) => link.status === status && link.profilerId === profilerId)
-            .filter((link) => matchesHostScope(link.performanceAccess, options?.remoteHost))
-            .map((link) => link.performanceId),
-    );
-};
-
-const idsForActivePerformance = (
-    links: ReportLink[],
-    status: ReportPairLinkStatus,
-    performanceId: string | null | undefined,
-    options?: LinkedReportIdOptions,
-): Set<string> => {
-    if (!performanceId) {
-        return new Set();
-    }
+    const counterpartRole = getOppositeRole(activeRole);
 
     return new Set(
         links
-            .filter((link) => link.status === status && link.performanceId === performanceId)
-            .filter((link) => matchesHostScope(link.profilerAccess, options?.remoteHost))
-            .map((link) => link.profilerId),
+            .filter((link) => link.status === status && getRoleId(link, activeRole) === activeId)
+            .filter((link) => matchesHostScope(getRoleAccess(link, counterpartRole), options?.remoteHost))
+            .map((link) => getRoleId(link, counterpartRole)),
     );
 };
 
@@ -106,22 +158,24 @@ export const linkedPerformanceIds = (
     links: ReportLink[],
     profilerId: string | null | undefined,
     options?: LinkedReportIdOptions,
-): Set<string> => idsForActiveProfiler(links, ReportPairLinkStatus.LINKED, profilerId, options);
+): Set<string> => counterpartIds(links, ReportPairLinkStatus.LINKED, ReportLinkRole.PROFILER, profilerId, options);
 
 export const unlinkedPerformanceIds = (
     links: ReportLink[],
     profilerId: string | null | undefined,
     options?: LinkedReportIdOptions,
-): Set<string> => idsForActiveProfiler(links, ReportPairLinkStatus.UNLINKED, profilerId, options);
+): Set<string> => counterpartIds(links, ReportPairLinkStatus.UNLINKED, ReportLinkRole.PROFILER, profilerId, options);
 
 export const linkedProfilerIds = (
     links: ReportLink[],
     performanceId: string | null | undefined,
     options?: LinkedReportIdOptions,
-): Set<string> => idsForActivePerformance(links, ReportPairLinkStatus.LINKED, performanceId, options);
+): Set<string> =>
+    counterpartIds(links, ReportPairLinkStatus.LINKED, ReportLinkRole.PERFORMANCE, performanceId, options);
 
 export const unlinkedProfilerIds = (
     links: ReportLink[],
     performanceId: string | null | undefined,
     options?: LinkedReportIdOptions,
-): Set<string> => idsForActivePerformance(links, ReportPairLinkStatus.UNLINKED, performanceId, options);
+): Set<string> =>
+    counterpartIds(links, ReportPairLinkStatus.UNLINKED, ReportLinkRole.PERFORMANCE, performanceId, options);
