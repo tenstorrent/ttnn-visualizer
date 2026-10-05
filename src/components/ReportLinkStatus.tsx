@@ -5,90 +5,28 @@
 import { Icon, Intent, Position, Tooltip } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import classNames from 'classnames';
-import { useAtomValue, useSetAtom } from 'jotai';
-import { useEffect } from 'react';
-import { ReportLocation } from '../definitions/Reports';
-import { ReportLinkMatchResult, ReportPairLinkStatus } from '../definitions/ReportLinks';
-import { getReportId, upsertReportLink } from '../functions/reportLinks';
-import useRemoteConnection from '../hooks/useRemote';
-import { useReportLinkMatch } from '../hooks/useReportLinkMatch';
 import {
-    activePerformanceReportAtom,
-    activeProfilerReportAtom,
-    performanceReportLocationAtom,
-    profilerReportLocationAtom,
-    reportLinksAtom,
-} from '../store/app';
+    REPORTS_LINKED_TOOLTIP,
+    REPORTS_UNLINKED_TOOLTIP,
+    REPORTS_UNLINKED_TOOLTIP_HINT,
+    ReportLinkMatchResult,
+} from '../definitions/ReportLinks';
+import { isSettledLinkMatch } from '../functions/reportLinks';
+import { useReportLinkMatch } from '../hooks/useReportLinkMatch';
 
 const ReportLinkStatus = () => {
     const matchResult = useReportLinkMatch();
     const isLinked = matchResult === ReportLinkMatchResult.LINKED;
-
-    const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
-    const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
-    const profilerLocation = useAtomValue(profilerReportLocationAtom);
-    const performanceLocation = useAtomValue(performanceReportLocationAtom);
-    const setReportLinks = useSetAtom(reportLinksAtom);
-    const { persistentState } = useRemoteConnection();
-
-    // Persist LINKED / UNLINKED once the live comparison settles so pickers can
-    // badge known counterparts (including failed pairs).
-    useEffect(() => {
-        if (!activeProfilerReport || !activePerformanceReport || !profilerLocation || !performanceLocation) {
-            return;
-        }
-
-        if (matchResult !== ReportLinkMatchResult.LINKED && matchResult !== ReportLinkMatchResult.UNLINKED) {
-            return;
-        }
-
-        const profilerId = getReportId(activeProfilerReport.syncedName, activeProfilerReport.path);
-        const performanceId = getReportId(activePerformanceReport.syncedName, activePerformanceReport.path);
-
-        if (!profilerId || !performanceId) {
-            return;
-        }
-
-        const remoteHost = persistentState.selectedConnection?.host ?? null;
-
-        setReportLinks((links) =>
-            upsertReportLink(links, {
-                profilerId,
-                performanceId,
-                status:
-                    matchResult === ReportLinkMatchResult.LINKED
-                        ? ReportPairLinkStatus.LINKED
-                        : ReportPairLinkStatus.UNLINKED,
-                recordedAt: Date.now(),
-                profilerAccess: {
-                    location: profilerLocation,
-                    path: activeProfilerReport.path,
-                    host: profilerLocation === ReportLocation.REMOTE ? remoteHost : null,
-                },
-                performanceAccess: {
-                    location: performanceLocation,
-                    path: activePerformanceReport.path,
-                    host: performanceLocation === ReportLocation.REMOTE ? remoteHost : null,
-                },
-            }),
-        );
-    }, [
-        matchResult,
-        activeProfilerReport,
-        activePerformanceReport,
-        profilerLocation,
-        performanceLocation,
-        setReportLinks,
-        persistentState.selectedConnection?.host,
-    ]);
+    // One headline for the tooltip and the accessible name, so the two can't drift apart.
+    const statusLabel = isLinked ? REPORTS_LINKED_TOOLTIP : REPORTS_UNLINKED_TOOLTIP;
 
     const tooltipContent = isLinked ? (
-        'Data linked between memory and performance reports'
+        statusLabel
     ) : (
         <>
-            Unable to link active memory and performance reports
+            {statusLabel}
             <br />
-            Please select reports generated from the same run to see additional data across the visualizer
+            {REPORTS_UNLINKED_TOOLTIP_HINT}
         </>
     );
 
@@ -97,7 +35,15 @@ const ReportLinkStatus = () => {
             content={tooltipContent}
             position={Position.TOP}
         >
+            {/* Blueprint hides a title-less icon from assistive tech; expose a settled link
+                state instead, without `title`, whose SVG <title> would add a native tooltip.
+                PENDING and UNAVAILABLE stay hidden rather than read as "unable to link". */}
             <Icon
+                {...(isSettledLinkMatch(matchResult) && {
+                    role: 'img',
+                    'aria-hidden': false,
+                    'aria-label': statusLabel,
+                })}
                 className={classNames({ 'no-sync-status-icon': !isLinked })}
                 icon={isLinked ? IconNames.LINK : IconNames.UNLINK}
                 intent={isLinked ? Intent.SUCCESS : Intent.NONE}
