@@ -86,6 +86,7 @@ from ttnn_visualizer.mlir import (
     upload_and_convert_mlir,
 )
 from ttnn_visualizer.models import (
+    BufferType,
     HostKeyOfferResponse,
     HostKeyTarget,
     HostKeyTrustRequest,
@@ -767,11 +768,19 @@ def tensors_list(instance: Instance):
         tensor_filters: dict = {}
         if device_id is not None:
             tensor_filters["device_id"] = device_id
-        if buffer_type_param is not None and str.isdigit(buffer_type_param):
-            tensor_filters["buffer_type"] = int(buffer_type_param)
         tensors = list(
             db.query_tensors(db.merge_rank_filter("tensors", tensor_filters, rank))
         )
+        # Filtered here rather than in SQL: the `buffer_type` column is wrong for
+        # unaddressed tensors, which `Tensor` corrects from the memory config.
+        if buffer_type_param is not None and str.isdigit(buffer_type_param):
+            wanted_buffer_type = int(buffer_type_param)
+            tensors = [
+                tensor
+                for tensor in tensors
+                if isinstance(tensor.buffer_type, BufferType)
+                and tensor.buffer_type.value == wanted_buffer_type
+            ]
         local_comparisons = list(db.query_tensor_comparisons(rank=rank))
         global_comparisons = list(db.query_tensor_comparisons(local=False, rank=rank))
         producers_consumers = list(db.query_producers_consumers(rank=rank))

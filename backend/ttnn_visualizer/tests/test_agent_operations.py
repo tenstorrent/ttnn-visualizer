@@ -165,6 +165,26 @@ INSERT INTO devices (
 ) VALUES (0, 1499136, 64, 1370848, 64, 0);
 """
 
+# tt-metal's graph report stores `buffer_type` as `0` -- DRAM -- for every
+# tensor the capture recorded no address for, whatever its memory config says.
+# Tensor 21 is the real case from a DeepSeek MoE capture: declared L1, stored 0.
+# Tensor 22 is a host tensor with no memory config at all, and 20 an allocated
+# tensor whose column is trustworthy and must be left alone. Its memory config
+# deliberately disagrees with the column, so the test proves the column wins
+# whenever there is an address.
+_UNADDRESSED_TENSORS_SQL = _INTEGER_BUFFER_TYPE_SQL + """
+INSERT INTO tensors VALUES
+    (20, 'Shape([1, 3200, 7168])', 'DataType.BFLOAT16', 'Layout.TILE',
+     'MemoryConfig(memory_layout=TensorMemoryLayout::INTERLEAVED,buffer_type=BufferType::L1,shard_spec=std::nullopt)',
+     0, 100, 0),
+    (21, 'Shape([1, 3200, 8])', 'DataType.UINT16', 'Layout.ROW_MAJOR',
+     'MemoryConfig(memory_layout=TensorMemoryLayout::INTERLEAVED,buffer_type=BufferType::L1,shard_spec=std::nullopt)',
+     NULL, NULL, 0),
+    (22, 'Shape([1, 256])', 'DataType.UINT32', 'Layout.ROW_MAJOR',
+     NULL, NULL, NULL, 0);
+INSERT INTO input_tensors VALUES (1, 0, 20), (1, 1, 21), (1, 2, 22);
+"""
+
 # Two ranks, each with its own operation 1 -- the collision the rank scope
 # exists to prevent (#1842).
 _RANKED_REPORT_SQL = """
@@ -801,6 +821,20 @@ class TestMemoryProfile:
 
 
 class TestOperationDetail:
+    def test_an_unaddressed_tensor_takes_its_buffer_type_from_its_memory_config(
+        self, loaded
+    ):
+        """The stored `0` would otherwise report an L1 tensor, and every host
+        tensor, as DRAM."""
+        registry, handle = loaded(_UNADDRESSED_TENSORS_SQL, name="unaddressed")
+
+        result = agent_operations.operation_detail(registry, handle, 1)
+
+        buffer_type_by_tensor = {
+            item["tensor_id"]: item["buffer_type"] for item in result["inputs"]
+        }
+        assert buffer_type_by_tensor == {20: "DRAM", 21: "L1", 22: None}
+
     def test_it_describes_the_tensors_the_operation_refers_to(self, loaded):
         registry, handle = loaded()
 
