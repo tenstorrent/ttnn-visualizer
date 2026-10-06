@@ -17,6 +17,8 @@ type MultiSelectFieldProps<T, K extends keyof T> = {
     disabled?: boolean;
     /** Options kept visible but unselectable, typically because they would match nothing. */
     disabledValues?: ReadonlySet<T[K]>;
+    /** Offers `null` as its own option, listed last, for rows that have no value to filter on. */
+    includeNull?: boolean;
 };
 
 const MultiSelectField = <T, K extends keyof T>({
@@ -28,6 +30,7 @@ const MultiSelectField = <T, K extends keyof T>({
     labelFormatter,
     disabled,
     disabledValues,
+    includeNull = false,
 }: MultiSelectFieldProps<T, K>) => {
     const updateMultiSelect = useCallback(
         (updatedFilter: T[K]) => {
@@ -63,8 +66,12 @@ const MultiSelectField = <T, K extends keyof T>({
         const uniqueValues = new Set(keyData.filter((val): val is T[K] => val != null && val !== ''));
         const sortedOptions = Array.from(uniqueValues).sort((a, b) => (a > b ? 1 : -1));
 
+        if (includeNull && keyData.includes(null as T[K])) {
+            sortedOptions.push(null as T[K]);
+        }
+
         return sortedOptions;
-    }, [options, keyName]);
+    }, [options, keyName, includeNull]);
 
     const filterPredicate: ItemPredicate<T[K]> = useCallback(
         (query, selected) =>
