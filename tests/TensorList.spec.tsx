@@ -6,7 +6,8 @@
  * A tensor without an address arrives with the buffer type its memory config
  * declares, and a host tensor, which declares none, with `null` rather than the
  * DRAM tt-metal stores for it. These pin what the list does with `null`: no tag,
- * no buffer details, and no place under any buffer-type filter.
+ * no buffer details, and a filter option of its own rather than a place under
+ * any buffer type.
  */
 
 import { cleanup, render } from '@testing-library/react';
@@ -128,6 +129,22 @@ describe('TensorList', () => {
         expect(rowFor(container, '111')).toBeDefined();
         expect(rowFor(container, '222')).toBeUndefined();
         expect(rowFor(container, '333')).toBeUndefined();
+    });
+
+    it('lists only the tensors with no buffer type under that filter', () => {
+        const { container } = renderList([null]);
+
+        expect(rowFor(container, '111')).toBeUndefined();
+        expect(rowFor(container, '222')).toBeUndefined();
+        expect(rowFor(container, '333')).toBeDefined();
+    });
+
+    it('combines the no-buffer-type filter with a buffer type', () => {
+        const { container } = renderList([BufferType.DRAM, null]);
+
+        expect(rowFor(container, '111')).toBeDefined();
+        expect(rowFor(container, '222')).toBeUndefined();
+        expect(rowFor(container, '333')).toBeDefined();
     });
 
     it('lists an unaddressed tensor under the buffer type its memory config declares', () => {

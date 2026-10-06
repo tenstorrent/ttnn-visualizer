@@ -109,4 +109,51 @@ describe('MultiSelectField', () => {
         expect(updateHandler).toHaveBeenCalledTimes(1);
         expect(updateHandler.mock.calls[0][0]([])).toEqual(['alpha']);
     });
+
+    describe('with a null value among the options', () => {
+        const NULLABLE_OPTIONS = [{ value: 'beta' }, { value: null }, { value: 'alpha' }];
+        const formatLabel = (value: string | null) => value ?? 'Nothing';
+
+        const renderNullableField = (includeNull: boolean) => {
+            const updateHandler = vi.fn();
+
+            render(
+                <MultiSelectField<{ value: string | null }, 'value'>
+                    keyName='value'
+                    options={NULLABLE_OPTIONS}
+                    placeholder={PLACEHOLDER}
+                    values={[]}
+                    updateHandler={updateHandler}
+                    labelFormatter={formatLabel}
+                    includeNull={includeNull}
+                />,
+            );
+
+            return updateHandler;
+        };
+
+        it('leaves null out by default', async () => {
+            renderNullableField(false);
+
+            await openSelect();
+
+            expect(screen.queryByRole('checkbox', { name: 'Nothing' })).not.toBeInTheDocument();
+        });
+
+        it('offers null last, and selects it, when asked to include it', async () => {
+            const updateHandler = renderNullableField(true);
+
+            await openSelect();
+
+            expect(screen.getAllByRole('checkbox').map((checkbox) => checkbox.closest('label')?.textContent)).toEqual([
+                'alpha',
+                'beta',
+                'Nothing',
+            ]);
+
+            fireEvent.click(screen.getByRole('checkbox', { name: 'Nothing' }));
+
+            expect(updateHandler.mock.calls[0][0]([])).toEqual([null]);
+        });
+    });
 });
