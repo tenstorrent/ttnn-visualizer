@@ -4,42 +4,21 @@
 
 import { describe, expect, it } from 'vitest';
 import { OperationDetails } from '../src/model/OperationDetails';
-import { BufferData, OperationDetailsData } from '../src/model/APIData';
+import { BufferData } from '../src/model/APIData';
 import { BufferType } from '../src/model/BufferType';
 import { TensorDeallocationReport } from '../src/model/BufferSummary';
 import { buildTensorDeallocationReport } from './helpers/lateDeallocationFixtures';
+import { buildBufferData, buildOperationDetails as buildDetails } from './helpers/operationDetailsFixtures';
 
 const SHARED_ADDRESS = 0x4000;
 
-const buffer = (address: number, bufferType: BufferType): BufferData => ({
-    operation_id: 1,
-    device_id: 0,
-    address,
-    max_size_per_bank: 256,
-    buffer_type: bufferType,
-});
+const buffer = (address: number, bufferType: BufferType): BufferData =>
+    buildBufferData({ address, buffer_type: bufferType });
 
 const buildOperationDetails = (
     buffersSummary: BufferData[],
     deallocationReport: TensorDeallocationReport[],
-): OperationDetails => {
-    const data = {
-        id: 1,
-        name: 'op',
-        inputs: [],
-        outputs: [],
-        stack_trace: '',
-        stack_trace_source_file_id: null,
-        operationFileIdentifier: 'op',
-        error: null,
-        buffers: [],
-        buffersSummary,
-        l1_sizes: [1_000_000],
-        device_operations: [],
-    } as unknown as OperationDetailsData;
-
-    return new OperationDetails(data, [], deallocationReport, { l1start: 0, l1end: 1_000_000 });
-};
+): OperationDetails => buildDetails({ data: { buffersSummary }, deallocationReport });
 
 const lateDeallocationFlagAt = (details: OperationDetails, bufferType: BufferType, address: number) =>
     details.memoryData(bufferType).memory.find((chunk) => chunk.address === address)?.lateDeallocation;
