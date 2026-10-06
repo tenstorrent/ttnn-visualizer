@@ -179,11 +179,19 @@ Every response that carries the link says how it went in `operation_link`:
 On a linked pair an `operation_id` is still null for a row with no profiler operation:
 a host op, a signpost, or a row past the end of a profiler capture that stopped before
 the performance one did. The match tolerates trailing rows, as the application's does.
-`top_ops` names each such row in `operation_link.unlinked_rows` with its `reason` —
-`signpost`, `host_op` or `past_profiler_capture` — and counts them in
-`unlinked_row_count`. Read the list there rather than looking for null ids among the
-ranked rows: the ranking leaves out any row with no value for its metric, which is every
-signpost, so `matched_rows` and the rows returned do not add up to the report.
+`top_ops` counts such rows in `operation_link.unlinked_by_reason` — `signpost`,
+`host_op` and `past_profiler_capture` — totals them in `unlinked_row_count`, and names
+the first row past the profiler capture in `first_past_profiler_capture_id`. Read the
+counts there rather than counting null ids among the ranked rows: the ranking leaves out
+any row with no value for its metric, which is every signpost, so `matched_rows` and the
+rows returned do not add up to the report.
+
+The link is resolved once per handle, on the first `top_ops` or `operation_detail` that
+needs it, and reads every captured graph at the linked rank. On a handle with both
+reports, the first `operation_detail` therefore also generates the performance report,
+which can take seconds on a large capture; every later call reuses both. A link that
+failed on a read that might pass next time — a locked database, a temp-file error in
+tt-perf-report — is not kept, so the next call tries again.
 
 **An operation id is not the end of the answer.** `memory_profile` names the operations
 holding its largest footprint, and `operation_provenance` turns such an id into the two things you need

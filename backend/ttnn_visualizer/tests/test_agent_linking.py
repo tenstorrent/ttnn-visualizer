@@ -73,7 +73,58 @@ def _matched(start, end, rows, num_devices):
 
 
 class TestMatcherParity:
-    """The frontend suite's cases, so the two joins cannot drift apart unnoticed."""
+    """The frontend suite's cases (`tests/deviceOperationMatching.spec.ts`).
+
+    This catches drift in the port only. A change to the app's matcher fails nothing
+    here, so a case added there has to be added here too; the spec says so.
+    """
+
+    def test_a_multi_device_report_recording_each_op_once_matches_directly(self):
+        """#1810: two devices, one entry per device op, and a genuinely repeated
+        `Pad` that the collapse mistakes for per-device duplication."""
+        ops = [
+            _op("PadDeviceOperation", 5),
+            _op("TransposeDeviceOperation", 5),
+            _op("PadDeviceOperation", 5),
+            _op("MatmulDeviceOperation", 6),
+        ]
+        rows = _perf_rows_for(
+            [
+                "PadDeviceOperation",
+                "TransposeDeviceOperation",
+                "PadDeviceOperation",
+                "MatmulDeviceOperation",
+            ]
+        )
+
+        assert [row_id for _, _, row_id in _matched(ops, ops, rows, 2)] == [
+            "0",
+            "1",
+            "2",
+            "3",
+        ]
+        # The collapse alone keeps only the twice-seen `Pad`, so only the direct
+        # pass links this report.
+        assert len(linking.collapse_multidevice_operations(ops, 2)) == 1
+
+    def test_leading_interleaved_and_trailing_signposts_are_all_dropped(self):
+        """#1943: the ids are the rows' own, so they still join the unfiltered report."""
+        ops = [_op("Alpha", 1), _op("Beta", 2), _op("Gamma", 3)]
+        rows = [
+            _perf_row("tt_forward_START", 0, "signpost"),
+            _perf_row("Alpha", 1),
+            _perf_row("phase_start", 2, "signpost"),
+            _perf_row("Beta", 3),
+            _perf_row("Gamma", 4),
+            _perf_row("phase_end", 5, "signpost"),
+            _perf_row("tt_forward_END", 6, "signpost"),
+        ]
+
+        assert [row_id for _, _, row_id in _matched(ops, ops, rows, 1)] == [
+            "1",
+            "3",
+            "4",
+        ]
 
     def test_signposts_are_dropped_before_aligning(self):
         rows = [_perf_row("start", 0, "signpost"), _perf_row("Alpha", 1)]
@@ -279,16 +330,17 @@ class TestMatcherParity:
 
 
 class TestLinkView:
-    def test_it_is_the_apps_pinned_link_view(self):
+    def test_the_canonical_projection_is_the_apps_link_view_but_for_host_ops(self):
         """`LINKED_PERFORMANCE_REPORT_FILTERS`: merged, host ops hidden, no range.
 
-        Derived from the canonical projection, so a change there would move the link
-        view silently without this.
+        The link filters host ops out of the canonical rows itself, so everything
+        else about the projection must already be the app's link view, or a change
+        to it would move the link silently.
         """
-        assert linking.LINK_VIEW["merge_devices"] is True
-        assert linking.LINK_VIEW["hide_host_ops"] is True
-        assert "start_signpost" not in linking.LINK_VIEW
-        assert "end_signpost" not in linking.LINK_VIEW
+        assert tools.CANONICAL_PROJECTION["merge_devices"] is True
+        assert tools.CANONICAL_PROJECTION["hide_host_ops"] is False
+        assert "start_signpost" not in tools.CANONICAL_PROJECTION
+        assert "end_signpost" not in tools.CANONICAL_PROJECTION
 
 
 class TestLinkViewEndToEnd:
@@ -394,7 +446,6 @@ CREATE TABLE input_tensors (
 CREATE TABLE output_tensors (
     operation_id int, output_index int, tensor_id int, rank int NOT NULL DEFAULT 0
 );
-INSERT INTO devices VALUES (0, 64, 1370848, 0), (0, 64, 1370848, 1);
 """
 
 
@@ -427,20 +478,47 @@ def _write_profiler(
     return str(directory)
 
 
-def _write_ranked_profiler(directory: Path, graphs: dict) -> str:
+# Rank 1's graphs launch nothing rank 0's rows hold, so reading them changes the match.
+_OTHER_RANK_GRAPHS = {
+    operation_id: _graph(name, "OtherRankDeviceOperation")
+    for operation_id, name in [*_OPERATIONS, (4, "ttnn.relu")]
+}
+
+
+def _write_ranked_profiler(
+    directory: Path, graphs: dict, rank_zero_devices: int = 1
+) -> str:
+    """Two ranks, where rank 1 differs from rank 0 in every table the link reads.
+
+    So a read that leaks rank 1 changes the result rather than repeating rank 0's:
+    its graphs are written after rank 0's and launch other device operations, it has
+    more devices, and it holds an operation 4 that rank 0 has only an orphan graph
+    for.
+    """
     directory.mkdir(parents=True, exist_ok=True)
     connection = sqlite3.connect(directory / "db.sqlite")
     try:
         connection.executescript(_RANKED_PROFILER_SQL)
-        for rank in (0, 1):
-            connection.executemany(
-                "INSERT INTO operations VALUES (?, ?, 0.1, ?)",
-                [(operation_id, name, rank) for operation_id, name in _OPERATIONS],
-            )
-            connection.executemany(
-                "INSERT INTO captured_graph VALUES (?, ?, ?)",
-                [(operation_id, graph, rank) for operation_id, graph in graphs.items()],
-            )
+        connection.executemany(
+            "INSERT INTO operations VALUES (?, ?, 0.1, 0)", _OPERATIONS
+        )
+        connection.executemany(
+            "INSERT INTO operations VALUES (?, ?, 0.1, 1)",
+            [*_OPERATIONS, (4, "ttnn.relu")],
+        )
+        connection.executemany(
+            "INSERT INTO captured_graph VALUES (?, ?, 0)",
+            [*graphs.items(), (4, _graph("ttnn.relu", "OrphanDeviceOperation"))],
+        )
+        connection.executemany(
+            "INSERT INTO captured_graph VALUES (?, ?, 1)",
+            list(_OTHER_RANK_GRAPHS.items()),
+        )
+        connection.executemany(
+            "INSERT INTO devices VALUES (?, 64, 1370848, ?)",
+            [(device, 0) for device in range(rank_zero_devices)]
+            + [(device, 1) for device in range(rank_zero_devices + 2)],
+        )
         connection.commit()
     finally:
         connection.close()
@@ -550,8 +628,14 @@ class TestTopOpsLink:
         assert result["op_count"] == len(_CANONICAL_ROWS)
 
     def test_operations_are_matched_in_id_order_not_table_order(self, linked):
-        """The app sorts `GET /operations` by id before matching (`views.py`)."""
-        registry, handle, _ = linked(operations=list(reversed(_OPERATIONS)))
+        """The app sorts `GET /operations` by id before matching (`views.py`).
+
+        The walk follows the captured graph rows, so those are reversed too.
+        """
+        registry, handle, _ = linked(
+            graphs=dict(reversed(list(_GRAPHS.items()))),
+            operations=list(reversed(_OPERATIONS)),
+        )
 
         result = linking.top_ops(registry, handle)
 
@@ -571,52 +655,55 @@ class TestTopOpsLink:
         assert "matched_rows" not in link and "matched_on" not in link
         assert all(row["operation_id"] is None for row in result["ops"])
 
-    def test_every_unlinked_row_is_named_with_its_reason(self, linked):
+    def test_every_unlinked_row_is_counted_by_its_reason(self, linked):
         """`top_ops` ranks only rows with a value for its metric, so a signpost
         never appears among its rows; this is the only place it is accounted
-        for. Row 6 is past the last operation the profiler captured."""
+        for. Rows 6 and 7 are past the last operation the profiler captured."""
         registry, handle, _ = linked(
-            rows=[*_CANONICAL_ROWS, _perf_row("MatmulDeviceOperation", 6)]
+            rows=[
+                *_CANONICAL_ROWS,
+                _perf_row("MatmulDeviceOperation", 6),
+                _perf_row("MatmulDeviceOperation", 7),
+            ]
         )
 
         link = linking.top_ops(registry, handle)["operation_link"]
 
-        assert link["unlinked_rows"] == [
-            {
-                "id": "2",
-                "op_code": "signpost-start",
-                "op_type": "signpost",
-                "reason": UnlinkedReason.SIGNPOST.value,
-            },
-            {
-                "id": "4",
-                "op_code": "aten::add (torch)",
-                "op_type": "python_fallback",
-                "reason": UnlinkedReason.HOST_OP.value,
-            },
-            {
-                "id": "6",
-                "op_code": "MatmulDeviceOperation",
-                "op_type": "tt_dnn_device",
-                "reason": UnlinkedReason.PAST_PROFILER_CAPTURE.value,
-            },
-        ]
-        assert link["unlinked_row_count"] == 3
-        assert link["matched_rows"] + link["unlinked_row_count"] == 5
+        assert link["unlinked_by_reason"] == {
+            UnlinkedReason.SIGNPOST.value: 1,
+            UnlinkedReason.HOST_OP.value: 1,
+            UnlinkedReason.PAST_PROFILER_CAPTURE.value: 2,
+        }
+        assert link["first_past_profiler_capture_id"] == "6"
+        assert link["unlinked_row_count"] == 4
+        assert link["matched_rows"] + link["unlinked_row_count"] == 6
 
-    def test_the_unlinked_rows_are_capped_and_counted(self, linked):
-        signposts = [
-            _perf_row(f"signpost-{index}", 100 + index, "signpost")
-            for index in range(MAX_LIMIT + 1)
-        ]
-        registry, handle, _ = linked(rows=[*_CANONICAL_ROWS, *signposts])
+    def test_a_capture_that_ran_to_the_end_names_no_first_row_past_it(self, linked):
+        registry, handle, _ = linked()
 
         link = linking.top_ops(registry, handle)["operation_link"]
 
-        assert len(link["unlinked_rows"]) == MAX_LIMIT
-        assert link["unlinked_row_count"] == MAX_LIMIT + 3
+        assert (
+            link["unlinked_by_reason"][UnlinkedReason.PAST_PROFILER_CAPTURE.value] == 0
+        )
+        assert link["first_past_profiler_capture_id"] is None
 
-    def test_an_unlinked_pair_lists_no_unlinked_rows(self, linked):
+    def test_the_unlinked_rows_cost_the_same_however_many_there_are(self, linked):
+        """Counted, not listed: hundreds of host ops must not outweigh the ranking."""
+        host_ops = [
+            _perf_row(f"op-{index} (torch)", 100 + index, "python_fallback")
+            for index in range(MAX_LIMIT * 5)
+        ]
+        registry, handle, _ = linked(rows=[*_CANONICAL_ROWS, *host_ops])
+
+        link = linking.top_ops(registry, handle, limit=1)["operation_link"]
+
+        assert link["unlinked_row_count"] == MAX_LIMIT * 5 + 2
+        assert not any(isinstance(value, list) for value in link.values())
+        # The note is a fixed string; everything else is a handful of scalars.
+        assert len(json.dumps({**link, "note": None})) < 400
+
+    def test_an_unlinked_pair_counts_no_unlinked_rows(self, linked):
         """Every row is unlinked then, which `status` already says."""
         registry, handle, _ = linked(
             graphs={**_GRAPHS, 3: _graph("ttnn.add", "SomethingElse")}
@@ -624,7 +711,7 @@ class TestTopOpsLink:
 
         link = linking.top_ops(registry, handle)["operation_link"]
 
-        assert "unlinked_rows" not in link and "unlinked_row_count" not in link
+        assert "unlinked_by_reason" not in link and "unlinked_row_count" not in link
 
     def test_operation_detail_carries_no_unlinked_rows(self, linked):
         """They belong to no operation, so they are not any one operation's detail."""
@@ -632,7 +719,7 @@ class TestTopOpsLink:
 
         result = linking.operation_detail(registry, handle, operation_id=2)
 
-        assert "unlinked_rows" not in result["operation_link"]
+        assert "unlinked_by_reason" not in result["operation_link"]
 
     def test_a_performance_only_handle_still_answers(self, linked):
         registry, handle, _ = linked(profiler=False)
@@ -640,7 +727,15 @@ class TestTopOpsLink:
         result = linking.top_ops(registry, handle)
 
         assert result["operation_link"]["status"] == LinkStatus.UNAVAILABLE.value
+        assert "note" not in result["operation_link"]
         assert result["ops"]
+
+    def test_a_handle_with_a_profiler_report_carries_the_note(self, linked):
+        registry, handle, _ = linked()
+
+        link = linking.top_ops(registry, handle)["operation_link"]
+
+        assert link["note"] == linking.TOP_OPS_LINK_NOTE
 
     def test_a_profiler_directory_without_a_database_still_answers(
         self, linked, tmp_path
@@ -740,7 +835,7 @@ class TestGraphReading:
         assert link.operation_by_perf_id == {"7": 2, "8": 2}
 
     def test_a_multi_device_capture_links_on_the_collapse(self, linked):
-        """The device count comes from the `devices` table, read at the link's rank."""
+        """The device count comes from the `devices` table."""
         graphs = {
             2: _graph("ttnn.matmul", "Matmul", "Matmul", nested=False),
             3: _graph("ttnn.add", "Add", "Add", nested=False),
@@ -750,6 +845,57 @@ class TestGraphReading:
 
         link = linking.operation_link(registry, handle)
 
+        assert link.matched_on is MatchedOn.FUNCTION_START_COLLAPSED
+        assert link.operation_by_perf_id == {"7": 2, "8": 3}
+
+    @pytest.mark.parametrize(
+        "devices, launches, linked_status",
+        [
+            # One device written twice: a raw count of 2 would collapse the two
+            # launches onto one row, which the app refuses.
+            (1, 2, LinkStatus.UNLINKED),
+            # Two devices each written twice: a raw count of 4 would expect four
+            # copies, and refuse a pair the app links.
+            (2, 2, LinkStatus.LINKED),
+        ],
+        ids=["one-device-twice", "two-devices-twice"],
+    )
+    def test_devices_are_counted_by_distinct_id_as_the_app_counts_them(
+        self, linked, tmp_path, devices, launches, linked_status
+    ):
+        """`fetchDevices` drops repeated device ids (#425) before matching."""
+        graphs = {2: _graph("ttnn.matmul", *(["Matmul"] * launches), nested=False)}
+        path = _write_profiler(tmp_path / "duplicated", graphs, devices=devices)
+        connection = sqlite3.connect(Path(path) / "db.sqlite")
+        try:
+            connection.execute("INSERT INTO devices SELECT * FROM devices")
+            connection.commit()
+        finally:
+            connection.close()
+        registry, handle, _ = linked(profiler_path=path, rows=[_perf_row("Matmul", 7)])
+
+        link = linking.operation_link(registry, handle)
+
+        assert link.status is linked_status
+
+    def test_a_multi_host_capture_links_at_rank_zero_only(self, linked, tmp_path):
+        """Graphs, operations and devices are each read at rank 0.
+
+        Rank 1 differs in all three, and the collapse needs rank 0's device count
+        exactly, so a read that leaked rank 1 from any one of them would not link.
+        """
+        graphs = {
+            2: _graph("ttnn.matmul", "Matmul", "Matmul", nested=False),
+            3: _graph("ttnn.add", "Add", "Add", nested=False),
+        }
+        path = _write_ranked_profiler(tmp_path / "ranked", graphs, rank_zero_devices=2)
+        rows = [_perf_row("Matmul", 7), _perf_row("Add", 8)]
+        registry, handle, _ = linked(profiler_path=path, rows=rows)
+
+        link = linking.operation_link(registry, handle)
+
+        assert link.status is LinkStatus.LINKED
+        assert link.rank == 0
         assert link.matched_on is MatchedOn.FUNCTION_START_COLLAPSED
         assert link.operation_by_perf_id == {"7": 2, "8": 3}
 
@@ -820,7 +966,9 @@ class TestOperationDetailLink:
         assert "perf_rows" not in result
         assert result["operation_link"]["status"] == LinkStatus.UNAVAILABLE.value
 
-    def test_an_unreadable_performance_report_costs_only_the_perf_rows(self, linked):
+    def test_an_unreadable_performance_report_costs_only_the_perf_rows(
+        self, linked, caplog
+    ):
         registry, handle, generate = linked()
         generate.side_effect = ValueError("bad csv")
 
@@ -829,6 +977,9 @@ class TestOperationDetailLink:
         assert result["name"] == "ttnn.matmul"
         assert "perf_rows" not in result
         assert "bad csv" in result["operation_link"]["reason"]
+        # The broad catch also swallows our own bugs, so the traceback is kept.
+        (record,) = [r for r in caplog.records if "bad csv" in r.getMessage()]
+        assert record.exc_info is not None
 
     def test_another_ranks_operation_gets_no_perf_rows(self, linked, tmp_path):
         """Ids restart per rank, so rank 1's operation 2 is not rank 0's."""
@@ -901,12 +1052,9 @@ class TestLinkCache:
 
         opened.assert_called_once()
 
-    def test_a_failed_link_is_cached_too(self, linked, tmp_path):
-        """A broken file is reported once rather than re-read on every call."""
-        broken = tmp_path / "broken"
-        broken.mkdir()
-        (broken / "db.sqlite").write_bytes(b"this is not a database" * 100)
-        registry, handle, _ = linked(profiler_path=str(broken))
+    def test_a_link_refused_for_what_the_file_holds_is_cached(self, linked):
+        """An unreadable graph stays unreadable, so it is reported once."""
+        registry, handle, _ = linked(graphs={**_GRAPHS, 2: "{not json"})
 
         with patch.object(
             linking.operations,
@@ -919,6 +1067,40 @@ class TestLinkCache:
         assert first.status is LinkStatus.UNAVAILABLE
         assert second is first
         opened.assert_called_once()
+
+    def test_a_performance_report_that_failed_once_is_read_again(self, linked):
+        """As the canonical report is: a temp-file error in tt-perf-report can pass,
+        and a cached failure would contradict a later `top_ops` that read it fine."""
+        registry, handle, generate = linked()
+        report = _report_for(_CANONICAL_ROWS)(None)
+        generate.side_effect = [OSError("too many open files"), report]
+
+        first = linking.operation_detail(registry, handle, operation_id=2)
+        second = linking.top_ops(registry, handle)
+
+        assert first["operation_link"]["status"] == LinkStatus.UNAVAILABLE.value
+        assert second["operation_link"]["status"] == LinkStatus.LINKED.value
+        assert {row["id"]: row["operation_id"] for row in second["ops"]}["3"] == 2
+
+    def test_a_profiler_database_that_failed_once_is_read_again(self, linked):
+        """A locked database raises the same `sqlite3.Error` a corrupt one does."""
+        registry, handle, _ = linked()
+        real = linking.operations.profiler_db
+        calls = []
+
+        def locked_once(instance):
+            calls.append(instance)
+            if len(calls) == 1:
+                raise sqlite3.OperationalError("database is locked")
+            return real(instance)
+
+        with patch.object(linking.operations, "profiler_db", side_effect=locked_once):
+            first = linking.operation_link(registry, handle)
+            second = linking.operation_link(registry, handle)
+
+        assert first.status is LinkStatus.UNAVAILABLE
+        assert "database is locked" in (first.reason or "")
+        assert second.status is LinkStatus.LINKED
 
     def test_variants_of_one_handle_are_cached_apart(self, linked):
         registry, handle, _ = linked()
@@ -957,8 +1139,8 @@ class TestLinkBounds:
     def test_the_bound_counts_only_the_rank_the_link_reads(self, linked, tmp_path):
         """The graph read is rank-filtered in SQL, so other ranks are never held.
 
-        Both ranks carry the same graphs, so a bound of exactly rank 0's size is
-        exceeded by the two together and met by the rank actually read.
+        A bound of exactly rank 0's size is exceeded by the two ranks together and
+        met by the rank actually read.
         """
         path = _write_ranked_profiler(tmp_path / "ranked", _GRAPHS)
         connection = sqlite3.connect(Path(path) / "db.sqlite")

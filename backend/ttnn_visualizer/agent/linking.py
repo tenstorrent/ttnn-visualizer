@@ -15,7 +15,9 @@ operations each profiler operation launched against the performance rows, in ord
 This is a port of that match (`src/functions/deviceOperationMatching.ts`) rather than a
 second answer to the same question: two joins that disagreed would send an agent and a
 person looking at the same report to different operations. `TestMatcherParity` restates
-the frontend suite's cases. A shared run id would replace both (#1800).
+the frontend suite's cases, which catches drift in this port only: a change to the app's
+matcher fails nothing here, so it must be mirrored by hand -- the TypeScript side points
+back to this module for that reason. A shared run id would replace both (#1800).
 
 This module sits above `tools` and `operations` and is the only one that reads both,
 which is what keeps those two from importing each other.
@@ -40,27 +42,14 @@ from ttnn_visualizer.models import Instance
 
 logger = logging.getLogger(__name__)
 
-# The view the match runs against: the app's pinned link view
-# (`LINKED_PERFORMANCE_REPORT_FILTERS`) -- devices merged, host ops hidden, no signpost
-# range. Host ops have no device operation to pair with, and alignment is positional,
-# so one host op mid-report would shift every later row and fail the whole match.
-#
-# It is derived from `top_ops`'s canonical snapshot rather than generated again,
-# because `hide_host_ops` only drops rows: tt-perf-report filters on `HOST_OP_MARKER`
-# and keeps each surviving row's id, which is its CSV position. On three local
-# captures, one with 65 host ops, the filtered canonical rows equal a
-# `hide_host_ops=True` run on id, op code, op type, device time, cores and bound.
-# `TestLinkViewEndToEnd` pins that against the real generator, and this mapping pins
-# that nothing else about the canonical projection has drifted from the app's.
-LINK_VIEW: Dict[str, object] = {**tools.CANONICAL_PROJECTION, "hide_host_ops": True}
-
 # Microseconds, as tt-perf-report writes `device_time`.
 DEVICE_TIME_UNIT = "us"
 
-# The captured graph a link will read, summed across ranks. `query_device_operations`
-# holds every graph at once, so this is checked in SQL before any is loaded. Across 85
-# local captures the largest total is 55.6 MB, so the bound is ~18x anything seen:
-# it refuses a pathological file, never a real one.
+# The captured graph a link will read, at the one rank it links: the size query takes
+# the read's own rank filter. `query_device_operations` holds every graph at once, so
+# this is checked in SQL before any is loaded. Across 85 local captures the largest
+# total is 55.6 MB, so the bound is ~18x anything seen: it refuses a pathological
+# file, never a real one.
 MAX_CAPTURED_GRAPH_CHARS = 1 << 30
 
 
@@ -104,6 +93,23 @@ class DeviceOperation(NamedTuple):
     name: str
 
 
+class UnlinkedRows(NamedTuple):
+    """The rows a linked pair left without an operation, counted by why.
+
+    Counted rather than listed so the answer stays one size whatever the capture: a
+    report with hundreds of host ops would otherwise outweigh the rows `top_ops` was
+    asked for. The first row past the profiler capture is named because it is the
+    one place the two reports stopped agreeing; host ops and signposts are expected.
+    """
+
+    by_reason: Dict[str, int]
+    first_past_profiler_capture_id: Optional[str]
+
+    @property
+    def total(self) -> int:
+        return sum(self.by_reason.values())
+
+
 @dataclass(frozen=True)
 class OperationLink:
     status: LinkStatus
@@ -113,10 +119,9 @@ class OperationLink:
     matched_on: Optional[MatchedOn] = None
     operation_by_perf_id: Dict[str, int] = field(default_factory=dict)
     perf_rows_by_operation: Dict[int, List[Dict]] = field(default_factory=dict)
-    # Every row of a linked pair without an operation, in report order. Only
-    # `top_ops` returns them: the rows have no operation, so they belong to no
-    # one operation's detail.
-    unlinked_rows: List[Dict[str, object]] = field(default_factory=list)
+    # The rows of a linked pair without an operation. Only `top_ops` returns them:
+    # the rows have no operation, so they belong to no one operation's detail.
+    unlinked: Optional[UnlinkedRows] = None
 
     def as_response(self) -> Dict[str, object]:
         response: Dict[str, object] = {"status": self.status.value}
@@ -328,18 +333,22 @@ def _unlinked_reason(row: Dict) -> UnlinkedReason:
 
 def unlinked_rows(
     rows: Sequence[Dict], operation_by_perf_id: Dict[str, int]
-) -> List[Dict[str, object]]:
-    """The rows a linked pair left without an operation, and why each was."""
-    return [
-        {
-            "id": str(row.get("id")),
-            "op_code": row.get("op_code"),
-            "op_type": row.get("op_type"),
-            "reason": _unlinked_reason(row).value,
-        }
-        for row in rows
-        if str(row.get("id")) not in operation_by_perf_id
-    ]
+) -> UnlinkedRows:
+    """The rows a linked pair left without an operation, and why."""
+    by_reason = {reason.value: 0 for reason in UnlinkedReason}
+    first_past_capture: Optional[str] = None
+    for row in rows:
+        perf_id = str(row.get("id"))
+        if perf_id in operation_by_perf_id:
+            continue
+        reason = _unlinked_reason(row)
+        by_reason[reason.value] += 1
+        if (
+            reason is UnlinkedReason.PAST_PROFILER_CAPTURE
+            and first_past_capture is None
+        ):
+            first_past_capture = perf_id
+    return UnlinkedRows(by_reason, first_past_capture)
 
 
 def _read_profiler_side(
@@ -347,8 +356,11 @@ def _read_profiler_side(
 ) -> Tuple[Optional[int], Dict[int, Dict[NodeOrder, List[str]]], int, bool]:
     """Rank, device operation names per operation, device count, captured-graph flag.
 
-    Graphs are parsed as they are read and only the names kept: a captured graph is
-    the largest column in the report, and the match needs none of the rest.
+    Each graph is reduced to its device operation names, so only the names outlive
+    this call: a captured graph is the largest column in the report, and the match
+    needs none of the rest. The read is not streamed -- `query_device_operations`
+    returns every matching graph at once -- which is what `MAX_CAPTURED_GRAPH_CHARS`
+    bounds.
     """
     with operations.profiler_db(instance) as queries:
         # Rank 0, which is what the app links against. The CSV carries no rank, so
@@ -387,13 +399,31 @@ def _read_profiler_side(
                     f"the captured graph for operation "
                     f"{device_operation.operation_id} cannot be read ({error})"
                 ) from None
-        num_devices = sum(
-            1
-            for _ in queries.query_devices(
-                filters=operations.scoped(queries, "devices", scope)
-            )
+        # Distinct ids, as the app counts them: `fetchDevices` drops repeated device
+        # ids (#425) before the count reaches the matcher, and a raw row count would
+        # expect a different number of copies per operation from the collapse.
+        num_devices = len(
+            {
+                device.device_id
+                for device in queries.query_devices(
+                    filters=operations.scoped(queries, "devices", scope)
+                )
+            }
         )
     return scope.rank, names_by_operation, num_devices, has_graph
+
+
+class _UncachedLink(Exception):
+    """A link built from a read that failed and might not fail again.
+
+    Raised out of the cache so the next call retries, as the canonical report and the
+    generation cache under it already do -- a link cached from a passing failure
+    would contradict a `top_ops` that later read the same report fine.
+    """
+
+    def __init__(self, link: OperationLink):
+        super().__init__(link.reason)
+        self.link = link
 
 
 def _build_link(
@@ -414,15 +444,17 @@ def _build_link(
         rank, names_by_operation, num_devices, has_graph = _read_profiler_side(instance)
     except operations.ProfilerDatabaseMissingError as error:
         return OperationLink(LinkStatus.UNAVAILABLE, reason=str(error))
-    # A profiler database `top_ops` never needed must not cost it its answer. Cached
-    # like any other outcome, so a broken file is reported once rather than re-read
-    # on every call.
+    # A profiler database `top_ops` never needed must not cost it its answer. Not
+    # cached: a locked database raises the same `sqlite3.Error` as a corrupt one, and
+    # re-reading a corrupt one fails on its first query.
     except sqlite3.Error as error:
         logger.warning("profiler database unreadable for the link: %s", error)
-        return OperationLink(
-            LinkStatus.UNAVAILABLE,
-            reason=f"the profiler database could not be read: {_redacted(error)}",
-        )
+        raise _UncachedLink(
+            OperationLink(
+                LinkStatus.UNAVAILABLE,
+                reason=f"the profiler database could not be read: {_redacted(error)}",
+            )
+        ) from None
     except (GraphTooLargeError, operations.UnattributableRankError) as error:
         logger.warning("%s", error)
         return OperationLink(LinkStatus.UNAVAILABLE, reason=str(error))
@@ -448,16 +480,32 @@ def _build_link(
         all_rows = _canonical_rows(registry, handle)
     # Broad on purpose: tt-perf-report raises whatever its parse hits, and a CSV it
     # cannot read must cost `operation_detail` its perf rows, not the whole answer
-    # about a profiler operation that was read fine.
+    # about a profiler operation that was read fine. The traceback is logged because
+    # this also catches bugs of our own, which nothing re-raises. Not cached, as the
+    # canonical report is not: a temp-file failure in tt-perf-report can pass.
     except Exception as error:
-        logger.warning("performance report unreadable for the link: %s", error)
-        return OperationLink(
-            LinkStatus.UNAVAILABLE,
-            rank=rank,
-            reason=f"the performance report could not be read: {_redacted(error)}",
+        logger.warning(
+            "performance report unreadable for the link: %s", error, exc_info=True
         )
+        raise _UncachedLink(
+            OperationLink(
+                LinkStatus.UNAVAILABLE,
+                rank=rank,
+                reason=f"the performance report could not be read: {_redacted(error)}",
+            )
+        ) from None
 
     orders = device_operation_orders(names_by_operation)
+    # The match runs against the app's pinned link view
+    # (`LINKED_PERFORMANCE_REPORT_FILTERS`): devices merged, host ops hidden, no
+    # signpost range. Host ops have no device operation to pair with, and alignment
+    # is positional, so one host op mid-report would shift every later row.
+    #
+    # Filtered from `top_ops`'s canonical snapshot rather than generated again,
+    # because `hide_host_ops` only drops rows: tt-perf-report filters on
+    # `HOST_OP_MARKER` and keeps each surviving row's id, which is its CSV position.
+    # `TestLinkViewEndToEnd` pins that against the real generator, and `TestLinkView`
+    # pins the rest of the canonical projection to the app's link view.
     match = match_device_operations(
         orders[NodeOrder.FUNCTION_START],
         orders[NodeOrder.FUNCTION_END],
@@ -487,17 +535,24 @@ def _build_link(
         matched_on=match.matched_on,
         operation_by_perf_id=operation_by_perf_id,
         perf_rows_by_operation=perf_rows_by_operation,
-        unlinked_rows=unlinked_rows(all_rows, operation_by_perf_id),
+        unlinked=unlinked_rows(all_rows, operation_by_perf_id),
     )
 
 
 def operation_link(registry: ReportRegistry, handle: str) -> OperationLink:
-    """The link for one handle, resolved once: it reads every captured graph."""
-    return registry.cached_report(
-        handle,
-        lambda instance: _build_link(registry, handle, instance),
-        variant=CacheVariant.OPERATION_LINK,
-    )
+    """The link for one handle, resolved once: it reads every captured graph.
+
+    A link that failed on a read which might succeed next time is returned without
+    being cached, so the next call tries again.
+    """
+    try:
+        return registry.cached_report(
+            handle,
+            lambda instance: _build_link(registry, handle, instance),
+            variant=CacheVariant.OPERATION_LINK,
+        )
+    except _UncachedLink as uncached:
+        return uncached.link
 
 
 # The one full statement of what `operation_id` means; the tool description points
@@ -508,9 +563,10 @@ TOP_OPS_LINK_NOTE = (
     "operation_link. It is null on every row when the two reports did not link. On a "
     "linked pair it is null for a row with no profiler operation: a host op, a "
     "signpost, or a row past the end of a profiler capture that stopped before the "
-    "performance one did -- matched_rows says how many rows linked, and "
-    "unlinked_rows names every row that did not and why, including rows the ranking "
-    "leaves out for having no value for the metric."
+    "performance one did -- matched_rows says how many rows linked, "
+    "unlinked_by_reason counts every row that did not by why, including rows the "
+    "ranking leaves out for having no value for the metric, and "
+    "first_past_profiler_capture_id names the first row past the profiler capture."
 )
 
 
@@ -526,10 +582,16 @@ def top_ops(
     ops = result.get("ops")
     for row in ops if isinstance(ops, list) else []:
         row["operation_id"] = link.operation_by_perf_id.get(str(row.get("id")))
-    response = {**link.as_response(), "note": TOP_OPS_LINK_NOTE}
-    if link.status is LinkStatus.LINKED:
-        response["unlinked_rows"] = link.unlinked_rows[:MAX_LIMIT]
-        response["unlinked_row_count"] = len(link.unlinked_rows)
+    response = link.as_response()
+    # Only a handle with a profiler report has an operation_id worth explaining.
+    if registry.get(handle).profiler_path:
+        response["note"] = TOP_OPS_LINK_NOTE
+    if link.status is LinkStatus.LINKED and link.unlinked is not None:
+        response["unlinked_row_count"] = link.unlinked.total
+        response["unlinked_by_reason"] = link.unlinked.by_reason
+        response["first_past_profiler_capture_id"] = (
+            link.unlinked.first_past_profiler_capture_id
+        )
     result["operation_link"] = response
     return result
 
@@ -571,7 +633,6 @@ def operation_detail(
 __all__ = [
     "DEVICE_TIME_UNIT",
     "MAX_CAPTURED_GRAPH_CHARS",
-    "LINK_VIEW",
     "TOP_OPS_LINK_NOTE",
     "DeviceOperation",
     "LinkStatus",
@@ -579,6 +640,7 @@ __all__ = [
     "NodeOrder",
     "OperationLink",
     "UnlinkedReason",
+    "UnlinkedRows",
     "collapse_multidevice_operations",
     "device_operation_orders",
     "is_device_operation",

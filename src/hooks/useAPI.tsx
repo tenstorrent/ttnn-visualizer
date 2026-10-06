@@ -860,6 +860,8 @@ export const useGetDeviceOperationsListByOp = () => {
 // instance per virtualised row, so `useMemo` would rebuild both order candidates
 // and rerun the O(rows) match for each. The inputs are shared React Query results.
 // Callers must not mutate the derived values — they share them now.
+// The agent tools build the same two orders in `device_operation_orders`
+// (`backend/ttnn_visualizer/agent/linking.py`); mirror a change there.
 const getDeviceOperationOrderCandidates = memoiseLatest(
     (operations?: OperationDescription[]): DeviceOperationOrderCandidates => {
         const functionStartOperations: DeviceOperationMapping[] = [];

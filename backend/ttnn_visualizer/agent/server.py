@@ -109,7 +109,7 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
                 "CSV. When the handle also holds a profiler report, each row's "
                 "operation_id is the profiler database id for one rank, and "
                 "operation_link says whether the reports linked, at which rank, "
-                "which rows did not link and why -- including signposts and other "
+                "how many rows did not link and why -- including signposts and other "
                 "rows the ranking leaves out -- and, in its note, when an "
                 "operation_id is null."
             ),
@@ -199,7 +199,10 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
                 "that column, and per bank otherwise. When the handle also holds a "
                 "linked performance report, perf_rows lists the device operations "
                 "it launched with their device time in microseconds; its own "
-                "duration is host seconds."
+                "duration is host seconds. The first call on such a handle "
+                "generates the performance report and reads every captured graph, "
+                "which can take seconds on a large capture; later calls, and "
+                "top_ops, reuse both."
             ),
             "schema": {
                 "type": "object",

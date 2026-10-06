@@ -12,6 +12,9 @@ import { PerfTableRow } from '../src/model/PerfTable';
 import { DeviceOperationMapping } from '../src/model/DeviceOperationMapping';
 import { OpType } from '../src/definitions/Performance';
 
+// `TestMatcherParity` in `backend/ttnn_visualizer/tests/test_agent_linking.py` restates
+// these cases for the agent tools' port of the matcher. Add a case there too.
+
 const mapping = (name: string, id: number): DeviceOperationMapping => ({
     name,
     id,
