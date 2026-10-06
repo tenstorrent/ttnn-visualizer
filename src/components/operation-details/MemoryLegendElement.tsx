@@ -17,6 +17,10 @@ import { L1_SMALL_MARKER_COLOR, L1_START_MARKER_COLOR } from '../../definitions/
 import { selectedBufferColourAtom, showHexAtom } from '../../store/app';
 import { StringBufferType, StringBufferTypeLabel } from '../../model/BufferType';
 import { isAddressRangeOutOfL1Zoom } from '../../functions/isAddressRangeVisibleInL1Zoom';
+import { TensorDeallocationReport } from '../../model/BufferSummary';
+import { getLateDeallocationSummary } from '../../functions/lateDeallocation';
+import { TEST_IDS } from '../../definitions/TestIds';
+import LateDeallocationGlyph from '../LateDeallocationGlyph';
 
 const LEGEND_AXIS_MARKER_COLORS: Partial<Record<MarkerType, string>> = {
     [MarkerType.L1_SMALL]: L1_SMALL_MARKER_COLOR,
@@ -44,6 +48,11 @@ interface MemoryLegendElementProps {
      */
     isGloballyAllocated?: boolean;
     deviceCount?: number;
+    /**
+     * The tensor at this row held past its last use. Resolved by the caller,
+     * which knows the row's memory space — the report only describes L1 (#1862).
+     */
+    lateDeallocation?: TensorDeallocationReport;
 }
 
 export const MemoryLegendElement = ({
@@ -62,6 +71,7 @@ export const MemoryLegendElement = ({
     userL1ZoomRange,
     isGloballyAllocated = false,
     deviceCount = 1,
+    lateDeallocation,
 }: MemoryLegendElementProps) => {
     const showHex = useAtomValue(showHexAtom);
     const selectedBufferColour = useAtomValue(selectedBufferColourAtom);
@@ -116,6 +126,9 @@ export const MemoryLegendElement = ({
     const globallyAllocatedDescription = derivedTensor
         ? `Aliased to Tensor ${derivedTensor.id} ${toReadableShape(derivedTensor.shape)} ${toReadableType(derivedTensor.dtype)}`
         : `Aliased to tensor @ ${prettyPrintAddress(chunk.address, memSize, showHex)}`;
+
+    const lateDeallocationSummary =
+        lateDeallocation && !chunk.empty && !isLegendMarker ? getLateDeallocationSummary([lateDeallocation]) : null;
 
     const isMatchingBufferColour = isGloballyAllocated
         ? resolvedColour === selectedBufferColour
@@ -222,6 +235,26 @@ export const MemoryLegendElement = ({
                     whole string, so the size drifts left and stops lining up with the
                     plain sizes above and below it. #1879 */}
                 {multiplierLabels && <span className='legend-multipliers monospace'>{multiplierLabels}</span>}
+                {/* Here rather than beside the size for the same reason as the multipliers. */}
+                {lateDeallocationSummary && (
+                    // The accessible name sits on the span rather than the tooltip,
+                    // whose `aria-describedby` only exists while it is open.
+                    <Tooltip
+                        // The tooltip's wrapper is the flex item, so it is what has to
+                        // keep its width when the description text is clipped.
+                        className='late-dealloc-marker-anchor'
+                        content={lateDeallocationSummary}
+                    >
+                        <span
+                            className='late-dealloc-marker'
+                            role='img'
+                            aria-label={lateDeallocationSummary}
+                            data-testid={`${TEST_IDS.LATE_DEALLOC_LEGEND_MARKER}-${chunk.address}`}
+                        >
+                            <LateDeallocationGlyph />
+                        </span>
+                    </Tooltip>
+                )}
                 {/* Wrapped rather than left as bare text: an unwrapped child of a flex
                     container becomes an anonymous flex item, which cannot receive
                     `text-overflow`, so this clipped mid-glyph instead of ellipsising. */}

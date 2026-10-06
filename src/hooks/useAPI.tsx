@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { AxiosError, AxiosRequestConfig } from 'axios';
-import { QueryClient, keepPreviousData, useQueries, useQuery } from '@tanstack/react-query';
+import { QueryClient, QueryStatus, keepPreviousData, useQueries, useQuery } from '@tanstack/react-query';
 import { useCallback, useEffect, useMemo } from 'react';
 import { useAtomValue } from 'jotai';
 import { NumberRange } from '@blueprintjs/core';
@@ -1471,8 +1471,9 @@ export const usePerfFolderList = () => {
 };
 
 export const useCreateTensorsByOperationByIdList = (bufferType: BufferType = BufferType.L1) => {
-    const { data: buffersByOperation } = useBuffers(bufferType, true);
-    const { data: operations } = useOperationsList();
+    const { data: buffersByOperation, status: buffersStatus } = useBuffers(bufferType, true);
+    const { data: operations, status: operationsStatus } = useOperationsList();
+    const operationRange = useAtomValue(selectedOperationRangeAtom);
 
     const uniqueBuffersByOperationList = useMemo(() => {
         return buffersByOperation?.map((operation) => {
@@ -1556,14 +1557,27 @@ export const useCreateTensorsByOperationByIdList = (bufferType: BufferType = Buf
         return result;
     }, [buffersByOperation, operations, uniqueBuffersByOperationList]);
 
+    // The map is empty until both queries settle, so callers need this to tell
+    // "nothing here" from "not known yet".
+    let status: QueryStatus = 'success';
+    if (buffersStatus === 'error' || operationsStatus === 'error') {
+        status = 'error';
+    } else if (buffersStatus === 'pending' || operationsStatus === 'pending') {
+        status = 'pending';
+    }
+
     return {
         tensorListByOperation: tensorsByOperationByAddress,
         uniqueBuffersByOperationList,
+        status,
+        // `useBuffers(…, true)` drops operations outside this range, which then
+        // read as empty rather than as unchecked.
+        operationRange,
     };
 };
 
 export const useGetTensorDeallocationReportByOperation = () => {
-    const { tensorListByOperation } = useCreateTensorsByOperationByIdList();
+    const { tensorListByOperation, status, operationRange } = useCreateTensorsByOperationByIdList();
     const { data: operations } = useOperationsList();
 
     const operationNamesById = useMemo(() => {
@@ -1574,14 +1588,25 @@ export const useGetTensorDeallocationReportByOperation = () => {
         return namesById;
     }, [operations]);
 
-    return useMemo(() => {
-        const { reportsByOpId, reportsByTensorId } = buildLateDeallocationReports({
-            tensorsByOperation: tensorListByOperation,
-            operationNamesById,
-        });
+    // Built apart from the status so a settling query doesn't rebuild the reports.
+    const { reportsByOpId, reportsByTensorId } = useMemo(
+        () =>
+            buildLateDeallocationReports({
+                tensorsByOperation: tensorListByOperation,
+                operationNamesById,
+            }),
+        [operationNamesById, tensorListByOperation],
+    );
 
-        return { lateDeallocationsByOperation: reportsByOpId, nonDeallocatedTensorList: reportsByTensorId };
-    }, [operationNamesById, tensorListByOperation]);
+    return useMemo(
+        () => ({
+            lateDeallocationsByOperation: reportsByOpId,
+            nonDeallocatedTensorList: reportsByTensorId,
+            status,
+            operationRange,
+        }),
+        [reportsByOpId, reportsByTensorId, status, operationRange],
+    );
 };
 
 const fetchLatestAppVersion = async (): Promise<string | null> => {

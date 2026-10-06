@@ -33,6 +33,7 @@ import ProducerConsumersData from './ProducerConsumersData';
 import isValidNumber from '../../functions/isValidNumber';
 import TensorVisualisationComponent from '../tensor-sharding-visualization/TensorVisualisationComponent';
 import GlobalSwitch from '../GlobalSwitch';
+import LateDeallocationControl from '../LateDeallocationControl';
 import GraphComponent from './DeviceOperationsGraphComponent';
 import { BufferType } from '../../model/BufferType';
 import DRAMPlots from './DRAMPlots';
@@ -45,6 +46,10 @@ import { StackTraceLanguage } from '../../definitions/StackTrace';
 import { L1_DEFAULT_MEMORY_SIZE } from '../../definitions/L1MemorySize';
 import MemoryPlotRenderer from './MemoryPlotRenderer';
 import { getMemoryAddress } from '../../functions/math';
+import {
+    getOperationLateDeallocationAvailability,
+    getOperationLateDeallocationCount,
+} from '../../functions/lateDeallocation';
 import useMemoryZoomRange from '../../hooks/useMemoryZoomRange';
 
 interface OperationDetailsProps {
@@ -93,7 +98,11 @@ const OperationDetailsComponent = ({ operationId }: OperationDetailsProps) => {
     };
 
     const operation = operations?.find((op) => op.id === operationId);
-    const { lateDeallocationsByOperation } = useGetTensorDeallocationReportByOperation();
+    const {
+        lateDeallocationsByOperation,
+        status: lateDeallocationStatus,
+        operationRange: lateDeallocationRange,
+    } = useGetTensorDeallocationReportByOperation();
     const hasOperationDetails =
         !isLoading && !isPrevLoading && !!operationDetails && !!previousOperationDetails && !!operations;
 
@@ -104,7 +113,7 @@ const OperationDetailsComponent = ({ operationId }: OperationDetailsProps) => {
     let memory: ZoomMemoryChunk[] = [];
 
     if (hasOperationDetails) {
-        const deallocationReport = lateDeallocationsByOperation.get(operation?.id || -1) || [];
+        const deallocationReport = lateDeallocationsByOperation.get(operationId) ?? [];
 
         details = new OperationDetails(
             operationDetails,
@@ -153,6 +162,16 @@ const OperationDetailsComponent = ({ operationId }: OperationDetailsProps) => {
         );
     }
     const l1Small = details.memoryData(BufferType.L1_SMALL);
+    // This view renders before the buffers that the report is built from arrive,
+    // and can step outside the range it covers, so the count can be unknown here.
+    const lateDeallocation = getOperationLateDeallocationCount(
+        details.lateDeallocationCount,
+        getOperationLateDeallocationAvailability({
+            status: lateDeallocationStatus,
+            operationRange: lateDeallocationRange,
+            operationId,
+        }),
+    );
     const { cbChartDataByOperation, chartData } = l1MemoryData;
 
     const onDramDeltaClick = (event: Readonly<PlotMouseEventCustom>): void => {
@@ -251,8 +270,12 @@ const OperationDetailsComponent = ({ operationId }: OperationDetailsProps) => {
                                     setShowCircularBuffer(!showCircularBuffer);
                                 }}
                             />
-                            <GlobalSwitch
-                                label='Mark late tensor deallocations'
+                            {/* Never disabled, unlike Buffer Summary's: the switch is global and
+                                this view shows one operation, so a clean operation would leave it
+                                reading "off" and untoggleable while it is on everywhere else. */}
+                            <LateDeallocationControl
+                                count={lateDeallocation.count}
+                                countSummary={lateDeallocation.summary}
                                 checked={showDeallocationReport}
                                 onChange={() => {
                                     setShowDeallocationReport(!showDeallocationReport);

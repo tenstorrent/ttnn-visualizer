@@ -8,6 +8,7 @@ import { IconNames } from '@blueprintjs/icons';
 import { FragmentationEntry } from '../../model/APIData';
 import { OperationDetails } from '../../model/OperationDetails';
 import { MemoryLegendElement } from './MemoryLegendElement';
+import { TensorDeallocationReport } from '../../model/BufferSummary';
 import 'styles/components/MemoryLegendElement.scss';
 
 interface MemoryLegendGroupProps {
@@ -17,6 +18,8 @@ interface MemoryLegendGroupProps {
     operationDetails: OperationDetails;
     onLegendClick: (selectedTensorAddress: number, tensorId?: number, colorVariance?: number) => void;
     userL1ZoomRange?: [number, number];
+    /** Marks the header only: the rows beneath are per-device copies of one tensor. */
+    lateDeallocation?: TensorDeallocationReport;
 }
 
 export const MemoryLegendGroup = ({
@@ -27,6 +30,7 @@ export const MemoryLegendGroup = ({
     operationDetails,
     onLegendClick,
     userL1ZoomRange,
+    lateDeallocation,
 }: MemoryLegendGroupProps) => {
     const [isOpen, setIsOpen] = useState(false);
 
@@ -42,6 +46,7 @@ export const MemoryLegendGroup = ({
                     onLegendClick={onLegendClick}
                     isGroupHeader
                     userL1ZoomRange={userL1ZoomRange}
+                    lateDeallocation={lateDeallocation}
                 />
 
                 <strong>x{group.length}</strong>
