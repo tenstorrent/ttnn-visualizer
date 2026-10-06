@@ -142,6 +142,7 @@ export const mathFilterListAtom = atom<TypedPerfTableRow['math_fidelity'][]>([])
 export const rawOpCodeFilterListAtom = atom<TypedPerfTableRow['raw_op_code'][]>([]);
 export const bufferTypeFilterListAtom = atom<TypedPerfTableRow['buffer_type'][]>([]);
 export const layoutFilterListAtom = atom<TypedPerfTableRow['layout'][]>([]);
+export const opCategoryFilterListAtom = atom<TypedPerfTableRow['op_category'][]>([]);
 // Selected duration buckets, keyed by each bucket's lower bound in microseconds. bucketIndex
 // is an offset from the dataset's lowest decade, so it would shift meaning as rows change.
 export const durationBucketFilterListAtom = atom<DurationBucket['minUs'][]>([]);

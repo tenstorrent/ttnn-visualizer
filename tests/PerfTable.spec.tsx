@@ -7,10 +7,11 @@ import { cleanup, fireEvent, render, screen, within } from '@testing-library/rea
 import { useAtomValue } from 'jotai';
 import { Mock, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import PerfTable from '../src/components/performance/PerfTable';
-import { ColumnKeys } from '../src/definitions/PerfTable';
+import { BoundType, ColumnKeys } from '../src/definitions/PerfTable';
 import { TypedPerfTableRow, signpostRowDefaults } from '../src/model/PerfTable';
 import { PERF_HEURISTIC_FLAG_DEFINITIONS, PerfHeuristicFlag } from '../src/definitions/PerfHeuristics';
 import { OpType } from '../src/definitions/Performance';
+import { OperationCategories } from '../src/definitions/StackedPerfTable';
 import { TEST_IDS } from '../src/definitions/TestIds';
 import { useGetNPEManifest, useOpToPerfIdFiltered, useOperationsList, usePerfMeta } from '../src/hooks/useAPI';
 import { hiddenPerfTableColumnsAtom, selectedPerfRowIdAtom } from '../src/store/app';
@@ -389,6 +390,37 @@ describe('PerfTable column visibility', () => {
         expect(within(comparisonTableRow as HTMLElement).getByText('72')).toBeInTheDocument();
     });
 
+    it('renders the op category beside OP Code', () => {
+        renderTable([baseRow({ id: 1, raw_op_code: 'AllGather', op_category: OperationCategories.CCL })]);
+
+        const table = screen.getByRole('table');
+        const headers = Array.from(table.querySelectorAll('thead th')).map((cell) => cell.textContent);
+
+        expect(headers.indexOf('Category')).toBe(headers.indexOf('OP Code') + 1);
+        expect(within(table).getByText(OperationCategories.CCL)).toBeInTheDocument();
+    });
+
+    it('keeps the Host category on a host op, whose other device columns are blank', () => {
+        renderTable([
+            baseRow({
+                id: 1,
+                raw_op_code: 'aten::embedding (torch)',
+                bound: BoundType.HOST,
+                op_category: OperationCategories.HOST,
+            }),
+        ]);
+
+        expect(within(screen.getByRole('table')).getByText(OperationCategories.HOST)).toBeInTheDocument();
+    });
+
+    it('renders the op category on comparison rows', () => {
+        const comparisonRow = baseRow({ id: 99, raw_op_code: 'Tilize', op_category: OperationCategories.DM });
+
+        renderTable([matmulRow], { comparisonData: [[comparisonRow]] });
+
+        expect(screen.getByText(OperationCategories.DM).closest('tr')).toHaveClass('comparison-row');
+    });
+
     it('keeps OP Code visible even when it is listed as hidden', () => {
         renderTable([matmulRow], { hiddenColumns: [ColumnKeys.OpCode, ColumnKeys.DeviceTime] });
 
@@ -420,7 +452,7 @@ describe('PerfTable column visibility', () => {
             cell.textContent?.includes('device ops'),
         );
 
-        expect(Number(opCodeFooter?.getAttribute('colspan'))).toBe(4);
+        expect(Number(opCodeFooter?.getAttribute('colspan'))).toBe(5);
     });
 });
 

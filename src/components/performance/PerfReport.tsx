@@ -41,6 +41,7 @@ import {
     layoutFilterListAtom,
     mathFilterListAtom,
     mergeDevicesAtom,
+    opCategoryFilterListAtom,
     rawOpCodeFilterListAtom,
     stackedGroupByAtom,
     tracingModeAtom,
@@ -120,6 +121,7 @@ const PerformanceReport = ({
     const [activeRawOpCodeFilterList, setActiveRawOpCodeFilterList] = useAtom(rawOpCodeFilterListAtom);
     const [activeBufferTypeFilterList, setActiveBufferTypeFilterList] = useAtom(bufferTypeFilterListAtom);
     const [activeLayoutFilterList, setActiveLayoutFilterList] = useAtom(layoutFilterListAtom);
+    const [activeOpCategoryFilterList, setActiveOpCategoryFilterList] = useAtom(opCategoryFilterListAtom);
     const [activeDurationBucketFilterList, setActiveDurationBucketFilterList] = useAtom(durationBucketFilterListAtom);
 
     // TODO: Reimplement merge/expand device data toggle
@@ -170,6 +172,7 @@ const PerformanceReport = ({
         activeRawOpCodeFilterList,
         activeBufferTypeFilterList,
         activeLayoutFilterList,
+        activeOpCategoryFilterList,
         activeDurationBucketFilterList,
         filterBySignpost,
     });
@@ -208,6 +211,15 @@ const PerformanceReport = ({
                 combinedRows
                     .map((row) => row.layout)
                     .filter((value): value is NonNullable<TypedPerfTableRow['layout']> => value !== null),
+            ),
+        [combinedRows],
+    );
+    const validOpCategoryValues = useMemo(
+        () =>
+            new Set(
+                combinedRows
+                    .map((row) => row.op_category)
+                    .filter((value): value is NonNullable<TypedPerfTableRow['op_category']> => value !== null),
             ),
         [combinedRows],
     );
@@ -332,6 +344,7 @@ const PerformanceReport = ({
         setActiveMathFilterList((currentFilters) => pruneToValidValues(validMathFilterValues, currentFilters));
         setActiveBufferTypeFilterList((currentFilters) => pruneToValidValues(validBufferTypeValues, currentFilters));
         setActiveLayoutFilterList((currentFilters) => pruneToValidValues(validLayoutValues, currentFilters));
+        setActiveOpCategoryFilterList((currentFilters) => pruneToValidValues(validOpCategoryValues, currentFilters));
         // A bucket that no longer exists would filter every row out with no visible tag to explain it
         setActiveDurationBucketFilterList((currentFilters) =>
             pruneToValidValues(validDurationBucketValues, currentFilters),
@@ -340,10 +353,12 @@ const PerformanceReport = ({
         validMathFilterValues,
         validBufferTypeValues,
         validLayoutValues,
+        validOpCategoryValues,
         validDurationBucketValues,
         setActiveMathFilterList,
         setActiveBufferTypeFilterList,
         setActiveLayoutFilterList,
+        setActiveOpCategoryFilterList,
         setActiveDurationBucketFilterList,
     ]);
 
@@ -576,6 +591,14 @@ const PerformanceReport = ({
                                     placeholder='Select Layout...'
                                     values={activeLayoutFilterList}
                                     updateHandler={setActiveLayoutFilterList}
+                                />
+
+                                <MultiSelectField<TypedPerfTableRow, 'op_category'>
+                                    keyName='op_category'
+                                    options={combinedRows}
+                                    placeholder='Select Op Category...'
+                                    values={activeOpCategoryFilterList}
+                                    updateHandler={setActiveOpCategoryFilterList}
                                 />
 
                                 <MultiSelectField<TypedPerfTableRow, 'math_fidelity'>

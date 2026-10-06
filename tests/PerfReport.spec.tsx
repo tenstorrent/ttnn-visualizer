@@ -9,11 +9,13 @@ import PerformanceReport from '../src/components/performance/PerfReport';
 import { TypedPerfTableRow } from '../src/model/PerfTable';
 import { PERF_DURATION_BUCKET_FILTER_PLACEHOLDER } from '../src/definitions/PerfDurationHistogram';
 import { OpType } from '../src/definitions/Performance';
+import { OperationCategories } from '../src/definitions/StackedPerfTable';
 import { TEST_IDS } from '../src/definitions/TestIds';
 import { useGetNPEManifest, useOpToPerfIdFiltered, useOperationsList, usePerfMeta } from '../src/hooks/useAPI';
 import {
     comparisonPerformanceReportListAtom,
     durationBucketFilterListAtom,
+    opCategoryFilterListAtom,
     rawOpCodeFilterListAtom,
 } from '../src/store/app';
 import { formatDurationBucketRange } from '../src/functions/formatDurationBucketRange';
@@ -34,7 +36,12 @@ const COMPARISON_REPORT = 'report-b';
 const REMOVE_TAG_LABEL = 'Remove tag';
 const WAIT_FOR_OPTIONS = { timeout: 1000 };
 
-const row = (opCode: string, id = 1, deviceTime: number | null = null): TypedPerfTableRow =>
+const row = (
+    opCode: string,
+    id = 1,
+    deviceTime: number | null = null,
+    opCategory: OperationCategories | null = null,
+): TypedPerfTableRow =>
     ({
         op_type: OpType.DEVICE_OP,
         op_code: opCode,
@@ -43,6 +50,7 @@ const row = (opCode: string, id = 1, deviceTime: number | null = null): TypedPer
         bound: null,
         isFirstHashOccurrence: true,
         device_time: deviceTime,
+        op_category: opCategory,
         id,
     }) as unknown as TypedPerfTableRow;
 
@@ -54,6 +62,7 @@ interface RenderOptions {
     data?: TypedPerfTableRow[];
     rawOpCodeFilterList?: string[];
     durationBucketFilterList?: number[];
+    opCategoryFilterList?: OperationCategories[];
 }
 
 function renderReport({
@@ -64,6 +73,7 @@ function renderReport({
     data = [row('Matmul')],
     rawOpCodeFilterList = [],
     durationBucketFilterList = [],
+    opCategoryFilterList = [],
 }: RenderOptions = {}) {
     const initialAtomValues: AtomProviderInitialValues = [];
 
@@ -77,6 +87,10 @@ function renderReport({
 
     if (durationBucketFilterList.length > 0) {
         initialAtomValues.push([durationBucketFilterListAtom, durationBucketFilterList]);
+    }
+
+    if (opCategoryFilterList.length > 0) {
+        initialAtomValues.push([opCategoryFilterListAtom, opCategoryFilterList]);
     }
 
     return render(
@@ -143,6 +157,43 @@ describe('PerformanceReport raw op code filter', () => {
 
         expect(screen.getAllByText('Matmul').length).toBeGreaterThan(0);
         expect(screen.queryByText('Conv2d')).not.toBeInTheDocument();
+    });
+});
+
+describe('PerformanceReport op category filter', () => {
+    it('shows only rows in a selected op category', () => {
+        renderReport({
+            data: [row('AllGather', 1, 5, OperationCategories.CCL), row('Matmul', 2, 5, OperationCategories.COMPUTE)],
+            opCategoryFilterList: [OperationCategories.CCL],
+        });
+
+        expect(screen.getAllByText('AllGather').length).toBeGreaterThan(0);
+        expect(screen.queryByText('Matmul')).not.toBeInTheDocument();
+    });
+
+    it('prunes a selected category that the data does not contain instead of emptying the table', () => {
+        renderReport({
+            data: [row('Matmul', 1, 5, OperationCategories.COMPUTE)],
+            opCategoryFilterList: [OperationCategories.CCL],
+        });
+
+        expect(screen.getAllByText('Matmul').length).toBeGreaterThan(0);
+    });
+
+    it('keeps a comparison-only match with normalisation turned off', () => {
+        renderReport({
+            data: [row('Matmul', 1, 5, OperationCategories.COMPUTE), row('Reshape', 2, 5, OperationCategories.TM)],
+            comparisonData: [
+                [row('Matmul', 1, 5, OperationCategories.COMPUTE), row('Reshape', 2, 5, OperationCategories.OTHER)],
+            ],
+            comparisonReports: [COMPARISON_REPORT],
+            opCategoryFilterList: [OperationCategories.OTHER],
+        });
+
+        fireEvent.click(screen.getByLabelText('Normalise data'));
+
+        expect(screen.getAllByText('Reshape').length).toBeGreaterThan(0);
+        expect(screen.queryByText('Matmul')).not.toBeInTheDocument();
     });
 });
 

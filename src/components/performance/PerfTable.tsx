@@ -23,6 +23,7 @@ import useSortTable, { SortingDirection } from '../../hooks/useSortTable';
 import { OperationDescription } from '../../model/APIData';
 import { hiddenPerfTableColumnsAtom, hideHostOpsAtom, mergeDevicesAtom, selectedPerfRowIdAtom } from '../../store/app';
 import PerfBoundAnalysisCoverage from './PerfBoundAnalysisCoverage';
+import PerfOpCategoryBreakdown from './PerfOpCategoryBreakdown';
 import PerfDeviceArchitecture from './PerfDeviceArchitecture';
 import PerfMultiDeviceNotice from './PerfMultiDeviceNotice';
 import PerfTableFrame from './PerfTableFrame';
@@ -479,6 +480,8 @@ const PerformanceTable = ({
             {mergeDevices && <PerfMultiDeviceNotice />}
 
             <PerfBoundAnalysisCoverage rows={data} />
+
+            <PerfOpCategoryBreakdown rows={data} />
 
             <PerfTableToolbar eligibleColumns={eligibleColumns} />
 

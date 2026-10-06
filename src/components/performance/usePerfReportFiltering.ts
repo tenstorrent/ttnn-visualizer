@@ -25,6 +25,7 @@ interface UsePerfReportFilteringParams {
     activeRawOpCodeFilterList: TypedPerfTableRow['raw_op_code'][];
     activeBufferTypeFilterList: TypedPerfTableRow['buffer_type'][];
     activeLayoutFilterList: TypedPerfTableRow['layout'][];
+    activeOpCategoryFilterList: TypedPerfTableRow['op_category'][];
     activeDurationBucketFilterList: DurationBucket['minUs'][];
     filterBySignpost: (Signpost | null)[];
 }
@@ -63,6 +64,7 @@ const usePerfReportFiltering = ({
     activeRawOpCodeFilterList,
     activeBufferTypeFilterList,
     activeLayoutFilterList,
+    activeOpCategoryFilterList,
     activeDurationBucketFilterList,
     filterBySignpost,
 }: UsePerfReportFilteringParams): UsePerfReportFilteringReturn => {
@@ -101,6 +103,7 @@ const usePerfReportFiltering = ({
     const bufferTypeFilterSet = useMemo(() => new Set(activeBufferTypeFilters), [activeBufferTypeFilters]);
     const activeLayoutFilters = useMemo(() => activeLayoutFilterList, [activeLayoutFilterList]);
     const layoutFilterSet = useMemo(() => new Set(activeLayoutFilters), [activeLayoutFilters]);
+    const opCategoryFilterSet = useMemo(() => new Set(activeOpCategoryFilterList), [activeOpCategoryFilterList]);
     const durationBucketFilterSet = useMemo(
         () => new Set(activeDurationBucketFilterList),
         [activeDurationBucketFilterList],
@@ -119,6 +122,7 @@ const usePerfReportFiltering = ({
             const hasMathFilter = activeMathFilters.length > 0;
             const hasBufferTypeFilter = activeBufferTypeFilters.length > 0;
             const hasLayoutFilter = activeLayoutFilters.length > 0;
+            const hasOpCategoryFilter = opCategoryFilterSet.size > 0;
             const hasDurationFilter = durationBucketFilterSet.size > 0;
             const hasCrossReportFilters =
                 hasOpCodeTextFilter ||
@@ -126,6 +130,7 @@ const usePerfReportFiltering = ({
                 hasMathFilter ||
                 hasBufferTypeFilter ||
                 hasLayoutFilter ||
+                hasOpCategoryFilter ||
                 hasDurationFilter;
             const filtersWithoutCrossReportFilters = {
                 ...filters,
@@ -175,6 +180,9 @@ const usePerfReportFiltering = ({
                     const matchesLayout = hasLayoutFilter
                         ? alignedRow.layout !== null && layoutFilterSet.has(alignedRow.layout)
                         : true;
+                    const matchesOpCategory = hasOpCategoryFilter
+                        ? alignedRow.op_category !== null && opCategoryFilterSet.has(alignedRow.op_category)
+                        : true;
                     const matchesDuration = hasDurationFilter ? matchesDurationBucket(alignedRow.device_time) : true;
 
                     return (
@@ -183,6 +191,7 @@ const usePerfReportFiltering = ({
                         matchesMathFidelity &&
                         matchesBufferType &&
                         matchesLayout &&
+                        matchesOpCategory &&
                         matchesDuration
                     );
                 });
@@ -217,6 +226,7 @@ const usePerfReportFiltering = ({
             mathFilter: activeMathFilters,
             bufferTypeFilter: activeBufferTypeFilters,
             activeLayoutFilterList: activeLayoutFilters,
+            opCategoryFilter: activeOpCategoryFilterList,
         });
         const sourceRowSet = new Set(sourceRowsWithoutSignposts);
         const keepRowMask = processedRows.map((row, index) => {
@@ -269,6 +279,8 @@ const usePerfReportFiltering = ({
         mathFilterSet,
         bufferTypeFilterSet,
         layoutFilterSet,
+        activeOpCategoryFilterList,
+        opCategoryFilterSet,
         durationBucketFilterSet,
         matchesDurationBucket,
         filterBySignpost,

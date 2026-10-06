@@ -7,6 +7,7 @@ import { TypedPerfTableRow, signpostRowDefaults } from '../model/PerfTable';
 import { DeviceOperationLayoutTypes } from '../model/APIData';
 import { BufferType } from '../model/BufferType';
 import { Signpost } from '../model/Signpost';
+import { OperationCategories } from '../definitions/StackedPerfTable';
 
 const SIGNPOST_MARKER = '(signpost)';
 
@@ -25,6 +26,7 @@ interface SortAndFilterPerfTableDataOptions {
     mathFilter?: string[];
     bufferTypeFilter?: (BufferType | null)[];
     activeLayoutFilterList?: (DeviceOperationLayoutTypes | null)[];
+    opCategoryFilter?: (OperationCategories | null)[];
     filterBySignpost?: (Signpost | null)[];
 }
 
@@ -36,6 +38,7 @@ const sortAndFilterPerfTableData = (
         mathFilter = [],
         bufferTypeFilter = [],
         activeLayoutFilterList = [],
+        opCategoryFilter = [],
         filterBySignpost = [],
     }: SortAndFilterPerfTableDataOptions = {},
 ): TypedPerfTableRow[] => {
@@ -108,6 +111,12 @@ const sortAndFilterPerfTableData = (
     if (activeLayoutFilterList?.length > 0) {
         filteredRows = filteredRows.filter(
             (row) => row?.layout !== null && activeLayoutFilterList.includes(row.layout),
+        );
+    }
+
+    if (opCategoryFilter?.length > 0) {
+        filteredRows = filteredRows.filter(
+            (row) => row?.op_category !== null && opCategoryFilter.includes(row.op_category),
         );
     }
 

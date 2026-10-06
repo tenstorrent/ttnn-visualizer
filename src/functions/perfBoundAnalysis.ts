@@ -2,8 +2,9 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-import { BoundAnalysis, ColumnKeys } from '../definitions/PerfTable';
+import { BoundAnalysis, BoundType, ColumnKeys, ROOFLINE_BOUND_THRESHOLD_PERCENT } from '../definitions/PerfTable';
 import { OpType } from '../definitions/Performance';
+import { CellColour } from '../definitions/CellColour';
 import { TypedPerfTableRow } from '../model/PerfTable';
 
 export const NOT_ANALYSED_LABEL = 'n/a';
@@ -17,6 +18,19 @@ export const FLOPS_ONLY_REASON =
 
 export const MISSING_INPUTS_REASON =
     'Not measured: the trace lacks inputs the roofline model needs for this op, so no figure could be derived.';
+
+export const SLOW_BOUND_REASON = `Analysed, but neither DRAM nor FLOPs explains the duration (both < ${ROOFLINE_BOUND_THRESHOLD_PERCENT}%).`;
+
+export const SLOW_HINT_REASON =
+    `The larger of DRAM % and FLOPs %, both below ${ROOFLINE_BOUND_THRESHOLD_PERCENT}%: ` +
+    'a hint at where to look, not a bound.';
+
+const SLOW_HINT_KEYS: ReadonlySet<ColumnKeys> = new Set([
+    ColumnKeys.Dram,
+    ColumnKeys.DramPercent,
+    ColumnKeys.Flops,
+    ColumnKeys.FlopsPercent,
+]);
 
 const ROOFLINE_KEYS: ReadonlySet<ColumnKeys> = new Set([
     ColumnKeys.Bound,
@@ -55,6 +69,25 @@ export const getNotAnalysedReason = (row: TypedPerfTableRow, key: ColumnKeys): s
         default:
             return null;
     }
+};
+
+/**
+ * What a SLOW row's Bound cell, or the roofline cell it hints at, means; null for any other cell.
+ *
+ * On the roofline columns yellow only ever comes from the SLOW hint (DRAM and FLOP bounds are
+ * green) and a muted row is grey, so the rendered colour decides which cell is the hint and the
+ * title cannot disagree with it.
+ */
+export const getSlowBoundExplanation = (row: TypedPerfTableRow, key: ColumnKeys, colour: CellColour): string | null => {
+    if (row.bound !== BoundType.SLOW) {
+        return null;
+    }
+
+    if (key === ColumnKeys.Bound) {
+        return SLOW_BOUND_REASON;
+    }
+
+    return SLOW_HINT_KEYS.has(key) && colour === CellColour.Yellow ? SLOW_HINT_REASON : null;
 };
 
 export interface BoundAnalysisCoverage {
