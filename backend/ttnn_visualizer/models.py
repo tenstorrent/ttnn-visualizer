@@ -184,11 +184,11 @@ class Tensor(SerializeableDataclass):
     rank: int = 0
 
     def __post_init__(self):
-        # tt-metal's graph report writes `buffer_type` as `0` (DRAM) whenever the
-        # capture recorded none, which is every tensor without an address: host
-        # tensors, and device tensors whose address was never captured. The
-        # column is only meaningful beside an address, so without one the
-        # tensor's own memory config is the authority, and a tensor that
+        # Graph reports up to tt-metal's schema 3.3 store `buffer_type` as `0`
+        # (DRAM) for every tensor the capture gave no buffer: host tensors,
+        # deallocated device tensors, and device tensors on a non-owned
+        # MeshBuffer. The column is only meaningful beside an address, so without
+        # one the tensor's own memory config is the authority, and a tensor that
         # declares no buffer type has none rather than a fabricated DRAM.
         if self.address is None:
             self.buffer_type = BufferType.__members__.get(
