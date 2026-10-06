@@ -134,12 +134,10 @@ function L1Plots({
         (a, b) => a.address - b.address,
     );
 
-    // Resolved here rather than inside the legend element: DRAM rows share the same
-    // `operationDetails`, and the report only describes L1 tensors. CB rows are
-    // skipped because a globally allocated CB sits at its tensor's address, and
-    // marking it would report the one held tensor twice.
+    // Keyed off the flag that drives the hatch, so the marker appears exactly
+    // where the hatch does: `memoryData()` sets it on L1 tensor rows only.
     const getLegendLateDeallocation = (chunk: FragmentationEntry) =>
-        showDeallocationReport && chunk.markerType !== MarkerType.CB
+        showDeallocationReport && chunk.lateDeallocation
             ? (operationDetails.getLateDeallocationForAddress(chunk.address) ?? undefined)
             : undefined;
 
