@@ -191,6 +191,77 @@ def test_tensors_list_non_numeric_buffer_type_is_ignored(client, make_report):
     assert ids == [10, 20, 30, 40]
 
 
+# tt-metal stores `buffer_type` as 0 (DRAM) for every tensor without an address.
+# 50 is addressed, and its column wins over a memory config that disagrees; 60
+# is unaddressed and declares L1; 70 is a host tensor that declares nothing.
+_UNADDRESSED_BUFFER_TYPE_INSERTS = """
+INSERT INTO operations VALUES (1, 'op_a', 1.0);
+INSERT INTO tensors VALUES (50, '(1,)', 'bfloat16', 'TILE',
+    'MemoryConfig(memory_layout=TensorMemoryLayout::INTERLEAVED,buffer_type=BufferType::L1,shard_spec=std::nullopt)',
+    0, 100, 0);
+INSERT INTO tensors VALUES (60, '(1,)', 'uint16', 'ROW_MAJOR',
+    'MemoryConfig(memory_layout=TensorMemoryLayout::INTERLEAVED,buffer_type=BufferType::L1,shard_spec=std::nullopt)',
+    0, NULL, 0);
+INSERT INTO tensors VALUES (70, '(1,)', 'uint32', 'ROW_MAJOR', NULL, 0, NULL, 0);
+"""
+
+
+def test_tensors_list_unaddressed_buffer_type_comes_from_memory_config(
+    client, make_report
+):
+    """The stored 0 would otherwise report an L1 tensor, and a host tensor, as DRAM."""
+    instance_id = make_report(_UNADDRESSED_BUFFER_TYPE_INSERTS, SCHEMA_V2)
+
+    response = client.get("/api/tensors", query_string={"instanceId": instance_id})
+    assert response.status_code == HTTPStatus.OK
+
+    buffer_types = {t["id"]: t["buffer_type"] for t in response.get_json()}
+    assert buffer_types == {50: 0, 60: 1, 70: None}
+
+
+def test_tensors_list_buffer_type_filter_uses_the_corrected_buffer_type(
+    client, make_report
+):
+    """The filter agrees with the buffer type each tensor is reported with."""
+    instance_id = make_report(_UNADDRESSED_BUFFER_TYPE_INSERTS, SCHEMA_V2)
+
+    ids_by_filter = {}
+    for buffer_type in (0, 1):
+        response = client.get(
+            "/api/tensors",
+            query_string={"instanceId": instance_id, "buffer_type": buffer_type},
+        )
+        assert response.status_code == HTTPStatus.OK
+        ids_by_filter[buffer_type] = sorted(t["id"] for t in response.get_json())
+
+    assert ids_by_filter == {0: [50], 1: [60]}
+
+
+def test_tensors_list_text_buffer_type_is_serialised_as_its_value(client, make_report):
+    """Newer reports store the name; addressed and unaddressed tensors alike
+    are serialised as the enum's value, never a mix of names and numbers."""
+    instance_id = make_report(
+        """
+        INSERT INTO operations VALUES (1, 'op_a', 1.0);
+        INSERT INTO tensors VALUES (80, '(1,)', 'bfloat16', 'TILE', NULL, 0, 100, 'L1_SMALL');
+        INSERT INTO tensors VALUES (90, '(1,)', 'uint16', 'ROW_MAJOR',
+            'MemoryConfig(memory_layout=TensorMemoryLayout::INTERLEAVED,buffer_type=BufferType::L1,shard_spec=std::nullopt)',
+            0, NULL, 'DRAM');
+        """,
+        SCHEMA_V2,
+    )
+
+    response = client.get(
+        "/api/tensors", query_string={"instanceId": instance_id, "buffer_type": 3}
+    )
+    assert response.status_code == HTTPStatus.OK
+    assert [(t["id"], t["buffer_type"]) for t in response.get_json()] == [(80, 3)]
+
+    response = client.get("/api/tensors", query_string={"instanceId": instance_id})
+    buffer_types = {t["id"]: t["buffer_type"] for t in response.get_json()}
+    assert buffer_types == {80: 3, 90: 1}
+
+
 # ---------------------------------------------------------------------------
 # /api/tensors/<tensor_id> — detail endpoint
 # ---------------------------------------------------------------------------

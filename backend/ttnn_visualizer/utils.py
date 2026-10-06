@@ -1265,20 +1265,38 @@ def update_last_synced(directory: Path) -> None:
 
 MEMORY_CONFIG_PATTERN = re.compile(r"MemoryConfig\((.*)\)$")
 MEMORY_LAYOUT_PATTERN = re.compile(r"memory_layout=([A-Za-z_:]+)")
+MEMORY_BUFFER_TYPE_PATTERN = re.compile(r"buffer_type=BufferType::([A-Z0-9_]+)")
 SHARD_SPEC_PATTERN = re.compile(
     r"shard_spec=ShardSpec\(grid=\{(\[.*?\])\},shape=\{(\d+),\s*(\d+)\},orientation=ShardOrientation::([A-Z_]+),halo=(\d+)\)"
 )
 
 
-def parse_memory_config(memory_config: Optional[str]) -> Optional[Dict[str, Any]]:
-    if not memory_config:  # Handle None or empty string
+def _memory_config_body(memory_config: object) -> Optional[str]:
+    """What sits inside a raw `MemoryConfig(...)` string, or None if it isn't one."""
+    if not isinstance(memory_config, str):
         return None
-
     memory_config_match = MEMORY_CONFIG_PATTERN.match(memory_config)
-    if not memory_config_match:
-        return None
+    return memory_config_match.group(1) if memory_config_match else None
 
-    captured_string = memory_config_match.group(1)
+
+def parse_memory_config_buffer_type(memory_config: object) -> Optional[str]:
+    """The buffer type a raw `MemoryConfig(...)` string declares, e.g. `'L1'`.
+
+    `parse_memory_config` drops it, because for an allocated tensor the
+    `tensors.buffer_type` column already says the same thing. It is kept here
+    for the tensors whose column cannot be trusted -- see `Tensor`.
+    """
+    captured_string = _memory_config_body(memory_config)
+    if captured_string is None:
+        return None
+    buffer_type_match = MEMORY_BUFFER_TYPE_PATTERN.search(captured_string)
+    return buffer_type_match.group(1) if buffer_type_match else None
+
+
+def parse_memory_config(memory_config: Optional[str]) -> Optional[Dict[str, Any]]:
+    captured_string = _memory_config_body(memory_config)
+    if captured_string is None:
+        return None
 
     memory_layout_match = MEMORY_LAYOUT_PATTERN.search(captured_string)
     memory_layout = memory_layout_match.group(1) if memory_layout_match else None
