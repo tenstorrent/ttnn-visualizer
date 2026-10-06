@@ -44,6 +44,11 @@ CSVQueryResult = Union[
 # column needs an int: `timer_id == "5"` matches nothing. `None` means isna().
 CSVFilters = Dict[str, Optional[Union[str, int]]]
 
+# The `OP TYPE` a `signpost()` marker carries, and the `op_type` a report row is
+# given for one. Named because the agent's report link drops these rows before
+# aligning, and must agree with what is written here.
+SIGNPOST_OP_TYPE = "signpost"
+
 # Rows per chunk when filtering a file rather than holding it. Large enough that
 # the per-chunk overhead stays negligible, small enough that a ~288 MB capture
 # never lands in memory whole.
@@ -936,7 +941,7 @@ class OpsPerformanceReportQueries:
         captured_signposts = set()
         signposts = []
         for index, row in enumerate(ops_perf_results):
-            if row.get("OP TYPE") == "signpost":
+            if row.get("OP TYPE") == SIGNPOST_OP_TYPE:
                 op_code = row["OP CODE"]
                 op_id = index + 2  # Match IDs with row numbers in ops perf results csv
                 if not any(s["op_code"] == op_code for s in signposts):
