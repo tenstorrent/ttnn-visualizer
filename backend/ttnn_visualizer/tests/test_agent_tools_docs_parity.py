@@ -103,6 +103,20 @@ def test_the_page_carries_the_memory_profile_floor_caveat():
     assert "tensor allocated and freed inside a single operation" in page
 
 
+def test_the_page_carries_the_null_bound_caveat():
+    """A null bound read as "fine" is the mistake #2048 found and #2064 closes.
+
+    `project_row` now returns `bound_analysis` beside `bound`, but the field only
+    helps a reader who knows what it means, and this page is where they learn it.
+    Phrases, not the whole paragraph, so the wording can still improve.
+    """
+    page = _read(_AGENT_DOCS)
+
+    assert "A null `bound` does not mean an operation is fine" in page
+    assert "`bound_analysis`" in page
+    assert "`op_category`" in page
+
+
 def test_the_agent_tools_page_is_published():
     assert "src/agent-tools" in _read(
         _DOCS_INDEX
