@@ -3,11 +3,14 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import { describe, expect, it } from 'vitest';
-import { BoundType } from '../src/definitions/PerfTable';
+import { BoundAnalysis, BoundType } from '../src/definitions/PerfTable';
 import { TypedPerfTableRow } from '../src/model/PerfTable';
 import { PerfHeuristicFlag } from '../src/definitions/PerfHeuristics';
 import { OpType } from '../src/definitions/Performance';
-import { annotatePerfHeuristicFlags } from '../src/functions/computePerfHeuristicFlags';
+import {
+    LOW_UTILISATION_UNMODELLED_NOTE,
+    annotatePerfHeuristicFlags,
+} from '../src/functions/computePerfHeuristicFlags';
 import { DEFAULT_MAX_CORES } from '../src/functions/getCoreCount';
 
 const MAX_CORES = DEFAULT_MAX_CORES;
@@ -220,5 +223,30 @@ describe('annotatePerfHeuristicFlags', () => {
         );
 
         expect(annotated.heuristicFlagDetails?.[PerfHeuristicFlag.RECOMPUTE_CANDIDATE]).toBe('Hash: abc123');
+    });
+
+    describe('low utilisation on ops tt-perf-report does not model', () => {
+        const lowUtilisationRow = { pm_ideal_ns: 1000, device_time: 1000, cores: 64 };
+        const getDetail = (boundAnalysis: BoundAnalysis) =>
+            annotatePerfHeuristicFlags([makeRow({ ...lowUtilisationRow, bound_analysis: boundAnalysis })], MAX_CORES)[0]
+                .heuristicFlagDetails?.[PerfHeuristicFlag.LOW_UTILISATION];
+
+        it.each([BoundAnalysis.FULL, BoundAnalysis.FLOPS_ONLY, BoundAnalysis.NONE])(
+            'still flags a %s op',
+            (boundAnalysis) => {
+                expect(getFlags({ ...lowUtilisationRow, bound_analysis: boundAnalysis })).toContain(
+                    PerfHeuristicFlag.LOW_UTILISATION,
+                );
+            },
+        );
+
+        it('says the ideal time is less reliable on an unmodelled op', () => {
+            expect(getDetail(BoundAnalysis.NONE)).toMatch(/^Core utilisation: .+\. /);
+            expect(getDetail(BoundAnalysis.NONE)).toContain(LOW_UTILISATION_UNMODELLED_NOTE);
+        });
+
+        it.each([BoundAnalysis.FULL, BoundAnalysis.FLOPS_ONLY])('adds no caveat to a %s op', (boundAnalysis) => {
+            expect(getDetail(boundAnalysis)).not.toContain(LOW_UTILISATION_UNMODELLED_NOTE);
+        });
     });
 });
