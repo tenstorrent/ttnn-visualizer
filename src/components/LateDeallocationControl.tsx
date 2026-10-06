@@ -53,7 +53,10 @@ function LateDeallocationControl({
                     // The tag renders a bare numeral, and the tooltip
                     // that explains it only wires `aria-describedby`
                     // while its popover is open — so without a name of
-                    // its own the count is announced as just a number.
+                    // its own the count is announced as just a number. The
+                    // role is what lets it carry a name: ARIA ignores
+                    // `aria-label` on the generic span Tag renders.
+                    role='img'
                     aria-label={countSummary}
                     data-testid={TEST_IDS.LATE_DEALLOC_COUNT}
                 >

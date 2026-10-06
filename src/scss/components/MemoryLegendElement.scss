@@ -172,12 +172,16 @@
         border: 0;
     }
 
+    .late-dealloc-marker-anchor {
+        flex: 0 0 auto;
+        margin-right: 8px;
+    }
+
     .late-dealloc-marker {
         @include lateDeallocMarker.late-dealloc-marker-colours;
 
         display: inline-flex;
         align-items: center;
-        margin-left: 6px;
         padding: 1px 3px;
         border-radius: 4px;
         vertical-align: middle;

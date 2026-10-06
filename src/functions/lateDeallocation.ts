@@ -302,7 +302,7 @@ export const getLateDeallocationSummary = (tensors: readonly TensorDeallocationR
  * so copy about operations "holding" a tensor would contradict the overlay it
  * sits beside.
  */
-export const getLateDeallocationCountSummary = (runStartCount: number): string =>
+export const getRunStartCountSummary = (runStartCount: number): string =>
     `${runStartCount} ${
         runStartCount === 1 ? 'operation' : 'operations'
     } where a tensor starts being held past its last use`;
@@ -310,11 +310,11 @@ export const getLateDeallocationCountSummary = (runStartCount: number): string =
 /**
  * Tooltip for the count shown beside the Operation Details toggle.
  *
- * Counts tensors rather than run starts: one operation can't open a run, it
- * can only be inside one, so the question there is how many tensors are being
- * held at this point.
+ * Counts tensors rather than run starts: a single-operation view can't tell a
+ * run's start from its continuation, so the question there is how many tensors
+ * are being held at this point.
  */
-export const getOperationLateDeallocationCountSummary = (tensorCount: number): string =>
+export const getHeldTensorCountSummary = (tensorCount: number): string =>
     `${tensorCount} ${tensorCount === 1 ? 'tensor' : 'tensors'} held past ${
         tensorCount === 1 ? 'its' : 'their'
     } last use at this operation`;
@@ -365,7 +365,7 @@ export const getOperationLateDeallocationCount = (
     availability: LateDeallocationAvailability,
 ): { count: number | null; summary: string } =>
     availability === LateDeallocationAvailability.READY
-        ? { count: tensorCount, summary: getOperationLateDeallocationCountSummary(tensorCount) }
+        ? { count: tensorCount, summary: getHeldTensorCountSummary(tensorCount) }
         : { count: null, summary: UNAVAILABLE_OPERATION_SUMMARIES[availability] };
 
 export interface CoalesceLateDeallocationRunStartsParams {

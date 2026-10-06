@@ -11,6 +11,15 @@ import { AtomProviderInitialValues } from './atomProvider';
 import { FIXTURE_L1_SIZE } from './operationDetailsFixtures';
 import { TestProviders } from './TestProviders';
 
+// L1Plots reads its region markers from queries that would otherwise make
+// real requests from jsdom on every render. Pinned to the fixture's L1 window.
+// The import is read when the hook is called, not when the hoisted factory runs.
+vi.mock('../../src/hooks/useAPI', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('../../src/hooks/useAPI')>()),
+    useGetL1StartMarker: () => 0,
+    useGetL1SmallMarker: () => FIXTURE_L1_SIZE,
+}));
+
 type L1PlotsProps = ComponentProps<typeof L1Plots>;
 
 interface RenderL1PlotsOptions extends Partial<Omit<L1PlotsProps, 'operationDetails'>> {

@@ -26,7 +26,7 @@ import {
     TopNAnnotationStatus,
 } from '../../definitions/TopNAnnotations';
 import { useTopNAnnotationAvailability } from '../../hooks/useTopNAnnotations';
-import { getLateDeallocationCountSummary } from '../../functions/lateDeallocation';
+import { getRunStartCountSummary } from '../../functions/lateDeallocation';
 import { TEST_IDS } from '../../definitions/TestIds';
 import 'styles/components/BufferSummaryControls.scss';
 
@@ -122,7 +122,7 @@ const BufferSummaryPlotControls = ({ lateDeallocationRunCount = 0 }: BufferSumma
     const isModeSelectDisabled = TOP_N_MODE_ORDER.every((mode) => statusByMode[mode] !== TopNAnnotationStatus.READY);
 
     const hasLateDeallocations = lateDeallocationRunCount > 0;
-    const lateDeallocationCountSummary = getLateDeallocationCountSummary(lateDeallocationRunCount);
+    const lateDeallocationCountSummary = getRunStartCountSummary(lateDeallocationRunCount);
 
     return (
         <div className='buffer-summary-controls'>

@@ -9,13 +9,13 @@ import {
     NO_CONSUMER_OPERATION_ID,
     buildLateDeallocationReports,
     coalesceLateDeallocationRunStarts,
+    getHeldTensorCountSummary,
     getLastValidConsumer,
-    getLateDeallocationCountSummary,
     getLateDeallocationReport,
     getLateDeallocationSummary,
     getOperationLateDeallocationAvailability,
     getOperationLateDeallocationCount,
-    getOperationLateDeallocationCountSummary,
+    getRunStartCountSummary,
     selectLateDeallocationRunStarts,
 } from '../src/functions/lateDeallocation';
 import { LATE_DEALLOC_OPPORTUNITY_TEXT, LateDeallocationAvailability } from '../src/definitions/LateDeallocation';
@@ -442,20 +442,16 @@ describe('getLateDeallocationSummary', () => {
     });
 });
 
-describe('getLateDeallocationCountSummary', () => {
+describe('getRunStartCountSummary', () => {
     // The count counts rows where a tensor *becomes* stale, while the overlay
     // hatches every row that keeps holding it — copy about operations
     // "holding" a tensor read as a contradiction beside dozens of hatched rows.
     it('uses the singular noun for one operation', () => {
-        expect(getLateDeallocationCountSummary(1)).toBe(
-            '1 operation where a tensor starts being held past its last use',
-        );
+        expect(getRunStartCountSummary(1)).toBe('1 operation where a tensor starts being held past its last use');
     });
 
     it('uses the plural noun for several operations', () => {
-        expect(getLateDeallocationCountSummary(4)).toBe(
-            '4 operations where a tensor starts being held past its last use',
-        );
+        expect(getRunStartCountSummary(4)).toBe('4 operations where a tensor starts being held past its last use');
     });
 });
 
@@ -521,21 +517,17 @@ describe('coalesceLateDeallocationRunStarts', () => {
     });
 });
 
-describe('getOperationLateDeallocationCountSummary', () => {
+describe('getHeldTensorCountSummary', () => {
     it('uses the singular for one tensor', () => {
-        expect(getOperationLateDeallocationCountSummary(1)).toBe('1 tensor held past its last use at this operation');
+        expect(getHeldTensorCountSummary(1)).toBe('1 tensor held past its last use at this operation');
     });
 
     it('uses the plural for several tensors', () => {
-        expect(getOperationLateDeallocationCountSummary(3)).toBe(
-            '3 tensors held past their last use at this operation',
-        );
+        expect(getHeldTensorCountSummary(3)).toBe('3 tensors held past their last use at this operation');
     });
 
     it('uses the plural for zero, so a clean operation still explains the count', () => {
-        expect(getOperationLateDeallocationCountSummary(0)).toBe(
-            '0 tensors held past their last use at this operation',
-        );
+        expect(getHeldTensorCountSummary(0)).toBe('0 tensors held past their last use at this operation');
     });
 });
 

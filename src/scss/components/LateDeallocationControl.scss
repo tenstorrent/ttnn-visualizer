@@ -11,8 +11,9 @@
 
     // The switch's own bottom margin is what spaces the control stack, so
     // move it to the wrapper — leaving it on the switch would push the
-    // count tag out of line with the label.
-    margin-bottom: 10px;
+    // count tag out of line with the label. Matches Blueprint's
+    // `.bp6-control` margin so the row spaces like its sibling switches.
+    margin-bottom: 8px;
 
     // `GlobalSwitch` stamps this on the Blueprint Switch root, so the
     // margin is reset without reaching for Blueprint's own classname.

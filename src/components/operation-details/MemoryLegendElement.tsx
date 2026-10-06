@@ -226,20 +226,6 @@ export const MemoryLegendElement = ({
                                 </span>
                             </Tooltip>
                         )}
-                        {lateDeallocationSummary && (
-                            // The accessible name sits on the span rather than the tooltip,
-                            // whose `aria-describedby` only exists while it is open.
-                            <Tooltip content={lateDeallocationSummary}>
-                                <span
-                                    className='late-dealloc-marker'
-                                    role='img'
-                                    aria-label={lateDeallocationSummary}
-                                    data-testid={`${TEST_IDS.LATE_DEALLOC_LEGEND_MARKER}-${chunk.address}`}
-                                >
-                                    <LateDeallocationGlyph />
-                                </span>
-                            </Tooltip>
-                        )}
                     </>
                 )}
             </div>
@@ -249,6 +235,26 @@ export const MemoryLegendElement = ({
                     whole string, so the size drifts left and stops lining up with the
                     plain sizes above and below it. #1879 */}
                 {multiplierLabels && <span className='legend-multipliers monospace'>{multiplierLabels}</span>}
+                {/* Here rather than beside the size for the same reason as the multipliers. */}
+                {lateDeallocationSummary && (
+                    // The accessible name sits on the span rather than the tooltip,
+                    // whose `aria-describedby` only exists while it is open.
+                    <Tooltip
+                        // The tooltip's wrapper is the flex item, so it is what has to
+                        // keep its width when the description text is clipped.
+                        className='late-dealloc-marker-anchor'
+                        content={lateDeallocationSummary}
+                    >
+                        <span
+                            className='late-dealloc-marker'
+                            role='img'
+                            aria-label={lateDeallocationSummary}
+                            data-testid={`${TEST_IDS.LATE_DEALLOC_LEGEND_MARKER}-${chunk.address}`}
+                        >
+                            <LateDeallocationGlyph />
+                        </span>
+                    </Tooltip>
+                )}
                 {/* Wrapped rather than left as bare text: an unwrapped child of a flex
                     container becomes an anonymous flex item, which cannot receive
                     `text-overflow`, so this clipped mid-glyph instead of ellipsising. */}
