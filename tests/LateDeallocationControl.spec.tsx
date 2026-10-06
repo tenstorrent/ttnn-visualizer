@@ -72,6 +72,15 @@ describe('LateDeallocationControl', () => {
         expect(getSwitch()).toBeChecked();
     });
 
+    it('shows an unknown count as a neutral dash, still named by the summary', () => {
+        renderControl({ count: null, countSummary: 'Late deallocations are still loading' });
+
+        const count = screen.getByTestId(TEST_IDS.LATE_DEALLOC_COUNT);
+        expect(count).toHaveTextContent('–');
+        expect(count).not.toHaveClass(Classes.INTENT_WARNING);
+        expect(count).toHaveAttribute('aria-label', 'Late deallocations are still loading');
+    });
+
     it('disables the switch when asked to', () => {
         renderControl({ disabled: true });
 

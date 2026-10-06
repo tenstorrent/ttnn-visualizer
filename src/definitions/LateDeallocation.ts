@@ -32,3 +32,15 @@ export const LATE_DEALLOC_OPPORTUNITY_TEXT = 'Opportunity to deallocate earlier'
 export const LATE_DEALLOC_GLYPH_SIZE = 10;
 
 export const LATE_DEALLOC_RAIL_LABEL = 'Operations where a tensor starts being held past its last use';
+
+/**
+ * Whether one operation's late-deallocation count can be read as a finding
+ * (#1862). The report is empty while it loads, after it fails and outside the
+ * range it was built over, so a zero in any of those states is not an all-clear.
+ */
+export enum LateDeallocationAvailability {
+    READY = 'ready',
+    LOADING = 'loading',
+    FAILED = 'failed',
+    OUT_OF_RANGE = 'outOfRange',
+}

@@ -2,7 +2,8 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-import { Classes } from '@blueprintjs/core';
+import { Classes, NumberRange } from '@blueprintjs/core';
+import { QueryStatus } from '@tanstack/react-query';
 import '@testing-library/jest-dom/vitest';
 import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -12,28 +13,16 @@ import { TensorDeallocationReport } from '../src/model/BufferSummary';
 import { showDeallocationReportAtom } from '../src/store/app';
 import { TestProviders } from './helpers/TestProviders';
 import { buildTensorDeallocationReport } from './helpers/lateDeallocationFixtures';
+import { buildOperationDetailsData } from './helpers/operationDetailsFixtures';
 
 // The control's own spec proves it stays enabled when `disabled` is omitted; it
 // can't see whether this view omits it, which report the view looks up, or
 // which wording it passes. Those three decisions live here. #1862
 const apiMock = vi.hoisted(() => ({
     lateDeallocationsByOperation: new Map<number, TensorDeallocationReport[]>(),
+    status: 'success' as QueryStatus,
+    operationRange: null as NumberRange | null,
 }));
-
-const buildOperationDetailsData = (id: number) => ({
-    id,
-    name: 'op',
-    inputs: [],
-    outputs: [],
-    stack_trace: '',
-    stack_trace_source_file_id: null,
-    operationFileIdentifier: 'op',
-    error: null,
-    buffers: [],
-    buffersSummary: [],
-    l1_sizes: [1_500_000],
-    device_operations: [],
-});
 
 vi.mock('../src/hooks/useAPI', () => ({
     useOperationsList: () => ({ data: [{ id: 0 }, { id: 1 }, { id: 2 }].map((op) => ({ ...op, name: 'op' })) }),
@@ -41,14 +30,16 @@ vi.mock('../src/hooks/useAPI', () => ({
     useGetL1SmallMarker: () => 1_500_000,
     useTensors: () => ({ data: [] }),
     useOperationDetails: (operationId: number) => ({
-        operationDetails: { data: buildOperationDetailsData(operationId), isLoading: false, status: 'success' },
+        operationDetails: { data: buildOperationDetailsData({ id: operationId }), isLoading: false, status: 'success' },
     }),
     usePreviousOperationDetails: (operationId: number) => ({
-        operationDetails: { data: buildOperationDetailsData(operationId - 1), isLoading: false },
+        operationDetails: { data: buildOperationDetailsData({ id: operationId - 1 }), isLoading: false },
     }),
     useGetTensorDeallocationReportByOperation: () => ({
         lateDeallocationsByOperation: apiMock.lateDeallocationsByOperation,
         nonDeallocatedTensorList: new Map(),
+        status: apiMock.status,
+        operationRange: apiMock.operationRange,
     }),
 }));
 
@@ -79,6 +70,8 @@ const getSwitch = (): HTMLInputElement =>
 afterEach(() => {
     cleanup();
     apiMock.lateDeallocationsByOperation = new Map();
+    apiMock.status = 'success';
+    apiMock.operationRange = null;
 });
 
 describe('OperationDetailsComponent late deallocation control (#1862)', () => {
@@ -125,5 +118,41 @@ describe('OperationDetailsComponent late deallocation control (#1862)', () => {
         expect(count).not.toHaveClass(Classes.INTENT_WARNING);
         expect(getSwitch()).not.toBeDisabled();
         expect(getSwitch()).toBeChecked();
+    });
+
+    // The report is empty until it is known and outside the range it covers, so
+    // a 0 in those states would read as an all-clear.
+    it.each([
+        ['while the report loads', 'pending', null, 'Late deallocations are still loading'],
+        ['after the report fails', 'error', null, 'Late deallocations could not be loaded'],
+        [
+            'outside the selected operation range',
+            'success',
+            [0, 1],
+            'Late deallocations are not checked for operations outside the selected operation range',
+        ],
+    ] as [string, QueryStatus, NumberRange | null, string][])(
+        'shows an unknown count %s',
+        (_label, status, operationRange, summary) => {
+            apiMock.status = status;
+            apiMock.operationRange = operationRange;
+
+            renderOperation(2, true);
+
+            const count = screen.getByTestId(TEST_IDS.LATE_DEALLOC_COUNT);
+            expect(count).toHaveTextContent('–');
+            expect(count).not.toHaveClass(Classes.INTENT_WARNING);
+            expect(count).toHaveAttribute('aria-label', summary);
+            expect(getSwitch()).not.toBeDisabled();
+        },
+    );
+
+    it('counts an operation inside the selected range', () => {
+        apiMock.lateDeallocationsByOperation = new Map([[1, [buildTensorDeallocationReport()]]]);
+        apiMock.operationRange = [0, 1];
+
+        renderOperation(1, false);
+
+        expect(screen.getByTestId(TEST_IDS.LATE_DEALLOC_COUNT)).toHaveTextContent('1');
     });
 });

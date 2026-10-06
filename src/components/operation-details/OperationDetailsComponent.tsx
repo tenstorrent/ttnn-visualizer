@@ -46,7 +46,10 @@ import { StackTraceLanguage } from '../../definitions/StackTrace';
 import { L1_DEFAULT_MEMORY_SIZE } from '../../definitions/L1MemorySize';
 import MemoryPlotRenderer from './MemoryPlotRenderer';
 import { getMemoryAddress } from '../../functions/math';
-import { getOperationLateDeallocationCountSummary } from '../../functions/lateDeallocation';
+import {
+    getOperationLateDeallocationAvailability,
+    getOperationLateDeallocationCount,
+} from '../../functions/lateDeallocation';
 import useMemoryZoomRange from '../../hooks/useMemoryZoomRange';
 
 interface OperationDetailsProps {
@@ -95,7 +98,11 @@ const OperationDetailsComponent = ({ operationId }: OperationDetailsProps) => {
     };
 
     const operation = operations?.find((op) => op.id === operationId);
-    const { lateDeallocationsByOperation } = useGetTensorDeallocationReportByOperation();
+    const {
+        lateDeallocationsByOperation,
+        status: lateDeallocationStatus,
+        operationRange: lateDeallocationRange,
+    } = useGetTensorDeallocationReportByOperation();
     const hasOperationDetails =
         !isLoading && !isPrevLoading && !!operationDetails && !!previousOperationDetails && !!operations;
 
@@ -155,7 +162,16 @@ const OperationDetailsComponent = ({ operationId }: OperationDetailsProps) => {
         );
     }
     const l1Small = details.memoryData(BufferType.L1_SMALL);
-    const { lateDeallocationCount } = details;
+    // This view renders before the buffers that the report is built from arrive,
+    // and can step outside the range it covers, so the count can be unknown here.
+    const lateDeallocation = getOperationLateDeallocationCount(
+        details.lateDeallocationCount,
+        getOperationLateDeallocationAvailability({
+            status: lateDeallocationStatus,
+            operationRange: lateDeallocationRange,
+            operationId,
+        }),
+    );
     const { cbChartDataByOperation, chartData } = l1MemoryData;
 
     const onDramDeltaClick = (event: Readonly<PlotMouseEventCustom>): void => {
@@ -258,8 +274,8 @@ const OperationDetailsComponent = ({ operationId }: OperationDetailsProps) => {
                                 this view shows one operation, so a clean operation would leave it
                                 reading "off" and untoggleable while it is on everywhere else. */}
                             <LateDeallocationControl
-                                count={lateDeallocationCount}
-                                countSummary={getOperationLateDeallocationCountSummary(lateDeallocationCount)}
+                                count={lateDeallocation.count}
+                                countSummary={lateDeallocation.summary}
                                 checked={showDeallocationReport}
                                 onChange={() => {
                                     setShowDeallocationReport(!showDeallocationReport);

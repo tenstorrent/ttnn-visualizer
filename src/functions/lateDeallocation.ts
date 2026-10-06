@@ -2,8 +2,14 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
+import { QueryStatus } from '@tanstack/react-query';
+import { NumberRange } from '@blueprintjs/core';
 import { DEALLOCATE_OP_NAME_LIST } from '../definitions/Deallocate';
-import { LATE_DEALLOC_OPPORTUNITY_TEXT, LateDeallocationRunStart } from '../definitions/LateDeallocation';
+import {
+    LATE_DEALLOC_OPPORTUNITY_TEXT,
+    LateDeallocationAvailability,
+    LateDeallocationRunStart,
+} from '../definitions/LateDeallocation';
 import { TensorDeallocationReport, TensorsByOperationByAddress } from '../model/BufferSummary';
 
 /** Sentinel for "this tensor has no consumer we can attribute a last use to". */
@@ -312,6 +318,55 @@ export const getOperationLateDeallocationCountSummary = (tensorCount: number): s
     `${tensorCount} ${tensorCount === 1 ? 'tensor' : 'tensors'} held past ${
         tensorCount === 1 ? 'its' : 'their'
     } last use at this operation`;
+
+const UNAVAILABLE_OPERATION_SUMMARIES: Record<
+    Exclude<LateDeallocationAvailability, LateDeallocationAvailability.READY>,
+    string
+> = {
+    [LateDeallocationAvailability.LOADING]: 'Late deallocations are still loading',
+    [LateDeallocationAvailability.FAILED]: 'Late deallocations could not be loaded',
+    [LateDeallocationAvailability.OUT_OF_RANGE]:
+        'Late deallocations are not checked for operations outside the selected operation range',
+};
+
+export interface GetOperationLateDeallocationAvailabilityParams {
+    status: QueryStatus;
+    /** The range the report was built over; `null` when it covers every operation. */
+    operationRange: NumberRange | null;
+    operationId: number;
+}
+
+export const getOperationLateDeallocationAvailability = ({
+    status,
+    operationRange,
+    operationId,
+}: GetOperationLateDeallocationAvailabilityParams): LateDeallocationAvailability => {
+    if (status === 'error') {
+        return LateDeallocationAvailability.FAILED;
+    }
+
+    if (status === 'pending') {
+        return LateDeallocationAvailability.LOADING;
+    }
+
+    if (operationRange && (operationId < operationRange[0] || operationId > operationRange[1])) {
+        return LateDeallocationAvailability.OUT_OF_RANGE;
+    }
+
+    return LateDeallocationAvailability.READY;
+};
+
+/**
+ * The count and tooltip for the Operation Details toggle. The count is `null`
+ * unless the report covers this operation, so an unknown never shows as 0.
+ */
+export const getOperationLateDeallocationCount = (
+    tensorCount: number,
+    availability: LateDeallocationAvailability,
+): { count: number | null; summary: string } =>
+    availability === LateDeallocationAvailability.READY
+        ? { count: tensorCount, summary: getOperationLateDeallocationCountSummary(tensorCount) }
+        : { count: null, summary: UNAVAILABLE_OPERATION_SUMMARIES[availability] };
 
 export interface CoalesceLateDeallocationRunStartsParams {
     runStarts: readonly LateDeallocationRunStart[];

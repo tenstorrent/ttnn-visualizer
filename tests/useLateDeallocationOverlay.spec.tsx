@@ -31,6 +31,8 @@ const mockReports = (lateDeallocationsByOperation: Map<number, TensorDeallocatio
     vi.mocked(useGetTensorDeallocationReportByOperation).mockReturnValue({
         lateDeallocationsByOperation,
         nonDeallocatedTensorList: new Map(),
+        status: 'success',
+        operationRange: null,
     });
 };
 

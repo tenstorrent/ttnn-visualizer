@@ -7,8 +7,11 @@ import GlobalSwitch from './GlobalSwitch';
 import { TEST_IDS } from '../definitions/TestIds';
 import 'styles/components/LateDeallocationControl.scss';
 
+const UNKNOWN_COUNT = '–';
+
 interface LateDeallocationControlProps {
-    count: number;
+    /** `null` when the count isn't known; shown as a dash so it can't read as an all-clear. */
+    count: number | null;
     /** Tooltip and accessible name for the count; callers word it for what they count. */
     countSummary: string;
     checked: boolean;
@@ -44,7 +47,7 @@ function LateDeallocationControl({
                     // Warning colour asserts there is something to look
                     // at, so a zero stays neutral rather than dressing
                     // an all-clear as a finding.
-                    intent={count > 0 ? Intent.WARNING : Intent.NONE}
+                    intent={count !== null && count > 0 ? Intent.WARNING : Intent.NONE}
                     minimal
                     round
                     // The tag renders a bare numeral, and the tooltip
@@ -54,7 +57,7 @@ function LateDeallocationControl({
                     aria-label={countSummary}
                     data-testid={TEST_IDS.LATE_DEALLOC_COUNT}
                 >
-                    {count}
+                    {count ?? UNKNOWN_COUNT}
                 </Tag>
             </Tooltip>
         </div>

@@ -13,10 +13,12 @@ import {
     getLateDeallocationCountSummary,
     getLateDeallocationReport,
     getLateDeallocationSummary,
+    getOperationLateDeallocationAvailability,
+    getOperationLateDeallocationCount,
     getOperationLateDeallocationCountSummary,
     selectLateDeallocationRunStarts,
 } from '../src/functions/lateDeallocation';
-import { LATE_DEALLOC_OPPORTUNITY_TEXT } from '../src/definitions/LateDeallocation';
+import { LATE_DEALLOC_OPPORTUNITY_TEXT, LateDeallocationAvailability } from '../src/definitions/LateDeallocation';
 import { Tensor } from '../src/model/APIData';
 import { buildTensorDeallocationReport as buildReport } from './helpers/lateDeallocationFixtures';
 
@@ -534,5 +536,57 @@ describe('getOperationLateDeallocationCountSummary', () => {
         expect(getOperationLateDeallocationCountSummary(0)).toBe(
             '0 tensors held past their last use at this operation',
         );
+    });
+});
+
+describe('getOperationLateDeallocationAvailability', () => {
+    it('reports a failed query as failed, whatever the range', () => {
+        expect(
+            getOperationLateDeallocationAvailability({ status: 'error', operationRange: [5, 6], operationId: 1 }),
+        ).toBe(LateDeallocationAvailability.FAILED);
+    });
+
+    it('reports a pending query as loading', () => {
+        expect(
+            getOperationLateDeallocationAvailability({ status: 'pending', operationRange: null, operationId: 1 }),
+        ).toBe(LateDeallocationAvailability.LOADING);
+    });
+
+    it('treats a missing range as covering every operation', () => {
+        expect(
+            getOperationLateDeallocationAvailability({ status: 'success', operationRange: null, operationId: 99 }),
+        ).toBe(LateDeallocationAvailability.READY);
+    });
+
+    // `filterByOperationRange` keeps both ends, so they must count as covered.
+    it.each([
+        [4, LateDeallocationAvailability.OUT_OF_RANGE],
+        [5, LateDeallocationAvailability.READY],
+        [8, LateDeallocationAvailability.READY],
+        [9, LateDeallocationAvailability.OUT_OF_RANGE],
+    ])('places operation %i against an inclusive [5, 8] range', (operationId, expected) => {
+        expect(
+            getOperationLateDeallocationAvailability({ status: 'success', operationRange: [5, 8], operationId }),
+        ).toBe(expected);
+    });
+});
+
+describe('getOperationLateDeallocationCount', () => {
+    it('passes the count through when the report covers the operation', () => {
+        expect(getOperationLateDeallocationCount(2, LateDeallocationAvailability.READY)).toEqual({
+            count: 2,
+            summary: '2 tensors held past their last use at this operation',
+        });
+    });
+
+    it.each([
+        LateDeallocationAvailability.LOADING,
+        LateDeallocationAvailability.FAILED,
+        LateDeallocationAvailability.OUT_OF_RANGE,
+    ])('withholds the count when %s', (availability) => {
+        const { count, summary } = getOperationLateDeallocationCount(0, availability);
+
+        expect(count).toBeNull();
+        expect(summary).not.toMatch(/^0 /);
     });
 });
