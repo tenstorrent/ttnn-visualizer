@@ -4,7 +4,7 @@
 
 import '@testing-library/jest-dom/vitest';
 import { afterEach, describe, expect, it } from 'vitest';
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { OpType } from '../src/definitions/Performance';
 import { OperationCategories } from '../src/definitions/StackedPerfTable';
 import { TEST_IDS } from '../src/definitions/TestIds';
@@ -77,6 +77,52 @@ describe('PerfOpCategoryBreakdown', () => {
         const items = within(screen.getByRole('list')).getAllByRole('listitem');
 
         expect(items.map((item) => item.textContent)).toEqual(['Op2 50 µs', 'Op1 5 µs']);
+    });
+
+    it('collapses the Other ops list until asked, and says whether it is open', async () => {
+        render(
+            <PerfOpCategoryBreakdown
+                rows={[makeRow('1', OperationCategories.OTHER, 5), makeRow('2', OperationCategories.COMPUTE, 95)]}
+            />,
+        );
+
+        const toggle = screen.getByRole('button', { name: /Largest Other ops/ });
+
+        expect(toggle).toHaveAttribute('aria-expanded', 'false');
+        expect(screen.queryByRole('list')).toBeNull();
+
+        fireEvent.click(toggle);
+
+        expect(toggle).toHaveAttribute('aria-expanded', 'true');
+        expect(screen.getByRole('list')).toBeInTheDocument();
+
+        fireEvent.click(toggle);
+
+        expect(toggle).toHaveAttribute('aria-expanded', 'false');
+        await waitFor(() => expect(screen.queryByRole('list')).toBeNull());
+    });
+
+    it('offers no Other ops list when no op is Other', () => {
+        render(
+            <PerfOpCategoryBreakdown
+                rows={[makeRow('1', OperationCategories.COMPUTE, 60), makeRow('2', OperationCategories.CCL, 40)]}
+            />,
+        );
+
+        expect(screen.getByTestId(TEST_IDS.PERF_OP_CATEGORY_BREAKDOWN)).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /Largest Other ops/ })).toBeNull();
+    });
+
+    it('keeps a sub-microsecond Other op from reading as 0 µs', () => {
+        render(
+            <PerfOpCategoryBreakdown
+                rows={[makeRow('1', OperationCategories.OTHER, 0.4), makeRow('2', OperationCategories.COMPUTE, 10)]}
+            />,
+        );
+
+        fireEvent.click(screen.getByRole('button', { name: /Largest Other ops/ }));
+
+        expect(within(screen.getByRole('list')).getByRole('listitem')).toHaveTextContent('Op1 0.4 µs');
     });
 
     it('renders nothing without device time', () => {

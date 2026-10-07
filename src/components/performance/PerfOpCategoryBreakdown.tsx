@@ -13,6 +13,8 @@ import { TEST_IDS } from '../../definitions/TestIds';
 export const OTHER_CATEGORY_EXPLANATION = 'Other is device time no tt-perf-report category explains.';
 export const HOST_CATEGORY_EXPLANATION = 'Host ops are not shown: they run no device time.';
 const UNCLASSIFIED_LABEL = 'Unclassified';
+// Matches the table's device-time totals, so a sub-microsecond op does not read as 0 µs.
+const DEVICE_TIME_DECIMALS = 2;
 
 interface PerfOpCategoryBreakdownProps {
     rows: TypedPerfTableRow[];
@@ -66,7 +68,7 @@ const PerfOpCategoryBreakdown = ({ rows }: PerfOpCategoryBreakdownProps) => {
                                 <li key={row.id}>
                                     {row.op_code}{' '}
                                     <span className='op-category-other-time'>
-                                        {formatSize(row.device_time ?? 0, 0)} µs
+                                        {formatSize(row.device_time ?? 0, DEVICE_TIME_DECIMALS)} µs
                                     </span>
                                 </li>
                             ))}
