@@ -74,25 +74,22 @@ const PerformanceTable = ({
     const { data: npeManifest, error: npeManifestError } = useGetNPEManifest();
     const navigate = useNavigate();
 
-    const tableFields = useMemo<TypedPerfTableRow[]>(() => {
-        if (!data) {
-            return [];
-        }
-
+    // Comparison sub-rows are paired with primary rows by index, so they take the primary report's
+    // sort order rather than sorting on their own values: sorted separately, a column whose value
+    // differs between reports (category, device time) would pair unrelated operations.
+    const { tableFields, comparisonDataTableFields } = useMemo(() => {
+        const rows = data ?? [];
+        const sourceIndexByRow = new Map<TypedPerfTableRow, number>(rows.map((row, index) => [row, index]));
         // Still some awkward casting here
-        return [...sortTableFields(data as [])];
-    }, [data, sortTableFields]);
+        const sortedRows: TypedPerfTableRow[] = [...sortTableFields(rows as [])];
+        const sortedSourceIndices = sortedRows.map((row) => sourceIndexByRow.get(row) ?? -1);
 
-    const comparisonDataTableFields = useMemo<TypedPerfTableRow[][]>(
-        () =>
-            comparisonData?.map((dataset) => {
-                const parsedData = dataset;
+        // A comparison report shorter than the primary one leaves gaps, which render as empty sub-rows.
+        const alignedComparisonRows: (TypedPerfTableRow | undefined)[][] =
+            comparisonData?.map((dataset) => sortedSourceIndices.map((index) => dataset[index])) ?? [];
 
-                // Still some awkward casting here
-                return [...sortTableFields(parsedData as [])];
-            }) || [],
-        [comparisonData, sortTableFields],
-    );
+        return { tableFields: sortedRows, comparisonDataTableFields: alignedComparisonRows };
+    }, [data, comparisonData, sortTableFields]);
 
     // L1 pressure is a per-TTNN-op snapshot, so it renders only on the first device-op row of each
     // op. Derive that "first" row from the current display order (`tableFields`, post-sort) rather
@@ -112,9 +109,11 @@ const PerformanceTable = ({
         return firstRows;
     }, [tableFields]);
 
+    // Read from the source datasets: the index-aligned comparison lists can hold gaps where a
+    // comparison report is shorter than the primary one, and order does not matter here.
     const rowsForColumnEligibility = useMemo(
-        () => [...tableFields, ...comparisonDataTableFields.flat()],
-        [tableFields, comparisonDataTableFields],
+        () => [...(data ?? []), ...(comparisonData?.flat() ?? [])],
+        [data, comparisonData],
     );
 
     const eligibleColumns = useMemo(
@@ -146,8 +145,8 @@ const PerformanceTable = ({
     const isReportsSynced = opIdsMap.length > 0;
     const isPrimaryActiveReport = activeReportComparisonIndex === null;
     const activeReportRows = useMemo<TypedPerfTableRow[]>(
-        () => (isPrimaryActiveReport ? tableFields : (comparisonDataTableFields[activeReportComparisonIndex] ?? [])),
-        [isPrimaryActiveReport, tableFields, comparisonDataTableFields, activeReportComparisonIndex],
+        () => (isPrimaryActiveReport ? tableFields : (comparisonData?.[activeReportComparisonIndex] ?? [])),
+        [isPrimaryActiveReport, tableFields, comparisonData, activeReportComparisonIndex],
     );
     const canShowTensorDrawer = isReportsSynced && activeReportRows.length > 0;
 

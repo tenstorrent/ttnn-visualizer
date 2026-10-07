@@ -421,6 +421,75 @@ describe('PerfTable column visibility', () => {
         expect(screen.getByText(OperationCategories.DM).closest('tr')).toHaveClass('comparison-row');
     });
 
+    describe('sorting with comparison reports', () => {
+        const sortByCategory = () => fireEvent.click(screen.getByRole('button', { name: /^Category/ }));
+        // Each comparison sub-row must sit directly under the primary row it was aligned with.
+        const rowOpCodes = () =>
+            Array.from(screen.getByRole('table').querySelectorAll('tbody tr')).map((tableRow) =>
+                ['AllGather', 'Matmul', 'Reshape MISSING'].find((opCode) => tableRow.textContent?.includes(opCode)),
+            );
+
+        it('keeps comparison rows with their primary row when categories differ', () => {
+            renderTable(
+                [
+                    baseRow({ id: 1, raw_op_code: 'Matmul', op_category: OperationCategories.COMPUTE }),
+                    baseRow({ id: 2, raw_op_code: 'AllGather', op_category: OperationCategories.CCL }),
+                ],
+                {
+                    comparisonData: [
+                        [
+                            baseRow({ id: 11, raw_op_code: 'Matmul', op_category: OperationCategories.COMPUTE }),
+                            baseRow({ id: 12, raw_op_code: 'AllGather', op_category: OperationCategories.OTHER }),
+                        ],
+                    ],
+                },
+            );
+
+            sortByCategory();
+
+            expect(rowOpCodes()).toEqual(['AllGather', 'AllGather', 'Matmul', 'Matmul']);
+        });
+
+        it('keeps a missing-op placeholder with its primary row', () => {
+            renderTable(
+                [
+                    baseRow({ id: 1, raw_op_code: 'AllGather', op_category: OperationCategories.CCL }),
+                    baseRow({ id: 2, raw_op_code: 'Matmul', op_category: OperationCategories.COMPUTE }),
+                ],
+                {
+                    comparisonData: [
+                        [
+                            baseRow({ id: 11, raw_op_code: 'Reshape MISSING', op_category: null }),
+                            baseRow({ id: 12, raw_op_code: 'Matmul', op_category: OperationCategories.COMPUTE }),
+                        ],
+                    ],
+                },
+            );
+
+            sortByCategory();
+
+            expect(rowOpCodes()).toEqual(['AllGather', 'Reshape MISSING', 'Matmul', 'Matmul']);
+        });
+
+        it('renders an empty sub-row where a comparison report is shorter', () => {
+            renderTable(
+                [
+                    baseRow({ id: 1, raw_op_code: 'Matmul', op_category: OperationCategories.COMPUTE }),
+                    baseRow({ id: 2, raw_op_code: 'AllGather', op_category: OperationCategories.CCL }),
+                ],
+                {
+                    comparisonData: [
+                        [baseRow({ id: 11, raw_op_code: 'Matmul', op_category: OperationCategories.COMPUTE })],
+                    ],
+                },
+            );
+
+            sortByCategory();
+
+            expect(rowOpCodes()).toEqual(['AllGather', undefined, 'Matmul', 'Matmul']);
+        });
+    });
+
     it('keeps OP Code visible even when it is listed as hidden', () => {
         renderTable([matmulRow], { hiddenColumns: [ColumnKeys.OpCode, ColumnKeys.DeviceTime] });
 
