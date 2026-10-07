@@ -281,7 +281,7 @@ def _device_operation_names(raw: Optional[str]) -> Dict[NodeOrder, List[str]]:
     same-named row and shift every later row onto the wrong operation. Newer captures
     close a failed scope with a `function_end` marked `aborted`; older ones leave the
     `function_start` unclosed. Each end closes the latest open start of its name.
-    Mirrors `getLinkableDeviceOperationNames` in
+    Mirrors `getLinkableDeviceOperations` in
     `src/functions/linkableDeviceOperations.ts`.
     """
     names: Dict[NodeOrder, List[str]] = {order: [] for order in NodeOrder}
