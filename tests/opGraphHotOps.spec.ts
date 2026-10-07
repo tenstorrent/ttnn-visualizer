@@ -49,6 +49,16 @@ describe('buildHotOpRows', () => {
     it('leaves out ops with a perf row that the graph does not show', () => {
         expect(ids(buildHotOpRows(overlay, [1, 2, 3, 4, 5], NAMES))).not.toContain(900);
     });
+
+    it('treats an op whose only perf row has no duration as having no perf data', () => {
+        // It draws no bar, so a ranked row with a cold-end swatch would match nothing.
+        const withZero = buildOpGraphPerfOverlay(rows([1, 10], [2, 0]), true, [1, 2]);
+
+        expect(buildHotOpRows(withZero, [1, 2], NAMES)).toEqual([
+            { operationId: 1, name: 'ttnn.add', deviceTimeNs: 10_000, rank: 1 },
+            { operationId: 2, name: 'ttnn.matmul', deviceTimeNs: null, rank: null },
+        ]);
+    });
 });
 
 describe('getVisibleHotOpRows', () => {
@@ -86,6 +96,16 @@ describe('getVisibleHotOpRows', () => {
         expect(ids(getVisibleHotOpRows(all, { limit: 3, sort: HotOpsSort.OPERATION_ID, hideUnlinked: true }))).toEqual([
             1, 2, 3,
         ]);
+    });
+
+    it('keeps ops without perf data last when ordering by id', () => {
+        // Op 1 has no perf row, so by id alone it would lead the linked ops.
+        const lowUnlinked = buildOpGraphPerfOverlay(rows([10, 5], [20, 30]), true, [1, 10, 20]);
+        const listed = buildHotOpRows(lowUnlinked, [1, 10, 20], NAMES);
+
+        expect(
+            ids(getVisibleHotOpRows(listed, { limit: null, sort: HotOpsSort.OPERATION_ID, hideUnlinked: false })),
+        ).toEqual([10, 20, 1]);
     });
 
     it('does not reorder the rows it was given', () => {

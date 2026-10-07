@@ -106,6 +106,19 @@ describe('OpGraphHotOpsPanel rows', () => {
 });
 
 describe('OpGraphHotOpsPanel controls', () => {
+    it('names each control group and marks its current choice', () => {
+        renderPanel();
+
+        const rowsToShow = screen.getByRole('radiogroup', { name: 'Rows to show' });
+        const sortOrder = screen.getByRole('radiogroup', { name: 'Sort order' });
+        expect(within(rowsToShow).getByRole('radio', { name: 'Top 10' })).toHaveAttribute('aria-checked', 'true');
+        expect(within(sortOrder).getByRole('radio', { name: 'Slowest first' })).toHaveAttribute('aria-checked', 'true');
+
+        choose('By ID');
+
+        expect(within(sortOrder).getByRole('radio', { name: 'By ID' })).toHaveAttribute('aria-checked', 'true');
+    });
+
     it('shows every linked op under All', () => {
         renderPanel();
 

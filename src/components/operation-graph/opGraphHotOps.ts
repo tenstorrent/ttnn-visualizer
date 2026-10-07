@@ -42,6 +42,8 @@ export const buildHotOpRows = (
     ];
 };
 
+const byOperationId = (a: HotOpRow, b: HotOpRow) => a.operationId - b.operationId;
+
 /** The rows to list: the limit takes the slowest, and the sort only orders what it kept. */
 export const getVisibleHotOpRows = (
     rows: readonly HotOpRow[],
@@ -49,5 +51,12 @@ export const getVisibleHotOpRows = (
 ): HotOpRow[] => {
     const eligible = hideUnlinked ? rows.filter((row) => row.rank !== null) : rows;
     const kept = limit === null ? [...eligible] : eligible.slice(0, limit);
-    return sort === HotOpsSort.OPERATION_ID ? kept.sort((a, b) => a.operationId - b.operationId) : kept;
+    if (sort === HotOpsSort.DURATION) {
+        return kept;
+    }
+    // Ops without perf data stay last under either order.
+    return [
+        ...kept.filter((row) => row.rank !== null).sort(byOperationId),
+        ...kept.filter((row) => row.rank === null).sort(byOperationId),
+    ];
 };

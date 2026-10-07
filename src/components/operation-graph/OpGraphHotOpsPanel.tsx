@@ -74,12 +74,14 @@ const OpGraphHotOpsPanel = ({
             </header>
             <div className='op-graph-hot-ops-controls'>
                 <SegmentedControl
+                    aria-label='Rows to show'
                     size={Size.SMALL}
                     options={LIMIT_OPTIONS}
                     value={limit === null ? ALL_LIMIT : String(limit)}
                     onValueChange={(value) => setSettings((current) => ({ ...current, limit: limitFromOption(value) }))}
                 />
                 <SegmentedControl
+                    aria-label='Sort order'
                     size={Size.SMALL}
                     options={SORT_OPTIONS}
                     value={sort}

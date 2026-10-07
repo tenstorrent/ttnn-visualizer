@@ -1013,6 +1013,39 @@ describe('OperationGraphReactFlow slowest operations list', () => {
         expect(listedIds()).toEqual([5, 4, 3, 2, 1]);
     });
 
+    // The list reads perf state only, so none of it may reach the layout worker.
+    it('does not relayout when its switch is turned on', () => {
+        renderGraph(OPERATION_LIST, PERF_ROWS);
+        runBuild.mockClear();
+
+        fireEvent.click(hotOpsSwitch());
+
+        expect(listHeading()).toBeInTheDocument();
+        expect(runBuild).not.toHaveBeenCalled();
+    });
+
+    const listControl = (label: string) =>
+        within(screen.getByRole('region', { name: 'Slowest operations' })).getByText(label);
+
+    it.each<[string, () => void]>([
+        ['how many rows it shows', () => fireEvent.click(listControl('Top 25'))],
+        ['its order', () => fireEvent.click(listControl('By ID'))],
+        ['whether ops without perf data show', () => fireEvent.click(listControl('Hide ops without perf data'))],
+        ['the op selected from it', () => fireEvent.click(rowFor('3 matmul_c'))],
+    ])('does not relayout for a change to %s', (_, change) => {
+        // Op 5 has no perf row, so the hide checkbox is offered.
+        renderGraph(
+            OPERATION_LIST,
+            PERF_ROWS.filter((row) => row.id !== 5),
+        );
+        fireEvent.click(hotOpsSwitch());
+        runBuild.mockClear();
+
+        change();
+
+        expect(runBuild).not.toHaveBeenCalled();
+    });
+
     it('hides the list again once its switch is off', () => {
         renderGraph(OPERATION_LIST, PERF_ROWS);
         fireEvent.click(hotOpsSwitch());
@@ -2938,10 +2971,9 @@ describe('OperationGraphReactFlow repeat blocks', () => {
         }));
         const drawnColor = (nodeId: string) =>
             asRenderedColor(String(perfColorOf(nodeById(lastFlowRender().nodes, nodeId))));
-        const listSwatch = (title: string) =>
-            within(screen.getByRole('region', { name: 'Slowest operations' }))
-                .getByTitle(title)
-                .querySelector<HTMLElement>('.op-graph-hot-ops-swatch');
+        const listRow = (title: string) =>
+            within(screen.getByRole('region', { name: 'Slowest operations' })).getByTitle(title);
+        const listSwatch = (title: string) => listRow(title).querySelector<HTMLElement>('.op-graph-hot-ops-swatch');
 
         const renderFoldedWithPerf = () => {
             renderGraph(REPEAT_OPERATION_LIST, REPEAT_PERF_ROWS);
@@ -2960,6 +2992,26 @@ describe('OperationGraphReactFlow repeat blocks', () => {
             const metric = screen.getByText('Kernel duration').nextElementSibling as HTMLElement;
             const swatch = metric.querySelector<HTMLElement>('.perf-overlay-op-metric-swatch');
             expect(swatch?.style.backgroundColor).toBe(drawnColor('6'));
+        });
+
+        it('selects a folded member through its block, which stays folded (#2086)', () => {
+            // Pins today's behaviour; #2086 decides whether the row should unfold the block instead.
+            renderFoldedWithPerf();
+            fireEvent.click(screen.getByRole('checkbox', { name: /^Slowest operations/ }));
+            absolutePositionById.set(FIRST_BLOCK_ID, { x: 4000, y: 800 });
+            runBuild.mockClear();
+            setViewport.mockClear();
+
+            fireEvent.click(listRow('3 layer_b'));
+
+            // The member has no node of its own, so the pan brings in the block holding it.
+            expect(setViewport).toHaveBeenCalledTimes(1);
+            const [viewport] = setViewport.mock.calls[0] as unknown as [{ x: number }];
+            expect((4000 + STORE_NODE.width) * PANNED_ZOOM + viewport.x).toBeLessThanOrEqual(PANE.width - SIDE_WIDTH);
+            expect(listRow('3 layer_b')).toHaveAttribute('aria-current', 'true');
+            expect(screen.getByLabelText('Selected block details')).toHaveTextContent('layer_a + layer_b × 2');
+            expect(hasClass(nodeById(lastFlowRender().nodes, FIRST_BLOCK_ID), 'op-graph-node-selected')).toBe(true);
+            expect(runBuild).not.toHaveBeenCalled();
         });
 
         it('keeps the list swatches the same whether or not the bars are drawn', () => {
