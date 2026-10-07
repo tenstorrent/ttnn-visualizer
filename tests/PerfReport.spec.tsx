@@ -180,6 +180,21 @@ describe('PerformanceReport op category filter', () => {
         expect(screen.getAllByText('Matmul').length).toBeGreaterThan(0);
     });
 
+    it('keeps a comparison-only match with normalisation on', () => {
+        renderReport({
+            data: [row('Matmul', 1, 5, OperationCategories.COMPUTE), row('Reshape', 2, 5, OperationCategories.TM)],
+            comparisonData: [
+                [row('Matmul', 1, 5, OperationCategories.COMPUTE), row('Reshape', 2, 5, OperationCategories.OTHER)],
+            ],
+            comparisonReports: [COMPARISON_REPORT],
+            opCategoryFilterList: [OperationCategories.OTHER],
+        });
+
+        expect(screen.getByLabelText('Normalise data')).toBeChecked();
+        expect(screen.getAllByText('Reshape').length).toBeGreaterThan(0);
+        expect(screen.queryByText('Matmul')).not.toBeInTheDocument();
+    });
+
     it('keeps a comparison-only match with normalisation turned off', () => {
         renderReport({
             data: [row('Matmul', 1, 5, OperationCategories.COMPUTE), row('Reshape', 2, 5, OperationCategories.TM)],

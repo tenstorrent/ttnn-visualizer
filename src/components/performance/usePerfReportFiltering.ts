@@ -215,8 +215,12 @@ const usePerfReportFiltering = ({
         const hasOpCodeTextFilter = opCodeFilterValue.length > 0;
         const hasRawOpCodeFilter = rawOpCodeFilterSet.size > 0;
         const hasDurationFilter = durationBucketFilterSet.size > 0;
+        // Options come from every dataset, so a category only a comparison row has must match there
+        // too rather than filtering the primary report alone and emptying both tables.
+        const hasOpCategoryFilter = opCategoryFilterSet.size > 0;
         // Every filter resolved against the aligned rows rather than per dataset
-        const hasAlignedRowFilters = hasOpCodeTextFilter || hasRawOpCodeFilter || hasDurationFilter;
+        const hasAlignedRowFilters =
+            hasOpCodeTextFilter || hasRawOpCodeFilter || hasDurationFilter || hasOpCategoryFilter;
         const filtersWithoutOpCode = {
             ...filters,
             [ColumnKeys.OpCode]: '',
@@ -226,7 +230,6 @@ const usePerfReportFiltering = ({
             mathFilter: activeMathFilters,
             bufferTypeFilter: activeBufferTypeFilters,
             activeLayoutFilterList: activeLayoutFilters,
-            opCategoryFilter: activeOpCategoryFilterList,
         });
         const sourceRowSet = new Set(sourceRowsWithoutSignposts);
         const keepRowMask = processedRows.map((row, index) => {
@@ -253,8 +256,11 @@ const usePerfReportFiltering = ({
                     ? alignedRow.raw_op_code !== null && rawOpCodeFilterSet.has(alignedRow.raw_op_code)
                     : true;
                 const matchesDuration = hasDurationFilter ? matchesDurationBucket(alignedRow.device_time) : true;
+                const matchesOpCategory = hasOpCategoryFilter
+                    ? alignedRow.op_category !== null && opCategoryFilterSet.has(alignedRow.op_category)
+                    : true;
 
-                return matchesOpCodeText && matchesRawOpCode && matchesDuration;
+                return matchesOpCodeText && matchesRawOpCode && matchesDuration && matchesOpCategory;
             });
         });
 
@@ -279,7 +285,6 @@ const usePerfReportFiltering = ({
         mathFilterSet,
         bufferTypeFilterSet,
         layoutFilterSet,
-        activeOpCategoryFilterList,
         opCategoryFilterSet,
         durationBucketFilterSet,
         matchesDurationBucket,

@@ -62,6 +62,18 @@ describe('getOpCategoryBreakdown', () => {
         expect(getOpCategoryBreakdown([makeRow('1', OperationCategories.HOST, null)])).toBeNull();
     });
 
+    it('keeps the largest Other ops whatever order the rows arrive in', () => {
+        const deviceTimes = [7, 42, 3, 99, 15, 1, 64, 28, 5, 81, 12, 50, 2, 36];
+        const breakdown = getOpCategoryBreakdown(
+            deviceTimes.map((deviceTime, index) => makeRow(String(index), OperationCategories.OTHER, deviceTime)),
+        );
+
+        expect(breakdown?.largestOtherOps.map((row) => row.device_time)).toEqual(
+            [...deviceTimes].sort((a, b) => b - a).slice(0, MAX_LISTED_OTHER_OPS),
+        );
+        expect(breakdown?.otherOpCount).toBe(deviceTimes.length);
+    });
+
     it('lists the largest Other ops first, capped, with the full count alongside', () => {
         const otherRows = Array.from({ length: MAX_LISTED_OTHER_OPS + 2 }, (_, index) =>
             makeRow(String(index), OperationCategories.OTHER, index + 1),

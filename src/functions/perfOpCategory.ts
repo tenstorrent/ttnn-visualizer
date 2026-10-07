@@ -32,6 +32,24 @@ export interface OpCategoryBreakdown {
     hasHostOps: boolean;
 }
 
+/**
+ * Keeps `largest` ordered by device time, descending, and no longer than MAX_LISTED_OTHER_OPS, so a
+ * report with hundreds of thousands of Other rows never builds or sorts a full-size list.
+ */
+const insertIntoLargest = (largest: TypedPerfTableRow[], row: TypedPerfTableRow, deviceTime: number) => {
+    if (largest.length === MAX_LISTED_OTHER_OPS && deviceTime <= (largest[largest.length - 1].device_time ?? 0)) {
+        return;
+    }
+
+    const insertAt = largest.findIndex((listed) => deviceTime > (listed.device_time ?? 0));
+
+    largest.splice(insertAt === -1 ? largest.length : insertAt, 0, row);
+
+    if (largest.length > MAX_LISTED_OTHER_OPS) {
+        largest.pop();
+    }
+};
+
 const isDeviceTimeCategory = (category: OperationCategories): category is DeviceTimeCategory =>
     (DEVICE_TIME_CATEGORIES as readonly OperationCategories[]).includes(category);
 
@@ -42,7 +60,8 @@ const isDeviceTimeCategory = (category: OperationCategories): category is Device
  */
 export const getOpCategoryBreakdown = (rows: TypedPerfTableRow[]): OpCategoryBreakdown | null => {
     const deviceTimeByCategory = new Map<DeviceTimeCategory, number>();
-    const otherOps: TypedPerfTableRow[] = [];
+    const largestOtherOps: TypedPerfTableRow[] = [];
+    let otherOpCount = 0;
     let totalTime = 0;
     let unclassifiedTime = 0;
     let hasHostOps = false;
@@ -66,7 +85,8 @@ export const getOpCategoryBreakdown = (rows: TypedPerfTableRow[]): OpCategoryBre
                 );
 
                 if (row.op_category === OperationCategories.OTHER) {
-                    otherOps.push(row);
+                    otherOpCount += 1;
+                    insertIntoLargest(largestOtherOps, row, deviceTime);
                 }
             } else {
                 unclassifiedTime += deviceTime;
@@ -85,14 +105,11 @@ export const getOpCategoryBreakdown = (rows: TypedPerfTableRow[]): OpCategoryBre
         ]),
     ) as Record<DeviceTimeCategory, number>;
 
-    // Only counted rows reach otherOps, so device_time is a positive number on every one.
-    otherOps.sort((a, b) => (b.device_time ?? 0) - (a.device_time ?? 0));
-
     return {
         percentByCategory,
         unclassifiedPercent: (unclassifiedTime / totalTime) * 100,
-        largestOtherOps: otherOps.slice(0, MAX_LISTED_OTHER_OPS),
-        otherOpCount: otherOps.length,
+        largestOtherOps,
+        otherOpCount,
         hasHostOps,
     };
 };
