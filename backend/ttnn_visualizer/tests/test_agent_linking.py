@@ -28,6 +28,7 @@ from ttnn_visualizer.agent.linking import (
     DeviceOperation,
     LinkStatus,
     MatchedOn,
+    NodeOrder,
     UnlinkedReason,
 )
 from ttnn_visualizer.tests.test_device_log_columns import (
@@ -329,6 +330,46 @@ class TestMatcherParity:
         assert linking.is_device_operation(name) is expected
 
 
+class TestFailedDeviceOperations:
+    """A device operation whose launch threw has no perf row, so it is not named.
+
+    `tests/linkableDeviceOperations.spec.ts` states these cases for the app's side.
+    """
+
+    @pytest.mark.parametrize("aborted", [True, False])
+    def test_the_failed_device_operation_is_dropped_from_both_orders(self, aborted):
+        names = linking._device_operation_names(
+            _failed_graph("FirstDeviceOperation", failed="Matmul", aborted=aborted)
+        )
+
+        assert names[NodeOrder.FUNCTION_START] == ["FirstDeviceOperation"]
+        assert names[NodeOrder.FUNCTION_END] == ["FirstDeviceOperation"]
+
+    def test_a_boolean_aborted_marker_is_read_as_aborted(self):
+        nodes = json.loads(_failed_graph(failed="Matmul"))
+        nodes[3]["params"]["aborted"] = True
+
+        names = linking._device_operation_names(json.dumps(nodes))
+
+        assert names[NodeOrder.FUNCTION_START] == []
+
+    def test_a_same_named_retry_links_to_its_own_row(self, linked):
+        """The failed matmul must not take the retry's row and shift the add."""
+        operations = [*_OPERATIONS[:2], (3, "ttnn.matmul"), (4, "ttnn.add")]
+        graphs = {
+            1: _GRAPHS[1],
+            2: _failed_graph(failed="MatmulDeviceOperation"),
+            3: _graph("ttnn.matmul", "MatmulDeviceOperation"),
+            4: _graph("ttnn.add", "BinaryNgDeviceOperation"),
+        }
+        registry, handle, _ = linked(graphs=graphs, operations=operations)
+
+        link = linking.operation_link(registry, handle)
+
+        assert link.status is LinkStatus.LINKED
+        assert link.operation_by_perf_id == {"3": 3, "5": 4}
+
+
 class TestLinkView:
     def test_the_canonical_projection_is_the_apps_link_view_but_for_host_ops(self):
         """`LINKED_PERFORMANCE_REPORT_FILTERS`: merged, host ops hidden, no range.
@@ -398,6 +439,33 @@ def _graph(*names: str, nested: bool = True) -> str:
         nodes.append({"node_type": "function_start", "params": {"name": name}})
     for name in reversed(names) if nested else names:
         nodes.append({"node_type": "function_end", "params": {"name": name}})
+    return json.dumps(nodes)
+
+
+def _failed_graph(*completed: str, failed: str, aborted: bool = True) -> str:
+    """A captured graph whose last device operation threw at launch.
+
+    `aborted` is the shape since tt-metal #53041, which closes the failed scope with a
+    `function_end` marked `aborted`; without it, the older shape leaves it unclosed.
+    """
+    nodes: List[Dict[str, object]] = [
+        {"node_type": "capture_start", "params": None},
+        {"node_type": "function_start", "params": {"name": "ttnn.matmul"}},
+    ]
+    for name in completed:
+        nodes.append({"node_type": "function_start", "params": {"name": name}})
+        nodes.append({"node_type": "function_end", "params": {"name": name}})
+    nodes.append({"node_type": "function_start", "params": {"name": failed}})
+    if aborted:
+        nodes.append(
+            {"node_type": "function_end", "params": {"name": failed, "aborted": "true"}}
+        )
+        nodes.append(
+            {
+                "node_type": "function_end",
+                "params": {"name": "ttnn.matmul", "aborted": "true"},
+            }
+        )
     return json.dumps(nodes)
 
 

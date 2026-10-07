@@ -254,7 +254,12 @@ const memoryOperations = DEVICE_OP_NAMES.map((name, index) => ({
     inputs: [],
     outputs: [],
     arguments: [],
-    device_operations: [{ node_type: 'function_start', params: { name } }],
+    // Closed, as every completed launch is: an unclosed start is how older captures record
+    // a launch that threw, which the match leaves out.
+    device_operations: [
+        { node_type: 'function_start', params: { name } },
+        { node_type: 'function_end', params: { name } },
+    ],
 }));
 
 const NESTED_DEVICE_OP_NAMES = ['SparseMatmulDeviceOperation', 'UnaryDeviceOperation'];

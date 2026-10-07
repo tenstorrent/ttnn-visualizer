@@ -7,6 +7,7 @@ export enum PerfHeuristicFlag {
     LOW_UTILISATION = 'low_utilisation',
     UNDERUTILISED_CORES = 'underutilised_cores',
     RECOMPUTE_CANDIDATE = 'recompute_candidate',
+    ALLOCATION_FAILURE = 'allocation_failure',
 }
 
 export enum PerfHeuristicFlagIntent {
@@ -54,6 +55,14 @@ export const PERF_HEURISTIC_FLAG_DEFINITIONS: Record<PerfHeuristicFlag, PerfHeur
         label: 'Recompute candidate',
         shortLabel: 'Recompute',
         description: 'An identical op hash was recomputed instead of reusing a cached result.',
+        intent: PerfHeuristicFlagIntent.DANGER,
+    },
+    // Recorded, not inferred: the memory report holds the error the allocator raised.
+    [PerfHeuristicFlag.ALLOCATION_FAILURE]: {
+        label: 'Operation failed to allocate',
+        shortLabel: 'Op failed',
+        description:
+            'This device op ran, but a later device op of the same operation failed to allocate memory, as recorded in the linked memory report.',
         intent: PerfHeuristicFlagIntent.DANGER,
     },
 };

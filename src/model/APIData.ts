@@ -8,7 +8,7 @@ import { ReportLocation } from '../definitions/Reports';
 import { BufferMemoryLayout, MemoryConfig } from './MemoryConfig';
 import { BufferType, StringBufferType } from './BufferType';
 
-interface OperationError {
+export interface OperationError {
     operation_id: number;
     operation_name: string;
     error_type: string;

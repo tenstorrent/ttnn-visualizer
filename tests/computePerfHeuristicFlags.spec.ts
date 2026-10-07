@@ -9,6 +9,7 @@ import { PerfHeuristicFlag } from '../src/definitions/PerfHeuristics';
 import { OpType } from '../src/definitions/Performance';
 import { annotatePerfHeuristicFlags } from '../src/functions/computePerfHeuristicFlags';
 import { DEFAULT_MAX_CORES } from '../src/functions/getCoreCount';
+import { makeAllocationFailure } from './helpers/allocationFailure';
 
 const MAX_CORES = DEFAULT_MAX_CORES;
 
@@ -34,6 +35,35 @@ const getFlags = (overrides: Partial<TypedPerfTableRow> = {}, maxCores = MAX_COR
     annotatePerfHeuristicFlags([makeRow(overrides)], maxCores)[0].heuristicFlags ?? [];
 
 describe('annotatePerfHeuristicFlags', () => {
+    describe('allocation failure', () => {
+        const failure = makeAllocationFailure();
+
+        it('flags a row whose operation recorded an allocation failure, with its figures', () => {
+            const [row] = annotatePerfHeuristicFlags([makeRow({ allocation_failure: failure })], MAX_CORES);
+
+            expect(row.heuristicFlags).toContain(PerfHeuristicFlag.ALLOCATION_FAILURE);
+            expect(row.heuristicFlagDetails?.[PerfHeuristicFlag.ALLOCATION_FAILURE]).toBe(
+                'Requested 3.13 MiB L1 across 4 banks (800 KiB per bank, bank size 1.32 MiB)',
+            );
+        });
+
+        it('is not muted below MIN_TOTAL_PERCENT', () => {
+            expect(getFlags({ allocation_failure: failure, total_percent: 0.01 })).toContain(
+                PerfHeuristicFlag.ALLOCATION_FAILURE,
+            );
+        });
+
+        it('is not muted on a row ineligible for heuristics', () => {
+            expect(getFlags({ allocation_failure: failure, bound: BoundType.HOST })).toEqual([
+                PerfHeuristicFlag.ALLOCATION_FAILURE,
+            ]);
+        });
+
+        it('is absent without a recorded failure', () => {
+            expect(getFlags({ allocation_failure: null })).not.toContain(PerfHeuristicFlag.ALLOCATION_FAILURE);
+        });
+    });
+
     it('flags DRAM-bound when bound is DRAM', () => {
         expect(getFlags({ bound: BoundType.DRAM })).toContain(PerfHeuristicFlag.DRAM_BOUND);
     });

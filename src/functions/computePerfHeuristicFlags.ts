@@ -10,6 +10,7 @@ import getCoreUtilization from './getCoreUtilization';
 import isValidNumber from './isValidNumber';
 import { formatPercentage } from './math';
 import { isSlowDramDominant } from './perfBoundPredicates';
+import { getAllocationFailureSummary } from './parseAllocationFailure';
 
 interface RowHeuristicEvaluation {
     flags: PerfHeuristicFlag[];
@@ -74,13 +75,20 @@ function isUnderutilisedCores(row: TypedPerfTableRow, maxCores: number, hasMinIm
 }
 
 function evaluateRowHeuristics(row: TypedPerfTableRow, maxCores: number): RowHeuristicEvaluation {
+    const flags: PerfHeuristicFlag[] = [];
+    const details: Partial<Record<PerfHeuristicFlag, string>> = {};
+
+    // A recorded failure, not a heuristic: no eligibility or impact gate may mute it.
+    if (row.allocation_failure) {
+        flags.push(PerfHeuristicFlag.ALLOCATION_FAILURE);
+        details[PerfHeuristicFlag.ALLOCATION_FAILURE] = getAllocationFailureSummary(row.allocation_failure);
+    }
+
     if (!isEligibleRow(row)) {
-        return { flags: [], details: undefined };
+        return { flags, details: flags.length > 0 ? details : undefined };
     }
 
     const hasMinImpact = meetsMinImpact(row);
-    const flags: PerfHeuristicFlag[] = [];
-    const details: Partial<Record<PerfHeuristicFlag, string>> = {};
 
     if (isDramBound(row, hasMinImpact)) {
         flags.push(PerfHeuristicFlag.DRAM_BOUND);

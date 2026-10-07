@@ -31,7 +31,7 @@ import tempfile
 from collections import Counter
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Dict, List, NamedTuple, Optional, Sequence, Tuple
+from typing import Dict, List, NamedTuple, Optional, Sequence, Set, Tuple
 
 from tt_perf_report.perf_report import HOST_OP_MARKER
 from ttnn_visualizer.agent import operations, tools
@@ -51,6 +51,10 @@ DEVICE_TIME_UNIT = "us"
 # total is 55.6 MB, so the bound is ~18x anything seen: it refuses a pathological
 # file, never a real one.
 MAX_CAPTURED_GRAPH_CHARS = 1 << 30
+
+# How tt-metal marks a `function_end` that closed a scope whose launch threw. Graph
+# params are strings; only `program_cache_hit` is converted when serialised.
+_ABORTED_PARAM_VALUE = "true"
 
 
 class LinkStatus(str, Enum):
@@ -268,7 +272,16 @@ def _redacted(error: Exception) -> str:
 
 
 def _device_operation_names(raw: Optional[str]) -> Dict[NodeOrder, List[str]]:
-    """One operation's device operation names, in each captured order."""
+    """One operation's device operation names, in each captured order.
+
+    Only device operations that completed are named: one whose launch threw never
+    reached the device, so it has no perf row, and left in it would take the next
+    same-named row and shift every later row onto the wrong operation. Newer captures
+    close a failed scope with a `function_end` marked `aborted`; older ones leave the
+    `function_start` unclosed. Each end closes the latest open start of its name.
+    Mirrors `getLinkableDeviceOperationNames` in
+    `src/functions/linkableDeviceOperations.ts`.
+    """
     names: Dict[NodeOrder, List[str]] = {order: [] for order in NodeOrder}
     if not raw:
         return names
@@ -278,6 +291,8 @@ def _device_operation_names(raw: Optional[str]) -> Dict[NodeOrder, List[str]]:
         raise UnreadableGraphError(str(error)) from None
     if not isinstance(nodes, list):
         raise UnreadableGraphError("not a list of nodes")
+
+    lifecycle: List[Tuple[NodeOrder, str, Dict]] = []
     for node in nodes:
         if not isinstance(node, dict):
             continue
@@ -291,9 +306,25 @@ def _device_operation_names(raw: Optional[str]) -> Dict[NodeOrder, List[str]]:
         # `getDeviceOperationNameList` reads `params.name` unguarded.
         params = node.get("params")
         name = params.get("name") if isinstance(params, dict) else None
-        if not isinstance(name, str):
+        if not isinstance(name, str) or not isinstance(params, dict):
             raise UnreadableGraphError(f"a {order.value} node carries no name")
-        if is_device_operation(name):
+        lifecycle.append((order, name, params))
+
+    open_starts: List[Tuple[str, int]] = []
+    completed: Set[int] = set()
+    for index, (order, name, params) in enumerate(lifecycle):
+        if order is NodeOrder.FUNCTION_START:
+            open_starts.append((name, index))
+            continue
+        for position in range(len(open_starts) - 1, -1, -1):
+            if open_starts[position][0] == name:
+                if str(params.get("aborted")).lower() != _ABORTED_PARAM_VALUE:
+                    completed.update((open_starts[position][1], index))
+                del open_starts[position]
+                break
+
+    for index, (order, name, _) in enumerate(lifecycle):
+        if index in completed and is_device_operation(name):
             names[order].append(name)
     return names
 

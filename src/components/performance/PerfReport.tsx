@@ -63,6 +63,8 @@ import { capitalizeString } from '../../functions/formatting';
 import { formatSyncedReportName } from '../../functions/reportRank';
 import { DeviceOperationLayoutTypes } from '../../model/APIData';
 import usePerfReportFiltering from './usePerfReportFiltering';
+import AllocationFailureSummary from './AllocationFailureSummary';
+import { AllocationFailureListing } from '../../model/AllocationFailure';
 
 enum SignpostSelectType {
     START,
@@ -80,8 +82,10 @@ interface PerformanceReportProps {
     isComparisonLoading?: boolean;
     maxCores: number;
     comparisonMaxCores?: number[];
+    allocationFailureListings?: AllocationFailureListing[];
 }
 
+const EMPTY_ALLOCATION_FAILURE_LISTINGS: AllocationFailureListing[] = [];
 const INITIAL_TAB_ID = 'perf-table-0'; // `perf-table-${index}`
 const STACKED_GROUP_BY = [StackedGroupBy.CATEGORY, StackedGroupBy.MEMORY, StackedGroupBy.OP];
 
@@ -106,6 +110,7 @@ const PerformanceReport = ({
     isComparisonLoading = false,
     maxCores,
     comparisonMaxCores = [],
+    allocationFailureListings = EMPTY_ALLOCATION_FAILURE_LISTINGS,
 }: PerformanceReportProps) => {
     const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
     const activeReportFolderName = useAtomValue(activePerformanceReportFolderNameAtom);
@@ -633,6 +638,7 @@ const PerformanceReport = ({
                 </div>
 
                 {/* Above the table: the table's height cap assumes nothing renders below it. */}
+                <AllocationFailureSummary listings={allocationFailureListings} />
                 {hiliteHighDispatch && !isStackedView && calcHighDispatchOps(processedRows)}
 
                 <Tabs

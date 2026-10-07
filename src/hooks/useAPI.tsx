@@ -43,6 +43,7 @@ import { L1PressureResult } from '../model/L1Pressure';
 import { buildL1PressureResult } from '../functions/l1Pressure';
 import { StackedPerfRow } from '../definitions/StackedPerfTable';
 import { isDeviceOperation } from '../functions/filterOperations';
+import { DeviceOperationNodeType, getLinkableDeviceOperationNames } from '../functions/linkableDeviceOperations';
 import { normalizeBufferPagesResponse } from '../functions/normalizeBufferPagesResponse';
 import { filterByOperationRange } from '../functions/filterByOperationRange';
 import {
@@ -184,8 +185,6 @@ const fetchOperationDetails = async (id: number | null): Promise<OperationDetail
         operationFileIdentifier: parseFileOperationIdentifier(operationDetails.stack_trace),
     };
 };
-
-type DeviceOperationNodeType = NodeType.function_start | NodeType.function_end;
 
 const getDeviceOperationNameList = (operation: OperationDescription, nodeType: DeviceOperationNodeType): string[] => {
     if (!Array.isArray(operation.device_operations)) {
@@ -872,7 +871,7 @@ const getDeviceOperationOrderCandidates = memoiseLatest(
         }
 
         for (const operation of operations) {
-            for (const name of operation.deviceOperationNameList) {
+            for (const name of getLinkableDeviceOperationNames(operation.device_operations, NodeType.function_start)) {
                 functionStartOperations.push({
                     name,
                     id: operation.id,
@@ -880,7 +879,7 @@ const getDeviceOperationOrderCandidates = memoiseLatest(
                 });
             }
 
-            for (const name of getDeviceOperationNameList(operation, NodeType.function_end)) {
+            for (const name of getLinkableDeviceOperationNames(operation.device_operations, NodeType.function_end)) {
                 functionEndOperations.push({
                     name,
                     id: operation.id,

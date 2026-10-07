@@ -49,6 +49,10 @@ vi.mock('../src/hooks/useAPI.tsx', () => ({
     usePerformanceReport: vi.fn(),
 }));
 
+vi.mock('../src/hooks/useAllocationFailures', () => ({
+    useAllocationFailures: () => ({ listings: [], allocationFailureByOpId: new Map() }),
+}));
+
 vi.mock('../src/functions/getServerConfig', () => ({
     default: () => ({ SERVER_MODE: true }),
     isFlagEnabled: (value: unknown) => value === true || value === 'true' || value === '1',
