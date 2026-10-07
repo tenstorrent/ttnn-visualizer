@@ -2,18 +2,20 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-import { memo, useMemo } from 'react';
+import { memo, useId, useMemo } from 'react';
 import { Checkbox, SegmentedControl, Size } from '@blueprintjs/core';
 import classNames from 'classnames';
 import { useAtom } from 'jotai';
-import { HOT_OPS_LIMITS, HotOpsSort } from '../../definitions/HotOps';
+import { DEFAULT_HOT_OPS_SETTINGS, HOT_OPS_LIMITS, HotOpsSort } from '../../definitions/HotOps';
 import { NO_PERF_DATA_LABEL } from '../../definitions/PerfOverlayStatus';
-import { formatDuration } from '../../functions/formatting';
-import { hotOpsPanelAtom } from '../../store/app';
-import { type HotOpRow, selectHotOpRows } from './opGraphHotOps';
+import { formatDuration, formatShareOfTotal } from '../../functions/formatting';
+import { isHotOpsSort } from '../../functions/hotOpsSettings';
+import { hotOpsSettingsAtom } from '../../store/app';
+import { type HotOpRow, getVisibleHotOpRows } from './opGraphHotOps';
 import { getPerfColorForNs } from './opGraphPerfOverlay';
 
 const ALL_LIMIT = 'all';
+const NO_RANK_LABEL = '–';
 
 const LIMIT_OPTIONS = [
     ...HOT_OPS_LIMITS.map((limit) => ({ label: `Top ${limit}`, value: String(limit) })),
@@ -24,6 +26,11 @@ const SORT_OPTIONS = [
     { label: 'Slowest first', value: HotOpsSort.DURATION },
     { label: 'By ID', value: HotOpsSort.OPERATION_ID },
 ];
+
+const limitFromOption = (value: string) =>
+    value === ALL_LIMIT
+        ? null
+        : (HOT_OPS_LIMITS.find((limit) => String(limit) === value) ?? DEFAULT_HOT_OPS_SETTINGS.limit);
 
 interface OpGraphHotOpsPanelProps {
     rows: readonly HotOpRow[];
@@ -45,21 +52,20 @@ const OpGraphHotOpsPanel = ({
     selectedOperationId,
     onSelectOperation,
 }: OpGraphHotOpsPanelProps) => {
-    const [{ limit, sort, hideUnlinked }, setState] = useAtom(hotOpsPanelAtom);
-    const visibleRows = useMemo(
-        () => selectHotOpRows(rows, { limit, sort, hideUnlinked }),
-        [rows, limit, sort, hideUnlinked],
-    );
-    const hasUnlinked = rows.length > linkedOpCount;
+    const titleId = useId();
+    const [settings, setSettings] = useAtom(hotOpsSettingsAtom);
+    const { limit, sort, hideUnlinked } = settings;
+    const visibleRows = useMemo(() => getVisibleHotOpRows(rows, settings), [rows, settings]);
+    const hasUnlinked = useMemo(() => rows.some((row) => row.rank === null), [rows]);
 
     return (
         <section
             className='op-graph-hot-ops'
-            aria-labelledby='op-graph-hot-ops-title'
+            aria-labelledby={titleId}
         >
             <header className='op-graph-hot-ops-header'>
                 <h2
-                    id='op-graph-hot-ops-title'
+                    id={titleId}
                     className='op-graph-hot-ops-title'
                 >
                     Slowest operations
@@ -71,22 +77,22 @@ const OpGraphHotOpsPanel = ({
                     size={Size.SMALL}
                     options={LIMIT_OPTIONS}
                     value={limit === null ? ALL_LIMIT : String(limit)}
-                    onValueChange={(value) =>
-                        setState((current) => ({ ...current, limit: value === ALL_LIMIT ? null : Number(value) }))
-                    }
+                    onValueChange={(value) => setSettings((current) => ({ ...current, limit: limitFromOption(value) }))}
                 />
                 <SegmentedControl
                     size={Size.SMALL}
                     options={SORT_OPTIONS}
                     value={sort}
-                    onValueChange={(value) => setState((current) => ({ ...current, sort: value as HotOpsSort }))}
+                    onValueChange={(value) =>
+                        setSettings((current) => (isHotOpsSort(value) ? { ...current, sort: value } : current))
+                    }
                 />
                 {hasUnlinked ? (
                     <Checkbox
                         className='op-graph-hot-ops-hide-unlinked'
                         label='Hide ops without perf data'
                         checked={hideUnlinked}
-                        onChange={() => setState((current) => ({ ...current, hideUnlinked: !current.hideUnlinked }))}
+                        onChange={() => setSettings((current) => ({ ...current, hideUnlinked: !current.hideUnlinked }))}
                     />
                 ) : null}
             </div>
@@ -121,7 +127,6 @@ interface HotOpRowButtonProps {
 
 const HotOpRowButton = memo(({ row, totalNs, color, isSelected, onSelect }: HotOpRowButtonProps) => {
     const { operationId, name, deviceTimeNs, rank } = row;
-    const share = deviceTimeNs !== null && totalNs > 0 ? `${((deviceTimeNs / totalNs) * 100).toFixed(1)}%` : '';
 
     return (
         <button
@@ -131,7 +136,7 @@ const HotOpRowButton = memo(({ row, totalNs, color, isSelected, onSelect }: HotO
             title={`${operationId} ${name}`}
             onClick={() => onSelect(operationId)}
         >
-            <span className='op-graph-hot-ops-rank'>{rank ?? '–'}</span>
+            <span className='op-graph-hot-ops-rank'>{rank ?? NO_RANK_LABEL}</span>
             <span
                 className='op-graph-hot-ops-swatch'
                 style={color === undefined ? undefined : { backgroundColor: color }}
@@ -142,7 +147,9 @@ const HotOpRowButton = memo(({ row, totalNs, color, isSelected, onSelect }: HotO
             <span className='op-graph-hot-ops-duration'>
                 {deviceTimeNs === null ? NO_PERF_DATA_LABEL : formatDuration(deviceTimeNs)}
             </span>
-            <span className='op-graph-hot-ops-share'>{share}</span>
+            <span className='op-graph-hot-ops-share'>
+                {deviceTimeNs === null ? '' : formatShareOfTotal(deviceTimeNs, totalNs)}
+            </span>
         </button>
     );
 });

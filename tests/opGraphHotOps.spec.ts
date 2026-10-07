@@ -4,7 +4,7 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { buildHotOpRows, selectHotOpRows } from '../src/components/operation-graph/opGraphHotOps';
+import { buildHotOpRows, getVisibleHotOpRows } from '../src/components/operation-graph/opGraphHotOps';
 import { buildOpGraphPerfOverlay } from '../src/components/operation-graph/opGraphPerfOverlay';
 import { HotOpsSort } from '../src/definitions/HotOps';
 import type { PerfOverlaySource } from '../src/functions/perfOverlay';
@@ -51,43 +51,45 @@ describe('buildHotOpRows', () => {
     });
 });
 
-describe('selectHotOpRows', () => {
+describe('getVisibleHotOpRows', () => {
     const all = buildHotOpRows(overlay, [1, 2, 3, 4, 5], NAMES);
 
     it('keeps the slowest ops up to the limit', () => {
-        expect(ids(selectHotOpRows(all, { limit: 2, sort: HotOpsSort.DURATION, hideUnlinked: true }))).toEqual([2, 3]);
+        expect(ids(getVisibleHotOpRows(all, { limit: 2, sort: HotOpsSort.DURATION, hideUnlinked: true }))).toEqual([
+            2, 3,
+        ]);
     });
 
     it('keeps every linked op with no limit', () => {
-        expect(ids(selectHotOpRows(all, { limit: null, sort: HotOpsSort.DURATION, hideUnlinked: true }))).toEqual([
+        expect(ids(getVisibleHotOpRows(all, { limit: null, sort: HotOpsSort.DURATION, hideUnlinked: true }))).toEqual([
             2, 3, 1,
         ]);
     });
 
     it('adds the ops without perf data after the ranked ones when asked', () => {
-        expect(ids(selectHotOpRows(all, { limit: null, sort: HotOpsSort.DURATION, hideUnlinked: false }))).toEqual([
+        expect(ids(getVisibleHotOpRows(all, { limit: null, sort: HotOpsSort.DURATION, hideUnlinked: false }))).toEqual([
             2, 3, 1, 4, 5,
         ]);
     });
 
     it('fills a limit with ranked ops before any op without perf data', () => {
-        expect(ids(selectHotOpRows(all, { limit: 4, sort: HotOpsSort.DURATION, hideUnlinked: false }))).toEqual([
+        expect(ids(getVisibleHotOpRows(all, { limit: 4, sort: HotOpsSort.DURATION, hideUnlinked: false }))).toEqual([
             2, 3, 1, 4,
         ]);
     });
 
     it('orders by id only the ops the limit kept', () => {
         // Sorting first would keep the lowest ids rather than the slowest ops.
-        expect(ids(selectHotOpRows(all, { limit: 2, sort: HotOpsSort.OPERATION_ID, hideUnlinked: true }))).toEqual([
+        expect(ids(getVisibleHotOpRows(all, { limit: 2, sort: HotOpsSort.OPERATION_ID, hideUnlinked: true }))).toEqual([
             2, 3,
         ]);
-        expect(ids(selectHotOpRows(all, { limit: 3, sort: HotOpsSort.OPERATION_ID, hideUnlinked: true }))).toEqual([
+        expect(ids(getVisibleHotOpRows(all, { limit: 3, sort: HotOpsSort.OPERATION_ID, hideUnlinked: true }))).toEqual([
             1, 2, 3,
         ]);
     });
 
     it('does not reorder the rows it was given', () => {
-        selectHotOpRows(all, { limit: null, sort: HotOpsSort.OPERATION_ID, hideUnlinked: false });
+        getVisibleHotOpRows(all, { limit: null, sort: HotOpsSort.OPERATION_ID, hideUnlinked: false });
 
         expect(ids(all)).toEqual([2, 3, 1, 4, 5]);
     });

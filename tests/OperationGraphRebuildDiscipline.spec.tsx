@@ -111,8 +111,20 @@ const PANNED_ZOOM = 0.5;
 // under test. These are the shapes the real view has.
 const PANE = { width: 1000, height: 800 };
 const TOOLBAR_HEIGHT = 150;
-const stubRect = (width: number, height: number) =>
-    ({ x: 0, y: 0, top: 0, left: 0, right: width, bottom: height, width, height, toJSON: () => ({}) }) as DOMRect;
+// Within the column's `clamp(280px, 26%, 360px)`.
+const SIDE_WIDTH = 300;
+const stubRect = (width: number, height: number, left = 0) =>
+    ({
+        x: left,
+        y: 0,
+        top: 0,
+        left,
+        right: left + width,
+        bottom: height,
+        width,
+        height,
+        toJSON: () => ({}),
+    }) as DOMRect;
 
 vi.mock('@xyflow/react', async () => {
     const { useState, createElement, Fragment } = await import('react');
@@ -279,9 +291,10 @@ import {
     activePerformanceReportAtom,
     activeProfilerReportAtom,
     criticalPathScopeAtom,
-    hotOpsPanelAtom,
+    hotOpsSettingsAtom,
+    isHotOpsEnabledAtom,
 } from '../src/store/app';
-import { DEFAULT_HOT_OPS_PANEL_STATE } from '../src/definitions/HotOps';
+import { DEFAULT_HOT_OPS_SETTINGS, HOT_OPS_ENABLED_STORAGE_KEY } from '../src/definitions/HotOps';
 import type { ReportFolder } from '../src/definitions/Reports';
 /* eslint-enable import/first */
 
@@ -529,9 +542,13 @@ beforeEach(() => {
     absolutePositionById.clear();
     viewportState.current = { x: 0, y: 0, zoom: PANNED_ZOOM };
     vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function measured(this: Element) {
-        return this.classList?.contains('op-graph-toolbar')
-            ? stubRect(PANE.width, TOOLBAR_HEIGHT)
-            : stubRect(PANE.width, PANE.height);
+        if (this.classList?.contains('op-graph-toolbar')) {
+            return stubRect(PANE.width, TOOLBAR_HEIGHT);
+        }
+        if (this.classList?.contains('op-graph-side')) {
+            return stubRect(SIDE_WIDTH, PANE.height, PANE.width - SIDE_WIDTH);
+        }
+        return stubRect(PANE.width, PANE.height);
     });
     harness.setNodes = null;
     harness.setEdges = null;
@@ -552,7 +569,8 @@ beforeEach(() => {
     // tests using the same fixture paths are the same scope, so it still needs
     // clearing.
     getDefaultStore().set(criticalPathScopeAtom, null);
-    getDefaultStore().set(hotOpsPanelAtom, DEFAULT_HOT_OPS_PANEL_STATE);
+    getDefaultStore().set(isHotOpsEnabledAtom, false);
+    getDefaultStore().set(hotOpsSettingsAtom, DEFAULT_HOT_OPS_SETTINGS);
 });
 
 afterEach(() => {
@@ -995,8 +1013,35 @@ describe('OperationGraphReactFlow slowest operations list', () => {
         expect(listedIds()).toEqual([5, 4, 3, 2, 1]);
     });
 
+    it('hides the list again once its switch is off', () => {
+        renderGraph(OPERATION_LIST, PERF_ROWS);
+        fireEvent.click(hotOpsSwitch());
+
+        fireEvent.click(hotOpsSwitch());
+
+        expect(listHeading()).toBeNull();
+    });
+
+    it('opens with the list the session left on', () => {
+        sessionStorage.setItem(HOT_OPS_ENABLED_STORAGE_KEY, 'true');
+
+        renderGraph(OPERATION_LIST, PERF_ROWS);
+
+        expect(hotOpsSwitch()).toBeChecked();
+        expect(listHeading()).toBeInTheDocument();
+    });
+
+    it('reads a stored flag it does not recognise as off', () => {
+        sessionStorage.setItem(HOT_OPS_ENABLED_STORAGE_KEY, '"yes"');
+
+        renderGraph(OPERATION_LIST, PERF_ROWS);
+
+        expect(hotOpsSwitch()).not.toBeChecked();
+        expect(listHeading()).toBeNull();
+    });
+
     it('stays hidden for a report that does not line up, even if it was left on', () => {
-        getDefaultStore().set(hotOpsPanelAtom, { ...DEFAULT_HOT_OPS_PANEL_STATE, isShown: true });
+        getDefaultStore().set(isHotOpsEnabledAtom, true);
 
         renderGraph(OPERATION_LIST, [{ id: 900, device_time: 10 }]);
 
@@ -1015,6 +1060,23 @@ describe('OperationGraphReactFlow slowest operations list', () => {
         expect(rowFor('3 matmul_c')).toHaveAttribute('aria-current', 'true');
         // The selection reaches the graph too, not just the panel.
         expect(nodeById(lastFlowRender().nodes, '3').selected).toBe(true);
+    });
+
+    it('brings a located node out from behind the list', () => {
+        // On screen at x 800–850, inside the column's band from 700: clear of the pane
+        // edge, so a reveal that ignored the column would not move at all.
+        absolutePositionById.set('3', { x: 1600, y: 800 });
+        renderGraph(OPERATION_LIST, PERF_ROWS);
+        fireEvent.click(hotOpsSwitch());
+        setViewport.mockClear();
+
+        fireEvent.click(rowFor('3 matmul_c'));
+
+        expect(setViewport).toHaveBeenCalledTimes(1);
+        const [viewport] = setViewport.mock.calls[0] as unknown as [{ x: number; y: number }];
+        const rightEdge = (1600 + STORE_NODE.width) * PANNED_ZOOM + viewport.x;
+        expect(rightEdge).toBeLessThanOrEqual(PANE.width - SIDE_WIDTH);
+        expect(viewport.y).toBe(0);
     });
 
     it('colours each swatch as its node is drawn', () => {
@@ -1644,11 +1706,11 @@ describe('OperationGraphReactFlow repeat blocks', () => {
         // Pans only. Recenter is an explicit request to move, not a licence to
         // rescale: the zoom stays wherever the user left it.
         expect(viewport.zoom).toBe(PANNED_ZOOM);
-        // The node's centre lands in the middle of the band the toolbar leaves,
-        // rather than the middle of the raw pane.
+        // The node's centre lands in the middle of the space the toolbar and the side
+        // column leave, rather than the middle of the raw pane.
         const centreX = (STORE_NODE.width / 2) * PANNED_ZOOM;
         const centreY = (STORE_NODE.height / 2) * PANNED_ZOOM;
-        expect(viewport.x + centreX).toBeCloseTo(PANE.width / 2, 5);
+        expect(viewport.x + centreX).toBeCloseTo((PANE.width - SIDE_WIDTH) / 2, 5);
         expect(viewport.y + centreY).toBeCloseTo(TOOLBAR_HEIGHT + (PANE.height - TOOLBAR_HEIGHT) / 2, 5);
     });
 
@@ -2253,7 +2315,10 @@ describe('OperationGraphReactFlow repeat blocks', () => {
             const [viewport] = setViewport.mock.calls[0] as unknown as [{ x: number; y: number }];
             // Centred on the absolute position: read relatively the node looks like it
             // sits at the origin and the pan lands a whole graph away.
-            expect(viewport.x + (4000 + STORE_NODE.width / 2) * PANNED_ZOOM).toBeCloseTo(PANE.width / 2, 5);
+            expect(viewport.x + (4000 + STORE_NODE.width / 2) * PANNED_ZOOM).toBeCloseTo(
+                (PANE.width - SIDE_WIDTH) / 2,
+                5,
+            );
         });
 
         it('orders the sequence by operation id, not by the order nodes are emitted', () => {
@@ -2863,5 +2928,49 @@ describe('OperationGraphReactFlow repeat blocks', () => {
         expect(screen.getByLabelText('Selected block details')).toHaveTextContent('layer_a + layer_b × 2');
         expect(hasClass(nodeById(lastFlowRender().nodes, FIRST_BLOCK_ID), 'op-graph-node-selected')).toBe(true);
         expect(hasClass(nodeById(lastFlowRender().nodes, '1'), 'op-graph-node-selected')).toBe(false);
+    });
+
+    describe('perf colours against folded block totals', () => {
+        // A folded block draws its members' sum, so the ramp spans past any single op.
+        const REPEAT_PERF_ROWS: PerfOverlaySource[] = REPEAT_OPERATION_LIST.map((op) => ({
+            id: op.id,
+            device_time: op.id * 10,
+        }));
+        const drawnColor = (nodeId: string) =>
+            asRenderedColor(String(perfColorOf(nodeById(lastFlowRender().nodes, nodeId))));
+        const listSwatch = (title: string) =>
+            within(screen.getByRole('region', { name: 'Slowest operations' }))
+                .getByTitle(title)
+                .querySelector<HTMLElement>('.op-graph-hot-ops-swatch');
+
+        const renderFoldedWithPerf = () => {
+            renderGraph(REPEAT_OPERATION_LIST, REPEAT_PERF_ROWS);
+            fireEvent.click(screen.getByRole('button', { name: 'Fold all repeats' }));
+            deliver(REPEAT_OPERATION_LIST, { expandedBlockIds: [] });
+        };
+
+        it('gives the selected op the colour its node is drawn in', () => {
+            renderFoldedWithPerf();
+            enableOverlay();
+
+            act(() => {
+                harness.onNodeClick?.(null, nodeById(lastFlowRender().nodes, '6'));
+            });
+
+            const metric = screen.getByText('Kernel duration').nextElementSibling as HTMLElement;
+            const swatch = metric.querySelector<HTMLElement>('.perf-overlay-op-metric-swatch');
+            expect(swatch?.style.backgroundColor).toBe(drawnColor('6'));
+        });
+
+        it('keeps the list swatches the same whether or not the bars are drawn', () => {
+            renderFoldedWithPerf();
+            fireEvent.click(screen.getByRole('checkbox', { name: /^Slowest operations/ }));
+            const withoutBars = listSwatch('6 suffix')?.style.backgroundColor;
+
+            enableOverlay();
+
+            expect(withoutBars).toBe(drawnColor('6'));
+            expect(listSwatch('6 suffix')?.style.backgroundColor).toBe(withoutBars);
+        });
     });
 });

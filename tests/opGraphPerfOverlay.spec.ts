@@ -12,6 +12,7 @@ import {
     buildRenderedPerfStyling,
     getPerfColorForNs,
     getPerfHoverLabel,
+    getRenderedPerfRange,
 } from '../src/components/operation-graph/opGraphPerfOverlay';
 import { NO_PERF_DATA_LABEL, PerfOverlayStatus } from '../src/definitions/PerfOverlayStatus';
 import { formatDuration } from '../src/functions/formatting';
@@ -263,6 +264,29 @@ describe('buildRenderedPerfStyling range', () => {
         const overlay = buildOpGraphPerfOverlay(rows([1, 10], [2, 1_000]), true, [1, 2]);
 
         expect(buildRenderedPerfStyling(overlay, false, [{ id: '1', operationId: 1 }])).toBeNull();
+    });
+});
+
+describe('getRenderedPerfRange', () => {
+    // What the slowest-operations list keys its swatches to while the bars are off.
+    it('matches the range the bars are drawn against', () => {
+        const overlay = buildOpGraphPerfOverlay(rows([1, 100], [2, 100], [3, 100]), true, [1, 2, 3]);
+        const nodes = [
+            { id: '1', operationId: 1 },
+            { id: 'block:2', operationId: 2, memberOperationIds: [2, 3] },
+        ];
+        const { minNs, maxNs } = buildRenderedPerfStyling(overlay, true, nodes)!;
+
+        expect(getRenderedPerfRange(overlay, nodes)).toEqual({ minNs, maxNs });
+    });
+
+    it('falls back to the per-operation range when nothing rendered carries a row', () => {
+        const overlay = buildOpGraphPerfOverlay(rows([1, 10], [2, 1_000]), true, [1, 2]);
+
+        expect(getRenderedPerfRange(overlay, [{ id: '9', operationId: 9 }])).toEqual({
+            minNs: overlay.minNs,
+            maxNs: overlay.maxNs,
+        });
     });
 });
 

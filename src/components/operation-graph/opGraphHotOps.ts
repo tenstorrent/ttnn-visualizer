@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-import { type HotOpsPanelState, HotOpsSort } from '../../definitions/HotOps';
+import { type HotOpsSettings, HotOpsSort } from '../../definitions/HotOps';
 import type { OpGraphPerfOverlay } from './opGraphPerfOverlay';
 
 export interface HotOpRow {
@@ -43,9 +43,9 @@ export const buildHotOpRows = (
 };
 
 /** The rows to list: the limit takes the slowest, and the sort only orders what it kept. */
-export const selectHotOpRows = (
+export const getVisibleHotOpRows = (
     rows: readonly HotOpRow[],
-    { limit, sort, hideUnlinked }: Pick<HotOpsPanelState, 'limit' | 'sort' | 'hideUnlinked'>,
+    { limit, sort, hideUnlinked }: Omit<HotOpsSettings, 'limit'> & { limit: number | null },
 ): HotOpRow[] => {
     const eligible = hideUnlinked ? rows.filter((row) => row.rank !== null) : rows;
     const kept = limit === null ? [...eligible] : eligible.slice(0, limit);

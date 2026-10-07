@@ -10,11 +10,10 @@ import { Provider, createStore } from 'jotai';
 import OpGraphHotOpsPanel from '../src/components/operation-graph/OpGraphHotOpsPanel';
 import { buildHotOpRows } from '../src/components/operation-graph/opGraphHotOps';
 import { buildOpGraphPerfOverlay, getPerfColorForNs } from '../src/components/operation-graph/opGraphPerfOverlay';
+import { HOT_OPS_SETTINGS_STORAGE_KEY } from '../src/definitions/HotOps';
 import { NO_PERF_DATA_LABEL } from '../src/definitions/PerfOverlayStatus';
 import { formatDuration } from '../src/functions/formatting';
 import type { PerfOverlaySource } from '../src/functions/perfOverlay';
-
-const STORAGE_KEY = 'opGraphHotOpsPanel';
 
 // Twelve linked ops, so the default top 10 has something to leave out; op N takes N µs.
 const LINKED_IDS = Array.from({ length: 12 }, (_, index) => index + 1);
@@ -141,13 +140,32 @@ describe('OpGraphHotOpsPanel controls', () => {
         expect(rowFor(40).querySelector<HTMLElement>('.op-graph-hot-ops-swatch')?.style.backgroundColor).toBe('');
     });
 
+    it('opens with the settings the session left', () => {
+        sessionStorage.setItem(
+            HOT_OPS_SETTINGS_STORAGE_KEY,
+            JSON.stringify({ limit: 25, sort: 'operationId', hideUnlinked: true }),
+        );
+
+        renderPanel();
+
+        expect(listedIds()).toEqual(LINKED_IDS);
+    });
+
+    it('opens on the defaults when the stored settings are unreadable', () => {
+        sessionStorage.setItem(HOT_OPS_SETTINGS_STORAGE_KEY, 'null');
+
+        renderPanel();
+
+        expect(listedIds()).toEqual([12, 11, 10, 9, 8, 7, 6, 5, 4, 3]);
+    });
+
     it('keeps its settings for the browser session', () => {
         renderPanel();
 
         choose('Top 100');
         choose('By ID');
 
-        expect(JSON.parse(sessionStorage.getItem(STORAGE_KEY) ?? '{}')).toMatchObject({
+        expect(JSON.parse(sessionStorage.getItem(HOT_OPS_SETTINGS_STORAGE_KEY) ?? '{}')).toMatchObject({
             limit: 100,
             sort: 'operationId',
         });

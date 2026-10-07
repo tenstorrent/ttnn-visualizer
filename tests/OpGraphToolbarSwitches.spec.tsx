@@ -25,7 +25,7 @@ interface RenderToolbarOptions {
     status: PerfOverlayStatus;
     onPerfOverlayChange?: (next: boolean) => void;
     onCriticalPathChange?: (next: boolean) => void;
-    isHotOpsShown?: boolean;
+    isHotOpsActive?: boolean;
     onHotOpsChange?: (next: boolean) => void;
     onDimUnrelatedEdgesChange?: (next: boolean) => void;
     isDisabled?: boolean;
@@ -40,7 +40,7 @@ const renderToolbar = ({
     status,
     onPerfOverlayChange = vi.fn(),
     onCriticalPathChange = vi.fn(),
-    isHotOpsShown = false,
+    isHotOpsActive = false,
     onHotOpsChange = vi.fn(),
     onDimUnrelatedEdgesChange = vi.fn(),
     isDisabled = false,
@@ -84,7 +84,7 @@ const renderToolbar = ({
             onPerfOverlayChange={onPerfOverlayChange}
             isCriticalPathActive={false}
             onCriticalPathChange={onCriticalPathChange}
-            isHotOpsShown={isHotOpsShown}
+            isHotOpsActive={isHotOpsActive}
             onHotOpsChange={onHotOpsChange}
             perfOverlayStatus={status}
             linkedOpCount={180}
@@ -226,7 +226,7 @@ describe('slowest operations switch', () => {
     });
 
     it('reads as on while the list is shown', () => {
-        renderToolbar({ status: PerfOverlayStatus.READY, isHotOpsShown: true });
+        renderToolbar({ status: PerfOverlayStatus.READY, isHotOpsActive: true });
 
         expect(hotOpsSwitch().input).toBeChecked();
     });

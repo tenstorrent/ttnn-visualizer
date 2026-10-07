@@ -16,22 +16,26 @@ export enum PerfOverlayStatus {
 // different states.
 export const NO_PERF_DATA_LABEL = 'No perf data';
 
+// Shared by every perf-gated switch: an unmatched report is the same absence for each.
+const UNLINKED_PERF_TOOLTIP = "Loaded performance report doesn't match this graph (no operations in common).";
+
 export const PERF_OVERLAY_TOOLTIP: Record<PerfOverlayStatus, string> = {
     [PerfOverlayStatus.UNAVAILABLE]: 'Load a performance report to enable perf overlay.',
-    [PerfOverlayStatus.UNLINKED]: "Loaded performance report doesn't match this graph (no operations in common).",
+    [PerfOverlayStatus.UNLINKED]: UNLINKED_PERF_TOOLTIP,
     [PerfOverlayStatus.READY]: 'Size and colour a bar on each node by per-op kernel duration.',
 };
 
 // Same statuses gate the critical path: both read per-op durations, so a report
 // that can't feed the bars can't weigh the path either. #1613
-export const HOT_OPS_TOOLTIP: Record<PerfOverlayStatus, string> = {
-    [PerfOverlayStatus.UNAVAILABLE]: 'Load a performance report to list the slowest operations.',
-    [PerfOverlayStatus.UNLINKED]: "Loaded performance report doesn't match this graph (no operations in common).",
-    [PerfOverlayStatus.READY]: 'List the slowest operations by kernel duration; click one to select it.',
-};
-
 export const CRITICAL_PATH_TOOLTIP: Record<PerfOverlayStatus, string> = {
     [PerfOverlayStatus.UNAVAILABLE]: 'Load a performance report to enable critical-path highlighting.',
-    [PerfOverlayStatus.UNLINKED]: "Loaded performance report doesn't match this graph (no operations in common).",
+    [PerfOverlayStatus.UNLINKED]: UNLINKED_PERF_TOOLTIP,
     [PerfOverlayStatus.READY]: 'Trace the longest cumulative-duration path through the graph.',
+};
+
+// And the slowest-operations list, which ranks the same durations. #1612
+export const HOT_OPS_TOOLTIP: Record<PerfOverlayStatus, string> = {
+    [PerfOverlayStatus.UNAVAILABLE]: 'Load a performance report to list the slowest operations.',
+    [PerfOverlayStatus.UNLINKED]: UNLINKED_PERF_TOOLTIP,
+    [PerfOverlayStatus.READY]: 'List the slowest operations by kernel duration; click one to select it.',
 };

@@ -62,9 +62,9 @@ interface PerfGatedSwitchProps {
     isDisabled: boolean;
 }
 
-// Both switches read per-op durations, so a report that can't feed the bars can't
-// weigh the path either — the gate below is that shared contract, held in one
-// place so the two can't drift apart. #1613
+// The perf switches all read per-op durations, so a report that can't feed the
+// bars can't weigh the path or rank the list either — the gate below is that shared
+// contract, held in one place so they can't drift apart. #1613
 //
 // The tooltip is bound to the Switch, not a wrapper: Blueprint targets the
 // enclosing label, which still emits pointer events while the input is disabled —
@@ -114,7 +114,7 @@ interface OpGraphToolbarProps {
     onPerfOverlayChange: (next: boolean) => void;
     isCriticalPathActive: boolean;
     onCriticalPathChange: (next: boolean) => void;
-    isHotOpsShown: boolean;
+    isHotOpsActive: boolean;
     onHotOpsChange: (next: boolean) => void;
     perfOverlayStatus: PerfOverlayStatus;
     linkedOpCount: number;
@@ -161,7 +161,7 @@ const OpGraphToolbar = memo(
         onPerfOverlayChange,
         isCriticalPathActive,
         onCriticalPathChange,
-        isHotOpsShown,
+        isHotOpsActive,
         onHotOpsChange,
         perfOverlayStatus,
         linkedOpCount,
@@ -378,7 +378,7 @@ const OpGraphToolbar = memo(
                 <PerfGatedSwitch
                     tooltipByStatus={HOT_OPS_TOOLTIP}
                     label='Slowest operations'
-                    checked={isHotOpsShown}
+                    checked={isHotOpsActive}
                     onChange={onHotOpsChange}
                     perfOverlayStatus={perfOverlayStatus}
                     isDisabled={isDisabled}

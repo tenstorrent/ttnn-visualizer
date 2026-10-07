@@ -10,17 +10,20 @@ export enum HotOpsSort {
 
 export const HOT_OPS_LIMITS = [10, 25, 100] as const;
 
-export interface HotOpsPanelState {
-    isShown: boolean;
-    /** Rows to show, or `null` for all of them. */
-    limit: number | null;
+/** Rows to show, or `null` for all of them. */
+export type HotOpsLimit = (typeof HOT_OPS_LIMITS)[number] | null;
+
+export interface HotOpsSettings {
+    limit: HotOpsLimit;
     sort: HotOpsSort;
     hideUnlinked: boolean;
 }
 
-export const DEFAULT_HOT_OPS_PANEL_STATE: HotOpsPanelState = {
-    isShown: false,
+export const DEFAULT_HOT_OPS_SETTINGS: HotOpsSettings = {
     limit: HOT_OPS_LIMITS[0],
     sort: HotOpsSort.DURATION,
     hideUnlinked: true,
 };
+
+export const HOT_OPS_ENABLED_STORAGE_KEY = 'opGraphHotOpsEnabled';
+export const HOT_OPS_SETTINGS_STORAGE_KEY = 'opGraphHotOpsSettings';
