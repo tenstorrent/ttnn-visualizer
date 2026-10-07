@@ -9,6 +9,7 @@ import { HIGH_DISPATCH_THRESHOLD_US } from '../definitions/Performance';
 import { BufferType } from '../model/BufferType';
 import { DeviceOperationLayoutTypes } from '../model/APIData';
 import { L1PressureMetrics } from '../model/L1Pressure';
+import { AllocationFailure } from '../model/AllocationFailure';
 import { nsToUs } from './math';
 import { parsePerfRowTensorAttributes } from './parsePerfRowTensorAttributes';
 import { isFlagEnabled } from './getServerConfig';
@@ -51,6 +52,7 @@ export const enrichRowData = (
     rows: PerfTableRow[],
     opIdsMap: { perfId?: string; opId: number }[],
     l1PressureMap: Map<number, L1PressureMetrics> | null,
+    allocationFailureByOpId: Map<number, AllocationFailure> | null = null,
 ): TypedPerfTableRow[] => {
     // Build the perf-id -> op-id lookup once so enrichment stays O(N) instead of O(N·M) — the
     // previous `.find()` per row scaled with both row count and the active report's op count.
@@ -105,6 +107,7 @@ export const enrichRowData = (
             l1_free_segments: l1Pressure?.freeSegments ?? null,
             l1_largest_free: l1Pressure?.largestFreeBytes ?? null,
             l1_largest_free_percent: l1Pressure?.largestFreePercent ?? null,
+            allocation_failure: (op !== undefined ? allocationFailureByOpId?.get(op) : undefined) ?? null,
             ...getRowAttributes(row),
             isFirstHashOccurrence: true, // Default to true, will be updated if needed in next step
         };

@@ -10,6 +10,7 @@ import { DeviceOperationLayoutTypes } from '../src/model/APIData';
 import { OpType } from '../src/definitions/Performance';
 import { BoundAnalysis } from '../src/definitions/PerfTable';
 import { OperationCategories } from '../src/definitions/StackedPerfTable';
+import { makeAllocationFailure } from './helpers/allocationFailure';
 
 // tt-perf-report emits a CSV whose columns (id, total_percent, bound, op_code, device, device_time,
 // op_to_op_gap, cores, dram, dram_percent, flops, flops_percent, ...) reach the frontend as strings.
@@ -222,5 +223,37 @@ describe('enrichRowData — typed conversion of tt-perf-report values', () => {
         const [row] = enrichRowData([makeRawRow({ id: '7' })], [{ perfId: '7', opId: 42 }], null);
 
         expect(row.op).toBe(42);
+    });
+
+    describe('allocation failures', () => {
+        const failure = makeAllocationFailure({ operationId: 42 });
+        const failureByOpId = new Map([[42, failure]]);
+
+        it('attaches the failure recorded for the linked operation', () => {
+            const [linked, other] = enrichRowData(
+                [makeRawRow({ id: '7' }), makeRawRow({ id: '8' })],
+                [
+                    { perfId: '7', opId: 42 },
+                    { perfId: '8', opId: 43 },
+                ],
+                null,
+                failureByOpId,
+            );
+
+            expect(linked.allocation_failure).toBe(failure);
+            expect(other.allocation_failure).toBeNull();
+        });
+
+        it('attaches nothing without a failure map, as comparison datasets are enriched', () => {
+            const [row] = enrichRowData([makeRawRow({ id: '7' })], [{ perfId: '7', opId: 42 }], null, null);
+
+            expect(row.allocation_failure).toBeNull();
+        });
+
+        it('attaches nothing to a row with no linked operation', () => {
+            const [row] = enrichRowData([makeRawRow({ id: '7' })], [], null, failureByOpId);
+
+            expect(row.allocation_failure).toBeNull();
+        });
     });
 });

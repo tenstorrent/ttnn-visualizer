@@ -174,6 +174,11 @@ memory report to a performance report. `top_ops` then gives each row an `operati
 and `operation_detail` lists an operation's `perf_rows` with device time in microseconds;
 its own `duration` is host seconds.
 
+A device operation whose launch threw — an allocation failure, for one — never reached the
+device and has no performance row, so the match leaves it out. Left in, it would put a name in
+the order that no row answers, and a report with a failure would usually not link at all. Newer captures mark its scope `aborted`; older ones leave it
+unclosed. The operation keeps any earlier device operations that did run.
+
 Every response that carries the link says how it went in `operation_link`:
 
 - `linked` names the rank the ids belong to — the CSV records no rank, and rank 0 is what

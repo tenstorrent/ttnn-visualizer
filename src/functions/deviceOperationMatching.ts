@@ -181,8 +181,11 @@ export const matchDeviceOperationOrdersToPerf = (
         return functionStartMatch;
     }
 
-    // An interrupted capture can omit function-end events. Since alignment
-    // tolerates trailing perf rows, only a complete reordering is safe to retry.
+    // Since alignment tolerates trailing perf rows, only a complete reordering is
+    // safe to retry: a shorter end order could otherwise match a prefix. Orders built
+    // by `getLinkableDeviceOperations` always hold the same operations -- it drops a
+    // start its capture never closed (an interrupted capture, or a failed launch) from
+    // both -- so this guards candidates assembled any other way.
     if (!hasSameDeviceOperations(functionStartOperations, functionEndOperations)) {
         return [];
     }
