@@ -6,7 +6,7 @@ import '@testing-library/jest-dom/vitest';
 import type { ReactNode } from 'react';
 import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { getDefaultStore } from 'jotai';
 
 import type { NodeChange } from '@xyflow/react';
@@ -275,7 +275,13 @@ import {
 import { NO_PERF_DATA_LABEL } from '../src/definitions/PerfOverlayStatus';
 import { formatDuration } from '../src/functions/formatting';
 import type { PerfOverlaySource } from '../src/functions/perfOverlay';
-import { activePerformanceReportAtom, activeProfilerReportAtom, criticalPathScopeAtom } from '../src/store/app';
+import {
+    activePerformanceReportAtom,
+    activeProfilerReportAtom,
+    criticalPathScopeAtom,
+    hotOpsPanelAtom,
+} from '../src/store/app';
+import { DEFAULT_HOT_OPS_PANEL_STATE } from '../src/definitions/HotOps';
 import type { ReportFolder } from '../src/definitions/Reports';
 /* eslint-enable import/first */
 
@@ -546,6 +552,7 @@ beforeEach(() => {
     // tests using the same fixture paths are the same scope, so it still needs
     // clearing.
     getDefaultStore().set(criticalPathScopeAtom, null);
+    getDefaultStore().set(hotOpsPanelAtom, DEFAULT_HOT_OPS_PANEL_STATE);
 });
 
 afterEach(() => {
@@ -966,6 +973,59 @@ describe('OperationGraphReactFlow perf overlay panel wiring', () => {
 
         expect(metricValue()).toHaveTextContent(NO_PERF_DATA_LABEL);
         expect(metricValue().querySelector('.perf-overlay-op-metric-swatch')).toBeNull();
+    });
+});
+
+describe('OperationGraphReactFlow slowest operations list', () => {
+    const hotOpsSwitch = () => screen.getByRole('checkbox', { name: /^Slowest operations/ }) as HTMLInputElement;
+    const listHeading = () => screen.queryByRole('heading', { name: 'Slowest operations' });
+    const listedIds = () =>
+        Array.from(document.querySelectorAll('.op-graph-hot-ops-id'), (cell) => Number(cell.textContent));
+    // Scoped to the list: the details heading carries the same title once an op is selected.
+    const rowFor = (title: string) =>
+        within(screen.getByRole('region', { name: 'Slowest operations' })).getByTitle(title);
+
+    it('shows the list, slowest first, once its switch is on', () => {
+        renderGraph(OPERATION_LIST, PERF_ROWS);
+        expect(listHeading()).toBeNull();
+
+        fireEvent.click(hotOpsSwitch());
+
+        expect(listHeading()).toBeInTheDocument();
+        expect(listedIds()).toEqual([5, 4, 3, 2, 1]);
+    });
+
+    it('stays hidden for a report that does not line up, even if it was left on', () => {
+        getDefaultStore().set(hotOpsPanelAtom, { ...DEFAULT_HOT_OPS_PANEL_STATE, isShown: true });
+
+        renderGraph(OPERATION_LIST, [{ id: 900, device_time: 10 }]);
+
+        expect(listHeading()).toBeNull();
+        expect(hotOpsSwitch()).toBeDisabled();
+        expect(hotOpsSwitch()).not.toBeChecked();
+    });
+
+    it('selects the op a row names and shows its details below', () => {
+        renderGraph(OPERATION_LIST, PERF_ROWS);
+        fireEvent.click(hotOpsSwitch());
+
+        fireEvent.click(rowFor('3 matmul_c'));
+
+        expect(screen.getByRole('heading', { name: '3 matmul_c' })).toBeInTheDocument();
+        expect(rowFor('3 matmul_c')).toHaveAttribute('aria-current', 'true');
+        // The selection reaches the graph too, not just the panel.
+        expect(nodeById(lastFlowRender().nodes, '3').selected).toBe(true);
+    });
+
+    it('colours each swatch as its node is drawn', () => {
+        renderGraph(OPERATION_LIST, PERF_ROWS);
+        enableOverlay();
+        fireEvent.click(hotOpsSwitch());
+
+        const swatch = rowFor('4 relu_d').querySelector<HTMLElement>('.op-graph-hot-ops-swatch');
+        expect(swatch?.style.backgroundColor).toBe(
+            asRenderedColor(String(perfColorOf(nodeById(lastFlowRender().nodes, '4')))),
+        );
     });
 });
 
