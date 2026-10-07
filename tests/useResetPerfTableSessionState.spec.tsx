@@ -9,12 +9,14 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { Button } from '@blueprintjs/core';
 import { BufferType } from '../src/model/BufferType';
 import { DeviceOperationLayoutTypes } from '../src/model/APIData';
+import { OperationCategories } from '../src/definitions/StackedPerfTable';
 import { useResetPerfTableSessionState } from '../src/hooks/useResetPerfTableSessionState';
 import {
     bufferTypeFilterListAtom,
     durationBucketFilterListAtom,
     layoutFilterListAtom,
     mathFilterListAtom,
+    opCategoryFilterListAtom,
     rawOpCodeFilterListAtom,
     selectedPerfRowIdAtom,
 } from '../src/store/app';
@@ -27,6 +29,7 @@ const SEEDED_STATE: AtomProviderInitialValues = [
     [rawOpCodeFilterListAtom, ['Matmul']],
     [bufferTypeFilterListAtom, [BufferType.L1]],
     [layoutFilterListAtom, [DeviceOperationLayoutTypes.TILE]],
+    [opCategoryFilterListAtom, [OperationCategories.CCL]],
     [durationBucketFilterListAtom, [10]],
 ];
 
@@ -40,6 +43,7 @@ function Probe() {
             <span data-testid='raw-op-filter'>{useAtomValue(rawOpCodeFilterListAtom).join(',')}</span>
             <span data-testid='buffer-filter'>{useAtomValue(bufferTypeFilterListAtom).join(',')}</span>
             <span data-testid='layout-filter'>{useAtomValue(layoutFilterListAtom).join(',')}</span>
+            <span data-testid='op-category-filter'>{useAtomValue(opCategoryFilterListAtom).join(',')}</span>
             <span data-testid='duration-filter'>{useAtomValue(durationBucketFilterListAtom).join(',')}</span>
             <Button
                 type='button'
@@ -73,6 +77,7 @@ describe('useResetPerfTableSessionState', () => {
         expect(screen.getByTestId('raw-op-filter').textContent).toBe('');
         expect(screen.getByTestId('buffer-filter').textContent).toBe('');
         expect(screen.getByTestId('layout-filter').textContent).toBe('');
+        expect(screen.getByTestId('op-category-filter').textContent).toBe('');
         expect(screen.getByTestId('duration-filter').textContent).toBe('');
     });
 });

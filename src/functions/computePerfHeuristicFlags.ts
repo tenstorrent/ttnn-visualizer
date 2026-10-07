@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-import { BoundType } from '../definitions/PerfTable';
+import { BoundAnalysis, BoundType } from '../definitions/PerfTable';
 import { TypedPerfTableRow } from '../model/PerfTable';
 import { PERF_HEURISTIC_THRESHOLDS, PerfHeuristicFlag } from '../definitions/PerfHeuristics';
 import { OpType } from '../definitions/Performance';
@@ -15,6 +15,12 @@ interface RowHeuristicEvaluation {
     flags: PerfHeuristicFlag[];
     details: Partial<Record<PerfHeuristicFlag, string>> | undefined;
 }
+
+// The ideal time behind utilisation is tt-metal's op perf model, which is most trustworthy for the
+// ops tt-perf-report also models; say so on the ops it does not. tt-perf-report decides that by
+// op-code name, so the note must not claim the op is not a convolution (Conv3d falls outside it).
+export const LOW_UTILISATION_UNMODELLED_NOTE =
+    'tt-perf-report has no roofline model for this op, so the ideal time this compares against is less reliable.';
 
 const { LOW_CORE_UTILISATION_RATIO, UNDERUTILISED_CORES_RATIO, MIN_TOTAL_PERCENT } = PERF_HEURISTIC_THRESHOLDS;
 
@@ -96,7 +102,12 @@ function evaluateRowHeuristics(row: TypedPerfTableRow, maxCores: number): RowHeu
 
         if (utilisation > 0 && utilisation < LOW_CORE_UTILISATION_RATIO) {
             flags.push(PerfHeuristicFlag.LOW_UTILISATION);
-            details[PerfHeuristicFlag.LOW_UTILISATION] = `Core utilisation: ${formatPercentage(utilisation * 100)}`;
+            const utilisationDetail = `Core utilisation: ${formatPercentage(utilisation * 100)}`;
+
+            details[PerfHeuristicFlag.LOW_UTILISATION] =
+                row.bound_analysis === BoundAnalysis.NONE
+                    ? `${utilisationDetail}. ${LOW_UTILISATION_UNMODELLED_NOTE}`
+                    : utilisationDetail;
         }
     }
 

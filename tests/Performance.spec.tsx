@@ -24,12 +24,14 @@ import {
     durationBucketFilterListAtom,
     layoutFilterListAtom,
     mathFilterListAtom,
+    opCategoryFilterListAtom,
     rawOpCodeFilterListAtom,
     selectedPerfRowIdAtom,
     selectedPerformanceRangeAtom,
 } from '../src/store/app';
 import { BufferType } from '../src/model/BufferType';
 import { DeviceOperationLayoutTypes } from '../src/model/APIData';
+import { OperationCategories } from '../src/definitions/StackedPerfTable';
 import { L1PressureStatus } from '../src/model/L1Pressure';
 import { PerfTableRow } from '../src/model/PerfTable';
 import { PerfHeuristicFlag } from '../src/definitions/PerfHeuristics';
@@ -129,6 +131,7 @@ function PerformanceController() {
     const [mathFilterList, setMathFilterList] = useAtom(mathFilterListAtom);
     const [bufferTypeFilterList, setBufferTypeFilterList] = useAtom(bufferTypeFilterListAtom);
     const [layoutFilterList, setLayoutFilterList] = useAtom(layoutFilterListAtom);
+    const [opCategoryFilterList, setOpCategoryFilterList] = useAtom(opCategoryFilterListAtom);
     const [durationBucketFilterList, setDurationBucketFilterList] = useAtom(durationBucketFilterListAtom);
     const setReport = useSetAtom(activePerformanceReportAtom);
 
@@ -139,6 +142,7 @@ function PerformanceController() {
             <span data-testid='math-filter-probe'>{formatFilterProbe(mathFilterList)}</span>
             <span data-testid='buffer-type-filter-probe'>{formatFilterProbe(bufferTypeFilterList)}</span>
             <span data-testid='layout-filter-probe'>{formatFilterProbe(layoutFilterList)}</span>
+            <span data-testid='op-category-filter-probe'>{formatFilterProbe(opCategoryFilterList)}</span>
             <span data-testid='duration-bucket-filter-probe'>{formatFilterProbe(durationBucketFilterList)}</span>
             <button
                 type='button'
@@ -155,6 +159,7 @@ function PerformanceController() {
                     setMathFilterList([MATH_FIDELITY]);
                     setBufferTypeFilterList([BufferType.L1]);
                     setLayoutFilterList([DeviceOperationLayoutTypes.INTERLEAVED]);
+                    setOpCategoryFilterList([OperationCategories.CCL]);
                     setDurationBucketFilterList([DURATION_BUCKET_MIN_US]);
                 }}
             >
@@ -365,6 +370,7 @@ describe('Performance route', () => {
         expect(screen.getByTestId('math-filter-probe')).toHaveTextContent(MATH_FIDELITY);
         expect(screen.getByTestId('buffer-type-filter-probe')).toHaveTextContent(String(BufferType.L1));
         expect(screen.getByTestId('layout-filter-probe')).toHaveTextContent(DeviceOperationLayoutTypes.INTERLEAVED);
+        expect(screen.getByTestId('op-category-filter-probe')).toHaveTextContent(OperationCategories.CCL);
         expect(screen.getByTestId('duration-bucket-filter-probe')).toHaveTextContent(String(DURATION_BUCKET_MIN_US));
 
         fireEvent.click(screen.getByTestId('set-report-b'));
@@ -373,6 +379,7 @@ describe('Performance route', () => {
         expect(screen.getByTestId('math-filter-probe')).toHaveTextContent('empty');
         expect(screen.getByTestId('buffer-type-filter-probe')).toHaveTextContent('empty');
         expect(screen.getByTestId('layout-filter-probe')).toHaveTextContent('empty');
+        expect(screen.getByTestId('op-category-filter-probe')).toHaveTextContent('empty');
         expect(screen.getByTestId('duration-bucket-filter-probe')).toHaveTextContent('empty');
     });
 
@@ -395,6 +402,7 @@ describe('Performance route', () => {
         expect(screen.getByTestId('math-filter-probe')).toHaveTextContent(MATH_FIDELITY);
         expect(screen.getByTestId('buffer-type-filter-probe')).toHaveTextContent(String(BufferType.L1));
         expect(screen.getByTestId('layout-filter-probe')).toHaveTextContent(DeviceOperationLayoutTypes.INTERLEAVED);
+        expect(screen.getByTestId('op-category-filter-probe')).toHaveTextContent(OperationCategories.CCL);
         expect(screen.getByTestId('duration-bucket-filter-probe')).toHaveTextContent(String(DURATION_BUCKET_MIN_US));
     });
 
@@ -433,6 +441,7 @@ describe('Performance route', () => {
         expect(screen.getByTestId('math-filter-probe')).toHaveTextContent(MATH_FIDELITY);
         expect(screen.getByTestId('buffer-type-filter-probe')).toHaveTextContent(String(BufferType.L1));
         expect(screen.getByTestId('layout-filter-probe')).toHaveTextContent(DeviceOperationLayoutTypes.INTERLEAVED);
+        expect(screen.getByTestId('op-category-filter-probe')).toHaveTextContent(OperationCategories.CCL);
         expect(screen.getByTestId('duration-bucket-filter-probe')).toHaveTextContent(String(DURATION_BUCKET_MIN_US));
     });
 

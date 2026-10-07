@@ -933,6 +933,8 @@ class TestOperationDetailLink:
                 "device_time": 9.0,
                 "cores": None,
                 "bound": None,
+                "bound_analysis": None,
+                "op_category": None,
             }
         ]
         assert result["perf_row_count"] == 1

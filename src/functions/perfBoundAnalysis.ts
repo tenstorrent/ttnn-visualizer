@@ -2,8 +2,10 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-import { BoundAnalysis, ColumnKeys } from '../definitions/PerfTable';
+import { BoundAnalysis, BoundType, ColumnKeys, ROOFLINE_BOUND_THRESHOLD_PERCENT } from '../definitions/PerfTable';
 import { OpType } from '../definitions/Performance';
+import { CellColour } from '../definitions/CellColour';
+import { isCountableDeviceTime } from './durationBuckets';
 import { TypedPerfTableRow } from '../model/PerfTable';
 
 export const NOT_ANALYSED_LABEL = 'n/a';
@@ -17,6 +19,12 @@ export const FLOPS_ONLY_REASON =
 
 export const MISSING_INPUTS_REASON =
     'Not measured: the trace lacks inputs the roofline model needs for this op, so no figure could be derived.';
+
+export const SLOW_BOUND_REASON = `Analysed, but neither DRAM nor FLOPs explains the duration (both < ${ROOFLINE_BOUND_THRESHOLD_PERCENT}%).`;
+
+export const SLOW_HINT_REASON =
+    `The larger of DRAM % and FLOPs %, both below ${ROOFLINE_BOUND_THRESHOLD_PERCENT}%: ` +
+    'a hint at where to look, not a bound.';
 
 const ROOFLINE_KEYS: ReadonlySet<ColumnKeys> = new Set([
     ColumnKeys.Bound,
@@ -57,6 +65,26 @@ export const getNotAnalysedReason = (row: TypedPerfTableRow, key: ColumnKeys): s
     }
 };
 
+/**
+ * What a SLOW row's Bound cell, or the roofline cell it hints at, means; null for any other cell.
+ *
+ * On the roofline columns yellow only ever comes from the SLOW hint (DRAM and FLOP bounds are
+ * green) and a muted row is grey, so the rendered colour decides which cell is the hint and the
+ * title cannot disagree with it.
+ */
+export const getSlowBoundExplanation = (row: TypedPerfTableRow, key: ColumnKeys, colour: CellColour): string | null => {
+    if (row.bound !== BoundType.SLOW) {
+        return null;
+    }
+
+    if (key === ColumnKeys.Bound) {
+        return SLOW_BOUND_REASON;
+    }
+
+    // Bound has returned above, so the remaining roofline keys are the cells the hint can land on.
+    return ROOFLINE_KEYS.has(key) && colour === CellColour.Yellow ? SLOW_HINT_REASON : null;
+};
+
 export interface BoundAnalysisCoverage {
     /** Share of device time in ops given any roofline model (full + FLOPs only). */
     analysedPercent: number;
@@ -77,10 +105,7 @@ export const getBoundAnalysisCoverage = (rows: TypedPerfTableRow[]): BoundAnalys
     for (const row of rows) {
         const deviceTime = row.device_time;
         // Host ops carry no device time, and signposts and placeholders carry neither field.
-        const isCounted =
-            row.bound_analysis !== null && deviceTime !== null && Number.isFinite(deviceTime) && deviceTime > 0;
-
-        if (isCounted) {
+        if (row.bound_analysis !== null && isCountableDeviceTime(deviceTime)) {
             totalTime += deviceTime;
 
             if (row.bound_analysis === BoundAnalysis.FULL) {

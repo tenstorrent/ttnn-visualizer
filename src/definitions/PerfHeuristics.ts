@@ -40,8 +40,7 @@ export const PERF_HEURISTIC_FLAG_DEFINITIONS: Record<PerfHeuristicFlag, PerfHeur
     [PerfHeuristicFlag.LOW_UTILISATION]: {
         label: 'Low utilisation',
         shortLabel: 'Low util',
-        description:
-            'Core utilisation is below ideal for the assigned core count. Most reliable for matmul and conv ops.',
+        description: 'Core utilisation is below ideal for the assigned core count.',
         intent: PerfHeuristicFlagIntent.WARNING,
     },
     [PerfHeuristicFlag.UNDERUTILISED_CORES]: {

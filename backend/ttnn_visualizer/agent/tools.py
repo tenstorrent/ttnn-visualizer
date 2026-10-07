@@ -151,6 +151,9 @@ def project_row(row: Dict, metric: str = "device_time") -> Dict[str, object]:
         metric: _rounded(_as_number(row.get(SORTABLE_METRICS[metric]))),
         "cores": _as_number(row.get("cores")),
         "bound": row.get("bound") or None,
+        # Without it a null bound reads as "fine" when the op was never modelled (#2064).
+        "bound_analysis": row.get("bound_analysis") or None,
+        "op_category": row.get("op_category") or None,
     }
 
 

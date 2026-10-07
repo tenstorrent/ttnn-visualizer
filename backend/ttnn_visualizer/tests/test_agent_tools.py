@@ -1040,3 +1040,21 @@ def test_main_serves_when_event_log_startup_raises(monkeypatch):
     server.main()
 
     assert order == ["serve"]
+
+
+class TestProjectRow:
+    def test_a_row_says_which_roofline_model_ran_and_its_category(self):
+        """A blank bound means "never modelled" or "measured, fine"; only bound_analysis tells which."""
+        projected = tools.project_row(
+            _row(bound="", bound_analysis="none", op_category="Other")
+        )
+
+        assert projected["bound"] is None
+        assert projected["bound_analysis"] == "none"
+        assert projected["op_category"] == "Other"
+
+    def test_a_row_without_the_columns_reports_them_as_null(self):
+        projected = tools.project_row(_row())
+
+        assert projected["bound_analysis"] is None
+        assert projected["op_category"] is None

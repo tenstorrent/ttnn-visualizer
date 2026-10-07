@@ -111,7 +111,12 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
                 "operation_link says whether the reports linked, at which rank, "
                 "how many rows did not link and why -- including signposts and other "
                 "rows the ranking leaves out -- and, in its note, when an "
-                "operation_id is null."
+                "operation_id is null. A null bound is not a clean bill of health: "
+                "read bound_analysis, where none means the op was never modelled, "
+                "flops_only means DRAM and bound are never derived, and full with a "
+                "null bound means the trace lacked the inputs the model needs. Each "
+                "row also carries op_category: Other is time no category explains, "
+                "and later tt-perf-report releases can add categories."
             ),
             "schema": {
                 "type": "object",
@@ -198,7 +203,8 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
                 "tensor size is whole-tensor bytes only where the report carries "
                 "that column, and per bank otherwise. When the handle also holds a "
                 "linked performance report, perf_rows lists the device operations "
-                "it launched with their device time in microseconds; its own "
+                "it launched with their device time in microseconds and the same "
+                "bound, bound_analysis and op_category fields as top_ops; its own "
                 "duration is host seconds. The first call on such a handle "
                 "generates the performance report and reads every captured graph, "
                 "which can take seconds on a large capture; later calls, and "

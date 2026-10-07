@@ -9,17 +9,19 @@ import {
     durationBucketFilterListAtom,
     layoutFilterListAtom,
     mathFilterListAtom,
+    opCategoryFilterListAtom,
     rawOpCodeFilterListAtom,
     selectedPerfRowIdAtom,
 } from '../store/app';
 
-/** Clears table selection and all PerfReport chip filters (op code, math, buffer, layout, duration). */
+/** Clears table selection and all PerfReport chip filters (op code, math, buffer, layout, op category, duration). */
 export function useResetPerfTableSessionState() {
     const setSelectedPerfRowId = useSetAtom(selectedPerfRowIdAtom);
     const setMathFilterList = useSetAtom(mathFilterListAtom);
     const setRawOpCodeFilterList = useSetAtom(rawOpCodeFilterListAtom);
     const setBufferTypeFilterList = useSetAtom(bufferTypeFilterListAtom);
     const setLayoutFilterList = useSetAtom(layoutFilterListAtom);
+    const setOpCategoryFilterList = useSetAtom(opCategoryFilterListAtom);
     const setDurationBucketFilterList = useSetAtom(durationBucketFilterListAtom);
 
     return useCallback(() => {
@@ -28,6 +30,7 @@ export function useResetPerfTableSessionState() {
         setRawOpCodeFilterList([]);
         setBufferTypeFilterList([]);
         setLayoutFilterList([]);
+        setOpCategoryFilterList([]);
         setDurationBucketFilterList([]);
     }, [
         setSelectedPerfRowId,
@@ -35,6 +38,7 @@ export function useResetPerfTableSessionState() {
         setRawOpCodeFilterList,
         setBufferTypeFilterList,
         setLayoutFilterList,
+        setOpCategoryFilterList,
         setDurationBucketFilterList,
     ]);
 }
