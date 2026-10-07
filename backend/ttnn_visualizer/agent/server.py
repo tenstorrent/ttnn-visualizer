@@ -114,7 +114,9 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
                 "operation_id is null. A null bound is not a clean bill of health: "
                 "read bound_analysis, where none means the op was never modelled, "
                 "flops_only means DRAM and bound are never derived, and full with a "
-                "null bound means the trace lacked the inputs the model needs."
+                "null bound means the trace lacked the inputs the model needs. Each "
+                "row also carries op_category: Other is time no category explains, "
+                "and later tt-perf-report releases can add categories."
             ),
             "schema": {
                 "type": "object",

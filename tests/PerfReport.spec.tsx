@@ -232,6 +232,115 @@ describe('PerformanceReport op category filter', () => {
     });
 });
 
+describe('PerformanceReport filters resolved on aligned rows', () => {
+    // Text highlighting splits a matching cell, so read whole rows rather than querying by text.
+    const getRowsContaining = (text: string) =>
+        Array.from(screen.getByRole('table').querySelectorAll('tbody tr')).filter((tableRow) =>
+            tableRow.textContent?.includes(text),
+        );
+    const expectInBothReports = (text: string) => {
+        const tableRows = getRowsContaining(text);
+
+        expect(tableRows.some((tableRow) => tableRow.classList.contains('comparison-row'))).toBe(true);
+        expect(tableRows.some((tableRow) => !tableRow.classList.contains('comparison-row'))).toBe(true);
+    };
+    const setNormalisation = (isOn: boolean) => {
+        if (!isOn) {
+            fireEvent.click(screen.getByLabelText('Normalise data'));
+        }
+
+        expect(screen.getByLabelText('Normalise data')).toHaveProperty('checked', isOn);
+    };
+    // Four rows per report so a normalised comparison stays within alignByOpCode's missing limit.
+    const withOpCode = (base: TypedPerfTableRow, opCode: string) => ({ ...base, op_code: opCode });
+
+    it.each([true, false])(
+        'keeps a row whose op code text only the comparison report matches (normalised: %s)',
+        (isNormalised) => {
+            renderReport({
+                data: [
+                    row('Softmax', 1, 5),
+                    withOpCode(row('Matmul', 2, 5), 'Matmul 64x64'),
+                    row('Reshape', 3, 5),
+                    row('Tilize', 4, 5),
+                ],
+                comparisonData: [
+                    [
+                        row('Softmax', 11, 5),
+                        withOpCode(row('Matmul', 12, 5), 'Matmul 128x128'),
+                        row('Reshape', 13, 5),
+                        row('Tilize', 14, 5),
+                    ],
+                ],
+                comparisonReports: [COMPARISON_REPORT],
+            });
+
+            setNormalisation(isNormalised);
+            fireEvent.change(screen.getByPlaceholderText('Filter by operation name'), {
+                target: { value: '128x128' },
+            });
+
+            expectInBothReports('Matmul');
+            expect(getRowsContaining('Softmax')).toHaveLength(0);
+            expect(getRowsContaining('Reshape')).toHaveLength(0);
+        },
+    );
+
+    it.each([true, false])(
+        'needs one aligned row to match every active filter, not each filter on some row (normalised: %s)',
+        (isNormalised) => {
+            renderReport({
+                data: [
+                    row('Softmax', 1, 5, OperationCategories.COMPUTE),
+                    row('Matmul', 2, 5, OperationCategories.COMPUTE),
+                    row('Reshape', 3, 5, OperationCategories.TM),
+                    row('Tilize', 4, 5, OperationCategories.DM),
+                ],
+                comparisonData: [
+                    [
+                        row('Softmax', 11, 5, OperationCategories.COMPUTE),
+                        row('Matmul', 12, 5, OperationCategories.COMPUTE),
+                        // Other, but slow: no single Reshape row is both Other and in the 1-10 µs bucket.
+                        row('Reshape', 13, 500, OperationCategories.OTHER),
+                        // Other and fast, so the table still renders a matching row.
+                        row('Tilize', 14, 5, OperationCategories.OTHER),
+                    ],
+                ],
+                comparisonReports: [COMPARISON_REPORT],
+                opCategoryFilterList: [OperationCategories.OTHER],
+                durationBucketFilterList: [1],
+            });
+
+            setNormalisation(isNormalised);
+
+            expectInBothReports('Tilize');
+            expect(getRowsContaining('Reshape')).toHaveLength(0);
+        },
+    );
+
+    // Normalisation aligns rows by raw op code, so only the unnormalised view can pair rows whose
+    // raw op codes differ.
+    it('keeps a row whose raw op code only the comparison report has, with normalisation off', async () => {
+        renderReport({
+            data: [row('Softmax', 1, 5), row('Matmul', 2, 5), row('Reshape', 3, 5), row('Tilize', 4, 5)],
+            comparisonData: [
+                [row('Softmax', 11, 5), row('Matmul', 12, 5), row('ReshapeView', 13, 5), row('Tilize', 14, 5)],
+            ],
+            comparisonReports: [COMPARISON_REPORT],
+        });
+
+        // Normalised, the unmatched ReshapeView row becomes a placeholder and is not offered, so
+        // switch off first and pick it from the select.
+        setNormalisation(false);
+        fireEvent.click(screen.getByPlaceholderText('Select Op Codes...'));
+        await waitFor(testForPortal, WAIT_FOR_OPTIONS);
+        fireEvent.click(screen.getByRole('checkbox', { name: 'ReshapeView' }));
+
+        expectInBothReports('Reshape');
+        expect(getRowsContaining('Matmul')).toHaveLength(0);
+    });
+});
+
 describe('PerformanceReport sorting with a normalised comparison', () => {
     // Four rows so one missing op stays under alignByOpCode's 30% missing limit.
     const OP_CODES = ['MISSING - AllGather', 'AllGather', 'Matmul', 'Reshape', 'Softmax'];

@@ -130,6 +130,11 @@ const usePerfReportFiltering = ({
             (!hasRawOpCodeFilter || (row.raw_op_code !== null && rawOpCodeFilterSet.has(row.raw_op_code))) &&
             (!hasOpCategoryFilter || (row.op_category !== null && opCategoryFilterSet.has(row.op_category))) &&
             (!hasDurationFilter || matchesDurationBucket(row.device_time));
+        // The op code text filter is resolved on aligned rows above, so the per-dataset pass skips it.
+        const filtersWithoutOpCode = {
+            ...filters,
+            [ColumnKeys.OpCode]: '',
+        };
 
         if (!isNormalisationApplied) {
             const hasMathFilter = activeMathFilters.length > 0;
@@ -137,14 +142,10 @@ const usePerfReportFiltering = ({
             const hasLayoutFilter = activeLayoutFilters.length > 0;
             const hasCrossReportFilters =
                 hasAlignedRowFilters || hasMathFilter || hasBufferTypeFilter || hasLayoutFilter;
-            const filtersWithoutCrossReportFilters = {
-                ...filters,
-                [ColumnKeys.OpCode]: '',
-            };
             const allDatasets = [processedRows, ...processedComparisonRows];
             const datasetsWithoutCrossReportFilters = allDatasets.map((dataset) =>
                 sortAndFilterPerfTableData(dataset, {
-                    filters: filtersWithoutCrossReportFilters,
+                    filters: filtersWithoutOpCode,
                 }),
             );
             const datasetRowSets = datasetsWithoutCrossReportFilters.map((dataset) => new Set(dataset));
@@ -204,10 +205,6 @@ const usePerfReportFiltering = ({
         }
 
         // Math, buffer type and layout still filter the primary report alone here (#2083).
-        const filtersWithoutOpCode = {
-            ...filters,
-            [ColumnKeys.OpCode]: '',
-        };
         const sourceRowsWithoutSignposts = sortAndFilterPerfTableData(processedRows, {
             filters: filtersWithoutOpCode,
             mathFilter: activeMathFilters,
