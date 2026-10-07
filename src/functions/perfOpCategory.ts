@@ -54,9 +54,10 @@ const isDeviceTimeCategory = (category: OperationCategories): category is Device
     (DEVICE_TIME_CATEGORIES as readonly OperationCategories[]).includes(category);
 
 /**
- * Share of device time in each op category across `rows`, counting rows the way
- * getBoundAnalysisCoverage does so the two figures describe the same time. Returns null when
- * there is no device time to share out, so callers show nothing rather than 0% everywhere.
+ * Share of device time in each op category across `rows`. Uses getBoundAnalysisCoverage's
+ * device-time rule (finite and positive) without its bound_analysis requirement; every row with
+ * device time carries both columns, so in practice the two callouts share one total. Returns null
+ * when there is no device time to share out, so callers show nothing rather than 0% everywhere.
  */
 export const getOpCategoryBreakdown = (rows: TypedPerfTableRow[]): OpCategoryBreakdown | null => {
     const deviceTimeByCategory = new Map<DeviceTimeCategory, number>();

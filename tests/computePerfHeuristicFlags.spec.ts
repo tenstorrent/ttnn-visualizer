@@ -227,7 +227,7 @@ describe('annotatePerfHeuristicFlags', () => {
 
     describe('low utilisation on ops tt-perf-report does not model', () => {
         const lowUtilisationRow = { pm_ideal_ns: 1000, device_time: 1000, cores: 64 };
-        const getDetail = (boundAnalysis: BoundAnalysis) =>
+        const getDetail = (boundAnalysis: BoundAnalysis | null) =>
             annotatePerfHeuristicFlags([makeRow({ ...lowUtilisationRow, bound_analysis: boundAnalysis })], MAX_CORES)[0]
                 .heuristicFlagDetails?.[PerfHeuristicFlag.LOW_UTILISATION];
 
@@ -247,6 +247,13 @@ describe('annotatePerfHeuristicFlags', () => {
 
         it.each([BoundAnalysis.FULL, BoundAnalysis.FLOPS_ONLY])('adds no caveat to a %s op', (boundAnalysis) => {
             expect(getDetail(boundAnalysis)).not.toContain(LOW_UTILISATION_UNMODELLED_NOTE);
+        });
+
+        it('adds no caveat when the row says nothing about which model ran', () => {
+            expect(getFlags({ ...lowUtilisationRow, bound_analysis: null })).toContain(
+                PerfHeuristicFlag.LOW_UTILISATION,
+            );
+            expect(getDetail(null)).not.toContain(LOW_UTILISATION_UNMODELLED_NOTE);
         });
     });
 });

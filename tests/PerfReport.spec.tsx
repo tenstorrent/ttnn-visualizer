@@ -110,6 +110,14 @@ function renderReport({
 
 afterEach(cleanup);
 
+// The primary row and its comparison sub-row both survive: the filter must not empty either table.
+function expectRowInBothReports(opCode: string) {
+    const tableRows = screen.getAllByText(opCode).map((cell) => cell.closest('tr'));
+
+    expect(tableRows.some((tableRow) => tableRow?.classList.contains('comparison-row'))).toBe(true);
+    expect(tableRows.some((tableRow) => tableRow && !tableRow.classList.contains('comparison-row'))).toBe(true);
+}
+
 beforeEach(() => {
     (useGetNPEManifest as Mock).mockReturnValue({ data: [], error: null });
     (useOpToPerfIdFiltered as Mock).mockReturnValue([]);
@@ -180,6 +188,18 @@ describe('PerformanceReport op category filter', () => {
         expect(screen.getAllByText('Matmul').length).toBeGreaterThan(0);
     });
 
+    it('shares out only the filtered rows in the category breakdown', () => {
+        renderReport({
+            data: [row('AllGather', 1, 30, OperationCategories.CCL), row('Matmul', 2, 70, OperationCategories.COMPUTE)],
+            opCategoryFilterList: [OperationCategories.CCL],
+        });
+
+        const breakdown = screen.getByTestId(TEST_IDS.PERF_OP_CATEGORY_BREAKDOWN);
+
+        expect(breakdown).toHaveTextContent('CCL 100%');
+        expect(breakdown).toHaveTextContent('Compute 0%');
+    });
+
     it('keeps a comparison-only match with normalisation on', () => {
         renderReport({
             data: [row('Matmul', 1, 5, OperationCategories.COMPUTE), row('Reshape', 2, 5, OperationCategories.TM)],
@@ -191,7 +211,7 @@ describe('PerformanceReport op category filter', () => {
         });
 
         expect(screen.getByLabelText('Normalise data')).toBeChecked();
-        expect(screen.getAllByText('Reshape').length).toBeGreaterThan(0);
+        expectRowInBothReports('Reshape');
         expect(screen.queryByText('Matmul')).not.toBeInTheDocument();
     });
 
@@ -207,7 +227,7 @@ describe('PerformanceReport op category filter', () => {
 
         fireEvent.click(screen.getByLabelText('Normalise data'));
 
-        expect(screen.getAllByText('Reshape').length).toBeGreaterThan(0);
+        expectRowInBothReports('Reshape');
         expect(screen.queryByText('Matmul')).not.toBeInTheDocument();
     });
 });
