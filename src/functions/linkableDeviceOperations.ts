@@ -8,13 +8,17 @@ import { isDeviceOperation } from './filterOperations';
 export type DeviceOperationNodeType = NodeType.function_start | NodeType.function_end;
 
 // tt-metal writes this string, not a boolean: graph params are all strings and only
-// `program_cache_hit` is converted when the graph is serialised.
+// `program_cache_hit` is converted when the graph is serialised. A boolean is accepted
+// too, in case a later serialiser converts it. `linking.py` reads it the same way.
 const ABORTED_PARAM_VALUE = 'true';
 
 const getNodeName = (node: Node): string | undefined => (node.params as DeviceOperationParams | null)?.name;
 
-const isAbortedEnd = (node: Node): boolean =>
-    String((node.params as { aborted?: string | boolean } | null)?.aborted) === ABORTED_PARAM_VALUE;
+const isAbortedEnd = (node: Node): boolean => {
+    const aborted = (node.params as { aborted?: unknown } | null)?.aborted;
+
+    return aborted === true || aborted === ABORTED_PARAM_VALUE;
+};
 
 /** Indices of the starts and ends of every scope that closed without aborting. */
 const getCompletedScopeIndices = (nodes: Node[]) => {
@@ -72,9 +76,14 @@ const getDeviceOperationNames = (
     return names;
 };
 
+export interface LinkableDeviceOperations {
+    starts: string[];
+    ends: string[];
+}
+
 /**
  * The device operation names in one operation's captured graph that can have produced a
- * perf row, in captured order.
+ * perf row, in each captured order.
  *
  * A device operation whose launch threw never reached the device, so it has no perf
  * row. Left in, it takes the next same-named row (typically the script's retry) and
@@ -86,25 +95,25 @@ const getDeviceOperationNames = (
  * closes the latest open start of its name, which pairs nested and sequential scopes
  * alike and needs no node ids. Across the local report corpus (22,915 device
  * operation starts), the only starts this drops belong to operations with a recorded
- * error.
+ * error. A capture cut off mid-operation also leaves its last start unclosed; that
+ * start is dropped too, so the capture's last perf row goes unclaimed.
  *
  * `deviceOperationNameList` keeps every device operation on purpose. The op list
  * filter and the graph panel are where a user goes looking for the failed one.
  *
  * Mirrored as `_device_operation_names` in `backend/ttnn_visualizer/agent/linking.py`.
  */
-export const getLinkableDeviceOperationNames = (
-    nodes: Node[] | null | undefined,
-    nodeType: DeviceOperationNodeType,
-): string[] => {
+export const getLinkableDeviceOperations = (nodes: Node[] | null | undefined): LinkableDeviceOperations => {
     if (!Array.isArray(nodes)) {
-        return [];
+        return { starts: [], ends: [] };
     }
 
     const completed = getCompletedScopeIndices(nodes);
-    const indices = nodeType === NodeType.function_start ? completed.starts : completed.ends;
 
-    return getDeviceOperationNames(nodes, nodeType, (index) => indices.has(index));
+    return {
+        starts: getDeviceOperationNames(nodes, NodeType.function_start, (index) => completed.starts.has(index)),
+        ends: getDeviceOperationNames(nodes, NodeType.function_end, (index) => completed.ends.has(index)),
+    };
 };
 
 /** The device operations in one operation's captured graph whose launch did not complete. */

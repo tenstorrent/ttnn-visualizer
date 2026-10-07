@@ -43,7 +43,7 @@ import { L1PressureResult } from '../model/L1Pressure';
 import { buildL1PressureResult } from '../functions/l1Pressure';
 import { StackedPerfRow } from '../definitions/StackedPerfTable';
 import { isDeviceOperation } from '../functions/filterOperations';
-import { DeviceOperationNodeType, getLinkableDeviceOperationNames } from '../functions/linkableDeviceOperations';
+import { DeviceOperationNodeType, getLinkableDeviceOperations } from '../functions/linkableDeviceOperations';
 import { normalizeBufferPagesResponse } from '../functions/normalizeBufferPagesResponse';
 import { filterByOperationRange } from '../functions/filterByOperationRange';
 import {
@@ -871,7 +871,9 @@ const getDeviceOperationOrderCandidates = memoiseLatest(
         }
 
         for (const operation of operations) {
-            for (const name of getLinkableDeviceOperationNames(operation.device_operations, NodeType.function_start)) {
+            const { starts, ends } = getLinkableDeviceOperations(operation.device_operations);
+
+            for (const name of starts) {
                 functionStartOperations.push({
                     name,
                     id: operation.id,
@@ -879,7 +881,7 @@ const getDeviceOperationOrderCandidates = memoiseLatest(
                 });
             }
 
-            for (const name of getLinkableDeviceOperationNames(operation.device_operations, NodeType.function_end)) {
+            for (const name of ends) {
                 functionEndOperations.push({
                     name,
                     id: operation.id,

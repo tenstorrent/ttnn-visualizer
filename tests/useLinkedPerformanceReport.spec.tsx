@@ -18,6 +18,7 @@ import {
     useGetDeviceOperationListPerf,
     useGetDeviceOperationListPerfByOpId,
     useLinkedPerformanceReport,
+    useOperationsList,
     usePerformanceReport,
 } from '../src/hooks/useAPI';
 import {
@@ -31,6 +32,7 @@ import {
     tracingModeAtom,
 } from '../src/store/app';
 import { StackedGroupBy } from '../src/definitions/StackedPerfTable';
+import { useAllocationFailures } from '../src/hooks/useAllocationFailures';
 import { AtomProvider, type AtomProviderInitialValues } from './helpers/atomProvider';
 import axiosInstance from '../src/libs/axiosInstance';
 import Endpoints from '../src/definitions/Endpoints';
@@ -378,6 +380,140 @@ describe('report matching under a filtered performance tab', () => {
 
         expect(result.current.map(({ name }) => name)).toEqual(functionEndNames);
         expect(result.current.map(({ perfData }) => perfData?.raw_op_code)).toEqual(functionEndNames);
+    });
+
+    describe('a failed launch followed by a same-named retry', () => {
+        const OUT_OF_MEMORY =
+            'Out of Memory: Not enough space to allocate 3276800 B L1 buffer across 4 banks, where each bank needs to store 819200 B, but bank size is only 1382720 B';
+
+        const closed = (name: string) => [
+            { node_type: 'function_start', params: { name } },
+            { node_type: 'function_end', params: { name } },
+        ];
+
+        // The two shapes tt-metal records a launch that threw in: newer captures close
+        // the scope marked aborted, older ones leave it open.
+        const FAILED_SHAPES = {
+            aborted: [
+                { node_type: 'function_start', params: { name: 'Matmul' } },
+                { node_type: 'function_end', params: { name: 'Matmul', aborted: 'true' } },
+            ],
+            unclosed: [{ node_type: 'function_start', params: { name: 'Matmul' } }],
+        };
+
+        const operationsWith = (failedGraph: object[]) => [
+            {
+                id: 1,
+                name: 'ttnn.matmul',
+                stack_trace: '',
+                inputs: [],
+                outputs: [],
+                arguments: [],
+                device_operations: failedGraph,
+                error: {
+                    operation_id: 1,
+                    operation_name: 'ttnn.matmul',
+                    error_type: 'RuntimeError',
+                    error_message: OUT_OF_MEMORY,
+                    stack_trace: '',
+                    timestamp: '',
+                },
+            },
+            ...[
+                [2, 'Matmul'],
+                [3, 'Softmax'],
+            ].map(([id, name]) => ({
+                id,
+                name: `ttnn.${String(name).toLowerCase()}`,
+                stack_trace: '',
+                inputs: [],
+                outputs: [],
+                arguments: [],
+                device_operations: closed(String(name)),
+                error: null,
+            })),
+        ];
+
+        const mockRun = (failedGraph: object[], rawOpCodes: string[]) =>
+            vi.mocked(axiosInstance.get).mockImplementation((url: string) => {
+                if (url.includes(Endpoints.PERFORMANCE_RESULTS_REPORT)) {
+                    return Promise.resolve({
+                        data: {
+                            report: rawOpCodes.map((name, index) => perfRow(index + 10, name)),
+                            stacked_report: [],
+                            signposts: [],
+                        },
+                    });
+                }
+
+                if (url.includes(Endpoints.OPERATIONS_LIST)) {
+                    return Promise.resolve({ data: operationsWith(failedGraph) });
+                }
+
+                if (url.includes(Endpoints.DEVICES)) {
+                    return Promise.resolve({ data: [{ device_id: 0 }] });
+                }
+
+                return Promise.resolve({ data: [] });
+            });
+
+        it.each(Object.entries(FAILED_SHAPES))(
+            'links the retry, not the failed launch, to the row (%s capture)',
+            async (_shape, failedGraph) => {
+                mockRun(failedGraph, ['Matmul', 'Softmax']);
+
+                const { result } = renderWithView(
+                    () => useGetDeviceOperationListPerfByOpId(),
+                    [[activeProfilerReportAtom, ACTIVE_REPORT]],
+                );
+
+                await waitFor(() => expect(result.current.size).toBe(2));
+
+                expect(result.current.has(1)).toBe(false);
+                expect(result.current.get(2)?.map(({ perfData }) => perfData?.id)).toEqual(['10']);
+                expect(result.current.get(3)?.map(({ perfData }) => perfData?.id)).toEqual(['11']);
+            },
+        );
+
+        it('lists the failure once the reports link', async () => {
+            mockRun(FAILED_SHAPES.aborted, ['Matmul', 'Softmax']);
+
+            const { result } = renderWithView(
+                () => useAllocationFailures(),
+                [[activeProfilerReportAtom, ACTIVE_REPORT]],
+            );
+
+            await waitFor(() => expect(result.current.listings).toHaveLength(1));
+
+            expect(result.current.listings[0]).toMatchObject({
+                failure: { operationId: 1 },
+                failedDeviceOperations: ['Matmul'],
+                linkedRowCount: 0,
+            });
+        });
+
+        it('lists nothing against a performance report from another run', async () => {
+            mockRun(FAILED_SHAPES.aborted, ['Conv2d', 'Reshape']);
+
+            const { result } = renderWithView(
+                () => ({
+                    failures: useAllocationFailures(),
+                    match: useGetDeviceOperationListPerf(),
+                    operations: useOperationsList().data,
+                    report: useLinkedPerformanceReport().data,
+                }),
+                [[activeProfilerReportAtom, ACTIVE_REPORT]],
+            );
+
+            // Both halves loaded, so an empty answer is the link refusing, not data pending.
+            await waitFor(() => {
+                expect(result.current.operations).toHaveLength(3);
+                expect(result.current.report?.report).toHaveLength(2);
+            });
+
+            expect(result.current.match).toEqual([]);
+            expect(result.current.failures.listings).toEqual([]);
+        });
     });
 
     // The match is memoised across call sites rather than per invocation, and

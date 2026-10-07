@@ -345,13 +345,53 @@ class TestFailedDeviceOperations:
         assert names[NodeOrder.FUNCTION_START] == ["FirstDeviceOperation"]
         assert names[NodeOrder.FUNCTION_END] == ["FirstDeviceOperation"]
 
-    def test_a_boolean_aborted_marker_is_read_as_aborted(self):
-        nodes = json.loads(_failed_graph(failed="Matmul"))
-        nodes[3]["params"]["aborted"] = True
+    @pytest.mark.parametrize(
+        "aborted, linkable",
+        [(True, False), ("true", False), ("True", True), ("false", True)],
+    )
+    def test_the_aborted_marker_is_read_exactly(self, aborted, linkable):
+        """The string tt-metal writes, or a boolean; nothing looser, as in the app."""
+        nodes = [
+            {"node_type": "function_start", "params": {"name": "Matmul"}},
+            {
+                "node_type": "function_end",
+                "params": {"name": "Matmul", "aborted": aborted},
+            },
+        ]
 
         names = linking._device_operation_names(json.dumps(nodes))
 
-        assert names[NodeOrder.FUNCTION_START] == []
+        expected = ["Matmul"] if linkable else []
+        assert names[NodeOrder.FUNCTION_START] == expected
+        assert names[NodeOrder.FUNCTION_END] == expected
+
+    @pytest.mark.parametrize(
+        "names, nested, starts, ends",
+        [
+            (("ttnn.matmul", "Matmul"), True, ["Matmul"], ["Matmul"]),
+            (("Outer", "Inner"), True, ["Outer", "Inner"], ["Inner", "Outer"]),
+            (("Matmul", "Matmul"), False, ["Matmul", "Matmul"], ["Matmul", "Matmul"]),
+        ],
+        ids=["host-side-skipped", "child-first", "sequential-same-name"],
+    )
+    def test_completed_scopes_pair_in_either_nesting(self, names, nested, starts, ends):
+        orders = linking._device_operation_names(_graph(*names, nested=nested))
+
+        assert orders[NodeOrder.FUNCTION_START] == starts
+        assert orders[NodeOrder.FUNCTION_END] == ends
+
+    def test_an_end_with_no_open_start_of_its_name_is_ignored(self):
+        nodes = [
+            {"node_type": "function_end", "params": {"name": "Stray"}},
+            {"node_type": "function_start", "params": {"name": "Matmul"}},
+            {"node_type": "function_end", "params": {"name": "Other"}},
+            {"node_type": "function_end", "params": {"name": "Matmul"}},
+        ]
+
+        names = linking._device_operation_names(json.dumps(nodes))
+
+        assert names[NodeOrder.FUNCTION_START] == ["Matmul"]
+        assert names[NodeOrder.FUNCTION_END] == ["Matmul"]
 
     def test_a_same_named_retry_links_to_its_own_row(self, linked):
         """The failed matmul must not take the retry's row and shift the add."""

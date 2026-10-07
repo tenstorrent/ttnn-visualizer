@@ -53,7 +53,8 @@ DEVICE_TIME_UNIT = "us"
 MAX_CAPTURED_GRAPH_CHARS = 1 << 30
 
 # How tt-metal marks a `function_end` that closed a scope whose launch threw. Graph
-# params are strings; only `program_cache_hit` is converted when serialised.
+# params are strings; only `program_cache_hit` is converted when serialised. A boolean
+# is accepted too, in case a later serialiser converts it -- the app reads it the same.
 _ABORTED_PARAM_VALUE = "true"
 
 
@@ -226,9 +227,10 @@ def match_device_operations(
 
     Start order first, because most captures are parent-first. End order is the
     fallback for nested operations whose child is enqueued before its parent (#1860),
-    and only when both orders hold the same operations: an interrupted capture can
-    drop function-end events, and alignment tolerating trailing rows would let the
-    shorter list match. The raw orders are tried before either collapse, so a
+    and only when both orders hold the same operations, since alignment tolerating
+    trailing rows would let a shorter list match. `_device_operation_names` already
+    drops a start its capture never closed from both orders, so names read from a
+    graph always pass; the check guards orders assembled any other way. The raw orders are tried before either collapse, so a
     spurious collapsed prefix cannot pre-empt a complete end-order match.
     """
     alignable = [row for row in rows if row.get("op_type") != SIGNPOST_OP_TYPE]
@@ -303,7 +305,8 @@ def _device_operation_names(raw: Optional[str]) -> Dict[NodeOrder, List[str]]:
         # A lifecycle node without a name is refused, not skipped: dropping it
         # shortens the order, and a prefix match can still mark the link linked
         # with later rows on the wrong operation. The app cannot read it either --
-        # `getDeviceOperationNameList` reads `params.name` unguarded.
+        # `getDeviceOperationNameList` (`src/hooks/useAPI.tsx`) reads `params.name`
+        # unguarded when it builds every operation's `deviceOperationNameList`.
         params = node.get("params")
         name = params.get("name") if isinstance(params, dict) else None
         if not isinstance(name, str) or not isinstance(params, dict):
@@ -318,7 +321,8 @@ def _device_operation_names(raw: Optional[str]) -> Dict[NodeOrder, List[str]]:
             continue
         for position in range(len(open_starts) - 1, -1, -1):
             if open_starts[position][0] == name:
-                if str(params.get("aborted")).lower() != _ABORTED_PARAM_VALUE:
+                aborted = params.get("aborted")
+                if aborted is not True and aborted != _ABORTED_PARAM_VALUE:
                     completed.update((open_starts[position][1], index))
                 del open_starts[position]
                 break

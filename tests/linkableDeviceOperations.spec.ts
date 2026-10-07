@@ -3,10 +3,7 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import { describe, expect, it } from 'vitest';
-import {
-    getFailedDeviceOperationNames,
-    getLinkableDeviceOperationNames,
-} from '../src/functions/linkableDeviceOperations';
+import { getFailedDeviceOperationNames, getLinkableDeviceOperations } from '../src/functions/linkableDeviceOperations';
 import { Node, NodeType } from '../src/model/APIData';
 
 // `TestFailedDeviceOperations` in `backend/ttnn_visualizer/tests/test_agent_linking.py`
@@ -20,12 +17,9 @@ const end = (name: string, aborted?: string | boolean): Node =>
         params: aborted === undefined ? { name } : { name, aborted },
     }) as unknown as Node;
 
-const both = (nodes: Node[]) => ({
-    starts: getLinkableDeviceOperationNames(nodes, NodeType.function_start),
-    ends: getLinkableDeviceOperationNames(nodes, NodeType.function_end),
-});
+const both = getLinkableDeviceOperations;
 
-describe('getLinkableDeviceOperationNames', () => {
+describe('getLinkableDeviceOperations', () => {
     it('names every completed device operation, skipping host-side functions', () => {
         const nodes = [start('ttnn.matmul'), start('Matmul'), end('Matmul'), end('ttnn.matmul')];
 
@@ -51,8 +45,20 @@ describe('getLinkableDeviceOperationNames', () => {
         expect(both(nodes)).toEqual({ starts: ['First'], ends: ['First'] });
     });
 
-    it('reads a boolean aborted marker as aborted', () => {
+    it('reads the aborted marker exactly: the string tt-metal writes, or a boolean', () => {
         expect(both([start('Matmul'), end('Matmul', true)])).toEqual({ starts: [], ends: [] });
+        expect(both([start('Matmul'), end('Matmul', 'True')])).toEqual({ starts: ['Matmul'], ends: ['Matmul'] });
+        expect(both([start('Matmul'), end('Matmul', 'false')])).toEqual({ starts: ['Matmul'], ends: ['Matmul'] });
+    });
+
+    it('ignores an end with no open start of its name', () => {
+        const nodes = [end('Stray'), start('Matmul'), end('Other'), end('Matmul')];
+
+        expect(both(nodes)).toEqual({ starts: ['Matmul'], ends: ['Matmul'] });
+    });
+
+    it('drops the last start of a capture cut off mid-operation, leaving earlier ones', () => {
+        expect(both([start('First'), end('First'), start('Second')])).toEqual({ starts: ['First'], ends: ['First'] });
     });
 
     it('pairs child-first and sequential same-named scopes', () => {
@@ -64,7 +70,7 @@ describe('getLinkableDeviceOperationNames', () => {
     });
 
     it('returns nothing for a missing graph', () => {
-        expect(getLinkableDeviceOperationNames(undefined, NodeType.function_start)).toEqual([]);
+        expect(getLinkableDeviceOperations(undefined)).toEqual({ starts: [], ends: [] });
     });
 });
 
