@@ -44,6 +44,14 @@ import { ReportKind, ReportLoadFailureReason, ReportSource } from '../src/defini
 
 // Scrub the markup after each test
 const WAIT_FOR_OPTIONS = { timeout: 1000 };
+
+// The select renders its menu in a portal that can mount before the items do, so wait for an
+// item rather than only the portal; reading items straight after the portal appears is flaky in CI.
+const waitForPickerOptions = () =>
+    waitFor(() => {
+        testForPortal();
+        expect(document.querySelector(`.${Classes.PORTAL} .${Classes.MENU_ITEM}`)).not.toBeNull();
+    }, WAIT_FOR_OPTIONS);
 const SELECT_REPORT_TEXT = 'Select a report...';
 
 // Data is mutated in the mock of useLocal - eventually this should be set per test as needed
@@ -207,7 +215,7 @@ it('renders the initial folder selector upload field states', async () => {
 
     getAllButtonsWithText(SELECT_REPORT_TEXT)[0].click();
 
-    await waitFor(testForPortal, WAIT_FOR_OPTIONS); // Select menu is rendered in a portal
+    await waitForPickerOptions();
 
     mockProfilerFolderList.forEach((folder: ReportFolder) => {
         expect(screen.getByText(folder.reportName)).not.toBeNull();
@@ -244,7 +252,7 @@ it('shows a loading spinner while updateInstance is pending then clears it', asy
     );
 
     getAllButtonsWithText(SELECT_REPORT_TEXT)[0].click();
-    await waitFor(testForPortal, WAIT_FOR_OPTIONS);
+    await waitForPickerOptions();
 
     const { reportName } = mockProfilerFolderList[0];
     screen.getByText(reportName).click();
@@ -280,7 +288,7 @@ it('updates the instance when a profiler report is selected and creates toast me
 
     getAllButtonsWithText(SELECT_REPORT_TEXT)[0].click();
 
-    await waitFor(testForPortal, WAIT_FOR_OPTIONS); // Select menu is rendered in a portal
+    await waitForPickerOptions();
 
     const { reportName } = mockProfilerFolderList[0];
 
@@ -306,7 +314,7 @@ it('updates the instance when a performance report is selected and creates toast
 
     getAllButtonsWithText(SELECT_REPORT_TEXT)[1].click();
 
-    await waitFor(testForPortal, WAIT_FOR_OPTIONS);
+    await waitForPickerOptions();
 
     const { path } = mockPerformanceReportFolders[0];
 
@@ -332,7 +340,7 @@ it('records a failed profiler selection without reporting a successful load', as
     );
 
     getAllButtonsWithText(SELECT_REPORT_TEXT)[0].click();
-    await waitFor(testForPortal, WAIT_FOR_OPTIONS);
+    await waitForPickerOptions();
     screen.getByText(mockProfilerFolderList[0].reportName).click();
 
     await waitFor(
@@ -357,7 +365,7 @@ it('records a failed performance selection without reporting a successful load',
     );
 
     getAllButtonsWithText(SELECT_REPORT_TEXT)[1].click();
-    await waitFor(testForPortal, WAIT_FOR_OPTIONS);
+    await waitForPickerOptions();
     screen.getByText(new RegExp(mockPerformanceReportFolders[0].path, 'i')).click();
 
     await waitFor(
@@ -387,7 +395,7 @@ it('classifies a 404 local profiler activation as missing_file without recording
     );
 
     getAllButtonsWithText(SELECT_REPORT_TEXT)[0].click();
-    await waitFor(testForPortal, WAIT_FOR_OPTIONS);
+    await waitForPickerOptions();
     screen.getByText(mockProfilerFolderList[0].reportName).click();
 
     await waitFor(
@@ -695,7 +703,7 @@ const getPickerRowTexts = () => screen.getAllByTestId(TEST_IDS.FOLDER_PICKER_ROW
 
 async function openPicker(select: HTMLElement) {
     select.click();
-    await waitFor(testForPortal, WAIT_FOR_OPTIONS);
+    await waitForPickerOptions();
 }
 
 /** Deletes the named report from an open picker through the confirmation dialog. */
