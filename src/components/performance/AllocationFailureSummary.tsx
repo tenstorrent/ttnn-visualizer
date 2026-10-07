@@ -11,14 +11,18 @@ import { TEST_IDS } from '../../definitions/TestIds';
 import { getAllocationFailureSummary } from '../../functions/parseAllocationFailure';
 import { AllocationFailureListing } from '../../model/AllocationFailure';
 
+// Speaks of the report, not the table: the callout also shows in the stacked view, which
+// has no Flags column, and filters, the range or the column picker can hide the rows.
 const getRunStatus = ({ failedDeviceOperations, linkedRowCount }: AllocationFailureListing): string => {
     const failedAt = failedDeviceOperations.length > 0 ? ` in ${failedDeviceOperations.join(', ')}` : '';
 
     if (linkedRowCount === 0) {
-        return `Failed${failedAt} before reaching the device, so it has no row in this table.`;
+        return `Failed${failedAt} before reaching the device, so it has no row in this report.`;
     }
 
-    return `Failed${failedAt}; ${linkedRowCount} earlier device op${linkedRowCount === 1 ? '' : 's'} ran and ${linkedRowCount === 1 ? 'is' : 'are'} marked in the table.`;
+    const isSingle = linkedRowCount === 1;
+
+    return `Failed${failedAt}; ${linkedRowCount} earlier device op${isSingle ? '' : 's'} ran, so it has ${linkedRowCount} row${isSingle ? '' : 's'} in this report.`;
 };
 
 interface AllocationFailureSummaryProps {

@@ -56,9 +56,19 @@ describe('AllocationFailureSummary', () => {
         ]);
 
         expect(
-            screen.getByText('Failed in Conv2d before reaching the device, so it has no row in this table.'),
+            screen.getByText('Failed in Conv2d before reaching the device, so it has no row in this report.'),
         ).toBeInTheDocument();
-        expect(screen.getByText('Failed; 2 earlier device ops ran and are marked in the table.')).toBeInTheDocument();
+        expect(
+            screen.getByText('Failed; 2 earlier device ops ran, so it has 2 rows in this report.'),
+        ).toBeInTheDocument();
+    });
+
+    it('uses the singular for one earlier device op', () => {
+        renderSummary([listing({ linkedRowCount: 1 })]);
+
+        expect(
+            screen.getByText('Failed in Conv2d; 1 earlier device op ran, so it has 1 row in this report.'),
+        ).toBeInTheDocument();
     });
 
     it('caps the list and counts the rest', () => {
