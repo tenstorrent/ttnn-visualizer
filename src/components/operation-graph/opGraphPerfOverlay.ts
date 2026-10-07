@@ -194,6 +194,10 @@ const logScore = (ns: number, minNs: number, maxNs: number): number => {
     return Math.min(1, Math.max(0, (Math.log10(ns) - logMin) / (Math.log10(maxNs) - logMin)));
 };
 
+/** The colour `ns` takes on the ramp the node bars and the legend are drawn against. */
+export const getPerfColorForNs = (ns: number, minNs: number, maxNs: number): string =>
+    perfColorScale(logScore(ns, minNs, maxNs));
+
 export interface RenderedPerfStyling {
     styleByNodeId: Map<string, CSSProperties>;
     /**

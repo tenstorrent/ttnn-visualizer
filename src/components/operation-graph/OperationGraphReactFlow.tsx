@@ -35,7 +35,12 @@ import { buildGraphFilterMatcher } from '../../functions/graphFilterMatcher';
 import type { OperationDescription } from '../../model/APIData';
 import { type PerfOverlaySource, perfColorScale } from '../../functions/perfOverlay';
 import { type ReportScope, isSameReportScope } from '../../definitions/ReportScope';
-import { activePerformanceReportAtom, activeProfilerReportAtom, criticalPathScopeAtom } from '../../store/app';
+import {
+    activePerformanceReportAtom,
+    activeProfilerReportAtom,
+    criticalPathScopeAtom,
+    hotOpsPanelAtom,
+} from '../../store/app';
 import type { GraphOpFilterHandle } from '../GraphOpFilter';
 import LoadingSpinner from '../LoadingSpinner';
 import PerfOverlayLegend from '../perf-overlay/PerfOverlayLegend';
@@ -45,7 +50,9 @@ import OpGraphDeviceGroupNode from './OpGraphDeviceGroupNode';
 import OpGraphWeightGroupNode from './OpGraphWeightGroupNode';
 import OpGraphDeviceOpNode from './OpGraphDeviceOpNode';
 import OpGraphEdge from './OpGraphEdge';
+import OpGraphHotOpsPanel from './OpGraphHotOpsPanel';
 import OpGraphInfoPanel from './OpGraphInfoPanel';
+import { buildHotOpRows } from './opGraphHotOps';
 import OpGraphNode from './OpGraphNode';
 import OpGraphToolbar from './OpGraphToolbar';
 import { buildDeviceOperationSubgraph, countDeviceOperations } from './opGraphDeviceSubgraph';
@@ -376,6 +383,7 @@ const OperationGraphInner = ({
     const [nodeIdByOperationId, setNodeIdByOperationId] = useState<ReadonlyMap<number, string>>(EMPTY_NODE_ID_BY_OP);
     const [isPerfOverlayEnabled, setIsPerfOverlayEnabled] = useState(false);
     const [criticalPathScope, setCriticalPathScope] = useAtom(criticalPathScopeAtom);
+    const [hotOpsPanel, setHotOpsPanel] = useAtom(hotOpsPanelAtom);
     const [perfHover, setPerfHover] = useState<PerfHover | null>(null);
     const [filterQuery, setFilterQuery] = useState('');
     const [appliedFilterQuery, setAppliedFilterQuery] = useState('');
@@ -1549,6 +1557,16 @@ const OperationGraphInner = ({
         [isPerfOverlayActive, perfOverlay, nodeIndex],
     );
     const perfStyleByNodeId = renderedPerfStyling?.styleByNodeId ?? null;
+    const perfRangeMinNs = renderedPerfStyling?.minNs ?? perfOverlay.minNs;
+    const perfRangeMaxNs = renderedPerfStyling?.maxNs ?? perfOverlay.maxNs;
+
+    const hotOpRows = useMemo(
+        () =>
+            hotOpsPanel.isShown && perfOverlay.status === PerfOverlayStatus.READY
+                ? buildHotOpRows(perfOverlay, graphOperationIds, operationNamesById)
+                : [],
+        [hotOpsPanel.isShown, perfOverlay, graphOperationIds, operationNamesById],
+    );
 
     const styledNodes = useMemo(() => {
         if (!highlight && !matchedIds && !perfStyleByNodeId && !criticalPathNodeIds && !revealedNodeIds) {
@@ -1764,6 +1782,11 @@ const OperationGraphInner = ({
         setPerfHover(null);
     }, []);
 
+    const handleHotOpsChange = useCallback(
+        (next: boolean) => setHotOpsPanel((current) => ({ ...current, isShown: next })),
+        [setHotOpsPanel],
+    );
+
     const handleCriticalPathChange = useCallback(
         (next: boolean) => setCriticalPathScope(next ? reportScope : null),
         [setCriticalPathScope, reportScope],
@@ -1820,6 +1843,8 @@ const OperationGraphInner = ({
     // Closed mid-build so the panel can't describe an operation the graph being
     // laid out is about to drop.
     const isPanelOpen = selectedOperationId !== null && !isBuilding;
+    const isHotOpsShown = hotOpsPanel.isShown && perfOverlay.status === PerfOverlayStatus.READY;
+    const isHotOpsVisible = isHotOpsShown && !isBuilding;
 
     const containerClassName = [
         'operation-graph-react-flow',
@@ -1872,6 +1897,8 @@ const OperationGraphInner = ({
                 onPerfOverlayChange={handlePerfOverlayChange}
                 isCriticalPathActive={isCriticalPathActive}
                 onCriticalPathChange={handleCriticalPathChange}
+                isHotOpsShown={isHotOpsShown}
+                onHotOpsChange={handleHotOpsChange}
                 perfOverlayStatus={perfOverlay.status}
                 linkedOpCount={perfOverlay.linkedOpCount}
                 totalOpCount={perfOverlay.totalOpCount}
@@ -1927,8 +1954,8 @@ const OperationGraphInner = ({
                 ) : null}
                 {isPerfOverlayActive && !isBuilding ? (
                     <PerfOverlayLegend
-                        minNs={renderedPerfStyling?.minNs ?? perfOverlay.minNs}
-                        maxNs={renderedPerfStyling?.maxNs ?? perfOverlay.maxNs}
+                        minNs={perfRangeMinNs}
+                        maxNs={perfRangeMaxNs}
                     />
                 ) : null}
             </div>
@@ -1945,21 +1972,36 @@ const OperationGraphInner = ({
                     {perfHoverLabel}
                 </div>
             ) : null}
-            {isPanelOpen ? (
-                <OpGraphInfoPanel
-                    operationId={selectedOperationId}
-                    operationById={operationById}
-                    operationNamesById={operationNamesById}
-                    onLocateOperation={centerOperation}
-                    isPerfOverlayActive={isPerfOverlayActive}
-                    perfDeviceTimeNs={selectedPerfDeviceTimeNs}
-                    perfColor={
-                        selectedBlock === null && selectedPerfScore !== undefined
-                            ? perfColorScale(selectedPerfScore.t)
-                            : undefined
-                    }
-                    block={selectedBlock}
-                />
+            {isPanelOpen || isHotOpsVisible ? (
+                <div className='op-graph-side'>
+                    {isHotOpsVisible ? (
+                        <OpGraphHotOpsPanel
+                            rows={hotOpRows}
+                            linkedOpCount={perfOverlay.linkedOpCount}
+                            totalNs={perfOverlay.totalNs}
+                            minNs={perfRangeMinNs}
+                            maxNs={perfRangeMaxNs}
+                            selectedOperationId={selectedOperationId}
+                            onSelectOperation={selectOperation}
+                        />
+                    ) : null}
+                    {isPanelOpen ? (
+                        <OpGraphInfoPanel
+                            operationId={selectedOperationId}
+                            operationById={operationById}
+                            operationNamesById={operationNamesById}
+                            onLocateOperation={centerOperation}
+                            isPerfOverlayActive={isPerfOverlayActive}
+                            perfDeviceTimeNs={selectedPerfDeviceTimeNs}
+                            perfColor={
+                                selectedBlock === null && selectedPerfScore !== undefined
+                                    ? perfColorScale(selectedPerfScore.t)
+                                    : undefined
+                            }
+                            block={selectedBlock}
+                        />
+                    ) : null}
+                </div>
             ) : null}
         </div>
     );

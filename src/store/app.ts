@@ -22,6 +22,7 @@ import { BufferType } from '../model/BufferType';
 import { StackedGroupBy } from '../definitions/StackedPerfTable';
 import { SortingOptions } from '../definitions/SortingOptions';
 import { DEFAULT_TOP_N_COUNT, TopNAnnotationMode } from '../definitions/TopNAnnotations';
+import { DEFAULT_HOT_OPS_PANEL_STATE, HotOpsPanelState } from '../definitions/HotOps';
 import { MlirServerConnection } from '../model/MlirServer';
 import { MlirFileResult, MlirLoadedReport } from '../model/MLIRJsonModel';
 import { aggregateFileTransferProgress, fileTransferRegistryAtom } from './fileTransferRegistry';
@@ -107,6 +108,13 @@ export const isFullStackTraceAtom = atom(false);
 // overlay's own flag is local `useState` and does not survive that trip; the two
 // switches deliberately differ until #1903 decides whether they should agree.
 export const criticalPathScopeAtom = atom<ReportScope | null>(null);
+
+// Session-scoped like `mlirNodeBodyToggles`: how the list reads is a preference for this sitting. #1612
+export const hotOpsPanelAtom = atomWithStorage<HotOpsPanelState>(
+    'opGraphHotOpsPanel',
+    DEFAULT_HOT_OPS_PANEL_STATE,
+    createJSONStorage(() => sessionStorage),
+);
 
 // Tensors route
 export const shouldCollapseAllTensorsAtom = atom(false);
