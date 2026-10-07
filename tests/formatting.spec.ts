@@ -3,7 +3,13 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import { describe, expect, it } from 'vitest';
-import { buildGitCommitUrl, formatDuration, formatShortSha, stripGitRemoteSuffix } from '../src/functions/formatting';
+import {
+    buildGitCommitUrl,
+    formatDuration,
+    formatShareOfTotal,
+    formatShortSha,
+    stripGitRemoteSuffix,
+} from '../src/functions/formatting';
 
 describe('formatShortSha', () => {
     it('truncates to seven characters', () => {
@@ -74,5 +80,16 @@ describe('formatDuration', () => {
         expect(formatDuration(-1)).toBe('0 ns');
         expect(formatDuration(Number.NaN)).toBe('0 ns');
         expect(formatDuration(Number.POSITIVE_INFINITY)).toBe('0 ns');
+    });
+});
+
+describe('formatShareOfTotal', () => {
+    it('prints one decimal, so a short op on a large graph does not read as 0%', () => {
+        expect(formatShareOfTotal(12, 78)).toBe('15.4%');
+        expect(formatShareOfTotal(1, 2_000)).toBe('0.1%');
+    });
+
+    it('reads an empty total as 0.0% rather than dividing by zero', () => {
+        expect(formatShareOfTotal(5, 0)).toBe('0.0%');
     });
 });

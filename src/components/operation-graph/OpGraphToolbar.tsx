@@ -8,7 +8,12 @@ import { type FormEvent, type Ref, memo } from 'react';
 import classNames from 'classnames';
 import GraphOpFilter, { type GraphOpFilterHandle } from '../GraphOpFilter';
 import type { GraphFilterMode } from '../../definitions/GraphFilterMode';
-import { CRITICAL_PATH_TOOLTIP, PERF_OVERLAY_TOOLTIP, PerfOverlayStatus } from '../../definitions/PerfOverlayStatus';
+import {
+    CRITICAL_PATH_TOOLTIP,
+    HOT_OPS_TOOLTIP,
+    PERF_OVERLAY_TOOLTIP,
+    PerfOverlayStatus,
+} from '../../definitions/PerfOverlayStatus';
 import { OpGraphGrouping } from './opGraphTypes';
 import 'styles/components/OpGraphToolbar.scss';
 
@@ -57,9 +62,9 @@ interface PerfGatedSwitchProps {
     isDisabled: boolean;
 }
 
-// Both switches read per-op durations, so a report that can't feed the bars can't
-// weigh the path either — the gate below is that shared contract, held in one
-// place so the two can't drift apart. #1613
+// The perf switches all read per-op durations, so a report that can't feed the
+// bars can't weigh the path or rank the list either — the gate below is that shared
+// contract, held in one place so they can't drift apart. #1613
 //
 // The tooltip is bound to the Switch, not a wrapper: Blueprint targets the
 // enclosing label, which still emits pointer events while the input is disabled —
@@ -109,6 +114,8 @@ interface OpGraphToolbarProps {
     onPerfOverlayChange: (next: boolean) => void;
     isCriticalPathActive: boolean;
     onCriticalPathChange: (next: boolean) => void;
+    isHotOpsActive: boolean;
+    onHotOpsChange: (next: boolean) => void;
     perfOverlayStatus: PerfOverlayStatus;
     linkedOpCount: number;
     totalOpCount: number;
@@ -154,6 +161,8 @@ const OpGraphToolbar = memo(
         onPerfOverlayChange,
         isCriticalPathActive,
         onCriticalPathChange,
+        isHotOpsActive,
+        onHotOpsChange,
         perfOverlayStatus,
         linkedOpCount,
         totalOpCount,
@@ -276,28 +285,6 @@ const OpGraphToolbar = memo(
                     label='Dim unrelated edges'
                     disabled={isDisabled}
                 />
-
-                <PerfGatedSwitch
-                    tooltipByStatus={PERF_OVERLAY_TOOLTIP}
-                    label={
-                        perfOverlayStatus === PerfOverlayStatus.READY
-                            ? `Perf overlay (${linkedOpCount}/${totalOpCount})`
-                            : 'Perf overlay'
-                    }
-                    checked={isPerfOverlayActive}
-                    onChange={onPerfOverlayChange}
-                    perfOverlayStatus={perfOverlayStatus}
-                    isDisabled={isDisabled}
-                />
-
-                <PerfGatedSwitch
-                    tooltipByStatus={CRITICAL_PATH_TOOLTIP}
-                    label='Highlight critical path'
-                    checked={isCriticalPathActive}
-                    onChange={onCriticalPathChange}
-                    perfOverlayStatus={perfOverlayStatus}
-                    isDisabled={isDisabled}
-                />
             </div>
 
             <div className='op-graph-toolbar-row'>
@@ -362,6 +349,40 @@ const OpGraphToolbar = memo(
                     // answer about this report rather than a broken control.
                     <span className='op-graph-toolbar-empty-note'>{`no ${GROUPING_NOUN[grouping]} detected`}</span>
                 )}
+            </div>
+
+            <div className='op-graph-toolbar-row'>
+                <span className='op-graph-toolbar-group-label'>Performance</span>
+                <PerfGatedSwitch
+                    tooltipByStatus={PERF_OVERLAY_TOOLTIP}
+                    label={
+                        perfOverlayStatus === PerfOverlayStatus.READY
+                            ? `Perf overlay (${linkedOpCount}/${totalOpCount})`
+                            : 'Perf overlay'
+                    }
+                    checked={isPerfOverlayActive}
+                    onChange={onPerfOverlayChange}
+                    perfOverlayStatus={perfOverlayStatus}
+                    isDisabled={isDisabled}
+                />
+
+                <PerfGatedSwitch
+                    tooltipByStatus={CRITICAL_PATH_TOOLTIP}
+                    label='Highlight critical path'
+                    checked={isCriticalPathActive}
+                    onChange={onCriticalPathChange}
+                    perfOverlayStatus={perfOverlayStatus}
+                    isDisabled={isDisabled}
+                />
+
+                <PerfGatedSwitch
+                    tooltipByStatus={HOT_OPS_TOOLTIP}
+                    label='Slowest operations'
+                    checked={isHotOpsActive}
+                    onChange={onHotOpsChange}
+                    perfOverlayStatus={perfOverlayStatus}
+                    isDisabled={isDisabled}
+                />
             </div>
         </div>
     ),

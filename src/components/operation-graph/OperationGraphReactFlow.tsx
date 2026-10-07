@@ -33,9 +33,14 @@ import { PerfOverlayStatus } from '../../definitions/PerfOverlayStatus';
 import { toReadableShape } from '../../functions/formatting';
 import { buildGraphFilterMatcher } from '../../functions/graphFilterMatcher';
 import type { OperationDescription } from '../../model/APIData';
-import { type PerfOverlaySource, perfColorScale } from '../../functions/perfOverlay';
+import type { PerfOverlaySource } from '../../functions/perfOverlay';
 import { type ReportScope, isSameReportScope } from '../../definitions/ReportScope';
-import { activePerformanceReportAtom, activeProfilerReportAtom, criticalPathScopeAtom } from '../../store/app';
+import {
+    activePerformanceReportAtom,
+    activeProfilerReportAtom,
+    criticalPathScopeAtom,
+    isHotOpsEnabledAtom,
+} from '../../store/app';
 import type { GraphOpFilterHandle } from '../GraphOpFilter';
 import LoadingSpinner from '../LoadingSpinner';
 import PerfOverlayLegend from '../perf-overlay/PerfOverlayLegend';
@@ -45,7 +50,9 @@ import OpGraphDeviceGroupNode from './OpGraphDeviceGroupNode';
 import OpGraphWeightGroupNode from './OpGraphWeightGroupNode';
 import OpGraphDeviceOpNode from './OpGraphDeviceOpNode';
 import OpGraphEdge from './OpGraphEdge';
+import OpGraphHotOpsPanel from './OpGraphHotOpsPanel';
 import OpGraphInfoPanel from './OpGraphInfoPanel';
+import { buildHotOpRows } from './opGraphHotOps';
 import OpGraphNode from './OpGraphNode';
 import OpGraphToolbar from './OpGraphToolbar';
 import { buildDeviceOperationSubgraph, countDeviceOperations } from './opGraphDeviceSubgraph';
@@ -54,8 +61,10 @@ import {
     PERF_BAR_ZOOM_VAR,
     buildOpGraphPerfOverlay,
     buildRenderedPerfStyling,
+    getPerfColorForNs,
     getPerfHoverLabel,
     getQuantisedPerfZoom,
+    getRenderedPerfRange,
 } from './opGraphPerfOverlay';
 import { EMPTY_CRITICAL_PATH, findCriticalPath } from './opGraphCriticalPath';
 import {
@@ -376,6 +385,7 @@ const OperationGraphInner = ({
     const [nodeIdByOperationId, setNodeIdByOperationId] = useState<ReadonlyMap<number, string>>(EMPTY_NODE_ID_BY_OP);
     const [isPerfOverlayEnabled, setIsPerfOverlayEnabled] = useState(false);
     const [criticalPathScope, setCriticalPathScope] = useAtom(criticalPathScopeAtom);
+    const [isHotOpsEnabled, setIsHotOpsEnabled] = useAtom(isHotOpsEnabledAtom);
     const [perfHover, setPerfHover] = useState<PerfHover | null>(null);
     const [filterQuery, setFilterQuery] = useState('');
     const [appliedFilterQuery, setAppliedFilterQuery] = useState('');
@@ -815,10 +825,17 @@ const OperationGraphInner = ({
 
     // The toolbar floats over the pane, so the band it covers is unusable for both
     // movers below. Measured from its bottom edge rather than its height: it sits at
-    // `top: 12px`, and it grows a row when the report has blocks.
+    // `top: 12px`, and its rows wrap with the window's width.
     const paneChromeInset = useCallback((pane: DOMRect): number => {
         const toolbar = containerRef.current?.querySelector('.op-graph-toolbar')?.getBoundingClientRect();
         return toolbar === undefined ? 0 : Math.max(0, toolbar.bottom - pane.top);
+    }, []);
+
+    // The side column floats over the pane's right edge the same way, and a node the
+    // slowest-operations list locates must not land behind the list that located it.
+    const paneSideInset = useCallback((pane: DOMRect): number => {
+        const side = containerRef.current?.querySelector('.op-graph-side')?.getBoundingClientRect();
+        return side === undefined ? 0 : Math.max(0, pane.right - side.left);
     }, []);
 
     // Pans, never zooms, and does nothing when the target is already on screen: the
@@ -830,13 +847,13 @@ const OperationGraphInner = ({
                 return;
             }
             const viewport = getViewport();
-            const { dx, dy } = revealPanShift(bounds, viewport, pane, paneChromeInset(pane));
+            const { dx, dy } = revealPanShift(bounds, viewport, pane, paneChromeInset(pane), paneSideInset(pane));
             if (dx === 0 && dy === 0) {
                 return;
             }
             void setViewport({ ...viewport, x: viewport.x + dx, y: viewport.y + dy }, { duration: FOCUS_DURATION_MS });
         },
-        [getViewport, setViewport, paneChromeInset],
+        [getViewport, setViewport, paneChromeInset, paneSideInset],
     );
 
     // `getInternalNode` rather than `getNode`: a node inside a container carries a
@@ -871,10 +888,10 @@ const OperationGraphInner = ({
                 return;
             }
             const viewport = getViewport();
-            const { dx, dy } = centerPanShift(bounds, viewport, pane, paneChromeInset(pane));
+            const { dx, dy } = centerPanShift(bounds, viewport, pane, paneChromeInset(pane), paneSideInset(pane));
             void setViewport({ ...viewport, x: viewport.x + dx, y: viewport.y + dy }, { duration: FOCUS_DURATION_MS });
         },
-        [pannableNodeAt, nodeIdByOperationId, getViewport, setViewport, paneChromeInset],
+        [pannableNodeAt, nodeIdByOperationId, getViewport, setViewport, paneChromeInset, paneSideInset],
     );
 
     // The only place a zoom is chosen for the user. Reads the committed array, not
@@ -1009,7 +1026,13 @@ const OperationGraphInner = ({
                 // Unrolling a fan reveals its members, which are container children.
                 const bounds = boundsOfNodes(revealed, positions ?? absolutePositionsOf(nodes));
                 if (bounds !== null) {
-                    const { dx, dy } = revealPanShift(bounds, viewport, pane, paneChromeInset(pane));
+                    const { dx, dy } = revealPanShift(
+                        bounds,
+                        viewport,
+                        pane,
+                        paneChromeInset(pane),
+                        paneSideInset(pane),
+                    );
                     viewport = { ...viewport, x: viewport.x + dx, y: viewport.y + dy };
                 }
             }
@@ -1022,7 +1045,7 @@ const OperationGraphInner = ({
         }
 
         void setViewport(viewport, { duration: FOCUS_DURATION_MS });
-    }, [nodes, reportScope, getViewport, setViewport, paneChromeInset]);
+    }, [nodes, reportScope, getViewport, setViewport, paneChromeInset, paneSideInset]);
 
     const armViewportAnchor = useCallback(
         (nodeId: string, fallbackNodeId: string) => {
@@ -1493,6 +1516,7 @@ const OperationGraphInner = ({
     }, [isPerfOverlayActive, flowStore]);
 
     const isCriticalPathActive = isCriticalPathEnabled && perfOverlay.status === PerfOverlayStatus.READY;
+    const isHotOpsActive = isHotOpsEnabled && perfOverlay.status === PerfOverlayStatus.READY;
 
     // The path runs over operations, so an edge rendering into an expanded node has
     // to be presented as reaching the node: `findCriticalPath` drops edges whose
@@ -1549,6 +1573,18 @@ const OperationGraphInner = ({
         [isPerfOverlayActive, perfOverlay, nodeIndex],
     );
     const perfStyleByNodeId = renderedPerfStyling?.styleByNodeId ?? null;
+    // The list's swatches key to the bars' range whether or not the bars are drawn.
+    const perfRange = useMemo(
+        () => renderedPerfStyling ?? (isHotOpsActive ? getRenderedPerfRange(perfOverlay, nodeIndex) : null),
+        [renderedPerfStyling, isHotOpsActive, perfOverlay, nodeIndex],
+    );
+    const perfRangeMinNs = perfRange?.minNs ?? perfOverlay.minNs;
+    const perfRangeMaxNs = perfRange?.maxNs ?? perfOverlay.maxNs;
+
+    const hotOpRows = useMemo(
+        () => (isHotOpsActive ? buildHotOpRows(perfOverlay, graphOperationIds, operationNamesById) : []),
+        [isHotOpsActive, perfOverlay, graphOperationIds, operationNamesById],
+    );
 
     const styledNodes = useMemo(() => {
         if (!highlight && !matchedIds && !perfStyleByNodeId && !criticalPathNodeIds && !revealedNodeIds) {
@@ -1796,8 +1832,6 @@ const OperationGraphInner = ({
 
     const selectedPerfAggregate =
         selectedOperationId === null ? undefined : perfOverlay.aggregatesByOpId.get(selectedOperationId);
-    const selectedPerfScore =
-        selectedOperationId === null ? undefined : perfOverlay.scoreByOpId.get(selectedOperationId);
     const selectedPerfDeviceTimeNs = useMemo(() => {
         if (!isPerfOverlayActive) {
             return undefined;
@@ -1820,6 +1854,7 @@ const OperationGraphInner = ({
     // Closed mid-build so the panel can't describe an operation the graph being
     // laid out is about to drop.
     const isPanelOpen = selectedOperationId !== null && !isBuilding;
+    const isHotOpsVisible = isHotOpsActive && !isBuilding;
 
     const containerClassName = [
         'operation-graph-react-flow',
@@ -1872,6 +1907,8 @@ const OperationGraphInner = ({
                 onPerfOverlayChange={handlePerfOverlayChange}
                 isCriticalPathActive={isCriticalPathActive}
                 onCriticalPathChange={handleCriticalPathChange}
+                isHotOpsActive={isHotOpsActive}
+                onHotOpsChange={setIsHotOpsEnabled}
                 perfOverlayStatus={perfOverlay.status}
                 linkedOpCount={perfOverlay.linkedOpCount}
                 totalOpCount={perfOverlay.totalOpCount}
@@ -1927,8 +1964,8 @@ const OperationGraphInner = ({
                 ) : null}
                 {isPerfOverlayActive && !isBuilding ? (
                     <PerfOverlayLegend
-                        minNs={renderedPerfStyling?.minNs ?? perfOverlay.minNs}
-                        maxNs={renderedPerfStyling?.maxNs ?? perfOverlay.maxNs}
+                        minNs={perfRangeMinNs}
+                        maxNs={perfRangeMaxNs}
                     />
                 ) : null}
             </div>
@@ -1945,21 +1982,36 @@ const OperationGraphInner = ({
                     {perfHoverLabel}
                 </div>
             ) : null}
-            {isPanelOpen ? (
-                <OpGraphInfoPanel
-                    operationId={selectedOperationId}
-                    operationById={operationById}
-                    operationNamesById={operationNamesById}
-                    onLocateOperation={centerOperation}
-                    isPerfOverlayActive={isPerfOverlayActive}
-                    perfDeviceTimeNs={selectedPerfDeviceTimeNs}
-                    perfColor={
-                        selectedBlock === null && selectedPerfScore !== undefined
-                            ? perfColorScale(selectedPerfScore.t)
-                            : undefined
-                    }
-                    block={selectedBlock}
-                />
+            {isPanelOpen || isHotOpsVisible ? (
+                <div className='op-graph-side'>
+                    {isHotOpsVisible ? (
+                        <OpGraphHotOpsPanel
+                            rows={hotOpRows}
+                            linkedOpCount={perfOverlay.linkedOpCount}
+                            totalNs={perfOverlay.totalNs}
+                            minNs={perfRangeMinNs}
+                            maxNs={perfRangeMaxNs}
+                            selectedOperationId={selectedOperationId}
+                            onSelectOperation={selectOperation}
+                        />
+                    ) : null}
+                    {isPanelOpen ? (
+                        <OpGraphInfoPanel
+                            operationId={selectedOperationId}
+                            operationById={operationById}
+                            operationNamesById={operationNamesById}
+                            onLocateOperation={centerOperation}
+                            isPerfOverlayActive={isPerfOverlayActive}
+                            perfDeviceTimeNs={selectedPerfDeviceTimeNs}
+                            perfColor={
+                                selectedBlock === null && selectedPerfDeviceTimeNs !== undefined
+                                    ? getPerfColorForNs(selectedPerfDeviceTimeNs, perfRangeMinNs, perfRangeMaxNs)
+                                    : undefined
+                            }
+                            block={selectedBlock}
+                        />
+                    ) : null}
+                </div>
             ) : null}
         </div>
     );

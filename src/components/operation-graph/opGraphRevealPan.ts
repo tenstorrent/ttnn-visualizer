@@ -11,8 +11,8 @@
 // is ever marked. #1944
 export const REVEALED_NODE_CLASS = 'op-graph-node-revealed';
 // Keeps a revealed node off the edge of the usable pane, where it reads as clipped.
-// `topInset` extends that on the vertical axis for chrome that floats over the pane
-// rather than shrinking it, so a target never lands behind the toolbar. #2007
+// `topInset` and `rightInset` extend that for chrome that floats over the pane rather
+// than shrinking it, so a target never lands behind the toolbar or the side column. #2007
 const REVEAL_MARGIN_PX = 48;
 
 /**
@@ -29,15 +29,16 @@ export const revealPanShift = (
     viewport: { x: number; y: number; zoom: number },
     pane: { width: number; height: number },
     topInset = 0,
+    rightInset = 0,
 ): { dx: number; dy: number } => {
     const left = bounds.minX * viewport.zoom + viewport.x;
     const top = bounds.minY * viewport.zoom + viewport.y;
     const right = bounds.maxX * viewport.zoom + viewport.x;
     const bottom = bounds.maxY * viewport.zoom + viewport.y;
 
-    const axis = (nearEdge: number, farEdge: number, extent: number, inset = 0): number => {
-        const lowLimit = inset + REVEAL_MARGIN_PX;
-        const highLimit = extent - REVEAL_MARGIN_PX;
+    const axis = (nearEdge: number, farEdge: number, extent: number, nearInset: number, farInset: number): number => {
+        const lowLimit = nearInset + REVEAL_MARGIN_PX;
+        const highLimit = extent - farInset - REVEAL_MARGIN_PX;
         if (farEdge - nearEdge > highLimit - lowLimit) {
             // Too large to fit: align the near edge and let the rest run off.
             return lowLimit - nearEdge;
@@ -51,7 +52,10 @@ export const revealPanShift = (
         return 0;
     };
 
-    return { dx: axis(left, right, pane.width), dy: axis(top, bottom, pane.height, topInset) };
+    return {
+        dx: axis(left, right, pane.width, 0, rightInset),
+        dy: axis(top, bottom, pane.height, topInset, 0),
+    };
 };
 
 /**
@@ -68,12 +72,13 @@ export const centerPanShift = (
     viewport: { x: number; y: number; zoom: number },
     pane: { width: number; height: number },
     topInset = 0,
+    rightInset = 0,
 ): { dx: number; dy: number } => {
     const centerX = ((bounds.minX + bounds.maxX) / 2) * viewport.zoom + viewport.x;
     const centerY = ((bounds.minY + bounds.maxY) / 2) * viewport.zoom + viewport.y;
 
     return {
-        dx: pane.width / 2 - centerX,
+        dx: (pane.width - rightInset) / 2 - centerX,
         // Centred in the band the toolbar leaves, not the raw pane, so a recentred
         // node sits where the eye is rather than tucked under the controls.
         dy: topInset + (pane.height - topInset) / 2 - centerY,
