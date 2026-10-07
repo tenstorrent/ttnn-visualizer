@@ -143,16 +143,16 @@ const usePerfReportFiltering = ({
             const hasCrossReportFilters =
                 hasAlignedRowFilters || hasMathFilter || hasBufferTypeFilter || hasLayoutFilter;
             const allDatasets = [processedRows, ...processedComparisonRows];
-            const datasetsWithoutCrossReportFilters = allDatasets.map((dataset) =>
+            const datasetsWithoutOpCodeFilter = allDatasets.map((dataset) =>
                 sortAndFilterPerfTableData(dataset, {
                     filters: filtersWithoutOpCode,
                 }),
             );
-            const datasetRowSets = datasetsWithoutCrossReportFilters.map((dataset) => new Set(dataset));
+            const datasetRowSets = datasetsWithoutOpCodeFilter.map((dataset) => new Set(dataset));
 
             if (!hasCrossReportFilters) {
-                const [filteredSourceRows, ...filteredComparisonRows] = datasetsWithoutCrossReportFilters.map(
-                    (dataset) => sortAndFilterPerfTableData(dataset, { filterBySignpost }),
+                const [filteredSourceRows, ...filteredComparisonRows] = datasetsWithoutOpCodeFilter.map((dataset) =>
+                    sortAndFilterPerfTableData(dataset, { filterBySignpost }),
                 );
 
                 return {

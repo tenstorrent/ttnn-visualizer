@@ -38,21 +38,16 @@ import { ReportLinkMatchResult } from '../src/definitions/ReportLinks';
 import ReportLinkRecorder from '../src/components/ReportLinkRecorder';
 import { ReportLinksProbe } from './helpers/ReportLinksProbe';
 import { createReportLink, getProbedReportLinks } from './helpers/reportLinkFixtures';
-import testForPortal from './helpers/testForPortal';
 import createMockFile, { MOCK_FOLDER } from './helpers/createMockFile';
 import { ReportKind, ReportLoadFailureReason, ReportSource } from '../src/definitions/EventLogEvent';
 
-// Scrub the markup after each test
 const WAIT_FOR_OPTIONS = { timeout: 1000 };
-
-// The select renders its menu in a portal that can mount before the items do, so wait for an
-// item rather than only the portal; reading items straight after the portal appears is flaky in CI.
-const waitForPickerOptions = () =>
-    waitFor(() => {
-        testForPortal();
-        expect(document.querySelector(`.${Classes.PORTAL} .${Classes.MENU_ITEM}`)).not.toBeNull();
-    }, WAIT_FOR_OPTIONS);
 const SELECT_REPORT_TEXT = 'Select a report...';
+
+// The select renders its menu in a portal that can mount before the rows do, so wait for the
+// picker's own rows; reading them straight after the portal appears is flaky in CI, and any menu
+// item would also match the empty state ("No results.").
+const waitForPickerOptions = () => screen.findAllByTestId(TEST_IDS.FOLDER_PICKER_ROW, {}, WAIT_FOR_OPTIONS);
 
 // Data is mutated in the mock of useLocal - eventually this should be set per test as needed
 const mockPerfFolderList = [...mockPerformanceReportFolders];

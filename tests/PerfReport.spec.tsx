@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import '@testing-library/jest-dom/vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { Mock, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import PerformanceReport from '../src/components/performance/PerfReport';
 import { TypedPerfTableRow } from '../src/model/PerfTable';
@@ -21,7 +21,6 @@ import {
 import { formatDurationBucketRange } from '../src/functions/formatDurationBucketRange';
 import { AtomProviderInitialValues } from './helpers/atomProvider';
 import { TestProviders } from './helpers/TestProviders';
-import testForPortal from './helpers/testForPortal';
 import { DEFAULT_MAX_CORES } from '../src/functions/getCoreCount';
 
 vi.mock('../src/hooks/useAPI.tsx', () => ({
@@ -110,12 +109,19 @@ function renderReport({
 
 afterEach(cleanup);
 
-// The primary row and its comparison sub-row both survive: the filter must not empty either table.
-function expectRowInBothReports(opCode: string) {
-    const tableRows = screen.getAllByText(opCode).map((cell) => cell.closest('tr'));
+// Text highlighting splits a matching cell, so read whole rows rather than querying by text. The
+// match is a substring: 'Reshape' also finds a 'ReshapeView' row.
+const getRowsContaining = (text: string) =>
+    Array.from(screen.getByRole('table').querySelectorAll('tbody tr')).filter((tableRow) =>
+        tableRow.textContent?.includes(text),
+    );
 
-    expect(tableRows.some((tableRow) => tableRow?.classList.contains('comparison-row'))).toBe(true);
-    expect(tableRows.some((tableRow) => tableRow && !tableRow.classList.contains('comparison-row'))).toBe(true);
+// The primary row and its comparison sub-row both survive: the filter must not empty either table.
+function expectRowInBothReports(text: string) {
+    const tableRows = getRowsContaining(text);
+
+    expect(tableRows.some((tableRow) => tableRow.classList.contains('comparison-row'))).toBe(true);
+    expect(tableRows.some((tableRow) => !tableRow.classList.contains('comparison-row'))).toBe(true);
 }
 
 beforeEach(() => {
@@ -233,17 +239,7 @@ describe('PerformanceReport op category filter', () => {
 });
 
 describe('PerformanceReport filters resolved on aligned rows', () => {
-    // Text highlighting splits a matching cell, so read whole rows rather than querying by text.
-    const getRowsContaining = (text: string) =>
-        Array.from(screen.getByRole('table').querySelectorAll('tbody tr')).filter((tableRow) =>
-            tableRow.textContent?.includes(text),
-        );
-    const expectInBothReports = (text: string) => {
-        const tableRows = getRowsContaining(text);
-
-        expect(tableRows.some((tableRow) => tableRow.classList.contains('comparison-row'))).toBe(true);
-        expect(tableRows.some((tableRow) => !tableRow.classList.contains('comparison-row'))).toBe(true);
-    };
+    // Four rows per report so a normalised comparison stays within alignByOpCode's missing limit.
     const setNormalisation = (isOn: boolean) => {
         if (!isOn) {
             fireEvent.click(screen.getByLabelText('Normalise data'));
@@ -251,7 +247,6 @@ describe('PerformanceReport filters resolved on aligned rows', () => {
 
         expect(screen.getByLabelText('Normalise data')).toHaveProperty('checked', isOn);
     };
-    // Four rows per report so a normalised comparison stays within alignByOpCode's missing limit.
     const withOpCode = (base: TypedPerfTableRow, opCode: string) => ({ ...base, op_code: opCode });
 
     it.each([true, false])(
@@ -280,9 +275,10 @@ describe('PerformanceReport filters resolved on aligned rows', () => {
                 target: { value: '128x128' },
             });
 
-            expectInBothReports('Matmul');
+            expectRowInBothReports('Matmul');
             expect(getRowsContaining('Softmax')).toHaveLength(0);
             expect(getRowsContaining('Reshape')).toHaveLength(0);
+            expect(getRowsContaining('Tilize')).toHaveLength(0);
         },
     );
 
@@ -313,7 +309,7 @@ describe('PerformanceReport filters resolved on aligned rows', () => {
 
             setNormalisation(isNormalised);
 
-            expectInBothReports('Tilize');
+            expectRowInBothReports('Tilize');
             expect(getRowsContaining('Reshape')).toHaveLength(0);
         },
     );
@@ -333,10 +329,11 @@ describe('PerformanceReport filters resolved on aligned rows', () => {
         // switch off first and pick it from the select.
         setNormalisation(false);
         fireEvent.click(screen.getByPlaceholderText('Select Op Codes...'));
-        await waitFor(testForPortal, WAIT_FOR_OPTIONS);
-        fireEvent.click(screen.getByRole('checkbox', { name: 'ReshapeView' }));
+        // Wait for the option itself: the popover's portal can mount before its items do.
+        fireEvent.click(await screen.findByRole('checkbox', { name: 'ReshapeView' }, WAIT_FOR_OPTIONS));
 
-        expectInBothReports('Reshape');
+        // The substring match finds the comparison's ReshapeView row as well.
+        expectRowInBothReports('Reshape');
         expect(getRowsContaining('Matmul')).toHaveLength(0);
     });
 });
@@ -478,10 +475,11 @@ describe('PerformanceReport duration bucket options', () => {
     // without holding a single row
     const gappedRows = [row('Matmul', 1, 5), row('Conv2d', 2, 5000)];
 
-    /** The options only exist while the MultiSelect popover is open. */
+    /** The options only exist while the MultiSelect popover is open, and render after its portal. */
     const openDeviceTimeSelect = async () => {
         fireEvent.click(screen.getByPlaceholderText(PERF_DURATION_BUCKET_FILTER_PLACEHOLDER));
-        await waitFor(testForPortal, WAIT_FOR_OPTIONS);
+        // The page's switches are checkboxes too, so wait for a bucket option specifically.
+        await screen.findAllByRole('checkbox', { name: /µs/ }, WAIT_FOR_OPTIONS);
     };
 
     const getOption = (minUs: number, maxUs: number) =>
