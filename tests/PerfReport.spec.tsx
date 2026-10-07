@@ -232,6 +232,51 @@ describe('PerformanceReport op category filter', () => {
     });
 });
 
+describe('PerformanceReport sorting with a normalised comparison', () => {
+    // Four rows so one missing op stays under alignByOpCode's 30% missing limit.
+    const OP_CODES = ['MISSING - AllGather', 'AllGather', 'Matmul', 'Reshape', 'Softmax'];
+    const getTableRowLabels = () =>
+        Array.from(screen.getByRole('table').querySelectorAll('tbody tr')).map((tableRow) => {
+            const opCode = OP_CODES.find((code) => tableRow.textContent?.includes(code)) ?? '';
+
+            return tableRow.classList.contains('comparison-row') ? `sub:${opCode}` : opCode;
+        });
+
+    it('keeps the missing-op placeholder under its primary row when sorting by category', () => {
+        renderReport({
+            data: [
+                row('Matmul', 1, 5, OperationCategories.COMPUTE),
+                row('AllGather', 2, 5, OperationCategories.CCL),
+                row('Reshape', 3, 5, OperationCategories.TM),
+                row('Softmax', 4, 5, OperationCategories.COMPUTE),
+            ],
+            comparisonData: [
+                [
+                    row('Matmul', 11, 5, OperationCategories.COMPUTE),
+                    row('Reshape', 13, 5, OperationCategories.TM),
+                    row('Softmax', 14, 5, OperationCategories.COMPUTE),
+                ],
+            ],
+            comparisonReports: [COMPARISON_REPORT],
+        });
+
+        expect(screen.getByLabelText('Normalise data')).toBeChecked();
+
+        fireEvent.click(screen.getByRole('button', { name: /^Category/ }));
+
+        expect(getTableRowLabels()).toEqual([
+            'AllGather',
+            'sub:MISSING - AllGather',
+            'Matmul',
+            'sub:Matmul',
+            'Softmax',
+            'sub:Softmax',
+            'Reshape',
+            'sub:Reshape',
+        ]);
+    });
+});
+
 describe('PerformanceReport duration bucket filter', () => {
     it('shows only rows whose device time bins into a selected bucket', () => {
         renderReport({

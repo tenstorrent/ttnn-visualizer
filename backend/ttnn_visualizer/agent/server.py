@@ -112,8 +112,9 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
                 "how many rows did not link and why -- including signposts and other "
                 "rows the ranking leaves out -- and, in its note, when an "
                 "operation_id is null. A null bound is not a clean bill of health: "
-                "read bound_analysis, where none means the op was never modelled and "
-                "flops_only means DRAM and bound are never derived."
+                "read bound_analysis, where none means the op was never modelled, "
+                "flops_only means DRAM and bound are never derived, and full with a "
+                "null bound means the trace lacked the inputs the model needs."
             ),
             "schema": {
                 "type": "object",

@@ -115,23 +115,28 @@ const usePerfReportFiltering = ({
     );
 
     const { filteredRows, filteredComparisonRowsList } = useMemo(() => {
+        // Filters resolved against the aligned rows in both branches. Options come from every
+        // dataset, so a value only a comparison row has must match there too, rather than filtering
+        // the primary report alone and emptying both tables.
+        const opCodeFilterValue = filters?.[ColumnKeys.OpCode]?.toLowerCase() || '';
+        const hasOpCodeTextFilter = opCodeFilterValue.length > 0;
+        const hasRawOpCodeFilter = rawOpCodeFilterSet.size > 0;
+        const hasOpCategoryFilter = opCategoryFilterSet.size > 0;
+        const hasDurationFilter = durationBucketFilterSet.size > 0;
+        const hasAlignedRowFilters =
+            hasOpCodeTextFilter || hasRawOpCodeFilter || hasOpCategoryFilter || hasDurationFilter;
+        const matchesAlignedRowFilters = (row: TypedPerfTableRow) =>
+            (!hasOpCodeTextFilter || row.op_code.toLowerCase().includes(opCodeFilterValue)) &&
+            (!hasRawOpCodeFilter || (row.raw_op_code !== null && rawOpCodeFilterSet.has(row.raw_op_code))) &&
+            (!hasOpCategoryFilter || (row.op_category !== null && opCategoryFilterSet.has(row.op_category))) &&
+            (!hasDurationFilter || matchesDurationBucket(row.device_time));
+
         if (!isNormalisationApplied) {
-            const opCodeFilterValue = filters?.[ColumnKeys.OpCode]?.toLowerCase() || '';
-            const hasOpCodeTextFilter = opCodeFilterValue.length > 0;
-            const hasRawOpCodeFilter = rawOpCodeFilterSet.size > 0;
             const hasMathFilter = activeMathFilters.length > 0;
             const hasBufferTypeFilter = activeBufferTypeFilters.length > 0;
             const hasLayoutFilter = activeLayoutFilters.length > 0;
-            const hasOpCategoryFilter = opCategoryFilterSet.size > 0;
-            const hasDurationFilter = durationBucketFilterSet.size > 0;
             const hasCrossReportFilters =
-                hasOpCodeTextFilter ||
-                hasRawOpCodeFilter ||
-                hasMathFilter ||
-                hasBufferTypeFilter ||
-                hasLayoutFilter ||
-                hasOpCategoryFilter ||
-                hasDurationFilter;
+                hasAlignedRowFilters || hasMathFilter || hasBufferTypeFilter || hasLayoutFilter;
             const filtersWithoutCrossReportFilters = {
                 ...filters,
                 [ColumnKeys.OpCode]: '',
@@ -165,12 +170,6 @@ const usePerfReportFiltering = ({
                     .filter((value): value is TypedPerfTableRow => Boolean(value));
 
                 return alignedRows.some((alignedRow) => {
-                    const matchesOpCodeText = hasOpCodeTextFilter
-                        ? alignedRow.op_code.toLowerCase().includes(opCodeFilterValue)
-                        : true;
-                    const matchesRawOpCode = hasRawOpCodeFilter
-                        ? alignedRow.raw_op_code !== null && rawOpCodeFilterSet.has(alignedRow.raw_op_code)
-                        : true;
                     const matchesMathFidelity = hasMathFilter
                         ? alignedRow.math_fidelity !== null && mathFilterSet.has(alignedRow.math_fidelity)
                         : true;
@@ -180,19 +179,12 @@ const usePerfReportFiltering = ({
                     const matchesLayout = hasLayoutFilter
                         ? alignedRow.layout !== null && layoutFilterSet.has(alignedRow.layout)
                         : true;
-                    const matchesOpCategory = hasOpCategoryFilter
-                        ? alignedRow.op_category !== null && opCategoryFilterSet.has(alignedRow.op_category)
-                        : true;
-                    const matchesDuration = hasDurationFilter ? matchesDurationBucket(alignedRow.device_time) : true;
 
                     return (
-                        matchesOpCodeText &&
-                        matchesRawOpCode &&
+                        matchesAlignedRowFilters(alignedRow) &&
                         matchesMathFidelity &&
                         matchesBufferType &&
-                        matchesLayout &&
-                        matchesOpCategory &&
-                        matchesDuration
+                        matchesLayout
                     );
                 });
             });
@@ -211,16 +203,7 @@ const usePerfReportFiltering = ({
             };
         }
 
-        const opCodeFilterValue = filters?.[ColumnKeys.OpCode]?.toLowerCase() || '';
-        const hasOpCodeTextFilter = opCodeFilterValue.length > 0;
-        const hasRawOpCodeFilter = rawOpCodeFilterSet.size > 0;
-        const hasDurationFilter = durationBucketFilterSet.size > 0;
-        // Options come from every dataset, so a category only a comparison row has must match there
-        // too rather than filtering the primary report alone and emptying both tables.
-        const hasOpCategoryFilter = opCategoryFilterSet.size > 0;
-        // Every filter resolved against the aligned rows rather than per dataset
-        const hasAlignedRowFilters =
-            hasOpCodeTextFilter || hasRawOpCodeFilter || hasDurationFilter || hasOpCategoryFilter;
+        // Math, buffer type and layout still filter the primary report alone here (#2083).
         const filtersWithoutOpCode = {
             ...filters,
             [ColumnKeys.OpCode]: '',
@@ -248,20 +231,7 @@ const usePerfReportFiltering = ({
                     .filter((value): value is TypedPerfTableRow => Boolean(value)),
             ];
 
-            return alignedRows.some((alignedRow) => {
-                const matchesOpCodeText = hasOpCodeTextFilter
-                    ? alignedRow.op_code.toLowerCase().includes(opCodeFilterValue)
-                    : true;
-                const matchesRawOpCode = hasRawOpCodeFilter
-                    ? alignedRow.raw_op_code !== null && rawOpCodeFilterSet.has(alignedRow.raw_op_code)
-                    : true;
-                const matchesDuration = hasDurationFilter ? matchesDurationBucket(alignedRow.device_time) : true;
-                const matchesOpCategory = hasOpCategoryFilter
-                    ? alignedRow.op_category !== null && opCategoryFilterSet.has(alignedRow.op_category)
-                    : true;
-
-                return matchesOpCodeText && matchesRawOpCode && matchesDuration && matchesOpCategory;
-            });
+            return alignedRows.some(matchesAlignedRowFilters);
         });
 
         const applyMask = (dataset: TypedPerfTableRow[]) => dataset.filter((_, index) => keepRowMask[index]);

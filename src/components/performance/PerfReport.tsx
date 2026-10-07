@@ -96,6 +96,24 @@ const pruneToValidValues = <T,>(validValues: ReadonlySet<NonNullable<T>>, curren
     return nextFilters.length === currentFilters.length ? currentFilters : nextFilters;
 };
 
+/** The distinct non-null values of one row field, which are the values its chip filter can offer. */
+const getDistinctValues = <K extends keyof TypedPerfTableRow>(
+    rows: TypedPerfTableRow[],
+    key: K,
+): Set<NonNullable<TypedPerfTableRow[K]>> => {
+    const values = new Set<NonNullable<TypedPerfTableRow[K]>>();
+
+    for (const row of rows) {
+        const value = row[key];
+
+        if (value !== null && value !== undefined) {
+            values.add(value);
+        }
+    }
+
+    return values;
+};
+
 const PerformanceReport = ({
     data,
     comparisonData,
@@ -196,33 +214,9 @@ const PerformanceReport = ({
             ),
         [combinedRows],
     );
-    const validBufferTypeValues = useMemo(
-        () =>
-            new Set(
-                combinedRows
-                    .map((row) => row.buffer_type)
-                    .filter((value): value is NonNullable<TypedPerfTableRow['buffer_type']> => value !== null),
-            ),
-        [combinedRows],
-    );
-    const validLayoutValues = useMemo(
-        () =>
-            new Set(
-                combinedRows
-                    .map((row) => row.layout)
-                    .filter((value): value is NonNullable<TypedPerfTableRow['layout']> => value !== null),
-            ),
-        [combinedRows],
-    );
-    const validOpCategoryValues = useMemo(
-        () =>
-            new Set(
-                combinedRows
-                    .map((row) => row.op_category)
-                    .filter((value): value is NonNullable<TypedPerfTableRow['op_category']> => value !== null),
-            ),
-        [combinedRows],
-    );
+    const validBufferTypeValues = useMemo(() => getDistinctValues(combinedRows, 'buffer_type'), [combinedRows]);
+    const validLayoutValues = useMemo(() => getDistinctValues(combinedRows, 'layout'), [combinedRows]);
+    const validOpCategoryValues = useMemo(() => getDistinctValues(combinedRows, 'op_category'), [combinedRows]);
     const validDurationBucketValues = useMemo(
         () => new Set(durationBucketOptions.map((bucket) => bucket.minUs)),
         [durationBucketOptions],
@@ -233,7 +227,8 @@ const PerformanceReport = ({
         [filteredComparisonRowsList, comparisonIndex],
     );
     // A comparison tab shows its own report as primary and every other report, the original
-    // primary first, beneath it. Memoised so PerfTable's sort is not redone on unrelated renders.
+    // primary first, beneath it. Memoised so PerfTable does not re-align its comparison sub-rows
+    // or recompute column eligibility on unrelated renders.
     const comparisonTabComparisonRows = useMemo(
         () => [filteredRows, ...filteredComparisonRowsList.filter((_, i) => i !== comparisonIndex)],
         [filteredRows, filteredComparisonRowsList, comparisonIndex],

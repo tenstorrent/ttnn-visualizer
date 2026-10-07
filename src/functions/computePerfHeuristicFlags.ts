@@ -17,9 +17,10 @@ interface RowHeuristicEvaluation {
 }
 
 // The ideal time behind utilisation is tt-metal's op perf model, which is most trustworthy for the
-// ops tt-perf-report also models (matmul and convolution); say so on the ops it does not.
+// ops tt-perf-report also models; say so on the ops it does not. tt-perf-report decides that by
+// op-code name, so the note must not claim the op is not a convolution (Conv3d falls outside it).
 export const LOW_UTILISATION_UNMODELLED_NOTE =
-    'Not a matmul or convolution, so the ideal time this compares against is less reliable.';
+    'tt-perf-report has no roofline model for this op, so the ideal time this compares against is less reliable.';
 
 const { LOW_CORE_UTILISATION_RATIO, UNDERUTILISED_CORES_RATIO, MIN_TOTAL_PERCENT } = PERF_HEURISTIC_THRESHOLDS;
 

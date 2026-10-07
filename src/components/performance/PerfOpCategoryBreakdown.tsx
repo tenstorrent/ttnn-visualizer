@@ -6,12 +6,15 @@ import { useMemo, useState } from 'react';
 import { Button, ButtonVariant, Callout, Collapse, Size } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { TypedPerfTableRow } from '../../model/PerfTable';
-import { DEVICE_TIME_CATEGORIES, getOpCategoryBreakdown } from '../../functions/perfOpCategory';
+import {
+    DEVICE_TIME_CATEGORIES,
+    HOST_CATEGORY_EXPLANATION,
+    OTHER_CATEGORY_EXPLANATION,
+    getOpCategoryBreakdown,
+} from '../../functions/perfOpCategory';
 import { formatPercentage, formatSize } from '../../functions/math';
 import { TEST_IDS } from '../../definitions/TestIds';
 
-export const OTHER_CATEGORY_EXPLANATION = 'Other is device time no tt-perf-report category explains.';
-export const HOST_CATEGORY_EXPLANATION = 'Host ops are not shown: they run no device time.';
 const UNCLASSIFIED_LABEL = 'Unclassified';
 // Matches the table's device-time totals, so a sub-microsecond op does not read as 0 µs.
 const DEVICE_TIME_DECIMALS = 2;
@@ -48,7 +51,7 @@ const PerfOpCategoryBreakdown = ({ rows }: PerfOpCategoryBreakdownProps) => {
                     {label} <strong>{formatPercentage(percent, 1)}</strong>
                 </span>
             ))}
-            . {OTHER_CATEGORY_EXPLANATION}
+            .{otherOpCount > 0 && ` ${OTHER_CATEGORY_EXPLANATION}`}
             {hasHostOps && ` ${HOST_CATEGORY_EXPLANATION}`}
             {otherOpCount > 0 && (
                 <>

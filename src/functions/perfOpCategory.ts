@@ -4,6 +4,10 @@
 
 import { OperationCategories } from '../definitions/StackedPerfTable';
 import { TypedPerfTableRow } from '../model/PerfTable';
+import { isCountableDeviceTime } from './durationBuckets';
+
+export const OTHER_CATEGORY_EXPLANATION = 'Other is device time no tt-perf-report category explains.';
+export const HOST_CATEGORY_EXPLANATION = 'Host ops are left out: they carry no device time.';
 
 // Host is left out: tt-perf-report blanks Device Time for host ops, so its share of device time
 // would always read 0% and suggest host ops cost nothing.
@@ -54,10 +58,9 @@ const isDeviceTimeCategory = (category: OperationCategories): category is Device
     (DEVICE_TIME_CATEGORIES as readonly OperationCategories[]).includes(category);
 
 /**
- * Share of device time in each op category across `rows`. Uses getBoundAnalysisCoverage's
- * device-time rule (finite and positive) without its bound_analysis requirement; every row with
- * device time carries both columns, so in practice the two callouts share one total. Returns null
- * when there is no device time to share out, so callers show nothing rather than 0% everywhere.
+ * Share of device time in each op category across `rows`. Returns null when no row carries a
+ * category (a report from before tt-perf-report 1.4.0) or there is no device time to share out,
+ * so callers show nothing rather than "Unclassified 100%" or 0% everywhere.
  */
 export const getOpCategoryBreakdown = (rows: TypedPerfTableRow[]): OpCategoryBreakdown | null => {
     const deviceTimeByCategory = new Map<DeviceTimeCategory, number>();
@@ -66,17 +69,19 @@ export const getOpCategoryBreakdown = (rows: TypedPerfTableRow[]): OpCategoryBre
     let totalTime = 0;
     let unclassifiedTime = 0;
     let hasHostOps = false;
+    let hasCategorisedRow = false;
 
     for (const row of rows) {
         const deviceTime = row.device_time;
-        // Signposts and placeholders carry no device time, and neither do host ops.
-        const isCounted = deviceTime !== null && Number.isFinite(deviceTime) && deviceTime > 0;
+
+        hasCategorisedRow ||= row.op_category !== null;
 
         if (row.op_category === OperationCategories.HOST) {
             hasHostOps = true;
         }
 
-        if (isCounted) {
+        // Signposts and placeholders carry no device time, and neither do host ops.
+        if (isCountableDeviceTime(deviceTime)) {
             totalTime += deviceTime;
 
             if (row.op_category !== null && isDeviceTimeCategory(row.op_category)) {
@@ -95,7 +100,7 @@ export const getOpCategoryBreakdown = (rows: TypedPerfTableRow[]): OpCategoryBre
         }
     }
 
-    if (totalTime === 0) {
+    if (!hasCategorisedRow || totalTime === 0) {
         return null;
     }
 

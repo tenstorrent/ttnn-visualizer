@@ -28,12 +28,16 @@ const DECADE_FACTOR = 10;
 /** A row whose device time is known to be binnable, so callers need no cast to read it. */
 export type BucketableRow = TypedPerfTableRow & { device_time: number };
 
-const isBucketableDuration = (deviceTimeUs: number | null): deviceTimeUs is number =>
+/**
+ * Whether a device time counts towards totals and buckets. Shared by the duration histogram, the
+ * bound-analysis coverage line and the op-category breakdown, so the callouts agree on one total.
+ */
+export const isCountableDeviceTime = (deviceTimeUs: number | null): deviceTimeUs is number =>
     deviceTimeUs !== null && Number.isFinite(deviceTimeUs) && deviceTimeUs > 0;
 
 /** A row can be binned when it is a real device op with a positive, finite device time. */
 export const hasBucketableDeviceTime = (row: TypedPerfTableRow): row is BucketableRow =>
-    row.op_type !== OpType.SIGNPOST && isBucketableDuration(row.device_time);
+    row.op_type !== OpType.SIGNPOST && isCountableDeviceTime(row.device_time);
 
 /** Filters to bucketable rows itself, so callers may pass raw table rows. */
 export const buildLogDecadeBuckets = (rows: TypedPerfTableRow[]): DurationBucket[] => {
@@ -132,7 +136,7 @@ export const isDurationInSelectedBuckets = (
     buckets: DurationBucket[],
     selectedMinUsSet: ReadonlySet<DurationBucket['minUs']>,
 ): boolean => {
-    if (selectedMinUsSet.size === 0 || !isBucketableDuration(deviceTimeUs)) {
+    if (selectedMinUsSet.size === 0 || !isCountableDeviceTime(deviceTimeUs)) {
         return false;
     }
 

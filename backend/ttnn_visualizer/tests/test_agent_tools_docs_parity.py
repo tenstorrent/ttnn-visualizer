@@ -114,7 +114,9 @@ def test_the_page_carries_the_null_bound_caveat():
 
     assert "A null `bound` does not mean an operation is fine" in page
     assert "`bound_analysis`" in page
+    assert "lacked the inputs the model needs" in page
     assert "`op_category`" in page
+    assert "The list can grow" in page
 
 
 def test_the_agent_tools_page_is_published():

@@ -5,6 +5,7 @@
 import { BoundAnalysis, BoundType, ColumnKeys, ROOFLINE_BOUND_THRESHOLD_PERCENT } from '../definitions/PerfTable';
 import { OpType } from '../definitions/Performance';
 import { CellColour } from '../definitions/CellColour';
+import { isCountableDeviceTime } from './durationBuckets';
 import { TypedPerfTableRow } from '../model/PerfTable';
 
 export const NOT_ANALYSED_LABEL = 'n/a';
@@ -24,13 +25,6 @@ export const SLOW_BOUND_REASON = `Analysed, but neither DRAM nor FLOPs explains 
 export const SLOW_HINT_REASON =
     `The larger of DRAM % and FLOPs %, both below ${ROOFLINE_BOUND_THRESHOLD_PERCENT}%: ` +
     'a hint at where to look, not a bound.';
-
-const SLOW_HINT_KEYS: ReadonlySet<ColumnKeys> = new Set([
-    ColumnKeys.Dram,
-    ColumnKeys.DramPercent,
-    ColumnKeys.Flops,
-    ColumnKeys.FlopsPercent,
-]);
 
 const ROOFLINE_KEYS: ReadonlySet<ColumnKeys> = new Set([
     ColumnKeys.Bound,
@@ -87,7 +81,8 @@ export const getSlowBoundExplanation = (row: TypedPerfTableRow, key: ColumnKeys,
         return SLOW_BOUND_REASON;
     }
 
-    return SLOW_HINT_KEYS.has(key) && colour === CellColour.Yellow ? SLOW_HINT_REASON : null;
+    // Bound has returned above, so the remaining roofline keys are the cells the hint can land on.
+    return ROOFLINE_KEYS.has(key) && colour === CellColour.Yellow ? SLOW_HINT_REASON : null;
 };
 
 export interface BoundAnalysisCoverage {
@@ -110,10 +105,7 @@ export const getBoundAnalysisCoverage = (rows: TypedPerfTableRow[]): BoundAnalys
     for (const row of rows) {
         const deviceTime = row.device_time;
         // Host ops carry no device time, and signposts and placeholders carry neither field.
-        const isCounted =
-            row.bound_analysis !== null && deviceTime !== null && Number.isFinite(deviceTime) && deviceTime > 0;
-
-        if (isCounted) {
+        if (row.bound_analysis !== null && isCountableDeviceTime(deviceTime)) {
             totalTime += deviceTime;
 
             if (row.bound_analysis === BoundAnalysis.FULL) {

@@ -148,12 +148,15 @@ adding them across a report would produce a number that looks authoritative and 
 
 A null `bound` does not mean an operation is fine. Every row from `top_ops` and every
 `perf_rows` entry from `operation_detail` carries `bound_analysis`, which says which roofline
-model tt-perf-report ran: `full` (matmuls) derives DRAM, FLOPs and the bound; `flops_only`
-(convolutions) derives FLOPs alone, so DRAM and the bound are never set; `none` (everything
-else) derives nothing, so a blank there says nothing about whether the operation is a
-bottleneck. A `SLOW` bound means the full model ran and neither DRAM nor FLOPs reached 65% of
-peak. Rows also carry `op_category` (`Compute`, `CCL`, `DM`, `TM`, `Host` or `Other`); `Other`
-is time no category explains.
+model tt-perf-report ran: `full` (matmuls) derives DRAM, FLOPs and the bound, or leaves the
+bound null when the trace lacked the inputs the model needs; `flops_only` (convolutions)
+derives FLOPs alone, so DRAM and the bound are never set; `none` (everything else) derives
+nothing, so a blank there says nothing about whether the operation is a bottleneck. A `SLOW`
+bound means the full model ran and neither DRAM nor FLOPs reached 65% of peak. Rows also carry
+`op_category`, which tt-perf-report 1.4.0 sets to `Compute`, `CCL`, `DM`, `TM`, `Host` or
+`Other` and leaves null on signposts. The list can grow in later releases (`CCL` was added
+recently), so treat an unfamiliar value as a category, not an error. `Other` is time no
+category explains.
 
 `zone_timings` carries a caveat of its own: cycles are summed across every core that ran
 the zone, so they measure occupancy rather than wall-clock duration. A core is counted per

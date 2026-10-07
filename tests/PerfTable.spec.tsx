@@ -79,6 +79,8 @@ afterEach(cleanup);
 
 beforeEach(() => {
     (useGetNPEManifest as Mock).mockReturnValue({ data: [], error: null });
+    // Reset per test: a value left by an earlier test would make results depend on run order.
+    (useOpToPerfIdFiltered as Mock).mockReturnValue([]);
     (useOperationsList as Mock).mockReturnValue({ data: [] });
     (usePerfMeta as Mock).mockReturnValue({ data: null, isLoading: false });
 });
@@ -492,7 +494,8 @@ describe('PerfTable column visibility', () => {
         it('sorts descending without separating a missing-op placeholder from its primary row', () => {
             renderTable(
                 [
-                    baseRow({ id: 1, raw_op_code: 'AllGather', op_category: OperationCategories.CCL }),
+                    // TM sorts first descending, so the placeholder's primary row must lead.
+                    baseRow({ id: 1, raw_op_code: 'AllGather', op_category: OperationCategories.TM }),
                     baseRow({ id: 2, raw_op_code: 'Matmul', op_category: OperationCategories.COMPUTE }),
                 ],
                 {
@@ -508,10 +511,31 @@ describe('PerfTable column visibility', () => {
             sortByCategory();
             sortByCategory();
 
-            expect(rowOpCodes()).toEqual(['Matmul', 'Matmul', 'AllGather', 'Reshape MISSING']);
+            expect(rowOpCodes()).toEqual(['AllGather', 'Reshape MISSING', 'Matmul', 'Matmul']);
         });
 
         it('keeps sub-rows aligned when sorting a numeric column whose values differ between reports', () => {
+            renderTable(
+                [
+                    baseRow({ id: 1, raw_op_code: 'AllGather', device_time: 10 }),
+                    baseRow({ id: 2, raw_op_code: 'Matmul', device_time: 5 }),
+                ],
+                {
+                    comparisonData: [
+                        [
+                            baseRow({ id: 11, raw_op_code: 'AllGather', device_time: 1 }),
+                            baseRow({ id: 12, raw_op_code: 'Matmul', device_time: 20 }),
+                        ],
+                    ],
+                },
+            );
+
+            fireEvent.click(screen.getByRole('button', { name: /^Device Time/ }));
+
+            expect(rowOpCodes()).toEqual(['Matmul', 'Matmul', 'AllGather', 'AllGather']);
+        });
+
+        it('leaves sub-rows in source order when the sort does not change the primary order', () => {
             renderTable(
                 [
                     baseRow({ id: 1, raw_op_code: 'AllGather', device_time: 5 }),

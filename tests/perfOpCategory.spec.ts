@@ -57,6 +57,10 @@ describe('getOpCategoryBreakdown', () => {
         expect(breakdown?.hasHostOps).toBe(true);
     });
 
+    it('returns null when no row carries a category, rather than reporting Unclassified 100%', () => {
+        expect(getOpCategoryBreakdown([makeRow('1', null, 10), makeRow('2', null, 5)])).toBeNull();
+    });
+
     it('returns null when there is no device time to share out', () => {
         expect(getOpCategoryBreakdown([])).toBeNull();
         expect(getOpCategoryBreakdown([makeRow('1', OperationCategories.HOST, null)])).toBeNull();

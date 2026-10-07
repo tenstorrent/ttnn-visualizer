@@ -9,10 +9,8 @@ import { OpType } from '../src/definitions/Performance';
 import { OperationCategories } from '../src/definitions/StackedPerfTable';
 import { TEST_IDS } from '../src/definitions/TestIds';
 import { TypedPerfTableRow } from '../src/model/PerfTable';
-import PerfOpCategoryBreakdown, {
-    HOST_CATEGORY_EXPLANATION,
-    OTHER_CATEGORY_EXPLANATION,
-} from '../src/components/performance/PerfOpCategoryBreakdown';
+import PerfOpCategoryBreakdown from '../src/components/performance/PerfOpCategoryBreakdown';
+import { HOST_CATEGORY_EXPLANATION, OTHER_CATEGORY_EXPLANATION } from '../src/functions/perfOpCategory';
 
 const makeRow = (id: string, opCategory: OperationCategories | null, deviceTime: number | null) =>
     ({
@@ -109,7 +107,9 @@ describe('PerfOpCategoryBreakdown', () => {
             />,
         );
 
-        expect(screen.getByTestId(TEST_IDS.PERF_OP_CATEGORY_BREAKDOWN)).toBeInTheDocument();
+        const breakdown = screen.getByTestId(TEST_IDS.PERF_OP_CATEGORY_BREAKDOWN);
+
+        expect(breakdown).not.toHaveTextContent(OTHER_CATEGORY_EXPLANATION);
         expect(screen.queryByRole('button', { name: /Largest Other ops/ })).toBeNull();
     });
 
