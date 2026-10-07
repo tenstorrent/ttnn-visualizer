@@ -232,6 +232,12 @@ const PerformanceReport = ({
         () => filteredComparisonRowsList[comparisonIndex] || [],
         [filteredComparisonRowsList, comparisonIndex],
     );
+    // A comparison tab shows its own report as primary and every other report, the original
+    // primary first, beneath it. Memoised so PerfTable's sort is not redone on unrelated renders.
+    const comparisonTabComparisonRows = useMemo(
+        () => [filteredRows, ...filteredComparisonRowsList.filter((_, i) => i !== comparisonIndex)],
+        [filteredRows, filteredComparisonRowsList, comparisonIndex],
+    );
 
     const filteredStackedRows = useMemo(
         () =>
@@ -738,10 +744,7 @@ const PerformanceReport = ({
                                 ) : (
                                     <PerfTable
                                         data={filteredComparisonRows}
-                                        comparisonData={[
-                                            filteredRows,
-                                            ...filteredComparisonRowsList.filter((_, i) => i !== comparisonIndex),
-                                        ]}
+                                        comparisonData={comparisonTabComparisonRows}
                                         filters={filters}
                                         provideMatmulAdvice={provideMatmulAdvice}
                                         hiliteHighDispatch={hiliteHighDispatch}

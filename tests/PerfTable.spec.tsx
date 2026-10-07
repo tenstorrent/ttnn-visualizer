@@ -488,6 +488,111 @@ describe('PerfTable column visibility', () => {
 
             expect(rowOpCodes()).toEqual(['AllGather', undefined, 'Matmul', 'Matmul']);
         });
+
+        it('sorts descending without separating a missing-op placeholder from its primary row', () => {
+            renderTable(
+                [
+                    baseRow({ id: 1, raw_op_code: 'AllGather', op_category: OperationCategories.CCL }),
+                    baseRow({ id: 2, raw_op_code: 'Matmul', op_category: OperationCategories.COMPUTE }),
+                ],
+                {
+                    comparisonData: [
+                        [
+                            baseRow({ id: 11, raw_op_code: 'Reshape MISSING', op_category: null }),
+                            baseRow({ id: 12, raw_op_code: 'Matmul', op_category: OperationCategories.COMPUTE }),
+                        ],
+                    ],
+                },
+            );
+
+            sortByCategory();
+            sortByCategory();
+
+            expect(rowOpCodes()).toEqual(['Matmul', 'Matmul', 'AllGather', 'Reshape MISSING']);
+        });
+
+        it('keeps sub-rows aligned when sorting a numeric column whose values differ between reports', () => {
+            renderTable(
+                [
+                    baseRow({ id: 1, raw_op_code: 'AllGather', device_time: 5 }),
+                    baseRow({ id: 2, raw_op_code: 'Matmul', device_time: 10 }),
+                ],
+                {
+                    comparisonData: [
+                        [
+                            baseRow({ id: 11, raw_op_code: 'AllGather', device_time: 20 }),
+                            baseRow({ id: 12, raw_op_code: 'Matmul', device_time: 1 }),
+                        ],
+                    ],
+                },
+            );
+
+            fireEvent.click(screen.getByRole('button', { name: /^Device Time/ }));
+
+            expect(rowOpCodes()).toEqual(['AllGather', 'AllGather', 'Matmul', 'Matmul']);
+        });
+
+        describe('on a comparison-report tab', () => {
+            // The primary rows are the selected comparison report; comparisonData[0] holds the
+            // active profiler report, whose sub-rows carry the tensor drawer trigger.
+            const comparisonReportRows = [
+                baseRow({ id: 1, raw_op_code: 'Matmul', op_category: OperationCategories.COMPUTE, op: undefined }),
+                baseRow({ id: 2, raw_op_code: 'AllGather', op_category: OperationCategories.CCL, op: undefined }),
+            ];
+
+            it('opens the drawer on the active report row aligned with the primary row', () => {
+                (useOpToPerfIdFiltered as Mock).mockReturnValue([
+                    { opId: 21, perfId: '11' },
+                    { opId: 22, perfId: '12' },
+                ]);
+                renderTable(comparisonReportRows, {
+                    comparisonData: [
+                        [
+                            baseRow({
+                                id: 11,
+                                raw_op_code: 'Matmul',
+                                op_category: OperationCategories.COMPUTE,
+                                op: 21,
+                            }),
+                            baseRow({
+                                id: 12,
+                                raw_op_code: 'AllGather',
+                                op_category: OperationCategories.OTHER,
+                                op: 22,
+                            }),
+                        ],
+                    ],
+                    activeReportComparisonIndex: 0,
+                });
+
+                sortByCategory();
+
+                const [firstTrigger] = screen.getAllByTestId(TEST_IDS.PERF_TENSOR_DRAWER_OPEN_BUTTON);
+                fireEvent.click(firstTrigger);
+
+                const selectedRow = firstTrigger.closest('tr')!;
+                expect(selectedRow).toHaveClass('comparison-row', 'is-selected');
+                expect(selectedRow).toHaveTextContent('AllGather');
+                expect(selectedRow.previousElementSibling).toHaveTextContent('AllGather');
+            });
+
+            it('puts no trigger on the gap where the active report is shorter', () => {
+                (useOpToPerfIdFiltered as Mock).mockReturnValue([{ opId: 21, perfId: '11' }]);
+                renderTable(comparisonReportRows, {
+                    comparisonData: [
+                        [baseRow({ id: 11, raw_op_code: 'Matmul', op_category: OperationCategories.COMPUTE, op: 21 })],
+                    ],
+                    activeReportComparisonIndex: 0,
+                });
+
+                sortByCategory();
+
+                const triggers = screen.getAllByTestId(TEST_IDS.PERF_TENSOR_DRAWER_OPEN_BUTTON);
+                expect(triggers).toHaveLength(1);
+                expect(triggers[0].closest('tr')).toHaveTextContent('Matmul');
+                expect(rowOpCodes()).toEqual(['AllGather', undefined, 'Matmul', 'Matmul']);
+            });
+        });
     });
 
     it('keeps OP Code visible even when it is listed as hidden', () => {

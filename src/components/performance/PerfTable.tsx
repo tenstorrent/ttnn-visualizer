@@ -77,19 +77,31 @@ const PerformanceTable = ({
     // Comparison sub-rows are paired with primary rows by index, so they take the primary report's
     // sort order rather than sorting on their own values: sorted separately, a column whose value
     // differs between reports (category, device time) would pair unrelated operations.
-    const { tableFields, comparisonDataTableFields } = useMemo(() => {
+    const { tableFields, sortedSourceIndices } = useMemo(() => {
         const rows = data ?? [];
-        const sourceIndexByRow = new Map<TypedPerfTableRow, number>(rows.map((row, index) => [row, index]));
         // Still some awkward casting here
         const sortedRows: TypedPerfTableRow[] = [...sortTableFields(rows as [])];
-        const sortedSourceIndices = sortedRows.map((row) => sourceIndexByRow.get(row) ?? -1);
 
-        // A comparison report shorter than the primary one leaves gaps, which render as empty sub-rows.
-        const alignedComparisonRows: (TypedPerfTableRow | undefined)[][] =
-            comparisonData?.map((dataset) => sortedSourceIndices.map((index) => dataset[index])) ?? [];
+        // Unsorted, the order is already the source order; skip the lookup.
+        if (sortedRows.every((row, index) => row === rows[index])) {
+            return { tableFields: sortedRows, sortedSourceIndices: null };
+        }
 
-        return { tableFields: sortedRows, comparisonDataTableFields: alignedComparisonRows };
-    }, [data, comparisonData, sortTableFields]);
+        const sourceIndexByRow = new Map<TypedPerfTableRow, number>(rows.map((row, index) => [row, index]));
+
+        // sortTableFields reorders the same row objects, so every lookup succeeds.
+        return { tableFields: sortedRows, sortedSourceIndices: sortedRows.map((row) => sourceIndexByRow.get(row)!) };
+    }, [data, sortTableFields]);
+
+    // Kept apart from the sort so a new comparisonData reference does not re-sort the primary rows.
+    // A comparison report shorter than the primary one leaves gaps, which render as empty sub-rows.
+    const comparisonDataTableFields = useMemo<(TypedPerfTableRow | undefined)[][]>(
+        () =>
+            comparisonData?.map((dataset) =>
+                sortedSourceIndices ? sortedSourceIndices.map((index) => dataset[index]) : dataset,
+            ) ?? [],
+        [comparisonData, sortedSourceIndices],
+    );
 
     // L1 pressure is a per-TTNN-op snapshot, so it renders only on the first device-op row of each
     // op. Derive that "first" row from the current display order (`tableFields`, post-sort) rather
