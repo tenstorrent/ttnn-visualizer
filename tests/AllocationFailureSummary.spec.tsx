@@ -63,6 +63,17 @@ describe('AllocationFailureSummary', () => {
         ).toBeInTheDocument();
     });
 
+    it('does not claim a failure never reached the device when no device op was recorded', () => {
+        renderSummary([listing({ failedDeviceOperations: [] })]);
+
+        expect(
+            screen.getByText(
+                'The memory report recorded no device ops for it, so no row in this report is linked to it.',
+            ),
+        ).toBeInTheDocument();
+        expect(screen.queryByText(/before reaching the device/)).not.toBeInTheDocument();
+    });
+
     it('uses the singular for one earlier device op', () => {
         renderSummary([listing({ linkedRowCount: 1 })]);
 

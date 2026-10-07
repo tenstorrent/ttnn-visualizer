@@ -5,7 +5,7 @@
 import { describe, expect, it } from 'vitest';
 import { getAllocationFailureSummary, parseAllocationFailure } from '../src/functions/parseAllocationFailure';
 import { AllocationFailureKind } from '../src/definitions/AllocationFailure';
-import { OperationError } from '../src/model/APIData';
+import { Operation } from '../src/model/APIData';
 import { StringBufferType } from '../src/model/BufferType';
 
 const BACKTRACE = 'backtrace:\n --- /workspace/build_Release/lib/libtt_metal.so(+0x570add) [0x7f0bc96eeadd]\n';
@@ -34,13 +34,17 @@ ${BACKTRACE}`;
 const CIRCULAR_BUFFERS_BEYOND_L1 =
     'Statically allocated circular buffers on core range [(x=0,y=0) - (x=7,y=7)] grow to 1600000 B which is beyond max L1 size of 1499136 B';
 
-const operationError = (message: string, errorType = 'RuntimeError'): OperationError => ({
-    operation_id: 240,
-    operation_name: 'ttnn.conv2d',
-    error_type: errorType,
-    error_message: message,
-    stack_trace: '',
-    timestamp: '',
+// The error as the API nests it under its operation, without the operation's id or name.
+const operationError = (message: string, errorType = 'RuntimeError'): Pick<Operation, 'id' | 'name' | 'error'> => ({
+    id: 240,
+    name: 'ttnn.conv2d',
+    error: {
+        error_type: errorType,
+        error_message: message,
+        stack_trace: '',
+        timestamp: '',
+        rank: 0,
+    },
 });
 
 describe('parseAllocationFailure', () => {
@@ -85,7 +89,6 @@ describe('parseAllocationFailure', () => {
             coreRange: '[(x=0,y=0) - (x=4,y=7)]',
             l1BufferAddress: 600256,
             circularBufferRegionEnd: 621824,
-            requestedBytes: null,
         });
     });
 
@@ -105,7 +108,7 @@ describe('parseAllocationFailure', () => {
                 operationError("Operation 'ttnn.conv2d' started but never completed", 'incomplete_operation'),
             ),
         ).toBeNull();
-        expect(parseAllocationFailure(null)).toBeNull();
+        expect(parseAllocationFailure({ id: 240, name: 'ttnn.conv2d', error: null })).toBeNull();
     });
 });
 
@@ -120,11 +123,30 @@ describe('getAllocationFailureSummary', () => {
         expect(getAllocationFailureSummary(current)).toContain('; free 374 KiB, largest free block 293 KiB');
     });
 
-    it('names the core range of a circular-buffer failure', () => {
+    it('labels the buffer type for display', () => {
+        const dependencies = parseAllocationFailure(
+            operationError(OUT_OF_MEMORY_WITH_DEPENDENCIES.replace('B DRAM across', 'B L1_SMALL across')),
+        )!;
+
+        expect(getAllocationFailureSummary(dependencies)).toMatch(/^Requested 2 KiB L1 Small across 2 banks/);
+    });
+
+    it('gives the circular-buffer growth beyond L1 as sizes that compare', () => {
+        const beyond = parseAllocationFailure(operationError(CIRCULAR_BUFFERS_BEYOND_L1))!;
+
+        expect(getAllocationFailureSummary(beyond)).toBe(
+            'Circular buffers on [(x=0,y=0) - (x=7,y=7)] grow to 1.53 MiB, beyond the L1 size of 1.43 MiB',
+        );
+    });
+
+    it('gives the circular-buffer clash as addresses, in hex when asked', () => {
         const clash = parseAllocationFailure(operationError(CIRCULAR_BUFFERS_CLASH))!;
 
         expect(getAllocationFailureSummary(clash)).toBe(
             'Circular buffers on [(x=0,y=0) - (x=4,y=7)] end at 621824, past an L1 buffer at 600256',
+        );
+        expect(getAllocationFailureSummary(clash, true)).toBe(
+            'Circular buffers on [(x=0,y=0) - (x=4,y=7)] end at 0x97D00, past an L1 buffer at 0x928C0',
         );
     });
 });

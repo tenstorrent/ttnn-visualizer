@@ -8,13 +8,13 @@ import { ReportLocation } from '../definitions/Reports';
 import { BufferMemoryLayout, MemoryConfig } from './MemoryConfig';
 import { BufferType, StringBufferType } from './BufferType';
 
+/** An operation's error as nested under it, without the operation's own id and name. */
 export interface OperationError {
-    operation_id: number;
-    operation_name: string;
     error_type: string;
     error_message: string;
     stack_trace: string;
     timestamp: string;
+    rank: number;
 }
 
 export interface Operation {
@@ -263,6 +263,8 @@ export enum NodeType {
     tensor = 'tensor',
 }
 
+export type DeviceOperationNodeType = NodeType.function_start | NodeType.function_end;
+
 export enum DeviceOperationLayoutTypes {
     INTERLEAVED = 'INTERLEAVED',
     SINGLE_BANK = 'SINGLE_BANK',
@@ -275,6 +277,13 @@ export interface DeviceOperationParams {
     name: string;
     device_id?: number | string;
     inputs?: number;
+}
+
+export interface DeviceOperationEndParams extends DeviceOperationParams {
+    // tt-metal writes the string `'true'` when the scope's launch threw: graph params are
+    // all strings, and only `program_cache_hit` is converted when the graph is serialised.
+    // A boolean is allowed in case a later serialiser converts it.
+    aborted?: string | boolean;
 }
 
 export interface CircularBufferDeallocateParams {
@@ -350,7 +359,7 @@ export interface DeviceOperationNode extends BaseNode<NodeType.function_start, D
 
 export type CaptureStartNode = BaseNode<NodeType.capture_start, DeviceOperationParams>;
 export type CaptureEndNode = BaseNode<NodeType.capture_end, DeviceOperationParams>;
-export type DeviceOperationNodeEnd = BaseNode<NodeType.function_end, DeviceOperationParams>;
+export type DeviceOperationNodeEnd = BaseNode<NodeType.function_end, DeviceOperationEndParams>;
 
 export type BufferNode = BaseNode<NodeType.buffer, BufferAllocateParams>;
 export type BufferAllocateNode = BaseNode<NodeType.buffer_allocate, BufferAllocateParams>;

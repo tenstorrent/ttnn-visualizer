@@ -15,6 +15,7 @@ import {
     BufferData,
     BuffersByOperation,
     DeviceInfo,
+    DeviceOperationNodeType,
     DeviceOperationParams,
     Instance,
     NodeType,
@@ -43,7 +44,7 @@ import { L1PressureResult } from '../model/L1Pressure';
 import { buildL1PressureResult } from '../functions/l1Pressure';
 import { StackedPerfRow } from '../definitions/StackedPerfTable';
 import { isDeviceOperation } from '../functions/filterOperations';
-import { DeviceOperationNodeType, getLinkableDeviceOperations } from '../functions/linkableDeviceOperations';
+import { getLinkableDeviceOperations } from '../functions/linkableDeviceOperations';
 import { normalizeBufferPagesResponse } from '../functions/normalizeBufferPagesResponse';
 import { filterByOperationRange } from '../functions/filterByOperationRange';
 import {

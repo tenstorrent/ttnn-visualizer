@@ -3,6 +3,7 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import { Callout, Intent } from '@blueprintjs/core';
+import { useAtomValue } from 'jotai';
 import { Link } from 'react-router';
 import 'styles/components/AllocationFailureSummary.scss';
 import { ALLOCATION_FAILURE_KIND_LABELS, MAX_ALLOCATION_FAILURES_LISTED } from '../../definitions/AllocationFailure';
@@ -10,11 +11,19 @@ import ROUTES from '../../definitions/Routes';
 import { TEST_IDS } from '../../definitions/TestIds';
 import { getAllocationFailureSummary } from '../../functions/parseAllocationFailure';
 import { AllocationFailureListing } from '../../model/AllocationFailure';
+import { showHexAtom } from '../../store/app';
 
 // Speaks of the report, not the table: the callout also shows in the stacked view, which
 // has no Flags column, and filters, the range or the column picker can hide the rows.
 const getRunStatus = ({ failedDeviceOperations, linkedRowCount }: AllocationFailureListing): string => {
-    const failedAt = failedDeviceOperations.length > 0 ? ` in ${failedDeviceOperations.join(', ')}` : '';
+    const hasFailedDeviceOperations = failedDeviceOperations.length > 0;
+    const failedAt = hasFailedDeviceOperations ? ` in ${failedDeviceOperations.join(', ')}` : '';
+
+    // A capture can stop before the failing operation's graph, so without a recorded
+    // device op there is nothing to say whether any of it reached the device.
+    if (linkedRowCount === 0 && !hasFailedDeviceOperations) {
+        return 'The memory report recorded no device ops for it, so no row in this report is linked to it.';
+    }
 
     if (linkedRowCount === 0) {
         return `Failed${failedAt} before reaching the device, so it has no row in this report.`;
@@ -30,6 +39,8 @@ interface AllocationFailureSummaryProps {
 }
 
 function AllocationFailureSummary({ listings }: AllocationFailureSummaryProps) {
+    const showHex = useAtomValue(showHexAtom);
+
     if (listings.length === 0) {
         return null;
     }
@@ -54,7 +65,7 @@ function AllocationFailureSummary({ listings }: AllocationFailureSummaryProps) {
                                 {failure.operationId} {failure.operationName}
                             </Link>{' '}
                             <strong>{ALLOCATION_FAILURE_KIND_LABELS[failure.kind]}</strong>
-                            <p>{getAllocationFailureSummary(failure)}</p>
+                            <p>{getAllocationFailureSummary(failure, showHex)}</p>
                             <p className='allocation-failure-run-status'>{getRunStatus(listing)}</p>
                         </li>
                     );

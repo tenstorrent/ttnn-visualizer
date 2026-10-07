@@ -410,13 +410,13 @@ describe('report matching under a filtered performance tab', () => {
                 outputs: [],
                 arguments: [],
                 device_operations: failedGraph,
+                // As `to_nested_dict` serialises it: no operation id or name.
                 error: {
-                    operation_id: 1,
-                    operation_name: 'ttnn.matmul',
                     error_type: 'RuntimeError',
                     error_message: OUT_OF_MEMORY,
                     stack_trace: '',
                     timestamp: '',
+                    rank: 0,
                 },
             },
             ...[
@@ -486,7 +486,7 @@ describe('report matching under a filtered performance tab', () => {
             await waitFor(() => expect(result.current.listings).toHaveLength(1));
 
             expect(result.current.listings[0]).toMatchObject({
-                failure: { operationId: 1 },
+                failure: { operationId: 1, operationName: 'ttnn.matmul' },
                 failedDeviceOperations: ['Matmul'],
                 linkedRowCount: 0,
             });

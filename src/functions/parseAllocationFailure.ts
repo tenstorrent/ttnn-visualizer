@@ -4,9 +4,9 @@
 
 import { AllocationFailureKind } from '../definitions/AllocationFailure';
 import { AllocationFailure } from '../model/AllocationFailure';
-import { OperationError } from '../model/APIData';
-import { StringBufferType } from '../model/BufferType';
-import { formatMemorySize } from './math';
+import { Operation } from '../model/APIData';
+import { StringBufferType, StringBufferTypeLabel } from '../model/BufferType';
+import { formatMemorySize, getMemoryAddress } from './math';
 
 // Each pattern restates a tt-metal format string; when a message stops matching, that
 // source is where the format moved. None is anchored: the stored message wraps the
@@ -36,30 +36,24 @@ const toNumber = (value: string | undefined): number | null => (value === undefi
 const toBufferType = (value: string): StringBufferType | null =>
     STRING_BUFFER_TYPES.has(value) ? (value as StringBufferType) : null;
 
-const EMPTY_FIGURES = {
-    bufferType: null,
-    requestedBytes: null,
-    numBanks: null,
-    bytesPerBank: null,
-    bankSizeBytes: null,
-    allocatedBytes: null,
-    freeBytes: null,
-    largestFreeBlockBytes: null,
-    coreRange: null,
-    l1BufferAddress: null,
-    circularBufferRegionEnd: null,
-    maxL1Bytes: null,
-} as const;
-
-/** The allocation failure an operation's error records, or `null` for any other error. */
-export const parseAllocationFailure = (error: OperationError | null | undefined): AllocationFailure | null => {
+/**
+ * The allocation failure an operation's error records, or `null` for any other error.
+ *
+ * Takes the operation rather than its error: the nested error the API returns leaves
+ * out the operation's id and name (`ErrorRecord.to_nested_dict`).
+ */
+export const parseAllocationFailure = ({
+    id,
+    name,
+    error,
+}: Pick<Operation, 'id' | 'name' | 'error'>): AllocationFailure | null => {
     const message = error?.error_message;
 
-    if (!error || typeof message !== 'string') {
+    if (typeof message !== 'string') {
         return null;
     }
 
-    const identity = { operationId: error.operation_id, operationName: error.operation_name };
+    const operation = { operationId: id, operationName: name };
 
     const bankMatch =
         message.match(BANK_OUT_OF_MEMORY_PATTERN) ?? message.match(BANK_OUT_OF_MEMORY_WITH_DEPENDENCIES_PATTERN);
@@ -68,16 +62,15 @@ export const parseAllocationFailure = (error: OperationError | null | undefined)
         const [, size, bufferType, numBanks, perBank, bankSize, allocated, free, largestFree] = bankMatch;
 
         return {
-            ...identity,
-            ...EMPTY_FIGURES,
+            ...operation,
             kind: BANK_OUT_OF_MEMORY_PATTERN.test(message)
                 ? AllocationFailureKind.BANK_OUT_OF_MEMORY
                 : AllocationFailureKind.BANK_OUT_OF_MEMORY_WITH_DEPENDENCIES,
             bufferType: toBufferType(bufferType),
-            requestedBytes: toNumber(size),
-            numBanks: toNumber(numBanks),
-            bytesPerBank: toNumber(perBank),
-            bankSizeBytes: toNumber(bankSize),
+            requestedBytes: Number(size),
+            numBanks: Number(numBanks),
+            bytesPerBank: Number(perBank),
+            bankSizeBytes: Number(bankSize),
             allocatedBytes: toNumber(allocated),
             freeBytes: toNumber(free),
             largestFreeBlockBytes: toNumber(largestFree),
@@ -90,13 +83,11 @@ export const parseAllocationFailure = (error: OperationError | null | undefined)
         const [, coreRange, regionEnd, maxL1] = beyondMatch;
 
         return {
-            ...identity,
-            ...EMPTY_FIGURES,
+            ...operation,
             kind: AllocationFailureKind.CIRCULAR_BUFFERS_BEYOND_L1,
-            bufferType: StringBufferType.L1,
             coreRange,
-            circularBufferRegionEnd: toNumber(regionEnd),
-            maxL1Bytes: toNumber(maxL1),
+            circularBufferRegionEnd: Number(regionEnd),
+            maxL1Bytes: Number(maxL1),
         };
     }
 
@@ -106,32 +97,29 @@ export const parseAllocationFailure = (error: OperationError | null | undefined)
         const [, coreRange, l1Address, regionEnd] = clashMatch;
 
         return {
-            ...identity,
-            ...EMPTY_FIGURES,
+            ...operation,
             kind: AllocationFailureKind.CIRCULAR_BUFFERS_CLASH,
-            bufferType: StringBufferType.L1,
             coreRange,
-            l1BufferAddress: toNumber(l1Address),
-            circularBufferRegionEnd: toNumber(regionEnd),
+            l1BufferAddress: Number(l1Address),
+            circularBufferRegionEnd: Number(regionEnd),
         };
     }
 
     return null;
 };
 
-const formatBytes = (bytes: number | null): string => formatMemorySize(bytes ?? undefined);
+const formatBytes = (bytes: number): string => formatMemorySize(bytes);
 
 /** One line describing what the allocation asked for against what was available. */
-export const getAllocationFailureSummary = (failure: AllocationFailure): string => {
+export const getAllocationFailureSummary = (failure: AllocationFailure, showHex = false): string => {
     switch (failure.kind) {
         case AllocationFailureKind.BANK_OUT_OF_MEMORY:
         case AllocationFailureKind.BANK_OUT_OF_MEMORY_WITH_DEPENDENCIES: {
-            const bufferType = failure.bufferType ? ` ${failure.bufferType}` : '';
+            const bufferType = failure.bufferType ? ` ${StringBufferTypeLabel[failure.bufferType]}` : '';
             const request =
                 `Requested ${formatBytes(failure.requestedBytes)}${bufferType} across ${failure.numBanks} banks ` +
                 `(${formatBytes(failure.bytesPerBank)} per bank, bank size ${formatBytes(failure.bankSizeBytes)})`;
 
-            // Older tt-metal does not report what was free.
             if (failure.freeBytes === null || failure.largestFreeBlockBytes === null) {
                 return request;
             }
@@ -139,10 +127,13 @@ export const getAllocationFailureSummary = (failure: AllocationFailure): string 
             return `${request}; free ${formatBytes(failure.freeBytes)}, largest free block ${formatBytes(failure.largestFreeBlockBytes)}`;
         }
         case AllocationFailureKind.CIRCULAR_BUFFERS_BEYOND_L1:
-            return `Circular buffers on ${failure.coreRange} end at ${failure.circularBufferRegionEnd}, beyond the L1 size of ${formatBytes(failure.maxL1Bytes)}`;
+            return `Circular buffers on ${failure.coreRange} grow to ${formatBytes(failure.circularBufferRegionEnd)}, beyond the L1 size of ${formatBytes(failure.maxL1Bytes)}`;
         case AllocationFailureKind.CIRCULAR_BUFFERS_CLASH:
-            return `Circular buffers on ${failure.coreRange} end at ${failure.circularBufferRegionEnd}, past an L1 buffer at ${failure.l1BufferAddress}`;
-        default:
-            return '';
+            return `Circular buffers on ${failure.coreRange} end at ${getMemoryAddress(failure.circularBufferRegionEnd, showHex)}, past an L1 buffer at ${getMemoryAddress(failure.l1BufferAddress, showHex)}`;
+        default: {
+            // A new kind fails to compile here until it has a summary.
+            const unhandled: never = failure;
+            return unhandled;
+        }
     }
 };

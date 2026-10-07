@@ -304,9 +304,12 @@ def _device_operation_names(raw: Optional[str]) -> Dict[NodeOrder, List[str]]:
             continue
         # A lifecycle node without a name is refused, not skipped: dropping it
         # shortens the order, and a prefix match can still mark the link linked
-        # with later rows on the wrong operation. The app cannot read it either --
-        # `getDeviceOperationNameList` (`src/hooks/useAPI.tsx`) reads `params.name`
-        # unguarded when it builds every operation's `deviceOperationNameList`.
+        # with later rows on the wrong operation. The app differs here. A nameless
+        # `function_start` breaks it outright, since `getDeviceOperationNameList`
+        # (`src/hooks/useAPI.tsx`) reads `params.name` unguarded. A nameless
+        # `function_end` closes nothing there, so its start is quietly left out
+        # rather than refused. tt-metal copies the start's name onto the end, so no
+        # real capture takes either path.
         params = node.get("params")
         name = params.get("name") if isinstance(params, dict) else None
         if not isinstance(name, str) or not isinstance(params, dict):

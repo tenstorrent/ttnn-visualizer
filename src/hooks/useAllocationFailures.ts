@@ -46,7 +46,7 @@ export const useAllocationFailures = (): AllocationFailures => {
         const allocationFailureByOpId = new Map<number, AllocationFailure>();
 
         for (const operation of operations) {
-            const failure = parseAllocationFailure(operation.error);
+            const failure = parseAllocationFailure(operation);
 
             if (failure) {
                 allocationFailureByOpId.set(operation.id, failure);

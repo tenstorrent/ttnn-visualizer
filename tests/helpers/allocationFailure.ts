@@ -3,11 +3,11 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import { AllocationFailureKind } from '../../src/definitions/AllocationFailure';
-import { AllocationFailure } from '../../src/model/AllocationFailure';
+import { BankAllocationFailure } from '../../src/model/AllocationFailure';
 import { StringBufferType } from '../../src/model/BufferType';
 
 /** An out-of-memory failure as older tt-metal records it: no free-space figures. */
-export const makeAllocationFailure = (overrides: Partial<AllocationFailure> = {}): AllocationFailure => ({
+export const makeAllocationFailure = (overrides: Partial<BankAllocationFailure> = {}): BankAllocationFailure => ({
     operationId: 240,
     operationName: 'ttnn.conv2d',
     kind: AllocationFailureKind.BANK_OUT_OF_MEMORY,
@@ -19,9 +19,5 @@ export const makeAllocationFailure = (overrides: Partial<AllocationFailure> = {}
     allocatedBytes: null,
     freeBytes: null,
     largestFreeBlockBytes: null,
-    coreRange: null,
-    l1BufferAddress: null,
-    circularBufferRegionEnd: null,
-    maxL1Bytes: null,
     ...overrides,
 });

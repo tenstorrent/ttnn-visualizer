@@ -2,20 +2,17 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-import { DeviceOperationParams, Node, NodeType } from '../model/APIData';
+import { DeviceOperationNode, DeviceOperationNodeEnd, DeviceOperationNodeType, Node, NodeType } from '../model/APIData';
 import { isDeviceOperation } from './filterOperations';
 
-export type DeviceOperationNodeType = NodeType.function_start | NodeType.function_end;
-
-// tt-metal writes this string, not a boolean: graph params are all strings and only
-// `program_cache_hit` is converted when the graph is serialised. A boolean is accepted
-// too, in case a later serialiser converts it. `linking.py` reads it the same way.
+// See `DeviceOperationEndParams.aborted`. `linking.py` reads it the same way.
 const ABORTED_PARAM_VALUE = 'true';
 
-const getNodeName = (node: Node): string | undefined => (node.params as DeviceOperationParams | null)?.name;
+// Graph params come straight from the capture, so `params` is guarded despite its type.
+const getNodeName = (node: DeviceOperationNode | DeviceOperationNodeEnd): string | undefined => node.params?.name;
 
-const isAbortedEnd = (node: Node): boolean => {
-    const aborted = (node.params as { aborted?: unknown } | null)?.aborted;
+const isAbortedEnd = (node: DeviceOperationNodeEnd): boolean => {
+    const aborted = node.params?.aborted;
 
     return aborted === true || aborted === ABORTED_PARAM_VALUE;
 };
@@ -66,9 +63,13 @@ const getDeviceOperationNames = (
     const names: string[] = [];
 
     nodes.forEach((node, index) => {
+        if (node.node_type !== nodeType) {
+            return;
+        }
+
         const name = getNodeName(node);
 
-        if (node.node_type === nodeType && name !== undefined && isDeviceOperation(name) && include(index)) {
+        if (name !== undefined && isDeviceOperation(name) && include(index)) {
             names.push(name);
         }
     });
@@ -86,8 +87,9 @@ export interface LinkableDeviceOperations {
  * perf row, in each captured order.
  *
  * A device operation whose launch threw never reached the device, so it has no perf
- * row. Left in, it takes the next same-named row (typically the script's retry) and
- * shifts every later row onto the wrong operation. Two shapes of failure:
+ * row. Left in, it puts a name in the order that no row answers, and the alignment
+ * (all or nothing) usually fails: a report with a failure would not link at all. Two
+ * shapes of failure:
  * - Newer captures close the scope with a `function_end` marked `aborted`.
  * - Older captures leave the `function_start` with no `function_end` at all.
  *

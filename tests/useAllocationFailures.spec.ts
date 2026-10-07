@@ -27,12 +27,11 @@ const failedOperation = (id: number, message = OUT_OF_MEMORY): OperationDescript
     operation(id, {
         name: 'ttnn.conv2d',
         error: {
-            operation_id: id,
-            operation_name: 'ttnn.conv2d',
             error_type: 'RuntimeError',
             error_message: message,
             stack_trace: '',
             timestamp: '',
+            rank: 0,
         },
         device_operations: [
             node(NodeType.function_start, 'Halo'),
@@ -66,7 +65,7 @@ describe('useAllocationFailures', () => {
 
         expect(result.current.listings).toHaveLength(1);
         expect(result.current.listings[0]).toMatchObject({
-            failure: { operationId: 2, kind: AllocationFailureKind.BANK_OUT_OF_MEMORY },
+            failure: { operationId: 2, operationName: 'ttnn.conv2d', kind: AllocationFailureKind.BANK_OUT_OF_MEMORY },
             failedDeviceOperations: ['Conv2d'],
             linkedRowCount: 1,
         });
