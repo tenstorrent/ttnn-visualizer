@@ -81,6 +81,9 @@ export const TEST_IDS = Object.freeze({
     TOP_N_RAIL: 'top-n-rail',
     TOP_N_RAIL_DOT: 'top-n-rail-dot',
 
+    // Operation list
+    UNATTACHED_ERRORS: 'unattached-errors',
+
     // General UI
     LOADING_SPINNER: 'loading-spinner',
     ERROR_MESSAGE: 'error-message',

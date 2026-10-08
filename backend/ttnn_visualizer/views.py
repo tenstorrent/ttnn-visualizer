@@ -109,9 +109,11 @@ from ttnn_visualizer.report_source_file import (
     report_source_file_available,
 )
 from ttnn_visualizer.serializers import (
+    select_error_for_operation,
     serialize_buffer,
     serialize_buffer_chunks,
     serialize_devices,
+    serialize_error_records,
     serialize_operation,
     serialize_operation_buffers,
     serialize_operations,
@@ -633,12 +635,7 @@ def operation_detail(operation_id, instance: Instance):
                     )
                 )
             )
-            for e in error_records:
-                if e.rank == operation.rank:
-                    error_record = e
-                    break
-            if error_record is None and error_records:
-                error_record = error_records[0]
+            error_record = select_error_for_operation(error_records, operation)
 
         serialized_operation = serialize_operation(
             buffers,
@@ -696,7 +693,10 @@ def errors_list(instance: Instance):
         error_records = list(
             db.query_error_records(db.merge_rank_filter("errors", None, rank))
         )
-        serialized_errors = [dataclasses.asdict(error) for error in error_records]
+        operations = list(
+            db.query_operations(db.merge_rank_filter("operations", None, rank))
+        )
+        serialized_errors = serialize_error_records(error_records, operations)
 
         return Response(
             orjson.dumps(serialized_errors),

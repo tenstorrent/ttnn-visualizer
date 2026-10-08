@@ -9,6 +9,7 @@ enum Endpoints {
     CLUSTER_DESCRIPTOR = '/api/cluster-descriptor',
     CONFIG = '/api/config',
     DEVICES = '/api/devices',
+    ERRORS = '/api/errors',
     INSTANCE = '/api/instance',
     LOCAL = '/api/local',
     MESH_DESCRIPTOR = '/api/mesh-descriptor',

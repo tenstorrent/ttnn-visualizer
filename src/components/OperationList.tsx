@@ -38,6 +38,7 @@ import OperationListPerfData from './OperationListPerfData';
 import OperationPerfRowBar from './OperationPerfRowBar';
 import SearchField from './SearchField';
 import SimpleMultiselect from './SimpleMultiselect';
+import UnattachedErrorsCallout from './UnattachedErrorsCallout';
 import { useOpPerfRowScores } from '../hooks/useOpPerfRowScores';
 import { filterByOperationRange } from '../functions/filterByOperationRange';
 
@@ -413,6 +414,8 @@ const OperationList = () => {
                     </p>
                 )}
             </div>
+
+            <UnattachedErrorsCallout />
 
             <div
                 ref={scrollElementRef}

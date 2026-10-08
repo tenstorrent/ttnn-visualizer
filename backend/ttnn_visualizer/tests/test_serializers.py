@@ -12,6 +12,7 @@ from ttnn_visualizer.models import (
     BufferType,
     Device,
     DeviceOperation,
+    ErrorRecord,
     InputTensor,
     Operation,
     OperationArgument,
@@ -21,6 +22,7 @@ from ttnn_visualizer.models import (
     Tensor,
 )
 from ttnn_visualizer.serializers import (
+    select_errors_by_operation,
     serialize_buffer_chunks,
     serialize_buffer_pages,
     serialize_devices,
@@ -767,3 +769,36 @@ class TestSerializers(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def _error_record(operation_id, operation_name, message="boom", rank=0):
+    return ErrorRecord(
+        operation_id, operation_name, "RuntimeError", message, "trace", "t", rank
+    )
+
+
+class TestSelectErrorsByOperation(unittest.TestCase):
+    def test_falls_back_to_rank_zero_when_errors_have_no_rank(self):
+        """An errors table without a rank column reads back as rank 0."""
+        operation = Operation(1, "ttnn.add", 0.5, rank=1)
+        error = _error_record(1, "ttnn.add")
+
+        self.assertIs(select_errors_by_operation([error], [operation])[(1, 1)], error)
+
+    def test_rank_zero_fallback_still_requires_a_matching_name(self):
+        operation = Operation(1, "ttnn.add", 0.5, rank=1)
+
+        self.assertEqual(
+            select_errors_by_operation([_error_record(1, "ttnn.conv2d")], [operation]),
+            {},
+        )
+
+    def test_prefers_the_exact_rank_over_the_fallback(self):
+        operation = Operation(1, "ttnn.add", 0.5, rank=1)
+        rank_zero = _error_record(1, "ttnn.add", "rank 0", rank=0)
+        rank_one = _error_record(1, "ttnn.add", "rank 1", rank=1)
+
+        self.assertIs(
+            select_errors_by_operation([rank_zero, rank_one], [operation])[(1, 1)],
+            rank_one,
+        )

@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { AxiosError, AxiosRequestConfig } from 'axios';
+import { AxiosError, AxiosRequestConfig, HttpStatusCode, isAxiosError } from 'axios';
 import { QueryClient, QueryStatus, keepPreviousData, useQueries, useQuery } from '@tanstack/react-query';
 import { useCallback, useEffect, useMemo } from 'react';
 import { useAtomValue } from 'jotai';
@@ -21,6 +21,7 @@ import {
     NodeType,
     OperationDescription,
     OperationDetailsData,
+    ReportError,
     ReportMetadataResponse,
     Tensor,
     defaultBuffer,
@@ -644,6 +645,30 @@ export const useOperationsList = () => {
     return useQuery<OperationDescription[], AxiosError>({
         queryFn: () => (activeProfilerReport !== null ? fetchOperations() : Promise.resolve([])),
         queryKey: ['get-operations', activeProfilerReport?.path],
+        retry: false,
+        staleTime: Infinity,
+    });
+};
+
+const fetchReportErrors = async (): Promise<ReportError[]> => {
+    try {
+        const { data } = await axiosInstance.get<ReportError[]>(Endpoints.ERRORS);
+        return data;
+    } catch (error) {
+        // Reports written before the errors table existed answer 422, and have no errors to show
+        if (isAxiosError(error) && error.response?.status === HttpStatusCode.UnprocessableEntity) {
+            return [];
+        }
+        throw error;
+    }
+};
+
+export const useReportErrors = () => {
+    const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
+    return useQuery<ReportError[], AxiosError>({
+        queryFn: fetchReportErrors,
+        queryKey: ['get-report-errors', activeProfilerReport?.path],
+        enabled: activeProfilerReport !== null,
         retry: false,
         staleTime: Infinity,
     });

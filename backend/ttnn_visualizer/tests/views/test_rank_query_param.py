@@ -697,6 +697,7 @@ def test_errors_list_rank_filter(app, client):
         assert e0[0]["operation_id"] == 1
         assert e0[0]["error_message"] == "oops"
         assert e0[0]["rank"] == 0
+        assert e0[0]["attached"] is True
     finally:
         Path(path).unlink(missing_ok=True)
 
