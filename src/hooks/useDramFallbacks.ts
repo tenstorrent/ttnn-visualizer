@@ -5,7 +5,7 @@
 import { useMemo } from 'react';
 import { AllocationFailure } from '../model/AllocationFailure';
 import { DramFallback } from '../model/DramFallback';
-import { getDramFallbacks } from '../functions/detectDramFallbacks';
+import { getDramFallbacks } from '../functions/getDramFallbacks';
 import { useOpToPerfIdFiltered, useOperationsList } from './useAPI';
 
 const EMPTY_RESULT: Map<number, DramFallback> = new Map<number, DramFallback>();

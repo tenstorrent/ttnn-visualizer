@@ -27,7 +27,7 @@ import {
     defaultOperation,
 } from '../model/APIData';
 import { BufferType } from '../model/BufferType';
-import parseMemoryConfig, { memoryConfigPattern } from '../functions/parseMemoryConfig';
+import parseMemoryConfig, { trailingMemoryConfigPattern } from '../functions/parseMemoryConfig';
 import { MemoryConfig } from '../model/MemoryConfig';
 import getServerConfig from '../functions/getServerConfig';
 import { PerfTableRow } from '../model/PerfTable';
@@ -229,7 +229,7 @@ const fetchOperations = async (): Promise<OperationDescription[]> => {
         });
 
         const argumentsWithParsedValues = operation.arguments.map((argument) =>
-            argument.name === 'memory_config' || memoryConfigPattern.test(argument.value)
+            argument.name === 'memory_config' || trailingMemoryConfigPattern.test(argument.value)
                 ? {
                       ...argument,
                       parsedValue: argument.value ? (parseMemoryConfig(argument.value) as MemoryConfig) : null,

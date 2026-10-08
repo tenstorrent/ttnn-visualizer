@@ -10,6 +10,7 @@ import { DeviceOperationLayoutTypes } from './APIData';
 import { BufferType as BufferTypeEnum } from './BufferType';
 import { AllocationFailure } from './AllocationFailure';
 import { DramFallback } from './DramFallback';
+import { L1PressureMetrics } from './L1Pressure';
 
 export interface PerfTableRow {
     id: string;
@@ -130,6 +131,13 @@ export interface TypedPerfTableRow extends Omit<
     dram_fallback: DramFallback | null;
     heuristicFlags?: PerfHeuristicFlag[];
     heuristicFlagDetails?: Partial<Record<PerfHeuristicFlag, string>>;
+}
+
+/** Per-operation data from the linked memory report, keyed by its operation id. */
+export interface LinkedOperationData {
+    l1PressureByOpId: Map<number, L1PressureMetrics> | null;
+    allocationFailureByOpId: Map<number, AllocationFailure> | null;
+    dramFallbackByOpId: Map<number, DramFallback> | null;
 }
 
 export const signpostRowDefaults = Object.freeze({

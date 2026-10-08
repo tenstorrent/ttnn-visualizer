@@ -11,7 +11,7 @@ import isValidNumber from './isValidNumber';
 import { formatPercentage } from './math';
 import { isSlowDramDominant } from './perfBoundPredicates';
 import { getAllocationFailureSummary } from './parseAllocationFailure';
-import { getDramFallbackSummary } from './detectDramFallbacks';
+import { getDramFallbackSummary } from './getDramFallbacks';
 
 interface RowHeuristicEvaluation {
     flags: PerfHeuristicFlag[];

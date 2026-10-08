@@ -5,8 +5,12 @@
 import { OperationDescription, Tensor } from '../../src/model/APIData';
 import { BufferType } from '../../src/model/BufferType';
 
-/** A memory config argument as tt-metal stores it, in the newer `nd_shard_spec` form. */
-export const memoryConfigArgument = (bufferType: string, name = 'memory_config') => ({
+/**
+ * A memory config argument as tt-metal stores it, in the newer `nd_shard_spec` form. Pass a
+ * `StringBufferType` member; the type is a plain string so a test can also pass one this app
+ * does not know.
+ */
+export const makeMemoryConfigArgument = (bufferType: string, name = 'memory_config') => ({
     name,
     value: `MemoryConfig(memory_layout=TensorMemoryLayout::INTERLEAVED,buffer_type=BufferType::${bufferType},shard_spec=std::nullopt,nd_shard_spec=std::nullopt,created_with_nd_shard_spec=0)`,
     parsedValue: null,
@@ -17,6 +21,7 @@ export const makeTensor = (overrides: Partial<Tensor> = {}): Tensor =>
         id: 1,
         address: null,
         buffer_type: BufferType.L1,
+        device_id: 0,
         producers: [],
         consumers: [],
         producerNames: [],

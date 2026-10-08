@@ -4,8 +4,8 @@
 
 import { describe, expect, it } from 'vitest';
 import { getMemoryConfigBufferType } from '../src/functions/parseMemoryConfig';
-import { BufferType } from '../src/model/BufferType';
-import { memoryConfigArgument } from './helpers/operationDescription';
+import { BufferType, StringBufferType } from '../src/model/BufferType';
+import { makeMemoryConfigArgument } from './helpers/operationDescription';
 
 // The older form, without the nd_shard_spec fields.
 const SHARDED_L1 =
@@ -13,11 +13,11 @@ const SHARDED_L1 =
 
 describe('getMemoryConfigBufferType', () => {
     it.each([
-        ['L1', BufferType.L1],
-        ['L1_SMALL', BufferType.L1_SMALL],
-        ['DRAM', BufferType.DRAM],
+        [StringBufferType.L1, BufferType.L1],
+        [StringBufferType.L1_SMALL, BufferType.L1_SMALL],
+        [StringBufferType.DRAM, BufferType.DRAM],
     ])('reads BufferType::%s from the newer nd_shard_spec form', (name, expected) => {
-        expect(getMemoryConfigBufferType(memoryConfigArgument(name).value)).toBe(expected);
+        expect(getMemoryConfigBufferType(makeMemoryConfigArgument(name).value)).toBe(expected);
     });
 
     it('reads the older form with a shard spec', () => {
@@ -33,7 +33,7 @@ describe('getMemoryConfigBufferType', () => {
     });
 
     it('is null for a buffer type this app does not know', () => {
-        expect(getMemoryConfigBufferType(memoryConfigArgument('FUTURE_MEMORY').value)).toBeNull();
+        expect(getMemoryConfigBufferType(makeMemoryConfigArgument('FUTURE_MEMORY').value)).toBeNull();
     });
 
     it('is null for a value that only ends in a memory config', () => {

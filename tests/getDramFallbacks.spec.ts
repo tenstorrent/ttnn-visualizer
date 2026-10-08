@@ -3,14 +3,14 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import { describe, expect, it } from 'vitest';
-import { getDramFallbackSummary, getDramFallbacks } from '../src/functions/detectDramFallbacks';
+import { getDramFallbackSummary, getDramFallbacks } from '../src/functions/getDramFallbacks';
 import { DRAM_FALLBACK_RETRY_WINDOW_OPERATIONS, DramFallbackSignal } from '../src/definitions/DramFallback';
 import { AllocationFailureKind } from '../src/definitions/AllocationFailure';
 import { AllocationFailure } from '../src/model/AllocationFailure';
 import { OperationDescription } from '../src/model/APIData';
 import { BufferType, StringBufferType } from '../src/model/BufferType';
 import { makeAllocationFailure } from './helpers/allocationFailure';
-import { makeOperation, makeTensor, memoryConfigArgument } from './helpers/operationDescription';
+import { makeMemoryConfigArgument, makeOperation, makeTensor } from './helpers/operationDescription';
 
 const INPUT_ADDRESS = 7023392;
 const OUTPUT_ADDRESS = 1048576;
@@ -22,7 +22,7 @@ const l1Output = makeTensor({ id: 12, address: OUTPUT_ADDRESS, buffer_type: Buff
 /** An op that asked for L1 and got DRAM, unless overridden. */
 const requestingL1 = (overrides: Partial<OperationDescription> = {}): OperationDescription =>
     makeOperation({
-        arguments: [memoryConfigArgument('L1')],
+        arguments: [makeMemoryConfigArgument(StringBufferType.L1)],
         inputs: [dramInput],
         outputs: [dramOutput],
         ...overrides,
@@ -54,6 +54,19 @@ describe('getDramFallbacks — argument vs output', () => {
         expect(getDramFallbacks([view], NO_FAILURES).size).toBe(0);
     });
 
+    // L1 and each device's DRAM are separate address spaces: an equal number there is no view.
+    it.each([
+        ['an L1 input', makeTensor({ id: 10, address: INPUT_ADDRESS, buffer_type: BufferType.L1 })],
+        ['a DRAM input on another device', makeTensor({ ...dramInput, device_id: 1 })],
+    ])('flags a DRAM output at the same address as %s', (_, input) => {
+        const operation = requestingL1({
+            inputs: [input],
+            outputs: [makeTensor({ id: 11, address: INPUT_ADDRESS, buffer_type: BufferType.DRAM })],
+        });
+
+        expect(getDramFallbacks([operation], NO_FAILURES).size).toBe(1);
+    });
+
     it('flags a deallocated DRAM output, which has no address to alias', () => {
         const operation = requestingL1({ outputs: [makeTensor({ address: null, buffer_type: BufferType.DRAM })] });
 
@@ -61,30 +74,50 @@ describe('getDramFallbacks — argument vs output', () => {
     });
 
     it('counts L1_SMALL as an L1 request', () => {
-        const operation = requestingL1({ arguments: [memoryConfigArgument('L1_SMALL')] });
+        const operation = requestingL1({ arguments: [makeMemoryConfigArgument(StringBufferType.L1_SMALL)] });
 
         expect(getDramFallbacks([operation], NO_FAILURES).get(1)).toMatchObject({
             requestedBufferType: BufferType.L1_SMALL,
         });
     });
 
+    // The case the intermediate exclusion exists for: without it, this request reads as mixed.
+    it('flags an L1 output request beside a DRAM intermediate', () => {
+        const operation = requestingL1({
+            arguments: [
+                makeMemoryConfigArgument(StringBufferType.L1),
+                makeMemoryConfigArgument(StringBufferType.DRAM, 'intermediate_memory_config'),
+            ],
+        });
+
+        expect(getDramFallbacks([operation], NO_FAILURES).get(1)).toMatchObject({
+            signal: DramFallbackSignal.ARGUMENT_MISMATCH,
+            requestedBufferType: BufferType.L1,
+        });
+    });
+
     it('reads a memory config passed positionally', () => {
-        const operation = requestingL1({ arguments: [memoryConfigArgument('L1', '1')] });
+        const operation = requestingL1({ arguments: [makeMemoryConfigArgument(StringBufferType.L1, '1')] });
 
         expect(getDramFallbacks([operation], NO_FAILURES).size).toBe(1);
     });
 
     it.each([
         ['an all-L1 output', { outputs: [l1Output] }],
-        ['a DRAM request', { arguments: [memoryConfigArgument('DRAM')] }],
+        ['a DRAM request', { arguments: [makeMemoryConfigArgument(StringBufferType.DRAM)] }],
         [
             'a mixed L1 and DRAM request',
-            { arguments: [memoryConfigArgument('L1'), memoryConfigArgument('DRAM', 'memory_config_mm')] },
+            {
+                arguments: [
+                    makeMemoryConfigArgument(StringBufferType.L1),
+                    makeMemoryConfigArgument(StringBufferType.DRAM, 'memory_config_mm'),
+                ],
+            },
         ],
         ['no memory config argument', { arguments: [{ name: '1', value: '1, -1, 144', parsedValue: null }] }],
         [
             'an L1 intermediate and no output config',
-            { arguments: [memoryConfigArgument('L1', 'intermediate_memory_config')] },
+            { arguments: [makeMemoryConfigArgument(StringBufferType.L1, 'intermediate_memory_config')] },
         ],
     ])('does not flag %s', (_, overrides) => {
         expect(getDramFallbacks([requestingL1(overrides)], NO_FAILURES).size).toBe(0);
@@ -101,7 +134,12 @@ describe('getDramFallbacks — retry after an L1 allocation failure', () => {
     const failed = makeOperation({ id: 10, name: 'ttnn.linear' });
     // The script asks for DRAM outright on its retry, so only the failure can tie the two together.
     const retry = (id: number) =>
-        makeOperation({ id, name: 'ttnn.linear', arguments: [memoryConfigArgument('DRAM')], outputs: [dramOutput] });
+        makeOperation({
+            id,
+            name: 'ttnn.linear',
+            arguments: [makeMemoryConfigArgument(StringBufferType.DRAM)],
+            outputs: [dramOutput],
+        });
     const unrelated = (id: number) => makeOperation({ id, name: 'ttnn.add', outputs: [l1Output] });
     const failureByOpId = (failure: AllocationFailure = makeAllocationFailure({ operationId: 10 })) =>
         new Map([[10, failure]]);
@@ -184,6 +222,40 @@ describe('getDramFallbacks — retry after an L1 allocation failure', () => {
         const stayedInL1 = makeOperation({ id: 11, name: 'ttnn.linear', outputs: [l1Output] });
 
         expect(getDramFallbacks([failed, stayedInL1], failureByOpId()).size).toBe(0);
+    });
+
+    // The first same-named op is the retry; once it stays in L1, a later DRAM call is a new one.
+    it('looks only at the first same-named op in the window', () => {
+        const stayedInL1 = makeOperation({ id: 11, name: 'ttnn.linear', outputs: [l1Output] });
+
+        expect(getDramFallbacks([failed, stayedInL1, retry(12)], failureByOpId()).size).toBe(0);
+    });
+
+    it('does not flag a retry whose DRAM output is a view of its input', () => {
+        const view = makeOperation({
+            id: 11,
+            name: 'ttnn.linear',
+            inputs: [dramInput],
+            outputs: [makeTensor({ id: 11, address: INPUT_ADDRESS, buffer_type: BufferType.DRAM })],
+        });
+
+        expect(getDramFallbacks([failed, view], failureByOpId()).size).toBe(0);
+    });
+
+    it('flags nothing when the failed op is the last one recorded', () => {
+        expect(getDramFallbacks([unrelated(9), failed], failureByOpId()).size).toBe(0);
+    });
+
+    it('credits a retry to the nearest failure before it', () => {
+        const earlierFailure = makeOperation({ id: 9, name: 'ttnn.linear' });
+        const failureByOpIdForBoth = new Map([
+            [9, makeAllocationFailure({ operationId: 9 })],
+            [10, makeAllocationFailure({ operationId: 10 })],
+        ]);
+
+        expect(getDramFallbacks([earlierFailure, failed, retry(11)], failureByOpIdForBoth).get(11)).toMatchObject({
+            failedOperationId: 10,
+        });
     });
 
     it('outranks an argument mismatch on the same op', () => {

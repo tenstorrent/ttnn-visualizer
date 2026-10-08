@@ -5,7 +5,7 @@
 import { DramFallbackSignal } from '../definitions/DramFallback';
 import { BufferType } from './BufferType';
 
-interface DramFallbackOutputs {
+export interface DramFallbackOutputs {
     operationId: number;
     dramOutputCount: number;
     outputCount: number;

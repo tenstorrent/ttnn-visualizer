@@ -3,8 +3,8 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import { describe, expect, it } from 'vitest';
-import { LinkedOperationData, enrichRowData } from '../src/functions/enrichPerfRowData';
-import { PerfTableRow } from '../src/model/PerfTable';
+import { enrichRowData } from '../src/functions/enrichPerfRowData';
+import { LinkedOperationData, PerfTableRow } from '../src/model/PerfTable';
 import { BufferType } from '../src/model/BufferType';
 import { DeviceOperationLayoutTypes } from '../src/model/APIData';
 import { OpType } from '../src/definitions/Performance';

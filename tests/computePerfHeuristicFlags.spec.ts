@@ -99,6 +99,23 @@ describe('annotatePerfHeuristicFlags', () => {
         it('is absent without a fallback', () => {
             expect(getFlags({ dram_fallback: null })).not.toContain(PerfHeuristicFlag.DRAM_FALLBACK);
         });
+
+        it('sits after a recorded allocation failure on the same row', () => {
+            const flags = getFlags({ allocation_failure: makeAllocationFailure(), dram_fallback: fallback });
+
+            expect(flags.slice(0, 2)).toEqual([PerfHeuristicFlag.ALLOCATION_FAILURE, PerfHeuristicFlag.DRAM_FALLBACK]);
+        });
+
+        // The recorded failure bypasses the eligibility gate; the inferred fallback does not.
+        it('leaves only the recorded failure on an ineligible row', () => {
+            expect(
+                getFlags({
+                    allocation_failure: makeAllocationFailure(),
+                    dram_fallback: fallback,
+                    bound: BoundType.HOST,
+                }),
+            ).toEqual([PerfHeuristicFlag.ALLOCATION_FAILURE]);
+        });
     });
 
     it('flags DRAM-bound when bound is DRAM', () => {

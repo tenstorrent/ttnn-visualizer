@@ -11,7 +11,7 @@ import {
 import { AllocationFailure } from '../model/AllocationFailure';
 import { Operation, OperationDescription, Tensor } from '../model/APIData';
 import { BufferType, BufferTypeLabel, StringBufferTypeToBufferType, isL1BufferType } from '../model/BufferType';
-import { DramFallback } from '../model/DramFallback';
+import { DramFallback, DramFallbackOutputs } from '../model/DramFallback';
 import { getMemoryConfigBufferType } from './parseMemoryConfig';
 
 type OperationArgument = Pick<OperationDescription['arguments'][number], 'name' | 'value'>;
@@ -21,17 +21,29 @@ export type DramFallbackOperation = Pick<Operation, 'id' | 'name' | 'inputs' | '
 };
 
 /**
- * DRAM outputs the op allocated itself. An output at an input's address is a view of that
- * input — `ttnn.reshape` takes this path and ignores its memory config — and accounted for
- * every DRAM output that asked for L1 across the reports measured for #2081.
+ * DRAM outputs the op allocated itself. An output at a DRAM input's address on the same device
+ * is a view of that input — `ttnn.reshape` takes this path and ignores its memory config — and
+ * accounted for every DRAM output that asked for L1 across the reports measured for #2081.
+ * L1 and each device's DRAM are separate address spaces, so an equal number elsewhere is not a view.
  */
 const getUnaliasedDramOutputs = ({ inputs, outputs }: DramFallbackOperation): Tensor[] => {
-    const inputAddresses = new Set(inputs.map(({ address }) => address).filter((address) => address !== null));
+    const isViewOfInput = ({ address, device_id: deviceId }: Tensor): boolean =>
+        address !== null &&
+        inputs.some(
+            (input) =>
+                input.buffer_type === BufferType.DRAM && input.address === address && input.device_id === deviceId,
+        );
 
-    return outputs.filter(
-        ({ address, buffer_type: bufferType }) =>
-            bufferType === BufferType.DRAM && (address === null || !inputAddresses.has(address)),
-    );
+    return outputs.filter((output) => output.buffer_type === BufferType.DRAM && !isViewOfInput(output));
+};
+
+/** The fields every signal reports, or `null` when the op allocated no DRAM output itself. */
+const getDramFallbackOutputs = (operation: DramFallbackOperation): DramFallbackOutputs | null => {
+    const dramOutputs = getUnaliasedDramOutputs(operation);
+
+    return dramOutputs.length > 0
+        ? { operationId: operation.id, dramOutputCount: dramOutputs.length, outputCount: operation.outputs.length }
+        : null;
 };
 
 const getRequestedBufferTypes = (operation: DramFallbackOperation): BufferType[] =>
@@ -70,20 +82,23 @@ export const getDramFallbacks = (
         const requested = getRequestedBufferTypes(operation);
         // A mixed request, such as an L1 output with a DRAM scratch buffer, cannot be pinned on the output.
         const requestsOnlyL1 = requested.length > 0 && requested.every(isL1BufferType);
-        const dramOutputs = requestsOnlyL1 ? getUnaliasedDramOutputs(operation) : [];
+        const outputs = requestsOnlyL1 ? getDramFallbackOutputs(operation) : null;
 
-        if (dramOutputs.length > 0) {
+        if (outputs) {
             dramFallbackByOpId.set(operation.id, {
+                ...outputs,
                 signal: DramFallbackSignal.ARGUMENT_MISMATCH,
-                operationId: operation.id,
                 requestedBufferType: requested[0],
-                dramOutputCount: dramOutputs.length,
-                outputCount: operation.outputs.length,
             });
         }
     }
 
-    // Last, so a recorded failure followed by DRAM outranks a bare argument mismatch.
+    if (allocationFailureByOpId.size === 0) {
+        return dramFallbackByOpId;
+    }
+
+    // Last, so a recorded failure followed by DRAM outranks a bare argument mismatch. Only the
+    // first same-named op in the window counts: if it stayed in L1, the retry worked.
     operations.forEach((failedOperation, index) => {
         const failure = allocationFailureByOpId.get(failedOperation.id);
 
@@ -94,16 +109,14 @@ export const getDramFallbacks = (
         const retry = operations
             .slice(index + 1, index + 1 + DRAM_FALLBACK_RETRY_WINDOW_OPERATIONS)
             .find(({ name }) => name === failedOperation.name);
-        const dramOutputs = retry ? getUnaliasedDramOutputs(retry) : [];
+        const outputs = retry ? getDramFallbackOutputs(retry) : null;
 
-        if (retry && dramOutputs.length > 0) {
-            dramFallbackByOpId.set(retry.id, {
+        if (outputs) {
+            dramFallbackByOpId.set(outputs.operationId, {
+                ...outputs,
                 signal: DramFallbackSignal.RETRY_AFTER_FAILURE,
-                operationId: retry.id,
                 failedOperationId: failedOperation.id,
                 failedOperationName: failedOperation.name,
-                dramOutputCount: dramOutputs.length,
-                outputCount: retry.outputs.length,
             });
         }
     });

@@ -9,9 +9,9 @@ import { useOpToPerfIdFiltered, useOperationsList } from '../src/hooks/useAPI';
 import { DramFallbackSignal } from '../src/definitions/DramFallback';
 import { AllocationFailure } from '../src/model/AllocationFailure';
 import { OperationDescription } from '../src/model/APIData';
-import { BufferType } from '../src/model/BufferType';
+import { BufferType, StringBufferType } from '../src/model/BufferType';
 import { makeAllocationFailure } from './helpers/allocationFailure';
-import { makeOperation, makeTensor, memoryConfigArgument } from './helpers/operationDescription';
+import { makeMemoryConfigArgument, makeOperation, makeTensor } from './helpers/operationDescription';
 
 vi.mock('../src/hooks/useAPI', () => ({
     useOperationsList: vi.fn(),
@@ -33,7 +33,11 @@ const mockReports = (
 };
 
 const dramOutput = makeTensor({ address: 1048576, buffer_type: BufferType.DRAM });
-const argumentMismatch = makeOperation({ id: 3, arguments: [memoryConfigArgument('L1')], outputs: [dramOutput] });
+const argumentMismatch = makeOperation({
+    id: 3,
+    arguments: [makeMemoryConfigArgument(StringBufferType.L1)],
+    outputs: [dramOutput],
+});
 
 beforeEach(() => {
     vi.mocked(useOperationsList).mockReset();
