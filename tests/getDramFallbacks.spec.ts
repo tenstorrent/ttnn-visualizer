@@ -119,12 +119,52 @@ describe('getDramFallbacks — argument vs output', () => {
             'an L1 intermediate and no output config',
             { arguments: [makeMemoryConfigArgument(StringBufferType.L1, 'intermediate_memory_config')] },
         ],
+        // A config whose buffer type can't be read can't be shown to ask for L1.
+        [
+            'an L1 request beside one of an unknown buffer type',
+            {
+                arguments: [
+                    makeMemoryConfigArgument(StringBufferType.L1),
+                    makeMemoryConfigArgument('FUTURE_MEMORY', 'memory_config_mm'),
+                ],
+            },
+        ],
+        [
+            'an L1 request beside one declaring no buffer type',
+            {
+                arguments: [
+                    makeMemoryConfigArgument(StringBufferType.L1),
+                    {
+                        name: 'memory_config_mm',
+                        value: 'MemoryConfig(memory_layout=TensorMemoryLayout::INTERLEAVED,shard_spec=std::nullopt)',
+                        parsedValue: null,
+                    },
+                ],
+            },
+        ],
     ])('does not flag %s', (_, overrides) => {
         expect(getDramFallbacks([requestingL1(overrides)], NO_FAILURES).size).toBe(0);
     });
 
-    it('counts only the DRAM outputs it allocated', () => {
-        const operation = requestingL1({ outputs: [dramOutput, l1Output] });
+    it('reports the first request when L1 and L1_SMALL are both asked for', () => {
+        const operation = requestingL1({
+            arguments: [
+                makeMemoryConfigArgument(StringBufferType.L1_SMALL),
+                makeMemoryConfigArgument(StringBufferType.L1, 'memory_config_mm'),
+            ],
+        });
+
+        expect(getDramFallbacks([operation], NO_FAILURES).get(1)).toMatchObject({
+            requestedBufferType: BufferType.L1_SMALL,
+        });
+    });
+
+    // The tooltip reads "N of M outputs in DRAM", so both the L1 output and the view count in M only.
+    it.each([
+        ['an L1 output', l1Output],
+        ['a view of its input', makeTensor({ id: 13, address: INPUT_ADDRESS, buffer_type: BufferType.DRAM })],
+    ])('counts only the DRAM outputs it allocated, beside %s', (_, otherOutput) => {
+        const operation = requestingL1({ outputs: [dramOutput, otherOutput] });
 
         expect(getDramFallbacks([operation], NO_FAILURES).get(1)).toMatchObject({ dramOutputCount: 1, outputCount: 2 });
     });
@@ -176,10 +216,11 @@ describe('getDramFallbacks — retry after an L1 allocation failure', () => {
         expect(getDramFallbacks(retryAt(DRAM_FALLBACK_RETRY_WINDOW_OPERATIONS + 1), failureByOpId()).size).toBe(0);
     });
 
-    it('does not flag a retry after a DRAM allocation failure', () => {
-        const dramFailure = makeAllocationFailure({ operationId: 10, bufferType: StringBufferType.DRAM });
+    // `null` is a buffer type the failure parser does not recognise: it can't be shown to be L1.
+    it.each([StringBufferType.DRAM, null])('does not flag a retry after a %s bank failure', (bufferType) => {
+        const failure = makeAllocationFailure({ operationId: 10, bufferType });
 
-        expect(getDramFallbacks([failed, retry(11)], failureByOpId(dramFailure)).size).toBe(0);
+        expect(getDramFallbacks([failed, retry(11)], failureByOpId(failure)).size).toBe(0);
     });
 
     const circularBufferRange = { operationId: 10, operationName: 'ttnn.linear', coreRange: '[(x=0,y=0) - (x=7,y=7)]' };

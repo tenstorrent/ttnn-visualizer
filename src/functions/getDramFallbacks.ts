@@ -12,7 +12,7 @@ import { AllocationFailure } from '../model/AllocationFailure';
 import { Operation, OperationDescription, Tensor } from '../model/APIData';
 import { BufferType, BufferTypeLabel, StringBufferTypeToBufferType, isL1BufferType } from '../model/BufferType';
 import { DramFallback, DramFallbackOutputs } from '../model/DramFallback';
-import { getMemoryConfigBufferType } from './parseMemoryConfig';
+import { getMemoryConfigBufferType, isMemoryConfigValue } from './parseMemoryConfig';
 
 type OperationArgument = Pick<OperationDescription['arguments'][number], 'name' | 'value'>;
 
@@ -46,11 +46,18 @@ const getDramFallbackOutputs = (operation: DramFallbackOperation): DramFallbackO
         : null;
 };
 
-const getRequestedBufferTypes = (operation: DramFallbackOperation): BufferType[] =>
-    operation.arguments
-        .filter(({ name }) => !DRAM_FALLBACK_IGNORED_ARGUMENT_PATTERN.test(name))
-        .map(({ value }) => getMemoryConfigBufferType(value))
-        .filter((bufferType): bufferType is BufferType => bufferType !== null);
+/**
+ * The L1 buffer type the op's memory config arguments ask for, or `null` unless every one of
+ * them asks for L1. A mixed request, such as an L1 output with a DRAM scratch buffer, cannot be
+ * pinned on the output, and a config whose buffer type is unknown cannot be shown to ask for L1.
+ */
+const getL1Request = (operation: DramFallbackOperation): BufferType | null => {
+    const requested = operation.arguments
+        .filter(({ name, value }) => !DRAM_FALLBACK_IGNORED_ARGUMENT_PATTERN.test(name) && isMemoryConfigValue(value))
+        .map(({ value }) => getMemoryConfigBufferType(value));
+
+    return requested.length > 0 && requested.every(isL1BufferType) ? requested[0] : null;
+};
 
 const isL1AllocationFailure = (failure: AllocationFailure): boolean => {
     switch (failure.kind) {
@@ -79,16 +86,14 @@ export const getDramFallbacks = (
     const dramFallbackByOpId = new Map<number, DramFallback>();
 
     for (const operation of operations) {
-        const requested = getRequestedBufferTypes(operation);
-        // A mixed request, such as an L1 output with a DRAM scratch buffer, cannot be pinned on the output.
-        const requestsOnlyL1 = requested.length > 0 && requested.every(isL1BufferType);
-        const outputs = requestsOnlyL1 ? getDramFallbackOutputs(operation) : null;
+        const requestedBufferType = getL1Request(operation);
+        const outputs = requestedBufferType !== null ? getDramFallbackOutputs(operation) : null;
 
-        if (outputs) {
+        if (requestedBufferType !== null && outputs) {
             dramFallbackByOpId.set(operation.id, {
                 ...outputs,
                 signal: DramFallbackSignal.ARGUMENT_MISMATCH,
-                requestedBufferType: requested[0],
+                requestedBufferType,
             });
         }
     }

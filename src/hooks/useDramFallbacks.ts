@@ -6,6 +6,7 @@ import { useMemo } from 'react';
 import { AllocationFailure } from '../model/AllocationFailure';
 import { DramFallback } from '../model/DramFallback';
 import { getDramFallbacks } from '../functions/getDramFallbacks';
+import { isMemoryReportLinked } from '../functions/linkableDeviceOperations';
 import { useOpToPerfIdFiltered, useOperationsList } from './useAPI';
 
 const EMPTY_RESULT: Map<number, DramFallback> = new Map<number, DramFallback>();
@@ -22,13 +23,11 @@ export const useDramFallbacks = (
     allocationFailureByOpId: Map<number, AllocationFailure>,
 ): Map<number, DramFallback> => {
     const { data: operations } = useOperationsList();
-    const opIdsMap = useOpToPerfIdFiltered();
+    // Only whether the reports link matters here, not the mapping, so a re-match does not rescan.
+    const isLinked = isMemoryReportLinked(operations, useOpToPerfIdFiltered());
 
     return useMemo(
-        () =>
-            operations?.length && opIdsMap.length > 0
-                ? getDramFallbacks(operations, allocationFailureByOpId)
-                : EMPTY_RESULT,
-        [operations, opIdsMap, allocationFailureByOpId],
+        () => (isLinked && operations ? getDramFallbacks(operations, allocationFailureByOpId) : EMPTY_RESULT),
+        [isLinked, operations, allocationFailureByOpId],
     );
 };

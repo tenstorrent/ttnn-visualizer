@@ -22,9 +22,9 @@ The callout appears only when the two reports are linked, and only for errors wh
 
 tt-metal records nothing when a tensor that would normally live in L1 ends up in DRAM, so the performance view infers it from the linked memory report. Rows of an operation that probably fell back carry a **DRAM fallback?** flag in the Flags column. The question mark is deliberate: treat the flag as a lead to check, not a fact. Its tooltip says which of these signals raised it:
 
-- **Requested L1, got DRAM.** Every memory config the operation was given asks for L1, yet an output it allocated is in DRAM. Intermediate memory configs are ignored, because they say nothing about where the output should go.
-- **Retry after an L1 failure.** An operation failed to allocate L1, and a same-named operation within the next three is in DRAM. This is the "try L1, fall back to DRAM" pattern in a script.
+- **Requested L1, got DRAM.** Every memory config the operation was given asks for L1, yet an output it allocated is in DRAM. Intermediate memory configs are ignored, because they say nothing about where the output should go. A memory config whose buffer type can't be read counts as not asking for L1.
+- **Retry after an L1 failure.** An operation failed to allocate L1, and the first same-named operation within the next three is in DRAM. This is the "try L1, fall back to DRAM" pattern in a script. If that operation stayed in L1, the retry worked and nothing is flagged.
 
-An output at the same address as one of the operation's inputs is a view of that input, not a fallback; `ttnn.reshape` returns one and ignores its memory config. Those outputs are never flagged.
+An output at the same DRAM address as one of the operation's DRAM inputs on the same device is a view of that input, not a fallback; `ttnn.reshape` returns one and ignores its memory config. Those outputs are never flagged. L1 and each device's DRAM are separate address spaces, so a matching number there does not count.
 
 The flag appears only when the two reports are linked. It does not catch a fallback when L1 was only implied. For example, `ttnn.split` given no memory config puts its output where its input is, and moves that output to DRAM when an L1 input's chunks won't fit. No argument records that L1 was expected, so nothing in the report shows the request it overrode. A general version of that check would mostly flag ops whose default output is simply DRAM ([#2096](https://github.com/tenstorrent/ttnn-visualizer/issues/2096)).

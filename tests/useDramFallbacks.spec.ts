@@ -97,4 +97,21 @@ describe('useDramFallbacks', () => {
 
         expect(result.current).toBe(first);
     });
+
+    // Failures arrive after the operations once the reports link, so the memo must follow them.
+    it('recomputes when the failures it is given change', () => {
+        mockReports([
+            makeOperation({ id: 1, name: 'ttnn.linear' }),
+            makeOperation({ id: 2, name: 'ttnn.linear', outputs: [dramOutput] }),
+        ]);
+
+        const { result, rerender } = renderHook(({ failures }) => useDramFallbacks(failures), {
+            initialProps: { failures: new Map<number, AllocationFailure>() },
+        });
+        const first = result.current;
+        rerender({ failures: new Map([[1, makeAllocationFailure({ operationId: 1 })]]) });
+
+        expect(first.has(2)).toBe(false);
+        expect(result.current.get(2)?.signal).toBe(DramFallbackSignal.RETRY_AFTER_FAILURE);
+    });
 });

@@ -5,6 +5,16 @@
 import { DeviceOperationNode, DeviceOperationNodeEnd, DeviceOperationNodeType, Node, NodeType } from '../model/APIData';
 import { isDeviceOperation } from './filterOperations';
 
+/**
+ * Whether the active memory report is linked to the performance report, so its per-operation
+ * findings may be shown against perf rows. Anything that could blame one run's operations on
+ * another's rows gates on this, so "linked" means the same thing everywhere.
+ */
+export const isMemoryReportLinked = <T>(
+    operations: T[] | null | undefined,
+    opIdsMap: readonly unknown[],
+): operations is T[] => !!operations?.length && opIdsMap.length > 0;
+
 // See `DeviceOperationEndParams.aborted`. `linking.py` reads it the same way.
 const ABORTED_PARAM_VALUE = 'true';
 

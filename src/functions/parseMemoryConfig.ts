@@ -46,6 +46,10 @@ const parseMemoryConfig = (string: string): MemoryConfig | null => {
     return null;
 };
 
+/** Whether a raw argument value is a whole `MemoryConfig(...)`, whatever buffer type it declares. */
+export const isMemoryConfigValue = (value: string | null | undefined): value is string =>
+    value != null && wholeMemoryConfigPattern.test(value);
+
 /**
  * The buffer type a raw `MemoryConfig(...)` string declares, mirroring the backend's
  * `parse_memory_config_buffer_type`. Kept out of `parseMemoryConfig`, whose result the
