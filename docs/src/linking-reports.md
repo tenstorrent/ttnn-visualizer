@@ -27,4 +27,4 @@ tt-metal records nothing when a tensor that would normally live in L1 ends up in
 
 An output at the same address as one of the operation's inputs is a view of that input, not a fallback; `ttnn.reshape` returns one and ignores its memory config. Those outputs are never flagged.
 
-The flag appears only when the two reports are linked. It does not catch an operation that moves one of its own *inputs* to DRAM internally, such as `ttnn.split` under L1 pressure, because nothing in the report shows the request it overrode.
+The flag appears only when the two reports are linked. It does not catch a fallback when L1 was only implied. For example, `ttnn.split` given no memory config puts its output where its input is, and moves that output to DRAM when an L1 input's chunks won't fit. No argument records that L1 was expected, so nothing in the report shows the request it overrode. A general version of that check would mostly flag ops whose default output is simply DRAM ([#2096](https://github.com/tenstorrent/ttnn-visualizer/issues/2096)).
