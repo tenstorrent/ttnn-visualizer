@@ -37,6 +37,7 @@ vi.mock('../src/hooks/useAPI.tsx', () => ({
 }));
 
 const COMPARISON_REPORT = 'report-b';
+const SECOND_COMPARISON_REPORT = 'report-c';
 /** Accessible name Blueprint gives a MultiSelect tag's dismiss button. */
 const REMOVE_TAG_LABEL = 'Remove tag';
 const WAIT_FOR_OPTIONS = { timeout: 1000 };
@@ -146,6 +147,15 @@ function expectRowInBothReports(text: string) {
 
     expect(tableRows.some((tableRow) => tableRow.classList.contains('comparison-row'))).toBe(true);
     expect(tableRows.some((tableRow) => !tableRow.classList.contains('comparison-row'))).toBe(true);
+}
+
+// Normalisation is on by default; switching it off needs a comparison report to enable the toggle.
+function setNormalisation(isOn: boolean) {
+    if (!isOn) {
+        fireEvent.click(screen.getByLabelText('Normalise data'));
+    }
+
+    expect(screen.getByLabelText('Normalise data')).toHaveProperty('checked', isOn);
 }
 
 beforeEach(() => {
@@ -264,13 +274,6 @@ describe('PerformanceReport op category filter', () => {
 
 describe('PerformanceReport filters resolved on aligned rows', () => {
     // Four rows per report so a normalised comparison stays within alignByOpCode's missing limit.
-    const setNormalisation = (isOn: boolean) => {
-        if (!isOn) {
-            fireEvent.click(screen.getByLabelText('Normalise data'));
-        }
-
-        expect(screen.getByLabelText('Normalise data')).toHaveProperty('checked', isOn);
-    };
     const withOpCode = (base: TypedPerfTableRow, opCode: string) => ({ ...base, op_code: opCode });
 
     it.each([true, false])(
@@ -439,14 +442,6 @@ describe('PerformanceReport set filters resolved on aligned rows', () => {
         },
     ];
 
-    const setNormalisation = (isOn: boolean) => {
-        if (!isOn) {
-            fireEvent.click(screen.getByLabelText('Normalise data'));
-        }
-
-        expect(screen.getByLabelText('Normalise data')).toHaveProperty('checked', isOn);
-    };
-
     describe.each(cases)('$name', ({ withValue, filters }) => {
         // Only the comparison's Reshape holds the filtered value, so filtering the primary report
         // by itself would empty both tables.
@@ -499,6 +494,44 @@ describe('PerformanceReport set filters resolved on aligned rows', () => {
             // A row with no value never matches an active filter.
             expect(getRowsContaining('Softmax')).toHaveLength(0);
         });
+
+        // Both comparison loops cover every report, not just the first.
+        it.each([true, false])(
+            'keeps a match only the second comparison report has (normalised: %s)',
+            (isNormalised) => {
+                renderReport({
+                    data: [withValue(row('Matmul', 1, 5), 'other'), withValue(row('Reshape', 2, 5), 'other')],
+                    comparisonData: [
+                        [withValue(row('Matmul', 1, 5), 'other'), withValue(row('Reshape', 2, 5), 'other')],
+                        [withValue(row('Matmul', 1, 5), 'other'), withValue(row('Reshape', 2, 5), 'match')],
+                    ],
+                    comparisonReports: [COMPARISON_REPORT, SECOND_COMPARISON_REPORT],
+                    ...filters,
+                });
+
+                setNormalisation(isNormalised);
+
+                expectRowInBothReports('Reshape');
+                expect(screen.queryByText('Matmul')).not.toBeInTheDocument();
+            },
+        );
+    });
+});
+
+describe('PerformanceReport set filter with several values selected', () => {
+    it('keeps rows matching any selected value', () => {
+        renderReport({
+            data: [
+                { ...row('Matmul', 1, 5), layout: DeviceOperationLayoutTypes.TILE },
+                { ...row('Reshape', 2, 5), layout: DeviceOperationLayoutTypes.ROW_MAJOR },
+                { ...row('Softmax', 3, 5), layout: null },
+            ],
+            layoutFilterList: [DeviceOperationLayoutTypes.TILE, DeviceOperationLayoutTypes.ROW_MAJOR],
+        });
+
+        expect(getRowsContaining('Matmul').length).toBeGreaterThan(0);
+        expect(getRowsContaining('Reshape').length).toBeGreaterThan(0);
+        expect(getRowsContaining('Softmax')).toHaveLength(0);
     });
 });
 

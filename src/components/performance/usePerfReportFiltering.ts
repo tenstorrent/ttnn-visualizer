@@ -55,8 +55,14 @@ const getRawOpCodeOptions = (rows: TypedPerfTableRow[]): TypedPerfTableRow[] => 
     });
 };
 
-// An empty set means the filter is off. Compare with null explicitly: BufferType.DRAM is 0.
-const matchesSet = <T>(value: T | null, set: ReadonlySet<T>) => set.size === 0 || (value !== null && set.has(value));
+/** A chip filter backed by a set of selected values; an empty set means the filter is off. */
+interface SetFilter {
+    selected: ReadonlySet<unknown>;
+    getValue: (row: TypedPerfTableRow) => unknown;
+}
+
+// Compare with null explicitly rather than by truthiness: BufferType.DRAM is 0.
+const isInFilterSet = (value: unknown, selected: ReadonlySet<unknown>) => value !== null && selected.has(value);
 
 const usePerfReportFiltering = ({
     data,
@@ -122,24 +128,22 @@ const usePerfReportFiltering = ({
         const opCodeFilterValue = filters?.[ColumnKeys.OpCode]?.toLowerCase() || '';
         const hasOpCodeTextFilter = opCodeFilterValue.length > 0;
         const hasDurationFilter = durationBucketFilterSet.size > 0;
-        const hasAlignedRowFilters =
-            hasOpCodeTextFilter ||
-            [
-                rawOpCodeFilterSet,
-                mathFilterSet,
-                bufferTypeFilterSet,
-                layoutFilterSet,
-                opCategoryFilterSet,
-                durationBucketFilterSet,
-            ].some((filterSet) => filterSet.size > 0);
+        // The single list of set-backed filters: both the active check and the matcher derive from
+        // it, so a new filter cannot be matched without also switching the filtering on.
+        const setFilters: SetFilter[] = [
+            { selected: rawOpCodeFilterSet, getValue: (row) => row.raw_op_code },
+            { selected: mathFilterSet, getValue: (row) => row.math_fidelity },
+            { selected: bufferTypeFilterSet, getValue: (row) => row.buffer_type },
+            { selected: layoutFilterSet, getValue: (row) => row.layout },
+            { selected: opCategoryFilterSet, getValue: (row) => row.op_category },
+        ];
+        const activeSetFilters = setFilters.filter(({ selected }) => selected.size > 0);
+        const hasAlignedRowFilters = hasOpCodeTextFilter || hasDurationFilter || activeSetFilters.length > 0;
+        // Set lookups run before the text check, which lower-cases the op code on every row it reaches.
         const matchesAlignedRowFilters = (row: TypedPerfTableRow) =>
-            (!hasOpCodeTextFilter || row.op_code.toLowerCase().includes(opCodeFilterValue)) &&
-            matchesSet(row.raw_op_code, rawOpCodeFilterSet) &&
-            matchesSet(row.math_fidelity, mathFilterSet) &&
-            matchesSet(row.buffer_type, bufferTypeFilterSet) &&
-            matchesSet(row.layout, layoutFilterSet) &&
-            matchesSet(row.op_category, opCategoryFilterSet) &&
-            (!hasDurationFilter || matchesDurationBucket(row.device_time));
+            activeSetFilters.every(({ selected, getValue }) => isInFilterSet(getValue(row), selected)) &&
+            (!hasDurationFilter || matchesDurationBucket(row.device_time)) &&
+            (!hasOpCodeTextFilter || row.op_code.toLowerCase().includes(opCodeFilterValue));
         // The op code text filter is resolved on aligned rows above, so the per-dataset pass skips it.
         const filtersWithoutOpCode = {
             ...filters,
