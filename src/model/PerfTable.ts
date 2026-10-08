@@ -127,7 +127,7 @@ export interface TypedPerfTableRow extends Omit<
     // The linked operation's recorded allocation failure. The row itself ran: only an
     // earlier device operation of a failed operation has a perf row.
     allocation_failure: AllocationFailure | null;
-    // Inferred, not recorded: tt-metal writes nothing when an op falls back to DRAM.
+    // The linked operation's likely DRAM fallback, inferred by `getDramFallbacks`.
     dram_fallback: DramFallback | null;
     heuristicFlags?: PerfHeuristicFlag[];
     heuristicFlagDetails?: Partial<Record<PerfHeuristicFlag, string>>;

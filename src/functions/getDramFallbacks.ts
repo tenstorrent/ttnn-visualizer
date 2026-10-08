@@ -13,6 +13,7 @@ import { Operation, OperationDescription, Tensor } from '../model/APIData';
 import { BufferType, BufferTypeLabel, StringBufferTypeToBufferType, isL1BufferType } from '../model/BufferType';
 import { DramFallback, DramFallbackOutputs } from '../model/DramFallback';
 import { getMemoryConfigBufferType, isMemoryConfigValue } from './parseMemoryConfig';
+import assertNever from './assertNever';
 
 type OperationArgument = Pick<OperationDescription['arguments'][number], 'name' | 'value'>;
 
@@ -67,11 +68,8 @@ const isL1AllocationFailure = (failure: AllocationFailure): boolean => {
         case AllocationFailureKind.CIRCULAR_BUFFERS_BEYOND_L1:
         case AllocationFailureKind.CIRCULAR_BUFFERS_CLASH:
             return true;
-        default: {
-            // A new kind fails to compile here until it is classified.
-            const unhandled: never = failure;
-            return unhandled;
-        }
+        default:
+            return assertNever(failure);
     }
 };
 
@@ -86,10 +84,11 @@ export const getDramFallbacks = (
     const dramFallbackByOpId = new Map<number, DramFallback>();
 
     for (const operation of operations) {
-        const requestedBufferType = getL1Request(operation);
-        const outputs = requestedBufferType !== null ? getDramFallbackOutputs(operation) : null;
+        // Outputs first: ruling out a DRAM output is cheaper than parsing every argument.
+        const outputs = getDramFallbackOutputs(operation);
+        const requestedBufferType = outputs ? getL1Request(operation) : null;
 
-        if (requestedBufferType !== null && outputs) {
+        if (outputs && requestedBufferType !== null) {
             dramFallbackByOpId.set(operation.id, {
                 ...outputs,
                 signal: DramFallbackSignal.ARGUMENT_MISMATCH,
@@ -138,10 +137,7 @@ export const getDramFallbackSummary = (fallback: DramFallback): string => {
             return `Requested ${BufferTypeLabel[fallback.requestedBufferType]}; ${outputs}.`;
         case DramFallbackSignal.RETRY_AFTER_FAILURE:
             return `Retries operation ${fallback.failedOperationId} (${fallback.failedOperationName}), which failed to allocate L1; ${outputs}.`;
-        default: {
-            // A new signal fails to compile here until it has a summary.
-            const unhandled: never = fallback;
-            return unhandled;
-        }
+        default:
+            return assertNever(fallback);
     }
 };

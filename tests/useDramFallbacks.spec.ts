@@ -5,12 +5,12 @@
 import { renderHook } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useDramFallbacks } from '../src/hooks/useDramFallbacks';
-import { useOpToPerfIdFiltered, useOperationsList } from '../src/hooks/useAPI';
 import { DramFallbackSignal } from '../src/definitions/DramFallback';
 import { AllocationFailure } from '../src/model/AllocationFailure';
 import { OperationDescription } from '../src/model/APIData';
 import { BufferType, StringBufferType } from '../src/model/BufferType';
 import { makeAllocationFailure } from './helpers/allocationFailure';
+import { OpIdsMap, mockLinkedReports, resetLinkedReportMocks } from './helpers/linkedReports';
 import { makeMemoryConfigArgument, makeOperation, makeTensor } from './helpers/operationDescription';
 
 vi.mock('../src/hooks/useAPI', () => ({
@@ -18,19 +18,14 @@ vi.mock('../src/hooks/useAPI', () => ({
     useOpToPerfIdFiltered: vi.fn(),
 }));
 
-const LINKED: ReturnType<typeof useOpToPerfIdFiltered> = [
+const LINKED: OpIdsMap = [
     { opId: 1, perfId: '1' },
     { opId: 2, perfId: '2' },
     { opId: 3, perfId: '3' },
 ];
 
-const mockReports = (
-    operations: OperationDescription[] | undefined,
-    opIdsMap: ReturnType<typeof useOpToPerfIdFiltered> = LINKED,
-) => {
-    vi.mocked(useOperationsList).mockReturnValue({ data: operations } as ReturnType<typeof useOperationsList>);
-    vi.mocked(useOpToPerfIdFiltered).mockReturnValue(opIdsMap);
-};
+const mockReports = (operations: OperationDescription[] | undefined, opIdsMap: OpIdsMap = LINKED) =>
+    mockLinkedReports(operations, opIdsMap);
 
 const dramOutput = makeTensor({ address: 1048576, buffer_type: BufferType.DRAM });
 const argumentMismatch = makeOperation({
@@ -39,10 +34,7 @@ const argumentMismatch = makeOperation({
     outputs: [dramOutput],
 });
 
-beforeEach(() => {
-    vi.mocked(useOperationsList).mockReset();
-    vi.mocked(useOpToPerfIdFiltered).mockReset();
-});
+beforeEach(resetLinkedReportMocks);
 
 describe('useDramFallbacks', () => {
     it.each([

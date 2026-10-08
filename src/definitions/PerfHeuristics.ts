@@ -65,7 +65,7 @@ export const PERF_HEURISTIC_FLAG_DEFINITIONS: Record<PerfHeuristicFlag, PerfHeur
             'This device op ran, but a later device op of the same operation failed to allocate memory, as recorded in the linked memory report.',
         intent: PerfHeuristicFlagIntent.DANGER,
     },
-    // Inferred, not recorded: tt-metal writes nothing when an op falls back to DRAM.
+    // Inferred, unlike the allocation failure above: see `getDramFallbacks`.
     [PerfHeuristicFlag.DRAM_FALLBACK]: {
         label: 'Likely DRAM fallback',
         shortLabel: 'DRAM fallback?',
