@@ -3297,7 +3297,7 @@ requires-dist = [
     { name = "python-dotenv", specifier = "==1.2.2" },
     { name = "pyyaml", specifier = ">=6.0.0,<7.0" },
     { name = "tt-perf-report", specifier = "==1.4.0" },
-    { name = "zstd", specifier = ">=1.5.7,<2.0" },
+    { name = "zstd", specifier = ">=1.5.7.2" },
 ]
 
 [package.metadata.requires-dev]

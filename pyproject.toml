@@ -22,7 +22,7 @@ dependencies = [
     "python-dotenv==1.2.2",
     "PyYAML>=6.0.0,<7.0",
     "tt-perf-report==1.4.0",
-    "zstd>=1.5.7,<2.0",
+    "zstd>=1.5.7.2",
 ]
 
 classifiers = [
