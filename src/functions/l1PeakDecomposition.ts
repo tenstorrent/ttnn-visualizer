@@ -11,14 +11,8 @@ import {
     L1PeakDecompositionResult,
 } from '../model/L1PeakDecomposition';
 import { Buffer, Node, NodeType } from '../model/APIData';
-import { BufferType, StringBufferType } from '../model/BufferType';
+import { BufferType, StringBufferType, isL1BufferType } from '../model/BufferType';
 import { L1_NUM_CORES } from '../definitions/L1MemorySize';
-
-/**
- * Buffer types that take space in a core's L1, as opposed to DRAM or host memory.
- * Used for the post-op snapshot, whose `buffer_type` is a real column.
- */
-const L1_RESIDENT_BUFFER_TYPES: ReadonlySet<BufferType> = new Set([BufferType.L1, BufferType.L1_SMALL]);
 
 const addressOf = (params: GraphMemoryParams | null): number | null => {
     if (params?.address === undefined || params.address === null) {
@@ -69,9 +63,6 @@ interface ResidentTensor {
     /** Set when the allocating operation also frees it, which a snapshot can never show. */
     intermediate: boolean;
 }
-
-const isL1ResidentBuffer = (bufferType: BufferType | undefined): boolean =>
-    bufferType !== undefined && L1_RESIDENT_BUFFER_TYPES.has(bufferType);
 
 /**
  * Per-bank bytes. `max_size_per_bank` is absent on some captures, and `num_cores` is
@@ -303,7 +294,8 @@ export function buildL1PeakDecomposition({
             const survivors = new Map<number, Buffer>();
 
             for (const buffer of snapshot) {
-                if (isL1ResidentBuffer(buffer.buffer_type)) {
+                // The post-op snapshot's `buffer_type` is a real column, unlike a graph node's.
+                if (isL1BufferType(buffer.buffer_type)) {
                     survivors.set(buffer.address, buffer);
                 }
             }

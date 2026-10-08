@@ -29,6 +29,20 @@ export const BufferTypeToStringBufferType: Record<BufferType, StringBufferType> 
     [BufferType.TRACE]: StringBufferType.TRACE,
 };
 
+export const StringBufferTypeToBufferType: Record<StringBufferType, BufferType> = {
+    [StringBufferType.DRAM]: BufferType.DRAM,
+    [StringBufferType.L1]: BufferType.L1,
+    [StringBufferType.SYSTEM_MEMORY]: BufferType.SYSTEM_MEMORY,
+    [StringBufferType.L1_SMALL]: BufferType.L1_SMALL,
+    [StringBufferType.TRACE]: BufferType.TRACE,
+};
+
+/** Buffer types that take space in a core's L1, as opposed to DRAM or host memory. */
+const L1_RESIDENT_BUFFER_TYPES: ReadonlySet<BufferType> = new Set([BufferType.L1, BufferType.L1_SMALL]);
+
+export const isL1BufferType = (bufferType: BufferType | null | undefined): boolean =>
+    bufferType != null && L1_RESIDENT_BUFFER_TYPES.has(bufferType);
+
 /**
  * The only place display labels are spelled out. `MemoryTag` slugs these into its
  * `tag-*` class, so renaming one requires a matching rule in `_common.scss`.

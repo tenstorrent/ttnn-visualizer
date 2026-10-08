@@ -10,6 +10,7 @@ import { BufferType } from '../model/BufferType';
 import { DeviceOperationLayoutTypes } from '../model/APIData';
 import { L1PressureMetrics } from '../model/L1Pressure';
 import { AllocationFailure } from '../model/AllocationFailure';
+import { DramFallback } from '../model/DramFallback';
 import { nsToUs } from './math';
 import { parsePerfRowTensorAttributes } from './parsePerfRowTensorAttributes';
 import { isFlagEnabled } from './getServerConfig';
@@ -45,14 +46,20 @@ export const getRowAttributes = (row: PerfTableRow): RowAttributes => {
     };
 };
 
+/** Per-operation data from the linked memory report, keyed by its operation id. */
+export interface LinkedOperationData {
+    l1PressureByOpId: Map<number, L1PressureMetrics> | null;
+    allocationFailureByOpId: Map<number, AllocationFailure> | null;
+    dramFallbackByOpId: Map<number, DramFallback> | null;
+}
+
 // Converts the raw string-based rows produced by tt-perf-report (via the backend CSV parse) into
 // the typed numeric rows the performance table renders. Keep the parsing here aligned with the
 // columns tt-perf-report emits so the table reflects the same data.
 export const enrichRowData = (
     rows: PerfTableRow[],
     opIdsMap: { perfId?: string; opId: number }[],
-    l1PressureMap: Map<number, L1PressureMetrics> | null,
-    allocationFailureByOpId: Map<number, AllocationFailure> | null = null,
+    linkedOperationData: LinkedOperationData | null,
 ): TypedPerfTableRow[] => {
     // Build the perf-id -> op-id lookup once so enrichment stays O(N) instead of O(N·M) — the
     // previous `.find()` per row scaled with both row count and the active report's op count.
@@ -66,7 +73,7 @@ export const enrichRowData = (
     const typedRows = rows.map((row) => {
         const op = opIdByPerfId.get(row.id);
         // TTNN-op snapshot is shared by all device ops that map to the same row.op.
-        const l1Pressure = op !== undefined ? l1PressureMap?.get(op) : undefined;
+        const l1Pressure = op !== undefined ? linkedOperationData?.l1PressureByOpId?.get(op) : undefined;
         // Parse the gap as a float once and reuse it for both the value and the high-dispatch flag.
         // parseInt would truncate (e.g. "6.6" -> 6), wrongly clearing the > 6.5µs flag.
         const parsedGap = parseFloat(row.op_to_op_gap);
@@ -107,7 +114,9 @@ export const enrichRowData = (
             l1_free_segments: l1Pressure?.freeSegments ?? null,
             l1_largest_free: l1Pressure?.largestFreeBytes ?? null,
             l1_largest_free_percent: l1Pressure?.largestFreePercent ?? null,
-            allocation_failure: (op !== undefined ? allocationFailureByOpId?.get(op) : undefined) ?? null,
+            allocation_failure:
+                (op !== undefined ? linkedOperationData?.allocationFailureByOpId?.get(op) : undefined) ?? null,
+            dram_fallback: (op !== undefined ? linkedOperationData?.dramFallbackByOpId?.get(op) : undefined) ?? null,
             ...getRowAttributes(row),
             isFirstHashOccurrence: true, // Default to true, will be updated if needed in next step
         };

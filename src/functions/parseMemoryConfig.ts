@@ -3,8 +3,13 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { MemoryConfig, MemoryKeys, ShardSpec, TensorMemoryLayout } from '../model/MemoryConfig';
+import { BufferType, StringBufferType, StringBufferTypeToBufferType } from '../model/BufferType';
 
 export const memoryConfigPattern = /MemoryConfig\((.*)\)$/;
+// Anchored at both ends, like the backend's `re.match`, so a tensor argument whose repr merely
+// ends in a memory config is not read as a request.
+const wholeMemoryConfigPattern = /^MemoryConfig\((.*)\)$/;
+const bufferTypePattern = /buffer_type=BufferType::([A-Z0-9_]+)/;
 const memoryLayoutPattern = /memory_layout=([A-Za-z_:]+)/;
 const shardSpecPattern =
     /shard_spec=ShardSpec\((?:grid=\{(\[.*?\])\},?)?(?:shape=\{(\d+), (\d+)\},?)?(?:orientation=ShardOrientation::([A-Za-z_]+),?)?(?:halo=(\d+),?)?(?:mode=ShardMode::([A-Z_]+),?)?(?:physical_shard_shape=std::([A-Za-z_]+),?)?/;
@@ -37,6 +42,22 @@ const parseMemoryConfig = (string: string): MemoryConfig | null => {
     }
 
     return null;
+};
+
+const STRING_BUFFER_TYPES = new Set<string>(Object.values(StringBufferType));
+
+/**
+ * The buffer type a raw `MemoryConfig(...)` string declares, mirroring the backend's
+ * `parse_memory_config_buffer_type`. Kept out of `parseMemoryConfig`, whose result the
+ * operation details view renders key by key.
+ */
+export const getMemoryConfigBufferType = (value: string | null | undefined): BufferType | null => {
+    const body = value?.match(wholeMemoryConfigPattern)?.[1];
+    const name = body?.match(bufferTypePattern)?.[1];
+
+    return name !== undefined && STRING_BUFFER_TYPES.has(name)
+        ? StringBufferTypeToBufferType[name as StringBufferType]
+        : null;
 };
 
 export const MEMORY_CONFIG_HEADERS = {

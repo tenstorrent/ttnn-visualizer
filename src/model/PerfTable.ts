@@ -9,6 +9,7 @@ import { OpType } from '../definitions/Performance';
 import { DeviceOperationLayoutTypes } from './APIData';
 import { BufferType as BufferTypeEnum } from './BufferType';
 import { AllocationFailure } from './AllocationFailure';
+import { DramFallback } from './DramFallback';
 
 export interface PerfTableRow {
     id: string;
@@ -125,6 +126,8 @@ export interface TypedPerfTableRow extends Omit<
     // The linked operation's recorded allocation failure. The row itself ran: only an
     // earlier device operation of a failed operation has a perf row.
     allocation_failure: AllocationFailure | null;
+    // Inferred, not recorded: tt-metal writes nothing when an op falls back to DRAM.
+    dram_fallback: DramFallback | null;
     heuristicFlags?: PerfHeuristicFlag[];
     heuristicFlagDetails?: Partial<Record<PerfHeuristicFlag, string>>;
 }
@@ -180,4 +183,5 @@ export const signpostRowDefaults = Object.freeze({
     l1_largest_free: null,
     l1_largest_free_percent: null,
     allocation_failure: null,
+    dram_fallback: null,
 });

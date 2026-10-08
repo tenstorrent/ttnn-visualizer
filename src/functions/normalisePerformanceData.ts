@@ -59,6 +59,7 @@ const PLACEHOLDER: TypedPerfTableRow = {
     l1_largest_free: null,
     l1_largest_free_percent: null,
     allocation_failure: null,
+    dram_fallback: null,
 };
 
 export interface NormalisedPerfData {
