@@ -61,6 +61,12 @@ interface SetFilter {
     getValue: (row: TypedPerfTableRow) => unknown;
 }
 
+/** Keyed so a selected set can only be paired with the row field whose values it holds. */
+const setFilter = <K extends keyof TypedPerfTableRow>(
+    key: K,
+    selected: ReadonlySet<TypedPerfTableRow[K]>,
+): SetFilter => ({ selected, getValue: (row) => row[key] });
+
 // Compare with null explicitly rather than by truthiness: BufferType.DRAM is 0.
 const isInFilterSet = (value: unknown, selected: ReadonlySet<unknown>) => value !== null && selected.has(value);
 
@@ -130,14 +136,14 @@ const usePerfReportFiltering = ({
         const hasDurationFilter = durationBucketFilterSet.size > 0;
         // The single list of set-backed filters: both the active check and the matcher derive from
         // it, so a new filter cannot be matched without also switching the filtering on.
-        const setFilters: SetFilter[] = [
-            { selected: rawOpCodeFilterSet, getValue: (row) => row.raw_op_code },
-            { selected: mathFilterSet, getValue: (row) => row.math_fidelity },
-            { selected: bufferTypeFilterSet, getValue: (row) => row.buffer_type },
-            { selected: layoutFilterSet, getValue: (row) => row.layout },
-            { selected: opCategoryFilterSet, getValue: (row) => row.op_category },
+        const setBackedFilters = [
+            setFilter('raw_op_code', rawOpCodeFilterSet),
+            setFilter('math_fidelity', mathFilterSet),
+            setFilter('buffer_type', bufferTypeFilterSet),
+            setFilter('layout', layoutFilterSet),
+            setFilter('op_category', opCategoryFilterSet),
         ];
-        const activeSetFilters = setFilters.filter(({ selected }) => selected.size > 0);
+        const activeSetFilters = setBackedFilters.filter(({ selected }) => selected.size > 0);
         const hasAlignedRowFilters = hasOpCodeTextFilter || hasDurationFilter || activeSetFilters.length > 0;
         // Set lookups run before the text check, which lower-cases the op code on every row it reaches.
         const matchesAlignedRowFilters = (row: TypedPerfTableRow) =>
@@ -149,15 +155,24 @@ const usePerfReportFiltering = ({
             ...filters,
             [ColumnKeys.OpCode]: '',
         };
+        // Only the op code filter is set from the UI today, so the per-dataset pass and the
+        // membership checks against its output usually do nothing; skip them unless needed.
+        const hasPerDatasetFilters = Object.values(filtersWithoutOpCode).some((value) => value.length > 0);
 
         if (!isNormalisationApplied) {
             const allDatasets = [processedRows, ...processedComparisonRows];
-            const datasetsWithoutOpCodeFilter = allDatasets.map((dataset) =>
-                sortAndFilterPerfTableData(dataset, {
-                    filters: filtersWithoutOpCode,
-                }),
-            );
-            const datasetRowSets = datasetsWithoutOpCodeFilter.map((dataset) => new Set(dataset));
+            const datasetsWithoutOpCodeFilter = hasPerDatasetFilters
+                ? allDatasets.map((dataset) =>
+                      sortAndFilterPerfTableData(dataset, {
+                          filters: filtersWithoutOpCode,
+                      }),
+                  )
+                : allDatasets;
+            const datasetRowSets = hasPerDatasetFilters
+                ? datasetsWithoutOpCodeFilter.map((dataset) => new Set(dataset))
+                : null;
+            const isInDataset = (row: TypedPerfTableRow, datasetIndex: number) =>
+                !datasetRowSets || datasetRowSets[datasetIndex].has(row);
 
             if (!hasAlignedRowFilters) {
                 const [filteredSourceRows, ...filteredComparisonRows] = datasetsWithoutOpCodeFilter.map((dataset) =>
@@ -175,7 +190,7 @@ const usePerfReportFiltering = ({
                 const alignedRows = allDatasets
                     .map((dataset, datasetIndex) => {
                         const row = dataset[index];
-                        return row && datasetRowSets[datasetIndex].has(row) ? row : null;
+                        return row && isInDataset(row, datasetIndex) ? row : null;
                     })
                     .filter((value): value is TypedPerfTableRow => Boolean(value));
 
@@ -183,7 +198,7 @@ const usePerfReportFiltering = ({
             });
             const [unifiedFilteredRows, ...unifiedFilteredComparisonRows] = allDatasets.map((dataset, datasetIndex) =>
                 sortAndFilterPerfTableData(
-                    dataset.filter((row, index) => datasetRowSets[datasetIndex].has(row) && keepRowMask[index]),
+                    dataset.filter((row, index) => isInDataset(row, datasetIndex) && keepRowMask[index]),
                     {
                         filterBySignpost,
                     },
@@ -196,12 +211,11 @@ const usePerfReportFiltering = ({
             };
         }
 
-        const sourceRowsWithoutSignposts = sortAndFilterPerfTableData(processedRows, {
-            filters: filtersWithoutOpCode,
-        });
-        const sourceRowSet = new Set(sourceRowsWithoutSignposts);
+        const sourceRowSet = hasPerDatasetFilters
+            ? new Set(sortAndFilterPerfTableData(processedRows, { filters: filtersWithoutOpCode }))
+            : null;
         const keepRowMask = processedRows.map((row, index) => {
-            if (!sourceRowSet.has(row)) {
+            if (sourceRowSet && !sourceRowSet.has(row)) {
                 return false;
             }
 

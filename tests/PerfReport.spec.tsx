@@ -478,7 +478,24 @@ describe('PerformanceReport set filters resolved on aligned rows', () => {
             },
         );
 
-        // A single report still takes the normalised branch, with no comparison rows to align.
+        // Only the primary report's Reshape holds the filtered value. The comparison-only cases
+        // above never exercise a match on the primary row itself.
+        it.each([true, false])('keeps a primary-only match (normalised: %s)', (isNormalised) => {
+            renderReport({
+                data: [withValue(row('Matmul', 1, 5), 'other'), withValue(row('Reshape', 2, 5), 'match')],
+                comparisonData: [[withValue(row('Matmul', 1, 5), 'other'), withValue(row('Reshape', 2, 5), 'other')]],
+                comparisonReports: [COMPARISON_REPORT],
+                ...filters,
+            });
+
+            setNormalisation(isNormalised);
+
+            expectRowInBothReports('Reshape');
+            expect(screen.queryByText('Matmul')).not.toBeInTheDocument();
+        });
+
+        // With no comparison report, normalisation switches off, so this filters one dataset in the
+        // unnormalised branch.
         it('filters a single report', () => {
             renderReport({
                 data: [
