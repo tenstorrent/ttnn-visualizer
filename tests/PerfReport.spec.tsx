@@ -356,8 +356,9 @@ describe('PerformanceReport filters resolved on aligned rows', () => {
                         withLayout(row('Softmax', 11, 5, OperationCategories.COMPUTE), DeviceOperationLayoutTypes.TILE),
                         withLayout(row('Matmul', 12, 5, OperationCategories.COMPUTE), DeviceOperationLayoutTypes.TILE),
                         withLayout(row('Reshape', 13, 5, OperationCategories.OTHER), DeviceOperationLayoutTypes.TILE),
-                        // Row major and Other, so the table still renders a matching row. Both Tilize
-                        // rows are row major, so it survives a primary-only layout filter too.
+                        // Row major and Other, so the table still renders a matching row. The primary
+                        // Tilize is row major too, so only the Reshape assertion depends on one row
+                        // matching both filters.
                         withLayout(
                             row('Tilize', 14, 5, OperationCategories.OTHER),
                             DeviceOperationLayoutTypes.ROW_MAJOR,
@@ -401,60 +402,102 @@ describe('PerformanceReport filters resolved on aligned rows', () => {
 });
 
 describe('PerformanceReport set filters resolved on aligned rows', () => {
-    // The comparison's Reshape alone holds the filtered value, so filtering the primary report by
-    // itself would empty both tables. DRAM is the filtered value because BufferType.DRAM is 0: a
-    // truthiness check in the matcher would drop it.
+    // 'match' is the filtered value, 'other' a value the filter excludes, and 'none' how a row with
+    // no value arrives. DRAM is the filtered value because BufferType.DRAM is 0: a truthiness check
+    // in the matcher would drop it.
+    type Variant = 'match' | 'other' | 'none';
+
     const cases = [
         {
             name: 'math fidelity',
-            withValue: (base: TypedPerfTableRow, isFilteredValue: boolean) => ({
+            withValue: (base: TypedPerfTableRow, variant: Variant) => ({
                 ...base,
-                math_fidelity: isFilteredValue ? MathFidelity.LoFi : MathFidelity.HiFi4,
+                // The parser leaves math fidelity as an empty string rather than null.
+                math_fidelity: { match: MathFidelity.LoFi, other: MathFidelity.HiFi4, none: '' }[variant],
             }),
             filters: { mathFilterList: [MathFidelity.LoFi] },
         },
         {
             name: 'buffer type',
-            withValue: (base: TypedPerfTableRow, isFilteredValue: boolean) => ({
+            withValue: (base: TypedPerfTableRow, variant: Variant) => ({
                 ...base,
-                buffer_type: isFilteredValue ? BufferType.DRAM : BufferType.L1,
+                buffer_type: { match: BufferType.DRAM, other: BufferType.L1, none: null }[variant],
             }),
             filters: { bufferTypeFilterList: [BufferType.DRAM] },
         },
         {
             name: 'layout',
-            withValue: (base: TypedPerfTableRow, isFilteredValue: boolean) => ({
+            withValue: (base: TypedPerfTableRow, variant: Variant) => ({
                 ...base,
-                layout: isFilteredValue ? DeviceOperationLayoutTypes.ROW_MAJOR : DeviceOperationLayoutTypes.TILE,
+                layout: {
+                    match: DeviceOperationLayoutTypes.ROW_MAJOR,
+                    other: DeviceOperationLayoutTypes.TILE,
+                    none: null,
+                }[variant],
             }),
             filters: { layoutFilterList: [DeviceOperationLayoutTypes.ROW_MAJOR] },
         },
     ];
 
+    const setNormalisation = (isOn: boolean) => {
+        if (!isOn) {
+            fireEvent.click(screen.getByLabelText('Normalise data'));
+        }
+
+        expect(screen.getByLabelText('Normalise data')).toHaveProperty('checked', isOn);
+    };
+
     describe.each(cases)('$name', ({ withValue, filters }) => {
-        const renderComparisonOnlyMatch = () =>
+        // Only the comparison's Reshape holds the filtered value, so filtering the primary report
+        // by itself would empty both tables.
+        it.each([true, false])('keeps a comparison-only match (normalised: %s)', (isNormalised) => {
             renderReport({
-                data: [withValue(row('Matmul', 1, 5), false), withValue(row('Reshape', 2, 5), false)],
-                comparisonData: [[withValue(row('Matmul', 1, 5), false), withValue(row('Reshape', 2, 5), true)]],
+                data: [withValue(row('Matmul', 1, 5), 'other'), withValue(row('Reshape', 2, 5), 'other')],
+                comparisonData: [[withValue(row('Matmul', 1, 5), 'other'), withValue(row('Reshape', 2, 5), 'match')]],
                 comparisonReports: [COMPARISON_REPORT],
                 ...filters,
             });
 
-        it('keeps a comparison-only match with normalisation on', () => {
-            renderComparisonOnlyMatch();
+            setNormalisation(isNormalised);
 
-            expect(screen.getByLabelText('Normalise data')).toBeChecked();
             expectRowInBothReports('Reshape');
             expect(screen.queryByText('Matmul')).not.toBeInTheDocument();
         });
 
-        it('keeps a comparison-only match with normalisation turned off', () => {
-            renderComparisonOnlyMatch();
+        it.each([true, false])(
+            'keeps a primary row with no value when its comparison row matches (normalised: %s)',
+            (isNormalised) => {
+                renderReport({
+                    data: [withValue(row('Matmul', 1, 5), 'other'), withValue(row('Reshape', 2, 5), 'none')],
+                    comparisonData: [
+                        [withValue(row('Matmul', 1, 5), 'other'), withValue(row('Reshape', 2, 5), 'match')],
+                    ],
+                    comparisonReports: [COMPARISON_REPORT],
+                    ...filters,
+                });
 
-            fireEvent.click(screen.getByLabelText('Normalise data'));
+                setNormalisation(isNormalised);
 
-            expectRowInBothReports('Reshape');
-            expect(screen.queryByText('Matmul')).not.toBeInTheDocument();
+                expectRowInBothReports('Reshape');
+                expect(screen.queryByText('Matmul')).not.toBeInTheDocument();
+            },
+        );
+
+        // A single report still takes the normalised branch, with no comparison rows to align.
+        it('filters a single report', () => {
+            renderReport({
+                data: [
+                    withValue(row('Matmul', 1, 5), 'other'),
+                    withValue(row('Reshape', 2, 5), 'match'),
+                    withValue(row('Softmax', 3, 5), 'none'),
+                ],
+                ...filters,
+            });
+
+            expect(getRowsContaining('Reshape').length).toBeGreaterThan(0);
+            expect(getRowsContaining('Matmul')).toHaveLength(0);
+            // A row with no value never matches an active filter.
+            expect(getRowsContaining('Softmax')).toHaveLength(0);
         });
     });
 });

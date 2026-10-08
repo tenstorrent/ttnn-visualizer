@@ -205,14 +205,16 @@ const usePerfReportFiltering = ({
                 return true;
             }
 
-            const alignedRows = [
-                row,
-                ...processedComparisonRows
-                    .map((dataset) => dataset[index])
-                    .filter((value): value is TypedPerfTableRow => Boolean(value)),
-            ];
+            // Checked in place rather than collecting the aligned rows: this runs once per row, on
+            // reports that can run to hundreds of thousands of rows.
+            return (
+                matchesAlignedRowFilters(row) ||
+                processedComparisonRows.some((dataset) => {
+                    const alignedRow = dataset[index];
 
-            return alignedRows.some(matchesAlignedRowFilters);
+                    return Boolean(alignedRow) && matchesAlignedRowFilters(alignedRow);
+                })
+            );
         });
 
         const applyMask = (dataset: TypedPerfTableRow[]) => dataset.filter((_, index) => keepRowMask[index]);
