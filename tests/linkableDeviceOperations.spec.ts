@@ -3,8 +3,13 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import { describe, expect, it } from 'vitest';
-import { getFailedDeviceOperationNames, getLinkableDeviceOperations } from '../src/functions/linkableDeviceOperations';
-import { Node, NodeType } from '../src/model/APIData';
+import {
+    getAbortReason,
+    getFailedDeviceOperationNames,
+    getLinkableDeviceOperations,
+    getScopePairing,
+} from '../src/functions/linkableDeviceOperations';
+import { DeviceOperationNodeEnd, Node, NodeType } from '../src/model/APIData';
 
 // `TestFailedDeviceOperations` in `backend/ttnn_visualizer/tests/test_agent_linking.py`
 // restates these cases for the agent tools' port. Add a case there too.
@@ -82,5 +87,67 @@ describe('getFailedDeviceOperationNames', () => {
         expect(getFailedDeviceOperationNames(aborted)).toEqual(['Conv2d']);
         expect(getFailedDeviceOperationNames(unclosed)).toEqual(['Conv2d']);
         expect(getFailedDeviceOperationNames([start('Halo'), end('Halo')])).toEqual([]);
+    });
+});
+
+describe('getScopePairing', () => {
+    it('pairs nested and sequential scopes by name', () => {
+        const nodes = [
+            start('ttnn.matmul'),
+            start('First'),
+            end('First'),
+            start('Matmul'),
+            end('Matmul'),
+            end('ttnn.matmul'),
+        ];
+
+        expect(getScopePairing(nodes)).toEqual({
+            startIndexByEndIndex: new Map([
+                [2, 1],
+                [4, 3],
+                [5, 0],
+            ]),
+            abortedEndIndices: new Set(),
+            unclosedStartIndices: new Set(),
+        });
+    });
+
+    it('pairs an aborted end with its start, and records it as aborted', () => {
+        const pairing = getScopePairing([start('Matmul'), end('Matmul', 'true')]);
+
+        expect(pairing.startIndexByEndIndex).toEqual(new Map([[1, 0]]));
+        expect(pairing.abortedEndIndices).toEqual(new Set([1]));
+    });
+
+    it('lets an outer end close its own scope past an inner one left unclosed', () => {
+        const pairing = getScopePairing([start('ttnn.linear'), start('Matmul'), end('ttnn.linear')]);
+
+        expect(pairing.startIndexByEndIndex).toEqual(new Map([[2, 0]]));
+        expect(pairing.unclosedStartIndices).toEqual(new Set([1]));
+    });
+
+    it('leaves out an end with no open start of its name', () => {
+        expect(getScopePairing([end('Stray', 'true'), start('Matmul'), end('Matmul')]).startIndexByEndIndex).toEqual(
+            new Map([[2, 1]]),
+        );
+    });
+});
+
+describe('getAbortReason', () => {
+    const abortedEnd = (abortReason?: unknown) =>
+        ({
+            node_type: NodeType.function_end,
+            params: { name: 'Matmul', aborted: 'true', abort_reason: abortReason },
+        }) as unknown as DeviceOperationNodeEnd;
+
+    it('gives the reason tt-metal recorded', () => {
+        expect(getAbortReason(abortedEnd('Out of Memory'))).toBe('Out of Memory');
+    });
+
+    it('gives nothing for an empty, blank or missing reason', () => {
+        expect(getAbortReason(abortedEnd(''))).toBeNull();
+        expect(getAbortReason(abortedEnd('  '))).toBeNull();
+        expect(getAbortReason(abortedEnd())).toBeNull();
+        expect(getAbortReason(abortedEnd(42))).toBeNull();
     });
 });

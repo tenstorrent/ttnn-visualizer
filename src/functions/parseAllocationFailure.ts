@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import { AllocationFailureKind } from '../definitions/AllocationFailure';
-import { AllocationFailure } from '../model/AllocationFailure';
+import { AllocationFailure, BankAllocationFailure } from '../model/AllocationFailure';
 import { Operation } from '../model/APIData';
 import { StringBufferType, StringBufferTypeLabel } from '../model/BufferType';
 import { formatMemorySize, getMemoryAddress } from './math';
@@ -17,9 +17,10 @@ import { formatMemorySize, getMemoryAddress } from './math';
 const BANK_OUT_OF_MEMORY_PATTERN =
     /Out of Memory: Not enough space to allocate (\d+) B (\w+) buffer across (\d+) banks, where each bank needs to store (\d+) B, but bank size is (?:only )?(\d+) B(?: \(allocated: (\d+) B, free: (\d+) B, largest free block: (\d+) B\))?/;
 
-// `tt_metal/impl/allocator/bank_manager.cpp`
+// `tt_metal/impl/allocator/bank_manager.cpp`. Older tt-metal ends at the allocator
+// statistics, without what remained placeable after subtracting dependencies.
 const BANK_OUT_OF_MEMORY_WITH_DEPENDENCIES_PATTERN =
-    /Out of Memory: Not enough space after considering dependencies to allocate (\d+) B (\w+) across (\d+) banks \((\d+) B per bank\), bank size is (\d+) B \(allocated: (\d+) B, free: (\d+) B, largest free block: (\d+) B\)/;
+    /Out of Memory: Not enough space after considering dependencies to allocate (\d+) B (\w+) across (\d+) banks \((\d+) B per bank\), bank size is (\d+) B \(allocated: (\d+) B, free: (\d+) B, largest free block: (\d+) B\)(?:\. After subtracting \d+ dependency range\(s\) and \d+ additional occupied range\(s\), (\d+) B remained placeable across \d+ window\(s\), largest (\d+) B)?/;
 
 // `tt_metal/impl/program/program.cpp`
 const CIRCULAR_BUFFERS_BEYOND_L1_PATTERN =
@@ -55,17 +56,14 @@ export const parseAllocationFailure = ({
 
     const operation = { operationId: id, operationName: name };
 
-    const bankMatch =
-        message.match(BANK_OUT_OF_MEMORY_PATTERN) ?? message.match(BANK_OUT_OF_MEMORY_WITH_DEPENDENCIES_PATTERN);
+    const bankMatch = message.match(BANK_OUT_OF_MEMORY_PATTERN);
 
     if (bankMatch) {
         const [, size, bufferType, numBanks, perBank, bankSize, allocated, free, largestFree] = bankMatch;
 
         return {
             ...operation,
-            kind: BANK_OUT_OF_MEMORY_PATTERN.test(message)
-                ? AllocationFailureKind.BANK_OUT_OF_MEMORY
-                : AllocationFailureKind.BANK_OUT_OF_MEMORY_WITH_DEPENDENCIES,
+            kind: AllocationFailureKind.BANK_OUT_OF_MEMORY,
             bufferType: toBufferType(bufferType),
             requestedBytes: Number(size),
             numBanks: Number(numBanks),
@@ -74,6 +72,30 @@ export const parseAllocationFailure = ({
             allocatedBytes: toNumber(allocated),
             freeBytes: toNumber(free),
             largestFreeBlockBytes: toNumber(largestFree),
+            placeableBytes: null,
+            largestPlaceableBytes: null,
+        };
+    }
+
+    const dependenciesMatch = message.match(BANK_OUT_OF_MEMORY_WITH_DEPENDENCIES_PATTERN);
+
+    if (dependenciesMatch) {
+        const [, size, bufferType, numBanks, perBank, bankSize, allocated, free, largestFree, placeable, largest] =
+            dependenciesMatch;
+
+        return {
+            ...operation,
+            kind: AllocationFailureKind.BANK_OUT_OF_MEMORY_WITH_DEPENDENCIES,
+            bufferType: toBufferType(bufferType),
+            requestedBytes: Number(size),
+            numBanks: Number(numBanks),
+            bytesPerBank: Number(perBank),
+            bankSizeBytes: Number(bankSize),
+            allocatedBytes: toNumber(allocated),
+            freeBytes: toNumber(free),
+            largestFreeBlockBytes: toNumber(largestFree),
+            placeableBytes: toNumber(placeable),
+            largestPlaceableBytes: toNumber(largest),
         };
     }
 
@@ -120,6 +142,12 @@ export const getAllocationFailureSummary = (failure: AllocationFailure, showHex 
                 `Requested ${formatBytes(failure.requestedBytes)}${bufferType} across ${failure.numBanks} banks ` +
                 `(${formatBytes(failure.bytesPerBank)} per bank, bank size ${formatBytes(failure.bankSizeBytes)})`;
 
+            // tt-metal's own figures can show plenty free when dependencies took it, so the
+            // placeable figures replace them whenever the message carries both.
+            if (failure.placeableBytes !== null && failure.largestPlaceableBytes !== null) {
+                return `${request}; placeable ${formatBytes(failure.placeableBytes)}, largest placeable window ${formatBytes(failure.largestPlaceableBytes)}`;
+            }
+
             if (failure.freeBytes === null || failure.largestFreeBlockBytes === null) {
                 return request;
             }
@@ -132,6 +160,67 @@ export const getAllocationFailureSummary = (failure: AllocationFailure, showHex 
             return `Circular buffers on ${failure.coreRange} end at ${getMemoryAddress(failure.circularBufferRegionEnd, showHex)}, past an L1 buffer at ${getMemoryAddress(failure.l1BufferAddress, showHex)}`;
         default: {
             // A new kind fails to compile here until it has a summary.
+            const unhandled: never = failure;
+            return unhandled;
+        }
+    }
+};
+
+const getBankFailureDiagnosis = (failure: BankAllocationFailure): string | null => {
+    const { bytesPerBank } = failure;
+    const hasPlaceable = failure.placeableBytes !== null && failure.largestPlaceableBytes !== null;
+    const free = hasPlaceable ? failure.placeableBytes : failure.freeBytes;
+    const largest = hasPlaceable ? failure.largestPlaceableBytes : failure.largestFreeBlockBytes;
+    const isDependencies = failure.kind === AllocationFailureKind.BANK_OUT_OF_MEMORY_WITH_DEPENDENCIES;
+    // tt-metal clamps only interleaved L1 to an address limit, but counts free space past
+    // it; the message does not say whether the buffer was sharded.
+    const mayBeAddressLimited = !isDependencies && failure.bufferType === StringBufferType.L1;
+    const needed = formatBytes(bytesPerBank);
+
+    if (free === null || largest === null) {
+        if (bytesPerBank > failure.bankSizeBytes) {
+            return `Needs ${needed} per bank, more than an empty bank holds (${formatBytes(failure.bankSizeBytes)}): it cannot fit in this buffer type spread across ${failure.numBanks} banks.`;
+        }
+
+        // Older tt-metal reports only the bank size, so there is nothing to compare against.
+        return null;
+    }
+
+    if (largest >= bytesPerBank) {
+        if (isDependencies) {
+            return `A free block of ${formatBytes(largest)} could hold the ${needed} per bank, but space reserved by dependent allocators overlaps it.`;
+        }
+
+        if (mayBeAddressLimited) {
+            return `A free block of ${formatBytes(largest)} could hold the ${needed} per bank, but an interleaved L1 buffer may only use the interleaved region, and that block lies outside it.`;
+        }
+
+        return `A free block of ${formatBytes(largest)} could hold the ${needed} per bank, but the allocator could not use it; the message does not say why.`;
+    }
+
+    if (free >= bytesPerBank) {
+        return `Fragmented: ${formatBytes(free)} free per bank, but no single block holds ${needed}; the largest is ${formatBytes(largest)}.`;
+    }
+
+    const shortfall = `Short by ${formatBytes(bytesPerBank - free)} per bank: needs ${needed}, ${formatBytes(free)} free.`;
+
+    return mayBeAddressLimited
+        ? `${shortfall} An interleaved buffer can use only part of that free space, so it may be short by more.`
+        : shortfall;
+};
+
+/** Why the allocation did not fit, from its figures; `null` when they cannot say. */
+export const getAllocationFailureDiagnosis = (failure: AllocationFailure, showHex = false): string | null => {
+    switch (failure.kind) {
+        case AllocationFailureKind.BANK_OUT_OF_MEMORY:
+        case AllocationFailureKind.BANK_OUT_OF_MEMORY_WITH_DEPENDENCIES:
+            return getBankFailureDiagnosis(failure);
+        case AllocationFailureKind.CIRCULAR_BUFFERS_BEYOND_L1:
+            return `Over L1 by ${formatBytes(failure.circularBufferRegionEnd - failure.maxL1Bytes)}.`;
+        case AllocationFailureKind.CIRCULAR_BUFFERS_CLASH:
+            return `Overlaps the L1 buffer at ${getMemoryAddress(failure.l1BufferAddress, showHex)} by ${formatBytes(failure.circularBufferRegionEnd - failure.l1BufferAddress)}.`;
+        default: {
+            // A new kind fails to compile here until it has a diagnosis.
             const unhandled: never = failure;
             return unhandled;
         }

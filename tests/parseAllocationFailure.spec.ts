@@ -3,10 +3,16 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import { describe, expect, it } from 'vitest';
-import { getAllocationFailureSummary, parseAllocationFailure } from '../src/functions/parseAllocationFailure';
+import {
+    getAllocationFailureDiagnosis,
+    getAllocationFailureSummary,
+    parseAllocationFailure,
+} from '../src/functions/parseAllocationFailure';
 import { AllocationFailureKind } from '../src/definitions/AllocationFailure';
 import { Operation } from '../src/model/APIData';
 import { StringBufferType } from '../src/model/BufferType';
+import { BankAllocationFailure } from '../src/model/AllocationFailure';
+import { makeAllocationFailure } from './helpers/allocationFailure';
 
 const BACKTRACE = 'backtrace:\n --- /workspace/build_Release/lib/libtt_metal.so(+0x570add) [0x7f0bc96eeadd]\n';
 
@@ -24,6 +30,12 @@ ${BACKTRACE}`;
 
 const OUT_OF_MEMORY_WITH_DEPENDENCIES =
     'Out of Memory: Not enough space after considering dependencies to allocate 2048 B DRAM across 2 banks (1024 B per bank), bank size is 4096 B (allocated: 3500 B, free: 596 B, largest free block: 512 B). After subtracting 1 dependency range(s) and 0 additional occupied range(s), 512 B remained placeable across 1 window(s), largest 512 B';
+
+// Before tt-metal 60e6701fa4e: no placeable figures after the allocator statistics.
+const OUT_OF_MEMORY_WITH_DEPENDENCIES_WITHOUT_PLACEABLE = OUT_OF_MEMORY_WITH_DEPENDENCIES.replace(
+    /\. After subtracting.*$/,
+    '',
+);
 
 // As stored in a local report.
 const CIRCULAR_BUFFERS_CLASH = `TT_THROW @ /workspace/tt_metal/impl/program/program.cpp:921: tt::exception
@@ -80,6 +92,27 @@ describe('parseAllocationFailure', () => {
             numBanks: 2,
             bytesPerBank: 1024,
             largestFreeBlockBytes: 512,
+            placeableBytes: 512,
+            largestPlaceableBytes: 512,
+        });
+    });
+
+    it('reads the dependency-aware error from before it reported what was placeable', () => {
+        expect(parseAllocationFailure(operationError(OUT_OF_MEMORY_WITH_DEPENDENCIES_WITHOUT_PLACEABLE))).toMatchObject(
+            {
+                kind: AllocationFailureKind.BANK_OUT_OF_MEMORY_WITH_DEPENDENCIES,
+                freeBytes: 596,
+                placeableBytes: null,
+                largestPlaceableBytes: null,
+            },
+        );
+    });
+
+    it('leaves the placeable figures empty on the plain out-of-memory error', () => {
+        expect(parseAllocationFailure(operationError(OUT_OF_MEMORY))).toMatchObject({
+            kind: AllocationFailureKind.BANK_OUT_OF_MEMORY,
+            placeableBytes: null,
+            largestPlaceableBytes: null,
         });
     });
 
@@ -123,6 +156,16 @@ describe('getAllocationFailureSummary', () => {
         expect(getAllocationFailureSummary(current)).toContain('; free 374 KiB, largest free block 293 KiB');
     });
 
+    it("gives what remained placeable rather than the allocator's own free space after dependencies", () => {
+        const dependencies = parseAllocationFailure(operationError(OUT_OF_MEMORY_WITH_DEPENDENCIES))!;
+        const older = parseAllocationFailure(operationError(OUT_OF_MEMORY_WITH_DEPENDENCIES_WITHOUT_PLACEABLE))!;
+
+        expect(getAllocationFailureSummary(dependencies)).toBe(
+            'Requested 2 KiB DRAM across 2 banks (1 KiB per bank, bank size 4 KiB); placeable 512 B, largest placeable window 512 B',
+        );
+        expect(getAllocationFailureSummary(older)).toContain('; free 596 B, largest free block 512 B');
+    });
+
     it('labels the buffer type for display', () => {
         const dependencies = parseAllocationFailure(
             operationError(OUT_OF_MEMORY_WITH_DEPENDENCIES.replace('B DRAM across', 'B L1_SMALL across')),
@@ -148,5 +191,70 @@ describe('getAllocationFailureSummary', () => {
         expect(getAllocationFailureSummary(clash, true)).toBe(
             'Circular buffers on [(x=0,y=0) - (x=4,y=7)] end at 0x97D00, past an L1 buffer at 0x928C0',
         );
+    });
+});
+
+describe('getAllocationFailureDiagnosis', () => {
+    const bank = (overrides: Partial<BankAllocationFailure>) =>
+        makeAllocationFailure({ bufferType: StringBufferType.DRAM, ...overrides });
+
+    it('calls a request that free space covers but no single block holds fragmentation', () => {
+        expect(
+            getAllocationFailureDiagnosis(
+                bank({ freeBytes: 1000000, largestFreeBlockBytes: 300000, bytesPerBank: 819200 }),
+            ),
+        ).toBe('Fragmented: 977 KiB free per bank, but no single block holds 800 KiB; the largest is 293 KiB.');
+    });
+
+    it('gives the shortfall when there is not enough free space', () => {
+        expect(getAllocationFailureDiagnosis(parseAllocationFailure(operationError(OUT_OF_MEMORY))!)).toBe(
+            'Short by 426 KiB per bank: needs 800 KiB, 374 KiB free. An interleaved buffer can use only part of that free space, so it may be short by more.',
+        );
+        expect(
+            getAllocationFailureDiagnosis(bank({ freeBytes: 100, largestFreeBlockBytes: 100, bytesPerBank: 300 })),
+        ).toBe('Short by 200 B per bank: needs 300 B, 100 B free.');
+    });
+
+    it('never calls it a shortfall when a free block is large enough', () => {
+        const fits = { freeBytes: 1000000, largestFreeBlockBytes: 900000 };
+
+        expect(getAllocationFailureDiagnosis(makeAllocationFailure(fits))).toMatch(
+            /could hold the 800 KiB per bank, but an interleaved L1 buffer may only use the interleaved region/,
+        );
+        expect(getAllocationFailureDiagnosis(bank(fits))).toMatch(/the message does not say why\.$/);
+        expect(
+            getAllocationFailureDiagnosis(
+                bank({ ...fits, kind: AllocationFailureKind.BANK_OUT_OF_MEMORY_WITH_DEPENDENCIES }),
+            ),
+        ).toMatch(/space reserved by dependent allocators overlaps it\.$/);
+    });
+
+    it('diagnoses the dependency-aware error from what remained placeable', () => {
+        const dependencies = parseAllocationFailure(operationError(OUT_OF_MEMORY_WITH_DEPENDENCIES))!;
+
+        expect(getAllocationFailureDiagnosis(dependencies)).toBe('Short by 512 B per bank: needs 1 KiB, 512 B free.');
+    });
+
+    it('says nothing about an older error that gives no free space', () => {
+        expect(getAllocationFailureDiagnosis(parseAllocationFailure(operationError(LEGACY_OUT_OF_MEMORY))!)).toBeNull();
+    });
+
+    it('says when the request is larger than an empty bank', () => {
+        expect(getAllocationFailureDiagnosis(makeAllocationFailure({ bytesPerBank: 2000000 }))).toBe(
+            'Needs 1.91 MiB per bank, more than an empty bank holds (1.32 MiB): it cannot fit in this buffer type spread across 4 banks.',
+        );
+    });
+
+    it('gives how far circular buffers run past L1', () => {
+        expect(getAllocationFailureDiagnosis(parseAllocationFailure(operationError(CIRCULAR_BUFFERS_BEYOND_L1))!)).toBe(
+            'Over L1 by 99 KiB.',
+        );
+    });
+
+    it('gives the circular-buffer clash overlap, with the address in hex when asked', () => {
+        const clash = parseAllocationFailure(operationError(CIRCULAR_BUFFERS_CLASH))!;
+
+        expect(getAllocationFailureDiagnosis(clash)).toBe('Overlaps the L1 buffer at 600256 by 21 KiB.');
+        expect(getAllocationFailureDiagnosis(clash, true)).toBe('Overlaps the L1 buffer at 0x928C0 by 21 KiB.');
     });
 });

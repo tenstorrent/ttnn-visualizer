@@ -16,4 +16,4 @@ When the linked memory report records that an operation failed to allocate memor
 
 A device operation that fails to allocate never reaches the device, so it has no row in the table, even when the script catches the error and retries. Rows only appear for earlier device operations of the same operation that did run; in the table view those rows carry an **Op failed** flag in the Flags column.
 
-The callout appears only when the two reports are linked, and only for errors whose message tt-metal formats as one of these allocation failures. Other errors stay in the operations view.
+The callout appears only when the two reports are linked, and only for errors whose message tt-metal formats as one of these allocation failures. Other errors stay in the operations view. See [Allocation failures](allocation-failures.md) for how the memory report explains each one.

@@ -26,6 +26,7 @@ import {
     shouldCollapseAllOperationsAtom,
     shouldSortByIDAtom,
     shouldSortDurationAtom,
+    showOperationErrorsOnlyAtom,
 } from '../store/app';
 import Collapsible from './Collapsible';
 import ListItem from './ListItem';
@@ -40,6 +41,12 @@ import SearchField from './SearchField';
 import SimpleMultiselect from './SimpleMultiselect';
 import { useOpPerfRowScores } from '../hooks/useOpPerfRowScores';
 import { filterByOperationRange } from '../functions/filterByOperationRange';
+import AllocationFailureDetails from './AllocationFailureDetails';
+import { ALLOCATION_FAILURE_KIND_LABELS } from '../definitions/AllocationFailure';
+import { TEST_IDS } from '../definitions/TestIds';
+import { getFailedDeviceOperationNames } from '../functions/linkableDeviceOperations';
+import { parseAllocationFailure } from '../functions/parseAllocationFailure';
+import { AllocationFailureListing } from '../model/AllocationFailure';
 
 const PLACEHOLDER_ARRAY_SIZE = 50;
 const OPERATION_EL_HEIGHT = 39; // Height in px of each list item
@@ -57,6 +64,7 @@ const OperationList = () => {
     const [focusedRow, setFocusedRow] = useState<number | null>(null);
     const [expandedItems, setExpandedItems] = useState<number[]>([]);
     const [selectedDeviceOperations, setSelectedDeviceOperations] = useAtom(selectedDeviceOperationsAtom);
+    const [showErrorsOnly, setShowErrorsOnly] = useAtom(showOperationErrorsOnlyAtom);
 
     const location = useLocation();
     const navigate = useNavigate();
@@ -76,6 +84,28 @@ const OperationList = () => {
     }, [fetchedOperations, selectedOperationRange]);
     const uniqueDeviceOperationNames = useGetUniqueDeviceOperationsList();
 
+    // Parsed once per report rather than per rendered row: the virtual list re-renders on scroll.
+    const allocationFailureByOpId = useMemo(() => {
+        const failures = new Map<number, Pick<AllocationFailureListing, 'failure' | 'failedDeviceOperations'>>();
+
+        fetchedOperations?.forEach((operation) => {
+            const failure = parseAllocationFailure(operation);
+
+            if (failure) {
+                failures.set(operation.id, {
+                    failure,
+                    failedDeviceOperations: getFailedDeviceOperationNames(operation.device_operations),
+                });
+            }
+        });
+
+        return failures;
+    }, [fetchedOperations]);
+    const hasOperationErrors = useMemo(
+        () => !!fetchedOperations?.some((operation) => operation.error),
+        [fetchedOperations],
+    );
+
     const filterDeviceOperations = (list: string[]) => {
         setSelectedDeviceOperations(new Set(list));
     };
@@ -94,6 +124,10 @@ const OperationList = () => {
                 operations = operations.filter((operation) =>
                     operation.deviceOperationNameList.some((opName) => selectedDeviceOperations.has(opName)),
                 );
+            }
+
+            if (showErrorsOnly) {
+                operations = operations.filter((operation) => operation.error);
             }
 
             if (isSortingModeActive(shouldSortByID)) {
@@ -119,6 +153,7 @@ const OperationList = () => {
         operationsWithRange,
         filterQuery,
         selectedDeviceOperations,
+        showErrorsOnly,
         shouldSortByID,
         shouldSortDuration,
     ]);
@@ -272,6 +307,11 @@ const OperationList = () => {
 
     const shouldCollapseAllLabel = shouldCollapseAll ? 'Collapse all' : 'Expand all';
     const scrollToTopLabel = 'Scroll to top';
+    let showErrorsOnlyLabel = showErrorsOnly ? 'Show all operations' : 'Show only operations with an error';
+
+    if (!hasOperationErrors && !showErrorsOnly) {
+        showErrorsOnlyLabel = 'No operation recorded an error';
+    }
     const scrollToBottomLabel = 'Scroll to bottom';
 
     useEffect(() => {
@@ -348,6 +388,22 @@ const OperationList = () => {
 
                 <ButtonGroup variant={ButtonVariant.MINIMAL}>
                     <Tooltip
+                        content={showErrorsOnlyLabel}
+                        placement={PopoverPosition.TOP}
+                    >
+                        <Button
+                            onClick={() => setShowErrorsOnly(!showErrorsOnly)}
+                            icon={IconNames.ERROR}
+                            variant={showErrorsOnly ? ButtonVariant.OUTLINED : undefined}
+                            // Stays enabled while active so it can always be switched back off.
+                            disabled={!hasOperationErrors && !showErrorsOnly}
+                            aria-label={showErrorsOnlyLabel}
+                            aria-pressed={showErrorsOnly}
+                            data-testid={TEST_IDS.OPERATION_LIST_ERRORS_ONLY}
+                        />
+                    </Tooltip>
+
+                    <Tooltip
                         content={shouldCollapseAllLabel}
                         placement={PopoverPosition.TOP}
                     >
@@ -407,7 +463,7 @@ const OperationList = () => {
 
                 {!isLoading && (
                     <p className='result-count'>
-                        {operationsWithRange && filterQuery
+                        {operationsWithRange && (filterQuery || selectedDeviceOperations.size > 0 || showErrorsOnly)
                             ? `Showing ${numberOfOperations} of ${operationsWithRange.length} operations`
                             : `Showing ${numberOfOperations} operations`}
                     </p>
@@ -455,7 +511,7 @@ const OperationList = () => {
                                             onExpandToggle={() => handleToggleCollapsible(operation.id)}
                                             label={
                                                 <Tooltip
-                                                    content='Error recorded in operation'
+                                                    content={getErrorTooltip(allocationFailureByOpId.get(operation.id))}
                                                     placement={PopoverPosition.TOP}
                                                     disabled={!operation?.error}
                                                 >
@@ -506,6 +562,12 @@ const OperationList = () => {
 
                                                 {operation?.error && (
                                                     <>
+                                                        {allocationFailureByOpId.has(operation.id) && (
+                                                            <AllocationFailureDetails
+                                                                {...allocationFailureByOpId.get(operation.id)!}
+                                                            />
+                                                        )}
+
                                                         <StackTrace
                                                             className='memory-error'
                                                             title='Error Message'
@@ -560,6 +622,12 @@ const OperationList = () => {
         </fieldset>
     );
 };
+
+function getErrorTooltip(allocationFailure?: Pick<AllocationFailureListing, 'failure'>) {
+    return allocationFailure
+        ? `${ALLOCATION_FAILURE_KIND_LABELS[allocationFailure.failure.kind]} recorded in operation`
+        : 'Error recorded in operation';
+}
 
 function getOperationFilterName(operation: OperationDescription) {
     return `${operation.id} ${operation.name} (${operation.operationFileIdentifier}) `;

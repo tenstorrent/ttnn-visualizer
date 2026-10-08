@@ -23,6 +23,11 @@ export interface BankAllocationFailure extends AllocationFailureOperation {
     allocatedBytes: number | null;
     freeBytes: number | null;
     largestFreeBlockBytes: number | null;
+    // The dependency-aware check reports what survived subtracting other allocators'
+    // ranges; the figures above are this allocator's own view, which can show plenty free.
+    // `null` for the plain check and for tt-metal before the figures were added.
+    placeableBytes: number | null;
+    largestPlaceableBytes: number | null;
 }
 
 /** Static circular buffers that grow past the end of L1. */

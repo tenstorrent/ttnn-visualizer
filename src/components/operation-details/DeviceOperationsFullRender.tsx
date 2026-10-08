@@ -40,6 +40,8 @@ import {
     DeviceOperationAnalysisResult,
 } from '../../definitions/DeviceOperationAnalysis';
 import { analyseDeviceOperation } from '../../functions/analyseDeviceOperation';
+import { isDeviceOperation } from '../../functions/filterOperations';
+import { getAbortReason, getScopePairing } from '../../functions/linkableDeviceOperations';
 
 type BufferDetails = {
     bufferOrTensorNode?: BufferNode | TensorNode;
@@ -217,6 +219,21 @@ const renderMemoryInfo = (
 
 type CBPressureModalState = { title: string; snapshot: CBPressureSnapshot } | null;
 
+enum ScopeOutcome {
+    COMPLETED = 'completed',
+    FAILED = 'failed',
+    // Left open with no recorded error: a capture that stopped part way.
+    UNCLOSED = 'unclosed',
+}
+
+interface RenderScopeArgs {
+    startNode: DeviceOperationNode;
+    innerContent: JSX.Element[] | undefined;
+    outcome: ScopeOutcome;
+    abortReason: string | null;
+    key: string;
+}
+
 function useDeviceOperationsFullRenderModel(args: {
     deviceOperations: Node[];
     details: OperationDetails;
@@ -224,6 +241,7 @@ function useDeviceOperationsFullRenderModel(args: {
     setDeviceOperationsArgsNode: React.Dispatch<React.SetStateAction<DeviceOperationNode | null>>;
     setDeviceOperationsArgsOpen: React.Dispatch<React.SetStateAction<boolean>>;
     setCbPressureModal: React.Dispatch<React.SetStateAction<CBPressureModalState>>;
+    hasRecordedError: boolean;
     colorVariance?: number;
 }) {
     const {
@@ -233,6 +251,7 @@ function useDeviceOperationsFullRenderModel(args: {
         setDeviceOperationsArgsOpen,
         setDeviceOperationsArgsNode,
         setCbPressureModal,
+        hasRecordedError,
     } = args;
 
     const selectedAddress = useAtomValue(selectedAddressAtom);
@@ -253,6 +272,109 @@ function useDeviceOperationsFullRenderModel(args: {
 
     const formatTensor = useCallback((node: Node) => formatTensorRendering(node, details), [details]);
 
+    const renderScope = useCallback(
+        ({ startNode, innerContent, outcome, abortReason, key }: RenderScopeArgs) => {
+            const opName = startNode.params.name;
+            const opArgs = startNode.arguments;
+            const opAnalysisResult = analyseDeviceOperation(startNode);
+            const isFailed = outcome === ScopeOutcome.FAILED;
+            const isUnclosed = outcome === ScopeOutcome.UNCLOSED;
+            const labelClass = classNames('device-operation-label', {
+                'failed-op-analysis': opAnalysisResult !== DeviceOperationAnalysisResult.OK,
+                'failed-scope': isFailed,
+            });
+
+            let tooltip = DEVICE_OPERATION_ANALYSIS_RESULT_LABEL[opAnalysisResult];
+            let intent: Intent =
+                opAnalysisResult === DeviceOperationAnalysisResult.NOOP ? Intent.WARNING : Intent.SUCCESS;
+
+            if (isFailed) {
+                const fallback = isDeviceOperation(opName)
+                    ? 'Launch failed before reaching the device'
+                    : 'Did not complete: an error was raised inside it';
+                tooltip = abortReason ?? fallback;
+                intent = Intent.DANGER;
+            } else if (isUnclosed) {
+                tooltip = 'The capture ended before this scope closed';
+                intent = Intent.NONE;
+            }
+
+            const label = (
+                <h4 className={labelClass}>
+                    <Tooltip content={tooltip}>
+                        <Icon
+                            className='operation-icon'
+                            size={13}
+                            intent={intent}
+                            icon={isFailed ? IconNames.ERROR : IconNames.CUBE_ADD}
+                        />
+                    </Tooltip>
+                    {opName} <DeviceID _node={startNode} /> (
+                    {startNode.inputs.map((inputNode, i) => (
+                        <span
+                            className='params'
+                            key={`input ${inputNode.id} ${startNode.id} ${i}`}
+                        >
+                            {formatTensor(inputNode)}
+                        </span>
+                    ))}
+                    )<span className='operation-arrow'> =&gt; </span>
+                    {startNode.outputs.map((outputNode, i) => (
+                        <span
+                            className='params'
+                            key={`output ${outputNode.id} ${startNode.id} ${i}`}
+                        >
+                            {formatTensor(outputNode)}
+                        </span>
+                    ))}
+                </h4>
+            );
+
+            const hasContent = innerContent && innerContent.length > 0;
+
+            return (
+                <Collapsible
+                    key={key}
+                    label={label}
+                    isOpen
+                    additionalElements={
+                        opArgs && opArgs.length > 0 ? (
+                            <Button
+                                icon={
+                                    <Icon
+                                        icon={IconNames.COMPARISON}
+                                        size={12}
+                                    />
+                                }
+                                size={Size.SMALL}
+                                variant={ButtonVariant.OUTLINED}
+                                intent={Intent.PRIMARY}
+                                onClick={() => {
+                                    setDeviceOperationsArgsNode(startNode);
+                                    setDeviceOperationsArgsOpen(true);
+                                }}
+                                title='View operation arguments'
+                            >
+                                Arguments
+                            </Button>
+                        ) : undefined
+                    }
+                    collapseClassName={classNames('device-operation function-container', {
+                        [COLLAPSIBLE_EMPTY_CLASS]: !hasContent,
+                    })}
+                >
+                    {hasContent ? (
+                        <>
+                            <div className='function-content'>{innerContent}</div>
+                            <div className='end-function'>{/* staying for now */}</div>
+                        </>
+                    ) : null}
+                </Collapsible>
+            );
+        },
+        [formatTensor, setDeviceOperationsArgsNode, setDeviceOperationsArgsOpen],
+    );
+
     const renderNodes = useCallback(
         (nodes: Node[]) => {
             const deviceOpList: Node[] = [];
@@ -263,6 +385,33 @@ function useDeviceOperationsFullRenderModel(args: {
             const deviceOpIdStack: { id: number; name: string }[] = [];
             const output: JSX.Element[] = [];
             let consecutiveCBsOutput = false;
+            // The index of the start that opened each `stack` frame, so an end can find its
+            // own scope rather than the innermost one.
+            const frameStartIndices: number[] = [];
+            const pairing = getScopePairing(nodes);
+            // A capture cut off mid-operation also leaves scopes open; only a recorded
+            // error says they failed.
+            const unclosedOutcome = hasRecordedError ? ScopeOutcome.FAILED : ScopeOutcome.UNCLOSED;
+
+            const closeFrame = (outcome: ScopeOutcome, endIndex?: number, abortReason: string | null = null) => {
+                const innerContent = stack.pop();
+                const startIndex = frameStartIndices.pop()!;
+                deviceOpIdStack.pop();
+                const startNode = nodes[startIndex] as DeviceOperationNode;
+                const block = renderScope({
+                    startNode,
+                    innerContent,
+                    outcome,
+                    abortReason,
+                    key: endIndex === undefined ? `start-${startIndex}` : `end-${endIndex}`,
+                });
+
+                if (stack.length > 0) {
+                    stack[stack.length - 1].push(block);
+                } else {
+                    output.push(block);
+                }
+            };
 
             nodes.forEach((node, index) => {
                 const nodeType = node.node_type;
@@ -279,104 +428,30 @@ function useDeviceOperationsFullRenderModel(args: {
                 if (nodeType === NodeType.function_start) {
                     deviceOpList.push(node);
                     stack.push([]);
+                    frameStartIndices.push(index);
                     deviceOpIdStack.push({ id: node.id, name: node.params.name });
                     return;
                 }
 
                 if (nodeType === NodeType.function_end) {
-                    const innerContent = stack.pop();
-                    deviceOpIdStack.pop();
-                    const opName = node.params.name;
+                    const startIndex = pairing.startIndexByEndIndex.get(index);
 
-                    const opArgs = node.operation?.arguments;
-
-                    const opAnalysisResult = analyseDeviceOperation(node.operation);
-                    const opAnalysisLabel = DEVICE_OPERATION_ANALYSIS_RESULT_LABEL[opAnalysisResult];
-                    const labelClass = classNames('device-operation-label', {
-                        'failed-op-analysis': opAnalysisResult !== DeviceOperationAnalysisResult.OK,
-                    });
-                    const label = (
-                        <h4 className={labelClass}>
-                            <Tooltip content={opAnalysisLabel}>
-                                <Icon
-                                    className='operation-icon'
-                                    size={13}
-                                    intent={
-                                        opAnalysisResult === DeviceOperationAnalysisResult.NOOP
-                                            ? Intent.WARNING
-                                            : Intent.SUCCESS
-                                    }
-                                    icon={IconNames.CUBE_ADD}
-                                />
-                            </Tooltip>
-                            {opName} <DeviceID _node={node} /> (
-                            {node.operation?.inputs.map((inputNode, i) => (
-                                <span
-                                    className='params'
-                                    key={`input ${inputNode.id} ${node.id} ${i}`}
-                                >
-                                    {formatTensor(inputNode)}
-                                </span>
-                            ))}
-                            )<span className='operation-arrow'> =&gt; </span>
-                            {node.operation?.outputs.map((outputNode, i) => (
-                                <span
-                                    className='params'
-                                    key={`output ${outputNode.id} ${node.id} ${i}`}
-                                >
-                                    {formatTensor(outputNode)}
-                                </span>
-                            ))}
-                        </h4>
-                    );
-
-                    const hasContent = innerContent && innerContent.length > 0;
-
-                    const completedBlock = (
-                        <Collapsible
-                            key={`end-${index}`}
-                            label={label}
-                            isOpen
-                            additionalElements={
-                                opArgs && opArgs.length > 0 ? (
-                                    <Button
-                                        icon={
-                                            <Icon
-                                                icon={IconNames.COMPARISON}
-                                                size={12}
-                                            />
-                                        }
-                                        size={Size.SMALL}
-                                        variant={ButtonVariant.OUTLINED}
-                                        intent={Intent.PRIMARY}
-                                        onClick={() => {
-                                            setDeviceOperationsArgsNode(node.operation!);
-                                            setDeviceOperationsArgsOpen(true);
-                                        }}
-                                        title='View operation arguments'
-                                    >
-                                        Arguments
-                                    </Button>
-                                ) : undefined
-                            }
-                            collapseClassName={classNames('device-operation function-container', {
-                                [COLLAPSIBLE_EMPTY_CLASS]: !hasContent,
-                            })}
-                        >
-                            {hasContent ? (
-                                <>
-                                    <div className='function-content'>{innerContent}</div>
-                                    <div className='end-function'>{/* staying for now */}</div>
-                                </>
-                            ) : null}
-                        </Collapsible>
-                    );
-
-                    if (stack.length > 0) {
-                        stack[stack.length - 1].push(completedBlock);
-                    } else {
-                        output.push(completedBlock);
+                    // Popping regardless would close whichever scope is innermost, so an
+                    // end left over from an earlier operation's unwind would take this
+                    // operation's scope with it.
+                    if (startIndex === undefined || !frameStartIndices.includes(startIndex)) {
+                        return;
                     }
+
+                    while (frameStartIndices[frameStartIndices.length - 1] !== startIndex) {
+                        closeFrame(unclosedOutcome);
+                    }
+
+                    closeFrame(
+                        pairing.abortedEndIndices.has(index) ? ScopeOutcome.FAILED : ScopeOutcome.COMPLETED,
+                        index,
+                        getAbortReason(node),
+                    );
                     return;
                 }
 
@@ -553,20 +628,23 @@ function useDeviceOperationsFullRenderModel(args: {
                 }
             });
 
+            while (stack.length > 0) {
+                closeFrame(unclosedOutcome);
+            }
+
             return output;
         },
         [
             cbFanout,
             cbPressureByOpId,
             details,
-            formatTensor,
+            hasRecordedError,
             memoryDetailsByNodeId,
             onLegendClick,
             peakMemoryLoad,
+            renderScope,
             selectedAddress,
             setCbPressureModal,
-            setDeviceOperationsArgsNode,
-            setDeviceOperationsArgsOpen,
         ],
     );
 
@@ -582,9 +660,16 @@ interface DeviceOperationsFullRenderProps {
     deviceOperations: Node[];
     details: OperationDetails;
     onLegendClick: (address: number, tensorId?: number, colorVariance?: number) => void;
+    // Tells a failure apart from a capture cut off: both leave scopes unclosed.
+    hasRecordedError: boolean;
 }
 
-const DeviceOperationsFullRender = ({ deviceOperations, details, onLegendClick }: DeviceOperationsFullRenderProps) => {
+const DeviceOperationsFullRender = ({
+    deviceOperations,
+    details,
+    onLegendClick,
+    hasRecordedError,
+}: DeviceOperationsFullRenderProps) => {
     const [deviceOperationsArgsOpen, setDeviceOperationsArgsOpen] = useState(false);
     const [deviceOperationsArgsNode, setDeviceOperationsArgsNode] = useState<DeviceOperationNode | null>(null);
     const [cbPressureModal, setCbPressureModal] = useState<CBPressureModalState>(null);
@@ -595,6 +680,7 @@ const DeviceOperationsFullRender = ({ deviceOperations, details, onLegendClick }
         setDeviceOperationsArgsNode,
         setDeviceOperationsArgsOpen,
         setCbPressureModal,
+        hasRecordedError,
     });
     return (
         <div className='device-operations-full-render-wrap'>
