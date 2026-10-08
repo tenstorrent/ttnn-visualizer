@@ -190,6 +190,6 @@ The following separate and independent dependencies are utilized by this project
 - tt-perf-report - MIT - https://opensource.org/license/mit
 - types-PyYAML - Apache-2.0 - https://github.com/python/typeshed
 - wheel - MIT - https://opensource.org/license/mit
-- python-zstd - BSD‑2‑Clause - https://github.com/sergey-dryabzhinsky/python-zstd/blob/master/LICENSE
+- zstd - BSD‑2‑Clause - https://github.com/sergey-dryabzhinsky/python-zstd/blob/master/LICENSE
 
 - Upload Release Assets - GitHub Action - MIT - https://github.com/AButler/upload-release-assets/blob/master/LICENSE
