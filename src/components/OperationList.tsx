@@ -30,7 +30,6 @@ import {
 import Collapsible from './Collapsible';
 import ListItem from './ListItem';
 import LoadingSpinner from './LoadingSpinner';
-import StackTrace from './operation-details/StackTrace';
 import SourceFileButton from './operation-details/SourceFileButton';
 import { extractOperationSourceData } from '../functions/stackTraceSource';
 import OperationArguments from './OperationArguments';
@@ -38,6 +37,7 @@ import OperationListPerfData from './OperationListPerfData';
 import OperationPerfRowBar from './OperationPerfRowBar';
 import SearchField from './SearchField';
 import SimpleMultiselect from './SimpleMultiselect';
+import OperationErrorTraces from './OperationErrorTraces';
 import UnattachedErrorsCallout from './UnattachedErrorsCallout';
 import { useOpPerfRowScores } from '../hooks/useOpPerfRowScores';
 import { filterByOperationRange } from '../functions/filterByOperationRange';
@@ -508,33 +508,11 @@ const OperationList = () => {
                                                 </p>
 
                                                 {operation?.error && (
-                                                    <>
-                                                        <StackTrace
-                                                            className='memory-error'
-                                                            title='Error Message'
-                                                            stackTrace={operation.error.error_message}
-                                                            language={StackTraceLanguage.CPP}
-                                                            onExpandChange={(_isOpen: boolean) =>
-                                                                handleToggleStackTrace(virtualRow.index)
-                                                            }
-                                                            intent={Intent.DANGER}
-                                                            hideSourceButton
-                                                            isInline
-                                                        />
-
-                                                        <StackTrace
-                                                            className='memory-error'
-                                                            title='Error Stack Trace'
-                                                            stackTrace={operation.error.stack_trace}
-                                                            language={StackTraceLanguage.CPP}
-                                                            onExpandChange={(_isOpen: boolean) =>
-                                                                handleToggleStackTrace(virtualRow.index)
-                                                            }
-                                                            intent={Intent.DANGER}
-                                                            hideSourceButton
-                                                            isInline
-                                                        />
-                                                    </>
+                                                    <OperationErrorTraces
+                                                        className='memory-error'
+                                                        error={operation.error}
+                                                        onExpandChange={() => handleToggleStackTrace(virtualRow.index)}
+                                                    />
                                                 )}
 
                                                 <OperationListPerfData operation={operation} />

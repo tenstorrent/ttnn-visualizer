@@ -685,10 +685,9 @@ def errors_list(instance: Instance):
         rejected = _reject_nonzero_rank_on_legacy_db(db, rank)
         if rejected is not None:
             return rejected
+        # Reports written before the errors table existed have no errors to show
         if not db._check_table_exists("errors"):
-            return response_unprocessable_entity(
-                message="Error records table does not exist in this report database."
-            )
+            return Response(orjson.dumps([]), mimetype="application/json")
 
         error_records = list(
             db.query_error_records(db.merge_rank_filter("errors", None, rank))

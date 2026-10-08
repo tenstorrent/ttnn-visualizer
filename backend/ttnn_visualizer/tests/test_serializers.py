@@ -22,6 +22,7 @@ from ttnn_visualizer.models import (
     Tensor,
 )
 from ttnn_visualizer.serializers import (
+    select_error_for_operation,
     select_errors_by_operation,
     serialize_buffer_chunks,
     serialize_buffer_pages,
@@ -767,10 +768,6 @@ class TestSerializers(unittest.TestCase):
         self.assertEqual(result, expected)
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 def _error_record(operation_id, operation_name, message="boom", rank=0):
     return ErrorRecord(
         operation_id, operation_name, "RuntimeError", message, "trace", "t", rank
@@ -783,7 +780,10 @@ class TestSelectErrorsByOperation(unittest.TestCase):
         operation = Operation(1, "ttnn.add", 0.5, rank=1)
         error = _error_record(1, "ttnn.add")
 
-        self.assertIs(select_errors_by_operation([error], [operation])[(1, 1)], error)
+        self.assertIs(
+            select_errors_by_operation([error], [operation])[(1, 1, "ttnn.add")],
+            error,
+        )
 
     def test_rank_zero_fallback_still_requires_a_matching_name(self):
         operation = Operation(1, "ttnn.add", 0.5, rank=1)
@@ -799,6 +799,31 @@ class TestSelectErrorsByOperation(unittest.TestCase):
         rank_one = _error_record(1, "ttnn.add", "rank 1", rank=1)
 
         self.assertIs(
-            select_errors_by_operation([rank_zero, rank_one], [operation])[(1, 1)],
+            select_errors_by_operation([rank_zero, rank_one], [operation])[
+                (1, 1, "ttnn.add")
+            ],
             rank_one,
         )
+
+    def test_operations_sharing_an_id_and_rank_each_show_their_own_error(self):
+        add = Operation(10001, "ttnn.add", 0.5)
+        mul = Operation(10001, "ttnn.mul", 0.5)
+        mul_error = _error_record(10001, "ttnn.mul")
+
+        self.assertEqual(
+            select_errors_by_operation([mul_error], [add, mul]),
+            {(10001, 0, "ttnn.mul"): mul_error},
+        )
+        self.assertIsNone(select_error_for_operation([mul_error], add))
+
+        serialized = serialize_operations(
+            [], [], [add, mul], [], [], [], [], [], [], error_records=[mul_error]
+        )
+        self.assertEqual(
+            [(op["name"], op["error"] is not None) for op in serialized],
+            [("ttnn.add", False), ("ttnn.mul", True)],
+        )
+
+
+if __name__ == "__main__":
+    unittest.main()

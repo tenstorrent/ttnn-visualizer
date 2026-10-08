@@ -42,24 +42,30 @@ def _stack_trace_source_file_id_for_operation(
     return stack_trace_source_file_ids_by_key.get((operation.operation_id, 0))
 
 
+def _error_key(operation: Operation) -> Tuple[int, int, str]:
+    return (operation.operation_id, operation.rank, operation.name)
+
+
 def select_errors_by_operation(
     error_records: Iterable[ErrorRecord], operations: Iterable[Operation]
-) -> Dict[Tuple[int, int], ErrorRecord]:
-    """The error each operation shows, keyed by (operation_id, rank).
+) -> Dict[Tuple[int, int, str], ErrorRecord]:
+    """The error each operation shows, keyed by (operation_id, rank, name).
 
     The id alone is not enough: the report importer writes errors it cannot place
     on an operation at a per-file base id, which can coincide with an unrelated
-    operation, so the error's operation name must match too (#2082). Rank 0 is
-    the fallback for reports whose errors table predates the rank column.
+    operation, so the error's operation name must match too (#2082). The name is
+    part of the key because operations can share an id and rank when a capture
+    runs into the next file's id range; an orphan whose name happens to match one
+    of those operations still attaches to it. Rank 0 is the fallback for reports
+    whose errors table predates the rank column.
     """
     errors_by_key: DefaultDict[Tuple[int, int], List[ErrorRecord]] = defaultdict(list)
     for error in error_records:
         errors_by_key[(error.operation_id, error.rank)].append(error)
 
-    selected: Dict[Tuple[int, int], ErrorRecord] = {}
+    selected: Dict[Tuple[int, int, str], ErrorRecord] = {}
     for operation in operations:
-        key = (operation.operation_id, operation.rank)
-        candidates = errors_by_key.get(key, []) + (
+        candidates = errors_by_key.get((operation.operation_id, operation.rank), []) + (
             errors_by_key.get((operation.operation_id, 0), [])
             if operation.rank != 0
             else []
@@ -68,7 +74,7 @@ def select_errors_by_operation(
             (e for e in candidates if e.operation_name == operation.name), None
         )
         if match is not None:
-            selected[key] = match
+            selected[_error_key(operation)] = match
     return selected
 
 
@@ -76,7 +82,7 @@ def select_error_for_operation(
     error_records: Iterable[ErrorRecord], operation: Operation
 ) -> Optional[ErrorRecord]:
     return select_errors_by_operation(error_records, [operation]).get(
-        (operation.operation_id, operation.rank)
+        _error_key(operation)
     )
 
 
@@ -153,7 +159,7 @@ def serialize_operations(
         )
         id = operation_data.pop("operation_id", None)
 
-        error = errors_by_operation.get((operation.operation_id, operation.rank))
+        error = errors_by_operation.get(_error_key(operation))
         error_data = error.to_nested_dict() if error else None
 
         results.append(

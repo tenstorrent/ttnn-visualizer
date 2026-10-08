@@ -48,8 +48,8 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe('useReportErrors', () => {
-    it('treats a report without an errors table as having no errors', async () => {
-        vi.mocked(axiosInstance.get).mockRejectedValue(responseError(HttpStatusCode.UnprocessableEntity));
+    it('returns the errors the report lists', async () => {
+        vi.mocked(axiosInstance.get).mockResolvedValue({ data: [] });
 
         const { result } = renderReportErrors();
 
@@ -57,11 +57,16 @@ describe('useReportErrors', () => {
         expect(result.current.data).toEqual([]);
     });
 
-    it('surfaces any other failure', async () => {
-        vi.mocked(axiosInstance.get).mockRejectedValue(responseError(HttpStatusCode.InternalServerError));
+    // A report without an errors table answers 200 with no errors, so a 422 is a real
+    // rejection, such as a non-zero rank on a legacy report, and must not read as "no errors"
+    it.each([HttpStatusCode.UnprocessableEntity, HttpStatusCode.InternalServerError])(
+        'surfaces a %i response as an error',
+        async (status) => {
+            vi.mocked(axiosInstance.get).mockRejectedValue(responseError(status));
 
-        const { result } = renderReportErrors();
+            const { result } = renderReportErrors();
 
-        await waitFor(() => expect(result.current.isError).toBe(true));
-    });
+            await waitFor(() => expect(result.current.isError).toBe(true));
+        },
+    );
 });

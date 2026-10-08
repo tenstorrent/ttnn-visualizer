@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { AxiosError, AxiosRequestConfig, HttpStatusCode, isAxiosError } from 'axios';
+import { AxiosError, AxiosRequestConfig } from 'axios';
 import { QueryClient, QueryStatus, keepPreviousData, useQueries, useQuery } from '@tanstack/react-query';
 import { useCallback, useEffect, useMemo } from 'react';
 import { useAtomValue } from 'jotai';
@@ -651,16 +651,8 @@ export const useOperationsList = () => {
 };
 
 const fetchReportErrors = async (): Promise<ReportError[]> => {
-    try {
-        const { data } = await axiosInstance.get<ReportError[]>(Endpoints.ERRORS);
-        return data;
-    } catch (error) {
-        // Reports written before the errors table existed answer 422, and have no errors to show
-        if (isAxiosError(error) && error.response?.status === HttpStatusCode.UnprocessableEntity) {
-            return [];
-        }
-        throw error;
-    }
+    const { data } = await axiosInstance.get<ReportError[]>(Endpoints.ERRORS);
+    return data;
 };
 
 export const useReportErrors = () => {

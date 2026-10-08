@@ -14,6 +14,8 @@ rest as unattached (#2082).
 
 from http import HTTPStatus
 
+from ttnn_visualizer.tests.report_schemas import SCHEMA_V2
+
 _OPERATIONS = """
 INSERT INTO operations VALUES (1, 'ttnn.add', 1.0);
 INSERT INTO operations VALUES (2, 'ttnn.conv2d', 1.0);
@@ -108,3 +110,10 @@ def test_list_and_detail_show_the_same_error_when_rows_share_a_key(client, make_
         ("first", True),
         ("second", False),
     ]
+
+
+def test_report_without_an_errors_table_has_no_errors(client, make_report):
+    """Reports written before the errors table existed list no errors, not a 422."""
+    instance_id = make_report(_OPERATIONS, schema_sql=SCHEMA_V2 + "DROP TABLE errors;")
+
+    assert _errors(client, instance_id) == []

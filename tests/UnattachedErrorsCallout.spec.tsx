@@ -6,6 +6,7 @@ import '@testing-library/jest-dom/vitest';
 import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import UnattachedErrorsCallout from '../src/components/UnattachedErrorsCallout';
+import { MAX_UNATTACHED_ERRORS_LISTED } from '../src/definitions/ReportErrors';
 import { TEST_IDS } from '../src/definitions/TestIds';
 import { ReportError } from '../src/model/APIData';
 
@@ -51,7 +52,7 @@ describe('UnattachedErrorsCallout', () => {
             reportError({ operation_id: 2, operation_name: 'ttnn.add', error_type: 'RuntimeError', attached: true }),
         ]);
 
-        expect(screen.getByText('1 error recorded that could not be matched to an operation')).toBeInTheDocument();
+        expect(screen.getByText('1 error recorded that is not shown on any operation')).toBeInTheDocument();
         expect(screen.getByText('ttnn.conv2d')).toBeInTheDocument();
         expect(screen.queryByText('ttnn.add')).not.toBeInTheDocument();
     });
@@ -59,7 +60,23 @@ describe('UnattachedErrorsCallout', () => {
     it('names an error without an operation name', () => {
         renderCallout([reportError({ operation_name: '' }), reportError()]);
 
-        expect(screen.getByText('2 errors recorded that could not be matched to an operation')).toBeInTheDocument();
+        expect(screen.getByText('2 errors recorded that are not shown on any operation')).toBeInTheDocument();
         expect(screen.getByText('Unknown operation')).toBeInTheDocument();
+    });
+
+    it('caps the list and counts the rest', () => {
+        const total = MAX_UNATTACHED_ERRORS_LISTED + 3;
+        renderCallout(Array.from({ length: total }, (_, index) => reportError({ operation_name: `ttnn.op${index}` })));
+
+        expect(screen.getByText(`${total} errors recorded that are not shown on any operation`)).toBeInTheDocument();
+        expect(screen.getAllByRole('listitem')).toHaveLength(MAX_UNATTACHED_ERRORS_LISTED);
+        expect(screen.getByText('And 3 more.')).toBeInTheDocument();
+    });
+
+    it('omits the stack trace pane when the report recorded none', () => {
+        renderCallout([reportError({ stack_trace: '' }), reportError({ stack_trace: 'frame 0' })]);
+
+        expect(screen.getAllByText('Error Message')).toHaveLength(2);
+        expect(screen.getAllByText('Error Stack Trace')).toHaveLength(1);
     });
 });
