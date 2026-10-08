@@ -121,7 +121,7 @@ def serialize_operations(
     devices,
     producers_consumers,
     device_operations,
-    error_records=None,
+    error_records,
 ):
     tensors_dict = {(t.tensor_id, t.rank): t for t in tensors}
     device_operations_dict = {
@@ -137,7 +137,7 @@ def serialize_operations(
         (st.operation_id, st.rank): st.source_file_id for st in stack_traces
     }
 
-    errors_by_operation = select_errors_by_operation(error_records or [], operations)
+    errors_by_operation = select_errors_by_operation(error_records, operations)
 
     arguments_dict = defaultdict(list)
     for argument in operation_arguments:

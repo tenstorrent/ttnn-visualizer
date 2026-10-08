@@ -87,6 +87,7 @@ class TestSerializers(unittest.TestCase):
             devices,
             producers_consumers,
             device_operations,
+            [],
         )
 
         expected = [
@@ -509,6 +510,7 @@ class TestSerializers(unittest.TestCase):
             [],
             [],
             [],
+            [],
         )
         self.assertEqual(result[0]["stack_trace"], "trace text")
         self.assertEqual(result[0]["stack_trace_source_file_id"], 42)
@@ -528,6 +530,7 @@ class TestSerializers(unittest.TestCase):
             operations,
             [],
             stack_traces,
+            [],
             [],
             [],
             [],
