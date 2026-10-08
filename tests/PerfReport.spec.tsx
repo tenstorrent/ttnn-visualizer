@@ -10,11 +10,17 @@ import { TypedPerfTableRow } from '../src/model/PerfTable';
 import { PERF_DURATION_BUCKET_FILTER_PLACEHOLDER } from '../src/definitions/PerfDurationHistogram';
 import { OpType } from '../src/definitions/Performance';
 import { OperationCategories } from '../src/definitions/StackedPerfTable';
+import { MathFidelity } from '../src/definitions/MathFidelity';
+import { DeviceOperationLayoutTypes } from '../src/model/APIData';
+import { BufferType } from '../src/model/BufferType';
 import { TEST_IDS } from '../src/definitions/TestIds';
 import { useGetNPEManifest, useOpToPerfIdFiltered, useOperationsList, usePerfMeta } from '../src/hooks/useAPI';
 import {
+    bufferTypeFilterListAtom,
     comparisonPerformanceReportListAtom,
     durationBucketFilterListAtom,
+    layoutFilterListAtom,
+    mathFilterListAtom,
     opCategoryFilterListAtom,
     rawOpCodeFilterListAtom,
 } from '../src/store/app';
@@ -31,6 +37,7 @@ vi.mock('../src/hooks/useAPI.tsx', () => ({
 }));
 
 const COMPARISON_REPORT = 'report-b';
+const SECOND_COMPARISON_REPORT = 'report-c';
 /** Accessible name Blueprint gives a MultiSelect tag's dismiss button. */
 const REMOVE_TAG_LABEL = 'Remove tag';
 const WAIT_FOR_OPTIONS = { timeout: 1000 };
@@ -62,6 +69,9 @@ interface RenderOptions {
     rawOpCodeFilterList?: string[];
     durationBucketFilterList?: number[];
     opCategoryFilterList?: OperationCategories[];
+    mathFilterList?: string[];
+    bufferTypeFilterList?: BufferType[];
+    layoutFilterList?: DeviceOperationLayoutTypes[];
 }
 
 function renderReport({
@@ -73,6 +83,9 @@ function renderReport({
     rawOpCodeFilterList = [],
     durationBucketFilterList = [],
     opCategoryFilterList = [],
+    mathFilterList = [],
+    bufferTypeFilterList = [],
+    layoutFilterList = [],
 }: RenderOptions = {}) {
     const initialAtomValues: AtomProviderInitialValues = [];
 
@@ -90,6 +103,18 @@ function renderReport({
 
     if (opCategoryFilterList.length > 0) {
         initialAtomValues.push([opCategoryFilterListAtom, opCategoryFilterList]);
+    }
+
+    if (mathFilterList.length > 0) {
+        initialAtomValues.push([mathFilterListAtom, mathFilterList]);
+    }
+
+    if (bufferTypeFilterList.length > 0) {
+        initialAtomValues.push([bufferTypeFilterListAtom, bufferTypeFilterList]);
+    }
+
+    if (layoutFilterList.length > 0) {
+        initialAtomValues.push([layoutFilterListAtom, layoutFilterList]);
     }
 
     return render(
@@ -122,6 +147,15 @@ function expectRowInBothReports(text: string) {
 
     expect(tableRows.some((tableRow) => tableRow.classList.contains('comparison-row'))).toBe(true);
     expect(tableRows.some((tableRow) => !tableRow.classList.contains('comparison-row'))).toBe(true);
+}
+
+// Normalisation is on by default; switching it off needs a comparison report to enable the toggle.
+function setNormalisation(isOn: boolean) {
+    if (!isOn) {
+        fireEvent.click(screen.getByLabelText('Normalise data'));
+    }
+
+    expect(screen.getByLabelText('Normalise data')).toHaveProperty('checked', isOn);
 }
 
 beforeEach(() => {
@@ -240,13 +274,6 @@ describe('PerformanceReport op category filter', () => {
 
 describe('PerformanceReport filters resolved on aligned rows', () => {
     // Four rows per report so a normalised comparison stays within alignByOpCode's missing limit.
-    const setNormalisation = (isOn: boolean) => {
-        if (!isOn) {
-            fireEvent.click(screen.getByLabelText('Normalise data'));
-        }
-
-        expect(screen.getByLabelText('Normalise data')).toHaveProperty('checked', isOn);
-    };
     const withOpCode = (base: TypedPerfTableRow, opCode: string) => ({ ...base, op_code: opCode });
 
     it.each([true, false])(
@@ -314,6 +341,45 @@ describe('PerformanceReport filters resolved on aligned rows', () => {
         },
     );
 
+    it.each([true, false])(
+        'needs one aligned row to match a set filter and another filter together (normalised: %s)',
+        (isNormalised) => {
+            const withLayout = (base: TypedPerfTableRow, layout: DeviceOperationLayoutTypes) => ({ ...base, layout });
+
+            renderReport({
+                data: [
+                    withLayout(row('Softmax', 1, 5, OperationCategories.COMPUTE), DeviceOperationLayoutTypes.TILE),
+                    withLayout(row('Matmul', 2, 5, OperationCategories.COMPUTE), DeviceOperationLayoutTypes.TILE),
+                    // Row major, but Compute: only the comparison Reshape is Other.
+                    withLayout(row('Reshape', 3, 5, OperationCategories.COMPUTE), DeviceOperationLayoutTypes.ROW_MAJOR),
+                    withLayout(row('Tilize', 4, 5, OperationCategories.DM), DeviceOperationLayoutTypes.ROW_MAJOR),
+                ],
+                comparisonData: [
+                    [
+                        withLayout(row('Softmax', 11, 5, OperationCategories.COMPUTE), DeviceOperationLayoutTypes.TILE),
+                        withLayout(row('Matmul', 12, 5, OperationCategories.COMPUTE), DeviceOperationLayoutTypes.TILE),
+                        withLayout(row('Reshape', 13, 5, OperationCategories.OTHER), DeviceOperationLayoutTypes.TILE),
+                        // Row major and Other, so the table still renders a matching row. The primary
+                        // Tilize is row major too, so only the Reshape assertion depends on one row
+                        // matching both filters.
+                        withLayout(
+                            row('Tilize', 14, 5, OperationCategories.OTHER),
+                            DeviceOperationLayoutTypes.ROW_MAJOR,
+                        ),
+                    ],
+                ],
+                comparisonReports: [COMPARISON_REPORT],
+                opCategoryFilterList: [OperationCategories.OTHER],
+                layoutFilterList: [DeviceOperationLayoutTypes.ROW_MAJOR],
+            });
+
+            setNormalisation(isNormalised);
+
+            expectRowInBothReports('Tilize');
+            expect(getRowsContaining('Reshape')).toHaveLength(0);
+        },
+    );
+
     // Normalisation aligns rows by raw op code, so only the unnormalised view can pair rows whose
     // raw op codes differ.
     it('keeps a row whose raw op code only the comparison report has, with normalisation off', async () => {
@@ -335,6 +401,154 @@ describe('PerformanceReport filters resolved on aligned rows', () => {
         // The substring match finds the comparison's ReshapeView row as well.
         expectRowInBothReports('Reshape');
         expect(getRowsContaining('Matmul')).toHaveLength(0);
+    });
+});
+
+describe('PerformanceReport set filters resolved on aligned rows', () => {
+    // 'match' is the filtered value, 'other' a value the filter excludes, and 'none' how a row with
+    // no value arrives. DRAM is the filtered value because BufferType.DRAM is 0: a truthiness check
+    // in the matcher would drop it.
+    type Variant = 'match' | 'other' | 'none';
+
+    const cases = [
+        {
+            name: 'math fidelity',
+            withValue: (base: TypedPerfTableRow, variant: Variant) => ({
+                ...base,
+                // The parser leaves math fidelity as an empty string rather than null.
+                math_fidelity: { match: MathFidelity.LoFi, other: MathFidelity.HiFi4, none: '' }[variant],
+            }),
+            filters: { mathFilterList: [MathFidelity.LoFi] },
+        },
+        {
+            name: 'buffer type',
+            withValue: (base: TypedPerfTableRow, variant: Variant) => ({
+                ...base,
+                buffer_type: { match: BufferType.DRAM, other: BufferType.L1, none: null }[variant],
+            }),
+            filters: { bufferTypeFilterList: [BufferType.DRAM] },
+        },
+        {
+            name: 'layout',
+            withValue: (base: TypedPerfTableRow, variant: Variant) => ({
+                ...base,
+                layout: {
+                    match: DeviceOperationLayoutTypes.ROW_MAJOR,
+                    other: DeviceOperationLayoutTypes.TILE,
+                    none: null,
+                }[variant],
+            }),
+            filters: { layoutFilterList: [DeviceOperationLayoutTypes.ROW_MAJOR] },
+        },
+    ];
+
+    describe.each(cases)('$name', ({ withValue, filters }) => {
+        // Only the comparison's Reshape holds the filtered value, so filtering the primary report
+        // by itself would empty both tables.
+        it.each([true, false])('keeps a comparison-only match (normalised: %s)', (isNormalised) => {
+            renderReport({
+                data: [withValue(row('Matmul', 1, 5), 'other'), withValue(row('Reshape', 2, 5), 'other')],
+                comparisonData: [[withValue(row('Matmul', 1, 5), 'other'), withValue(row('Reshape', 2, 5), 'match')]],
+                comparisonReports: [COMPARISON_REPORT],
+                ...filters,
+            });
+
+            setNormalisation(isNormalised);
+
+            expectRowInBothReports('Reshape');
+            expect(screen.queryByText('Matmul')).not.toBeInTheDocument();
+        });
+
+        it.each([true, false])(
+            'keeps a primary row with no value when its comparison row matches (normalised: %s)',
+            (isNormalised) => {
+                renderReport({
+                    data: [withValue(row('Matmul', 1, 5), 'other'), withValue(row('Reshape', 2, 5), 'none')],
+                    comparisonData: [
+                        [withValue(row('Matmul', 1, 5), 'other'), withValue(row('Reshape', 2, 5), 'match')],
+                    ],
+                    comparisonReports: [COMPARISON_REPORT],
+                    ...filters,
+                });
+
+                setNormalisation(isNormalised);
+
+                expectRowInBothReports('Reshape');
+                expect(screen.queryByText('Matmul')).not.toBeInTheDocument();
+            },
+        );
+
+        // Only the primary report's Reshape holds the filtered value. The comparison-only cases
+        // above never exercise a match on the primary row itself.
+        it.each([true, false])('keeps a primary-only match (normalised: %s)', (isNormalised) => {
+            renderReport({
+                data: [withValue(row('Matmul', 1, 5), 'other'), withValue(row('Reshape', 2, 5), 'match')],
+                comparisonData: [[withValue(row('Matmul', 1, 5), 'other'), withValue(row('Reshape', 2, 5), 'other')]],
+                comparisonReports: [COMPARISON_REPORT],
+                ...filters,
+            });
+
+            setNormalisation(isNormalised);
+
+            expectRowInBothReports('Reshape');
+            expect(screen.queryByText('Matmul')).not.toBeInTheDocument();
+        });
+
+        // With no comparison report, normalisation switches off, so this filters one dataset in the
+        // unnormalised branch.
+        it('filters a single report', () => {
+            renderReport({
+                data: [
+                    withValue(row('Matmul', 1, 5), 'other'),
+                    withValue(row('Reshape', 2, 5), 'match'),
+                    withValue(row('Softmax', 3, 5), 'none'),
+                ],
+                ...filters,
+            });
+
+            expect(getRowsContaining('Reshape').length).toBeGreaterThan(0);
+            expect(getRowsContaining('Matmul')).toHaveLength(0);
+            // A row with no value never matches an active filter.
+            expect(getRowsContaining('Softmax')).toHaveLength(0);
+        });
+
+        // Both comparison loops cover every report, not just the first.
+        it.each([true, false])(
+            'keeps a match only the second comparison report has (normalised: %s)',
+            (isNormalised) => {
+                renderReport({
+                    data: [withValue(row('Matmul', 1, 5), 'other'), withValue(row('Reshape', 2, 5), 'other')],
+                    comparisonData: [
+                        [withValue(row('Matmul', 1, 5), 'other'), withValue(row('Reshape', 2, 5), 'other')],
+                        [withValue(row('Matmul', 1, 5), 'other'), withValue(row('Reshape', 2, 5), 'match')],
+                    ],
+                    comparisonReports: [COMPARISON_REPORT, SECOND_COMPARISON_REPORT],
+                    ...filters,
+                });
+
+                setNormalisation(isNormalised);
+
+                expectRowInBothReports('Reshape');
+                expect(screen.queryByText('Matmul')).not.toBeInTheDocument();
+            },
+        );
+    });
+});
+
+describe('PerformanceReport set filter with several values selected', () => {
+    it('keeps rows matching any selected value', () => {
+        renderReport({
+            data: [
+                { ...row('Matmul', 1, 5), layout: DeviceOperationLayoutTypes.TILE },
+                { ...row('Reshape', 2, 5), layout: DeviceOperationLayoutTypes.ROW_MAJOR },
+                { ...row('Softmax', 3, 5), layout: null },
+            ],
+            layoutFilterList: [DeviceOperationLayoutTypes.TILE, DeviceOperationLayoutTypes.ROW_MAJOR],
+        });
+
+        expect(getRowsContaining('Matmul').length).toBeGreaterThan(0);
+        expect(getRowsContaining('Reshape').length).toBeGreaterThan(0);
+        expect(getRowsContaining('Softmax')).toHaveLength(0);
     });
 });
 
