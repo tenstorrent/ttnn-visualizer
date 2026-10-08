@@ -534,7 +534,7 @@ There are two hooks for the performance report, and picking the wrong one is a c
 - **`usePerformanceReport(name)`** — the report as the performance tab is displaying it, with every view filter applied. For rendering the tab.
 - **`useLinkedPerformanceReport()`** — the same report pinned to devices merged, host ops hidden, whole run, default grouping, tracing mode off. For *anything that decides whether two reports describe the same run*: the link badge, the perf-table Op column, L1-pressure columns, tensor-drawer gating, the graph perf overlay, top-N annotations.
 
-Link status is a property of the reports, not of the current view. Resolving it from the filtered query means toggling **Merge devices** flips the badge to "Failed to link" and drops every dependent feature with it — and `ReportLinkStatus` persists that verdict to `localStorage`, so the failure outlives the toggle (#1812).
+Link status is a property of the reports, not of the current view. Resolving it from the filtered query means toggling **Merge devices** flips the badge to "Failed to link" and drops every dependent feature with it — and `usePersistReportLinks` (mounted via `ReportLinkRecorder` in `Layout`) persists that verdict to `localStorage`, so the failure outlives the toggle (#1812).
 
 Build both keys through `src/functions/performanceReportQueryKey.ts` rather than assembling one inline, so the two cannot drift into keying on different filters. **Every** filter is pinned, so `getLinkedPerformanceReportParams()` takes no arguments — a view control that needs threading through it is a sign the call site wants `usePerformanceReport` instead.
 
@@ -614,7 +614,7 @@ Defaults belong on the `<ToastContainer>` in `Layout.tsx`, which is mounted once
 
 ## Event logging (frontend)
 
-`src/functions/recordEvent.ts` buffers events and posts them to `POST /api/event-log/events`. Local installs append to `~/.ttnn-visualizer/usage/events.log`; `SERVER_MODE` appends to `/data/usage/<event-log-id>/events.log`, where the server-derived log partition key lives in the signed Flask session cookie. The backend never forwards raw events. The one export path is the local-only, opt-in `GET /api/metrics` aggregate projection (see [Local Prometheus collection](docs/src/event-logging.md#local-prometheus-collection)), which `@local_only` refuses under `SERVER_MODE`; hosted deployments have no collection beyond this log. The browser-to-backend post is local only on a local installation and crosses the network under `SERVER_MODE`. The invariants below are not visible from either side alone.
+`src/functions/recordEvent.ts` buffers events and posts them to `POST /api/event-log/events`. Local installs append to `~/.ttnn-visualizer/usage/events.log`; `SERVER_MODE` appends to `/data/usage/<event-log-id>/events.log`, where the server-derived log partition key lives in the signed Flask session cookie. The backend never forwards raw events. The one export path is the local-only, opt-in `GET /api/metrics` aggregate projection, which `@local_only` refuses under `SERVER_MODE`; hosted deployments have no collection beyond this log. The browser-to-backend post is local only on a local installation and crosses the network under `SERVER_MODE`. The invariants below are not visible from either side alone.
 
 ### `event_logging.py` owns the vocabulary; the frontend and user reference are copies
 

@@ -6,6 +6,9 @@ import { cleanup, render, screen } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { MemoryLegendElement } from '../src/components/operation-details/MemoryLegendElement';
+import { MemoryLegendGroup } from '../src/components/operation-details/MemoryLegendGroup';
+import { TEST_IDS } from '../src/definitions/TestIds';
+import { buildTensorDeallocationReport } from './helpers/lateDeallocationFixtures';
 import { MarkerType } from '../src/model/APIData';
 import { StringBufferType } from '../src/model/BufferType';
 import { OperationDetails } from '../src/model/OperationDetails';
@@ -291,5 +294,66 @@ describe('MemoryLegendElement multiplier placement', () => {
         const container = renderLegendElement(cbChunk, { deviceCount: 32 });
 
         expect(container.querySelector('.legend-multipliers')?.textContent).toBe('x 32 devices');
+    });
+});
+
+describe('MemoryLegendElement late deallocation marker (#1862)', () => {
+    const chunk = { address: 0x4000, size: 1024 };
+    const lateDeallocation = buildTensorDeallocationReport({
+        id: 42,
+        address: chunk.address,
+        lastConsumerOperationId: 7,
+        consumerName: 'ttnn.matmul',
+    });
+    const markerTestId = `${TEST_IDS.LATE_DEALLOC_LEGEND_MARKER}-${chunk.address}`;
+
+    it('names the tensor and its last consumer', () => {
+        renderLegendElement(chunk, { lateDeallocation });
+
+        expect(screen.getByTestId(markerTestId)).toHaveAttribute(
+            'aria-label',
+            'Opportunity to deallocate earlier: tensor 42 — last used by 7 ttnn.matmul',
+        );
+    });
+
+    it('does not render the marker by default', () => {
+        renderLegendElement(chunk);
+
+        expect(screen.queryByTestId(markerTestId)).not.toBeInTheDocument();
+    });
+
+    it.each([
+        ['empty space', { ...chunk, empty: true }],
+        ['a region marker', { ...chunk, size: 0, markerType: MarkerType.L1_START }],
+    ])('does not mark %s even when given a report', (_label, markerChunk) => {
+        renderLegendElement(markerChunk, { lateDeallocation });
+
+        expect(screen.queryByTestId(markerTestId)).not.toBeInTheDocument();
+    });
+
+    // The group's rows are per-device copies of one tensor, so marking each
+    // would repeat a single finding once per device.
+    it('marks only the header of a multi-device group', () => {
+        render(
+            <TestProviders>
+                <MemoryLegendGroup
+                    group={[
+                        { ...chunk, device_id: 0 },
+                        { ...chunk, device_id: 1 },
+                    ]}
+                    memSize={1024}
+                    selectedTensorAddress={null}
+                    operationDetails={operationDetails}
+                    onLegendClick={onLegendClick}
+                    lateDeallocation={lateDeallocation}
+                />
+            </TestProviders>,
+        );
+
+        // Header plus both device rows are mounted, so a single marker is the
+        // header's rather than an artefact of the collapse hiding the rows.
+        expect(document.querySelectorAll('.legend-item')).toHaveLength(3);
+        expect(screen.getAllByTestId(markerTestId)).toHaveLength(1);
+        expect(screen.getByTestId(markerTestId).closest('.group-header')).not.toBeNull();
     });
 });

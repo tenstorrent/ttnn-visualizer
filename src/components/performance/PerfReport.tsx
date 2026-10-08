@@ -41,6 +41,7 @@ import {
     layoutFilterListAtom,
     mathFilterListAtom,
     mergeDevicesAtom,
+    opCategoryFilterListAtom,
     rawOpCodeFilterListAtom,
     stackedGroupByAtom,
     tracingModeAtom,
@@ -63,6 +64,8 @@ import { capitalizeString } from '../../functions/formatting';
 import { formatSyncedReportName } from '../../functions/reportRank';
 import { DeviceOperationLayoutTypes } from '../../model/APIData';
 import usePerfReportFiltering from './usePerfReportFiltering';
+import AllocationFailureSummary from './AllocationFailureSummary';
+import { AllocationFailureListing } from '../../model/AllocationFailure';
 
 enum SignpostSelectType {
     START,
@@ -80,8 +83,10 @@ interface PerformanceReportProps {
     isComparisonLoading?: boolean;
     maxCores: number;
     comparisonMaxCores?: number[];
+    allocationFailureListings?: AllocationFailureListing[];
 }
 
+const EMPTY_ALLOCATION_FAILURE_LISTINGS: AllocationFailureListing[] = [];
 const INITIAL_TAB_ID = 'perf-table-0'; // `perf-table-${index}`
 const STACKED_GROUP_BY = [StackedGroupBy.CATEGORY, StackedGroupBy.MEMORY, StackedGroupBy.OP];
 
@@ -95,6 +100,24 @@ const pruneToValidValues = <T,>(validValues: ReadonlySet<NonNullable<T>>, curren
     return nextFilters.length === currentFilters.length ? currentFilters : nextFilters;
 };
 
+/** The distinct non-null values of one row field, which are the values its chip filter can offer. */
+const getDistinctValues = <K extends keyof TypedPerfTableRow>(
+    rows: TypedPerfTableRow[],
+    key: K,
+): Set<NonNullable<TypedPerfTableRow[K]>> => {
+    const values = new Set<NonNullable<TypedPerfTableRow[K]>>();
+
+    for (const row of rows) {
+        const value = row[key];
+
+        if (value !== null && value !== undefined) {
+            values.add(value);
+        }
+    }
+
+    return values;
+};
+
 const PerformanceReport = ({
     data,
     comparisonData,
@@ -106,6 +129,7 @@ const PerformanceReport = ({
     isComparisonLoading = false,
     maxCores,
     comparisonMaxCores = [],
+    allocationFailureListings = EMPTY_ALLOCATION_FAILURE_LISTINGS,
 }: PerformanceReportProps) => {
     const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
     const activeReportFolderName = useAtomValue(activePerformanceReportFolderNameAtom);
@@ -120,6 +144,7 @@ const PerformanceReport = ({
     const [activeRawOpCodeFilterList, setActiveRawOpCodeFilterList] = useAtom(rawOpCodeFilterListAtom);
     const [activeBufferTypeFilterList, setActiveBufferTypeFilterList] = useAtom(bufferTypeFilterListAtom);
     const [activeLayoutFilterList, setActiveLayoutFilterList] = useAtom(layoutFilterListAtom);
+    const [activeOpCategoryFilterList, setActiveOpCategoryFilterList] = useAtom(opCategoryFilterListAtom);
     const [activeDurationBucketFilterList, setActiveDurationBucketFilterList] = useAtom(durationBucketFilterListAtom);
 
     // TODO: Reimplement merge/expand device data toggle
@@ -170,6 +195,7 @@ const PerformanceReport = ({
         activeRawOpCodeFilterList,
         activeBufferTypeFilterList,
         activeLayoutFilterList,
+        activeOpCategoryFilterList,
         activeDurationBucketFilterList,
         filterBySignpost,
     });
@@ -193,24 +219,9 @@ const PerformanceReport = ({
             ),
         [combinedRows],
     );
-    const validBufferTypeValues = useMemo(
-        () =>
-            new Set(
-                combinedRows
-                    .map((row) => row.buffer_type)
-                    .filter((value): value is NonNullable<TypedPerfTableRow['buffer_type']> => value !== null),
-            ),
-        [combinedRows],
-    );
-    const validLayoutValues = useMemo(
-        () =>
-            new Set(
-                combinedRows
-                    .map((row) => row.layout)
-                    .filter((value): value is NonNullable<TypedPerfTableRow['layout']> => value !== null),
-            ),
-        [combinedRows],
-    );
+    const validBufferTypeValues = useMemo(() => getDistinctValues(combinedRows, 'buffer_type'), [combinedRows]);
+    const validLayoutValues = useMemo(() => getDistinctValues(combinedRows, 'layout'), [combinedRows]);
+    const validOpCategoryValues = useMemo(() => getDistinctValues(combinedRows, 'op_category'), [combinedRows]);
     const validDurationBucketValues = useMemo(
         () => new Set(durationBucketOptions.map((bucket) => bucket.minUs)),
         [durationBucketOptions],
@@ -219,6 +230,13 @@ const PerformanceReport = ({
     const filteredComparisonRows = useMemo(
         () => filteredComparisonRowsList[comparisonIndex] || [],
         [filteredComparisonRowsList, comparisonIndex],
+    );
+    // A comparison tab shows its own report as primary and every other report, the original
+    // primary first, beneath it. Memoised so PerfTable does not re-align its comparison sub-rows
+    // or recompute column eligibility on unrelated renders.
+    const comparisonTabComparisonRows = useMemo(
+        () => [filteredRows, ...filteredComparisonRowsList.filter((_, i) => i !== comparisonIndex)],
+        [filteredRows, filteredComparisonRowsList, comparisonIndex],
     );
 
     const filteredStackedRows = useMemo(
@@ -332,6 +350,7 @@ const PerformanceReport = ({
         setActiveMathFilterList((currentFilters) => pruneToValidValues(validMathFilterValues, currentFilters));
         setActiveBufferTypeFilterList((currentFilters) => pruneToValidValues(validBufferTypeValues, currentFilters));
         setActiveLayoutFilterList((currentFilters) => pruneToValidValues(validLayoutValues, currentFilters));
+        setActiveOpCategoryFilterList((currentFilters) => pruneToValidValues(validOpCategoryValues, currentFilters));
         // A bucket that no longer exists would filter every row out with no visible tag to explain it
         setActiveDurationBucketFilterList((currentFilters) =>
             pruneToValidValues(validDurationBucketValues, currentFilters),
@@ -340,10 +359,12 @@ const PerformanceReport = ({
         validMathFilterValues,
         validBufferTypeValues,
         validLayoutValues,
+        validOpCategoryValues,
         validDurationBucketValues,
         setActiveMathFilterList,
         setActiveBufferTypeFilterList,
         setActiveLayoutFilterList,
+        setActiveOpCategoryFilterList,
         setActiveDurationBucketFilterList,
     ]);
 
@@ -578,6 +599,14 @@ const PerformanceReport = ({
                                     updateHandler={setActiveLayoutFilterList}
                                 />
 
+                                <MultiSelectField<TypedPerfTableRow, 'op_category'>
+                                    keyName='op_category'
+                                    options={combinedRows}
+                                    placeholder='Select Op Category...'
+                                    values={activeOpCategoryFilterList}
+                                    updateHandler={setActiveOpCategoryFilterList}
+                                />
+
                                 <MultiSelectField<TypedPerfTableRow, 'math_fidelity'>
                                     keyName='math_fidelity'
                                     options={combinedRows}
@@ -633,6 +662,7 @@ const PerformanceReport = ({
                 </div>
 
                 {/* Above the table: the table's height cap assumes nothing renders below it. */}
+                <AllocationFailureSummary listings={allocationFailureListings} />
                 {hiliteHighDispatch && !isStackedView && calcHighDispatchOps(processedRows)}
 
                 <Tabs
@@ -715,10 +745,7 @@ const PerformanceReport = ({
                                 ) : (
                                     <PerfTable
                                         data={filteredComparisonRows}
-                                        comparisonData={[
-                                            filteredRows,
-                                            ...filteredComparisonRowsList.filter((_, i) => i !== comparisonIndex),
-                                        ]}
+                                        comparisonData={comparisonTabComparisonRows}
                                         filters={filters}
                                         provideMatmulAdvice={provideMatmulAdvice}
                                         hiliteHighDispatch={hiliteHighDispatch}

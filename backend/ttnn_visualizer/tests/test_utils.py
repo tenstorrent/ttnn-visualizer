@@ -19,6 +19,8 @@ from ttnn_visualizer.utils import (
     is_running_in_container,
     is_valid_profiler_ranked_entry,
     parse_bool,
+    parse_memory_config,
+    parse_memory_config_buffer_type,
     pick_cluster_descriptor_path,
     pick_mesh_descriptor_path,
     pick_profiler_config_paths,
@@ -978,3 +980,59 @@ def test_ranked_family_completeness_counts_rather_than_enumerating(tmp_path):
     assert err is None
     assert path is not None
     assert path.name == "cluster_descriptor.yaml"
+
+
+_INTERLEAVED_L1_SMALL = (
+    "MemoryConfig(memory_layout=TensorMemoryLayout::INTERLEAVED,"
+    "buffer_type=BufferType::L1_SMALL,shard_spec=std::nullopt)"
+)
+_HEIGHT_SHARDED_L1 = (
+    "MemoryConfig(memory_layout=TensorMemoryLayout::HEIGHT_SHARDED,"
+    "buffer_type=BufferType::L1,shard_spec=ShardSpec(grid={[(x=0,y=0) - (x=7,y=7)]},"
+    "shape={32, 64},orientation=ShardOrientation::ROW_MAJOR,halo=0))"
+)
+
+
+@pytest.mark.parametrize(
+    "memory_config",
+    [
+        None,
+        {},
+        "",
+        "garbage",
+        "MemoryConfig(memory_layout=TensorMemoryLayout::INTERLEAVED,shard_spec=std::nullopt)",
+    ],
+)
+def test_parse_memory_config_buffer_type_is_none_without_a_declared_type(
+    memory_config,
+):
+    assert parse_memory_config_buffer_type(memory_config) is None
+
+
+@pytest.mark.parametrize(
+    ("memory_config", "expected"),
+    [(_INTERLEAVED_L1_SMALL, "L1_SMALL"), (_HEIGHT_SHARDED_L1, "L1")],
+)
+def test_parse_memory_config_buffer_type_reads_the_declared_type(
+    memory_config, expected
+):
+    assert parse_memory_config_buffer_type(memory_config) == expected
+
+
+@pytest.mark.parametrize("memory_config", [None, {}, "", "garbage"])
+def test_parse_memory_config_is_none_for_anything_but_a_memory_config(
+    memory_config,
+):
+    assert parse_memory_config(memory_config) is None
+
+
+def test_parse_memory_config_reads_the_layout_and_shard_spec():
+    assert parse_memory_config(_HEIGHT_SHARDED_L1) == {
+        "memory_layout": "TensorMemoryLayout::HEIGHT_SHARDED",
+        "shard_spec": {
+            "grid": "[(x=0,y=0) - (x=7,y=7)]",
+            "shape": [32, 64],
+            "orientation": "ROW_MAJOR",
+            "halo": 0,
+        },
+    }

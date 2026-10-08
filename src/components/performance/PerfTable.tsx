@@ -23,6 +23,7 @@ import useSortTable, { SortingDirection } from '../../hooks/useSortTable';
 import { OperationDescription } from '../../model/APIData';
 import { hiddenPerfTableColumnsAtom, hideHostOpsAtom, mergeDevicesAtom, selectedPerfRowIdAtom } from '../../store/app';
 import PerfBoundAnalysisCoverage from './PerfBoundAnalysisCoverage';
+import PerfOpCategoryBreakdown from './PerfOpCategoryBreakdown';
 import PerfDeviceArchitecture from './PerfDeviceArchitecture';
 import PerfMultiDeviceNotice from './PerfMultiDeviceNotice';
 import PerfTableFrame from './PerfTableFrame';
@@ -73,24 +74,33 @@ const PerformanceTable = ({
     const { data: npeManifest, error: npeManifestError } = useGetNPEManifest();
     const navigate = useNavigate();
 
-    const tableFields = useMemo<TypedPerfTableRow[]>(() => {
-        if (!data) {
-            return [];
+    // Comparison sub-rows are paired with primary rows by index, so they take the primary report's
+    // sort order rather than sorting on their own values: sorted separately, a column whose value
+    // differs between reports (category, device time) would pair unrelated operations.
+    const { tableFields, sortedSourceIndices } = useMemo(() => {
+        const rows = data ?? [];
+        // Still some awkward casting here
+        const sortedRows: TypedPerfTableRow[] = [...sortTableFields(rows as [])];
+
+        // Unsorted, the order is already the source order; skip the lookup.
+        if (sortedRows.every((row, index) => row === rows[index])) {
+            return { tableFields: sortedRows, sortedSourceIndices: null };
         }
 
-        // Still some awkward casting here
-        return [...sortTableFields(data as [])];
+        const sourceIndexByRow = new Map<TypedPerfTableRow, number>(rows.map((row, index) => [row, index]));
+
+        // sortTableFields reorders the same row objects, so every lookup succeeds.
+        return { tableFields: sortedRows, sortedSourceIndices: sortedRows.map((row) => sourceIndexByRow.get(row)!) };
     }, [data, sortTableFields]);
 
-    const comparisonDataTableFields = useMemo<TypedPerfTableRow[][]>(
+    // Kept apart from the sort so a new comparisonData reference does not re-sort the primary rows.
+    // A comparison report shorter than the primary one leaves gaps, which render as empty sub-rows.
+    const comparisonDataTableFields = useMemo<(TypedPerfTableRow | undefined)[][]>(
         () =>
-            comparisonData?.map((dataset) => {
-                const parsedData = dataset;
-
-                // Still some awkward casting here
-                return [...sortTableFields(parsedData as [])];
-            }) || [],
-        [comparisonData, sortTableFields],
+            comparisonData?.map((dataset) =>
+                sortedSourceIndices ? sortedSourceIndices.map((index) => dataset[index]) : dataset,
+            ) ?? [],
+        [comparisonData, sortedSourceIndices],
     );
 
     // L1 pressure is a per-TTNN-op snapshot, so it renders only on the first device-op row of each
@@ -111,9 +121,11 @@ const PerformanceTable = ({
         return firstRows;
     }, [tableFields]);
 
+    // Read from the source datasets: the index-aligned comparison lists can hold gaps where a
+    // comparison report is shorter than the primary one, and order does not matter here.
     const rowsForColumnEligibility = useMemo(
-        () => [...tableFields, ...comparisonDataTableFields.flat()],
-        [tableFields, comparisonDataTableFields],
+        () => [...(data ?? []), ...(comparisonData?.flat() ?? [])],
+        [data, comparisonData],
     );
 
     const eligibleColumns = useMemo(
@@ -145,8 +157,8 @@ const PerformanceTable = ({
     const isReportsSynced = opIdsMap.length > 0;
     const isPrimaryActiveReport = activeReportComparisonIndex === null;
     const activeReportRows = useMemo<TypedPerfTableRow[]>(
-        () => (isPrimaryActiveReport ? tableFields : (comparisonDataTableFields[activeReportComparisonIndex] ?? [])),
-        [isPrimaryActiveReport, tableFields, comparisonDataTableFields, activeReportComparisonIndex],
+        () => (isPrimaryActiveReport ? tableFields : (comparisonData?.[activeReportComparisonIndex] ?? [])),
+        [isPrimaryActiveReport, tableFields, comparisonData, activeReportComparisonIndex],
     );
     const canShowTensorDrawer = isReportsSynced && activeReportRows.length > 0;
 
@@ -479,6 +491,8 @@ const PerformanceTable = ({
             {mergeDevices && <PerfMultiDeviceNotice />}
 
             <PerfBoundAnalysisCoverage rows={data} />
+
+            <PerfOpCategoryBreakdown rows={data} />
 
             <PerfTableToolbar eligibleColumns={eligibleColumns} />
 

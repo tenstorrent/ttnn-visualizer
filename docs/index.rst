@@ -27,4 +27,3 @@ Welcome to TT-NN Visualizer documentation!
    src/troubleshooting
    src/startup-requirements
    src/event-logging
-   src/local-prometheus-collection

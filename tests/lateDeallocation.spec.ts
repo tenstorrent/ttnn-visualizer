@@ -9,13 +9,16 @@ import {
     NO_CONSUMER_OPERATION_ID,
     buildLateDeallocationReports,
     coalesceLateDeallocationRunStarts,
+    getHeldTensorCountSummary,
     getLastValidConsumer,
-    getLateDeallocationCountSummary,
     getLateDeallocationReport,
     getLateDeallocationSummary,
+    getOperationLateDeallocationAvailability,
+    getOperationLateDeallocationCount,
+    getRunStartCountSummary,
     selectLateDeallocationRunStarts,
 } from '../src/functions/lateDeallocation';
-import { LATE_DEALLOC_OPPORTUNITY_TEXT } from '../src/definitions/LateDeallocation';
+import { LATE_DEALLOC_OPPORTUNITY_TEXT, LateDeallocationAvailability } from '../src/definitions/LateDeallocation';
 import { Tensor } from '../src/model/APIData';
 import { buildTensorDeallocationReport as buildReport } from './helpers/lateDeallocationFixtures';
 
@@ -439,20 +442,16 @@ describe('getLateDeallocationSummary', () => {
     });
 });
 
-describe('getLateDeallocationCountSummary', () => {
+describe('getRunStartCountSummary', () => {
     // The count counts rows where a tensor *becomes* stale, while the overlay
     // hatches every row that keeps holding it — copy about operations
     // "holding" a tensor read as a contradiction beside dozens of hatched rows.
     it('uses the singular noun for one operation', () => {
-        expect(getLateDeallocationCountSummary(1)).toBe(
-            '1 operation where a tensor starts being held past its last use',
-        );
+        expect(getRunStartCountSummary(1)).toBe('1 operation where a tensor starts being held past its last use');
     });
 
     it('uses the plural noun for several operations', () => {
-        expect(getLateDeallocationCountSummary(4)).toBe(
-            '4 operations where a tensor starts being held past its last use',
-        );
+        expect(getRunStartCountSummary(4)).toBe('4 operations where a tensor starts being held past its last use');
     });
 });
 
@@ -515,5 +514,71 @@ describe('coalesceLateDeallocationRunStarts', () => {
         expect(
             coalesceLateDeallocationRunStarts({ runStarts: [buildRunStart(1, 0, 1)], rowCount: 0, maxDots: 300 }),
         ).toEqual([]);
+    });
+});
+
+describe('getHeldTensorCountSummary', () => {
+    it('uses the singular for one tensor', () => {
+        expect(getHeldTensorCountSummary(1)).toBe('1 tensor held past its last use at this operation');
+    });
+
+    it('uses the plural for several tensors', () => {
+        expect(getHeldTensorCountSummary(3)).toBe('3 tensors held past their last use at this operation');
+    });
+
+    it('uses the plural for zero, so a clean operation still explains the count', () => {
+        expect(getHeldTensorCountSummary(0)).toBe('0 tensors held past their last use at this operation');
+    });
+});
+
+describe('getOperationLateDeallocationAvailability', () => {
+    it('reports a failed query as failed, whatever the range', () => {
+        expect(
+            getOperationLateDeallocationAvailability({ status: 'error', operationRange: [5, 6], operationId: 1 }),
+        ).toBe(LateDeallocationAvailability.FAILED);
+    });
+
+    it('reports a pending query as loading', () => {
+        expect(
+            getOperationLateDeallocationAvailability({ status: 'pending', operationRange: null, operationId: 1 }),
+        ).toBe(LateDeallocationAvailability.LOADING);
+    });
+
+    it('treats a missing range as covering every operation', () => {
+        expect(
+            getOperationLateDeallocationAvailability({ status: 'success', operationRange: null, operationId: 99 }),
+        ).toBe(LateDeallocationAvailability.READY);
+    });
+
+    // `filterByOperationRange` keeps both ends, so they must count as covered.
+    it.each([
+        [4, LateDeallocationAvailability.OUT_OF_RANGE],
+        [5, LateDeallocationAvailability.READY],
+        [8, LateDeallocationAvailability.READY],
+        [9, LateDeallocationAvailability.OUT_OF_RANGE],
+    ])('places operation %i against an inclusive [5, 8] range', (operationId, expected) => {
+        expect(
+            getOperationLateDeallocationAvailability({ status: 'success', operationRange: [5, 8], operationId }),
+        ).toBe(expected);
+    });
+});
+
+describe('getOperationLateDeallocationCount', () => {
+    it('passes the count through when the report covers the operation', () => {
+        expect(getOperationLateDeallocationCount(2, LateDeallocationAvailability.READY)).toEqual({
+            count: 2,
+            summary: '2 tensors held past their last use at this operation',
+        });
+    });
+
+    it.each([
+        LateDeallocationAvailability.LOADING,
+        LateDeallocationAvailability.FAILED,
+        LateDeallocationAvailability.OUT_OF_RANGE,
+    ])('withholds the count when %s', (availability) => {
+        const { count, summary } = getOperationLateDeallocationCount(0, availability);
+
+        expect(count).toBeNull();
+        expect(summary).not.toMatch(/^0 /);
     });
 });

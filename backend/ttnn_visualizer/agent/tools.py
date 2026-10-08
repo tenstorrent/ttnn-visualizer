@@ -86,7 +86,7 @@ def _rounded(value: Optional[float]) -> Optional[float]:
     return None if value is None else round(value, 3)
 
 
-def _canonical_report(registry: ReportRegistry, handle: str) -> Dict:
+def canonical_report(registry: ReportRegistry, handle: str) -> Dict:
     """One generated report per handle; see `ReportRegistry.cached_report`."""
     return registry.cached_report(handle, _generate_canonical_report)
 
@@ -137,6 +137,26 @@ def _sub_devices(rows: List[Dict]) -> set:
     }
 
 
+def project_row(row: Dict, metric: str = "device_time") -> Dict[str, object]:
+    """One performance row as every tool reports it.
+
+    Shared so a row reads the same wherever it appears: `top_ops` ranks it and
+    `operation_detail` lists it under the operation that launched it, and two
+    projections of one CSV row that disagreed would be the drift the link exists
+    to prevent.
+    """
+    return {
+        "id": row.get("id"),
+        "op_code": row.get("op_code") or row.get("raw_op_code"),
+        metric: _rounded(_as_number(row.get(SORTABLE_METRICS[metric]))),
+        "cores": _as_number(row.get("cores")),
+        "bound": row.get("bound") or None,
+        # Without it a null bound reads as "fine" when the op was never modelled (#2064).
+        "bound_analysis": row.get("bound_analysis") or None,
+        "op_category": row.get("op_category") or None,
+    }
+
+
 def top_ops(
     registry: ReportRegistry,
     handle: str,
@@ -149,7 +169,7 @@ def top_ops(
             f"unknown metric {by!r}; expected one of {', '.join(sorted(SORTABLE_METRICS))}"
         )
 
-    rows = _canonical_report(registry, handle).get("report", [])
+    rows = canonical_report(registry, handle).get("report", [])
     field = SORTABLE_METRICS[by]
 
     ranked = sorted(
@@ -161,13 +181,9 @@ def top_ops(
     total: float = sum(_as_number(row.get(field)) or 0.0 for row in rows)
     ops = [
         {
-            "id": row.get("id"),
-            "op_code": row.get("op_code") or row.get("raw_op_code"),
-            by: _rounded(_as_number(row.get(field))),
-            "cores": _as_number(row.get("cores")),
+            **project_row(row, by),
             "device": row.get("device"),
             "sub_device_id": row.get("sub_device_id") or None,
-            "bound": row.get("bound") or None,
             # The projection keeps signpost rows deliberately, so the field that
             # tells a marker from an operation has to survive into the response.
             "op_type": row.get("op_type") or None,
@@ -289,7 +305,7 @@ def diff_reports(
     sub_devices: set = set()
 
     def totals_by_op_code(handle: str) -> Dict[str, Dict[str, float]]:
-        rows = _canonical_report(registry, handle).get("report", [])
+        rows = canonical_report(registry, handle).get("report", [])
         sub_devices.update(_sub_devices(rows))
         totals: Dict[str, Dict[str, float]] = defaultdict(
             lambda: {"total": 0.0, "count": 0.0}
@@ -362,7 +378,9 @@ def _stderr_log() -> None:
 __all__ = [
     "CANONICAL_PROJECTION",
     "SORTABLE_METRICS",
+    "canonical_report",
     "diff_reports",
+    "project_row",
     "top_ops",
     "zone_timings",
 ]

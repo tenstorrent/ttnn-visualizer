@@ -7,10 +7,11 @@ import { cleanup, fireEvent, render, screen, within } from '@testing-library/rea
 import { useAtomValue } from 'jotai';
 import { Mock, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import PerfTable from '../src/components/performance/PerfTable';
-import { ColumnKeys } from '../src/definitions/PerfTable';
+import { BoundType, ColumnKeys } from '../src/definitions/PerfTable';
 import { TypedPerfTableRow, signpostRowDefaults } from '../src/model/PerfTable';
 import { PERF_HEURISTIC_FLAG_DEFINITIONS, PerfHeuristicFlag } from '../src/definitions/PerfHeuristics';
 import { OpType } from '../src/definitions/Performance';
+import { OperationCategories } from '../src/definitions/StackedPerfTable';
 import { TEST_IDS } from '../src/definitions/TestIds';
 import { useGetNPEManifest, useOpToPerfIdFiltered, useOperationsList, usePerfMeta } from '../src/hooks/useAPI';
 import { hiddenPerfTableColumnsAtom, selectedPerfRowIdAtom } from '../src/store/app';
@@ -78,6 +79,8 @@ afterEach(cleanup);
 
 beforeEach(() => {
     (useGetNPEManifest as Mock).mockReturnValue({ data: [], error: null });
+    // Reset per test: a value left by an earlier test would make results depend on run order.
+    (useOpToPerfIdFiltered as Mock).mockReturnValue([]);
     (useOperationsList as Mock).mockReturnValue({ data: [] });
     (usePerfMeta as Mock).mockReturnValue({ data: null, isLoading: false });
 });
@@ -389,6 +392,233 @@ describe('PerfTable column visibility', () => {
         expect(within(comparisonTableRow as HTMLElement).getByText('72')).toBeInTheDocument();
     });
 
+    it('renders the op category beside OP Code', () => {
+        renderTable([baseRow({ id: 1, raw_op_code: 'AllGather', op_category: OperationCategories.CCL })]);
+
+        const table = screen.getByRole('table');
+        const headers = Array.from(table.querySelectorAll('thead th')).map((cell) => cell.textContent);
+
+        expect(headers.indexOf('Category')).toBe(headers.indexOf('OP Code') + 1);
+        expect(within(table).getByText(OperationCategories.CCL)).toBeInTheDocument();
+    });
+
+    it('keeps the Host category on a host op, whose other device columns are blank', () => {
+        renderTable([
+            baseRow({
+                id: 1,
+                raw_op_code: 'aten::embedding (torch)',
+                bound: BoundType.HOST,
+                op_category: OperationCategories.HOST,
+            }),
+        ]);
+
+        expect(within(screen.getByRole('table')).getByText(OperationCategories.HOST)).toBeInTheDocument();
+    });
+
+    it('renders the op category on comparison rows', () => {
+        const comparisonRow = baseRow({ id: 99, raw_op_code: 'Tilize', op_category: OperationCategories.DM });
+
+        renderTable([matmulRow], { comparisonData: [[comparisonRow]] });
+
+        expect(screen.getByText(OperationCategories.DM).closest('tr')).toHaveClass('comparison-row');
+    });
+
+    describe('sorting with comparison reports', () => {
+        const sortByCategory = () => fireEvent.click(screen.getByRole('button', { name: /^Category/ }));
+        // Each comparison sub-row must sit directly under the primary row it was aligned with.
+        const rowOpCodes = () =>
+            Array.from(screen.getByRole('table').querySelectorAll('tbody tr')).map((tableRow) =>
+                ['AllGather', 'Matmul', 'Reshape MISSING'].find((opCode) => tableRow.textContent?.includes(opCode)),
+            );
+
+        it('keeps comparison rows with their primary row when categories differ', () => {
+            renderTable(
+                [
+                    baseRow({ id: 1, raw_op_code: 'Matmul', op_category: OperationCategories.COMPUTE }),
+                    baseRow({ id: 2, raw_op_code: 'AllGather', op_category: OperationCategories.CCL }),
+                ],
+                {
+                    comparisonData: [
+                        [
+                            baseRow({ id: 11, raw_op_code: 'Matmul', op_category: OperationCategories.COMPUTE }),
+                            baseRow({ id: 12, raw_op_code: 'AllGather', op_category: OperationCategories.OTHER }),
+                        ],
+                    ],
+                },
+            );
+
+            sortByCategory();
+
+            expect(rowOpCodes()).toEqual(['AllGather', 'AllGather', 'Matmul', 'Matmul']);
+        });
+
+        it('keeps a missing-op placeholder with its primary row', () => {
+            renderTable(
+                [
+                    baseRow({ id: 1, raw_op_code: 'AllGather', op_category: OperationCategories.CCL }),
+                    baseRow({ id: 2, raw_op_code: 'Matmul', op_category: OperationCategories.COMPUTE }),
+                ],
+                {
+                    comparisonData: [
+                        [
+                            baseRow({ id: 11, raw_op_code: 'Reshape MISSING', op_category: null }),
+                            baseRow({ id: 12, raw_op_code: 'Matmul', op_category: OperationCategories.COMPUTE }),
+                        ],
+                    ],
+                },
+            );
+
+            sortByCategory();
+
+            expect(rowOpCodes()).toEqual(['AllGather', 'Reshape MISSING', 'Matmul', 'Matmul']);
+        });
+
+        it('renders an empty sub-row where a comparison report is shorter', () => {
+            renderTable(
+                [
+                    baseRow({ id: 1, raw_op_code: 'Matmul', op_category: OperationCategories.COMPUTE }),
+                    baseRow({ id: 2, raw_op_code: 'AllGather', op_category: OperationCategories.CCL }),
+                ],
+                {
+                    comparisonData: [
+                        [baseRow({ id: 11, raw_op_code: 'Matmul', op_category: OperationCategories.COMPUTE })],
+                    ],
+                },
+            );
+
+            sortByCategory();
+
+            expect(rowOpCodes()).toEqual(['AllGather', undefined, 'Matmul', 'Matmul']);
+        });
+
+        it('sorts descending without separating a missing-op placeholder from its primary row', () => {
+            renderTable(
+                [
+                    // TM sorts first descending, so the placeholder's primary row must lead.
+                    baseRow({ id: 1, raw_op_code: 'AllGather', op_category: OperationCategories.TM }),
+                    baseRow({ id: 2, raw_op_code: 'Matmul', op_category: OperationCategories.COMPUTE }),
+                ],
+                {
+                    comparisonData: [
+                        [
+                            baseRow({ id: 11, raw_op_code: 'Reshape MISSING', op_category: null }),
+                            baseRow({ id: 12, raw_op_code: 'Matmul', op_category: OperationCategories.COMPUTE }),
+                        ],
+                    ],
+                },
+            );
+
+            sortByCategory();
+            sortByCategory();
+
+            expect(rowOpCodes()).toEqual(['AllGather', 'Reshape MISSING', 'Matmul', 'Matmul']);
+        });
+
+        it('keeps sub-rows aligned when sorting a numeric column whose values differ between reports', () => {
+            renderTable(
+                [
+                    baseRow({ id: 1, raw_op_code: 'AllGather', device_time: 10 }),
+                    baseRow({ id: 2, raw_op_code: 'Matmul', device_time: 5 }),
+                ],
+                {
+                    comparisonData: [
+                        [
+                            baseRow({ id: 11, raw_op_code: 'AllGather', device_time: 1 }),
+                            baseRow({ id: 12, raw_op_code: 'Matmul', device_time: 20 }),
+                        ],
+                    ],
+                },
+            );
+
+            fireEvent.click(screen.getByRole('button', { name: /^Device Time/ }));
+
+            expect(rowOpCodes()).toEqual(['Matmul', 'Matmul', 'AllGather', 'AllGather']);
+        });
+
+        it('leaves sub-rows in source order when the sort does not change the primary order', () => {
+            renderTable(
+                [
+                    baseRow({ id: 1, raw_op_code: 'AllGather', device_time: 5 }),
+                    baseRow({ id: 2, raw_op_code: 'Matmul', device_time: 10 }),
+                ],
+                {
+                    comparisonData: [
+                        [
+                            baseRow({ id: 11, raw_op_code: 'AllGather', device_time: 20 }),
+                            baseRow({ id: 12, raw_op_code: 'Matmul', device_time: 1 }),
+                        ],
+                    ],
+                },
+            );
+
+            fireEvent.click(screen.getByRole('button', { name: /^Device Time/ }));
+
+            expect(rowOpCodes()).toEqual(['AllGather', 'AllGather', 'Matmul', 'Matmul']);
+        });
+
+        describe('on a comparison-report tab', () => {
+            // The primary rows are the selected comparison report; comparisonData[0] holds the
+            // active profiler report, whose sub-rows carry the tensor drawer trigger.
+            const comparisonReportRows = [
+                baseRow({ id: 1, raw_op_code: 'Matmul', op_category: OperationCategories.COMPUTE, op: undefined }),
+                baseRow({ id: 2, raw_op_code: 'AllGather', op_category: OperationCategories.CCL, op: undefined }),
+            ];
+
+            it('opens the drawer on the active report row aligned with the primary row', () => {
+                (useOpToPerfIdFiltered as Mock).mockReturnValue([
+                    { opId: 21, perfId: '11' },
+                    { opId: 22, perfId: '12' },
+                ]);
+                renderTable(comparisonReportRows, {
+                    comparisonData: [
+                        [
+                            baseRow({
+                                id: 11,
+                                raw_op_code: 'Matmul',
+                                op_category: OperationCategories.COMPUTE,
+                                op: 21,
+                            }),
+                            baseRow({
+                                id: 12,
+                                raw_op_code: 'AllGather',
+                                op_category: OperationCategories.OTHER,
+                                op: 22,
+                            }),
+                        ],
+                    ],
+                    activeReportComparisonIndex: 0,
+                });
+
+                sortByCategory();
+
+                const [firstTrigger] = screen.getAllByTestId(TEST_IDS.PERF_TENSOR_DRAWER_OPEN_BUTTON);
+                fireEvent.click(firstTrigger);
+
+                const selectedRow = firstTrigger.closest('tr')!;
+                expect(selectedRow).toHaveClass('comparison-row', 'is-selected');
+                expect(selectedRow).toHaveTextContent('AllGather');
+                expect(selectedRow.previousElementSibling).toHaveTextContent('AllGather');
+            });
+
+            it('puts no trigger on the gap where the active report is shorter', () => {
+                (useOpToPerfIdFiltered as Mock).mockReturnValue([{ opId: 21, perfId: '11' }]);
+                renderTable(comparisonReportRows, {
+                    comparisonData: [
+                        [baseRow({ id: 11, raw_op_code: 'Matmul', op_category: OperationCategories.COMPUTE, op: 21 })],
+                    ],
+                    activeReportComparisonIndex: 0,
+                });
+
+                sortByCategory();
+
+                const triggers = screen.getAllByTestId(TEST_IDS.PERF_TENSOR_DRAWER_OPEN_BUTTON);
+                expect(triggers).toHaveLength(1);
+                expect(triggers[0].closest('tr')).toHaveTextContent('Matmul');
+                expect(rowOpCodes()).toEqual(['AllGather', undefined, 'Matmul', 'Matmul']);
+            });
+        });
+    });
+
     it('keeps OP Code visible even when it is listed as hidden', () => {
         renderTable([matmulRow], { hiddenColumns: [ColumnKeys.OpCode, ColumnKeys.DeviceTime] });
 
@@ -420,7 +650,7 @@ describe('PerfTable column visibility', () => {
             cell.textContent?.includes('device ops'),
         );
 
-        expect(Number(opCodeFooter?.getAttribute('colspan'))).toBe(4);
+        expect(Number(opCodeFooter?.getAttribute('colspan'))).toBe(5);
     });
 });
 

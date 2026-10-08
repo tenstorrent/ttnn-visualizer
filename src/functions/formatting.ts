@@ -101,6 +101,10 @@ export const formatDuration = (ns: number): string => {
     return `${formatSize(ns / 1_000_000_000, 2)} s`;
 };
 
+// One decimal, since whole percents print 0% for a short op on a large graph.
+export const formatShareOfTotal = (part: number, total: number): string =>
+    `${(total > 0 ? (part / total) * 100 : 0).toFixed(1)}%`;
+
 /** Remote folder sync timestamps are Unix epoch seconds. */
 export const getUTCFromEpoch = (epoch: number): Date => new Date(epoch * 1000);
 

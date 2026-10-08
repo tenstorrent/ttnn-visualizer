@@ -314,6 +314,8 @@ module.exports = defineConfig([
         '**/myenv',
         '**/node_modules',
         '**/ttnn_env',
+        // Agent worktrees are full checkouts of other branches.
+        '.claude/worktrees',
         'eslint.config.cjs',
         'src/libs/blueprintjs/legacySassSvgInlinerFactory.js',
     ]),

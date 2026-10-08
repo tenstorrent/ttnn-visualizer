@@ -24,17 +24,22 @@ import {
     durationBucketFilterListAtom,
     layoutFilterListAtom,
     mathFilterListAtom,
+    opCategoryFilterListAtom,
     rawOpCodeFilterListAtom,
     selectedPerfRowIdAtom,
     selectedPerformanceRangeAtom,
 } from '../src/store/app';
 import { BufferType } from '../src/model/BufferType';
 import { DeviceOperationLayoutTypes } from '../src/model/APIData';
+import { OperationCategories } from '../src/definitions/StackedPerfTable';
 import { L1PressureStatus } from '../src/model/L1Pressure';
 import { PerfTableRow } from '../src/model/PerfTable';
 import { PerfHeuristicFlag } from '../src/definitions/PerfHeuristics';
 import { OpType } from '../src/definitions/Performance';
 import { TestProviders } from './helpers/TestProviders';
+import { makeAllocationFailure } from './helpers/allocationFailure';
+import { useAllocationFailures } from '../src/hooks/useAllocationFailures';
+import { AllocationFailure } from '../src/model/AllocationFailure';
 
 const perfReportProps = vi.hoisted(() => vi.fn());
 
@@ -47,6 +52,10 @@ vi.mock('../src/hooks/useAPI.tsx', () => ({
     usePerformanceComparisonReport: vi.fn(),
     usePerformanceRange: vi.fn(),
     usePerformanceReport: vi.fn(),
+}));
+
+vi.mock('../src/hooks/useAllocationFailures', () => ({
+    useAllocationFailures: vi.fn(),
 }));
 
 vi.mock('../src/functions/getServerConfig', () => ({
@@ -117,6 +126,10 @@ beforeEach(() => {
     (useL1PressureByOperation as Mock).mockReturnValue({ status: L1PressureStatus.Unavailable, data: null });
     (usePerfMeta as Mock).mockReturnValue({ data: undefined, isLoading: false });
     (usePerfMetas as Mock).mockReturnValue([]);
+    (useAllocationFailures as Mock).mockReturnValue({
+        listings: [],
+        allocationFailureByOpId: new Map<number, AllocationFailure>(),
+    });
 });
 
 function formatFilterProbe(values: unknown[]): string {
@@ -129,6 +142,7 @@ function PerformanceController() {
     const [mathFilterList, setMathFilterList] = useAtom(mathFilterListAtom);
     const [bufferTypeFilterList, setBufferTypeFilterList] = useAtom(bufferTypeFilterListAtom);
     const [layoutFilterList, setLayoutFilterList] = useAtom(layoutFilterListAtom);
+    const [opCategoryFilterList, setOpCategoryFilterList] = useAtom(opCategoryFilterListAtom);
     const [durationBucketFilterList, setDurationBucketFilterList] = useAtom(durationBucketFilterListAtom);
     const setReport = useSetAtom(activePerformanceReportAtom);
 
@@ -139,6 +153,7 @@ function PerformanceController() {
             <span data-testid='math-filter-probe'>{formatFilterProbe(mathFilterList)}</span>
             <span data-testid='buffer-type-filter-probe'>{formatFilterProbe(bufferTypeFilterList)}</span>
             <span data-testid='layout-filter-probe'>{formatFilterProbe(layoutFilterList)}</span>
+            <span data-testid='op-category-filter-probe'>{formatFilterProbe(opCategoryFilterList)}</span>
             <span data-testid='duration-bucket-filter-probe'>{formatFilterProbe(durationBucketFilterList)}</span>
             <button
                 type='button'
@@ -155,6 +170,7 @@ function PerformanceController() {
                     setMathFilterList([MATH_FIDELITY]);
                     setBufferTypeFilterList([BufferType.L1]);
                     setLayoutFilterList([DeviceOperationLayoutTypes.INTERLEAVED]);
+                    setOpCategoryFilterList([OperationCategories.CCL]);
                     setDurationBucketFilterList([DURATION_BUCKET_MIN_US]);
                 }}
             >
@@ -351,6 +367,51 @@ describe('Performance route', () => {
         expect(lastProps?.comparisonMaxCores).toEqual([130]);
     });
 
+    it('marks active rows with their linked failure, lists it, and leaves comparison rows unmarked', () => {
+        const failure = makeAllocationFailure({ operationId: 7 });
+        const listings = [{ failure, failedDeviceOperations: ['Conv2d'], linkedRowCount: 1 }];
+
+        (useAllocationFailures as Mock).mockReturnValue({
+            listings,
+            allocationFailureByOpId: new Map([[7, failure]]),
+        });
+        (useOpToPerfIdFiltered as Mock).mockReturnValue([{ perfId: '1', opId: 7 }]);
+        (usePerformanceReport as Mock).mockReturnValue({
+            data: { report: [DRAM_PERF_ROW], stacked_report: [], signposts: [] },
+            isLoading: false,
+            error: null,
+        });
+        // Same perf id, so the op-id lookup resolves for the comparison row too: only the
+        // null failure map keeps the active report's failure off it.
+        (usePerformanceComparisonReport as Mock).mockReturnValue({
+            data: [{ report: [DRAM_PERF_ROW], stacked_report: [] }],
+        });
+        (usePerformanceRange as Mock).mockReturnValue([1, 1]);
+        (usePerfMetas as Mock).mockReturnValue([{ max_cores: 130, architecture: null, frequency: null }]);
+
+        render(
+            <TestProviders
+                initialAtomValues={[
+                    [activePerformanceReportAtom, REPORT_A],
+                    [selectedPerformanceRangeAtom, [1, 1]],
+                ]}
+            >
+                <Performance />
+            </TestProviders>,
+        );
+
+        const lastProps = perfReportProps.mock.calls.at(-1)?.[0];
+        const [activeRow] = lastProps?.data ?? [];
+        const [comparisonRow] = lastProps?.comparisonData?.[0] ?? [];
+
+        expect(lastProps?.allocationFailureListings).toBe(listings);
+        expect(activeRow?.allocation_failure).toBe(failure);
+        expect(activeRow?.heuristicFlags).toContain(PerfHeuristicFlag.ALLOCATION_FAILURE);
+        expect(comparisonRow?.op).toBe(7);
+        expect(comparisonRow?.allocation_failure).toBeNull();
+        expect(comparisonRow?.heuristicFlags).not.toContain(PerfHeuristicFlag.ALLOCATION_FAILURE);
+    });
+
     it('clears all table chip filters when the active performance report changes', () => {
         render(
             <TestProviders>
@@ -365,6 +426,7 @@ describe('Performance route', () => {
         expect(screen.getByTestId('math-filter-probe')).toHaveTextContent(MATH_FIDELITY);
         expect(screen.getByTestId('buffer-type-filter-probe')).toHaveTextContent(String(BufferType.L1));
         expect(screen.getByTestId('layout-filter-probe')).toHaveTextContent(DeviceOperationLayoutTypes.INTERLEAVED);
+        expect(screen.getByTestId('op-category-filter-probe')).toHaveTextContent(OperationCategories.CCL);
         expect(screen.getByTestId('duration-bucket-filter-probe')).toHaveTextContent(String(DURATION_BUCKET_MIN_US));
 
         fireEvent.click(screen.getByTestId('set-report-b'));
@@ -373,6 +435,7 @@ describe('Performance route', () => {
         expect(screen.getByTestId('math-filter-probe')).toHaveTextContent('empty');
         expect(screen.getByTestId('buffer-type-filter-probe')).toHaveTextContent('empty');
         expect(screen.getByTestId('layout-filter-probe')).toHaveTextContent('empty');
+        expect(screen.getByTestId('op-category-filter-probe')).toHaveTextContent('empty');
         expect(screen.getByTestId('duration-bucket-filter-probe')).toHaveTextContent('empty');
     });
 
@@ -395,6 +458,7 @@ describe('Performance route', () => {
         expect(screen.getByTestId('math-filter-probe')).toHaveTextContent(MATH_FIDELITY);
         expect(screen.getByTestId('buffer-type-filter-probe')).toHaveTextContent(String(BufferType.L1));
         expect(screen.getByTestId('layout-filter-probe')).toHaveTextContent(DeviceOperationLayoutTypes.INTERLEAVED);
+        expect(screen.getByTestId('op-category-filter-probe')).toHaveTextContent(OperationCategories.CCL);
         expect(screen.getByTestId('duration-bucket-filter-probe')).toHaveTextContent(String(DURATION_BUCKET_MIN_US));
     });
 
@@ -433,6 +497,7 @@ describe('Performance route', () => {
         expect(screen.getByTestId('math-filter-probe')).toHaveTextContent(MATH_FIDELITY);
         expect(screen.getByTestId('buffer-type-filter-probe')).toHaveTextContent(String(BufferType.L1));
         expect(screen.getByTestId('layout-filter-probe')).toHaveTextContent(DeviceOperationLayoutTypes.INTERLEAVED);
+        expect(screen.getByTestId('op-category-filter-probe')).toHaveTextContent(OperationCategories.CCL);
         expect(screen.getByTestId('duration-bucket-filter-probe')).toHaveTextContent(String(DURATION_BUCKET_MIN_US));
     });
 

@@ -2,8 +2,6 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { OpType } from './Performance';
-
 export enum OperationCategories {
     CCL = 'CCL',
     COMPUTE = 'Compute',
@@ -55,7 +53,6 @@ export interface StackedPerfRow {
     [StackedColumnKeys.FlopsMean]: string;
     [StackedColumnKeys.FlopsStd]: string;
     [StackedColumnKeys.FlopsWeightedMean]: string;
-    op_type: OpType;
 }
 
 export interface TypedStackedPerfRow extends Omit<

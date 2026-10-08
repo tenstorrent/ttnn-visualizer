@@ -169,6 +169,14 @@ describe('centerPanShift', () => {
         expect((offScreen.minX + offScreen.maxX) / 2 + dx).toBeCloseTo(PANE.width / 2, 5);
         expect((offScreen.minY + offScreen.maxY) / 2 + dy).toBeCloseTo(TOOLBAR + (PANE.height - TOOLBAR) / 2, 5);
     });
+
+    it('centres in the width the side column leaves', () => {
+        const SIDE = 300;
+        const bounds = boundsOf(300, TOOLBAR + 100, 200, 60);
+        const { dx } = centerPanShift(bounds, viewport, PANE, TOOLBAR, SIDE);
+
+        expect((bounds.minX + bounds.maxX) / 2 + dx).toBeCloseTo((PANE.width - SIDE) / 2, 5);
+    });
 });
 
 describe('revealPanShift', () => {
@@ -211,6 +219,23 @@ describe('revealPanShift', () => {
         const tall = boundsOf(300, 0, 200, PANE.height * 2);
 
         expect(revealPanShift(tall, viewport, PANE, TOOLBAR).dy).toBe(TOOLBAR + MARGIN);
+    });
+
+    it('treats the band behind the side column as unusable', () => {
+        // A row in the slowest-operations list must not locate a node behind the list. #1612
+        const SIDE = 300;
+        const behindSide = boundsOf(PANE.width - 200, TOOLBAR + 100, 100, 60);
+
+        expect(revealPanShift(behindSide, viewport, PANE, TOOLBAR).dx).toBe(0);
+        expect(revealPanShift(behindSide, viewport, PANE, TOOLBAR, SIDE).dx).toBe(
+            PANE.width - SIDE - MARGIN - (PANE.width - 100),
+        );
+    });
+
+    it('leaves the vertical axis alone — the side column only eats the right', () => {
+        const behindSide = boundsOf(PANE.width - 200, TOOLBAR + 100, 100, 60);
+
+        expect(revealPanShift(behindSide, viewport, PANE, TOOLBAR, 300).dy).toBe(0);
     });
 });
 

@@ -43,6 +43,8 @@ const PLACEHOLDER_ARRAY_SIZE = 50;
 const OPERATION_EL_HEIGHT = 39; // Estimated size of each element in px
 const TOTAL_SHADE_HEIGHT = 100; // Total height in px of 'scroll-shade' pseudo elements
 const HIGH_CONSUMER_INTENT = Intent.DANGER;
+// Host tensors, and any other whose memory config declares no buffer type.
+const NO_BUFFER_TYPE_LABEL = 'No buffer type';
 
 const TensorList = () => {
     'use no memo';
@@ -98,9 +100,7 @@ const TensorList = () => {
             }
 
             if (bufferTypeFilters && bufferTypeFilters?.length > 0) {
-                tensors = tensors.filter(
-                    (tensor) => tensor?.buffer_type !== null && bufferTypeFilters.includes(tensor.buffer_type),
-                );
+                tensors = tensors.filter((tensor) => bufferTypeFilters.includes(tensor.buffer_type));
             }
 
             if (showHighConsumerTensors) {
@@ -293,7 +293,8 @@ const TensorList = () => {
                     placeholder='Buffer type filter...'
                     values={bufferTypeFilters}
                     updateHandler={setBufferTypeFilters}
-                    labelFormatter={(value) => (value === null ? 'Unknown' : BufferTypeLabel[value])}
+                    labelFormatter={(value) => (value === null ? NO_BUFFER_TYPE_LABEL : BufferTypeLabel[value])}
+                    includeNull
                 />
 
                 <ButtonGroup variant={ButtonVariant.MINIMAL}>

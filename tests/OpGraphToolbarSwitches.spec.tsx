@@ -8,7 +8,12 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 
 import OpGraphToolbar from '../src/components/operation-graph/OpGraphToolbar';
 import { OpGraphGrouping } from '../src/components/operation-graph/opGraphTypes';
-import { CRITICAL_PATH_TOOLTIP, PERF_OVERLAY_TOOLTIP, PerfOverlayStatus } from '../src/definitions/PerfOverlayStatus';
+import {
+    CRITICAL_PATH_TOOLTIP,
+    HOT_OPS_TOOLTIP,
+    PERF_OVERLAY_TOOLTIP,
+    PerfOverlayStatus,
+} from '../src/definitions/PerfOverlayStatus';
 import { GraphFilterMode } from '../src/definitions/GraphFilterMode';
 
 interface RenderToolbarOptions {
@@ -20,6 +25,8 @@ interface RenderToolbarOptions {
     status: PerfOverlayStatus;
     onPerfOverlayChange?: (next: boolean) => void;
     onCriticalPathChange?: (next: boolean) => void;
+    isHotOpsActive?: boolean;
+    onHotOpsChange?: (next: boolean) => void;
     onDimUnrelatedEdgesChange?: (next: boolean) => void;
     isDisabled?: boolean;
     hasBlocks?: boolean;
@@ -33,6 +40,8 @@ const renderToolbar = ({
     status,
     onPerfOverlayChange = vi.fn(),
     onCriticalPathChange = vi.fn(),
+    isHotOpsActive = false,
+    onHotOpsChange = vi.fn(),
     onDimUnrelatedEdgesChange = vi.fn(),
     isDisabled = false,
     hasBlocks = false,
@@ -75,6 +84,8 @@ const renderToolbar = ({
             onPerfOverlayChange={onPerfOverlayChange}
             isCriticalPathActive={false}
             onCriticalPathChange={onCriticalPathChange}
+            isHotOpsActive={isHotOpsActive}
+            onHotOpsChange={onHotOpsChange}
             perfOverlayStatus={status}
             linkedOpCount={180}
             totalOpCount={302}
@@ -97,6 +108,7 @@ const switchNamed = (label: RegExp) => {
 
 const perfOverlaySwitch = () => switchNamed(/^Perf overlay/);
 const criticalPathSwitch = () => switchNamed(/^Highlight critical path/);
+const hotOpsSwitch = () => switchNamed(/^Slowest operations/);
 
 afterEach(cleanup);
 
@@ -183,6 +195,55 @@ describe('critical path switch', () => {
     });
 });
 
+describe('slowest operations switch', () => {
+    it('is operable once the reports line up', () => {
+        renderToolbar({ status: PerfOverlayStatus.READY });
+
+        expect(hotOpsSwitch().input).toBeEnabled();
+        expect(hotOpsSwitch().input).not.toBeChecked();
+    });
+
+    it.each([
+        ['no report loaded', PerfOverlayStatus.UNAVAILABLE, false],
+        ['a report that does not match', PerfOverlayStatus.UNLINKED, false],
+        ['a graph still being laid out', PerfOverlayStatus.READY, true],
+    ])('cannot be turned on with %s', (_label, status, isDisabled) => {
+        // The list ranks the overlay's durations, so it shares the overlay's gate.
+        renderToolbar({ status, isDisabled });
+
+        expect(hotOpsSwitch().input).toBeDisabled();
+    });
+
+    it('turns on when toggled, apart from the other perf switches', () => {
+        const onHotOpsChange = vi.fn();
+        const onPerfOverlayChange = vi.fn();
+        renderToolbar({ status: PerfOverlayStatus.READY, onHotOpsChange, onPerfOverlayChange });
+
+        fireEvent.click(hotOpsSwitch().input);
+
+        expect(onHotOpsChange).toHaveBeenCalledWith(true);
+        expect(onPerfOverlayChange).not.toHaveBeenCalled();
+    });
+
+    it('reads as on while the list is shown', () => {
+        renderToolbar({ status: PerfOverlayStatus.READY, isHotOpsActive: true });
+
+        expect(hotOpsSwitch().input).toBeChecked();
+    });
+});
+
+describe('performance row', () => {
+    it('holds the perf switches apart from the graph switches', () => {
+        renderToolbar({ status: PerfOverlayStatus.READY });
+
+        const row = screen.getByText('Performance').closest('.op-graph-toolbar-row') as HTMLElement;
+        for (const perfSwitch of [perfOverlaySwitch(), criticalPathSwitch(), hotOpsSwitch()]) {
+            expect(row).toContainElement(perfSwitch.input);
+        }
+        expect(row).not.toContainElement(switchNamed(/^Dim unrelated edges/).input);
+    });
+});
+
 describe('dim unrelated edges switch', () => {
     it('turns on when toggled', () => {
         const onDimUnrelatedEdgesChange = vi.fn();
@@ -225,6 +286,18 @@ describe('switch tooltips', () => {
         fireEvent.mouseEnter(criticalPathSwitch().label);
 
         await waitFor(() => expect(screen.getByText(CRITICAL_PATH_TOOLTIP[status])).toBeInTheDocument());
+    });
+
+    it.each([
+        ['unavailable', PerfOverlayStatus.UNAVAILABLE],
+        ['unlinked', PerfOverlayStatus.UNLINKED],
+        ['ready', PerfOverlayStatus.READY],
+    ])('explains the %s slowest-operations state on hover', async (_label, status) => {
+        renderToolbar({ status });
+
+        fireEvent.mouseEnter(hotOpsSwitch().label);
+
+        await waitFor(() => expect(screen.getByText(HOT_OPS_TOOLTIP[status])).toBeInTheDocument());
     });
 });
 

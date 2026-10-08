@@ -12,7 +12,7 @@ import { getFolderLinkState, shouldShowFolderLinkStatus } from '../../functions/
 import { ReportFolder } from '../../definitions/Reports';
 import getServerConfig from '../../functions/getServerConfig';
 import isDirectReportMode from '../../functions/isDirectReportMode';
-import { getReportId } from '../../functions/reportLinks';
+import { getFolderReportId } from '../../functions/reportLinks';
 import { formatSyncedReportName } from '../../functions/reportRank';
 import { ManagedEntity } from '../../definitions/ManagedEntity';
 import { TEST_IDS } from '../../definitions/TestIds';
@@ -81,7 +81,7 @@ const LocalFolderPicker = ({
             return null;
         }
 
-        const folderId = getReportId(folder.syncedName, folder.path);
+        const folderId = getFolderReportId(folder);
 
         return (
             // MenuItem renders the <li role="option"> itself, so this layout wrapper can't be one

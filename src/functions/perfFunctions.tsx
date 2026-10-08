@@ -25,7 +25,7 @@ import PerfHeuristicFlags from '../components/performance/PerfHeuristicFlags';
 import { MathFidelity } from '../definitions/MathFidelity';
 import { CellColour } from '../definitions/CellColour';
 import { isSlowDramDominant } from './perfBoundPredicates';
-import { NOT_ANALYSED_LABEL, getNotAnalysedReason } from './perfBoundAnalysis';
+import { NOT_ANALYSED_LABEL, getNotAnalysedReason, getSlowBoundExplanation } from './perfBoundAnalysis';
 
 const OPERATION_COLOURS: { [key: string]: CellColour } = {
     '(torch)': CellColour.Red,
@@ -103,7 +103,12 @@ export const formatCell = (
 
     // Host Ops only have a few meaningful columns
     if (isHost) {
-        if (key !== ColumnKeys.Id && key !== ColumnKeys.OpCode && key !== ColumnKeys.Bound) {
+        if (
+            key !== ColumnKeys.Id &&
+            key !== ColumnKeys.OpCode &&
+            key !== ColumnKeys.OpCategory &&
+            key !== ColumnKeys.Bound
+        ) {
             return '';
         }
     }
@@ -254,7 +259,12 @@ export const formatCell = (
         }
     }
 
-    return getCellMarkup(formatted, getCellColour(row, key), highlight);
+    const colour = getCellColour(row, key);
+    const slowExplanation = getSlowBoundExplanation(row, key, colour);
+
+    return slowExplanation
+        ? getExplainedCellMarkup(formatted, colour, slowExplanation, highlight)
+        : getCellMarkup(formatted, colour, highlight);
 };
 
 // A native title rather than a Blueprint Tooltip: the table is not virtualised and an unanalysed
@@ -265,6 +275,23 @@ const getNotAnalysedMarkup = (reason: string) => (
         title={reason}
     >
         {NOT_ANALYSED_LABEL}
+    </span>
+);
+
+// Native title for the same reason as getNotAnalysedMarkup: every SLOW row carries up to three.
+const getExplainedCellMarkup = (text: string, colour: CellColour, reason: string, highlight?: string | null) => (
+    <span
+        className={classNames(colour, Classes.TOOLTIP_INDICATOR)}
+        title={reason}
+    >
+        {highlight ? (
+            <HighlightedText
+                text={text}
+                filter={highlight}
+            />
+        ) : (
+            text
+        )}
     </span>
 );
 
@@ -307,6 +334,7 @@ export const getCellColour = (row: TypedPerfTableRow, key: ColumnKeys): CellColo
 
     if (
         key === ColumnKeys.Id ||
+        key === ColumnKeys.OpCategory ||
         key === ColumnKeys.TotalPercent ||
         key === ColumnKeys.DeviceTime ||
         key === ColumnKeys.DeviceKernelDuration

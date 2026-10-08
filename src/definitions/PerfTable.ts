@@ -30,6 +30,10 @@ export enum BoundAnalysis {
     NONE = 'none',
 }
 
+// tt-perf-report's DRAM % / FLOPs % cut-off for a DRAM or FLOP bound; below it on both, a fully
+// analysed op is SLOW. A literal in its perf_report.py, mirrored here only to explain the result.
+export const ROOFLINE_BOUND_THRESHOLD_PERCENT = 65;
+
 export const MarkerColours = [
     'rgb(0, 128, 128)',
     'rgb(255, 215, 0)',
@@ -74,6 +78,7 @@ export enum ColumnKeys {
     TotalPercent = 'total_percent',
     Bound = 'bound',
     OpCode = 'op_code',
+    OpCategory = 'op_category',
     Flags = 'heuristicFlags',
     Device = 'device',
     BufferType = 'buffer_type',
@@ -117,10 +122,11 @@ export const Columns: ColumnDefinition[] = [
         colour: 'blue',
         sortable: true,
         filterable: true,
-        // Absorbs Flags + Device + Sub Device + Type (all footerSpan: 0) — keep in sync with
-        // getFooterColumns.
-        footerSpan: 5,
+        // Absorbs Category + Flags + Device + Sub Device + Type (all footerSpan: 0) — keep in sync
+        // with getFooterColumns.
+        footerSpan: 6,
     },
+    { name: 'Category', key: ColumnKeys.OpCategory, sortable: true, footerSpan: 0 },
     { name: 'Flags', key: ColumnKeys.Flags, footerSpan: 0 },
     { name: 'Device', key: ColumnKeys.Device, footerSpan: 0 },
     { name: 'Sub Device', key: ColumnKeys.SUB_DEVICE, filterable: true, footerSpan: 0 },
@@ -181,6 +187,7 @@ export const comparisonKeys: ColumnKeys[] = [
     ColumnKeys.Layout,
     ColumnKeys.MathFidelity,
     ColumnKeys.OpCode,
+    ColumnKeys.OpCategory,
     ColumnKeys.Flags,
     ColumnKeys.OpToOpGap,
     ColumnKeys.TotalPercent,

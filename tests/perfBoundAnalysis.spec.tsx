@@ -14,6 +14,8 @@ import {
     MISSING_INPUTS_REASON,
     NOT_ANALYSED_LABEL,
     NOT_MODELLED_REASON,
+    SLOW_BOUND_REASON,
+    SLOW_HINT_REASON,
     getBoundAnalysisCoverage,
     getNotAnalysedReason,
 } from '../src/functions/perfBoundAnalysis';
@@ -144,6 +146,62 @@ describe('getBoundAnalysisCoverage', () => {
     it('returns null when nothing reports bound analysis', () => {
         expect(getBoundAnalysisCoverage([makeRow({ bound_analysis: null })])).toBeNull();
         expect(getBoundAnalysisCoverage([])).toBeNull();
+    });
+});
+
+describe('formatCell SLOW explanation', () => {
+    const slowRow = (overrides: Partial<TypedPerfTableRow> = {}) =>
+        makeRow({
+            bound: BoundType.SLOW,
+            bound_analysis: BoundAnalysis.FULL,
+            dram: 100,
+            dram_percent: 40,
+            flops: 20,
+            flops_percent: 30,
+            ...overrides,
+        });
+
+    const getTitle = (row: TypedPerfTableRow, key: ColumnKeys) => {
+        const { container } = render(<>{formatCell(row, getColumn(key))}</>);
+
+        return container.querySelector('[title]')?.getAttribute('title') ?? null;
+    };
+
+    it('says what SLOW means on the Bound cell', () => {
+        expect(getTitle(slowRow(), ColumnKeys.Bound)).toBe(SLOW_BOUND_REASON);
+        expect(SLOW_BOUND_REASON).toContain('both < 65%');
+    });
+
+    it.each([ColumnKeys.Dram, ColumnKeys.DramPercent])(
+        'marks %s as the hint when DRAM %% is the larger figure',
+        (key) => {
+            expect(getTitle(slowRow(), key)).toBe(SLOW_HINT_REASON);
+        },
+    );
+
+    it.each([ColumnKeys.Flops, ColumnKeys.FlopsPercent])('leaves %s unexplained when DRAM %% is larger', (key) => {
+        expect(getTitle(slowRow(), key)).toBeNull();
+    });
+
+    it('marks the FLOPs side on a tie, as the yellow hint does', () => {
+        const row = slowRow({ dram_percent: 30, flops_percent: 30 });
+
+        expect(getTitle(row, ColumnKeys.FlopsPercent)).toBe(SLOW_HINT_REASON);
+        expect(getTitle(row, ColumnKeys.DramPercent)).toBeNull();
+    });
+
+    it('gives a muted row no hint title, since it shows no yellow hint', () => {
+        const row = slowRow({ total_percent: 0.1 });
+
+        expect(getTitle(row, ColumnKeys.DramPercent)).toBeNull();
+        expect(getTitle(row, ColumnKeys.Bound)).toBe(SLOW_BOUND_REASON);
+    });
+
+    it.each([BoundType.DRAM, BoundType.FLOP, BoundType.BOTH])('adds no SLOW title to a %s row', (bound) => {
+        const row = slowRow({ bound, dram_percent: 70, flops_percent: 70 });
+
+        expect(getTitle(row, ColumnKeys.Bound)).toBeNull();
+        expect(getTitle(row, ColumnKeys.DramPercent)).toBeNull();
     });
 });
 

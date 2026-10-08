@@ -27,7 +27,7 @@ const GraphView = () => {
     // report from the overlay nor break the match below (#1812).
     const { data: perfReport } = useLinkedPerformanceReport();
     // Canonical "do the loaded reports belong to the same run?" signal. This is
-    // the same name-based lock-step match used by `ReportLinkStatus`: returns
+    // the same name-based lock-step match used by `useReportLinkMatch`: returns
     // `[]` whenever the loaded perf report doesn't line up with the profiler
     // report, which the overlay must treat as UNLINKED rather than READY.
     const matchedPerfOps = useGetDeviceOperationListPerf();

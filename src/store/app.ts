@@ -13,7 +13,7 @@ import { PerfTabIds } from '../definitions/Performance';
 import { ReportFolder, ReportLocation } from '../definitions/Reports';
 import { ReportScope } from '../definitions/ReportScope';
 import { REPORT_LINKS_STORAGE_KEY } from '../definitions/ReportLinks';
-import { getReportId } from '../functions/reportLinks';
+import { getFolderReportId } from '../functions/reportLinks';
 import { ReportLink } from '../model/ReportLinks';
 import { ColumnKeys } from '../definitions/PerfTable';
 import { TypedPerfTableRow } from '../model/PerfTable';
@@ -22,6 +22,13 @@ import { BufferType } from '../model/BufferType';
 import { StackedGroupBy } from '../definitions/StackedPerfTable';
 import { SortingOptions } from '../definitions/SortingOptions';
 import { DEFAULT_TOP_N_COUNT, TopNAnnotationMode } from '../definitions/TopNAnnotations';
+import {
+    DEFAULT_HOT_OPS_SETTINGS,
+    HOT_OPS_ENABLED_STORAGE_KEY,
+    HOT_OPS_SETTINGS_STORAGE_KEY,
+    HotOpsSettings,
+} from '../definitions/HotOps';
+import { parseHotOpsEnabled, parseHotOpsSettings } from '../functions/hotOpsSettings';
 import { MlirServerConnection } from '../model/MlirServer';
 import { MlirFileResult, MlirLoadedReport } from '../model/MLIRJsonModel';
 import { aggregateFileTransferProgress, fileTransferRegistryAtom } from './fileTransferRegistry';
@@ -74,9 +81,7 @@ export const activePerformanceReportAtom = atom<ReportFolder | null>(null);
  * qualifier that tells one rank of a launch from another.
  */
 export const activePerformanceReportFolderNameAtom = atom((get) => {
-    const activeReport = get(activePerformanceReportAtom);
-
-    return getReportId(activeReport?.syncedName, activeReport?.path);
+    return getFolderReportId(get(activePerformanceReportAtom));
 });
 /** True while a report select/mount is awaiting confirmation of the active report. */
 export const isActivatingReportAtom = atom(false);
@@ -106,9 +111,29 @@ export const isFullStackTraceAtom = atom(false);
 //
 // Module scope, so the intent outlives leaving `/graphtree` and coming back — the
 // report it names is what invalidates it, not the view's lifetime. The perf
-// overlay's own flag is local `useState` and does not survive that trip; the two
-// switches deliberately differ until #1903 decides whether they should agree.
+// overlay's own flag is local `useState` and does not survive that trip, and the
+// slowest-operations switch below lasts the browser session; the three deliberately
+// differ until #1903 decides whether they should agree.
 export const criticalPathScopeAtom = atom<ReportScope | null>(null);
+
+// Read back through a parser, since a session can outlive the build that stored the value.
+const parsedSessionStorage = <Value>(parse: (stored: unknown) => Value) => {
+    const storage = createJSONStorage<Value>(() => sessionStorage);
+    return { ...storage, getItem: (key: string, initialValue: Value) => parse(storage.getItem(key, initialValue)) };
+};
+
+// Session-scoped like `mlirNodeBodyToggles`: how the list reads is a preference for this sitting.
+// The switch is its own atom so the list's settings don't re-render the graph that reads it. #1612, #1903
+export const isHotOpsEnabledAtom = atomWithStorage<boolean>(
+    HOT_OPS_ENABLED_STORAGE_KEY,
+    false,
+    parsedSessionStorage(parseHotOpsEnabled),
+);
+export const hotOpsSettingsAtom = atomWithStorage<HotOpsSettings>(
+    HOT_OPS_SETTINGS_STORAGE_KEY,
+    DEFAULT_HOT_OPS_SETTINGS,
+    parsedSessionStorage(parseHotOpsSettings),
+);
 
 // Tensors route
 export const shouldCollapseAllTensorsAtom = atom(false);
@@ -144,6 +169,7 @@ export const mathFilterListAtom = atom<TypedPerfTableRow['math_fidelity'][]>([])
 export const rawOpCodeFilterListAtom = atom<TypedPerfTableRow['raw_op_code'][]>([]);
 export const bufferTypeFilterListAtom = atom<TypedPerfTableRow['buffer_type'][]>([]);
 export const layoutFilterListAtom = atom<TypedPerfTableRow['layout'][]>([]);
+export const opCategoryFilterListAtom = atom<TypedPerfTableRow['op_category'][]>([]);
 // Selected duration buckets, keyed by each bucket's lower bound in microseconds. bucketIndex
 // is an offset from the dataset's lowest decade, so it would shift meaning as rows change.
 export const durationBucketFilterListAtom = atom<DurationBucket['minUs'][]>([]);

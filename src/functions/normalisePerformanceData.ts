@@ -58,6 +58,7 @@ const PLACEHOLDER: TypedPerfTableRow = {
     l1_free_segments: null,
     l1_largest_free: null,
     l1_largest_free_percent: null,
+    allocation_failure: null,
 };
 
 export interface NormalisedPerfData {

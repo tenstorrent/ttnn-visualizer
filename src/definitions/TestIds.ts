@@ -54,6 +54,7 @@ export const TEST_IDS = Object.freeze({
     PERF_TENSOR_DRAWER_OPEN_BUTTON: 'perf-tensor-drawer-open-button',
     PERF_TABLE_SKELETON: 'perf-table-skeleton',
     PERF_BOUND_ANALYSIS_COVERAGE: 'perf-bound-analysis-coverage',
+    PERF_OP_CATEGORY_BREAKDOWN: 'perf-op-category-breakdown',
     PERF_COLUMN_PICKER: 'perf-column-picker',
     PERF_COLUMN_PICKER_TRIGGER: 'perf-column-picker-trigger',
     PERF_COLUMN_PICKER_RESET: 'perf-column-picker-reset',
@@ -61,13 +62,16 @@ export const TEST_IDS = Object.freeze({
     PERF_DURATION_HISTOGRAM: 'perf-duration-histogram',
     PERF_HEURISTIC_FLAGS: 'perf-heuristic-flags',
     PERF_HEURISTIC_FLAG: 'perf-heuristic-flag',
+    PERF_ALLOCATION_FAILURE_SUMMARY: 'perf-allocation-failure-summary',
     PERF_CHART_HINT: 'perf-chart-hint',
     PERF_NPE_LINK: 'perf-npe-link',
 
-    // Buffer summary late deallocation. The badge and rail dot ids are suffixed
-    // with the operation id at the call site.
+    // Late deallocation (Buffer Summary and Operation Details). The badge and
+    // rail dot ids are suffixed with the operation id at the call site, the
+    // legend marker with the buffer address.
     LATE_DEALLOC_COUNT: 'late-dealloc-count',
     LATE_DEALLOC_BADGE: 'late-dealloc-badge',
+    LATE_DEALLOC_LEGEND_MARKER: 'late-dealloc-legend-marker',
     LATE_DEALLOC_RAIL: 'late-dealloc-rail',
     LATE_DEALLOC_RAIL_DOT: 'late-dealloc-rail-dot',
 

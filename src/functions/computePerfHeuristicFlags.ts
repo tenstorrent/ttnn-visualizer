@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-import { BoundType } from '../definitions/PerfTable';
+import { BoundAnalysis, BoundType } from '../definitions/PerfTable';
 import { TypedPerfTableRow } from '../model/PerfTable';
 import { PERF_HEURISTIC_THRESHOLDS, PerfHeuristicFlag } from '../definitions/PerfHeuristics';
 import { OpType } from '../definitions/Performance';
@@ -10,11 +10,18 @@ import getCoreUtilization from './getCoreUtilization';
 import isValidNumber from './isValidNumber';
 import { formatPercentage } from './math';
 import { isSlowDramDominant } from './perfBoundPredicates';
+import { getAllocationFailureSummary } from './parseAllocationFailure';
 
 interface RowHeuristicEvaluation {
     flags: PerfHeuristicFlag[];
     details: Partial<Record<PerfHeuristicFlag, string>> | undefined;
 }
+
+// The ideal time behind utilisation is tt-metal's op perf model, which is most trustworthy for the
+// ops tt-perf-report also models; say so on the ops it does not. tt-perf-report decides that by
+// op-code name, so the note must not claim the op is not a convolution (Conv3d falls outside it).
+export const LOW_UTILISATION_UNMODELLED_NOTE =
+    'tt-perf-report has no roofline model for this op, so the ideal time this compares against is less reliable.';
 
 const { LOW_CORE_UTILISATION_RATIO, UNDERUTILISED_CORES_RATIO, MIN_TOTAL_PERCENT } = PERF_HEURISTIC_THRESHOLDS;
 
@@ -74,13 +81,20 @@ function isUnderutilisedCores(row: TypedPerfTableRow, maxCores: number, hasMinIm
 }
 
 function evaluateRowHeuristics(row: TypedPerfTableRow, maxCores: number): RowHeuristicEvaluation {
+    const flags: PerfHeuristicFlag[] = [];
+    const details: Partial<Record<PerfHeuristicFlag, string>> = {};
+
+    // A recorded failure, not a heuristic: no eligibility or impact gate may mute it.
+    if (row.allocation_failure) {
+        flags.push(PerfHeuristicFlag.ALLOCATION_FAILURE);
+        details[PerfHeuristicFlag.ALLOCATION_FAILURE] = getAllocationFailureSummary(row.allocation_failure);
+    }
+
     if (!isEligibleRow(row)) {
-        return { flags: [], details: undefined };
+        return { flags, details: flags.length > 0 ? details : undefined };
     }
 
     const hasMinImpact = meetsMinImpact(row);
-    const flags: PerfHeuristicFlag[] = [];
-    const details: Partial<Record<PerfHeuristicFlag, string>> = {};
 
     if (isDramBound(row, hasMinImpact)) {
         flags.push(PerfHeuristicFlag.DRAM_BOUND);
@@ -96,7 +110,12 @@ function evaluateRowHeuristics(row: TypedPerfTableRow, maxCores: number): RowHeu
 
         if (utilisation > 0 && utilisation < LOW_CORE_UTILISATION_RATIO) {
             flags.push(PerfHeuristicFlag.LOW_UTILISATION);
-            details[PerfHeuristicFlag.LOW_UTILISATION] = `Core utilisation: ${formatPercentage(utilisation * 100)}`;
+            const utilisationDetail = `Core utilisation: ${formatPercentage(utilisation * 100)}`;
+
+            details[PerfHeuristicFlag.LOW_UTILISATION] =
+                row.bound_analysis === BoundAnalysis.NONE
+                    ? `${utilisationDetail}. ${LOW_UTILISATION_UNMODELLED_NOTE}`
+                    : utilisationDetail;
         }
     }
 

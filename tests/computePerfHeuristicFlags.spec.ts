@@ -3,12 +3,16 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import { describe, expect, it } from 'vitest';
-import { BoundType } from '../src/definitions/PerfTable';
+import { BoundAnalysis, BoundType } from '../src/definitions/PerfTable';
 import { TypedPerfTableRow } from '../src/model/PerfTable';
 import { PerfHeuristicFlag } from '../src/definitions/PerfHeuristics';
 import { OpType } from '../src/definitions/Performance';
-import { annotatePerfHeuristicFlags } from '../src/functions/computePerfHeuristicFlags';
+import {
+    LOW_UTILISATION_UNMODELLED_NOTE,
+    annotatePerfHeuristicFlags,
+} from '../src/functions/computePerfHeuristicFlags';
 import { DEFAULT_MAX_CORES } from '../src/functions/getCoreCount';
+import { makeAllocationFailure } from './helpers/allocationFailure';
 
 const MAX_CORES = DEFAULT_MAX_CORES;
 
@@ -34,6 +38,35 @@ const getFlags = (overrides: Partial<TypedPerfTableRow> = {}, maxCores = MAX_COR
     annotatePerfHeuristicFlags([makeRow(overrides)], maxCores)[0].heuristicFlags ?? [];
 
 describe('annotatePerfHeuristicFlags', () => {
+    describe('allocation failure', () => {
+        const failure = makeAllocationFailure();
+
+        it('flags a row whose operation recorded an allocation failure, with its figures', () => {
+            const [row] = annotatePerfHeuristicFlags([makeRow({ allocation_failure: failure })], MAX_CORES);
+
+            expect(row.heuristicFlags).toContain(PerfHeuristicFlag.ALLOCATION_FAILURE);
+            expect(row.heuristicFlagDetails?.[PerfHeuristicFlag.ALLOCATION_FAILURE]).toBe(
+                'Requested 3.13 MiB L1 across 4 banks (800 KiB per bank, bank size 1.32 MiB)',
+            );
+        });
+
+        it('is not muted below MIN_TOTAL_PERCENT', () => {
+            expect(getFlags({ allocation_failure: failure, total_percent: 0.01 })).toContain(
+                PerfHeuristicFlag.ALLOCATION_FAILURE,
+            );
+        });
+
+        it('is not muted on a row ineligible for heuristics', () => {
+            expect(getFlags({ allocation_failure: failure, bound: BoundType.HOST })).toEqual([
+                PerfHeuristicFlag.ALLOCATION_FAILURE,
+            ]);
+        });
+
+        it('is absent without a recorded failure', () => {
+            expect(getFlags({ allocation_failure: null })).not.toContain(PerfHeuristicFlag.ALLOCATION_FAILURE);
+        });
+    });
+
     it('flags DRAM-bound when bound is DRAM', () => {
         expect(getFlags({ bound: BoundType.DRAM })).toContain(PerfHeuristicFlag.DRAM_BOUND);
     });
@@ -220,5 +253,37 @@ describe('annotatePerfHeuristicFlags', () => {
         );
 
         expect(annotated.heuristicFlagDetails?.[PerfHeuristicFlag.RECOMPUTE_CANDIDATE]).toBe('Hash: abc123');
+    });
+
+    describe('low utilisation on ops tt-perf-report does not model', () => {
+        const lowUtilisationRow = { pm_ideal_ns: 1000, device_time: 1000, cores: 64 };
+        const getDetail = (boundAnalysis: BoundAnalysis | null) =>
+            annotatePerfHeuristicFlags([makeRow({ ...lowUtilisationRow, bound_analysis: boundAnalysis })], MAX_CORES)[0]
+                .heuristicFlagDetails?.[PerfHeuristicFlag.LOW_UTILISATION];
+
+        it.each([BoundAnalysis.FULL, BoundAnalysis.FLOPS_ONLY, BoundAnalysis.NONE])(
+            'still flags a %s op',
+            (boundAnalysis) => {
+                expect(getFlags({ ...lowUtilisationRow, bound_analysis: boundAnalysis })).toContain(
+                    PerfHeuristicFlag.LOW_UTILISATION,
+                );
+            },
+        );
+
+        it('says the ideal time is less reliable on an unmodelled op', () => {
+            expect(getDetail(BoundAnalysis.NONE)).toMatch(/^Core utilisation: .+\. /);
+            expect(getDetail(BoundAnalysis.NONE)).toContain(LOW_UTILISATION_UNMODELLED_NOTE);
+        });
+
+        it.each([BoundAnalysis.FULL, BoundAnalysis.FLOPS_ONLY])('adds no caveat to a %s op', (boundAnalysis) => {
+            expect(getDetail(boundAnalysis)).not.toContain(LOW_UTILISATION_UNMODELLED_NOTE);
+        });
+
+        it('adds no caveat when the row says nothing about which model ran', () => {
+            expect(getFlags({ ...lowUtilisationRow, bound_analysis: null })).toContain(
+                PerfHeuristicFlag.LOW_UTILISATION,
+            );
+            expect(getDetail(null)).not.toContain(LOW_UTILISATION_UNMODELLED_NOTE);
+        });
     });
 });

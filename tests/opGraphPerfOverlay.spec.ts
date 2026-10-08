@@ -10,7 +10,9 @@ import {
     PERF_BAR_SCALE_VAR,
     buildOpGraphPerfOverlay,
     buildRenderedPerfStyling,
+    getPerfColorForNs,
     getPerfHoverLabel,
+    getRenderedPerfRange,
 } from '../src/components/operation-graph/opGraphPerfOverlay';
 import { NO_PERF_DATA_LABEL, PerfOverlayStatus } from '../src/definitions/PerfOverlayStatus';
 import { formatDuration } from '../src/functions/formatting';
@@ -262,6 +264,55 @@ describe('buildRenderedPerfStyling range', () => {
         const overlay = buildOpGraphPerfOverlay(rows([1, 10], [2, 1_000]), true, [1, 2]);
 
         expect(buildRenderedPerfStyling(overlay, false, [{ id: '1', operationId: 1 }])).toBeNull();
+    });
+});
+
+describe('getRenderedPerfRange', () => {
+    // What the slowest-operations list keys its swatches to while the bars are off.
+    it('matches the range the bars are drawn against', () => {
+        const overlay = buildOpGraphPerfOverlay(rows([1, 100], [2, 100], [3, 100]), true, [1, 2, 3]);
+        const nodes = [
+            { id: '1', operationId: 1 },
+            { id: 'block:2', operationId: 2, memberOperationIds: [2, 3] },
+        ];
+        const { minNs, maxNs } = buildRenderedPerfStyling(overlay, true, nodes)!;
+
+        expect(getRenderedPerfRange(overlay, nodes)).toEqual({ minNs, maxNs });
+    });
+
+    it('falls back to the per-operation range when nothing rendered carries a row', () => {
+        const overlay = buildOpGraphPerfOverlay(rows([1, 10], [2, 1_000]), true, [1, 2]);
+
+        expect(getRenderedPerfRange(overlay, [{ id: '9', operationId: 9 }])).toEqual({
+            minNs: overlay.minNs,
+            maxNs: overlay.maxNs,
+        });
+    });
+});
+
+describe('getPerfColorForNs', () => {
+    it('gives a duration the colour its own node is drawn in', () => {
+        const overlay = buildOpGraphPerfOverlay(rows([1, 10], [2, 100], [3, 1_000]), true, [1, 2, 3]);
+        const nodes = [1, 2, 3].map((operationId) => ({ id: String(operationId), operationId }));
+        const { styleByNodeId, minNs, maxNs } = buildRenderedPerfStyling(overlay, true, nodes)!;
+
+        for (const { id, operationId } of nodes) {
+            const { deviceTimeNs } = overlay.aggregatesByOpId.get(operationId)!;
+            const style = styleByNodeId.get(id) as Record<string, unknown>;
+            expect(getPerfColorForNs(deviceTimeNs, minNs, maxNs)).toBe(style[PERF_BAR_COLOR_VAR]);
+        }
+    });
+
+    it('places a folded member on the ramp its block total sets', () => {
+        // The block node carries the sum, so the member's own duration sits below the top.
+        const overlay = buildOpGraphPerfOverlay(rows([1, 100], [2, 100], [3, 100]), true, [1, 2, 3]);
+        const { minNs, maxNs } = buildRenderedPerfStyling(overlay, true, [
+            { id: '1', operationId: 1 },
+            { id: 'block:2', operationId: 2, memberOperationIds: [2, 3] },
+        ])!;
+
+        expect(getPerfColorForNs(100_000, minNs, maxNs)).toBe(perfColorScale(0));
+        expect(getPerfColorForNs(200_000, minNs, maxNs)).toBe(perfColorScale(1));
     });
 });
 

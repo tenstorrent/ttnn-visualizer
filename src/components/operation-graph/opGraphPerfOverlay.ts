@@ -7,7 +7,7 @@ import type { CSSProperties } from 'react';
 import { type MemberBearingNode, memberOperationIdsOf, sumDeviceTimeNs } from './opGraphMemberTime';
 
 import { NO_PERF_DATA_LABEL, PerfOverlayStatus } from '../../definitions/PerfOverlayStatus';
-import { formatDuration } from '../../functions/formatting';
+import { formatDuration, formatShareOfTotal } from '../../functions/formatting';
 import {
     type OpPerfAggregate,
     type OpPerfScore,
@@ -194,6 +194,10 @@ const logScore = (ns: number, minNs: number, maxNs: number): number => {
     return Math.min(1, Math.max(0, (Math.log10(ns) - logMin) / (Math.log10(maxNs) - logMin)));
 };
 
+/** The colour `ns` takes on the ramp the node bars and the legend are drawn against. */
+export const getPerfColorForNs = (ns: number, minNs: number, maxNs: number): string =>
+    perfColorScale(logScore(ns, minNs, maxNs));
+
 export interface RenderedPerfStyling {
     styleByNodeId: Map<string, CSSProperties>;
     /**
@@ -233,6 +237,13 @@ export const buildRenderedPerfStyling = (
     return { styleByNodeId, minNs, maxNs };
 };
 
+/** The range `buildRenderedPerfStyling` draws against, for a key or swatch shown with the overlay off. */
+export const getRenderedPerfRange = (
+    overlay: OpGraphPerfOverlay,
+    nodes: readonly RenderedPerfNode[],
+): { minNs: number; maxNs: number } =>
+    spanOfTotals(sumNsByRenderedNode(overlay, nodes), { minNs: overlay.minNs, maxNs: overlay.maxNs });
+
 /** Duration, rank among the linked ops, and share of their total. #1610 */
 export const getPerfHoverLabel = (overlay: OpGraphPerfOverlay, operationId: number): string => {
     const aggregate = overlay.aggregatesByOpId.get(operationId);
@@ -240,6 +251,6 @@ export const getPerfHoverLabel = (overlay: OpGraphPerfOverlay, operationId: numb
         return NO_PERF_DATA_LABEL;
     }
     const rank = overlay.rankByOpId.get(operationId);
-    const share = overlay.totalNs > 0 ? (aggregate.deviceTimeNs / overlay.totalNs) * 100 : 0;
-    return `${formatDuration(aggregate.deviceTimeNs)} · #${rank} of ${overlay.linkedOpCount} · ${share.toFixed(1)}% of total`;
+    const share = formatShareOfTotal(aggregate.deviceTimeNs, overlay.totalNs);
+    return `${formatDuration(aggregate.deviceTimeNs)} · #${rank} of ${overlay.linkedOpCount} · ${share} of total`;
 };
