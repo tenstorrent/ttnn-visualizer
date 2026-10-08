@@ -460,6 +460,21 @@ describe('Performance route', () => {
         expect(comparisonRow?.heuristicFlags).not.toContain(PerfHeuristicFlag.DRAM_FALLBACK);
     });
 
+    // Both hooks are mocked, so only this ties the retry signal to the failures the route parsed.
+    it('detects DRAM fallbacks against the allocation failures it already parsed', () => {
+        const allocationFailureByOpId = new Map([[7, makeAllocationFailure({ operationId: 7 })]]);
+
+        (useAllocationFailures as Mock).mockReturnValue({ listings: [], allocationFailureByOpId });
+
+        render(
+            <TestProviders>
+                <Performance />
+            </TestProviders>,
+        );
+
+        expect(useDramFallbacks).toHaveBeenCalledWith(allocationFailureByOpId);
+    });
+
     it('clears all table chip filters when the active performance report changes', () => {
         render(
             <TestProviders>

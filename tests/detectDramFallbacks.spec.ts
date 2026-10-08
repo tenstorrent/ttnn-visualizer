@@ -119,13 +119,23 @@ describe('getDramFallbacks — retry after an L1 allocation failure', () => {
         });
     });
 
-    it('does not reach past the retry window', () => {
-        const between = Array.from({ length: DRAM_FALLBACK_RETRY_WINDOW_OPERATIONS }, (_, index) =>
-            unrelated(11 + index),
-        );
-        const late = retry(11 + DRAM_FALLBACK_RETRY_WINDOW_OPERATIONS);
+    /** A retry `offset` operations after the failure, with unrelated ops between. */
+    const retryAt = (offset: number) => [
+        failed,
+        ...Array.from({ length: offset - 1 }, (_, index) => unrelated(11 + index)),
+        retry(10 + offset),
+    ];
 
-        expect(getDramFallbacks([failed, ...between, late], failureByOpId()).size).toBe(0);
+    it('reaches the last operation in the retry window', () => {
+        const offset = DRAM_FALLBACK_RETRY_WINDOW_OPERATIONS;
+
+        expect(getDramFallbacks(retryAt(offset), failureByOpId()).get(10 + offset)?.signal).toBe(
+            DramFallbackSignal.RETRY_AFTER_FAILURE,
+        );
+    });
+
+    it('does not reach past the retry window', () => {
+        expect(getDramFallbacks(retryAt(DRAM_FALLBACK_RETRY_WINDOW_OPERATIONS + 1), failureByOpId()).size).toBe(0);
     });
 
     it('does not flag a retry after a DRAM allocation failure', () => {
@@ -134,17 +144,40 @@ describe('getDramFallbacks — retry after an L1 allocation failure', () => {
         expect(getDramFallbacks([failed, retry(11)], failureByOpId(dramFailure)).size).toBe(0);
     });
 
-    it('flags a retry after circular buffers outgrow L1', () => {
-        const circularBufferFailure: AllocationFailure = {
-            operationId: 10,
-            operationName: 'ttnn.linear',
-            kind: AllocationFailureKind.CIRCULAR_BUFFERS_BEYOND_L1,
-            coreRange: '[(x=0,y=0) - (x=7,y=7)]',
-            circularBufferRegionEnd: 1600000,
-            maxL1Bytes: 1499136,
-        };
+    const circularBufferRange = { operationId: 10, operationName: 'ttnn.linear', coreRange: '[(x=0,y=0) - (x=7,y=7)]' };
 
-        expect(getDramFallbacks([failed, retry(11)], failureByOpId(circularBufferFailure)).has(11)).toBe(true);
+    it.each<[string, AllocationFailure]>([
+        ['an L1_SMALL bank failure', makeAllocationFailure({ operationId: 10, bufferType: StringBufferType.L1_SMALL })],
+        [
+            'an L1 bank failure after dependencies',
+            makeAllocationFailure({
+                operationId: 10,
+                kind: AllocationFailureKind.BANK_OUT_OF_MEMORY_WITH_DEPENDENCIES,
+                allocatedBytes: 1300000,
+                freeBytes: 82720,
+                largestFreeBlockBytes: 65536,
+            }),
+        ],
+        [
+            'circular buffers outgrowing L1',
+            {
+                ...circularBufferRange,
+                kind: AllocationFailureKind.CIRCULAR_BUFFERS_BEYOND_L1,
+                circularBufferRegionEnd: 1600000,
+                maxL1Bytes: 1499136,
+            },
+        ],
+        [
+            'circular buffers clashing with an L1 buffer',
+            {
+                ...circularBufferRange,
+                kind: AllocationFailureKind.CIRCULAR_BUFFERS_CLASH,
+                circularBufferRegionEnd: 1100000,
+                l1BufferAddress: 1048576,
+            },
+        ],
+    ])('flags a retry after %s', (_, failure) => {
+        expect(getDramFallbacks([failed, retry(11)], failureByOpId(failure)).has(11)).toBe(true);
     });
 
     it('does not flag a retry that stayed in L1', () => {

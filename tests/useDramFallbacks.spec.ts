@@ -5,7 +5,7 @@
 import { renderHook } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useDramFallbacks } from '../src/hooks/useDramFallbacks';
-import { useOperationsList } from '../src/hooks/useAPI';
+import { useOpToPerfIdFiltered, useOperationsList } from '../src/hooks/useAPI';
 import { DramFallbackSignal } from '../src/definitions/DramFallback';
 import { AllocationFailure } from '../src/model/AllocationFailure';
 import { OperationDescription } from '../src/model/APIData';
@@ -15,29 +15,53 @@ import { makeOperation, makeTensor, memoryConfigArgument } from './helpers/opera
 
 vi.mock('../src/hooks/useAPI', () => ({
     useOperationsList: vi.fn(),
+    useOpToPerfIdFiltered: vi.fn(),
 }));
 
-const mockOperations = (operations: OperationDescription[] | undefined) => {
+const LINKED: ReturnType<typeof useOpToPerfIdFiltered> = [
+    { opId: 1, perfId: '1' },
+    { opId: 2, perfId: '2' },
+    { opId: 3, perfId: '3' },
+];
+
+const mockReports = (
+    operations: OperationDescription[] | undefined,
+    opIdsMap: ReturnType<typeof useOpToPerfIdFiltered> = LINKED,
+) => {
     vi.mocked(useOperationsList).mockReturnValue({ data: operations } as ReturnType<typeof useOperationsList>);
+    vi.mocked(useOpToPerfIdFiltered).mockReturnValue(opIdsMap);
 };
 
 const dramOutput = makeTensor({ address: 1048576, buffer_type: BufferType.DRAM });
+const argumentMismatch = makeOperation({ id: 3, arguments: [memoryConfigArgument('L1')], outputs: [dramOutput] });
 
 beforeEach(() => {
     vi.mocked(useOperationsList).mockReset();
+    vi.mocked(useOpToPerfIdFiltered).mockReset();
 });
 
 describe('useDramFallbacks', () => {
-    it('is empty before the operations load', () => {
-        mockOperations(undefined);
+    it.each([
+        ['before the operations load', undefined],
+        ['for a report with no operations', []],
+    ])('is empty %s', (_, operations) => {
+        mockReports(operations);
 
         const { result } = renderHook(() => useDramFallbacks(new Map<number, AllocationFailure>()));
 
         expect(result.current.size).toBe(0);
     });
 
-    it('finds argument mismatches in the active memory report', () => {
-        mockOperations([makeOperation({ id: 3, arguments: [memoryConfigArgument('L1')], outputs: [dramOutput] })]);
+    it('is empty when the reports are not linked, so an unrelated run is never blamed', () => {
+        mockReports([argumentMismatch], []);
+
+        const { result } = renderHook(() => useDramFallbacks(new Map<number, AllocationFailure>()));
+
+        expect(result.current.size).toBe(0);
+    });
+
+    it('finds argument mismatches in the linked memory report', () => {
+        mockReports([argumentMismatch]);
 
         const { result } = renderHook(() => useDramFallbacks(new Map<number, AllocationFailure>()));
 
@@ -45,7 +69,7 @@ describe('useDramFallbacks', () => {
     });
 
     it('reads retries against the failures it is given', () => {
-        mockOperations([
+        mockReports([
             makeOperation({ id: 1, name: 'ttnn.linear' }),
             makeOperation({ id: 2, name: 'ttnn.linear', outputs: [dramOutput] }),
         ]);
@@ -55,5 +79,18 @@ describe('useDramFallbacks', () => {
         );
 
         expect(result.current.get(2)?.signal).toBe(DramFallbackSignal.RETRY_AFTER_FAILURE);
+    });
+
+    // The route feeds the result into the table's enrichment memo, so a fresh map per render
+    // would re-enrich every row.
+    it('returns the same map when re-rendered with the same inputs', () => {
+        const allocationFailureByOpId = new Map<number, AllocationFailure>();
+        mockReports([argumentMismatch]);
+
+        const { result, rerender } = renderHook(() => useDramFallbacks(allocationFailureByOpId));
+        const first = result.current;
+        rerender();
+
+        expect(result.current).toBe(first);
     });
 });

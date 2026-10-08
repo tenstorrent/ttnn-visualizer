@@ -9,11 +9,9 @@ import { NO_CONSUMER_OPERATION_ID, getLastValidConsumer } from '../functions/lat
 import { L1PeakStatus } from '../definitions/L1PeakDecomposition';
 import { L1PeakDecompositionState } from '../model/L1PeakDecomposition';
 import { Buffer, OperationDescription, Tensor } from '../model/APIData';
-import { BufferType } from '../model/BufferType';
+import { BufferType, isL1BufferType } from '../model/BufferType';
 import { activeProfilerReportAtom } from '../store/app';
 import { useBuffers, useDevices, useOperationsList } from './useAPI';
-
-const L1_TENSOR_TYPES: ReadonlySet<BufferType> = new Set([BufferType.L1, BufferType.L1_SMALL]);
 
 interface AddressLifetimes {
     lastUseByAddress: Map<number, number>;
@@ -36,7 +34,7 @@ const resolveAddressLifetimes = (operations: readonly OperationDescription[]): A
     const lastUseByTensorId = new Map<number, { address: number; lastUse: number }>();
 
     const consider = (tensor: Tensor) => {
-        if (tensor.address === null || tensor.buffer_type === null || !L1_TENSOR_TYPES.has(tensor.buffer_type)) {
+        if (tensor.address === null || !isL1BufferType(tensor.buffer_type)) {
             return;
         }
         // Same definition of "a real use" as the late-deallocation overlay, so the two views

@@ -10,7 +10,7 @@ import {
 } from '../definitions/DramFallback';
 import { AllocationFailure } from '../model/AllocationFailure';
 import { Operation, OperationDescription, Tensor } from '../model/APIData';
-import { BufferType, BufferTypeLabel, StringBufferType, isL1BufferType } from '../model/BufferType';
+import { BufferType, BufferTypeLabel, StringBufferTypeToBufferType, isL1BufferType } from '../model/BufferType';
 import { DramFallback } from '../model/DramFallback';
 import { getMemoryConfigBufferType } from './parseMemoryConfig';
 
@@ -44,7 +44,7 @@ const isL1AllocationFailure = (failure: AllocationFailure): boolean => {
     switch (failure.kind) {
         case AllocationFailureKind.BANK_OUT_OF_MEMORY:
         case AllocationFailureKind.BANK_OUT_OF_MEMORY_WITH_DEPENDENCIES:
-            return failure.bufferType === StringBufferType.L1 || failure.bufferType === StringBufferType.L1_SMALL;
+            return failure.bufferType !== null && isL1BufferType(StringBufferTypeToBufferType[failure.bufferType]);
         case AllocationFailureKind.CIRCULAR_BUFFERS_BEYOND_L1:
         case AllocationFailureKind.CIRCULAR_BUFFERS_CLASH:
             return true;
