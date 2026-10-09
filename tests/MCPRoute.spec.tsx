@@ -3,21 +3,15 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import '@testing-library/jest-dom/vitest';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen, within } from '@testing-library/react';
 import Markdown from 'markdown-to-jsx';
-import { ServerConfig } from '../src/definitions/ServerConfig';
 import { DOC_MARKDOWN_OPTIONS } from '../src/definitions/MarkdownOptions';
 import MCP from '../src/routes/MCP';
 
 vi.mock('react-helmet-async', () => ({ Helmet: () => null }));
 
-const getServerConfigMock = vi.hoisted(() => vi.fn((): Partial<ServerConfig> => ({ SERVER_MODE: false })));
-
-vi.mock('../src/functions/getServerConfig', () => ({ default: getServerConfigMock }));
-
 afterEach(cleanup);
-beforeEach(() => getServerConfigMock.mockReturnValue({ SERVER_MODE: false }));
 
 describe('MCP', () => {
     it('renders the published documentation rather than a copy of it', () => {
@@ -60,21 +54,5 @@ describe('MCP', () => {
 
         expect(link).toHaveAttribute('target', '_blank');
         expect(link).toHaveAttribute('rel', expect.stringContaining('noreferrer'));
-    });
-
-    it('says the server is the reader’s to run when the app is hosted', () => {
-        // Hosted, "run ttnn-visualizer-mcp" is about the reader's own machine, and the
-        // tools address reports by path on whichever machine that is.
-        getServerConfigMock.mockReturnValue({ SERVER_MODE: true });
-
-        render(<MCP />);
-
-        expect(screen.getByText(/server you run yourself/i)).toBeInTheDocument();
-    });
-
-    it('leaves the hosted note out of a local run, where it would only mislead', () => {
-        render(<MCP />);
-
-        expect(screen.queryByText(/server you run yourself/i)).not.toBeInTheDocument();
     });
 });

@@ -112,5 +112,8 @@ export const NAVIGATION_ITEMS: readonly NavigationItem[] = Object.freeze([
         // Reference material about a server the reader runs themselves, so no report is
         // needed and none is implied — it sits last for the same reason. #2035
         requirement: NavRequirement.NONE,
+        // That server runs on the reader's machine and addresses reports by local path, so
+        // it cannot reach a hosted deployment's reports. #2101
+        hiddenInServerMode: true,
     },
 ]);
