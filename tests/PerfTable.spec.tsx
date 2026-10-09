@@ -10,13 +10,15 @@ import PerfTable from '../src/components/performance/PerfTable';
 import { BoundType, ColumnKeys } from '../src/definitions/PerfTable';
 import { TypedPerfTableRow, signpostRowDefaults } from '../src/model/PerfTable';
 import { PERF_HEURISTIC_FLAG_DEFINITIONS, PerfHeuristicFlag } from '../src/definitions/PerfHeuristics';
-import { OpType } from '../src/definitions/Performance';
+import { HIGH_DISPATCH_THRESHOLD_US, OpType } from '../src/definitions/Performance';
 import { OperationCategories } from '../src/definitions/StackedPerfTable';
 import { TEST_IDS } from '../src/definitions/TestIds';
 import { useGetNPEManifest, useOpToPerfIdFiltered, useOperationsList, usePerfMeta } from '../src/hooks/useAPI';
 import { hiddenPerfTableColumnsAtom, selectedPerfRowIdAtom } from '../src/store/app';
 import { TestProviders } from './helpers/TestProviders';
 import { DEFAULT_MAX_CORES } from '../src/functions/getCoreCount';
+import { enrichRowData } from '../src/functions/enrichPerfRowData';
+import { makeRawPerfRow } from './helpers/perfRowFixtures';
 
 vi.mock('../src/hooks/useAPI.tsx', () => ({
     useGetNPEManifest: vi.fn(),
@@ -54,10 +56,16 @@ interface RenderTableOptions {
     comparisonData?: TypedPerfTableRow[][];
     activeReportComparisonIndex?: number | null;
     hiddenColumns?: ColumnKeys[];
+    hiliteHighDispatch?: boolean;
 }
 
 function renderTable(rows: TypedPerfTableRow[], options: RenderTableOptions = {}) {
-    const { comparisonData = [], activeReportComparisonIndex = null, hiddenColumns = [] } = options;
+    const {
+        comparisonData = [],
+        activeReportComparisonIndex = null,
+        hiddenColumns = [],
+        hiliteHighDispatch = false,
+    } = options;
 
     return render(
         <TestProviders initialAtomValues={[[hiddenPerfTableColumnsAtom, hiddenColumns]]}>
@@ -66,7 +74,7 @@ function renderTable(rows: TypedPerfTableRow[], options: RenderTableOptions = {}
                 comparisonData={comparisonData}
                 filters={null}
                 provideMatmulAdvice={false}
-                hiliteHighDispatch={false}
+                hiliteHighDispatch={hiliteHighDispatch}
                 reportFolderName='unit-test'
                 maxCores={DEFAULT_MAX_CORES}
                 activeReportComparisonIndex={activeReportComparisonIndex}
@@ -792,3 +800,48 @@ function SelectedRowProbe() {
 
     return <span data-testid='selected-row-probe'>{selected === null ? 'null' : String(selected)}</span>;
 }
+
+describe('PerfTable high dispatch highlight', () => {
+    const DISPATCH_TOOLTIP = `Op with > ${HIGH_DISPATCH_THRESHOLD_US} µs dispatch latency`;
+
+    // Enriched from raw rows so the flag comes from the same path the report uses.
+    const dispatchRows = () =>
+        enrichRowData(
+            [
+                makeRawPerfRow({
+                    id: '1',
+                    op_code: 'LongOp',
+                    raw_op_code: 'LongOp',
+                    device_time: '500',
+                    op_to_op_gap: '1',
+                }),
+                makeRawPerfRow({
+                    id: '2',
+                    op_code: 'ShortOp',
+                    raw_op_code: 'ShortOp',
+                    device_time: '2',
+                    op_to_op_gap: '16.5',
+                }),
+            ],
+            [],
+            null,
+        );
+
+    const rowFor = (opCode: string) => screen.getByText(opCode).closest('tr')!;
+
+    it('marks only the op behind a long op-to-op gap', async () => {
+        renderTable(dispatchRows(), { hiliteHighDispatch: true });
+
+        expect(screen.getByRole('columnheader', { name: /Slow/ })).toBeInTheDocument();
+        // Blueprint loads the icon's SVG, and with it the <title>, asynchronously.
+        expect(await within(rowFor('ShortOp')).findByTitle(DISPATCH_TOOLTIP)).toBeInTheDocument();
+        expect(within(rowFor('LongOp')).queryByTitle(DISPATCH_TOOLTIP)).toBeNull();
+        expect(screen.getAllByTitle(DISPATCH_TOOLTIP)).toHaveLength(1);
+    });
+
+    it('drops the Slow column when the highlight is off', () => {
+        renderTable(dispatchRows());
+
+        expect(screen.queryByRole('columnheader', { name: /Slow/ })).toBeNull();
+    });
+});
