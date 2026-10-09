@@ -120,7 +120,8 @@ export const formatCell = (
     if (key === ColumnKeys.HighDispatch) {
         const tooltipMessage = `Op with > ${HIGH_DISPATCH_THRESHOLD_US} µs dispatch latency`;
 
-        return row?.[ColumnKeys.DeviceTime] !== null && row?.[ColumnKeys.DeviceTime] > HIGH_DISPATCH_THRESHOLD_US ? (
+        // Flagged from the op-to-op gap in enrichRowData, the same rows the tracing banner counts.
+        return row?.high_dispatch ? (
             <Tooltip content={tooltipMessage}>
                 <Icon
                     className={WARNING_COLOUR}
@@ -512,10 +513,7 @@ export const getOpToOpGapColour = (value: number): CellColour => {
 export const calcHighDispatchOps = (rows: TypedPerfTableRow[]) => {
     const highDispatchOps = rows
         .map((opData: TypedPerfTableRow, index: number): [number, TypedPerfTableRow] => [index + 1, opData])
-        .filter(([_, opData]) => {
-            const val = opData.op_to_op_gap;
-            return val !== null && val !== undefined && typeof val === 'number' && val > HIGH_DISPATCH_THRESHOLD_US;
-        });
+        .filter(([_, opData]) => opData.high_dispatch);
 
     if (highDispatchOps.length === 0) {
         return null;
