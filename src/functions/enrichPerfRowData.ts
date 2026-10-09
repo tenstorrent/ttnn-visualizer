@@ -5,7 +5,6 @@
 import { PerfTableRow, TypedPerfTableRow } from '../model/PerfTable';
 import { BoundAnalysis } from '../definitions/PerfTable';
 import { OperationCategories } from '../definitions/StackedPerfTable';
-import { HIGH_DISPATCH_THRESHOLD_US } from '../definitions/Performance';
 import { BufferType } from '../model/BufferType';
 import { DeviceOperationLayoutTypes } from '../model/APIData';
 import { L1PressureMetrics } from '../model/L1Pressure';
@@ -13,6 +12,7 @@ import { AllocationFailure } from '../model/AllocationFailure';
 import { nsToUs } from './math';
 import { parsePerfRowTensorAttributes } from './parsePerfRowTensorAttributes';
 import { isFlagEnabled } from './getServerConfig';
+import { isHighDispatchGap } from './perfBoundPredicates';
 
 interface RowAttributes {
     buffer_type: BufferType | null;
@@ -78,7 +78,7 @@ export const enrichRowData = (
         return {
             ...row,
             op,
-            high_dispatch: opToOpGap !== null && opToOpGap > HIGH_DISPATCH_THRESHOLD_US,
+            high_dispatch: isHighDispatchGap(opToOpGap),
             id: parseInt(row.id, 10),
             total_percent: parseFloat(row.total_percent),
             device: Number.isNaN(parsedDevice) ? null : parsedDevice,

@@ -7,10 +7,10 @@ import { enrichRowData } from '../src/functions/enrichPerfRowData';
 import { PerfTableRow } from '../src/model/PerfTable';
 import { BufferType } from '../src/model/BufferType';
 import { DeviceOperationLayoutTypes } from '../src/model/APIData';
-import { OpType } from '../src/definitions/Performance';
 import { BoundAnalysis } from '../src/definitions/PerfTable';
 import { OperationCategories } from '../src/definitions/StackedPerfTable';
 import { makeAllocationFailure } from './helpers/allocationFailure';
+import { makeRawPerfRow } from './helpers/perfRowFixtures';
 
 // tt-perf-report emits a CSV whose columns (id, total_percent, bound, op_code, device, device_time,
 // op_to_op_gap, cores, dram, dram_percent, flops, flops_percent, ...) reach the frontend as strings.
@@ -18,46 +18,9 @@ import { makeAllocationFailure } from './helpers/allocationFailure';
 // that conversion faithfully reflects the values tt-perf-report produced — including the >6.5µs
 // high-dispatch flag, which mirrors tt-perf-report's Op-to-Op Gap threshold (perf_report.py:1052).
 
-// A raw row as delivered to the frontend: the numeric columns arrive as strings (matching the
-// CSV-derived JSON), alongside non-string fields like global_call_count, advice, and hash.
-const makeRawRow = (overrides: Partial<PerfTableRow> = {}): PerfTableRow =>
-    ({
-        id: '1',
-        global_call_count: 0,
-        advice: [],
-        total_percent: '12.5',
-        bound: 'DRAM',
-        op_code: 'Matmul',
-        raw_op_code: 'Matmul',
-        device: '0',
-        device_time: '123.4',
-        op_to_op_gap: '2.5',
-        cores: '64',
-        dram: '15.5',
-        dram_percent: '42.1',
-        flops: '88.8',
-        flops_percent: '73.2',
-        math_fidelity: 'HiFi4',
-        output_datatype: 'BFLOAT16',
-        output_0_memory: '',
-        input_0_datatype: 'BFLOAT16',
-        input_1_datatype: 'BFLOAT16',
-        dram_sharded: '',
-        input_0_memory: 'DEV_0_DRAM_INTERLEAVED',
-        input_1_memory: '',
-        inner_dim_block_size: '',
-        output_subblock_h: '',
-        output_subblock_w: '',
-        pm_ideal_ns: '1000',
-        op_type: OpType.DEVICE_OP,
-        hash: null,
-        cache_hit: null,
-        ...overrides,
-    }) as PerfTableRow;
-
 describe('enrichRowData — typed conversion of tt-perf-report values', () => {
     it('parses numeric columns into numbers', () => {
-        const [row] = enrichRowData([makeRawRow()], [], null);
+        const [row] = enrichRowData([makeRawPerfRow()], [], null);
 
         expect(row.id).toBe(1);
         expect(row.total_percent).toBe(12.5);
@@ -73,7 +36,7 @@ describe('enrichRowData — typed conversion of tt-perf-report values', () => {
     });
 
     it('parses the op category and bound analysis tt-perf-report 1.4.0 emits', () => {
-        const [row] = enrichRowData([makeRawRow({ op_category: 'CCL', bound_analysis: 'flops_only' })], [], null);
+        const [row] = enrichRowData([makeRawPerfRow({ op_category: 'CCL', bound_analysis: 'flops_only' })], [], null);
 
         expect(row.op_category).toBe(OperationCategories.CCL);
         expect(row.bound_analysis).toBe(BoundAnalysis.FLOPS_ONLY);
@@ -81,7 +44,7 @@ describe('enrichRowData — typed conversion of tt-perf-report values', () => {
 
     it('reads a missing or unrecognised op category and bound analysis as unknown', () => {
         const [missing, unrecognised] = enrichRowData(
-            [makeRawRow(), makeRawRow({ op_category: 'Quantum', bound_analysis: 'partial' })],
+            [makeRawPerfRow(), makeRawPerfRow({ op_category: 'Quantum', bound_analysis: 'partial' })],
             [],
             null,
         );
@@ -95,7 +58,7 @@ describe('enrichRowData — typed conversion of tt-perf-report values', () => {
     it('maps empty optional numeric columns to null', () => {
         const [row] = enrichRowData(
             [
-                makeRawRow({
+                makeRawPerfRow({
                     op_to_op_gap: '',
                     dram: '',
                     dram_percent: '',
@@ -117,7 +80,7 @@ describe('enrichRowData — typed conversion of tt-perf-report values', () => {
     });
 
     it('extracts buffer type and layout from input_0_memory', () => {
-        const [row] = enrichRowData([makeRawRow({ input_0_memory: 'DEV_0_L1_TILE' })], [], null);
+        const [row] = enrichRowData([makeRawPerfRow({ input_0_memory: 'DEV_0_L1_TILE' })], [], null);
 
         expect(row.buffer_type).toBe(BufferType.L1);
         expect(row.layout).toBe(DeviceOperationLayoutTypes.TILE);
@@ -125,33 +88,33 @@ describe('enrichRowData — typed conversion of tt-perf-report values', () => {
 
     describe('high_dispatch flag (tt-perf-report Op-to-Op Gap > 6.5µs)', () => {
         it('flags an op whose gap exceeds 6.5µs', () => {
-            const [row] = enrichRowData([makeRawRow({ op_to_op_gap: '7.0' })], [], null);
+            const [row] = enrichRowData([makeRawPerfRow({ op_to_op_gap: '7.0' })], [], null);
 
             expect(row.high_dispatch).toBe(true);
         });
 
         it('does not flag an op at or below 6.5µs', () => {
-            const [row] = enrichRowData([makeRawRow({ op_to_op_gap: '3.0' })], [], null);
+            const [row] = enrichRowData([makeRawPerfRow({ op_to_op_gap: '3.0' })], [], null);
 
             expect(row.high_dispatch).toBe(false);
         });
 
         it('does not flag an op with no gap', () => {
-            const [row] = enrichRowData([makeRawRow({ op_to_op_gap: '' })], [], null);
+            const [row] = enrichRowData([makeRawPerfRow({ op_to_op_gap: '' })], [], null);
 
             expect(row.high_dispatch).toBe(false);
         });
 
         // Pins the decimal boundary: parsing with parseInt would truncate "6.6" to 6 and miss it.
         it('flags a fractional gap just over 6.5µs', () => {
-            const [row] = enrichRowData([makeRawRow({ op_to_op_gap: '6.6' })], [], null);
+            const [row] = enrichRowData([makeRawPerfRow({ op_to_op_gap: '6.6' })], [], null);
 
             expect(row.high_dispatch).toBe(true);
             expect(row.op_to_op_gap).toBe(6.6);
         });
 
         it('does not flag a gap exactly at 6.5µs', () => {
-            const [row] = enrichRowData([makeRawRow({ op_to_op_gap: '6.5' })], [], null);
+            const [row] = enrichRowData([makeRawPerfRow({ op_to_op_gap: '6.5' })], [], null);
 
             expect(row.high_dispatch).toBe(false);
         });
@@ -164,7 +127,7 @@ describe('enrichRowData — typed conversion of tt-perf-report values', () => {
         it('converts raw nanosecond strings into microseconds', () => {
             const [row] = enrichRowData(
                 [
-                    makeRawRow({
+                    makeRawPerfRow({
                         device_kernel_duration: '1500000',
                         brisc_kernel_duration: '1234',
                         ncrisc_kernel_duration: '500',
@@ -189,7 +152,7 @@ describe('enrichRowData — typed conversion of tt-perf-report values', () => {
         it('maps absent or non-numeric kernel durations to null', () => {
             const [row] = enrichRowData(
                 [
-                    makeRawRow({
+                    makeRawPerfRow({
                         device_kernel_duration: '',
                         brisc_kernel_duration: null,
                     } as Partial<PerfTableRow>),
@@ -207,9 +170,9 @@ describe('enrichRowData — typed conversion of tt-perf-report values', () => {
         it('marks only the first row of each hash as the first occurrence', () => {
             const rows = enrichRowData(
                 [
-                    makeRawRow({ id: '1', hash: 'abc' }),
-                    makeRawRow({ id: '2', hash: 'abc' }),
-                    makeRawRow({ id: '3', hash: 'def' }),
+                    makeRawPerfRow({ id: '1', hash: 'abc' }),
+                    makeRawPerfRow({ id: '2', hash: 'abc' }),
+                    makeRawPerfRow({ id: '3', hash: 'def' }),
                 ],
                 [],
                 null,
@@ -220,7 +183,7 @@ describe('enrichRowData — typed conversion of tt-perf-report values', () => {
     });
 
     it('attaches the op id from the perf-id lookup', () => {
-        const [row] = enrichRowData([makeRawRow({ id: '7' })], [{ perfId: '7', opId: 42 }], null);
+        const [row] = enrichRowData([makeRawPerfRow({ id: '7' })], [{ perfId: '7', opId: 42 }], null);
 
         expect(row.op).toBe(42);
     });
@@ -231,7 +194,7 @@ describe('enrichRowData — typed conversion of tt-perf-report values', () => {
 
         it('attaches the failure recorded for the linked operation', () => {
             const [linked, other] = enrichRowData(
-                [makeRawRow({ id: '7' }), makeRawRow({ id: '8' })],
+                [makeRawPerfRow({ id: '7' }), makeRawPerfRow({ id: '8' })],
                 [
                     { perfId: '7', opId: 42 },
                     { perfId: '8', opId: 43 },
@@ -245,13 +208,13 @@ describe('enrichRowData — typed conversion of tt-perf-report values', () => {
         });
 
         it('attaches nothing without a failure map, as comparison datasets are enriched', () => {
-            const [row] = enrichRowData([makeRawRow({ id: '7' })], [{ perfId: '7', opId: 42 }], null, null);
+            const [row] = enrichRowData([makeRawPerfRow({ id: '7' })], [{ perfId: '7', opId: 42 }], null, null);
 
             expect(row.allocation_failure).toBeNull();
         });
 
         it('attaches nothing to a row with no linked operation', () => {
-            const [row] = enrichRowData([makeRawRow({ id: '7' })], [], null, failureByOpId);
+            const [row] = enrichRowData([makeRawPerfRow({ id: '7' })], [], null, failureByOpId);
 
             expect(row.allocation_failure).toBeNull();
         });
