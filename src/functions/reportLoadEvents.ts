@@ -4,24 +4,22 @@
 
 import axios, { HttpStatusCode } from 'axios';
 import { EventLogEvent, ReportKind, ReportLoadFailureReason, ReportSource } from '../definitions/EventLogEvent';
+import { ReportFolder } from '../definitions/Reports';
 import getServerConfig from './getServerConfig';
 import recordEvent from './recordEvent';
-
-// Mirrors the demo rule in `get_profiler_data_list` and `get_performance_data_list` (views.py).
-const HOSTED_DEMO_FOLDER_PATTERN = /^demo/i;
 
 export function recordReportLoaded(kind: ReportKind, source: ReportSource): void {
     recordEvent({ event: EventLogEvent.REPORT_LOADED, details: { kind, source } });
 }
 
 /** Source of a report activated from the server's own report folders. */
-export function getLocalFolderReportSource(folderPath: string): ReportSource {
+export function getLocalFolderReportSource(folder: Pick<ReportFolder, 'isDemo'>): ReportSource {
     if (!getServerConfig()?.SERVER_MODE) {
         return ReportSource.LOCAL_TT_METAL;
     }
 
     // Hosted listings hold only demo folders and this session's own uploads.
-    return HOSTED_DEMO_FOLDER_PATTERN.test(folderPath) ? ReportSource.DEMO : ReportSource.UPLOAD;
+    return folder.isDemo ? ReportSource.DEMO : ReportSource.UPLOAD;
 }
 
 export function recordReportLoadFailed(kind: ReportKind, reason: ReportLoadFailureReason): void {

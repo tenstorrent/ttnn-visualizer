@@ -110,21 +110,21 @@ describe('recordReportLoadFailure', () => {
 
 describe('getLocalFolderReportSource', () => {
     it('records every local folder pick as local_tt_metal outside SERVER_MODE', () => {
-        expect(getLocalFolderReportSource('demo-resnet')).toBe(ReportSource.LOCAL_TT_METAL);
-        expect(getLocalFolderReportSource('my-report')).toBe(ReportSource.LOCAL_TT_METAL);
+        expect(getLocalFolderReportSource({ isDemo: true })).toBe(ReportSource.LOCAL_TT_METAL);
+        expect(getLocalFolderReportSource({ isDemo: false })).toBe(ReportSource.LOCAL_TT_METAL);
+        expect(getLocalFolderReportSource({})).toBe(ReportSource.LOCAL_TT_METAL);
     });
 
-    it('records demo-named folders as demo under SERVER_MODE, matching case-insensitively', () => {
+    it('records folders the listing marks as demos as demo under SERVER_MODE', () => {
         getServerConfigMock.mockReturnValue({ SERVER_MODE: true });
 
-        expect(getLocalFolderReportSource('demo-resnet')).toBe(ReportSource.DEMO);
-        expect(getLocalFolderReportSource('Demo_Resnet')).toBe(ReportSource.DEMO);
+        expect(getLocalFolderReportSource({ isDemo: true })).toBe(ReportSource.DEMO);
     });
 
     it("records any other folder as upload under SERVER_MODE, since only the session's uploads are listed", () => {
         getServerConfigMock.mockReturnValue({ SERVER_MODE: true });
 
-        expect(getLocalFolderReportSource('my-report')).toBe(ReportSource.UPLOAD);
-        expect(getLocalFolderReportSource('not-demo')).toBe(ReportSource.UPLOAD);
+        expect(getLocalFolderReportSource({ isDemo: false })).toBe(ReportSource.UPLOAD);
+        expect(getLocalFolderReportSource({})).toBe(ReportSource.UPLOAD);
     });
 });

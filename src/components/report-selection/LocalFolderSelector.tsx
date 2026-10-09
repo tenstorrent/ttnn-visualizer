@@ -188,7 +188,7 @@ const LocalFolderOptions = () => {
     ) => {
         try {
             await withActivatingReport(action);
-            recordReportLoaded(kind, getLocalFolderReportSource(folder.path));
+            recordReportLoaded(kind, getLocalFolderReportSource(folder));
         } catch (err: unknown) {
             createToastNotification(failedTitle, getResponseError(err), ToastType.ERROR);
             recordReportLoadFailed(kind, getReportLoadFailureReason(err));

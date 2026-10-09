@@ -50,7 +50,7 @@ const SELECT_REPORT_TEXT = 'Select a report...';
 const waitForPickerOptions = () => screen.findAllByTestId(TEST_IDS.FOLDER_PICKER_ROW, {}, WAIT_FOR_OPTIONS);
 
 // Data is mutated in the mock of useLocal - eventually this should be set per test as needed
-const mockPerfFolderList = [...mockPerformanceReportFolders];
+const mockPerfFolderList: ReportFolder[] = [...mockPerformanceReportFolders];
 
 // The folder list is the mocked query's only source of truth, so deleting has to remove from it
 // for anything downstream of the delete to be observable.
@@ -68,7 +68,7 @@ const {
     mockUpdateInstance: vi.fn(),
     mockDeleteProfiler: vi.fn(),
     mockDeletePerformance: vi.fn(),
-    mockProfilerFolders: [] as { path: string; reportName: string; syncedName?: string }[],
+    mockProfilerFolders: [] as ReportFolder[],
     mockUploadLocalFolder: vi.fn(),
     mockUploadLocalPerformanceFolder: vi.fn(),
     getUploadSizeLimitError: vi.fn(),
@@ -339,9 +339,14 @@ it('updates the instance when a performance report is selected and creates toast
 });
 
 describe('under SERVER_MODE', () => {
-    // Hosted listings hold the pre-installed demo folders plus the session's own uploads.
-    const DEMO_PROFILER_FOLDER = { path: 'demo-profiler-report', reportName: 'demo_profiler_report' };
-    const DEMO_PERFORMANCE_FOLDER = { path: 'demo-performance-report', reportName: 'demo-performance-report' };
+    // Hosted listings hold the pre-installed demo folders plus the session's own uploads. Shaped
+    // like the shipped n300-llama demo, whose profiler `report_name` doesn't mention "demo".
+    const DEMO_PROFILER_FOLDER: ReportFolder = { path: 'demo_n300-llama', reportName: 'n150 llama', isDemo: true };
+    const DEMO_PERFORMANCE_FOLDER: ReportFolder = {
+        path: 'DEMO_N300-LLAMA',
+        reportName: 'DEMO_N300-LLAMA',
+        isDemo: true,
+    };
 
     beforeEach(() => {
         serverModeState.enabled = true;
