@@ -234,22 +234,26 @@ describe('SideNavigation collapsing', () => {
 });
 
 describe('SideNavigation server mode', () => {
-    // The frontend half of the dual gate AGENTS.md requires: MLIR's endpoints are
-    // `@local_only`, so the hosted rail must not offer a door that 403s behind it. The
-    // gate is one `hiddenInServerMode` flag consumed by one filter — cheap to delete by
-    // accident during a restyle, hence pinned here.
-    it('offers MLIR in a local deployment', () => {
+    // MLIR is the frontend half of the dual gate AGENTS.md requires: its endpoints are
+    // `@local_only`, so the hosted rail must not offer a door that 403s behind it. MCP has
+    // no backend half — its page documents a server the reader runs on their own machine,
+    // which cannot reach a hosted deployment's reports (#2101). Both rest on one
+    // `hiddenInServerMode` flag consumed by one filter — cheap to delete by accident during
+    // a restyle, hence pinned here.
+    it('offers MLIR and MCP in a local deployment', () => {
         renderRail();
 
         expect(getButtonWithText('mlir')).toBeInTheDocument();
+        expect(getButtonWithText('mcp')).toBeInTheDocument();
     });
 
-    it('hides MLIR in server mode and leaves the rest of the rail alone', () => {
+    it('hides MLIR and MCP in server mode and leaves the rest of the rail alone', () => {
         getServerConfigMock.mockReturnValue({ SERVER_MODE: true });
 
         renderRail();
 
         expect(screen.queryByRole('button', { name: /mlir/i })).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /mcp/i })).not.toBeInTheDocument();
         // The filter drops one item, not a category.
         expect(getButtonWithText('reports')).toBeEnabled();
         expect(getButtonWithText('npe')).toBeEnabled();
