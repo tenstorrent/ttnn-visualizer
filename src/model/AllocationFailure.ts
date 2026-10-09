@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-import { AllocationFailureKind } from '../definitions/AllocationFailure';
+import { AllocationFailureKind, AllocationFailureReason } from '../definitions/AllocationFailure';
 import { StringBufferType } from './BufferType';
 
 interface AllocationFailureOperation {
@@ -49,6 +49,12 @@ export interface CircularBuffersClashFailure extends AllocationFailureOperation 
 
 /** An allocation failure read out of an operation's recorded error. */
 export type AllocationFailure = BankAllocationFailure | CircularBuffersBeyondL1Failure | CircularBuffersClashFailure;
+
+/** Why an allocation did not fit, and the figures that show it. */
+export interface AllocationFailureDiagnosis {
+    reason: AllocationFailureReason;
+    detail: string;
+}
 
 /** An operation's allocation failure, with where in its captured graph it failed. */
 export interface AllocationFailureDetail {

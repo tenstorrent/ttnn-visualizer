@@ -24,7 +24,7 @@ describe('AllocationFailureDetails', () => {
 
         expect(details).toHaveTextContent('Out of memory');
         expect(details).toHaveTextContent('Requested 3.13 MiB L1 across 4 banks');
-        expect(details).toHaveTextContent('Fragmented: 977 KiB free per bank');
+        expect(details).toHaveTextContent('Fragmented. 977 KiB free per bank');
         expect(details).toHaveTextContent('Failed in Conv2dDeviceOperation');
     });
 

@@ -4,7 +4,7 @@
 
 import { useAtomValue } from 'jotai';
 import 'styles/components/AllocationFailureDetails.scss';
-import { ALLOCATION_FAILURE_KIND_LABELS } from '../definitions/AllocationFailure';
+import { ALLOCATION_FAILURE_KIND_LABELS, ALLOCATION_FAILURE_REASON_LABELS } from '../definitions/AllocationFailure';
 import { TEST_IDS } from '../definitions/TestIds';
 import { getAllocationFailureDiagnosis, getAllocationFailureSummary } from '../functions/parseAllocationFailure';
 import { AllocationFailureDetail } from '../model/AllocationFailure';
@@ -21,7 +21,11 @@ function AllocationFailureDetails({ failure, failedDeviceOperations }: Allocatio
         >
             <strong>{ALLOCATION_FAILURE_KIND_LABELS[failure.kind]}</strong>
             <p>{getAllocationFailureSummary(failure, showHex)}</p>
-            {diagnosis && <p className='allocation-failure-diagnosis'>{diagnosis}</p>}
+            {diagnosis && (
+                <p className='allocation-failure-diagnosis'>
+                    <strong>{ALLOCATION_FAILURE_REASON_LABELS[diagnosis.reason]}.</strong> {diagnosis.detail}
+                </p>
+            )}
             {failedDeviceOperations.length > 0 && <p>Failed in {failedDeviceOperations.join(', ')}</p>}
         </div>
     );

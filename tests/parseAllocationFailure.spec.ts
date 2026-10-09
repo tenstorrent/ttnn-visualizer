@@ -9,7 +9,11 @@ import {
     getAllocationFailureSummary,
     parseAllocationFailure,
 } from '../src/functions/parseAllocationFailure';
-import { AllocationFailureKind } from '../src/definitions/AllocationFailure';
+import {
+    ALLOCATION_FAILURE_REASON_LABELS,
+    AllocationFailureKind,
+    AllocationFailureReason,
+} from '../src/definitions/AllocationFailure';
 import { Node, NodeType, Operation } from '../src/model/APIData';
 import { StringBufferType } from '../src/model/BufferType';
 import { BankAllocationFailure } from '../src/model/AllocationFailure';
@@ -226,40 +230,61 @@ describe('getAllocationFailureSummary', () => {
 });
 
 describe('getAllocationFailureDiagnosis', () => {
+    const { NOT_ENOUGH_FREE_SPACE, FRAGMENTED, FREE_BLOCK_COULD_HOLD_IT, LARGER_THAN_EMPTY_BANK } =
+        AllocationFailureReason;
+
     const bank = (overrides: Partial<BankAllocationFailure>) =>
         makeAllocationFailure({ bufferType: StringBufferType.DRAM, ...overrides });
+
+    const diagnose = (message: string) =>
+        getAllocationFailureDiagnosis(parseAllocationFailure(operationError(message))!);
+
+    // The reason, with the detail matching a pattern.
+    const matching = (reason: AllocationFailureReason, detail: RegExp) => ({
+        reason,
+        detail: expect.stringMatching(detail),
+    });
 
     it('calls a request that free space covers but no single block holds fragmentation', () => {
         expect(
             getAllocationFailureDiagnosis(
                 bank({ freeBytes: 1000000, largestFreeBlockBytes: 300000, bytesPerBank: 819200 }),
             ),
-        ).toBe('Fragmented: 977 KiB free per bank, but no single block holds 800 KiB; the largest is 293 KiB.');
+        ).toEqual({
+            reason: FRAGMENTED,
+            detail: '977 KiB free per bank, but no single block holds 800 KiB; the largest is 293 KiB.',
+        });
     });
 
     it('gives the shortfall when there is not enough free space', () => {
-        expect(getAllocationFailureDiagnosis(parseAllocationFailure(operationError(OUT_OF_MEMORY))!)).toBe(
-            'Short by 426 KiB per bank: needs 800 KiB, 374 KiB free. An interleaved L1 buffer can use only the part of that free space inside the interleaved region, so it may be short by more.',
-        );
+        expect(diagnose(OUT_OF_MEMORY)).toEqual({
+            reason: NOT_ENOUGH_FREE_SPACE,
+            detail: 'Short by 426 KiB per bank: needs 800 KiB, 374 KiB free. An interleaved L1 buffer can use only the part of that free space inside the interleaved region, so it may be short by more.',
+        });
         expect(
             getAllocationFailureDiagnosis(bank({ freeBytes: 100, largestFreeBlockBytes: 100, bytesPerBank: 300 })),
-        ).toBe('Short by 200 B per bank: needs 300 B, 100 B free.');
+        ).toEqual({ reason: NOT_ENOUGH_FREE_SPACE, detail: 'Short by 200 B per bank: needs 300 B, 100 B free.' });
     });
 
     it('calls free space exactly the request fragmentation, and a block exactly the request large enough', () => {
         expect(
-            getAllocationFailureDiagnosis(bank({ freeBytes: 300, largestFreeBlockBytes: 299, bytesPerBank: 300 })),
-        ).toMatch(/^Fragmented:/);
+            getAllocationFailureDiagnosis(bank({ freeBytes: 300, largestFreeBlockBytes: 299, bytesPerBank: 300 }))
+                ?.reason,
+        ).toBe(FRAGMENTED);
         expect(
-            getAllocationFailureDiagnosis(bank({ freeBytes: 300, largestFreeBlockBytes: 300, bytesPerBank: 300 })),
-        ).toMatch(/^A free block of 300 B could hold/);
+            getAllocationFailureDiagnosis(bank({ freeBytes: 300, largestFreeBlockBytes: 300, bytesPerBank: 300 }))
+                ?.reason,
+        ).toBe(FREE_BLOCK_COULD_HOLD_IT);
     });
 
     it('caveats fragmentation on L1, where an interleaved buffer cannot use all of the free space', () => {
         expect(
             getAllocationFailureDiagnosis(makeAllocationFailure({ freeBytes: 1000000, largestFreeBlockBytes: 300000 })),
-        ).toMatch(
-            /^Fragmented: .* An interleaved L1 buffer can use only the part of that free space inside the interleaved region\.$/,
+        ).toEqual(
+            matching(
+                FRAGMENTED,
+                /An interleaved L1 buffer can use only the part of that free space inside the interleaved region\.$/,
+            ),
         );
     });
 
@@ -268,74 +293,88 @@ describe('getAllocationFailureDiagnosis', () => {
 
         // tt-metal throws a different error when the block lies below the interleaved limit,
         // so the plain error gives no reason whatever the buffer type.
-        expect(getAllocationFailureDiagnosis(makeAllocationFailure(fits))).toBe(
-            'A free block of 879 KiB could hold the 800 KiB per bank, but the allocator could not use it; the message does not say why.',
+        expect(getAllocationFailureDiagnosis(makeAllocationFailure(fits))).toEqual({
+            reason: FREE_BLOCK_COULD_HOLD_IT,
+            detail: 'The largest free block, 879 KiB, could hold the 800 KiB per bank, but the allocator could not use it; the message does not say why.',
+        });
+        expect(getAllocationFailureDiagnosis(bank(fits))).toEqual(
+            matching(FREE_BLOCK_COULD_HOLD_IT, /the message does not say why\.$/),
         );
-        expect(getAllocationFailureDiagnosis(bank(fits))).toMatch(/the message does not say why\.$/);
         expect(
             getAllocationFailureDiagnosis(
                 bank({ ...fits, kind: AllocationFailureKind.BANK_OUT_OF_MEMORY_WITH_DEPENDENCIES }),
             ),
-        ).toMatch(/space reserved by other allocators overlaps it\.$/);
+        ).toEqual(matching(FREE_BLOCK_COULD_HOLD_IT, /space reserved by other allocators overlaps it\.$/));
     });
 
     it("says other allocators' reservations split a block that would have held the request", () => {
-        const dependencies = parseAllocationFailure(operationError(OUT_OF_MEMORY_WITH_DEPENDENCIES))!;
-
-        expect(getAllocationFailureDiagnosis(dependencies)).toBe(
-            "A free block of 3 KiB could hold the 2 KiB per bank, but other allocators' reservations leave a placeable window of at most 1 KiB.",
-        );
-        expect(
-            getAllocationFailureDiagnosis(
-                parseAllocationFailure(
-                    operationError(OUT_OF_MEMORY_WITH_DEPENDENCIES.replace('B DRAM across', 'B L1 across')),
-                )!,
+        expect(diagnose(OUT_OF_MEMORY_WITH_DEPENDENCIES)).toEqual({
+            reason: FREE_BLOCK_COULD_HOLD_IT,
+            detail: "The largest free block, 3 KiB, could hold the 2 KiB per bank, but other allocators' reservations leave a placeable window of at most 1 KiB.",
+        });
+        expect(diagnose(OUT_OF_MEMORY_WITH_DEPENDENCIES.replace('B DRAM across', 'B L1 across'))).toEqual(
+            matching(
+                FREE_BLOCK_COULD_HOLD_IT,
+                /at most 1 KiB\. An interleaved L1 buffer is also limited to the interleaved region\.$/,
             ),
-        ).toMatch(/at most 1 KiB\. An interleaved L1 buffer is also limited to the interleaved region\.$/);
+        );
     });
 
     it("diagnoses the dependency-aware error from the allocator's own figures when it was itself fragmented", () => {
-        expect(
-            getAllocationFailureDiagnosis(
-                parseAllocationFailure(operationError(OUT_OF_MEMORY_WITH_DEPENDENCIES_FRAGMENTED))!,
-            ),
-        ).toBe('Fragmented: 977 KiB free per bank, but no single block holds 800 KiB; the largest is 293 KiB.');
+        expect(diagnose(OUT_OF_MEMORY_WITH_DEPENDENCIES_FRAGMENTED)).toEqual({
+            reason: FRAGMENTED,
+            detail: '977 KiB free per bank, but no single block holds 800 KiB; the largest is 293 KiB.',
+        });
     });
 
     it('says nothing about an older error that gives no free space', () => {
-        expect(getAllocationFailureDiagnosis(parseAllocationFailure(operationError(LEGACY_OUT_OF_MEMORY))!)).toBeNull();
+        expect(diagnose(LEGACY_OUT_OF_MEMORY)).toBeNull();
     });
 
     it('says when the request is larger than an empty bank, whether or not free space is reported', () => {
-        const expected =
-            'Needs 1.91 MiB per bank, more than an empty bank holds (1.32 MiB): it cannot fit in this buffer type spread across 4 banks.';
+        const expected = {
+            reason: LARGER_THAN_EMPTY_BANK,
+            detail: 'Needs 1.91 MiB per bank, more than an empty bank holds (1.32 MiB): it cannot fit in this buffer type spread across 4 banks.',
+        };
 
-        expect(getAllocationFailureDiagnosis(makeAllocationFailure({ bytesPerBank: 2000000 }))).toBe(expected);
+        expect(getAllocationFailureDiagnosis(makeAllocationFailure({ bytesPerBank: 2000000 }))).toEqual(expected);
         expect(
             getAllocationFailureDiagnosis(
                 bank({ bytesPerBank: 2000000, freeBytes: 382720, largestFreeBlockBytes: 300000 }),
             ),
-        ).toBe(expected);
+        ).toEqual(expected);
     });
 
     it('does not call a request exactly the bank size larger than an empty bank', () => {
         expect(
             getAllocationFailureDiagnosis(
                 bank({ bytesPerBank: 1382720, freeBytes: 382720, largestFreeBlockBytes: 300000 }),
-            ),
-        ).toMatch(/^Short by/);
+            )?.reason,
+        ).toBe(NOT_ENOUGH_FREE_SPACE);
     });
 
     it('gives how far circular buffers run past L1', () => {
-        expect(getAllocationFailureDiagnosis(parseAllocationFailure(operationError(CIRCULAR_BUFFERS_BEYOND_L1))!)).toBe(
-            'Over L1 by 99 KiB.',
-        );
+        expect(diagnose(CIRCULAR_BUFFERS_BEYOND_L1)).toEqual({
+            reason: AllocationFailureReason.BEYOND_END_OF_L1,
+            detail: 'The circular buffers run 99 KiB past the end of L1.',
+        });
     });
 
     it('gives the circular-buffer clash overlap, with the address in hex when asked', () => {
         const clash = parseAllocationFailure(operationError(CIRCULAR_BUFFERS_CLASH))!;
 
-        expect(getAllocationFailureDiagnosis(clash)).toBe('Overlaps the L1 buffer at 600256 by 21 KiB.');
-        expect(getAllocationFailureDiagnosis(clash, true)).toBe('Overlaps the L1 buffer at 0x928C0 by 21 KiB.');
+        expect(getAllocationFailureDiagnosis(clash)).toEqual({
+            reason: AllocationFailureReason.OVERLAPS_L1_BUFFER,
+            detail: 'The circular buffers overlap the L1 buffer at 600256 by 21 KiB.',
+        });
+        expect(getAllocationFailureDiagnosis(clash, true)?.detail).toBe(
+            'The circular buffers overlap the L1 buffer at 0x928C0 by 21 KiB.',
+        );
+    });
+
+    it('has a label for every reason', () => {
+        Object.values(AllocationFailureReason).forEach((reason) => {
+            expect(ALLOCATION_FAILURE_REASON_LABELS[reason]).toBeTruthy();
+        });
     });
 });
