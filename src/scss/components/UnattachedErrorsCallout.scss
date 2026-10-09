@@ -1,0 +1,13 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
+
+@use '../mixins/calloutList' as calloutList;
+
+.unattached-errors-callout {
+    @include calloutList.callout-list;
+
+    p {
+        margin: 8px 0 0;
+    }
+}

@@ -4,8 +4,6 @@
 
 import { ColumnKeys, PerfTableFilters } from '../definitions/PerfTable';
 import { TypedPerfTableRow, signpostRowDefaults } from '../model/PerfTable';
-import { DeviceOperationLayoutTypes } from '../model/APIData';
-import { BufferType } from '../model/BufferType';
 import { Signpost } from '../model/Signpost';
 
 const SIGNPOST_MARKER = '(signpost)';
@@ -21,23 +19,12 @@ const getCellText = (buffer: TypedPerfTableRow, key: ColumnKeys) => {
 
 interface SortAndFilterPerfTableDataOptions {
     filters?: PerfTableFilters;
-    rawOpCodeFilter?: string[];
-    mathFilter?: string[];
-    bufferTypeFilter?: (BufferType | null)[];
-    activeLayoutFilterList?: (DeviceOperationLayoutTypes | null)[];
     filterBySignpost?: (Signpost | null)[];
 }
 
 const sortAndFilterPerfTableData = (
     data: TypedPerfTableRow[] = [],
-    {
-        filters,
-        rawOpCodeFilter = [],
-        mathFilter = [],
-        bufferTypeFilter = [],
-        activeLayoutFilterList = [],
-        filterBySignpost = [],
-    }: SortAndFilterPerfTableDataOptions = {},
+    { filters, filterBySignpost = [] }: SortAndFilterPerfTableDataOptions = {},
 ): TypedPerfTableRow[] => {
     if (data.length === 0) {
         return data;
@@ -85,30 +72,6 @@ const sortAndFilterPerfTableData = (
 
             return !isFilteredOut;
         });
-    }
-
-    if (rawOpCodeFilter?.length > 0) {
-        filteredRows = filteredRows.filter(
-            (row) => row?.raw_op_code !== null && rawOpCodeFilter.includes(row.raw_op_code),
-        );
-    }
-
-    if (mathFilter?.length > 0) {
-        filteredRows = filteredRows.filter(
-            (row) => row?.math_fidelity !== null && mathFilter.includes(row.math_fidelity),
-        );
-    }
-
-    if (bufferTypeFilter?.length > 0) {
-        filteredRows = filteredRows.filter(
-            (row) => row?.buffer_type !== null && bufferTypeFilter.includes(row.buffer_type),
-        );
-    }
-
-    if (activeLayoutFilterList?.length > 0) {
-        filteredRows = filteredRows.filter(
-            (row) => row?.layout !== null && activeLayoutFilterList.includes(row.layout),
-        );
     }
 
     return filteredRows;

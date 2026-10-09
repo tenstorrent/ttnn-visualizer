@@ -29,6 +29,13 @@ export interface Operation {
     error: OperationError | null;
 }
 
+/** An error record as the report stores it, flagged with whether an operation shows it. */
+export interface ReportError extends OperationError {
+    operation_id: number;
+    operation_name: string;
+    attached: boolean;
+}
+
 export interface Tensor {
     address: number | null;
     id: number;
