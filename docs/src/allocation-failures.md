@@ -39,7 +39,7 @@ Older tt-metal reports only the bank size, so there is no free space to compare 
 
 Operations with an error are marked with an error icon. Expand one with an allocation failure to see it explained above the raw message and stack trace.
 
-Use the error button beside the list controls to show only operations with an error. It is disabled when no operation recorded one.
+Use the error button beside the list controls to show only operations with an error. It is disabled when no operation in the list has an error attached.
 
 ## In the device operations tree
 

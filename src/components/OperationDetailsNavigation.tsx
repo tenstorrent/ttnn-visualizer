@@ -25,8 +25,7 @@ import { LoadingSpinnerSizes } from '../definitions/LoadingSpinner';
 import Overlay from './Overlay';
 import StackTrace from './operation-details/StackTrace';
 import AllocationFailureDetails from './AllocationFailureDetails';
-import { parseAllocationFailure } from '../functions/parseAllocationFailure';
-import { getFailedDeviceOperationNames } from '../functions/scopeOutcomes';
+import { getAllocationFailureDetail } from '../functions/parseAllocationFailure';
 import { StackTraceLanguage } from '../definitions/StackTrace';
 
 enum TAB_IDS {
@@ -48,9 +47,8 @@ function OperationDetailsNavigation({ operationId, isLoading }: OperationDetails
     const { operation } = useOperationDetails(operationId);
     const previousOperation = usePreviousOperation(operationId);
     const nextOperation = useNextOperation(operationId);
-    const allocationFailure = useMemo(() => (operation ? parseAllocationFailure(operation) : null), [operation]);
-    const failedDeviceOperations = useMemo(
-        () => getFailedDeviceOperationNames(operation?.device_operations),
+    const allocationFailureDetail = useMemo(
+        () => (operation ? getAllocationFailureDetail(operation) : null),
         [operation],
     );
 
@@ -190,11 +188,8 @@ function OperationDetailsNavigation({ operationId, isLoading }: OperationDetails
                             icon={IconNames.COMMENT}
                             panel={
                                 <>
-                                    {allocationFailure && (
-                                        <AllocationFailureDetails
-                                            failure={allocationFailure}
-                                            failedDeviceOperations={failedDeviceOperations}
-                                        />
+                                    {allocationFailureDetail && (
+                                        <AllocationFailureDetails {...allocationFailureDetail} />
                                     )}
                                     <StackTrace
                                         stackTrace={operation.error.error_message}

@@ -4,12 +4,13 @@
 
 import { describe, expect, it } from 'vitest';
 import {
+    getAllocationFailureDetail,
     getAllocationFailureDiagnosis,
     getAllocationFailureSummary,
     parseAllocationFailure,
 } from '../src/functions/parseAllocationFailure';
 import { AllocationFailureKind } from '../src/definitions/AllocationFailure';
-import { Operation } from '../src/model/APIData';
+import { Node, NodeType, Operation } from '../src/model/APIData';
 import { StringBufferType } from '../src/model/BufferType';
 import { BankAllocationFailure } from '../src/model/AllocationFailure';
 import { makeAllocationFailure } from './helpers/allocationFailure';
@@ -148,6 +149,28 @@ describe('parseAllocationFailure', () => {
             ),
         ).toBeNull();
         expect(parseAllocationFailure({ id: 240, name: 'ttnn.conv2d', error: null })).toBeNull();
+    });
+});
+
+describe('getAllocationFailureDetail', () => {
+    const start = (name: string) => ({ node_type: NodeType.function_start, params: { name } }) as unknown as Node;
+
+    it('gives the failure with the device operations whose launch it stopped', () => {
+        expect(
+            getAllocationFailureDetail({
+                ...operationError(OUT_OF_MEMORY),
+                device_operations: [start('ttnn.conv2d'), start('Conv2d')],
+            }),
+        ).toEqual({
+            failure: parseAllocationFailure(operationError(OUT_OF_MEMORY)),
+            failedDeviceOperations: ['Conv2d'],
+        });
+    });
+
+    it('gives nothing for an error that is not an allocation failure', () => {
+        expect(
+            getAllocationFailureDetail({ ...operationError('Shape mismatch'), device_operations: [start('Conv2d')] }),
+        ).toBeNull();
     });
 });
 

@@ -7,15 +7,10 @@ import 'styles/components/AllocationFailureDetails.scss';
 import { ALLOCATION_FAILURE_KIND_LABELS } from '../definitions/AllocationFailure';
 import { TEST_IDS } from '../definitions/TestIds';
 import { getAllocationFailureDiagnosis, getAllocationFailureSummary } from '../functions/parseAllocationFailure';
-import { AllocationFailure } from '../model/AllocationFailure';
+import { AllocationFailureDetail } from '../model/AllocationFailure';
 import { showHexAtom } from '../store/app';
 
-interface AllocationFailureDetailsProps {
-    failure: AllocationFailure;
-    failedDeviceOperations: string[];
-}
-
-function AllocationFailureDetails({ failure, failedDeviceOperations }: AllocationFailureDetailsProps) {
+function AllocationFailureDetails({ failure, failedDeviceOperations }: AllocationFailureDetail) {
     const showHex = useAtomValue(showHexAtom);
     const diagnosis = getAllocationFailureDiagnosis(failure, showHex);
 

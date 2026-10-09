@@ -44,9 +44,8 @@ import { filterByOperationRange } from '../functions/filterByOperationRange';
 import AllocationFailureDetails from './AllocationFailureDetails';
 import { ALLOCATION_FAILURE_KIND_LABELS } from '../definitions/AllocationFailure';
 import { TEST_IDS } from '../definitions/TestIds';
-import { getFailedDeviceOperationNames } from '../functions/scopeOutcomes';
-import { parseAllocationFailure } from '../functions/parseAllocationFailure';
-import { AllocationFailureListing } from '../model/AllocationFailure';
+import { getAllocationFailureDetail } from '../functions/parseAllocationFailure';
+import { AllocationFailure, AllocationFailureDetail } from '../model/AllocationFailure';
 
 const PLACEHOLDER_ARRAY_SIZE = 50;
 const OPERATION_EL_HEIGHT = 39; // Height in px of each list item
@@ -86,16 +85,13 @@ const OperationList = () => {
 
     // Parsed once per report rather than per rendered row: the virtual list re-renders on scroll.
     const allocationFailureByOpId = useMemo(() => {
-        const failures = new Map<number, Pick<AllocationFailureListing, 'failure' | 'failedDeviceOperations'>>();
+        const failures = new Map<number, AllocationFailureDetail>();
 
         fetchedOperations?.forEach((operation) => {
-            const failure = parseAllocationFailure(operation);
+            const detail = getAllocationFailureDetail(operation);
 
-            if (failure) {
-                failures.set(operation.id, {
-                    failure,
-                    failedDeviceOperations: getFailedDeviceOperationNames(operation.device_operations),
-                });
+            if (detail) {
+                failures.set(operation.id, detail);
             }
         });
 
@@ -307,12 +303,9 @@ const OperationList = () => {
 
     const shouldCollapseAllLabel = shouldCollapseAll ? 'Collapse all' : 'Expand all';
     const scrollToTopLabel = 'Scroll to top';
-    let showErrorsOnlyLabel = showErrorsOnly ? 'Show all operations' : 'Show only operations with an error';
-
-    if (!hasOperationErrors && !showErrorsOnly) {
-        showErrorsOnlyLabel = 'No operation recorded an error';
-    }
     const scrollToBottomLabel = 'Scroll to bottom';
+    // A report can record errors no operation in the list has attached.
+    const showErrorsOnlyLabel = getShowErrorsOnlyLabel(showErrorsOnly, hasOperationErrors);
 
     useEffect(() => {
         const initialOperationId = location.state?.previousOperationId;
@@ -495,6 +488,7 @@ const OperationList = () => {
                             virtualItems.map((virtualRow) => {
                                 const operation = filteredOperationsList[virtualRow.index];
                                 const operationSourceData = extractOperationSourceData(operation);
+                                const allocationFailureDetail = allocationFailureByOpId.get(operation.id);
 
                                 return (
                                     <li
@@ -511,7 +505,7 @@ const OperationList = () => {
                                             onExpandToggle={() => handleToggleCollapsible(operation.id)}
                                             label={
                                                 <Tooltip
-                                                    content={getErrorTooltip(allocationFailureByOpId.get(operation.id))}
+                                                    content={getErrorTooltip(allocationFailureDetail?.failure)}
                                                     placement={PopoverPosition.TOP}
                                                     disabled={!operation?.error}
                                                 >
@@ -562,10 +556,8 @@ const OperationList = () => {
 
                                                 {operation?.error && (
                                                     <>
-                                                        {allocationFailureByOpId.has(operation.id) && (
-                                                            <AllocationFailureDetails
-                                                                {...allocationFailureByOpId.get(operation.id)!}
-                                                            />
+                                                        {allocationFailureDetail && (
+                                                            <AllocationFailureDetails {...allocationFailureDetail} />
                                                         )}
 
                                                         <StackTrace
@@ -623,10 +615,18 @@ const OperationList = () => {
     );
 };
 
-function getErrorTooltip(allocationFailure?: Pick<AllocationFailureListing, 'failure'>) {
+function getErrorTooltip(allocationFailure?: AllocationFailure) {
     return allocationFailure
-        ? `${ALLOCATION_FAILURE_KIND_LABELS[allocationFailure.failure.kind]} recorded in operation`
+        ? `${ALLOCATION_FAILURE_KIND_LABELS[allocationFailure.kind]} recorded in operation`
         : 'Error recorded in operation';
+}
+
+function getShowErrorsOnlyLabel(showErrorsOnly: boolean, hasOperationErrors: boolean) {
+    if (showErrorsOnly) {
+        return 'Show all operations';
+    }
+
+    return hasOperationErrors ? 'Show only operations with an error' : 'No operation in the list has an error attached';
 }
 
 function getOperationFilterName(operation: OperationDescription) {

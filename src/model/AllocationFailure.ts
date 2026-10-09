@@ -50,11 +50,15 @@ export interface CircularBuffersClashFailure extends AllocationFailureOperation 
 /** An allocation failure read out of an operation's recorded error. */
 export type AllocationFailure = BankAllocationFailure | CircularBuffersBeyondL1Failure | CircularBuffersClashFailure;
 
-/** An allocation failure as the performance view lists it, joined to the linked perf report. */
-export interface AllocationFailureListing {
+/** An operation's allocation failure, with where in its captured graph it failed. */
+export interface AllocationFailureDetail {
     failure: AllocationFailure;
     /** Device operations whose launch did not complete; empty when the capture did not record one. */
     failedDeviceOperations: string[];
+}
+
+/** An allocation failure as the performance view lists it, joined to the linked perf report. */
+export interface AllocationFailureListing extends AllocationFailureDetail {
     /** Perf rows of this operation's earlier device operations, which did run. Usually zero. */
     linkedRowCount: number;
 }

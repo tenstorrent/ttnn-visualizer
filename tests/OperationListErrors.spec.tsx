@@ -18,6 +18,19 @@ const apiMock = vi.hoisted(() => ({ operations: [] as OperationDescription[] }))
 vi.mock('../src/hooks/useAPI', () => ({
     useOperationsList: () => ({ data: apiMock.operations, error: null, isLoading: false }),
     useGetUniqueDeviceOperationsList: () => [],
+    useGetDeviceOperationListPerfByOpId: () => new Map(),
+}));
+// jsdom lays nothing out, so the real virtualiser renders no rows; this one
+// renders every row it is asked for.
+vi.mock('@tanstack/react-virtual', () => ({
+    useVirtualizer: ({ count }: { count: number }) => ({
+        getVirtualItems: () => Array.from({ length: count }, (_, index) => ({ index, key: index, start: 0 })),
+        getTotalSize: () => count * 39,
+        scrollOffset: 0,
+        measurementsCache: [],
+        measureElement: () => {},
+        scrollToIndex: vi.fn(),
+    }),
 }));
 vi.mock('../src/hooks/useOpPerfRowScores', () => ({
     useOpPerfRowScores: () => ({ scoreByOpId: new Map(), isAvailable: false }),
@@ -71,10 +84,20 @@ describe('OperationList errors-only filter', () => {
         expect(screen.getByText('Showing 2 of 3 operations')).toBeInTheDocument();
     });
 
-    it('is disabled when no operation recorded an error', () => {
+    it('is disabled, and says why, when no operation in the list has an error attached', () => {
         renderList([operation(1), operation(2)]);
 
         expect(errorsOnlyButton()).toBeDisabled();
+        // The report may still record errors attached to no operation.
+        expect(errorsOnlyButton()).toHaveAttribute('aria-label', 'No operation in the list has an error attached');
+    });
+
+    it('explains an allocation failure above the raw error when its row is expanded', () => {
+        renderList([operation(1, error(OUT_OF_MEMORY))]);
+
+        fireEvent.click(document.querySelector('.list-collapsible .collapsible-button')!);
+
+        expect(screen.getByTestId(TEST_IDS.ALLOCATION_FAILURE_DETAILS)).toHaveTextContent('Out of memory');
     });
 
     it('is cleared with the rest of the list state', () => {

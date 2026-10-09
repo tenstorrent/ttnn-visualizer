@@ -6,8 +6,7 @@ import { useMemo } from 'react';
 import { Callout, Intent } from '@blueprintjs/core';
 import AllocationFailureDetails from '../AllocationFailureDetails';
 import { TEST_IDS } from '../../definitions/TestIds';
-import { getFailedDeviceOperationNames } from '../../functions/scopeOutcomes';
-import { parseAllocationFailure } from '../../functions/parseAllocationFailure';
+import { getAllocationFailureDetail } from '../../functions/parseAllocationFailure';
 import { OperationDetailsData } from '../../model/APIData';
 
 interface OperationAllocationFailureCalloutProps {
@@ -15,13 +14,9 @@ interface OperationAllocationFailureCalloutProps {
 }
 
 function OperationAllocationFailureCallout({ operation }: OperationAllocationFailureCalloutProps) {
-    const failure = useMemo(() => (operation ? parseAllocationFailure(operation) : null), [operation]);
-    const failedDeviceOperations = useMemo(
-        () => getFailedDeviceOperationNames(operation?.device_operations),
-        [operation],
-    );
+    const detail = useMemo(() => (operation ? getAllocationFailureDetail(operation) : null), [operation]);
 
-    if (!failure) {
+    if (!detail) {
         return null;
     }
 
@@ -32,10 +27,7 @@ function OperationAllocationFailureCallout({ operation }: OperationAllocationFai
             intent={Intent.DANGER}
             compact
         >
-            <AllocationFailureDetails
-                failure={failure}
-                failedDeviceOperations={failedDeviceOperations}
-            />
+            <AllocationFailureDetails {...detail} />
         </Callout>
     );
 }

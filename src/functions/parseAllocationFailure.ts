@@ -3,10 +3,11 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import { AllocationFailureKind } from '../definitions/AllocationFailure';
-import { AllocationFailure, BankAllocationFailure } from '../model/AllocationFailure';
+import { AllocationFailure, AllocationFailureDetail, BankAllocationFailure } from '../model/AllocationFailure';
 import { Operation } from '../model/APIData';
 import { StringBufferType, StringBufferTypeLabel } from '../model/BufferType';
 import { formatMemorySize, getMemoryAddress } from './math';
+import { getFailedDeviceOperationNames } from './scopeOutcomes';
 
 // Each pattern restates a tt-metal format string; when a message stops matching, that
 // source is where the format moved. None is anchored: the stored message wraps the
@@ -128,6 +129,20 @@ export const parseAllocationFailure = ({
     }
 
     return null;
+};
+
+/**
+ * The allocation failure an operation's error records, and the device operations whose
+ * launch it stopped; `null` for any other error. Walks the captured graph only for a failure.
+ */
+export const getAllocationFailureDetail = (
+    operation: Pick<Operation, 'id' | 'name' | 'error' | 'device_operations'>,
+): AllocationFailureDetail | null => {
+    const failure = parseAllocationFailure(operation);
+
+    return failure
+        ? { failure, failedDeviceOperations: getFailedDeviceOperationNames(operation.device_operations) }
+        : null;
 };
 
 const formatBytes = (bytes: number): string => formatMemorySize(bytes);
