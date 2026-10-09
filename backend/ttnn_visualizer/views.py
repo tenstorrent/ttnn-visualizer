@@ -195,6 +195,20 @@ MAX_EVENT_LOG_REQUEST_BYTES = 16 * 1024
 _EVENT_LOG_EVENTS_FIELD = "events"
 
 
+# Hosted installs pre-install bundled demo reports beside session uploads; their folder
+# names mark them, e.g. `demo_n300-llama` and `DEMO_N300-LLAMA`.
+_DEMO_DIRECTORY_PATTERN = re.compile(r"^demo", re.IGNORECASE)
+
+
+def _list_demo_directory_names(path: Path) -> List[str]:
+    """Names of the bundled demo report folders directly under ``path``."""
+    return [
+        report.name
+        for report in path.glob("*")
+        if _DEMO_DIRECTORY_PATTERN.match(report.name)
+    ]
+
+
 def _stack_source_request_params():
     """
     Parse ``?filePath=`` and optional ``?sourceFileId=`` for stack-trace GET requests.
@@ -1010,6 +1024,8 @@ def get_profiler_data_list(instance: Instance):
 
     valid_dirs = []
 
+    demo_directory_names: List[str] = []
+
     if current_app.config["SERVER_MODE"]:
         session_instances = session.get("instances", [])
         instances = get_instances(session_instances)
@@ -1021,11 +1037,7 @@ def get_profiler_data_list(instance: Instance):
         session_directory_names = [
             str(Path(session_path).parent.name) for session_path in session_paths
         ]
-        demo_directory_names = []
-        demo_pattern = re.compile(r"^demo", re.IGNORECASE)
-        for report in path.glob("*"):
-            if demo_pattern.match(report.name):
-                demo_directory_names.append(report.name)
+        demo_directory_names = _list_demo_directory_names(path)
         directory_names = list(
             set(db_directory_names + session_directory_names + demo_directory_names)
         )
@@ -1052,7 +1064,13 @@ def get_profiler_data_list(instance: Instance):
         else:
             report_name = dir_path.name
 
-        valid_dirs.append({"path": dir_path.name, "reportName": report_name})
+        valid_dirs.append(
+            {
+                "path": dir_path.name,
+                "reportName": report_name,
+                "isDemo": dir_name in demo_directory_names,
+            }
+        )
 
     return Response(orjson.dumps(valid_dirs), mimetype="application/json")
 
@@ -1113,6 +1131,8 @@ def get_performance_data_list(instance: Instance):
             logger.warning(f"TT-Metal performance reports not found: {path}")
             return jsonify([])
 
+    demo_directory_names: List[str] = []
+
     if current_app.config["SERVER_MODE"]:
         session_instances = session.get("instances", [])
         instances = get_instances(session_instances)
@@ -1126,11 +1146,7 @@ def get_performance_data_list(instance: Instance):
         session_directory_names = [
             str(Path(session_path).name) for session_path in session_paths
         ]
-        demo_directory_names = []
-        demo_pattern = re.compile(r"^demo", re.IGNORECASE)
-        for report in path.glob("*"):
-            if demo_pattern.match(report.name):
-                demo_directory_names.append(report.name)
+        demo_directory_names = _list_demo_directory_names(path)
         directory_names = list(
             set(db_directory_names + session_directory_names + demo_directory_names)
         )
@@ -1162,6 +1178,7 @@ def get_performance_data_list(instance: Instance):
             {
                 "path": dir_path.name,
                 "reportName": dir_path.name,
+                "isDemo": dir_name in demo_directory_names,
             }
         )
 
