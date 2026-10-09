@@ -291,6 +291,9 @@ export interface DeviceOperationEndParams extends DeviceOperationParams {
     // all strings, and only `program_cache_hit` is converted when the graph is serialised.
     // A boolean is allowed in case a later serialiser converts it.
     aborted?: string | boolean;
+    // Set alongside `aborted` by newer tt-metal: the exception text, or why the scope was
+    // closed for it. Absent or empty when the scope was closed while unwinding.
+    abort_reason?: string;
 }
 
 export interface CircularBufferDeallocateParams {
@@ -355,7 +358,8 @@ export interface BaseNode<T extends NodeType, P> {
     operation?: DeviceOperationNode;
     buffer?: BufferNode[];
     allocation?: BufferAllocateNode;
-    stacking_level: number;
+    // How deeply the scope is nested. Absent from most captures, which predate it.
+    stacking_level?: number;
 }
 
 export interface DeviceOperationNode extends BaseNode<NodeType.function_start, DeviceOperationParams> {

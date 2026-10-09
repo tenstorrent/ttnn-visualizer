@@ -15,6 +15,7 @@ import {
     shouldSortDurationAtom,
     showHighConsumerTensorsAtom,
     showLateDeallocatedTensorsAtom,
+    showOperationErrorsOnlyAtom,
     tensorBufferTypeFiltersAtom,
     tensorListFilterAtom,
 } from '../store/app';
@@ -29,6 +30,7 @@ export const useResetMemoryListStates = () => {
     const setShouldSortByID = useSetAtom(shouldSortByIDAtom);
     const setShouldSortDuration = useSetAtom(shouldSortDurationAtom);
     const setShouldCollapseAllOperations = useSetAtom(shouldCollapseAllOperationsAtom);
+    const setShowOperationErrorsOnly = useSetAtom(showOperationErrorsOnlyAtom);
 
     // Tensor List
     const setTensorBufferTypeFilters = useSetAtom(tensorBufferTypeFiltersAtom);
@@ -44,12 +46,14 @@ export const useResetMemoryListStates = () => {
         setShouldSortByID(SortingOptions.ASCENDING);
         setShouldSortDuration(SortingOptions.OFF);
         setShouldCollapseAllOperations(false);
+        setShowOperationErrorsOnly(false);
     }, [
         setOperationListFilter,
         setSelectedDeviceOperations,
         setShouldSortByID,
         setShouldSortDuration,
         setShouldCollapseAllOperations,
+        setShowOperationErrorsOnly,
     ]);
 
     const resetTensorList = useCallback(() => {

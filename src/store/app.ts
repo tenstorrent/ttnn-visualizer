@@ -96,6 +96,7 @@ export const selectedPerformanceRangeAtom = atom<NumberRange | null>(null);
 export const shouldCollapseAllOperationsAtom = atom(false);
 export const operationListFilterAtom = atom('');
 export const selectedDeviceOperationsAtom = atom<Set<string>>(new Set<string>());
+export const showOperationErrorsOnlyAtom = atom(false);
 export const shouldSortByIDAtom = atom<SortingOptions>(SortingOptions.ASCENDING);
 export const shouldSortDurationAtom = atom<SortingOptions>(SortingOptions.OFF);
 

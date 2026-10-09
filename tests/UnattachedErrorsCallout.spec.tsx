@@ -73,6 +73,30 @@ describe('UnattachedErrorsCallout', () => {
         expect(screen.getByText('And 3 more.')).toBeInTheDocument();
     });
 
+    it('explains an allocation failure above its raw message', () => {
+        renderCallout([
+            reportError({
+                error_type: 'RuntimeError',
+                error_message:
+                    'Out of Memory: Not enough space to allocate 3276800 B L1 buffer across 4 banks, where each bank needs to store 819200 B, but bank size is 1382720 B (allocated: 1000000 B, free: 382720 B, largest free block: 300000 B)',
+            }),
+        ]);
+
+        const details = screen.getByTestId(TEST_IDS.ALLOCATION_FAILURE_DETAILS);
+
+        expect(details).toHaveTextContent('Out of memory');
+        expect(details).toHaveTextContent('Not enough free space. Short by 426 KiB per bank');
+        // No captured graph comes with an unattached error to name the failed device op.
+        expect(details).not.toHaveTextContent('Failed in');
+        expect(screen.getByText('Error Message')).toBeInTheDocument();
+    });
+
+    it('explains nothing for an error that is not an allocation failure', () => {
+        renderCallout([reportError()]);
+
+        expect(screen.queryByTestId(TEST_IDS.ALLOCATION_FAILURE_DETAILS)).not.toBeInTheDocument();
+    });
+
     it('omits the stack trace pane when the report recorded none', () => {
         renderCallout([reportError({ stack_trace: '' }), reportError({ stack_trace: 'frame 0' })]);
 

@@ -26,6 +26,7 @@ import {
     shouldCollapseAllOperationsAtom,
     shouldSortByIDAtom,
     shouldSortDurationAtom,
+    showOperationErrorsOnlyAtom,
 } from '../store/app';
 import Collapsible from './Collapsible';
 import ListItem from './ListItem';
@@ -37,10 +38,14 @@ import OperationListPerfData from './OperationListPerfData';
 import OperationPerfRowBar from './OperationPerfRowBar';
 import SearchField from './SearchField';
 import SimpleMultiselect from './SimpleMultiselect';
-import OperationErrorTraces from './OperationErrorTraces';
+import RecordedErrorDetails from './RecordedErrorDetails';
 import UnattachedErrorsCallout from './UnattachedErrorsCallout';
 import { useOpPerfRowScores } from '../hooks/useOpPerfRowScores';
 import { filterByOperationRange } from '../functions/filterByOperationRange';
+import { ALLOCATION_FAILURE_KIND_LABELS } from '../definitions/AllocationFailure';
+import { TEST_IDS } from '../definitions/TestIds';
+import { getAllocationFailureDetail } from '../functions/parseAllocationFailure';
+import { AllocationFailure, AllocationFailureDetail } from '../model/AllocationFailure';
 
 const PLACEHOLDER_ARRAY_SIZE = 50;
 const OPERATION_EL_HEIGHT = 39; // Height in px of each list item
@@ -58,6 +63,7 @@ const OperationList = () => {
     const [focusedRow, setFocusedRow] = useState<number | null>(null);
     const [expandedItems, setExpandedItems] = useState<number[]>([]);
     const [selectedDeviceOperations, setSelectedDeviceOperations] = useAtom(selectedDeviceOperationsAtom);
+    const [showErrorsOnly, setShowErrorsOnly] = useAtom(showOperationErrorsOnlyAtom);
 
     const location = useLocation();
     const navigate = useNavigate();
@@ -77,6 +83,25 @@ const OperationList = () => {
     }, [fetchedOperations, selectedOperationRange]);
     const uniqueDeviceOperationNames = useGetUniqueDeviceOperationsList();
 
+    // Parsed once per report rather than per rendered row: the virtual list re-renders on scroll.
+    const allocationFailureByOpId = useMemo(() => {
+        const failures = new Map<number, AllocationFailureDetail>();
+
+        fetchedOperations?.forEach((operation) => {
+            const detail = getAllocationFailureDetail(operation);
+
+            if (detail) {
+                failures.set(operation.id, detail);
+            }
+        });
+
+        return failures;
+    }, [fetchedOperations]);
+    const hasOperationErrors = useMemo(
+        () => !!fetchedOperations?.some((operation) => operation.error),
+        [fetchedOperations],
+    );
+
     const filterDeviceOperations = (list: string[]) => {
         setSelectedDeviceOperations(new Set(list));
     };
@@ -95,6 +120,10 @@ const OperationList = () => {
                 operations = operations.filter((operation) =>
                     operation.deviceOperationNameList.some((opName) => selectedDeviceOperations.has(opName)),
                 );
+            }
+
+            if (showErrorsOnly) {
+                operations = operations.filter((operation) => operation.error);
             }
 
             if (isSortingModeActive(shouldSortByID)) {
@@ -120,6 +149,7 @@ const OperationList = () => {
         operationsWithRange,
         filterQuery,
         selectedDeviceOperations,
+        showErrorsOnly,
         shouldSortByID,
         shouldSortDuration,
     ]);
@@ -274,6 +304,8 @@ const OperationList = () => {
     const shouldCollapseAllLabel = shouldCollapseAll ? 'Collapse all' : 'Expand all';
     const scrollToTopLabel = 'Scroll to top';
     const scrollToBottomLabel = 'Scroll to bottom';
+    // A report can record errors no operation in the list has attached.
+    const showErrorsOnlyLabel = getShowErrorsOnlyLabel(showErrorsOnly, hasOperationErrors);
 
     useEffect(() => {
         const initialOperationId = location.state?.previousOperationId;
@@ -349,6 +381,22 @@ const OperationList = () => {
 
                 <ButtonGroup variant={ButtonVariant.MINIMAL}>
                     <Tooltip
+                        content={showErrorsOnlyLabel}
+                        placement={PopoverPosition.TOP}
+                    >
+                        <Button
+                            onClick={() => setShowErrorsOnly(!showErrorsOnly)}
+                            icon={IconNames.ERROR}
+                            variant={showErrorsOnly ? ButtonVariant.OUTLINED : undefined}
+                            // Stays enabled while active so it can always be switched back off.
+                            disabled={!hasOperationErrors && !showErrorsOnly}
+                            aria-label={showErrorsOnlyLabel}
+                            aria-pressed={showErrorsOnly}
+                            data-testid={TEST_IDS.OPERATION_LIST_ERRORS_ONLY}
+                        />
+                    </Tooltip>
+
+                    <Tooltip
                         content={shouldCollapseAllLabel}
                         placement={PopoverPosition.TOP}
                     >
@@ -408,7 +456,7 @@ const OperationList = () => {
 
                 {!isLoading && (
                     <p className='result-count'>
-                        {operationsWithRange && filterQuery
+                        {operationsWithRange && (filterQuery || selectedDeviceOperations.size > 0 || showErrorsOnly)
                             ? `Showing ${numberOfOperations} of ${operationsWithRange.length} operations`
                             : `Showing ${numberOfOperations} operations`}
                     </p>
@@ -442,6 +490,7 @@ const OperationList = () => {
                             virtualItems.map((virtualRow) => {
                                 const operation = filteredOperationsList[virtualRow.index];
                                 const operationSourceData = extractOperationSourceData(operation);
+                                const allocationFailureDetail = allocationFailureByOpId.get(operation.id);
 
                                 return (
                                     <li
@@ -458,7 +507,7 @@ const OperationList = () => {
                                             onExpandToggle={() => handleToggleCollapsible(operation.id)}
                                             label={
                                                 <Tooltip
-                                                    content='Error recorded in operation'
+                                                    content={getErrorTooltip(allocationFailureDetail?.failure)}
                                                     placement={PopoverPosition.TOP}
                                                     disabled={!operation?.error}
                                                 >
@@ -508,9 +557,10 @@ const OperationList = () => {
                                                 </p>
 
                                                 {operation?.error && (
-                                                    <OperationErrorTraces
+                                                    <RecordedErrorDetails
                                                         className='memory-error'
                                                         error={operation.error}
+                                                        allocationFailure={allocationFailureDetail}
                                                         onExpandChange={() => handleToggleStackTrace(virtualRow.index)}
                                                     />
                                                 )}
@@ -541,6 +591,20 @@ const OperationList = () => {
         </fieldset>
     );
 };
+
+function getErrorTooltip(allocationFailure?: AllocationFailure) {
+    return allocationFailure
+        ? `${ALLOCATION_FAILURE_KIND_LABELS[allocationFailure.kind]} recorded in operation`
+        : 'Error recorded in operation';
+}
+
+function getShowErrorsOnlyLabel(showErrorsOnly: boolean, hasOperationErrors: boolean) {
+    if (showErrorsOnly) {
+        return 'Show all operations';
+    }
+
+    return hasOperationErrors ? 'Show only operations with an error' : 'No operation in the list has an error attached';
+}
 
 function getOperationFilterName(operation: OperationDescription) {
     return `${operation.id} ${operation.name} (${operation.operationFileIdentifier}) `;
