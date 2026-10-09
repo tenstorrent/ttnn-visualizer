@@ -6,7 +6,7 @@ import { useMemo } from 'react';
 import { Callout, Intent } from '@blueprintjs/core';
 import AllocationFailureDetails from '../AllocationFailureDetails';
 import { TEST_IDS } from '../../definitions/TestIds';
-import { getFailedDeviceOperationNames } from '../../functions/linkableDeviceOperations';
+import { getFailedDeviceOperationNames } from '../../functions/scopeOutcomes';
 import { parseAllocationFailure } from '../../functions/parseAllocationFailure';
 import { OperationDetailsData } from '../../model/APIData';
 

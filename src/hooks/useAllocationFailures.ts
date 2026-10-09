@@ -5,7 +5,7 @@
 import { useMemo } from 'react';
 import { AllocationFailure, AllocationFailureListing } from '../model/AllocationFailure';
 import { parseAllocationFailure } from '../functions/parseAllocationFailure';
-import { getFailedDeviceOperationNames } from '../functions/linkableDeviceOperations';
+import { getFailedDeviceOperationNames } from '../functions/scopeOutcomes';
 import { useOpToPerfIdFiltered, useOperationsList } from './useAPI';
 
 export interface AllocationFailures {

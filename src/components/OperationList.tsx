@@ -44,7 +44,7 @@ import { filterByOperationRange } from '../functions/filterByOperationRange';
 import AllocationFailureDetails from './AllocationFailureDetails';
 import { ALLOCATION_FAILURE_KIND_LABELS } from '../definitions/AllocationFailure';
 import { TEST_IDS } from '../definitions/TestIds';
-import { getFailedDeviceOperationNames } from '../functions/linkableDeviceOperations';
+import { getFailedDeviceOperationNames } from '../functions/scopeOutcomes';
 import { parseAllocationFailure } from '../functions/parseAllocationFailure';
 import { AllocationFailureListing } from '../model/AllocationFailure';
 

@@ -45,4 +45,4 @@ Use the error button beside the list controls to show only operations with an er
 
 A device operation whose launch failed is marked with an error icon, and so is every scope enclosing it, since the failure ended those too. Hover the icon for the reason newer tt-metal records. Whatever the scope allocated before it failed is still listed.
 
-Older tt-metal leaves a failed scope open rather than closing it. The tree marks an open scope as failed only when the operation recorded an error; otherwise the capture simply ended before the scope closed, and it is shown without the error icon.
+Older tt-metal leaves a failed scope open rather than closing it. The tree marks an open scope as failed only when the operation recorded an error; otherwise the capture simply ended before the scope closed, and it is shown without the error icon. Where the capture records how deeply each scope is nested, a scope left open ends where the next scope at its level starts; otherwise what follows it is shown inside it.

@@ -30,7 +30,6 @@ function mkNode<T extends Partial<Node>>(node: T): Node {
         connections: [],
         inputs: [],
         outputs: [],
-        stacking_level: 0,
         ...node,
     } as Node;
 }
@@ -39,12 +38,25 @@ function captureStart(): Node {
     return mkNode({ node_type: NodeType.capture_start, params: { name: 'capture' } } as unknown as Partial<Node>);
 }
 
-function functionStart(name: string): Node {
-    return mkNode({ node_type: NodeType.function_start, params: { name } } as unknown as Partial<Node>);
+// No `stacking_level` unless given, as in most captures.
+function functionStart(name: string, stackingLevel?: number): Node {
+    return mkNode({
+        node_type: NodeType.function_start,
+        params: { name },
+        ...(stackingLevel !== undefined && { stacking_level: stackingLevel }),
+    } as unknown as Partial<Node>);
 }
 
-function functionEnd(name: string, extra: { aborted?: string; abort_reason?: string } = {}): Node {
-    return mkNode({ node_type: NodeType.function_end, params: { name, ...extra } } as unknown as Partial<Node>);
+function functionEnd(
+    name: string,
+    extra: { aborted?: string; abort_reason?: string } = {},
+    stackingLevel?: number,
+): Node {
+    return mkNode({
+        node_type: NodeType.function_end,
+        params: { name, ...extra },
+        ...(stackingLevel !== undefined && { stacking_level: stackingLevel }),
+    } as unknown as Partial<Node>);
 }
 
 function cbAllocate(size: number, address: number, deviceId?: number): Node {
@@ -205,6 +217,20 @@ describe('DeviceOperationsFullRender - failed device operations', () => {
             isFailed: label.classList.contains('failed-scope'),
         }));
 
+    // How many scopes enclose each label, in render order.
+    const depths = (container: HTMLElement) =>
+        [...container.querySelectorAll('.device-operation-label')].map((label) => {
+            let depth = 0;
+
+            for (let element = label.parentElement; element; element = element.parentElement) {
+                if (element.classList.contains('function-content')) {
+                    depth += 1;
+                }
+            }
+
+            return { name: label.textContent?.split(' ')[0], depth };
+        });
+
     const hoverIconOf = (container: HTMLElement, name: string) => {
         const label = [...container.querySelectorAll('.device-operation-label')].find((element) =>
             element.textContent?.startsWith(name),
@@ -307,8 +333,39 @@ describe('DeviceOperationsFullRender - failed device operations', () => {
         expect(await screen.findByText('Did not complete: an error was raised inside it')).toBeInTheDocument();
     });
 
-    it('opens the CB snapshot of the op that follows an unclosed sibling', () => {
-        renderGraph(
+    it('closes a scope left open when a sibling starts, where the capture records stacking levels', () => {
+        const container = renderGraph(
+            [
+                captureStart(),
+                functionStart('ttnn.conv2d', 1),
+                functionStart('Failed', 2),
+                functionStart('Next', 2),
+                cbAllocate(4096, 0x1000),
+                cbDeallocateAll(),
+                functionEnd('Next', {}, 2),
+                functionEnd('ttnn.conv2d', {}, 1),
+            ],
+            true,
+        );
+
+        expect(depths(container)).toEqual([
+            { name: 'ttnn.conv2d', depth: 0 },
+            { name: 'Failed', depth: 1 },
+            { name: 'Next', depth: 1 },
+        ]);
+        expect(labels(container)).toEqual([
+            { name: 'ttnn.conv2d', isFailed: false },
+            { name: 'Failed', isFailed: true },
+            { name: 'Next', isFailed: false },
+        ]);
+
+        fireEvent.click(screen.getByRole('button', { name: /View per-core allocations/ }));
+
+        expect(screen.getByText('Next · per-core CB allocations')).toBeInTheDocument();
+    });
+
+    it('nests the scope after one left open, where the capture records no stacking levels', () => {
+        const container = renderGraph(
             [
                 captureStart(),
                 functionStart('ttnn.conv2d'),
@@ -322,8 +379,59 @@ describe('DeviceOperationsFullRender - failed device operations', () => {
             true,
         );
 
+        expect(depths(container)).toEqual([
+            { name: 'ttnn.conv2d', depth: 0 },
+            { name: 'Failed', depth: 1 },
+            { name: 'Next', depth: 2 },
+        ]);
+
         fireEvent.click(screen.getByRole('button', { name: /View per-core allocations/ }));
 
         expect(screen.getByText('Next · per-core CB allocations')).toBeInTheDocument();
+    });
+
+    it('closes a crossed inner scope with its outer one, and skips its own end', () => {
+        const container = renderGraph(
+            [
+                captureStart(),
+                functionStart('ttnn.conv2d'),
+                functionStart('Conv2d'),
+                cbAllocate(4096, 0x1000),
+                functionEnd('ttnn.conv2d'),
+                functionEnd('Conv2d'),
+            ],
+            true,
+        );
+
+        expect(labels(container)).toEqual([
+            { name: 'ttnn.conv2d', isFailed: false },
+            { name: 'Conv2d', isFailed: true },
+        ]);
+        expect(legendRows(container)).toHaveLength(1);
+    });
+
+    it('ignores a stray end that arrives while a scope is open', () => {
+        const container = renderGraph(
+            [
+                captureStart(),
+                functionStart('Conv2d'),
+                functionEnd('ttnn.matmul', { aborted: 'true' }),
+                cbAllocate(4096, 0x1000),
+                functionEnd('Conv2d'),
+            ],
+            true,
+        );
+
+        expect(labels(container)).toEqual([{ name: 'Conv2d', isFailed: false }]);
+        expect(depths(container)).toEqual([{ name: 'Conv2d', depth: 0 }]);
+        expect(legendRows(container)).toHaveLength(1);
+    });
+
+    it('says the capture ended before a scope closed when no error was recorded', async () => {
+        const container = renderGraph([captureStart(), functionStart('Conv2d'), cbAllocate(4096, 0x1000)]);
+
+        hoverIconOf(container, 'Conv2d');
+
+        expect(await screen.findByText('The capture ended before this scope closed')).toBeInTheDocument();
     });
 });

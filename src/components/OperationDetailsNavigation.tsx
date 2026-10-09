@@ -26,7 +26,7 @@ import Overlay from './Overlay';
 import StackTrace from './operation-details/StackTrace';
 import AllocationFailureDetails from './AllocationFailureDetails';
 import { parseAllocationFailure } from '../functions/parseAllocationFailure';
-import { getFailedDeviceOperationNames } from '../functions/linkableDeviceOperations';
+import { getFailedDeviceOperationNames } from '../functions/scopeOutcomes';
 import { StackTraceLanguage } from '../definitions/StackTrace';
 
 enum TAB_IDS {

@@ -5,7 +5,6 @@
 import { describe, expect, it } from 'vitest';
 import {
     getAbortReason,
-    getFailedDeviceOperationNames,
     getLinkableDeviceOperations,
     getScopePairing,
 } from '../src/functions/linkableDeviceOperations';
@@ -79,17 +78,6 @@ describe('getLinkableDeviceOperations', () => {
     });
 });
 
-describe('getFailedDeviceOperationNames', () => {
-    it('names the device operation whose launch did not complete, in either capture shape', () => {
-        const aborted = [start('ttnn.conv2d'), start('Halo'), end('Halo'), start('Conv2d'), end('Conv2d', 'true')];
-        const unclosed = [start('ttnn.conv2d'), start('Halo'), end('Halo'), start('Conv2d')];
-
-        expect(getFailedDeviceOperationNames(aborted)).toEqual(['Conv2d']);
-        expect(getFailedDeviceOperationNames(unclosed)).toEqual(['Conv2d']);
-        expect(getFailedDeviceOperationNames([start('Halo'), end('Halo')])).toEqual([]);
-    });
-});
-
 describe('getScopePairing', () => {
     it('pairs nested and sequential scopes by name', () => {
         const nodes = [
@@ -108,8 +96,18 @@ describe('getScopePairing', () => {
                 [5, 0],
             ]),
             abortedEndIndices: new Set(),
-            unclosedStartIndices: new Set(),
         });
+    });
+
+    it('pairs each end of a nested same-named scope with the latest open start', () => {
+        const nodes = [start('Tensor::to'), start('Tensor::to'), end('Tensor::to'), end('Tensor::to')];
+
+        expect(getScopePairing(nodes).startIndexByEndIndex).toEqual(
+            new Map([
+                [2, 1],
+                [3, 0],
+            ]),
+        );
     });
 
     it('pairs an aborted end with its start, and records it as aborted', () => {
@@ -123,7 +121,6 @@ describe('getScopePairing', () => {
         const pairing = getScopePairing([start('ttnn.linear'), start('Matmul'), end('ttnn.linear')]);
 
         expect(pairing.startIndexByEndIndex).toEqual(new Map([[2, 0]]));
-        expect(pairing.unclosedStartIndices).toEqual(new Set([1]));
     });
 
     it('leaves out an end with no open start of its name', () => {

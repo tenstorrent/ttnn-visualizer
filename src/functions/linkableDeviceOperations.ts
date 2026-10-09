@@ -23,14 +23,13 @@ export interface ScopePairing {
     startIndexByEndIndex: Map<number, number>;
     /** Ends that closed their scope because it threw. */
     abortedEndIndices: Set<number>;
-    /** Starts that no end closed: a failure in older captures, or a capture cut off. */
-    unclosedStartIndices: Set<number>;
 }
 
 /**
  * Pairs each end with the latest open start of its name, which pairs nested and
- * sequential scopes alike and needs no node ids. The device-operations tree and the
- * perf linking both read this, so they cannot disagree about which scope failed.
+ * sequential scopes alike and needs no node ids. The perf linking and
+ * `getScopeOutcomes` both pair ends to starts this way; only the latter decides what
+ * happens to the scopes no end closes.
  */
 export const getScopePairing = (nodes: Node[]): ScopePairing => {
     const openStarts: { name: string | undefined; index: number }[] = [];
@@ -67,11 +66,7 @@ export const getScopePairing = (nodes: Node[]): ScopePairing => {
         openStarts.splice(openIndex, 1);
     });
 
-    return {
-        startIndexByEndIndex,
-        abortedEndIndices,
-        unclosedStartIndices: new Set(openStarts.map(({ index }) => index)),
-    };
+    return { startIndexByEndIndex, abortedEndIndices };
 };
 
 /** Indices of the starts and ends of every scope that closed without aborting. */
@@ -158,15 +153,4 @@ export const getLinkableDeviceOperations = (nodes: Node[] | null | undefined): L
         starts: getDeviceOperationNames(nodes, NodeType.function_start, (index) => completed.starts.has(index)),
         ends: getDeviceOperationNames(nodes, NodeType.function_end, (index) => completed.ends.has(index)),
     };
-};
-
-/** The device operations in one operation's captured graph whose launch did not complete. */
-export const getFailedDeviceOperationNames = (nodes: Node[] | null | undefined): string[] => {
-    if (!Array.isArray(nodes)) {
-        return [];
-    }
-
-    const { starts } = getCompletedScopeIndices(nodes);
-
-    return getDeviceOperationNames(nodes, NodeType.function_start, (index) => !starts.has(index));
 };

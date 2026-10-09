@@ -41,7 +41,8 @@ import {
 } from '../../definitions/DeviceOperationAnalysis';
 import { analyseDeviceOperation } from '../../functions/analyseDeviceOperation';
 import { isDeviceOperation } from '../../functions/filterOperations';
-import { getAbortReason, getScopePairing } from '../../functions/linkableDeviceOperations';
+import { ScopeClose, getScopeOutcomes } from '../../functions/scopeOutcomes';
+import { ScopeOutcome } from '../../definitions/ScopeOutcome';
 
 type BufferDetails = {
     bufferOrTensorNode?: BufferNode | TensorNode;
@@ -219,13 +220,6 @@ const renderMemoryInfo = (
 
 type CBPressureModalState = { title: string; snapshot: CBPressureSnapshot } | null;
 
-enum ScopeOutcome {
-    COMPLETED = 'completed',
-    FAILED = 'failed',
-    // Left open with no recorded error: a capture that stopped part way.
-    UNCLOSED = 'unclosed',
-}
-
 interface RenderScopeArgs {
     startNode: DeviceOperationNode;
     innerContent: JSX.Element[] | undefined;
@@ -268,6 +262,10 @@ function useDeviceOperationsFullRenderModel(args: {
     const memoryDetailsByNodeId = useMemo(
         () => new Map<number, AllocationDetails>(memoryAllocationList.map((data) => [data.id, data])),
         [memoryAllocationList],
+    );
+    const scopeOutcomes = useMemo(
+        () => getScopeOutcomes(deviceOperations, hasRecordedError),
+        [deviceOperations, hasRecordedError],
     );
 
     const formatTensor = useCallback((node: Node) => formatTensorRendering(node, details), [details]);
@@ -375,9 +373,9 @@ function useDeviceOperationsFullRenderModel(args: {
         [formatTensor, setDeviceOperationsArgsNode, setDeviceOperationsArgsOpen],
     );
 
+    // Takes the same `deviceOperations` that `scopeOutcomes` was built from.
     const renderNodes = useCallback(
         (nodes: Node[]) => {
-            const deviceOpList: Node[] = [];
             const stack: JSX.Element[][] = [];
             // Tracks the innermost open DeviceOp (matching the JSX stack) so
             // the CB-pressure button rendered at the "<h4>CBs</h4>" heading
@@ -385,17 +383,10 @@ function useDeviceOperationsFullRenderModel(args: {
             const deviceOpIdStack: { id: number; name: string }[] = [];
             const output: JSX.Element[] = [];
             let consecutiveCBsOutput = false;
-            // The index of the start that opened each `stack` frame, so an end can find its
-            // own scope rather than the innermost one.
-            const frameStartIndices: number[] = [];
-            const pairing = getScopePairing(nodes);
-            // A capture cut off mid-operation also leaves scopes open; only a recorded
-            // error says they failed.
-            const unclosedOutcome = hasRecordedError ? ScopeOutcome.FAILED : ScopeOutcome.UNCLOSED;
 
-            const closeFrame = (outcome: ScopeOutcome, endIndex?: number, abortReason: string | null = null) => {
+            // `scopeOutcomes` closes scopes innermost first, so each close is the top frame.
+            const closeFrame = ({ startIndex, outcome, endIndex, abortReason }: ScopeClose) => {
                 const innerContent = stack.pop();
-                const startIndex = frameStartIndices.pop()!;
                 deviceOpIdStack.pop();
                 const startNode = nodes[startIndex] as DeviceOperationNode;
                 const block = renderScope({
@@ -403,7 +394,7 @@ function useDeviceOperationsFullRenderModel(args: {
                     innerContent,
                     outcome,
                     abortReason,
-                    key: endIndex === undefined ? `start-${startIndex}` : `end-${endIndex}`,
+                    key: endIndex === null ? `start-${startIndex}` : `end-${endIndex}`,
                 });
 
                 if (stack.length > 0) {
@@ -425,33 +416,15 @@ function useDeviceOperationsFullRenderModel(args: {
                 const memoryDetails = memoryDetailsByNodeId.get(node.id);
                 const memoryInfo = renderMemoryInfo(memoryDetails, peakMemoryLoad);
 
+                scopeOutcomes.closesByIndex.get(index)?.forEach(closeFrame);
+
                 if (nodeType === NodeType.function_start) {
-                    deviceOpList.push(node);
                     stack.push([]);
-                    frameStartIndices.push(index);
                     deviceOpIdStack.push({ id: node.id, name: node.params.name });
                     return;
                 }
 
                 if (nodeType === NodeType.function_end) {
-                    const startIndex = pairing.startIndexByEndIndex.get(index);
-
-                    // Popping regardless would close whichever scope is innermost, so an
-                    // end left over from an earlier operation's unwind would take this
-                    // operation's scope with it.
-                    if (startIndex === undefined || !frameStartIndices.includes(startIndex)) {
-                        return;
-                    }
-
-                    while (frameStartIndices[frameStartIndices.length - 1] !== startIndex) {
-                        closeFrame(unclosedOutcome);
-                    }
-
-                    closeFrame(
-                        pairing.abortedEndIndices.has(index) ? ScopeOutcome.FAILED : ScopeOutcome.COMPLETED,
-                        index,
-                        getAbortReason(node),
-                    );
                     return;
                 }
 
@@ -628,9 +601,7 @@ function useDeviceOperationsFullRenderModel(args: {
                 }
             });
 
-            while (stack.length > 0) {
-                closeFrame(unclosedOutcome);
-            }
+            scopeOutcomes.closesAtEnd.forEach(closeFrame);
 
             return output;
         },
@@ -638,11 +609,11 @@ function useDeviceOperationsFullRenderModel(args: {
             cbFanout,
             cbPressureByOpId,
             details,
-            hasRecordedError,
             memoryDetailsByNodeId,
             onLegendClick,
             peakMemoryLoad,
             renderScope,
+            scopeOutcomes,
             selectedAddress,
             setCbPressureModal,
         ],

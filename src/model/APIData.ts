@@ -351,7 +351,8 @@ export interface BaseNode<T extends NodeType, P> {
     operation?: DeviceOperationNode;
     buffer?: BufferNode[];
     allocation?: BufferAllocateNode;
-    stacking_level: number;
+    // How deeply the scope is nested. Absent from most captures, which predate it.
+    stacking_level?: number;
 }
 
 export interface DeviceOperationNode extends BaseNode<NodeType.function_start, DeviceOperationParams> {
