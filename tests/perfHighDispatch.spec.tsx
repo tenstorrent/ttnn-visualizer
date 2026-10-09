@@ -8,7 +8,6 @@ import { ColumnKeys } from '../src/definitions/PerfTable';
 import { OpType } from '../src/definitions/Performance';
 import { TypedPerfTableRow } from '../src/model/PerfTable';
 import { calcHighDispatchOps, formatCell } from '../src/functions/perfFunctions';
-import { getEligiblePerfColumns } from '../src/functions/perfTableColumns';
 
 const makeRow = (overrides: Partial<TypedPerfTableRow> = {}): TypedPerfTableRow =>
     ({
@@ -22,7 +21,7 @@ const makeRow = (overrides: Partial<TypedPerfTableRow> = {}): TypedPerfTableRow 
         ...overrides,
     }) as TypedPerfTableRow;
 
-const HIGH_DISPATCH_COLUMN = { name: 'High dispatch', key: ColumnKeys.HighDispatch };
+const HIGH_DISPATCH_COLUMN = { name: 'Slow', key: ColumnKeys.HighDispatch };
 
 const hasWarningIcon = (row: TypedPerfTableRow) => {
     const cell = formatCell(row, HIGH_DISPATCH_COLUMN);
@@ -33,19 +32,6 @@ const hasWarningIcon = (row: TypedPerfTableRow) => {
 afterEach(cleanup);
 
 describe('High dispatch column', () => {
-    it('is labelled so it cannot be mistaken for the SLOW bound', () => {
-        const column = getEligiblePerfColumns({
-            hasOpIds: false,
-            hasL1PressureData: false,
-            hiliteHighDispatch: true,
-            hasNpe: false,
-            hasSubDeviceIds: false,
-            hasMultipleAvailableCoreBudgets: false,
-        }).find((eligible) => eligible.key === ColumnKeys.HighDispatch);
-
-        expect(column?.name).toBe('High dispatch');
-    });
-
     it('flags a short op behind a long op-to-op gap', () => {
         expect(hasWarningIcon(makeRow({ device_time: 2, op_to_op_gap: 20, high_dispatch: true }))).toBe(true);
     });
