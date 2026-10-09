@@ -457,6 +457,25 @@ class DatabaseQueries:
         for row in rows:
             yield Operation(*row)
 
+    def query_operations_with_errors(
+        self, filters: Optional[Dict[str, Any]] = None
+    ) -> Generator[Operation, None, None]:
+        """Operations whose id has at least one error row, at any rank.
+
+        Narrowed with a subquery rather than by binding the error ids, for the
+        reason ``query_tensor_comparisons`` gives. The subquery ignores rank so
+        the rank-0 fallback in ``select_errors_by_operation`` can still match.
+        """
+        select_clause = self._dataclass_select_clause("operations", Operation)
+        rows = self._query_table(
+            "operations",
+            filters,
+            additional_conditions="AND operation_id IN (SELECT operation_id FROM errors)",
+            select_clause=select_clause,
+        )
+        for row in rows:
+            yield Operation(*row)
+
     def query_buffers(
         self, filters: Optional[Dict[str, Any]] = None
     ) -> Generator[Buffer, None, None]:

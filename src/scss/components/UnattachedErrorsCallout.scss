@@ -4,14 +4,10 @@
 
 @use '../mixins/calloutList' as calloutList;
 
-.allocation-failure-summary {
+.unattached-errors-callout {
     @include calloutList.callout-list;
 
     p {
-        margin: 2px 0 0;
-    }
-
-    .allocation-failure-run-status {
-        font-style: italic;
+        margin: 8px 0 0;
     }
 }

@@ -87,6 +87,7 @@ from ttnn_visualizer.mlir import (
 )
 from ttnn_visualizer.models import (
     BufferType,
+    ErrorRecord,
     HostKeyOfferResponse,
     HostKeyTarget,
     HostKeyTrustRequest,
@@ -109,9 +110,11 @@ from ttnn_visualizer.report_source_file import (
     report_source_file_available,
 )
 from ttnn_visualizer.serializers import (
+    select_error_for_operation,
     serialize_buffer,
     serialize_buffer_chunks,
     serialize_devices,
+    serialize_error_records,
     serialize_operation,
     serialize_operation_buffers,
     serialize_operations,
@@ -282,6 +285,15 @@ _NONZERO_RANK_UNSUPPORTED_MSG = (
     "This report database does not store per-rank data. "
     "Omit the rank query parameter or use rank=0 only."
 )
+
+
+def _query_error_records(
+    db: DatabaseQueries, filters: Optional[Dict[str, Any]], rank: int
+) -> List[ErrorRecord]:
+    # Reports written before the errors table existed have no errors to show
+    if not db._check_table_exists("errors"):
+        return []
+    return list(db.query_error_records(db.merge_rank_filter("errors", filters, rank)))
 
 
 def _reject_nonzero_rank_on_legacy_db(db: DatabaseQueries, rank: int):
@@ -473,11 +485,7 @@ def operation_list(instance: Instance):
         devices = list(db.query_devices(db.merge_rank_filter("devices", None, rank)))
         producers_consumers = list(db.query_producers_consumers(rank=rank))
 
-        error_records = None
-        if db._check_table_exists("errors"):
-            error_records = list(
-                db.query_error_records(db.merge_rank_filter("errors", None, rank))
-            )
+        error_records = _query_error_records(db, None, rank)
 
         serialized_operations = serialize_operations(
             inputs,
@@ -622,23 +630,9 @@ def operation_detail(operation_id, instance: Instance):
 
         devices = list(db.query_devices(db.merge_rank_filter("devices", None, rank)))
 
-        error_record = None
-        if db._check_table_exists("errors"):
-            error_records = list(
-                db.query_error_records(
-                    db.merge_rank_filter(
-                        "errors",
-                        {"operation_id": operation_id},
-                        rank,
-                    )
-                )
-            )
-            for e in error_records:
-                if e.rank == operation.rank:
-                    error_record = e
-                    break
-            if error_record is None and error_records:
-                error_record = error_records[0]
+        error_record = select_error_for_operation(
+            _query_error_records(db, {"operation_id": operation_id}, rank), operation
+        )
 
         serialized_operation = serialize_operation(
             buffers,
@@ -688,15 +682,16 @@ def errors_list(instance: Instance):
         rejected = _reject_nonzero_rank_on_legacy_db(db, rank)
         if rejected is not None:
             return rejected
-        if not db._check_table_exists("errors"):
-            return response_unprocessable_entity(
-                message="Error records table does not exist in this report database."
-            )
+        error_records = _query_error_records(db, None, rank)
+        if not error_records:
+            return Response(orjson.dumps([]), mimetype="application/json")
 
-        error_records = list(
-            db.query_error_records(db.merge_rank_filter("errors", None, rank))
+        operations = list(
+            db.query_operations_with_errors(
+                db.merge_rank_filter("operations", None, rank)
+            )
         )
-        serialized_errors = [dataclasses.asdict(error) for error in error_records]
+        serialized_errors = serialize_error_records(error_records, operations)
 
         return Response(
             orjson.dumps(serialized_errors),
