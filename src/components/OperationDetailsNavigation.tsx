@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
     Button,
     ButtonGroup,
@@ -24,8 +24,6 @@ import LoadingSpinner from './LoadingSpinner';
 import { LoadingSpinnerSizes } from '../definitions/LoadingSpinner';
 import Overlay from './Overlay';
 import StackTrace from './operation-details/StackTrace';
-import AllocationFailureDetails from './AllocationFailureDetails';
-import { getAllocationFailureDetail } from '../functions/parseAllocationFailure';
 import { StackTraceLanguage } from '../definitions/StackTrace';
 
 enum TAB_IDS {
@@ -47,10 +45,6 @@ function OperationDetailsNavigation({ operationId, isLoading }: OperationDetails
     const { operation } = useOperationDetails(operationId);
     const previousOperation = usePreviousOperation(operationId);
     const nextOperation = useNextOperation(operationId);
-    const allocationFailureDetail = useMemo(
-        () => (operation ? getAllocationFailureDetail(operation) : null),
-        [operation],
-    );
 
     const navigateToPreviousOperation = useCallback(() => {
         void navigate(`${ROUTES.OPERATIONS}/${previousOperation?.id}`);
@@ -187,20 +181,15 @@ function OperationDetailsNavigation({ operationId, isLoading }: OperationDetails
                             title='Error details'
                             icon={IconNames.COMMENT}
                             panel={
-                                <>
-                                    {allocationFailureDetail && (
-                                        <AllocationFailureDetails {...allocationFailureDetail} />
-                                    )}
-                                    <StackTrace
-                                        stackTrace={operation.error.error_message}
-                                        language={StackTraceLanguage.CPP}
-                                        intent={Intent.DANGER}
-                                        isInitiallyExpanded={isErrorExpanded}
-                                        onExpandChange={(state) => setIsErrorExpanded(!state)}
-                                        hideSourceButton
-                                        isInline
-                                    />
-                                </>
+                                <StackTrace
+                                    stackTrace={operation.error.error_message}
+                                    language={StackTraceLanguage.CPP}
+                                    intent={Intent.DANGER}
+                                    isInitiallyExpanded={isErrorExpanded}
+                                    onExpandChange={(state) => setIsErrorExpanded(!state)}
+                                    hideSourceButton
+                                    isInline
+                                />
                             }
                         />
 
