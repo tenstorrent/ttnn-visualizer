@@ -59,6 +59,7 @@ import { DBVersionValidation } from '../../definitions/Versions';
 import { evaluateDbVersion } from '../../functions/compareDbVersion';
 import { ReportKind, ReportLoadFailureReason, ReportSource } from '../../definitions/EventLogEvent';
 import {
+    getLocalFolderReportSource,
     getReportLoadFailureReason,
     recordReportLoadFailed,
     recordReportLoaded,
@@ -179,10 +180,15 @@ const LocalFolderOptions = () => {
     const { linkedPerfIds, unlinkedPerfIds, linkedProfilerReportIds, unlinkedProfilerReportIds } =
         useReportLinkBadgeIds();
 
-    const activateLocalReport = async (kind: ReportKind, failedTitle: string, action: () => Promise<void>) => {
+    const activateLocalReport = async (
+        kind: ReportKind,
+        folder: ReportFolder,
+        failedTitle: string,
+        action: () => Promise<void>,
+    ) => {
         try {
             await withActivatingReport(action);
-            recordReportLoaded(kind, ReportSource.LOCAL_TT_METAL);
+            recordReportLoaded(kind, getLocalFolderReportSource(folder.path));
         } catch (err: unknown) {
             createToastNotification(failedTitle, getResponseError(err), ToastType.ERROR);
             recordReportLoadFailed(kind, getReportLoadFailureReason(err));
@@ -299,7 +305,7 @@ const LocalFolderOptions = () => {
     };
 
     const handleSelectProfiler = async (folder: ReportFolder) => {
-        await activateLocalReport(ReportKind.PROFILER, MEMORY_REPORT_LOAD_FAILED_TOAST_TITLE, async () => {
+        await activateLocalReport(ReportKind.PROFILER, folder, MEMORY_REPORT_LOAD_FAILED_TOAST_TITLE, async () => {
             // Backend handles updating only the specific parts of active_report
             await updateInstance({
                 active_report: { profiler_name: folder.path, profiler_location: ReportLocation.LOCAL },
@@ -352,16 +358,21 @@ const LocalFolderOptions = () => {
         });
 
     const handleSelectPerformance = async (folder: ReportFolder) => {
-        await activateLocalReport(ReportKind.PERFORMANCE, PERFORMANCE_REPORT_LOAD_FAILED_TOAST_TITLE, async () => {
-            // Backend handles updating only the specific parts of active_report
-            await updateInstance({
-                active_report: { performance_name: folder.path, performance_location: ReportLocation.LOCAL },
-            });
+        await activateLocalReport(
+            ReportKind.PERFORMANCE,
+            folder,
+            PERFORMANCE_REPORT_LOAD_FAILED_TOAST_TITLE,
+            async () => {
+                // Backend handles updating only the specific parts of active_report
+                await updateInstance({
+                    active_report: { performance_name: folder.path, performance_location: ReportLocation.LOCAL },
+                });
 
-            createToastNotification(ACTIVE_PERFORMANCE_REPORT_TOAST_TITLE, folder.reportName, ToastType.SUCCESS);
-            setActivePerformanceReport(folder);
-            setPerformanceReportLocation(ReportLocation.LOCAL);
-        });
+                createToastNotification(ACTIVE_PERFORMANCE_REPORT_TOAST_TITLE, folder.reportName, ToastType.SUCCESS);
+                setActivePerformanceReport(folder);
+                setPerformanceReportLocation(ReportLocation.LOCAL);
+            },
+        );
     };
 
     const handleDeletePerformance = (folder: ReportFolder) =>

@@ -5,6 +5,7 @@
 import { AxiosError, CanceledError, HttpStatusCode } from 'axios';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+    getLocalFolderReportSource,
     getReportLoadFailureReason,
     recordReportLoadFailed,
     recordReportLoadFailure,
@@ -15,6 +16,10 @@ import { EventLogEvent, ReportKind, ReportLoadFailureReason, ReportSource } from
 const { recordEvent } = vi.hoisted(() => ({ recordEvent: vi.fn() }));
 
 vi.mock('../src/functions/recordEvent', () => ({ default: recordEvent }));
+
+const getServerConfigMock = vi.hoisted(() => vi.fn(() => ({ SERVER_MODE: false })));
+
+vi.mock('../src/functions/getServerConfig', () => ({ default: getServerConfigMock }));
 
 const getAxiosError = (status: number, body: unknown = null): AxiosError => {
     const error = new AxiosError('private response message');
@@ -31,6 +36,7 @@ const getAxiosError = (status: number, body: unknown = null): AxiosError => {
 
 beforeEach(() => {
     vi.clearAllMocks();
+    getServerConfigMock.mockReturnValue({ SERVER_MODE: false });
 });
 
 describe('report-load event payloads', () => {
@@ -99,5 +105,26 @@ describe('recordReportLoadFailure', () => {
             details: { kind: ReportKind.PROFILER, reason_class: ReportLoadFailureReason.MISSING_FILE },
         });
         expect(JSON.stringify(recordEvent.mock.calls)).not.toContain('private response message');
+    });
+});
+
+describe('getLocalFolderReportSource', () => {
+    it('records every local folder pick as local_tt_metal outside SERVER_MODE', () => {
+        expect(getLocalFolderReportSource('demo-resnet')).toBe(ReportSource.LOCAL_TT_METAL);
+        expect(getLocalFolderReportSource('my-report')).toBe(ReportSource.LOCAL_TT_METAL);
+    });
+
+    it('records demo-named folders as demo under SERVER_MODE, matching case-insensitively', () => {
+        getServerConfigMock.mockReturnValue({ SERVER_MODE: true });
+
+        expect(getLocalFolderReportSource('demo-resnet')).toBe(ReportSource.DEMO);
+        expect(getLocalFolderReportSource('Demo_Resnet')).toBe(ReportSource.DEMO);
+    });
+
+    it("records any other folder as upload under SERVER_MODE, since only the session's uploads are listed", () => {
+        getServerConfigMock.mockReturnValue({ SERVER_MODE: true });
+
+        expect(getLocalFolderReportSource('my-report')).toBe(ReportSource.UPLOAD);
+        expect(getLocalFolderReportSource('not-demo')).toBe(ReportSource.UPLOAD);
     });
 });

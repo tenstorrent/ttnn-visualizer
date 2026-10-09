@@ -96,6 +96,12 @@ Recorded after a report is loaded successfully.
 
 - `kind`: `profiler`, `performance`, `npe`, `mlir`, `cluster_descriptor`.
 - `source`: `upload`, `remote_sync`, `local_tt_metal`, `demo`.
+  - `upload`: a report uploaded from the browser. Under `SERVER_MODE`, this includes reselecting one of the session's earlier uploads from the report list.
+  - `remote_sync`: a report synced from a remote host.
+  - `local_tt_metal`: a report selected from the local installation's report folders.
+  - `demo`: a bundled demo report. That is any NPE demo, and, under `SERVER_MODE`, any profiler or performance report whose folder name starts with `demo`.
+
+Hosted event logs written before profiler and performance demos were recorded as `demo` tag every report picked from the hosted report list as `local_tt_metal`. Read those hosted `local_tt_metal` counts as demo loads or reselected uploads, not as a tt-metal checkout.
 
 ### `report_load_failed`
 
