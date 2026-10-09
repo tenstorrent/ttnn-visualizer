@@ -26,14 +26,14 @@ All figures are per bank.
 
 - **Short by** — there was not enough free space for the request.
 - **Fragmented** — there was enough free space in total, but no single free block was large enough. Look at the order tensors are deallocated in and how long they live, not only their size.
-- **A free block could hold it** — a large enough block was free, but the allocator could not use it. For an interleaved L1 buffer, tt-metal only allocates within the interleaved region, and the free block lies outside it. For the dependency-aware error, other allocators had reserved that space.
+- **A free block could hold it** — a large enough block was free, but the allocator could not use it. For the dependency-aware error, other allocators had reserved part of that block; newer tt-metal also gives the largest window left once their ranges are subtracted. For the plain error, the message does not say why.
 - **Larger than an empty bank** — the request cannot fit in this buffer type spread across that many banks, whatever else is allocated.
 
-The free space tt-metal reports for an interleaved L1 buffer includes space it may not use, so a shortfall there can be larger than stated.
+For an L1 buffer, the free space tt-metal reports includes space an interleaved buffer may not use: tt-metal allocates interleaved L1 only within the interleaved region. A shortfall there can be larger than stated, and fragmentation can be worse.
 
-For the dependency-aware error, newer tt-metal also reports how much space remained placeable once other allocators' ranges were subtracted. TT-NN Visualizer uses those figures when the error has them, since the allocator's own free space can look ample when the failure was caused by those reservations.
+For the dependency-aware error, newer tt-metal also reports how much space remained placeable: what is left of the free blocks large enough for the request once other allocators' ranges are subtracted. That is not free space, so TT-NN Visualizer decides why the allocation did not fit from the allocator's own figures, and lists the placeable figures beside them.
 
-Older tt-metal reports only the bank size, so there is no free space to compare against and no reason is given.
+Older tt-metal reports only the bank size, so there is no free space to compare against; the only reason given is when the request is larger than an empty bank.
 
 ## In the operations list
 

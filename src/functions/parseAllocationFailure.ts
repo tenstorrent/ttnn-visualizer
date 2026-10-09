@@ -142,17 +142,20 @@ export const getAllocationFailureSummary = (failure: AllocationFailure, showHex 
                 `Requested ${formatBytes(failure.requestedBytes)}${bufferType} across ${failure.numBanks} banks ` +
                 `(${formatBytes(failure.bytesPerBank)} per bank, bank size ${formatBytes(failure.bankSizeBytes)})`;
 
-            // tt-metal's own figures can show plenty free when dependencies took it, so the
-            // placeable figures replace them whenever the message carries both.
-            if (failure.placeableBytes !== null && failure.largestPlaceableBytes !== null) {
-                return `${request}; placeable ${formatBytes(failure.placeableBytes)}, largest placeable window ${formatBytes(failure.largestPlaceableBytes)}`;
-            }
-
             if (failure.freeBytes === null || failure.largestFreeBlockBytes === null) {
                 return request;
             }
 
-            return `${request}; free ${formatBytes(failure.freeBytes)}, largest free block ${formatBytes(failure.largestFreeBlockBytes)}`;
+            const free = `${request}; free ${formatBytes(failure.freeBytes)}, largest free block ${formatBytes(failure.largestFreeBlockBytes)}`;
+
+            // Placeable is what is left of the free blocks large enough for the request once
+            // other allocators' ranges are taken out, so it adds to the free figures rather
+            // than standing in for them.
+            if (failure.placeableBytes !== null && failure.largestPlaceableBytes !== null) {
+                return `${free}; placeable ${formatBytes(failure.placeableBytes)}, largest placeable window ${formatBytes(failure.largestPlaceableBytes)}`;
+            }
+
+            return free;
         }
         case AllocationFailureKind.CIRCULAR_BUFFERS_BEYOND_L1:
             return `Circular buffers on ${failure.coreRange} grow to ${formatBytes(failure.circularBufferRegionEnd)}, beyond the L1 size of ${formatBytes(failure.maxL1Bytes)}`;
@@ -166,47 +169,54 @@ export const getAllocationFailureSummary = (failure: AllocationFailure, showHex 
     }
 };
 
+// tt-metal clamps only interleaved L1 to an address limit, on both checks, but counts free
+// space past it; the message does not say whether the buffer was sharded.
+const INTERLEAVED_L1_CAVEAT =
+    'An interleaved L1 buffer can use only the part of that free space inside the interleaved region';
+const INTERLEAVED_L1_BLOCK_CAVEAT = 'An interleaved L1 buffer is also limited to the interleaved region.';
+
 const getBankFailureDiagnosis = (failure: BankAllocationFailure): string | null => {
-    const { bytesPerBank } = failure;
-    const hasPlaceable = failure.placeableBytes !== null && failure.largestPlaceableBytes !== null;
-    const free = hasPlaceable ? failure.placeableBytes : failure.freeBytes;
-    const largest = hasPlaceable ? failure.largestPlaceableBytes : failure.largestFreeBlockBytes;
-    const isDependencies = failure.kind === AllocationFailureKind.BANK_OUT_OF_MEMORY_WITH_DEPENDENCIES;
-    // tt-metal clamps only interleaved L1 to an address limit, but counts free space past
-    // it; the message does not say whether the buffer was sharded.
-    const mayBeAddressLimited = !isDependencies && failure.bufferType === StringBufferType.L1;
+    const { bytesPerBank, freeBytes: free, largestFreeBlockBytes: largest } = failure;
     const needed = formatBytes(bytesPerBank);
+    const isL1 = failure.bufferType === StringBufferType.L1;
+
+    // Ahead of the free figures: no amount of freeing makes room for this.
+    if (bytesPerBank > failure.bankSizeBytes) {
+        return `Needs ${needed} per bank, more than an empty bank holds (${formatBytes(failure.bankSizeBytes)}): it cannot fit in this buffer type spread across ${failure.numBanks} banks.`;
+    }
 
     if (free === null || largest === null) {
-        if (bytesPerBank > failure.bankSizeBytes) {
-            return `Needs ${needed} per bank, more than an empty bank holds (${formatBytes(failure.bankSizeBytes)}): it cannot fit in this buffer type spread across ${failure.numBanks} banks.`;
-        }
-
         // Older tt-metal reports only the bank size, so there is nothing to compare against.
         return null;
     }
 
     if (largest >= bytesPerBank) {
-        if (isDependencies) {
-            return `A free block of ${formatBytes(largest)} could hold the ${needed} per bank, but space reserved by dependent allocators overlaps it.`;
+        const fits = `A free block of ${formatBytes(largest)} could hold the ${needed} per bank`;
+
+        if (failure.kind !== AllocationFailureKind.BANK_OUT_OF_MEMORY_WITH_DEPENDENCIES) {
+            // The plain error fires only when no free block is large enough; a block that ends
+            // up here was outgrown by the request rounded up to the minimum allocation size.
+            // A block below the interleaved limit throws a different error.
+            return `${fits}, but the allocator could not use it; the message does not say why.`;
         }
 
-        if (mayBeAddressLimited) {
-            return `A free block of ${formatBytes(largest)} could hold the ${needed} per bank, but an interleaved L1 buffer may only use the interleaved region, and that block lies outside it.`;
-        }
+        const reserved =
+            failure.largestPlaceableBytes === null
+                ? `${fits}, but space reserved by other allocators overlaps it.`
+                : `${fits}, but other allocators' reservations leave a placeable window of at most ${formatBytes(failure.largestPlaceableBytes)}.`;
 
-        return `A free block of ${formatBytes(largest)} could hold the ${needed} per bank, but the allocator could not use it; the message does not say why.`;
+        return isL1 ? `${reserved} ${INTERLEAVED_L1_BLOCK_CAVEAT}` : reserved;
     }
 
     if (free >= bytesPerBank) {
-        return `Fragmented: ${formatBytes(free)} free per bank, but no single block holds ${needed}; the largest is ${formatBytes(largest)}.`;
+        const fragmented = `Fragmented: ${formatBytes(free)} free per bank, but no single block holds ${needed}; the largest is ${formatBytes(largest)}.`;
+
+        return isL1 ? `${fragmented} ${INTERLEAVED_L1_CAVEAT}.` : fragmented;
     }
 
     const shortfall = `Short by ${formatBytes(bytesPerBank - free)} per bank: needs ${needed}, ${formatBytes(free)} free.`;
 
-    return mayBeAddressLimited
-        ? `${shortfall} An interleaved buffer can use only part of that free space, so it may be short by more.`
-        : shortfall;
+    return isL1 ? `${shortfall} ${INTERLEAVED_L1_CAVEAT}, so it may be short by more.` : shortfall;
 };
 
 /** Why the allocation did not fit, from its figures; `null` when they cannot say. */
