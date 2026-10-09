@@ -66,6 +66,11 @@ export const TEST_IDS = Object.freeze({
     PERF_CHART_HINT: 'perf-chart-hint',
     PERF_NPE_LINK: 'perf-npe-link',
 
+    // Allocation failures in the memory report
+    ALLOCATION_FAILURE_DETAILS: 'allocation-failure-details',
+    OPERATION_ALLOCATION_FAILURE_CALLOUT: 'operation-allocation-failure-callout',
+    OPERATION_LIST_ERRORS_ONLY: 'operation-list-errors-only',
+
     // Late deallocation (Buffer Summary and Operation Details). The badge and
     // rail dot ids are suffixed with the operation id at the call site, the
     // legend marker with the buffer address.
@@ -80,6 +85,9 @@ export const TEST_IDS = Object.freeze({
     TOP_N_BADGE: 'top-n-badge',
     TOP_N_RAIL: 'top-n-rail',
     TOP_N_RAIL_DOT: 'top-n-rail-dot',
+
+    // Operation list
+    UNATTACHED_ERRORS: 'unattached-errors',
 
     // General UI
     LOADING_SPINNER: 'loading-spinner',

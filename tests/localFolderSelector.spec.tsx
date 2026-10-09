@@ -6,7 +6,7 @@ import { Classes } from '@blueprintjs/core';
 import { AxiosError, HttpStatusCode } from 'axios';
 import { QueryClient } from '@tanstack/react-query';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TestProviders } from './helpers/TestProviders';
 import getAllButtonsWithText from './helpers/getAllButtonsWithText';
 import mockInstanceEmpty from './data/mockInstanceEmpty.json';
@@ -50,7 +50,7 @@ const SELECT_REPORT_TEXT = 'Select a report...';
 const waitForPickerOptions = () => screen.findAllByTestId(TEST_IDS.FOLDER_PICKER_ROW, {}, WAIT_FOR_OPTIONS);
 
 // Data is mutated in the mock of useLocal - eventually this should be set per test as needed
-const mockPerfFolderList = [...mockPerformanceReportFolders];
+const mockPerfFolderList: ReportFolder[] = [...mockPerformanceReportFolders];
 
 // The folder list is the mocked query's only source of truth, so deleting has to remove from it
 // for anything downstream of the delete to be observable.
@@ -68,7 +68,7 @@ const {
     mockUpdateInstance: vi.fn(),
     mockDeleteProfiler: vi.fn(),
     mockDeletePerformance: vi.fn(),
-    mockProfilerFolders: [] as { path: string; reportName: string; syncedName?: string }[],
+    mockProfilerFolders: [] as ReportFolder[],
     mockUploadLocalFolder: vi.fn(),
     mockUploadLocalPerformanceFolder: vi.fn(),
     getUploadSizeLimitError: vi.fn(),
@@ -111,6 +111,17 @@ vi.mock('../src/functions/reportLoadEvents', async (importOriginal) => {
 
 vi.mock('../src/functions/getUploadSizeLimitError', () => ({ default: getUploadSizeLimitError }));
 
+const serverModeState = vi.hoisted(() => ({ enabled: false }));
+
+vi.mock('../src/functions/getServerConfig', async (importOriginal) => {
+    const actual = await importOriginal<typeof import('../src/functions/getServerConfig')>();
+
+    return {
+        ...actual,
+        default: () => ({ ...actual.default(), SERVER_MODE: serverModeState.enabled }),
+    };
+});
+
 // Only the recorder harness below reads the match; the selector itself never does. Seeded in
 // `beforeEach`: the enum isn't importable yet when `vi.hoisted` runs.
 const matchState = vi.hoisted(() => ({
@@ -149,6 +160,7 @@ afterEach(() => {
 });
 
 beforeEach(() => {
+    serverModeState.enabled = false;
     matchState.result = ReportLinkMatchResult.LINKED;
     recordReportLoaded.mockClear();
     recordReportLoadFailed.mockClear();
@@ -324,6 +336,85 @@ it('updates the instance when a performance report is selected and creates toast
     expect(getAllButtonsWithText(SELECT_REPORT_TEXT)).toHaveLength(1);
     expect(recordReportLoaded).toHaveBeenCalledWith(ReportKind.PERFORMANCE, ReportSource.LOCAL_TT_METAL);
     expect(recordReportLoaded).toHaveBeenCalledTimes(1);
+});
+
+describe('under SERVER_MODE', () => {
+    // Hosted listings hold the pre-installed demo folders plus the session's own uploads. Shaped
+    // like the shipped n300-llama demo, whose profiler `report_name` doesn't mention "demo".
+    const DEMO_PROFILER_FOLDER: ReportFolder = { path: 'demo_n300-llama', reportName: 'n150 llama', isDemo: true };
+    const DEMO_PERFORMANCE_FOLDER: ReportFolder = {
+        path: 'DEMO_N300-LLAMA',
+        reportName: 'DEMO_N300-LLAMA',
+        isDemo: true,
+    };
+
+    beforeEach(() => {
+        serverModeState.enabled = true;
+        mockProfilerFolders.unshift(DEMO_PROFILER_FOLDER);
+        mockPerfFolderList.unshift(DEMO_PERFORMANCE_FOLDER);
+    });
+
+    const selectProfiler = async (reportName: string) => {
+        render(
+            <TestProviders>
+                <LocalFolderSelector />
+            </TestProviders>,
+        );
+
+        getAllButtonsWithText(SELECT_REPORT_TEXT)[0].click();
+        await waitForPickerOptions();
+        screen.getByText(reportName).click();
+
+        await waitFor(
+            () => expect(screen.getByTestId(TEST_IDS.TOAST_FILENAME).textContent).to.contain(reportName),
+            WAIT_FOR_OPTIONS,
+        );
+    };
+
+    const selectPerformance = async (path: string) => {
+        render(
+            <TestProviders>
+                <LocalFolderSelector />
+            </TestProviders>,
+        );
+
+        getAllButtonsWithText(SELECT_REPORT_TEXT)[1].click();
+        await waitForPickerOptions();
+        screen.getByText(new RegExp(path, 'i')).click();
+
+        await waitFor(
+            () => expect(screen.getByTestId(TEST_IDS.TOAST_FILENAME).textContent).to.contain(path),
+            WAIT_FOR_OPTIONS,
+        );
+    };
+
+    it('records a demo profiler pick as demo', async () => {
+        await selectProfiler(DEMO_PROFILER_FOLDER.reportName);
+
+        expect(recordReportLoaded).toHaveBeenCalledWith(ReportKind.PROFILER, ReportSource.DEMO);
+        expect(recordReportLoaded).toHaveBeenCalledTimes(1);
+    });
+
+    it('records a demo performance pick as demo', async () => {
+        await selectPerformance(DEMO_PERFORMANCE_FOLDER.path);
+
+        expect(recordReportLoaded).toHaveBeenCalledWith(ReportKind.PERFORMANCE, ReportSource.DEMO);
+        expect(recordReportLoaded).toHaveBeenCalledTimes(1);
+    });
+
+    it("records reselecting the session's own profiler upload as upload", async () => {
+        await selectProfiler(mockProfilerFolderList[0].reportName);
+
+        expect(recordReportLoaded).toHaveBeenCalledWith(ReportKind.PROFILER, ReportSource.UPLOAD);
+        expect(recordReportLoaded).toHaveBeenCalledTimes(1);
+    });
+
+    it("records reselecting the session's own performance upload as upload", async () => {
+        await selectPerformance(mockPerformanceReportFolders[0].path);
+
+        expect(recordReportLoaded).toHaveBeenCalledWith(ReportKind.PERFORMANCE, ReportSource.UPLOAD);
+        expect(recordReportLoaded).toHaveBeenCalledTimes(1);
+    });
 });
 
 it('records a failed profiler selection without reporting a successful load', async () => {

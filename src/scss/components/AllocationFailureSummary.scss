@@ -2,21 +2,18 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
+@use '../mixins/calloutList' as calloutList;
+
 .allocation-failure-summary {
-    margin-bottom: 15px;
-
-    ul {
-        margin: 0;
-        padding-left: 0;
-        list-style: none;
-    }
-
-    li + li {
-        margin-top: 8px;
-    }
+    @include calloutList.callout-list;
 
     p {
         margin: 2px 0 0;
+    }
+
+    // Spaced by the list items instead.
+    .allocation-failure-details {
+        margin-bottom: 0;
     }
 
     .allocation-failure-run-status {

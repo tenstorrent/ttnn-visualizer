@@ -21,6 +21,7 @@ import {
     NodeType,
     OperationDescription,
     OperationDetailsData,
+    ReportError,
     ReportMetadataResponse,
     Tensor,
     defaultBuffer,
@@ -644,6 +645,22 @@ export const useOperationsList = () => {
     return useQuery<OperationDescription[], AxiosError>({
         queryFn: () => (activeProfilerReport !== null ? fetchOperations() : Promise.resolve([])),
         queryKey: ['get-operations', activeProfilerReport?.path],
+        retry: false,
+        staleTime: Infinity,
+    });
+};
+
+const fetchReportErrors = async (): Promise<ReportError[]> => {
+    const { data } = await axiosInstance.get<ReportError[]>(Endpoints.ERRORS);
+    return data;
+};
+
+export const useReportErrors = () => {
+    const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
+    return useQuery<ReportError[], AxiosError>({
+        queryFn: fetchReportErrors,
+        queryKey: ['get-report-errors', activeProfilerReport?.path],
+        enabled: activeProfilerReport !== null,
         retry: false,
         staleTime: Infinity,
     });

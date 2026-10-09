@@ -19,5 +19,7 @@ export const makeAllocationFailure = (overrides: Partial<BankAllocationFailure> 
     allocatedBytes: null,
     freeBytes: null,
     largestFreeBlockBytes: null,
+    placeableBytes: null,
+    largestPlaceableBytes: null,
     ...overrides,
 });

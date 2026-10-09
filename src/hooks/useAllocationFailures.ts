@@ -4,8 +4,8 @@
 
 import { useMemo } from 'react';
 import { AllocationFailure, AllocationFailureListing } from '../model/AllocationFailure';
-import { parseAllocationFailure } from '../functions/parseAllocationFailure';
-import { getFailedDeviceOperationNames, isMemoryReportLinked } from '../functions/linkableDeviceOperations';
+import { getAllocationFailureDetail } from '../functions/parseAllocationFailure';
+import { isMemoryReportLinked } from '../functions/linkableDeviceOperations';
 import { useOpToPerfIdFiltered, useOperationsList } from './useAPI';
 
 export interface AllocationFailures {
@@ -46,15 +46,11 @@ export const useAllocationFailures = (): AllocationFailures => {
         const allocationFailureByOpId = new Map<number, AllocationFailure>();
 
         for (const operation of operations) {
-            const failure = parseAllocationFailure(operation);
+            const detail = getAllocationFailureDetail(operation);
 
-            if (failure) {
-                allocationFailureByOpId.set(operation.id, failure);
-                listings.push({
-                    failure,
-                    failedDeviceOperations: getFailedDeviceOperationNames(operation.device_operations),
-                    linkedRowCount: linkedRowCountByOpId.get(operation.id) ?? 0,
-                });
+            if (detail) {
+                allocationFailureByOpId.set(operation.id, detail.failure);
+                listings.push({ ...detail, linkedRowCount: linkedRowCountByOpId.get(operation.id) ?? 0 });
             }
         }
 

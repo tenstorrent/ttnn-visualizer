@@ -30,7 +30,6 @@ function mkNode<T extends Partial<Node>>(node: T): Node {
         connections: [],
         inputs: [],
         outputs: [],
-        stacking_level: 0,
         ...node,
     } as Node;
 }
@@ -39,12 +38,25 @@ function captureStart(): Node {
     return mkNode({ node_type: NodeType.capture_start, params: { name: 'capture' } } as unknown as Partial<Node>);
 }
 
-function functionStart(name: string): Node {
-    return mkNode({ node_type: NodeType.function_start, params: { name } } as unknown as Partial<Node>);
+// No `stacking_level` unless given, as in most captures.
+function functionStart(name: string, stackingLevel?: number): Node {
+    return mkNode({
+        node_type: NodeType.function_start,
+        params: { name },
+        ...(stackingLevel !== undefined && { stacking_level: stackingLevel }),
+    } as unknown as Partial<Node>);
 }
 
-function functionEnd(name: string): Node {
-    return mkNode({ node_type: NodeType.function_end, params: { name } } as unknown as Partial<Node>);
+function functionEnd(
+    name: string,
+    extra: { aborted?: string; abort_reason?: string } = {},
+    stackingLevel?: number,
+): Node {
+    return mkNode({
+        node_type: NodeType.function_end,
+        params: { name, ...extra },
+        ...(stackingLevel !== undefined && { stacking_level: stackingLevel }),
+    } as unknown as Partial<Node>);
 }
 
 function cbAllocate(size: number, address: number, deviceId?: number): Node {
@@ -76,13 +88,14 @@ const details = {
     getTensorProducerConsumer: () => [],
 } as unknown as OperationDetails;
 
-function renderGraph(graph: Node[]) {
+function renderGraph(graph: Node[], hasRecordedError = false) {
     const { container } = render(
         <TestProviders>
             <DeviceOperationsFullRender
                 deviceOperations={graph}
                 details={details}
                 onLegendClick={vi.fn()}
+                hasRecordedError={hasRecordedError}
             />
         </TestProviders>,
     );
@@ -194,5 +207,255 @@ describe('DeviceOperationsFullRender - per-device CB fan-out (#1844)', () => {
         expect(rows).toHaveLength(2);
         expect(rows[0]).toMatch(/x 2 devices/);
         expect(rows[1]).not.toMatch(/devices/);
+    });
+});
+
+describe('DeviceOperationsFullRender - failed device operations', () => {
+    const labels = (container: HTMLElement) =>
+        [...container.querySelectorAll('.device-operation-label')].map((label) => ({
+            name: label.textContent?.split(' ')[0],
+            isFailed: label.classList.contains('failed-scope'),
+        }));
+
+    // How many scopes enclose each label, in render order.
+    const depths = (container: HTMLElement) =>
+        [...container.querySelectorAll('.device-operation-label')].map((label) => {
+            let depth = 0;
+
+            for (let element = label.parentElement; element; element = element.parentElement) {
+                if (element.classList.contains('function-content')) {
+                    depth += 1;
+                }
+            }
+
+            return { name: label.textContent?.split(' ')[0], depth };
+        });
+
+    const hoverIconOf = (container: HTMLElement, name: string) => {
+        const label = [...container.querySelectorAll('.device-operation-label')].find((element) =>
+            element.textContent?.startsWith(name),
+        );
+        fireEvent.mouseEnter(label!.querySelector('.operation-icon')!);
+    };
+
+    it('marks a scope that ended aborted as failed', () => {
+        const container = renderGraph(
+            [captureStart(), functionStart('Conv2d'), functionEnd('Conv2d', { aborted: 'true' })],
+            true,
+        );
+
+        expect(labels(container)).toEqual([{ name: 'Conv2d', isFailed: true }]);
+    });
+
+    it('still renders what an unclosed scope allocated before it threw', () => {
+        const container = renderGraph([captureStart(), functionStart('Conv2d'), cbAllocate(4096, 0x1000)], true);
+
+        expect(labels(container)).toEqual([{ name: 'Conv2d', isFailed: true }]);
+        expect(legendRows(container)).toHaveLength(1);
+    });
+
+    it('closes the outer scope at its own end when an inner scope never closed', () => {
+        const container = renderGraph(
+            [
+                captureStart(),
+                functionStart('ttnn.conv2d'),
+                cbAllocate(4096, 0x1000),
+                functionStart('Conv2d'),
+                cbAllocate(2048, 0x2000),
+                functionEnd('ttnn.conv2d'),
+            ],
+            true,
+        );
+
+        expect(labels(container)).toEqual([
+            { name: 'ttnn.conv2d', isFailed: false },
+            { name: 'Conv2d', isFailed: true },
+        ]);
+        // Before, the outer end closed the inner frame and the outer one was dropped,
+        // taking its own allocation with it.
+        expect(legendRows(container)).toHaveLength(2);
+    });
+
+    it('does not call a scope failed when the capture was only cut off', () => {
+        const container = renderGraph([captureStart(), functionStart('Conv2d'), cbAllocate(4096, 0x1000)]);
+
+        expect(labels(container)).toEqual([{ name: 'Conv2d', isFailed: false }]);
+        expect(legendRows(container)).toHaveLength(1);
+    });
+
+    it('ignores an aborted end left over from an earlier operation', () => {
+        const container = renderGraph(
+            [
+                functionEnd('ttnn.matmul', { aborted: 'true' }),
+                captureStart(),
+                functionStart('Conv2d'),
+                cbAllocate(4096, 0x1000),
+                functionEnd('Conv2d'),
+            ],
+            true,
+        );
+
+        expect(labels(container)).toEqual([{ name: 'Conv2d', isFailed: false }]);
+        expect(legendRows(container)).toHaveLength(1);
+    });
+
+    it('gives the reason tt-metal recorded for the abort', async () => {
+        const container = renderGraph(
+            [
+                captureStart(),
+                functionStart('Conv2d'),
+                functionEnd('Conv2d', { aborted: 'true', abort_reason: 'Out of Memory: Not enough space' }),
+            ],
+            true,
+        );
+
+        hoverIconOf(container, 'Conv2d');
+
+        expect(await screen.findByText('Out of Memory: Not enough space')).toBeInTheDocument();
+    });
+
+    it('says a device op failed to launch, and an enclosing scope did not complete', async () => {
+        const container = renderGraph(
+            [
+                captureStart(),
+                functionStart('ttnn.conv2d'),
+                functionStart('Conv2d'),
+                functionEnd('Conv2d', { aborted: 'true', abort_reason: '' }),
+                functionEnd('ttnn.conv2d', { aborted: 'true' }),
+            ],
+            true,
+        );
+
+        hoverIconOf(container, 'Conv2d');
+        expect(await screen.findByText('Launch failed before reaching the device')).toBeInTheDocument();
+
+        hoverIconOf(container, 'ttnn.conv2d');
+        expect(await screen.findByText('Did not complete: an error was raised inside it')).toBeInTheDocument();
+    });
+
+    it('closes a scope left open when a sibling starts, where the capture records stacking levels', () => {
+        const container = renderGraph(
+            [
+                captureStart(),
+                functionStart('ttnn.conv2d', 1),
+                functionStart('Failed', 2),
+                functionStart('Next', 2),
+                cbAllocate(4096, 0x1000),
+                cbDeallocateAll(),
+                functionEnd('Next', {}, 2),
+                functionEnd('ttnn.conv2d', {}, 1),
+            ],
+            true,
+        );
+
+        expect(depths(container)).toEqual([
+            { name: 'ttnn.conv2d', depth: 0 },
+            { name: 'Failed', depth: 1 },
+            { name: 'Next', depth: 1 },
+        ]);
+        expect(labels(container)).toEqual([
+            { name: 'ttnn.conv2d', isFailed: false },
+            { name: 'Failed', isFailed: true },
+            { name: 'Next', isFailed: false },
+        ]);
+
+        fireEvent.click(screen.getByRole('button', { name: /View per-core allocations/ }));
+
+        expect(screen.getByText('Next · per-core CB allocations')).toBeInTheDocument();
+    });
+
+    it("heads a sibling's CBs afresh after a failed scope's CBs that were never deallocated", () => {
+        renderGraph(
+            [
+                captureStart(),
+                functionStart('ttnn.conv2d', 1),
+                functionStart('Failed', 2),
+                cbAllocate(2048, 0x2000),
+                functionStart('Next', 2),
+                cbAllocate(4096, 0x1000),
+                cbDeallocateAll(),
+                functionEnd('Next', {}, 2),
+                functionEnd('ttnn.conv2d', {}, 1),
+            ],
+            true,
+        );
+
+        expect(screen.getAllByText('CBs', { selector: 'h4' })).toHaveLength(2);
+
+        const viewButtons = screen.getAllByRole('button', { name: /View per-core allocations/ });
+        fireEvent.click(viewButtons[viewButtons.length - 1]);
+
+        expect(screen.getByText('Next · per-core CB allocations')).toBeInTheDocument();
+    });
+
+    it('nests the scope after one left open, where the capture records no stacking levels', () => {
+        const container = renderGraph(
+            [
+                captureStart(),
+                functionStart('ttnn.conv2d'),
+                functionStart('Failed'),
+                functionStart('Next'),
+                cbAllocate(4096, 0x1000),
+                cbDeallocateAll(),
+                functionEnd('Next'),
+                functionEnd('ttnn.conv2d'),
+            ],
+            true,
+        );
+
+        expect(depths(container)).toEqual([
+            { name: 'ttnn.conv2d', depth: 0 },
+            { name: 'Failed', depth: 1 },
+            { name: 'Next', depth: 2 },
+        ]);
+
+        fireEvent.click(screen.getByRole('button', { name: /View per-core allocations/ }));
+
+        expect(screen.getByText('Next · per-core CB allocations')).toBeInTheDocument();
+    });
+
+    it('closes a crossed inner scope with its outer one, and skips its own end', () => {
+        const container = renderGraph(
+            [
+                captureStart(),
+                functionStart('ttnn.conv2d'),
+                functionStart('Conv2d'),
+                cbAllocate(4096, 0x1000),
+                functionEnd('ttnn.conv2d'),
+                functionEnd('Conv2d'),
+            ],
+            true,
+        );
+
+        expect(labels(container)).toEqual([
+            { name: 'ttnn.conv2d', isFailed: false },
+            { name: 'Conv2d', isFailed: true },
+        ]);
+        expect(legendRows(container)).toHaveLength(1);
+    });
+
+    it('ignores a stray end that arrives while a scope is open', () => {
+        const container = renderGraph(
+            [
+                captureStart(),
+                functionStart('Conv2d'),
+                functionEnd('ttnn.matmul', { aborted: 'true' }),
+                cbAllocate(4096, 0x1000),
+                functionEnd('Conv2d'),
+            ],
+            true,
+        );
+
+        expect(labels(container)).toEqual([{ name: 'Conv2d', isFailed: false }]);
+        expect(depths(container)).toEqual([{ name: 'Conv2d', depth: 0 }]);
+        expect(legendRows(container)).toHaveLength(1);
+    });
+
+    it('says the capture ended before a scope closed when no error was recorded', async () => {
+        const container = renderGraph([captureStart(), functionStart('Conv2d'), cbAllocate(4096, 0x1000)]);
+
+        hoverIconOf(container, 'Conv2d');
+
+        expect(await screen.findByText('The capture ended before this scope closed')).toBeInTheDocument();
     });
 });

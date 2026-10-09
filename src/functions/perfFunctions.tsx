@@ -24,7 +24,7 @@ import L1FullnessBar from '../components/performance/L1FullnessBar';
 import PerfHeuristicFlags from '../components/performance/PerfHeuristicFlags';
 import { MathFidelity } from '../definitions/MathFidelity';
 import { CellColour } from '../definitions/CellColour';
-import { isSlowDramDominant } from './perfBoundPredicates';
+import { isHighDispatchGap, isSlowDramDominant } from './perfBoundPredicates';
 import { NOT_ANALYSED_LABEL, getNotAnalysedReason, getSlowBoundExplanation } from './perfBoundAnalysis';
 
 const OPERATION_COLOURS: { [key: string]: CellColour } = {
@@ -120,7 +120,8 @@ export const formatCell = (
     if (key === ColumnKeys.HighDispatch) {
         const tooltipMessage = `Op with > ${HIGH_DISPATCH_THRESHOLD_US} µs dispatch latency`;
 
-        return row?.[ColumnKeys.DeviceTime] !== null && row?.[ColumnKeys.DeviceTime] > HIGH_DISPATCH_THRESHOLD_US ? (
+        // Flagged from the op-to-op gap in enrichRowData, the same rows the tracing banner counts.
+        return row?.high_dispatch ? (
             <Tooltip content={tooltipMessage}>
                 <Icon
                     className={WARNING_COLOUR}
@@ -506,42 +507,35 @@ export const getCoreColour = (
 };
 
 export const getOpToOpGapColour = (value: number): CellColour => {
-    return value > HIGH_DISPATCH_THRESHOLD_US ? CellColour.Red : DEFAULT_COLOUR;
+    return isHighDispatchGap(value) ? CellColour.Red : DEFAULT_COLOUR;
 };
 
-export const calcHighDispatchOps = (rows: TypedPerfTableRow[]) => {
-    const highDispatchOps = rows
-        .map((opData: TypedPerfTableRow, index: number): [number, TypedPerfTableRow] => [index + 1, opData])
-        .filter(([_, opData]) => {
-            const val = opData.op_to_op_gap;
-            return val !== null && val !== undefined && typeof val === 'number' && val > HIGH_DISPATCH_THRESHOLD_US;
-        });
+// device_time is parseFloat'd, so a missing value arrives as NaN rather than null.
+const finiteOrZero = (value: number | null): number => (value !== null && Number.isFinite(value) ? value : 0);
 
-    if (highDispatchOps.length === 0) {
+export const calcHighDispatchOps = (rows: TypedPerfTableRow[]) => {
+    // One pass: the overhead tracing could remove from flagged rows, against the total of device
+    // times plus Op-to-Op Gaps across every row.
+    let hasHighDispatchOps = false;
+    let maxDispatchOverhead = 0;
+    let totalDuration = 0;
+
+    for (const opData of rows) {
+        const deviceTime = finiteOrZero(opData.device_time);
+        const opToOpGap = finiteOrZero(opData.op_to_op_gap);
+
+        totalDuration += deviceTime + opToOpGap;
+
+        if (opData.high_dispatch) {
+            hasHighDispatchOps = true;
+            maxDispatchOverhead += opToOpGap - HIGH_DISPATCH_THRESHOLD_US;
+        }
+    }
+
+    if (!hasHighDispatchOps) {
         return null;
     }
 
-    // Compute the max dispatch overhead
-    const maxDispatchOverhead = highDispatchOps.reduce((acc, [_, opData]) => {
-        const val = opData.op_to_op_gap || 0;
-
-        return acc + (val - HIGH_DISPATCH_THRESHOLD_US);
-    }, 0);
-
-    // Compute total_duration as sum of device times + Op-to-Op Gaps
-    const totalDeviceTime = rows.reduce((acc, r) => {
-        const val = r.device_time || 0;
-
-        return acc + (typeof val === 'number' ? val : 0);
-    }, 0);
-
-    const totalDispatchTime = rows.reduce((acc, r) => {
-        const val = r.op_to_op_gap;
-
-        return acc + (typeof val === 'number' ? val : 0);
-    }, 0);
-
-    const totalDuration = totalDeviceTime + totalDispatchTime;
     const percentageSaved = (maxDispatchOverhead / totalDuration) * 100;
 
     return (

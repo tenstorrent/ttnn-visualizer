@@ -96,6 +96,14 @@ Recorded after a report is loaded successfully.
 
 - `kind`: `profiler`, `performance`, `npe`, `mlir`, `cluster_descriptor`.
 - `source`: `upload`, `remote_sync`, `local_tt_metal`, `demo`.
+  - `upload`: a report uploaded from the browser. Under `SERVER_MODE`, this also counts every reselection of one of the session's earlier uploads from the report list, so hosted `upload` counts are loads, not uploads.
+  - `remote_sync`: a report synced from a remote host.
+  - `local_tt_metal`: a report selected from the local installation's report folders. Without `TT_METAL_HOME`, uploads are saved into those same folders, so this includes reselecting an earlier upload on a local installation. Never recorded under `SERVER_MODE`.
+  - `demo`: a bundled demo report. That is any NPE demo, and, under `SERVER_MODE`, any profiler or performance report whose folder name starts with `demo`, in any case.
+
+Because reselected uploads count as `upload` when hosted but as `local_tt_metal` locally, do not compare upload share between hosted and local logs.
+
+Before 0.107.0, hosted event logs tagged every report picked from the hosted report list as `local_tt_metal`. Hosted logs carry no version, since `app_start` is not written under `SERVER_MODE`, so find the cut-over from the 0.107.0 deploy date. Read hosted `local_tt_metal` counts from before it as demo loads or reselected uploads, not as a tt-metal checkout.
 
 ### `report_load_failed`
 

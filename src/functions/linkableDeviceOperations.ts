@@ -27,11 +27,24 @@ const isAbortedEnd = (node: DeviceOperationNodeEnd): boolean => {
     return aborted === true || aborted === ABORTED_PARAM_VALUE;
 };
 
-/** Indices of the starts and ends of every scope that closed without aborting. */
-const getCompletedScopeIndices = (nodes: Node[]) => {
+/** How the function scopes in one captured graph open and close, by node index. */
+export interface ScopePairing {
+    /** The start each end closes. An end with no open start of its name is left out. */
+    startIndexByEndIndex: Map<number, number>;
+    /** Ends that closed their scope because it threw. */
+    abortedEndIndices: Set<number>;
+}
+
+/**
+ * Pairs each end with the latest open start of its name, which pairs nested and
+ * sequential scopes alike and needs no node ids. The perf linking and
+ * `getScopeOutcomes` both pair ends to starts this way; only the latter decides what
+ * happens to the scopes no end closes.
+ */
+export const getScopePairing = (nodes: Node[]): ScopePairing => {
     const openStarts: { name: string | undefined; index: number }[] = [];
-    const starts = new Set<number>();
-    const ends = new Set<number>();
+    const startIndexByEndIndex = new Map<number, number>();
+    const abortedEndIndices = new Set<number>();
 
     nodes.forEach((node, index) => {
         if (node.node_type === NodeType.function_start) {
@@ -54,15 +67,39 @@ const getCompletedScopeIndices = (nodes: Node[]) => {
             return;
         }
 
-        if (!isAbortedEnd(node)) {
-            starts.add(openStarts[openIndex].index);
-            ends.add(index);
+        startIndexByEndIndex.set(index, openStarts[openIndex].index);
+
+        if (isAbortedEnd(node)) {
+            abortedEndIndices.add(index);
         }
 
         openStarts.splice(openIndex, 1);
     });
 
+    return { startIndexByEndIndex, abortedEndIndices };
+};
+
+/** Indices of the starts and ends of every scope that closed without aborting. */
+const getCompletedScopeIndices = (nodes: Node[]) => {
+    const { startIndexByEndIndex, abortedEndIndices } = getScopePairing(nodes);
+    const starts = new Set<number>();
+    const ends = new Set<number>();
+
+    startIndexByEndIndex.forEach((startIndex, endIndex) => {
+        if (!abortedEndIndices.has(endIndex)) {
+            starts.add(startIndex);
+            ends.add(endIndex);
+        }
+    });
+
     return { starts, ends };
+};
+
+/** The reason tt-metal gave for aborting a scope; `null` when it gave none. */
+export const getAbortReason = (node: DeviceOperationNodeEnd): string | null => {
+    const reason = node.params?.abort_reason;
+
+    return typeof reason === 'string' && reason.trim() !== '' ? reason : null;
 };
 
 const getDeviceOperationNames = (
@@ -126,15 +163,4 @@ export const getLinkableDeviceOperations = (nodes: Node[] | null | undefined): L
         starts: getDeviceOperationNames(nodes, NodeType.function_start, (index) => completed.starts.has(index)),
         ends: getDeviceOperationNames(nodes, NodeType.function_end, (index) => completed.ends.has(index)),
     };
-};
-
-/** The device operations in one operation's captured graph whose launch did not complete. */
-export const getFailedDeviceOperationNames = (nodes: Node[] | null | undefined): string[] => {
-    if (!Array.isArray(nodes)) {
-        return [];
-    }
-
-    const { starts } = getCompletedScopeIndices(nodes);
-
-    return getDeviceOperationNames(nodes, NodeType.function_start, (index) => !starts.has(index));
 };

@@ -3,15 +3,13 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import { Callout, Intent } from '@blueprintjs/core';
-import { useAtomValue } from 'jotai';
 import { Link } from 'react-router';
 import 'styles/components/AllocationFailureSummary.scss';
-import { ALLOCATION_FAILURE_KIND_LABELS, MAX_ALLOCATION_FAILURES_LISTED } from '../../definitions/AllocationFailure';
+import AllocationFailureDetails from '../AllocationFailureDetails';
+import { MAX_ALLOCATION_FAILURES_LISTED } from '../../definitions/AllocationFailure';
 import ROUTES from '../../definitions/Routes';
 import { TEST_IDS } from '../../definitions/TestIds';
-import { getAllocationFailureSummary } from '../../functions/parseAllocationFailure';
 import { AllocationFailureListing } from '../../model/AllocationFailure';
-import { showHexAtom } from '../../store/app';
 
 // Speaks of the report, not the table: the callout also shows in the stacked view, which
 // has no Flags column, and filters, the range or the column picker can hide the rows.
@@ -39,8 +37,6 @@ interface AllocationFailureSummaryProps {
 }
 
 function AllocationFailureSummary({ listings }: AllocationFailureSummaryProps) {
-    const showHex = useAtomValue(showHexAtom);
-
     if (listings.length === 0) {
         return null;
     }
@@ -57,16 +53,19 @@ function AllocationFailureSummary({ listings }: AllocationFailureSummaryProps) {
         >
             <ul>
                 {listings.slice(0, MAX_ALLOCATION_FAILURES_LISTED).map((listing) => {
-                    const { failure } = listing;
+                    const { failure, failedDeviceOperations } = listing;
 
                     return (
                         <li key={failure.operationId}>
                             <Link to={`${ROUTES.OPERATIONS}/${failure.operationId}`}>
                                 {failure.operationId} {failure.operationName}
-                            </Link>{' '}
-                            <strong>{ALLOCATION_FAILURE_KIND_LABELS[failure.kind]}</strong>
-                            <p>{getAllocationFailureSummary(failure, showHex)}</p>
-                            <p className='allocation-failure-run-status'>{getRunStatus(listing)}</p>
+                            </Link>
+                            {/* The run status names the failed device ops, and says whether any ran. */}
+                            <AllocationFailureDetails
+                                failure={failure}
+                                failedDeviceOperations={failedDeviceOperations}
+                                status={<p className='allocation-failure-run-status'>{getRunStatus(listing)}</p>}
+                            />
                         </li>
                     );
                 })}

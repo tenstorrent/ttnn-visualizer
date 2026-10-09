@@ -295,6 +295,18 @@ const PerformanceReport = ({
 
     const isInitialTab = selectedTabId === INITIAL_TAB_ID;
 
+    // Summarises the active tab's report so the banner agrees with the Slow icons in its table.
+    // Memoised so unrelated re-renders (hover) don't rescan every row.
+    const highDispatchAdvice = useMemo(() => {
+        if (!hiliteHighDispatch || isStackedView) {
+            return null;
+        }
+
+        const activeRows = isInitialTab ? processedRows : processedComparisonRows[comparisonIndex];
+
+        return activeRows ? calcHighDispatchOps(activeRows) : null;
+    }, [hiliteHighDispatch, isStackedView, isInitialTab, processedRows, processedComparisonRows, comparisonIndex]);
+
     const activeDataCount = useMemo(() => {
         const isComparison = !isInitialTab;
         let filteredData;
@@ -663,7 +675,7 @@ const PerformanceReport = ({
 
                 {/* Above the table: the table's height cap assumes nothing renders below it. */}
                 <AllocationFailureSummary listings={allocationFailureListings} />
-                {hiliteHighDispatch && !isStackedView && calcHighDispatchOps(processedRows)}
+                {highDispatchAdvice}
 
                 <Tabs
                     selectedTabId={selectedTabId}
