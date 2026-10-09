@@ -51,7 +51,7 @@ Older tt-metal leaves a failed scope open rather than closing it. The tree marks
 
 ## In the performance view
 
-When the memory and performance reports are [linked](linking-reports.md), the performance table shows a callout above it listing the allocation failures the memory report records. Each entry links to the operation and gives the kind of failure, its figures and the device operation that failed, where the capture recorded it. For why it did not fit, open the operation.
+When the memory and performance reports are [linked](linking-reports.md), the performance table shows a callout above it listing the allocation failures the memory report records. Each entry links to the operation and gives the kind of failure, its figures and why it did not fit, as on the operation's page. It also says which device operation failed, where the capture recorded it, and whether any of the operation's earlier device operations ran.
 
 A device operation that fails to allocate never reaches the device, so it has no row in the table, even when the script catches the error and retries. Rows only appear for earlier device operations of the same operation that did run; in the table view those rows carry an **Op failed** flag in the Flags column.
 

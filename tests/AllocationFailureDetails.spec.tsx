@@ -28,6 +28,21 @@ describe('AllocationFailureDetails', () => {
         expect(details).toHaveTextContent('Failed in Conv2dDeviceOperation');
     });
 
+    it('shows a status in place of the failed device ops when given one', () => {
+        render(
+            <AllocationFailureDetails
+                failure={makeAllocationFailure()}
+                failedDeviceOperations={['Conv2dDeviceOperation']}
+                status={<p>Ran 2 earlier device ops</p>}
+            />,
+        );
+
+        const details = screen.getByTestId(TEST_IDS.ALLOCATION_FAILURE_DETAILS);
+
+        expect(details).toHaveTextContent('Ran 2 earlier device ops');
+        expect(details).not.toHaveTextContent('Failed in');
+    });
+
     it('leaves out what the report does not record', () => {
         render(
             <AllocationFailureDetails

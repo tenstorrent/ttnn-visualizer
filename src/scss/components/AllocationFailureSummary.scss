@@ -19,6 +19,11 @@
         margin: 2px 0 0;
     }
 
+    // Spaced by the list items instead.
+    .allocation-failure-details {
+        margin-bottom: 0;
+    }
+
     .allocation-failure-run-status {
         font-style: italic;
     }
