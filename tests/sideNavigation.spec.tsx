@@ -254,7 +254,7 @@ describe('SideNavigation server mode', () => {
 
         expect(screen.queryByRole('button', { name: /mlir/i })).not.toBeInTheDocument();
         expect(screen.queryByRole('button', { name: /mcp/i })).not.toBeInTheDocument();
-        // The filter drops one item, not a category.
+        // The filter drops only the flagged items, not a category.
         expect(getButtonWithText('reports')).toBeEnabled();
         expect(getButtonWithText('npe')).toBeEnabled();
     });

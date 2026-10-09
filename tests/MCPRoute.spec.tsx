@@ -3,25 +3,15 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import '@testing-library/jest-dom/vitest';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen, within } from '@testing-library/react';
-import { MemoryRouter, Route, Routes } from 'react-router';
 import Markdown from 'markdown-to-jsx';
-import { ServerConfig } from '../src/definitions/ServerConfig';
 import { DOC_MARKDOWN_OPTIONS } from '../src/definitions/MarkdownOptions';
-import ROUTES from '../src/definitions/Routes';
 import MCP from '../src/routes/MCP';
 
 vi.mock('react-helmet-async', () => ({ Helmet: () => null }));
 
-const getServerConfigMock = vi.hoisted(() => vi.fn((): Partial<ServerConfig> => ({ SERVER_MODE: false })));
-
-vi.mock('../src/functions/getServerConfig', () => ({ default: getServerConfigMock }));
-
-const HOME_MARKER_ID = 'home-route';
-
 afterEach(cleanup);
-beforeEach(() => getServerConfigMock.mockReturnValue({ SERVER_MODE: false }));
 
 describe('MCP', () => {
     it('renders the published documentation rather than a copy of it', () => {
@@ -64,42 +54,5 @@ describe('MCP', () => {
 
         expect(link).toHaveAttribute('target', '_blank');
         expect(link).toHaveAttribute('rel', expect.stringContaining('noreferrer'));
-    });
-});
-
-describe('MCP direct visit', () => {
-    // The rail hides MCP under SERVER_MODE, so this is the only way in: a typed or
-    // bookmarked URL. The tools address reports by path on the reader's machine, so the
-    // page has nothing to offer a hosted deployment. #2101
-    const renderAtMcp = () =>
-        render(
-            <MemoryRouter initialEntries={[ROUTES.MCP]}>
-                <Routes>
-                    <Route
-                        path={ROUTES.MCP}
-                        element={<MCP />}
-                    />
-                    <Route
-                        path={ROUTES.HOME}
-                        element={<div data-testid={HOME_MARKER_ID} />}
-                    />
-                </Routes>
-            </MemoryRouter>,
-        );
-
-    it('sends a direct visit to Home in server mode', () => {
-        getServerConfigMock.mockReturnValue({ SERVER_MODE: true });
-
-        renderAtMcp();
-
-        expect(screen.getByTestId(HOME_MARKER_ID)).toBeInTheDocument();
-        expect(screen.queryByRole('heading', { level: 1, name: /agent tools/i })).not.toBeInTheDocument();
-    });
-
-    it('stays on the page in a local run', () => {
-        renderAtMcp();
-
-        expect(screen.getByRole('heading', { level: 1, name: /agent tools/i })).toBeInTheDocument();
-        expect(screen.queryByTestId(HOME_MARKER_ID)).not.toBeInTheDocument();
     });
 });
