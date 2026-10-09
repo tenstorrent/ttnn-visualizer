@@ -295,6 +295,12 @@ const PerformanceReport = ({
 
     const isInitialTab = selectedTabId === INITIAL_TAB_ID;
 
+    // Memoised so unrelated re-renders (hover, tabs) don't rescan every row.
+    const highDispatchAdvice = useMemo(
+        () => (hiliteHighDispatch && !isStackedView ? calcHighDispatchOps(processedRows) : null),
+        [hiliteHighDispatch, isStackedView, processedRows],
+    );
+
     const activeDataCount = useMemo(() => {
         const isComparison = !isInitialTab;
         let filteredData;
@@ -663,7 +669,7 @@ const PerformanceReport = ({
 
                 {/* Above the table: the table's height cap assumes nothing renders below it. */}
                 <AllocationFailureSummary listings={allocationFailureListings} />
-                {hiliteHighDispatch && !isStackedView && calcHighDispatchOps(processedRows)}
+                {highDispatchAdvice}
 
                 <Tabs
                     selectedTabId={selectedTabId}
