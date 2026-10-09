@@ -9,6 +9,8 @@ import { OpType } from '../definitions/Performance';
 import { DeviceOperationLayoutTypes } from './APIData';
 import { BufferType as BufferTypeEnum } from './BufferType';
 import { AllocationFailure } from './AllocationFailure';
+import { DramFallback } from './DramFallback';
+import { L1PressureMetrics } from './L1Pressure';
 
 export interface PerfTableRow {
     id: string;
@@ -125,8 +127,17 @@ export interface TypedPerfTableRow extends Omit<
     // The linked operation's recorded allocation failure. The row itself ran: only an
     // earlier device operation of a failed operation has a perf row.
     allocation_failure: AllocationFailure | null;
+    // The linked operation's likely DRAM fallback, inferred by `getDramFallbacks`.
+    dram_fallback: DramFallback | null;
     heuristicFlags?: PerfHeuristicFlag[];
     heuristicFlagDetails?: Partial<Record<PerfHeuristicFlag, string>>;
+}
+
+/** Per-operation data from the linked memory report, keyed by its operation id. */
+export interface LinkedOperationData {
+    l1PressureByOpId: Map<number, L1PressureMetrics> | null;
+    allocationFailureByOpId: Map<number, AllocationFailure> | null;
+    dramFallbackByOpId: Map<number, DramFallback> | null;
 }
 
 export const signpostRowDefaults = Object.freeze({
@@ -180,4 +191,5 @@ export const signpostRowDefaults = Object.freeze({
     l1_largest_free: null,
     l1_largest_free_percent: null,
     allocation_failure: null,
+    dram_fallback: null,
 });

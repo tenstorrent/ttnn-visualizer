@@ -5,9 +5,9 @@
 import { renderHook } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useAllocationFailures } from '../src/hooks/useAllocationFailures';
-import { useOpToPerfIdFiltered, useOperationsList } from '../src/hooks/useAPI';
 import { Node, NodeType, OperationDescription } from '../src/model/APIData';
 import { AllocationFailureKind } from '../src/definitions/AllocationFailure';
+import { mockLinkedReports, resetLinkedReportMocks } from './helpers/linkedReports';
 
 vi.mock('../src/hooks/useAPI', () => ({
     useOperationsList: vi.fn(),
@@ -41,19 +41,11 @@ const failedOperation = (id: number, message = OUT_OF_MEMORY): OperationDescript
         ],
     });
 
-const mockReports = (operations: OperationDescription[], opIdsMap: ReturnType<typeof useOpToPerfIdFiltered>) => {
-    vi.mocked(useOperationsList).mockReturnValue({ data: operations } as ReturnType<typeof useOperationsList>);
-    vi.mocked(useOpToPerfIdFiltered).mockReturnValue(opIdsMap);
-};
-
-beforeEach(() => {
-    vi.mocked(useOperationsList).mockReset();
-    vi.mocked(useOpToPerfIdFiltered).mockReset();
-});
+beforeEach(resetLinkedReportMocks);
 
 describe('useAllocationFailures', () => {
     it('lists each allocation failure with the device op that failed and the rows that ran', () => {
-        mockReports(
+        mockLinkedReports(
             [operation(1), failedOperation(2)],
             [
                 { opId: 1, perfId: '1' },
@@ -74,7 +66,7 @@ describe('useAllocationFailures', () => {
     });
 
     it('lists nothing when the reports are not linked, so an unrelated run is never blamed', () => {
-        mockReports([failedOperation(2)], []);
+        mockLinkedReports([failedOperation(2)], []);
 
         const { result } = renderHook(() => useAllocationFailures());
 
@@ -83,7 +75,7 @@ describe('useAllocationFailures', () => {
     });
 
     it('ignores errors that are not allocation failures', () => {
-        mockReports([failedOperation(2, 'TypeError: bad argument')], [{ opId: 1, perfId: '1' }]);
+        mockLinkedReports([failedOperation(2, 'TypeError: bad argument')], [{ opId: 1, perfId: '1' }]);
 
         const { result } = renderHook(() => useAllocationFailures());
 

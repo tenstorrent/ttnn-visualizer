@@ -12,6 +12,7 @@ import {
 import { Operation } from '../model/APIData';
 import { StringBufferType, StringBufferTypeLabel } from '../model/BufferType';
 import { formatMemorySize, getMemoryAddress } from './math';
+import assertNever from './assertNever';
 import { getFailedDeviceOperationNames } from './scopeOutcomes';
 
 // Each pattern restates a tt-metal format string; when a message stops matching, that
@@ -181,11 +182,8 @@ export const getAllocationFailureSummary = (failure: AllocationFailure, showHex 
             return `Circular buffers on ${failure.coreRange} grow to ${formatBytes(failure.circularBufferRegionEnd)}, beyond the L1 size of ${formatBytes(failure.maxL1Bytes)}`;
         case AllocationFailureKind.CIRCULAR_BUFFERS_CLASH:
             return `Circular buffers on ${failure.coreRange} end at ${getMemoryAddress(failure.circularBufferRegionEnd, showHex)}, past an L1 buffer at ${getMemoryAddress(failure.l1BufferAddress, showHex)}`;
-        default: {
-            // A new kind fails to compile here until it has a summary.
-            const unhandled: never = failure;
-            return unhandled;
-        }
+        default:
+            return assertNever(failure);
     }
 };
 
@@ -275,10 +273,7 @@ export const getAllocationFailureDiagnosis = (
                 AllocationFailureReason.OVERLAPS_L1_BUFFER,
                 `The circular buffers overlap the L1 buffer at ${getMemoryAddress(failure.l1BufferAddress, showHex)} by ${formatBytes(failure.circularBufferRegionEnd - failure.l1BufferAddress)}.`,
             );
-        default: {
-            // A new kind fails to compile here until it has a diagnosis.
-            const unhandled: never = failure;
-            return unhandled;
-        }
+        default:
+            return assertNever(failure);
     }
 };
