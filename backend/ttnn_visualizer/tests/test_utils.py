@@ -1011,7 +1011,12 @@ def test_parse_memory_config_buffer_type_is_none_without_a_declared_type(
 
 @pytest.mark.parametrize(
     ("memory_config", "expected"),
-    [(_INTERLEAVED_L1_SMALL, "L1_SMALL"), (_HEIGHT_SHARDED_L1, "L1")],
+    [
+        (_INTERLEAVED_L1_SMALL, "L1_SMALL"),
+        (_HEIGHT_SHARDED_L1, "L1"),
+        # Older reports namespace the type.
+        (f"tt::tt_metal::{_HEIGHT_SHARDED_L1}", "L1"),
+    ],
 )
 def test_parse_memory_config_buffer_type_reads_the_declared_type(
     memory_config, expected

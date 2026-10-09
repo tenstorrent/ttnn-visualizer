@@ -67,10 +67,65 @@ describe('getDramFallbacks — argument vs output', () => {
         expect(getDramFallbacks([operation], NO_FAILURES).size).toBe(1);
     });
 
-    it('flags a deallocated DRAM output, which has no address to alias', () => {
-        const operation = requestingL1({ outputs: [makeTensor({ address: null, buffer_type: BufferType.DRAM })] });
+    // On older multi-device reports a mesh tensor's address is null and each device's is recorded apart.
+    it('ignores a multi-device view whose per-device address matches its input', () => {
+        const view = requestingL1({
+            name: 'ttnn.squeeze',
+            outputs: [
+                makeTensor({
+                    id: 11,
+                    address: null,
+                    device_id: null,
+                    buffer_type: BufferType.DRAM,
+                    device_addresses: [INPUT_ADDRESS, INPUT_ADDRESS],
+                }),
+            ],
+        });
+
+        expect(getDramFallbacks([view], NO_FAILURES).size).toBe(0);
+    });
+
+    // A conv2d with `deallocate_activation` frees its input, and a new buffer can land there.
+    it('flags a DRAM output at its input address with a different element count', () => {
+        const operation = requestingL1({
+            outputs: [
+                makeTensor({
+                    id: 11,
+                    address: INPUT_ADDRESS,
+                    buffer_type: BufferType.DRAM,
+                    shape: 'Shape([1, 1, 64, 64])',
+                }),
+            ],
+        });
 
         expect(getDramFallbacks([operation], NO_FAILURES).size).toBe(1);
+    });
+
+    // With either address unknown, aliasing can't be ruled out, so it is not flagged.
+    it.each([
+        ['the output', dramInput, makeTensor({ address: null, buffer_type: BufferType.DRAM })],
+        ['the input', makeTensor({ ...dramInput, address: null }), dramOutput],
+    ])('does not flag a DRAM output when the address of %s is unknown', (_, input, output) => {
+        expect(getDramFallbacks([requestingL1({ inputs: [input], outputs: [output] })], NO_FAILURES).size).toBe(0);
+    });
+
+    it('flags a DRAM output without an address when there is no DRAM input it could alias', () => {
+        const operation = requestingL1({
+            inputs: [],
+            outputs: [makeTensor({ address: null, buffer_type: BufferType.DRAM })],
+        });
+
+        expect(getDramFallbacks([operation], NO_FAILURES).size).toBe(1);
+    });
+
+    // A conv returns its prepared weights and bias too, always new DRAM buffers.
+    it('does not flag a conv whose activation stayed in L1 beside DRAM weights and bias', () => {
+        const conv = requestingL1({
+            name: 'ttnn.conv2d',
+            outputs: [l1Output, makeTensor({ id: 13, address: 2097152, buffer_type: BufferType.DRAM }), dramOutput],
+        });
+
+        expect(getDramFallbacks([conv], NO_FAILURES).size).toBe(0);
     });
 
     it('counts L1_SMALL as an L1 request', () => {
@@ -159,12 +214,10 @@ describe('getDramFallbacks — argument vs output', () => {
         });
     });
 
-    // The tooltip reads "N of M outputs in DRAM", so both the L1 output and the view count in M only.
-    it.each([
-        ['an L1 output', l1Output],
-        ['a view of its input', makeTensor({ id: 13, address: INPUT_ADDRESS, buffer_type: BufferType.DRAM })],
-    ])('counts only the DRAM outputs it allocated, beside %s', (_, otherOutput) => {
-        const operation = requestingL1({ outputs: [dramOutput, otherOutput] });
+    // The tooltip reads "N of M outputs in DRAM", so the view counts in M only.
+    it('counts only the DRAM outputs it allocated, beside a view of its input', () => {
+        const view = makeTensor({ id: 13, address: INPUT_ADDRESS, buffer_type: BufferType.DRAM });
+        const operation = requestingL1({ outputs: [dramOutput, view] });
 
         expect(getDramFallbacks([operation], NO_FAILURES).get(1)).toMatchObject({ dramOutputCount: 1, outputCount: 2 });
     });
@@ -223,8 +276,6 @@ describe('getDramFallbacks — retry after an L1 allocation failure', () => {
         expect(getDramFallbacks([failed, retry(11)], failureByOpId(failure)).size).toBe(0);
     });
 
-    const circularBufferRange = { operationId: 10, operationName: 'ttnn.linear', coreRange: '[(x=0,y=0) - (x=7,y=7)]' };
-
     it.each<[string, AllocationFailure]>([
         ['an L1_SMALL bank failure', makeAllocationFailure({ operationId: 10, bufferType: StringBufferType.L1_SMALL })],
         [
@@ -237,6 +288,23 @@ describe('getDramFallbacks — retry after an L1 allocation failure', () => {
                 largestFreeBlockBytes: 65536,
             }),
         ],
+    ])('flags a retry after %s', (_, failure) => {
+        expect(getDramFallbacks([failed, retry(11)], failureByOpId(failure)).has(11)).toBe(true);
+    });
+
+    // The L1 bank that ran out held something other than the output it asked to put in DRAM.
+    it('does not flag a retry after an L1 bank failure on an op that asked for DRAM', () => {
+        const failedRequestingDram = makeOperation({
+            ...failed,
+            arguments: [makeMemoryConfigArgument(StringBufferType.DRAM)],
+        });
+
+        expect(getDramFallbacks([failedRequestingDram, retry(11)], failureByOpId()).size).toBe(0);
+    });
+
+    const circularBufferRange = { operationId: 10, operationName: 'ttnn.linear', coreRange: '[(x=0,y=0) - (x=7,y=7)]' };
+
+    describe.each<[string, AllocationFailure]>([
         [
             'circular buffers outgrowing L1',
             {
@@ -255,8 +323,20 @@ describe('getDramFallbacks — retry after an L1 allocation failure', () => {
                 l1BufferAddress: 1048576,
             },
         ],
-    ])('flags a retry after %s', (_, failure) => {
-        expect(getDramFallbacks([failed, retry(11)], failureByOpId(failure)).has(11)).toBe(true);
+    ])('after %s', (_, failure) => {
+        it('flags the retry of an op that asked for L1', () => {
+            const failedRequestingL1 = makeOperation({
+                ...failed,
+                arguments: [makeMemoryConfigArgument(StringBufferType.L1)],
+            });
+
+            expect(getDramFallbacks([failedRequestingL1, retry(11)], failureByOpId(failure)).has(11)).toBe(true);
+        });
+
+        // Circular buffers are the program's, not the output's: a matmul's output defaults to DRAM.
+        it('does not flag the retry of an op that did not ask for L1', () => {
+            expect(getDramFallbacks([failed, retry(11)], failureByOpId(failure)).size).toBe(0);
+        });
     });
 
     it('does not flag a retry that stayed in L1', () => {
@@ -270,6 +350,18 @@ describe('getDramFallbacks — retry after an L1 allocation failure', () => {
         const stayedInL1 = makeOperation({ id: 11, name: 'ttnn.linear', outputs: [l1Output] });
 
         expect(getDramFallbacks([failed, stayedInL1, retry(12)], failureByOpId()).size).toBe(0);
+    });
+
+    // A conv retry prepares its weights and bias again, in DRAM, even when its activation fits.
+    it('does not flag a conv retry whose activation stayed in L1', () => {
+        const failedConv = makeOperation({ id: 10, name: 'ttnn.conv2d' });
+        const convRetry = makeOperation({
+            id: 11,
+            name: 'ttnn.conv2d',
+            outputs: [l1Output, makeTensor({ id: 13, address: 2097152, buffer_type: BufferType.DRAM }), dramOutput],
+        });
+
+        expect(getDramFallbacks([failedConv, convRetry], failureByOpId()).size).toBe(0);
     });
 
     it('does not flag a retry whose DRAM output is a view of its input', () => {
@@ -310,7 +402,8 @@ describe('getDramFallbacks — retry after an L1 allocation failure', () => {
 
 describe('getDramFallbackSummary', () => {
     it('states the request against the outputs', () => {
-        const [fallback] = getDramFallbacks([requestingL1({ outputs: [dramOutput, l1Output] })], NO_FAILURES).values();
+        const view = makeTensor({ id: 13, address: INPUT_ADDRESS, buffer_type: BufferType.DRAM });
+        const [fallback] = getDramFallbacks([requestingL1({ outputs: [dramOutput, view] })], NO_FAILURES).values();
 
         expect(getDramFallbackSummary(fallback)).toBe('Requested L1; 1 of 2 outputs in DRAM.');
     });

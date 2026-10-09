@@ -7,10 +7,10 @@ import { BufferType, StringBufferType, StringBufferTypeToBufferType } from '../m
 
 // Unanchored at the start, so it also matches a value that only ends in a memory config. Kept
 // as it is for the details view; anchoring it would change which arguments that view parses.
-export const trailingMemoryConfigPattern = /MemoryConfig\((.*)\)$/;
+const trailingMemoryConfigPattern = /MemoryConfig\((.*)\)$/;
 // Anchored at both ends, like the backend's `re.match`, so a tensor argument whose repr merely
-// ends in a memory config is not read as a request.
-const wholeMemoryConfigPattern = /^MemoryConfig\((.*)\)$/;
+// ends in a memory config is not read as a request. Older reports namespace the type.
+const wholeMemoryConfigPattern = /^(?:tt::tt_metal::)?MemoryConfig\((.*)\)$/;
 const bufferTypePattern = /buffer_type=BufferType::([A-Z0-9_]+)/;
 const memoryLayoutPattern = /memory_layout=([A-Za-z_:]+)/;
 const shardSpecPattern =
@@ -45,6 +45,13 @@ const parseMemoryConfig = (string: string): MemoryConfig | null => {
 
     return null;
 };
+
+/**
+ * Whether the operation details view parses this argument as a memory config. Looser than
+ * `isMemoryConfigValue`, which decides what counts as a request.
+ */
+export const isParsableMemoryConfigArgument = ({ name, value }: { name: string; value: string }): boolean =>
+    name === 'memory_config' || trailingMemoryConfigPattern.test(value);
 
 /** Whether a raw argument value is a whole `MemoryConfig(...)`, whatever buffer type it declares. */
 export const isMemoryConfigValue = (value: string | null | undefined): value is string =>
