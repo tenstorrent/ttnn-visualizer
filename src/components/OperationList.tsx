@@ -38,11 +38,10 @@ import OperationListPerfData from './OperationListPerfData';
 import OperationPerfRowBar from './OperationPerfRowBar';
 import SearchField from './SearchField';
 import SimpleMultiselect from './SimpleMultiselect';
-import OperationErrorTraces from './OperationErrorTraces';
+import RecordedErrorDetails from './RecordedErrorDetails';
 import UnattachedErrorsCallout from './UnattachedErrorsCallout';
 import { useOpPerfRowScores } from '../hooks/useOpPerfRowScores';
 import { filterByOperationRange } from '../functions/filterByOperationRange';
-import AllocationFailureDetails from './AllocationFailureDetails';
 import { ALLOCATION_FAILURE_KIND_LABELS } from '../definitions/AllocationFailure';
 import { TEST_IDS } from '../definitions/TestIds';
 import { getAllocationFailureDetail } from '../functions/parseAllocationFailure';
@@ -558,19 +557,12 @@ const OperationList = () => {
                                                 </p>
 
                                                 {operation?.error && (
-                                                    <>
-                                                        {allocationFailureDetail && (
-                                                            <AllocationFailureDetails {...allocationFailureDetail} />
-                                                        )}
-
-                                                        <OperationErrorTraces
-                                                            className='memory-error'
-                                                            error={operation.error}
-                                                            onExpandChange={() =>
-                                                                handleToggleStackTrace(virtualRow.index)
-                                                            }
-                                                        />
-                                                    </>
+                                                    <RecordedErrorDetails
+                                                        className='memory-error'
+                                                        error={operation.error}
+                                                        allocationFailure={allocationFailureDetail}
+                                                        onExpandChange={() => handleToggleStackTrace(virtualRow.index)}
+                                                    />
                                                 )}
 
                                                 <OperationListPerfData operation={operation} />

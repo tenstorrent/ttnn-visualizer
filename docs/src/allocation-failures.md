@@ -43,6 +43,8 @@ Operations with an error are marked with an error icon. Expand one with an alloc
 
 Use the error button beside the list controls to show only operations with an error. It is disabled when no operation in the list has an error attached.
 
+Errors the report could not place on an operation, such as one recorded by an operation that crashed before it was written, are listed in a callout above the list. An allocation failure there is explained too, though without the failed device operation, since no captured graph comes with it.
+
 ## In the device operations tree
 
 A device operation whose launch failed is marked with an error icon, and so is every scope enclosing it, since the failure ended those too. Hover the icon for the reason newer tt-metal records. Whatever the scope allocated before it failed is still listed.
