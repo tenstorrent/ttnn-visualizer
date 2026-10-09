@@ -364,6 +364,30 @@ describe('DeviceOperationsFullRender - failed device operations', () => {
         expect(screen.getByText('Next · per-core CB allocations')).toBeInTheDocument();
     });
 
+    it("heads a sibling's CBs afresh after a failed scope's CBs that were never deallocated", () => {
+        renderGraph(
+            [
+                captureStart(),
+                functionStart('ttnn.conv2d', 1),
+                functionStart('Failed', 2),
+                cbAllocate(2048, 0x2000),
+                functionStart('Next', 2),
+                cbAllocate(4096, 0x1000),
+                cbDeallocateAll(),
+                functionEnd('Next', {}, 2),
+                functionEnd('ttnn.conv2d', {}, 1),
+            ],
+            true,
+        );
+
+        expect(screen.getAllByText('CBs', { selector: 'h4' })).toHaveLength(2);
+
+        const viewButtons = screen.getAllByRole('button', { name: /View per-core allocations/ });
+        fireEvent.click(viewButtons[viewButtons.length - 1]);
+
+        expect(screen.getByText('Next · per-core CB allocations')).toBeInTheDocument();
+    });
+
     it('nests the scope after one left open, where the capture records no stacking levels', () => {
         const container = renderGraph(
             [

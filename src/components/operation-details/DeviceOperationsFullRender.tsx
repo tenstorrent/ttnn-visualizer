@@ -418,6 +418,12 @@ function useDeviceOperationsFullRenderModel(args: {
 
                 scopeOutcomes.closesByIndex.get(index)?.forEach(closeFrame);
 
+                // A scope boundary starts a new CB group, though the scope before it may have
+                // stopped, failing, before its `circular_buffer_deallocate_all`.
+                if (nodeType === NodeType.function_start || nodeType === NodeType.function_end) {
+                    consecutiveCBsOutput = false;
+                }
+
                 if (nodeType === NodeType.function_start) {
                     stack.push([]);
                     deviceOpIdStack.push({ id: node.id, name: node.params.name });
