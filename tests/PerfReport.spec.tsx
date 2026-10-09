@@ -763,3 +763,28 @@ describe('PerformanceReport duration bucket tag', () => {
         expect(screen.queryByText(formatDurationBucketRange(1, 10))).not.toBeInTheDocument();
     });
 });
+
+describe('PerformanceReport high dispatch banner', () => {
+    const withGap = (tableRow: TypedPerfTableRow, opToOpGap: number) =>
+        ({ ...tableRow, op_to_op_gap: opToOpGap, high_dispatch: true }) as TypedPerfTableRow;
+
+    // Regression: the banner summarised the original report on every tab, so a comparison tab's
+    // Slow icons and its "could save" figure came from different reports.
+    it("summarises the active tab's report", () => {
+        renderReport({
+            data: [withGap(row('Matmul', 1, 2), 16.5)],
+            comparisonData: [[withGap(row('Matmul', 1, 2), 26.5)]],
+            comparisonReports: [COMPARISON_REPORT],
+        });
+
+        fireEvent.click(screen.getByLabelText('Highlight high dispatch ops'));
+
+        // Each saving is the gap minus the 6.5 µs threshold.
+        expect(screen.getByText(/could save 10 µs/)).toBeInTheDocument();
+
+        fireEvent.click(screen.getByRole('tab', { name: COMPARISON_REPORT }));
+
+        expect(screen.getByText(/could save 20 µs/)).toBeInTheDocument();
+        expect(screen.queryByText(/could save 10 µs/)).not.toBeInTheDocument();
+    });
+});

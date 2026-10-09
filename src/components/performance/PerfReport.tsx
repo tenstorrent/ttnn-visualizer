@@ -295,11 +295,17 @@ const PerformanceReport = ({
 
     const isInitialTab = selectedTabId === INITIAL_TAB_ID;
 
-    // Memoised so unrelated re-renders (hover, tabs) don't rescan every row.
-    const highDispatchAdvice = useMemo(
-        () => (hiliteHighDispatch && !isStackedView ? calcHighDispatchOps(processedRows) : null),
-        [hiliteHighDispatch, isStackedView, processedRows],
-    );
+    // Summarises the active tab's report so the banner agrees with the Slow icons in its table.
+    // Memoised so unrelated re-renders (hover) don't rescan every row.
+    const highDispatchAdvice = useMemo(() => {
+        if (!hiliteHighDispatch || isStackedView) {
+            return null;
+        }
+
+        const activeRows = isInitialTab ? processedRows : processedComparisonRows[comparisonIndex];
+
+        return activeRows ? calcHighDispatchOps(activeRows) : null;
+    }, [hiliteHighDispatch, isStackedView, isInitialTab, processedRows, processedComparisonRows, comparisonIndex]);
 
     const activeDataCount = useMemo(() => {
         const isComparison = !isInitialTab;
