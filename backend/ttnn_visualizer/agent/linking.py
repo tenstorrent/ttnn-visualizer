@@ -124,6 +124,10 @@ class OperationLink:
     matched_on: Optional[MatchedOn] = None
     operation_by_perf_id: Dict[str, int] = field(default_factory=dict)
     perf_rows_by_operation: Dict[int, List[Dict]] = field(default_factory=dict)
+    # What every device-time share in `operation_detail` divides by.
+    report_device_time_total: float = 0.0
+    # Said beside every share, since a share assumes the ops ran one after another.
+    partitioned_caveat: Optional[str] = None
     # The rows of a linked pair without an operation. Only `top_ops` returns them:
     # the rows have no operation, so they belong to no one operation's detail.
     unlinked: Optional[UnlinkedRows] = None
@@ -574,6 +578,15 @@ def _build_link(
         operation_by_perf_id=operation_by_perf_id,
         perf_rows_by_operation=perf_rows_by_operation,
         unlinked=unlinked_rows(all_rows, operation_by_perf_id),
+        # Over the rows the match could pair: host ops and signposts launch nothing.
+        report_device_time_total=sum(
+            device_time
+            for row in all_rows
+            if not is_host_op_row(row)
+            and row.get("op_type") != SIGNPOST_OP_TYPE
+            and (device_time := tools.countable_device_time(row)) is not None
+        ),
+        partitioned_caveat=tools.partitioned_caveat(all_rows),
     )
 
 
@@ -634,6 +647,35 @@ def top_ops(
     return result
 
 
+def _share_percent(device_time: Optional[float], total: float) -> Optional[float]:
+    """Percent of `total`, to three significant figures so a sliver stays non-zero."""
+    if device_time is None or total <= 0:
+        return None
+    return float(f"{device_time / total * 100:.3g}")
+
+
+def _device_time_summary(
+    rows: Sequence[Dict], link: OperationLink
+) -> Dict[str, object]:
+    """The operation's device time over all its rows, and the slowest of them."""
+    timed = [
+        (row, device_time)
+        for row in rows
+        if (device_time := tools.countable_device_time(row)) is not None
+    ]
+    if not timed:
+        return {}
+    total = sum(device_time for _, device_time in timed)
+    slowest, _ = max(timed, key=lambda pair: pair[1])
+    return {
+        "device_time": round(total, 3),
+        "device_time_share_percent": _share_percent(
+            total, link.report_device_time_total
+        ),
+        "slowest_perf_id": slowest.get("id"),
+    }
+
+
 def operation_detail(
     registry: ReportRegistry,
     handle: str,
@@ -659,11 +701,26 @@ def operation_detail(
         return result
     if link.status is LinkStatus.LINKED:
         rows = link.perf_rows_by_operation.get(int(operation_id), [])
-        result["perf_rows"] = [tools.project_row(row) for row in rows[:MAX_LIMIT]]
+        result["perf_rows"] = [
+            {
+                **tools.project_row(row),
+                "device_time_share_percent": _share_percent(
+                    tools.countable_device_time(row), link.report_device_time_total
+                ),
+            }
+            for row in rows[:MAX_LIMIT]
+        ]
         result["perf_row_count"] = len(rows)
         # Stated because this response's other duration is host seconds, and the two
         # invite being compared.
         result["device_time_unit"] = DEVICE_TIME_UNIT
+        if rows:
+            result.update(_device_time_summary(rows, link))
+            result["report_device_time_total"] = round(link.report_device_time_total, 3)
+            caveat = link.partitioned_caveat
+            if caveat:
+                existing = result.get("caveat")
+                result["caveat"] = f"{existing} {caveat}" if existing else caveat
     result["operation_link"] = link.as_response()
     return result
 

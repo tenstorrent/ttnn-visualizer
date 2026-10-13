@@ -1043,6 +1043,7 @@ class TestOperationDetailLink:
                 "bound": None,
                 "bound_analysis": None,
                 "op_category": None,
+                "device_time_share_percent": 90.0,
             }
         ]
         assert result["perf_row_count"] == 1

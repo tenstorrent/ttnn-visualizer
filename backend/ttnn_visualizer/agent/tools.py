@@ -12,6 +12,7 @@ server-side windowing on the NPE view. #1995
 import contextlib
 import io
 import logging
+import math
 import sys
 from collections import defaultdict
 from typing import Dict, List, Optional
@@ -81,6 +82,16 @@ def _as_number(value: object) -> Optional[float]:
     return None
 
 
+def countable_device_time(row: Dict) -> Optional[float]:
+    """A row's device time, or None where tt-perf-report blanked it as invalid.
+
+    `isCountableDeviceTime` in `src/functions/durationBuckets.ts`, so a share
+    reads the same here as in the app.
+    """
+    value = _as_number(row.get("device_time"))
+    return value if value is not None and math.isfinite(value) and value > 0 else None
+
+
 def _rounded(value: Optional[float]) -> Optional[float]:
     """Nanosecond precision is plenty, and a 17-digit float is context spent."""
     return None if value is None else round(value, 3)
@@ -109,7 +120,7 @@ def _generate_canonical_report(instance: Instance, **overrides: object) -> Dict:
     return report
 
 
-def _partitioned_caveat(rows: List[Dict]) -> Optional[str]:
+def partitioned_caveat(rows: List[Dict]) -> Optional[str]:
     """Totals assume ops ran sequentially, which a partitioned run breaks.
 
     tt-perf-report prints this warning itself when a report carries more than one
@@ -201,7 +212,7 @@ def top_ops(
     }
     if by in ADDITIVE_METRICS:
         result[f"{by}_total"] = round(total, 3)
-    caveat = _partitioned_caveat(rows)
+    caveat = partitioned_caveat(rows)
     if caveat:
         result["caveat"] = caveat
     return result
@@ -379,7 +390,9 @@ __all__ = [
     "CANONICAL_PROJECTION",
     "SORTABLE_METRICS",
     "canonical_report",
+    "countable_device_time",
     "diff_reports",
+    "partitioned_caveat",
     "project_row",
     "top_ops",
     "zone_timings",

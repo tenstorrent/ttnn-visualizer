@@ -31,6 +31,7 @@ export type BucketableRow = TypedPerfTableRow & { device_time: number };
 /**
  * Whether a device time counts towards totals and buckets. Shared by the duration histogram, the
  * bound-analysis coverage line and the op-category breakdown, so the callouts agree on one total.
+ * Mirrored as `countable_device_time` in `backend/ttnn_visualizer/agent/tools.py`.
  */
 export const isCountableDeviceTime = (deviceTimeUs: number | null): deviceTimeUs is number =>
     deviceTimeUs !== null && Number.isFinite(deviceTimeUs) && deviceTimeUs > 0;
