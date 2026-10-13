@@ -8,7 +8,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import DeviceOperationsFullRender from '../src/components/operation-details/DeviceOperationsFullRender';
 import { Node, NodeType } from '../src/model/APIData';
 import { OperationDetails } from '../src/model/OperationDetails';
+import { PerfOverlayStatus } from '../src/definitions/PerfOverlayStatus';
+import { DeviceOperationPerf } from '../src/hooks/useDeviceOperationPerf';
+import { enrichRowData } from '../src/functions/enrichPerfRowData';
+import { PerfTableRow } from '../src/model/PerfTable';
 import { TestProviders } from './helpers/TestProviders';
+import { makeRawPerfRow } from './helpers/perfRowFixtures';
 
 // The always-mounted `CircularBufferPressureModal` is the subtree's only API caller.
 const mockUseDevices = vi.fn();
@@ -16,19 +21,18 @@ vi.mock('../src/hooks/useAPI.tsx', () => ({
     useDevices: () => mockUseDevices(),
 }));
 
-// The linked performance report never arrives, so the perf summary renders nothing.
-vi.mock('../src/hooks/useDeviceOperationPerf', async () => {
-    const { PerfOverlayStatus } = await import('../src/definitions/PerfOverlayStatus');
+const mockUseDeviceOperationPerf = vi.fn();
+vi.mock('../src/hooks/useDeviceOperationPerf', () => ({
+    useDeviceOperationPerf: () => mockUseDeviceOperationPerf(),
+}));
 
-    return {
-        useDeviceOperationPerf: () => ({
-            status: PerfOverlayStatus.UNAVAILABLE,
-            isLoading: true,
-            rowByStartNodeId: new Map(),
-            totalDeviceTimeUs: 0,
-        }),
-    };
-});
+// Unless a case says otherwise, the linked performance report never arrives and no perf renders.
+const PERF_LOADING: DeviceOperationPerf = {
+    status: PerfOverlayStatus.UNAVAILABLE,
+    isLoading: true,
+    rowByStartNodeId: new Map(),
+    totalDeviceTimeUs: 0,
+};
 
 // Unsorted, as a real capture emits them, so nothing here can lean on ascending
 // order. The sequence recorded in #1844.
@@ -122,6 +126,7 @@ const peakLoad = (container: HTMLElement) => container.querySelector('.peak-load
 beforeEach(() => {
     nextId = 0;
     mockUseDevices.mockReturnValue({ data: [{ num_x_cores: 2, num_y_cores: 2, worker_l1_size: 1_000_000 }] });
+    mockUseDeviceOperationPerf.mockReturnValue(PERF_LOADING);
 });
 
 afterEach(() => {
@@ -471,5 +476,79 @@ describe('DeviceOperationsFullRender - failed device operations', () => {
         hoverIconOf(container, 'Conv2d');
 
         expect(await screen.findByText('The capture ended before this scope closed')).toBeInTheDocument();
+    });
+});
+
+describe('DeviceOperationsFullRender - device operation perf (#1512)', () => {
+    const perfRow = (id: string, rawOpCode: string, deviceTimeUs: string, cores: string) =>
+        enrichRowData(
+            [
+                makeRawPerfRow({
+                    id,
+                    raw_op_code: rawOpCode,
+                    device_time: deviceTimeUs,
+                    cores,
+                    bound: '' as PerfTableRow['bound'],
+                    bound_analysis: 'none',
+                }),
+            ],
+            [],
+            null,
+        )[0];
+
+    const perfByScope = (container: HTMLElement) =>
+        [...container.querySelectorAll('.device-operation-label')].map((label) => [
+            label.textContent?.split(' ')[0],
+            label.closest('.collapsible-controls')?.querySelector('.device-operation-perf')?.textContent ?? null,
+        ]);
+
+    it("shows each device operation's own row in its header, and none on a helper scope", () => {
+        // ttnn.cumsum in bge_m3: the same device operation twice, each with its own row.
+        const reshape = functionStart('Tensor::reshape');
+        const firstPermute = functionStart('PermuteDeviceOperation');
+        const accumulation = functionStart('AccumulationDeviceOperation');
+        const secondPermute = functionStart('PermuteDeviceOperation');
+        mockUseDeviceOperationPerf.mockReturnValue({
+            status: PerfOverlayStatus.READY,
+            isLoading: false,
+            totalDeviceTimeUs: 50_000,
+            rowByStartNodeId: new Map([
+                [firstPermute.id, perfRow('5', 'PermuteDeviceOperation', '14.418', '64')],
+                [accumulation.id, perfRow('6', 'AccumulationDeviceOperation', '115.73', '1')],
+                [secondPermute.id, perfRow('7', 'PermuteDeviceOperation', '5.559', '32')],
+            ]),
+        });
+
+        const container = renderGraph([
+            captureStart(),
+            reshape,
+            functionEnd('Tensor::reshape'),
+            firstPermute,
+            functionEnd('PermuteDeviceOperation'),
+            accumulation,
+            functionEnd('AccumulationDeviceOperation'),
+            secondPermute,
+            functionEnd('PermuteDeviceOperation'),
+        ]);
+
+        expect(perfByScope(container)).toEqual([
+            ['Tensor::reshape', null],
+            ['PermuteDeviceOperation', '14 µs·64 cores·<0.1% of device time'],
+            ['AccumulationDeviceOperation', '116 µs·1 core·0.2% of device time'],
+            ['PermuteDeviceOperation', '6 µs·32 cores·<0.1% of device time'],
+        ]);
+        expect(container).toHaveTextContent(
+            "3 device operations ran for 136 µs (0.3% of the report's device time). " +
+                'Slowest: AccumulationDeviceOperation, 116 µs on 1 core.',
+        );
+    });
+
+    it('says so above the list when no performance report is loaded', () => {
+        mockUseDeviceOperationPerf.mockReturnValue({ ...PERF_LOADING, isLoading: false });
+
+        const container = renderGraph([captureStart(), functionStart('Matmul'), functionEnd('Matmul')]);
+
+        expect(container).toHaveTextContent('Load a performance report from the same run');
+        expect(perfByScope(container)).toEqual([['Matmul', null]]);
     });
 });
