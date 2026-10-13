@@ -1089,7 +1089,7 @@ class TestOperationDetailLink:
         ]
         assert result["device_time"] == 130.0
         assert result["device_time_share_percent"] == 65.0
-        # A tie goes to the row that ran first, as in the app.
+        # A tie goes to the row that ran first.
         assert result["slowest_perf_id"] == "11"
         assert result["report_device_time_total"] == 200.0
 
@@ -1135,6 +1135,7 @@ class TestOperationDetailLink:
 
         assert result["perf_rows"][0]["device_time_share_percent"] is None
         assert "device_time" not in result
+        assert "device_time_share_percent" not in result
         assert "slowest_perf_id" not in result
 
     def test_the_summary_covers_rows_past_the_cap(self, linked):

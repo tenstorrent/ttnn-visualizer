@@ -578,7 +578,8 @@ def _build_link(
         operation_by_perf_id=operation_by_perf_id,
         perf_rows_by_operation=perf_rows_by_operation,
         unlinked=unlinked_rows(all_rows, operation_by_perf_id),
-        # Over the rows the match could pair: host ops and signposts launch nothing.
+        # Over the rows the match could pair, as the app's Operation Details sums it
+        # (#2111): host ops and signposts launch nothing.
         report_device_time_total=sum(
             device_time
             for row in all_rows
@@ -717,10 +718,10 @@ def operation_detail(
         if rows:
             result.update(_device_time_summary(rows, link))
             result["report_device_time_total"] = round(link.report_device_time_total, 3)
-            caveat = link.partitioned_caveat
-            if caveat:
-                existing = result.get("caveat")
-                result["caveat"] = f"{existing} {caveat}" if existing else caveat
+            if link.partitioned_caveat:
+                result["caveat"] = operations.joined_caveat(
+                    result.get("caveat"), link.partitioned_caveat
+                )
     result["operation_link"] = link.as_response()
     return result
 

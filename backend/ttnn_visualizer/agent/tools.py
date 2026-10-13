@@ -83,10 +83,10 @@ def _as_number(value: object) -> Optional[float]:
 
 
 def countable_device_time(row: Dict) -> Optional[float]:
-    """A row's device time, or None where tt-perf-report blanked it as invalid.
+    """A row's device time, or None where it is blank, non-finite or not positive.
 
-    `isCountableDeviceTime` in `src/functions/durationBuckets.ts`, so a share
-    reads the same here as in the app.
+    `isCountableDeviceTime` in `src/functions/durationBuckets.ts`, which the app
+    counts a share's device time with; mirror a change there.
     """
     value = _as_number(row.get("device_time"))
     return value if value is not None and math.isfinite(value) and value > 0 else None
