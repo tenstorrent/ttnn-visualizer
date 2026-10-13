@@ -3,8 +3,9 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import { describe, expect, it } from 'vitest';
-import { BufferData, Tensor } from '../src/model/APIData';
-import { BufferType, StringBufferType } from '../src/model/BufferType';
+import { PlotData } from 'plotly.js';
+import { BufferData, Node, NodeType, Tensor } from '../src/model/APIData';
+import { BufferType } from '../src/model/BufferType';
 import { OperationDetails } from '../src/model/OperationDetails';
 import { PlotDataCustom } from '../src/model/PlotData';
 import { getBufferColor, getTensorColor } from '../src/functions/colorGenerator';
@@ -15,6 +16,7 @@ import {
     buildOperationDescription,
     buildOperationDetails,
     buildTensor,
+    createNodeFactory,
 } from './helpers/operationDetailsFixtures';
 
 // DRAM and L1 are separate address spaces, so one address can hold a different
@@ -138,16 +140,14 @@ describe('OperationDetails at a shared L1/DRAM address (#2078)', () => {
         expect(chunkAt(details, BufferType.L1)?.tensorId).toBe(L1_TENSOR_ID);
     });
 
-    // Graph nodes name their memory space as a string, or not at all.
     it.each([
-        ['DRAM', 'DRAM', DRAM_TENSOR_ID],
-        ['L1', 'L1', L1_TENSOR_ID],
+        ['DRAM', BufferType.DRAM, DRAM_TENSOR_ID],
+        ['L1', BufferType.L1, L1_TENSOR_ID],
         ['no', undefined, L1_TENSOR_ID],
-    ] as const)('resolves a graph node naming %s memory space', (_label, type, tensorId) => {
+    ])('resolves a graph node in %s memory space', (_label, bufferType, tensorId) => {
         const details = buildDetails({ buffers: [dramBuffer, l1Buffer], outputs: [dramTensor, l1Tensor] });
-        const stringType = type === undefined ? undefined : StringBufferType[type];
 
-        expect(details.getTensorForNode(SHARED_ADDRESS, stringType)?.id).toBe(tensorId);
+        expect(details.getTensorForNode(SHARED_ADDRESS, bufferType)?.id).toBe(tensorId);
     });
 });
 
@@ -177,5 +177,79 @@ describe.each([
     it('keeps each memory space its own copy', () => {
         expect(details.getTensorForBuffer(SHARED_ADDRESS, BufferType.L1)?.buffer_type).toBe(BufferType.L1);
         expect(details.getTensorForBuffer(SHARED_ADDRESS, BufferType.DRAM)?.buffer_type).toBe(BufferType.DRAM);
+    });
+
+    it("gives each plot's bar its own space's copy", () => {
+        expect(barAt(details, BufferType.L1)?.memoryData.tensor?.buffer_type).toBe(BufferType.L1);
+        expect(barAt(details, BufferType.DRAM)?.memoryData.tensor?.buffer_type).toBe(BufferType.DRAM);
+    });
+});
+
+// Device-operation chunks come from graph nodes whose string `type` reads
+// `'L1'` for L1 Small too, so conv and pool CBs aliased over L1 Small tensors
+// must still find them.
+describe('OperationDetails device-operation bars over an L1 Small tensor', () => {
+    const L1_SMALL_TENSOR_ID = 30;
+    const l1SmallBuffer = buildBufferData({ address: SHARED_ADDRESS, buffer_type: BufferType.L1_SMALL });
+    const l1SmallTensor = buildTensor({
+        id: L1_SMALL_TENSOR_ID,
+        address: SHARED_ADDRESS,
+        buffer_type: BufferType.L1_SMALL,
+        producers: [OPERATION_ID],
+    });
+
+    const buildWithGraph = (memoryNode: Partial<Node>) => {
+        const mkNode = createNodeFactory();
+        const deviceOperations = [
+            mkNode({ node_type: NodeType.function_start, params: { name: 'conv2d' } } as unknown as Partial<Node>),
+            mkNode(memoryNode),
+            mkNode({ node_type: NodeType.function_end, params: { name: 'conv2d' } } as unknown as Partial<Node>),
+        ];
+
+        return buildOperationDetails({
+            data: {
+                id: OPERATION_ID,
+                buffers: [l1SmallBuffer],
+                buffersSummary: summariseOperationBuffers([l1SmallBuffer]),
+                device_operations: deviceOperations,
+            },
+            operations: [buildOperationDescription({ id: OPERATION_ID, name: 'conv2d', outputs: [l1SmallTensor] })],
+        });
+    };
+
+    const tensorIdsAt = (traces: Partial<PlotData>[] | undefined) =>
+        (traces as PlotDataCustom[] | undefined)
+            ?.filter((bar) => bar.memoryData.address === SHARED_ADDRESS)
+            .map((bar) => bar.memoryData.tensor?.id);
+
+    it('names the tensor under an aliased CB', () => {
+        const details = buildWithGraph({
+            node_type: NodeType.circular_buffer_allocate,
+            params: {
+                core_range_set: '{[(x=0,y=0) - (x=0,y=0)]}',
+                size: '1024',
+                address: String(SHARED_ADDRESS),
+                globally_allocated: '1',
+            },
+        } as unknown as Partial<Node>);
+        const [traces] = details.memoryData(BufferType.L1).cbChartDataByOperation.values();
+
+        expect(tensorIdsAt(traces)).toEqual([L1_SMALL_TENSOR_ID]);
+    });
+
+    it("names the tensor under a device-operation buffer whose type reads 'L1'", () => {
+        const details = buildWithGraph({
+            node_type: NodeType.buffer_allocate,
+            params: {
+                address: String(SHARED_ADDRESS),
+                size: '1024',
+                num_cores: '1',
+                type: 'L1',
+                buffer_type: BufferType.L1_SMALL,
+            },
+        } as unknown as Partial<Node>);
+        const [traces] = details.memoryData(BufferType.L1).bufferChartDataByOperation.values();
+
+        expect(tensorIdsAt(traces)).toEqual([L1_SMALL_TENSOR_ID]);
     });
 });

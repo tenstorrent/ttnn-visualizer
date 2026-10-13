@@ -94,6 +94,7 @@ function meshGraph(sizes: { size: number; address: number }[], deviceIds: (numbe
 const details = {
     l1_sizes: [1_000_000],
     getTensorForAddress: () => undefined,
+    getTensorForNode: () => undefined,
     getTensorProducerConsumer: () => [],
 } as unknown as OperationDetails;
 
@@ -475,11 +476,13 @@ describe('DeviceOperationsFullRender - tensors at a shared L1/DRAM address (#207
     const SHARED_ADDRESS = 0x4000;
     const L1_TENSOR_ID = 10;
     const DRAM_TENSOR_ID = 20;
+    const L1_SMALL_TENSOR_ID = 30;
 
     const buildSharedAddressDetails = () => {
         const buffers = [
             buildBufferData({ address: SHARED_ADDRESS, buffer_type: BufferType.DRAM, max_size_per_bank: 128 }),
             buildBufferData({ address: SHARED_ADDRESS, buffer_type: BufferType.L1, max_size_per_bank: 4096 }),
+            buildBufferData({ address: SHARED_ADDRESS, buffer_type: BufferType.L1_SMALL, max_size_per_bank: 64 }),
         ];
 
         return buildOperationDetails({
@@ -490,42 +493,80 @@ describe('DeviceOperationsFullRender - tensors at a shared L1/DRAM address (#207
                     outputs: [
                         buildTensor({ id: L1_TENSOR_ID, address: SHARED_ADDRESS, buffer_type: BufferType.L1 }),
                         buildTensor({ id: DRAM_TENSOR_ID, address: SHARED_ADDRESS, buffer_type: BufferType.DRAM }),
+                        buildTensor({
+                            id: L1_SMALL_TENSOR_ID,
+                            address: SHARED_ADDRESS,
+                            buffer_type: BufferType.L1_SMALL,
+                        }),
                     ],
                 }),
             ],
         });
     };
 
-    // As captured: the memory space is on the buffer node, as a string `type`.
-    const dramTensorGraph = (): Node[] => {
+    // As captured: tensor and buffer nodes carry a numeric `buffer_type`, and
+    // buffer nodes a string `type` that reads `'L1'` for L1 Small too.
+    const tensorGraph = (
+        tensorId: number,
+        tensorParams: Record<string, unknown>,
+        bufferParams: Record<string, unknown>,
+    ): Node[] => {
         const buffer = mkNode({
             node_type: NodeType.buffer,
-            params: { type: 'DRAM', size: '128', device_id: 0 },
+            params: { size: '128', device_id: 0, ...bufferParams },
         } as unknown as Partial<Node>);
         const tensor = mkNode({
             node_type: NodeType.tensor,
             params: {
-                tensor_id: DRAM_TENSOR_ID,
+                tensor_id: tensorId,
                 address: String(SHARED_ADDRESS),
                 shape: 'Shape([1, 32])',
                 dtype: 'DataType.BFLOAT16',
                 size: '128',
+                ...tensorParams,
             },
             buffer: [buffer],
         } as unknown as Partial<Node>);
 
-        return [captureStart(), { ...functionStart('ToDram'), inputs: [tensor] }, functionEnd('ToDram')];
+        return [captureStart(), { ...functionStart('Op'), inputs: [tensor] }, functionEnd('Op')];
     };
 
-    it('colours a DRAM tensor with its own tensor, not the L1 tensor at its address', () => {
+    const dramTensorGraph = () =>
+        tensorGraph(DRAM_TENSOR_ID, { buffer_type: BufferType.DRAM }, { type: 'DRAM', buffer_type: BufferType.DRAM });
+
+    const labelSquare = (container: HTMLElement) =>
+        container.querySelector('.tensor-details-layout .memory-color-block');
+
+    // Each case names the memory space in one place only, so each source is tested alone.
+    it.each([
+        ['its own numeric type', { buffer_type: BufferType.DRAM }, {}],
+        ["its buffer's numeric type", {}, { buffer_type: BufferType.DRAM }],
+        ["its buffer's string type", {}, { type: 'DRAM' }],
+        // At least one capture stores the C++ enum name.
+        ['the C++ enum name', { buffer_type: 'BufferType::DRAM' }, {}],
+    ])('colours a DRAM tensor named by %s with its own tensor', (_label, tensorParams, bufferParams) => {
         // Resolved up front: colours are handed out in first-seen order.
         const dramColour = getTensorColor(DRAM_TENSOR_ID);
         const l1Colour = getTensorColor(L1_TENSOR_ID);
-        const container = renderGraph(dramTensorGraph(), false, buildSharedAddressDetails());
+        const container = renderGraph(
+            tensorGraph(DRAM_TENSOR_ID, tensorParams, bufferParams),
+            false,
+            buildSharedAddressDetails(),
+        );
 
-        const square = container.querySelector('.tensor-details-layout .memory-color-block');
-        expect(square).toHaveStyle({ backgroundColor: dramColour });
-        expect(square).not.toHaveStyle({ backgroundColor: l1Colour });
+        expect(labelSquare(container)).toHaveStyle({ backgroundColor: dramColour });
+        expect(labelSquare(container)).not.toHaveStyle({ backgroundColor: l1Colour });
+    });
+
+    it('colours an L1 Small tensor whose buffer reads L1 with its own tensor', () => {
+        const l1SmallColour = getTensorColor(L1_SMALL_TENSOR_ID);
+        const container = renderGraph(
+            tensorGraph(L1_SMALL_TENSOR_ID, {}, { type: 'L1', buffer_type: BufferType.L1_SMALL }),
+            false,
+            buildSharedAddressDetails(),
+        );
+
+        expect(labelSquare(container)).toHaveStyle({ backgroundColor: l1SmallColour });
     });
 
     // A tensor node with its own address renders its buffer row from the node
@@ -540,5 +581,33 @@ describe('DeviceOperationsFullRender - tensors at a shared L1/DRAM address (#207
             Boolean(element?.classList.contains('arg-tensor-tooltip')),
         );
         expect(tooltip.querySelector('.memory-color-block')).toHaveStyle({ backgroundColor: dramColour });
+    });
+
+    // These rows carry no tensor id, so they resolve one from their own memory space.
+    it.each([
+        ['allocate', NodeType.buffer_allocate],
+        ['deallocate', NodeType.buffer_deallocate],
+    ])('colours a DRAM buffer %s row with the DRAM tensor at its address', (_label, nodeType) => {
+        const dramColour = getTensorColor(DRAM_TENSOR_ID);
+        const l1Colour = getTensorColor(L1_TENSOR_ID);
+        const bufferNode = mkNode({
+            node_type: nodeType,
+            params: {
+                address: String(SHARED_ADDRESS),
+                size: '128',
+                num_cores: '1',
+                type: 'DRAM',
+                buffer_type: BufferType.DRAM,
+            },
+        } as unknown as Partial<Node>);
+        const container = renderGraph(
+            [captureStart(), functionStart('Op'), bufferNode, functionEnd('Op')],
+            false,
+            buildSharedAddressDetails(),
+        );
+
+        const swatch = container.querySelector('.memory-legend-row .memory-color-block');
+        expect(swatch).toHaveStyle({ backgroundColor: dramColour });
+        expect(swatch).not.toHaveStyle({ backgroundColor: l1Colour });
     });
 });

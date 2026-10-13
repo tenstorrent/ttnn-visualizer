@@ -16,7 +16,7 @@ import {
     OperationDetailsData,
     Tensor,
 } from './APIData';
-import { BufferType, BufferTypeToStringBufferType, StringBufferType } from './BufferType';
+import { BufferType, StringBufferType } from './BufferType';
 import { DRAM_MEMORY_SIZE } from '../definitions/DRAMMemorySize';
 import { CONDENSED_PLOT_CHUNK_COLOR, PlotDataOverrides } from '../definitions/PlotConfigurations';
 import { PlotDataCustom } from './PlotData';
@@ -27,10 +27,10 @@ import { TensorDeallocationReport } from './BufferSummary';
 import { normaliseDeviceId } from '../functions/collapseCbDeviceRows';
 import { getBufferKey } from '../functions/summariseOperationBuffers';
 
-// Graph nodes name their memory space as a string (`'L1'`, `'DRAM'`), not a `BufferType`.
-const BUFFER_TYPE_BY_STRING = new Map<StringBufferType, BufferType>(
-    Object.entries(BufferTypeToStringBufferType).map(([bufferType, name]) => [name, Number(bufferType) as BufferType]),
-);
+// Device-operation chunks come from graph nodes whose string `type` reads
+// `'L1'` for L1 Small too. L1 and L1 Small are disjoint regions of one L1, so
+// trying both can't hand a chunk another region's tensor.
+const L1_REGIONS = [BufferType.L1, BufferType.L1_SMALL] as const;
 
 export interface OperationDetailsOptions {
     renderPattern: boolean;
@@ -337,23 +337,27 @@ export class OperationDetails implements Partial<OperationDetailsData> {
         this.getGroupedMemoryReport = this.getGroupedMemoryReport.bind(this);
     }
 
-    // `bufferType` is required so every call states its memory space: an untyped
+    // `bufferTypes` is required so every call states its memory space: an untyped
     // fallback would hand a bar with no tensor of its own the tensor another
-    // space keeps at the same address. #2078
-    private getChartData(memory: Chunk[], bufferType: BufferType, overrides?: PlotDataOverrides): Partial<PlotData>[] {
-        const tensorByChunkAddress = new Map<number, Tensor>();
-
-        memory.forEach((chunk) => {
-            const tensor = chunk.tensorId !== undefined ? this.tensorListById.get(chunk.tensorId) : undefined;
-
-            if (tensor) {
-                tensorByChunkAddress.set(chunk.address, tensor);
-            }
-        });
-
+    // space keeps at the same address. Types are tried in order. #2078
+    private getChartData(
+        memory: Chunk[],
+        bufferTypes: readonly BufferType[],
+        overrides?: PlotDataOverrides,
+    ): Partial<PlotData>[] {
         return getChartData(
             memory,
-            (address) => tensorByChunkAddress.get(address) ?? this.getTensorForBuffer(address, bufferType),
+            (address) => {
+                for (const bufferType of bufferTypes) {
+                    const tensor = this.getTensorForBuffer(address, bufferType);
+
+                    if (tensor) {
+                        return tensor;
+                    }
+                }
+
+                return null;
+            },
             overrides,
             this.options,
         );
@@ -383,12 +387,10 @@ export class OperationDetails implements Partial<OperationDetailsData> {
     }
 
     /**
-     * The tensor for a graph node, within the memory space it names. A node that
-     * names none falls back to the address-only lookup, where L1 wins. #2078
+     * The tensor for a graph node, within its memory space (see `getNodeBufferType`).
+     * A node with none falls back to the address-only lookup, where L1 wins. #2078
      */
-    getTensorForNode(address: number, type: StringBufferType | undefined): Tensor | null {
-        const bufferType = type !== undefined ? BUFFER_TYPE_BY_STRING.get(type) : undefined;
-
+    getTensorForNode(address: number, bufferType: BufferType | undefined): Tensor | null {
         return bufferType !== undefined
             ? this.getTensorForBuffer(address, bufferType)
             : this.getTensorForAddress(address);
@@ -559,7 +561,7 @@ export class OperationDetails implements Partial<OperationDetailsData> {
         const cbCondensed: Chunk = calculateCondensed(anonymousCBMemory);
         const bufferCondensed: Chunk = calculateCondensed(bufferMemory);
 
-        const chartData = this.getChartData(memory, bufferType);
+        const chartData = this.getChartData(memory, [bufferType]);
         const cbColor = '#e2defc';
         const cbHoverTemplate = `
 <span style="color:${cbColor};font-size:20px;">&#9632;</span>
@@ -567,7 +569,7 @@ ${getMemoryAddress(cbCondensed.address, this.options.showHex)} <br />${formatMem
 <br><br>CBs Summary
 <extra></extra>`;
 
-        const cbChartData = this.getChartData([cbCondensed], BufferType.L1, {
+        const cbChartData = this.getChartData([cbCondensed], [BufferType.L1], {
             color: cbColor,
             hovertemplate: cbHoverTemplate,
         });
@@ -577,10 +579,10 @@ ${getMemoryAddress(cbCondensed.address, this.options.showHex)} <br />${formatMem
                 // Aliased CBs are emitted as a separate outlined trace so they don't obscure the tensor below. #1652
                 const anonymousCBs = op.cbList.filter((cb) => !cb.globallyAllocated);
                 const aliasedCBs = op.cbList.filter((cb) => cb.globallyAllocated);
-                const filled = this.getChartData(anonymousCBs, BufferType.L1, { colorVariance: op.id });
+                const filled = this.getChartData(anonymousCBs, L1_REGIONS, { colorVariance: op.id });
                 const outlined =
                     aliasedCBs.length > 0
-                        ? this.getChartData(aliasedCBs, BufferType.L1, { colorVariance: op.id, outline: true })
+                        ? this.getChartData(aliasedCBs, L1_REGIONS, { colorVariance: op.id, outline: true })
                         : [];
                 cbChartDataByOperation.set(
                     {
@@ -598,7 +600,7 @@ ${getMemoryAddress(cbCondensed.address, this.options.showHex)} <br />${formatMem
 ${getMemoryAddress(bufferCondensed.address, this.options.showHex)} <br /> ${formatMemorySize(bufferCondensed.size, 2)}
 <br><br>Buffers Summary
 <extra></extra>`;
-        const bufferChartData = this.getChartData([bufferCondensed], BufferType.L1, {
+        const bufferChartData = this.getChartData([bufferCondensed], [BufferType.L1], {
             color: bufferColor,
             hovertemplate: bufferHoverTemplate,
         });
@@ -610,12 +612,12 @@ ${getMemoryAddress(bufferCondensed.address, this.options.showHex)} <br /> ${form
                         name: op.name,
                         index: op.id,
                     },
-                    this.getChartData(op.bufferList, BufferType.L1),
+                    this.getChartData(op.bufferList, L1_REGIONS),
                 );
             }
         });
 
-        const condensedChart = this.getChartData([condensed], bufferType);
+        const condensedChart = this.getChartData([condensed], [bufferType]);
 
         if (condensedChart[0] !== undefined && bufferType === BufferType.L1_SMALL) {
             condensedChart[0].marker!.color = CONDENSED_PLOT_CHUNK_COLOR;
@@ -646,7 +648,7 @@ ${getMemoryAddress(bufferCondensed.address, this.options.showHex)} <br /> ${form
 
         return {
             // Only the DRAM plot asks for a delta, and `max` below already assumes DRAM.
-            chartData: this.getChartData(delta, BufferType.DRAM),
+            chartData: this.getChartData(delta, [BufferType.DRAM]),
             // eslint-disable-next-line no-unsafe-optional-chaining
             min: delta[0]?.address - 10240 || 0,
             // eslint-disable-next-line no-unsafe-optional-chaining

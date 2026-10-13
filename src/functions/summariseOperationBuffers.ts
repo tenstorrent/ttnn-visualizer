@@ -8,7 +8,8 @@ import { BufferType } from '../model/BufferType';
 /**
  * Identity of a buffer within one operation. DRAM, L1 and L1 Small are
  * separate address spaces, so an address is only unique within a type: key
- * every buffer-identity map through this rather than by address alone. #2078
+ * Operation Details' buffer-identity maps through this rather than by address
+ * alone. The late-deallocation report still matches tensors by address. #2078
  */
 export const getBufferKey = (bufferType: BufferType, address: number): string => `${bufferType}:${address}`;
 

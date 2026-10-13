@@ -17,7 +17,7 @@ import { TestProviders } from './helpers/TestProviders';
 const onLegendClick = vi.fn();
 
 const operationDetails = {
-    getTensorForAddress: () => undefined,
+    getTensorForNode: () => undefined,
 } as unknown as OperationDetails;
 
 type LegendProps = Parameters<typeof MemoryLegendElement>[0];
@@ -204,7 +204,7 @@ describe('MemoryLegendElement globally_allocated marker (#1651)', () => {
         // different colour from the address, so nothing ever matched: the row dimmed
         // itself and a toast said it was selected. #2032
         const aliasedTensor = { id: 188, shape: 'Shape([1, 32, 64, 64])', dtype: 'DataType.BFLOAT16' };
-        const opDetails = { getTensorForAddress: () => aliasedTensor } as unknown as OperationDetails;
+        const opDetails = { getTensorForNode: () => aliasedTensor } as unknown as OperationDetails;
         onLegendClick.mockClear();
 
         const { container } = render(
@@ -232,7 +232,7 @@ describe('MemoryLegendElement globally_allocated marker (#1651)', () => {
             dtype: 'DataType.BFLOAT16',
         };
         const opDetails = {
-            getTensorForAddress: () => aliasedTensor,
+            getTensorForNode: () => aliasedTensor,
         } as unknown as OperationDetails;
 
         render(
@@ -264,7 +264,7 @@ describe('MemoryLegendElement tensor label', () => {
         const ownTensor = { id: 20, shape: 'Shape([1, 32])', dtype: 'DataType.BFLOAT16' };
         const addressTensor = { id: 10, shape: 'Shape([1, 32])', dtype: 'DataType.BFLOAT16' };
         const opDetails = {
-            getTensorForAddress: () => addressTensor,
+            getTensorForNode: () => addressTensor,
             tensorListById: new Map([[ownTensor.id, ownTensor]]),
         } as unknown as OperationDetails;
 

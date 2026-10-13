@@ -29,6 +29,34 @@ export const BufferTypeToStringBufferType: Record<BufferType, StringBufferType> 
     [BufferType.TRACE]: StringBufferType.TRACE,
 };
 
+export const StringBufferTypeToBufferType = new Map<string, BufferType>(
+    Object.entries(BufferTypeToStringBufferType).map(([bufferType, name]) => [name, Number(bufferType) as BufferType]),
+);
+
+const CPP_ENUM_PREFIX = 'BufferType::';
+
+/**
+ * A recorded `buffer_type` as a `BufferType`. Captures write the enum's value,
+ * but at least one writes its C++ name (`'BufferType::DRAM'`) instead.
+ */
+export const toBufferType = (value: unknown): BufferType | undefined => {
+    if (typeof value === 'number') {
+        return BufferType[value] !== undefined ? value : undefined;
+    }
+
+    if (typeof value !== 'string' || value === '') {
+        return undefined;
+    }
+
+    if (/^\d+$/.test(value)) {
+        return toBufferType(Number(value));
+    }
+
+    return StringBufferTypeToBufferType.get(
+        value.startsWith(CPP_ENUM_PREFIX) ? value.slice(CPP_ENUM_PREFIX.length) : value,
+    );
+};
+
 /**
  * The only place display labels are spelled out. `MemoryTag` slugs these into its
  * `tag-*` class, so renaming one requires a matching rule in `_common.scss`.

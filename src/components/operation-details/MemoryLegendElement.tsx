@@ -15,7 +15,7 @@ import { getCoreCountLabel, getDeviceCountLabel, toReadableShape, toReadableType
 import 'styles/components/MemoryLegendElement.scss';
 import { L1_SMALL_MARKER_COLOR, L1_START_MARKER_COLOR } from '../../definitions/PlotConfigurations';
 import { selectedBufferColourAtom, showHexAtom } from '../../store/app';
-import { StringBufferType, StringBufferTypeLabel } from '../../model/BufferType';
+import { StringBufferType, StringBufferTypeLabel, StringBufferTypeToBufferType } from '../../model/BufferType';
 import { isAddressRangeOutOfL1Zoom } from '../../functions/isAddressRangeVisibleInL1Zoom';
 import { TensorDeallocationReport } from '../../model/BufferSummary';
 import { getLateDeallocationSummary } from '../../functions/lateDeallocation';
@@ -94,11 +94,15 @@ export const MemoryLegendElement = ({
         </>
     );
 
-    // `tensorId` was resolved within the chunk's own memory space; the address
-    // lookup is the fallback for CB and device-operation rows, which carry none. #2078
+    // `tensorId` was resolved within the chunk's own memory space. Rows without
+    // one look the tensor up in the row's memory space when it names one; CB rows
+    // name none and fall back to the address-only lookup. #2078
     const derivedTensor =
         (chunk.tensorId !== undefined ? operationDetails.tensorListById.get(chunk.tensorId) : undefined) ??
-        operationDetails.getTensorForAddress(chunk.address);
+        operationDetails.getTensorForNode(
+            chunk.address,
+            bufferType !== undefined ? StringBufferTypeToBufferType.get(bufferType) : undefined,
+        );
     const isPerCoreBuffer = bufferType !== StringBufferType.DRAM && bufferType !== StringBufferType.SYSTEM_MEMORY;
     const numCoresLabel = isPerCoreBuffer && numCores && numCores > 0 ? getCoreCountLabel(numCores) : '';
     const deviceCountLabel = deviceCount > 1 ? getDeviceCountLabel(deviceCount) : '';
