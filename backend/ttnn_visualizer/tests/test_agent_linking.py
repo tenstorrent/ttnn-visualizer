@@ -1061,12 +1061,118 @@ class TestOperationDetailLink:
         assert len(result["perf_rows"]) == MAX_LIMIT
         assert result["perf_row_count"] == count
 
+    def test_a_share_is_of_the_device_time_the_match_could_pair(self, linked):
+        """The host op and the signpost launch nothing, so their time is not counted."""
+        registry, handle, _ = linked()
+
+        result = linking.operation_detail(registry, handle, operation_id=3)
+
+        assert result["report_device_time_total"] == 10.0
+        assert result["perf_rows"][0]["device_time_share_percent"] == 90.0
+
+    def test_it_sums_the_operations_rows_and_names_the_slowest(self, linked):
+        graphs = {**_GRAPHS, 2: _graph("ttnn.matmul", "Alpha", "Beta", "Gamma")}
+        rows = [
+            {**_perf_row("Alpha", 10), "device_time": "30"},
+            {**_perf_row("Beta", 11), "device_time": "50"},
+            {**_perf_row("Gamma", 12), "device_time": "50"},
+            {**_perf_row("BinaryNgDeviceOperation", 13), "device_time": "70"},
+        ]
+        registry, handle, _ = linked(graphs=graphs, rows=rows)
+
+        result = linking.operation_detail(registry, handle, operation_id=2)
+
+        assert [row["device_time_share_percent"] for row in result["perf_rows"]] == [
+            15.0,
+            25.0,
+            25.0,
+        ]
+        assert result["device_time"] == 130.0
+        assert result["device_time_share_percent"] == 65.0
+        # A tie goes to the row that ran first, as in the app.
+        assert result["slowest_perf_id"] == "11"
+        assert result["report_device_time_total"] == 200.0
+
+    def test_a_sliver_of_the_report_keeps_a_non_zero_share(self, linked):
+        rows = [
+            {**_perf_row("MatmulDeviceOperation", 3), "device_time": "0.002"},
+            {**_perf_row("BinaryNgDeviceOperation", 5), "device_time": "99999.998"},
+        ]
+        registry, handle, _ = linked(rows=rows)
+
+        result = linking.operation_detail(registry, handle, operation_id=2)
+
+        assert result["perf_rows"][0]["device_time_share_percent"] == 2e-06
+
+    def test_a_blank_device_time_has_no_share_and_counts_for_nothing(self, linked):
+        """tt-perf-report blanks a device time it judges invalid."""
+        graphs = {**_GRAPHS, 2: _graph("ttnn.matmul", "Alpha", "Beta")}
+        rows = [
+            {**_perf_row("Alpha", 10), "device_time": ""},
+            {**_perf_row("Beta", 11), "device_time": "4"},
+            {**_perf_row("BinaryNgDeviceOperation", 12), "device_time": "6"},
+        ]
+        registry, handle, _ = linked(graphs=graphs, rows=rows)
+
+        result = linking.operation_detail(registry, handle, operation_id=2)
+
+        assert [row["device_time_share_percent"] for row in result["perf_rows"]] == [
+            None,
+            40.0,
+        ]
+        assert result["device_time"] == 4.0
+        assert result["slowest_perf_id"] == "11"
+        assert result["report_device_time_total"] == 10.0
+
+    def test_an_operation_with_no_device_time_states_no_total(self, linked):
+        rows = [
+            {**row, "device_time": ""} if row["id"] == "3" else row
+            for row in _CANONICAL_ROWS
+        ]
+        registry, handle, _ = linked(rows=rows)
+
+        result = linking.operation_detail(registry, handle, operation_id=2)
+
+        assert result["perf_rows"][0]["device_time_share_percent"] is None
+        assert "device_time" not in result
+        assert "slowest_perf_id" not in result
+
+    def test_the_summary_covers_rows_past_the_cap(self, linked):
+        count = MAX_LIMIT + 5
+        rows = [_perf_row("Matmul", index) for index in range(count)]
+        rows[-1] = {**rows[-1], "device_time": "50"}
+        graph = _graph("ttnn.matmul", *(["Matmul"] * count), nested=False)
+        registry, handle, _ = linked(graphs={2: graph}, rows=rows)
+
+        result = linking.operation_detail(registry, handle, operation_id=2)
+
+        assert result["device_time"] == count - 1 + 50
+        assert result["slowest_perf_id"] == str(count - 1)
+        assert result["device_time_share_percent"] == 100.0
+
+    def test_a_share_on_a_partitioned_run_carries_the_caveat(self, linked, tmp_path):
+        """Shares divide by a total that assumes the sub-devices ran one after another."""
+        path = _write_ranked_profiler(tmp_path / "ranked", _GRAPHS)
+        rows = [
+            {**row, "sub_device_id": str(index % 2)}
+            for index, row in enumerate(_CANONICAL_ROWS)
+        ]
+        registry, handle, _ = linked(profiler_path=path, rows=rows)
+
+        with_rows = linking.operation_detail(registry, handle, operation_id=3)
+        without_rows = linking.operation_detail(registry, handle, operation_id=1)
+
+        assert "rank 0" in with_rows["caveat"]
+        assert "2 sub-devices" in with_rows["caveat"]
+        assert "sub-devices" not in without_rows["caveat"]
+
     def test_an_operation_that_launched_nothing_has_no_rows(self, linked):
         registry, handle, _ = linked()
 
         result = linking.operation_detail(registry, handle, operation_id=1)
 
         assert result["perf_rows"] == []
+        assert "report_device_time_total" not in result
         assert result["operation_link"]["status"] == LinkStatus.LINKED.value
 
     def test_a_profiler_only_handle_omits_perf_rows(self, linked):
