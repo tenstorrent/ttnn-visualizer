@@ -152,9 +152,56 @@ describe('reportLinks', () => {
             expect(result[0].status).toBe(ReportPairLinkStatus.UNLINKED);
         });
 
-        it('returns the same reference when status is unchanged', () => {
+        // `recordedAt` changes on every comparison, so counting it would make every re-run a change.
+        it('returns the same reference when the last pair is seen again unchanged', () => {
+            const links = [link('mem-b', 'perf-b'), link('mem-a', 'perf-a', { profilerHost: 'h1' })];
+            expect(upsertReportLink(links, link('mem-a', 'perf-a', { profilerHost: 'h1', recordedAt: 99 }))).toBe(
+                links,
+            );
+        });
+
+        it('treats a missing host and a null host as the same access', () => {
+            const access = createReportLinkAccess(ReportLocation.LOCAL, 'mem-a', null);
+            const links = [createReportLink('mem-a', 'perf-a', { profilerAccess: { ...access, host: undefined } })];
+
+            expect(upsertReportLink(links, createReportLink('mem-a', 'perf-a', { profilerAccess: access }))).toBe(
+                links,
+            );
+        });
+
+        // The remote picker scopes badges by the stored host, so a stale one hides the badge on the new host.
+        it('replaces a pair seen again from a different remote host and moves it to the end', () => {
+            const links = [link('mem-a', 'perf-a', { performanceHost: 'h1' }), link('mem-b', 'perf-b')];
+            const result = upsertReportLink(links, link('mem-a', 'perf-a', { performanceHost: 'h2', recordedAt: 99 }));
+
+            expect(result).toHaveLength(2);
+            expect(result[1]).toMatchObject({
+                profilerId: 'mem-a',
+                recordedAt: 99,
+                performanceAccess: createReportLinkAccess(ReportLocation.REMOTE, '/remote/perf-a', 'h2'),
+            });
+        });
+
+        it.each([
+            ['location', createReportLinkAccess(ReportLocation.REMOTE, 'mem-a', 'h1')],
+            ['path', createReportLinkAccess(ReportLocation.LOCAL, 'mem-a-moved', null)],
+        ])('replaces the last pair when only its %s changes', (_field, profilerAccess) => {
             const links = [link('mem-a', 'perf-a')];
-            expect(upsertReportLink(links, link('mem-a', 'perf-a', { recordedAt: 99 }))).toBe(links);
+            const result = upsertReportLink(
+                links,
+                createReportLink('mem-a', 'perf-a', { ...links[0], profilerAccess }),
+            );
+
+            expect(result).not.toBe(links);
+            expect(result).toEqual([expect.objectContaining({ profilerAccess })]);
+        });
+
+        it('moves an unchanged pair that is not last to the end with the new recordedAt', () => {
+            const links = [link('mem-a', 'perf-a'), link('mem-b', 'perf-b')];
+            const result = upsertReportLink(links, link('mem-a', 'perf-a', { recordedAt: 99 }));
+
+            expect(result.map((entry) => entry.profilerId)).toEqual(['mem-b', 'mem-a']);
+            expect(result[1].recordedAt).toBe(99);
         });
 
         it('keeps distinct pairs that share one side (many-to-many)', () => {
@@ -180,6 +227,17 @@ describe('reportLinks', () => {
 
             expect(result).toHaveLength(MAX_REPORT_LINKS);
             expect(result.find((entry) => entry.profilerId === 'mem-0')?.status).toBe(ReportPairLinkStatus.UNLINKED);
+            expect(result.some((entry) => entry.profilerId === 'mem-1')).toBe(false);
+        });
+
+        // A pair compared often but always with the same verdict must not age out behind pairs seen once.
+        it('moves a pair seen again unchanged to the end so it survives the next eviction', () => {
+            const full = Array.from({ length: MAX_REPORT_LINKS }, (_, index) => link(`mem-${index}`, 'perf'));
+            let result = upsertReportLink(full, link('mem-0', 'perf'));
+            result = upsertReportLink(result, link('mem-new', 'perf'));
+
+            expect(result).toHaveLength(MAX_REPORT_LINKS);
+            expect(result.some((entry) => entry.profilerId === 'mem-0')).toBe(true);
             expect(result.some((entry) => entry.profilerId === 'mem-1')).toBe(false);
         });
     });

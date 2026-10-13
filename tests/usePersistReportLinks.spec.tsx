@@ -25,13 +25,19 @@ const matchState = vi.hoisted(() => ({
     result: null as ReportLinkMatchResult | null,
 }));
 
+const DEFAULT_REMOTE_HOST = 'n150';
+
+const remoteState = vi.hoisted(() => ({
+    host: '',
+}));
+
 vi.mock('../src/hooks/useReportLinkMatch', () => ({
     useReportLinkMatch: () => matchState.result,
 }));
 
 vi.mock('../src/hooks/useRemote', () => ({
     default: () => ({
-        persistentState: { selectedConnection: { host: 'n150' } },
+        persistentState: { selectedConnection: { host: remoteState.host } },
     }),
 }));
 
@@ -89,6 +95,7 @@ describe('usePersistReportLinks', () => {
     beforeEach(() => {
         window.localStorage.clear();
         matchState.result = ReportLinkMatchResult.PENDING;
+        remoteState.host = DEFAULT_REMOTE_HOST;
     });
 
     afterEach(() => {
@@ -179,9 +186,28 @@ describe('usePersistReportLinks', () => {
 
         expect(getProbedReportLinks()).toMatchObject([
             {
-                profilerAccess: { location: ReportLocation.REMOTE, path: PROFILER_REPORT.path, host: 'n150' },
+                profilerAccess: {
+                    location: ReportLocation.REMOTE,
+                    path: PROFILER_REPORT.path,
+                    host: DEFAULT_REMOTE_HOST,
+                },
                 performanceAccess: { location: ReportLocation.LOCAL, path: PERFORMANCE_REPORT.path, host: null },
             },
+        ]);
+    });
+
+    // A pair stored on one host must follow a later comparison from another, or the remote
+    // picker on the new host scopes its badge out.
+    it('updates the stored host when the same pair is compared from another remote host', () => {
+        matchState.result = ReportLinkMatchResult.LINKED;
+        remoteState.host = 'h1';
+        const { rerender } = renderWithReports({ profilerLocation: ReportLocation.REMOTE });
+
+        remoteState.host = 'h2';
+        rerender(reportsTree({ profilerLocation: ReportLocation.REMOTE }));
+
+        expect(getProbedReportLinks()).toEqual([
+            expect.objectContaining({ profilerAccess: expect.objectContaining({ host: 'h2' }) }),
         ]);
     });
 
