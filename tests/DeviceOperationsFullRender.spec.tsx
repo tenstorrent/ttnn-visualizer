@@ -8,7 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import DeviceOperationsFullRender from '../src/components/operation-details/DeviceOperationsFullRender';
 import { Node, NodeType } from '../src/model/APIData';
 import { OperationDetails } from '../src/model/OperationDetails';
-import { PerfOverlayStatus } from '../src/definitions/PerfOverlayStatus';
+import { ReportLinkMatchResult } from '../src/definitions/ReportLinks';
 import { DeviceOperationPerf } from '../src/hooks/useDeviceOperationPerf';
 import { enrichRowData } from '../src/functions/enrichPerfRowData';
 import { PerfTableRow } from '../src/model/PerfTable';
@@ -28,8 +28,7 @@ vi.mock('../src/hooks/useDeviceOperationPerf', () => ({
 
 // Unless a case says otherwise, the linked performance report never arrives and no perf renders.
 const PERF_LOADING: DeviceOperationPerf = {
-    status: PerfOverlayStatus.UNAVAILABLE,
-    isLoading: true,
+    linkStatus: ReportLinkMatchResult.PENDING,
     rowByStartNodeId: new Map(),
     totalDeviceTimeUs: 0,
 };
@@ -509,8 +508,7 @@ describe('DeviceOperationsFullRender - device operation perf (#1512)', () => {
         const accumulation = functionStart('AccumulationDeviceOperation');
         const secondPermute = functionStart('PermuteDeviceOperation');
         mockUseDeviceOperationPerf.mockReturnValue({
-            status: PerfOverlayStatus.READY,
-            isLoading: false,
+            linkStatus: ReportLinkMatchResult.LINKED,
             totalDeviceTimeUs: 50_000,
             rowByStartNodeId: new Map([
                 [firstPermute.id, perfRow('5', 'PermuteDeviceOperation', '14.418', '64')],
@@ -544,11 +542,23 @@ describe('DeviceOperationsFullRender - device operation perf (#1512)', () => {
     });
 
     it('says so above the list when no performance report is loaded', () => {
-        mockUseDeviceOperationPerf.mockReturnValue({ ...PERF_LOADING, isLoading: false });
+        mockUseDeviceOperationPerf.mockReturnValue({ ...PERF_LOADING, linkStatus: ReportLinkMatchResult.UNAVAILABLE });
 
         const container = renderGraph([captureStart(), functionStart('Matmul'), functionEnd('Matmul')]);
 
         expect(container).toHaveTextContent('Load a performance report from the same run');
         expect(perfByScope(container)).toEqual([['Matmul', null]]);
+    });
+
+    it('says nothing about perf for an operation with only host-side scopes', () => {
+        mockUseDeviceOperationPerf.mockReturnValue({ ...PERF_LOADING, linkStatus: ReportLinkMatchResult.UNAVAILABLE });
+
+        const container = renderGraph([
+            captureStart(),
+            functionStart('Tensor::reshape'),
+            functionEnd('Tensor::reshape'),
+        ]);
+
+        expect(container).not.toHaveTextContent('performance report');
     });
 });

@@ -687,15 +687,17 @@ const DeviceOperationsFullRender = ({
         perfRowByStartNodeId: devicePerf.rowByStartNodeId,
         totalDeviceTimeUs: devicePerf.totalDeviceTimeUs,
     });
-    const perfRowsInRunOrder = useMemo(
-        () =>
-            deviceOperations.flatMap((node) => {
-                const row = node.node_type === NodeType.function_start && devicePerf.rowByStartNodeId.get(node.id);
+    const { perfRows, hasDeviceOperations } = useMemo(() => {
+        const scopes = deviceOperations.filter(
+            (node): node is DeviceOperationNode =>
+                node.node_type === NodeType.function_start && isDeviceOperation(node.params.name),
+        );
 
-                return row ? [row] : [];
-            }),
-        [deviceOperations, devicePerf.rowByStartNodeId],
-    );
+        return {
+            perfRows: scopes.flatMap((node) => devicePerf.rowByStartNodeId.get(node.id) ?? []),
+            hasDeviceOperations: scopes.length > 0,
+        };
+    }, [deviceOperations, devicePerf.rowByStartNodeId]);
 
     return (
         <div className='device-operations-full-render-wrap'>
@@ -711,9 +713,9 @@ const DeviceOperationsFullRender = ({
                 onClose={() => setCbPressureModal(null)}
             />
             <OperationDevicePerfSummary
-                status={devicePerf.status}
-                isLoading={devicePerf.isLoading}
-                rows={perfRowsInRunOrder}
+                linkStatus={devicePerf.linkStatus}
+                hasDeviceOperations={hasDeviceOperations}
+                rows={perfRows}
                 totalDeviceTimeUs={devicePerf.totalDeviceTimeUs}
             />
             <h3 className='peak-load monospace'>

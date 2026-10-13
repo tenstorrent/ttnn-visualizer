@@ -71,7 +71,7 @@ export const formatCell = (
     highlight?: string | null,
     isFirstOfOpRun: boolean = true,
 ): JSX.Element | string => {
-    const { key, unit, decimals } = column;
+    const { key, decimals } = column;
     const isSignpost = row.op_type === OpType.SIGNPOST;
     const isHost = isHostOp(row.bound);
 
@@ -80,7 +80,6 @@ export const formatCell = (
     }
 
     const value = row[key];
-    let formatted: string;
 
     if (value === null || value === '' || Number.isNaN(value)) {
         // Host ops keep their blanks: HOST in the Bound column already says why nothing was measured.
@@ -246,26 +245,32 @@ export const formatCell = (
         );
     }
 
-    if (typeof value === 'number' && key !== ColumnKeys.Id) {
-        formatted = formatSize(value, decimals);
-    } else {
-        formatted = value?.toString() || '';
-    }
-
-    if (unit) {
-        if (unit === '%') {
-            formatted = formatPercentage(Number(value), decimals);
-        } else {
-            formatted += ` ${unit}`;
-        }
-    }
-
+    const formatted = formatCellText(row, column);
     const colour = getCellColour(row, key);
     const slowExplanation = getSlowBoundExplanation(row, key, colour);
 
     return slowExplanation
         ? getExplainedCellMarkup(formatted, colour, slowExplanation, highlight)
         : getCellMarkup(formatted, colour, highlight);
+};
+
+/** A plain cell's value with its unit, or '' when it has none: what `formatCell` colours and explains. */
+export const formatCellText = (row: TypedPerfTableRow, column: ColumnDefinition): string => {
+    const { key, unit, decimals } = column;
+    const value = row[key];
+
+    if (value === null || value === '' || Number.isNaN(value)) {
+        return '';
+    }
+
+    const formatted =
+        typeof value === 'number' && key !== ColumnKeys.Id ? formatSize(value, decimals) : value?.toString() || '';
+
+    if (unit === '%') {
+        return formatPercentage(Number(value), decimals);
+    }
+
+    return unit ? `${formatted} ${unit}` : formatted;
 };
 
 // A native title rather than a Blueprint Tooltip: the table is not virtualised and an unanalysed

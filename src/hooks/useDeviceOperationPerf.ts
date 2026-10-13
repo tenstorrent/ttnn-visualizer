@@ -3,17 +3,15 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import { useMemo } from 'react';
-import { useAtomValue } from 'jotai';
-import { PerfOverlayStatus } from '../definitions/PerfOverlayStatus';
+import { ReportLinkMatchResult } from '../definitions/ReportLinks';
 import { enrichRowData } from '../functions/enrichPerfRowData';
 import { DeviceOperationMapping } from '../model/DeviceOperationMapping';
 import { PerfTableRow, TypedPerfTableRow } from '../model/PerfTable';
-import { activePerformanceReportFolderNameAtom } from '../store/app';
 import { useGetDeviceOperationListPerfByOpId, useLinkedPerformanceReport } from './useAPI';
+import { useReportLinkMatch } from './useReportLinkMatch';
 
 export interface DeviceOperationPerf {
-    status: PerfOverlayStatus;
-    isLoading: boolean;
+    linkStatus: ReportLinkMatchResult;
     /** Keyed on the `function_start` node of each device operation's scope. */
     rowByStartNodeId: ReadonlyMap<number, TypedPerfTableRow>;
     /** Every row's device time summed (µs), the denominator for a device operation's share. */
@@ -29,47 +27,33 @@ const sumDeviceTimeUs = (rows: PerfTableRow[]): number =>
         return Number.isFinite(deviceTime) ? total + deviceTime : total;
     }, 0);
 
-type AttributedMapping = DeviceOperationMapping & { perfData: PerfTableRow; startNodeId: number };
-
-const isAttributed = (mapping: DeviceOperationMapping): mapping is AttributedMapping =>
-    mapping.perfData !== undefined && mapping.startNodeId !== undefined;
+const hasPerfRow = (mapping: DeviceOperationMapping): mapping is DeviceOperationMapping & { perfData: PerfTableRow } =>
+    mapping.perfData !== undefined;
 
 /** @description One operation's device-operation perf rows, from the report linked to the memory report. */
 export const useDeviceOperationPerf = (operationId: number): DeviceOperationPerf => {
-    const activeReportFolderName = useAtomValue(activePerformanceReportFolderNameAtom);
+    const linkStatus = useReportLinkMatch();
     const { data: perfReport } = useLinkedPerformanceReport();
-    const matchedByOpId = useGetDeviceOperationListPerfByOpId();
-    const mappings = matchedByOpId.get(operationId);
-    const isLinked = matchedByOpId.size > 0;
+    const mappings = useGetDeviceOperationListPerfByOpId().get(operationId);
     const totalDeviceTimeUs = useMemo(() => sumDeviceTimeUs(perfReport?.report ?? []), [perfReport]);
 
-    return useMemo(() => {
-        const empty = { rowByStartNodeId: NO_ROWS, totalDeviceTimeUs };
-
-        if (activeReportFolderName === null) {
-            return { ...empty, status: PerfOverlayStatus.UNAVAILABLE, isLoading: false };
+    const rowByStartNodeId = useMemo(() => {
+        if (linkStatus !== ReportLinkMatchResult.LINKED) {
+            return NO_ROWS;
         }
 
-        if (perfReport === undefined) {
-            return { ...empty, status: PerfOverlayStatus.UNAVAILABLE, isLoading: true };
-        }
-
-        if (!isLinked) {
-            return { ...empty, status: PerfOverlayStatus.UNLINKED, isLoading: false };
-        }
-
-        const attributed = (mappings ?? []).filter(isAttributed);
+        const matched = (mappings ?? []).filter(hasPerfRow);
         const typedRows = enrichRowData(
-            attributed.map(({ perfData }) => perfData),
-            attributed.map(({ id, perfData }) => ({ perfId: perfData.id, opId: id })),
+            matched.map(({ perfData }) => perfData),
+            matched.map(({ id, perfData }) => ({ perfId: perfData.id, opId: id })),
             null,
         );
 
-        return {
-            status: PerfOverlayStatus.READY,
-            isLoading: false,
-            rowByStartNodeId: new Map(attributed.map(({ startNodeId }, index) => [startNodeId, typedRows[index]])),
-            totalDeviceTimeUs,
-        };
-    }, [activeReportFolderName, perfReport, isLinked, mappings, totalDeviceTimeUs]);
+        return new Map(matched.map(({ startNodeId }, index) => [startNodeId, typedRows[index]]));
+    }, [linkStatus, mappings]);
+
+    return useMemo(
+        () => ({ linkStatus, rowByStartNodeId, totalDeviceTimeUs }),
+        [linkStatus, rowByStartNodeId, totalDeviceTimeUs],
+    );
 };

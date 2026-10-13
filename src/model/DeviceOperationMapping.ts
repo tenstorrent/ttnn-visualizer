@@ -13,7 +13,7 @@ export interface DeviceOperationMapping {
     id: number;
     operationName: string;
     /** The `function_start` node of the device operation's scope in the operation's captured graph. */
-    startNodeId?: number;
+    startNodeId: number;
     perfData?: PerfTableRow;
 }
 

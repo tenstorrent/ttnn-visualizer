@@ -39,7 +39,6 @@
         gap: 2px 16px;
     }
 
-    // The perf table's cell colours are for its dark background; a tooltip here is light.
     .device-operation-perf-label,
     .device-operation-perf-note {
         color: $tt-grey-4;
@@ -48,12 +47,6 @@
     .device-operation-perf-note {
         margin: 8px 0 0;
         font-size: 12px;
-    }
-
-    // Their explanations are written out as notes, so the cells promise no hover of their own.
-    .bp6-tooltip-indicator {
-        border-bottom: none;
-        cursor: inherit;
     }
 }
 

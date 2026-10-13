@@ -19,6 +19,7 @@ const mapping = (name: string, id: number): DeviceOperationMapping => ({
     name,
     id,
     operationName: `ttnn.${name.toLowerCase()}`,
+    startNodeId: 0,
 });
 
 // Rows carry an `op_type` because the model has it non-nullable and the backend

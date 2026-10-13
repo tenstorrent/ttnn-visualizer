@@ -2,13 +2,15 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-import { Fragment, JSX } from 'react';
+import { Fragment, JSX, ReactNode } from 'react';
 import classNames from 'classnames';
 import { Classes, PopoverPosition, Tooltip } from '@blueprintjs/core';
 import { ColumnDefinition, ColumnKeys, Columns } from '../../definitions/PerfTable';
-import { PerfOverlayStatus } from '../../definitions/PerfOverlayStatus';
-import { formatPercentage, formatSize } from '../../functions/math';
-import { formatCell, getCellColour } from '../../functions/perfFunctions';
+import { ReportLinkMatchResult } from '../../definitions/ReportLinks';
+import { isCountableDeviceTime } from '../../functions/durationBuckets';
+import { formatNonZeroShareOfTotal, getCoreCountText } from '../../functions/formatting';
+import { formatSize } from '../../functions/math';
+import { formatCell, formatCellText, getCellColour, isHostOp } from '../../functions/perfFunctions';
 import { NOT_ANALYSED_LABEL, getNotAnalysedReason, getSlowBoundExplanation } from '../../functions/perfBoundAnalysis';
 import { TypedPerfTableRow } from '../../model/PerfTable';
 import 'styles/components/DeviceOperationPerf.scss';
@@ -34,45 +36,46 @@ const DETAIL_COLUMNS = getColumns([
     ColumnKeys.DeviceKernelDuration,
 ]);
 
-const SMALLEST_SHOWN_SHARE_PERCENT = 0.1;
-
-const formatShare = (deviceTimeUs: number, totalDeviceTimeUs: number): string | null => {
-    if (!Number.isFinite(deviceTimeUs) || totalDeviceTimeUs <= 0) {
-        return null;
-    }
-
-    const percent = (deviceTimeUs / totalDeviceTimeUs) * 100;
-
-    return percent > 0 && percent < SMALLEST_SHOWN_SHARE_PERCENT
-        ? `<${formatPercentage(SMALLEST_SHOWN_SHARE_PERCENT, 1)}`
-        : formatPercentage(percent, 1);
+const LINK_STATUS_MESSAGE: Partial<Record<ReportLinkMatchResult, string>> = {
+    [ReportLinkMatchResult.UNAVAILABLE]:
+        'Load a performance report from the same run to see how long each device operation took.',
+    [ReportLinkMatchResult.UNLINKED]:
+        'The loaded performance report does not match this memory report, so device times are not shown.',
 };
 
-const formatCores = (cores: number | null): string | null =>
-    cores !== null && Number.isFinite(cores) ? `${cores} ${cores === 1 ? 'core' : 'cores'}` : null;
+const formatShare = (deviceTimeUs: number | null, totalDeviceTimeUs: number): string | null =>
+    isCountableDeviceTime(deviceTimeUs) && totalDeviceTimeUs > 0
+        ? formatNonZeroShareOfTotal(deviceTimeUs, totalDeviceTimeUs)
+        : null;
 
-const isMissing = (value: unknown): boolean => value === null || value === '' || Number.isNaN(value);
+const formatCores = (cores: number | null): string | null =>
+    cores !== null && Number.isFinite(cores) ? getCoreCountText(cores) : null;
+
+const deviceTimeOf = (row: TypedPerfTableRow): number => (isCountableDeviceTime(row.device_time) ? row.device_time : 0);
 
 const addColumnName = (namesByReason: Map<string, string[]>, reason: string, name: string) =>
     namesByReason.set(reason, [...(namesByReason.get(reason) ?? []), name]);
 
+interface DeviceOperationPerfDetailsProps {
+    row: TypedPerfTableRow;
+}
+
 // The table explains n/a and SLOW cells in hover titles, which a hover card cannot host, so they are spelled out.
-const DeviceOperationPerfDetails = ({ row }: { row: TypedPerfTableRow }) => {
+const DeviceOperationPerfDetails = ({ row }: DeviceOperationPerfDetailsProps) => {
     const unanalysedNamesByReason = new Map<string, string[]>();
     const explainedNamesByReason = new Map<string, string[]>();
     const lines: JSX.Element[] = [];
 
     DETAIL_COLUMNS.forEach((column) => {
-        const unanalysedReason = isMissing(row[column.key]) ? getNotAnalysedReason(row, column.key) : null;
+        const text = formatCellText(row, column);
 
-        if (unanalysedReason) {
-            addColumnName(unanalysedNamesByReason, unanalysedReason, column.name);
-            return;
-        }
+        if (text === '') {
+            const reason = isHostOp(row.bound) ? null : getNotAnalysedReason(row, column.key);
 
-        const cell = formatCell(row, column);
+            if (reason) {
+                addColumnName(unanalysedNamesByReason, reason, column.name);
+            }
 
-        if (cell === '') {
             return;
         }
 
@@ -85,7 +88,7 @@ const DeviceOperationPerfDetails = ({ row }: { row: TypedPerfTableRow }) => {
         lines.push(
             <Fragment key={column.key}>
                 <span className='device-operation-perf-label'>{column.name}</span>
-                <span>{cell}</span>
+                <span>{text}</span>
             </Fragment>,
         );
     });
@@ -119,10 +122,28 @@ interface DeviceOperationPerfSummaryProps {
     totalDeviceTimeUs: number;
 }
 
-/** Device time, cores and share of the report's device time, with the whole perf row on hover. */
+/** Device time, cores and share of the report's device time, with the row's key columns on hover. */
 export const DeviceOperationPerfSummary = ({ row, totalDeviceTimeUs }: DeviceOperationPerfSummaryProps) => {
+    const deviceTime = formatCell(row, DEVICE_TIME_COLUMN);
     const cores = formatCores(row.cores);
-    const share = formatShare(row.device_time ?? NaN, totalDeviceTimeUs);
+    const share = formatShare(row.device_time, totalDeviceTimeUs);
+    const parts: { key: string; node: ReactNode }[] = [];
+
+    if (deviceTime) {
+        parts.push({ key: 'time', node: deviceTime });
+    }
+
+    if (cores) {
+        parts.push({ key: 'cores', node: <span className={getCellColour(row, ColumnKeys.Cores)}>{cores}</span> });
+    }
+
+    if (share) {
+        parts.push({ key: 'share', node: <span>{share} of device time</span> });
+    }
+
+    if (parts.length === 0) {
+        return null;
+    }
 
     return (
         <Tooltip
@@ -132,28 +153,21 @@ export const DeviceOperationPerfSummary = ({ row, totalDeviceTimeUs }: DeviceOpe
             popoverClassName='device-operation-perf-popover'
         >
             <span className={classNames('device-operation-perf', Classes.TOOLTIP_INDICATOR)}>
-                {formatCell(row, DEVICE_TIME_COLUMN)}
-                {cores && (
-                    <>
-                        <span className='separator'>·</span>
-                        <span className={getCellColour(row, ColumnKeys.Cores)}>{cores}</span>
-                    </>
-                )}
-                {share && (
-                    <>
-                        <span className='separator'>·</span>
-                        <span>{share} of device time</span>
-                    </>
-                )}
+                {parts.map(({ key, node }, index) => (
+                    <Fragment key={key}>
+                        {index > 0 && <span className='separator'>·</span>}
+                        {node}
+                    </Fragment>
+                ))}
             </span>
         </Tooltip>
     );
 };
 
 interface OperationDevicePerfSummaryProps {
-    status: PerfOverlayStatus;
-    isLoading: boolean;
-    /** The operation's device operation rows, in the order they ran. */
+    linkStatus: ReportLinkMatchResult;
+    /** Without a device operation there is nothing to time, so not even the empty states apply. */
+    hasDeviceOperations: boolean;
     rows: TypedPerfTableRow[];
     totalDeviceTimeUs: number;
 }
@@ -162,51 +176,42 @@ const formatDeviceTime = (deviceTimeUs: number): string => `${formatSize(deviceT
 
 /** One line above the device operations: their total device time and the slowest of them. */
 export const OperationDevicePerfSummary = ({
-    status,
-    isLoading,
+    linkStatus,
+    hasDeviceOperations,
     rows,
     totalDeviceTimeUs,
 }: OperationDevicePerfSummaryProps) => {
-    if (isLoading) {
+    if (!hasDeviceOperations) {
         return null;
     }
 
-    if (status === PerfOverlayStatus.UNAVAILABLE) {
-        return (
-            <p className='operation-device-perf-summary is-unavailable'>
-                Load a performance report from the same run to see how long each device operation took.
-            </p>
-        );
+    const message = LINK_STATUS_MESSAGE[linkStatus];
+
+    if (message) {
+        return <p className='operation-device-perf-summary is-unavailable'>{message}</p>;
     }
 
-    if (status === PerfOverlayStatus.UNLINKED) {
-        return (
-            <p className='operation-device-perf-summary is-unavailable'>
-                The loaded performance report does not match this memory report, so device times are not shown.
-            </p>
-        );
-    }
+    // tt-perf-report blanks the device time it judges invalid; such a row is neither counted nor named.
+    const timedRows = rows.filter((row) => isCountableDeviceTime(row.device_time));
 
-    if (rows.length === 0) {
+    if (timedRows.length === 0) {
         return null;
     }
 
-    const totalUs = rows.reduce((total, row) => total + (row.device_time ?? 0), 0);
+    const totalUs = timedRows.reduce((total, row) => total + deviceTimeOf(row), 0);
     const share = formatShare(totalUs, totalDeviceTimeUs);
-    const slowest = rows.reduce((current, row) =>
-        (row.device_time ?? 0) > (current.device_time ?? 0) ? row : current,
-    );
+    const slowest = timedRows.reduce((current, row) => (deviceTimeOf(row) > deviceTimeOf(current) ? row : current));
     const slowestCores = formatCores(slowest.cores);
 
     return (
         <p className='operation-device-perf-summary'>
-            {rows.length} device {rows.length === 1 ? 'operation' : 'operations'} ran for{' '}
+            {timedRows.length} device {timedRows.length === 1 ? 'operation' : 'operations'} ran for{' '}
             <strong>{formatDeviceTime(totalUs)}</strong>
             {share && ` (${share} of the report's device time)`}.
-            {rows.length > 1 && (
+            {timedRows.length > 1 && (
                 <>
                     {' '}
-                    Slowest: <strong>{slowest.raw_op_code}</strong>, {formatDeviceTime(slowest.device_time ?? 0)}
+                    Slowest: <strong>{slowest.raw_op_code}</strong>, {formatDeviceTime(deviceTimeOf(slowest))}
                     {slowestCores && ` on ${slowestCores}`}.
                 </>
             )}

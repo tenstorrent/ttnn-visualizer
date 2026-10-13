@@ -9,7 +9,7 @@ import {
     DeviceOperationPerfSummary,
     OperationDevicePerfSummary,
 } from '../src/components/operation-details/DeviceOperationPerf';
-import { PerfOverlayStatus } from '../src/definitions/PerfOverlayStatus';
+import { ReportLinkMatchResult } from '../src/definitions/ReportLinks';
 import { enrichRowData } from '../src/functions/enrichPerfRowData';
 import { NOT_MODELLED_REASON, SLOW_BOUND_REASON } from '../src/functions/perfBoundAnalysis';
 import { PerfTableRow, TypedPerfTableRow } from '../src/model/PerfTable';
@@ -37,54 +37,80 @@ const accumulation = typedRow({
     cores: '1',
 });
 const secondPermute = typedRow({ id: '7', raw_op_code: 'PermuteDeviceOperation', device_time: '5.559', cores: '32' });
+// tt-perf-report blanks a device time it judges invalid.
+const untimed = typedRow({ id: '8', raw_op_code: 'TilizeDeviceOperation', device_time: '', cores: '64' });
 
 const REPORT_DEVICE_TIME_US = 49_989;
 
 afterEach(cleanup);
 
-const renderOperationSummary = (status: PerfOverlayStatus, rows: TypedPerfTableRow[] = [], isLoading = false) =>
+const renderOperationSummary = (
+    linkStatus: ReportLinkMatchResult,
+    rows: TypedPerfTableRow[] = [],
+    hasDeviceOperations = true,
+) =>
     render(
         <OperationDevicePerfSummary
-            status={status}
-            isLoading={isLoading}
+            linkStatus={linkStatus}
+            hasDeviceOperations={hasDeviceOperations}
             rows={rows}
             totalDeviceTimeUs={REPORT_DEVICE_TIME_US}
         />,
     ).container;
 
 describe('OperationDevicePerfSummary', () => {
-    it('renders nothing while the linked report loads', () => {
-        expect(renderOperationSummary(PerfOverlayStatus.UNAVAILABLE, [], true)).toBeEmptyDOMElement();
+    it('renders nothing while the reports are still being matched', () => {
+        expect(renderOperationSummary(ReportLinkMatchResult.PENDING)).toBeEmptyDOMElement();
     });
 
     it('asks for a performance report when none is loaded', () => {
-        renderOperationSummary(PerfOverlayStatus.UNAVAILABLE);
+        renderOperationSummary(ReportLinkMatchResult.UNAVAILABLE);
 
         expect(screen.getByText(/Load a performance report from the same run/)).toBeInTheDocument();
     });
 
     it('says when the loaded report does not match the memory report', () => {
-        renderOperationSummary(PerfOverlayStatus.UNLINKED);
+        renderOperationSummary(ReportLinkMatchResult.UNLINKED);
 
         expect(screen.getByText(/does not match this memory report/)).toBeInTheDocument();
     });
 
-    it('renders nothing for an operation with no device operation rows', () => {
-        expect(renderOperationSummary(PerfOverlayStatus.READY)).toBeEmptyDOMElement();
+    it.each([ReportLinkMatchResult.UNAVAILABLE, ReportLinkMatchResult.UNLINKED, ReportLinkMatchResult.LINKED])(
+        'says nothing for an operation with no device operation, when the link is %s',
+        (linkStatus) => {
+            expect(renderOperationSummary(linkStatus, [accumulation], false)).toBeEmptyDOMElement();
+        },
+    );
+
+    it('renders nothing for a linked operation with no device operation rows', () => {
+        expect(renderOperationSummary(ReportLinkMatchResult.LINKED)).toBeEmptyDOMElement();
     });
 
     it("gives one device operation's time and share, with no slowest to name", () => {
-        const container = renderOperationSummary(PerfOverlayStatus.READY, [accumulation]);
+        const container = renderOperationSummary(ReportLinkMatchResult.LINKED, [accumulation]);
 
         expect(container).toHaveTextContent("1 device operation ran for 116 µs (0.2% of the report's device time).");
         expect(container).not.toHaveTextContent('Slowest');
     });
 
     it('totals several device operations and names the slowest', () => {
-        const container = renderOperationSummary(PerfOverlayStatus.READY, [firstPermute, accumulation, secondPermute]);
+        const container = renderOperationSummary(ReportLinkMatchResult.LINKED, [
+            firstPermute,
+            accumulation,
+            secondPermute,
+        ]);
 
         expect(container).toHaveTextContent(
             "3 device operations ran for 136 µs (0.3% of the report's device time). " +
+                'Slowest: AccumulationDeviceOperation, 116 µs on 1 core.',
+        );
+    });
+
+    it('leaves a row with no device time out of the total and the slowest', () => {
+        const container = renderOperationSummary(ReportLinkMatchResult.LINKED, [untimed, accumulation, firstPermute]);
+
+        expect(container).toHaveTextContent(
+            "2 device operations ran for 130 µs (0.3% of the report's device time). " +
                 'Slowest: AccumulationDeviceOperation, 116 µs on 1 core.',
         );
     });
@@ -107,6 +133,10 @@ const openDetails = async (container: HTMLElement) => {
 describe('DeviceOperationPerfSummary', () => {
     it("shows device time, cores and share of the report's device time", () => {
         expect(renderDeviceSummary(accumulation)).toHaveTextContent('116 µs·1 core·0.2% of device time');
+    });
+
+    it('drops a part the row has no value for, separator included', () => {
+        expect(renderDeviceSummary(untimed).querySelector('.device-operation-perf')).toHaveTextContent(/^64 cores$/);
     });
 
     it('marks a share too small to round as below a tenth of a percent', () => {

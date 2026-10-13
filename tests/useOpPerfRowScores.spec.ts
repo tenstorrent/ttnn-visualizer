@@ -20,6 +20,7 @@ const mapping = (id: number, deviceTimeUs: number | null): DeviceOperationMappin
     id,
     name: 'mock_op',
     operationName: 'mock_op',
+    startNodeId: 0,
     perfData: deviceTimeUs === null ? undefined : perfRow(deviceTimeUs),
 });
 
@@ -65,7 +66,13 @@ describe('useOpPerfRowScores', () => {
 
     it('skips mappings whose device_time fails to parse instead of dropping the whole report', () => {
         vi.mocked(useGetDeviceOperationListPerf).mockReturnValue([
-            { id: 1, name: 'a', operationName: 'a', perfData: { device_time: 'NaN' } as unknown as PerfTableRow },
+            {
+                id: 1,
+                name: 'a',
+                operationName: 'a',
+                startNodeId: 0,
+                perfData: { device_time: 'NaN' } as unknown as PerfTableRow,
+            },
             mapping(2, 50),
         ]);
 
