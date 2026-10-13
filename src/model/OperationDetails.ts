@@ -16,7 +16,7 @@ import {
     OperationDetailsData,
     Tensor,
 } from './APIData';
-import { BufferType, StringBufferType } from './BufferType';
+import { BufferType, BufferTypeToStringBufferType, StringBufferType } from './BufferType';
 import { DRAM_MEMORY_SIZE } from '../definitions/DRAMMemorySize';
 import { CONDENSED_PLOT_CHUNK_COLOR, PlotDataOverrides } from '../definitions/PlotConfigurations';
 import { PlotDataCustom } from './PlotData';
@@ -26,6 +26,11 @@ import { L1_DEFAULT_MEMORY_SIZE, L1_NUM_CORES } from '../definitions/L1MemorySiz
 import { TensorDeallocationReport } from './BufferSummary';
 import { normaliseDeviceId } from '../functions/collapseCbDeviceRows';
 import { getBufferKey } from '../functions/summariseOperationBuffers';
+
+// Graph nodes name their memory space as a string (`'L1'`, `'DRAM'`), not a `BufferType`.
+const BUFFER_TYPE_BY_STRING = new Map<StringBufferType, BufferType>(
+    Object.entries(BufferTypeToStringBufferType).map(([bufferType, name]) => [name, Number(bufferType) as BufferType]),
+);
 
 export interface OperationDetailsOptions {
     renderPattern: boolean;
@@ -375,6 +380,18 @@ export class OperationDetails implements Partial<OperationDetailsData> {
 
     getTensorForBuffer(address: number, bufferType: BufferType): Tensor | null {
         return this.tensorsByBuffer.get(getBufferKey(bufferType, address)) ?? null;
+    }
+
+    /**
+     * The tensor for a graph node, within the memory space it names. A node that
+     * names none falls back to the address-only lookup, where L1 wins. #2078
+     */
+    getTensorForNode(address: number, type: StringBufferType | undefined): Tensor | null {
+        const bufferType = type !== undefined ? BUFFER_TYPE_BY_STRING.get(type) : undefined;
+
+        return bufferType !== undefined
+            ? this.getTensorForBuffer(address, bufferType)
+            : this.getTensorForAddress(address);
     }
 
     getTensorProducerConsumer(id: number | null) {

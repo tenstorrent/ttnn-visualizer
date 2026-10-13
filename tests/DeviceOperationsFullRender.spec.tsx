@@ -7,8 +7,17 @@ import '@testing-library/jest-dom/vitest';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import DeviceOperationsFullRender from '../src/components/operation-details/DeviceOperationsFullRender';
 import { Node, NodeType } from '../src/model/APIData';
+import { BufferType } from '../src/model/BufferType';
 import { OperationDetails } from '../src/model/OperationDetails';
+import { getTensorColor } from '../src/functions/colorGenerator';
+import { summariseOperationBuffers } from '../src/functions/summariseOperationBuffers';
 import { TestProviders } from './helpers/TestProviders';
+import {
+    buildBufferData,
+    buildOperationDescription,
+    buildOperationDetails,
+    buildTensor,
+} from './helpers/operationDetailsFixtures';
 
 // The always-mounted `CircularBufferPressureModal` is the subtree's only API caller.
 const mockUseDevices = vi.fn();
@@ -88,12 +97,12 @@ const details = {
     getTensorProducerConsumer: () => [],
 } as unknown as OperationDetails;
 
-function renderGraph(graph: Node[], hasRecordedError = false) {
+function renderGraph(graph: Node[], hasRecordedError = false, operationDetails: OperationDetails = details) {
     const { container } = render(
         <TestProviders>
             <DeviceOperationsFullRender
                 deviceOperations={graph}
-                details={details}
+                details={operationDetails}
                 onLegendClick={vi.fn()}
                 hasRecordedError={hasRecordedError}
             />
@@ -457,5 +466,79 @@ describe('DeviceOperationsFullRender - failed device operations', () => {
         hoverIconOf(container, 'Conv2d');
 
         expect(await screen.findByText('The capture ended before this scope closed')).toBeInTheDocument();
+    });
+});
+
+// The tensor rows here are looked up by address, and L1 and DRAM can share one.
+// A captured tensor node names no memory space itself, so its buffer decides. #2078
+describe('DeviceOperationsFullRender - tensors at a shared L1/DRAM address (#2078)', () => {
+    const SHARED_ADDRESS = 0x4000;
+    const L1_TENSOR_ID = 10;
+    const DRAM_TENSOR_ID = 20;
+
+    const buildSharedAddressDetails = () => {
+        const buffers = [
+            buildBufferData({ address: SHARED_ADDRESS, buffer_type: BufferType.DRAM, max_size_per_bank: 128 }),
+            buildBufferData({ address: SHARED_ADDRESS, buffer_type: BufferType.L1, max_size_per_bank: 4096 }),
+        ];
+
+        return buildOperationDetails({
+            data: { id: 1, buffers, buffersSummary: summariseOperationBuffers(buffers) },
+            operations: [
+                buildOperationDescription({
+                    id: 1,
+                    outputs: [
+                        buildTensor({ id: L1_TENSOR_ID, address: SHARED_ADDRESS, buffer_type: BufferType.L1 }),
+                        buildTensor({ id: DRAM_TENSOR_ID, address: SHARED_ADDRESS, buffer_type: BufferType.DRAM }),
+                    ],
+                }),
+            ],
+        });
+    };
+
+    // As captured: the memory space is on the buffer node, as a string `type`.
+    const dramTensorGraph = (): Node[] => {
+        const buffer = mkNode({
+            node_type: NodeType.buffer,
+            params: { type: 'DRAM', size: '128', device_id: 0 },
+        } as unknown as Partial<Node>);
+        const tensor = mkNode({
+            node_type: NodeType.tensor,
+            params: {
+                tensor_id: DRAM_TENSOR_ID,
+                address: String(SHARED_ADDRESS),
+                shape: 'Shape([1, 32])',
+                dtype: 'DataType.BFLOAT16',
+                size: '128',
+            },
+            buffer: [buffer],
+        } as unknown as Partial<Node>);
+
+        return [captureStart(), { ...functionStart('ToDram'), inputs: [tensor] }, functionEnd('ToDram')];
+    };
+
+    it('colours a DRAM tensor with its own tensor, not the L1 tensor at its address', () => {
+        // Resolved up front: colours are handed out in first-seen order.
+        const dramColour = getTensorColor(DRAM_TENSOR_ID);
+        const l1Colour = getTensorColor(L1_TENSOR_ID);
+        const container = renderGraph(dramTensorGraph(), false, buildSharedAddressDetails());
+
+        const square = container.querySelector('.tensor-details-layout .memory-color-block');
+        expect(square).toHaveStyle({ backgroundColor: dramColour });
+        expect(square).not.toHaveStyle({ backgroundColor: l1Colour });
+    });
+
+    // A tensor node with its own address renders its buffer row from the node
+    // itself, in the label's tooltip, so that path needs the buffer's space too.
+    it('colours the DRAM tensor buffer row with its own tensor', async () => {
+        const dramColour = getTensorColor(DRAM_TENSOR_ID);
+        const container = renderGraph(dramTensorGraph(), false, buildSharedAddressDetails());
+
+        fireEvent.mouseEnter(container.querySelector('.tensor-details-layout .has-tooltip')!);
+
+        const tooltip = await screen.findByText((_content, element) =>
+            Boolean(element?.classList.contains('arg-tensor-tooltip')),
+        );
+        expect(tooltip.querySelector('.memory-color-block')).toHaveStyle({ backgroundColor: dramColour });
     });
 });

@@ -4,7 +4,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { BufferData, Tensor } from '../src/model/APIData';
-import { BufferType } from '../src/model/BufferType';
+import { BufferType, StringBufferType } from '../src/model/BufferType';
 import { OperationDetails } from '../src/model/OperationDetails';
 import { PlotDataCustom } from '../src/model/PlotData';
 import { getBufferColor, getTensorColor } from '../src/functions/colorGenerator';
@@ -136,5 +136,46 @@ describe('OperationDetails at a shared L1/DRAM address (#2078)', () => {
         const details = buildDetails({ buffers: [l1Buffer], outputs: [untypedTensor] });
 
         expect(chunkAt(details, BufferType.L1)?.tensorId).toBe(L1_TENSOR_ID);
+    });
+
+    // Graph nodes name their memory space as a string, or not at all.
+    it.each([
+        ['DRAM', 'DRAM', DRAM_TENSOR_ID],
+        ['L1', 'L1', L1_TENSOR_ID],
+        ['no', undefined, L1_TENSOR_ID],
+    ] as const)('resolves a graph node naming %s memory space', (_label, type, tensorId) => {
+        const details = buildDetails({ buffers: [dramBuffer, l1Buffer], outputs: [dramTensor, l1Tensor] });
+        const stringType = type === undefined ? undefined : StringBufferType[type];
+
+        expect(details.getTensorForNode(SHARED_ADDRESS, stringType)?.id).toBe(tensorId);
+    });
+});
+
+// A tensor with no recorded type matches every buffer at its address, so one
+// id reaches both memory spaces. The id lookup has to agree with the address
+// lookup on which copy it returns, whichever buffer comes first.
+describe.each([
+    ['DRAM buffer first', [dramBuffer, l1Buffer]],
+    ['L1 buffer first', [l1Buffer, dramBuffer]],
+])('OperationDetails with an untyped tensor at a shared address (%s)', (_order, buffers) => {
+    const UNTYPED_TENSOR_ID = 30;
+    const details = buildDetails({
+        buffers,
+        outputs: [buildTensor({ id: UNTYPED_TENSOR_ID, address: SHARED_ADDRESS, buffer_type: null })],
+    });
+
+    it('gives both plots the tensor', () => {
+        expect(chunkAt(details, BufferType.L1)?.tensorId).toBe(UNTYPED_TENSOR_ID);
+        expect(chunkAt(details, BufferType.DRAM)?.tensorId).toBe(UNTYPED_TENSOR_ID);
+    });
+
+    it('keeps the L1 copy for id and address lookups', () => {
+        expect(details.tensorListById.get(UNTYPED_TENSOR_ID)?.buffer_type).toBe(BufferType.L1);
+        expect(details.tensorListByAddress.get(SHARED_ADDRESS)?.buffer_type).toBe(BufferType.L1);
+    });
+
+    it('keeps each memory space its own copy', () => {
+        expect(details.getTensorForBuffer(SHARED_ADDRESS, BufferType.L1)?.buffer_type).toBe(BufferType.L1);
+        expect(details.getTensorForBuffer(SHARED_ADDRESS, BufferType.DRAM)?.buffer_type).toBe(BufferType.DRAM);
     });
 });
