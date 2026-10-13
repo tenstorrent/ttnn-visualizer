@@ -192,13 +192,21 @@ describe('enrichRowData — typed conversion of tt-perf-report values', () => {
     describe('linked operation data', () => {
         const failure = makeAllocationFailure({ operationId: 42 });
         const fallback = makeDramFallback({ operationId: 42 });
+        const l1Pressure = { fullnessPercent: 87.5, freeSegments: 3, largestFreeBytes: 1024, largestFreePercent: 12.5 };
         const linkedOperationData: LinkedOperationData = {
-            l1PressureByOpId: null,
+            l1PressureByOpId: new Map([[42, l1Pressure]]),
             allocationFailureByOpId: new Map([[42, failure]]),
             dramFallbackByOpId: new Map([[42, fallback]]),
         };
 
-        it("attaches the linked operation's failure and fallback, and nothing to other rows", () => {
+        const L1_FIELDS = [
+            'l1_fullness_percent',
+            'l1_free_segments',
+            'l1_largest_free',
+            'l1_largest_free_percent',
+        ] as const;
+
+        it("attaches the linked operation's L1 pressure, failure and fallback, and nothing to other rows", () => {
             const [linked, other] = enrichRowData(
                 [makeRawPerfRow({ id: '7' }), makeRawPerfRow({ id: '8' })],
                 [
@@ -208,8 +216,15 @@ describe('enrichRowData — typed conversion of tt-perf-report values', () => {
                 linkedOperationData,
             );
 
+            expect(linked).toMatchObject({
+                l1_fullness_percent: 87.5,
+                l1_free_segments: 3,
+                l1_largest_free: 1024,
+                l1_largest_free_percent: 12.5,
+            });
             expect(linked.allocation_failure).toBe(failure);
             expect(linked.dram_fallback).toBe(fallback);
+            L1_FIELDS.forEach((field) => expect(other[field]).toBeNull());
             expect(other.allocation_failure).toBeNull();
             expect(other.dram_fallback).toBeNull();
         });

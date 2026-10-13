@@ -11,7 +11,7 @@ import {
     L1PeakDecompositionResult,
 } from '../model/L1PeakDecomposition';
 import { Buffer, Node, NodeType } from '../model/APIData';
-import { BufferType, StringBufferType, isL1BufferType } from '../model/BufferType';
+import { BufferType, isL1BufferType, isL1StringBufferType } from '../model/BufferType';
 import { L1_NUM_CORES } from '../definitions/L1MemorySize';
 
 const addressOf = (params: GraphMemoryParams | null): number | null => {
@@ -31,8 +31,7 @@ const addressOf = (params: GraphMemoryParams | null): number | null => {
  * reads `type` for the same reason. Both `L1` and `L1_SMALL` occupy L1; tt-metal spells
  * an L1_SMALL node's `type` as `'L1'` and distinguishes it only via `buffer_type`.
  */
-const isL1ResidentNode = (params: { type?: string } | null): boolean =>
-    params?.type === StringBufferType.L1 || params?.type === StringBufferType.L1_SMALL;
+const isL1ResidentNode = (params: { type?: string } | null): boolean => isL1StringBufferType(params?.type);
 
 /** The union of params carried by the memory-bearing graph nodes. */
 interface GraphMemoryParams {

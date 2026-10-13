@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { MemoryConfig, MemoryKeys, ShardSpec, TensorMemoryLayout } from '../model/MemoryConfig';
-import { BufferType, StringBufferType, StringBufferTypeToBufferType } from '../model/BufferType';
+import { BufferType, toBufferType } from '../model/BufferType';
 
 // Unanchored at the start, so it also matches a value that only ends in a memory config. Kept
 // as it is for the details view; anchoring it would change which arguments that view parses.
@@ -64,11 +64,8 @@ export const isMemoryConfigValue = (value: string | null | undefined): value is 
  */
 export const getMemoryConfigBufferType = (value: string | null | undefined): BufferType | null => {
     const body = value?.match(wholeMemoryConfigPattern)?.[1];
-    const name = body?.match(bufferTypePattern)?.[1];
 
-    return name !== undefined && Object.hasOwn(StringBufferTypeToBufferType, name)
-        ? StringBufferTypeToBufferType[name as StringBufferType]
-        : null;
+    return toBufferType(body?.match(bufferTypePattern)?.[1]);
 };
 
 export const MEMORY_CONFIG_HEADERS = {

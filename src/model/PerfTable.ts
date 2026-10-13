@@ -140,6 +140,24 @@ export interface LinkedOperationData {
     dramFallbackByOpId: Map<number, DramFallback> | null;
 }
 
+/** The row fields `enrichRowData` fills from `LinkedOperationData`, for a row with none. */
+export const EMPTY_LINKED_OPERATION_FIELDS = Object.freeze({
+    l1_fullness_percent: null,
+    l1_free_segments: null,
+    l1_largest_free: null,
+    l1_largest_free_percent: null,
+    allocation_failure: null,
+    dram_fallback: null,
+} satisfies Pick<
+    TypedPerfTableRow,
+    | 'l1_fullness_percent'
+    | 'l1_free_segments'
+    | 'l1_largest_free'
+    | 'l1_largest_free_percent'
+    | 'allocation_failure'
+    | 'dram_fallback'
+>);
+
 export const signpostRowDefaults = Object.freeze({
     global_call_count: null,
     sub_device_id: null,
@@ -186,10 +204,5 @@ export const signpostRowDefaults = Object.freeze({
     hash: null,
     cache_hit: null,
     isFirstHashOccurrence: true,
-    l1_fullness_percent: null,
-    l1_free_segments: null,
-    l1_largest_free: null,
-    l1_largest_free_percent: null,
-    allocation_failure: null,
-    dram_fallback: null,
+    ...EMPTY_LINKED_OPERATION_FIELDS,
 });

@@ -43,6 +43,14 @@ const L1_RESIDENT_BUFFER_TYPES: ReadonlySet<BufferType> = new Set([BufferType.L1
 export const isL1BufferType = (bufferType: BufferType | null | undefined): boolean =>
     bufferType != null && L1_RESIDENT_BUFFER_TYPES.has(bufferType);
 
+/** The `BufferType` a raw string names, or `null` when it names none this app knows. */
+export const toBufferType = (name: string | null | undefined): BufferType | null =>
+    name != null && Object.hasOwn(StringBufferTypeToBufferType, name)
+        ? StringBufferTypeToBufferType[name as StringBufferType]
+        : null;
+
+export const isL1StringBufferType = (name: string | null | undefined): boolean => isL1BufferType(toBufferType(name));
+
 /**
  * The only place display labels are spelled out. `MemoryTag` slugs these into its
  * `tag-*` class, so renaming one requires a matching rule in `_common.scss`.
