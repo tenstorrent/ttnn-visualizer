@@ -159,6 +159,22 @@ def test_enabling_collection_creates_a_stable_random_identity(
     assert stat.S_IMODE(usage_collection_config_path.stat().st_mode) == 0o600
 
 
+def test_preparing_keeps_the_bearer_token(usage_collection_config_path):
+    _write_config(
+        usage_collection_config_path,
+        enabled=True,
+        remote_write_endpoint="https://metrics.example/write",
+        remote_write_bearer_token="secret-token",
+    )
+
+    config = usage_collection.prepare_usage_collection_config()
+
+    persisted = json.loads(usage_collection_config_path.read_text(encoding="utf-8"))
+    assert persisted["remote_write_bearer_token"] == "secret-token"
+    assert persisted["machine_id"] == config.machine_id
+    assert stat.S_IMODE(usage_collection_config_path.stat().st_mode) == 0o600
+
+
 def test_loading_an_unprepared_config_does_not_modify_it(
     usage_collection_config_path,
 ):
@@ -561,7 +577,59 @@ def test_renderer_preserves_existing_config_when_atomic_replace_fails(
         usage_collection.render_prometheus_config(output)
 
     assert output.read_text(encoding="utf-8") == "existing configuration\n"
-    assert list(tmp_path.glob(".prometheus.yml.*")) == []
+    assert not (tmp_path / usage_collection.REMOTE_WRITE_TOKEN_FILENAME).exists()
+    assert list(tmp_path.glob(".*")) == []
+
+
+def test_renderer_replaces_the_token_before_the_config(
+    usage_collection_config_path, tmp_path, monkeypatch
+):
+    _write_config(
+        usage_collection_config_path,
+        enabled=True,
+        remote_write_endpoint="https://metrics.example/write",
+        remote_write_bearer_token="secret-token",
+        # Already prepared, so the only renames are the renderer's own.
+        machine_id=uuid.uuid4().hex,
+    )
+    output = tmp_path / "prometheus.yml"
+    output.write_text("existing configuration\n", encoding="utf-8")
+    replace = usage_collection.os.replace
+    replaced = []
+
+    def _fail_second_replace(source, destination):
+        if replaced:
+            raise OSError("replace failed")
+        replaced.append(destination)
+        replace(source, destination)
+
+    monkeypatch.setattr(usage_collection.os, "replace", _fail_second_replace)
+
+    with pytest.raises(OSError, match="replace failed"):
+        usage_collection.render_prometheus_config(output)
+
+    token_path = tmp_path / usage_collection.REMOTE_WRITE_TOKEN_FILENAME
+    assert replaced == [token_path]
+    assert token_path.read_text(encoding="utf-8") == "secret-token"
+    assert output.read_text(encoding="utf-8") == "existing configuration\n"
+    assert list(tmp_path.glob(".*")) == []
+
+
+def test_compose_mounts_the_token_where_the_config_reads_it():
+    compose_path = (
+        Path(__file__).parents[3] / "docker" / "prometheus" / "docker-compose.yml"
+    )
+    compose = yaml.safe_load(compose_path.read_text(encoding="utf-8"))
+    (token_mount,) = [
+        volume
+        for volume in compose["services"]["prometheus"]["volumes"]
+        if isinstance(volume, dict) and volume.get("type") == "bind"
+    ]
+
+    assert token_mount["target"] == usage_collection.CONTAINER_REMOTE_WRITE_TOKEN_PATH
+    assert token_mount["source"].endswith(
+        f"/{usage_collection.REMOTE_WRITE_TOKEN_FILENAME}"
+    )
 
 
 def test_renderer_with_invalid_arguments_does_not_opt_in(

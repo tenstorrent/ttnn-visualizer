@@ -13,12 +13,14 @@ services:
     ports:
       - 127.0.0.1:9090:9090
     restart: unless-stopped
+    # One directory for both files, because the renderer writes the token beside the
+    # config: separate overrides could mount a config with another render's token.
     volumes:
-      - ${PROMETHEUS_CONFIG_FILE:-./prometheus.generated.yml}:/etc/prometheus/prometheus.yml:ro
+      - ${PROMETHEUS_GENERATED_DIR:-.}/prometheus.generated.yml:/etc/prometheus/prometheus.yml:ro
       # Long syntax so a missing token file fails the start instead of Docker creating
       # a directory in its place. The renderer always writes it, empty without a token.
       - type: bind
-        source: ${PROMETHEUS_REMOTE_WRITE_TOKEN_FILE:-./prometheus.remote-write.token}
+        source: ${PROMETHEUS_GENERATED_DIR:-.}/prometheus.remote-write.token
         target: /etc/prometheus/remote-write.token
         read_only: true
         bind:

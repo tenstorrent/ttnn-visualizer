@@ -122,7 +122,7 @@ def test_renderer_and_compose_accept_an_enabled_config(tmp_path):
         ),
         encoding="utf-8",
     )
-    output_path = tmp_path / "prometheus.yml"
+    output_path = tmp_path / "prometheus.generated.yml"
     environment = os.environ | {"HOME": str(tmp_path)}
 
     rendered = subprocess.run(
@@ -164,12 +164,11 @@ def test_renderer_and_compose_accept_an_enabled_config(tmp_path):
     assert len(prometheus_config["global"]["external_labels"]["machine_id"]) == 32
     assert stat.S_IMODE(output_path.stat().st_mode) == 0o644
 
-    compose_environment = os.environ | {
-        "PROMETHEUS_CONFIG_FILE": str(output_path),
-        "PROMETHEUS_REMOTE_WRITE_TOKEN_FILE": str(
-            tmp_path / "prometheus.remote-write.token"
-        ),
-    }
+    token_path = output_path.parent / "prometheus.remote-write.token"
+    assert token_path.read_text(encoding="utf-8") == "secret-token"
+    assert stat.S_IMODE(token_path.stat().st_mode) == 0o644
+
+    compose_environment = os.environ | {"PROMETHEUS_GENERATED_DIR": str(tmp_path)}
     compose = subprocess.run(
         [
             "docker",

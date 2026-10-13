@@ -14,7 +14,7 @@ import tempfile
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, Optional, Sequence
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 from urllib.parse import urlsplit
 
 import yaml
@@ -25,7 +25,8 @@ logger = logging.getLogger(__name__)
 COLLECTION_CONFIG_FILENAME = "collection.json"
 GENERATED_PROMETHEUS_FILENAME = "prometheus.generated.yml"
 # Written beside the generated config and mounted read-only at the container path, so
-# the generated config references the token without holding it.
+# the generated config references the token without holding it. Mirror both names in
+# ``docker/prometheus/docker-compose.yml``; a test pins the pairing.
 REMOTE_WRITE_TOKEN_FILENAME = "prometheus.remote-write.token"
 CONTAINER_REMOTE_WRITE_TOKEN_PATH = "/etc/prometheus/remote-write.token"
 # Mirror the ``PORT`` and ``BASE_PATH`` defaults in ``settings.Config``. The renderer is
@@ -89,9 +90,10 @@ def _validate_remote_write_endpoint(value: Any) -> str:
         parsed.port
     except ValueError as error:
         raise ValueError("remote_write_endpoint has an invalid port") from error
-    # Credentials are refused because the URL is rendered into the generated Prometheus
-    # config, which is readable by other local users. Authenticate with
-    # ``remote_write_bearer_token`` instead, which is rendered to a separate file.
+    # Credentials are refused because the URL is also printed in error messages and
+    # Prometheus logs, and rendered into the generated config. Authenticate with
+    # ``remote_write_bearer_token`` instead. Its rendered file is readable by other
+    # local users too, so neither protects a token on a shared machine.
     if parsed.username is not None or parsed.password is not None:
         raise ValueError("remote_write_endpoint must not contain credentials")
     if parsed.query:
@@ -142,22 +144,38 @@ def _read_object(path: Path) -> Dict[str, Any]:
     return raw
 
 
+def _write_texts_atomically(
+    contents: Sequence[Tuple[Path, str]], mode: int = PRIVATE_FILE_MODE
+) -> None:
+    """Replace each file atomically, in order, after every one has been staged.
+
+    Staging all of them first means a failed write leaves every file untouched. Only a
+    failed rename can leave the earlier files replaced and the later ones not.
+    """
+    staged: List[Tuple[Path, Path]] = []
+    try:
+        for path, content in contents:
+            descriptor, temporary_name = tempfile.mkstemp(
+                dir=path.parent,
+                prefix=f".{path.name}.",
+                text=True,
+            )
+            temporary_path = Path(temporary_name)
+            staged.append((temporary_path, path))
+            with os.fdopen(descriptor, "w", encoding="utf-8") as temporary_file:
+                temporary_file.write(content)
+            os.chmod(temporary_path, mode)
+        for temporary_path, path in staged:
+            os.replace(temporary_path, path)
+    finally:
+        for temporary_path, _ in staged:
+            temporary_path.unlink(missing_ok=True)
+
+
 def _write_text_atomically(
     path: Path, content: str, mode: int = PRIVATE_FILE_MODE
 ) -> None:
-    descriptor, temporary_name = tempfile.mkstemp(
-        dir=path.parent,
-        prefix=f".{path.name}.",
-        text=True,
-    )
-    temporary_path = Path(temporary_name)
-    try:
-        with os.fdopen(descriptor, "w", encoding="utf-8") as temporary_file:
-            temporary_file.write(content)
-        os.chmod(temporary_path, mode)
-        os.replace(temporary_path, path)
-    finally:
-        temporary_path.unlink(missing_ok=True)
+    _write_texts_atomically([(path, content)], mode)
 
 
 def _write_config(path: Path, data: Dict[str, Any]) -> None:
@@ -353,17 +371,19 @@ def render_prometheus_config(
         base_path=base_path,
     )
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    # Written even when empty, so the Compose bind mount always has a source and a
-    # removed token does not linger. Container-readable for the same reason as the
-    # config: the unprivileged Prometheus user does not own it.
-    _write_text_atomically(
-        output_path.parent / REMOTE_WRITE_TOKEN_FILENAME,
-        config.remote_write_bearer_token or "",
-        mode=CONTAINER_READABLE_FILE_MODE,
-    )
-    _write_text_atomically(
-        output_path,
-        yaml.safe_dump(rendered, sort_keys=False),
+    # The token is written even when empty, so the Compose bind mount always has a
+    # source and a removed token does not linger. It is container-readable, like the
+    # config, because the unprivileged Prometheus user does not own it, which leaves it
+    # readable by other local users too. Only a failed rename between the two can pair
+    # the new token with the old config.
+    _write_texts_atomically(
+        [
+            (
+                output_path.parent / REMOTE_WRITE_TOKEN_FILENAME,
+                config.remote_write_bearer_token or "",
+            ),
+            (output_path, yaml.safe_dump(rendered, sort_keys=False)),
+        ],
         mode=CONTAINER_READABLE_FILE_MODE,
     )
     return output_path

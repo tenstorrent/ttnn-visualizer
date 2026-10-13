@@ -61,7 +61,8 @@ docs/output
 # Machine-specific: the generated Prometheus configuration carries this install's
 # machine_id and its remote-write URL. Neither is a credential, but neither belongs in
 # the repository. Anchored to where `pnpm prometheus:config` and the documented commands
-# write it; the CLI's bare default is the working directory and is not covered. The token
-# file beside it holds the remote-write bearer token, which is a credential.
+# write it; the CLI's bare default is the working directory and is not covered.
 docker/prometheus/prometheus.generated.yml
-docker/prometheus/prometheus.remote-write.token
+# The remote-write bearer token the renderer writes beside that config is a credential,
+# so it is ignored wherever it is written.
+prometheus.remote-write.token
