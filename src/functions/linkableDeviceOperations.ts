@@ -69,20 +69,20 @@ export const getScopePairing = (nodes: Node[]): ScopePairing => {
     return { startIndexByEndIndex, abortedEndIndices };
 };
 
-/** Indices of the starts and ends of every scope that closed without aborting. */
+/** The starts and ends of every scope that closed without aborting, each end with its start. */
 const getCompletedScopeIndices = (nodes: Node[]) => {
     const { startIndexByEndIndex, abortedEndIndices } = getScopePairing(nodes);
     const starts = new Set<number>();
-    const ends = new Set<number>();
+    const startIndexByEnd = new Map<number, number>();
 
     startIndexByEndIndex.forEach((startIndex, endIndex) => {
         if (!abortedEndIndices.has(endIndex)) {
             starts.add(startIndex);
-            ends.add(endIndex);
+            startIndexByEnd.set(endIndex, startIndex);
         }
     });
 
-    return { starts, ends };
+    return { starts, startIndexByEnd };
 };
 
 /** The reason tt-metal gave for aborting a scope; `null` when it gave none. */
@@ -92,12 +92,19 @@ export const getAbortReason = (node: DeviceOperationNodeEnd): string | null => {
     return typeof reason === 'string' && reason.trim() !== '' ? reason : null;
 };
 
-const getDeviceOperationNames = (
+/** A device operation that can have produced a perf row, and the scope it ran in. */
+export interface LinkableDeviceOperation {
+    name: string;
+    /** The `function_start` node that opens its scope, whichever order lists it. */
+    startNodeId: number;
+}
+
+const getLinkableScopes = (
     nodes: Node[],
     nodeType: DeviceOperationNodeType,
-    include: (index: number) => boolean,
-): string[] => {
-    const names: string[] = [];
+    getStartIndex: (index: number) => number | undefined,
+): LinkableDeviceOperation[] => {
+    const scopes: LinkableDeviceOperation[] = [];
 
     nodes.forEach((node, index) => {
         if (node.node_type !== nodeType) {
@@ -105,22 +112,23 @@ const getDeviceOperationNames = (
         }
 
         const name = getNodeName(node);
+        const startIndex = getStartIndex(index);
 
-        if (name !== undefined && isDeviceOperation(name) && include(index)) {
-            names.push(name);
+        if (name !== undefined && isDeviceOperation(name) && startIndex !== undefined) {
+            scopes.push({ name, startNodeId: nodes[startIndex].id });
         }
     });
 
-    return names;
+    return scopes;
 };
 
 export interface LinkableDeviceOperations {
-    starts: string[];
-    ends: string[];
+    starts: LinkableDeviceOperation[];
+    ends: LinkableDeviceOperation[];
 }
 
 /**
- * The device operation names in one operation's captured graph that can have produced a
+ * The device operations in one operation's captured graph that can have produced a
  * perf row, in each captured order.
  *
  * A device operation whose launch threw never reached the device, so it has no perf
@@ -150,7 +158,9 @@ export const getLinkableDeviceOperations = (nodes: Node[] | null | undefined): L
     const completed = getCompletedScopeIndices(nodes);
 
     return {
-        starts: getDeviceOperationNames(nodes, NodeType.function_start, (index) => completed.starts.has(index)),
-        ends: getDeviceOperationNames(nodes, NodeType.function_end, (index) => completed.ends.has(index)),
+        starts: getLinkableScopes(nodes, NodeType.function_start, (index) =>
+            completed.starts.has(index) ? index : undefined,
+        ),
+        ends: getLinkableScopes(nodes, NodeType.function_end, (index) => completed.startIndexByEnd.get(index)),
     };
 };

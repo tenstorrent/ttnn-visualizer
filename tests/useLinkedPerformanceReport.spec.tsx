@@ -274,10 +274,10 @@ const nestedMemoryOperations = [
         outputs: [],
         arguments: [],
         device_operations: [
-            { node_type: 'function_start', params: { name: NESTED_DEVICE_OP_NAMES[0] } },
-            { node_type: 'function_start', params: { name: NESTED_DEVICE_OP_NAMES[1] } },
-            { node_type: 'function_end', params: { name: NESTED_DEVICE_OP_NAMES[1] } },
-            { node_type: 'function_end', params: { name: NESTED_DEVICE_OP_NAMES[0] } },
+            { id: 10, node_type: 'function_start', params: { name: NESTED_DEVICE_OP_NAMES[0] } },
+            { id: 11, node_type: 'function_start', params: { name: NESTED_DEVICE_OP_NAMES[1] } },
+            { id: 12, node_type: 'function_end', params: { name: NESTED_DEVICE_OP_NAMES[1] } },
+            { id: 13, node_type: 'function_end', params: { name: NESTED_DEVICE_OP_NAMES[0] } },
         ],
     },
 ];
@@ -380,6 +380,8 @@ describe('report matching under a filtered performance tab', () => {
 
         expect(result.current.map(({ name }) => name)).toEqual(functionEndNames);
         expect(result.current.map(({ perfData }) => perfData?.raw_op_code)).toEqual(functionEndNames);
+        // Each row keeps the scope it ran in: the inner start closes first.
+        expect(result.current.map(({ startNodeId }) => startNodeId)).toEqual([11, 10]);
     });
 
     describe('a failed launch followed by a same-named retry', () => {

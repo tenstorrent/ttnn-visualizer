@@ -19,6 +19,7 @@ const mapping = (name: string, id: number): DeviceOperationMapping => ({
     name,
     id,
     operationName: `ttnn.${name.toLowerCase()}`,
+    startNodeId: 0,
 });
 
 // Rows carry an `op_type` because the model has it non-nullable and the backend
@@ -205,6 +206,22 @@ describe('matchDeviceOperationsToPerf', () => {
 });
 
 describe('matchDeviceOperationOrdersToPerf', () => {
+    // Scopes are the frontend's alone, so this case has no counterpart in `TestMatcherParity`.
+    it('keeps each row on its own scope when the end order is the one that matches', () => {
+        const outer = { ...mapping('OuterDeviceOperation', 1), startNodeId: 10 };
+        const inner = { ...mapping('InnerDeviceOperation', 1), startNodeId: 11 };
+        const matched = matchDeviceOperationOrdersToPerf(
+            orderCandidates([outer, inner], [inner, outer]),
+            perfRowsFor(['InnerDeviceOperation', 'OuterDeviceOperation']),
+            1,
+        );
+
+        expect(matched.map(({ startNodeId, perfData }) => [startNodeId, perfData?.raw_op_code])).toEqual([
+            [11, 'InnerDeviceOperation'],
+            [10, 'OuterDeviceOperation'],
+        ]);
+    });
+
     it('falls back to function-end order for nested device operations (#1860)', () => {
         const functionStartOperations = [
             mapping('SparseMatmulDeviceOperation', 59),

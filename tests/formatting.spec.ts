@@ -6,8 +6,11 @@ import { describe, expect, it } from 'vitest';
 import {
     buildGitCommitUrl,
     formatDuration,
+    formatNonZeroShareOfTotal,
     formatShareOfTotal,
     formatShortSha,
+    getCoreCountLabel,
+    getCoreCountText,
     stripGitRemoteSuffix,
 } from '../src/functions/formatting';
 
@@ -91,5 +94,32 @@ describe('formatShareOfTotal', () => {
 
     it('reads an empty total as 0.0% rather than dividing by zero', () => {
         expect(formatShareOfTotal(5, 0)).toBe('0.0%');
+    });
+});
+
+describe('formatNonZeroShareOfTotal', () => {
+    it('marks a share that took time but rounds to nothing as below the smallest step', () => {
+        expect(formatNonZeroShareOfTotal(0.5, 1_000)).toBe('<0.1%');
+    });
+
+    it('prints the smallest step and anything above it as formatShareOfTotal does', () => {
+        expect(formatNonZeroShareOfTotal(1, 1_000)).toBe('0.1%');
+        expect(formatNonZeroShareOfTotal(12, 78)).toBe('15.4%');
+    });
+
+    it('keeps a share of nothing, or of an empty total, at 0.0%', () => {
+        expect(formatNonZeroShareOfTotal(0, 100)).toBe('0.0%');
+        expect(formatNonZeroShareOfTotal(5, 0)).toBe('0.0%');
+    });
+});
+
+describe('getCoreCountText', () => {
+    it('pluralises cores', () => {
+        expect(getCoreCountText(1)).toBe('1 core');
+        expect(getCoreCountText(2)).toBe('2 cores');
+    });
+
+    it('is what getCoreCountLabel prefixes', () => {
+        expect(getCoreCountLabel(2)).toBe('x 2 cores');
     });
 });
