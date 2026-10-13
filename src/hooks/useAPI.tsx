@@ -891,19 +891,21 @@ const getDeviceOperationOrderCandidates = memoiseLatest(
         for (const operation of operations) {
             const { starts, ends } = getLinkableDeviceOperations(operation.device_operations);
 
-            for (const name of starts) {
+            for (const { name, startNodeId } of starts) {
                 functionStartOperations.push({
                     name,
                     id: operation.id,
                     operationName: operation.name,
+                    startNodeId,
                 });
             }
 
-            for (const name of ends) {
+            for (const { name, startNodeId } of ends) {
                 functionEndOperations.push({
                     name,
                     id: operation.id,
                     operationName: operation.name,
+                    startNodeId,
                 });
             }
         }

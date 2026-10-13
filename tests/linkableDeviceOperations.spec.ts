@@ -21,7 +21,11 @@ const end = (name: string, aborted?: string | boolean): Node =>
         params: aborted === undefined ? { name } : { name, aborted },
     }) as unknown as Node;
 
-const both = getLinkableDeviceOperations;
+const both = (nodes: Node[]) => {
+    const { starts, ends } = getLinkableDeviceOperations(nodes);
+
+    return { starts: starts.map(({ name }) => name), ends: ends.map(({ name }) => name) };
+};
 
 describe('getLinkableDeviceOperations', () => {
     it('names every completed device operation, skipping host-side functions', () => {

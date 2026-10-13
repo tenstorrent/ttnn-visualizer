@@ -16,6 +16,20 @@ vi.mock('../src/hooks/useAPI.tsx', () => ({
     useDevices: () => mockUseDevices(),
 }));
 
+// The linked performance report never arrives, so the perf summary renders nothing.
+vi.mock('../src/hooks/useDeviceOperationPerf', async () => {
+    const { PerfOverlayStatus } = await import('../src/definitions/PerfOverlayStatus');
+
+    return {
+        useDeviceOperationPerf: () => ({
+            status: PerfOverlayStatus.UNAVAILABLE,
+            isLoading: true,
+            rowByStartNodeId: new Map(),
+            totalDeviceTimeUs: 0,
+        }),
+    };
+});
+
 // Unsorted, as a real capture emits them, so nothing here can lean on ascending
 // order. The sequence recorded in #1844.
 const MESH_DEVICE_IDS = [6, 4, 5, 7, 3, 2, 0, 1];
