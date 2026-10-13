@@ -28,6 +28,9 @@ export interface ReportLink {
     status: ReportPairLinkStatus;
     profilerAccess?: ReportLinkAccess;
     performanceAccess?: ReportLinkAccess;
-    /** Epoch ms of the most recent settled comparison. Informational; capping uses array order. */
+    /**
+     * Epoch ms when the pair was last stored or moved to the end. Kept as is when the pair
+     * is seen again already last and unchanged. Informational; capping uses array order.
+     */
     recordedAt: number;
 }
