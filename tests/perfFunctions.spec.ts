@@ -48,6 +48,7 @@ describe('formatColumnNumber', () => {
 describe('formatCellText', () => {
     it('formats a numeric cell as its column shows a number', () => {
         expect(formatCellText(makeRow(), getColumn(ColumnKeys.DeviceTime))).toBe('1,235 µs');
+        expect(formatCellText(makeRow(), getColumn(ColumnKeys.TotalPercent))).toBe('5%');
         expect(formatCellText(makeRow(), getColumn(ColumnKeys.Id))).toBe('12345');
     });
 
