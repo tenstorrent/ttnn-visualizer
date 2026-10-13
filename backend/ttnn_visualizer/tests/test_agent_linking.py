@@ -1049,6 +1049,8 @@ class TestOperationDetailLink:
         assert result["perf_row_count"] == 1
         assert result["device_time_unit"] == linking.DEVICE_TIME_UNIT
         assert result["duration_unit"] == "host_seconds"
+        # The rows and their shares come from the canonical report, merged per device.
+        assert result["projection"] == tools.CANONICAL_PROJECTION
 
     def test_perf_rows_are_capped_and_the_full_count_kept(self, linked):
         count = MAX_LIMIT + 5
@@ -1182,6 +1184,7 @@ class TestOperationDetailLink:
         result = linking.operation_detail(registry, handle, operation_id=2)
 
         assert "perf_rows" not in result
+        assert "projection" not in result
         assert result["operation_link"]["status"] == LinkStatus.UNAVAILABLE.value
 
     def test_an_unreadable_performance_report_costs_only_the_perf_rows(

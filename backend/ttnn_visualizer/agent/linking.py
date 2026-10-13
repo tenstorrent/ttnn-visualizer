@@ -715,6 +715,7 @@ def operation_detail(
         # Stated because this response's other duration is host seconds, and the two
         # invite being compared.
         result["device_time_unit"] = DEVICE_TIME_UNIT
+        result["projection"] = dict(tools.CANONICAL_PROJECTION)
         if rows:
             result.update(_device_time_summary(rows, link))
             result["report_device_time_total"] = round(link.report_device_time_total, 3)
