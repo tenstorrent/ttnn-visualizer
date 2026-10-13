@@ -25,6 +25,7 @@ import { calculateCondensed } from '../functions/calculateCondensed';
 import { L1_DEFAULT_MEMORY_SIZE, L1_NUM_CORES } from '../definitions/L1MemorySize';
 import { TensorDeallocationReport } from './BufferSummary';
 import { normaliseDeviceId } from '../functions/collapseCbDeviceRows';
+import { getBufferKey } from '../functions/summariseOperationBuffers';
 
 export interface OperationDetailsOptions {
     renderPattern: boolean;
@@ -53,7 +54,13 @@ export class OperationDetails implements Partial<OperationDetailsData> {
 
     device_operations: Node[] = [];
 
+    // Address-only view of `tensorsByBuffer` for callers that cannot say which
+    // memory space they mean; L1 wins an address shared with another space.
     tensorListByAddress: Map<number, Tensor> = new Map();
+
+    // Keyed by `getBufferKey`: DRAM and L1 are separate address spaces, so the
+    // same address can hold a different tensor in each. #2078
+    private tensorsByBuffer: Map<string, Tensor> = new Map();
 
     public tensorListById: Map<number, Tensor> = new Map();
 
@@ -74,7 +81,7 @@ export class OperationDetails implements Partial<OperationDetailsData> {
     };
 
     // TEMP (#1291): `${device_id}:${address}` -> real L1_Small Tensor sourced from
-    // /api/tensors?buffer_type=3. Used by getTensorListByAddress() until tt-metal
+    // /api/tensors?buffer_type=3. Used by buildTensorMaps() until tt-metal
     // records producers/consumers for L1_Small and the standard backward op-walk
     // can locate them via op.inputs/op.outputs.
     // Composite key avoids cross-device collisions: the same L1_Small address can
@@ -215,8 +222,10 @@ export class OperationDetails implements Partial<OperationDetailsData> {
                 ],
             ].flat() || [];
 
-        this.tensorListByAddress = this.getTensorListByAddress();
-        this.tensorListByAddress.forEach((tensor) => {
+        const { byBuffer, byAddress, byId } = this.buildTensorMaps();
+        this.tensorsByBuffer = byBuffer;
+        this.tensorListByAddress = byAddress;
+        this.tensorsByBuffer.forEach((tensor) => {
             tensor.producerNames = tensor.producers.map((op) => {
                 return this.operations.find((operation) => operation.id === op)?.name || '';
             });
@@ -224,9 +233,7 @@ export class OperationDetails implements Partial<OperationDetailsData> {
                 return this.operations.find((operation) => operation.id === op)?.name || '';
             });
         });
-        this.tensorListById = new Map(
-            Array.from(this.tensorListByAddress.values()).map((tensor) => [tensor.id, tensor]),
-        );
+        this.tensorListById = byId;
 
         const deviceOpList: DeviceOperationNode[] = [];
         if (this.device_operations !== null) {
@@ -325,8 +332,26 @@ export class OperationDetails implements Partial<OperationDetailsData> {
         this.getGroupedMemoryReport = this.getGroupedMemoryReport.bind(this);
     }
 
-    private getChartData(memory: Chunk[], overrides?: PlotDataOverrides): Partial<PlotData>[] {
-        return getChartData(memory, this.getTensorForAddress.bind(this), overrides, this.options);
+    // `bufferType` is required so every call states its memory space: an untyped
+    // fallback would hand a bar with no tensor of its own the tensor another
+    // space keeps at the same address. #2078
+    private getChartData(memory: Chunk[], bufferType: BufferType, overrides?: PlotDataOverrides): Partial<PlotData>[] {
+        const tensorByChunkAddress = new Map<number, Tensor>();
+
+        memory.forEach((chunk) => {
+            const tensor = chunk.tensorId !== undefined ? this.tensorListById.get(chunk.tensorId) : undefined;
+
+            if (tensor) {
+                tensorByChunkAddress.set(chunk.address, tensor);
+            }
+        });
+
+        return getChartData(
+            memory,
+            (address) => tensorByChunkAddress.get(address) ?? this.getTensorForBuffer(address, bufferType),
+            overrides,
+            this.options,
+        );
     }
 
     get memorySizeL1(): number {
@@ -346,6 +371,10 @@ export class OperationDetails implements Partial<OperationDetailsData> {
 
     getTensorForAddress(address: number): Tensor | null {
         return this.tensorListByAddress.get(address) || null;
+    }
+
+    getTensorForBuffer(address: number, bufferType: BufferType): Tensor | null {
+        return this.tensorsByBuffer.get(getBufferKey(bufferType, address)) ?? null;
     }
 
     getTensorProducerConsumer(id: number | null) {
@@ -383,6 +412,7 @@ export class OperationDetails implements Partial<OperationDetailsData> {
                 const entry: FragmentationEntry = {
                     ...buffer,
                     size: buffer.max_size_per_bank,
+                    tensorId: this.getTensorForBuffer(buffer.address, bufferType)?.id,
                 };
 
                 if (groupedMap.has(entry.address)) {
@@ -421,7 +451,7 @@ export class OperationDetails implements Partial<OperationDetailsData> {
                     return {
                         address: buffer.address,
                         size: buffer.max_size_per_bank,
-                        tensorId: this.getTensorForAddress(buffer.address)?.id,
+                        tensorId: this.getTensorForBuffer(buffer.address, bufferType)?.id,
                         lateDeallocation,
                     };
                 })
@@ -512,7 +542,7 @@ export class OperationDetails implements Partial<OperationDetailsData> {
         const cbCondensed: Chunk = calculateCondensed(anonymousCBMemory);
         const bufferCondensed: Chunk = calculateCondensed(bufferMemory);
 
-        const chartData = this.getChartData(memory);
+        const chartData = this.getChartData(memory, bufferType);
         const cbColor = '#e2defc';
         const cbHoverTemplate = `
 <span style="color:${cbColor};font-size:20px;">&#9632;</span>
@@ -520,16 +550,21 @@ ${getMemoryAddress(cbCondensed.address, this.options.showHex)} <br />${formatMem
 <br><br>CBs Summary
 <extra></extra>`;
 
-        const cbChartData = this.getChartData([cbCondensed], { color: cbColor, hovertemplate: cbHoverTemplate });
+        const cbChartData = this.getChartData([cbCondensed], BufferType.L1, {
+            color: cbColor,
+            hovertemplate: cbHoverTemplate,
+        });
         const cbChartDataByOperation: Map<{ name: string; index: number }, Partial<PlotData>[]> = new Map();
         this.deviceOperations.forEach((op) => {
             if (op.cbList.length !== 0) {
                 // Aliased CBs are emitted as a separate outlined trace so they don't obscure the tensor below. #1652
                 const anonymousCBs = op.cbList.filter((cb) => !cb.globallyAllocated);
                 const aliasedCBs = op.cbList.filter((cb) => cb.globallyAllocated);
-                const filled = this.getChartData(anonymousCBs, { colorVariance: op.id });
+                const filled = this.getChartData(anonymousCBs, BufferType.L1, { colorVariance: op.id });
                 const outlined =
-                    aliasedCBs.length > 0 ? this.getChartData(aliasedCBs, { colorVariance: op.id, outline: true }) : [];
+                    aliasedCBs.length > 0
+                        ? this.getChartData(aliasedCBs, BufferType.L1, { colorVariance: op.id, outline: true })
+                        : [];
                 cbChartDataByOperation.set(
                     {
                         name: op.name,
@@ -546,7 +581,7 @@ ${getMemoryAddress(cbCondensed.address, this.options.showHex)} <br />${formatMem
 ${getMemoryAddress(bufferCondensed.address, this.options.showHex)} <br /> ${formatMemorySize(bufferCondensed.size, 2)}
 <br><br>Buffers Summary
 <extra></extra>`;
-        const bufferChartData = this.getChartData([bufferCondensed], {
+        const bufferChartData = this.getChartData([bufferCondensed], BufferType.L1, {
             color: bufferColor,
             hovertemplate: bufferHoverTemplate,
         });
@@ -558,12 +593,12 @@ ${getMemoryAddress(bufferCondensed.address, this.options.showHex)} <br /> ${form
                         name: op.name,
                         index: op.id,
                     },
-                    this.getChartData(op.bufferList),
+                    this.getChartData(op.bufferList, BufferType.L1),
                 );
             }
         });
 
-        const condensedChart = this.getChartData([condensed]);
+        const condensedChart = this.getChartData([condensed], bufferType);
 
         if (condensedChart[0] !== undefined && bufferType === BufferType.L1_SMALL) {
             condensedChart[0].marker!.color = CONDENSED_PLOT_CHUNK_COLOR;
@@ -593,7 +628,8 @@ ${getMemoryAddress(bufferCondensed.address, this.options.showHex)} <br /> ${form
         const delta = delta1.length > 0 ? delta1 : delta2;
 
         return {
-            chartData: this.getChartData(delta),
+            // Only the DRAM plot asks for a delta, and `max` below already assumes DRAM.
+            chartData: this.getChartData(delta, BufferType.DRAM),
             // eslint-disable-next-line no-unsafe-optional-chaining
             min: delta[0]?.address - 10240 || 0,
             // eslint-disable-next-line no-unsafe-optional-chaining
@@ -602,25 +638,52 @@ ${getMemoryAddress(bufferCondensed.address, this.options.showHex)} <br /> ${form
         };
     }
 
-    private getTensorListByAddress() {
-        const tensorsByBufferAddress: Map<number, Tensor> = new Map();
+    private buildTensorMaps(): {
+        byBuffer: Map<string, Tensor>;
+        byAddress: Map<number, Tensor>;
+        byId: Map<number, Tensor>;
+    } {
+        const byBuffer: Map<string, Tensor> = new Map();
+        const byAddress: Map<number, Tensor> = new Map();
+        const byId: Map<number, Tensor> = new Map();
+
+        // L1 wins a shared key in the untyped maps. A tensor with no recorded
+        // type matches every buffer at its address, so `byId` can see one id twice.
+        const record = (bufferType: BufferType, address: number, tensor: Tensor) => {
+            const stamped: Tensor = { ...tensor, buffer_type: bufferType };
+
+            byBuffer.set(getBufferKey(bufferType, address), stamped);
+
+            if (!byAddress.has(address) || bufferType === BufferType.L1) {
+                byAddress.set(address, stamped);
+            }
+
+            if (!byId.has(stamped.id) || bufferType === BufferType.L1) {
+                byId.set(stamped.id, stamped);
+            }
+        };
 
         const currentOperation = this.operations.find((op) => op.id === this.id);
 
         for (const buffer of this.buffers) {
             const bufferAddress = buffer.address;
             const bufferType = buffer.buffer_type;
+            // A tensor in another memory space at the same address is a different
+            // tensor. Older reports may leave the type unset; those still match.
+            const isBufferTensor = (candidate: Tensor) =>
+                candidate.address === bufferAddress &&
+                (candidate.buffer_type == null || candidate.buffer_type === bufferType);
             let tensor: Tensor | undefined;
 
             for (let i = this.operations.indexOf(currentOperation!); i >= 0; i--) {
                 const op = this.operations[i];
-                tensor = op.outputs.find((output) => output.address === bufferAddress);
+                tensor = op.outputs.find(isBufferTensor);
 
                 if (tensor !== undefined) {
                     break;
                 }
 
-                tensor = op.inputs.find((input) => input.address === bufferAddress);
+                tensor = op.inputs.find(isBufferTensor);
 
                 if (tensor !== undefined) {
                     break;
@@ -628,10 +691,7 @@ ${getMemoryAddress(bufferCondensed.address, this.options.showHex)} <br /> ${form
             }
 
             if (tensor !== undefined) {
-                tensorsByBufferAddress.set(bufferAddress, {
-                    ...tensor,
-                    buffer_type: bufferType,
-                });
+                record(bufferType, bufferAddress, tensor);
             } else if (bufferType === BufferType.L1_SMALL) {
                 // TEMP (#1291): L1_Small tensors are not yet reported with
                 // producers/consumers from tt-metal, so they never match the
@@ -642,15 +702,12 @@ ${getMemoryAddress(bufferCondensed.address, this.options.showHex)} <br /> ${form
                 // graph_processor.cpp::track_allocate).
                 const l1SmallTensor = this.l1SmallTensorsByAddress.get(`${buffer.device_id}:${bufferAddress}`);
                 if (l1SmallTensor !== undefined) {
-                    tensorsByBufferAddress.set(bufferAddress, {
-                        ...l1SmallTensor,
-                        buffer_type: bufferType,
-                    });
+                    record(bufferType, bufferAddress, l1SmallTensor);
                 }
             }
         }
 
-        return tensorsByBufferAddress;
+        return { byBuffer, byAddress, byId };
     }
 
     // eslint-disable-next-line class-methods-use-this

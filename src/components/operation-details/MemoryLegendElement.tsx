@@ -94,7 +94,11 @@ export const MemoryLegendElement = ({
         </>
     );
 
-    const derivedTensor = operationDetails.getTensorForAddress(chunk.address);
+    // `tensorId` was resolved within the chunk's own memory space; the address
+    // lookup is the fallback for CB and device-operation rows, which carry none. #2078
+    const derivedTensor =
+        (chunk.tensorId !== undefined ? operationDetails.tensorListById.get(chunk.tensorId) : undefined) ??
+        operationDetails.getTensorForAddress(chunk.address);
     const isPerCoreBuffer = bufferType !== StringBufferType.DRAM && bufferType !== StringBufferType.SYSTEM_MEMORY;
     const numCoresLabel = isPerCoreBuffer && numCores && numCores > 0 ? getCoreCountLabel(numCores) : '';
     const deviceCountLabel = deviceCount > 1 ? getDeviceCountLabel(deviceCount) : '';

@@ -28,6 +28,7 @@ import {
     defaultOperation,
 } from '../model/APIData';
 import { BufferType } from '../model/BufferType';
+import { summariseOperationBuffers } from '../functions/summariseOperationBuffers';
 import parseMemoryConfig, { memoryConfigPattern } from '../functions/parseMemoryConfig';
 import { MemoryConfig } from '../model/MemoryConfig';
 import getServerConfig from '../functions/getServerConfig';
@@ -782,28 +783,10 @@ export const useOperationDetails = (operationId: number | null) => {
         staleTime: Infinity,
     });
 
-    const buffersSummary = useMemo(() => {
-        if (!operationDetails.data) {
-            return [];
-        }
-
-        const uniqueBuffers: Map<number, BufferData> = new Map<number, BufferData>();
-
-        operationDetails.data.buffers.forEach((buffer) => {
-            // eslint-disable-next-line camelcase
-            const { address, max_size_per_bank } = buffer;
-
-            if (address) {
-                const existingBuffer = uniqueBuffers.get(address);
-                // eslint-disable-next-line camelcase
-                if (!existingBuffer || max_size_per_bank > existingBuffer.max_size_per_bank) {
-                    uniqueBuffers.set(address, buffer);
-                }
-            }
-        });
-
-        return Array.from(uniqueBuffers.values());
-    }, [operationDetails.data]);
+    const buffersSummary = useMemo(
+        () => (operationDetails.data ? summariseOperationBuffers(operationDetails.data.buffers) : []),
+        [operationDetails.data],
+    );
 
     const augmentedOperationDetails = useMemo(() => {
         if (!operationDetails.data) {

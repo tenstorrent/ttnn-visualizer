@@ -8,10 +8,18 @@ import { cleanup, screen } from '@testing-library/react';
 import { resetPlotPropsCapture } from './mocks/plotComponent';
 import { OperationDetails } from '../src/model/OperationDetails';
 import { BufferData, type Node, NodeType } from '../src/model/APIData';
+import { BufferType } from '../src/model/BufferType';
+import { summariseOperationBuffers } from '../src/functions/summariseOperationBuffers';
 import { showDeallocationReportAtom } from '../src/store/app';
 import { TEST_IDS } from '../src/definitions/TestIds';
 import { buildTensorDeallocationReport } from './helpers/lateDeallocationFixtures';
-import { buildBufferData, buildOperationDetails, createNodeFactory } from './helpers/operationDetailsFixtures';
+import {
+    buildBufferData,
+    buildOperationDescription,
+    buildOperationDetails,
+    buildTensor,
+    createNodeFactory,
+} from './helpers/operationDetailsFixtures';
 import { renderL1Plots } from './helpers/renderL1Plots';
 
 // The legend element is tested with the report handed to it directly, so those
@@ -124,5 +132,35 @@ describe('L1 plot legend late deallocation markers (#1862)', () => {
         const markers = screen.getAllByTestId(markerTestId(LATE_ADDRESS));
         expect(markers).toHaveLength(1);
         expect(markers[0].closest('.legend-item')).not.toHaveClass('globally-allocated');
+    });
+
+    // A larger DRAM buffer at the late tensor's address used to evict it from the
+    // summary, leaving the count beside the switch with no hatched row to match. #2078
+    it('keeps the late L1 row when a larger DRAM buffer shares its address', () => {
+        const l1TensorId = 10;
+        const dramTensorId = 20;
+        const buffers = [
+            buildBufferData({ address: LATE_ADDRESS, buffer_type: BufferType.DRAM, max_size_per_bank: 4096 }),
+            l1Buffer(LATE_ADDRESS),
+        ];
+        const details = buildOperationDetails({
+            data: { id: 1, buffers, buffersSummary: summariseOperationBuffers(buffers) },
+            operations: [
+                buildOperationDescription({
+                    id: 1,
+                    outputs: [
+                        buildTensor({ id: dramTensorId, address: LATE_ADDRESS, buffer_type: BufferType.DRAM }),
+                        buildTensor({ id: l1TensorId, address: LATE_ADDRESS, buffer_type: BufferType.L1 }),
+                    ],
+                }),
+            ],
+            deallocationReport: [buildTensorDeallocationReport({ address: LATE_ADDRESS })],
+        });
+
+        renderPlots({ showDeallocationReport: true, details });
+
+        expect(screen.getAllByTestId(markerTestId(LATE_ADDRESS))).toHaveLength(1);
+        expect(screen.getByText(`Tensor ${l1TensorId}`, { exact: false })).toBeInTheDocument();
+        expect(screen.queryByText(`Tensor ${dramTensorId}`, { exact: false })).not.toBeInTheDocument();
     });
 });

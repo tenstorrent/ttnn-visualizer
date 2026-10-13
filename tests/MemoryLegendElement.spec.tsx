@@ -257,6 +257,24 @@ describe('MemoryLegendElement globally_allocated marker (#1651)', () => {
     });
 });
 
+// A chunk's `tensorId` was resolved within its own memory space; the address can
+// name a tensor in another space, so the label must follow the id. #2078
+describe('MemoryLegendElement tensor label', () => {
+    it('names the tensor the chunk carries, not the one at its address', () => {
+        const ownTensor = { id: 20, shape: 'Shape([1, 32])', dtype: 'DataType.BFLOAT16' };
+        const addressTensor = { id: 10, shape: 'Shape([1, 32])', dtype: 'DataType.BFLOAT16' };
+        const opDetails = {
+            getTensorForAddress: () => addressTensor,
+            tensorListById: new Map([[ownTensor.id, ownTensor]]),
+        } as unknown as OperationDetails;
+
+        renderLegendElement({ address: 0x4000, size: 256, tensorId: ownTensor.id }, { operationDetails: opDetails });
+
+        expect(screen.getByText('Tensor 20', { exact: false })).toBeInTheDocument();
+        expect(screen.queryByText('Tensor 10', { exact: false })).not.toBeInTheDocument();
+    });
+});
+
 // The size cell is `text-align: right`, so a cell holding "8 KiB x 32 devices"
 // right-aligns the whole string and the size drifts left — measured on op 104 of
 // the MoE report as three distinct size right-edges (417 / 451 / 468 at 1900px)
