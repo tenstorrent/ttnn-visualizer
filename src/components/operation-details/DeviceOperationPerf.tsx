@@ -9,9 +9,8 @@ import { ColumnDefinition, ColumnKeys, Columns } from '../../definitions/PerfTab
 import { ReportLinkMatchResult } from '../../definitions/ReportLinks';
 import { isCountableDeviceTime } from '../../functions/durationBuckets';
 import { formatNonZeroShareOfTotal, getCoreCountText } from '../../functions/formatting';
-import { formatSize } from '../../functions/math';
-import { formatCell, formatCellText, getCellColour, isHostOp } from '../../functions/perfFunctions';
-import { NOT_ANALYSED_LABEL, getNotAnalysedReason, getSlowBoundExplanation } from '../../functions/perfBoundAnalysis';
+import { describePlainCell, formatCell, formatColumnNumber, getCellColour } from '../../functions/perfFunctions';
+import { NOT_ANALYSED_LABEL } from '../../functions/perfBoundAnalysis';
 import { TypedPerfTableRow } from '../../model/PerfTable';
 import 'styles/components/DeviceOperationPerf.scss';
 
@@ -36,11 +35,21 @@ const DETAIL_COLUMNS = getColumns([
     ColumnKeys.DeviceKernelDuration,
 ]);
 
-const LINK_STATUS_MESSAGE: Partial<Record<ReportLinkMatchResult, string>> = {
-    [ReportLinkMatchResult.UNAVAILABLE]:
-        'Load a performance report from the same run to see how long each device operation took.',
-    [ReportLinkMatchResult.UNLINKED]:
-        'The loaded performance report does not match this memory report, so device times are not shown.',
+const NO_REPORT_MESSAGE = 'Load a performance report from the same run to see how long each device operation took.';
+const UNREADABLE_MESSAGE = 'Device times could not be loaded, so they are not shown.';
+const MISMATCHED_REPORT_MESSAGE =
+    'The loaded performance report does not match this memory report, so device times are not shown.';
+
+const getLinkStatusMessage = (linkStatus: ReportLinkMatchResult, hasPerformanceReport: boolean): string | null => {
+    if (linkStatus === ReportLinkMatchResult.UNLINKED) {
+        return MISMATCHED_REPORT_MESSAGE;
+    }
+
+    if (linkStatus === ReportLinkMatchResult.UNAVAILABLE) {
+        return hasPerformanceReport ? UNREADABLE_MESSAGE : NO_REPORT_MESSAGE;
+    }
+
+    return null;
 };
 
 const formatShare = (deviceTimeUs: number | null, totalDeviceTimeUs: number): string | null =>
@@ -67,22 +76,18 @@ const DeviceOperationPerfDetails = ({ row }: DeviceOperationPerfDetailsProps) =>
     const lines: JSX.Element[] = [];
 
     DETAIL_COLUMNS.forEach((column) => {
-        const text = formatCellText(row, column);
+        const { text, notAnalysedReason, slowExplanation } = describePlainCell(row, column);
 
-        if (text === '') {
-            const reason = isHostOp(row.bound) ? null : getNotAnalysedReason(row, column.key);
-
-            if (reason) {
-                addColumnName(unanalysedNamesByReason, reason, column.name);
-            }
-
-            return;
+        if (notAnalysedReason) {
+            addColumnName(unanalysedNamesByReason, notAnalysedReason, column.name);
         }
 
-        const explanation = getSlowBoundExplanation(row, column.key, getCellColour(row, column.key));
+        if (slowExplanation) {
+            addColumnName(explainedNamesByReason, slowExplanation, column.name);
+        }
 
-        if (explanation) {
-            addColumnName(explainedNamesByReason, explanation, column.name);
+        if (!text) {
+            return;
         }
 
         lines.push(
@@ -152,7 +157,12 @@ export const DeviceOperationPerfSummary = ({ row, totalDeviceTimeUs }: DeviceOpe
             className='device-operation-perf-target'
             popoverClassName='device-operation-perf-popover'
         >
-            <span className={classNames('device-operation-perf', Classes.TOOLTIP_INDICATOR)}>
+            <span
+                className={classNames('device-operation-perf', Classes.TOOLTIP_INDICATOR)}
+                // Focusable so the card, the only place these details show, opens from the keyboard too.
+                // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex
+                tabIndex={0}
+            >
                 {parts.map(({ key, node }, index) => (
                     <Fragment key={key}>
                         {index > 0 && <span className='separator'>·</span>}
@@ -166,17 +176,19 @@ export const DeviceOperationPerfSummary = ({ row, totalDeviceTimeUs }: DeviceOpe
 
 interface OperationDevicePerfSummaryProps {
     linkStatus: ReportLinkMatchResult;
+    hasPerformanceReport: boolean;
     /** Without a device operation there is nothing to time, so not even the empty states apply. */
     hasDeviceOperations: boolean;
     rows: TypedPerfTableRow[];
     totalDeviceTimeUs: number;
 }
 
-const formatDeviceTime = (deviceTimeUs: number): string => `${formatSize(deviceTimeUs, 0)} µs`;
+const formatDeviceTime = (deviceTimeUs: number): string => formatColumnNumber(deviceTimeUs, DEVICE_TIME_COLUMN);
 
 /** One line above the device operations: their total device time and the slowest of them. */
 export const OperationDevicePerfSummary = ({
     linkStatus,
+    hasPerformanceReport,
     hasDeviceOperations,
     rows,
     totalDeviceTimeUs,
@@ -185,7 +197,7 @@ export const OperationDevicePerfSummary = ({
         return null;
     }
 
-    const message = LINK_STATUS_MESSAGE[linkStatus];
+    const message = getLinkStatusMessage(linkStatus, hasPerformanceReport);
 
     if (message) {
         return <p className='operation-device-perf-summary is-unavailable'>{message}</p>;

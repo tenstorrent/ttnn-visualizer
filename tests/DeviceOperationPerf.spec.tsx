@@ -48,10 +48,12 @@ const renderOperationSummary = (
     linkStatus: ReportLinkMatchResult,
     rows: TypedPerfTableRow[] = [],
     hasDeviceOperations = true,
+    hasPerformanceReport = false,
 ) =>
     render(
         <OperationDevicePerfSummary
             linkStatus={linkStatus}
+            hasPerformanceReport={hasPerformanceReport}
             hasDeviceOperations={hasDeviceOperations}
             rows={rows}
             totalDeviceTimeUs={REPORT_DEVICE_TIME_US}
@@ -67,6 +69,13 @@ describe('OperationDevicePerfSummary', () => {
         renderOperationSummary(ReportLinkMatchResult.UNAVAILABLE);
 
         expect(screen.getByText(/Load a performance report from the same run/)).toBeInTheDocument();
+    });
+
+    it('says the device times could not be loaded when a selected report failed to read', () => {
+        renderOperationSummary(ReportLinkMatchResult.UNAVAILABLE, [], true, true);
+
+        expect(screen.getByText(/Device times could not be loaded/)).toBeInTheDocument();
+        expect(screen.queryByText(/Load a performance report/)).not.toBeInTheDocument();
     });
 
     it('says when the loaded report does not match the memory report', () => {

@@ -714,6 +714,7 @@ const DeviceOperationsFullRender = ({
             />
             <OperationDevicePerfSummary
                 linkStatus={devicePerf.linkStatus}
+                hasPerformanceReport={devicePerf.hasPerformanceReport}
                 hasDeviceOperations={hasDeviceOperations}
                 rows={perfRows}
                 totalDeviceTimeUs={devicePerf.totalDeviceTimeUs}

@@ -29,6 +29,7 @@ vi.mock('../src/hooks/useDeviceOperationPerf', () => ({
 // Unless a case says otherwise, the linked performance report never arrives and no perf renders.
 const PERF_LOADING: DeviceOperationPerf = {
     linkStatus: ReportLinkMatchResult.PENDING,
+    hasPerformanceReport: false,
     rowByStartNodeId: new Map(),
     totalDeviceTimeUs: 0,
 };
@@ -509,6 +510,7 @@ describe('DeviceOperationsFullRender - device operation perf (#1512)', () => {
         const secondPermute = functionStart('PermuteDeviceOperation');
         mockUseDeviceOperationPerf.mockReturnValue({
             linkStatus: ReportLinkMatchResult.LINKED,
+            hasPerformanceReport: true,
             totalDeviceTimeUs: 50_000,
             rowByStartNodeId: new Map([
                 [firstPermute.id, perfRow('5', 'PermuteDeviceOperation', '14.418', '64')],
@@ -539,6 +541,36 @@ describe('DeviceOperationsFullRender - device operation perf (#1512)', () => {
             "3 device operations ran for 136 µs (0.3% of the report's device time). " +
                 'Slowest: AccumulationDeviceOperation, 116 µs on 1 core.',
         );
+    });
+
+    const linkedTo = (scope: Node, row: ReturnType<typeof perfRow>): DeviceOperationPerf => ({
+        linkStatus: ReportLinkMatchResult.LINKED,
+        hasPerformanceReport: true,
+        totalDeviceTimeUs: 50_000,
+        rowByStartNodeId: new Map([[scope.id, row]]),
+    });
+
+    it("shows a scope's perf and its Arguments button together, and the button still opens", () => {
+        const matmul = { ...functionStart('MatmulDeviceOperation'), arguments: ['Tensor(shape=[32, 32])'] } as Node;
+        mockUseDeviceOperationPerf.mockReturnValue(linkedTo(matmul, perfRow('3', 'MatmulDeviceOperation', '40', '8')));
+
+        const container = renderGraph([captureStart(), matmul, functionEnd('MatmulDeviceOperation')]);
+        fireEvent.click(screen.getByRole('button', { name: /Arguments/ }));
+
+        expect(perfByScope(container)).toEqual([['MatmulDeviceOperation', '40 µs·8 cores·<0.1% of device time']]);
+        expect(document.querySelector('.device-operation-arguments-visualisation-overlay')).toHaveTextContent(
+            'Tensor(shape = [32, 32])',
+        );
+    });
+
+    it("shows a scope's perf with no Arguments button when it has no arguments", () => {
+        const matmul = functionStart('MatmulDeviceOperation');
+        mockUseDeviceOperationPerf.mockReturnValue(linkedTo(matmul, perfRow('3', 'MatmulDeviceOperation', '40', '8')));
+
+        const container = renderGraph([captureStart(), matmul, functionEnd('MatmulDeviceOperation')]);
+
+        expect(perfByScope(container)).toEqual([['MatmulDeviceOperation', '40 µs·8 cores·<0.1% of device time']]);
+        expect(screen.queryByRole('button', { name: /Arguments/ })).not.toBeInTheDocument();
     });
 
     it('says so above the list when no performance report is loaded', () => {

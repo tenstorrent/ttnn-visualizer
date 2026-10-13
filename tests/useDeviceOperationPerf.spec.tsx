@@ -2,12 +2,16 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
+import { ReactNode } from 'react';
 import { renderHook } from '@testing-library/react';
+import { Provider, createStore } from 'jotai';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useDeviceOperationPerf } from '../src/hooks/useDeviceOperationPerf';
 import { useGetDeviceOperationListPerfByOpId, useLinkedPerformanceReport } from '../src/hooks/useAPI';
 import { useReportLinkMatch } from '../src/hooks/useReportLinkMatch';
 import { ReportLinkMatchResult } from '../src/definitions/ReportLinks';
+import { ReportFolder } from '../src/definitions/Reports';
+import { activePerformanceReportAtom } from '../src/store/app';
 import { DeviceOperationMapping } from '../src/model/DeviceOperationMapping';
 import { PerfTableRow } from '../src/model/PerfTable';
 import { makeRawPerfRow } from './helpers/perfRowFixtures';
@@ -83,6 +87,17 @@ describe('useDeviceOperationPerf', () => {
         givenMatches(new Map([[OPERATION_ID, [scopeMapping(101, undefined), scopeMapping(105, secondPermute)]]]));
 
         expect([...renderPerf().rowByStartNodeId.keys()]).toEqual([105]);
+    });
+
+    it('says whether a performance report is selected, which tells a missing one from a failed read', () => {
+        const store = createStore();
+        store.set(activePerformanceReportAtom, { path: 'perf', reportName: 'perf' } as ReportFolder);
+        const wrapper = ({ children }: { children: ReactNode }) => <Provider store={store}>{children}</Provider>;
+
+        expect(renderPerf().hasPerformanceReport).toBe(false);
+        expect(
+            renderHook(() => useDeviceOperationPerf(OPERATION_ID), { wrapper }).result.current.hasPerformanceReport,
+        ).toBe(true);
     });
 
     it("sums every row's countable device time for the share", () => {
