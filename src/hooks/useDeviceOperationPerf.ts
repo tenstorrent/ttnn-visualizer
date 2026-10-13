@@ -4,6 +4,7 @@
 
 import { useMemo } from 'react';
 import { ReportLinkMatchResult } from '../definitions/ReportLinks';
+import { isCountableDeviceTime } from '../functions/durationBuckets';
 import { enrichRowData } from '../functions/enrichPerfRowData';
 import { DeviceOperationMapping } from '../model/DeviceOperationMapping';
 import { PerfTableRow, TypedPerfTableRow } from '../model/PerfTable';
@@ -14,7 +15,10 @@ export interface DeviceOperationPerf {
     linkStatus: ReportLinkMatchResult;
     /** Keyed on the `function_start` node of each device operation's scope. */
     rowByStartNodeId: ReadonlyMap<number, TypedPerfTableRow>;
-    /** Every row's device time summed (µs), the denominator for a device operation's share. */
+    /**
+     * Every countable device time summed (µs), the denominator for a device operation's share.
+     * Mirrored as `report_device_time_total` in `backend/ttnn_visualizer/agent/linking.py`.
+     */
     totalDeviceTimeUs: number;
 }
 
@@ -24,7 +28,7 @@ const sumDeviceTimeUs = (rows: PerfTableRow[]): number =>
     rows.reduce((total, row) => {
         const deviceTime = parseFloat(row.device_time);
 
-        return Number.isFinite(deviceTime) ? total + deviceTime : total;
+        return isCountableDeviceTime(deviceTime) ? total + deviceTime : total;
     }, 0);
 
 const hasPerfRow = (mapping: DeviceOperationMapping): mapping is DeviceOperationMapping & { perfData: PerfTableRow } =>

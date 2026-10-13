@@ -85,11 +85,12 @@ describe('useDeviceOperationPerf', () => {
         expect([...renderPerf().rowByStartNodeId.keys()]).toEqual([105]);
     });
 
-    it("sums every row's device time for the share, skipping rows without one", () => {
+    it("sums every row's countable device time for the share", () => {
         givenLinkedReport([
             makeRawPerfRow({ device_time: '10' }),
             makeRawPerfRow({ device_time: '30.5' }),
             makeRawPerfRow({ device_time: '' }),
+            makeRawPerfRow({ device_time: '-2' }),
         ]);
 
         expect(renderPerf().totalDeviceTimeUs).toBe(40.5);
