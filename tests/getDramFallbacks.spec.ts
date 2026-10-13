@@ -85,6 +85,64 @@ describe('getDramFallbacks — argument vs output', () => {
         expect(getDramFallbacks([view], NO_FAILURES).size).toBe(0);
     });
 
+    // Newer multi-device reports set both: the scalar is one device's, the list has them all.
+    it('compares every device in the address list, not only the scalar address', () => {
+        const operation = requestingL1({
+            inputs: [makeTensor({ ...dramInput, device_addresses: [INPUT_ADDRESS, INPUT_ADDRESS] })],
+            outputs: [
+                makeTensor({
+                    id: 11,
+                    address: INPUT_ADDRESS,
+                    buffer_type: BufferType.DRAM,
+                    device_addresses: [INPUT_ADDRESS, OUTPUT_ADDRESS],
+                }),
+            ],
+        });
+
+        expect(getDramFallbacks([operation], NO_FAILURES).size).toBe(1);
+    });
+
+    it('flags a multi-device output that matches its input on only some devices', () => {
+        const operation = requestingL1({
+            inputs: [
+                makeTensor({
+                    ...dramInput,
+                    address: null,
+                    device_id: null,
+                    device_addresses: [INPUT_ADDRESS, 2097152],
+                }),
+            ],
+            outputs: [
+                makeTensor({
+                    id: 11,
+                    address: null,
+                    device_id: null,
+                    buffer_type: BufferType.DRAM,
+                    device_addresses: [INPUT_ADDRESS, OUTPUT_ADDRESS],
+                }),
+            ],
+        });
+
+        expect(getDramFallbacks([operation], NO_FAILURES).size).toBe(1);
+    });
+
+    it('ignores a multi-device view when a device is missing from the input', () => {
+        const operation = requestingL1({
+            inputs: [makeTensor({ ...dramInput, address: null, device_id: null, device_addresses: [INPUT_ADDRESS] })],
+            outputs: [
+                makeTensor({
+                    id: 11,
+                    address: null,
+                    device_id: null,
+                    buffer_type: BufferType.DRAM,
+                    device_addresses: [INPUT_ADDRESS, OUTPUT_ADDRESS],
+                }),
+            ],
+        });
+
+        expect(getDramFallbacks([operation], NO_FAILURES).size).toBe(0);
+    });
+
     // A conv2d with `deallocate_activation` frees its input, and a new buffer can land there.
     it('flags a DRAM output at its input address with a different element count', () => {
         const operation = requestingL1({

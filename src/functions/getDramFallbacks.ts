@@ -26,25 +26,30 @@ export type DramFallbackOperation = Pick<Operation, 'id' | 'name' | 'inputs' | '
     arguments: OperationArgument[];
 };
 
-interface DeviceAddress {
-    deviceId: number | null;
-    address: number;
-}
-
 /**
- * Where the tensor sits on each device. Older multi-device reports leave a mesh tensor's
- * `address` null and record one address per device, indexed by device id, instead.
+ * Where the tensor sits on each device, keyed by device id. Multi-device reports record one
+ * address per device, indexed by device id; older ones leave a mesh tensor's `address` null.
+ * The scalar `address` fills in its own device where the list has no entry.
  */
 const getDeviceAddresses = ({
     address,
     device_id: deviceId,
     device_addresses: deviceAddresses,
-}: Tensor): DeviceAddress[] =>
-    address !== null
-        ? [{ deviceId, address }]
-        : (deviceAddresses ?? []).flatMap((deviceAddress, index) =>
-              deviceAddress !== null ? [{ deviceId: index, address: deviceAddress }] : [],
-          );
+}: Tensor): Map<number | null, number> => {
+    const addressByDeviceId = new Map<number | null, number>();
+
+    (deviceAddresses ?? []).forEach((deviceAddress, index) => {
+        if (deviceAddress !== null) {
+            addressByDeviceId.set(index, deviceAddress);
+        }
+    });
+
+    if (address !== null && !addressByDeviceId.has(deviceId)) {
+        addressByDeviceId.set(deviceId, address);
+    }
+
+    return addressByDeviceId;
+};
 
 const shapePattern = /^(?:Shape|torch\.Size)\(\[([\d,\s]*)\]\)$/;
 
@@ -62,8 +67,10 @@ const getElementCount = (shape: string | undefined): number | null => {
 
 /**
  * Whether the output may be a view of the input: same element count, and the same address on
- * the same device. L1 and each device's DRAM are separate address spaces, so an equal number
- * elsewhere is not a view. When either address is unknown, aliasing can't be ruled out.
+ * every device both are known on, with at least one such device. L1 and each device's DRAM
+ * are separate address spaces, so an equal number elsewhere is not a view, and one matching
+ * shard of a mesh tensor does not make the rest a view. When either tensor has no known
+ * address, aliasing can't be ruled out.
  * The element count separates a view from a new buffer reusing a freed input's address, as a
  * conv2d's prepared weights do after `deallocate_activation`.
  */
@@ -78,14 +85,15 @@ const mayAlias = (output: Tensor, input: Tensor): boolean => {
     const outputAddresses = getDeviceAddresses(output);
     const inputAddresses = getDeviceAddresses(input);
 
+    if (outputAddresses.size === 0 || inputAddresses.size === 0) {
+        return true;
+    }
+
+    const sharedDeviceIds = [...outputAddresses.keys()].filter((deviceId) => inputAddresses.has(deviceId));
+
     return (
-        outputAddresses.length === 0 ||
-        inputAddresses.length === 0 ||
-        outputAddresses.some(({ deviceId, address }) =>
-            inputAddresses.some(
-                (inputAddress) => inputAddress.deviceId === deviceId && inputAddress.address === address,
-            ),
-        )
+        sharedDeviceIds.length > 0 &&
+        sharedDeviceIds.every((deviceId) => outputAddresses.get(deviceId) === inputAddresses.get(deviceId))
     );
 };
 
