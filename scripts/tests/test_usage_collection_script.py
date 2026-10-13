@@ -117,6 +117,7 @@ def test_renderer_and_compose_accept_an_enabled_config(tmp_path):
             {
                 "enabled": True,
                 "remote_write_endpoint": "https://metrics.example/write",
+                "remote_write_bearer_token": "secret-token",
             }
         ),
         encoding="utf-8",
@@ -146,6 +147,10 @@ def test_renderer_and_compose_accept_an_enabled_config(tmp_path):
     assert prometheus_config["remote_write"] == [
         {
             "url": "https://metrics.example/write",
+            "authorization": {
+                "type": "Bearer",
+                "credentials_file": "/etc/prometheus/remote-write.token",
+            },
             "write_relabel_configs": [
                 {
                     "source_labels": ["__name__"],
@@ -159,7 +164,12 @@ def test_renderer_and_compose_accept_an_enabled_config(tmp_path):
     assert len(prometheus_config["global"]["external_labels"]["machine_id"]) == 32
     assert stat.S_IMODE(output_path.stat().st_mode) == 0o644
 
-    compose_environment = os.environ | {"PROMETHEUS_CONFIG_FILE": str(output_path)}
+    compose_environment = os.environ | {
+        "PROMETHEUS_CONFIG_FILE": str(output_path),
+        "PROMETHEUS_REMOTE_WRITE_TOKEN_FILE": str(
+            tmp_path / "prometheus.remote-write.token"
+        ),
+    }
     compose = subprocess.run(
         [
             "docker",

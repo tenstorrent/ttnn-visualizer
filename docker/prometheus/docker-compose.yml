@@ -15,6 +15,14 @@ services:
     restart: unless-stopped
     volumes:
       - ${PROMETHEUS_CONFIG_FILE:-./prometheus.generated.yml}:/etc/prometheus/prometheus.yml:ro
+      # Long syntax so a missing token file fails the start instead of Docker creating
+      # a directory in its place. The renderer always writes it, empty without a token.
+      - type: bind
+        source: ${PROMETHEUS_REMOTE_WRITE_TOKEN_FILE:-./prometheus.remote-write.token}
+        target: /etc/prometheus/remote-write.token
+        read_only: true
+        bind:
+          create_host_path: false
       - prometheus-data:/prometheus
 
 volumes:

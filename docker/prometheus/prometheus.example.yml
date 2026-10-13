@@ -16,6 +16,10 @@ scrape_configs:
           - host.docker.internal:8000
 remote_write:
   - url: https://prometheus.example/api/v1/write
+    # Present only when collection.json sets remote_write_bearer_token.
+    authorization:
+      type: Bearer
+      credentials_file: /etc/prometheus/remote-write.token
     write_relabel_configs:
       - source_labels:
           - __name__

@@ -12,7 +12,7 @@ import os
 import re
 import tempfile
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, Optional, Sequence
 from urllib.parse import urlsplit
@@ -24,6 +24,10 @@ logger = logging.getLogger(__name__)
 
 COLLECTION_CONFIG_FILENAME = "collection.json"
 GENERATED_PROMETHEUS_FILENAME = "prometheus.generated.yml"
+# Written beside the generated config and mounted read-only at the container path, so
+# the generated config references the token without holding it.
+REMOTE_WRITE_TOKEN_FILENAME = "prometheus.remote-write.token"
+CONTAINER_REMOTE_WRITE_TOKEN_PATH = "/etc/prometheus/remote-write.token"
 # Mirror the ``PORT`` and ``BASE_PATH`` defaults in ``settings.Config``. The renderer is
 # a standalone CLI that runs without building ``Config``, so a change there must be
 # repeated here.
@@ -46,6 +50,8 @@ COLLECTION_CONFIG_PATH: Optional[Path] = None
 class UsageCollectionConfig:
     enabled: bool = False
     remote_write_endpoint: Optional[str] = None
+    # Excluded from ``repr`` so logging or printing a config never reveals the secret.
+    remote_write_bearer_token: Optional[str] = field(default=None, repr=False)
     machine_id: Optional[str] = None
     error: Optional[str] = None
 
@@ -83,11 +89,9 @@ def _validate_remote_write_endpoint(value: Any) -> str:
         parsed.port
     except ValueError as error:
         raise ValueError("remote_write_endpoint has an invalid port") from error
-    # TODO: Authenticate remote-write requests. Credentials are refused here because the
-    # URL is persisted in plain JSON and rendered into the generated Prometheus config,
-    # which leaves the receiver accepting anonymous writes from anyone who learns its
-    # URL. Support a secret read from a separate read-only file instead, rendered as
-    # Prometheus ``authorization.credentials_file`` or ``basic_auth.password_file``.
+    # Credentials are refused because the URL is rendered into the generated Prometheus
+    # config, which is readable by other local users. Authenticate with
+    # ``remote_write_bearer_token`` instead, which is rendered to a separate file.
     if parsed.username is not None or parsed.password is not None:
         raise ValueError("remote_write_endpoint must not contain credentials")
     if parsed.query:
@@ -98,6 +102,19 @@ def _validate_remote_write_endpoint(value: Any) -> str:
         raise ValueError("remote_write_endpoint must use HTTPS outside loopback")
 
     return endpoint
+
+
+def _validate_remote_write_bearer_token(value: Any) -> str:
+    # Messages never include the value, because they are logged and printed.
+    if not isinstance(value, str) or not value:
+        raise ValueError("remote_write_bearer_token must be a non-empty string")
+    # Rejects whitespace too: Prometheus trims the credentials file, so surrounding
+    # whitespace would be silently dropped, and inner whitespace is not a valid token.
+    if not value.isprintable() or any(character.isspace() for character in value):
+        raise ValueError(
+            "remote_write_bearer_token must not contain whitespace or control characters"
+        )
+    return value
 
 
 def _validate_machine_id(value: Any) -> str:
@@ -114,7 +131,12 @@ def _read_object(path: Path) -> Dict[str, Any]:
     raw = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(raw, dict):
         raise ValueError("collection config must be a JSON object")
-    unknown = set(raw) - {"enabled", "remote_write_endpoint", "machine_id"}
+    unknown = set(raw) - {
+        "enabled",
+        "remote_write_endpoint",
+        "remote_write_bearer_token",
+        "machine_id",
+    }
     if unknown:
         raise ValueError("collection config contains unknown fields")
     return raw
@@ -170,6 +192,14 @@ def _load_config(persist: bool) -> UsageCollectionConfig:
             if endpoint_value is not None
             else None
         )
+        token_value = data.get("remote_write_bearer_token")
+        token = (
+            _validate_remote_write_bearer_token(token_value)
+            if token_value is not None
+            else None
+        )
+        if token is not None and endpoint is None:
+            raise ValueError("remote_write_bearer_token needs a remote_write_endpoint")
         machine_id_value = data.get("machine_id")
         machine_id = (
             _validate_machine_id(machine_id_value)
@@ -186,6 +216,7 @@ def _load_config(persist: bool) -> UsageCollectionConfig:
         return UsageCollectionConfig(
             enabled=True,
             remote_write_endpoint=endpoint,
+            remote_write_bearer_token=token,
             machine_id=machine_id,
         )
     except (OSError, RuntimeError, ValueError, json.JSONDecodeError) as error:
@@ -274,22 +305,24 @@ def build_prometheus_config(
 
     rendered["global"]["external_labels"] = {MACHINE_ID_LABEL: config.machine_id}
     if config.remote_write_endpoint:
-        rendered["remote_write"] = [
-            {
-                "url": config.remote_write_endpoint,
-                "write_relabel_configs": [
-                    {
-                        "source_labels": ["__name__"],
-                        "regex": EXPORTED_METRIC_PATTERN,
-                        "action": "keep",
-                    },
-                    {
-                        "regex": TARGET_IDENTITY_LABEL_PATTERN,
-                        "action": "labeldrop",
-                    },
-                ],
+        remote_write: Dict[str, Any] = {"url": config.remote_write_endpoint}
+        if config.remote_write_bearer_token:
+            remote_write["authorization"] = {
+                "type": "Bearer",
+                "credentials_file": CONTAINER_REMOTE_WRITE_TOKEN_PATH,
             }
+        remote_write["write_relabel_configs"] = [
+            {
+                "source_labels": ["__name__"],
+                "regex": EXPORTED_METRIC_PATTERN,
+                "action": "keep",
+            },
+            {
+                "regex": TARGET_IDENTITY_LABEL_PATTERN,
+                "action": "labeldrop",
+            },
         ]
+        rendered["remote_write"] = [remote_write]
     return rendered
 
 
@@ -320,6 +353,14 @@ def render_prometheus_config(
         base_path=base_path,
     )
     output_path.parent.mkdir(parents=True, exist_ok=True)
+    # Written even when empty, so the Compose bind mount always has a source and a
+    # removed token does not linger. Container-readable for the same reason as the
+    # config: the unprivileged Prometheus user does not own it.
+    _write_text_atomically(
+        output_path.parent / REMOTE_WRITE_TOKEN_FILENAME,
+        config.remote_write_bearer_token or "",
+        mode=CONTAINER_READABLE_FILE_MODE,
+    )
     _write_text_atomically(
         output_path,
         yaml.safe_dump(rendered, sort_keys=False),

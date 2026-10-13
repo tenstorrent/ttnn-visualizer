@@ -43,7 +43,7 @@ def reset_usage_metrics_state(monkeypatch, event_log_directory):
 
 
 def _write_config(path: Path, **values):
-    path.parent.mkdir(parents=True)
+    path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(values), encoding="utf-8")
 
 
@@ -237,6 +237,27 @@ def test_preparing_normalises_a_hyphenated_machine_id(usage_collection_config_pa
             "remote_write_endpoint": "https://metrics.example/write",
             "machine_id": "not-a-uuid",
         },
+        {"enabled": True, "remote_write_bearer_token": "secret"},
+        {
+            "enabled": True,
+            "remote_write_endpoint": "https://metrics.example/write",
+            "remote_write_bearer_token": "",
+        },
+        {
+            "enabled": True,
+            "remote_write_endpoint": "https://metrics.example/write",
+            "remote_write_bearer_token": 123,
+        },
+        {
+            "enabled": True,
+            "remote_write_endpoint": "https://metrics.example/write",
+            "remote_write_bearer_token": "secret\n",
+        },
+        {
+            "enabled": True,
+            "remote_write_endpoint": "https://metrics.example/write",
+            "remote_write_bearer_token": "two words",
+        },
     ],
 )
 def test_invalid_config_fails_closed(usage_collection_config_path, values):
@@ -246,6 +267,34 @@ def test_invalid_config_fails_closed(usage_collection_config_path, values):
 
     assert config.enabled is False
     assert config.error
+
+
+def test_invalid_bearer_token_is_not_reported(usage_collection_config_path):
+    _write_config(
+        usage_collection_config_path,
+        enabled=True,
+        remote_write_endpoint="https://metrics.example/write",
+        remote_write_bearer_token="top secret",
+    )
+
+    config = usage_collection.load_usage_collection_config()
+
+    assert config.error
+    assert "secret" not in config.error
+
+
+def test_bearer_token_is_loaded_but_not_shown(usage_collection_config_path):
+    _write_config(
+        usage_collection_config_path,
+        enabled=True,
+        remote_write_endpoint="https://metrics.example/write",
+        remote_write_bearer_token="secret-token",
+    )
+
+    config = usage_collection.load_usage_collection_config()
+
+    assert config.remote_write_bearer_token == "secret-token"
+    assert "secret-token" not in repr(config)
 
 
 def test_malformed_json_fails_closed(usage_collection_config_path):
@@ -340,6 +389,23 @@ def test_prometheus_config_wires_target_identity_and_remote_write(
             ],
         }
     ]
+
+
+def test_prometheus_config_references_the_bearer_token_file():
+    config = usage_collection.UsageCollectionConfig(
+        enabled=True,
+        remote_write_endpoint="https://metrics.example/write",
+        remote_write_bearer_token="secret-token",
+        machine_id=uuid.uuid4().hex,
+    )
+
+    rendered = usage_collection.build_prometheus_config(config)
+
+    assert rendered["remote_write"][0]["authorization"] == {
+        "type": "Bearer",
+        "credentials_file": "/etc/prometheus/remote-write.token",
+    }
+    assert "secret-token" not in yaml.safe_dump(rendered)
 
 
 def test_disabled_prometheus_config_omits_remote_write_and_identity():
@@ -445,7 +511,38 @@ def test_renderer_writes_valid_yaml(usage_collection_config_path, tmp_path):
         },
         {"regex": "job|instance", "action": "labeldrop"},
     ]
+    assert "authorization" not in parsed["remote_write"][0]
     assert stat.S_IMODE(output.stat().st_mode) == 0o644
+    token_path = tmp_path / usage_collection.REMOTE_WRITE_TOKEN_FILENAME
+    assert token_path.read_text(encoding="utf-8") == ""
+
+
+def test_renderer_writes_the_bearer_token_beside_the_config(
+    usage_collection_config_path, tmp_path
+):
+    _write_config(
+        usage_collection_config_path,
+        enabled=True,
+        remote_write_endpoint="https://metrics.example/write",
+        remote_write_bearer_token="secret-token",
+    )
+    output = tmp_path / "prometheus.yml"
+    token_path = tmp_path / usage_collection.REMOTE_WRITE_TOKEN_FILENAME
+
+    usage_collection.render_prometheus_config(output)
+
+    assert "secret-token" not in output.read_text(encoding="utf-8")
+    assert token_path.read_text(encoding="utf-8") == "secret-token"
+    assert stat.S_IMODE(token_path.stat().st_mode) == 0o644
+
+    _write_config(
+        usage_collection_config_path,
+        enabled=True,
+        remote_write_endpoint="https://metrics.example/write",
+    )
+    usage_collection.render_prometheus_config(output)
+
+    assert token_path.read_text(encoding="utf-8") == ""
 
 
 def test_renderer_preserves_existing_config_when_atomic_replace_fails(
@@ -530,6 +627,7 @@ def test_example_prometheus_config_matches_the_builder():
     config = usage_collection.UsageCollectionConfig(
         enabled=True,
         remote_write_endpoint="https://prometheus.example/api/v1/write",
+        remote_write_bearer_token="token",
         machine_id="0" * 32,
     )
 
