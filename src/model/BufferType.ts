@@ -47,9 +47,29 @@ export const isL1BufferType = (bufferType: BufferType | null | undefined): boole
 export const toStringBufferType = (name: string | null | undefined): StringBufferType | null =>
     name != null && Object.hasOwn(StringBufferTypeToBufferType, name) ? (name as StringBufferType) : null;
 
-/** The `BufferType` a raw string names, or `null` when it names none this app knows. */
-export const toBufferType = (name: string | null | undefined): BufferType | null => {
-    const stringBufferType = toStringBufferType(name);
+const CPP_ENUM_PREFIX = 'BufferType::';
+
+/**
+ * A recorded buffer type as a `BufferType`, or `null` when it names none this app
+ * knows. Captures write the enum's value, but at least one writes its C++ name
+ * (`'BufferType::DRAM'`) instead, and string fields carry the bare name.
+ */
+export const toBufferType = (value: unknown): BufferType | null => {
+    if (typeof value === 'number') {
+        return BufferType[value] !== undefined ? value : null;
+    }
+
+    if (typeof value !== 'string') {
+        return null;
+    }
+
+    if (/^\d+$/.test(value)) {
+        return toBufferType(Number(value));
+    }
+
+    const stringBufferType = toStringBufferType(
+        value.startsWith(CPP_ENUM_PREFIX) ? value.slice(CPP_ENUM_PREFIX.length) : value,
+    );
 
     return stringBufferType === null ? null : StringBufferTypeToBufferType[stringBufferType];
 };

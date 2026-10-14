@@ -40,6 +40,7 @@ import {
     DeviceOperationAnalysisResult,
 } from '../../definitions/DeviceOperationAnalysis';
 import { analyseDeviceOperation } from '../../functions/analyseDeviceOperation';
+import { getNodeBufferType, getNodeStringBufferType } from '../../functions/getNodeBufferType';
 import { isDeviceOperation } from '../../functions/filterOperations';
 import { ScopeClose, getScopeOutcomes } from '../../functions/scopeOutcomes';
 import { ScopeOutcome } from '../../definitions/ScopeOutcome';
@@ -79,16 +80,17 @@ const renderBufferDetails = ({ bufferOrTensorNode, optionalOutput, details }: Bu
     let address = allocation?.params.address !== undefined ? parseInt(allocation.params.address, 10) : undefined;
     const size: number | undefined = parseInt(bufferOrTensorNode.params.size, 10);
     let layout = '';
-    let { type } = bufferOrTensorNode.params;
+    const bufferType = getNodeBufferType(bufferOrTensorNode);
+    const type = bufferType !== undefined ? BufferTypeToStringBufferType[bufferType] : bufferOrTensorNode.params.type;
     let dtype = null;
     if (bufferOrTensorNode.node_type === NodeType.tensor) {
         const { params } = bufferOrTensorNode;
         address = params.address !== undefined ? parseInt(params.address, 10) : undefined;
         layout = toReadableLayout(params.layout) || '';
-        type = BufferTypeToStringBufferType[params.buffer_type];
         dtype = params.dtype || null;
     }
-    const tensor: Tensor | undefined = address !== undefined ? details.tensorListByAddress.get(address) : undefined;
+    const tensor: Tensor | undefined =
+        address !== undefined ? (details.getTensorForNode(address, bufferType) ?? undefined) : undefined;
 
     if (address === undefined && tensor?.id === undefined) {
         tensorSquare = null;
@@ -123,7 +125,8 @@ const renderTensorLabel = (
 ) => {
     const layout = node.buffer?.[0]?.params.layout;
     const address = node.params.address !== undefined ? parseInt(node.params.address, 10) : undefined;
-    const tensor: Tensor | undefined = address !== undefined ? details.tensorListByAddress.get(address) : undefined;
+    const tensor: Tensor | undefined =
+        address !== undefined ? (details.getTensorForNode(address, getNodeBufferType(node)) ?? undefined) : undefined;
 
     const square = tensor?.id === undefined && address === undefined ? null : getColorSquare(address, tensor?.id);
 
@@ -491,7 +494,7 @@ function useDeviceOperationsFullRenderModel(args: {
                                     selectedTensorAddress={selectedAddress}
                                     operationDetails={details}
                                     onLegendClick={onLegendClick}
-                                    bufferType={buffer.type}
+                                    bufferType={getNodeStringBufferType(node)}
                                     layout={buffer.layout}
                                 />
                                 <div
@@ -527,7 +530,7 @@ function useDeviceOperationsFullRenderModel(args: {
                                     selectedTensorAddress={selectedAddress}
                                     operationDetails={details}
                                     onLegendClick={onLegendClick}
-                                    bufferType={buffer.type}
+                                    bufferType={getNodeStringBufferType(node)}
                                 />
                                 <div
                                     className='memory-info-placeholder'
