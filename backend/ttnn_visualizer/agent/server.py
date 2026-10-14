@@ -31,6 +31,7 @@ from ttnn_visualizer.event_logging import (
     McpToolOutcome,
     compact_if_needed,
     describe_opt_out,
+    get_application_version,
     get_event_log_path,
     get_recording_disabled_reason,
     is_recording_enabled,
@@ -379,7 +380,10 @@ def handle_message(message: object, table: Dict[str, Dict]) -> Optional[Dict]:
             {
                 "protocolVersion": PROTOCOL_VERSION,
                 "capabilities": {"tools": {}},
-                "serverInfo": {"name": SERVER_NAME, "version": "0.1.0"},
+                "serverInfo": {
+                    "name": SERVER_NAME,
+                    "version": get_application_version(),
+                },
             },
         )
 
