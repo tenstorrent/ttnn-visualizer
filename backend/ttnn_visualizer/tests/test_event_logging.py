@@ -17,6 +17,7 @@ import shutil
 import subprocess
 import sys
 import time
+from importlib.metadata import PackageNotFoundError
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -34,12 +35,14 @@ from ttnn_visualizer.event_logging import (
     RUN_ID_ENV_VAR,
     RUN_ID_FIELD,
     SERVER_EVENT_DETAIL_FIELDS,
+    UNKNOWN_VALUE,
     DeploymentMode,
     EventLogEvent,
     EventLogView,
     LaunchMode,
     ReportKind,
     ReportLoadFailureReason,
+    get_application_version,
     get_deployment_mode,
     get_event_log_path,
     get_launch_mode,
@@ -489,8 +492,15 @@ def test_an_event_round_trips_as_logfmt(event_log_directory):
 
 @pytest.mark.parametrize(
     "value",
-    ["two words", "with\nnewline", "key=value", 'quote"', "path/to/report"],
-    ids=["space", "newline", "separator", "quote", "path"],
+    [
+        "two words",
+        "with\nnewline",
+        "trailing\n",
+        "key=value",
+        'quote"',
+        "path/to/report",
+    ],
+    ids=["space", "newline", "trailing-newline", "separator", "quote", "path"],
 )
 def test_an_unsafe_value_writes_no_line_at_all(event_log_directory, value):
     # A partial line would be worse than none: an embedded newline forges a whole
@@ -686,6 +696,48 @@ def test_launch_mode_is_wheel_for_a_regular_distribution(monkeypatch):
 
 def test_launch_mode_is_hosted_in_server_mode():
     assert get_launch_mode(server_mode=True) == LaunchMode.HOSTED
+
+
+def _not_installed(_name):
+    raise PackageNotFoundError(_name)
+
+
+def test_application_version_reads_the_installed_distribution(monkeypatch):
+    monkeypatch.setattr(event_logging, "distribution_version", lambda _name: "1.2.3")
+
+    assert get_application_version() == "1.2.3"
+
+
+def test_application_version_falls_back_to_package_json(monkeypatch):
+    monkeypatch.setattr(event_logging, "distribution_version", _not_installed)
+    monkeypatch.setattr(
+        event_logging, "read_version_from_package_json", lambda: "0.80.0"
+    )
+
+    assert get_application_version() == "0.80.0"
+
+
+@pytest.mark.parametrize("error", [OSError, KeyError, ValueError])
+def test_application_version_is_unknown_when_no_source_answers(monkeypatch, error):
+    # Callers read `unknown` as "cannot verify", so a missing source must not raise.
+    def _unreadable():
+        raise error("package.json")
+
+    monkeypatch.setattr(event_logging, "distribution_version", _not_installed)
+    monkeypatch.setattr(event_logging, "read_version_from_package_json", _unreadable)
+
+    assert get_application_version() == UNKNOWN_VALUE
+
+
+@pytest.mark.parametrize(
+    "version",
+    ["1.0 beta", "1.0\n", "1.0=2"],
+    ids=["space", "trailing-newline", "separator"],
+)
+def test_application_version_is_unknown_when_unsafe(monkeypatch, version):
+    monkeypatch.setattr(event_logging, "distribution_version", lambda _name: version)
+
+    assert get_application_version() == UNKNOWN_VALUE
 
 
 def _write_log(directory: Path, lines):
