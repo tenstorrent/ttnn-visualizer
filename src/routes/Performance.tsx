@@ -4,7 +4,7 @@
 
 import { Helmet } from 'react-helmet-async';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Size, Tab, Tabs } from '@blueprintjs/core';
+import { Callout, Intent, Size, Tab, Tabs } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { useAtom, useAtomValue } from 'jotai';
 import { HttpStatusCode } from 'axios';
@@ -42,6 +42,7 @@ import { clampSelectionToRange } from '../functions/perfRangeSelection';
 import ComparisonReportSelector from '../components/performance/ComparisonReportSelector';
 import 'styles/routes/Performance.scss';
 import getServerConfig from '../functions/getServerConfig';
+import { TEST_IDS } from '../definitions/TestIds';
 import { OpType, PerfTabIds } from '../definitions/Performance';
 import { StackedColumnKeys, StackedPerfRow, TypedStackedPerfRow } from '../definitions/StackedPerfTable';
 
@@ -69,7 +70,11 @@ export default function Performance() {
         isLoading: isLoadingPerformance,
         error: perfDataError,
     } = usePerformanceReport(activeReportFolderName);
-    const { data: comparisonData, isLoading: isLoadingComparison } = usePerformanceComparisonReport();
+    const {
+        data: comparisonData,
+        isLoading: isLoadingComparison,
+        error: comparisonError,
+    } = usePerformanceComparisonReport();
     const { data: folderList } = usePerfFolderList();
     const perfRange = usePerformanceRange();
     const opIdsMap = useOpToPerfIdFiltered();
@@ -329,6 +334,20 @@ export default function Performance() {
                 ) : (
                     <LoadingSpinner />
                 ))}
+
+            {/* Comparisons are read with the active report's signpost range, which a
+                comparison report need not hold. Said here rather than left as no data. */}
+            {comparisonError && (
+                <Callout
+                    className='comparison-error'
+                    data-testid={TEST_IDS.PERF_COMPARISON_ERROR}
+                    intent={Intent.DANGER}
+                    title='Comparison reports could not be loaded'
+                    compact
+                >
+                    {comparisonError.message}
+                </Callout>
+            )}
 
             <Tabs
                 id='performance-tabs'

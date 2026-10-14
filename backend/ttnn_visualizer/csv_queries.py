@@ -51,8 +51,13 @@ CSVFilters = Dict[str, Optional[Union[str, int]]]
 SIGNPOST_OP_TYPE = "signpost"
 
 # A report row's id is its line in the CSV: data rows count from 0, plus one for
-# the header and one because lines number from 1.
-_SIGNPOST_ID_OFFSET = 2
+# the header and one because lines number from 1. Both the report's rows and its
+# `signposts` list are numbered this way, and a refusal must name the same ids.
+SIGNPOST_ID_OFFSET = 2
+
+# tt-perf-report orders rows by this column before it resolves a signpost, unless
+# tracing mode is on.
+_HOST_START_COLUMN = "HOST START TS"
 
 # Signpost names a refusal lists. A capture can emit one per layer or iteration;
 # the list is there to show a typo its neighbours, not to inventory the report.
@@ -952,7 +957,7 @@ class OpsPerformanceReportQueries:
         for index, row in enumerate(ops_perf_results):
             if row.get("OP TYPE") == SIGNPOST_OP_TYPE:
                 op_code = row["OP CODE"]
-                op_id = index + 2  # Match IDs with row numbers in ops perf results csv
+                op_id = index + SIGNPOST_ID_OFFSET
                 if not any(s["op_code"] == op_code for s in signposts):
                     captured_signposts.add(op_code)
                     signposts.append(
@@ -1056,7 +1061,12 @@ class OpsPerformanceReportQueries:
                 f"CSV must have at least header + 1 data row, got {len(csv_lines)} lines"
             )
 
-        check_signpost_range(raw_csv, options.start_signpost, options.end_signpost)
+        check_signpost_range(
+            raw_csv,
+            options.start_signpost,
+            options.end_signpost,
+            tracing_mode=options.tracing_mode,
+        )
 
         # Determine if we should skip stacked report
         data_row_count = len(csv_lines) - 1
@@ -1276,17 +1286,24 @@ class OpsPerformanceReportQueries:
 
 
 def check_signpost_range(
-    raw_csv: str, start_signpost: Optional[str], end_signpost: Optional[str]
+    raw_csv: str,
+    start_signpost: Optional[str],
+    end_signpost: Optional[str],
+    tracing_mode: bool = False,
 ) -> None:
     """Refuse a signpost range tt-perf-report would answer from different rows.
 
     `filter_by_signpost` only warns about a name it cannot find. With neither name
     found it falls back to the rows after the last signpost, and with one found it
     drops the other bound, so a mistyped name returns a full-looking report of the
-    wrong window. An end that occurs before the start returns no rows at all. Each
-    bound resolves to its name's first occurrence -- the end to its second when it
-    names the start too -- and they compare by position in the file, before the
-    report sorts by host start time.
+    wrong window. An end that falls before the start returns no rows at all.
+
+    Which occurrence a bound resolves to is tt-perf-report's choice, so this reads
+    the rows the way `generate_perf_report` does: sorted by `HOST START TS` unless
+    tracing mode is on, which makes a bound its name's earliest by host time rather
+    than its first in the file -- the end its second when it names the start too.
+    The window is then cut by file position. The read and sort are pandas', as the
+    library's are, so equal timestamps order the same way in both.
 
     Ids are the ones the report and its `signposts` list give rows, so a refusal
     names the same row a reader sees.
@@ -1294,10 +1311,19 @@ def check_signpost_range(
     if not start_signpost and not end_signpost:
         return
 
+    wanted = {"OP TYPE", "OP CODE", _HOST_START_COLUMN}
+    rows = pd.read_csv(
+        StringIO(raw_csv), usecols=lambda column: column in wanted, low_memory=False
+    )
+    sorted_by_host_time = _HOST_START_COLUMN in rows.columns and not tracing_mode
+    if sorted_by_host_time:
+        rows = rows.sort_values(by=_HOST_START_COLUMN)
+
     positions: Dict[str, List[int]] = defaultdict(list)
-    for position, row in enumerate(csv.DictReader(StringIO(raw_csv))):
-        if row.get("OP TYPE") == SIGNPOST_OP_TYPE:
-            positions[row.get("OP CODE") or ""].append(position)
+    if "OP TYPE" in rows.columns and "OP CODE" in rows.columns:
+        signposts = rows[rows["OP TYPE"] == SIGNPOST_OP_TYPE]
+        for position, name in zip(signposts.index, signposts["OP CODE"]):
+            positions[str(name)].append(int(position))
 
     def occurrences(name: str) -> List[int]:
         if name in positions:
@@ -1319,23 +1345,23 @@ def check_signpost_range(
         return
 
     end_occurrences = occurrences(end_signpost)
-    if end_signpost == start_signpost:
-        if len(end_occurrences) < 2:
-            raise InvalidSignpostRange(
-                f"signpost {end_signpost!r} occurs once, so it cannot bound both "
-                "ends of a range: a range that starts and ends on one name ends at "
-                "its second occurrence"
-            )
-        end = end_occurrences[1]
-    else:
-        end = end_occurrences[0]
+    end_is_second = end_signpost == start_signpost
+    if end_is_second and len(end_occurrences) < 2:
+        raise InvalidSignpostRange(
+            f"signpost {end_signpost!r} occurs once, so it cannot bound both ends "
+            "of a range: a range that starts and ends on one name ends at its "
+            "second occurrence"
+        )
+    end = end_occurrences[1 if end_is_second else 0]
 
     if start is not None and end < start:
+        order = "host start time" if sorted_by_host_time else "file position"
         raise InvalidSignpostRange(
-            f"end signpost {end_signpost!r} first occurs at id "
-            f"{end + _SIGNPOST_ID_OFFSET}, before start signpost {start_signpost!r} "
-            f"at id {start + _SIGNPOST_ID_OFFSET}; each bound uses its name's first "
-            "occurrence, so this range holds no rows"
+            f"end signpost {end_signpost!r} resolves to id "
+            f"{end + SIGNPOST_ID_OFFSET}, before start signpost {start_signpost!r} "
+            f"at id {start + SIGNPOST_ID_OFFSET}, so this range holds no rows: the "
+            f"start is its name's first occurrence by {order} and the end its "
+            f"{'second' if end_is_second else 'first'}"
         )
 
 

@@ -100,6 +100,7 @@ import { parseNpeAxiosResponseData } from '../functions/parseNpeAxiosResponseDat
 import { throwNpeClientAxiosError } from '../functions/throwNpeClientAxiosError';
 import validateNpeSummary from '../functions/validateNpeSummary';
 import validateNpeWindow from '../functions/validateNpeWindow';
+import getResponseError from '../functions/getResponseError';
 
 const EMPTY_PERF_RETURN = { report: [], stacked_report: [], signposts: [] };
 
@@ -1285,6 +1286,21 @@ export const useLinkedPerformanceReport = () => {
     return usePerformanceReportQuery(name, LINKED_PERFORMANCE_REPORT_PARAMS);
 };
 
+/**
+ * A comparison report the API would not return, named. The comparison reports
+ * share one request, so without the name a refusal reads as if it were about the
+ * active report.
+ */
+export class ComparisonReportError extends Error {
+    constructor(
+        readonly reportName: string,
+        readonly reason: unknown,
+    ) {
+        super(`${reportName}: ${getResponseError(reason, 'Failed to load performance data')}`);
+        this.name = 'ComparisonReportError';
+    }
+}
+
 export const usePerformanceComparisonReport = () => {
     const rawReportNames = useAtomValue(comparisonPerformanceReportListAtom);
     const location = useAtomValue(performanceReportLocationAtom);
@@ -1294,13 +1310,19 @@ export const usePerformanceComparisonReport = () => {
         return Array.isArray(rawReportNames) ? [...rawReportNames] : rawReportNames;
     }, [rawReportNames]);
 
-    const response = useQuery<PerformanceReportResponse[], AxiosError>({
+    const response = useQuery<PerformanceReportResponse[], ComparisonReportError>({
         queryFn: async () => {
             if (!reportNames || !Array.isArray(reportNames) || reportNames.length === 0) {
                 return [];
             }
 
-            const results = await Promise.all(reportNames.map((name) => fetchPerformanceReport(name, params)));
+            const results = await Promise.all(
+                reportNames.map((name) =>
+                    fetchPerformanceReport(name, params).catch((error: unknown) => {
+                        throw new ComparisonReportError(name, error);
+                    }),
+                ),
+            );
 
             return results;
         },
@@ -1311,6 +1333,8 @@ export const usePerformanceComparisonReport = () => {
             params,
         }),
         staleTime: Infinity,
+        // A refused signpost range fails the same way every time.
+        retry: false,
         enabled: !!reportNames,
     });
 

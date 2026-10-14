@@ -11,6 +11,8 @@ used to pass those straight through with a 200.
 """
 
 import csv
+from http import HTTPStatus
+from io import StringIO
 from pathlib import Path
 from unittest import mock
 
@@ -47,14 +49,32 @@ REPEATED = [
 ]
 
 
+# Host start times running against file order, so the earliest A by host time is
+# its last in the file. Positions: A at 0 and 4, B at 2.
+HOST_TIME_REVERSED = [
+    ("signpost", "A", "30"),
+    ("tt_dnn_device", "x", "25"),
+    ("signpost", "B", "20"),
+    ("tt_dnn_device", "y", "15"),
+    ("signpost", "A", "10"),
+]
+
+
 def _raw_csv(rows) -> str:
-    return "\n".join(["OP TYPE,OP CODE", *(",".join(row) for row in rows), ""])
+    header = "OP TYPE,OP CODE" + (",HOST START TS" if len(rows[0]) == 3 else "")
+    return "\n".join([header, *(",".join(row) for row in rows), ""])
 
 
-def _window(rows, start, end):
-    """The positions tt-perf-report itself keeps, with signposts printed."""
-    frame = pd.DataFrame(rows, columns=["OP TYPE", "OP CODE"])
-    return list(perf_report.filter_by_signpost(frame, start, end, False, True).index)
+def _window(rows, start, end, tracing_mode=False):
+    """The positions tt-perf-report itself keeps, with signposts printed.
+
+    Sorted first as `generate_perf_report` sorts before it filters, so the window is
+    the one the report would hold rather than the filter's alone.
+    """
+    frame = pd.read_csv(StringIO(_raw_csv(rows)))
+    if "HOST START TS" in frame.columns and not tracing_mode:
+        frame = frame.sort_values(by="HOST START TS")
+    return sorted(perf_report.filter_by_signpost(frame, start, end, False, True).index)
 
 
 class TestCheckSignpostRange:
@@ -116,11 +136,38 @@ class TestCheckSignpostRange:
     def test_an_end_before_the_start_is_refused_with_both_ids(self):
         # B first occurs at position 2 (id 4), A at 0 (id 2), so B..A is empty --
         # even though a later A follows the first B.
-        with pytest.raises(InvalidSignpostRange, match="at id 2.*at id 4") as raised:
+        with pytest.raises(
+            InvalidSignpostRange,
+            match="'A' resolves to id 2, before start signpost 'B' at id 4",
+        ) as raised:
             check_signpost_range(_raw_csv(REPEATED), "B", "A")
 
-        assert "'A' first occurs at id 2" in str(raised.value)
+        assert "first occurrence by file position" in str(raised.value)
         assert _window(REPEATED, "B", "A") == []
+
+    def test_a_bound_is_its_earliest_occurrence_by_host_time(self):
+        """tt-perf-report sorts by host start time before it resolves a name.
+
+        By file order A..B is the row between them; by host time A is the last row
+        in the file, after B, so the report would hold nothing.
+        """
+        with pytest.raises(InvalidSignpostRange, match="by host start time"):
+            check_signpost_range(_raw_csv(HOST_TIME_REVERSED), "A", "B")
+
+        assert _window(HOST_TIME_REVERSED, "A", "B") == []
+
+    def test_tracing_mode_resolves_by_file_order(self):
+        """Tracing mode leaves the rows unsorted, so the first A in the file counts."""
+        check_signpost_range(_raw_csv(HOST_TIME_REVERSED), "A", "B", tracing_mode=True)
+
+        assert _window(HOST_TIME_REVERSED, "A", "B", tracing_mode=True) == [1]
+
+    def test_one_name_for_both_bounds_resolves_by_host_time_too(self):
+        """The earliest A by host time is the later one in the file, so A..A is empty."""
+        with pytest.raises(InvalidSignpostRange, match="the end its second"):
+            check_signpost_range(_raw_csv(HOST_TIME_REVERSED), "A", "A")
+
+        assert _window(HOST_TIME_REVERSED, "A", "A") == []
 
 
 @pytest.fixture
@@ -179,17 +226,21 @@ class TestReportRoute:
             end_signpost="PERF_END",
         )
 
-        assert whole.status_code == ranged.status_code == 200
+        assert whole.status_code == ranged.status_code == HTTPStatus.OK
         ranged_ids = {int(row["id"]) for row in ranged.get_json()["report"]}
         whole_ids = {int(row["id"]) for row in whole.get_json()["report"]}
+        window = set(range(7, 15))
+        # Every row the whole report holds between the boundaries, and no other:
+        # a window one row short or long at either end changes the set.
+        assert ranged_ids == whole_ids & window
         assert ranged_ids
-        assert ranged_ids <= set(range(7, 15))
-        assert whole_ids - set(range(7, 15))
+        assert whole_ids - window
 
     @pytest.mark.parametrize(
         "signposts, message",
         [
             ({"start_signpost": "PERF_STRAT"}, "no signpost named 'PERF_STRAT'"),
+            ({"end_signpost": "PERF_ED"}, "no signpost named 'PERF_ED'"),
             (
                 {"start_signpost": "PERF_START", "end_signpost": "PERF_ED"},
                 "no signpost named 'PERF_ED'",
@@ -212,6 +263,6 @@ class TestReportRoute:
         ) as generate:
             response = self._get(client, signposted_instance, **signposts)
 
-        assert response.status_code == 400
+        assert response.status_code == HTTPStatus.BAD_REQUEST
         assert message in response.get_json()["error"]
         generate.assert_not_called()

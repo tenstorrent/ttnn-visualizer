@@ -33,6 +33,7 @@ import { BufferType } from '../src/model/BufferType';
 import { DeviceOperationLayoutTypes } from '../src/model/APIData';
 import { OperationCategories } from '../src/definitions/StackedPerfTable';
 import { L1PressureStatus } from '../src/model/L1Pressure';
+import { TEST_IDS } from '../src/definitions/TestIds';
 import { PerfTableRow } from '../src/model/PerfTable';
 import { PerfHeuristicFlag } from '../src/definitions/PerfHeuristics';
 import { OpType } from '../src/definitions/Performance';
@@ -373,6 +374,30 @@ describe('Performance route', () => {
             'Bound: DRAM',
         );
         expect(lastProps?.comparisonMaxCores).toEqual([130]);
+    });
+
+    it('says which comparison report could not be loaded rather than showing no comparison', () => {
+        (usePerformanceReport as Mock).mockReturnValue({
+            data: { report: [DRAM_PERF_ROW], stacked_report: [], signposts: [] },
+            isLoading: false,
+            error: null,
+        });
+        (usePerformanceComparisonReport as Mock).mockReturnValue({
+            data: undefined,
+            isLoading: false,
+            error: new Error("report-b: no signpost named 'PERF_DECODE' in this report"),
+        });
+        (usePerformanceRange as Mock).mockReturnValue([1, 1]);
+
+        render(
+            <TestProviders initialAtomValues={[[activePerformanceReportAtom, REPORT_A]]}>
+                <Performance />
+            </TestProviders>,
+        );
+
+        const callout = screen.getByTestId(TEST_IDS.PERF_COMPARISON_ERROR);
+        expect(callout).toHaveTextContent('Comparison reports could not be loaded');
+        expect(callout).toHaveTextContent("report-b: no signpost named 'PERF_DECODE' in this report");
     });
 
     it('marks active rows with their linked failure, lists it, and leaves comparison rows unmarked', () => {
