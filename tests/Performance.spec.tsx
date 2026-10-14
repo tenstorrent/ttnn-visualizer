@@ -40,6 +40,9 @@ import { TestProviders } from './helpers/TestProviders';
 import { makeAllocationFailure } from './helpers/allocationFailure';
 import { useAllocationFailures } from '../src/hooks/useAllocationFailures';
 import { AllocationFailure } from '../src/model/AllocationFailure';
+import { useDramFallbacks } from '../src/hooks/useDramFallbacks';
+import { DramFallback } from '../src/model/DramFallback';
+import { makeDramFallback } from './helpers/dramFallback';
 
 const perfReportProps = vi.hoisted(() => vi.fn());
 
@@ -56,6 +59,10 @@ vi.mock('../src/hooks/useAPI.tsx', () => ({
 
 vi.mock('../src/hooks/useAllocationFailures', () => ({
     useAllocationFailures: vi.fn(),
+}));
+
+vi.mock('../src/hooks/useDramFallbacks', () => ({
+    useDramFallbacks: vi.fn(),
 }));
 
 vi.mock('../src/functions/getServerConfig', () => ({
@@ -130,6 +137,7 @@ beforeEach(() => {
         listings: [],
         allocationFailureByOpId: new Map<number, AllocationFailure>(),
     });
+    (useDramFallbacks as Mock).mockReturnValue(new Map<number, DramFallback>());
 });
 
 function formatFilterProbe(values: unknown[]): string {
@@ -410,6 +418,61 @@ describe('Performance route', () => {
         expect(comparisonRow?.op).toBe(7);
         expect(comparisonRow?.allocation_failure).toBeNull();
         expect(comparisonRow?.heuristicFlags).not.toContain(PerfHeuristicFlag.ALLOCATION_FAILURE);
+    });
+
+    it('flags active rows with their linked DRAM fallback and leaves comparison rows unflagged', () => {
+        const fallback = makeDramFallback({ operationId: 7 });
+
+        (useDramFallbacks as Mock).mockReturnValue(new Map([[7, fallback]]));
+        (useOpToPerfIdFiltered as Mock).mockReturnValue([{ perfId: '1', opId: 7 }]);
+        (usePerformanceReport as Mock).mockReturnValue({
+            data: { report: [DRAM_PERF_ROW], stacked_report: [], signposts: [] },
+            isLoading: false,
+            error: null,
+        });
+        // Same perf id, so the op-id lookup resolves for the comparison row too: only the
+        // null linked data keeps the active report's fallback off it.
+        (usePerformanceComparisonReport as Mock).mockReturnValue({
+            data: [{ report: [DRAM_PERF_ROW], stacked_report: [] }],
+        });
+        (usePerformanceRange as Mock).mockReturnValue([1, 1]);
+        (usePerfMetas as Mock).mockReturnValue([{ max_cores: 130, architecture: null, frequency: null }]);
+
+        render(
+            <TestProviders
+                initialAtomValues={[
+                    [activePerformanceReportAtom, REPORT_A],
+                    [selectedPerformanceRangeAtom, [1, 1]],
+                ]}
+            >
+                <Performance />
+            </TestProviders>,
+        );
+
+        const lastProps = perfReportProps.mock.calls.at(-1)?.[0];
+        const [activeRow] = lastProps?.data ?? [];
+        const [comparisonRow] = lastProps?.comparisonData?.[0] ?? [];
+
+        expect(activeRow?.dram_fallback).toBe(fallback);
+        expect(activeRow?.heuristicFlags).toContain(PerfHeuristicFlag.DRAM_FALLBACK);
+        expect(comparisonRow?.op).toBe(7);
+        expect(comparisonRow?.dram_fallback).toBeNull();
+        expect(comparisonRow?.heuristicFlags).not.toContain(PerfHeuristicFlag.DRAM_FALLBACK);
+    });
+
+    // Both hooks are mocked, so only this ties the retry signal to the failures the route parsed.
+    it('detects DRAM fallbacks against the allocation failures it already parsed', () => {
+        const allocationFailureByOpId = new Map([[7, makeAllocationFailure({ operationId: 7 })]]);
+
+        (useAllocationFailures as Mock).mockReturnValue({ listings: [], allocationFailureByOpId });
+
+        render(
+            <TestProviders>
+                <Performance />
+            </TestProviders>,
+        );
+
+        expect(useDramFallbacks).toHaveBeenCalledWith(allocationFailureByOpId);
     });
 
     it('clears all table chip filters when the active performance report changes', () => {

@@ -29,33 +29,52 @@ export const BufferTypeToStringBufferType: Record<BufferType, StringBufferType> 
     [BufferType.TRACE]: StringBufferType.TRACE,
 };
 
-export const StringBufferTypeToBufferType = new Map<string, BufferType>(
-    Object.entries(BufferTypeToStringBufferType).map(([bufferType, name]) => [name, Number(bufferType) as BufferType]),
-);
+const StringBufferTypeToBufferType: Record<StringBufferType, BufferType> = {
+    [StringBufferType.DRAM]: BufferType.DRAM,
+    [StringBufferType.L1]: BufferType.L1,
+    [StringBufferType.SYSTEM_MEMORY]: BufferType.SYSTEM_MEMORY,
+    [StringBufferType.L1_SMALL]: BufferType.L1_SMALL,
+    [StringBufferType.TRACE]: BufferType.TRACE,
+};
+
+/** Buffer types that take space in a core's L1, as opposed to DRAM or host memory. */
+const L1_RESIDENT_BUFFER_TYPES: ReadonlySet<BufferType> = new Set([BufferType.L1, BufferType.L1_SMALL]);
+
+export const isL1BufferType = (bufferType: BufferType | null | undefined): boolean =>
+    bufferType != null && L1_RESIDENT_BUFFER_TYPES.has(bufferType);
+
+/** The `StringBufferType` a raw string names, or `null` when it names none this app knows. */
+export const toStringBufferType = (name: string | null | undefined): StringBufferType | null =>
+    name != null && Object.hasOwn(StringBufferTypeToBufferType, name) ? (name as StringBufferType) : null;
 
 const CPP_ENUM_PREFIX = 'BufferType::';
 
 /**
- * A recorded `buffer_type` as a `BufferType`. Captures write the enum's value,
- * but at least one writes its C++ name (`'BufferType::DRAM'`) instead.
+ * A recorded buffer type as a `BufferType`, or `null` when it names none this app
+ * knows. Captures write the enum's value, but at least one writes its C++ name
+ * (`'BufferType::DRAM'`) instead, and string fields carry the bare name.
  */
-export const toBufferType = (value: unknown): BufferType | undefined => {
+export const toBufferType = (value: unknown): BufferType | null => {
     if (typeof value === 'number') {
-        return BufferType[value] !== undefined ? value : undefined;
+        return BufferType[value] !== undefined ? value : null;
     }
 
-    if (typeof value !== 'string' || value === '') {
-        return undefined;
+    if (typeof value !== 'string') {
+        return null;
     }
 
     if (/^\d+$/.test(value)) {
         return toBufferType(Number(value));
     }
 
-    return StringBufferTypeToBufferType.get(
+    const stringBufferType = toStringBufferType(
         value.startsWith(CPP_ENUM_PREFIX) ? value.slice(CPP_ENUM_PREFIX.length) : value,
     );
+
+    return stringBufferType === null ? null : StringBufferTypeToBufferType[stringBufferType];
 };
+
+export const isL1StringBufferType = (name: string | null | undefined): boolean => isL1BufferType(toBufferType(name));
 
 /**
  * The only place display labels are spelled out. `MemoryTag` slugs these into its

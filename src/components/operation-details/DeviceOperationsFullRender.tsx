@@ -44,6 +44,9 @@ import { getNodeBufferType, getNodeStringBufferType } from '../../functions/getN
 import { isDeviceOperation } from '../../functions/filterOperations';
 import { ScopeClose, getScopeOutcomes } from '../../functions/scopeOutcomes';
 import { ScopeOutcome } from '../../definitions/ScopeOutcome';
+import { TypedPerfTableRow } from '../../model/PerfTable';
+import { useDeviceOperationPerf } from '../../hooks/useDeviceOperationPerf';
+import { DeviceOperationPerfSummary, OperationDevicePerfSummary } from './DeviceOperationPerf';
 
 type BufferDetails = {
     bufferOrTensorNode?: BufferNode | TensorNode;
@@ -239,6 +242,8 @@ function useDeviceOperationsFullRenderModel(args: {
     setDeviceOperationsArgsOpen: React.Dispatch<React.SetStateAction<boolean>>;
     setCbPressureModal: React.Dispatch<React.SetStateAction<CBPressureModalState>>;
     hasRecordedError: boolean;
+    perfRowByStartNodeId: ReadonlyMap<number, TypedPerfTableRow>;
+    totalDeviceTimeUs: number;
     colorVariance?: number;
 }) {
     const {
@@ -249,6 +254,8 @@ function useDeviceOperationsFullRenderModel(args: {
         setDeviceOperationsArgsNode,
         setCbPressureModal,
         hasRecordedError,
+        perfRowByStartNodeId,
+        totalDeviceTimeUs,
     } = args;
 
     const selectedAddress = useAtomValue(selectedAddressAtom);
@@ -332,6 +339,8 @@ function useDeviceOperationsFullRenderModel(args: {
             );
 
             const hasContent = innerContent && innerContent.length > 0;
+            const hasArgs = opArgs && opArgs.length > 0;
+            const perfRow = perfRowByStartNodeId.get(startNode.id);
 
             return (
                 <Collapsible
@@ -339,25 +348,35 @@ function useDeviceOperationsFullRenderModel(args: {
                     label={label}
                     isOpen
                     additionalElements={
-                        opArgs && opArgs.length > 0 ? (
-                            <Button
-                                icon={
-                                    <Icon
-                                        icon={IconNames.COMPARISON}
-                                        size={12}
+                        perfRow || hasArgs ? (
+                            <>
+                                {perfRow && (
+                                    <DeviceOperationPerfSummary
+                                        row={perfRow}
+                                        totalDeviceTimeUs={totalDeviceTimeUs}
                                     />
-                                }
-                                size={Size.SMALL}
-                                variant={ButtonVariant.OUTLINED}
-                                intent={Intent.PRIMARY}
-                                onClick={() => {
-                                    setDeviceOperationsArgsNode(startNode);
-                                    setDeviceOperationsArgsOpen(true);
-                                }}
-                                title='View operation arguments'
-                            >
-                                Arguments
-                            </Button>
+                                )}
+                                {hasArgs && (
+                                    <Button
+                                        icon={
+                                            <Icon
+                                                icon={IconNames.COMPARISON}
+                                                size={12}
+                                            />
+                                        }
+                                        size={Size.SMALL}
+                                        variant={ButtonVariant.OUTLINED}
+                                        intent={Intent.PRIMARY}
+                                        onClick={() => {
+                                            setDeviceOperationsArgsNode(startNode);
+                                            setDeviceOperationsArgsOpen(true);
+                                        }}
+                                        title='View operation arguments'
+                                    >
+                                        Arguments
+                                    </Button>
+                                )}
+                            </>
                         ) : undefined
                     }
                     collapseClassName={classNames('device-operation function-container', {
@@ -373,7 +392,13 @@ function useDeviceOperationsFullRenderModel(args: {
                 </Collapsible>
             );
         },
-        [formatTensor, setDeviceOperationsArgsNode, setDeviceOperationsArgsOpen],
+        [
+            formatTensor,
+            perfRowByStartNodeId,
+            setDeviceOperationsArgsNode,
+            setDeviceOperationsArgsOpen,
+            totalDeviceTimeUs,
+        ],
     );
 
     // Takes the same `deviceOperations` that `scopeOutcomes` was built from.
@@ -653,6 +678,7 @@ const DeviceOperationsFullRender = ({
     const [deviceOperationsArgsOpen, setDeviceOperationsArgsOpen] = useState(false);
     const [deviceOperationsArgsNode, setDeviceOperationsArgsNode] = useState<DeviceOperationNode | null>(null);
     const [cbPressureModal, setCbPressureModal] = useState<CBPressureModalState>(null);
+    const devicePerf = useDeviceOperationPerf(details.id);
     const { peakMemoryLoad, renderOperations } = useDeviceOperationsFullRenderModel({
         deviceOperations,
         details,
@@ -661,7 +687,21 @@ const DeviceOperationsFullRender = ({
         setDeviceOperationsArgsOpen,
         setCbPressureModal,
         hasRecordedError,
+        perfRowByStartNodeId: devicePerf.rowByStartNodeId,
+        totalDeviceTimeUs: devicePerf.totalDeviceTimeUs,
     });
+    const { perfRows, hasDeviceOperations } = useMemo(() => {
+        const scopes = deviceOperations.filter(
+            (node): node is DeviceOperationNode =>
+                node.node_type === NodeType.function_start && isDeviceOperation(node.params.name),
+        );
+
+        return {
+            perfRows: scopes.flatMap((node) => devicePerf.rowByStartNodeId.get(node.id) ?? []),
+            hasDeviceOperations: scopes.length > 0,
+        };
+    }, [deviceOperations, devicePerf.rowByStartNodeId]);
+
     return (
         <div className='device-operations-full-render-wrap'>
             <DeviceOperationArgumentsComponent
@@ -674,6 +714,13 @@ const DeviceOperationsFullRender = ({
                 title={cbPressureModal?.title ?? ''}
                 snapshot={cbPressureModal?.snapshot ?? null}
                 onClose={() => setCbPressureModal(null)}
+            />
+            <OperationDevicePerfSummary
+                linkStatus={devicePerf.linkStatus}
+                hasPerformanceReport={devicePerf.hasPerformanceReport}
+                hasDeviceOperations={hasDeviceOperations}
+                rows={perfRows}
+                totalDeviceTimeUs={devicePerf.totalDeviceTimeUs}
             />
             <h3 className='peak-load monospace'>
                 Peak L1 memory load per core:{' '}

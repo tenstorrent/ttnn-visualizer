@@ -11,6 +11,7 @@ import isValidNumber from './isValidNumber';
 import { formatPercentage } from './math';
 import { isSlowDramDominant } from './perfBoundPredicates';
 import { getAllocationFailureSummary } from './parseAllocationFailure';
+import { getDramFallbackSummary } from './getDramFallbacks';
 
 interface RowHeuristicEvaluation {
     flags: PerfHeuristicFlag[];
@@ -92,6 +93,13 @@ function evaluateRowHeuristics(row: TypedPerfTableRow, maxCores: number): RowHeu
 
     if (!isEligibleRow(row)) {
         return { flags, details: flags.length > 0 ? details : undefined };
+    }
+
+    // Inferred, so eligibility applies; impact does not, because the cost lands on the later
+    // ops that read this output from DRAM rather than on this row.
+    if (row.dram_fallback) {
+        flags.push(PerfHeuristicFlag.DRAM_FALLBACK);
+        details[PerfHeuristicFlag.DRAM_FALLBACK] = getDramFallbackSummary(row.dram_fallback);
     }
 
     const hasMinImpact = meetsMinImpact(row);

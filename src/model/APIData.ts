@@ -49,6 +49,10 @@ export interface Tensor {
     layout: string;
     memory_config: MemoryConfig | null;
     device_id: number | null;
+    // Each device's address, indexed by device id, on any report that records per-device
+    // addresses. Older multi-device ones record a mesh tensor's addresses only here and
+    // leave `address` null.
+    device_addresses?: (number | null)[];
     producerOperation?: Operation;
     operationIdentifier?: string;
     comparison: {

@@ -21,7 +21,11 @@ const end = (name: string, aborted?: string | boolean): Node =>
         params: aborted === undefined ? { name } : { name, aborted },
     }) as unknown as Node;
 
-const both = getLinkableDeviceOperations;
+const both = (nodes: Node[]) => {
+    const { starts, ends } = getLinkableDeviceOperations(nodes);
+
+    return { starts: starts.map(({ name }) => name), ends: ends.map(({ name }) => name) };
+};
 
 describe('getLinkableDeviceOperations', () => {
     it('names every completed device operation, skipping host-side functions', () => {
@@ -75,6 +79,47 @@ describe('getLinkableDeviceOperations', () => {
 
     it('returns nothing for a missing graph', () => {
         expect(getLinkableDeviceOperations(undefined)).toEqual({ starts: [], ends: [] });
+    });
+});
+
+// Scopes are the frontend's alone: the agent tools link rows to operations, so there is no case to restate.
+describe('getLinkableDeviceOperations scopes', () => {
+    const scopeNode = (id: number, nodeType: NodeType, name: string): Node =>
+        ({ id, node_type: nodeType, params: { name } }) as unknown as Node;
+
+    it('gives each start its own node, and each end the start it closes', () => {
+        const nodes = [
+            scopeNode(10, NodeType.function_start, 'Outer'),
+            scopeNode(11, NodeType.function_start, 'Inner'),
+            scopeNode(12, NodeType.function_end, 'Inner'),
+            scopeNode(13, NodeType.function_end, 'Outer'),
+        ];
+
+        expect(getLinkableDeviceOperations(nodes)).toEqual({
+            starts: [
+                { name: 'Outer', startNodeId: 10 },
+                { name: 'Inner', startNodeId: 11 },
+            ],
+            ends: [
+                { name: 'Inner', startNodeId: 11 },
+                { name: 'Outer', startNodeId: 10 },
+            ],
+        });
+    });
+
+    it('tells two runs of the same device operation apart', () => {
+        const nodes = [
+            scopeNode(20, NodeType.function_start, 'Permute'),
+            scopeNode(21, NodeType.function_end, 'Permute'),
+            scopeNode(22, NodeType.function_start, 'Accumulation'),
+            scopeNode(23, NodeType.function_end, 'Accumulation'),
+            scopeNode(24, NodeType.function_start, 'Permute'),
+            scopeNode(25, NodeType.function_end, 'Permute'),
+        ];
+        const { starts, ends } = getLinkableDeviceOperations(nodes);
+
+        expect(starts.map(({ startNodeId }) => startNodeId)).toEqual([20, 22, 24]);
+        expect(ends.map(({ startNodeId }) => startNodeId)).toEqual([20, 22, 24]);
     });
 });
 

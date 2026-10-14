@@ -29,7 +29,7 @@ import {
 } from '../model/APIData';
 import { BufferType } from '../model/BufferType';
 import { summariseOperationBuffers } from '../functions/summariseOperationBuffers';
-import parseMemoryConfig, { memoryConfigPattern } from '../functions/parseMemoryConfig';
+import parseMemoryConfig, { isParsableMemoryConfigArgument } from '../functions/parseMemoryConfig';
 import { MemoryConfig } from '../model/MemoryConfig';
 import getServerConfig from '../functions/getServerConfig';
 import { PerfTableRow } from '../model/PerfTable';
@@ -231,7 +231,7 @@ const fetchOperations = async (): Promise<OperationDescription[]> => {
         });
 
         const argumentsWithParsedValues = operation.arguments.map((argument) =>
-            argument.name === 'memory_config' || memoryConfigPattern.test(argument.value)
+            isParsableMemoryConfigArgument(argument)
                 ? {
                       ...argument,
                       parsedValue: argument.value ? (parseMemoryConfig(argument.value) as MemoryConfig) : null,
@@ -874,19 +874,21 @@ const getDeviceOperationOrderCandidates = memoiseLatest(
         for (const operation of operations) {
             const { starts, ends } = getLinkableDeviceOperations(operation.device_operations);
 
-            for (const name of starts) {
+            for (const { name, startNodeId } of starts) {
                 functionStartOperations.push({
                     name,
                     id: operation.id,
                     operationName: operation.name,
+                    startNodeId,
                 });
             }
 
-            for (const name of ends) {
+            for (const { name, startNodeId } of ends) {
                 functionEndOperations.push({
                     name,
                     id: operation.id,
                     operationName: operation.name,
+                    startNodeId,
                 });
             }
         }

@@ -105,6 +105,17 @@ export const formatDuration = (ns: number): string => {
 export const formatShareOfTotal = (part: number, total: number): string =>
     `${(total > 0 ? (part / total) * 100 : 0).toFixed(1)}%`;
 
+const SMALLEST_SHOWN_SHARE_PERCENT = 0.1;
+
+// A share that still took time reads as under the smallest step rather than as 0.0%.
+export const formatNonZeroShareOfTotal = (part: number, total: number): string => {
+    const percent = total > 0 ? (part / total) * 100 : 0;
+
+    return percent > 0 && percent < SMALLEST_SHOWN_SHARE_PERCENT
+        ? `<${SMALLEST_SHOWN_SHARE_PERCENT}%`
+        : formatShareOfTotal(part, total);
+};
+
 /** Remote folder sync timestamps are Unix epoch seconds. */
 export const getUTCFromEpoch = (epoch: number): Date => new Date(epoch * 1000);
 
@@ -112,10 +123,12 @@ export const getUTCFromEpoch = (epoch: number): Date => new Date(epoch * 1000);
 export const getSshConfigHostLabel = (host: SshConfigHost): string =>
     host.hostName ? `${host.host} — ${host.hostName}` : host.host;
 
+export const getCoreCountText = (numCores: number): string => `${numCores} ${numCores === 1 ? 'core' : 'cores'}`;
+
 // The CB legend row and the pressure modal both spell out these multipliers.
 // Written twice, they drifted on pluralisation; callers keep their own gating,
 // which genuinely differs, and share only the wording. #1844
-export const getCoreCountLabel = (numCores: number): string => `x ${numCores} ${numCores === 1 ? 'core' : 'cores'}`;
+export const getCoreCountLabel = (numCores: number): string => `x ${getCoreCountText(numCores)}`;
 
 export const getDeviceCountLabel = (deviceCount: number): string =>
     `x ${deviceCount} ${deviceCount === 1 ? 'device' : 'devices'}`;

@@ -3,13 +3,7 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import { BufferAllocateNode, BufferDeallocateNode, BufferNode, TensorNode } from '../model/APIData';
-import {
-    BufferType,
-    BufferTypeToStringBufferType,
-    StringBufferType,
-    StringBufferTypeToBufferType,
-    toBufferType,
-} from '../model/BufferType';
+import { BufferType, BufferTypeToStringBufferType, StringBufferType, toBufferType } from '../model/BufferType';
 
 type MemoryNode = BufferNode | BufferAllocateNode | BufferDeallocateNode | TensorNode;
 
@@ -26,7 +20,8 @@ export const getNodeBufferType = (node: MemoryNode): BufferType | undefined => {
     return (
         toBufferType(node.params.buffer_type) ??
         toBufferType(buffer?.params.buffer_type) ??
-        (stringType !== undefined ? StringBufferTypeToBufferType.get(stringType) : undefined)
+        toBufferType(stringType) ??
+        undefined
     );
 };
 

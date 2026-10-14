@@ -63,3 +63,6 @@ docs/output
 # the repository. Anchored to where `pnpm prometheus:config` and the documented commands
 # write it; the CLI's bare default is the working directory and is not covered.
 docker/prometheus/prometheus.generated.yml
+# The remote-write bearer token the renderer writes beside that config is a credential,
+# so it is ignored wherever it is written.
+prometheus.remote-write.token

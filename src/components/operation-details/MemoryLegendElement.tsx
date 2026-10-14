@@ -15,7 +15,7 @@ import { getCoreCountLabel, getDeviceCountLabel, toReadableShape, toReadableType
 import 'styles/components/MemoryLegendElement.scss';
 import { L1_SMALL_MARKER_COLOR, L1_START_MARKER_COLOR } from '../../definitions/PlotConfigurations';
 import { selectedBufferColourAtom, showHexAtom } from '../../store/app';
-import { StringBufferType, StringBufferTypeLabel, StringBufferTypeToBufferType } from '../../model/BufferType';
+import { StringBufferType, StringBufferTypeLabel, toBufferType } from '../../model/BufferType';
 import { isAddressRangeOutOfL1Zoom } from '../../functions/isAddressRangeVisibleInL1Zoom';
 import { TensorDeallocationReport } from '../../model/BufferSummary';
 import { getLateDeallocationSummary } from '../../functions/lateDeallocation';
@@ -99,10 +99,7 @@ export const MemoryLegendElement = ({
     // name none and fall back to the address-only lookup. #2078
     const derivedTensor =
         (chunk.tensorId !== undefined ? operationDetails.tensorListById.get(chunk.tensorId) : undefined) ??
-        operationDetails.getTensorForNode(
-            chunk.address,
-            bufferType !== undefined ? StringBufferTypeToBufferType.get(bufferType) : undefined,
-        );
+        operationDetails.getTensorForNode(chunk.address, toBufferType(bufferType) ?? undefined);
     const isPerCoreBuffer = bufferType !== StringBufferType.DRAM && bufferType !== StringBufferType.SYSTEM_MEMORY;
     const numCoresLabel = isPerCoreBuffer && numCores && numCores > 0 ? getCoreCountLabel(numCores) : '';
     const deviceCountLabel = deviceCount > 1 ? getDeviceCountLabel(deviceCount) : '';

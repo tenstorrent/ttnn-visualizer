@@ -10,8 +10,9 @@ import {
     BankAllocationFailure,
 } from '../model/AllocationFailure';
 import { Operation } from '../model/APIData';
-import { StringBufferType, StringBufferTypeLabel } from '../model/BufferType';
+import { StringBufferType, StringBufferTypeLabel, toStringBufferType } from '../model/BufferType';
 import { formatMemorySize, getMemoryAddress } from './math';
+import assertNever from './assertNever';
 import { getFailedDeviceOperationNames } from './scopeOutcomes';
 
 // Each pattern restates a tt-metal format string; when a message stops matching, that
@@ -36,12 +37,7 @@ const CIRCULAR_BUFFERS_BEYOND_L1_PATTERN =
 const CIRCULAR_BUFFERS_CLASH_PATTERN =
     /Statically allocated circular buffers in program \d+ clash with L1 buffers on core range (.+?)\. L1 buffer allocated at (\d+) and static circular buffer region ends at (\d+)/;
 
-const STRING_BUFFER_TYPES = new Set<string>(Object.values(StringBufferType));
-
 const toNumber = (value: string | undefined): number | null => (value === undefined ? null : Number(value));
-
-const toBufferType = (value: string): StringBufferType | null =>
-    STRING_BUFFER_TYPES.has(value) ? (value as StringBufferType) : null;
 
 /**
  * The allocation failure an operation's error records, or `null` for any other error.
@@ -70,7 +66,7 @@ export const parseAllocationFailure = ({
         return {
             ...operation,
             kind: AllocationFailureKind.BANK_OUT_OF_MEMORY,
-            bufferType: toBufferType(bufferType),
+            bufferType: toStringBufferType(bufferType),
             requestedBytes: Number(size),
             numBanks: Number(numBanks),
             bytesPerBank: Number(perBank),
@@ -92,7 +88,7 @@ export const parseAllocationFailure = ({
         return {
             ...operation,
             kind: AllocationFailureKind.BANK_OUT_OF_MEMORY_WITH_DEPENDENCIES,
-            bufferType: toBufferType(bufferType),
+            bufferType: toStringBufferType(bufferType),
             requestedBytes: Number(size),
             numBanks: Number(numBanks),
             bytesPerBank: Number(perBank),
@@ -181,11 +177,8 @@ export const getAllocationFailureSummary = (failure: AllocationFailure, showHex 
             return `Circular buffers on ${failure.coreRange} grow to ${formatBytes(failure.circularBufferRegionEnd)}, beyond the L1 size of ${formatBytes(failure.maxL1Bytes)}`;
         case AllocationFailureKind.CIRCULAR_BUFFERS_CLASH:
             return `Circular buffers on ${failure.coreRange} end at ${getMemoryAddress(failure.circularBufferRegionEnd, showHex)}, past an L1 buffer at ${getMemoryAddress(failure.l1BufferAddress, showHex)}`;
-        default: {
-            // A new kind fails to compile here until it has a summary.
-            const unhandled: never = failure;
-            return unhandled;
-        }
+        default:
+            return assertNever(failure);
     }
 };
 
@@ -275,10 +268,7 @@ export const getAllocationFailureDiagnosis = (
                 AllocationFailureReason.OVERLAPS_L1_BUFFER,
                 `The circular buffers overlap the L1 buffer at ${getMemoryAddress(failure.l1BufferAddress, showHex)} by ${formatBytes(failure.circularBufferRegionEnd - failure.l1BufferAddress)}.`,
             );
-        default: {
-            // A new kind fails to compile here until it has a diagnosis.
-            const unhandled: never = failure;
-            return unhandled;
-        }
+        default:
+            return assertNever(failure);
     }
 };
