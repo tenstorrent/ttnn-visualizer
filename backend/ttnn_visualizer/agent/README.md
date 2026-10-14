@@ -16,6 +16,7 @@ This file covers only what a person changing the code needs.
 | `tools.py` | The performance-report tools, `CANONICAL_PROJECTION`, and the caveat logic. |
 | `operations.py` | The profiler-database tools, including provenance (arguments and call site). Opens its own read-only connection: `LocalQueryRunner` reads `Instance.profiler_path` as the SQLite file, while a handle holds the directory the caller named. |
 | `linking.py` | The join from a performance row to the profiler operation that launched it: a port of the app's positional match (`src/functions/deviceOperationMatching.ts`). `TestMatcherParity` restates the app's cases, so it catches drift in the port only: **a change to the app's matcher, `isDeviceOperation` or the order lists in `useAPI.tsx` fails nothing here and must be mirrored in `linking.py` by hand.** The only module reading both halves, so `tools` and `operations` never import each other; `server` routes `top_ops` and `operation_detail` through it. |
+| `links.py` | Links from an answer into the web application (#2047). A link carries the report's directories, which the app opens through `POST /api/instance/local-paths`, so the server itself makes no request. The query parameters must match `src/libs/openReportFromLink.ts`. |
 | `bounds.py` | The one result cap, shared because `server` quotes it to an agent in every limit schema. |
 | `server.py` | Newline-delimited JSON-RPC on stdio. Nothing above it imports from here. |
 

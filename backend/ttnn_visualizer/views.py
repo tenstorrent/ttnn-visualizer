@@ -66,7 +66,11 @@ from ttnn_visualizer.file_uploads import (
     save_uploaded_files,
     validate_files,
 )
-from ttnn_visualizer.instances import get_instances, update_instance
+from ttnn_visualizer.instances import (
+    create_instance_from_local_paths,
+    get_instances,
+    update_instance,
+)
 from ttnn_visualizer.known_hosts import (
     append_host_keys,
     rekey_host_line,
@@ -2590,6 +2594,41 @@ def update_current_instance(instance: Instance):
         return response_internal_server_error(
             "An error occurred while updating the instance.",
         )
+
+
+@api.route("/instance/local-paths", methods=["POST"])
+@local_only
+def create_instance_for_local_paths():
+    """A new instance on report directories named by path, as `--profiler-path` makes.
+
+    How a link from the agent tools opens the report the agent read (#2047).
+    """
+    payload = request.get_json(silent=True) or {}
+    profiler_path = payload.get("profiler_path")
+    performance_path = payload.get("performance_path")
+
+    if not profiler_path and not performance_path:
+        return response_bad_request(
+            "One of profiler_path or performance_path is required."
+        )
+
+    for label, path in (
+        ("profiler_path", profiler_path),
+        ("performance_path", performance_path),
+    ):
+        if path is None:
+            continue
+        if not isinstance(path, str) or not Path(path).is_absolute():
+            return response_bad_request(f"{label} must be an absolute path.")
+        if not Path(path).is_dir():
+            return response_bad_request(f"No report directory at {path}.")
+
+    if profiler_path and not Path(profiler_path, "db.sqlite").is_file():
+        return response_bad_request(f"No db.sqlite in {profiler_path}.")
+
+    instance = create_instance_from_local_paths(profiler_path, performance_path)
+
+    return jsonify({"instance_id": instance.instance_id})
 
 
 @api.route("/npe", methods=["GET"])

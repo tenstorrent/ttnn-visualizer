@@ -23,6 +23,11 @@ import { initEventLogging } from '../functions/recordEvent';
 import useRecordViewEngaged from '../hooks/useRecordViewEngaged';
 import useRecordViewOpened from '../hooks/useRecordViewOpened';
 import { isModalOpen } from '../functions/modalRoute';
+import { clearReportLinkError, getReportLinkError } from '../libs/openReportFromLink';
+import { createToast } from '../functions/createToastNotification';
+import { ToastType } from '../definitions/ToastType';
+
+const REPORT_LINK_ERROR_TOAST_ID = 'report-link-error';
 
 function Layout() {
     const location = useLocation();
@@ -33,6 +38,20 @@ function Layout() {
     // module scope so importing the sender has no side effect, and so the listeners are
     // owned the way every other listener in this app is.
     useEffect(() => initEventLogging(), []);
+
+    // After the toast container below has mounted, which a toast raised any earlier misses. The
+    // fixed id keeps a remount of the container, as StrictMode does, from showing it twice.
+    useEffect(() => {
+        const linkError = getReportLinkError();
+
+        if (linkError) {
+            createToast(
+                `Could not open the linked report: ${linkError}`,
+                { toastId: REPORT_LINK_ERROR_TOAST_ID, autoClose: false, onClose: clearReportLinkError },
+                ToastType.ERROR,
+            );
+        }
+    }, []);
 
     useRecordViewOpened();
     useRecordViewEngaged(viewContainerRef);

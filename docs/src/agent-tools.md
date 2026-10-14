@@ -33,6 +33,31 @@ claude mcp add ttnn-visualizer -- ttnn-visualizer-mcp
 Reports are addressed by path, not by the `instanceId` the web application uses, so the
 server needs no database and no running application.
 
+## Links into the visualizer
+
+Answers link to the same thing in the web application, for the reader to open:
+
+- `load_report` returns a `link` to the report.
+- `operation_detail` and `operation_provenance` return a `link` to the operation.
+- `find_operations`, `top_ops`, `memory_profile` and `tensor_flow` return one
+  `link_template`, in which `{operation_id}` takes any operation id the answer lists.
+
+A link names the report by its directories, and the visualizer opens them when the link is
+followed, as `ttnn-visualizer --profiler-path` does. So it lands on the report the agent
+read, not on whatever the reader had open. The server itself still makes no request:
+following the link is what opens the report.
+
+Links point at `http://localhost:8000` unless the server's environment sets
+`TTNN_VISUALIZER_URL`, or `load_report` is given an `app_url`, which wins for that handle:
+
+```bash
+claude mcp add ttnn-visualizer -e TTNN_VISUALIZER_URL=http://localhost:8001 -- ttnn-visualizer-mcp
+```
+
+They open only in a visualizer running locally; a hosted one does not open a report by
+path. An answer read at a rank other than 0 carries no link, because the visualizer shows
+every operation at rank 0 and would open another rank's operation under the same id.
+
 ## The tools
 
 | Tool | Answers |

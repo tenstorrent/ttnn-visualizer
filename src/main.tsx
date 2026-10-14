@@ -15,6 +15,7 @@ import getServerConfig from './functions/getServerConfig';
 import { SocketProvider } from './libs/SocketProvider';
 import { routeObjectList } from './routes/routeObjectList';
 import ProtectedRoute from './components/ProtectedRoute';
+import { openReportFromLink } from './libs/openReportFromLink';
 
 const router = createBrowserRouter(
     [
@@ -44,16 +45,26 @@ const queryClient = new QueryClient({
         },
     },
 });
-ReactDOM.createRoot(document.getElementById('root')!).render(
-    <QueryClientProvider client={queryClient}>
-        <HelmetProvider>
-            <React.StrictMode>
-                <SocketProvider>
-                    <OverlaysProvider>
-                        <RouterProvider router={router} />
-                    </OverlaysProvider>
-                </SocketProvider>
-            </React.StrictMode>
-        </HelmetProvider>
-    </QueryClientProvider>,
-);
+const renderApp = () => {
+    ReactDOM.createRoot(document.getElementById('root')!).render(
+        <QueryClientProvider client={queryClient}>
+            <HelmetProvider>
+                <React.StrictMode>
+                    <SocketProvider>
+                        <OverlaysProvider>
+                            <RouterProvider router={router} />
+                        </OverlaysProvider>
+                    </SocketProvider>
+                </React.StrictMode>
+            </HelmetProvider>
+        </QueryClientProvider>,
+    );
+};
+
+const start = async () => {
+    if (!(await openReportFromLink())) {
+        renderApp();
+    }
+};
+
+void start();
