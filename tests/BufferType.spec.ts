@@ -10,6 +10,7 @@ import {
     isL1BufferType,
     isL1StringBufferType,
     toBufferType,
+    toStringBufferType,
 } from '../src/model/BufferType';
 
 describe('isL1BufferType', () => {
@@ -34,6 +35,16 @@ describe('toBufferType', () => {
 
     it.each(['FUTURE_MEMORY', 'constructor', '', null, undefined])('is null for %s', (name) => {
         expect(toBufferType(name)).toBeNull();
+    });
+});
+
+describe('toStringBufferType', () => {
+    it.each(Object.values(StringBufferType))('is %s for its own name', (name) => {
+        expect(toStringBufferType(name)).toBe(name);
+    });
+
+    it.each(['FUTURE_MEMORY', 'constructor', '', null, undefined])('is null for %s', (name) => {
+        expect(toStringBufferType(name)).toBeNull();
     });
 });
 

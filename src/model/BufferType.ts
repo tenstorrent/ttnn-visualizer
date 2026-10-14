@@ -29,7 +29,7 @@ export const BufferTypeToStringBufferType: Record<BufferType, StringBufferType> 
     [BufferType.TRACE]: StringBufferType.TRACE,
 };
 
-export const StringBufferTypeToBufferType: Record<StringBufferType, BufferType> = {
+const StringBufferTypeToBufferType: Record<StringBufferType, BufferType> = {
     [StringBufferType.DRAM]: BufferType.DRAM,
     [StringBufferType.L1]: BufferType.L1,
     [StringBufferType.SYSTEM_MEMORY]: BufferType.SYSTEM_MEMORY,
@@ -43,11 +43,16 @@ const L1_RESIDENT_BUFFER_TYPES: ReadonlySet<BufferType> = new Set([BufferType.L1
 export const isL1BufferType = (bufferType: BufferType | null | undefined): boolean =>
     bufferType != null && L1_RESIDENT_BUFFER_TYPES.has(bufferType);
 
+/** The `StringBufferType` a raw string names, or `null` when it names none this app knows. */
+export const toStringBufferType = (name: string | null | undefined): StringBufferType | null =>
+    name != null && Object.hasOwn(StringBufferTypeToBufferType, name) ? (name as StringBufferType) : null;
+
 /** The `BufferType` a raw string names, or `null` when it names none this app knows. */
-export const toBufferType = (name: string | null | undefined): BufferType | null =>
-    name != null && Object.hasOwn(StringBufferTypeToBufferType, name)
-        ? StringBufferTypeToBufferType[name as StringBufferType]
-        : null;
+export const toBufferType = (name: string | null | undefined): BufferType | null => {
+    const stringBufferType = toStringBufferType(name);
+
+    return stringBufferType === null ? null : StringBufferTypeToBufferType[stringBufferType];
+};
 
 export const isL1StringBufferType = (name: string | null | undefined): boolean => isL1BufferType(toBufferType(name));
 

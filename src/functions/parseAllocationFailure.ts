@@ -10,7 +10,7 @@ import {
     BankAllocationFailure,
 } from '../model/AllocationFailure';
 import { Operation } from '../model/APIData';
-import { StringBufferType, StringBufferTypeLabel } from '../model/BufferType';
+import { StringBufferType, StringBufferTypeLabel, toStringBufferType } from '../model/BufferType';
 import { formatMemorySize, getMemoryAddress } from './math';
 import assertNever from './assertNever';
 import { getFailedDeviceOperationNames } from './scopeOutcomes';
@@ -37,12 +37,7 @@ const CIRCULAR_BUFFERS_BEYOND_L1_PATTERN =
 const CIRCULAR_BUFFERS_CLASH_PATTERN =
     /Statically allocated circular buffers in program \d+ clash with L1 buffers on core range (.+?)\. L1 buffer allocated at (\d+) and static circular buffer region ends at (\d+)/;
 
-const STRING_BUFFER_TYPES = new Set<string>(Object.values(StringBufferType));
-
 const toNumber = (value: string | undefined): number | null => (value === undefined ? null : Number(value));
-
-const toBufferType = (value: string): StringBufferType | null =>
-    STRING_BUFFER_TYPES.has(value) ? (value as StringBufferType) : null;
 
 /**
  * The allocation failure an operation's error records, or `null` for any other error.
@@ -71,7 +66,7 @@ export const parseAllocationFailure = ({
         return {
             ...operation,
             kind: AllocationFailureKind.BANK_OUT_OF_MEMORY,
-            bufferType: toBufferType(bufferType),
+            bufferType: toStringBufferType(bufferType),
             requestedBytes: Number(size),
             numBanks: Number(numBanks),
             bytesPerBank: Number(perBank),
@@ -93,7 +88,7 @@ export const parseAllocationFailure = ({
         return {
             ...operation,
             kind: AllocationFailureKind.BANK_OUT_OF_MEMORY_WITH_DEPENDENCIES,
-            bufferType: toBufferType(bufferType),
+            bufferType: toStringBufferType(bufferType),
             requestedBytes: Number(size),
             numBanks: Number(numBanks),
             bytesPerBank: Number(perBank),
