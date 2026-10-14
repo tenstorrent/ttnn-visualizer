@@ -13,12 +13,11 @@ import { MarkerType } from '../src/model/APIData';
 import { StringBufferType } from '../src/model/BufferType';
 import { OperationDetails } from '../src/model/OperationDetails';
 import { TestProviders } from './helpers/TestProviders';
+import { buildOperationDetails } from './helpers/operationDetailsFixtures';
 
 const onLegendClick = vi.fn();
 
-const operationDetails = {
-    getTensorForNode: () => undefined,
-} as unknown as OperationDetails;
+const operationDetails = buildOperationDetails();
 
 type LegendProps = Parameters<typeof MemoryLegendElement>[0];
 

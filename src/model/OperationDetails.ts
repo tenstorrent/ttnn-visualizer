@@ -643,11 +643,11 @@ ${getMemoryAddress(bufferCondensed.address, this.options.showHex)} <br /> ${form
         };
     }
 
-    public getMemoryDelta(delta1: Chunk[], delta2: Chunk[]) {
+    /** DRAM only: its chunks resolve DRAM tensors, and `max` falls back to DRAM's size. */
+    public getDramMemoryDelta(delta1: Chunk[], delta2: Chunk[]) {
         const delta = delta1.length > 0 ? delta1 : delta2;
 
         return {
-            // Only the DRAM plot asks for a delta, and `max` below already assumes DRAM.
             chartData: this.getChartData(delta, [BufferType.DRAM]),
             // eslint-disable-next-line no-unsafe-optional-chaining
             min: delta[0]?.address - 10240 || 0,

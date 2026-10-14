@@ -95,10 +95,25 @@ describe.each([
         expect(details.tensorListByAddress.get(SHARED_ADDRESS)?.id).toBe(L1_TENSOR_ID);
     });
 
-    it('labels a multi-device DRAM group with the DRAM tensor', () => {
-        const [entry] = details.getGroupedMemoryReport(BufferType.DRAM).get(SHARED_ADDRESS) ?? [];
+    it('labels every device in a multi-device DRAM group with the DRAM tensor', () => {
+        const secondDeviceDramBuffer = { ...dramBuffer, device_id: 1 };
+        const multiDeviceDetails = buildDetails({
+            buffers: [...buffers, secondDeviceDramBuffer],
+            outputs: [dramTensor, l1Tensor],
+        });
+        const group = multiDeviceDetails.getGroupedMemoryReport(BufferType.DRAM).get(SHARED_ADDRESS) ?? [];
 
-        expect(entry?.tensorId).toBe(DRAM_TENSOR_ID);
+        expect(group.map((entry) => [entry.device_id, entry.tensorId])).toEqual([
+            [0, DRAM_TENSOR_ID],
+            [1, DRAM_TENSOR_ID],
+        ]);
+    });
+
+    it('gives the DRAM delta plot the DRAM tensor', () => {
+        const dramChunk = chunkAt(details, BufferType.DRAM)!;
+        const [bar] = details.getDramMemoryDelta([dramChunk], []).chartData as PlotDataCustom[];
+
+        expect(bar?.memoryData.tensor?.id).toBe(DRAM_TENSOR_ID);
     });
 });
 
