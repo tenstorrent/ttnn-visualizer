@@ -167,6 +167,15 @@ describe('getDramFallbacks — argument vs output', () => {
         expect(getDramFallbacks([requestingL1({ inputs: [input], outputs: [output] })], NO_FAILURES).size).toBe(0);
     });
 
+    // A view keeps its input's element count, so a mismatch rules one out before the address is read.
+    it('flags a DRAM output with an unknown address and a different element count', () => {
+        const operation = requestingL1({
+            outputs: [makeTensor({ address: null, buffer_type: BufferType.DRAM, shape: 'Shape([1, 1, 64, 64])' })],
+        });
+
+        expect(getDramFallbacks([operation], NO_FAILURES).size).toBe(1);
+    });
+
     it('flags a DRAM output without an address when there is no DRAM input it could alias', () => {
         const operation = requestingL1({
             inputs: [],

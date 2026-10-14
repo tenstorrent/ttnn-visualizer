@@ -69,8 +69,8 @@ const getElementCount = (shape: string | undefined): number | null => {
  * Whether the output may be a view of the input: same element count, and the same address on
  * every device both are known on, with at least one such device. L1 and each device's DRAM
  * are separate address spaces, so an equal number elsewhere is not a view, and one matching
- * shard of a mesh tensor does not make the rest a view. When either tensor has no known
- * address, aliasing can't be ruled out.
+ * shard of a mesh tensor does not make the rest a view. When the element counts match, or
+ * either can't be read, and either tensor has no known address, aliasing can't be ruled out.
  * The element count separates a view from a new buffer reusing a freed input's address, as a
  * conv2d's prepared weights do after `deallocate_activation`.
  */
