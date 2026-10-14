@@ -31,6 +31,7 @@ const teardown = vi.hoisted(() => vi.fn());
 const initEventLogging = vi.hoisted(() => vi.fn(() => teardown));
 const recordEvent = vi.hoisted(() => vi.fn());
 const persistReportLinks = vi.hoisted(() => vi.fn());
+const axiosPost = vi.hoisted(() => vi.fn());
 
 vi.mock('../src/functions/recordEvent', () => ({ default: recordEvent, initEventLogging }));
 
@@ -47,6 +48,8 @@ vi.mock('../src/libs/ModalAwareOutlet', () => ({ ModalAwareOutlet: () => null })
 // The real hook reads the query client and the report atoms; this spec only pins that
 // `Layout` mounts it (through `ReportLinkRecorder`), which is all that keeps report links recorded.
 vi.mock('../src/hooks/usePersistReportLinks', () => ({ default: persistReportLinks }));
+// Only the linked-report case posts; it fails the request to leave a reason for `Layout` to show.
+vi.mock('../src/libs/axiosInstance', () => ({ default: { post: axiosPost } }));
 
 async function resetViewOpenedMemory() {
     const { resetRememberedViewPathname } = await import('../src/functions/eventLogViews');
@@ -274,5 +277,36 @@ describe('Layout report-link wiring', () => {
         renderLayout(Layout);
 
         expect(persistReportLinks).toHaveBeenCalled();
+    });
+});
+
+describe('Layout linked-report error', () => {
+    afterEach(() => {
+        cleanup();
+        window.history.replaceState(null, '', '/');
+    });
+
+    // StrictMode re-subscribes the toast container, which loses a toast raised before `Layout` mounts.
+    it('shows why a link could not be opened, once under StrictMode, until it is closed', async () => {
+        const { getReportLinkError, openReportFromLink } = await import('../src/libs/openReportFromLink');
+        window.history.replaceState(null, '', '/?profiler_path=/no/such/report');
+        axiosPost.mockRejectedValueOnce(new Error('No memory report (db.sqlite) at /no/such/report.'));
+        expect(await openReportFromLink(vi.fn())).toBe(false);
+
+        const { default: Layout } = await import('../src/components/Layout');
+        renderLayout(Layout);
+
+        const body = await screen.findByText(
+            'Could not open the linked report: No memory report (db.sqlite) at /no/such/report.',
+        );
+        expect(document.querySelectorAll('.Toastify__toast')).toHaveLength(1);
+
+        const toast = body.closest('.Toastify__toast')!;
+        fireEvent.click(toast);
+        act(() => {
+            toast.dispatchEvent(new Event('animationend'));
+        });
+
+        await waitFor(() => expect(getReportLinkError()).toBeNull());
     });
 });
