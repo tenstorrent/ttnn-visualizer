@@ -17,23 +17,25 @@ import { routeObjectList } from './routes/routeObjectList';
 import ProtectedRoute from './components/ProtectedRoute';
 import { openReportFromLink } from './libs/openReportFromLink';
 
-const router = createBrowserRouter(
-    [
+// A function, so the router reads the URL after `openReportFromLink` strips a link's paths from it.
+const createRouter = () =>
+    createBrowserRouter(
+        [
+            {
+                path: '*',
+                element: (
+                    <ProtectedRoute>
+                        <Layout />
+                    </ProtectedRoute>
+                ),
+                errorElement: <ErrorPage />,
+                children: routeObjectList,
+            },
+        ],
         {
-            path: '*',
-            element: (
-                <ProtectedRoute>
-                    <Layout />
-                </ProtectedRoute>
-            ),
-            errorElement: <ErrorPage />,
-            children: routeObjectList,
+            basename: getServerConfig().BASE_PATH,
         },
-    ],
-    {
-        basename: getServerConfig().BASE_PATH,
-    },
-);
+    );
 
 FocusStyleManager.onlyShowFocusOnTabs();
 
@@ -46,6 +48,8 @@ const queryClient = new QueryClient({
     },
 });
 const renderApp = () => {
+    const router = createRouter();
+
     ReactDOM.createRoot(document.getElementById('root')!).render(
         <QueryClientProvider client={queryClient}>
             <HelmetProvider>

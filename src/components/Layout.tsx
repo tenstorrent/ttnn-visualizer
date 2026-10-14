@@ -39,8 +39,8 @@ function Layout() {
     // owned the way every other listener in this app is.
     useEffect(() => initEventLogging(), []);
 
-    // After the toast container below has mounted, which a toast raised any earlier misses. The
-    // fixed id keeps a remount of the container, as StrictMode does, from showing it twice.
+    // After the container below subscribes: StrictMode re-subscribes it, losing a toast raised
+    // earlier. The fixed id keeps that remount from showing this one twice.
     useEffect(() => {
         const linkError = getReportLinkError();
 

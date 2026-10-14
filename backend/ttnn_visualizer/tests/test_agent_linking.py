@@ -21,7 +21,7 @@ from typing import Dict, List, Optional
 from unittest.mock import patch
 
 import pytest
-from ttnn_visualizer.agent import linking, links, server, tools
+from ttnn_visualizer.agent import app_url, linking, server, tools
 from ttnn_visualizer.agent.bounds import MAX_LIMIT
 from ttnn_visualizer.agent.handles import CacheVariant, ReportRegistry, load_report
 from ttnn_visualizer.agent.linking import (
@@ -1139,7 +1139,7 @@ class TestServerRouting:
         self, linked, tmp_path, monkeypatch
     ):
         """The app reads rank 0, so rank 1's operation 2 would open rank 0's."""
-        monkeypatch.delenv(links.APP_URL_ENV_VAR, raising=False)
+        monkeypatch.delenv(app_url.APP_URL_ENV_VAR, raising=False)
         path = _write_ranked_profiler(tmp_path / "ranked", _GRAPHS)
         registry, handle, _ = linked(profiler_path=path)
 
@@ -1152,10 +1152,12 @@ class TestServerRouting:
             {"handle": handle, "operation_id": 2, "rank": 1},
         )
 
-        assert rank_zero["link"].startswith(
-            f"{links.DEFAULT_APP_URL}/operations/2?profiler_path={path}&"
+        # The fixture's performance directory has no ops_perf_results CSV, so the app
+        # could not open it and the link leaves it out.
+        assert rank_zero["app_link"] == (
+            f"{app_url.DEFAULT_APP_URL}/operations/2?profiler_path={path}"
         )
-        assert "link" not in rank_one
+        assert "app_link" not in rank_one
 
     def test_operation_detail_carries_the_link(self, linked):
         registry, handle, _ = linked()

@@ -17,7 +17,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Callable, Dict, List, Optional, Tuple, TypeVar, cast
 
-from ttnn_visualizer.agent.links import checked_app_url
+from ttnn_visualizer.agent.app_url import checked_app_url
 from ttnn_visualizer.csv_queries import (
     DeviceLogProfilerQueries,
     OpsPerformanceQueries,
@@ -264,7 +264,9 @@ def load_report(
 
     profiler = _resolved_directory("profiler_path", profiler_path)
     performance = _resolved_directory("performance_path", performance_path)
-    checked_url = checked_app_url(app_url) if app_url is not None else None
+    checked_url = (
+        checked_app_url(app_url, loopback_only=True) if app_url is not None else None
+    )
     handle = registry.add(profiler, performance, app_url=checked_url)
     instance = registry.get(handle)
 

@@ -10,7 +10,7 @@ import axiosInstance from './axiosInstance';
 // The query parameters the agent tools' links carry (`backend/ttnn_visualizer/agent/links.py`).
 const REPORT_PATH_PARAMS = ['profiler_path', 'performance_path'] as const;
 
-// Held until the toast container mounts: a toast raised before it is dropped.
+// Raised by `Layout` rather than here: StrictMode re-subscribes the toast container, losing an earlier toast.
 let linkError: string | undefined;
 
 /** Why a link's report could not be opened, until `clearReportLinkError`. */

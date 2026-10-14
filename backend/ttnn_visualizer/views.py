@@ -49,6 +49,8 @@ from ttnn_visualizer.event_logging import (
 )
 from ttnn_visualizer.exceptions import (
     DataFormatError,
+    InvalidProfilerPath,
+    InvalidReportPath,
     InvalidRequestPayload,
     PerformanceReportNotLoadedException,
     RemoteConnectionException,
@@ -2598,38 +2600,53 @@ def update_current_instance(instance: Instance):
 
 @api.route("/instance/local-paths", methods=["POST"])
 @local_only
-def create_instance_for_local_paths():
+def open_local_report_paths():
     """A new instance on report directories named by path, as `--profiler-path` makes.
 
-    How a link from the agent tools opens the report the agent read (#2047).
+    How a link from the agent tools opens the report the agent read (#2047). Any page
+    can send the reader here with paths of its choosing, so only a directory holding a
+    report the app could load is opened, and it is opened resolved.
     """
     payload = request.get_json(silent=True) or {}
     if not isinstance(payload, dict):
         return response_bad_request("Expected a JSON object.")
 
-    profiler_path = payload.get("profiler_path")
-    performance_path = payload.get("performance_path")
+    report_kinds = {
+        "profiler_path": (is_valid_profiler_report_dir, "memory report (db.sqlite)"),
+        "performance_path": (
+            is_valid_performance_report_dir,
+            "performance report (profile_log_device.csv and ops_perf_results*.csv)",
+        ),
+    }
+    resolved: Dict[str, Optional[str]] = {}
+    for key, (is_valid, kind) in report_kinds.items():
+        path = payload.get(key) or None
+        resolved[key] = None
+        if path is None:
+            continue
+        if not isinstance(path, str) or not Path(path).is_absolute():
+            return response_bad_request(f"{key} must be an absolute path.")
+        try:
+            directory = Path(path).resolve()
+            is_report = is_valid(directory)
+        except (OSError, RuntimeError) as error:
+            reason = getattr(error, "strerror", None) or error
+            return response_bad_request(f"Cannot read {path}: {reason}.")
+        if not is_report:
+            return response_bad_request(f"No {kind} at {path}.")
+        resolved[key] = str(directory)
 
-    if not profiler_path and not performance_path:
+    if not any(resolved.values()):
         return response_bad_request(
             "One of profiler_path or performance_path is required."
         )
 
-    for label, path in (
-        ("profiler_path", profiler_path),
-        ("performance_path", performance_path),
-    ):
-        if path is None:
-            continue
-        if not isinstance(path, str) or not Path(path).is_absolute():
-            return response_bad_request(f"{label} must be an absolute path.")
-        if not Path(path).is_dir():
-            return response_bad_request(f"No report directory at {path}.")
-
-    if profiler_path and not Path(profiler_path, "db.sqlite").is_file():
-        return response_bad_request(f"No db.sqlite in {profiler_path}.")
-
-    instance = create_instance_from_local_paths(profiler_path, performance_path)
+    try:
+        instance = create_instance_from_local_paths(
+            resolved["profiler_path"], resolved["performance_path"]
+        )
+    except (InvalidReportPath, InvalidProfilerPath):
+        return response_bad_request("A report directory went away while opening it.")
 
     return jsonify({"instance_id": instance.instance_id})
 

@@ -1167,6 +1167,10 @@ Nothing in the app is authenticated, so these two controls are what stand betwee
 
 A new endpoint needs a conscious decision on both. `@local_only` returns 403 automatically under `SERVER_MODE`, and the frontend must hide the matching UI via `getServerConfig()` — gating one side only leaves a feature that 403s in the UI or an endpoint anyone can reach.
 
+### A request the SPA makes from its own URL is same-origin
+
+`ALLOWED_ORIGINS` stops another page from *calling* the API, but not from *navigating* the reader to the app. Anything the app does on load from its URL parameters is a same-origin request the allowlist never sees, so any page or link can trigger it. `openReportFromLink` is one: a link's `profiler_path` / `performance_path` make the local app open those directories (#2047). An endpoint reached that way gets the decision a cross-origin one would: `POST /api/instance/local-paths` is `@local_only`, resolves the paths, and opens only a directory holding a report the app could load, so a crafted link can swap the tab's report but not point the app at an arbitrary file.
+
 ### CORS is a trust boundary, not deployment plumbing
 
 **Rationale.** `@local_only` endpoints are the *most* sensitive ones on a local install, not the least: they hand out `~/.ssh/config` host aliases, usernames, and local filesystem paths. Since there's no authentication, the only thing stopping a page served from another localhost port from reading that is the origin allowlist. `_build_allowed_origins` therefore defaults to the narrowest set that still works — `http://localhost:<PORT>`, plus the Vite dev server outside production — rather than to `*`. Note that this default names localhost regardless of what the app is bound to: a non-localhost binding works through the same-origin exemption below, not by appearing in the list, so a proxied hostname is a configuration step.

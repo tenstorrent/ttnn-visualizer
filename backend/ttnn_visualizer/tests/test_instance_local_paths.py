@@ -12,9 +12,10 @@ ENDPOINT = "/api/instance/local-paths"
 @pytest.fixture
 def local_mode(app):
     """The test settings run hosted, and this endpoint is local-only."""
+    previous = app.config["SERVER_MODE"]
     app.config["SERVER_MODE"] = False
     yield
-    app.config["SERVER_MODE"] = True
+    app.config["SERVER_MODE"] = previous
 
 
 @pytest.fixture
@@ -24,6 +25,8 @@ def report_dirs(tmp_path):
     (profiler / "db.sqlite").touch()
     performance = tmp_path / "2026_08_19_16_47_08"
     performance.mkdir()
+    (performance / "profile_log_device.csv").touch()
+    (performance / "ops_perf_results_2026_08_19_16_47_08.csv").touch()
     return profiler, performance
 
 
@@ -77,7 +80,8 @@ class TestLocalPaths:
             ("/reports/bge_m3", "Expected a JSON object."),
             ({"profiler_path": "relative/report"}, "must be an absolute path"),
             ({"profiler_path": 7}, "must be an absolute path"),
-            ({"performance_path": "/no/such/report"}, "No report directory at"),
+            ({"performance_path": "/no/such/report"}, "No performance report"),
+            ({"profiler_path": "", "performance_path": ""}, "One of profiler_path"),
         ],
     )
     def test_it_refuses_a_payload_it_cannot_open(self, client, payload, reason):
@@ -86,11 +90,36 @@ class TestLocalPaths:
         assert response.status_code == 400
         assert reason in response.get_json()["error"]
 
-    def test_it_refuses_a_profiler_directory_without_a_database(self, client, tmp_path):
-        response = client.post(ENDPOINT, json={"profiler_path": str(tmp_path)})
+    @pytest.mark.parametrize("key", ["profiler_path", "performance_path"])
+    def test_it_opens_only_a_directory_holding_a_report(self, client, tmp_path, key):
+        """Any page can send the reader here with a path of its choosing."""
+        response = client.post(ENDPOINT, json={key: str(tmp_path)})
 
         assert response.status_code == 400
-        assert response.get_json()["error"] == f"No db.sqlite in {tmp_path}."
+        assert response.get_json()["error"].endswith(f"at {tmp_path}.")
+
+    def test_it_opens_the_resolved_directory(self, client, report_dirs):
+        profiler, _ = report_dirs
+        roundabout = profiler / ".." / profiler.name
+
+        response = client.post(ENDPOINT, json={"profiler_path": str(roundabout)})
+
+        instance = _instance(client, response.get_json()["instance_id"])
+        assert instance["profiler_path"] == f"{profiler.resolve()}/db.sqlite"
+
+    def test_an_unreadable_path_is_refused_rather_than_raised(self, client, tmp_path):
+        locked = tmp_path / "locked"
+        locked.mkdir()
+        locked.chmod(0)
+        try:
+            response = client.post(
+                ENDPOINT, json={"profiler_path": str(locked / "report")}
+            )
+        finally:
+            locked.chmod(0o755)
+
+        assert response.status_code == 400
+        assert response.get_json()["error"].startswith("Cannot read")
 
 
 def test_a_hosted_app_opens_no_report_by_path(client, report_dirs):

@@ -37,26 +37,33 @@ server needs no database and no running application.
 
 Answers link to the same thing in the web application, for the reader to open:
 
-- `load_report` returns a `link` to the report.
-- `operation_detail` and `operation_provenance` return a `link` to the operation.
+- `load_report` returns an `app_link` to the report.
+- `operation_detail` and `operation_provenance` return an `app_link` to the operation.
 - `find_operations`, `top_ops`, `memory_profile` and `tensor_flow` return one
-  `link_template`, in which `{operation_id}` takes any operation id the answer lists.
+  `app_link_template`, in which `{operation_id}` takes any operation id the answer lists.
 
 A link names the report by its directories, and the visualizer opens them when the link is
-followed, as `ttnn-visualizer --profiler-path` does. So it lands on the report the agent
-read, not on whatever the reader had open. The server itself still makes no request:
-following the link is what opens the report.
+followed, as `ttnn-visualizer --profiler-path` does: each followed link starts a new session
+on that report, so it lands on the report the agent read, not on whatever the reader had
+open. The server itself still makes no request; following the link is what opens the
+report. A link carries those directories as absolute paths on this machine, so it is for
+the reader here, not for sharing.
 
 Links point at `http://localhost:8000` unless the server's environment sets
-`TTNN_VISUALIZER_URL`, or `load_report` is given an `app_url`, which wins for that handle:
+`TTNN_VISUALIZER_URL`, which may name any host:
 
 ```bash
 claude mcp add ttnn-visualizer -e TTNN_VISUALIZER_URL=http://localhost:8001 -- ttnn-visualizer-mcp
 ```
 
+`load_report` also takes an `app_url`, which wins for that handle but must name this
+machine (`localhost` or a loopback address). A `TTNN_VISUALIZER_URL` that is not an http(s)
+URL with a host gives no links at all, rather than links to the default.
+
 They open only in a visualizer running locally; a hosted one does not open a report by
-path. An answer read at a rank other than 0 carries no link, because the visualizer shows
-every operation at rank 0 and would open another rank's operation under the same id.
+path, and a local one opens only a directory holding a report it could load. An answer
+read at a rank other than 0 carries no link, because the visualizer shows every operation
+at rank 0 and would open another rank's operation under the same id.
 
 ## The tools
 

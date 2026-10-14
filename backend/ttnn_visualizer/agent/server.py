@@ -18,7 +18,7 @@ import logging
 import sys
 from typing import Callable, Dict, List, Optional, TextIO
 
-from ttnn_visualizer.agent import linking, links, operations, tools
+from ttnn_visualizer.agent import app_links, app_url, linking, operations, tools
 from ttnn_visualizer.agent.bounds import MAX_LIMIT
 from ttnn_visualizer.agent.handles import (
     ReportRegistry,
@@ -81,9 +81,9 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
         McpToolName.LOAD_REPORT: {
             "description": (
                 "Register a report directory and list what it can answer. Call this "
-                "first; every other tool takes the handle it returns. Answers carry a "
-                "link, or a link_template to fill with an operation_id, that opens the "
-                "same thing in the web application: give it to the reader."
+                "first; every other tool takes the handle it returns. Answers carry an "
+                "app_link, or an app_link_template to fill with an operation_id, that "
+                "opens the same thing in the web application: give it to the reader."
             ),
             "schema": {
                 "type": "object",
@@ -102,14 +102,15 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
                     "app_url": {
                         "type": "string",
                         "description": (
-                            "The web application this handle's links open in, e.g. "
-                            f"{links.DEFAULT_APP_URL}. Defaults to the server's "
-                            f"{links.APP_URL_ENV_VAR}, else {links.DEFAULT_APP_URL}."
+                            "The web application on this machine that this "
+                            "handle's links open in, e.g. http://localhost:5173. "
+                            "Defaults to the server's "
+                            f"{app_url.APP_URL_ENV_VAR}, else {app_url.DEFAULT_APP_URL}."
                         ),
                     },
                 },
             },
-            "handler": lambda arguments: links.with_report_link(
+            "handler": lambda arguments: app_links.with_report_link(
                 registry, load_report(registry, **arguments)
             ),
         },
@@ -139,8 +140,8 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
                 },
                 "required": ["handle"],
             },
-            "handler": lambda arguments: links.with_linked_rows_link_template(
-                registry, arguments["handle"], linking.top_ops(registry, **arguments)
+            "handler": lambda arguments: app_links.with_linked_rows_link_template(
+                registry, linking.top_ops(registry, **arguments)
             ),
         },
         McpToolName.ZONE_TIMINGS: {
@@ -206,9 +207,8 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
                 },
                 "required": ["handle"],
             },
-            "handler": lambda arguments: links.with_operation_link_template(
+            "handler": lambda arguments: app_links.with_operation_link_template(
                 registry,
-                arguments["handle"],
                 operations.find_operations(registry, **arguments),
             ),
         },
@@ -235,9 +235,8 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
                 },
                 "required": ["handle", "operation_id"],
             },
-            "handler": lambda arguments: links.with_operation_link(
+            "handler": lambda arguments: app_links.with_operation_link(
                 registry,
-                arguments["handle"],
                 linking.operation_detail(registry, **arguments),
             ),
         },
@@ -268,9 +267,8 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
                 },
                 "required": ["handle"],
             },
-            "handler": lambda arguments: links.with_operation_link_template(
+            "handler": lambda arguments: app_links.with_operation_link_template(
                 registry,
-                arguments["handle"],
                 operations.memory_profile(registry, **arguments),
             ),
         },
@@ -306,9 +304,8 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
                 },
                 "required": ["handle", "operation_id"],
             },
-            "handler": lambda arguments: links.with_operation_link(
+            "handler": lambda arguments: app_links.with_operation_link(
                 registry,
-                arguments["handle"],
                 operations.operation_provenance(registry, **arguments),
             ),
         },
@@ -326,9 +323,8 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
                 },
                 "required": ["handle", "tensor_id"],
             },
-            "handler": lambda arguments: links.with_operation_link_template(
+            "handler": lambda arguments: app_links.with_operation_link_template(
                 registry,
-                arguments["handle"],
                 operations.tensor_flow(registry, **arguments),
             ),
         },
