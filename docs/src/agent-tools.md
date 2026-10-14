@@ -82,7 +82,7 @@ another rank's operation under the same id.
 | `zone_timings` | Per-zone, per-RISC totals from `profile_log_device.csv` — firmware and kernel phases, as measured on device. |
 | `diff_reports` | Per-operation-code deltas between two reports, largest movement first. |
 | `find_operations` | Operations matching a name substring or a call-stack substring, with the ids `operation_detail` takes. |
-| `operation_detail` | One operation: its input and output tensors with shape, dtype, layout and memory config, and what it had allocated. With a linked performance report, also the performance rows it launched and their device time. |
+| `operation_detail` | One operation: its input and output tensors with shape, dtype, layout and memory config, and what it had allocated. With a linked performance report, also the performance rows it launched, their device time and share of the report's, and the operation's total and slowest row. |
 | `memory_profile` | Memory footprint per operation, keyed by buffer type and ranked within each, with each type's largest footprint and the device's L1 geometry. A floor rather than the peak — see below. |
 | `tensor_flow` | Which operation produced a tensor and which ones consumed it. |
 | `operation_provenance` | What one operation was called with, and where in the model code it came from. |
@@ -180,7 +180,8 @@ worse than no answer.
 sub-device, operations on different sub-devices can run concurrently, so summed device
 time, total percentages and op-to-op gaps overstate elapsed time. Responses that include a
 total say so, and name the sub-devices involved — `top_ops` and `diff_reports` alike, since
-a delta between two unsound totals is unsound the same way.
+a delta between two unsound totals is unsound the same way, and `operation_detail` wherever
+it returns `report_device_time_total`, since its shares divide by that total.
 
 Totals are only reported for metrics a sum means something for: device time, op-to-op gap
 and total percentage. DRAM bandwidth, FLOPS and core count are per-operation figures, and
@@ -212,7 +213,18 @@ align the device operations each profiler operation launched (from its captured 
 against the performance rows, in order — the same match the application uses to link a
 memory report to a performance report. `top_ops` then gives each row an `operation_id`,
 and `operation_detail` lists an operation's `perf_rows` with device time in microseconds;
-its own `duration` is host seconds.
+its own `duration` is host seconds. Each row's `device_time_share_percent` is its percent
+of `report_device_time_total`, the device time of every row that is not a host op or a
+signpost, whether or not it linked to an operation. That is not tt-perf-report's
+`total_percent`, which also counts the op-to-op gap, so on an untraced capture it mostly
+measures dispatch gaps rather than device time. Nor is `report_device_time_total` quite
+`top_ops`'s `device_time_total`, which sums every row's device time; the two agree on
+reports tt-perf-report writes, since it leaves host ops and signposts without one. At the
+top level, `device_time`, `device_time_share_percent` and `slowest_perf_id` cover all of
+the operation's rows, including any past the cap on `perf_rows`, so the slowest row may be
+one `perf_rows` does not list. A row whose device time tt-perf-report left blank has a
+null share and is left out of the total; when no row has a device time, those three keys
+are absent.
 
 A device operation whose launch threw — an allocation failure, for one — never reached the
 device and has no performance row, so the match leaves it out. Left in, it would put a name in

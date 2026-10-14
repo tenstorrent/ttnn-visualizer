@@ -1071,3 +1071,25 @@ class TestProjectRow:
 
         assert projected["bound_analysis"] is None
         assert projected["op_category"] is None
+
+
+class TestCountableDeviceTime:
+    """Restates `isCountableDeviceTime`'s cases (`tests/durationBuckets.spec.ts`):
+    a share counted any other way would disagree with the app's."""
+
+    @pytest.mark.parametrize(
+        "device_time", ["", None, "0", 0, "-5", "nan", "inf", "-inf", "1e400", True]
+    )
+    def test_a_blank_non_finite_or_non_positive_time_counts_for_nothing(
+        self, device_time
+    ):
+        assert tools.countable_device_time({"device_time": device_time}) is None
+
+    @pytest.mark.parametrize(
+        ("device_time", "expected"), [("0.5", 0.5), ("12345", 12345.0), (3, 3.0)]
+    )
+    def test_a_positive_finite_time_counts(self, device_time, expected):
+        assert tools.countable_device_time({"device_time": device_time}) == expected
+
+    def test_a_row_without_the_column_counts_for_nothing(self):
+        assert tools.countable_device_time({}) is None
