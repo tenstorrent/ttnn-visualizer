@@ -1052,8 +1052,12 @@ class OpsPerformanceReportQueries:
         # offers only ranges this accepts.
         try:
             resolved_signposts = resolve_signposts(csv_file, options.tracing_mode)
-        except (ValueError, pd.errors.ParserError) as error:
-            raise DataFormatError(f"could not read the report's signposts: {error}")
+        # `EmptyDataError` and `ParserError` are both `ValueError`s: a ragged or
+        # truncated capture is the caller's data, answered as such rather than a 500.
+        except ValueError as error:
+            raise DataFormatError(
+                f"could not read the report's signposts: {error}"
+            ) from error
         check_signpost_range(
             resolved_signposts, options.start_signpost, options.end_signpost
         )

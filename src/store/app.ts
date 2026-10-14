@@ -164,11 +164,17 @@ export const topNAnnotationCountAtom = atomWithStorage<number>('topNAnnotationCo
 export const comparisonPerformanceReportListAtom = atom<string[] | null>(null);
 export const perfSelectedTabAtom = atom<TabId>(PerfTabIds.TABLE);
 export const isStackedViewAtom = atom(false);
-// One constant so an unset range keeps its identity across reads and the query
-// params memoised from it stay stable.
+// One constant so an unset range keeps its identity across reads, and a consumer
+// comparing the array by reference sees no change.
 const NO_SIGNPOST_RANGE: (Signpost | null)[] = [null, null];
-const signpostRangeSelectionAtom = atom<{ reportFolder: string | null; range: (Signpost | null)[] }>({
+interface SignpostRangeSelection {
+    reportFolder: string | null;
+    reportLocation: ReportLocation | null;
+    range: (Signpost | null)[];
+}
+const signpostRangeSelectionAtom = atom<SignpostRangeSelection>({
     reportFolder: null,
+    reportLocation: null,
     range: NO_SIGNPOST_RANGE,
 });
 /**
@@ -176,20 +182,29 @@ const signpostRangeSelectionAtom = atom<{ reportFolder: string | null; range: (S
  * were chosen on. A range names signposts, and another report need not hold them:
  * the API refuses a name a report lacks, so a range carried across a report switch
  * would turn the new report (and every comparison fetched with it) into an error.
- * Reading it against any other report gives no range; switching back restores it.
+ * Reading it against any other report gives no range; switching back restores it,
+ * unless a range has since been chosen on another report.
+ *
+ * A report is its folder and its location: a local and a remote copy can share a
+ * folder name and differ in content (see `performanceReportQueryKey`).
  */
 export const filterBySignpostAtom = atom(
     (get) => {
         const selection = get(signpostRangeSelectionAtom);
+        const isSameReport =
+            selection.reportFolder === get(activePerformanceReportFolderNameAtom) &&
+            selection.reportLocation === get(performanceReportLocationAtom);
 
-        return selection.reportFolder === get(activePerformanceReportFolderNameAtom)
-            ? selection.range
-            : NO_SIGNPOST_RANGE;
+        return isSameReport ? selection.range : NO_SIGNPOST_RANGE;
     },
     (get, set, update: SetStateAction<(Signpost | null)[]>) => {
         const range = typeof update === 'function' ? update(get(filterBySignpostAtom)) : update;
 
-        set(signpostRangeSelectionAtom, { reportFolder: get(activePerformanceReportFolderNameAtom), range });
+        set(signpostRangeSelectionAtom, {
+            reportFolder: get(activePerformanceReportFolderNameAtom),
+            reportLocation: get(performanceReportLocationAtom),
+            range,
+        });
     },
 );
 export const hideHostOpsAtom = atom(true);

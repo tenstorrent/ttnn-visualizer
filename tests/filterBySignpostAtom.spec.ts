@@ -4,7 +4,8 @@
 
 import { describe, expect, it } from 'vitest';
 import { createStore } from 'jotai';
-import { activePerformanceReportAtom, filterBySignpostAtom } from '../src/store/app';
+import { activePerformanceReportAtom, filterBySignpostAtom, performanceReportLocationAtom } from '../src/store/app';
+import { ReportLocation } from '../src/definitions/Reports';
 
 const REPORT_A = { path: 'report-a', reportName: 'report-a' };
 const REPORT_B = { path: 'report-b', reportName: 'report-b' };
@@ -67,5 +68,17 @@ describe('filterBySignpostAtom', () => {
         store.set(filterBySignpostAtom, (range) => [range[0], END]);
 
         expect(store.get(filterBySignpostAtom)).toEqual([null, END]);
+    });
+
+    it("holds no range on a remote report sharing the local one's folder name", () => {
+        const store = storeOn(REPORT_A);
+        store.set(performanceReportLocationAtom, ReportLocation.LOCAL);
+        store.set(filterBySignpostAtom, [START, END]);
+
+        store.set(performanceReportLocationAtom, ReportLocation.REMOTE);
+        expect(store.get(filterBySignpostAtom)).toEqual([null, null]);
+
+        store.set(performanceReportLocationAtom, ReportLocation.LOCAL);
+        expect(store.get(filterBySignpostAtom)).toEqual([START, END]);
     });
 });
