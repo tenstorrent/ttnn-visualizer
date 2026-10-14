@@ -15,7 +15,7 @@ import getServerConfig from './functions/getServerConfig';
 import { SocketProvider } from './libs/SocketProvider';
 import { routeObjectList } from './routes/routeObjectList';
 import ProtectedRoute from './components/ProtectedRoute';
-import { openReportFromLink } from './libs/openReportFromLink';
+import { startWithReportLink } from './libs/openReportFromLink';
 
 // A function, so the router reads the URL after `openReportFromLink` strips a link's paths from it.
 const createRouter = () =>
@@ -65,10 +65,4 @@ const renderApp = () => {
     );
 };
 
-const start = async () => {
-    if (!(await openReportFromLink())) {
-        renderApp();
-    }
-};
-
-void start();
+void startWithReportLink(renderApp);

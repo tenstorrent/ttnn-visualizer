@@ -5,7 +5,12 @@
 import { AxiosError, AxiosResponse } from 'axios';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import Endpoints from '../src/definitions/Endpoints';
-import { clearReportLinkError, getReportLinkError, openReportFromLink } from '../src/libs/openReportFromLink';
+import {
+    clearReportLinkError,
+    getReportLinkError,
+    openReportFromLink,
+    startWithReportLink,
+} from '../src/libs/openReportFromLink';
 
 const h = vi.hoisted(() => ({ serverMode: false, post: vi.fn() }));
 
@@ -14,6 +19,10 @@ vi.mock('../src/functions/getServerConfig', () => ({
 }));
 
 vi.mock('../src/libs/axiosInstance', () => ({ default: { post: h.post } }));
+
+// `test_agent_app_links.py` encodes this name to exactly this, so the two must change together.
+const AWKWARD_NAME = 'a+b&c#d%e é';
+const AWKWARD_NAME_ENCODED = 'a%2Bb%26c%23d%25e%20%C3%A9';
 
 const PROFILER = '/reports/bge m3';
 const PERFORMANCE = '/reports/perf';
@@ -55,10 +64,11 @@ describe('openReportFromLink', () => {
 
         expect(await openReportFromLink(navigate)).toBe(true);
 
-        expect(h.post).toHaveBeenCalledWith(Endpoints.INSTANCE_LOCAL_PATHS, {
-            profiler_path: PROFILER,
-            performance_path: PERFORMANCE,
-        });
+        expect(h.post).toHaveBeenCalledWith(
+            Endpoints.INSTANCE_LOCAL_PATHS,
+            { profiler_path: PROFILER, performance_path: PERFORMANCE },
+            { timeout: 10_000 },
+        );
         const target: URL = navigate.mock.calls[0][0];
         expect(target.pathname).toBe('/operations/4');
         expect([...target.searchParams]).toEqual([
@@ -98,6 +108,58 @@ describe('openReportFromLink', () => {
 
         clearReportLinkError();
 
-        expect(getReportLinkError()).toBeUndefined();
+        expect(getReportLinkError()).toBeNull();
+    });
+
+    it('reads back a path the agent tools encoded, character for character', async () => {
+        openAt(`/operations/4?profiler_path=/r/${AWKWARD_NAME_ENCODED}`);
+        h.post.mockResolvedValue({ data: { instance_id: 'linked' } });
+
+        await openReportFromLink(vi.fn());
+
+        expect(h.post.mock.calls[0][1]).toEqual({ profiler_path: `/r/${AWKWARD_NAME}` });
+    });
+
+    it('opens nothing inside another page, which could otherwise switch it unseen', async () => {
+        openAt(linkTo('/operations/4'));
+
+        expect(await openReportFromLink(vi.fn(), () => true)).toBe(false);
+
+        expect(h.post).not.toHaveBeenCalled();
+        expect(window.location.search).toBe('');
+        expect(getReportLinkError()).toBe('A visualizer inside another page does not open a report by path.');
+    });
+});
+
+describe('startWithReportLink', () => {
+    it('renders nothing while a link reloads the tab', async () => {
+        const render = vi.fn();
+
+        await startWithReportLink(render, () => Promise.resolve(true));
+
+        expect(render).not.toHaveBeenCalled();
+    });
+
+    it('renders once the link has been handled, after its paths are stripped', async () => {
+        const order: string[] = [];
+
+        await startWithReportLink(
+            () => order.push('render'),
+            () => {
+                order.push('open');
+
+                return Promise.resolve(false);
+            },
+        );
+
+        expect(order).toEqual(['open', 'render']);
+    });
+
+    it('still renders when opening the link throws', async () => {
+        const render = vi.fn();
+
+        await startWithReportLink(render, () => Promise.reject(new Error('boom')));
+
+        expect(render).toHaveBeenCalledTimes(1);
     });
 });

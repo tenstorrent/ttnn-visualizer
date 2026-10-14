@@ -12,6 +12,7 @@ not say its rank.
 
 import json
 import logging
+from urllib.parse import parse_qs, urlsplit
 
 import pytest
 from ttnn_visualizer.agent import app_links, linking, operations, server
@@ -26,11 +27,31 @@ from ttnn_visualizer.agent.app_links import (
     with_report_link,
 )
 from ttnn_visualizer.agent.handles import ReportRegistry
-from ttnn_visualizer.tests.test_agent_linking import (
-    _GRAPHS,
-    _write_profiler,
-    _write_ranked_profiler,
+from ttnn_visualizer.tests.test_agent_linking import _write_profiler
+from ttnn_visualizer.tests.test_agent_operations import (
+    _RANKED_REPORT_SQL,
+    _write_report,
 )
+
+# Every character `quote` and `URLSearchParams` could disagree on. Its encoding is
+# what `tests/openReportFromLink.spec.ts` reads back, so the two must change together.
+AWKWARD_NAME = "a+b&c#d%e é"
+AWKWARD_NAME_ENCODED = "a%2Bb%26c%23d%25e%20%C3%A9"
+
+# One tensor and one argument on each rank under the same ids, for `tensor_flow` and
+# `operation_provenance`.
+_RANKED_TENSORS_SQL = """
+CREATE TABLE operation_arguments (
+    operation_id int, name text, value text, rank int NOT NULL DEFAULT 0
+);
+INSERT INTO operation_arguments VALUES (1, 'dim', '0', 0), (1, 'dim', '1', 1);
+INSERT INTO tensors (
+    tensor_id, shape, dtype, layout, memory_config, device_id, address, buffer_type,
+    size, rank
+) VALUES (1, 'Shape([1])', 'BFLOAT16', 'TILE', '', 0, 100, 'L1', 2, 0),
+         (1, 'Shape([1])', 'BFLOAT16', 'TILE', '', 0, 100, 'L1', 2, 1);
+INSERT INTO output_tensors VALUES (1, 0, 1, 0), (1, 0, 1, 1);
+"""
 
 
 @pytest.fixture(autouse=True)
@@ -180,6 +201,19 @@ class TestReportLink:
             f"{DEFAULT_APP_URL}/performance?performance_path={performance}"
         )
 
+    def test_an_awkward_path_comes_back_out_of_the_query_unchanged(self, tmp_path):
+        profiler = tmp_path / AWKWARD_NAME
+        profiler.mkdir()
+        (profiler / "db.sqlite").touch()
+        registry, handle = _registry(str(profiler), None)
+
+        query = urlsplit(
+            with_report_link(registry, {"handle": handle})["app_link"]
+        ).query
+
+        assert query.endswith(f"/{AWKWARD_NAME_ENCODED}")
+        assert parse_qs(query)["profiler_path"] == [str(profiler)]
+
     def test_nothing_the_app_could_open_gets_no_link(self, tmp_path):
         registry, handle = _registry(str(tmp_path), str(tmp_path))
 
@@ -296,20 +330,6 @@ class TestToolsCarryLinks:
 
         assert key in result
 
-    def test_find_operations_at_another_rank_carries_no_template(self, tmp_path):
-        """End to end, so a tool that stopped saying its rank would show up here."""
-        registry = ReportRegistry()
-        table = server._tool_table(registry)
-        profiler = _write_ranked_profiler(tmp_path / "ranked", _GRAPHS)
-        handle = table["load_report"]["handler"]({"profiler_path": profiler})["handle"]
-        find = table["find_operations"]["handler"]
-
-        rank_zero = find({"handle": handle, "name_contains": "ttnn", "rank": 0})
-        rank_one = find({"handle": handle, "name_contains": "ttnn", "rank": 1})
-
-        assert "app_link_template" in rank_zero
-        assert "app_link_template" not in rank_one
-
     @pytest.mark.parametrize(
         "tool",
         [
@@ -335,3 +355,36 @@ class TestToolsCarryLinks:
 
         text = json.loads(json.dumps(response))["result"]["content"][0]["text"]
         assert text.startswith(f"bad arguments for {tool}")
+
+
+class TestRankGatingOnRealAnswers:
+    """Each tool's own answer must state its rank; one that stopped would either lose
+    its link or link rank 1's id to rank 0's operation, and the faked answers above
+    would not notice."""
+
+    @pytest.fixture
+    def ranked(self, tmp_path):
+        path = _write_report(
+            tmp_path / "ranked", _RANKED_REPORT_SQL + _RANKED_TENSORS_SQL
+        )
+        registry = ReportRegistry()
+        table = server._tool_table(registry)
+        handle = table["load_report"]["handler"]({"profiler_path": path})["handle"]
+        return table, handle
+
+    @pytest.mark.parametrize(
+        ("tool", "arguments", "key"),
+        [
+            ("find_operations", {}, "app_link_template"),
+            ("memory_profile", {}, "app_link_template"),
+            ("tensor_flow", {"tensor_id": 1}, "app_link_template"),
+            ("operation_detail", {"operation_id": 1}, "app_link"),
+            ("operation_provenance", {"operation_id": 1}, "app_link"),
+        ],
+    )
+    def test_a_link_at_rank_0_and_none_at_rank_1(self, ranked, tool, arguments, key):
+        table, handle = ranked
+        handler = table[tool]["handler"]
+
+        assert key in handler({"handle": handle, **arguments, "rank": 0})
+        assert key not in handler({"handle": handle, **arguments, "rank": 1})

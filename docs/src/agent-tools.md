@@ -60,8 +60,9 @@ A `TTNN_VISUALIZER_URL` that is not an http(s) URL with a host gives no links at
 rather than links to the default.
 
 They open only in a visualizer running locally; a hosted one does not open a report by
-path. A local one opens a linked directory without asking, as long as it holds the files a
-report needs, so follow links you got from your own agent. A page that plants a `db.sqlite`
+path, and neither does one framed inside another page. A local one opens a linked directory
+without asking, as long as it holds the files a report needs, so follow links you got from
+your own agent. A page that plants a `db.sqlite`
 in a folder you can reach, such as Downloads, could link the visualizer to it too. An
 answer read at a rank other than 0 carries no link, because the visualizer shows every
 operation at rank 0 and would open another rank's operation under the same id.

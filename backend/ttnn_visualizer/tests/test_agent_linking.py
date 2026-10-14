@@ -1159,6 +1159,20 @@ class TestServerRouting:
         )
         assert "app_link" not in rank_one
 
+    def test_top_ops_carries_a_template_at_the_rank_it_linked(
+        self, linked, tmp_path, monkeypatch
+    ):
+        monkeypatch.delenv(app_links.APP_URL_ENV_VAR, raising=False)
+        path = _write_ranked_profiler(tmp_path / "ranked", _GRAPHS)
+        registry, handle, _ = linked(profiler_path=path)
+
+        result = self._call(registry, "top_ops", {"handle": handle})
+
+        assert result["operation_link"]["rank"] == 0
+        assert result["app_link_template"].startswith(
+            f"{app_links.DEFAULT_APP_URL}/operations/{{operation_id}}?"
+        )
+
     def test_operation_detail_carries_the_link(self, linked):
         registry, handle, _ = linked()
 

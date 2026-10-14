@@ -307,6 +307,6 @@ describe('Layout linked-report error', () => {
             toast.dispatchEvent(new Event('animationend'));
         });
 
-        await waitFor(() => expect(getReportLinkError()).toBeUndefined());
+        await waitFor(() => expect(getReportLinkError()).toBeNull());
     });
 });

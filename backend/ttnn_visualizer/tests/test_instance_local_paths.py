@@ -4,9 +4,11 @@
 
 """`POST /api/instance/local-paths`: how a link from the agent tools opens its report (#2047)."""
 
+import json
 import os
 
 import pytest
+from ttnn_visualizer.models import InstanceTable
 
 ENDPOINT = "/api/instance/local-paths"
 
@@ -30,6 +32,11 @@ def report_dirs(tmp_path):
     (performance / "profile_log_device.csv").touch()
     (performance / "ops_perf_results_2026_08_19_16_47_08.csv").touch()
     return profiler, performance
+
+
+def _instance_count(app):
+    with app.app_context():
+        return InstanceTable.query.count()
 
 
 def _instance(client, instance_id):
@@ -91,6 +98,34 @@ class TestLocalPaths:
 
         assert response.status_code == 400
         assert reason in response.get_json()["error"]
+
+    def test_a_cross_site_text_plain_post_is_not_read(self, app, client, report_dirs):
+        """Such a POST skips the CORS preflight; only the JSON content type keeps it out."""
+        profiler, _ = report_dirs
+        before = _instance_count(app)
+
+        response = client.post(
+            ENDPOINT,
+            data=json.dumps({"profiler_path": str(profiler)}),
+            content_type="text/plain",
+        )
+
+        assert response.status_code == 400
+        assert _instance_count(app) == before
+
+    @pytest.mark.parametrize("bad", ["profiler_path", "performance_path"])
+    def test_one_bad_half_refuses_the_whole_link(
+        self, app, client, report_dirs, tmp_path, bad
+    ):
+        profiler, performance = report_dirs
+        payload = {"profiler_path": str(profiler), "performance_path": str(performance)}
+        payload[bad] = str(tmp_path / "missing")
+        before = _instance_count(app)
+
+        response = client.post(ENDPOINT, json=payload)
+
+        assert response.status_code == 400
+        assert _instance_count(app) == before
 
     @pytest.mark.parametrize("key", ["profiler_path", "performance_path"])
     def test_it_opens_only_a_directory_holding_a_report(self, client, tmp_path, key):

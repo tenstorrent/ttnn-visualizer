@@ -2607,6 +2607,8 @@ def open_local_report_paths():
     can send the reader here with paths of its choosing, so only a directory holding a
     report the app could load is opened, and it is opened resolved.
     """
+    # Never `force=True`: a cross-site `text/plain` POST skips the CORS preflight, and
+    # only requiring a JSON content type keeps such a request from being read.
     payload = request.get_json(silent=True) or {}
     if not isinstance(payload, dict):
         return response_bad_request("Expected a JSON object.")
