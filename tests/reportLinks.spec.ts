@@ -170,6 +170,26 @@ describe('reportLinks', () => {
         });
 
         // The remote picker scopes badges by the stored host, so a stale one hides the badge on the new host.
+        // The ticket's case: a performance report synced from `h1`, then compared from `h2`.
+        it('replaces the last pair when only its performance host changes', () => {
+            const links = [link('mem-a', 'perf-a', { performanceHost: 'h1' })];
+            const result = upsertReportLink(links, link('mem-a', 'perf-a', { performanceHost: 'h2' }));
+
+            expect(result).not.toBe(links);
+            expect(result).toEqual([
+                expect.objectContaining({
+                    performanceAccess: createReportLinkAccess(ReportLocation.REMOTE, '/remote/perf-a', 'h2'),
+                }),
+            ]);
+        });
+
+        it('appends a different pair even when its access matches the last pair', () => {
+            const links = [link('mem-a', 'perf-a')];
+            const result = upsertReportLink(links, { ...links[0], profilerId: 'mem-b', performanceId: 'perf-b' });
+
+            expect(result.map((entry) => entry.profilerId)).toEqual(['mem-a', 'mem-b']);
+        });
+
         it('replaces a pair seen again from a different remote host and moves it to the end', () => {
             const links = [link('mem-a', 'perf-a', { performanceHost: 'h1' }), link('mem-b', 'perf-b')];
             const result = upsertReportLink(links, link('mem-a', 'perf-a', { performanceHost: 'h2', recordedAt: 99 }));
@@ -183,7 +203,8 @@ describe('reportLinks', () => {
         });
 
         it.each([
-            ['location', createReportLinkAccess(ReportLocation.REMOTE, 'mem-a', 'h1')],
+            // No host, so only the location differs from the stored local access.
+            ['location', createReportLinkAccess(ReportLocation.REMOTE, 'mem-a', null)],
             ['path', createReportLinkAccess(ReportLocation.LOCAL, 'mem-a-moved', null)],
         ])('replaces the last pair when only its %s changes', (_field, profilerAccess) => {
             const links = [link('mem-a', 'perf-a')];
