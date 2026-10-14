@@ -21,7 +21,7 @@ from typing import Dict, List, Optional
 from unittest.mock import patch
 
 import pytest
-from ttnn_visualizer.agent import linking, server, tools
+from ttnn_visualizer.agent import linking, links, server, tools
 from ttnn_visualizer.agent.bounds import MAX_LIMIT
 from ttnn_visualizer.agent.handles import CacheVariant, ReportRegistry, load_report
 from ttnn_visualizer.agent.linking import (
@@ -1134,6 +1134,28 @@ class TestServerRouting:
 
         assert result["operation_link"]["status"] == LinkStatus.LINKED.value
         assert all("operation_id" in row for row in result["ops"])
+
+    def test_operation_detail_links_to_the_operation_at_rank_0_only(
+        self, linked, tmp_path, monkeypatch
+    ):
+        """The app reads rank 0, so rank 1's operation 2 would open rank 0's."""
+        monkeypatch.delenv(links.APP_URL_ENV_VAR, raising=False)
+        path = _write_ranked_profiler(tmp_path / "ranked", _GRAPHS)
+        registry, handle, _ = linked(profiler_path=path)
+
+        rank_zero = self._call(
+            registry, "operation_detail", {"handle": handle, "operation_id": 2}
+        )
+        rank_one = self._call(
+            registry,
+            "operation_detail",
+            {"handle": handle, "operation_id": 2, "rank": 1},
+        )
+
+        assert rank_zero["link"].startswith(
+            f"{links.DEFAULT_APP_URL}/operations/2?profiler_path={path}&"
+        )
+        assert "link" not in rank_one
 
     def test_operation_detail_carries_the_link(self, linked):
         registry, handle, _ = linked()
