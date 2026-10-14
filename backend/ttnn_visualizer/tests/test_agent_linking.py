@@ -1063,7 +1063,7 @@ class TestOperationDetailLink:
         assert len(result["perf_rows"]) == MAX_LIMIT
         assert result["perf_row_count"] == count
 
-    def test_a_share_is_of_the_device_time_the_match_could_pair(self, linked):
+    def test_a_share_leaves_out_host_ops_and_signposts(self, linked):
         """The host op and the signpost launch nothing, so their time is not counted."""
         registry, handle, _ = linked()
 
@@ -1071,6 +1071,23 @@ class TestOperationDetailLink:
 
         assert result["report_device_time_total"] == 10.0
         assert result["perf_rows"][0]["device_time_share_percent"] == 90.0
+
+    def test_a_row_past_the_profiler_capture_still_counts_toward_the_total(
+        self, linked
+    ):
+        """It ran on the device, so it is the report's device time though no operation
+        claims it -- counting only linked rows would raise every share."""
+        rows = [
+            *_CANONICAL_ROWS,
+            {**_perf_row("TrailingDeviceOperation", 6), "device_time": "5.0"},
+        ]
+        registry, handle, _ = linked(rows=rows)
+
+        result = linking.operation_detail(registry, handle, operation_id=3)
+
+        assert result["operation_link"]["status"] == LinkStatus.LINKED.value
+        assert result["report_device_time_total"] == 15.0
+        assert result["perf_rows"][0]["device_time_share_percent"] == 60.0
 
     def test_it_sums_the_operations_rows_and_names_the_slowest(self, linked):
         graphs = {**_GRAPHS, 2: _graph("ttnn.matmul", "Alpha", "Beta", "Gamma")}

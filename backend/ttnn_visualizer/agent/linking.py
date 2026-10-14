@@ -361,6 +361,11 @@ def is_host_op_row(row: Dict) -> bool:
     return HOST_OP_MARKER in str(row.get("op_code") or "")
 
 
+def _pairable(row: Dict) -> bool:
+    """A row a device operation could pair with: host ops and signposts launch none."""
+    return not is_host_op_row(row) and row.get("op_type") != SIGNPOST_OP_TYPE
+
+
 def _canonical_rows(registry: ReportRegistry, handle: str) -> List[Dict]:
     return list(tools.canonical_report(registry, handle).get("report", []))
 
@@ -551,7 +556,7 @@ def _build_link(
     match = match_device_operations(
         orders[NodeOrder.FUNCTION_START],
         orders[NodeOrder.FUNCTION_END],
-        [row for row in all_rows if not is_host_op_row(row)],
+        [row for row in all_rows if _pairable(row)],
         num_devices,
     )
     if match is None:
@@ -578,13 +583,12 @@ def _build_link(
         operation_by_perf_id=operation_by_perf_id,
         perf_rows_by_operation=perf_rows_by_operation,
         unlinked=unlinked_rows(all_rows, operation_by_perf_id),
-        # Over the rows the match could pair, as the app's Operation Details sums it
-        # (#2111): host ops and signposts launch nothing.
+        # Every pairable row, paired or not. Operation Details (#2111) sums the same
+        # rows: it fetches with host ops hidden, and a signpost's device time is blank.
         report_device_time_total=sum(
             device_time
             for row in all_rows
-            if not is_host_op_row(row)
-            and row.get("op_type") != SIGNPOST_OP_TYPE
+            if _pairable(row)
             and (device_time := tools.countable_device_time(row)) is not None
         ),
         partitioned_caveat=tools.partitioned_caveat(all_rows),

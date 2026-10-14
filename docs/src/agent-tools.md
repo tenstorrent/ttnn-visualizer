@@ -175,7 +175,7 @@ memory report to a performance report. `top_ops` then gives each row an `operati
 and `operation_detail` lists an operation's `perf_rows` with device time in microseconds;
 its own `duration` is host seconds. Each row's `device_time_share_percent` is its percent of
 `report_device_time_total`, the device time of every row that is not a host op or a
-signpost. That is not tt-perf-report's `total_percent`, which also counts the op-to-op gap,
+signpost, whether or not it linked to an operation. That is not tt-perf-report's `total_percent`, which also counts the op-to-op gap,
 so on an untraced capture it mostly measures dispatch gaps rather than device time. Nor is
 `report_device_time_total` quite `top_ops`'s `device_time_total`, which sums every row's
 device time; the two agree on reports tt-perf-report writes, since it leaves host ops and
