@@ -56,14 +56,15 @@ Links point at `http://localhost:8000` unless the server's environment sets
 claude mcp add ttnn-visualizer -e TTNN_VISUALIZER_URL=http://localhost:8001 -- ttnn-visualizer-mcp
 ```
 
-`load_report` also takes an `app_url`, which wins for that handle but must name this
-machine (`localhost` or a loopback address). A `TTNN_VISUALIZER_URL` that is not an http(s)
-URL with a host gives no links at all, rather than links to the default.
+A `TTNN_VISUALIZER_URL` that is not an http(s) URL with a host gives no links at all,
+rather than links to the default.
 
 They open only in a visualizer running locally; a hosted one does not open a report by
-path, and a local one opens only a directory holding a report it could load. An answer
-read at a rank other than 0 carries no link, because the visualizer shows every operation
-at rank 0 and would open another rank's operation under the same id.
+path. A local one opens a linked directory without asking, as long as it holds the files a
+report needs, so follow links you got from your own agent. A page that plants a `db.sqlite`
+in a folder you can reach, such as Downloads, could link the visualizer to it too. An
+answer read at a rank other than 0 carries no link, because the visualizer shows every
+operation at rank 0 and would open another rank's operation under the same id.
 
 ## The tools
 

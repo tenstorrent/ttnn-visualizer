@@ -18,7 +18,7 @@ import logging
 import sys
 from typing import Callable, Dict, List, Optional, TextIO
 
-from ttnn_visualizer.agent import app_links, app_url, linking, operations, tools
+from ttnn_visualizer.agent import app_links, linking, operations, tools
 from ttnn_visualizer.agent.bounds import MAX_LIMIT
 from ttnn_visualizer.agent.handles import (
     ReportRegistry,
@@ -97,15 +97,6 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
                         "description": (
                             "Directory holding ops_perf_results*.csv and "
                             "profile_log_device.csv."
-                        ),
-                    },
-                    "app_url": {
-                        "type": "string",
-                        "description": (
-                            "The web application on this machine that this "
-                            "handle's links open in, e.g. http://localhost:5173. "
-                            "Defaults to the server's "
-                            f"{app_url.APP_URL_ENV_VAR}, else {app_url.DEFAULT_APP_URL}."
                         ),
                     },
                 },

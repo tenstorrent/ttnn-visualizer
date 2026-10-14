@@ -7,7 +7,7 @@ import getServerConfig from '../functions/getServerConfig';
 import getResponseError from '../functions/getResponseError';
 import axiosInstance from './axiosInstance';
 
-// The query parameters the agent tools' links carry (`backend/ttnn_visualizer/agent/links.py`).
+// The query parameters the agent tools' links carry (`backend/ttnn_visualizer/agent/app_links.py`).
 const REPORT_PATH_PARAMS = ['profiler_path', 'performance_path'] as const;
 
 // Raised by `Layout` rather than here: StrictMode re-subscribes the toast container, losing an earlier toast.

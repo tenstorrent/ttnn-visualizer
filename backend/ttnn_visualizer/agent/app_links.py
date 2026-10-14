@@ -15,16 +15,23 @@ one that does not say its rank, gets no link: it could open another rank's
 operation under the same id.
 """
 
+import functools
+import logging
+import os
 from pathlib import Path
 from typing import Dict, Optional
-from urllib.parse import quote, urlencode
+from urllib.parse import quote, urlencode, urlsplit, urlunsplit
 
-from ttnn_visualizer.agent.app_url import configured_app_url
 from ttnn_visualizer.agent.handles import ReportRegistry
 from ttnn_visualizer.utils import (
     is_valid_performance_report_dir,
     is_valid_profiler_report_dir,
 )
+
+logger = logging.getLogger(__name__)
+
+APP_URL_ENV_VAR = "TTNN_VISUALIZER_URL"
+DEFAULT_APP_URL = "http://localhost:8000"
 
 # The query parameters `src/libs/openReportFromLink.ts` reads a report's directories from.
 PROFILER_PATH_PARAM = "profiler_path"
@@ -33,6 +40,64 @@ PERFORMANCE_PATH_PARAM = "performance_path"
 OPERATION_ID_PLACEHOLDER = "{operation_id}"
 
 _LINKABLE_RANKS = (None, 0)
+
+
+class InvalidAppUrlError(ValueError):
+    """An app URL a link cannot be built on."""
+
+
+def checked_app_url(url: object) -> str:
+    """`url` as the base of a link: http(s) with a host, no query or fragment, no
+    trailing slash."""
+    if not isinstance(url, str):
+        raise InvalidAppUrlError(f"app URL must be a string; got {url!r}")
+    # Python and a browser part ways on these: a browser reads `\` as `/`, so
+    # `http://evil.example\@localhost` parses here as localhost and opens evil.example.
+    if any(
+        char in "\\@" or char.isspace() or not char.isprintable()
+        for char in url.strip()
+    ):
+        raise InvalidAppUrlError(
+            "app URL must be a plain http or https URL, with no credentials, "
+            f"backslashes or spaces; got {url!r}"
+        )
+    try:
+        parts = urlsplit(url.strip())
+        # Read for its check: `port` raises for one out of range, `urlsplit` does not.
+        _ = parts.port
+    except ValueError as error:
+        raise InvalidAppUrlError(
+            f"app URL is not a URL ({error}); got {url!r}"
+        ) from None
+    if parts.scheme not in ("http", "https") or not parts.hostname:
+        raise InvalidAppUrlError(
+            f"app URL must be an http or https URL with a host, e.g. "
+            f"{DEFAULT_APP_URL}; got {url!r}"
+        )
+    # A bare `?` or `#` splits as an empty query or fragment, yet still ends the path.
+    if "?" in url or "#" in url:
+        raise InvalidAppUrlError(
+            f"app URL must not carry a query or fragment; got {url!r}"
+        )
+    return urlunsplit((parts.scheme, parts.netloc, parts.path.rstrip("/"), "", ""))
+
+
+def configured_app_url() -> Optional[str]:
+    """`TTNN_VISUALIZER_URL`, else the default; None when it is set but unusable."""
+    return _checked_configured_url(os.environ.get(APP_URL_ENV_VAR))
+
+
+# Keyed by the value, so a bad one warns once rather than on every answer.
+@functools.lru_cache(maxsize=8)
+def _checked_configured_url(configured: Optional[str]) -> Optional[str]:
+    if not configured:
+        return DEFAULT_APP_URL
+    try:
+        return checked_app_url(configured)
+    except InvalidAppUrlError as error:
+        # The default would send the reader to an app the configuration says is not it.
+        logger.warning("no links: %s=%s", APP_URL_ENV_VAR, error)
+        return None
 
 
 def _openable(path: Optional[str], is_valid) -> Optional[str]:
@@ -52,9 +117,10 @@ def _report_params(registry: ReportRegistry, handle: str) -> Dict[str, str]:
     return params
 
 
-def _link(registry: ReportRegistry, handle: str, route: str) -> Optional[str]:
-    base = registry.app_url(handle) or configured_app_url()
-    params = _report_params(registry, handle)
+def _link(
+    registry: ReportRegistry, handle: str, route: str, params: Dict[str, str]
+) -> Optional[str]:
+    base = configured_app_url()
     if base is None or not params:
         return None
     return f"{base}{route}?{urlencode(params, quote_via=quote, safe='/')}"
@@ -64,9 +130,10 @@ def _operations_link(
     registry: ReportRegistry, handle: str, route: str
 ) -> Optional[str]:
     """`route` under /operations, when the app can open the memory report."""
-    if PROFILER_PATH_PARAM not in _report_params(registry, handle):
+    params = _report_params(registry, handle)
+    if PROFILER_PATH_PARAM not in params:
         return None
-    return _link(registry, handle, route)
+    return _link(registry, handle, route, params)
 
 
 def _reads_the_rank_the_app_shows(answer: Dict[str, object]) -> bool:
@@ -87,10 +154,9 @@ def with_report_link(
     """`load_report`'s `result`, plus an `app_link` to the report's operations, or to
     its performance view when the app cannot open its memory report."""
     handle = str(result["handle"])
-    link = _operations_link(registry, handle, "/operations") or _link(
-        registry, handle, "/performance"
-    )
-    return _with(result, "app_link", link)
+    params = _report_params(registry, handle)
+    route = "/operations" if PROFILER_PATH_PARAM in params else "/performance"
+    return _with(result, "app_link", _link(registry, handle, route, params))
 
 
 def with_operation_link(
@@ -133,9 +199,14 @@ def with_linked_rows_link_template(
 
 
 __all__ = [
+    "APP_URL_ENV_VAR",
+    "DEFAULT_APP_URL",
+    "InvalidAppUrlError",
     "OPERATION_ID_PLACEHOLDER",
     "PERFORMANCE_PATH_PARAM",
     "PROFILER_PATH_PARAM",
+    "checked_app_url",
+    "configured_app_url",
     "with_linked_rows_link_template",
     "with_operation_link",
     "with_operation_link_template",

@@ -14,18 +14,16 @@ import json
 import logging
 
 import pytest
-from ttnn_visualizer.agent import linking, operations, server
+from ttnn_visualizer.agent import app_links, linking, operations, server
 from ttnn_visualizer.agent.app_links import (
-    with_linked_rows_link_template,
-    with_operation_link,
-    with_operation_link_template,
-    with_report_link,
-)
-from ttnn_visualizer.agent.app_url import (
     APP_URL_ENV_VAR,
     DEFAULT_APP_URL,
     InvalidAppUrlError,
     checked_app_url,
+    with_linked_rows_link_template,
+    with_operation_link,
+    with_operation_link_template,
+    with_report_link,
 )
 from ttnn_visualizer.agent.handles import ReportRegistry
 from ttnn_visualizer.tests.test_agent_linking import (
@@ -38,6 +36,7 @@ from ttnn_visualizer.tests.test_agent_linking import (
 @pytest.fixture(autouse=True)
 def _no_configured_app_url(monkeypatch):
     monkeypatch.delenv(APP_URL_ENV_VAR, raising=False)
+    app_links._checked_configured_url.cache_clear()
 
 
 @pytest.fixture
@@ -58,9 +57,9 @@ def reports(tmp_path):
     return str(profiler), str(performance), query
 
 
-def _registry(profiler, performance, app_url=None):
+def _registry(profiler, performance):
     registry = ReportRegistry()
-    return registry, registry.add(profiler, performance, app_url=app_url)
+    return registry, registry.add(profiler, performance)
 
 
 def _answer(handle, rank=None, **extra):
@@ -101,17 +100,6 @@ class TestAppUrl:
             checked_app_url(url)
 
     @pytest.mark.parametrize(
-        "url", ["http://localhost:5173", "http://127.0.0.1:8000", "http://[::1]:8000"]
-    )
-    def test_an_agent_may_name_this_machine(self, url):
-        assert checked_app_url(url, loopback_only=True) == url
-
-    def test_an_agent_may_not_send_local_paths_to_another_host(self):
-        """A link carries absolute paths, and an agent can be steered by what it reads."""
-        with pytest.raises(InvalidAppUrlError, match=APP_URL_ENV_VAR):
-            checked_app_url("https://evil.example", loopback_only=True)
-
-    @pytest.mark.parametrize(
         "url",
         [
             # Python reads the host as localhost; a browser reads `\\` as `/`.
@@ -124,7 +112,7 @@ class TestAppUrl:
     )
     def test_a_url_python_and_a_browser_would_read_apart_is_refused(self, url):
         with pytest.raises(InvalidAppUrlError):
-            checked_app_url(url, loopback_only=True)
+            checked_app_url(url)
 
     def test_links_go_to_the_default_app_when_nothing_says_otherwise(self, reports):
         registry, handle = _registry(*reports[:2])
@@ -141,16 +129,6 @@ class TestAppUrl:
 
         assert link.startswith("https://lab.example/visualizer/operations/3?")
 
-    def test_a_handle_loaded_with_an_app_url_overrides_the_environment(
-        self, monkeypatch, reports
-    ):
-        monkeypatch.setenv(APP_URL_ENV_VAR, "http://localhost:8001")
-        registry, handle = _registry(*reports[:2], app_url="http://localhost:5173")
-
-        link = with_operation_link(registry, _answer(handle))["app_link"]
-
-        assert link.startswith("http://localhost:5173/")
-
     def test_a_bad_configured_url_gives_no_link_rather_than_the_default(
         self, monkeypatch, reports, caplog
     ):
@@ -160,6 +138,11 @@ class TestAppUrl:
 
         with caplog.at_level(logging.WARNING):
             assert "app_link" not in with_operation_link(registry, _answer(handle))
+            assert "app_link" not in with_operation_link(registry, _answer(handle))
+        # Once, not once per answer.
+        assert [r.getMessage() for r in caplog.records].count(
+            caplog.records[0].getMessage()
+        ) == 1
         assert APP_URL_ENV_VAR in caplog.text
 
 
@@ -202,20 +185,17 @@ class TestReportLink:
 
         assert "app_link" not in with_report_link(registry, {"handle": handle})
 
-    def test_load_report_takes_and_checks_the_app_url(self, tmp_path):
+    def test_load_report_answers_with_a_link_to_the_report(self, monkeypatch, tmp_path):
+        monkeypatch.setenv(APP_URL_ENV_VAR, "http://localhost:5173/")
         registry = ReportRegistry()
         handler = server._tool_table(registry)["load_report"]["handler"]
         profiler = _write_profiler(tmp_path / "profiler", {})
 
-        result = handler(
-            {"profiler_path": profiler, "app_url": "http://localhost:5173/"}
-        )
+        result = handler({"profiler_path": profiler})
 
         assert result["app_link"] == (
             f"http://localhost:5173/operations?profiler_path={profiler}"
         )
-        with pytest.raises(InvalidAppUrlError):
-            handler({"profiler_path": profiler, "app_url": "https://evil.example"})
 
 
 class TestOperationLinks:

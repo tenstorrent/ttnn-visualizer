@@ -4,6 +4,8 @@
 
 """`POST /api/instance/local-paths`: how a link from the agent tools opens its report (#2047)."""
 
+import os
+
 import pytest
 
 ENDPOINT = "/api/instance/local-paths"
@@ -107,6 +109,10 @@ class TestLocalPaths:
         instance = _instance(client, response.get_json()["instance_id"])
         assert instance["profiler_path"] == f"{profiler.resolve()}/db.sqlite"
 
+    @pytest.mark.skipif(
+        hasattr(os, "geteuid") and os.geteuid() == 0,
+        reason="root reads a directory whatever its mode",
+    )
     def test_an_unreadable_path_is_refused_rather_than_raised(self, client, tmp_path):
         locked = tmp_path / "locked"
         locked.mkdir()

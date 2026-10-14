@@ -17,7 +17,6 @@ from enum import Enum
 from pathlib import Path
 from typing import Callable, Dict, List, Optional, Tuple, TypeVar, cast
 
-from ttnn_visualizer.agent.app_url import checked_app_url
 from ttnn_visualizer.csv_queries import (
     DeviceLogProfilerQueries,
     OpsPerformanceQueries,
@@ -53,16 +52,10 @@ class ReportRegistry:
 
     def __init__(self) -> None:
         self._instances: Dict[str, Instance] = {}
-        self._app_urls: Dict[str, str] = {}
         self._reports: Dict[Tuple[str, CacheVariant], object] = {}
         self._next_id = 1
 
-    def add(
-        self,
-        profiler_path: Optional[str],
-        performance_path: Optional[str],
-        app_url: Optional[str] = None,
-    ) -> str:
+    def add(self, profiler_path: Optional[str], performance_path: Optional[str]) -> str:
         handle = f"report-{self._next_id}"
         self._next_id += 1
         self._instances[handle] = Instance(
@@ -70,14 +63,7 @@ class ReportRegistry:
             profiler_path=profiler_path,
             performance_path=performance_path,
         )
-        if app_url:
-            self._app_urls[handle] = app_url
         return handle
-
-    def app_url(self, handle: str) -> Optional[str]:
-        """The web application `load_report` was told this handle's links go to."""
-        self.get(handle)
-        return self._app_urls.get(handle)
 
     def get(self, handle: str) -> Instance:
         try:
@@ -117,7 +103,6 @@ class ReportRegistry:
 
     def clear(self) -> None:
         self._instances.clear()
-        self._app_urls.clear()
         self._reports.clear()
         self._next_id = 1
 
@@ -256,7 +241,6 @@ def load_report(
     registry: ReportRegistry,
     profiler_path: Optional[str] = None,
     performance_path: Optional[str] = None,
-    app_url: Optional[str] = None,
 ) -> Dict[str, object]:
     """Register a report by path and describe what it holds."""
     if profiler_path is None and performance_path is None:
@@ -264,10 +248,7 @@ def load_report(
 
     profiler = _resolved_directory("profiler_path", profiler_path)
     performance = _resolved_directory("performance_path", performance_path)
-    checked_url = (
-        checked_app_url(app_url, loopback_only=True) if app_url is not None else None
-    )
-    handle = registry.add(profiler, performance, app_url=checked_url)
+    handle = registry.add(profiler, performance)
     instance = registry.get(handle)
 
     metadata: Dict[str, str] = {}
