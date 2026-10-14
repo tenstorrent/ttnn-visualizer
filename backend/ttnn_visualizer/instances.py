@@ -7,6 +7,7 @@ import random
 import string
 from logging import getLogger
 from pathlib import Path
+from typing import Optional
 
 from flask import request
 from ttnn_visualizer.exceptions import InvalidProfilerPath, InvalidReportPath
@@ -552,6 +553,15 @@ def create_random_instance_id():
     return "".join(random.choices(string.ascii_lowercase + string.digits, k=45))
 
 
+def _report_name(path: Optional[Path]) -> str:
+    """The folder's own name, which the app treats as the report being active.
+
+    Empty only for no path: a report directly under `/` is still named, or the app
+    would take it for no report at all.
+    """
+    return path.name if path else ""
+
+
 def create_instance_from_local_paths(profiler_path, performance_path):
     _profiler_path = Path(profiler_path) if profiler_path else None
     _performance_path = Path(performance_path) if performance_path else None
@@ -564,16 +574,8 @@ def create_instance_from_local_paths(profiler_path, performance_path):
     ):
         raise InvalidProfilerPath()
 
-    profiler_name = (
-        _profiler_path.parts[-1]
-        if _profiler_path and len(_profiler_path.parts) > 2
-        else ""
-    )
-    performance_name = (
-        _performance_path.parts[-1]
-        if _performance_path and len(_performance_path.parts) > 2
-        else ""
-    )
+    profiler_name = _report_name(_profiler_path)
+    performance_name = _report_name(_performance_path)
     instance_data = InstanceTable(
         instance_id=create_random_instance_id(),
         active_report={

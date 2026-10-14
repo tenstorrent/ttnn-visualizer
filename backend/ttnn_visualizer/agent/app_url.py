@@ -38,7 +38,24 @@ def checked_app_url(url: object, loopback_only: bool = False) -> str:
     trailing slash. `loopback_only` also refuses any host but this machine."""
     if not isinstance(url, str):
         raise InvalidAppUrlError(f"app_url must be a string; got {url!r}")
-    parts = urlsplit(url.strip())
+    # Python and a browser part ways on these: a browser reads `\` as `/`, so
+    # `http://evil.example\@localhost` parses here as localhost and opens evil.example.
+    if any(
+        char in "\\@" or char.isspace() or not char.isprintable()
+        for char in url.strip()
+    ):
+        raise InvalidAppUrlError(
+            f"app_url must be a plain http or https URL, with no credentials, "
+            f"backslashes or spaces; got {url!r}"
+        )
+    try:
+        parts = urlsplit(url.strip())
+        # Read for its check: `port` raises for one out of range, `urlsplit` does not.
+        _ = parts.port
+    except ValueError as error:
+        raise InvalidAppUrlError(
+            f"app_url is not a URL ({error}); got {url!r}"
+        ) from None
     if parts.scheme not in ("http", "https") or not parts.hostname:
         raise InvalidAppUrlError(
             f"app_url must be an http or https URL with a host, e.g. "

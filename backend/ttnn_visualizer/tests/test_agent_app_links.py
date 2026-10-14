@@ -91,6 +91,8 @@ class TestAppUrl:
             # Empty, yet either would still end the path: links would carry no report.
             "http://localhost:8000/?",
             "http://localhost:8000#",
+            "http://[::1",
+            "http://localhost:99999",
             8000,
         ],
     )
@@ -108,6 +110,21 @@ class TestAppUrl:
         """A link carries absolute paths, and an agent can be steered by what it reads."""
         with pytest.raises(InvalidAppUrlError, match=APP_URL_ENV_VAR):
             checked_app_url("https://evil.example", loopback_only=True)
+
+    @pytest.mark.parametrize(
+        "url",
+        [
+            # Python reads the host as localhost; a browser reads `\\` as `/`.
+            "http://evil.example\\@localhost",
+            "http://evil.example\\\uff20localhost",
+            "http://user@localhost:8000",
+            "http://local host:8000",
+            "http://localhost:8000\x00",
+        ],
+    )
+    def test_a_url_python_and_a_browser_would_read_apart_is_refused(self, url):
+        with pytest.raises(InvalidAppUrlError):
+            checked_app_url(url, loopback_only=True)
 
     def test_links_go_to_the_default_app_when_nothing_says_otherwise(self, reports):
         registry, handle = _registry(*reports[:2])
