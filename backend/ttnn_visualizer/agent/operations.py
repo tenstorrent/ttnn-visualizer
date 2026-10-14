@@ -203,13 +203,11 @@ def refuse_unattributable(
 
 
 def _buffer_type_name(value: object) -> str:
-    """`buffers.buffer_type` arrives as the column's own value, not a `BufferType`.
+    """A stored `buffer_type` by name, whether or not it became a `BufferType`.
 
-    `_dataclass_select_clause` reads the column straight, so despite the
-    annotation the value is whatever the capture stored. Both forms are common
-    locally -- integers (`0`, `1`, `3`) in most reports, including every
-    `SCHEMA_V*` fixture, and text (`'DRAM'`, `'L1'`) in newer ones -- so neither
-    is the fallback case.
+    `Buffer` and `Tensor` coerce the column, which stores integers (`0`, `1`,
+    `3`) in most reports and text (`'DRAM'`, `'L1'`) in newer ones, but pass an
+    unrecognised value through unchanged.
     """
     if isinstance(value, int) and not isinstance(value, bool):
         try:

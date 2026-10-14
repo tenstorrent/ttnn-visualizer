@@ -90,6 +90,12 @@ class Buffer(SerializeableDataclass):
     buffer_layout: Optional[int] = None
     rank: int = 0
 
+    def __post_init__(self):
+        # The frontend matches a buffer to its tensor by comparing the two
+        # `buffer_type`s, so this column needs the same form as the tensor's.
+        # Some reports store it as text (`'L1'`).
+        self.buffer_type = _coerce_buffer_type(self.buffer_type)
+
 
 @dataclasses.dataclass
 class BufferPage(SerializeableDataclass):

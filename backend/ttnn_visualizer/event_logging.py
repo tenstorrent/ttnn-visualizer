@@ -766,7 +766,8 @@ def get_application_version() -> str:
 
 
 def _is_safe_value(value: str) -> bool:
-    return bool(_SAFE_VALUE_PATTERN.match(value))
+    # `fullmatch`, not `match`: `$` also matches before a trailing newline.
+    return bool(_SAFE_VALUE_PATTERN.fullmatch(value))
 
 
 def _detail_value(value: Any) -> str:

@@ -325,6 +325,7 @@ const OperationDetailsComponent = ({ operationId }: OperationDetailsProps) => {
                             <ProducerConsumersData
                                 selectedTensor={
                                     inputOutputList.find((t) => t.id === selectedTensorId) ||
+                                    details.tensorListById.get(selectedTensorId) ||
                                     details.getTensorForAddress(selectedAddress ?? 0)
                                 }
                                 details={details}

@@ -33,9 +33,22 @@ describe('toBufferType', () => {
         expect(BufferTypeToStringBufferType[toBufferType(name)!]).toBe(name);
     });
 
-    it.each(['FUTURE_MEMORY', 'constructor', '', null, undefined])('is null for %s', (name) => {
-        expect(toBufferType(name)).toBeNull();
+    it.each([
+        ['the enum value', 3, BufferType.L1_SMALL],
+        ['the value as text', '3', BufferType.L1_SMALL],
+        ['the name', 'L1_SMALL', BufferType.L1_SMALL],
+        ['the C++ enum name', 'BufferType::L1_SMALL', BufferType.L1_SMALL],
+        ['DRAM, whose value is falsy', 0, BufferType.DRAM],
+    ])('reads %s', (_label, value, expected) => {
+        expect(toBufferType(value)).toBe(expected);
     });
+
+    it.each(['FUTURE_MEMORY', 'BufferType::FUTURE_MEMORY', 'constructor', '', 99, '99', null, undefined])(
+        'is null for %s',
+        (value) => {
+            expect(toBufferType(value)).toBeNull();
+        },
+    );
 });
 
 describe('toStringBufferType', () => {

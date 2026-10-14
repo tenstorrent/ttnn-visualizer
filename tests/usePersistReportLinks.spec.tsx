@@ -25,17 +25,24 @@ const matchState = vi.hoisted(() => ({
     result: null as ReportLinkMatchResult | null,
 }));
 
+const DEFAULT_REMOTE_HOST = 'n150';
+
+const remoteState = vi.hoisted(() => ({
+    host: '',
+}));
+
 vi.mock('../src/hooks/useReportLinkMatch', () => ({
     useReportLinkMatch: () => matchState.result,
 }));
 
 vi.mock('../src/hooks/useRemote', () => ({
     default: () => ({
-        persistentState: { selectedConnection: { host: 'n150' } },
+        persistentState: { selectedConnection: { host: remoteState.host } },
     }),
 }));
 
 const CLEAR_REPORT_LINKS_LABEL = 'Clear report links';
+const REAPPLY_PROFILER_REPORT_LABEL = 'Reapply profiler report';
 
 // Writes `reportLinksAtom` from outside the recorder, as a delete's prune does.
 function ReportLinksClearer() {
@@ -47,6 +54,21 @@ function ReportLinksClearer() {
             onClick={() => setReportLinks([])}
         >
             {CLEAR_REPORT_LINKS_LABEL}
+        </button>
+    );
+}
+
+// Applies the same run again as a new folder object, as syncing it from another host does.
+// `initialAtomValues` only seed the store on mount, so a `rerender` cannot swap it.
+function ProfilerReportReapplier() {
+    const setActiveProfilerReport = useSetAtom(activeProfilerReportAtom);
+
+    return (
+        <button
+            type='button'
+            onClick={() => setActiveProfilerReport({ ...PROFILER_REPORT })}
+        >
+            {REAPPLY_PROFILER_REPORT_LABEL}
         </button>
     );
 }
@@ -78,6 +100,7 @@ function reportsTree({
         >
             <ReportLinkRecorder />
             <ReportLinksClearer />
+            <ProfilerReportReapplier />
             <ReportLinksProbe />
         </TestProviders>
     );
@@ -89,6 +112,7 @@ describe('usePersistReportLinks', () => {
     beforeEach(() => {
         window.localStorage.clear();
         matchState.result = ReportLinkMatchResult.PENDING;
+        remoteState.host = DEFAULT_REMOTE_HOST;
     });
 
     afterEach(() => {
@@ -179,9 +203,44 @@ describe('usePersistReportLinks', () => {
 
         expect(getProbedReportLinks()).toMatchObject([
             {
-                profilerAccess: { location: ReportLocation.REMOTE, path: PROFILER_REPORT.path, host: 'n150' },
+                profilerAccess: {
+                    location: ReportLocation.REMOTE,
+                    path: PROFILER_REPORT.path,
+                    host: DEFAULT_REMOTE_HOST,
+                },
                 performanceAccess: { location: ReportLocation.LOCAL, path: PERFORMANCE_REPORT.path, host: null },
             },
+        ]);
+    });
+
+    // A pair stored on one host must follow a later comparison from another, or the remote
+    // picker on the new host scopes its badge out.
+    it('updates the stored host when the same pair is compared from another remote host', () => {
+        matchState.result = ReportLinkMatchResult.LINKED;
+        remoteState.host = 'h1';
+        const { rerender } = renderWithReports({ profilerLocation: ReportLocation.REMOTE });
+
+        remoteState.host = 'h2';
+        rerender(reportsTree({ profilerLocation: ReportLocation.REMOTE }));
+        fireEvent.click(screen.getByRole('button', { name: REAPPLY_PROFILER_REPORT_LABEL }));
+
+        expect(getProbedReportLinks()).toEqual([
+            expect.objectContaining({ profilerAccess: expect.objectContaining({ host: 'h2' }) }),
+        ]);
+    });
+
+    // The selected connection can change while the active report still came from the old
+    // host, e.g. before the remote picker has resolved its selected folder after a reload.
+    it('keeps the stored host when only the selected connection changes', () => {
+        matchState.result = ReportLinkMatchResult.LINKED;
+        remoteState.host = 'h1';
+        const { rerender } = renderWithReports({ profilerLocation: ReportLocation.REMOTE });
+
+        remoteState.host = 'h2';
+        rerender(reportsTree({ profilerLocation: ReportLocation.REMOTE }));
+
+        expect(getProbedReportLinks()).toEqual([
+            expect.objectContaining({ profilerAccess: expect.objectContaining({ host: 'h1' }) }),
         ]);
     });
 

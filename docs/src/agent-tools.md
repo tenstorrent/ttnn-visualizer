@@ -33,6 +33,12 @@ claude mcp add ttnn-visualizer -- ttnn-visualizer-mcp
 Reports are addressed by path, not by the `instanceId` the web application uses, so the
 server needs no database and no running application.
 
+The `initialize` response's `serverInfo.version` is the installed ttnn-visualizer
+version, so a launcher can check for a minimum release before relying on a tool;
+`protocolVersion` is the MCP specification revision, not the package version. A
+version of `unknown` means it could not be determined — treat it as unverifiable,
+not as old.
+
 ## Links into the visualizer
 
 Answers link to the same thing in the web application, for the reader to open:
@@ -62,10 +68,10 @@ rather than links to the default.
 They open only in a visualizer running locally; a hosted one does not open a report by
 path, and neither does one framed inside another page. A local one opens a linked directory
 without asking, as long as it holds the files a report needs, so follow links you got from
-your own agent. A page that plants a `db.sqlite`
-in a folder you can reach, such as Downloads, could link the visualizer to it too. An
-answer read at a rank other than 0 carries no link, because the visualizer shows every
-operation at rank 0 and would open another rank's operation under the same id.
+your own agent. A page that plants a `db.sqlite` in a folder you can reach, such as
+Downloads, could link the visualizer to it too. An answer read at a rank other than 0
+carries no link, because the visualizer shows every operation at rank 0 and would open
+another rank's operation under the same id.
 
 ## The tools
 
