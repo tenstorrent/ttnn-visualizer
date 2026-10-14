@@ -892,8 +892,16 @@ it('does not re-record the pair when the active, linked memory report is deleted
 
     render(activePairTree());
 
-    // SEEDED_LINKS[0] is exactly the active pair, so recording it again is a no-op.
-    expect(getProbedReportLinks()).toEqual(SEEDED_LINKS);
+    // SEEDED_LINKS[0] is the active pair. Seeing it again refreshes it and moves it last
+    // rather than adding a second entry.
+    expect(getProbedReportLinks()).toEqual([
+        SEEDED_LINKS[1],
+        SEEDED_LINKS[2],
+        expect.objectContaining({
+            profilerId: SEEDED_LINKS[0].profilerId,
+            performanceId: SEEDED_LINKS[0].performanceId,
+        }),
+    ]);
 
     await openPicker(getAllButtonsWithText(deletedFolder.reportName)[0]);
     await confirmDeleteInOpenPicker(deletedFolder);

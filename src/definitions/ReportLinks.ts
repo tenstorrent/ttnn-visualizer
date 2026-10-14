@@ -36,7 +36,7 @@ export const REPORTS_UNLINKED_TOOLTIP = 'Unable to link active memory and perfor
 export const REPORTS_UNLINKED_TOOLTIP_HINT =
     'Please select reports generated from the same run to see additional data across the visualizer';
 
-/** Soft cap on persisted pairs — oldest entries drop first when exceeded. */
+/** Soft cap on persisted pairs; the least recently compared drop first when exceeded. */
 export const MAX_REPORT_LINKS = 200;
 
 export const REPORT_LINKS_STORAGE_KEY = 'reportLinks.v2';
