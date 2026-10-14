@@ -31,7 +31,7 @@ import {
 } from '../store/app';
 import PerformanceChartsTab from '../components/performance/PerformanceChartsTab';
 import { Marker, MarkerColours } from '../definitions/PerfTable';
-import { TypedPerfTableRow } from '../model/PerfTable';
+import { PerfTableRow, TypedPerfTableRow } from '../model/PerfTable';
 import { L1PressureStatus } from '../model/L1Pressure';
 import { annotatePerfHeuristicFlags } from '../functions/computePerfHeuristicFlags';
 import { resolveMaxCores } from '../functions/getCoreCount';
@@ -49,6 +49,8 @@ import { StackedColumnKeys, StackedPerfRow, TypedStackedPerfRow } from '../defin
 const INITIAL_TAB_ID = PerfTabIds.TABLE;
 const EMPTY_COMPARISON_ROWS: TypedPerfTableRow[][] = [];
 const EMPTY_COMPARISON_MAX_CORES: number[] = [];
+const NO_COMPARISON_REPORT_ROWS: PerfTableRow[] = [];
+const NO_COMPARISON_STACKED_ROWS: StackedPerfRow[] = [];
 
 export default function Performance() {
     const [comparisonReportList, setComparisonReportList] = useAtom(comparisonPerformanceReportListAtom);
@@ -73,7 +75,7 @@ export default function Performance() {
     const {
         data: comparisonData,
         isLoading: isLoadingComparison,
-        error: comparisonError,
+        failures: comparisonFailures,
     } = usePerformanceComparisonReport();
     const { data: folderList } = usePerfFolderList();
     const perfRange = usePerformanceRange();
@@ -98,8 +100,16 @@ export default function Performance() {
     const stackedData = data?.stacked_report;
     const reportSelectors =
         comparisonReportList && comparisonReportList?.length > 0 ? [...comparisonReportList, null] : [null];
-    const comparisonPerfData = useMemo(() => comparisonData?.map((d) => d.report) || [], [comparisonData]);
-    const comparisonStackedData = useMemo(() => comparisonData?.map((d) => d.stacked_report) || [], [comparisonData]);
+    // A comparison report that could not be read keeps its slot, empty, so every
+    // dataset still lines up with the report it came from.
+    const comparisonPerfData = useMemo(
+        () => comparisonData?.map((d) => d?.report ?? NO_COMPARISON_REPORT_ROWS) || [],
+        [comparisonData],
+    );
+    const comparisonStackedData = useMemo(
+        () => comparisonData?.map((d) => d?.stacked_report ?? NO_COMPARISON_STACKED_ROWS) || [],
+        [comparisonData],
+    );
     const opCodeOptions = useMemo(() => {
         const opCodes = Array.from(
             new Set([
@@ -335,10 +345,10 @@ export default function Performance() {
                     <LoadingSpinner />
                 ))}
 
-            {/* The comparison reports load as one query, so one failure loses them all. A
-                likely one is a signpost range the comparison report does not hold, since
-                comparisons are read with the active report's range. */}
-            {comparisonError && (
+            {/* Each comparison report that could not be read, named. A likely cause is a
+                signpost range it does not hold, since comparisons are read with the active
+                report's range. */}
+            {(comparisonFailures?.length ?? 0) > 0 && (
                 <Callout
                     className='comparison-error'
                     data-testid={TEST_IDS.PERF_COMPARISON_ERROR}
@@ -347,7 +357,11 @@ export default function Performance() {
                     role='alert'
                     compact
                 >
-                    {getResponseError(comparisonError, PERFORMANCE_LOAD_FAILED)}
+                    <ul>
+                        {comparisonFailures.map((failure) => (
+                            <li key={failure.message}>{getResponseError(failure, PERFORMANCE_LOAD_FAILED)}</li>
+                        ))}
+                    </ul>
                 </Callout>
             )}
 

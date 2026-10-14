@@ -376,18 +376,19 @@ describe('Performance route', () => {
         expect(lastProps?.comparisonMaxCores).toEqual([130]);
     });
 
-    it('announces which comparison report could not be loaded rather than showing no comparison', () => {
+    it('announces each comparison report that could not be loaded, keeping the rest', () => {
         (usePerformanceReport as Mock).mockReturnValue({
             data: { report: [DRAM_PERF_ROW], stacked_report: [], signposts: [] },
             isLoading: false,
             error: null,
         });
         (usePerformanceComparisonReport as Mock).mockReturnValue({
-            data: undefined,
+            data: [{ report: [{ ...DRAM_PERF_ROW, id: '2' }], stacked_report: [] }, null],
             isLoading: false,
-            error: new Error("report-b: no signpost named 'PERF_DECODE' in this report"),
+            failures: [new Error("report-c: no signpost named 'PERF_DECODE' in this report")],
         });
         (usePerformanceRange as Mock).mockReturnValue([1, 1]);
+        (usePerfMetas as Mock).mockReturnValue([null, null]);
 
         render(
             <TestProviders initialAtomValues={[[activePerformanceReportAtom, REPORT_A]]}>
@@ -397,7 +398,12 @@ describe('Performance route', () => {
 
         const alert = screen.getByRole('alert');
         expect(alert).toHaveTextContent(COMPARISON_LOAD_FAILED_TITLE);
-        expect(alert).toHaveTextContent("report-b: no signpost named 'PERF_DECODE' in this report");
+        expect(alert).toHaveTextContent("report-c: no signpost named 'PERF_DECODE' in this report");
+        // The report that loaded keeps its rows; the one that did not keeps its slot.
+        const comparisonData = perfReportProps.mock.calls.at(-1)?.[0]?.comparisonData;
+        expect(comparisonData).toHaveLength(2);
+        expect(comparisonData[0]).toHaveLength(1);
+        expect(comparisonData[1]).toEqual([]);
     });
 
     it('shows no comparison error when the comparisons load', () => {
@@ -406,7 +412,7 @@ describe('Performance route', () => {
             isLoading: false,
             error: null,
         });
-        (usePerformanceComparisonReport as Mock).mockReturnValue({ data: undefined, isLoading: false, error: null });
+        (usePerformanceComparisonReport as Mock).mockReturnValue({ data: undefined, isLoading: false, failures: [] });
         (usePerformanceRange as Mock).mockReturnValue([1, 1]);
 
         render(

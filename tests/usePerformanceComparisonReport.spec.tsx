@@ -103,70 +103,74 @@ describe('the performance report request', () => {
     });
 });
 
+// Only report-b holds the active report's signposts; the rest refuse the range.
+const refusingAllBut =
+    (accepting: string, failure: (name: string) => unknown = () => badRequest(REFUSAL)) =>
+    (_url: string, config?: unknown) => {
+        const { name } = (config as { params: RequestParams }).params;
+
+        return name === accepting
+            ? Promise.resolve({ data: { report: [{ id: '7' }], stacked_report: [], signposts: [] } })
+            : Promise.reject(failure(name));
+    };
+
+const renderComparisons = (names: string[], queryClient?: QueryClient) => {
+    const store = createStore();
+    store.set(activePerformanceReportAtom, REPORT_A);
+    store.set(filterBySignpostAtom, [START, END]);
+    store.set(comparisonPerformanceReportListAtom, names);
+
+    return queryClient
+        ? renderHook(usePerformanceComparisonReport, {
+              wrapper: ({ children }: { children: ReactNode }) => (
+                  <QueryClientProvider client={queryClient}>
+                      <Provider store={store}>{children}</Provider>
+                  </QueryClientProvider>
+              ),
+          })
+        : renderWithStore(usePerformanceComparisonReport, store);
+};
+
 describe('usePerformanceComparisonReport', () => {
-    it('names the comparison report that refused the range, without retrying it', async () => {
-        vi.mocked(axiosInstance.get).mockImplementation((_url, config) =>
-            (config as { params: RequestParams }).params.name === 'report-c'
-                ? Promise.reject(badRequest(REFUSAL))
-                : Promise.resolve({ data: { report: [], stacked_report: [], signposts: [] } }),
-        );
-        const store = createStore();
-        store.set(activePerformanceReportAtom, REPORT_A);
-        store.set(filterBySignpostAtom, [START, END]);
-        store.set(comparisonPerformanceReportListAtom, ['report-b', 'report-c']);
+    it('keeps the comparisons that loaded and names each one that refused the range', async () => {
+        vi.mocked(axiosInstance.get).mockImplementation(refusingAllBut('report-b'));
 
-        const { result } = renderWithStore(usePerformanceComparisonReport, store);
+        const { result } = renderComparisons(['report-b', 'report-c', 'report-d']);
 
-        await waitFor(() => expect(result.current.error).toBeInstanceOf(AxiosError));
-        // Still the response's status, so a call site can branch on it.
-        expect(result.current.error?.status).toBe(HttpStatusCode.BadRequest);
-        expect(result.current.error?.message).toBe(`report-c: ${REFUSAL}`);
-        expect(getResponseError(result.current.error)).toBe(`report-c: ${REFUSAL}`);
-        expect(getReportRequests().filter((params) => params.name === 'report-c')).toHaveLength(1);
+        await waitFor(() => expect(result.current.data).toBeDefined());
+        // In the order of the comparison list, so each dataset lines up with its report.
+        expect(result.current.data).toEqual([{ report: [{ id: '7' }], stacked_report: [], signposts: [] }, null, null]);
+        expect(result.current.error).toBeNull();
+        expect(result.current.failures.map((failure) => getResponseError(failure))).toEqual([
+            `report-c: ${REFUSAL}`,
+            `report-d: ${REFUSAL}`,
+        ]);
+        // Still the response's status, so a reader can branch on it.
+        expect(result.current.failures[0].status).toBe(HttpStatusCode.BadRequest);
     });
 
-    it('does not ask again for a refused comparison when the route mounts again', async () => {
-        vi.mocked(axiosInstance.get).mockImplementation((_url, config) =>
-            (config as { params: RequestParams }).params.name === 'report-c'
-                ? Promise.reject(badRequest(REFUSAL))
-                : Promise.resolve({ data: { report: [], stacked_report: [], signposts: [] } }),
-        );
-        const store = createStore();
-        store.set(activePerformanceReportAtom, REPORT_A);
-        store.set(filterBySignpostAtom, [START, END]);
-        store.set(comparisonPerformanceReportListAtom, ['report-c']);
-        // One client across both mounts, keeping the failed query as the app does.
+    it('asks once for a refused comparison, and not again when the route mounts again', async () => {
+        vi.mocked(axiosInstance.get).mockImplementation(refusingAllBut('report-b'));
+        // One client across both mounts, keeping the answer as the app does.
         const queryClient = new QueryClient();
-        const wrapper = ({ children }: { children: ReactNode }) => (
-            <QueryClientProvider client={queryClient}>
-                <Provider store={store}>{children}</Provider>
-            </QueryClientProvider>
-        );
 
-        const first = renderHook(usePerformanceComparisonReport, { wrapper });
-        await waitFor(() => expect(first.result.current.error).toBeInstanceOf(AxiosError));
+        const first = renderComparisons(['report-c'], queryClient);
+        await waitFor(() => expect(first.result.current.failures).toHaveLength(1));
         first.unmount();
 
-        const second = renderHook(usePerformanceComparisonReport, { wrapper });
+        const second = renderComparisons(['report-c'], queryClient);
 
-        expect(second.result.current.error).toBeInstanceOf(AxiosError);
+        expect(second.result.current.failures).toHaveLength(1);
         expect(second.result.current.isFetching).toBe(false);
         expect(getReportRequests().filter((params) => params.name === 'report-c')).toHaveLength(1);
     });
 
     it('names the report when the failure carries no response', async () => {
-        vi.mocked(axiosInstance.get).mockImplementation((_url, config) =>
-            (config as { params: RequestParams }).params.name === 'report-c'
-                ? Promise.reject(new Error('Network Error'))
-                : Promise.resolve({ data: { report: [], stacked_report: [], signposts: [] } }),
-        );
-        const store = createStore();
-        store.set(activePerformanceReportAtom, REPORT_A);
-        store.set(comparisonPerformanceReportListAtom, ['report-b', 'report-c']);
+        vi.mocked(axiosInstance.get).mockImplementation(refusingAllBut('report-b', () => new Error('Network Error')));
 
-        const { result } = renderWithStore(usePerformanceComparisonReport, store);
+        const { result } = renderComparisons(['report-b', 'report-c']);
 
-        await waitFor(() => expect(result.current.error).toBeInstanceOf(AxiosError));
-        expect(getResponseError(result.current.error)).toBe('report-c: Network Error');
+        await waitFor(() => expect(result.current.failures).toHaveLength(1));
+        expect(getResponseError(result.current.failures[0])).toBe('report-c: Network Error');
     });
 });

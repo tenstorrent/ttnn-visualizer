@@ -385,28 +385,41 @@ class TestReportRoute:
             {"id": 17, "op_code": "PERF_START"},
         ]
 
-    def test_a_capture_it_cannot_parse_is_unprocessable_with_a_range(
-        self, app, client, tmp_path
+    @pytest.mark.parametrize(
+        "signposts", [{}, {"start_signpost": "A"}], ids=["no range", "a range"]
+    )
+    def test_a_capture_the_signpost_read_cannot_parse_is_unprocessable(
+        self, app, client, tmp_path, signposts
     ):
-        """A ragged CSV is the caller's data: a 422, as without a range, not a 500."""
-        performance_path = tmp_path / "ragged"
+        """A CSV pandas cannot tokenise is the caller's data: a 422, not a 500.
+
+        An unterminated quote fails the signpost read itself. A merely ragged row
+        would not: the read keeps three columns and tolerates the extra field, so the
+        422 would come from tt-perf-report and this would pass without the handling.
+        """
+        performance_path = tmp_path / "unterminated"
         performance_path.mkdir()
         (performance_path / "ops_perf_results.csv").write_text(
-            "OP TYPE,OP CODE\nsignpost,A\nx,y,z,extra\n"
+            'OP TYPE,OP CODE\nsignpost,"A\n'
         )
         with app.app_context():
             db.session.add(
                 InstanceTable(
-                    instance_id="pytest-signpost-ragged",
+                    instance_id="pytest-signpost-unterminated",
                     active_report={},
                     performance_path=str(performance_path),
                 )
             )
             db.session.commit()
 
-        response = self._get(client, "pytest-signpost-ragged", start_signpost="A")
+        with mock.patch(
+            "ttnn_visualizer.csv_queries.perf_report.generate_perf_report"
+        ) as generate:
+            response = self._get(client, "pytest-signpost-unterminated", **signposts)
 
         assert response.status_code == HTTPStatus.UNPROCESSABLE_ENTITY
+        assert "could not read the report's signposts" in response.get_json()["error"]
+        generate.assert_not_called()
 
     def test_tt_perf_report_answers_a_range_only_host_time_order_accepts(
         self, client, host_time_reversed_instance
