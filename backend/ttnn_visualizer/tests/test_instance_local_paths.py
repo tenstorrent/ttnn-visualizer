@@ -28,7 +28,9 @@ def report_dirs(tmp_path):
 
 
 def _instance(client, instance_id):
-    return client.get(f"/api/instance?instanceId={instance_id}").get_json()
+    return client.get(
+        "/api/instance", query_string={"instanceId": instance_id}
+    ).get_json()
 
 
 @pytest.mark.usefixtures("local_mode")
@@ -71,6 +73,8 @@ class TestLocalPaths:
         ("payload", "reason"),
         [
             ({}, "One of profiler_path or performance_path is required."),
+            (["/reports/bge_m3"], "Expected a JSON object."),
+            ("/reports/bge_m3", "Expected a JSON object."),
             ({"profiler_path": "relative/report"}, "must be an absolute path"),
             ({"profiler_path": 7}, "must be an absolute path"),
             ({"performance_path": "/no/such/report"}, "No report directory at"),

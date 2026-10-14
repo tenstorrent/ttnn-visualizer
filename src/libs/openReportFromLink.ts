@@ -2,10 +2,10 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-import axios from 'axios';
 import Endpoints from '../definitions/Endpoints';
 import getServerConfig from '../functions/getServerConfig';
 import getResponseError from '../functions/getResponseError';
+import axiosInstance from './axiosInstance';
 
 // The query parameters the agent tools' links carry (`backend/ttnn_visualizer/agent/links.py`).
 const REPORT_PATH_PARAMS = ['profiler_path', 'performance_path'] as const;
@@ -51,9 +51,7 @@ export const openReportFromLink = async (navigate: (url: URL) => void = reload):
     }
 
     try {
-        const { data } = await axios.post<{ instance_id: string }>(Endpoints.INSTANCE_LOCAL_PATHS, paths, {
-            baseURL: getServerConfig().BASE_PATH,
-        });
+        const { data } = await axiosInstance.post<{ instance_id: string }>(Endpoints.INSTANCE_LOCAL_PATHS, paths);
 
         url.searchParams.set('instanceId', data.instance_id);
         navigate(url);

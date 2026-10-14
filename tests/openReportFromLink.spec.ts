@@ -13,11 +13,7 @@ vi.mock('../src/functions/getServerConfig', () => ({
     default: () => ({ SERVER_MODE: h.serverMode, BASE_PATH: '/' }),
 }));
 
-vi.mock('axios', async (importOriginal) => {
-    const actual = await importOriginal<typeof import('axios')>();
-
-    return { ...actual, default: { ...actual.default, post: h.post } };
-});
+vi.mock('../src/libs/axiosInstance', () => ({ default: { post: h.post } }));
 
 const PROFILER = '/reports/bge m3';
 const PERFORMANCE = '/reports/perf';
@@ -59,11 +55,10 @@ describe('openReportFromLink', () => {
 
         expect(await openReportFromLink(navigate)).toBe(true);
 
-        expect(h.post).toHaveBeenCalledWith(
-            Endpoints.INSTANCE_LOCAL_PATHS,
-            { profiler_path: PROFILER, performance_path: PERFORMANCE },
-            { baseURL: '/' },
-        );
+        expect(h.post).toHaveBeenCalledWith(Endpoints.INSTANCE_LOCAL_PATHS, {
+            profiler_path: PROFILER,
+            performance_path: PERFORMANCE,
+        });
         const target: URL = navigate.mock.calls[0][0];
         expect(target.pathname).toBe('/operations/4');
         expect([...target.searchParams]).toEqual([

@@ -2604,6 +2604,9 @@ def create_instance_for_local_paths():
     How a link from the agent tools opens the report the agent read (#2047).
     """
     payload = request.get_json(silent=True) or {}
+    if not isinstance(payload, dict):
+        return response_bad_request("Expected a JSON object.")
+
     profiler_path = payload.get("profiler_path")
     performance_path = payload.get("performance_path")
 
