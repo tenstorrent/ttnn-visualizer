@@ -23,6 +23,7 @@ from ttnn_visualizer.csv_queries import (
     MAX_LISTED_SIGNPOSTS,
     check_signpost_range,
     resolve_signposts,
+    signpost_range_ignored,
 )
 from ttnn_visualizer.exceptions import InvalidSignpostRange
 from ttnn_visualizer.extensions import db
@@ -120,11 +121,15 @@ class TestCheckSignpostRange:
         with pytest.raises(InvalidSignpostRange, match="no signpost named 'C'"):
             check_signpost_range(_resolved(REPEATED), "A", "C")
 
-    def test_a_report_without_signposts_says_so(self):
-        rows = [("tt_dnn_device", "x")]
+    def test_a_range_on_a_report_without_signposts_is_answered_whole(self):
+        """tt-perf-report uses the whole file here, and says so: no other window."""
+        resolved = _resolved([("tt_dnn_device", "x")])
 
-        with pytest.raises(InvalidSignpostRange, match="has no signposts"):
-            check_signpost_range(_resolved(rows), "A", None)
+        check_signpost_range(resolved, "A", "B")
+
+        assert signpost_range_ignored(resolved, "A", "B")
+        assert not signpost_range_ignored(resolved, None, None)
+        assert not signpost_range_ignored(_resolved(REPEATED), "A", "B")
 
     def test_a_long_list_of_names_is_capped(self):
         rows = [("signpost", f"S{index}") for index in range(MAX_LISTED_SIGNPOSTS + 3)]
@@ -179,8 +184,9 @@ class TestCheckSignpostRange:
     def test_a_report_without_the_signpost_columns_has_no_signposts(self):
         resolved = resolve_signposts(StringIO("OP CODE,HOST START TS\nx,1\n"))
 
-        with pytest.raises(InvalidSignpostRange, match="has no signposts"):
-            check_signpost_range(resolved, "A", None)
+        check_signpost_range(resolved, "A", None)
+
+        assert signpost_range_ignored(resolved, "A", None)
 
     def test_a_nameless_signpost_is_not_offered(self):
         resolved = _resolved([("signpost", "A"), ("signpost", ""), ("x", "y")])
@@ -259,6 +265,12 @@ def _signpost(name, like, host_start=None):
     if host_start is not None:
         row["HOST START TS"] = str(host_start)
     return row
+
+
+@pytest.fixture
+def unsignposted_instance(app, tmp_path):
+    """The smoke capture as it is: no signposts at all."""
+    return _write_capture(app, tmp_path, _smoke_rows(), "pytest-signpost-none")
 
 
 @pytest.fixture
@@ -449,3 +461,33 @@ class TestReportRoute:
         assert [int(row["id"]) for row in report] == [16]
         assert unsorted.status_code == HTTPStatus.BAD_REQUEST
         assert "before start signpost" in unsorted.get_json()["error"]
+
+    def test_a_range_on_a_report_without_signposts_is_the_whole_report_flagged(
+        self, client, unsignposted_instance
+    ):
+        """Answered whole, as tt-perf-report answers it, and flagged as not narrowed."""
+        whole = self._get(client, unsignposted_instance)
+        ranged = self._get(
+            client,
+            unsignposted_instance,
+            start_signpost="PERF_DECODE",
+            end_signpost="PERF_DECODE_END",
+        )
+
+        assert whole.status_code == ranged.status_code == HTTPStatus.OK
+        assert [row["id"] for row in ranged.get_json()["report"]] == [
+            row["id"] for row in whole.get_json()["report"]
+        ]
+        assert ranged.get_json()["signpost_range_ignored"] is True
+        assert whole.get_json()["signpost_range_ignored"] is False
+
+    def test_a_narrowed_report_is_not_flagged(self, client, signposted_instance):
+        ranged = self._get(
+            client,
+            signposted_instance,
+            start_signpost="PERF_START",
+            end_signpost="PERF_END",
+        )
+
+        assert ranged.status_code == HTTPStatus.OK
+        assert ranged.get_json()["signpost_range_ignored"] is False

@@ -1268,6 +1268,12 @@ class OpsPerformanceReportQueries:
                 "report": report,
                 "stacked_report": stacked_report,
                 "signposts": signposts,
+                # True when a range was asked of a report with no signposts, which
+                # tt-perf-report answers with the whole file: the rows are not the
+                # window the range names, and a reader must be told.
+                "signpost_range_ignored": signpost_range_ignored(
+                    resolved_signposts, options.start_signpost, options.end_signpost
+                ),
             }
             if degraded:
                 raise _DegradedPerformanceReport(result)
@@ -1341,6 +1347,20 @@ def resolve_signposts(
     return ResolvedSignposts(dict(positions_by_name), sorted_by_host_time)
 
 
+def signpost_range_ignored(
+    signposts: ResolvedSignposts,
+    start_signpost: Optional[str],
+    end_signpost: Optional[str],
+) -> bool:
+    """Whether a range was asked of a report with no signposts to narrow it by.
+
+    tt-perf-report answers that with the whole file. The range is not wrong so much
+    as inapplicable -- a comparison report captured without signposts is the usual
+    case -- so the report is returned whole, and says so.
+    """
+    return bool(start_signpost or end_signpost) and not signposts.positions_by_name
+
+
 def check_signpost_range(
     signposts: ResolvedSignposts,
     start_signpost: Optional[str],
@@ -1353,9 +1373,15 @@ def check_signpost_range(
     drops the other bound, so a mistyped name returns a full-looking report of the
     wrong window. An end that falls before the start returns no rows at all.
 
+    A report with no signposts at all is answered, not refused: tt-perf-report then
+    uses the whole file and says so rather than picking some other window, and the
+    report carries a `signpost_range_ignored` flag so a reader is told too.
+
     Ids are the ones the report and its `signposts` list give rows, so a refusal
     names the same row a reader sees.
     """
+    if signpost_range_ignored(signposts, start_signpost, end_signpost):
+        return
     if not start_signpost and not end_signpost:
         return
 
@@ -1364,10 +1390,6 @@ def check_signpost_range(
     def occurrences(name: str) -> List[int]:
         if name in positions_by_name:
             return positions_by_name[name]
-        if not positions_by_name:
-            raise InvalidSignpostRange(
-                f"no signpost named {name!r}: this report has no signposts"
-            )
         names = [str(entry["op_code"]) for entry in signposts.listing()]
         listed = ", ".join(repr(known) for known in names[:MAX_LISTED_SIGNPOSTS])
         if len(names) > MAX_LISTED_SIGNPOSTS:

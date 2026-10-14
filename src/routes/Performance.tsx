@@ -43,7 +43,14 @@ import ComparisonReportSelector from '../components/performance/ComparisonReport
 import 'styles/routes/Performance.scss';
 import getServerConfig from '../functions/getServerConfig';
 import { TEST_IDS } from '../definitions/TestIds';
-import { COMPARISON_LOAD_FAILED_TITLE, OpType, PERFORMANCE_LOAD_FAILED, PerfTabIds } from '../definitions/Performance';
+import {
+    COMPARISON_LOAD_FAILED_TITLE,
+    OpType,
+    PERFORMANCE_LOAD_FAILED,
+    PerfTabIds,
+    SIGNPOST_RANGE_IGNORED_REASON,
+    SIGNPOST_RANGE_IGNORED_TITLE,
+} from '../definitions/Performance';
 import { StackedColumnKeys, StackedPerfRow, TypedStackedPerfRow } from '../definitions/StackedPerfTable';
 
 const INITIAL_TAB_ID = PerfTabIds.TABLE;
@@ -109,6 +116,16 @@ export default function Performance() {
     const comparisonStackedData = useMemo(
         () => comparisonData?.map((d) => d?.stacked_report ?? NO_COMPARISON_STACKED_ROWS) || [],
         [comparisonData],
+    );
+    // Reports asked for a signpost range they hold no signposts for come back whole,
+    // so their figures are not the window's: name each one rather than let them pass
+    // for it. A comparison report captured without signposts is the usual case.
+    const reportsShownWhole = useMemo(
+        () => [
+            ...(data?.signpost_range_ignored && activeReportFolderName ? [activeReportFolderName] : []),
+            ...(comparisonReportList ?? []).filter((_, index) => comparisonData?.[index]?.signpost_range_ignored),
+        ],
+        [data, activeReportFolderName, comparisonReportList, comparisonData],
     );
     const opCodeOptions = useMemo(() => {
         const opCodes = Array.from(
@@ -345,12 +362,31 @@ export default function Performance() {
                     <LoadingSpinner />
                 ))}
 
+            {reportsShownWhole.length > 0 && (
+                <Callout
+                    className='performance-notice'
+                    data-testid={TEST_IDS.PERF_SIGNPOST_RANGE_IGNORED}
+                    intent={Intent.WARNING}
+                    title={SIGNPOST_RANGE_IGNORED_TITLE}
+                    role='status'
+                    compact
+                >
+                    <ul>
+                        {reportsShownWhole.map((reportName) => (
+                            <li key={reportName}>
+                                {reportName} {SIGNPOST_RANGE_IGNORED_REASON}
+                            </li>
+                        ))}
+                    </ul>
+                </Callout>
+            )}
+
             {/* Each comparison report that could not be read, named. A likely cause is a
                 signpost range it does not hold, since comparisons are read with the active
                 report's range. */}
             {(comparisonFailures?.length ?? 0) > 0 && (
                 <Callout
-                    className='comparison-error'
+                    className='performance-notice'
                     data-testid={TEST_IDS.PERF_COMPARISON_ERROR}
                     intent={Intent.DANGER}
                     title={COMPARISON_LOAD_FAILED_TITLE}

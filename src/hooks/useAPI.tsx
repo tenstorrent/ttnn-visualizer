@@ -397,6 +397,9 @@ export interface PerformanceReportResponse {
     report: PerfTableRow[];
     stacked_report: StackedPerfRow[];
     signposts?: Signpost[];
+    // True when a signpost range was asked of a report holding no signposts: the
+    // report is then whole rather than the window the range names.
+    signpost_range_ignored?: boolean;
 }
 
 // Takes the params as one object rather than positionally: `hideHostOps`,
