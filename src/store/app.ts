@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { atomWithStorage, createJSONStorage } from 'jotai/utils';
-import { atom } from 'jotai';
+import { SetStateAction, atom } from 'jotai';
 import { NumberRange, TabId } from '@blueprintjs/core';
 import { Id } from 'react-toastify';
 import { TAB_IDS } from '../definitions/BufferSummary';
@@ -164,7 +164,34 @@ export const topNAnnotationCountAtom = atomWithStorage<number>('topNAnnotationCo
 export const comparisonPerformanceReportListAtom = atom<string[] | null>(null);
 export const perfSelectedTabAtom = atom<TabId>(PerfTabIds.TABLE);
 export const isStackedViewAtom = atom(false);
-export const filterBySignpostAtom = atom<(Signpost | null)[]>([null, null]);
+// One constant so an unset range keeps its identity across reads and the query
+// params memoised from it stay stable.
+const NO_SIGNPOST_RANGE: (Signpost | null)[] = [null, null];
+const signpostRangeSelectionAtom = atom<{ reportFolder: string | null; range: (Signpost | null)[] }>({
+    reportFolder: null,
+    range: NO_SIGNPOST_RANGE,
+});
+/**
+ * `[start, end]` signposts the performance view is narrowed to, for the report they
+ * were chosen on. A range names signposts, and another report need not hold them:
+ * the API refuses a name a report lacks, so a range carried across a report switch
+ * would turn the new report (and every comparison fetched with it) into an error.
+ * Reading it against any other report gives no range; switching back restores it.
+ */
+export const filterBySignpostAtom = atom(
+    (get) => {
+        const selection = get(signpostRangeSelectionAtom);
+
+        return selection.reportFolder === get(activePerformanceReportFolderNameAtom)
+            ? selection.range
+            : NO_SIGNPOST_RANGE;
+    },
+    (get, set, update: SetStateAction<(Signpost | null)[]>) => {
+        const range = typeof update === 'function' ? update(get(filterBySignpostAtom)) : update;
+
+        set(signpostRangeSelectionAtom, { reportFolder: get(activePerformanceReportFolderNameAtom), range });
+    },
+);
 export const hideHostOpsAtom = atom(true);
 export const mathFilterListAtom = atom<TypedPerfTableRow['math_fidelity'][]>([]);
 export const rawOpCodeFilterListAtom = atom<TypedPerfTableRow['raw_op_code'][]>([]);

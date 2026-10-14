@@ -28,6 +28,7 @@ import zstd
 from tt_perf_report import perf_report
 from ttnn_visualizer.exceptions import (
     DataFormatError,
+    InvalidSignpostRange,
     PerformanceReportNotLoadedException,
 )
 from ttnn_visualizer.models import Instance
@@ -48,6 +49,14 @@ CSVFilters = Dict[str, Optional[Union[str, int]]]
 # given for one. Named because the agent's report link drops these rows before
 # aligning, and must agree with what is written here.
 SIGNPOST_OP_TYPE = "signpost"
+
+# A report row's id is its line in the CSV: data rows count from 0, plus one for
+# the header and one because lines number from 1.
+_SIGNPOST_ID_OFFSET = 2
+
+# Signpost names a refusal lists. A capture can emit one per layer or iteration;
+# the list is there to show a typo its neighbours, not to inventory the report.
+MAX_LISTED_SIGNPOSTS = 20
 
 # Rows per chunk when filtering a file rather than holding it. Large enough that
 # the per-chunk overhead stays negligible, small enough that a ~288 MB capture
@@ -1047,6 +1056,8 @@ class OpsPerformanceReportQueries:
                 f"CSV must have at least header + 1 data row, got {len(csv_lines)} lines"
             )
 
+        check_signpost_range(raw_csv, options.start_signpost, options.end_signpost)
+
         # Determine if we should skip stacked report
         data_row_count = len(csv_lines) - 1
         no_stacked_report = options.no_stacked_report
@@ -1262,6 +1273,70 @@ class OpsPerformanceReportQueries:
             cls.cleanup_temp_files(
                 [csv_output_file, summary_csv_path, summary_png_path, csv_summary_file]
             )
+
+
+def check_signpost_range(
+    raw_csv: str, start_signpost: Optional[str], end_signpost: Optional[str]
+) -> None:
+    """Refuse a signpost range tt-perf-report would answer from different rows.
+
+    `filter_by_signpost` only warns about a name it cannot find. With neither name
+    found it falls back to the rows after the last signpost, and with one found it
+    drops the other bound, so a mistyped name returns a full-looking report of the
+    wrong window. An end that occurs before the start returns no rows at all. Each
+    bound resolves to its name's first occurrence -- the end to its second when it
+    names the start too -- and they compare by position in the file, before the
+    report sorts by host start time.
+
+    Ids are the ones the report and its `signposts` list give rows, so a refusal
+    names the same row a reader sees.
+    """
+    if not start_signpost and not end_signpost:
+        return
+
+    positions: Dict[str, List[int]] = defaultdict(list)
+    for position, row in enumerate(csv.DictReader(StringIO(raw_csv))):
+        if row.get("OP TYPE") == SIGNPOST_OP_TYPE:
+            positions[row.get("OP CODE") or ""].append(position)
+
+    def occurrences(name: str) -> List[int]:
+        if name in positions:
+            return positions[name]
+        if not positions:
+            raise InvalidSignpostRange(
+                f"no signpost named {name!r}: this report has no signposts"
+            )
+        names = list(positions)
+        listed = ", ".join(repr(known) for known in names[:MAX_LISTED_SIGNPOSTS])
+        if len(names) > MAX_LISTED_SIGNPOSTS:
+            listed += f" and {len(names) - MAX_LISTED_SIGNPOSTS} more"
+        raise InvalidSignpostRange(
+            f"no signpost named {name!r} in this report; it holds {listed}"
+        )
+
+    start = occurrences(start_signpost)[0] if start_signpost else None
+    if not end_signpost:
+        return
+
+    end_occurrences = occurrences(end_signpost)
+    if end_signpost == start_signpost:
+        if len(end_occurrences) < 2:
+            raise InvalidSignpostRange(
+                f"signpost {end_signpost!r} occurs once, so it cannot bound both "
+                "ends of a range: a range that starts and ends on one name ends at "
+                "its second occurrence"
+            )
+        end = end_occurrences[1]
+    else:
+        end = end_occurrences[0]
+
+    if start is not None and end < start:
+        raise InvalidSignpostRange(
+            f"end signpost {end_signpost!r} first occurs at id "
+            f"{end + _SIGNPOST_ID_OFFSET}, before start signpost {start_signpost!r} "
+            f"at id {start + _SIGNPOST_ID_OFFSET}; each bound uses its name's first "
+            "occurrence, so this range holds no rows"
+        )
 
 
 class _DegradedPerformanceReport(Exception):

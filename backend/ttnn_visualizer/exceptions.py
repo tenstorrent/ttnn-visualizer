@@ -188,6 +188,10 @@ class DataFormatError(Exception):
     pass
 
 
+class InvalidSignpostRange(ValueError):
+    """A signpost range the performance report cannot honour as asked."""
+
+
 class InvalidReportPath(Exception):
     pass
 
