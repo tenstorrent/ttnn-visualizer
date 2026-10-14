@@ -407,3 +407,32 @@ class TestReportRoute:
         response = self._get(client, "pytest-signpost-ragged", start_signpost="A")
 
         assert response.status_code == HTTPStatus.UNPROCESSABLE_ENTITY
+
+    def test_tt_perf_report_answers_a_range_only_host_time_order_accepts(
+        self, client, host_time_reversed_instance
+    ):
+        """Pins the premise of the check against the library, not a copy of its sort.
+
+        By host time PERF_START resolves to position 15, after PERF_END at 13, so
+        PERF_END..PERF_START holds position 14 (id 16). In file order PERF_START is 4,
+        before PERF_END, so tracing mode refuses it. If tt-perf-report stopped sorting
+        before it filters, the accepted range would come back without that row.
+        """
+        signposts = {"start_signpost": "PERF_END", "end_signpost": "PERF_START"}
+
+        sorted_by_host_time = self._get(
+            client,
+            host_time_reversed_instance,
+            tracing_mode="false",
+            merge_devices="false",
+            **signposts,
+        )
+        unsorted = self._get(
+            client, host_time_reversed_instance, tracing_mode="true", **signposts
+        )
+
+        assert sorted_by_host_time.status_code == HTTPStatus.OK
+        report = sorted_by_host_time.get_json()["report"]
+        assert [int(row["id"]) for row in report] == [16]
+        assert unsorted.status_code == HTTPStatus.BAD_REQUEST
+        assert "before start signpost" in unsorted.get_json()["error"]

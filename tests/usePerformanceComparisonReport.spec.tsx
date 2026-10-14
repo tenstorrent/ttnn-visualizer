@@ -12,7 +12,7 @@ import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Provider, createStore, useAtomValue } from 'jotai';
-import { AxiosError, AxiosHeaders } from 'axios';
+import { AxiosError, AxiosHeaders, HttpStatusCode } from 'axios';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { usePerformanceComparisonReport, usePerformanceReport } from '../src/hooks/useAPI';
 import getResponseError from '../src/functions/getResponseError';
@@ -53,7 +53,7 @@ const getReportRequests = (): RequestParams[] =>
 const badRequest = (message: string) =>
     new AxiosError('Request failed with status code 400', AxiosError.ERR_BAD_REQUEST, undefined, undefined, {
         data: { error: message },
-        status: 400,
+        status: HttpStatusCode.BadRequest,
         statusText: 'Bad Request',
         headers: {},
         config: { headers: new AxiosHeaders() },
@@ -119,9 +119,38 @@ describe('usePerformanceComparisonReport', () => {
 
         await waitFor(() => expect(result.current.error).toBeInstanceOf(AxiosError));
         // Still the response's status, so a call site can branch on it.
-        expect(result.current.error?.status).toBe(400);
+        expect(result.current.error?.status).toBe(HttpStatusCode.BadRequest);
         expect(result.current.error?.message).toBe(`report-c: ${REFUSAL}`);
         expect(getResponseError(result.current.error)).toBe(`report-c: ${REFUSAL}`);
+        expect(getReportRequests().filter((params) => params.name === 'report-c')).toHaveLength(1);
+    });
+
+    it('does not ask again for a refused comparison when the route mounts again', async () => {
+        vi.mocked(axiosInstance.get).mockImplementation((_url, config) =>
+            (config as { params: RequestParams }).params.name === 'report-c'
+                ? Promise.reject(badRequest(REFUSAL))
+                : Promise.resolve({ data: { report: [], stacked_report: [], signposts: [] } }),
+        );
+        const store = createStore();
+        store.set(activePerformanceReportAtom, REPORT_A);
+        store.set(filterBySignpostAtom, [START, END]);
+        store.set(comparisonPerformanceReportListAtom, ['report-c']);
+        // One client across both mounts, keeping the failed query as the app does.
+        const queryClient = new QueryClient();
+        const wrapper = ({ children }: { children: ReactNode }) => (
+            <QueryClientProvider client={queryClient}>
+                <Provider store={store}>{children}</Provider>
+            </QueryClientProvider>
+        );
+
+        const first = renderHook(usePerformanceComparisonReport, { wrapper });
+        await waitFor(() => expect(first.result.current.error).toBeInstanceOf(AxiosError));
+        first.unmount();
+
+        const second = renderHook(usePerformanceComparisonReport, { wrapper });
+
+        expect(second.result.current.error).toBeInstanceOf(AxiosError);
+        expect(second.result.current.isFetching).toBe(false);
         expect(getReportRequests().filter((params) => params.name === 'report-c')).toHaveLength(1);
     });
 

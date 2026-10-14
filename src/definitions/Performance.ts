@@ -39,3 +39,8 @@ export const HIGH_DISPATCH_THRESHOLD_US = 6.5; // Threshold for flagging high di
 // Shown when a performance report request fails without a message of its own.
 export const PERFORMANCE_LOAD_FAILED = 'Failed to load performance data';
 export const COMPARISON_LOAD_FAILED_TITLE = 'Comparison reports could not be loaded';
+
+export enum SignpostSelectType {
+    START,
+    END,
+}

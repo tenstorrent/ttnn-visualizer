@@ -400,7 +400,7 @@ describe('Performance route', () => {
         expect(alert).toHaveTextContent("report-b: no signpost named 'PERF_DECODE' in this report");
     });
 
-    it('shows no comparison error while the comparisons load', () => {
+    it('shows no comparison error when the comparisons load', () => {
         (usePerformanceReport as Mock).mockReturnValue({
             data: { report: [DRAM_PERF_ROW], stacked_report: [], signposts: [] },
             isLoading: false,

@@ -54,7 +54,7 @@ SIGNPOST_OP_TYPE = "signpost"
 # A report row's id is its line in the CSV: data rows count from 0, plus one for
 # the header and one because lines number from 1. Report rows, the `signposts` list
 # and a refusal are all numbered this way, so each names the row a reader sees.
-SIGNPOST_ID_OFFSET = 2
+REPORT_ROW_ID_OFFSET = 2
 
 # Raw CSV columns a signpost is read from. tt-perf-report orders rows by the host
 # start time before it resolves a signpost, unless tracing mode is on.
@@ -1165,8 +1165,7 @@ class OpsPerformanceReportQueries:
                                             )
 
                                         op_id = int(row[id_index])
-                                        # IDs in result column one correspond to row numbers in ops perf results csv
-                                        idx = op_id - 2
+                                        idx = op_id - REPORT_ROW_ID_OFFSET
 
                                         processed_row = cls._parse_report_row(
                                             column_indexes, row
@@ -1302,7 +1301,7 @@ class ResolvedSignposts:
         offers only ranges `check_signpost_range` accepts.
         """
         return [
-            {"id": positions[0] + SIGNPOST_ID_OFFSET, "op_code": name}
+            {"id": positions[0] + REPORT_ROW_ID_OFFSET, "op_code": name}
             for name, positions in sorted(
                 self.positions_by_name.items(), key=lambda item: item[1][0]
             )
@@ -1395,8 +1394,8 @@ def check_signpost_range(
         order = "host start time" if signposts.sorted_by_host_time else "file position"
         raise InvalidSignpostRange(
             f"end signpost {end_signpost!r} resolves to id "
-            f"{end + SIGNPOST_ID_OFFSET}, before start signpost {start_signpost!r} "
-            f"at id {start + SIGNPOST_ID_OFFSET}, so this range holds no rows: the "
+            f"{end + REPORT_ROW_ID_OFFSET}, before start signpost {start_signpost!r} "
+            f"at id {start + REPORT_ROW_ID_OFFSET}, so this range holds no rows: the "
             f"start is its name's first occurrence by {order} and the end its "
             f"{'second' if end_is_second else 'first'}"
         )

@@ -1318,8 +1318,10 @@ export const usePerformanceComparisonReport = () => {
             params,
         }),
         staleTime: Infinity,
-        // A refused signpost range fails the same way every time.
+        // A refused signpost range fails the same way every time, so neither retry it
+        // nor refetch it each time the performance route mounts again.
         retry: false,
+        retryOnMount: false,
         enabled: !!reportNames,
     });
 
