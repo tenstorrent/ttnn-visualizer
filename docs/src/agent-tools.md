@@ -213,17 +213,18 @@ align the device operations each profiler operation launched (from its captured 
 against the performance rows, in order — the same match the application uses to link a
 memory report to a performance report. `top_ops` then gives each row an `operation_id`,
 and `operation_detail` lists an operation's `perf_rows` with device time in microseconds;
-its own `duration` is host seconds. Each row's `device_time_share_percent` is its percent of
-`report_device_time_total`, the device time of every row that is not a host op or a
-signpost, whether or not it linked to an operation. That is not tt-perf-report's `total_percent`, which also counts the op-to-op gap,
-so on an untraced capture it mostly measures dispatch gaps rather than device time. Nor is
-`report_device_time_total` quite `top_ops`'s `device_time_total`, which sums every row's
-device time; the two agree on reports tt-perf-report writes, since it leaves host ops and
-signposts without one. At the top level, `device_time`, `device_time_share_percent` and
-`slowest_perf_id` cover all of the operation's rows, including any past the cap on
-`perf_rows`, so the slowest row may be one `perf_rows` does not list. A row whose device
-time tt-perf-report left blank has a null share and is left out of the total; when no row
-has a device time, those three keys are absent.
+its own `duration` is host seconds. Each row's `device_time_share_percent` is its percent
+of `report_device_time_total`, the device time of every row that is not a host op or a
+signpost, whether or not it linked to an operation. That is not tt-perf-report's
+`total_percent`, which also counts the op-to-op gap, so on an untraced capture it mostly
+measures dispatch gaps rather than device time. Nor is `report_device_time_total` quite
+`top_ops`'s `device_time_total`, which sums every row's device time; the two agree on
+reports tt-perf-report writes, since it leaves host ops and signposts without one. At the
+top level, `device_time`, `device_time_share_percent` and `slowest_perf_id` cover all of
+the operation's rows, including any past the cap on `perf_rows`, so the slowest row may be
+one `perf_rows` does not list. A row whose device time tt-perf-report left blank has a
+null share and is left out of the total; when no row has a device time, those three keys
+are absent.
 
 A device operation whose launch threw — an allocation failure, for one — never reached the
 device and has no performance row, so the match leaves it out. Left in, it would put a name in

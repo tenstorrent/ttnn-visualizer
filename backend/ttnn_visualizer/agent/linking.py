@@ -660,7 +660,7 @@ def _share_percent(device_time: Optional[float], total: float) -> Optional[float
 
 
 def _device_time_summary(
-    rows: Sequence[Dict], link: OperationLink
+    rows: Sequence[Dict], report_total: float
 ) -> Dict[str, object]:
     """The operation's device time over all its rows, and the slowest of them."""
     timed = [
@@ -674,9 +674,7 @@ def _device_time_summary(
     slowest, _ = max(timed, key=lambda pair: pair[1])
     return {
         "device_time": round(total, 3),
-        "device_time_share_percent": _share_percent(
-            total, link.report_device_time_total
-        ),
+        "device_time_share_percent": _share_percent(total, report_total),
         "slowest_perf_id": slowest.get("id"),
     }
 
@@ -721,7 +719,7 @@ def operation_detail(
         result["device_time_unit"] = DEVICE_TIME_UNIT
         result["projection"] = dict(tools.CANONICAL_PROJECTION)
         if rows:
-            result.update(_device_time_summary(rows, link))
+            result.update(_device_time_summary(rows, link.report_device_time_total))
             result["report_device_time_total"] = round(link.report_device_time_total, 3)
             if link.partitioned_caveat:
                 result["caveat"] = operations.joined_caveat(
