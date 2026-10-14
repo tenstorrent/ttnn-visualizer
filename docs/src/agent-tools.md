@@ -33,6 +33,12 @@ claude mcp add ttnn-visualizer -- ttnn-visualizer-mcp
 Reports are addressed by path, not by the `instanceId` the web application uses, so the
 server needs no database and no running application.
 
+The `initialize` response's `serverInfo.version` is the installed ttnn-visualizer
+version, so a launcher can check for a minimum release before relying on a tool;
+`protocolVersion` is the MCP specification revision, not the package version. A
+version of `unknown` means it could not be determined — treat it as unverifiable,
+not as old.
+
 ## The tools
 
 | Tool | Answers |

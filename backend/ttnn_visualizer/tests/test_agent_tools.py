@@ -36,6 +36,7 @@ from ttnn_visualizer.event_logging import (
     EventLogEvent,
     McpToolName,
     McpToolOutcome,
+    get_application_version,
 )
 from ttnn_visualizer.exceptions import DataFormatError
 from ttnn_visualizer.models import Instance
@@ -865,6 +866,18 @@ class TestTransport:
 
         assert response["result"]["capabilities"] == {"tools": {}}
         assert response["result"]["serverInfo"]["name"] == "ttnn-visualizer"
+        assert response["result"]["serverInfo"]["version"] == get_application_version()
+
+    def test_initialize_reports_the_package_version(self):
+        # Equality with the real helper alone would pass if both sides were
+        # "unknown"; a sentinel proves the value is read from the helper.
+        with patch.object(server, "get_application_version", return_value="9.9.9"):
+            response = server.handle_message(
+                {"jsonrpc": "2.0", "id": 5, "method": "initialize", "params": {}},
+                self._table(),
+            )
+
+        assert response["result"]["serverInfo"]["version"] == "9.9.9"
 
     def test_a_successful_call_is_recorded(self):
         table = self._table()
