@@ -36,7 +36,7 @@ import { L1PressureStatus } from '../src/model/L1Pressure';
 import { TEST_IDS } from '../src/definitions/TestIds';
 import { PerfTableRow } from '../src/model/PerfTable';
 import { PerfHeuristicFlag } from '../src/definitions/PerfHeuristics';
-import { OpType } from '../src/definitions/Performance';
+import { COMPARISON_LOAD_FAILED_TITLE, OpType } from '../src/definitions/Performance';
 import { TestProviders } from './helpers/TestProviders';
 import { makeAllocationFailure } from './helpers/allocationFailure';
 import { useAllocationFailures } from '../src/hooks/useAllocationFailures';
@@ -376,7 +376,7 @@ describe('Performance route', () => {
         expect(lastProps?.comparisonMaxCores).toEqual([130]);
     });
 
-    it('says which comparison report could not be loaded rather than showing no comparison', () => {
+    it('announces which comparison report could not be loaded rather than showing no comparison', () => {
         (usePerformanceReport as Mock).mockReturnValue({
             data: { report: [DRAM_PERF_ROW], stacked_report: [], signposts: [] },
             isLoading: false,
@@ -395,9 +395,27 @@ describe('Performance route', () => {
             </TestProviders>,
         );
 
-        const callout = screen.getByTestId(TEST_IDS.PERF_COMPARISON_ERROR);
-        expect(callout).toHaveTextContent('Comparison reports could not be loaded');
-        expect(callout).toHaveTextContent("report-b: no signpost named 'PERF_DECODE' in this report");
+        const alert = screen.getByRole('alert');
+        expect(alert).toHaveTextContent(COMPARISON_LOAD_FAILED_TITLE);
+        expect(alert).toHaveTextContent("report-b: no signpost named 'PERF_DECODE' in this report");
+    });
+
+    it('shows no comparison error while the comparisons load', () => {
+        (usePerformanceReport as Mock).mockReturnValue({
+            data: { report: [DRAM_PERF_ROW], stacked_report: [], signposts: [] },
+            isLoading: false,
+            error: null,
+        });
+        (usePerformanceComparisonReport as Mock).mockReturnValue({ data: undefined, isLoading: false, error: null });
+        (usePerformanceRange as Mock).mockReturnValue([1, 1]);
+
+        render(
+            <TestProviders initialAtomValues={[[activePerformanceReportAtom, REPORT_A]]}>
+                <Performance />
+            </TestProviders>,
+        );
+
+        expect(screen.queryByTestId(TEST_IDS.PERF_COMPARISON_ERROR)).not.toBeInTheDocument();
     });
 
     it('marks active rows with their linked failure, lists it, and leaves comparison rows unmarked', () => {

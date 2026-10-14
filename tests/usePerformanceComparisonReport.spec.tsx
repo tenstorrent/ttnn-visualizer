@@ -14,7 +14,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Provider, createStore, useAtomValue } from 'jotai';
 import { AxiosError, AxiosHeaders } from 'axios';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ComparisonReportError, usePerformanceComparisonReport, usePerformanceReport } from '../src/hooks/useAPI';
+import { usePerformanceComparisonReport, usePerformanceReport } from '../src/hooks/useAPI';
+import getResponseError from '../src/functions/getResponseError';
 import {
     activePerformanceReportAtom,
     activePerformanceReportFolderNameAtom,
@@ -58,14 +59,19 @@ const badRequest = (message: string) =>
         config: { headers: new AxiosHeaders() },
     });
 
-const renderWithStore = <T,>(hook: () => T, store: ReturnType<typeof createStore>) =>
-    renderHook(hook, {
+const renderWithStore = <T,>(hook: () => T, store: ReturnType<typeof createStore>) => {
+    // Unobserved queries are dropped at once, so a report switched back to is fetched
+    // again rather than answered from the cache, and its request can be asserted.
+    const queryClient = new QueryClient({ defaultOptions: { queries: { gcTime: 0 } } });
+
+    return renderHook(hook, {
         wrapper: ({ children }: { children: ReactNode }) => (
-            <QueryClientProvider client={new QueryClient()}>
+            <QueryClientProvider client={queryClient}>
                 <Provider store={store}>{children}</Provider>
             </QueryClientProvider>
         ),
     });
+};
 
 const useActiveReport = () => usePerformanceReport(useAtomValue(activePerformanceReportFolderNameAtom));
 
@@ -90,6 +96,10 @@ describe('the performance report request', () => {
         await waitFor(() => expect(getReportRequests().at(-1)?.name).toBe('report-b'));
         expect(getReportRequests().at(-1)?.start_signpost).toBeUndefined();
         expect(getReportRequests().at(-1)?.end_signpost).toBeUndefined();
+
+        act(() => store.set(activePerformanceReportAtom, REPORT_A));
+        await waitFor(() => expect(getReportRequests().at(-1)?.name).toBe('report-a'));
+        expect(getReportRequests().at(-1)).toMatchObject({ start_signpost: START.op_code, end_signpost: END.op_code });
     });
 });
 
@@ -107,9 +117,27 @@ describe('usePerformanceComparisonReport', () => {
 
         const { result } = renderWithStore(usePerformanceComparisonReport, store);
 
-        await waitFor(() => expect(result.current.error).toBeInstanceOf(ComparisonReportError));
-        expect(result.current.error?.reportName).toBe('report-c');
+        await waitFor(() => expect(result.current.error).toBeInstanceOf(AxiosError));
+        // Still the response's status, so a call site can branch on it.
+        expect(result.current.error?.status).toBe(400);
         expect(result.current.error?.message).toBe(`report-c: ${REFUSAL}`);
+        expect(getResponseError(result.current.error)).toBe(`report-c: ${REFUSAL}`);
         expect(getReportRequests().filter((params) => params.name === 'report-c')).toHaveLength(1);
+    });
+
+    it('names the report when the failure carries no response', async () => {
+        vi.mocked(axiosInstance.get).mockImplementation((_url, config) =>
+            (config as { params: RequestParams }).params.name === 'report-c'
+                ? Promise.reject(new Error('Network Error'))
+                : Promise.resolve({ data: { report: [], stacked_report: [], signposts: [] } }),
+        );
+        const store = createStore();
+        store.set(activePerformanceReportAtom, REPORT_A);
+        store.set(comparisonPerformanceReportListAtom, ['report-b', 'report-c']);
+
+        const { result } = renderWithStore(usePerformanceComparisonReport, store);
+
+        await waitFor(() => expect(result.current.error).toBeInstanceOf(AxiosError));
+        expect(getResponseError(result.current.error)).toBe('report-c: Network Error');
     });
 });

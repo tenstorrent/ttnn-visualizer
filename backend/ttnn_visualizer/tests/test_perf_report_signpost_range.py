@@ -22,6 +22,7 @@ from tt_perf_report import perf_report
 from ttnn_visualizer.csv_queries import (
     MAX_LISTED_SIGNPOSTS,
     check_signpost_range,
+    resolve_signposts,
 )
 from ttnn_visualizer.exceptions import InvalidSignpostRange
 from ttnn_visualizer.extensions import db
@@ -65,6 +66,10 @@ def _raw_csv(rows) -> str:
     return "\n".join([header, *(",".join(row) for row in rows), ""])
 
 
+def _resolved(rows, tracing_mode=False):
+    return resolve_signposts(StringIO(_raw_csv(rows)), tracing_mode)
+
+
 def _window(rows, start, end, tracing_mode=False):
     """The positions tt-perf-report itself keeps, with signposts printed.
 
@@ -90,19 +95,21 @@ class TestCheckSignpostRange:
     )
     def test_an_accepted_range_is_the_first_occurrence_window(self, start, end, window):
         """Pins the semantics the check assumes against the library itself."""
-        check_signpost_range(_raw_csv(REPEATED), start, end)
+        check_signpost_range(_resolved(REPEATED), start, end)
 
         assert _window(REPEATED, start, end) == window
 
     def test_no_range_is_not_checked(self):
-        check_signpost_range("not,a\ncsv", None, None)
-        check_signpost_range("not,a\ncsv", "", "")
+        nothing = resolve_signposts(StringIO("not,a\ncsv\n"))
+
+        check_signpost_range(nothing, None, None)
+        check_signpost_range(nothing, "", "")
 
     def test_an_absent_name_is_refused_with_the_names_held(self):
         with pytest.raises(
             InvalidSignpostRange, match="no signpost named 'C'"
         ) as raised:
-            check_signpost_range(_raw_csv(REPEATED), "C", "B")
+            check_signpost_range(_resolved(REPEATED), "C", "B")
 
         assert "'A', 'B'" in str(raised.value)
         # What it guards against: tt-perf-report applies the bound it found and
@@ -111,19 +118,19 @@ class TestCheckSignpostRange:
 
     def test_an_absent_end_is_refused_too(self):
         with pytest.raises(InvalidSignpostRange, match="no signpost named 'C'"):
-            check_signpost_range(_raw_csv(REPEATED), "A", "C")
+            check_signpost_range(_resolved(REPEATED), "A", "C")
 
     def test_a_report_without_signposts_says_so(self):
         rows = [("tt_dnn_device", "x")]
 
         with pytest.raises(InvalidSignpostRange, match="has no signposts"):
-            check_signpost_range(_raw_csv(rows), "A", None)
+            check_signpost_range(_resolved(rows), "A", None)
 
     def test_a_long_list_of_names_is_capped(self):
         rows = [("signpost", f"S{index}") for index in range(MAX_LISTED_SIGNPOSTS + 3)]
 
         with pytest.raises(InvalidSignpostRange, match="and 3 more") as raised:
-            check_signpost_range(_raw_csv(rows), "missing", None)
+            check_signpost_range(_resolved(rows), "missing", None)
 
         assert f"'S{MAX_LISTED_SIGNPOSTS}'" not in str(raised.value)
 
@@ -131,7 +138,7 @@ class TestCheckSignpostRange:
         rows = [("signpost", "A"), ("tt_dnn_device", "x")]
 
         with pytest.raises(InvalidSignpostRange, match="occurs once"):
-            check_signpost_range(_raw_csv(rows), "A", "A")
+            check_signpost_range(_resolved(rows), "A", "A")
 
     def test_an_end_before_the_start_is_refused_with_both_ids(self):
         # B first occurs at position 2 (id 4), A at 0 (id 2), so B..A is empty --
@@ -140,7 +147,7 @@ class TestCheckSignpostRange:
             InvalidSignpostRange,
             match="'A' resolves to id 2, before start signpost 'B' at id 4",
         ) as raised:
-            check_signpost_range(_raw_csv(REPEATED), "B", "A")
+            check_signpost_range(_resolved(REPEATED), "B", "A")
 
         assert "first occurrence by file position" in str(raised.value)
         assert _window(REPEATED, "B", "A") == []
@@ -152,47 +159,82 @@ class TestCheckSignpostRange:
         in the file, after B, so the report would hold nothing.
         """
         with pytest.raises(InvalidSignpostRange, match="by host start time"):
-            check_signpost_range(_raw_csv(HOST_TIME_REVERSED), "A", "B")
+            check_signpost_range(_resolved(HOST_TIME_REVERSED), "A", "B")
 
         assert _window(HOST_TIME_REVERSED, "A", "B") == []
 
     def test_tracing_mode_resolves_by_file_order(self):
         """Tracing mode leaves the rows unsorted, so the first A in the file counts."""
-        check_signpost_range(_raw_csv(HOST_TIME_REVERSED), "A", "B", tracing_mode=True)
+        check_signpost_range(_resolved(HOST_TIME_REVERSED, tracing_mode=True), "A", "B")
 
         assert _window(HOST_TIME_REVERSED, "A", "B", tracing_mode=True) == [1]
 
     def test_one_name_for_both_bounds_resolves_by_host_time_too(self):
         """The earliest A by host time is the later one in the file, so A..A is empty."""
         with pytest.raises(InvalidSignpostRange, match="the end its second"):
-            check_signpost_range(_raw_csv(HOST_TIME_REVERSED), "A", "A")
+            check_signpost_range(_resolved(HOST_TIME_REVERSED), "A", "A")
 
         assert _window(HOST_TIME_REVERSED, "A", "A") == []
 
+    def test_a_report_without_the_signpost_columns_has_no_signposts(self):
+        resolved = resolve_signposts(StringIO("OP CODE,HOST START TS\nx,1\n"))
 
-@pytest.fixture
-def signposted_instance(app, tmp_path):
-    """An instance whose perf CSV is the smoke capture with two signposts inserted."""
-    if not SMOKE_CAPTURE.is_file():
-        pytest.skip(f"{SMOKE_CAPTURE} is not present")
-    rows = list(csv.DictReader(SMOKE_CAPTURE.open()))
+        with pytest.raises(InvalidSignpostRange, match="has no signposts"):
+            check_signpost_range(resolved, "A", None)
 
-    def signpost(name, like):
-        return {**like, "OP CODE": name, "OP TYPE": "signpost"}
+    def test_a_nameless_signpost_is_not_offered(self):
+        resolved = _resolved([("signpost", "A"), ("signpost", ""), ("x", "y")])
 
-    # Data positions after insertion: START at 4, END at 13, so the window holds
-    # positions 5-12 -- ids 7-14.
-    rows.insert(4, signpost("PERF_START", rows[4]))
-    rows.insert(13, signpost("PERF_END", rows[13]))
+        assert resolved.listing() == [{"id": 2, "op_code": "A"}]
 
-    performance_path = tmp_path / "performance-report"
+
+class TestSignpostListing:
+    """The `signposts` list is what the app's range picker offers.
+
+    The picker offers as an end only the entries after the chosen start, so the list
+    must order names the way a bound resolves them -- or the app builds a range the
+    route refuses.
+    """
+
+    @pytest.mark.parametrize(
+        "rows, tracing_mode",
+        [
+            (REPEATED, False),
+            (HOST_TIME_REVERSED, False),
+            (HOST_TIME_REVERSED, True),
+        ],
+    )
+    def test_every_range_the_picker_offers_is_accepted(self, rows, tracing_mode):
+        resolved = _resolved(rows, tracing_mode)
+        names = [entry["op_code"] for entry in resolved.listing()]
+
+        for index, start in enumerate(names):
+            for end in names[index + 1 :]:
+                check_signpost_range(resolved, start, end)
+            for end in names[:index]:
+                with pytest.raises(InvalidSignpostRange, match="before start"):
+                    check_signpost_range(resolved, start, end)
+
+    def test_an_entry_is_the_row_a_bound_resolves_to(self):
+        # By host time A's earliest row is position 4 (id 6), after B at id 4.
+        assert _resolved(HOST_TIME_REVERSED).listing() == [
+            {"id": 4, "op_code": "B"},
+            {"id": 6, "op_code": "A"},
+        ]
+        assert _resolved(HOST_TIME_REVERSED, tracing_mode=True).listing() == [
+            {"id": 2, "op_code": "A"},
+            {"id": 4, "op_code": "B"},
+        ]
+
+
+def _write_capture(app, tmp_path, rows, instance_id) -> str:
+    performance_path = tmp_path / instance_id
     performance_path.mkdir()
     with (performance_path / "ops_perf_results.csv").open("w", newline="") as out:
         writer = csv.DictWriter(out, fieldnames=list(rows[0].keys()))
         writer.writeheader()
         writer.writerows(rows)
 
-    instance_id = "pytest-signpost-range"
     with app.app_context():
         db.session.add(
             InstanceTable(
@@ -204,6 +246,45 @@ def signposted_instance(app, tmp_path):
         db.session.commit()
 
     return instance_id
+
+
+def _smoke_rows():
+    if not SMOKE_CAPTURE.is_file():
+        pytest.skip(f"{SMOKE_CAPTURE} is not present")
+    return list(csv.DictReader(SMOKE_CAPTURE.open()))
+
+
+def _signpost(name, like, host_start=None):
+    row = {**like, "OP CODE": name, "OP TYPE": "signpost"}
+    if host_start is not None:
+        row["HOST START TS"] = str(host_start)
+    return row
+
+
+@pytest.fixture
+def signposted_instance(app, tmp_path):
+    """The smoke capture with two signposts inserted."""
+    rows = _smoke_rows()
+    # Data positions after insertion: START at 4, END at 13, so the window holds
+    # positions 5-12 -- ids 7-14.
+    rows.insert(4, _signpost("PERF_START", rows[4]))
+    rows.insert(13, _signpost("PERF_END", rows[13]))
+    return _write_capture(app, tmp_path, rows, "pytest-signpost-range")
+
+
+@pytest.fixture
+def host_time_reversed_instance(app, tmp_path):
+    """The smoke capture with PERF_START twice, its later row the earlier by host time.
+
+    Positions: PERF_START at 4, PERF_END at 13, PERF_START again at 15. Sorted by
+    host time the start is position 15, after the end; in file order it is 4.
+    """
+    rows = _smoke_rows()
+    host_starts = [int(row["HOST START TS"]) for row in rows]
+    rows.insert(4, _signpost("PERF_START", rows[4], max(host_starts) + 1000))
+    rows.insert(13, _signpost("PERF_END", rows[13]))
+    rows.insert(15, _signpost("PERF_START", rows[15], min(host_starts) - 1000))
+    return _write_capture(app, tmp_path, rows, "pytest-signpost-host-time")
 
 
 class TestReportRoute:
@@ -266,3 +347,40 @@ class TestReportRoute:
         assert response.status_code == HTTPStatus.BAD_REQUEST
         assert message in response.get_json()["error"]
         generate.assert_not_called()
+
+    def test_tracing_mode_decides_which_occurrence_bounds_the_range(
+        self, client, host_time_reversed_instance
+    ):
+        """The route hands tracing mode to the check, as it does to tt-perf-report."""
+        sorted_by_host_time = self._get(
+            client,
+            host_time_reversed_instance,
+            start_signpost="PERF_START",
+            end_signpost="PERF_END",
+            tracing_mode="false",
+        )
+        unsorted = self._get(
+            client,
+            host_time_reversed_instance,
+            start_signpost="PERF_START",
+            end_signpost="PERF_END",
+            tracing_mode="true",
+        )
+
+        assert sorted_by_host_time.status_code == HTTPStatus.BAD_REQUEST
+        assert "by host start time" in sorted_by_host_time.get_json()["error"]
+        assert unsorted.status_code == HTTPStatus.OK
+        ranged_ids = {int(row["id"]) for row in unsorted.get_json()["report"]}
+        assert ranged_ids
+        assert ranged_ids <= set(range(7, 15))
+
+    def test_the_listed_signposts_are_the_rows_a_bound_resolves_to(
+        self, client, host_time_reversed_instance
+    ):
+        response = self._get(client, host_time_reversed_instance)
+
+        assert response.status_code == HTTPStatus.OK
+        assert response.get_json()["signposts"] == [
+            {"id": 15, "op_code": "PERF_END"},
+            {"id": 17, "op_code": "PERF_START"},
+        ]

@@ -14,6 +14,7 @@ from functools import lru_cache
 from io import StringIO
 from pathlib import Path
 from typing import (
+    IO,
     Dict,
     List,
     Literal,
@@ -51,12 +52,14 @@ CSVFilters = Dict[str, Optional[Union[str, int]]]
 SIGNPOST_OP_TYPE = "signpost"
 
 # A report row's id is its line in the CSV: data rows count from 0, plus one for
-# the header and one because lines number from 1. Both the report's rows and its
-# `signposts` list are numbered this way, and a refusal must name the same ids.
+# the header and one because lines number from 1. Report rows, the `signposts` list
+# and a refusal are all numbered this way, so each names the row a reader sees.
 SIGNPOST_ID_OFFSET = 2
 
-# tt-perf-report orders rows by this column before it resolves a signpost, unless
-# tracing mode is on.
+# Raw CSV columns a signpost is read from. tt-perf-report orders rows by the host
+# start time before it resolves a signpost, unless tracing mode is on.
+_OP_TYPE_COLUMN = "OP TYPE"
+_OP_CODE_COLUMN = "OP CODE"
 _HOST_START_COLUMN = "HOST START TS"
 
 # Signpost names a refusal lists. A capture can emit one per layer or iteration;
@@ -941,38 +944,21 @@ class OpsPerformanceReportQueries:
         return value
 
     @staticmethod
-    def extract_signposts(csv_file):
+    def extract_signposts(csv_file, resolved: "ResolvedSignposts"):
+        """The raw rows, and the signposts a range can name.
+
+        Signpost names are not unique, but tt-perf-report resolves a name to one of
+        its rows, so the list holds one entry per name at that row.
+        """
         logger.info("Reading raw CSV for signpost extraction...")
         csv_file.seek(0)
-        ops_perf_results = []
-        ops_perf_results_reader = csv.DictReader(csv_file)
-
-        for row in ops_perf_results_reader:
-            ops_perf_results.append(row)
-
-        # Returns a list of unique signposts in the order they appear
-        # TODO: Signpost names are not unique but tt-perf-report treats them as such
-        captured_signposts = set()
-        signposts = []
-        for index, row in enumerate(ops_perf_results):
-            if row.get("OP TYPE") == SIGNPOST_OP_TYPE:
-                op_code = row["OP CODE"]
-                op_id = index + SIGNPOST_ID_OFFSET
-                if not any(s["op_code"] == op_code for s in signposts):
-                    captured_signposts.add(op_code)
-                    signposts.append(
-                        {
-                            "id": op_id,
-                            "op_code": op_code,
-                        }
-                    )
-
-        return ops_perf_results, signposts
+        ops_perf_results = list(csv.DictReader(csv_file))
+        return ops_perf_results, resolved.listing()
 
     @staticmethod
     def set_op_type_from_results(processed_row, idx, ops_perf_results):
         if 0 <= idx < len(ops_perf_results):
-            processed_row["op_type"] = ops_perf_results[idx].get("OP TYPE")
+            processed_row["op_type"] = ops_perf_results[idx].get(_OP_TYPE_COLUMN)
         else:
             processed_row["op_type"] = None
 
@@ -1061,11 +1047,15 @@ class OpsPerformanceReportQueries:
                 f"CSV must have at least header + 1 data row, got {len(csv_lines)} lines"
             )
 
+        # Resolved before generating, so a range tt-perf-report would answer from
+        # other rows is refused without running it, and the `signposts` list below
+        # offers only ranges this accepts.
+        try:
+            resolved_signposts = resolve_signposts(csv_file, options.tracing_mode)
+        except (ValueError, pd.errors.ParserError) as error:
+            raise DataFormatError(f"could not read the report's signposts: {error}")
         check_signpost_range(
-            raw_csv,
-            options.start_signpost,
-            options.end_signpost,
-            tracing_mode=options.tracing_mode,
+            resolved_signposts, options.start_signpost, options.end_signpost
         )
 
         # Determine if we should skip stacked report
@@ -1132,7 +1122,9 @@ class OpsPerformanceReportQueries:
                 raise DataFormatError(e)
 
             try:
-                ops_perf_results, signposts = cls.extract_signposts(csv_file)
+                ops_perf_results, signposts = cls.extract_signposts(
+                    csv_file, resolved_signposts
+                )
             except Exception as e:
                 logger.error(f"Error extracting signposts: {e}")
                 ops_perf_results = []
@@ -1285,11 +1277,71 @@ class OpsPerformanceReportQueries:
             )
 
 
+@dataclass
+class ResolvedSignposts:
+    """Each signpost name's rows, in the order tt-perf-report resolves a bound.
+
+    `generate_perf_report` sorts rows by `HOST START TS` before it filters, unless
+    tracing mode is on, so a bound names its signpost's earliest occurrence by host
+    time rather than its first in the file -- the end its second when it names the
+    start too. The window is then cut by file position. Rows are numbered by file
+    position here, which is also how report rows are numbered.
+    """
+
+    positions_by_name: Dict[str, List[int]]
+    sorted_by_host_time: bool
+
+    def listing(self) -> List[Dict[str, object]]:
+        """One entry per name, at the row a bound on that name resolves to.
+
+        Ordered by those rows, so a picker that offers only later entries as an end
+        offers only ranges `check_signpost_range` accepts.
+        """
+        return [
+            {"id": positions[0] + SIGNPOST_ID_OFFSET, "op_code": name}
+            for name, positions in sorted(
+                self.positions_by_name.items(), key=lambda item: item[1][0]
+            )
+        ]
+
+
+def resolve_signposts(
+    csv_file: IO[str], tracing_mode: bool = False
+) -> ResolvedSignposts:
+    """Read a perf CSV's signposts as `generate_perf_report` orders them.
+
+    The read and sort are pandas', as the library's are, so equal timestamps order
+    the same way in both. Only the three columns it needs are parsed. The file is
+    rewound before and after, so the caller can hand it on.
+    """
+    wanted = {_OP_TYPE_COLUMN, _OP_CODE_COLUMN, _HOST_START_COLUMN}
+    csv_file.seek(0)
+    rows = pd.read_csv(
+        csv_file, usecols=lambda column: column in wanted, low_memory=False
+    )
+    csv_file.seek(0)
+
+    sorted_by_host_time = _HOST_START_COLUMN in rows.columns and not tracing_mode
+    if sorted_by_host_time:
+        rows = rows.sort_values(by=_HOST_START_COLUMN)
+
+    positions_by_name: Dict[str, List[int]] = defaultdict(list)
+    if _OP_TYPE_COLUMN in rows.columns and _OP_CODE_COLUMN in rows.columns:
+        # A nameless signpost cannot be asked for: tt-perf-report matches on the
+        # name, and a missing one never equals anything.
+        signposts = rows[
+            (rows[_OP_TYPE_COLUMN] == SIGNPOST_OP_TYPE) & rows[_OP_CODE_COLUMN].notna()
+        ]
+        for position, name in zip(signposts.index, signposts[_OP_CODE_COLUMN]):
+            positions_by_name[str(name)].append(int(position))
+
+    return ResolvedSignposts(dict(positions_by_name), sorted_by_host_time)
+
+
 def check_signpost_range(
-    raw_csv: str,
+    signposts: ResolvedSignposts,
     start_signpost: Optional[str],
     end_signpost: Optional[str],
-    tracing_mode: bool = False,
 ) -> None:
     """Refuse a signpost range tt-perf-report would answer from different rows.
 
@@ -1298,41 +1350,22 @@ def check_signpost_range(
     drops the other bound, so a mistyped name returns a full-looking report of the
     wrong window. An end that falls before the start returns no rows at all.
 
-    Which occurrence a bound resolves to is tt-perf-report's choice, so this reads
-    the rows the way `generate_perf_report` does: sorted by `HOST START TS` unless
-    tracing mode is on, which makes a bound its name's earliest by host time rather
-    than its first in the file -- the end its second when it names the start too.
-    The window is then cut by file position. The read and sort are pandas', as the
-    library's are, so equal timestamps order the same way in both.
-
     Ids are the ones the report and its `signposts` list give rows, so a refusal
     names the same row a reader sees.
     """
     if not start_signpost and not end_signpost:
         return
 
-    wanted = {"OP TYPE", "OP CODE", _HOST_START_COLUMN}
-    rows = pd.read_csv(
-        StringIO(raw_csv), usecols=lambda column: column in wanted, low_memory=False
-    )
-    sorted_by_host_time = _HOST_START_COLUMN in rows.columns and not tracing_mode
-    if sorted_by_host_time:
-        rows = rows.sort_values(by=_HOST_START_COLUMN)
-
-    positions: Dict[str, List[int]] = defaultdict(list)
-    if "OP TYPE" in rows.columns and "OP CODE" in rows.columns:
-        signposts = rows[rows["OP TYPE"] == SIGNPOST_OP_TYPE]
-        for position, name in zip(signposts.index, signposts["OP CODE"]):
-            positions[str(name)].append(int(position))
+    positions_by_name = signposts.positions_by_name
 
     def occurrences(name: str) -> List[int]:
-        if name in positions:
-            return positions[name]
-        if not positions:
+        if name in positions_by_name:
+            return positions_by_name[name]
+        if not positions_by_name:
             raise InvalidSignpostRange(
                 f"no signpost named {name!r}: this report has no signposts"
             )
-        names = list(positions)
+        names = [str(entry["op_code"]) for entry in signposts.listing()]
         listed = ", ".join(repr(known) for known in names[:MAX_LISTED_SIGNPOSTS])
         if len(names) > MAX_LISTED_SIGNPOSTS:
             listed += f" and {len(names) - MAX_LISTED_SIGNPOSTS} more"
@@ -1355,7 +1388,7 @@ def check_signpost_range(
     end = end_occurrences[1 if end_is_second else 0]
 
     if start is not None and end < start:
-        order = "host start time" if sorted_by_host_time else "file position"
+        order = "host start time" if signposts.sorted_by_host_time else "file position"
         raise InvalidSignpostRange(
             f"end signpost {end_signpost!r} resolves to id "
             f"{end + SIGNPOST_ID_OFFSET}, before start signpost {start_signpost!r} "

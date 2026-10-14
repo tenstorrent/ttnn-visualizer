@@ -248,11 +248,11 @@ def test_a_swallowed_generation_failure_is_not_cached(tmp_path, monkeypatch):
     failures = iter([OSError(24, "Too many open files")])
     real_extract_signposts = OpsPerformanceReportQueries.extract_signposts
 
-    def _extract_signposts_failing_once(csv_file):
+    def _extract_signposts_failing_once(csv_file, resolved):
         failure = next(failures, None)
         if failure is not None:
             raise failure
-        return real_extract_signposts(csv_file)
+        return real_extract_signposts(csv_file, resolved)
 
     def _write_empty_perf_report(*args):
         # args[8] is the output CSV path tt-perf-report would fill.

@@ -43,7 +43,7 @@ import ComparisonReportSelector from '../components/performance/ComparisonReport
 import 'styles/routes/Performance.scss';
 import getServerConfig from '../functions/getServerConfig';
 import { TEST_IDS } from '../definitions/TestIds';
-import { OpType, PerfTabIds } from '../definitions/Performance';
+import { COMPARISON_LOAD_FAILED_TITLE, OpType, PERFORMANCE_LOAD_FAILED, PerfTabIds } from '../definitions/Performance';
 import { StackedColumnKeys, StackedPerfRow, TypedStackedPerfRow } from '../definitions/StackedPerfTable';
 
 const INITIAL_TAB_ID = PerfTabIds.TABLE;
@@ -335,17 +335,19 @@ export default function Performance() {
                     <LoadingSpinner />
                 ))}
 
-            {/* Comparisons are read with the active report's signpost range, which a
-                comparison report need not hold. Said here rather than left as no data. */}
+            {/* The comparison reports load as one query, so one failure loses them all. A
+                likely one is a signpost range the comparison report does not hold, since
+                comparisons are read with the active report's range. */}
             {comparisonError && (
                 <Callout
                     className='comparison-error'
                     data-testid={TEST_IDS.PERF_COMPARISON_ERROR}
                     intent={Intent.DANGER}
-                    title='Comparison reports could not be loaded'
+                    title={COMPARISON_LOAD_FAILED_TITLE}
+                    role='alert'
                     compact
                 >
-                    {comparisonError.message}
+                    {getResponseError(comparisonError, PERFORMANCE_LOAD_FAILED)}
                 </Callout>
             )}
 
