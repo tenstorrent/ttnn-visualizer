@@ -5,6 +5,7 @@
 import { useMemo } from 'react';
 import { AllocationFailure, AllocationFailureListing } from '../model/AllocationFailure';
 import { getAllocationFailureDetail } from '../functions/parseAllocationFailure';
+import { isMemoryReportLinked } from '../functions/linkableDeviceOperations';
 import { useOpToPerfIdFiltered, useOperationsList } from './useAPI';
 
 export interface AllocationFailures {
@@ -29,7 +30,7 @@ export const useAllocationFailures = (): AllocationFailures => {
     const opIdsMap = useOpToPerfIdFiltered();
 
     return useMemo(() => {
-        if (!operations?.length || opIdsMap.length === 0) {
+        if (!isMemoryReportLinked(operations, opIdsMap)) {
             return EMPTY_RESULT;
         }
 

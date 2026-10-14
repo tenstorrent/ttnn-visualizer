@@ -905,21 +905,19 @@ class DatabaseQueries:
             device_addresses: List[Any] = []
 
             if device_tensors_data:
-                pairs = device_tensors_data.split(",")
-                device_tensor_list = []
-                for pair in pairs:
+                # Keyed by device id: the joins above repeat each pair once per
+                # operation that reads or writes the tensor, and the list is
+                # indexed by device id, so a repeat must not take a new slot.
+                address_by_device_id: Dict[int, int] = {}
+                for pair in device_tensors_data.split(","):
                     if pair:
                         device_id_str, address_str = pair.split(":")
-                        device_id = int(device_id_str)
-                        address = int(address_str)
-                        device_tensor_list.append((device_id, address))
+                        address_by_device_id[int(device_id_str)] = int(address_str)
 
-                for device_id, address in sorted(
-                    device_tensor_list, key=lambda x: x[0]
-                ):
-                    while len(device_addresses) < device_id:
-                        device_addresses.append(None)
-                    device_addresses.append(address)
+                device_addresses = [
+                    address_by_device_id.get(device_id)
+                    for device_id in range(max(address_by_device_id, default=-1) + 1)
+                ]
 
             yield Tensor(
                 row[0],

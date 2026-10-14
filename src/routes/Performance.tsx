@@ -37,6 +37,7 @@ import { annotatePerfHeuristicFlags } from '../functions/computePerfHeuristicFla
 import { resolveMaxCores } from '../functions/getCoreCount';
 import { enrichRowData } from '../functions/enrichPerfRowData';
 import { useAllocationFailures } from '../hooks/useAllocationFailures';
+import { useDramFallbacks } from '../hooks/useDramFallbacks';
 import { clampSelectionToRange } from '../functions/perfRangeSelection';
 import ComparisonReportSelector from '../components/performance/ComparisonReportSelector';
 import 'styles/routes/Performance.scss';
@@ -75,6 +76,7 @@ export default function Performance() {
     const l1Pressure = useL1PressureByOperation();
     const l1PressureMap = l1Pressure.data;
     const { listings: allocationFailureListings, allocationFailureByOpId } = useAllocationFailures();
+    const dramFallbackByOpId = useDramFallbacks(allocationFailureByOpId);
     const { data: deviceMeta } = usePerfMeta(activeReportFolderName);
     // Combined to `(MetaData | null)[]` so comparison enrichment memos on stable data, not per-render query objects.
     const comparisonDeviceMetas = usePerfMetas(comparisonReportList);
@@ -157,8 +159,13 @@ export default function Performance() {
     const isTableLoading = isLoadingPerformance || (!!perfData?.length && rangeForTable === null);
 
     const typedRows = useMemo(
-        () => enrichRowData(rangedData, opIdsMap, l1PressureMap, allocationFailureByOpId),
-        [rangedData, opIdsMap, l1PressureMap, allocationFailureByOpId],
+        () =>
+            enrichRowData(rangedData, opIdsMap, {
+                l1PressureByOpId: l1PressureMap,
+                allocationFailureByOpId,
+                dramFallbackByOpId,
+            }),
+        [rangedData, opIdsMap, l1PressureMap, allocationFailureByOpId, dramFallbackByOpId],
     );
 
     const maxCores = useMemo(() => resolveMaxCores(deviceMeta, typedRows), [deviceMeta, typedRows]);
@@ -174,10 +181,10 @@ export default function Performance() {
 
         const maxCoresByDataset: number[] = [];
         const annotatedByDataset = comparisonPerfData.map((dataset, index) => {
-            // L1 pressure and allocation failures come from the active profiler report only —
-            // never attribute them to comparison datasets (op-id sync and buffer lookups are
-            // keyed to the active report).
-            const comparisonTypedRows = enrichRowData(dataset, opIdsMap, null, null);
+            // L1 pressure, allocation failures and DRAM fallbacks come from the active profiler
+            // report only — never attribute them to comparison datasets (op-id sync and buffer
+            // lookups are keyed to the active report).
+            const comparisonTypedRows = enrichRowData(dataset, opIdsMap, null);
             const datasetMaxCores = resolveMaxCores(comparisonDeviceMetas[index], comparisonTypedRows);
             maxCoresByDataset.push(datasetMaxCores);
 

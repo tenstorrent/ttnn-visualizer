@@ -4,12 +4,13 @@
 
 import { describe, expect, it } from 'vitest';
 import { enrichRowData } from '../src/functions/enrichPerfRowData';
-import { PerfTableRow } from '../src/model/PerfTable';
+import { LinkedOperationData, PerfTableRow } from '../src/model/PerfTable';
 import { BufferType } from '../src/model/BufferType';
 import { DeviceOperationLayoutTypes } from '../src/model/APIData';
 import { BoundAnalysis } from '../src/definitions/PerfTable';
 import { OperationCategories } from '../src/definitions/StackedPerfTable';
 import { makeAllocationFailure } from './helpers/allocationFailure';
+import { makeDramFallback } from './helpers/dramFallback';
 import { makeRawPerfRow } from './helpers/perfRowFixtures';
 
 // tt-perf-report emits a CSV whose columns (id, total_percent, bound, op_code, device, device_time,
@@ -188,35 +189,58 @@ describe('enrichRowData — typed conversion of tt-perf-report values', () => {
         expect(row.op).toBe(42);
     });
 
-    describe('allocation failures', () => {
+    describe('linked operation data', () => {
         const failure = makeAllocationFailure({ operationId: 42 });
-        const failureByOpId = new Map([[42, failure]]);
+        const fallback = makeDramFallback({ operationId: 42 });
+        const l1Pressure = { fullnessPercent: 87.5, freeSegments: 3, largestFreeBytes: 1024, largestFreePercent: 12.5 };
+        const linkedOperationData: LinkedOperationData = {
+            l1PressureByOpId: new Map([[42, l1Pressure]]),
+            allocationFailureByOpId: new Map([[42, failure]]),
+            dramFallbackByOpId: new Map([[42, fallback]]),
+        };
 
-        it('attaches the failure recorded for the linked operation', () => {
+        const L1_FIELDS = [
+            'l1_fullness_percent',
+            'l1_free_segments',
+            'l1_largest_free',
+            'l1_largest_free_percent',
+        ] as const;
+
+        it("attaches the linked operation's L1 pressure, failure and fallback, and nothing to other rows", () => {
             const [linked, other] = enrichRowData(
                 [makeRawPerfRow({ id: '7' }), makeRawPerfRow({ id: '8' })],
                 [
                     { perfId: '7', opId: 42 },
                     { perfId: '8', opId: 43 },
                 ],
-                null,
-                failureByOpId,
+                linkedOperationData,
             );
 
+            expect(linked).toMatchObject({
+                l1_fullness_percent: 87.5,
+                l1_free_segments: 3,
+                l1_largest_free: 1024,
+                l1_largest_free_percent: 12.5,
+            });
             expect(linked.allocation_failure).toBe(failure);
+            expect(linked.dram_fallback).toBe(fallback);
+            L1_FIELDS.forEach((field) => expect(other[field]).toBeNull());
             expect(other.allocation_failure).toBeNull();
+            expect(other.dram_fallback).toBeNull();
         });
 
-        it('attaches nothing without a failure map, as comparison datasets are enriched', () => {
-            const [row] = enrichRowData([makeRawPerfRow({ id: '7' })], [{ perfId: '7', opId: 42 }], null, null);
+        it('attaches nothing without linked data, as comparison datasets are enriched', () => {
+            const [row] = enrichRowData([makeRawPerfRow({ id: '7' })], [{ perfId: '7', opId: 42 }], null);
 
             expect(row.allocation_failure).toBeNull();
+            expect(row.dram_fallback).toBeNull();
         });
 
         it('attaches nothing to a row with no linked operation', () => {
-            const [row] = enrichRowData([makeRawPerfRow({ id: '7' })], [], null, failureByOpId);
+            const [row] = enrichRowData([makeRawPerfRow({ id: '7' })], [], linkedOperationData);
 
             expect(row.allocation_failure).toBeNull();
+            expect(row.dram_fallback).toBeNull();
         });
     });
 });
