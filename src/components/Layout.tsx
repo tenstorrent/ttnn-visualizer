@@ -27,8 +27,6 @@ import { clearReportLinkError, getReportLinkError } from '../libs/openReportFrom
 import { createToast } from '../functions/createToastNotification';
 import { ToastType } from '../definitions/ToastType';
 
-const REPORT_LINK_ERROR_TOAST_ID = 'report-link-error';
-
 function Layout() {
     const location = useLocation();
     const isTopologyOpen = isModalOpen(location, ROUTES.CLUSTER);
@@ -39,15 +37,14 @@ function Layout() {
     // owned the way every other listener in this app is.
     useEffect(() => initEventLogging(), []);
 
-    // After the container below subscribes: StrictMode re-subscribes it, losing a toast raised
-    // earlier. The fixed id keeps that remount from showing this one twice.
+    // Raised once the container below subscribes: StrictMode re-subscribes it, losing an earlier toast.
     useEffect(() => {
         const linkError = getReportLinkError();
 
         if (linkError) {
             createToast(
                 `Could not open the linked report: ${linkError}`,
-                { toastId: REPORT_LINK_ERROR_TOAST_ID, autoClose: false, onClose: clearReportLinkError },
+                { autoClose: false, onClose: clearReportLinkError },
                 ToastType.ERROR,
             );
         }
