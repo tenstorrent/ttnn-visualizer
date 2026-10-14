@@ -4,7 +4,7 @@
 
 import { Helmet } from 'react-helmet-async';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Size, Tab, Tabs } from '@blueprintjs/core';
+import { Callout, Intent, Size, Tab, Tabs } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { useAtom, useAtomValue } from 'jotai';
 import { HttpStatusCode } from 'axios';
@@ -31,7 +31,7 @@ import {
 } from '../store/app';
 import PerformanceChartsTab from '../components/performance/PerformanceChartsTab';
 import { Marker, MarkerColours } from '../definitions/PerfTable';
-import { TypedPerfTableRow } from '../model/PerfTable';
+import { PerfTableRow, TypedPerfTableRow } from '../model/PerfTable';
 import { L1PressureStatus } from '../model/L1Pressure';
 import { annotatePerfHeuristicFlags } from '../functions/computePerfHeuristicFlags';
 import { resolveMaxCores } from '../functions/getCoreCount';
@@ -42,12 +42,22 @@ import { clampSelectionToRange } from '../functions/perfRangeSelection';
 import ComparisonReportSelector from '../components/performance/ComparisonReportSelector';
 import 'styles/routes/Performance.scss';
 import getServerConfig from '../functions/getServerConfig';
-import { OpType, PerfTabIds } from '../definitions/Performance';
+import { TEST_IDS } from '../definitions/TestIds';
+import {
+    COMPARISON_LOAD_FAILED_TITLE,
+    OpType,
+    PERFORMANCE_LOAD_FAILED,
+    PerfTabIds,
+    SIGNPOST_RANGE_IGNORED_REASON,
+    SIGNPOST_RANGE_IGNORED_TITLE,
+} from '../definitions/Performance';
 import { StackedColumnKeys, StackedPerfRow, TypedStackedPerfRow } from '../definitions/StackedPerfTable';
 
 const INITIAL_TAB_ID = PerfTabIds.TABLE;
 const EMPTY_COMPARISON_ROWS: TypedPerfTableRow[][] = [];
 const EMPTY_COMPARISON_MAX_CORES: number[] = [];
+const NO_COMPARISON_REPORT_ROWS: PerfTableRow[] = [];
+const NO_COMPARISON_STACKED_ROWS: StackedPerfRow[] = [];
 
 export default function Performance() {
     const [comparisonReportList, setComparisonReportList] = useAtom(comparisonPerformanceReportListAtom);
@@ -69,7 +79,11 @@ export default function Performance() {
         isLoading: isLoadingPerformance,
         error: perfDataError,
     } = usePerformanceReport(activeReportFolderName);
-    const { data: comparisonData, isLoading: isLoadingComparison } = usePerformanceComparisonReport();
+    const {
+        data: comparisonData,
+        isLoading: isLoadingComparison,
+        failures: comparisonFailures,
+    } = usePerformanceComparisonReport();
     const { data: folderList } = usePerfFolderList();
     const perfRange = usePerformanceRange();
     const opIdsMap = useOpToPerfIdFiltered();
@@ -93,8 +107,26 @@ export default function Performance() {
     const stackedData = data?.stacked_report;
     const reportSelectors =
         comparisonReportList && comparisonReportList?.length > 0 ? [...comparisonReportList, null] : [null];
-    const comparisonPerfData = useMemo(() => comparisonData?.map((d) => d.report) || [], [comparisonData]);
-    const comparisonStackedData = useMemo(() => comparisonData?.map((d) => d.stacked_report) || [], [comparisonData]);
+    // A comparison report that could not be read keeps its slot, empty, so every
+    // dataset still lines up with the report it came from.
+    const comparisonPerfData = useMemo(
+        () => comparisonData?.map((d) => d?.report ?? NO_COMPARISON_REPORT_ROWS) || [],
+        [comparisonData],
+    );
+    const comparisonStackedData = useMemo(
+        () => comparisonData?.map((d) => d?.stacked_report ?? NO_COMPARISON_STACKED_ROWS) || [],
+        [comparisonData],
+    );
+    // Reports asked for a signpost range they hold no signposts for come back whole,
+    // so their figures are not the window's: name each one rather than let them pass
+    // for it. A comparison report captured without signposts is the usual case.
+    const reportsShownWhole = useMemo(
+        () => [
+            ...(data?.signpost_range_ignored && activeReportFolderName ? [activeReportFolderName] : []),
+            ...(comparisonReportList ?? []).filter((_, index) => comparisonData?.[index]?.signpost_range_ignored),
+        ],
+        [data, activeReportFolderName, comparisonReportList, comparisonData],
+    );
     const opCodeOptions = useMemo(() => {
         const opCodes = Array.from(
             new Set([
@@ -329,6 +361,45 @@ export default function Performance() {
                 ) : (
                     <LoadingSpinner />
                 ))}
+
+            {reportsShownWhole.length > 0 && (
+                <Callout
+                    className='performance-notice'
+                    data-testid={TEST_IDS.PERF_SIGNPOST_RANGE_IGNORED}
+                    intent={Intent.WARNING}
+                    title={SIGNPOST_RANGE_IGNORED_TITLE}
+                    role='status'
+                    compact
+                >
+                    <ul>
+                        {reportsShownWhole.map((reportName) => (
+                            <li key={reportName}>
+                                {reportName} {SIGNPOST_RANGE_IGNORED_REASON}
+                            </li>
+                        ))}
+                    </ul>
+                </Callout>
+            )}
+
+            {/* Each comparison report that could not be read, named. A likely cause is a
+                signpost range it does not hold, since comparisons are read with the active
+                report's range. */}
+            {(comparisonFailures?.length ?? 0) > 0 && (
+                <Callout
+                    className='performance-notice'
+                    data-testid={TEST_IDS.PERF_COMPARISON_ERROR}
+                    intent={Intent.DANGER}
+                    title={COMPARISON_LOAD_FAILED_TITLE}
+                    role='alert'
+                    compact
+                >
+                    <ul>
+                        {comparisonFailures.map((failure) => (
+                            <li key={failure.message}>{getResponseError(failure, PERFORMANCE_LOAD_FAILED)}</li>
+                        ))}
+                    </ul>
+                </Callout>
+            )}
 
             <Tabs
                 id='performance-tabs'

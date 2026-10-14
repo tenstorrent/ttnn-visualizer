@@ -7,11 +7,13 @@ import { useAtom, useAtomValue, useSetAtom } from 'jotai';
 import { IconNames } from '@blueprintjs/icons';
 import { useLocation } from 'react-router';
 import { useEffect, useState } from 'react';
+import { HttpStatusCode } from 'axios';
 import {
     activePerformanceReportAtom,
     activePerformanceReportFolderNameAtom,
     activeProfilerReportAtom,
     comparisonPerformanceReportListAtom,
+    filterBySignpostAtom,
     operationRangeAtom,
     performanceRangeAtom,
     selectedOperationRangeAtom,
@@ -35,6 +37,7 @@ import createToastNotification from '../functions/createToastNotification';
 import { ToastType } from '../definitions/ToastType';
 import getResponseError from '../functions/getResponseError';
 import { clampSelectionToRange } from '../functions/perfRangeSelection';
+import { PERFORMANCE_LOAD_FAILED } from '../definitions/Performance';
 
 const RANGE_STEP = 25;
 
@@ -47,6 +50,8 @@ function Range() {
     const setPerformanceRange = useSetAtom(performanceRangeAtom);
     const [selectedPerformanceRange, setSelectedPerformanceRange] = useAtom(selectedPerformanceRangeAtom);
     const comparisonReportList = useAtomValue(comparisonPerformanceReportListAtom);
+    const [signpostRange, setSignpostRange] = useAtom(filterBySignpostAtom);
+    const hasSignpostRange = signpostRange.some((signpost) => signpost !== null);
     const [isUserOpChange, setIsUserOpChange] = useState(false);
     const [isUserPerfChange, setIsUserPerfChange] = useState(false);
 
@@ -180,13 +185,26 @@ function Range() {
     }, [isInSync, selectedPerformanceRange]);
 
     useEffect(() => {
-        if (perfDataError && activePerformanceReport) {
-            const message = `Error loading report: ${getResponseError(perfDataError, 'Failed to load performance data')}`;
-
-            createToastNotification(message, activePerformanceReport?.reportName, ToastType.ERROR);
-            setActivePerformanceReport(null);
+        if (!perfDataError || !activePerformanceReport) {
+            return;
         }
-    }, [perfDataError, activePerformanceReport, setActivePerformanceReport]);
+
+        // The API refuses a signpost range the report cannot honour. That is a fault in
+        // the view, not the report: unloading the report would leave the range keyed to
+        // it, so opening it again would be refused again. Drop the range and keep it.
+        if (perfDataError.status === HttpStatusCode.BadRequest && hasSignpostRange) {
+            const message = `Signpost range removed: ${getResponseError(perfDataError, PERFORMANCE_LOAD_FAILED)}`;
+
+            createToastNotification(message, activePerformanceReport.reportName, ToastType.WARNING);
+            setSignpostRange([null, null]);
+            return;
+        }
+
+        const message = `Error loading report: ${getResponseError(perfDataError, PERFORMANCE_LOAD_FAILED)}`;
+
+        createToastNotification(message, activePerformanceReport.reportName, ToastType.ERROR);
+        setActivePerformanceReport(null);
+    }, [perfDataError, activePerformanceReport, setActivePerformanceReport, hasSignpostRange, setSignpostRange]);
 
     useEffect(() => {
         if (clusterError && activeProfilerReport) {

@@ -52,6 +52,7 @@ from ttnn_visualizer.exceptions import (
     InvalidProfilerPath,
     InvalidReportPath,
     InvalidRequestPayload,
+    InvalidSignpostRange,
     PerformanceReportNotLoadedException,
     RemoteConnectionException,
     RemoteFileReadException,
@@ -1312,6 +1313,8 @@ def get_performance_results_report(instance: Instance):
             tracing_mode=tracing_mode,
             group_by=group_by,
         )
+    except InvalidSignpostRange as error:
+        return response_bad_request(str(error))
     except DataFormatError as error:
         return response_unprocessable_entity(str(error))
 

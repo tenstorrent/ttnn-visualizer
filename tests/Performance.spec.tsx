@@ -21,6 +21,7 @@ import {
 import {
     activePerformanceReportAtom,
     bufferTypeFilterListAtom,
+    comparisonPerformanceReportListAtom,
     durationBucketFilterListAtom,
     layoutFilterListAtom,
     mathFilterListAtom,
@@ -33,9 +34,15 @@ import { BufferType } from '../src/model/BufferType';
 import { DeviceOperationLayoutTypes } from '../src/model/APIData';
 import { OperationCategories } from '../src/definitions/StackedPerfTable';
 import { L1PressureStatus } from '../src/model/L1Pressure';
+import { TEST_IDS } from '../src/definitions/TestIds';
 import { PerfTableRow } from '../src/model/PerfTable';
 import { PerfHeuristicFlag } from '../src/definitions/PerfHeuristics';
-import { OpType } from '../src/definitions/Performance';
+import {
+    COMPARISON_LOAD_FAILED_TITLE,
+    OpType,
+    SIGNPOST_RANGE_IGNORED_REASON,
+    SIGNPOST_RANGE_IGNORED_TITLE,
+} from '../src/definitions/Performance';
 import { TestProviders } from './helpers/TestProviders';
 import { makeAllocationFailure } from './helpers/allocationFailure';
 import { useAllocationFailures } from '../src/hooks/useAllocationFailures';
@@ -373,6 +380,106 @@ describe('Performance route', () => {
             'Bound: DRAM',
         );
         expect(lastProps?.comparisonMaxCores).toEqual([130]);
+    });
+
+    it('announces each comparison report that could not be loaded, keeping the rest', () => {
+        (usePerformanceReport as Mock).mockReturnValue({
+            data: { report: [DRAM_PERF_ROW], stacked_report: [], signposts: [] },
+            isLoading: false,
+            error: null,
+        });
+        (usePerformanceComparisonReport as Mock).mockReturnValue({
+            data: [{ report: [{ ...DRAM_PERF_ROW, id: '2' }], stacked_report: [] }, null],
+            isLoading: false,
+            failures: [new Error("report-c: no signpost named 'PERF_DECODE' in this report")],
+        });
+        (usePerformanceRange as Mock).mockReturnValue([1, 1]);
+        (usePerfMetas as Mock).mockReturnValue([null, null]);
+
+        render(
+            <TestProviders initialAtomValues={[[activePerformanceReportAtom, REPORT_A]]}>
+                <Performance />
+            </TestProviders>,
+        );
+
+        const alert = screen.getByRole('alert');
+        expect(alert).toHaveTextContent(COMPARISON_LOAD_FAILED_TITLE);
+        expect(alert).toHaveTextContent("report-c: no signpost named 'PERF_DECODE' in this report");
+        // The report that loaded keeps its rows; the one that did not keeps its slot.
+        const comparisonData = perfReportProps.mock.calls.at(-1)?.[0]?.comparisonData;
+        expect(comparisonData).toHaveLength(2);
+        expect(comparisonData[0]).toHaveLength(1);
+        expect(comparisonData[1]).toEqual([]);
+    });
+
+    it('names each report shown whole because it holds no signposts for the range', () => {
+        (usePerformanceReport as Mock).mockReturnValue({
+            data: { report: [DRAM_PERF_ROW], stacked_report: [], signposts: [], signpost_range_ignored: false },
+            isLoading: false,
+            error: null,
+        });
+        (usePerformanceComparisonReport as Mock).mockReturnValue({
+            data: [
+                { report: [DRAM_PERF_ROW], stacked_report: [], signpost_range_ignored: true },
+                { report: [DRAM_PERF_ROW], stacked_report: [], signpost_range_ignored: false },
+            ],
+            isLoading: false,
+            failures: [],
+        });
+        (usePerformanceRange as Mock).mockReturnValue([1, 1]);
+        (usePerfMetas as Mock).mockReturnValue([null, null]);
+
+        render(
+            <TestProviders
+                initialAtomValues={[
+                    [activePerformanceReportAtom, REPORT_A],
+                    [comparisonPerformanceReportListAtom, ['report-b', 'report-c']],
+                ]}
+            >
+                <Performance />
+            </TestProviders>,
+        );
+
+        const notice = screen.getByRole('status');
+        expect(notice).toHaveTextContent(SIGNPOST_RANGE_IGNORED_TITLE);
+        expect(notice).toHaveTextContent(`report-b ${SIGNPOST_RANGE_IGNORED_REASON}`);
+        expect(notice).not.toHaveTextContent('report-c');
+    });
+
+    it('shows no signpost notice when every report was narrowed', () => {
+        (usePerformanceReport as Mock).mockReturnValue({
+            data: { report: [DRAM_PERF_ROW], stacked_report: [], signposts: [], signpost_range_ignored: false },
+            isLoading: false,
+            error: null,
+        });
+        (usePerformanceComparisonReport as Mock).mockReturnValue({ data: undefined, isLoading: false, failures: [] });
+        (usePerformanceRange as Mock).mockReturnValue([1, 1]);
+
+        render(
+            <TestProviders initialAtomValues={[[activePerformanceReportAtom, REPORT_A]]}>
+                <Performance />
+            </TestProviders>,
+        );
+
+        expect(screen.queryByTestId(TEST_IDS.PERF_SIGNPOST_RANGE_IGNORED)).not.toBeInTheDocument();
+    });
+
+    it('shows no comparison error when the comparisons load', () => {
+        (usePerformanceReport as Mock).mockReturnValue({
+            data: { report: [DRAM_PERF_ROW], stacked_report: [], signposts: [] },
+            isLoading: false,
+            error: null,
+        });
+        (usePerformanceComparisonReport as Mock).mockReturnValue({ data: undefined, isLoading: false, failures: [] });
+        (usePerformanceRange as Mock).mockReturnValue([1, 1]);
+
+        render(
+            <TestProviders initialAtomValues={[[activePerformanceReportAtom, REPORT_A]]}>
+                <Performance />
+            </TestProviders>,
+        );
+
+        expect(screen.queryByTestId(TEST_IDS.PERF_COMPARISON_ERROR)).not.toBeInTheDocument();
     });
 
     it('marks active rows with their linked failure, lists it, and leaves comparison rows unmarked', () => {

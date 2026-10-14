@@ -35,3 +35,15 @@ export enum DeviceLogZonePhase {
 export const PATTERN_COUNT = 3; // Number of row patterns defined in PerfReport.scss
 
 export const HIGH_DISPATCH_THRESHOLD_US = 6.5; // Threshold for flagging high dispatch latency ops
+
+// Shown when a performance report request fails without a message of its own.
+export const PERFORMANCE_LOAD_FAILED = 'Failed to load performance data';
+export const COMPARISON_LOAD_FAILED_TITLE = 'Comparison reports could not be loaded';
+export const SIGNPOST_RANGE_IGNORED_TITLE = 'Shown without the signpost range';
+export const SIGNPOST_RANGE_IGNORED_REASON =
+    'holds no signposts, so it is shown whole rather than narrowed to the range';
+
+export enum SignpostSelectType {
+    START,
+    END,
+}

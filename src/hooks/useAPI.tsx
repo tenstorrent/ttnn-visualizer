@@ -100,6 +100,7 @@ import { parseNpeAxiosResponseData } from '../functions/parseNpeAxiosResponseDat
 import { throwNpeClientAxiosError } from '../functions/throwNpeClientAxiosError';
 import validateNpeSummary from '../functions/validateNpeSummary';
 import validateNpeWindow from '../functions/validateNpeWindow';
+import { comparisonReportAxiosError } from '../functions/comparisonReportAxiosError';
 
 const EMPTY_PERF_RETURN = { report: [], stacked_report: [], signposts: [] };
 
@@ -396,6 +397,9 @@ export interface PerformanceReportResponse {
     report: PerfTableRow[];
     stacked_report: StackedPerfRow[];
     signposts?: Signpost[];
+    // True when a signpost range was asked of a report holding no signposts: the
+    // report is then whole rather than the window the range names.
+    signpost_range_ignored?: boolean;
 }
 
 // Takes the params as one object rather than positionally: `hideHostOps`,
@@ -1285,6 +1289,20 @@ export const useLinkedPerformanceReport = () => {
     return usePerformanceReportQuery(name, LINKED_PERFORMANCE_REPORT_PARAMS);
 };
 
+interface ComparisonReportResult {
+    report: PerformanceReportResponse | null;
+    error: AxiosError | null;
+}
+
+const NO_COMPARISON_FAILURES: AxiosError[] = [];
+
+/**
+ * @description The comparison reports, read with the performance tab's view filters.
+ * `data` lines up with the comparison report list, with `null` where a report could
+ * not be read; `failures` names each of those. The likeliest is a signpost range a
+ * comparison report does not hold, since comparisons are read with the active
+ * report's range -- and it costs only that report, not the others.
+ */
 export const usePerformanceComparisonReport = () => {
     const rawReportNames = useAtomValue(comparisonPerformanceReportListAtom);
     const location = useAtomValue(performanceReportLocationAtom);
@@ -1294,15 +1312,21 @@ export const usePerformanceComparisonReport = () => {
         return Array.isArray(rawReportNames) ? [...rawReportNames] : rawReportNames;
     }, [rawReportNames]);
 
-    const response = useQuery<PerformanceReportResponse[], AxiosError>({
+    const response = useQuery<ComparisonReportResult[], AxiosError>({
         queryFn: async () => {
             if (!reportNames || !Array.isArray(reportNames) || reportNames.length === 0) {
                 return [];
             }
 
-            const results = await Promise.all(reportNames.map((name) => fetchPerformanceReport(name, params)));
+            // Settled rather than all, so one report's refusal does not take the
+            // others' rows with it.
+            const settled = await Promise.allSettled(reportNames.map((name) => fetchPerformanceReport(name, params)));
 
-            return results;
+            return settled.map((outcome, index) =>
+                outcome.status === 'fulfilled'
+                    ? { report: outcome.value, error: null }
+                    : { report: null, error: comparisonReportAxiosError(reportNames[index], outcome.reason) },
+            );
         },
         queryKey: getPerformanceComparisonReportQueryKey({
             names: reportNames,
@@ -1314,7 +1338,14 @@ export const usePerformanceComparisonReport = () => {
         enabled: !!reportNames,
     });
 
-    return response;
+    const results = response.data;
+    const data = useMemo(() => results?.map((result) => result.report), [results]);
+    const failures = useMemo(
+        () => results?.flatMap((result) => (result.error ? [result.error] : [])) ?? NO_COMPARISON_FAILURES,
+        [results],
+    );
+
+    return { ...response, data, failures };
 };
 
 export const useInstance = () => {
