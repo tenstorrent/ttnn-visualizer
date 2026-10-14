@@ -11,6 +11,7 @@ enum Endpoints {
     DEVICES = '/api/devices',
     ERRORS = '/api/errors',
     INSTANCE = '/api/instance',
+    INSTANCE_LOCAL_PATHS = '/api/instance/local-paths',
     LOCAL = '/api/local',
     MESH_DESCRIPTOR = '/api/mesh-descriptor',
     NPE = '/api/npe',

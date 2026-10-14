@@ -33,6 +33,46 @@ claude mcp add ttnn-visualizer -- ttnn-visualizer-mcp
 Reports are addressed by path, not by the `instanceId` the web application uses, so the
 server needs no database and no running application.
 
+The `initialize` response's `serverInfo.version` is the installed ttnn-visualizer
+version, so a launcher can check for a minimum release before relying on a tool;
+`protocolVersion` is the MCP specification revision, not the package version. A
+version of `unknown` means it could not be determined — treat it as unverifiable,
+not as old.
+
+## Links into the visualizer
+
+Answers link to the same thing in the web application, for the reader to open:
+
+- `load_report` returns an `app_link` to the report.
+- `operation_detail` and `operation_provenance` return an `app_link` to the operation.
+- `find_operations`, `top_ops`, `memory_profile` and `tensor_flow` return one
+  `app_link_template`, in which `{operation_id}` takes any operation id the answer lists.
+
+A link names the report by its directories, and the visualizer opens them when the link is
+followed, as `ttnn-visualizer --profiler-path` does: each followed link starts a new session
+on that report, so it lands on the report the agent read, not on whatever the reader had
+open. The server itself still makes no request; following the link is what opens the
+report. A link carries those directories as absolute paths on this machine, so it is for
+the reader here, not for sharing.
+
+Links point at `http://localhost:8000` unless the server's environment sets
+`TTNN_VISUALIZER_URL`, which may name any host:
+
+```bash
+claude mcp add ttnn-visualizer -e TTNN_VISUALIZER_URL=http://localhost:8001 -- ttnn-visualizer-mcp
+```
+
+A `TTNN_VISUALIZER_URL` that is not an http(s) URL with a host gives no links at all,
+rather than links to the default.
+
+They open only in a visualizer running locally; a hosted one does not open a report by
+path, and neither does one framed inside another page. A local one opens a linked directory
+without asking, as long as it holds the files a report needs, so follow links you got from
+your own agent. A page that plants a `db.sqlite` in a folder you can reach, such as
+Downloads, could link the visualizer to it too. An answer read at a rank other than 0
+carries no link, because the visualizer shows every operation at rank 0 and would open
+another rank's operation under the same id.
+
 ## The tools
 
 | Tool | Answers |

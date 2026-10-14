@@ -28,6 +28,9 @@ export interface ReportLink {
     status: ReportPairLinkStatus;
     profilerAccess?: ReportLinkAccess;
     performanceAccess?: ReportLinkAccess;
-    /** Epoch ms; used for LRU capping. */
+    /**
+     * Epoch ms when the pair was last stored or moved to the end. Kept as is when the pair
+     * is seen again already last and unchanged. Informational; capping uses array order.
+     */
     recordedAt: number;
 }

@@ -14,6 +14,7 @@ from functools import lru_cache
 from io import StringIO
 from pathlib import Path
 from typing import (
+    IO,
     Dict,
     List,
     Literal,
@@ -28,6 +29,7 @@ import zstd
 from tt_perf_report import perf_report
 from ttnn_visualizer.exceptions import (
     DataFormatError,
+    InvalidSignpostRange,
     PerformanceReportNotLoadedException,
 )
 from ttnn_visualizer.models import Instance
@@ -48,6 +50,21 @@ CSVFilters = Dict[str, Optional[Union[str, int]]]
 # given for one. Named because the agent's report link drops these rows before
 # aligning, and must agree with what is written here.
 SIGNPOST_OP_TYPE = "signpost"
+
+# A report row's id is its line in the CSV: data rows count from 0, plus one for
+# the header and one because lines number from 1. Report rows, the `signposts` list
+# and a refusal are all numbered this way, so each names the row a reader sees.
+REPORT_ROW_ID_OFFSET = 2
+
+# Raw CSV columns a signpost is read from. tt-perf-report orders rows by the host
+# start time before it resolves a signpost, unless tracing mode is on.
+_OP_TYPE_COLUMN = "OP TYPE"
+_OP_CODE_COLUMN = "OP CODE"
+_HOST_START_COLUMN = "HOST START TS"
+
+# Signpost names a refusal lists. A capture can emit one per layer or iteration;
+# the list is there to show a typo its neighbours, not to inventory the report.
+MAX_LISTED_SIGNPOSTS = 20
 
 # Rows per chunk when filtering a file rather than holding it. Large enough that
 # the per-chunk overhead stays negligible, small enough that a ~288 MB capture
@@ -927,38 +944,21 @@ class OpsPerformanceReportQueries:
         return value
 
     @staticmethod
-    def extract_signposts(csv_file):
+    def extract_signposts(csv_file, resolved: "ResolvedSignposts"):
+        """The raw rows, and the signposts a range can name.
+
+        Signpost names are not unique, but tt-perf-report resolves a name to one of
+        its rows, so the list holds one entry per name at that row.
+        """
         logger.info("Reading raw CSV for signpost extraction...")
         csv_file.seek(0)
-        ops_perf_results = []
-        ops_perf_results_reader = csv.DictReader(csv_file)
-
-        for row in ops_perf_results_reader:
-            ops_perf_results.append(row)
-
-        # Returns a list of unique signposts in the order they appear
-        # TODO: Signpost names are not unique but tt-perf-report treats them as such
-        captured_signposts = set()
-        signposts = []
-        for index, row in enumerate(ops_perf_results):
-            if row.get("OP TYPE") == SIGNPOST_OP_TYPE:
-                op_code = row["OP CODE"]
-                op_id = index + 2  # Match IDs with row numbers in ops perf results csv
-                if not any(s["op_code"] == op_code for s in signposts):
-                    captured_signposts.add(op_code)
-                    signposts.append(
-                        {
-                            "id": op_id,
-                            "op_code": op_code,
-                        }
-                    )
-
-        return ops_perf_results, signposts
+        ops_perf_results = list(csv.DictReader(csv_file))
+        return ops_perf_results, resolved.listing()
 
     @staticmethod
     def set_op_type_from_results(processed_row, idx, ops_perf_results):
         if 0 <= idx < len(ops_perf_results):
-            processed_row["op_type"] = ops_perf_results[idx].get("OP TYPE")
+            processed_row["op_type"] = ops_perf_results[idx].get(_OP_TYPE_COLUMN)
         else:
             processed_row["op_type"] = None
 
@@ -1047,6 +1047,21 @@ class OpsPerformanceReportQueries:
                 f"CSV must have at least header + 1 data row, got {len(csv_lines)} lines"
             )
 
+        # Resolved before generating, so a range tt-perf-report would answer from
+        # other rows is refused without running it, and the `signposts` list below
+        # offers only ranges this accepts.
+        try:
+            resolved_signposts = resolve_signposts(csv_file, options.tracing_mode)
+        # `EmptyDataError` and `ParserError` are both `ValueError`s: a ragged or
+        # truncated capture is the caller's data, answered as such rather than a 500.
+        except ValueError as error:
+            raise DataFormatError(
+                f"could not read the report's signposts: {error}"
+            ) from error
+        check_signpost_range(
+            resolved_signposts, options.start_signpost, options.end_signpost
+        )
+
         # Determine if we should skip stacked report
         data_row_count = len(csv_lines) - 1
         no_stacked_report = options.no_stacked_report
@@ -1111,7 +1126,9 @@ class OpsPerformanceReportQueries:
                 raise DataFormatError(e)
 
             try:
-                ops_perf_results, signposts = cls.extract_signposts(csv_file)
+                ops_perf_results, signposts = cls.extract_signposts(
+                    csv_file, resolved_signposts
+                )
             except Exception as e:
                 logger.error(f"Error extracting signposts: {e}")
                 ops_perf_results = []
@@ -1148,8 +1165,7 @@ class OpsPerformanceReportQueries:
                                             )
 
                                         op_id = int(row[id_index])
-                                        # IDs in result column one correspond to row numbers in ops perf results csv
-                                        idx = op_id - 2
+                                        idx = op_id - REPORT_ROW_ID_OFFSET
 
                                         processed_row = cls._parse_report_row(
                                             column_indexes, row
@@ -1252,6 +1268,12 @@ class OpsPerformanceReportQueries:
                 "report": report,
                 "stacked_report": stacked_report,
                 "signposts": signposts,
+                # True when a range was asked of a report with no signposts, which
+                # tt-perf-report answers with the whole file: the rows are not the
+                # window the range names, and a reader must be told.
+                "signpost_range_ignored": signpost_range_ignored(
+                    resolved_signposts, options.start_signpost, options.end_signpost
+                ),
             }
             if degraded:
                 raise _DegradedPerformanceReport(result)
@@ -1262,6 +1284,143 @@ class OpsPerformanceReportQueries:
             cls.cleanup_temp_files(
                 [csv_output_file, summary_csv_path, summary_png_path, csv_summary_file]
             )
+
+
+@dataclass
+class ResolvedSignposts:
+    """Each signpost name's rows, in the order tt-perf-report resolves a bound.
+
+    `generate_perf_report` sorts rows by `HOST START TS` before it filters, unless
+    tracing mode is on, so a bound names its signpost's earliest occurrence by host
+    time rather than its first in the file -- the end its second when it names the
+    start too. The window is then cut by file position. Rows are numbered by file
+    position here, which is also how report rows are numbered.
+    """
+
+    positions_by_name: Dict[str, List[int]]
+    sorted_by_host_time: bool
+
+    def listing(self) -> List[Dict[str, object]]:
+        """One entry per name, at the row a bound on that name resolves to.
+
+        Ordered by those rows, so a picker that offers only later entries as an end
+        offers only ranges `check_signpost_range` accepts.
+        """
+        return [
+            {"id": positions[0] + REPORT_ROW_ID_OFFSET, "op_code": name}
+            for name, positions in sorted(
+                self.positions_by_name.items(), key=lambda item: item[1][0]
+            )
+        ]
+
+
+def resolve_signposts(
+    csv_file: IO[str], tracing_mode: bool = False
+) -> ResolvedSignposts:
+    """Read a perf CSV's signposts as `generate_perf_report` orders them.
+
+    The read and sort are pandas', as the library's are, so equal timestamps order
+    the same way in both. Only the three columns it needs are parsed. The file is
+    rewound before and after, so the caller can hand it on.
+    """
+    wanted = {_OP_TYPE_COLUMN, _OP_CODE_COLUMN, _HOST_START_COLUMN}
+    csv_file.seek(0)
+    rows = pd.read_csv(
+        csv_file, usecols=lambda column: column in wanted, low_memory=False
+    )
+    csv_file.seek(0)
+
+    sorted_by_host_time = _HOST_START_COLUMN in rows.columns and not tracing_mode
+    if sorted_by_host_time:
+        rows = rows.sort_values(by=_HOST_START_COLUMN)
+
+    positions_by_name: Dict[str, List[int]] = defaultdict(list)
+    if _OP_TYPE_COLUMN in rows.columns and _OP_CODE_COLUMN in rows.columns:
+        # A nameless signpost cannot be asked for: tt-perf-report matches on the
+        # name, and a missing one never equals anything.
+        signposts = rows[
+            (rows[_OP_TYPE_COLUMN] == SIGNPOST_OP_TYPE) & rows[_OP_CODE_COLUMN].notna()
+        ]
+        for position, name in zip(signposts.index, signposts[_OP_CODE_COLUMN]):
+            positions_by_name[str(name)].append(int(position))
+
+    return ResolvedSignposts(dict(positions_by_name), sorted_by_host_time)
+
+
+def signpost_range_ignored(
+    signposts: ResolvedSignposts,
+    start_signpost: Optional[str],
+    end_signpost: Optional[str],
+) -> bool:
+    """Whether a range was asked of a report with no signposts to narrow it by.
+
+    tt-perf-report answers that with the whole file. The range is not wrong so much
+    as inapplicable -- a comparison report captured without signposts is the usual
+    case -- so the report is returned whole, and says so.
+    """
+    return bool(start_signpost or end_signpost) and not signposts.positions_by_name
+
+
+def check_signpost_range(
+    signposts: ResolvedSignposts,
+    start_signpost: Optional[str],
+    end_signpost: Optional[str],
+) -> None:
+    """Refuse a signpost range tt-perf-report would answer from different rows.
+
+    `filter_by_signpost` only warns about a name it cannot find. With neither name
+    found it falls back to the rows after the last signpost, and with one found it
+    drops the other bound, so a mistyped name returns a full-looking report of the
+    wrong window. An end that falls before the start returns no rows at all.
+
+    A report with no signposts at all is answered, not refused: tt-perf-report then
+    uses the whole file and says so rather than picking some other window, and the
+    report carries a `signpost_range_ignored` flag so a reader is told too.
+
+    Ids are the ones the report and its `signposts` list give rows, so a refusal
+    names the same row a reader sees.
+    """
+    if signpost_range_ignored(signposts, start_signpost, end_signpost):
+        return
+    if not start_signpost and not end_signpost:
+        return
+
+    positions_by_name = signposts.positions_by_name
+
+    def occurrences(name: str) -> List[int]:
+        if name in positions_by_name:
+            return positions_by_name[name]
+        names = [str(entry["op_code"]) for entry in signposts.listing()]
+        listed = ", ".join(repr(known) for known in names[:MAX_LISTED_SIGNPOSTS])
+        if len(names) > MAX_LISTED_SIGNPOSTS:
+            listed += f" and {len(names) - MAX_LISTED_SIGNPOSTS} more"
+        raise InvalidSignpostRange(
+            f"no signpost named {name!r} in this report; it holds {listed}"
+        )
+
+    start = occurrences(start_signpost)[0] if start_signpost else None
+    if not end_signpost:
+        return
+
+    end_occurrences = occurrences(end_signpost)
+    end_is_second = end_signpost == start_signpost
+    if end_is_second and len(end_occurrences) < 2:
+        raise InvalidSignpostRange(
+            f"signpost {end_signpost!r} occurs once, so it cannot bound both ends "
+            "of a range: a range that starts and ends on one name ends at its "
+            "second occurrence"
+        )
+    end = end_occurrences[1 if end_is_second else 0]
+
+    if start is not None and end < start:
+        order = "host start time" if signposts.sorted_by_host_time else "file position"
+        raise InvalidSignpostRange(
+            f"end signpost {end_signpost!r} resolves to id "
+            f"{end + REPORT_ROW_ID_OFFSET}, before start signpost {start_signpost!r} "
+            f"at id {start + REPORT_ROW_ID_OFFSET}, so this range holds no rows: the "
+            f"start is its name's first occurrence by {order} and the end its "
+            f"{'second' if end_is_second else 'first'}"
+        )
 
 
 class _DegradedPerformanceReport(Exception):

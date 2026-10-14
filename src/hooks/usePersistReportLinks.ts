@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import { useAtomValue, useSetAtom } from 'jotai';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { ReportLinkMatchResult, ReportPairLinkStatus } from '../definitions/ReportLinks';
 import {
     createReportLinkAccess,
@@ -35,6 +35,15 @@ export default function usePersistReportLinks(): void {
     const performanceLocation = useAtomValue(performanceReportLocationAtom);
     const setReportLinks = useSetAtom(reportLinksAtom);
     const { persistentState } = useRemoteConnection();
+    const selectedHost = persistentState.selectedConnection?.host ?? null;
+
+    // Read through a ref so picking another connection alone does not re-record: the
+    // dropdown's choice can change while the active reports still came from the old host.
+    // Declared first, so it updates before the recording effect in the same commit.
+    const remoteHostRef = useRef(selectedHost);
+    useEffect(() => {
+        remoteHostRef.current = selectedHost;
+    }, [selectedHost]);
 
     useEffect(() => {
         if (!activeProfilerReport || !activePerformanceReport || !profilerLocation || !performanceLocation) {
@@ -52,7 +61,7 @@ export default function usePersistReportLinks(): void {
             return;
         }
 
-        const remoteHost = persistentState.selectedConnection?.host ?? null;
+        const remoteHost = remoteHostRef.current;
 
         setReportLinks((links) =>
             upsertReportLink(links, {
@@ -78,6 +87,5 @@ export default function usePersistReportLinks(): void {
         profilerLocation,
         performanceLocation,
         setReportLinks,
-        persistentState.selectedConnection?.host,
     ]);
 }

@@ -51,7 +51,7 @@ function DRAMPlots({
     const reverseDramDelta = previousDramMemory.filter(
         (chunk) => !dramMemoryReport.find((c) => c.address === chunk.address),
     );
-    const dramDeltaObject = operationDetails.getMemoryDelta(dramDelta, reverseDramDelta);
+    const dramDeltaObject = operationDetails.getDramMemoryDelta(dramDelta, reverseDramDelta);
     const { getGroupedMemoryReport } = operationDetails;
 
     let dramPlotZoomRangeStart =

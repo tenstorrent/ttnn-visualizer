@@ -2,7 +2,13 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-import { BufferData, type Node, type OperationDetailsData } from '../../src/model/APIData';
+import {
+    BufferData,
+    type Node,
+    type OperationDescription,
+    type OperationDetailsData,
+    type Tensor,
+} from '../../src/model/APIData';
 import { BufferType } from '../../src/model/BufferType';
 import { TensorDeallocationReport } from '../../src/model/BufferSummary';
 import { OperationDetails } from '../../src/model/OperationDetails';
@@ -33,13 +39,18 @@ export const buildOperationDetailsData = (overrides: Partial<OperationDetailsDat
 interface BuildOperationDetailsOptions {
     data?: Partial<OperationDetailsData>;
     deallocationReport?: TensorDeallocationReport[];
+    // The report's operation list. The model walks it backwards from `data.id`
+    // to name each buffer's tensor, so a spec that needs tensors resolved must
+    // include the operation itself.
+    operations?: OperationDescription[];
 }
 
 export const buildOperationDetails = ({
     data,
     deallocationReport = [],
+    operations = [],
 }: BuildOperationDetailsOptions = {}): OperationDetails =>
-    new OperationDetails(buildOperationDetailsData(data), [], deallocationReport, {
+    new OperationDetails(buildOperationDetailsData(data), operations, deallocationReport, {
         l1start: 0,
         l1end: FIXTURE_L1_SIZE,
     });
@@ -52,6 +63,43 @@ export const buildBufferData = (overrides: Partial<BufferData> = {}): BufferData
     buffer_type: BufferType.L1,
     ...overrides,
 });
+
+export const buildTensor = (overrides: Partial<Tensor> = {}): Tensor => ({
+    id: 1,
+    address: 0,
+    buffer_type: BufferType.L1,
+    producers: [],
+    consumers: [],
+    producerNames: [],
+    consumerNames: [],
+    shape: 'Shape([1, 32])',
+    dtype: 'DataType.BFLOAT16',
+    layout: 'Layout.TILE',
+    memory_config: null,
+    device_id: 0,
+    comparison: null,
+    io: null,
+    size: null,
+    ...overrides,
+});
+
+export const buildOperationDescription = (overrides: Partial<OperationDescription> = {}): OperationDescription =>
+    ({
+        id: 1,
+        name: 'op',
+        inputs: [],
+        outputs: [],
+        stack_trace: '',
+        stack_trace_source_file_id: null,
+        device_operations: [],
+        operationFileIdentifier: 'op',
+        error: null,
+        duration: 0,
+        arguments: [],
+        processedConnections: [],
+        deviceOperationNameList: [],
+        ...overrides,
+    }) as OperationDescription;
 
 /**
  * Returns a node builder with its own id counter, so a spec gets ids unique

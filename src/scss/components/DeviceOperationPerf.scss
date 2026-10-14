@@ -1,0 +1,59 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
+
+@use '../definitions/colours' as *;
+@use '../mixins/perfReportColours' as perf;
+
+.device-operation-perf-target {
+    margin: 0 10px 0 4px;
+}
+
+.device-operation-perf {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 6px;
+    font-size: 13px;
+    white-space: nowrap;
+
+    .separator {
+        color: $tt-grey-5;
+    }
+
+    @include perf.perf-report-colours;
+}
+
+.device-operation-perf-popover {
+    .device-operation-perf-details {
+        max-width: 420px;
+    }
+
+    .device-operation-perf-heading {
+        font-weight: bold;
+        margin-bottom: 8px;
+    }
+
+    .device-operation-perf-grid {
+        display: grid;
+        grid-template-columns: max-content max-content;
+        gap: 2px 16px;
+    }
+
+    .device-operation-perf-label,
+    .device-operation-perf-note {
+        color: $tt-grey-4;
+    }
+
+    .device-operation-perf-note {
+        margin: 8px 0 0;
+        font-size: 12px;
+    }
+}
+
+.operation-device-perf-summary {
+    margin: 10px 0;
+
+    &.is-unavailable {
+        color: $tt-grey-5;
+    }
+}

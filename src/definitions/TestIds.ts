@@ -63,6 +63,8 @@ export const TEST_IDS = Object.freeze({
     PERF_HEURISTIC_FLAGS: 'perf-heuristic-flags',
     PERF_HEURISTIC_FLAG: 'perf-heuristic-flag',
     PERF_ALLOCATION_FAILURE_SUMMARY: 'perf-allocation-failure-summary',
+    PERF_COMPARISON_ERROR: 'perf-comparison-error',
+    PERF_SIGNPOST_RANGE_IGNORED: 'perf-signpost-range-ignored',
     PERF_CHART_HINT: 'perf-chart-hint',
     PERF_NPE_LINK: 'perf-npe-link',
 

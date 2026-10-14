@@ -71,20 +71,16 @@ export const formatCell = (
     highlight?: string | null,
     isFirstOfOpRun: boolean = true,
 ): JSX.Element | string => {
-    const { key, unit, decimals } = column;
-    const isSignpost = row.op_type === OpType.SIGNPOST;
-    const isHost = isHostOp(row.bound);
+    const { key, decimals } = column;
 
     if (key === ColumnKeys.Flags) {
         return <PerfHeuristicFlags row={row} />;
     }
 
     const value = row[key];
-    let formatted: string;
 
     if (value === null || value === '' || Number.isNaN(value)) {
-        // Host ops keep their blanks: HOST in the Bound column already says why nothing was measured.
-        const notAnalysedReason = isHost ? null : getNotAnalysedReason(row, key);
+        const { notAnalysedReason } = describePlainCell(row, column);
 
         return notAnalysedReason ? getNotAnalysedMarkup(notAnalysedReason) : '';
     }
@@ -94,23 +90,8 @@ export const formatCell = (
         return '';
     }
 
-    // Signposts only have a few meaningful columns
-    if (isSignpost) {
-        if (key !== ColumnKeys.Id && key !== ColumnKeys.OpCode) {
-            return '';
-        }
-    }
-
-    // Host Ops only have a few meaningful columns
-    if (isHost) {
-        if (
-            key !== ColumnKeys.Id &&
-            key !== ColumnKeys.OpCode &&
-            key !== ColumnKeys.OpCategory &&
-            key !== ColumnKeys.Bound
-        ) {
-            return '';
-        }
+    if (isBlankedForRowKind(row, key)) {
+        return '';
     }
 
     if (key === ColumnKeys.BufferType) {
@@ -246,26 +227,100 @@ export const formatCell = (
         );
     }
 
-    if (typeof value === 'number' && key !== ColumnKeys.Id) {
-        formatted = formatSize(value, decimals);
-    } else {
-        formatted = value?.toString() || '';
+    const { text, colour, slowExplanation } = describePlainCell(row, column);
+
+    return slowExplanation
+        ? getExplainedCellMarkup(text, colour, slowExplanation, highlight)
+        : getCellMarkup(text, colour, highlight);
+};
+
+/** A number as `column` shows one: its decimals and its unit. */
+export const formatColumnNumber = (value: number, column: ColumnDefinition): string => {
+    const { key, unit, decimals } = column;
+
+    if (unit === '%') {
+        return formatPercentage(value, decimals);
     }
 
-    if (unit) {
-        if (unit === '%') {
-            formatted = formatPercentage(Number(value), decimals);
-        } else {
-            formatted += ` ${unit}`;
-        }
+    const formatted = key === ColumnKeys.Id ? value.toString() : formatSize(value, decimals);
+
+    return unit ? `${formatted} ${unit}` : formatted;
+};
+
+/** A plain cell's value with its unit, or '' when it has none: what `formatCell` colours and explains. */
+export const formatCellText = (row: TypedPerfTableRow, column: ColumnDefinition): string => {
+    const { unit, decimals } = column;
+    const value = row[column.key];
+
+    if (value === null || value === '' || Number.isNaN(value)) {
+        return '';
+    }
+
+    if (typeof value === 'number') {
+        return formatColumnNumber(value, column);
+    }
+
+    if (unit === '%') {
+        return formatPercentage(Number(value), decimals);
+    }
+
+    const formatted = value?.toString() || '';
+
+    return unit ? `${formatted} ${unit}` : formatted;
+};
+
+// Signposts and host ops have only a few meaningful columns.
+const isBlankedForRowKind = (row: TypedPerfTableRow, key: ColumnKeys): boolean => {
+    if (row.op_type === OpType.SIGNPOST) {
+        return key !== ColumnKeys.Id && key !== ColumnKeys.OpCode;
+    }
+
+    if (isHostOp(row.bound)) {
+        return (
+            key !== ColumnKeys.Id &&
+            key !== ColumnKeys.OpCode &&
+            key !== ColumnKeys.OpCategory &&
+            key !== ColumnKeys.Bound
+        );
+    }
+
+    return false;
+};
+
+export interface PlainCell {
+    /** The value with its unit, or '' when the table leaves the cell blank. */
+    text: string;
+    colour?: CellColour;
+    /** Why a blank roofline cell was never analysed. */
+    notAnalysedReason: string | null;
+    /** Why a SLOW row's cell is coloured as it is. */
+    slowExplanation: string | null;
+}
+
+const BLANK_CELL: PlainCell = { text: '', notAnalysedReason: null, slowExplanation: null };
+
+/** A cell with no special rendering, as `formatCell` decides it but without the markup. */
+export const describePlainCell = (row: TypedPerfTableRow, column: ColumnDefinition): PlainCell => {
+    const { key } = column;
+    const value = row[key];
+
+    if (value === null || value === '' || Number.isNaN(value)) {
+        // Host ops keep their blanks: HOST in the Bound column already says why nothing was measured.
+        return { ...BLANK_CELL, notAnalysedReason: isHostOp(row.bound) ? null : getNotAnalysedReason(row, key) };
+    }
+
+    if (isBlankedForRowKind(row, key)) {
+        return BLANK_CELL;
     }
 
     const colour = getCellColour(row, key);
-    const slowExplanation = getSlowBoundExplanation(row, key, colour);
 
-    return slowExplanation
-        ? getExplainedCellMarkup(formatted, colour, slowExplanation, highlight)
-        : getCellMarkup(formatted, colour, highlight);
+    return {
+        text: formatCellText(row, column),
+        colour,
+        notAnalysedReason: null,
+        slowExplanation: getSlowBoundExplanation(row, key, colour),
+    };
 };
 
 // A native title rather than a Blueprint Tooltip: the table is not virtualised and an unanalysed
@@ -280,7 +335,12 @@ const getNotAnalysedMarkup = (reason: string) => (
 );
 
 // Native title for the same reason as getNotAnalysedMarkup: every SLOW row carries up to three.
-const getExplainedCellMarkup = (text: string, colour: CellColour, reason: string, highlight?: string | null) => (
+const getExplainedCellMarkup = (
+    text: string,
+    colour: CellColour | undefined,
+    reason: string,
+    highlight?: string | null,
+) => (
     <span
         className={classNames(colour, Classes.TOOLTIP_INDICATOR)}
         title={reason}
