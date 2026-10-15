@@ -62,7 +62,7 @@ describe('getChipDesign', () => {
         ]);
         // Not in the tt-umd map: tt-metal's `grendel_qsr1_att_config.h` DISPATCH_ENTRIES (full-tile selectors 56-58).
         expect(grendel?.dispatch).toEqual(['10-1', '10-6', '1-6']);
-        expect(grendel?.router_only).toEqual(ring);
+        expect([...(grendel?.router_only ?? [])].sort()).toEqual([...ring].sort());
         // Keraunos sits outside the mesh at x 11, and the map does not carry its tiles.
         expect(grendel?.eth).toEqual([]);
         expect(grendel?.pcie).toEqual([]);

@@ -33,13 +33,12 @@ describe('resolveMaxCores', () => {
         );
     });
 
-    it('defaults Quasar to its 32 Tensix cores rather than the Wormhole default', () => {
-        expect(resolveMaxCores({ architecture: DeviceArchitecture.QUASAR }, [makeRow(8)])).toBe(32);
-    });
-
-    it('defaults Grendel to the 32 Tensix cores of its Quasar mesh', () => {
-        expect(resolveMaxCores({ architecture: DeviceArchitecture.GRENDEL }, [makeRow(8)])).toBe(32);
-    });
+    it.each([DeviceArchitecture.QUASAR, DeviceArchitecture.GRENDEL])(
+        'defaults %s to its 32 Tensix cores rather than the Wormhole default',
+        (architecture) => {
+            expect(resolveMaxCores({ architecture }, [makeRow(8)])).toBe(32);
+        },
+    );
 
     // The device log's `ARCH:` token reaches here raw, so casing must not change the default.
     it('normalises the device log arch before looking up its default', () => {

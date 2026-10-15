@@ -119,9 +119,9 @@ const gridExtent = (grid: unknown): GridExtent | null => {
  * device can render without a baked entry for its arch.
  *
  * NPE lands NoC transfers on real node coordinates, so it needs the full grid
- * and there is no report-side substitute. Licensee parts in the Quasar-IP family
- * roll their own descriptors, which cannot be bundled, and that is what this
- * override exists for. See #1776.
+ * and there is no report-side substitute. Grendel traces rely on it until a report
+ * can select the baked Grendel descriptor (#2130), and licensee parts in the
+ * Quasar-IP family roll their own descriptors, which cannot be bundled. See #1776.
  *
  * Empty `dram` / `eth` / `pcie` are accepted: a tensix-only emulation descriptor
  * legitimately has none, so their absence is a shape to render rather than an

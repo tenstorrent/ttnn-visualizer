@@ -21,6 +21,9 @@ describe('stringToArchitecture', () => {
     // No descriptor carries `grendel`: UMD marks Grendel with an `ip_variant` on `quasar` (#2130).
     it('resolves the dormant grendel arch name', () => {
         expect(stringToArchitecture('grendel')).toBe(DeviceArchitecture.GRENDEL);
+        // Prefix match, like the other arches: a Grendel model name gets the qsr.s1-derived
+        // descriptor, which NPE's grid check still withholds from a report on another grid.
+        expect(stringToArchitecture('grendel_qsr1')).toBe(DeviceArchitecture.GRENDEL);
     });
 
     it('is case insensitive', () => {

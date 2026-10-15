@@ -187,6 +187,8 @@ describe('useNodeType grid guard (#1847)', () => {
 
 describe('useNodeType with the derived Grendel descriptor (#2130)', () => {
     it('draws a Grendel report on its baked descriptor', () => {
+        const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+
         const { result } = renderHook(() =>
             useNodeType(DeviceArchitecture.GRENDEL, undefined, { x_size: 12, y_size: 8 }),
         );
@@ -195,6 +197,20 @@ describe('useNodeType with the derived Grendel descriptor (#2130)', () => {
         expect(result.current.cores).toHaveLength(32);
         expect(result.current.dram).toHaveLength(8);
         expect(result.current.dispatch).toHaveLength(3);
+        expect(result.current.eth).toEqual([]);
+        expect(result.current.pcie).toEqual([]);
+        expect(consoleError).not.toHaveBeenCalled();
+    });
+
+    it('withholds the Grendel descriptor from a report on another grid', () => {
+        vi.spyOn(console, 'error').mockImplementation(() => {});
+
+        const { result } = renderHook(() =>
+            useNodeType(DeviceArchitecture.GRENDEL, undefined, { x_size: 11, y_size: 8 }),
+        );
+
+        expect(result.current.architecture).toBeNull();
+        expect(result.current.gridMismatch?.baked).toEqual({ x_size: 12, y_size: 8 });
     });
 
     // UMD reads `quasar` without an `ip_variant` as Grendel (tt-umd#3587); this deliberately doesn't, since no

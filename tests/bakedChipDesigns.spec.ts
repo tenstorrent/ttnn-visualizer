@@ -5,8 +5,8 @@
 import { describe, expect, it } from 'vitest';
 import { DeviceArchitecture } from '../src/definitions/DeviceArchitecture';
 import { getChipDesign } from '../src/functions/getChipDesign';
-import { parseSocDescriptorOverride } from '../src/functions/socDescriptorOverride';
 import { resolveMaxCores } from '../src/functions/getCoreCount';
+import { parseSocDescriptorOverride } from '../src/functions/socDescriptorOverride';
 import { ChipDesign } from '../src/model/ClusterModel';
 
 // Every arch with a baked descriptor, so a new one is held to these rules without being listed.
