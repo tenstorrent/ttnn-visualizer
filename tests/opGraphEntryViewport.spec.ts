@@ -246,8 +246,10 @@ describe('revealPanShift', () => {
 
         it('leaves a target below the column where it is', () => {
             const belowSide = boundsOf(PANE.width - 200, 500, 100, 60);
+            const touchingSide = boundsOf(PANE.width - 200, SHORT_SIDE.bottom, 100, 60);
 
             expect(revealPanShift(belowSide, viewport, PANE, TOOLBAR, SHORT_SIDE)).toEqual({ dx: 0, dy: 0 });
+            expect(revealPanShift(touchingSide, viewport, PANE, TOOLBAR, SHORT_SIDE)).toEqual({ dx: 0, dy: 0 });
         });
 
         it('still moves a target out from behind the column', () => {

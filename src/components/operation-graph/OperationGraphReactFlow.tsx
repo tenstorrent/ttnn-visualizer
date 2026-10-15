@@ -328,7 +328,6 @@ const CRITICAL_PATH_CLASS = 'op-graph-critical-path';
 const CRITICAL_PATH_NODE_CLASS = 'op-graph-node-critical-path';
 const CRITICAL_PATH_EDGE_CLASS = 'op-graph-edge-critical-path';
 const DIM_UNRELATED_EDGES_CLASS = 'op-graph-dim-unrelated-edges';
-// The details stretch the side column down the pane; the list alone only takes the height it needs. #2087
 const SIDE_WITH_DETAILS_CLASS = 'op-graph-side-with-details';
 
 interface OperationGraphReactFlowProps {
@@ -837,7 +836,6 @@ const OperationGraphInner = ({
 
     // The side column floats over the pane's right edge the same way, and a node the
     // slowest-operations list locates must not land behind the list that located it.
-    // `sideSpansPane` is for a pan made before the details open and stretch the column.
     const paneSideInset = useCallback((pane: DOMRect, sideSpansPane = false): PaneSideInset => {
         const side = containerRef.current?.querySelector('.op-graph-side')?.getBoundingClientRect();
         if (side === undefined) {
@@ -905,6 +903,7 @@ const OperationGraphInner = ({
                 return;
             }
             const viewport = getViewport();
+            // Only the details offer Recenter, and they stretch the column down the pane.
             const { dx, dy } = centerPanShift(bounds, viewport, pane, paneChromeInset(pane), paneSideInset(pane).width);
             void setViewport({ ...viewport, x: viewport.x + dx, y: viewport.y + dy }, { duration: FOCUS_DURATION_MS });
         },
@@ -1277,7 +1276,8 @@ const OperationGraphInner = ({
     const selectOperation = useCallback(
         (id: number) => {
             setSelectedOperationId(id);
-            // Measured before the details this opens stretch the side column down the pane.
+            // Measured before the details this opens stretch the side column down the pane;
+            // with no column mounted yet there is nothing to stretch (#2137).
             focusOperation(id, true);
         },
         [focusOperation],
@@ -1960,10 +1960,8 @@ const OperationGraphInner = ({
                     >
                         <Background />
                         <Controls />
-                        {/* Docked left rather than in React Flow's default corner: the
-                        panel is a full-height right column, and `onBuilt` always
-                        resolves a selection, so a right-docked minimap would be
-                        hidden in every state the user lands in. */}
+                        {/* Docked left rather than in React Flow's default corner, which the
+                        side column covers whenever the details or a long list are open. */}
                         <MiniMap
                             pannable
                             position='bottom-left'

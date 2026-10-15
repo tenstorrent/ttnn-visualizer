@@ -116,18 +116,31 @@ const SIDE_WIDTH = 300;
 // The list alone sizes the column to its rows; only the details stretch it down the pane. #2087
 const LIST_ONLY_SIDE_HEIGHT = 300;
 const SIDE_WITH_DETAILS_CLASS = 'op-graph-side-with-details';
-const stubRect = (width: number, height: number, left = 0) =>
+const stubRect = (width: number, height: number, left = 0, top = 0) =>
     ({
         x: left,
-        y: 0,
-        top: 0,
+        y: top,
+        top,
         left,
         right: left + width,
-        bottom: height,
+        bottom: top + height,
         width,
         height,
         toJSON: () => ({}),
     }) as DOMRect;
+
+// The view's chrome as measured with the pane `paneTop` px down the window.
+const measuredWithPaneAt = (paneTop: number) =>
+    function measured(this: Element) {
+        if (this.classList?.contains('op-graph-toolbar')) {
+            return stubRect(PANE.width, TOOLBAR_HEIGHT, 0, paneTop);
+        }
+        if (this.classList?.contains('op-graph-side')) {
+            const height = this.classList.contains(SIDE_WITH_DETAILS_CLASS) ? PANE.height : LIST_ONLY_SIDE_HEIGHT;
+            return stubRect(SIDE_WIDTH, height, PANE.width - SIDE_WIDTH, paneTop);
+        }
+        return stubRect(PANE.width, PANE.height, 0, paneTop);
+    };
 
 vi.mock('@xyflow/react', async () => {
     const { useState, createElement, Fragment } = await import('react');
@@ -277,6 +290,7 @@ vi.mock('../src/components/operation-graph/opGraphCriticalPath', async () => {
 import { buildOpGraph } from '../src/components/operation-graph/opGraphBuilder';
 import { findCriticalPath } from '../src/components/operation-graph/opGraphCriticalPath';
 import {
+    buildDeviceOperationSubgraph,
     countDeviceOperations,
     getDeviceEdgeId,
     getDeviceNodeId,
@@ -544,16 +558,7 @@ beforeEach(() => {
     flowStoreLag.isBlind = false;
     absolutePositionById.clear();
     viewportState.current = { x: 0, y: 0, zoom: PANNED_ZOOM };
-    vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function measured(this: Element) {
-        if (this.classList?.contains('op-graph-toolbar')) {
-            return stubRect(PANE.width, TOOLBAR_HEIGHT);
-        }
-        if (this.classList?.contains('op-graph-side')) {
-            const height = this.classList.contains(SIDE_WITH_DETAILS_CLASS) ? PANE.height : LIST_ONLY_SIDE_HEIGHT;
-            return stubRect(SIDE_WIDTH, height, PANE.width - SIDE_WIDTH);
-        }
-        return stubRect(PANE.width, PANE.height);
-    });
+    vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(measuredWithPaneAt(0));
     harness.setNodes = null;
     harness.setEdges = null;
     harness.onNodeClick = null;
@@ -1158,6 +1163,21 @@ describe('OperationGraphReactFlow slowest operations list', () => {
             expect(setViewport).not.toHaveBeenCalled();
         });
 
+        it("measures the list's reach from the pane, which sits below the window's top", () => {
+            // The app's own padding puts the pane 15 px down. At y 305 the node is below the
+            // list's 300 px only once those 15 px are taken off the column's window bottom.
+            vi.mocked(Element.prototype.getBoundingClientRect).mockImplementation(measuredWithPaneAt(15));
+            absolutePositionById.set('3', { x: 1600, y: 610 });
+            renderGraph(OPERATION_LIST, PERF_ROWS);
+            fireEvent.click(hotOpsSwitch());
+            typeFilter('matmul_c');
+            setViewport.mockClear();
+
+            fireEvent.click(screen.getByLabelText('Next match'));
+
+            expect(setViewport).not.toHaveBeenCalled();
+        });
+
         it('still steps a match out from behind the list alone', () => {
             // y 200 is inside the band the list covers.
             absolutePositionById.set('3', { x: 1600, y: 400 });
@@ -1173,6 +1193,55 @@ describe('OperationGraphReactFlow slowest operations list', () => {
             expect((1600 + STORE_NODE.width) * PANNED_ZOOM + viewport.x).toBeLessThanOrEqual(PANE.width - SIDE_WIDTH);
             // Stepping matches only moves the viewport; the list keeps the column to itself.
             expect(sideColumn()).not.toHaveClass(SIDE_WITH_DETAILS_CLASS);
+        });
+
+        // Expanding op 3 keeps its corner where it was, which these tests put in the
+        // column's band but below the list alone, with the open box clear of the pane edge.
+        describe('revealing an expanded operation', () => {
+            const operations = OPERATION_LIST.map((op) =>
+                op.id === 3 ? withDeviceOperations(op, ['head()', 'body()', 'tail()']) : op,
+            );
+            const subgraph = buildDeviceOperationSubgraph(operations[2]);
+            const expandedBox = () => nodeById(lastFlowRender().nodes, '3');
+
+            const expandAt = (paneX: number, paneY: number) => {
+                absolutePositionById.set('3', { x: paneX / PANNED_ZOOM, y: paneY / PANNED_ZOOM });
+                setViewport.mockClear();
+                fireEvent.click(screen.getByRole('button', { name: 'Show 3 device operations' }));
+                rebuildWith(operations, subgraph === null ? [] : [subgraph]);
+                expect(setViewport).toHaveBeenCalledTimes(1);
+                return (setViewport.mock.calls[0] as unknown as [{ x: number; y: number }])[0];
+            };
+
+            const boxWidth = () => {
+                const graph = buildOpGraph(sourceFor(operations), {
+                    hideDeallocate: true,
+                    deviceSubgraphs: subgraph === null ? [] : [subgraph],
+                });
+                return (nodeById(graph.nodes, '3').width ?? 0) * PANNED_ZOOM;
+            };
+
+            it('leaves it where it opened when that is below the list alone', () => {
+                renderGraph(operations, PERF_ROWS);
+                fireEvent.click(hotOpsSwitch());
+                const paneX = PANE.width - 60 - boxWidth();
+
+                const viewport = expandAt(paneX, LIST_ONLY_SIDE_HEIGHT + 20);
+
+                expect(expandedBox().position.x * PANNED_ZOOM + viewport.x).toBeCloseTo(paneX, 5);
+            });
+
+            it('moves it out from under the details when they stretch the column past it', () => {
+                renderGraph(operations, PERF_ROWS);
+                fireEvent.click(hotOpsSwitch());
+                fireEvent.click(rowFor('1 matmul_a'));
+                const paneX = PANE.width - 60 - boxWidth();
+
+                const viewport = expandAt(paneX, LIST_ONLY_SIDE_HEIGHT + 20);
+
+                const rightEdge = expandedBox().position.x * PANNED_ZOOM + viewport.x + boxWidth();
+                expect(rightEdge).toBeLessThanOrEqual(PANE.width - SIDE_WIDTH);
+            });
         });
     });
 
