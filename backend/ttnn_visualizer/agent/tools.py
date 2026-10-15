@@ -29,6 +29,10 @@ from ttnn_visualizer.csv_queries import (
     read_signposts,
     signpost_range_ignored,
 )
+from ttnn_visualizer.exceptions import (
+    InvalidSignpostRange,
+    PerformanceReportNotLoadedException,
+)
 from ttnn_visualizer.models import Instance
 
 logger = logging.getLogger(__name__)
@@ -117,9 +121,10 @@ class SignpostRange:
     """A window of the report, bounded as `tt-perf-report --start-signpost` bounds it.
 
     The bounds are passed to tt-perf-report rather than cut from the whole
-    snapshot: it recomputes `Total %` and the first op-to-op gap over the window,
-    and a cut snapshot would disagree with the signposted run an agent is
-    checking against. Row ids are CSV positions either way, so a windowed row
+    snapshot: it recomputes `Total %` over the window and leaves the first
+    operation's op-to-op gap blank, since no operation precedes it inside the
+    window, and a cut snapshot would disagree on both with the signposted run an
+    agent is checking against. Row ids are CSV positions either way, so a windowed row
     keeps the id the whole report gives it. #2122
     """
 
@@ -161,20 +166,73 @@ def canonical_report(
     raises `InvalidSignpostRange`, a `ValueError`, and is not cached. It is
     refused against the signposts already read for the handle, before the CSV is
     read again: an agent guessing names would otherwise pay a full read per guess.
+
+    Every read that misses the cache first checks the capture is the one the
+    handle's first read came from; see `_require_same_source`.
     """
     ignored = range_ignored(registry, handle, signposts)
     if signposts is not None and not ignored:
+        check_range(registry, handle, signposts)
+    scope = None if ignored else signposts
+    overrides = scope.as_overrides() if scope is not None else {}
+
+    def build(instance: Instance) -> Dict:
+        _require_same_source(registry, handle, instance)
+        return _generate_canonical_report(instance, **overrides)
+
+    _pin_source(registry, handle)
+    report = registry.cached_report(handle, build, scope=scope)
+    return {**report, "signpost_range_ignored": True} if ignored else report
+
+
+def check_range(
+    registry: ReportRegistry, handle: str, signposts: SignpostRange
+) -> None:
+    """Refuse a range this handle's signposts cannot honour, naming the handle.
+
+    `diff_reports` asks it of both reports before generating either, so the
+    refusal has to say which one it is about.
+    """
+    try:
         check_signpost_range(
             _signposts(registry, handle), signposts.start, signposts.end
         )
-    scope = None if ignored else signposts
-    overrides = scope.as_overrides() if scope is not None else {}
-    report = registry.cached_report(
-        handle,
-        lambda instance: _generate_canonical_report(instance, **overrides),
-        scope=scope,
-    )
-    return {**report, "signpost_range_ignored": True} if ignored else report
+    except InvalidSignpostRange as error:
+        raise InvalidSignpostRange(f"{handle!r}: {error}") from error
+
+
+def _source_now(instance: Instance) -> Optional[object]:
+    """The CSV a report would be read from now, or None when there is none.
+
+    None leaves nothing to compare, and the read that follows fails on its own.
+    """
+    try:
+        return OpsPerformanceReportQueries.report_source(instance)
+    except (FileNotFoundError, PerformanceReportNotLoadedException):
+        return None
+
+
+def _pin_source(registry: ReportRegistry, handle: str) -> Optional[object]:
+    return registry.cached_report(handle, _source_now, variant=CacheVariant.SOURCE)
+
+
+def _require_same_source(
+    registry: ReportRegistry, handle: str, instance: Instance
+) -> None:
+    """Refuse to read a capture other than the one the handle first read.
+
+    The whole snapshot and the operation link are pinned to the capture the
+    handle first read, and rows are matched to operations by CSV position. A
+    read of a rewritten or newer CSV would put its rows under the old link's
+    operation ids, so it is refused and a fresh handle asked for.
+    """
+    pinned = _pin_source(registry, handle)
+    if pinned is not None and _source_now(instance) != pinned:
+        raise ValueError(
+            f"the performance capture behind {handle!r} has changed since it was "
+            "first read, so a new read would not line up with the operations "
+            "already linked to it. Call load_report again for a fresh handle."
+        )
 
 
 def range_ignored(
@@ -194,9 +252,13 @@ def range_ignored(
 
 def _signposts(registry: ReportRegistry, handle: str) -> ResolvedSignposts:
     """The handle's signposts, read once."""
-    return registry.cached_report(
-        handle, _resolve_signposts, variant=CacheVariant.SIGNPOSTS
-    )
+
+    def build(instance: Instance) -> ResolvedSignposts:
+        _require_same_source(registry, handle, instance)
+        return _resolve_signposts(instance)
+
+    _pin_source(registry, handle)
+    return registry.cached_report(handle, build, variant=CacheVariant.SIGNPOSTS)
 
 
 def _resolve_signposts(instance: Instance) -> ResolvedSignposts:
@@ -239,6 +301,13 @@ def is_ranged(response_projection: object) -> bool:
     )
 
 
+# How a report is generated rather than what it reads, so not part of the
+# projection. No tool reads the stacked report, and tt-perf-report draws it as a
+# 300-dpi pyplot figure it never closes: kept on, every generation -- one per
+# range asked for -- would leave a figure open for the life of the server.
+_GENERATION_OPTIONS: Dict[str, object] = {"no_stacked_report": True}
+
+
 def _generate_canonical_report(instance: Instance, **overrides: object) -> Dict:
     """Run the report with stdout captured.
 
@@ -250,7 +319,7 @@ def _generate_canonical_report(instance: Instance, **overrides: object) -> Dict:
     captured = io.StringIO()
     with contextlib.redirect_stdout(captured):
         report = OpsPerformanceReportQueries.generate_report(
-            instance, **{**CANONICAL_PROJECTION, **overrides}
+            instance, **{**CANONICAL_PROJECTION, **_GENERATION_OPTIONS, **overrides}
         )
     if captured.getvalue().strip():
         logger.debug("tt-perf-report output: %s", captured.getvalue().strip())
@@ -465,7 +534,8 @@ def diff_reports(
     # Refused rather than caveated: a window compared against a whole report
     # reports every row outside the window as a change, and this is the response
     # most likely to be acted on. Both sides ignoring it compares like with like.
-    # Checked before either report is generated, so a refusal costs two reads.
+    # Checked, with every other refusal, before either report is generated, so a
+    # refusal costs two reads and names the report it is about.
     if ignored_a != ignored_b:
         unsignposted = handle_a if ignored_a else handle_b
         raise ValueError(
@@ -474,6 +544,9 @@ def diff_reports(
             "window would show as a change. Diff without a range, or against a "
             "capture with the same signposts."
         )
+    if signposts is not None and not ignored_a:
+        check_range(registry, handle_a, signposts)
+        check_range(registry, handle_b, signposts)
     report_a = canonical_report(registry, handle_a, signposts)
     report_b = canonical_report(registry, handle_b, signposts)
 
@@ -556,6 +629,7 @@ __all__ = [
     "SORTABLE_METRICS",
     "SignpostRange",
     "canonical_report",
+    "check_range",
     "is_ranged",
     "countable_device_time",
     "diff_reports",

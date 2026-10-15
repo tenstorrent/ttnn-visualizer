@@ -13,7 +13,9 @@ and that a zone pairing survives the chunk boundary it is invisible across.
 See #1995.
 """
 
+import os
 import sqlite3
+import time
 from unittest.mock import patch
 
 import pytest
@@ -774,6 +776,47 @@ class TestSignpostRangeEndToEnd:
                 registry, handle, start_signpost="PERF_END", end_signpost="PERF_START"
             )
 
+    def test_generating_a_report_leaves_no_figure_open(self, tmp_path):
+        """tt-perf-report draws the stacked report as a pyplot figure it never
+        closes; one generation per range would leave one open per range."""
+        import matplotlib.pyplot as plt
+
+        registry = ReportRegistry()
+        handle = self._handle(registry, tmp_path)
+        open_before = len(plt.get_fignums())
+
+        tools.top_ops(registry, handle)
+        self._ranged(registry, handle)
+        self._ranged(registry, handle, end_signpost=None)
+
+        assert len(plt.get_fignums()) == open_before
+
+    def test_a_range_on_a_rewritten_capture_is_refused(self, tmp_path):
+        """Rows link to operations by CSV position, so a read of the rewritten
+        file would put its rows under the first capture's operation ids."""
+        registry = ReportRegistry()
+        handle = self._handle(registry, tmp_path)
+        whole = tools.top_ops(registry, handle)
+
+        write_ops_perf(tmp_path / "signposted", signposted_rows()[:-1])
+
+        with pytest.raises(ValueError, match="has changed since it was first read"):
+            self._ranged(registry, handle)
+        # What the handle already holds still answers, from the first capture.
+        assert tools.top_ops(registry, handle) == whole
+
+    def test_a_newer_capture_beside_the_first_is_refused_too(self, tmp_path):
+        registry = ReportRegistry()
+        handle = self._handle(registry, tmp_path)
+        self._ranged(registry, handle)
+
+        newer = tmp_path / "signposted" / "ops_perf_results_newer.csv"
+        newer.write_text((tmp_path / "signposted" / "ops_perf_results.csv").read_text())
+        os.utime(newer, ns=(time.time_ns() + 10**9, time.time_ns() + 10**9))
+
+        with pytest.raises(ValueError, match="has changed since it was first read"):
+            tools.top_ops(registry, handle)
+
     def test_a_range_on_a_capture_without_signposts_is_read_whole(self, tmp_path):
         """The real signpost read, not a patched one, agrees with tt-perf-report:
         the unmodified smoke capture has no signposts, so a range reads it whole."""
@@ -923,6 +966,38 @@ class TestDiffReports:
             )
 
         assert diff["projection"]["signpost_range_ignored"] is True
+
+    def test_a_name_only_the_second_report_lacks_is_refused_before_generating(
+        self, tmp_path
+    ):
+        """The "after" capture that stopped early, or renamed a signpost: refused
+        before the first report is generated, and naming the report it is about."""
+        registry = self._two_reports(tmp_path)
+
+        def resolve(instance):
+            names = (
+                {"PERF_DECODE": [0], "PERF_DECODE_END": [1]}
+                if instance.instance_id == "report-1"
+                else {"PERF_PREFILL": [0]}
+            )
+            return ResolvedSignposts(names, True)
+
+        with (
+            patch.object(tools, "_resolve_signposts", side_effect=resolve),
+            patch.object(tools, "_generate_canonical_report") as generate,
+        ):
+            with pytest.raises(
+                ValueError, match="'report-2': no signpost named 'PERF_DECODE'"
+            ):
+                tools.diff_reports(
+                    registry,
+                    "report-1",
+                    "report-2",
+                    start_signpost="PERF_DECODE",
+                    end_signpost="PERF_DECODE_END",
+                )
+
+        generate.assert_not_called()
 
     def test_a_range_refused_for_one_report_is_not_kept_for_either(self, tmp_path):
         """The report that generated stays cached; the refused one is built again."""

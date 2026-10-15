@@ -997,6 +997,25 @@ class OpsPerformanceReportQueries:
 
         return processed_row
 
+    @staticmethod
+    def report_source(instance) -> "_PerformanceReportSource":
+        """The CSV a report would be generated from now, and its identity on disk.
+
+        The newest `ops_perf_results` file, so a capture written later is a
+        different source, and so is the same file rewritten in place.
+        """
+        source_path = Path(
+            OpsPerformanceQueries.get_local_ops_perf_file_path(instance)
+        ).resolve()
+        source_stat = source_path.stat()
+        return _PerformanceReportSource(
+            path=str(source_path),
+            modified_ns=source_stat.st_mtime_ns,
+            changed_ns=source_stat.st_ctime_ns,
+            inode=source_stat.st_ino,
+            size=source_stat.st_size,
+        )
+
     @classmethod
     def generate_report(cls, instance, **kwargs):
         """Build the performance report, reusing a cached one when nothing changed.
@@ -1004,17 +1023,7 @@ class OpsPerformanceReportQueries:
         A cache hit hands every caller the same dict and row dicts, across users,
         so treat the result as read-only: copy before sorting or annotating it.
         """
-        source_path = Path(
-            OpsPerformanceQueries.get_local_ops_perf_file_path(instance)
-        ).resolve()
-        source_stat = source_path.stat()
-        source = _PerformanceReportSource(
-            path=str(source_path),
-            modified_ns=source_stat.st_mtime_ns,
-            changed_ns=source_stat.st_ctime_ns,
-            inode=source_stat.st_ino,
-            size=source_stat.st_size,
-        )
+        source = cls.report_source(instance)
         options = _PerformanceReportOptions(
             start_signpost=kwargs.get("start_signpost", cls.DEFAULT_START_SIGNPOST),
             end_signpost=kwargs.get("end_signpost", cls.DEFAULT_END_SIGNPOST),

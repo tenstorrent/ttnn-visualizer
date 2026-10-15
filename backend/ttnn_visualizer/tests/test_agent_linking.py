@@ -774,6 +774,22 @@ class TestTopOpsLink:
         assert ranged["matched_rows"] == whole["matched_rows"]
         assert ranged["unlinked_by_reason"] == whole["unlinked_by_reason"]
 
+    def test_an_end_only_range_reaches_the_generator_and_scopes_the_link(self, linked):
+        """`linking.top_ops` is what the server calls, so an end bound it dropped
+        would read to the end of the report while the projection echoed none."""
+        registry, handle, generate = linked()
+
+        result = linking.top_ops(registry, handle, end_signpost="signpost-start")
+
+        ranged = [
+            call.kwargs
+            for call in generate.call_args_list
+            if call.kwargs.get("end_signpost")
+        ]
+        assert ranged == [{"start_signpost": None, "end_signpost": "signpost-start"}]
+        assert result["projection"]["end_signpost"] == "signpost-start"
+        assert result["operation_link"]["scope"] == linking.WHOLE_REPORT_SCOPE
+
     def test_a_ranged_call_generates_the_window_and_the_whole_once_each(self, linked):
         """What the top_ops description promises about cost on a linked handle."""
         registry, handle, generate = linked()

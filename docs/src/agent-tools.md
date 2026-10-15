@@ -122,9 +122,12 @@ can be checked against the same window. They are resolved the way tt-perf-report
 them: a name means its earliest occurrence by host start time, and an end that names the
 start signpost too means its second occurrence. The window holds the rows strictly between
 the two, so the bounding signposts are left out and any signposts inside it are kept.
-tt-perf-report recomputes `total_percent` over the window, and the first operation's
-op-to-op gap is measured from inside it, so a ranged answer is not the whole-report answer
-cut down — it is what the signposted run reports.
+tt-perf-report recomputes `total_percent` over the window, and the first operation in the
+window has no op-to-op gap, because tt-perf-report measures a gap from the previous
+operation and none precedes it inside the window. Ranking by `op_to_op_gap` therefore
+leaves that operation out, and `op_to_op_gap_total` excludes the gap leading into the
+window, which is often the largest in the capture. A ranged answer is not the whole-report
+answer cut down — it is what the signposted run reports.
 
 A range the report cannot honour is refused rather than answered from other rows: a name
 the report does not hold (the refusal lists the names it does), one name for both bounds
@@ -134,7 +137,8 @@ uses the whole file rather than some other window, and the response's `projectio
 with `signpost_range_ignored`. Every ranged response's `projection` names the range, so a
 windowed answer cannot be taken for a whole-report one. `diff_reports` applies one range to
 both reports, and refuses when only one of them holds signposts: a window compared against
-a whole report would show every row outside the window as a change.
+a whole report would show every row outside the window as a change. It checks the range
+against both reports before generating either, and a refusal names the report it is about.
 
 One filter is applied, deliberately: per-device rows are **merged**, so an operation that
 ran on eight devices is one row rather than eight. That is the unit an operation is
@@ -285,11 +289,15 @@ its CSV position in either read, so its `operation_id` is the one it has unrange
 `top_ops`'s own `op_count` and totals describe the window.
 
 The link is resolved once per handle, on the first `top_ops` or `operation_detail` that
-needs it, and reads every captured graph at the linked rank. On a handle with both
-reports, the first `operation_detail` therefore also generates the performance report,
-which can take seconds on a large capture; every later call reuses both. A link that
-failed on a read that might pass next time — a locked database, a temp-file error in
-tt-perf-report — is not kept, so the next call tries again.
+needs it, and reads every captured graph at the linked rank. On a handle with both reports,
+the first `operation_detail` therefore also generates the performance report, which can
+take seconds on a large capture; every later call reuses both. A link that failed on a read
+that might pass next time — a locked database, a temp-file error in tt-perf-report — is not
+kept, so the next call tries again. A handle keeps answering from the capture it first
+read, so it never mixes two. A read that needs the CSV again after it was rewritten, or
+after a newer `ops_perf_results` file appeared — a range not asked before, or one dropped
+from the cache — is refused rather than lined up against operations linked from the old
+capture; call `load_report` again for a fresh handle.
 
 **An operation id is not the end of the answer.** `memory_profile` names the operations
 holding its largest footprint, and `operation_provenance` turns such an id into the two things you need

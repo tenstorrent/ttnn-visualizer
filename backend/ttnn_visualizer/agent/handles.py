@@ -40,6 +40,9 @@ class CacheVariant(str, Enum):
     OPERATION_LINK = "operation_link"
     # Which signposts the performance CSV holds, read without generating a report.
     SIGNPOSTS = "signposts"
+    # The performance CSV the handle's first read came from, so a later read can
+    # tell whether it is still reading the same capture.
+    SOURCE = "source"
 
 
 # Snapshots narrowed by a scope -- a signpost range -- kept at once, across every
