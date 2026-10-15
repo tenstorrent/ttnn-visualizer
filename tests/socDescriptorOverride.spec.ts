@@ -116,14 +116,22 @@ describe('parseSocDescriptorOverride', () => {
             functional_workers: ['1-1'],
             dispatch: ['10-1'],
         });
+        // Present but null is malformed, not omitted: the schema declares an array.
+        const nulled = parseSocDescriptorOverride({
+            grid: { x_size: 4, y_size: 4 },
+            functional_workers: ['1-1'],
+            dispatch: null,
+        });
 
         expect(malformed.status).toBe('invalid');
         expect(outside.status).toBe('invalid');
-        if (malformed.status !== 'invalid' || outside.status !== 'invalid') {
+        expect(nulled.status).toBe('invalid');
+        if (malformed.status !== 'invalid' || outside.status !== 'invalid' || nulled.status !== 'invalid') {
             return;
         }
         expect(malformed.problems.join(' ')).toContain('`dispatch` must be an array');
         expect(outside.problems.join(' ')).toContain('`dispatch` has coordinates outside the 4x4 grid: 10-1');
+        expect(nulled.problems.join(' ')).toContain('`dispatch` must be an array');
     });
 
     it('needs only grid and functional_workers, defaulting every node list', () => {

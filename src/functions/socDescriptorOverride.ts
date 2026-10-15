@@ -149,7 +149,8 @@ export const parseSocDescriptorOverride = (raw: unknown, reportedArch?: string):
         ...coordinateProblems('pcie', raw.pcie ?? [], extent),
         ...coordinateProblems('arc', raw.arc ?? [], extent),
         ...coordinateProblems('router_only', raw.router_only ?? [], extent),
-        ...coordinateProblems('dispatch', raw.dispatch ?? [], extent),
+        // Only an absent `dispatch` defaults: tt-npe omits it rather than writing null.
+        ...coordinateProblems('dispatch', raw.dispatch === undefined ? [] : raw.dispatch, extent),
     ];
 
     if (Array.isArray(raw.functional_workers) && raw.functional_workers.length === 0) {
