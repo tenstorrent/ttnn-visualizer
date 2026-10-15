@@ -203,13 +203,11 @@ def refuse_unattributable(
 
 
 def _buffer_type_name(value: object) -> str:
-    """`buffers.buffer_type` arrives as the column's own value, not a `BufferType`.
+    """A stored `buffer_type` by name, whether or not it became a `BufferType`.
 
-    `_dataclass_select_clause` reads the column straight, so despite the
-    annotation the value is whatever the capture stored. Both forms are common
-    locally -- integers (`0`, `1`, `3`) in most reports, including every
-    `SCHEMA_V*` fixture, and text (`'DRAM'`, `'L1'`) in newer ones -- so neither
-    is the fallback case.
+    `Buffer` and `Tensor` coerce the column, which stores integers (`0`, `1`,
+    `3`) in most reports and text (`'DRAM'`, `'L1'`) in newer ones, but pass an
+    unrecognised value through unchanged.
     """
     if isinstance(value, int) and not isinstance(value, bool):
         try:
@@ -308,7 +306,7 @@ def _parse_frames(trace: str) -> List[Dict[str, object]]:
     return frames
 
 
-def _joined(existing: object, addition: str) -> str:
+def joined_caveat(existing: object, addition: str) -> str:
     """Append to the response's one caveat field rather than inventing another."""
     return f"{existing} {addition}" if existing else addition
 
@@ -434,13 +432,13 @@ def operation_provenance(
     # no call sites; a row that yields no frame is a trace this parser does not
     # read, and calling that "no stack trace recorded" would be false.
     if not raw_trace.strip():
-        result["caveat"] = _joined(
+        result["caveat"] = joined_caveat(
             result.get("caveat"),
             "This capture recorded no stack trace for this operation, so it has no "
             "call site. Older reports omit them.",
         )
     elif not frames:
-        result["caveat"] = _joined(
+        result["caveat"] = joined_caveat(
             result.get("caveat"),
             "A stack trace is recorded for this operation but holds no frame this "
             "tool could read, so the call site is unknown rather than absent. The "
@@ -524,7 +522,7 @@ def find_operations(
         **_caveats(scope),
     }
     if no_traces_recorded:
-        result["caveat"] = _joined(
+        result["caveat"] = joined_caveat(
             result.get("caveat"),
             "This capture records no stack traces, so `called_from` can match "
             "nothing. An empty result here is not evidence that no operation came "
@@ -944,6 +942,7 @@ __all__ = [
     "TENSOR_SIZE_UNIT",
     "ProfilerDatabaseMissingError",
     "find_operations",
+    "joined_caveat",
     "memory_profile",
     "operation_detail",
     "operation_provenance",

@@ -1,0 +1,18 @@
+// SPDX-License-Identifier: Apache-2.0
+//
+// SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
+
+// A report-level callout listing one entry per line above the operations or perf table
+@mixin callout-list {
+    margin-bottom: 15px;
+
+    ul {
+        margin: 0;
+        padding-left: 0;
+        list-style: none;
+    }
+
+    li + li {
+        margin-top: 8px;
+    }
+}

@@ -456,6 +456,27 @@ class TestDatabaseQueries(unittest.TestCase):
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0].tensor_id, 1)
 
+    def test_query_tensors_device_addresses_indexed_by_device_id(self):
+        # Without `tensors.size`, the query joins input and output tensors, so a
+        # tensor read by two operations repeats each device_tensors row.
+        self.connection.executescript("""
+            CREATE TABLE device_tensors (tensor_id int, device_id int, address int);
+            INSERT INTO tensors VALUES (1, '(2,2)', 'float32', 'NCHW', 'default', 0, 100, 0);
+            INSERT INTO tensors VALUES (2, '(2,2)', 'float32', 'NCHW', 'default', NULL, NULL, 0);
+            INSERT INTO device_tensors VALUES (1, 0, 100);
+            INSERT INTO device_tensors VALUES (2, 2, 300);
+            INSERT INTO device_tensors VALUES (2, 0, 200);
+            INSERT INTO input_tensors VALUES (5, 0, 1);
+            INSERT INTO input_tensors VALUES (6, 0, 1);
+            INSERT INTO input_tensors VALUES (5, 1, 2);
+            INSERT INTO input_tensors VALUES (6, 1, 2);
+            """)
+        results = {
+            tensor.tensor_id: tensor.device_addresses
+            for tensor in self.db_queries.query_tensors()
+        }
+        self.assertEqual(results, {1: [100], 2: [200, None, 300]})
+
     def test_query_input_tensors(self):
         self.connection.execute("INSERT INTO input_tensors VALUES (1, 0, 1)")
         results = list(self.db_queries.query_input_tensors(filters={"operation_id": 1}))

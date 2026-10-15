@@ -13,6 +13,7 @@ import {
 } from '../src/functions/computePerfHeuristicFlags';
 import { DEFAULT_MAX_CORES } from '../src/functions/getCoreCount';
 import { makeAllocationFailure } from './helpers/allocationFailure';
+import { makeDramFallback } from './helpers/dramFallback';
 
 const MAX_CORES = DEFAULT_MAX_CORES;
 
@@ -64,6 +65,56 @@ describe('annotatePerfHeuristicFlags', () => {
 
         it('is absent without a recorded failure', () => {
             expect(getFlags({ allocation_failure: null })).not.toContain(PerfHeuristicFlag.ALLOCATION_FAILURE);
+        });
+    });
+
+    describe('DRAM fallback', () => {
+        const fallback = makeDramFallback();
+
+        it('flags a row whose operation likely fell back to DRAM, with what it asked for', () => {
+            const [row] = annotatePerfHeuristicFlags([makeRow({ dram_fallback: fallback })], MAX_CORES);
+
+            expect(row.heuristicFlags).toContain(PerfHeuristicFlag.DRAM_FALLBACK);
+            expect(row.heuristicFlagDetails?.[PerfHeuristicFlag.DRAM_FALLBACK]).toBe(
+                'Requested L1; 1 of 1 outputs in DRAM.',
+            );
+        });
+
+        // The cost of the fallback lands on the ops that read the output, not on this row.
+        it('is not muted below MIN_TOTAL_PERCENT', () => {
+            expect(getFlags({ dram_fallback: fallback, total_percent: 0.01 })).toContain(
+                PerfHeuristicFlag.DRAM_FALLBACK,
+            );
+        });
+
+        // Inferred, unlike an allocation failure, so the eligibility gate applies.
+        it.each([
+            ['a signpost', { op_type: OpType.SIGNPOST }],
+            ['a host-bound row', { bound: BoundType.HOST }],
+            ['a missing row', { missing: true }],
+        ])('is muted on %s', (_, overrides) => {
+            expect(getFlags({ dram_fallback: fallback, ...overrides })).not.toContain(PerfHeuristicFlag.DRAM_FALLBACK);
+        });
+
+        it('is absent without a fallback', () => {
+            expect(getFlags({ dram_fallback: null })).not.toContain(PerfHeuristicFlag.DRAM_FALLBACK);
+        });
+
+        it('sits after a recorded allocation failure on the same row', () => {
+            const flags = getFlags({ allocation_failure: makeAllocationFailure(), dram_fallback: fallback });
+
+            expect(flags.slice(0, 2)).toEqual([PerfHeuristicFlag.ALLOCATION_FAILURE, PerfHeuristicFlag.DRAM_FALLBACK]);
+        });
+
+        // The recorded failure bypasses the eligibility gate; the inferred fallback does not.
+        it('leaves only the recorded failure on an ineligible row', () => {
+            expect(
+                getFlags({
+                    allocation_failure: makeAllocationFailure(),
+                    dram_fallback: fallback,
+                    bound: BoundType.HOST,
+                }),
+            ).toEqual([PerfHeuristicFlag.ALLOCATION_FAILURE]);
         });
     });
 

@@ -53,20 +53,29 @@ export const isSettledLinkMatch = (result: ReportLinkMatchResult): boolean =>
 const isSamePair = (a: ReportLink, b: ReportLink): boolean =>
     a.profilerId === b.profilerId && a.performanceId === b.performanceId;
 
+// `host` is optional on stored access, so a missing host and `null` are the same.
+const isSameAccess = (a: ReportLinkAccess | undefined, b: ReportLinkAccess | undefined): boolean =>
+    a?.location === b?.location && a?.path === b?.path && (a?.host ?? null) === (b?.host ?? null);
+
 export const capReportLinks = (links: ReportLink[]): ReportLink[] =>
     links.length <= MAX_REPORT_LINKS ? links : links.slice(links.length - MAX_REPORT_LINKS);
 
 /**
- * Insert or update a pair (identity ignores status). On insert or status change,
- * appends the pair at the end so recency-based capping keeps actively compared
- * pairs. Returns the same array reference when the pair already exists with the
- * same status (avoids jotai update loops) — that path does not bump recency or
- * recordedAt.
+ * Insert or replace a pair (identity ignores status, access and `recordedAt`), moving it
+ * to the end so capping evicts the least recently compared pairs first. Returns the same
+ * array reference only when the pair is already last with the same status and access,
+ * which spares `useReportLinkBadgeIds` subscribers a re-render.
  */
 export const upsertReportLink = (links: ReportLink[], next: ReportLink): ReportLink[] => {
-    const existing = links.find((link) => isSamePair(link, next));
+    const last = links[links.length - 1];
 
-    if (existing && existing.status === next.status) {
+    if (
+        last &&
+        isSamePair(last, next) &&
+        last.status === next.status &&
+        isSameAccess(last.profilerAccess, next.profilerAccess) &&
+        isSameAccess(last.performanceAccess, next.performanceAccess)
+    ) {
         return links;
     }
 

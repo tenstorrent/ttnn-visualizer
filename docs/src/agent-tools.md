@@ -33,6 +33,46 @@ claude mcp add ttnn-visualizer -- ttnn-visualizer-mcp
 Reports are addressed by path, not by the `instanceId` the web application uses, so the
 server needs no database and no running application.
 
+The `initialize` response's `serverInfo.version` is the installed ttnn-visualizer
+version, so a launcher can check for a minimum release before relying on a tool;
+`protocolVersion` is the MCP specification revision, not the package version. A
+version of `unknown` means it could not be determined — treat it as unverifiable,
+not as old.
+
+## Links into the visualizer
+
+Answers link to the same thing in the web application, for the reader to open:
+
+- `load_report` returns an `app_link` to the report.
+- `operation_detail` and `operation_provenance` return an `app_link` to the operation.
+- `find_operations`, `top_ops`, `memory_profile` and `tensor_flow` return one
+  `app_link_template`, in which `{operation_id}` takes any operation id the answer lists.
+
+A link names the report by its directories, and the visualizer opens them when the link is
+followed, as `ttnn-visualizer --profiler-path` does: each followed link starts a new session
+on that report, so it lands on the report the agent read, not on whatever the reader had
+open. The server itself still makes no request; following the link is what opens the
+report. A link carries those directories as absolute paths on this machine, so it is for
+the reader here, not for sharing.
+
+Links point at `http://localhost:8000` unless the server's environment sets
+`TTNN_VISUALIZER_URL`, which may name any host:
+
+```bash
+claude mcp add ttnn-visualizer -e TTNN_VISUALIZER_URL=http://localhost:8001 -- ttnn-visualizer-mcp
+```
+
+A `TTNN_VISUALIZER_URL` that is not an http(s) URL with a host gives no links at all,
+rather than links to the default.
+
+They open only in a visualizer running locally; a hosted one does not open a report by
+path, and neither does one framed inside another page. A local one opens a linked directory
+without asking, as long as it holds the files a report needs, so follow links you got from
+your own agent. A page that plants a `db.sqlite` in a folder you can reach, such as
+Downloads, could link the visualizer to it too. An answer read at a rank other than 0
+carries no link, because the visualizer shows every operation at rank 0 and would open
+another rank's operation under the same id.
+
 ## The tools
 
 | Tool | Answers |
@@ -42,7 +82,7 @@ server needs no database and no running application.
 | `zone_timings` | Per-zone, per-RISC totals from `profile_log_device.csv` — firmware and kernel phases, as measured on device. |
 | `diff_reports` | Per-operation-code deltas between two reports, largest movement first. |
 | `find_operations` | Operations matching a name substring or a call-stack substring, with the ids `operation_detail` takes. |
-| `operation_detail` | One operation: its input and output tensors with shape, dtype, layout and memory config, and what it had allocated. With a linked performance report, also the performance rows it launched and their device time. |
+| `operation_detail` | One operation: its input and output tensors with shape, dtype, layout and memory config, and what it had allocated. With a linked performance report, also the performance rows it launched, their device time and share of the report's, and the operation's total and slowest row. |
 | `memory_profile` | Memory footprint per operation, keyed by buffer type and ranked within each, with each type's largest footprint and the device's L1 geometry. A floor rather than the peak — see below. |
 | `tensor_flow` | Which operation produced a tensor and which ones consumed it. |
 | `operation_provenance` | What one operation was called with, and where in the model code it came from. |
@@ -140,7 +180,8 @@ worse than no answer.
 sub-device, operations on different sub-devices can run concurrently, so summed device
 time, total percentages and op-to-op gaps overstate elapsed time. Responses that include a
 total say so, and name the sub-devices involved — `top_ops` and `diff_reports` alike, since
-a delta between two unsound totals is unsound the same way.
+a delta between two unsound totals is unsound the same way, and `operation_detail` wherever
+it returns `report_device_time_total`, since its shares divide by that total.
 
 Totals are only reported for metrics a sum means something for: device time, op-to-op gap
 and total percentage. DRAM bandwidth, FLOPS and core count are per-operation figures, and
@@ -172,7 +213,18 @@ align the device operations each profiler operation launched (from its captured 
 against the performance rows, in order — the same match the application uses to link a
 memory report to a performance report. `top_ops` then gives each row an `operation_id`,
 and `operation_detail` lists an operation's `perf_rows` with device time in microseconds;
-its own `duration` is host seconds.
+its own `duration` is host seconds. Each row's `device_time_share_percent` is its percent
+of `report_device_time_total`, the device time of every row that is not a host op or a
+signpost, whether or not it linked to an operation. That is not tt-perf-report's
+`total_percent`, which also counts the op-to-op gap, so on an untraced capture it mostly
+measures dispatch gaps rather than device time. Nor is `report_device_time_total` quite
+`top_ops`'s `device_time_total`, which sums every row's device time; the two agree on
+reports tt-perf-report writes, since it leaves host ops and signposts without one. At the
+top level, `device_time`, `device_time_share_percent` and `slowest_perf_id` cover all of
+the operation's rows, including any past the cap on `perf_rows`, so the slowest row may be
+one `perf_rows` does not list. A row whose device time tt-perf-report left blank has a
+null share and is left out of the total; when no row has a device time, those three keys
+are absent.
 
 A device operation whose launch threw — an allocation failure, for one — never reached the
 device and has no performance row, so the match leaves it out. Left in, it would put a name in

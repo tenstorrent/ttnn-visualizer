@@ -45,6 +45,23 @@ describe('AllocationFailureSummary', () => {
         ).toBeInTheDocument();
     });
 
+    it('says why it did not fit, as the operation page does', () => {
+        renderSummary([
+            listing({ failure: makeAllocationFailure({ freeBytes: 1000000, largestFreeBlockBytes: 300000 }) }),
+        ]);
+
+        expect(screen.getByText('Out of memory')).toBeInTheDocument();
+        expect(screen.getByTestId(TEST_IDS.ALLOCATION_FAILURE_DETAILS)).toHaveTextContent(
+            'Fragmented. 977 KiB free per bank',
+        );
+    });
+
+    it('names the failed device op once, in the run status', () => {
+        renderSummary([listing()]);
+
+        expect(screen.getAllByText(/Failed in Conv2d/)).toHaveLength(1);
+    });
+
     it('says whether any of the failed operation ran', () => {
         renderSummary([
             listing(),

@@ -9,6 +9,8 @@ import { OpType } from '../definitions/Performance';
 import { DeviceOperationLayoutTypes } from './APIData';
 import { BufferType as BufferTypeEnum } from './BufferType';
 import { AllocationFailure } from './AllocationFailure';
+import { DramFallback } from './DramFallback';
+import { L1PressureMetrics } from './L1Pressure';
 
 export interface PerfTableRow {
     id: string;
@@ -125,9 +127,36 @@ export interface TypedPerfTableRow extends Omit<
     // The linked operation's recorded allocation failure. The row itself ran: only an
     // earlier device operation of a failed operation has a perf row.
     allocation_failure: AllocationFailure | null;
+    // The linked operation's likely DRAM fallback, inferred by `getDramFallbacks`.
+    dram_fallback: DramFallback | null;
     heuristicFlags?: PerfHeuristicFlag[];
     heuristicFlagDetails?: Partial<Record<PerfHeuristicFlag, string>>;
 }
+
+/** Per-operation data from the linked memory report, keyed by its operation id. */
+export interface LinkedOperationData {
+    l1PressureByOpId: Map<number, L1PressureMetrics> | null;
+    allocationFailureByOpId: Map<number, AllocationFailure> | null;
+    dramFallbackByOpId: Map<number, DramFallback> | null;
+}
+
+/** The row fields `enrichRowData` fills from `LinkedOperationData`, for a row with none. */
+export const EMPTY_LINKED_OPERATION_FIELDS = Object.freeze({
+    l1_fullness_percent: null,
+    l1_free_segments: null,
+    l1_largest_free: null,
+    l1_largest_free_percent: null,
+    allocation_failure: null,
+    dram_fallback: null,
+} satisfies Pick<
+    TypedPerfTableRow,
+    | 'l1_fullness_percent'
+    | 'l1_free_segments'
+    | 'l1_largest_free'
+    | 'l1_largest_free_percent'
+    | 'allocation_failure'
+    | 'dram_fallback'
+>);
 
 export const signpostRowDefaults = Object.freeze({
     global_call_count: null,
@@ -175,9 +204,5 @@ export const signpostRowDefaults = Object.freeze({
     hash: null,
     cache_hit: null,
     isFirstHashOccurrence: true,
-    l1_fullness_percent: null,
-    l1_free_segments: null,
-    l1_largest_free: null,
-    l1_largest_free_percent: null,
-    allocation_failure: null,
+    ...EMPTY_LINKED_OPERATION_FIELDS,
 });

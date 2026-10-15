@@ -21,6 +21,7 @@ import {
 import {
     activePerformanceReportAtom,
     bufferTypeFilterListAtom,
+    comparisonPerformanceReportListAtom,
     durationBucketFilterListAtom,
     layoutFilterListAtom,
     mathFilterListAtom,
@@ -33,13 +34,22 @@ import { BufferType } from '../src/model/BufferType';
 import { DeviceOperationLayoutTypes } from '../src/model/APIData';
 import { OperationCategories } from '../src/definitions/StackedPerfTable';
 import { L1PressureStatus } from '../src/model/L1Pressure';
+import { TEST_IDS } from '../src/definitions/TestIds';
 import { PerfTableRow } from '../src/model/PerfTable';
 import { PerfHeuristicFlag } from '../src/definitions/PerfHeuristics';
-import { OpType } from '../src/definitions/Performance';
+import {
+    COMPARISON_LOAD_FAILED_TITLE,
+    OpType,
+    SIGNPOST_RANGE_IGNORED_REASON,
+    SIGNPOST_RANGE_IGNORED_TITLE,
+} from '../src/definitions/Performance';
 import { TestProviders } from './helpers/TestProviders';
 import { makeAllocationFailure } from './helpers/allocationFailure';
 import { useAllocationFailures } from '../src/hooks/useAllocationFailures';
 import { AllocationFailure } from '../src/model/AllocationFailure';
+import { useDramFallbacks } from '../src/hooks/useDramFallbacks';
+import { DramFallback } from '../src/model/DramFallback';
+import { makeDramFallback } from './helpers/dramFallback';
 
 const perfReportProps = vi.hoisted(() => vi.fn());
 
@@ -56,6 +66,10 @@ vi.mock('../src/hooks/useAPI.tsx', () => ({
 
 vi.mock('../src/hooks/useAllocationFailures', () => ({
     useAllocationFailures: vi.fn(),
+}));
+
+vi.mock('../src/hooks/useDramFallbacks', () => ({
+    useDramFallbacks: vi.fn(),
 }));
 
 vi.mock('../src/functions/getServerConfig', () => ({
@@ -130,6 +144,7 @@ beforeEach(() => {
         listings: [],
         allocationFailureByOpId: new Map<number, AllocationFailure>(),
     });
+    (useDramFallbacks as Mock).mockReturnValue(new Map<number, DramFallback>());
 });
 
 function formatFilterProbe(values: unknown[]): string {
@@ -367,6 +382,106 @@ describe('Performance route', () => {
         expect(lastProps?.comparisonMaxCores).toEqual([130]);
     });
 
+    it('announces each comparison report that could not be loaded, keeping the rest', () => {
+        (usePerformanceReport as Mock).mockReturnValue({
+            data: { report: [DRAM_PERF_ROW], stacked_report: [], signposts: [] },
+            isLoading: false,
+            error: null,
+        });
+        (usePerformanceComparisonReport as Mock).mockReturnValue({
+            data: [{ report: [{ ...DRAM_PERF_ROW, id: '2' }], stacked_report: [] }, null],
+            isLoading: false,
+            failures: [new Error("report-c: no signpost named 'PERF_DECODE' in this report")],
+        });
+        (usePerformanceRange as Mock).mockReturnValue([1, 1]);
+        (usePerfMetas as Mock).mockReturnValue([null, null]);
+
+        render(
+            <TestProviders initialAtomValues={[[activePerformanceReportAtom, REPORT_A]]}>
+                <Performance />
+            </TestProviders>,
+        );
+
+        const alert = screen.getByRole('alert');
+        expect(alert).toHaveTextContent(COMPARISON_LOAD_FAILED_TITLE);
+        expect(alert).toHaveTextContent("report-c: no signpost named 'PERF_DECODE' in this report");
+        // The report that loaded keeps its rows; the one that did not keeps its slot.
+        const comparisonData = perfReportProps.mock.calls.at(-1)?.[0]?.comparisonData;
+        expect(comparisonData).toHaveLength(2);
+        expect(comparisonData[0]).toHaveLength(1);
+        expect(comparisonData[1]).toEqual([]);
+    });
+
+    it('names each report shown whole because it holds no signposts for the range', () => {
+        (usePerformanceReport as Mock).mockReturnValue({
+            data: { report: [DRAM_PERF_ROW], stacked_report: [], signposts: [], signpost_range_ignored: false },
+            isLoading: false,
+            error: null,
+        });
+        (usePerformanceComparisonReport as Mock).mockReturnValue({
+            data: [
+                { report: [DRAM_PERF_ROW], stacked_report: [], signpost_range_ignored: true },
+                { report: [DRAM_PERF_ROW], stacked_report: [], signpost_range_ignored: false },
+            ],
+            isLoading: false,
+            failures: [],
+        });
+        (usePerformanceRange as Mock).mockReturnValue([1, 1]);
+        (usePerfMetas as Mock).mockReturnValue([null, null]);
+
+        render(
+            <TestProviders
+                initialAtomValues={[
+                    [activePerformanceReportAtom, REPORT_A],
+                    [comparisonPerformanceReportListAtom, ['report-b', 'report-c']],
+                ]}
+            >
+                <Performance />
+            </TestProviders>,
+        );
+
+        const notice = screen.getByRole('status');
+        expect(notice).toHaveTextContent(SIGNPOST_RANGE_IGNORED_TITLE);
+        expect(notice).toHaveTextContent(`report-b ${SIGNPOST_RANGE_IGNORED_REASON}`);
+        expect(notice).not.toHaveTextContent('report-c');
+    });
+
+    it('shows no signpost notice when every report was narrowed', () => {
+        (usePerformanceReport as Mock).mockReturnValue({
+            data: { report: [DRAM_PERF_ROW], stacked_report: [], signposts: [], signpost_range_ignored: false },
+            isLoading: false,
+            error: null,
+        });
+        (usePerformanceComparisonReport as Mock).mockReturnValue({ data: undefined, isLoading: false, failures: [] });
+        (usePerformanceRange as Mock).mockReturnValue([1, 1]);
+
+        render(
+            <TestProviders initialAtomValues={[[activePerformanceReportAtom, REPORT_A]]}>
+                <Performance />
+            </TestProviders>,
+        );
+
+        expect(screen.queryByTestId(TEST_IDS.PERF_SIGNPOST_RANGE_IGNORED)).not.toBeInTheDocument();
+    });
+
+    it('shows no comparison error when the comparisons load', () => {
+        (usePerformanceReport as Mock).mockReturnValue({
+            data: { report: [DRAM_PERF_ROW], stacked_report: [], signposts: [] },
+            isLoading: false,
+            error: null,
+        });
+        (usePerformanceComparisonReport as Mock).mockReturnValue({ data: undefined, isLoading: false, failures: [] });
+        (usePerformanceRange as Mock).mockReturnValue([1, 1]);
+
+        render(
+            <TestProviders initialAtomValues={[[activePerformanceReportAtom, REPORT_A]]}>
+                <Performance />
+            </TestProviders>,
+        );
+
+        expect(screen.queryByTestId(TEST_IDS.PERF_COMPARISON_ERROR)).not.toBeInTheDocument();
+    });
+
     it('marks active rows with their linked failure, lists it, and leaves comparison rows unmarked', () => {
         const failure = makeAllocationFailure({ operationId: 7 });
         const listings = [{ failure, failedDeviceOperations: ['Conv2d'], linkedRowCount: 1 }];
@@ -410,6 +525,61 @@ describe('Performance route', () => {
         expect(comparisonRow?.op).toBe(7);
         expect(comparisonRow?.allocation_failure).toBeNull();
         expect(comparisonRow?.heuristicFlags).not.toContain(PerfHeuristicFlag.ALLOCATION_FAILURE);
+    });
+
+    it('flags active rows with their linked DRAM fallback and leaves comparison rows unflagged', () => {
+        const fallback = makeDramFallback({ operationId: 7 });
+
+        (useDramFallbacks as Mock).mockReturnValue(new Map([[7, fallback]]));
+        (useOpToPerfIdFiltered as Mock).mockReturnValue([{ perfId: '1', opId: 7 }]);
+        (usePerformanceReport as Mock).mockReturnValue({
+            data: { report: [DRAM_PERF_ROW], stacked_report: [], signposts: [] },
+            isLoading: false,
+            error: null,
+        });
+        // Same perf id, so the op-id lookup resolves for the comparison row too: only the
+        // null linked data keeps the active report's fallback off it.
+        (usePerformanceComparisonReport as Mock).mockReturnValue({
+            data: [{ report: [DRAM_PERF_ROW], stacked_report: [] }],
+        });
+        (usePerformanceRange as Mock).mockReturnValue([1, 1]);
+        (usePerfMetas as Mock).mockReturnValue([{ max_cores: 130, architecture: null, frequency: null }]);
+
+        render(
+            <TestProviders
+                initialAtomValues={[
+                    [activePerformanceReportAtom, REPORT_A],
+                    [selectedPerformanceRangeAtom, [1, 1]],
+                ]}
+            >
+                <Performance />
+            </TestProviders>,
+        );
+
+        const lastProps = perfReportProps.mock.calls.at(-1)?.[0];
+        const [activeRow] = lastProps?.data ?? [];
+        const [comparisonRow] = lastProps?.comparisonData?.[0] ?? [];
+
+        expect(activeRow?.dram_fallback).toBe(fallback);
+        expect(activeRow?.heuristicFlags).toContain(PerfHeuristicFlag.DRAM_FALLBACK);
+        expect(comparisonRow?.op).toBe(7);
+        expect(comparisonRow?.dram_fallback).toBeNull();
+        expect(comparisonRow?.heuristicFlags).not.toContain(PerfHeuristicFlag.DRAM_FALLBACK);
+    });
+
+    // Both hooks are mocked, so only this ties the retry signal to the failures the route parsed.
+    it('detects DRAM fallbacks against the allocation failures it already parsed', () => {
+        const allocationFailureByOpId = new Map([[7, makeAllocationFailure({ operationId: 7 })]]);
+
+        (useAllocationFailures as Mock).mockReturnValue({ listings: [], allocationFailureByOpId });
+
+        render(
+            <TestProviders>
+                <Performance />
+            </TestProviders>,
+        );
+
+        expect(useDramFallbacks).toHaveBeenCalledWith(allocationFailureByOpId);
     });
 
     it('clears all table chip filters when the active performance report changes', () => {

@@ -5,7 +5,8 @@
 import { ReactNode } from 'react';
 import { Navigate, useLocation } from 'react-router';
 import ROUTES from '../definitions/Routes';
-import { RouteRequirements } from '../routes/routeObjectList';
+import { RouteRequirements, isHiddenInServerMode } from '../routes/routeObjectList';
+import getServerConfig from '../functions/getServerConfig';
 import LoadingSpinner from './LoadingSpinner';
 import 'styles/components/ProtectedRoute.scss';
 import useRestoreInstance from '../hooks/useRestoreInstance';
@@ -21,6 +22,18 @@ const ProtectedRoute = ({ children }: ProtectedRouteProps) => {
     const currentRoute = RouteRequirements[location.pathname];
     const needsProfiler = currentRoute?.needsProfilerReport ?? false;
     const needsPerformance = currentRoute?.needsPerformanceReport ?? false;
+
+    // Ahead of the instance wait: whether a route exists when hosted does not depend on
+    // which report is loaded, and redirecting here keeps `Layout` from mounting at the
+    // hidden URL and recording a view of it before the bounce. #2101
+    if (getServerConfig()?.SERVER_MODE && isHiddenInServerMode(location.pathname)) {
+        return (
+            <Navigate
+                to={ROUTES.HOME}
+                replace
+            />
+        );
+    }
 
     if (!hasRestoredInstance && (isLoading || Boolean(instance))) {
         return (

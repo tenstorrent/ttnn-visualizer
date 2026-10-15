@@ -24,7 +24,7 @@ import L1FullnessBar from '../components/performance/L1FullnessBar';
 import PerfHeuristicFlags from '../components/performance/PerfHeuristicFlags';
 import { MathFidelity } from '../definitions/MathFidelity';
 import { CellColour } from '../definitions/CellColour';
-import { isSlowDramDominant } from './perfBoundPredicates';
+import { isHighDispatchGap, isSlowDramDominant } from './perfBoundPredicates';
 import { NOT_ANALYSED_LABEL, getNotAnalysedReason, getSlowBoundExplanation } from './perfBoundAnalysis';
 
 const OPERATION_COLOURS: { [key: string]: CellColour } = {
@@ -71,20 +71,16 @@ export const formatCell = (
     highlight?: string | null,
     isFirstOfOpRun: boolean = true,
 ): JSX.Element | string => {
-    const { key, unit, decimals } = column;
-    const isSignpost = row.op_type === OpType.SIGNPOST;
-    const isHost = isHostOp(row.bound);
+    const { key, decimals } = column;
 
     if (key === ColumnKeys.Flags) {
         return <PerfHeuristicFlags row={row} />;
     }
 
     const value = row[key];
-    let formatted: string;
 
     if (value === null || value === '' || Number.isNaN(value)) {
-        // Host ops keep their blanks: HOST in the Bound column already says why nothing was measured.
-        const notAnalysedReason = isHost ? null : getNotAnalysedReason(row, key);
+        const { notAnalysedReason } = describePlainCell(row, column);
 
         return notAnalysedReason ? getNotAnalysedMarkup(notAnalysedReason) : '';
     }
@@ -94,23 +90,8 @@ export const formatCell = (
         return '';
     }
 
-    // Signposts only have a few meaningful columns
-    if (isSignpost) {
-        if (key !== ColumnKeys.Id && key !== ColumnKeys.OpCode) {
-            return '';
-        }
-    }
-
-    // Host Ops only have a few meaningful columns
-    if (isHost) {
-        if (
-            key !== ColumnKeys.Id &&
-            key !== ColumnKeys.OpCode &&
-            key !== ColumnKeys.OpCategory &&
-            key !== ColumnKeys.Bound
-        ) {
-            return '';
-        }
+    if (isBlankedForRowKind(row, key)) {
+        return '';
     }
 
     if (key === ColumnKeys.BufferType) {
@@ -120,7 +101,8 @@ export const formatCell = (
     if (key === ColumnKeys.HighDispatch) {
         const tooltipMessage = `Op with > ${HIGH_DISPATCH_THRESHOLD_US} µs dispatch latency`;
 
-        return row?.[ColumnKeys.DeviceTime] !== null && row?.[ColumnKeys.DeviceTime] > HIGH_DISPATCH_THRESHOLD_US ? (
+        // Flagged from the op-to-op gap in enrichRowData, the same rows the tracing banner counts.
+        return row?.high_dispatch ? (
             <Tooltip content={tooltipMessage}>
                 <Icon
                     className={WARNING_COLOUR}
@@ -245,26 +227,100 @@ export const formatCell = (
         );
     }
 
-    if (typeof value === 'number' && key !== ColumnKeys.Id) {
-        formatted = formatSize(value, decimals);
-    } else {
-        formatted = value?.toString() || '';
+    const { text, colour, slowExplanation } = describePlainCell(row, column);
+
+    return slowExplanation
+        ? getExplainedCellMarkup(text, colour, slowExplanation, highlight)
+        : getCellMarkup(text, colour, highlight);
+};
+
+/** A number as `column` shows one: its decimals and its unit. */
+export const formatColumnNumber = (value: number, column: ColumnDefinition): string => {
+    const { key, unit, decimals } = column;
+
+    if (unit === '%') {
+        return formatPercentage(value, decimals);
     }
 
-    if (unit) {
-        if (unit === '%') {
-            formatted = formatPercentage(Number(value), decimals);
-        } else {
-            formatted += ` ${unit}`;
-        }
+    const formatted = key === ColumnKeys.Id ? value.toString() : formatSize(value, decimals);
+
+    return unit ? `${formatted} ${unit}` : formatted;
+};
+
+/** A plain cell's value with its unit, or '' when it has none: what `formatCell` colours and explains. */
+export const formatCellText = (row: TypedPerfTableRow, column: ColumnDefinition): string => {
+    const { unit, decimals } = column;
+    const value = row[column.key];
+
+    if (value === null || value === '' || Number.isNaN(value)) {
+        return '';
+    }
+
+    if (typeof value === 'number') {
+        return formatColumnNumber(value, column);
+    }
+
+    if (unit === '%') {
+        return formatPercentage(Number(value), decimals);
+    }
+
+    const formatted = value?.toString() || '';
+
+    return unit ? `${formatted} ${unit}` : formatted;
+};
+
+// Signposts and host ops have only a few meaningful columns.
+const isBlankedForRowKind = (row: TypedPerfTableRow, key: ColumnKeys): boolean => {
+    if (row.op_type === OpType.SIGNPOST) {
+        return key !== ColumnKeys.Id && key !== ColumnKeys.OpCode;
+    }
+
+    if (isHostOp(row.bound)) {
+        return (
+            key !== ColumnKeys.Id &&
+            key !== ColumnKeys.OpCode &&
+            key !== ColumnKeys.OpCategory &&
+            key !== ColumnKeys.Bound
+        );
+    }
+
+    return false;
+};
+
+export interface PlainCell {
+    /** The value with its unit, or '' when the table leaves the cell blank. */
+    text: string;
+    colour?: CellColour;
+    /** Why a blank roofline cell was never analysed. */
+    notAnalysedReason: string | null;
+    /** Why a SLOW row's cell is coloured as it is. */
+    slowExplanation: string | null;
+}
+
+const BLANK_CELL: PlainCell = { text: '', notAnalysedReason: null, slowExplanation: null };
+
+/** A cell with no special rendering, as `formatCell` decides it but without the markup. */
+export const describePlainCell = (row: TypedPerfTableRow, column: ColumnDefinition): PlainCell => {
+    const { key } = column;
+    const value = row[key];
+
+    if (value === null || value === '' || Number.isNaN(value)) {
+        // Host ops keep their blanks: HOST in the Bound column already says why nothing was measured.
+        return { ...BLANK_CELL, notAnalysedReason: isHostOp(row.bound) ? null : getNotAnalysedReason(row, key) };
+    }
+
+    if (isBlankedForRowKind(row, key)) {
+        return BLANK_CELL;
     }
 
     const colour = getCellColour(row, key);
-    const slowExplanation = getSlowBoundExplanation(row, key, colour);
 
-    return slowExplanation
-        ? getExplainedCellMarkup(formatted, colour, slowExplanation, highlight)
-        : getCellMarkup(formatted, colour, highlight);
+    return {
+        text: formatCellText(row, column),
+        colour,
+        notAnalysedReason: null,
+        slowExplanation: getSlowBoundExplanation(row, key, colour),
+    };
 };
 
 // A native title rather than a Blueprint Tooltip: the table is not virtualised and an unanalysed
@@ -279,7 +335,12 @@ const getNotAnalysedMarkup = (reason: string) => (
 );
 
 // Native title for the same reason as getNotAnalysedMarkup: every SLOW row carries up to three.
-const getExplainedCellMarkup = (text: string, colour: CellColour, reason: string, highlight?: string | null) => (
+const getExplainedCellMarkup = (
+    text: string,
+    colour: CellColour | undefined,
+    reason: string,
+    highlight?: string | null,
+) => (
     <span
         className={classNames(colour, Classes.TOOLTIP_INDICATOR)}
         title={reason}
@@ -506,42 +567,35 @@ export const getCoreColour = (
 };
 
 export const getOpToOpGapColour = (value: number): CellColour => {
-    return value > HIGH_DISPATCH_THRESHOLD_US ? CellColour.Red : DEFAULT_COLOUR;
+    return isHighDispatchGap(value) ? CellColour.Red : DEFAULT_COLOUR;
 };
 
-export const calcHighDispatchOps = (rows: TypedPerfTableRow[]) => {
-    const highDispatchOps = rows
-        .map((opData: TypedPerfTableRow, index: number): [number, TypedPerfTableRow] => [index + 1, opData])
-        .filter(([_, opData]) => {
-            const val = opData.op_to_op_gap;
-            return val !== null && val !== undefined && typeof val === 'number' && val > HIGH_DISPATCH_THRESHOLD_US;
-        });
+// device_time is parseFloat'd, so a missing value arrives as NaN rather than null.
+const finiteOrZero = (value: number | null): number => (value !== null && Number.isFinite(value) ? value : 0);
 
-    if (highDispatchOps.length === 0) {
+export const calcHighDispatchOps = (rows: TypedPerfTableRow[]) => {
+    // One pass: the overhead tracing could remove from flagged rows, against the total of device
+    // times plus Op-to-Op Gaps across every row.
+    let hasHighDispatchOps = false;
+    let maxDispatchOverhead = 0;
+    let totalDuration = 0;
+
+    for (const opData of rows) {
+        const deviceTime = finiteOrZero(opData.device_time);
+        const opToOpGap = finiteOrZero(opData.op_to_op_gap);
+
+        totalDuration += deviceTime + opToOpGap;
+
+        if (opData.high_dispatch) {
+            hasHighDispatchOps = true;
+            maxDispatchOverhead += opToOpGap - HIGH_DISPATCH_THRESHOLD_US;
+        }
+    }
+
+    if (!hasHighDispatchOps) {
         return null;
     }
 
-    // Compute the max dispatch overhead
-    const maxDispatchOverhead = highDispatchOps.reduce((acc, [_, opData]) => {
-        const val = opData.op_to_op_gap || 0;
-
-        return acc + (val - HIGH_DISPATCH_THRESHOLD_US);
-    }, 0);
-
-    // Compute total_duration as sum of device times + Op-to-Op Gaps
-    const totalDeviceTime = rows.reduce((acc, r) => {
-        const val = r.device_time || 0;
-
-        return acc + (typeof val === 'number' ? val : 0);
-    }, 0);
-
-    const totalDispatchTime = rows.reduce((acc, r) => {
-        const val = r.op_to_op_gap;
-
-        return acc + (typeof val === 'number' ? val : 0);
-    }, 0);
-
-    const totalDuration = totalDeviceTime + totalDispatchTime;
     const percentageSaved = (maxDispatchOverhead / totalDuration) * 100;
 
     return (

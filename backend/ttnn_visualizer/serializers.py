@@ -4,10 +4,15 @@
 
 import dataclasses
 from collections import defaultdict
-from typing import DefaultDict, List
+from typing import DefaultDict, Dict, Iterable, List, Optional, Tuple
 
 import orjson
-from ttnn_visualizer.models import BufferType, Operation, TensorComparisonRecord
+from ttnn_visualizer.models import (
+    BufferType,
+    ErrorRecord,
+    Operation,
+    TensorComparisonRecord,
+)
 
 _EMPTY_DEVICE_OPERATIONS = orjson.Fragment(b"[]")
 
@@ -37,11 +42,66 @@ def _stack_trace_source_file_id_for_operation(
     return stack_trace_source_file_ids_by_key.get((operation.operation_id, 0))
 
 
-def _error_for_operation(errors_by_key, operation):
-    key = (operation.operation_id, operation.rank)
-    if key in errors_by_key:
-        return errors_by_key[key]
-    return errors_by_key.get((operation.operation_id, 0))
+def _error_key(operation: Operation) -> Tuple[int, int, str]:
+    return (operation.operation_id, operation.rank, operation.name)
+
+
+def select_errors_by_operation(
+    error_records: Iterable[ErrorRecord], operations: Iterable[Operation]
+) -> Dict[Tuple[int, int, str], ErrorRecord]:
+    """The error each operation shows, keyed by (operation_id, rank, name).
+
+    The id alone is not enough: the report importer writes errors it cannot place
+    on an operation at a per-file base id, which can coincide with an unrelated
+    operation, so the error's operation name must match too (#2082). The name is
+    part of the key because operations can share an id and rank when a capture
+    runs into the next file's id range; an orphan whose name happens to match one
+    of those operations still attaches to it. Rank 0 is the fallback for reports
+    whose errors table predates the rank column.
+    """
+    errors_by_key: DefaultDict[Tuple[int, int], List[ErrorRecord]] = defaultdict(list)
+    for error in error_records:
+        errors_by_key[(error.operation_id, error.rank)].append(error)
+
+    selected: Dict[Tuple[int, int, str], ErrorRecord] = {}
+    for operation in operations:
+        candidates = errors_by_key.get((operation.operation_id, operation.rank), []) + (
+            errors_by_key.get((operation.operation_id, 0), [])
+            if operation.rank != 0
+            else []
+        )
+        match = next(
+            (e for e in candidates if e.operation_name == operation.name), None
+        )
+        if match is not None:
+            selected[_error_key(operation)] = match
+    return selected
+
+
+def select_error_for_operation(
+    error_records: Iterable[ErrorRecord], operation: Operation
+) -> Optional[ErrorRecord]:
+    return select_errors_by_operation(error_records, [operation]).get(
+        _error_key(operation)
+    )
+
+
+def serialize_error_records(
+    error_records: List[ErrorRecord], operations: Iterable[Operation]
+) -> List[dict]:
+    """Flat error records, each flagged with whether an operation shows it.
+
+    An unattached record is shown by no operation, so the client surfaces it at
+    report level instead.
+    """
+    attached_ids = {
+        id(error)
+        for error in select_errors_by_operation(error_records, operations).values()
+    }
+    return [
+        {**dataclasses.asdict(error), "attached": id(error) in attached_ids}
+        for error in error_records
+    ]
 
 
 def _device_ops_for_operation(device_ops_by_key, operation):
@@ -61,7 +121,7 @@ def serialize_operations(
     devices,
     producers_consumers,
     device_operations,
-    error_records=None,
+    error_records,
 ):
     tensors_dict = {(t.tensor_id, t.rank): t for t in tensors}
     device_operations_dict = {
@@ -77,10 +137,7 @@ def serialize_operations(
         (st.operation_id, st.rank): st.source_file_id for st in stack_traces
     }
 
-    errors_dict = {}
-    if error_records:
-        for error in error_records:
-            errors_dict[(error.operation_id, error.rank)] = error.to_nested_dict()
+    errors_by_operation = select_errors_by_operation(error_records, operations)
 
     arguments_dict = defaultdict(list)
     for argument in operation_arguments:
@@ -102,7 +159,8 @@ def serialize_operations(
         )
         id = operation_data.pop("operation_id", None)
 
-        error_data = _error_for_operation(errors_dict, operation)
+        error = errors_by_operation.get(_error_key(operation))
+        error_data = error.to_nested_dict() if error else None
 
         results.append(
             {

@@ -36,6 +36,7 @@ from ttnn_visualizer.event_logging import (
     EventLogEvent,
     McpToolName,
     McpToolOutcome,
+    get_application_version,
 )
 from ttnn_visualizer.exceptions import DataFormatError
 from ttnn_visualizer.models import Instance
@@ -865,6 +866,18 @@ class TestTransport:
 
         assert response["result"]["capabilities"] == {"tools": {}}
         assert response["result"]["serverInfo"]["name"] == "ttnn-visualizer"
+        assert response["result"]["serverInfo"]["version"] == get_application_version()
+
+    def test_initialize_reports_the_package_version(self):
+        # Equality with the real helper alone would pass if both sides were
+        # "unknown"; a sentinel proves the value is read from the helper.
+        with patch.object(server, "get_application_version", return_value="9.9.9"):
+            response = server.handle_message(
+                {"jsonrpc": "2.0", "id": 5, "method": "initialize", "params": {}},
+                self._table(),
+            )
+
+        assert response["result"]["serverInfo"]["version"] == "9.9.9"
 
     def test_a_successful_call_is_recorded(self):
         table = self._table()
@@ -1058,3 +1071,25 @@ class TestProjectRow:
 
         assert projected["bound_analysis"] is None
         assert projected["op_category"] is None
+
+
+class TestCountableDeviceTime:
+    """Restates `isCountableDeviceTime`'s cases (`tests/durationBuckets.spec.ts`):
+    a share counted any other way would disagree with the app's."""
+
+    @pytest.mark.parametrize(
+        "device_time", ["", None, "0", 0, "-5", "nan", "inf", "-inf", "1e400", True]
+    )
+    def test_a_blank_non_finite_or_non_positive_time_counts_for_nothing(
+        self, device_time
+    ):
+        assert tools.countable_device_time({"device_time": device_time}) is None
+
+    @pytest.mark.parametrize(
+        ("device_time", "expected"), [("0.5", 0.5), ("12345", 12345.0), (3, 3.0)]
+    )
+    def test_a_positive_finite_time_counts(self, device_time, expected):
+        assert tools.countable_device_time({"device_time": device_time}) == expected
+
+    def test_a_row_without_the_column_counts_for_nothing(self):
+        assert tools.countable_device_time({}) is None

@@ -96,6 +96,14 @@ Recorded after a report is loaded successfully.
 
 - `kind`: `profiler`, `performance`, `npe`, `mlir`, `cluster_descriptor`.
 - `source`: `upload`, `remote_sync`, `local_tt_metal`, `demo`.
+  - `upload`: a report uploaded from the browser. Under `SERVER_MODE`, this also counts every reselection of one of the session's earlier uploads from the report list, so hosted `upload` counts are loads, not uploads.
+  - `remote_sync`: a report synced from a remote host.
+  - `local_tt_metal`: a report selected from the local installation's report folders. Without `TT_METAL_HOME`, uploads are saved into those same folders, so this includes reselecting an earlier upload on a local installation. Never recorded under `SERVER_MODE`.
+  - `demo`: a bundled demo report. That is any NPE demo, and, under `SERVER_MODE`, any profiler or performance report whose folder name starts with `demo`, in any case.
+
+Because reselected uploads count as `upload` when hosted but as `local_tt_metal` locally, do not compare upload share between hosted and local logs.
+
+Before 0.107.0, hosted event logs tagged every report picked from the hosted report list as `local_tt_metal`. Hosted logs carry no version, since `app_start` is not written under `SERVER_MODE`, so find the cut-over from the 0.107.0 deploy date. Read hosted `local_tt_metal` counts from before it as demo loads or reselected uploads, not as a tt-metal checkout.
 
 ### `report_load_failed`
 
@@ -152,7 +160,9 @@ The opt-in file is:
 ~/.ttnn-visualizer/usage/collection.json
 ```
 
-It contains the explicit `enabled` flag, an optional Prometheus remote-write endpoint, and a random persistent `machine_id`. The ID is generated when collection is first enabled; it is not derived from a hostname, username, path, or IP address. Omitting the endpoint keeps collection local to the Docker Prometheus. Deleting the config disables collection and causes a new identity to be generated if collection is enabled again. A malformed config fails closed without preventing TT-NN Visualizer from starting.
+It contains the explicit `enabled` flag, an optional Prometheus remote-write endpoint, an optional `remote_write_bearer_token` for that endpoint, and a random persistent `machine_id`. The ID is generated when collection is first enabled; it is not derived from a hostname, username, path, or IP address. Omitting the endpoint keeps collection local to the Docker Prometheus. Deleting the config disables collection and causes a new identity to be generated if collection is enabled again. A malformed config fails closed without preventing TT-NN Visualizer from starting.
+
+The bearer token is sent as an `Authorization: Bearer` header on remote-write requests. It requires an endpoint and must not contain whitespace or control characters; a token that breaks either rule fails the whole config closed. The Prometheus config renderer writes it to `prometheus.remote-write.token` beside the generated config, which only references the file, and the Docker Compose file mounts it read-only. Both files are mode `0644` so the unprivileged Prometheus container can read them, which leaves the token readable by other users on the machine; `collection.json` stays `0600`. To render somewhere other than `docker/prometheus/`, set `PROMETHEUS_GENERATED_DIR` to that directory for Compose, and keep the default `prometheus.generated.yml` output name. Compose refuses to start without the token file, so rerender after upgrading. Without a token, remote-write requests are unauthenticated.
 
 The metrics projection exports one `_total` counter per event name with only that event's documented fields as labels. It honours compacted `count` values. It never exports timestamps, `run_id`, hosted session directory names, raw event rows, usernames, hostnames, paths, or unknown fields. Collector health metrics distinguish a missing log, malformed lines, and a read failure. Deleting the event log resets the projected counters; compaction preserves them.
 

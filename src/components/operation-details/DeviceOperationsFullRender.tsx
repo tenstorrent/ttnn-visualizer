@@ -40,6 +40,13 @@ import {
     DeviceOperationAnalysisResult,
 } from '../../definitions/DeviceOperationAnalysis';
 import { analyseDeviceOperation } from '../../functions/analyseDeviceOperation';
+import { getNodeBufferType, getNodeStringBufferType } from '../../functions/getNodeBufferType';
+import { isDeviceOperation } from '../../functions/filterOperations';
+import { ScopeClose, getScopeOutcomes } from '../../functions/scopeOutcomes';
+import { ScopeOutcome } from '../../definitions/ScopeOutcome';
+import { TypedPerfTableRow } from '../../model/PerfTable';
+import { useDeviceOperationPerf } from '../../hooks/useDeviceOperationPerf';
+import { DeviceOperationPerfSummary, OperationDevicePerfSummary } from './DeviceOperationPerf';
 
 type BufferDetails = {
     bufferOrTensorNode?: BufferNode | TensorNode;
@@ -73,16 +80,17 @@ const renderBufferDetails = ({ bufferOrTensorNode, optionalOutput, details }: Bu
     let address = allocation?.params.address !== undefined ? parseInt(allocation.params.address, 10) : undefined;
     const size: number | undefined = parseInt(bufferOrTensorNode.params.size, 10);
     let layout = '';
-    let { type } = bufferOrTensorNode.params;
+    const bufferType = getNodeBufferType(bufferOrTensorNode);
+    const type = bufferType !== undefined ? BufferTypeToStringBufferType[bufferType] : bufferOrTensorNode.params.type;
     let dtype = null;
     if (bufferOrTensorNode.node_type === NodeType.tensor) {
         const { params } = bufferOrTensorNode;
         address = params.address !== undefined ? parseInt(params.address, 10) : undefined;
         layout = toReadableLayout(params.layout) || '';
-        type = BufferTypeToStringBufferType[params.buffer_type];
         dtype = params.dtype || null;
     }
-    const tensor: Tensor | undefined = address !== undefined ? details.tensorListByAddress.get(address) : undefined;
+    const tensor: Tensor | undefined =
+        address !== undefined ? (details.getTensorForNode(address, bufferType) ?? undefined) : undefined;
 
     if (address === undefined && tensor?.id === undefined) {
         tensorSquare = null;
@@ -117,7 +125,8 @@ const renderTensorLabel = (
 ) => {
     const layout = node.buffer?.[0]?.params.layout;
     const address = node.params.address !== undefined ? parseInt(node.params.address, 10) : undefined;
-    const tensor: Tensor | undefined = address !== undefined ? details.tensorListByAddress.get(address) : undefined;
+    const tensor: Tensor | undefined =
+        address !== undefined ? (details.getTensorForNode(address, getNodeBufferType(node)) ?? undefined) : undefined;
 
     const square = tensor?.id === undefined && address === undefined ? null : getColorSquare(address, tensor?.id);
 
@@ -217,6 +226,14 @@ const renderMemoryInfo = (
 
 type CBPressureModalState = { title: string; snapshot: CBPressureSnapshot } | null;
 
+interface RenderScopeArgs {
+    startNode: DeviceOperationNode;
+    innerContent: JSX.Element[] | undefined;
+    outcome: ScopeOutcome;
+    abortReason: string | null;
+    key: string;
+}
+
 function useDeviceOperationsFullRenderModel(args: {
     deviceOperations: Node[];
     details: OperationDetails;
@@ -224,6 +241,9 @@ function useDeviceOperationsFullRenderModel(args: {
     setDeviceOperationsArgsNode: React.Dispatch<React.SetStateAction<DeviceOperationNode | null>>;
     setDeviceOperationsArgsOpen: React.Dispatch<React.SetStateAction<boolean>>;
     setCbPressureModal: React.Dispatch<React.SetStateAction<CBPressureModalState>>;
+    hasRecordedError: boolean;
+    perfRowByStartNodeId: ReadonlyMap<number, TypedPerfTableRow>;
+    totalDeviceTimeUs: number;
     colorVariance?: number;
 }) {
     const {
@@ -233,6 +253,9 @@ function useDeviceOperationsFullRenderModel(args: {
         setDeviceOperationsArgsOpen,
         setDeviceOperationsArgsNode,
         setCbPressureModal,
+        hasRecordedError,
+        perfRowByStartNodeId,
+        totalDeviceTimeUs,
     } = args;
 
     const selectedAddress = useAtomValue(selectedAddressAtom);
@@ -250,12 +273,137 @@ function useDeviceOperationsFullRenderModel(args: {
         () => new Map<number, AllocationDetails>(memoryAllocationList.map((data) => [data.id, data])),
         [memoryAllocationList],
     );
+    const scopeOutcomes = useMemo(
+        () => getScopeOutcomes(deviceOperations, hasRecordedError),
+        [deviceOperations, hasRecordedError],
+    );
 
     const formatTensor = useCallback((node: Node) => formatTensorRendering(node, details), [details]);
 
+    const renderScope = useCallback(
+        ({ startNode, innerContent, outcome, abortReason, key }: RenderScopeArgs) => {
+            const opName = startNode.params.name;
+            const opArgs = startNode.arguments;
+            const opAnalysisResult = analyseDeviceOperation(startNode);
+            const isFailed = outcome === ScopeOutcome.FAILED;
+            const isUnclosed = outcome === ScopeOutcome.UNCLOSED;
+            const labelClass = classNames('device-operation-label', {
+                'failed-op-analysis': opAnalysisResult !== DeviceOperationAnalysisResult.OK,
+                'failed-scope': isFailed,
+            });
+
+            let tooltip = DEVICE_OPERATION_ANALYSIS_RESULT_LABEL[opAnalysisResult];
+            let intent: Intent =
+                opAnalysisResult === DeviceOperationAnalysisResult.NOOP ? Intent.WARNING : Intent.SUCCESS;
+
+            if (isFailed) {
+                const fallback = isDeviceOperation(opName)
+                    ? 'Launch failed before reaching the device'
+                    : 'Did not complete: an error was raised inside it';
+                tooltip = abortReason ?? fallback;
+                intent = Intent.DANGER;
+            } else if (isUnclosed) {
+                tooltip = 'The capture ended before this scope closed';
+                intent = Intent.NONE;
+            }
+
+            const label = (
+                <h4 className={labelClass}>
+                    <Tooltip content={tooltip}>
+                        <Icon
+                            className='operation-icon'
+                            size={13}
+                            intent={intent}
+                            icon={isFailed ? IconNames.ERROR : IconNames.CUBE_ADD}
+                        />
+                    </Tooltip>
+                    {opName} <DeviceID _node={startNode} /> (
+                    {startNode.inputs.map((inputNode, i) => (
+                        <span
+                            className='params'
+                            key={`input ${inputNode.id} ${startNode.id} ${i}`}
+                        >
+                            {formatTensor(inputNode)}
+                        </span>
+                    ))}
+                    )<span className='operation-arrow'> =&gt; </span>
+                    {startNode.outputs.map((outputNode, i) => (
+                        <span
+                            className='params'
+                            key={`output ${outputNode.id} ${startNode.id} ${i}`}
+                        >
+                            {formatTensor(outputNode)}
+                        </span>
+                    ))}
+                </h4>
+            );
+
+            const hasContent = innerContent && innerContent.length > 0;
+            const hasArgs = opArgs && opArgs.length > 0;
+            const perfRow = perfRowByStartNodeId.get(startNode.id);
+
+            return (
+                <Collapsible
+                    key={key}
+                    label={label}
+                    isOpen
+                    additionalElements={
+                        perfRow || hasArgs ? (
+                            <>
+                                {perfRow && (
+                                    <DeviceOperationPerfSummary
+                                        row={perfRow}
+                                        totalDeviceTimeUs={totalDeviceTimeUs}
+                                    />
+                                )}
+                                {hasArgs && (
+                                    <Button
+                                        icon={
+                                            <Icon
+                                                icon={IconNames.COMPARISON}
+                                                size={12}
+                                            />
+                                        }
+                                        size={Size.SMALL}
+                                        variant={ButtonVariant.OUTLINED}
+                                        intent={Intent.PRIMARY}
+                                        onClick={() => {
+                                            setDeviceOperationsArgsNode(startNode);
+                                            setDeviceOperationsArgsOpen(true);
+                                        }}
+                                        title='View operation arguments'
+                                    >
+                                        Arguments
+                                    </Button>
+                                )}
+                            </>
+                        ) : undefined
+                    }
+                    collapseClassName={classNames('device-operation function-container', {
+                        [COLLAPSIBLE_EMPTY_CLASS]: !hasContent,
+                    })}
+                >
+                    {hasContent ? (
+                        <>
+                            <div className='function-content'>{innerContent}</div>
+                            <div className='end-function'>{/* staying for now */}</div>
+                        </>
+                    ) : null}
+                </Collapsible>
+            );
+        },
+        [
+            formatTensor,
+            perfRowByStartNodeId,
+            setDeviceOperationsArgsNode,
+            setDeviceOperationsArgsOpen,
+            totalDeviceTimeUs,
+        ],
+    );
+
+    // Takes the same `deviceOperations` that `scopeOutcomes` was built from.
     const renderNodes = useCallback(
         (nodes: Node[]) => {
-            const deviceOpList: Node[] = [];
             const stack: JSX.Element[][] = [];
             // Tracks the innermost open DeviceOp (matching the JSX stack) so
             // the CB-pressure button rendered at the "<h4>CBs</h4>" heading
@@ -263,6 +411,26 @@ function useDeviceOperationsFullRenderModel(args: {
             const deviceOpIdStack: { id: number; name: string }[] = [];
             const output: JSX.Element[] = [];
             let consecutiveCBsOutput = false;
+
+            // `scopeOutcomes` closes scopes innermost first, so each close is the top frame.
+            const closeFrame = ({ startIndex, outcome, endIndex, abortReason }: ScopeClose) => {
+                const innerContent = stack.pop();
+                deviceOpIdStack.pop();
+                const startNode = nodes[startIndex] as DeviceOperationNode;
+                const block = renderScope({
+                    startNode,
+                    innerContent,
+                    outcome,
+                    abortReason,
+                    key: endIndex === null ? `start-${startIndex}` : `end-${endIndex}`,
+                });
+
+                if (stack.length > 0) {
+                    stack[stack.length - 1].push(block);
+                } else {
+                    output.push(block);
+                }
+            };
 
             nodes.forEach((node, index) => {
                 const nodeType = node.node_type;
@@ -276,107 +444,21 @@ function useDeviceOperationsFullRenderModel(args: {
                 const memoryDetails = memoryDetailsByNodeId.get(node.id);
                 const memoryInfo = renderMemoryInfo(memoryDetails, peakMemoryLoad);
 
+                scopeOutcomes.closesByIndex.get(index)?.forEach(closeFrame);
+
+                // A scope boundary starts a new CB group, though the scope before it may have
+                // stopped, failing, before its `circular_buffer_deallocate_all`.
+                if (nodeType === NodeType.function_start || nodeType === NodeType.function_end) {
+                    consecutiveCBsOutput = false;
+                }
+
                 if (nodeType === NodeType.function_start) {
-                    deviceOpList.push(node);
                     stack.push([]);
                     deviceOpIdStack.push({ id: node.id, name: node.params.name });
                     return;
                 }
 
                 if (nodeType === NodeType.function_end) {
-                    const innerContent = stack.pop();
-                    deviceOpIdStack.pop();
-                    const opName = node.params.name;
-
-                    const opArgs = node.operation?.arguments;
-
-                    const opAnalysisResult = analyseDeviceOperation(node.operation);
-                    const opAnalysisLabel = DEVICE_OPERATION_ANALYSIS_RESULT_LABEL[opAnalysisResult];
-                    const labelClass = classNames('device-operation-label', {
-                        'failed-op-analysis': opAnalysisResult !== DeviceOperationAnalysisResult.OK,
-                    });
-                    const label = (
-                        <h4 className={labelClass}>
-                            <Tooltip content={opAnalysisLabel}>
-                                <Icon
-                                    className='operation-icon'
-                                    size={13}
-                                    intent={
-                                        opAnalysisResult === DeviceOperationAnalysisResult.NOOP
-                                            ? Intent.WARNING
-                                            : Intent.SUCCESS
-                                    }
-                                    icon={IconNames.CUBE_ADD}
-                                />
-                            </Tooltip>
-                            {opName} <DeviceID _node={node} /> (
-                            {node.operation?.inputs.map((inputNode, i) => (
-                                <span
-                                    className='params'
-                                    key={`input ${inputNode.id} ${node.id} ${i}`}
-                                >
-                                    {formatTensor(inputNode)}
-                                </span>
-                            ))}
-                            )<span className='operation-arrow'> =&gt; </span>
-                            {node.operation?.outputs.map((outputNode, i) => (
-                                <span
-                                    className='params'
-                                    key={`output ${outputNode.id} ${node.id} ${i}`}
-                                >
-                                    {formatTensor(outputNode)}
-                                </span>
-                            ))}
-                        </h4>
-                    );
-
-                    const hasContent = innerContent && innerContent.length > 0;
-
-                    const completedBlock = (
-                        <Collapsible
-                            key={`end-${index}`}
-                            label={label}
-                            isOpen
-                            additionalElements={
-                                opArgs && opArgs.length > 0 ? (
-                                    <Button
-                                        icon={
-                                            <Icon
-                                                icon={IconNames.COMPARISON}
-                                                size={12}
-                                            />
-                                        }
-                                        size={Size.SMALL}
-                                        variant={ButtonVariant.OUTLINED}
-                                        intent={Intent.PRIMARY}
-                                        onClick={() => {
-                                            setDeviceOperationsArgsNode(node.operation!);
-                                            setDeviceOperationsArgsOpen(true);
-                                        }}
-                                        title='View operation arguments'
-                                    >
-                                        Arguments
-                                    </Button>
-                                ) : undefined
-                            }
-                            collapseClassName={classNames('device-operation function-container', {
-                                [COLLAPSIBLE_EMPTY_CLASS]: !hasContent,
-                            })}
-                        >
-                            {hasContent ? (
-                                <>
-                                    <div className='function-content'>{innerContent}</div>
-                                    <div className='end-function'>{/* staying for now */}</div>
-                                </>
-                            ) : null}
-                        </Collapsible>
-                    );
-
-                    if (stack.length > 0) {
-                        stack[stack.length - 1].push(completedBlock);
-                    } else {
-                        output.push(completedBlock);
-                    }
                     return;
                 }
 
@@ -412,7 +494,7 @@ function useDeviceOperationsFullRenderModel(args: {
                                     selectedTensorAddress={selectedAddress}
                                     operationDetails={details}
                                     onLegendClick={onLegendClick}
-                                    bufferType={buffer.type}
+                                    bufferType={getNodeStringBufferType(node)}
                                     layout={buffer.layout}
                                 />
                                 <div
@@ -448,7 +530,7 @@ function useDeviceOperationsFullRenderModel(args: {
                                     selectedTensorAddress={selectedAddress}
                                     operationDetails={details}
                                     onLegendClick={onLegendClick}
-                                    bufferType={buffer.type}
+                                    bufferType={getNodeStringBufferType(node)}
                                 />
                                 <div
                                     className='memory-info-placeholder'
@@ -553,20 +635,21 @@ function useDeviceOperationsFullRenderModel(args: {
                 }
             });
 
+            scopeOutcomes.closesAtEnd.forEach(closeFrame);
+
             return output;
         },
         [
             cbFanout,
             cbPressureByOpId,
             details,
-            formatTensor,
             memoryDetailsByNodeId,
             onLegendClick,
             peakMemoryLoad,
+            renderScope,
+            scopeOutcomes,
             selectedAddress,
             setCbPressureModal,
-            setDeviceOperationsArgsNode,
-            setDeviceOperationsArgsOpen,
         ],
     );
 
@@ -582,12 +665,20 @@ interface DeviceOperationsFullRenderProps {
     deviceOperations: Node[];
     details: OperationDetails;
     onLegendClick: (address: number, tensorId?: number, colorVariance?: number) => void;
+    // Tells a failure apart from a capture cut off: both leave scopes unclosed.
+    hasRecordedError: boolean;
 }
 
-const DeviceOperationsFullRender = ({ deviceOperations, details, onLegendClick }: DeviceOperationsFullRenderProps) => {
+const DeviceOperationsFullRender = ({
+    deviceOperations,
+    details,
+    onLegendClick,
+    hasRecordedError,
+}: DeviceOperationsFullRenderProps) => {
     const [deviceOperationsArgsOpen, setDeviceOperationsArgsOpen] = useState(false);
     const [deviceOperationsArgsNode, setDeviceOperationsArgsNode] = useState<DeviceOperationNode | null>(null);
     const [cbPressureModal, setCbPressureModal] = useState<CBPressureModalState>(null);
+    const devicePerf = useDeviceOperationPerf(details.id);
     const { peakMemoryLoad, renderOperations } = useDeviceOperationsFullRenderModel({
         deviceOperations,
         details,
@@ -595,7 +686,22 @@ const DeviceOperationsFullRender = ({ deviceOperations, details, onLegendClick }
         setDeviceOperationsArgsNode,
         setDeviceOperationsArgsOpen,
         setCbPressureModal,
+        hasRecordedError,
+        perfRowByStartNodeId: devicePerf.rowByStartNodeId,
+        totalDeviceTimeUs: devicePerf.totalDeviceTimeUs,
     });
+    const { perfRows, hasDeviceOperations } = useMemo(() => {
+        const scopes = deviceOperations.filter(
+            (node): node is DeviceOperationNode =>
+                node.node_type === NodeType.function_start && isDeviceOperation(node.params.name),
+        );
+
+        return {
+            perfRows: scopes.flatMap((node) => devicePerf.rowByStartNodeId.get(node.id) ?? []),
+            hasDeviceOperations: scopes.length > 0,
+        };
+    }, [deviceOperations, devicePerf.rowByStartNodeId]);
+
     return (
         <div className='device-operations-full-render-wrap'>
             <DeviceOperationArgumentsComponent
@@ -608,6 +714,13 @@ const DeviceOperationsFullRender = ({ deviceOperations, details, onLegendClick }
                 title={cbPressureModal?.title ?? ''}
                 snapshot={cbPressureModal?.snapshot ?? null}
                 onClose={() => setCbPressureModal(null)}
+            />
+            <OperationDevicePerfSummary
+                linkStatus={devicePerf.linkStatus}
+                hasPerformanceReport={devicePerf.hasPerformanceReport}
+                hasDeviceOperations={hasDeviceOperations}
+                rows={perfRows}
+                totalDeviceTimeUs={devicePerf.totalDeviceTimeUs}
             />
             <h3 className='peak-load monospace'>
                 Peak L1 memory load per core:{' '}

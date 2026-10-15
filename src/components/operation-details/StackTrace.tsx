@@ -59,6 +59,10 @@ function StackTrace({
         return highlightedFileContents;
     }, [stackTrace, language]);
 
+    const stackTracePreview = useMemo(() => getStackTracePreview(stackTraceWithHighlights), [stackTraceWithHighlights]);
+    // A trace that fits in the preview has nothing more to show
+    const canExpand = stackTracePreview !== stackTraceWithHighlights;
+
     const handleToggleStackTrace = () => {
         setIsExpanded(!isExpanded);
 
@@ -87,21 +91,21 @@ function StackTrace({
                         // HTML tags are escaped by hljs
                         // eslint-disable-next-line react/no-danger
                         dangerouslySetInnerHTML={{
-                            __html: isExpanded
-                                ? stackTraceWithHighlights
-                                : getStackTracePreview(stackTraceWithHighlights),
+                            __html: isExpanded ? stackTraceWithHighlights : stackTracePreview,
                         }}
                     />
                 </div>
 
                 <div className={classNames('stack-trace-buttons is-sticky')}>
-                    <Button
-                        variant={ButtonVariant.MINIMAL}
-                        intent={Intent.PRIMARY}
-                        onClick={handleToggleStackTrace}
-                        text={isExpanded ? 'Collapse' : 'Expand'}
-                        endIcon={isExpanded ? IconNames.MINIMIZE : IconNames.MAXIMIZE}
-                    />
+                    {canExpand && (
+                        <Button
+                            variant={ButtonVariant.MINIMAL}
+                            intent={Intent.PRIMARY}
+                            onClick={handleToggleStackTrace}
+                            text={isExpanded ? 'Collapse' : 'Expand'}
+                            endIcon={isExpanded ? IconNames.MINIMIZE : IconNames.MAXIMIZE}
+                        />
+                    )}
 
                     {!hideSourceButton && (
                         <SourceFileButton

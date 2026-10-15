@@ -8,6 +8,7 @@ export enum PerfHeuristicFlag {
     UNDERUTILISED_CORES = 'underutilised_cores',
     RECOMPUTE_CANDIDATE = 'recompute_candidate',
     ALLOCATION_FAILURE = 'allocation_failure',
+    DRAM_FALLBACK = 'dram_fallback',
 }
 
 export enum PerfHeuristicFlagIntent {
@@ -63,5 +64,13 @@ export const PERF_HEURISTIC_FLAG_DEFINITIONS: Record<PerfHeuristicFlag, PerfHeur
         description:
             'This device op ran, but a later device op of the same operation failed to allocate memory, as recorded in the linked memory report.',
         intent: PerfHeuristicFlagIntent.DANGER,
+    },
+    // Inferred, unlike the allocation failure above: see `getDramFallbacks`.
+    [PerfHeuristicFlag.DRAM_FALLBACK]: {
+        label: 'Likely DRAM fallback',
+        shortLabel: 'DRAM fallback?',
+        description:
+            "Inferred, not recorded: L1 was requested or had just failed to allocate, but this op's output is in DRAM. tt-metal does not record fallbacks, so treat this as a lead to check, not a fact.",
+        intent: PerfHeuristicFlagIntent.WARNING,
     },
 };

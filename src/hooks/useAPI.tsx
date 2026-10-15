@@ -21,13 +21,15 @@ import {
     NodeType,
     OperationDescription,
     OperationDetailsData,
+    ReportError,
     ReportMetadataResponse,
     Tensor,
     defaultBuffer,
     defaultOperation,
 } from '../model/APIData';
 import { BufferType } from '../model/BufferType';
-import parseMemoryConfig, { memoryConfigPattern } from '../functions/parseMemoryConfig';
+import { summariseOperationBuffers } from '../functions/summariseOperationBuffers';
+import parseMemoryConfig, { isParsableMemoryConfigArgument } from '../functions/parseMemoryConfig';
 import { MemoryConfig } from '../model/MemoryConfig';
 import getServerConfig from '../functions/getServerConfig';
 import { PerfTableRow } from '../model/PerfTable';
@@ -98,6 +100,7 @@ import { parseNpeAxiosResponseData } from '../functions/parseNpeAxiosResponseDat
 import { throwNpeClientAxiosError } from '../functions/throwNpeClientAxiosError';
 import validateNpeSummary from '../functions/validateNpeSummary';
 import validateNpeWindow from '../functions/validateNpeWindow';
+import { comparisonReportAxiosError } from '../functions/comparisonReportAxiosError';
 
 const EMPTY_PERF_RETURN = { report: [], stacked_report: [], signposts: [] };
 
@@ -229,7 +232,7 @@ const fetchOperations = async (): Promise<OperationDescription[]> => {
         });
 
         const argumentsWithParsedValues = operation.arguments.map((argument) =>
-            argument.name === 'memory_config' || memoryConfigPattern.test(argument.value)
+            isParsableMemoryConfigArgument(argument)
                 ? {
                       ...argument,
                       parsedValue: argument.value ? (parseMemoryConfig(argument.value) as MemoryConfig) : null,
@@ -394,6 +397,9 @@ export interface PerformanceReportResponse {
     report: PerfTableRow[];
     stacked_report: StackedPerfRow[];
     signposts?: Signpost[];
+    // True when a signpost range was asked of a report holding no signposts: the
+    // report is then whole rather than the window the range names.
+    signpost_range_ignored?: boolean;
 }
 
 // Takes the params as one object rather than positionally: `hideHostOps`,
@@ -649,6 +655,22 @@ export const useOperationsList = () => {
     });
 };
 
+const fetchReportErrors = async (): Promise<ReportError[]> => {
+    const { data } = await axiosInstance.get<ReportError[]>(Endpoints.ERRORS);
+    return data;
+};
+
+export const useReportErrors = () => {
+    const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
+    return useQuery<ReportError[], AxiosError>({
+        queryFn: fetchReportErrors,
+        queryKey: ['get-report-errors', activeProfilerReport?.path],
+        enabled: activeProfilerReport !== null,
+        retry: false,
+        staleTime: Infinity,
+    });
+};
+
 export const useOperationListRange = (): NumberRange | null => {
     const response = useOperationsList();
 
@@ -765,28 +787,10 @@ export const useOperationDetails = (operationId: number | null) => {
         staleTime: Infinity,
     });
 
-    const buffersSummary = useMemo(() => {
-        if (!operationDetails.data) {
-            return [];
-        }
-
-        const uniqueBuffers: Map<number, BufferData> = new Map<number, BufferData>();
-
-        operationDetails.data.buffers.forEach((buffer) => {
-            // eslint-disable-next-line camelcase
-            const { address, max_size_per_bank } = buffer;
-
-            if (address) {
-                const existingBuffer = uniqueBuffers.get(address);
-                // eslint-disable-next-line camelcase
-                if (!existingBuffer || max_size_per_bank > existingBuffer.max_size_per_bank) {
-                    uniqueBuffers.set(address, buffer);
-                }
-            }
-        });
-
-        return Array.from(uniqueBuffers.values());
-    }, [operationDetails.data]);
+    const buffersSummary = useMemo(
+        () => (operationDetails.data ? summariseOperationBuffers(operationDetails.data.buffers) : []),
+        [operationDetails.data],
+    );
 
     const augmentedOperationDetails = useMemo(() => {
         if (!operationDetails.data) {
@@ -874,19 +878,21 @@ const getDeviceOperationOrderCandidates = memoiseLatest(
         for (const operation of operations) {
             const { starts, ends } = getLinkableDeviceOperations(operation.device_operations);
 
-            for (const name of starts) {
+            for (const { name, startNodeId } of starts) {
                 functionStartOperations.push({
                     name,
                     id: operation.id,
                     operationName: operation.name,
+                    startNodeId,
                 });
             }
 
-            for (const name of ends) {
+            for (const { name, startNodeId } of ends) {
                 functionEndOperations.push({
                     name,
                     id: operation.id,
                     operationName: operation.name,
+                    startNodeId,
                 });
             }
         }
@@ -1283,6 +1289,20 @@ export const useLinkedPerformanceReport = () => {
     return usePerformanceReportQuery(name, LINKED_PERFORMANCE_REPORT_PARAMS);
 };
 
+interface ComparisonReportResult {
+    report: PerformanceReportResponse | null;
+    error: AxiosError | null;
+}
+
+const NO_COMPARISON_FAILURES: AxiosError[] = [];
+
+/**
+ * @description The comparison reports, read with the performance tab's view filters.
+ * `data` lines up with the comparison report list, with `null` where a report could
+ * not be read; `failures` names each of those. The likeliest is a signpost range a
+ * comparison report does not hold, since comparisons are read with the active
+ * report's range -- and it costs only that report, not the others.
+ */
 export const usePerformanceComparisonReport = () => {
     const rawReportNames = useAtomValue(comparisonPerformanceReportListAtom);
     const location = useAtomValue(performanceReportLocationAtom);
@@ -1292,15 +1312,21 @@ export const usePerformanceComparisonReport = () => {
         return Array.isArray(rawReportNames) ? [...rawReportNames] : rawReportNames;
     }, [rawReportNames]);
 
-    const response = useQuery<PerformanceReportResponse[], AxiosError>({
+    const response = useQuery<ComparisonReportResult[], AxiosError>({
         queryFn: async () => {
             if (!reportNames || !Array.isArray(reportNames) || reportNames.length === 0) {
                 return [];
             }
 
-            const results = await Promise.all(reportNames.map((name) => fetchPerformanceReport(name, params)));
+            // Settled rather than all, so one report's refusal does not take the
+            // others' rows with it.
+            const settled = await Promise.allSettled(reportNames.map((name) => fetchPerformanceReport(name, params)));
 
-            return results;
+            return settled.map((outcome, index) =>
+                outcome.status === 'fulfilled'
+                    ? { report: outcome.value, error: null }
+                    : { report: null, error: comparisonReportAxiosError(reportNames[index], outcome.reason) },
+            );
         },
         queryKey: getPerformanceComparisonReportQueryKey({
             names: reportNames,
@@ -1312,7 +1338,14 @@ export const usePerformanceComparisonReport = () => {
         enabled: !!reportNames,
     });
 
-    return response;
+    const results = response.data;
+    const data = useMemo(() => results?.map((result) => result.report), [results]);
+    const failures = useMemo(
+        () => results?.flatMap((result) => (result.error ? [result.error] : [])) ?? NO_COMPARISON_FAILURES,
+        [results],
+    );
+
+    return { ...response, data, failures };
 };
 
 export const useInstance = () => {

@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-import { AllocationFailureKind } from '../definitions/AllocationFailure';
+import { AllocationFailureKind, AllocationFailureReason } from '../definitions/AllocationFailure';
 import { StringBufferType } from './BufferType';
 
 interface AllocationFailureOperation {
@@ -23,6 +23,12 @@ export interface BankAllocationFailure extends AllocationFailureOperation {
     allocatedBytes: number | null;
     freeBytes: number | null;
     largestFreeBlockBytes: number | null;
+    // The dependency-aware check reports what is left of this allocator's free blocks large
+    // enough for the request once other allocators' ranges are subtracted, so it is not free
+    // space: a fragmented allocator has none. `null` for the plain check and for tt-metal
+    // before the figures were added.
+    placeableBytes: number | null;
+    largestPlaceableBytes: number | null;
 }
 
 /** Static circular buffers that grow past the end of L1. */
@@ -44,11 +50,21 @@ export interface CircularBuffersClashFailure extends AllocationFailureOperation 
 /** An allocation failure read out of an operation's recorded error. */
 export type AllocationFailure = BankAllocationFailure | CircularBuffersBeyondL1Failure | CircularBuffersClashFailure;
 
-/** An allocation failure as the performance view lists it, joined to the linked perf report. */
-export interface AllocationFailureListing {
+/** Why an allocation did not fit, and the figures that show it. */
+export interface AllocationFailureDiagnosis {
+    reason: AllocationFailureReason;
+    detail: string;
+}
+
+/** An operation's allocation failure, with where in its captured graph it failed. */
+export interface AllocationFailureDetail {
     failure: AllocationFailure;
     /** Device operations whose launch did not complete; empty when the capture did not record one. */
     failedDeviceOperations: string[];
+}
+
+/** An allocation failure as the performance view lists it, joined to the linked perf report. */
+export interface AllocationFailureListing extends AllocationFailureDetail {
     /** Perf rows of this operation's earlier device operations, which did run. Usually zero. */
     linkedRowCount: number;
 }

@@ -37,6 +37,7 @@ const mapping = (name: string, deviceTime: string): DeviceOperationMapping => ({
     name,
     id: OP_ID,
     operationName: `ttnn.${name.toLowerCase()}`,
+    startNodeId: 0,
     perfData: perfRow(name, deviceTime),
 });
 

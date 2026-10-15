@@ -2,6 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
+import { matchPath } from 'react-router';
 import Home from './Home';
 import Operations from './Operations';
 import OperationDetails from './OperationDetails';
@@ -93,3 +94,15 @@ export const RouteRequirements: Record<string, RouteRequirements> = Object.fromE
         (entry): entry is [string, RouteRequirements] => entry[1] !== undefined,
     ),
 );
+
+// The routes the hosted rail omits, from the same descriptors, so hiding an item and
+// refusing its URL are one decision. A page-level guard per item drifted the same way the
+// requirement table did: a flagged item without its own guard stayed reachable by URL. #2101
+const SERVER_MODE_HIDDEN_ROUTES: readonly string[] = NAVIGATION_ITEMS.filter((item) => item.hiddenInServerMode).map(
+    (item) => item.route,
+);
+
+// Prefix match rather than an exact lookup: MLIR is mounted at `/mlir/:filepath?`, so
+// `/mlir/model.json` has to be refused along with `/mlir`.
+export const isHiddenInServerMode = (pathname: string): boolean =>
+    SERVER_MODE_HIDDEN_ROUTES.some((route) => matchPath({ path: route, end: false }, pathname) !== null);

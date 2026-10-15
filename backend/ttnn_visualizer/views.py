@@ -49,7 +49,10 @@ from ttnn_visualizer.event_logging import (
 )
 from ttnn_visualizer.exceptions import (
     DataFormatError,
+    InvalidProfilerPath,
+    InvalidReportPath,
     InvalidRequestPayload,
+    InvalidSignpostRange,
     PerformanceReportNotLoadedException,
     RemoteConnectionException,
     RemoteFileReadException,
@@ -66,7 +69,11 @@ from ttnn_visualizer.file_uploads import (
     save_uploaded_files,
     validate_files,
 )
-from ttnn_visualizer.instances import get_instances, update_instance
+from ttnn_visualizer.instances import (
+    create_instance_from_local_paths,
+    get_instances,
+    update_instance,
+)
 from ttnn_visualizer.known_hosts import (
     append_host_keys,
     rekey_host_line,
@@ -87,6 +94,7 @@ from ttnn_visualizer.mlir import (
 )
 from ttnn_visualizer.models import (
     BufferType,
+    ErrorRecord,
     HostKeyOfferResponse,
     HostKeyTarget,
     HostKeyTrustRequest,
@@ -109,9 +117,11 @@ from ttnn_visualizer.report_source_file import (
     report_source_file_available,
 )
 from ttnn_visualizer.serializers import (
+    select_error_for_operation,
     serialize_buffer,
     serialize_buffer_chunks,
     serialize_devices,
+    serialize_error_records,
     serialize_operation,
     serialize_operation_buffers,
     serialize_operations,
@@ -190,6 +200,20 @@ MAX_EVENT_LOG_REQUEST_BYTES = 16 * 1024
 # is just the envelope's field name. The shape of an event *inside* the envelope belongs
 # to `event_logging.py`, which validates it.
 _EVENT_LOG_EVENTS_FIELD = "events"
+
+
+# Hosted installs pre-install bundled demo reports beside session uploads; their folder
+# names mark them, e.g. `demo_n300-llama` and `DEMO_N300-LLAMA`.
+_DEMO_DIRECTORY_PATTERN = re.compile(r"^demo", re.IGNORECASE)
+
+
+def _list_demo_directory_names(path: Path) -> List[str]:
+    """Names of the bundled demo report folders directly under ``path``."""
+    return [
+        report.name
+        for report in path.glob("*")
+        if _DEMO_DIRECTORY_PATTERN.match(report.name)
+    ]
 
 
 def _stack_source_request_params():
@@ -282,6 +306,15 @@ _NONZERO_RANK_UNSUPPORTED_MSG = (
     "This report database does not store per-rank data. "
     "Omit the rank query parameter or use rank=0 only."
 )
+
+
+def _query_error_records(
+    db: DatabaseQueries, filters: Optional[Dict[str, Any]], rank: int
+) -> List[ErrorRecord]:
+    # Reports written before the errors table existed have no errors to show
+    if not db._check_table_exists("errors"):
+        return []
+    return list(db.query_error_records(db.merge_rank_filter("errors", filters, rank)))
 
 
 def _reject_nonzero_rank_on_legacy_db(db: DatabaseQueries, rank: int):
@@ -473,11 +506,7 @@ def operation_list(instance: Instance):
         devices = list(db.query_devices(db.merge_rank_filter("devices", None, rank)))
         producers_consumers = list(db.query_producers_consumers(rank=rank))
 
-        error_records = None
-        if db._check_table_exists("errors"):
-            error_records = list(
-                db.query_error_records(db.merge_rank_filter("errors", None, rank))
-            )
+        error_records = _query_error_records(db, None, rank)
 
         serialized_operations = serialize_operations(
             inputs,
@@ -622,23 +651,9 @@ def operation_detail(operation_id, instance: Instance):
 
         devices = list(db.query_devices(db.merge_rank_filter("devices", None, rank)))
 
-        error_record = None
-        if db._check_table_exists("errors"):
-            error_records = list(
-                db.query_error_records(
-                    db.merge_rank_filter(
-                        "errors",
-                        {"operation_id": operation_id},
-                        rank,
-                    )
-                )
-            )
-            for e in error_records:
-                if e.rank == operation.rank:
-                    error_record = e
-                    break
-            if error_record is None and error_records:
-                error_record = error_records[0]
+        error_record = select_error_for_operation(
+            _query_error_records(db, {"operation_id": operation_id}, rank), operation
+        )
 
         serialized_operation = serialize_operation(
             buffers,
@@ -688,15 +703,16 @@ def errors_list(instance: Instance):
         rejected = _reject_nonzero_rank_on_legacy_db(db, rank)
         if rejected is not None:
             return rejected
-        if not db._check_table_exists("errors"):
-            return response_unprocessable_entity(
-                message="Error records table does not exist in this report database."
-            )
+        error_records = _query_error_records(db, None, rank)
+        if not error_records:
+            return Response(orjson.dumps([]), mimetype="application/json")
 
-        error_records = list(
-            db.query_error_records(db.merge_rank_filter("errors", None, rank))
+        operations = list(
+            db.query_operations_with_errors(
+                db.merge_rank_filter("operations", None, rank)
+            )
         )
-        serialized_errors = [dataclasses.asdict(error) for error in error_records]
+        serialized_errors = serialize_error_records(error_records, operations)
 
         return Response(
             orjson.dumps(serialized_errors),
@@ -1015,6 +1031,8 @@ def get_profiler_data_list(instance: Instance):
 
     valid_dirs = []
 
+    demo_directory_names: List[str] = []
+
     if current_app.config["SERVER_MODE"]:
         session_instances = session.get("instances", [])
         instances = get_instances(session_instances)
@@ -1026,11 +1044,7 @@ def get_profiler_data_list(instance: Instance):
         session_directory_names = [
             str(Path(session_path).parent.name) for session_path in session_paths
         ]
-        demo_directory_names = []
-        demo_pattern = re.compile(r"^demo", re.IGNORECASE)
-        for report in path.glob("*"):
-            if demo_pattern.match(report.name):
-                demo_directory_names.append(report.name)
+        demo_directory_names = _list_demo_directory_names(path)
         directory_names = list(
             set(db_directory_names + session_directory_names + demo_directory_names)
         )
@@ -1057,7 +1071,13 @@ def get_profiler_data_list(instance: Instance):
         else:
             report_name = dir_path.name
 
-        valid_dirs.append({"path": dir_path.name, "reportName": report_name})
+        valid_dirs.append(
+            {
+                "path": dir_path.name,
+                "reportName": report_name,
+                "isDemo": dir_name in demo_directory_names,
+            }
+        )
 
     return Response(orjson.dumps(valid_dirs), mimetype="application/json")
 
@@ -1118,6 +1138,8 @@ def get_performance_data_list(instance: Instance):
             logger.warning(f"TT-Metal performance reports not found: {path}")
             return jsonify([])
 
+    demo_directory_names: List[str] = []
+
     if current_app.config["SERVER_MODE"]:
         session_instances = session.get("instances", [])
         instances = get_instances(session_instances)
@@ -1131,11 +1153,7 @@ def get_performance_data_list(instance: Instance):
         session_directory_names = [
             str(Path(session_path).name) for session_path in session_paths
         ]
-        demo_directory_names = []
-        demo_pattern = re.compile(r"^demo", re.IGNORECASE)
-        for report in path.glob("*"):
-            if demo_pattern.match(report.name):
-                demo_directory_names.append(report.name)
+        demo_directory_names = _list_demo_directory_names(path)
         directory_names = list(
             set(db_directory_names + session_directory_names + demo_directory_names)
         )
@@ -1167,6 +1185,7 @@ def get_performance_data_list(instance: Instance):
             {
                 "path": dir_path.name,
                 "reportName": dir_path.name,
+                "isDemo": dir_name in demo_directory_names,
             }
         )
 
@@ -1294,6 +1313,8 @@ def get_performance_results_report(instance: Instance):
             tracing_mode=tracing_mode,
             group_by=group_by,
         )
+    except InvalidSignpostRange as error:
+        return response_bad_request(str(error))
     except DataFormatError as error:
         return response_unprocessable_entity(str(error))
 
@@ -2578,6 +2599,61 @@ def update_current_instance(instance: Instance):
         return response_internal_server_error(
             "An error occurred while updating the instance.",
         )
+
+
+@api.route("/instance/local-paths", methods=["POST"])
+@local_only
+def open_local_report_paths():
+    """A new instance on report directories named by path, as `--profiler-path` makes.
+
+    How a link from the agent tools opens the report the agent read (#2047). Any page
+    can send the reader here with paths of its choosing, so only a directory holding a
+    report the app could load is opened, and it is opened resolved.
+    """
+    # Never `force=True`: a cross-site `text/plain` POST skips the CORS preflight, and
+    # only requiring a JSON content type keeps such a request from being read.
+    payload = request.get_json(silent=True) or {}
+    if not isinstance(payload, dict):
+        return response_bad_request("Expected a JSON object.")
+
+    report_kinds = {
+        "profiler_path": (is_valid_profiler_report_dir, "memory report (db.sqlite)"),
+        "performance_path": (
+            is_valid_performance_report_dir,
+            "performance report (profile_log_device.csv and ops_perf_results*.csv)",
+        ),
+    }
+    resolved: Dict[str, Optional[str]] = {}
+    for key, (is_valid, kind) in report_kinds.items():
+        path = payload.get(key) or None
+        resolved[key] = None
+        if path is None:
+            continue
+        if not isinstance(path, str) or not Path(path).is_absolute():
+            return response_bad_request(f"{key} must be an absolute path.")
+        try:
+            directory = Path(path).resolve()
+            is_report = is_valid(directory)
+        except (OSError, RuntimeError) as error:
+            reason = getattr(error, "strerror", None) or error
+            return response_bad_request(f"Cannot read {path}: {reason}.")
+        if not is_report:
+            return response_bad_request(f"No {kind} at {path}.")
+        resolved[key] = str(directory)
+
+    if not any(resolved.values()):
+        return response_bad_request(
+            "One of profiler_path or performance_path is required."
+        )
+
+    try:
+        instance = create_instance_from_local_paths(
+            resolved["profiler_path"], resolved["performance_path"]
+        )
+    except (InvalidReportPath, InvalidProfilerPath):
+        return response_bad_request("A report directory went away while opening it.")
+
+    return jsonify({"instance_id": instance.instance_id})
 
 
 @api.route("/npe", methods=["GET"])

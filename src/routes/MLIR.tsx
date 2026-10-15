@@ -4,7 +4,6 @@
 
 import { Helmet } from 'react-helmet-async';
 import { useMemo, useState } from 'react';
-import { Navigate } from 'react-router';
 import { useAtomValue } from 'jotai';
 import { HttpStatusCode } from 'axios';
 import { Button, ButtonVariant, Size } from '@blueprintjs/core';
@@ -12,17 +11,14 @@ import { IconNames } from '@blueprintjs/icons';
 import { mlirLoadedReportsAtom, mlirSplitViewEpochAtom } from '../store/app';
 import type { GraphBundle } from '../model/MLIRJsonModel';
 import { MLIRValidationError } from '../definitions/MLIRData';
-import ROUTES from '../definitions/Routes';
 import MlirJsonFileLoader from '../components/mlir/MlirJsonFileLoader';
 import MlGraph from '../components/mlir/MLIRViewReactFlow';
 import MlirSplitView, { type MlirSplitReport } from '../components/mlir/MlirSplitView';
 import MlirProcessingStatus from '../components/MlirProcessingStatus';
 import { useMlir } from '../hooks/useAPI';
-import getServerConfig from '../functions/getServerConfig';
 import 'styles/components/MlirPage.scss';
 
 const MLIR = () => {
-    const isServerMode = !!getServerConfig()?.SERVER_MODE;
     const loadedReports = useAtomValue(mlirLoadedReportsAtom);
     const splitViewEpoch = useAtomValue(mlirSplitViewEpochAtom);
     const primaryReport = loadedReports[0] ?? null;
@@ -39,11 +35,7 @@ const MLIR = () => {
     // On a fresh page load the in-memory graph is gone but the instance may
     // still reference a persisted MLIR report — fetch it back by name. Skip the
     // fetch when the graph is already in memory (e.g. just uploaded).
-    const {
-        data: restoredMlirData,
-        isLoading,
-        error: httpError,
-    } = useMlir(isServerMode || activeMlirData ? null : mlirJsonFilename);
+    const { data: restoredMlirData, isLoading, error: httpError } = useMlir(activeMlirData ? null : mlirJsonFilename);
     const mlirData = activeMlirData ?? restoredMlirData ?? null;
 
     // Re-collapse the loader whenever the active graph changes, so a manual
@@ -89,15 +81,6 @@ const MLIR = () => {
     const peerKey = peerReport?.name ?? null;
     const autoSplitView = !!peerReport?.data && peerKey !== null && dismissedSplitEpoch !== splitViewEpoch;
     const splitView = manualSplitView || autoSplitView;
-
-    if (isServerMode) {
-        return (
-            <Navigate
-                to={ROUTES.HOME}
-                replace
-            />
-        );
-    }
 
     const handleExitSplit = () => {
         setManualSplitView(false);

@@ -210,3 +210,8 @@
         z-index: variables.$z-index-2-interactive;
     }
 }
+
+// A sibling of `.operation-details-component`: it also shows while the page is still loading.
+.operation-allocation-failure-callout {
+    margin: 10px 0 15px;
+}

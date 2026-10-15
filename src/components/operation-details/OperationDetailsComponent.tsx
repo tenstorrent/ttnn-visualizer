@@ -41,6 +41,7 @@ import L1Plots from './L1Plots';
 import TensorDetailsList from './TensorDetailsList';
 import OperationArguments from '../OperationArguments';
 import DeviceOperationsFullRender from './DeviceOperationsFullRender';
+import OperationAllocationFailureCallout from './OperationAllocationFailureCallout';
 import useBufferFocus from '../../hooks/useBufferFocus';
 import { StackTraceLanguage } from '../../definitions/StackTrace';
 import { L1_DEFAULT_MEMORY_SIZE } from '../../definitions/L1MemorySize';
@@ -157,6 +158,7 @@ const OperationDetailsComponent = ({ operationId }: OperationDetailsProps) => {
                     operationId={operationId}
                     isLoading={isLoading}
                 />
+                <OperationAllocationFailureCallout operation={operationDetails ?? null} />
                 {status === 'error' && <h3 className='not-found-message'>Operation {operationId} not found</h3>}
             </>
         );
@@ -211,6 +213,7 @@ const OperationDetailsComponent = ({ operationId }: OperationDetailsProps) => {
                 operationId={operationId}
                 isLoading={isLoading}
             />
+            <OperationAllocationFailureCallout operation={operationDetails ?? null} />
 
             <div className='operation-details-component'>
                 {(selectedAddress || isValidNumber(selectedTensorId)) && (
@@ -322,6 +325,7 @@ const OperationDetailsComponent = ({ operationId }: OperationDetailsProps) => {
                             <ProducerConsumersData
                                 selectedTensor={
                                     inputOutputList.find((t) => t.id === selectedTensorId) ||
+                                    details.tensorListById.get(selectedTensorId) ||
                                     details.getTensorForAddress(selectedAddress ?? 0)
                                 }
                                 details={details}
@@ -491,6 +495,7 @@ const OperationDetailsComponent = ({ operationId }: OperationDetailsProps) => {
                                     deviceOperations={details.device_operations}
                                     details={details}
                                     onLegendClick={onLegendClick}
+                                    hasRecordedError={!!operationDetails?.error}
                                 />
                             </>
                         )}

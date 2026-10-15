@@ -22,4 +22,6 @@ export interface ReportFolder {
     // since `path` is the remote path while a report is freshly selected and the
     // synced folder name after a reload — and `reportName` is display-only.
     syncedName?: string;
+    // Set by the server's report listings: true for a bundled demo report under SERVER_MODE.
+    isDemo?: boolean;
 }

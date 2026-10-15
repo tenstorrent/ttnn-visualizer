@@ -194,3 +194,12 @@ def test_update_tolerates_a_stored_connection_the_validators_now_reject(app, cap
         # rather than a remote host directory.
         local_root = Path(app.config["LOCAL_DATA_DIRECTORY"])
         assert str(instance.profiler_path or "").startswith(str(local_root))
+
+
+def test_a_report_directly_under_the_root_is_still_named():
+    """An empty name reads as no active report, so the app would not open it."""
+    from ttnn_visualizer.instances import _report_name
+
+    assert _report_name(Path("/report")) == "report"
+    assert _report_name(Path("/work/generated/ttnn/reports/bge_m3")) == "bge_m3"
+    assert _report_name(None) == ""

@@ -457,6 +457,25 @@ class DatabaseQueries:
         for row in rows:
             yield Operation(*row)
 
+    def query_operations_with_errors(
+        self, filters: Optional[Dict[str, Any]] = None
+    ) -> Generator[Operation, None, None]:
+        """Operations whose id has at least one error row, at any rank.
+
+        Narrowed with a subquery rather than by binding the error ids, for the
+        reason ``query_tensor_comparisons`` gives. The subquery ignores rank so
+        the rank-0 fallback in ``select_errors_by_operation`` can still match.
+        """
+        select_clause = self._dataclass_select_clause("operations", Operation)
+        rows = self._query_table(
+            "operations",
+            filters,
+            additional_conditions="AND operation_id IN (SELECT operation_id FROM errors)",
+            select_clause=select_clause,
+        )
+        for row in rows:
+            yield Operation(*row)
+
     def query_buffers(
         self, filters: Optional[Dict[str, Any]] = None
     ) -> Generator[Buffer, None, None]:
@@ -886,21 +905,19 @@ class DatabaseQueries:
             device_addresses: List[Any] = []
 
             if device_tensors_data:
-                pairs = device_tensors_data.split(",")
-                device_tensor_list = []
-                for pair in pairs:
+                # Keyed by device id: the joins above repeat each pair once per
+                # operation that reads or writes the tensor, and the list is
+                # indexed by device id, so a repeat must not take a new slot.
+                address_by_device_id: Dict[int, int] = {}
+                for pair in device_tensors_data.split(","):
                     if pair:
                         device_id_str, address_str = pair.split(":")
-                        device_id = int(device_id_str)
-                        address = int(address_str)
-                        device_tensor_list.append((device_id, address))
+                        address_by_device_id[int(device_id_str)] = int(address_str)
 
-                for device_id, address in sorted(
-                    device_tensor_list, key=lambda x: x[0]
-                ):
-                    while len(device_addresses) < device_id:
-                        device_addresses.append(None)
-                    device_addresses.append(address)
+                device_addresses = [
+                    address_by_device_id.get(device_id)
+                    for device_id in range(max(address_by_device_id, default=-1) + 1)
+                ]
 
             yield Tensor(
                 row[0],

@@ -65,12 +65,9 @@ import { formatSyncedReportName } from '../../functions/reportRank';
 import { DeviceOperationLayoutTypes } from '../../model/APIData';
 import usePerfReportFiltering from './usePerfReportFiltering';
 import AllocationFailureSummary from './AllocationFailureSummary';
+import isSignpostOutsideRange from '../../functions/isSignpostOutsideRange';
+import { SignpostSelectType } from '../../definitions/Performance';
 import { AllocationFailureListing } from '../../model/AllocationFailure';
-
-enum SignpostSelectType {
-    START,
-    END,
-}
 
 interface PerformanceReportProps {
     data?: TypedPerfTableRow[];
@@ -294,6 +291,18 @@ const PerformanceReport = ({
     }, [activeComparisonReportList, selectedTabId]);
 
     const isInitialTab = selectedTabId === INITIAL_TAB_ID;
+
+    // Summarises the active tab's report so the banner agrees with the Slow icons in its table.
+    // Memoised so unrelated re-renders (hover) don't rescan every row.
+    const highDispatchAdvice = useMemo(() => {
+        if (!hiliteHighDispatch || isStackedView) {
+            return null;
+        }
+
+        const activeRows = isInitialTab ? processedRows : processedComparisonRows[comparisonIndex];
+
+        return activeRows ? calcHighDispatchOps(activeRows) : null;
+    }, [hiliteHighDispatch, isStackedView, isInitialTab, processedRows, processedComparisonRows, comparisonIndex]);
 
     const activeDataCount = useMemo(() => {
         const isComparison = !isInitialTab;
@@ -663,7 +672,7 @@ const PerformanceReport = ({
 
                 {/* Above the table: the table's height cap assumes nothing renders below it. */}
                 <AllocationFailureSummary listings={allocationFailureListings} />
-                {hiliteHighDispatch && !isStackedView && calcHighDispatchOps(processedRows)}
+                {highDispatchAdvice}
 
                 <Tabs
                     selectedTabId={selectedTabId}
@@ -786,28 +795,7 @@ const renderSignpost: RenderSignpostProps<Signpost> = (
         return null;
     }
 
-    // Check if the current signpost should be disabled based on selectType and filterBySignpost
-    let isOutsideRange = false;
-    const [startSignpost, endSignpost] = selectedSignposts;
-    const currentIndex = allSignposts.findIndex((s) => s.id === signpost.id);
-
-    if (selectType === SignpostSelectType.START) {
-        // For start select: only disable items after the end signpost
-        if (endSignpost) {
-            const endIndex = allSignposts.findIndex((s) => s.id === endSignpost.id) - 1;
-            if (endIndex !== -1) {
-                isOutsideRange = currentIndex > endIndex;
-            }
-        }
-    } else if (selectType === SignpostSelectType.END) {
-        // For end select: only disable items before the start signpost
-        if (startSignpost) {
-            const startIndex = allSignposts.findIndex((s) => s.id === startSignpost.id) + 1;
-            if (startIndex !== -1) {
-                isOutsideRange = currentIndex < startIndex;
-            }
-        }
-    }
+    const isOutsideRange = isSignpostOutsideRange(signpost, selectedSignposts, allSignposts, selectType);
 
     return (
         <MenuItem
