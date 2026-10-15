@@ -37,6 +37,10 @@ describe('resolveMaxCores', () => {
         expect(resolveMaxCores({ architecture: DeviceArchitecture.QUASAR }, [makeRow(8)])).toBe(32);
     });
 
+    it('defaults Grendel to the 32 Tensix cores of its Quasar mesh', () => {
+        expect(resolveMaxCores({ architecture: DeviceArchitecture.GRENDEL }, [makeRow(8)])).toBe(32);
+    });
+
     // The device log's `ARCH:` token reaches here raw, so casing must not change the default.
     it('normalises the device log arch before looking up its default', () => {
         expect(resolveMaxCores({ architecture: 'QUASAR' as DeviceArchitecture }, [makeRow(8)])).toBe(32);
@@ -44,8 +48,8 @@ describe('resolveMaxCores', () => {
     });
 
     it('honours the rows for an arch it does not recognise', () => {
-        expect(resolveMaxCores({ architecture: 'grendel' as DeviceArchitecture }, [makeRow(100)])).toBe(100);
-        expect(resolveMaxCores({ architecture: 'grendel' as DeviceArchitecture }, [makeRow(8)])).toBe(
+        expect(resolveMaxCores({ architecture: 'horizon' as DeviceArchitecture }, [makeRow(100)])).toBe(100);
+        expect(resolveMaxCores({ architecture: 'horizon' as DeviceArchitecture }, [makeRow(8)])).toBe(
             DEFAULT_MAX_CORES,
         );
     });

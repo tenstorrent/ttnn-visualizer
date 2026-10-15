@@ -18,11 +18,17 @@ describe('stringToArchitecture', () => {
         expect(stringToArchitecture('grayskull')).toBe(DeviceArchitecture.GRAYSKULL);
     });
 
+    // No descriptor carries `grendel`: UMD marks Grendel with an `ip_variant` on `quasar` (#2130).
+    it('resolves the dormant grendel arch name', () => {
+        expect(stringToArchitecture('grendel')).toBe(DeviceArchitecture.GRENDEL);
+    });
+
     it('is case insensitive', () => {
         expect(stringToArchitecture('WORMHOLE_B0')).toBe(DeviceArchitecture.WORMHOLE);
         expect(stringToArchitecture('Blackhole')).toBe(DeviceArchitecture.BLACKHOLE);
         // tt-metal's SoC descriptor YAML spells it `QUASAR`; UMD's arch string is `quasar`.
         expect(stringToArchitecture('QUASAR')).toBe(DeviceArchitecture.QUASAR);
+        expect(stringToArchitecture('GRENDEL')).toBe(DeviceArchitecture.GRENDEL);
     });
 
     it('does not resolve a name that merely contains an arch', () => {
@@ -33,8 +39,8 @@ describe('stringToArchitecture', () => {
     });
 
     it('reports an unrecognised or absent arch as unknown', () => {
-        // Grendel has no arch value in UMD and no descriptor here yet (#2130).
-        expect(stringToArchitecture('grendel')).toBe(DeviceArchitecture.UNKNOWN);
+        // Licensee parts such as Horizon bring their own descriptors and are never baked.
+        expect(stringToArchitecture('horizon')).toBe(DeviceArchitecture.UNKNOWN);
         expect(stringToArchitecture('')).toBe(DeviceArchitecture.UNKNOWN);
     });
 
