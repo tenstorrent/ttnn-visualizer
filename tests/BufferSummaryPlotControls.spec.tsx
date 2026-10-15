@@ -376,6 +376,14 @@ describe('BufferSummaryPlotControls late deallocation count (#963)', () => {
         expect(getLateDeallocationSwitch()).not.toBeChecked();
     });
 
+    it('turns the switch on from Buffer Summary when nothing is flagged', () => {
+        renderControls([[showDeallocationReportAtom, false]], 0);
+
+        fireEvent.click(getLateDeallocationSwitch());
+
+        expect(getLateDeallocationSwitch()).toBeChecked();
+    });
+
     it('checks the switch when the atom is on and findings exist', () => {
         renderControls([[showDeallocationReportAtom, true]], 4);
 
