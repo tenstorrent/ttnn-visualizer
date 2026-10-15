@@ -19,11 +19,14 @@ from typing import (
     List,
     Literal,
     Optional,
+    Set,
     Tuple,
     Union,
     overload,
 )
 
+import matplotlib
+import matplotlib.pyplot as plt
 import pandas as pd
 import zstd
 from tt_perf_report import perf_report
@@ -35,6 +38,24 @@ from ttnn_visualizer.exceptions import (
 from ttnn_visualizer.models import Instance
 
 logger = logging.getLogger(__name__)
+
+# The server only ever draws figures to files, and the default can resolve to an
+# interactive GUI backend (macosx), which has no business in a web worker. Forced,
+# so a user's MPLBACKEND can't change it.
+matplotlib.use("Agg")
+
+
+def _close_figures_opened_since(open_before: Set[int]) -> None:
+    """Close the figures tt-perf-report opened and never closed (#2135).
+
+    pyplot keeps every figure alive until it is closed. Closing only the new ones,
+    rather than `plt.close("all")`, leaves figures that already existed alone. The
+    figure registry is process-global, so a threaded worker could still see another
+    request's figure here; the default gevent worker doesn't yield mid-generation.
+    """
+    for figure_number in set(plt.get_fignums()) - open_before:
+        plt.close(figure_number)
+
 
 # Cell values after NaN sanitization; matches LocalCSVQueryRunner.execute_query.
 CSVCell = Optional[Union[str, float, int]]
@@ -1098,6 +1119,7 @@ class OpsPerformanceReportQueries:
             else:
                 ignore_signposts = cls.DEFAULT_IGNORE_SIGNPOSTS
 
+            open_figures = set(plt.get_fignums())
             try:
                 perf_report.generate_perf_report(
                     [csv_file],
@@ -1126,6 +1148,8 @@ class OpsPerformanceReportQueries:
                 logger.error(f"Error loading report: {e}")
                 logger.error(f"Full traceback:\n{traceback.format_exc()}")
                 raise DataFormatError(e)
+            finally:
+                _close_figures_opened_since(open_figures)
 
             try:
                 ops_perf_results, signposts = cls.extract_signposts(

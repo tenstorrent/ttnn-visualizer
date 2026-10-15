@@ -97,6 +97,11 @@ line_length = 88
 # used to pass `backend/ttnn_visualizer` explicitly, which silently skipped any
 # tests living outside the package — `scripts/tests` would never have run.
 testpaths = ["backend/ttnn_visualizer/tests", "scripts/tests"]
+# A figure tt-perf-report opened and nobody closed is a per-request memory leak
+# in the server (#2135), so the suite fails rather than warns when one builds up.
+filterwarnings = [
+    "error:More than .* figures have been opened:RuntimeWarning",
+]
 
 [tool.mypy]
 ignore_missing_imports = true
