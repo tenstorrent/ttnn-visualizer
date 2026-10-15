@@ -21,5 +21,8 @@ export const stringToArchitecture = (arch: unknown): DeviceArchitecture => {
     if (name.startsWith('blackhole')) {
         return DeviceArchitecture.BLACKHOLE;
     }
+    if (name.startsWith('quasar')) {
+        return DeviceArchitecture.QUASAR;
+    }
     return DeviceArchitecture.UNKNOWN;
 };

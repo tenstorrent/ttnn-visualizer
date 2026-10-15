@@ -4,7 +4,7 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { parseSocDescriptorOverride } from '../src/functions/socDescriptorOverride';
+import { parseReportedGrid, parseSocDescriptorOverride } from '../src/functions/socDescriptorOverride';
 import archWormhole from '../src/assets/data/arch-wormhole.json';
 import archBlackhole from '../src/assets/data/arch-blackhole.json';
 
@@ -86,6 +86,44 @@ describe('parseSocDescriptorOverride', () => {
         expect(result.design.pcie).toEqual([]);
         expect(result.design.arc).toEqual([]);
         expect(result.design.router_only).toEqual([]);
+        expect(result.design.dispatch).toEqual([]);
+    });
+
+    // tt-npe embeds the run's descriptor, and a Quasar one lists its dispatch engines.
+    it('carries dispatch engines through', () => {
+        const result = parseSocDescriptorOverride({
+            grid: { x_size: 2, y_size: 3 },
+            functional_workers: ['0-1', '1-1'],
+            dispatch: ['0-2'],
+        });
+
+        expect(result.status).toBe('valid');
+        if (result.status !== 'valid') {
+            return;
+        }
+        expect(result.design.dispatch).toEqual(['0-2']);
+    });
+
+    // The NPE view parses every list it labels, so a malformed `dispatch` must stop here.
+    it('validates dispatch engines like every other node list', () => {
+        const malformed = parseSocDescriptorOverride({
+            grid: { x_size: 4, y_size: 4 },
+            functional_workers: ['1-1'],
+            dispatch: 'not-a-list',
+        });
+        const outside = parseSocDescriptorOverride({
+            grid: { x_size: 4, y_size: 4 },
+            functional_workers: ['1-1'],
+            dispatch: ['10-1'],
+        });
+
+        expect(malformed.status).toBe('invalid');
+        expect(outside.status).toBe('invalid');
+        if (malformed.status !== 'invalid' || outside.status !== 'invalid') {
+            return;
+        }
+        expect(malformed.problems.join(' ')).toContain('`dispatch` must be an array');
+        expect(outside.problems.join(' ')).toContain('`dispatch` has coordinates outside the 4x4 grid: 10-1');
     });
 
     it('needs only grid and functional_workers, defaulting every node list', () => {
@@ -246,5 +284,25 @@ describe('parseSocDescriptorOverride', () => {
             return;
         }
         expect(result.problems.length).toBeGreaterThanOrEqual(3);
+    });
+});
+
+describe('parseReportedGrid', () => {
+    it('accepts a grid the renderer can draw', () => {
+        expect(parseReportedGrid(11, 8)).toEqual({ x_size: 11, y_size: 8 });
+    });
+
+    // NPE's `num_cols` / `num_rows` arrive unvalidated, and the result sizes the rendered grid.
+    it.each([
+        ['an absent axis', undefined, 8],
+        ['a null axis', 11, null],
+        ['a zero axis', 0, 8],
+        ['a negative axis', 11, -8],
+        ['a non-integer axis', 2.5, 3],
+        ['a numeric string', '11', 8],
+        ['an axis above the cap', 1_000_000, 3],
+        ['a cell count above the cap', 200, 200],
+    ])('rejects %s', (_label, xSize, ySize) => {
+        expect(parseReportedGrid(xSize, ySize)).toBeNull();
     });
 });

@@ -10,6 +10,7 @@ const CORE_COUNT: Record<Exclude<DeviceArchitecture, DeviceArchitecture.UNKNOWN>
     [DeviceArchitecture.GRAYSKULL]: 108,
     [DeviceArchitecture.WORMHOLE]: 64,
     [DeviceArchitecture.BLACKHOLE]: 130, // Mohamed: 130 for BH p150 and 120 for BH p100. P150 is more popular so 130 is good
+    [DeviceArchitecture.QUASAR]: 32, // 8x4; Tensix dispatch reserves a column and leaves 28
 };
 
 // Wormhole default used when device metadata is unavailable (matches DeviceArchitecture.WORMHOLE).

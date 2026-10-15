@@ -9,9 +9,9 @@ import { DeviceArchitecture } from '../definitions/DeviceArchitecture';
  * Outcome of reading a report-supplied SoC descriptor.
  *
  * Three states rather than `ChipDesign | null`, because absent and malformed
- * need different answers: absent falls back to the baked lookup, malformed must
- * say so. Collapsing them is how an unusable override would render as an empty
- * grid — the failure #1776 is about.
+ * need different answers: absent falls back to the baked lookup (when the report's
+ * grid matches it), malformed must say so. Collapsing them is how an unusable
+ * override would render as an empty grid — the failure #1776 is about.
  */
 export type SocDescriptorOverride =
     | { status: 'absent' }
@@ -96,6 +96,12 @@ const gridProblems = (grid: unknown): string[] => {
     return cells > MAX_GRID_CELLS ? [`\`grid\` asks for ${cells} cells, above the ${MAX_GRID_CELLS} limit`] : [];
 };
 
+/** A grid a report states for itself, such as NPE's `num_cols` / `num_rows`, or null unless it is drawable. */
+export const parseReportedGrid = (xSize: unknown, ySize: unknown): ChipDesign['grid'] | null =>
+    gridProblems({ x_size: xSize, y_size: ySize }).length === 0
+        ? { x_size: xSize as number, y_size: ySize as number }
+        : null;
+
 /** The extent to bounds-check against, or null when `grid` is unusable. */
 const gridExtent = (grid: unknown): GridExtent | null => {
     if (!isRecord(grid) || gridProblems(grid).length > 0) {
@@ -143,6 +149,7 @@ export const parseSocDescriptorOverride = (raw: unknown, reportedArch?: string):
         ...coordinateProblems('pcie', raw.pcie ?? [], extent),
         ...coordinateProblems('arc', raw.arc ?? [], extent),
         ...coordinateProblems('router_only', raw.router_only ?? [], extent),
+        ...coordinateProblems('dispatch', raw.dispatch ?? [], extent),
     ];
 
     if (Array.isArray(raw.functional_workers) && raw.functional_workers.length === 0) {
@@ -171,6 +178,7 @@ export const parseSocDescriptorOverride = (raw: unknown, reportedArch?: string):
             eth: raw.eth ?? [],
             pcie: raw.pcie ?? [],
             router_only: raw.router_only ?? [],
+            dispatch: raw.dispatch ?? [],
         } as ChipDesign,
     };
 };

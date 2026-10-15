@@ -159,6 +159,7 @@ export interface ChipDesign {
     pcie: string[];
     router_only: string[];
     functional_workers: string[];
+    dispatch?: string[];
 
     [unknownKey: string]: unknown;
 }

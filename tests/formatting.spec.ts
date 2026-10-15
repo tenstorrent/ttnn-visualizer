@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 import {
     buildGitCommitUrl,
     formatDuration,
+    formatGridSize,
     formatNonZeroShareOfTotal,
     formatShareOfTotal,
     formatShortSha,
@@ -121,5 +122,11 @@ describe('getCoreCountText', () => {
 
     it('is what getCoreCountLabel prefixes', () => {
         expect(getCoreCountLabel(2)).toBe('x 2 cores');
+    });
+});
+
+describe('formatGridSize', () => {
+    it('writes columns before rows, as SoC descriptors size a grid', () => {
+        expect(formatGridSize({ x_size: 11, y_size: 8 })).toBe('11x8');
     });
 });

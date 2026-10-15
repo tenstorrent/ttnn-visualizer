@@ -3,6 +3,7 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import archBlackhole from '../assets/data/arch-blackhole.json';
+import archQuasar from '../assets/data/arch-quasar.json';
 import archWormhole from '../assets/data/arch-wormhole.json';
 import { DeviceArchitecture } from '../definitions/DeviceArchitecture';
 import { ChipDesign } from '../model/ClusterModel';
@@ -18,6 +19,9 @@ export const getChipDesign = (arch: DeviceArchitecture): ChipDesign | null => {
             return archWormhole as ChipDesign;
         case DeviceArchitecture.BLACKHOLE:
             return archBlackhole as ChipDesign;
+        // Quasar-32 from tt-metal `soc_descriptors/quasar_32_arch.yaml` at 7d54a363f0c: Tensix-only emulation. #1847
+        case DeviceArchitecture.QUASAR:
+            return archQuasar as ChipDesign;
         default:
             return null;
     }

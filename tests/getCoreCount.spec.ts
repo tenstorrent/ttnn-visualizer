@@ -33,6 +33,15 @@ describe('resolveMaxCores', () => {
         );
     });
 
+    it('defaults Quasar to its 32 Tensix cores rather than the Wormhole default', () => {
+        expect(resolveMaxCores({ architecture: DeviceArchitecture.QUASAR }, [makeRow(8)])).toBe(32);
+    });
+
+    it("prefers the device log's core count for a Quasar run with Tensix dispatch", () => {
+        // Dispatch on Tensix reserves a column of the 8x4 grid, leaving 28 compute cores.
+        expect(resolveMaxCores({ architecture: DeviceArchitecture.QUASAR, max_cores: 28 }, [makeRow(8)])).toBe(28);
+    });
+
     it('falls back to DEFAULT_MAX_CORES when resolved capacity is non-positive', () => {
         expect(resolveMaxCores({ max_cores: 0 }, [])).toBe(DEFAULT_MAX_CORES);
     });
