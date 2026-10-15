@@ -89,8 +89,8 @@ interface BufferSummaryPlotControlsProps {
      * Rows where a tensor goes stale (#963). Shown beside the overlay toggle
      * whether or not the overlay is on, and whether or not it is zero — a
      * switch that reads "0" tells the user not to bother, which the switch
-     * alone can't. Zero also disables the switch, following the Tensor List's
-     * late-deallocation filter: the same finding, signalled the same way.
+     * alone can't. The count is the only signal for zero: the switch is global,
+     * so it stays live and shows its real state (#2071).
      */
     lateDeallocationRunCount?: number;
 }
@@ -121,7 +121,6 @@ const BufferSummaryPlotControls = ({ lateDeallocationRunCount = 0 }: BufferSumma
     // still pick a different metric, so leave the select interactive.
     const isModeSelectDisabled = TOP_N_MODE_ORDER.every((mode) => statusByMode[mode] !== TopNAnnotationStatus.READY);
 
-    const hasLateDeallocations = lateDeallocationRunCount > 0;
     const lateDeallocationCountSummary = getRunStartCountSummary(lateDeallocationRunCount);
 
     return (
@@ -136,11 +135,10 @@ const BufferSummaryPlotControls = ({ lateDeallocationRunCount = 0 }: BufferSumma
                 <LateDeallocationControl
                     count={lateDeallocationRunCount}
                     countSummary={lateDeallocationCountSummary}
-                    checked={showDeallocationReport && hasLateDeallocations}
+                    checked={showDeallocationReport}
                     onChange={() => {
                         setShowDeallocationReport(!showDeallocationReport);
                     }}
-                    disabled={!hasLateDeallocations}
                 />
             ) : null}
 

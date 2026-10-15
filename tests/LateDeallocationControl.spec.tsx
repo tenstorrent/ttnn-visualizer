@@ -60,9 +60,9 @@ describe('LateDeallocationControl', () => {
         );
     });
 
-    // Operation Details leaves `disabled` unset: the switch is global, so a
-    // clean operation must not leave it reading "off" or untoggleable. #1862
-    it('stays enabled and follows `checked` at a zero count unless told otherwise', () => {
+    // The switch is global, so neither Operation Details nor Buffer Summary may
+    // leave it reading "off" or untoggleable where nothing is flagged. #1862 #2071
+    it('stays enabled and follows `checked` at a zero count', () => {
         renderControl({ count: 0, checked: true });
 
         const count = screen.getByTestId(TEST_IDS.LATE_DEALLOC_COUNT);
@@ -79,12 +79,6 @@ describe('LateDeallocationControl', () => {
         expect(count).toHaveTextContent('–');
         expect(count).not.toHaveClass(Classes.INTENT_WARNING);
         expect(count).toHaveAttribute('aria-label', 'Late deallocations are still loading');
-    });
-
-    it('disables the switch when asked to', () => {
-        renderControl({ disabled: true });
-
-        expect(getSwitch()).toBeDisabled();
     });
 
     it('calls onChange when the switch is flipped', () => {

@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import { Classes } from '@blueprintjs/core';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -348,24 +348,31 @@ describe('BufferSummaryPlotControls late deallocation count (#963)', () => {
         );
     });
 
-    // Following the Tensor List's late-deallocation filter: the count is always
-    // there to be read, and emptiness is signalled by disabling the control
-    // rather than by removing the only thing that could say "nothing here".
-    it('shows a zero count and disables the toggle when nothing is flagged', () => {
+    // The count is always there to be read, and it alone says "nothing here":
+    // the switch is global, so disabling it would misreport it. #2071
+    it('shows a neutral zero count and leaves the toggle enabled when nothing is flagged', () => {
         renderControls([], 0);
 
         const count = screen.getByTestId(TEST_IDS.LATE_DEALLOC_COUNT);
         expect(count).toHaveTextContent('0');
         expect(count).not.toHaveClass(Classes.INTENT_WARNING);
-        expect(getLateDeallocationSwitch()).toBeDisabled();
+        expect(getLateDeallocationSwitch()).not.toBeDisabled();
     });
 
-    // The atom can stay true after a report with findings while the next report
-    // has none — checked must follow findings, not the atom alone.
-    it('keeps the switch unchecked when the atom is on but nothing is flagged', () => {
+    // The switch must read the same here as in Operation Details, which shows
+    // the atom as it is whatever the count. #2071
+    it('shows the switch on when the atom is on, even with nothing flagged', () => {
         renderControls([[showDeallocationReportAtom, true]], 0);
 
-        expect(getLateDeallocationSwitch()).toBeDisabled();
+        expect(getLateDeallocationSwitch()).not.toBeDisabled();
+        expect(getLateDeallocationSwitch()).toBeChecked();
+    });
+
+    it('turns the switch off from Buffer Summary when nothing is flagged', () => {
+        renderControls([[showDeallocationReportAtom, true]], 0);
+
+        fireEvent.click(getLateDeallocationSwitch());
+
         expect(getLateDeallocationSwitch()).not.toBeChecked();
     });
 
@@ -376,7 +383,7 @@ describe('BufferSummaryPlotControls late deallocation count (#963)', () => {
         expect(getLateDeallocationSwitch()).not.toBeDisabled();
     });
 
-    it('explains the zero in the same tooltip, so the disabled switch is not unexplained', () => {
+    it('explains the zero in the same tooltip', () => {
         renderControls([], 0);
 
         const count = screen.getByTestId(TEST_IDS.LATE_DEALLOC_COUNT);

@@ -273,9 +273,6 @@ const OperationDetailsComponent = ({ operationId }: OperationDetailsProps) => {
                                     setShowCircularBuffer(!showCircularBuffer);
                                 }}
                             />
-                            {/* Never disabled, unlike Buffer Summary's: the switch is global and
-                                this view shows one operation, so a clean operation would leave it
-                                reading "off" and untoggleable while it is on everywhere else. */}
                             <LateDeallocationControl
                                 count={lateDeallocation.count}
                                 countSummary={lateDeallocation.summary}
