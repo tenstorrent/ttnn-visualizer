@@ -31,6 +31,8 @@ from ttnn_visualizer.agent.linking import (
     NodeOrder,
     UnlinkedReason,
 )
+from ttnn_visualizer.csv_queries import ResolvedSignposts
+from ttnn_visualizer.tests.smoke_capture import SMOKE_CAPTURE_DIR
 from ttnn_visualizer.tests.test_device_log_columns import (
     MODERN_HEADER,
     write_device_log,
@@ -432,7 +434,7 @@ class TestLinkViewEndToEnd:
     `hide_host_ops` and drops nothing but host ops.
     """
 
-    SMOKE_CAPTURE = Path("scripts/fixtures/smoke-performance-report")
+    SMOKE_CAPTURE = SMOKE_CAPTURE_DIR
 
     def _capture_with_a_host_op(self, tmp_path) -> Path:
         source = self.SMOKE_CAPTURE / "ops_perf_results.csv"
@@ -653,7 +655,10 @@ _CANONICAL_ROWS = [
 
 def _report_for(rows):
     def generate(instance, **overrides):
-        return {"report": rows, "stacked_report": [], "signposts": []}
+        # A ranged read is the rows after the leading signpost, ids unchanged, as
+        # tt-perf-report numbers a window by CSV position.
+        window = rows[2:] if overrides.get("start_signpost") else rows
+        return {"report": window, "stacked_report": [], "signposts": []}
 
     return generate
 
@@ -690,6 +695,14 @@ def linked(tmp_path):
         )
         patches.append(patcher)
         generate = patcher.start()
+        # The CSV is never written here, so the signpost check reads this instead.
+        signposts = patch.object(
+            tools,
+            "_resolve_signposts",
+            return_value=ResolvedSignposts({"signpost-start": [0]}, True),
+        )
+        patches.append(signposts)
+        signposts.start()
         return registry, handle, generate
 
     yield _linked
@@ -726,6 +739,91 @@ class TestTopOpsLink:
         linking.operation_detail(registry, handle, operation_id=2)
 
         generate.assert_called_once()
+
+    def test_a_ranged_row_keeps_the_operation_id_it_has_unranged(self, linked):
+        """The link is matched against the whole report; a window only narrows
+        the ranked rows (#2122).
+
+        Ranged first, on a fresh registry: asked the other way round the whole
+        report's link is already cached, and a link built from the window would
+        pass unnoticed.
+        """
+        registry, handle, _ = linked()
+
+        ranged = linking.top_ops(registry, handle, start_signpost="signpost-start")
+        whole = linking.top_ops(registry, handle)
+
+        whole_ids = {row["id"]: row["operation_id"] for row in whole["ops"]}
+        ranged_ids = {row["id"]: row["operation_id"] for row in ranged["ops"]}
+        assert ranged_ids == {"4": None, "5": 3}
+        assert all(whole_ids[row_id] == ranged_ids[row_id] for row_id in ranged_ids)
+        # Both matched rows, though only one is in the window.
+        assert ranged["operation_link"]["matched_rows"] == 2
+
+    def test_a_ranged_link_says_its_counts_are_the_whole_reports(self, linked):
+        registry, handle, _ = linked()
+
+        whole = linking.top_ops(registry, handle)["operation_link"]
+        ranged = linking.top_ops(registry, handle, start_signpost="signpost-start")[
+            "operation_link"
+        ]
+
+        assert "scope" not in whole
+        assert ranged["scope"] == linking.WHOLE_REPORT_SCOPE
+        assert linking.RANGED_LINK_NOTE in ranged["note"]
+        assert ranged["matched_rows"] == whole["matched_rows"]
+        assert ranged["unlinked_by_reason"] == whole["unlinked_by_reason"]
+
+    def test_an_end_only_range_reaches_the_generator_and_scopes_the_link(self, linked):
+        """`linking.top_ops` is what the server calls, so an end bound it dropped
+        would read to the end of the report while the projection echoed none."""
+        registry, handle, generate = linked()
+
+        result = linking.top_ops(registry, handle, end_signpost="signpost-start")
+
+        ranged = [
+            call.kwargs
+            for call in generate.call_args_list
+            if call.kwargs.get("end_signpost")
+        ]
+        assert ranged == [{"start_signpost": None, "end_signpost": "signpost-start"}]
+        assert result["projection"]["end_signpost"] == "signpost-start"
+        assert result["operation_link"]["scope"] == linking.WHOLE_REPORT_SCOPE
+
+    def test_a_ranged_call_generates_the_window_and_the_whole_once_each(self, linked):
+        """What the top_ops description promises about cost on a linked handle."""
+        registry, handle, generate = linked()
+
+        linking.top_ops(registry, handle, start_signpost="signpost-start")
+        linking.top_ops(registry, handle, start_signpost="signpost-start")
+
+        assert generate.call_count == 2
+        assert {
+            bool(call.kwargs.get("start_signpost")) for call in generate.call_args_list
+        } == {True, False}
+
+    def test_an_ignored_range_on_a_linked_handle_is_still_whole_report_scoped(
+        self, linked
+    ):
+        """No signposts, so the read is whole -- and the link's counts are the
+        whole report's either way, which is all the scope says."""
+        registry, handle, _ = linked()
+
+        with patch.object(
+            tools, "_resolve_signposts", return_value=ResolvedSignposts({}, True)
+        ):
+            result = linking.top_ops(registry, handle, start_signpost="anything")
+
+        assert result["projection"]["signpost_range_ignored"] is True
+        assert result["operation_link"]["scope"] == linking.WHOLE_REPORT_SCOPE
+
+    def test_a_ranged_call_on_a_performance_only_handle_has_no_link_scope(self, linked):
+        """No profiler report, no operation_id to explain, so no scope either."""
+        registry, handle, _ = linked(profiler=False)
+
+        result = linking.top_ops(registry, handle, start_signpost="signpost-start")
+
+        assert "scope" not in result["operation_link"]
 
     def test_the_canonical_projection_still_keeps_host_ops(self, linked):
         registry, handle, _ = linked()

@@ -625,15 +625,41 @@ TOP_OPS_LINK_NOTE = (
     "first_past_profiler_capture_id names the first row past the profiler capture."
 )
 
+# `operation_link.scope` on a ranged `top_ops`: the link's counts are the whole
+# report's, not the window's.
+WHOLE_REPORT_SCOPE = "whole_report"
+
+# What a signpost range does not narrow. The link is matched against the whole
+# report, because alignment is positional and a window would start it mid-run.
+RANGED_LINK_NOTE = (
+    "A signpost range narrows the ranked rows only: operation_id and every count "
+    "in operation_link are from the whole report, so a row's operation_id is the "
+    "one it has unranged, and matched_rows and unlinked_by_reason count rows "
+    "outside the window too."
+)
+
 
 def top_ops(
     registry: ReportRegistry,
     handle: str,
     by: str = "device_time",
     limit: Optional[int] = None,
+    start_signpost: Optional[str] = None,
+    end_signpost: Optional[str] = None,
 ) -> Dict[str, object]:
-    """`tools.top_ops`, with each row's profiler operation id where one is known."""
-    result = tools.top_ops(registry, handle, by=by, limit=limit)
+    """`tools.top_ops`, with each row's profiler operation id where one is known.
+
+    Ids are CSV positions in a ranged report as in the whole one, so the
+    whole-report link answers a windowed row too.
+    """
+    result = tools.top_ops(
+        registry,
+        handle,
+        by=by,
+        limit=limit,
+        start_signpost=start_signpost,
+        end_signpost=end_signpost,
+    )
     link = operation_link(registry, handle)
     ops = result.get("ops")
     for row in ops if isinstance(ops, list) else []:
@@ -642,6 +668,11 @@ def top_ops(
     # Only a handle with a profiler report has an operation_id worth explaining.
     if registry.get(handle).profiler_path:
         response["note"] = TOP_OPS_LINK_NOTE
+        # Read from the projection, which already names any range it read, so
+        # the note can never disagree with it.
+        if tools.is_ranged(result.get("projection")):
+            response["scope"] = WHOLE_REPORT_SCOPE
+            response["note"] = f"{TOP_OPS_LINK_NOTE} {RANGED_LINK_NOTE}"
     if link.status is LinkStatus.LINKED and link.unlinked is not None:
         response["unlinked_row_count"] = link.unlinked.total
         response["unlinked_by_reason"] = link.unlinked.by_reason
@@ -717,7 +748,7 @@ def operation_detail(
         # Stated because this response's other duration is host seconds, and the two
         # invite being compared.
         result["device_time_unit"] = DEVICE_TIME_UNIT
-        result["projection"] = dict(tools.CANONICAL_PROJECTION)
+        result["projection"] = tools.projection(None)
         if rows:
             result.update(_device_time_summary(rows, link.report_device_time_total))
             result["report_device_time_total"] = round(link.report_device_time_total, 3)

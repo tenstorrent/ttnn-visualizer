@@ -13,9 +13,10 @@ answer; that is the capture, not the app's session.) #1995
 """
 
 import sqlite3
+from collections import OrderedDict
 from enum import Enum
 from pathlib import Path
-from typing import Callable, Dict, List, Optional, Tuple, TypeVar, cast
+from typing import Callable, Dict, Hashable, List, Optional, Tuple, TypeVar, cast
 
 from ttnn_visualizer.csv_queries import (
     DeviceLogProfilerQueries,
@@ -37,6 +38,21 @@ class CacheVariant(str, Enum):
 
     CANONICAL_REPORT = "canonical_report"
     OPERATION_LINK = "operation_link"
+    # Which signposts the performance CSV holds, read without generating a report.
+    SIGNPOSTS = "signposts"
+    # The performance CSV the handle's first read came from, so a later read can
+    # tell whether it is still reading the same capture.
+    SOURCE = "source"
+
+
+# Snapshots narrowed by a scope -- a signpost range -- kept at once, across every
+# handle. Each is a generated report of up to a whole report's rows, and an agent
+# walking per-layer signposts asks for many, so they are evicted least recently
+# used rather than pinned; an evicted range costs one regeneration, which the
+# process-wide cache underneath may still answer. Two is one `diff_reports` pair:
+# these are references the registry holds past that cache's own eviction, so
+# more would keep alive memory `MAX_CACHED_PERFORMANCE_REPORTS` budgets against.
+MAX_SCOPED_REPORTS = 2
 
 
 class UnknownHandleError(ValueError):
@@ -53,6 +69,9 @@ class ReportRegistry:
     def __init__(self) -> None:
         self._instances: Dict[str, Instance] = {}
         self._reports: Dict[Tuple[str, CacheVariant], object] = {}
+        self._scoped_reports: (
+            "OrderedDict[Tuple[str, CacheVariant, Hashable], object]"
+        ) = OrderedDict()
         self._next_id = 1
 
     def add(self, profiler_path: Optional[str], performance_path: Optional[str]) -> str:
@@ -79,8 +98,9 @@ class ReportRegistry:
         handle: str,
         build: Callable[[Instance], Cached],
         variant: CacheVariant = CacheVariant.CANONICAL_REPORT,
+        scope: Hashable = None,
     ) -> Cached:
-        """Keep one report snapshot per handle and variant.
+        """Keep one report snapshot per handle, variant and scope.
 
         `generate_report` re-parses the CSV, shells through tt-perf-report and
         writes three temp files; an agent asking four questions of one report
@@ -94,16 +114,32 @@ class ReportRegistry:
         `variant` keeps what is derived from the report apart from the report
         itself: the operation link reads every captured graph, so it is resolved
         once per handle beside the snapshot it was matched against.
+
+        `scope` keeps a narrowed read of the same report -- a signpost range, see
+        `tools.SignpostRange` -- apart from the whole one. Unlike the unscoped
+        snapshots, scoped ones are not pinned: at most `MAX_SCOPED_REPORTS` are
+        kept, least recently used first out.
         """
-        key = (handle, variant)
-        if key not in self._reports:
-            self._reports[key] = build(self.get(handle))
-        # Each variant has one builder, so the key fixes the type it stored.
-        return cast(Cached, self._reports[key])
+        if scope is None:
+            key = (handle, variant)
+            if key not in self._reports:
+                self._reports[key] = build(self.get(handle))
+            # Each variant has one builder, so the key fixes the type it stored.
+            return cast(Cached, self._reports[key])
+
+        scoped_key = (handle, variant, scope)
+        if scoped_key in self._scoped_reports:
+            self._scoped_reports.move_to_end(scoped_key)
+        else:
+            self._scoped_reports[scoped_key] = build(self.get(handle))
+            while len(self._scoped_reports) > MAX_SCOPED_REPORTS:
+                self._scoped_reports.popitem(last=False)
+        return cast(Cached, self._scoped_reports[scoped_key])
 
     def clear(self) -> None:
         self._instances.clear()
         self._reports.clear()
+        self._scoped_reports.clear()
         self._next_id = 1
 
 

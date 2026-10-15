@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Dict, Set
 
 import pytest
-from ttnn_visualizer.agent import server
+from ttnn_visualizer.agent import server, tools
 from ttnn_visualizer.agent.handles import ReportRegistry
 from ttnn_visualizer.tests.docs_parity import reject_duplicates
 
@@ -117,6 +117,13 @@ def test_the_page_carries_the_null_bound_caveat():
     assert "lacked the inputs the model needs" in page
     assert "`op_category`" in page
     assert "The list can grow" in page
+
+
+def test_the_signpost_name_limit_the_page_states_is_the_enforced_one():
+    """The page states the limit as a number, so nothing else ties it to the code."""
+    page = " ".join(_read(_AGENT_DOCS).split())
+
+    assert f"a name longer than {tools.MAX_SIGNPOST_NAME_LENGTH} characters" in page
 
 
 def test_the_agent_tools_page_is_published():

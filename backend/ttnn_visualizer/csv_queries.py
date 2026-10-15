@@ -997,6 +997,25 @@ class OpsPerformanceReportQueries:
 
         return processed_row
 
+    @staticmethod
+    def report_source(instance) -> "_PerformanceReportSource":
+        """The CSV a report would be generated from now, and its identity on disk.
+
+        The newest `ops_perf_results` file, so a capture written later is a
+        different source, and so is the same file rewritten in place.
+        """
+        source_path = Path(
+            OpsPerformanceQueries.get_local_ops_perf_file_path(instance)
+        ).resolve()
+        source_stat = source_path.stat()
+        return _PerformanceReportSource(
+            path=str(source_path),
+            modified_ns=source_stat.st_mtime_ns,
+            changed_ns=source_stat.st_ctime_ns,
+            inode=source_stat.st_ino,
+            size=source_stat.st_size,
+        )
+
     @classmethod
     def generate_report(cls, instance, **kwargs):
         """Build the performance report, reusing a cached one when nothing changed.
@@ -1004,17 +1023,7 @@ class OpsPerformanceReportQueries:
         A cache hit hands every caller the same dict and row dicts, across users,
         so treat the result as read-only: copy before sorting or annotating it.
         """
-        source_path = Path(
-            OpsPerformanceQueries.get_local_ops_perf_file_path(instance)
-        ).resolve()
-        source_stat = source_path.stat()
-        source = _PerformanceReportSource(
-            path=str(source_path),
-            modified_ns=source_stat.st_mtime_ns,
-            changed_ns=source_stat.st_ctime_ns,
-            inode=source_stat.st_ino,
-            size=source_stat.st_size,
-        )
+        source = cls.report_source(instance)
         options = _PerformanceReportOptions(
             start_signpost=kwargs.get("start_signpost", cls.DEFAULT_START_SIGNPOST),
             end_signpost=kwargs.get("end_signpost", cls.DEFAULT_END_SIGNPOST),
@@ -1050,14 +1059,7 @@ class OpsPerformanceReportQueries:
         # Resolved before generating, so a range tt-perf-report would answer from
         # other rows is refused without running it, and the `signposts` list below
         # offers only ranges this accepts.
-        try:
-            resolved_signposts = resolve_signposts(csv_file, options.tracing_mode)
-        # `EmptyDataError` and `ParserError` are both `ValueError`s: a ragged or
-        # truncated capture is the caller's data, answered as such rather than a 500.
-        except ValueError as error:
-            raise DataFormatError(
-                f"could not read the report's signposts: {error}"
-            ) from error
+        resolved_signposts = read_signposts(csv_file, options.tracing_mode)
         check_signpost_range(
             resolved_signposts, options.start_signpost, options.end_signpost
         )
@@ -1345,6 +1347,22 @@ def resolve_signposts(
             positions_by_name[str(name)].append(int(position))
 
     return ResolvedSignposts(dict(positions_by_name), sorted_by_host_time)
+
+
+def read_signposts(csv_file: IO[str], tracing_mode: bool = False) -> ResolvedSignposts:
+    """`resolve_signposts`, with an unreadable capture answered as the caller's data.
+
+    `EmptyDataError` and `ParserError` are both `ValueError`s: a ragged or
+    truncated capture is the caller's data, answered as such rather than a 500.
+    Shared by the report route and the agent tools, so a bad capture reads the
+    same through either.
+    """
+    try:
+        return resolve_signposts(csv_file, tracing_mode)
+    except ValueError as error:
+        raise DataFormatError(
+            f"could not read the report's signposts: {error}"
+        ) from error
 
 
 def signpost_range_ignored(

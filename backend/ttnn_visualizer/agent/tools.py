@@ -15,13 +15,23 @@ import logging
 import math
 import sys
 from collections import defaultdict
+from dataclasses import dataclass
 from typing import Dict, List, Optional
 
 from ttnn_visualizer.agent.bounds import bounded
-from ttnn_visualizer.agent.handles import ReportRegistry
+from ttnn_visualizer.agent.handles import CacheVariant, ReportRegistry
 from ttnn_visualizer.csv_queries import (
     DeviceLogProfilerQueries,
+    OpsPerformanceQueries,
     OpsPerformanceReportQueries,
+    ResolvedSignposts,
+    check_signpost_range,
+    read_signposts,
+    signpost_range_ignored,
+)
+from ttnn_visualizer.exceptions import (
+    InvalidSignpostRange,
+    PerformanceReportNotLoadedException,
 )
 from ttnn_visualizer.models import Instance
 
@@ -34,14 +44,18 @@ logger = logging.getLogger(__name__)
 # an agent unannounced they produce confident reasoning over a partial set,
 # which is how #1883 lost six features to a filtered link status.
 #
-# So nothing here drops a row. Host ops stay in, and `print_signposts` is true
-# because the name understates it: `filter_by_signpost` drops the signpost rows
-# themselves when it is false, rather than only omitting them from a printout
-# (`perf_report.py:480`). It is inert on this path today -- passing no signpost
-# range means `ignore_signposts`, which returns the frame before the strip can
-# run -- but a projection that exists to not filter should not declare a filter
-# it would honour the moment a tool took a range. Rows carry `op_type`, so an
-# agent can tell a marker from an operation.
+# So nothing here drops a row unless asked. Host ops stay in, and
+# `print_signposts` is true because the name understates it: `filter_by_signpost`
+# drops the signpost rows themselves when it is false, rather than only omitting
+# them from a printout. With no range it is inert -- no range means
+# `ignore_signposts`, which returns the frame before the strip can run. With a
+# range (#2122) it keeps the signposts inside the window; the two that bound it
+# are excluded by tt-perf-report itself, which keeps rows strictly after the
+# start and strictly before the end. Rows carry `op_type`, so an agent can tell
+# a marker from an operation.
+#
+# A range is not part of this projection: the operation link is matched against
+# the whole report, so a range is passed per call and echoed by `projection`.
 #
 # `merge_devices` is the one filter kept, and deliberately: unmerged rows report
 # the same op once per device, so a merged row is the unit an op is reported in
@@ -97,9 +111,201 @@ def _rounded(value: Optional[float]) -> Optional[float]:
     return None if value is None else round(value, 3)
 
 
-def canonical_report(registry: ReportRegistry, handle: str) -> Dict:
-    """One generated report per handle; see `ReportRegistry.cached_report`."""
-    return registry.cached_report(handle, _generate_canonical_report)
+# Longer than any signpost a model emits, and short enough that a refusal or a
+# projection echoing the name stays small.
+MAX_SIGNPOST_NAME_LENGTH = 256
+
+
+@dataclass(frozen=True)
+class SignpostRange:
+    """A window of the report, bounded as `tt-perf-report --start-signpost` bounds it.
+
+    The bounds are passed to tt-perf-report rather than cut from the whole
+    snapshot: it recomputes `Total %` over the window and leaves the first
+    operation's op-to-op gap blank, since no operation precedes it inside the
+    window, and a cut snapshot would disagree on both with the signposted run an
+    agent is checking against. Row ids are CSV positions either way, so a windowed row
+    keeps the id the whole report gives it. #2122
+    """
+
+    start: Optional[str]
+    end: Optional[str]
+
+    @classmethod
+    def of(
+        cls, start: Optional[str] = None, end: Optional[str] = None
+    ) -> Optional["SignpostRange"]:
+        """The range asked for, or None for none.
+
+        An empty name is no bound, as `check_signpost_range` reads it, so it must
+        not key a second snapshot of the same whole report.
+        """
+        for label, name in (("start_signpost", start), ("end_signpost", end)):
+            if name and len(name) > MAX_SIGNPOST_NAME_LENGTH:
+                raise ValueError(
+                    f"{label} is {len(name)} characters; a signpost name is at most "
+                    f"{MAX_SIGNPOST_NAME_LENGTH}"
+                )
+        start, end = start or None, end or None
+        if start is None and end is None:
+            return None
+        return cls(start, end)
+
+    def as_overrides(self) -> Dict[str, object]:
+        return {"start_signpost": self.start, "end_signpost": self.end}
+
+
+def canonical_report(
+    registry: ReportRegistry, handle: str, signposts: Optional[SignpostRange] = None
+) -> Dict:
+    """One generated report per handle and range; see `ReportRegistry.cached_report`.
+
+    A range on a report with no signposts is answered from the whole snapshot:
+    tt-perf-report would read the whole file for it anyway, and generating it
+    once per name asked would cache an identical copy for each. A refused range
+    raises `InvalidSignpostRange`, a `ValueError`, and is not cached. It is
+    refused against the signposts already read for the handle, before the CSV is
+    read again: an agent guessing names would otherwise pay a full read per guess.
+
+    Every read that misses the cache first checks the capture is the one the
+    handle's first read came from; see `_require_same_source`.
+    """
+    ignored = range_ignored(registry, handle, signposts)
+    if signposts is not None and not ignored:
+        check_range(registry, handle, signposts)
+    scope = None if ignored else signposts
+    overrides = scope.as_overrides() if scope is not None else {}
+
+    def build(instance: Instance) -> Dict:
+        _require_same_source(registry, handle, instance)
+        return _generate_canonical_report(instance, **overrides)
+
+    _pin_source(registry, handle)
+    report = registry.cached_report(handle, build, scope=scope)
+    return {**report, "signpost_range_ignored": True} if ignored else report
+
+
+def check_range(
+    registry: ReportRegistry, handle: str, signposts: SignpostRange
+) -> None:
+    """Refuse a range this handle's signposts cannot honour, naming the handle.
+
+    `diff_reports` asks it of both reports before generating either, so the
+    refusal has to say which one it is about.
+    """
+    try:
+        check_signpost_range(
+            _signposts(registry, handle), signposts.start, signposts.end
+        )
+    except InvalidSignpostRange as error:
+        raise InvalidSignpostRange(f"{handle!r}: {error}") from error
+
+
+def _source_now(instance: Instance) -> Optional[object]:
+    """The CSV a report would be read from now, or None when there is none.
+
+    None leaves nothing to compare, and the read that follows fails on its own.
+    """
+    try:
+        return OpsPerformanceReportQueries.report_source(instance)
+    except (FileNotFoundError, PerformanceReportNotLoadedException):
+        return None
+
+
+def _pin_source(registry: ReportRegistry, handle: str) -> Optional[object]:
+    return registry.cached_report(handle, _source_now, variant=CacheVariant.SOURCE)
+
+
+def _require_same_source(
+    registry: ReportRegistry, handle: str, instance: Instance
+) -> None:
+    """Refuse to read a capture other than the one the handle first read.
+
+    The whole snapshot and the operation link are pinned to the capture the
+    handle first read, and rows are matched to operations by CSV position. A
+    read of a rewritten or newer CSV would put its rows under the old link's
+    operation ids, so it is refused and a fresh handle asked for.
+    """
+    pinned = _pin_source(registry, handle)
+    if pinned is not None and _source_now(instance) != pinned:
+        raise ValueError(
+            f"the performance capture behind {handle!r} has changed since it was "
+            "first read, so a new read would not line up with the operations "
+            "already linked to it. Call load_report again for a fresh handle."
+        )
+
+
+def range_ignored(
+    registry: ReportRegistry, handle: str, signposts: Optional[SignpostRange]
+) -> bool:
+    """Whether tt-perf-report would read the whole file for this range.
+
+    `signpost_range_ignored` itself, asked before generating rather than after:
+    the handle's signposts are read once, three columns, without a report.
+    """
+    if signposts is None:
+        return False
+    return signpost_range_ignored(
+        _signposts(registry, handle), signposts.start, signposts.end
+    )
+
+
+def _signposts(registry: ReportRegistry, handle: str) -> ResolvedSignposts:
+    """The handle's signposts, read once."""
+
+    def build(instance: Instance) -> ResolvedSignposts:
+        _require_same_source(registry, handle, instance)
+        return _resolve_signposts(instance)
+
+    _pin_source(registry, handle)
+    return registry.cached_report(handle, build, variant=CacheVariant.SIGNPOSTS)
+
+
+def _resolve_signposts(instance: Instance) -> ResolvedSignposts:
+    path = OpsPerformanceQueries.get_local_ops_perf_file_path(instance)
+    with open(path, newline="") as csv_file:
+        return read_signposts(csv_file)
+
+
+# The projection key a range adds, and the one `is_ranged` reads it back by.
+_START_SIGNPOST_KEY = "start_signpost"
+
+
+def projection(
+    signposts: Optional[SignpostRange], ignored: bool = False
+) -> Dict[str, object]:
+    """The projection a response read through, including any range it was asked.
+
+    `signpost_range_ignored` is true when the report holds no signposts, which
+    tt-perf-report answers with the whole file: the rows are then not the window
+    the range names.
+    """
+    result: Dict[str, object] = dict(CANONICAL_PROJECTION)
+    if signposts is not None:
+        result.update(
+            {
+                _START_SIGNPOST_KEY: signposts.start,
+                "end_signpost": signposts.end,
+                "boundary_signposts_included": False,
+                "signpost_range_ignored": ignored,
+            }
+        )
+    return result
+
+
+def is_ranged(response_projection: object) -> bool:
+    """Whether a response's projection says it was read over a signpost range."""
+    return (
+        isinstance(response_projection, dict)
+        and _START_SIGNPOST_KEY in response_projection
+    )
+
+
+# How a report is generated rather than what it reads, so not part of the
+# projection. No tool reads the stacked report, and tt-perf-report draws it as a
+# 300-dpi pyplot figure it never closes: kept on, every generation -- one per
+# range asked for -- would leave a figure open for the life of the server.
+_GENERATION_OPTIONS: Dict[str, object] = {"no_stacked_report": True}
 
 
 def _generate_canonical_report(instance: Instance, **overrides: object) -> Dict:
@@ -113,7 +319,7 @@ def _generate_canonical_report(instance: Instance, **overrides: object) -> Dict:
     captured = io.StringIO()
     with contextlib.redirect_stdout(captured):
         report = OpsPerformanceReportQueries.generate_report(
-            instance, **{**CANONICAL_PROJECTION, **overrides}
+            instance, **{**CANONICAL_PROJECTION, **_GENERATION_OPTIONS, **overrides}
         )
     if captured.getvalue().strip():
         logger.debug("tt-perf-report output: %s", captured.getvalue().strip())
@@ -173,6 +379,8 @@ def top_ops(
     handle: str,
     by: str = "device_time",
     limit: Optional[int] = None,
+    start_signpost: Optional[str] = None,
+    end_signpost: Optional[str] = None,
 ) -> Dict[str, object]:
     """The costliest ops by one metric, with the projection that produced them."""
     if by not in SORTABLE_METRICS:
@@ -180,7 +388,9 @@ def top_ops(
             f"unknown metric {by!r}; expected one of {', '.join(sorted(SORTABLE_METRICS))}"
         )
 
-    rows = canonical_report(registry, handle).get("report", [])
+    signposts = SignpostRange.of(start_signpost, end_signpost)
+    report = canonical_report(registry, handle, signposts)
+    rows = report.get("report", [])
     field = SORTABLE_METRICS[by]
 
     ranked = sorted(
@@ -208,7 +418,7 @@ def top_ops(
         "op_count": len(rows),
         "returned": len(ops),
         "ops": ops,
-        "projection": dict(CANONICAL_PROJECTION),
+        "projection": projection(signposts, bool(report.get("signpost_range_ignored"))),
     }
     if by in ADDITIVE_METRICS:
         result[f"{by}_total"] = round(total, 3)
@@ -288,12 +498,17 @@ def diff_reports(
     handle_b: str,
     by: str = "device_time",
     limit: Optional[int] = None,
+    start_signpost: Optional[str] = None,
+    end_signpost: Optional[str] = None,
 ) -> Dict[str, object]:
     """Per-op-code deltas between two reports.
 
     Aggregated by op code rather than joined on op id: the question is "did my
     change help", and a change that adds or reorders ops shifts every id after
     it, so an id join would report a diff for ops that did not change.
+
+    One range applies to both reports, which is the before-and-after case: the
+    same signposts in two runs.
     """
     if by not in SORTABLE_METRICS:
         raise ValueError(
@@ -313,10 +528,32 @@ def diff_reports(
         )
     field = SORTABLE_METRICS[by]
 
+    signposts = SignpostRange.of(start_signpost, end_signpost)
+    ignored_a = range_ignored(registry, handle_a, signposts)
+    ignored_b = range_ignored(registry, handle_b, signposts)
+    # Refused rather than caveated: a window compared against a whole report
+    # reports every row outside the window as a change, and this is the response
+    # most likely to be acted on. Both sides ignoring it compares like with like.
+    # Checked, with every other refusal, before either report is generated, so a
+    # refusal costs two reads and names the report it is about.
+    if ignored_a != ignored_b:
+        unsignposted = handle_a if ignored_a else handle_b
+        raise ValueError(
+            f"{unsignposted!r} holds no signposts, so the range would read it whole "
+            "while the other report is read as a window, and every row outside the "
+            "window would show as a change. Diff without a range, or against a "
+            "capture with the same signposts."
+        )
+    if signposts is not None and not ignored_a:
+        check_range(registry, handle_a, signposts)
+        check_range(registry, handle_b, signposts)
+    report_a = canonical_report(registry, handle_a, signposts)
+    report_b = canonical_report(registry, handle_b, signposts)
+
     sub_devices: set = set()
 
-    def totals_by_op_code(handle: str) -> Dict[str, Dict[str, float]]:
-        rows = canonical_report(registry, handle).get("report", [])
+    def totals_by_op_code(report: Dict) -> Dict[str, Dict[str, float]]:
+        rows = report.get("report", [])
         sub_devices.update(_sub_devices(rows))
         totals: Dict[str, Dict[str, float]] = defaultdict(
             lambda: {"total": 0.0, "count": 0.0}
@@ -332,8 +569,8 @@ def diff_reports(
             totals[op_code]["count"] += 1
         return totals
 
-    before = totals_by_op_code(handle_a)
-    after = totals_by_op_code(handle_b)
+    before = totals_by_op_code(report_a)
+    after = totals_by_op_code(report_b)
 
     changes = []
     for op_code in set(before) | set(after):
@@ -361,7 +598,7 @@ def diff_reports(
         "after": handle_b,
         "returned": min(len(changes), bounded(limit)),
         "changes": changes[: bounded(limit)],
-        "projection": dict(CANONICAL_PROJECTION),
+        "projection": projection(signposts, ignored_a and ignored_b),
         "grouped_by": "op_code",
     }
     result["delta_total"] = round(
@@ -388,12 +625,18 @@ def _stderr_log() -> None:
 
 __all__ = [
     "CANONICAL_PROJECTION",
+    "MAX_SIGNPOST_NAME_LENGTH",
     "SORTABLE_METRICS",
+    "SignpostRange",
     "canonical_report",
+    "check_range",
+    "is_ranged",
     "countable_device_time",
     "diff_reports",
     "partitioned_caveat",
     "project_row",
+    "projection",
+    "range_ignored",
     "top_ops",
     "zone_timings",
 ]

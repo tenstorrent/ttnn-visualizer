@@ -78,9 +78,9 @@ another rank's operation under the same id.
 | Tool | Answers |
 |---|---|
 | `load_report` | What this report contains, and which of the tools below apply to it. Returns a handle the others take. |
-| `top_ops` | The costliest operations by device time, op-to-op gap, total percentage, FLOPS, DRAM bandwidth or core count. Each row carries the profiler `operation_id` it links to, when the handle holds both reports — see below. |
+| `top_ops` | The costliest operations by device time, op-to-op gap, total percentage, FLOPS, DRAM bandwidth or core count, over the whole report or a signpost range. Each row carries the profiler `operation_id` it links to, when the handle holds both reports — see below. |
 | `zone_timings` | Per-zone, per-RISC totals from `profile_log_device.csv` — firmware and kernel phases, as measured on device. |
-| `diff_reports` | Per-operation-code deltas between two reports, largest movement first. |
+| `diff_reports` | Per-operation-code deltas between two reports, largest movement first, over the whole reports or one signpost range in both. |
 | `find_operations` | Operations matching a name substring or a call-stack substring, with the ids `operation_detail` takes. |
 | `operation_detail` | One operation: its input and output tensors with shape, dtype, layout and memory config, and what it had allocated. With a linked performance report, also the performance rows it launched, their device time and share of the report's, and the operation's total and slowest row. |
 | `memory_profile` | Memory footprint per operation, keyed by buffer type and ranked within each, with each type's largest footprint and the device's L1 geometry. A floor rather than the peak — see below. |
@@ -112,7 +112,33 @@ server-side, so asking for more returns the cap rather than the report.
 **No rows are hidden from you.** The web application's performance view hides host
 operations by default and can narrow to a signpost range. Those are display choices, and an
 agent handed them unannounced would reason confidently about a partial set. The tools read
-the report with host operations included, signpost markers kept, and no signpost range.
+the report with host operations included, signpost markers kept, and, unless you pass one,
+no signpost range.
+
+A range is read only when you ask for one. `top_ops` and `diff_reports` take
+`start_signpost` and `end_signpost`, the bounds `tt-perf-report --start-signpost` and
+`--end-signpost` take, so a bring-up run measured over `PERF_DECODE` to `PERF_DECODE_END`
+can be checked against the same window. They are resolved the way tt-perf-report resolves
+them: a name means its earliest occurrence by host start time, and an end that names the
+start signpost too means its second occurrence. The window holds the rows strictly between
+the two, so the bounding signposts are left out and any signposts inside it are kept.
+tt-perf-report recomputes `total_percent` over the window, and the first operation in the
+window has no op-to-op gap, because tt-perf-report measures a gap from the previous
+operation and none precedes it inside the window. Ranking by `op_to_op_gap` therefore
+leaves that operation out, and `op_to_op_gap_total` excludes the gap leading into the
+window, which is often the largest in the capture. A ranged answer is not the whole-report
+answer cut down — it is what the signposted run reports.
+
+A range the report cannot honour is refused rather than answered from other rows: a name
+the report does not hold (the refusal lists the names it does), one name for both bounds
+when it occurs only once, an end that falls before the start, or a name longer than 256
+characters. A report with no signposts at all is read whole, because tt-perf-report then
+uses the whole file rather than some other window, and the response's `projection` says so
+with `signpost_range_ignored`. Every ranged response's `projection` names the range, so a
+windowed answer cannot be taken for a whole-report one. `diff_reports` applies one range to
+both reports, and refuses when only one of them holds signposts: a window compared against
+a whole report would show every row outside the window as a change. It checks the range
+against both reports before generating either, and a refusal names the report it is about.
 
 One filter is applied, deliberately: per-device rows are **merged**, so an operation that
 ran on eight devices is one row rather than eight. That is the unit an operation is
@@ -255,12 +281,23 @@ counts there rather than counting null ids among the ranked rows: the ranking le
 any row with no value for its metric, which is every signpost, so `matched_rows` and the
 rows returned do not add up to the report.
 
+A signpost range narrows the ranked rows and nothing else. The link is matched against the
+whole report, since alignment is by order and a window would start it mid-run; a row's id is
+its CSV position in either read, so its `operation_id` is the one it has unranged. Its
+`operation_link` then carries `scope: whole_report`, because every count in it, and
+`operation_detail`'s `report_device_time_total` and shares, describe the whole report while
+`top_ops`'s own `op_count` and totals describe the window.
+
 The link is resolved once per handle, on the first `top_ops` or `operation_detail` that
-needs it, and reads every captured graph at the linked rank. On a handle with both
-reports, the first `operation_detail` therefore also generates the performance report,
-which can take seconds on a large capture; every later call reuses both. A link that
-failed on a read that might pass next time — a locked database, a temp-file error in
-tt-perf-report — is not kept, so the next call tries again.
+needs it, and reads every captured graph at the linked rank. On a handle with both reports,
+the first `operation_detail` therefore also generates the performance report, which can
+take seconds on a large capture; every later call reuses both. A link that failed on a read
+that might pass next time — a locked database, a temp-file error in tt-perf-report — is not
+kept, so the next call tries again. A handle keeps answering from the capture it first
+read, so it never mixes two. A read that needs the CSV again after it was rewritten, or
+after a newer `ops_perf_results` file appeared — a range not asked before, or one dropped
+from the cache — is refused rather than lined up against operations linked from the old
+capture; call `load_report` again for a fresh handle.
 
 **An operation id is not the end of the answer.** `memory_profile` names the operations
 holding its largest footprint, and `operation_provenance` turns such an id into the two things you need
