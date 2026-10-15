@@ -65,6 +65,25 @@ _RANK_SCHEMA = {
         "per rank, so reading every rank at once collides them."
     ),
 }
+# The bounds `tt-perf-report --start-signpost/--end-signpost` take, resolved the
+# same way: the bring-up skills measure a signposted window, and figures read any
+# other way would disagree with theirs. #2122
+_SIGNPOST_SCHEMAS = {
+    "start_signpost": {
+        "type": "string",
+        "description": (
+            "Read only the rows after this signpost: its earliest occurrence by "
+            "host start time, as tt-perf-report --start-signpost reads it."
+        ),
+    },
+    "end_signpost": {
+        "type": "string",
+        "description": (
+            "Read only the rows before this signpost: its earliest occurrence, or "
+            "its second when it also names the start."
+        ),
+    },
+}
 _ADDITIVE_METRIC_SCHEMA = {
     "type": "string",
     "enum": sorted(tools.ADDITIVE_METRICS),
@@ -108,9 +127,14 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
         },
         McpToolName.TOP_OPS: {
             "description": (
-                "The costliest operations by one metric. Reads the report unfiltered "
-                "-- host ops included, no signpost range -- and returns the projection "
-                "it used alongside the rows. Each row's id numbers the performance "
+                "The costliest operations by one metric. Reads the whole report "
+                "unless given a signpost range -- host ops included either way -- and "
+                "returns the projection it used alongside the rows. A range is read "
+                "as tt-perf-report reads it: the two bounding signposts are left out, "
+                "and Total % and the first op-to-op gap are recomputed over the "
+                "window. A signpost name the report lacks is refused; a report with "
+                "no signposts at all is read whole, with signpost_range_ignored set "
+                "in the projection. Each row's id numbers the performance "
                 "CSV. When the handle also holds a profiler report, each row's "
                 "operation_id is the profiler database id for one rank, and "
                 "operation_link says whether the reports linked, at which rank, "
@@ -129,6 +153,7 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
                     "handle": {"type": "string"},
                     "by": _METRIC_SCHEMA,
                     "limit": _LIMIT_SCHEMA,
+                    **_SIGNPOST_SCHEMAS,
                 },
                 "required": ["handle"],
             },
@@ -155,7 +180,11 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
                 "Grouped by op code rather than joined on op id, so a change that "
                 "adds or reorders ops does not report every later op as changed. "
                 "Accepts additive metrics only (device_time, op_to_op_gap, "
-                "total_percent); rank by a rate or a core count with top_ops."
+                "total_percent); rank by a rate or a core count with top_ops. A "
+                "signpost range applies to both reports, read as top_ops reads it; "
+                "it is refused when only one report holds signposts, since a "
+                "window against a whole report shows every row outside it as a "
+                "change."
             ),
             "schema": {
                 "type": "object",
@@ -164,6 +193,7 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
                     "handle_b": {"type": "string", "description": "After the change."},
                     "by": _ADDITIVE_METRIC_SCHEMA,
                     "limit": _LIMIT_SCHEMA,
+                    **_SIGNPOST_SCHEMAS,
                 },
                 "required": ["handle_a", "handle_b"],
             },

@@ -653,7 +653,10 @@ _CANONICAL_ROWS = [
 
 def _report_for(rows):
     def generate(instance, **overrides):
-        return {"report": rows, "stacked_report": [], "signposts": []}
+        # A ranged read is the rows after the leading signpost, ids unchanged, as
+        # tt-perf-report numbers a window by CSV position.
+        window = rows[2:] if overrides.get("start_signpost") else rows
+        return {"report": window, "stacked_report": [], "signposts": []}
 
     return generate
 
@@ -726,6 +729,33 @@ class TestTopOpsLink:
         linking.operation_detail(registry, handle, operation_id=2)
 
         generate.assert_called_once()
+
+    def test_a_ranged_row_keeps_the_operation_id_it_has_unranged(self, linked):
+        """The link is matched against the whole report; a window only narrows
+        the ranked rows (#2122)."""
+        registry, handle, _ = linked()
+
+        whole = linking.top_ops(registry, handle)
+        ranged = linking.top_ops(registry, handle, start_signpost="signpost-start")
+
+        whole_ids = {row["id"]: row["operation_id"] for row in whole["ops"]}
+        ranged_ids = {row["id"]: row["operation_id"] for row in ranged["ops"]}
+        assert ranged_ids == {"4": None, "5": 3}
+        assert all(whole_ids[row_id] == ranged_ids[row_id] for row_id in ranged_ids)
+
+    def test_a_ranged_link_says_its_counts_are_the_whole_reports(self, linked):
+        registry, handle, _ = linked()
+
+        whole = linking.top_ops(registry, handle)["operation_link"]
+        ranged = linking.top_ops(registry, handle, start_signpost="signpost-start")[
+            "operation_link"
+        ]
+
+        assert "scope" not in whole
+        assert ranged["scope"] == "whole_report"
+        assert linking.RANGED_LINK_NOTE in ranged["note"]
+        assert ranged["matched_rows"] == whole["matched_rows"]
+        assert ranged["unlinked_by_reason"] == whole["unlinked_by_reason"]
 
     def test_the_canonical_projection_still_keeps_host_ops(self, linked):
         registry, handle, _ = linked()

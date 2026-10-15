@@ -15,6 +15,7 @@ import logging
 import math
 import sys
 from collections import defaultdict
+from dataclasses import dataclass
 from typing import Dict, List, Optional
 
 from ttnn_visualizer.agent.bounds import bounded
@@ -34,14 +35,18 @@ logger = logging.getLogger(__name__)
 # an agent unannounced they produce confident reasoning over a partial set,
 # which is how #1883 lost six features to a filtered link status.
 #
-# So nothing here drops a row. Host ops stay in, and `print_signposts` is true
-# because the name understates it: `filter_by_signpost` drops the signpost rows
-# themselves when it is false, rather than only omitting them from a printout
-# (`perf_report.py:480`). It is inert on this path today -- passing no signpost
-# range means `ignore_signposts`, which returns the frame before the strip can
-# run -- but a projection that exists to not filter should not declare a filter
-# it would honour the moment a tool took a range. Rows carry `op_type`, so an
-# agent can tell a marker from an operation.
+# So nothing here drops a row unless asked. Host ops stay in, and
+# `print_signposts` is true because the name understates it: `filter_by_signpost`
+# drops the signpost rows themselves when it is false, rather than only omitting
+# them from a printout. With no range it is inert -- no range means
+# `ignore_signposts`, which returns the frame before the strip can run. With a
+# range (#2122) it keeps the signposts inside the window; the two that bound it
+# are excluded by tt-perf-report itself, which keeps rows strictly after the
+# start and strictly before the end. Rows carry `op_type`, so an agent can tell
+# a marker from an operation.
+#
+# A range is not part of this projection: the operation link is matched against
+# the whole report, so a range is passed per call and echoed by `projection`.
 #
 # `merge_devices` is the one filter kept, and deliberately: unmerged rows report
 # the same op once per device, so a merged row is the unit an op is reported in
@@ -97,9 +102,77 @@ def _rounded(value: Optional[float]) -> Optional[float]:
     return None if value is None else round(value, 3)
 
 
-def canonical_report(registry: ReportRegistry, handle: str) -> Dict:
-    """One generated report per handle; see `ReportRegistry.cached_report`."""
-    return registry.cached_report(handle, _generate_canonical_report)
+@dataclass(frozen=True)
+class SignpostRange:
+    """A window of the report, bounded as `tt-perf-report --start-signpost` bounds it.
+
+    The bounds are passed to tt-perf-report rather than cut from the whole
+    snapshot: it recomputes `Total %` and the first op-to-op gap over the window,
+    and a cut snapshot would disagree with the signposted run an agent is
+    checking against. Row ids are CSV positions either way, so a windowed row
+    keeps the id the whole report gives it. #2122
+    """
+
+    start: Optional[str]
+    end: Optional[str]
+
+    @classmethod
+    def of(
+        cls, start: Optional[str] = None, end: Optional[str] = None
+    ) -> Optional["SignpostRange"]:
+        """The range asked for, or None for none.
+
+        An empty name is no bound, as `check_signpost_range` reads it, so it must
+        not key a second snapshot of the same whole report.
+        """
+        start, end = start or None, end or None
+        if start is None and end is None:
+            return None
+        return cls(start, end)
+
+    def as_overrides(self) -> Dict[str, object]:
+        return {"start_signpost": self.start, "end_signpost": self.end}
+
+
+def canonical_report(
+    registry: ReportRegistry, handle: str, signposts: Optional[SignpostRange] = None
+) -> Dict:
+    """One generated report per handle and range; see `ReportRegistry.cached_report`.
+
+    A refused range raises `InvalidSignpostRange`, a `ValueError`, and is not
+    cached.
+    """
+    if signposts is None:
+        return registry.cached_report(handle, _generate_canonical_report)
+    return registry.cached_report(
+        handle,
+        lambda instance: _generate_canonical_report(
+            instance, **signposts.as_overrides()
+        ),
+        scope=signposts,
+    )
+
+
+def projection(
+    signposts: Optional[SignpostRange], range_ignored: bool = False
+) -> Dict[str, object]:
+    """The projection a response read through, including any range it was asked.
+
+    `signpost_range_ignored` is true when the report holds no signposts, which
+    tt-perf-report answers with the whole file: the rows are then not the window
+    the range names.
+    """
+    result: Dict[str, object] = dict(CANONICAL_PROJECTION)
+    if signposts is not None:
+        result.update(
+            {
+                "start_signpost": signposts.start,
+                "end_signpost": signposts.end,
+                "boundary_signposts_included": False,
+                "signpost_range_ignored": range_ignored,
+            }
+        )
+    return result
 
 
 def _generate_canonical_report(instance: Instance, **overrides: object) -> Dict:
@@ -173,6 +246,8 @@ def top_ops(
     handle: str,
     by: str = "device_time",
     limit: Optional[int] = None,
+    start_signpost: Optional[str] = None,
+    end_signpost: Optional[str] = None,
 ) -> Dict[str, object]:
     """The costliest ops by one metric, with the projection that produced them."""
     if by not in SORTABLE_METRICS:
@@ -180,7 +255,9 @@ def top_ops(
             f"unknown metric {by!r}; expected one of {', '.join(sorted(SORTABLE_METRICS))}"
         )
 
-    rows = canonical_report(registry, handle).get("report", [])
+    signposts = SignpostRange.of(start_signpost, end_signpost)
+    report = canonical_report(registry, handle, signposts)
+    rows = report.get("report", [])
     field = SORTABLE_METRICS[by]
 
     ranked = sorted(
@@ -208,7 +285,7 @@ def top_ops(
         "op_count": len(rows),
         "returned": len(ops),
         "ops": ops,
-        "projection": dict(CANONICAL_PROJECTION),
+        "projection": projection(signposts, bool(report.get("signpost_range_ignored"))),
     }
     if by in ADDITIVE_METRICS:
         result[f"{by}_total"] = round(total, 3)
@@ -288,12 +365,17 @@ def diff_reports(
     handle_b: str,
     by: str = "device_time",
     limit: Optional[int] = None,
+    start_signpost: Optional[str] = None,
+    end_signpost: Optional[str] = None,
 ) -> Dict[str, object]:
     """Per-op-code deltas between two reports.
 
     Aggregated by op code rather than joined on op id: the question is "did my
     change help", and a change that adds or reorders ops shifts every id after
     it, so an id join would report a diff for ops that did not change.
+
+    One range applies to both reports, which is the before-and-after case: the
+    same signposts in two runs.
     """
     if by not in SORTABLE_METRICS:
         raise ValueError(
@@ -313,10 +395,27 @@ def diff_reports(
         )
     field = SORTABLE_METRICS[by]
 
+    signposts = SignpostRange.of(start_signpost, end_signpost)
+    report_a = canonical_report(registry, handle_a, signposts)
+    report_b = canonical_report(registry, handle_b, signposts)
+    ignored_a = bool(report_a.get("signpost_range_ignored"))
+    ignored_b = bool(report_b.get("signpost_range_ignored"))
+    # Refused rather than caveated: a window compared against a whole report
+    # reports every row outside the window as a change, and this is the response
+    # most likely to be acted on. Both sides ignoring it compares like with like.
+    if ignored_a != ignored_b:
+        unsignposted = handle_a if ignored_a else handle_b
+        raise ValueError(
+            f"{unsignposted!r} holds no signposts, so the range would read it whole "
+            "while the other report is read as a window, and every row outside the "
+            "window would show as a change. Diff without a range, or against a "
+            "capture with the same signposts."
+        )
+
     sub_devices: set = set()
 
-    def totals_by_op_code(handle: str) -> Dict[str, Dict[str, float]]:
-        rows = canonical_report(registry, handle).get("report", [])
+    def totals_by_op_code(report: Dict) -> Dict[str, Dict[str, float]]:
+        rows = report.get("report", [])
         sub_devices.update(_sub_devices(rows))
         totals: Dict[str, Dict[str, float]] = defaultdict(
             lambda: {"total": 0.0, "count": 0.0}
@@ -332,8 +431,8 @@ def diff_reports(
             totals[op_code]["count"] += 1
         return totals
 
-    before = totals_by_op_code(handle_a)
-    after = totals_by_op_code(handle_b)
+    before = totals_by_op_code(report_a)
+    after = totals_by_op_code(report_b)
 
     changes = []
     for op_code in set(before) | set(after):
@@ -361,7 +460,7 @@ def diff_reports(
         "after": handle_b,
         "returned": min(len(changes), bounded(limit)),
         "changes": changes[: bounded(limit)],
-        "projection": dict(CANONICAL_PROJECTION),
+        "projection": projection(signposts, ignored_a and ignored_b),
         "grouped_by": "op_code",
     }
     result["delta_total"] = round(
@@ -389,11 +488,13 @@ def _stderr_log() -> None:
 __all__ = [
     "CANONICAL_PROJECTION",
     "SORTABLE_METRICS",
+    "SignpostRange",
     "canonical_report",
     "countable_device_time",
     "diff_reports",
     "partitioned_caveat",
     "project_row",
+    "projection",
     "top_ops",
     "zone_timings",
 ]

@@ -625,15 +625,37 @@ TOP_OPS_LINK_NOTE = (
     "first_past_profiler_capture_id names the first row past the profiler capture."
 )
 
+# What a signpost range does not narrow. The link is matched against the whole
+# report, because alignment is positional and a window would start it mid-run.
+RANGED_LINK_NOTE = (
+    "A signpost range narrows the ranked rows only: operation_id and every count "
+    "in operation_link are from the whole report, so a row's operation_id is the "
+    "one it has unranged, and matched_rows and unlinked_by_reason count rows "
+    "outside the window too."
+)
+
 
 def top_ops(
     registry: ReportRegistry,
     handle: str,
     by: str = "device_time",
     limit: Optional[int] = None,
+    start_signpost: Optional[str] = None,
+    end_signpost: Optional[str] = None,
 ) -> Dict[str, object]:
-    """`tools.top_ops`, with each row's profiler operation id where one is known."""
-    result = tools.top_ops(registry, handle, by=by, limit=limit)
+    """`tools.top_ops`, with each row's profiler operation id where one is known.
+
+    Ids are CSV positions in a ranged report as in the whole one, so the
+    whole-report link answers a windowed row too.
+    """
+    result = tools.top_ops(
+        registry,
+        handle,
+        by=by,
+        limit=limit,
+        start_signpost=start_signpost,
+        end_signpost=end_signpost,
+    )
     link = operation_link(registry, handle)
     ops = result.get("ops")
     for row in ops if isinstance(ops, list) else []:
@@ -642,6 +664,9 @@ def top_ops(
     # Only a handle with a profiler report has an operation_id worth explaining.
     if registry.get(handle).profiler_path:
         response["note"] = TOP_OPS_LINK_NOTE
+        if tools.SignpostRange.of(start_signpost, end_signpost) is not None:
+            response["scope"] = "whole_report"
+            response["note"] = f"{TOP_OPS_LINK_NOTE} {RANGED_LINK_NOTE}"
     if link.status is LinkStatus.LINKED and link.unlinked is not None:
         response["unlinked_row_count"] = link.unlinked.total
         response["unlinked_by_reason"] = link.unlinked.by_reason

@@ -38,7 +38,7 @@ from ttnn_visualizer.event_logging import (
     McpToolOutcome,
     get_application_version,
 )
-from ttnn_visualizer.exceptions import DataFormatError
+from ttnn_visualizer.exceptions import DataFormatError, InvalidSignpostRange
 from ttnn_visualizer.models import Instance
 from ttnn_visualizer.tests.event_log_readers import (
     parse_event_log_line,
@@ -82,8 +82,13 @@ UNTYPED_ROWS = [
 ]
 
 
-def _perf_report(rows):
-    return {"report": rows, "stacked_report": [], "signposts": []}
+def _perf_report(rows, signpost_range_ignored=False):
+    return {
+        "report": rows,
+        "stacked_report": [],
+        "signposts": [],
+        "signpost_range_ignored": signpost_range_ignored,
+    }
 
 
 def _row(**overrides):
@@ -246,10 +251,11 @@ class TestTopOps:
     def test_the_projection_declares_no_filter(self, tmp_path):
         """`print_signposts` drops rows rather than only omitting a printout.
 
-        It is inert while no tool passes a signpost range — `ignore_signposts`
-        returns the frame before the strip runs — so this pins the declaration
-        rather than an observable difference: a projection that exists to not
-        filter should not carry a filter it would honour if a range arrived.
+        Unranged it is inert — `ignore_signposts` returns the frame before the
+        strip runs — and ranged it keeps the signposts inside the window, so a
+        projection that exists to not filter must keep declaring it true. A range
+        is per call and stays out of this constant: the operation link is matched
+        against the whole report (#2122).
         """
         assert tools.CANONICAL_PROJECTION == {
             "hide_host_ops": False,
@@ -298,6 +304,105 @@ class TestTopOps:
             tools.top_ops(registry, "report-1", limit=5)
 
         generate.assert_called_once()
+
+    def test_a_range_reaches_the_generator_and_is_echoed(self, tmp_path):
+        """The window is tt-perf-report's, not a cut of the whole snapshot (#2122)."""
+        registry = self._registry(tmp_path)
+        with patch.object(
+            tools, "_generate_canonical_report", return_value=_perf_report([_row()])
+        ) as generate:
+            result = tools.top_ops(
+                registry,
+                "report-1",
+                start_signpost="PERF_DECODE",
+                end_signpost="PERF_DECODE_END",
+            )
+
+        _, overrides = generate.call_args
+        assert overrides == {
+            "start_signpost": "PERF_DECODE",
+            "end_signpost": "PERF_DECODE_END",
+        }
+        assert result["projection"] == {
+            **tools.CANONICAL_PROJECTION,
+            "start_signpost": "PERF_DECODE",
+            "end_signpost": "PERF_DECODE_END",
+            "boundary_signposts_included": False,
+            "signpost_range_ignored": False,
+        }
+
+    def test_an_unranged_projection_names_no_range(self, tmp_path):
+        registry = self._registry(tmp_path)
+        with patch.object(
+            tools, "_generate_canonical_report", return_value=_perf_report([_row()])
+        ):
+            result = tools.top_ops(registry, "report-1")
+
+        assert result["projection"] == tools.CANONICAL_PROJECTION
+
+    def test_a_range_on_a_report_without_signposts_says_it_was_ignored(self, tmp_path):
+        registry = self._registry(tmp_path)
+        with patch.object(
+            tools,
+            "_generate_canonical_report",
+            return_value=_perf_report([_row()], signpost_range_ignored=True),
+        ):
+            result = tools.top_ops(registry, "report-1", start_signpost="PERF_START")
+
+        assert result["projection"]["signpost_range_ignored"] is True
+
+    def test_each_range_is_kept_apart_from_the_whole_report(self, tmp_path):
+        """A window served from the whole snapshot, or the reverse, is a wrong answer
+        that looks right; each read is generated once and kept under its range."""
+        registry = self._registry(tmp_path)
+        whole = _perf_report([_row(id="1"), _row(id="2")])
+        window = _perf_report([_row(id="2")])
+
+        def generate_for(_instance, **overrides):
+            return window if overrides.get("start_signpost") else whole
+
+        with patch.object(
+            tools, "_generate_canonical_report", side_effect=generate_for
+        ) as generate:
+            first_whole = tools.top_ops(registry, "report-1")
+            first_window = tools.top_ops(registry, "report-1", start_signpost="A")
+            again_whole = tools.top_ops(registry, "report-1", by="op_to_op_gap")
+            again_window = tools.top_ops(registry, "report-1", start_signpost="A")
+
+        assert generate.call_count == 2
+        assert first_whole["op_count"] == again_whole["op_count"] == 2
+        assert first_window["op_count"] == again_window["op_count"] == 1
+
+    def test_an_empty_signpost_name_is_no_range(self, tmp_path):
+        """`check_signpost_range` reads an empty name as no bound, so it must not
+        generate a second copy of the whole report."""
+        registry = self._registry(tmp_path)
+        with patch.object(
+            tools, "_generate_canonical_report", return_value=_perf_report([_row()])
+        ) as generate:
+            tools.top_ops(registry, "report-1")
+            result = tools.top_ops(
+                registry, "report-1", start_signpost="", end_signpost=""
+            )
+
+        generate.assert_called_once()
+        assert result["projection"] == tools.CANONICAL_PROJECTION
+
+    def test_a_refused_range_is_raised_and_not_kept(self, tmp_path):
+        registry = self._registry(tmp_path)
+        with patch.object(
+            tools,
+            "_generate_canonical_report",
+            side_effect=[
+                InvalidSignpostRange("no signpost named 'TYPO'"),
+                _perf_report([_row()]),
+            ],
+        ) as generate:
+            with pytest.raises(ValueError, match="no signpost named 'TYPO'"):
+                tools.top_ops(registry, "report-1", start_signpost="TYPO")
+            tools.top_ops(registry, "report-1", start_signpost="TYPO")
+
+        assert generate.call_count == 2
 
     def test_only_additive_metrics_get_a_total(self, tmp_path):
         """`dram` is GB/s and `cores` is a per-op allocation.
@@ -435,6 +540,95 @@ class TestPartitionCaveatEndToEnd:
         assert "2 sub-devices" in diff["caveat"]
 
 
+class TestSignpostRangeEndToEnd:
+    """A range through the real generator (#2122).
+
+    No demo or fixture capture holds signposts, so two are inserted into the
+    smoke capture, as `test_perf_report_signpost_range` does for the HTTP route.
+    """
+
+    SMOKE_CAPTURE = Path("scripts/fixtures/smoke-performance-report")
+
+    def _handle(self, registry, tmp_path):
+        import csv
+
+        source = self.SMOKE_CAPTURE / "ops_perf_results.csv"
+        if not source.is_file():
+            pytest.skip(f"{source} is not present")
+        rows = list(csv.DictReader(source.open()))
+        # Data positions after insertion: START at 4, END at 13, so the window
+        # holds positions 5-12 -- ids 7-14, ids counting the header and from 1.
+        for position, name in ((4, "PERF_START"), (13, "PERF_END")):
+            rows.insert(
+                position, {**rows[position], "OP CODE": name, "OP TYPE": "signpost"}
+            )
+        destination = tmp_path / "signposted"
+        destination.mkdir()
+        with (destination / "ops_perf_results.csv").open("w", newline="") as out:
+            writer = csv.DictWriter(out, fieldnames=list(rows[0].keys()))
+            writer.writeheader()
+            writer.writerows(rows)
+        return load_report(registry, performance_path=str(destination))["handle"]
+
+    def _ranged(self, registry, handle, **overrides):
+        return tools.top_ops(
+            registry,
+            handle,
+            by="total_percent",
+            limit=MAX_LIMIT,
+            **{"start_signpost": "PERF_START", "end_signpost": "PERF_END", **overrides},
+        )
+
+    def test_the_window_holds_the_rows_between_the_signposts_and_no_other(
+        self, tmp_path
+    ):
+        registry = ReportRegistry()
+        handle = self._handle(registry, tmp_path)
+
+        whole = tools.top_ops(registry, handle, limit=MAX_LIMIT)
+        ranged = self._ranged(registry, handle)
+
+        ranged_ids = {int(op["id"]) for op in ranged["ops"]}
+        whole_ids = {int(op["id"]) for op in whole["ops"]}
+        window = set(range(7, 15))
+        assert ranged_ids == whole_ids & window
+        assert ranged_ids
+        assert ranged["op_count"] < whole["op_count"]
+        # The bounding signposts are tt-perf-report's to exclude, not this tool's.
+        assert not any(op["op_type"] == "signpost" for op in ranged["ops"])
+
+    def test_total_percent_is_recomputed_over_the_window(self, tmp_path):
+        """What a cut of the whole snapshot would get wrong, and why it regenerates."""
+        registry = ReportRegistry()
+        handle = self._handle(registry, tmp_path)
+
+        whole = tools.top_ops(registry, handle, by="total_percent", limit=MAX_LIMIT)
+        ranged = self._ranged(registry, handle)
+
+        window_ids = {op["id"] for op in ranged["ops"]}
+        cut_from_whole = sum(
+            op["total_percent"] for op in whole["ops"] if op["id"] in window_ids
+        )
+        assert ranged["total_percent_total"] == pytest.approx(100.0, abs=0.5)
+        assert cut_from_whole < ranged["total_percent_total"] - 1
+
+    def test_a_name_the_report_lacks_is_refused(self, tmp_path):
+        registry = ReportRegistry()
+        handle = self._handle(registry, tmp_path)
+
+        with pytest.raises(ValueError, match="no signpost named 'PERF_TYPO'"):
+            self._ranged(registry, handle, start_signpost="PERF_TYPO")
+
+    def test_an_end_before_the_start_is_refused(self, tmp_path):
+        registry = ReportRegistry()
+        handle = self._handle(registry, tmp_path)
+
+        with pytest.raises(ValueError, match="before start signpost"):
+            self._ranged(
+                registry, handle, start_signpost="PERF_END", end_signpost="PERF_START"
+            )
+
+
 class TestDiffReports:
     def _two_reports(self, tmp_path):
         registry = ReportRegistry()
@@ -444,6 +638,59 @@ class TestDiffReports:
             write_device_log(directory, MODERN_HEADER, [])
             load_report(registry, performance_path=str(directory))
         return registry
+
+    def test_one_range_applies_to_both_reports(self, tmp_path):
+        registry = self._two_reports(tmp_path)
+        with patch.object(
+            tools,
+            "_generate_canonical_report",
+            side_effect=[_perf_report([_row()]), _perf_report([_row()])],
+        ) as generate:
+            diff = tools.diff_reports(
+                registry,
+                "report-1",
+                "report-2",
+                start_signpost="PERF_DECODE",
+                end_signpost="PERF_DECODE_END",
+            )
+
+        assert [call.kwargs for call in generate.call_args_list] == [
+            {"start_signpost": "PERF_DECODE", "end_signpost": "PERF_DECODE_END"}
+        ] * 2
+        assert diff["projection"]["start_signpost"] == "PERF_DECODE"
+        assert diff["projection"]["signpost_range_ignored"] is False
+
+    @pytest.mark.parametrize("ignored_side", ["report-1", "report-2"])
+    def test_a_range_only_one_report_can_honour_is_refused(
+        self, tmp_path, ignored_side
+    ):
+        """A window against a whole report reports every row outside the window
+        as a change: an apparent regression, or win, made of rows."""
+        registry = self._two_reports(tmp_path)
+        reports = [
+            _perf_report([_row()], signpost_range_ignored=handle == ignored_side)
+            for handle in ("report-1", "report-2")
+        ]
+        with patch.object(tools, "_generate_canonical_report", side_effect=reports):
+            with pytest.raises(
+                ValueError, match=f"{ignored_side!r} holds no signposts"
+            ):
+                tools.diff_reports(
+                    registry, "report-1", "report-2", start_signpost="PERF_START"
+                )
+
+    def test_a_range_neither_report_can_honour_is_answered_and_flagged(self, tmp_path):
+        registry = self._two_reports(tmp_path)
+        reports = [
+            _perf_report([_row()], signpost_range_ignored=True),
+            _perf_report([_row()], signpost_range_ignored=True),
+        ]
+        with patch.object(tools, "_generate_canonical_report", side_effect=reports):
+            diff = tools.diff_reports(
+                registry, "report-1", "report-2", start_signpost="PERF_START"
+            )
+
+        assert diff["projection"]["signpost_range_ignored"] is True
 
     def test_identical_reports_diff_to_zero(self, tmp_path):
         registry = self._two_reports(tmp_path)
@@ -814,6 +1061,36 @@ class TestTransport:
         assert response["result"]["isError"] is True
         assert "unknown handle" in response["result"]["content"][0]["text"]
         assert "error" not in response
+
+    def test_a_refused_signpost_range_comes_back_as_content(self, tmp_path):
+        """`InvalidSignpostRange` is a `ValueError`, so the model reads why."""
+        registry = ReportRegistry()
+        write_device_log(tmp_path, MODERN_HEADER, [])
+        load_report(registry, performance_path=str(tmp_path))
+        with (
+            patch.object(
+                tools,
+                "_generate_canonical_report",
+                side_effect=InvalidSignpostRange("no signpost named 'TYPO'"),
+            ),
+            patch.object(server, "record_event") as record,
+        ):
+            response = server.handle_message(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 2,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "top_ops",
+                        "arguments": {"handle": "report-1", "start_signpost": "TYPO"},
+                    },
+                },
+                server._tool_table(registry),
+            )
+
+        assert response["result"]["isError"] is True
+        assert "no signpost named 'TYPO'" in response["result"]["content"][0]["text"]
+        assert record.call_args.kwargs["outcome"] is McpToolOutcome.REFUSED
 
     @pytest.mark.parametrize("frame", ["[]", "null", "7", '"text"'])
     def test_a_non_object_frame_is_refused_rather_than_fatal(self, frame):

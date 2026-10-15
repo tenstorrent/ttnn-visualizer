@@ -15,7 +15,7 @@ answer; that is the capture, not the app's session.) #1995
 import sqlite3
 from enum import Enum
 from pathlib import Path
-from typing import Callable, Dict, List, Optional, Tuple, TypeVar, cast
+from typing import Callable, Dict, Hashable, List, Optional, Tuple, TypeVar, cast
 
 from ttnn_visualizer.csv_queries import (
     DeviceLogProfilerQueries,
@@ -52,7 +52,7 @@ class ReportRegistry:
 
     def __init__(self) -> None:
         self._instances: Dict[str, Instance] = {}
-        self._reports: Dict[Tuple[str, CacheVariant], object] = {}
+        self._reports: Dict[Tuple[str, CacheVariant, Hashable], object] = {}
         self._next_id = 1
 
     def add(self, profiler_path: Optional[str], performance_path: Optional[str]) -> str:
@@ -79,8 +79,9 @@ class ReportRegistry:
         handle: str,
         build: Callable[[Instance], Cached],
         variant: CacheVariant = CacheVariant.CANONICAL_REPORT,
+        scope: Hashable = None,
     ) -> Cached:
-        """Keep one report snapshot per handle and variant.
+        """Keep one report snapshot per handle, variant and scope.
 
         `generate_report` re-parses the CSV, shells through tt-perf-report and
         writes three temp files; an agent asking four questions of one report
@@ -94,8 +95,14 @@ class ReportRegistry:
         `variant` keeps what is derived from the report apart from the report
         itself: the operation link reads every captured graph, so it is resolved
         once per handle beside the snapshot it was matched against.
+
+        `scope` keeps a narrowed read of the same report apart from the whole one:
+        a signpost range is regenerated rather than cut from the whole snapshot,
+        because tt-perf-report recomputes `Total %` and the first op-to-op gap over
+        the window. Each distinct range an agent asks for is kept for the
+        registry's lifetime, which an agent's handful of ranges keeps small.
         """
-        key = (handle, variant)
+        key = (handle, variant, scope)
         if key not in self._reports:
             self._reports[key] = build(self.get(handle))
         # Each variant has one builder, so the key fixes the type it stored.

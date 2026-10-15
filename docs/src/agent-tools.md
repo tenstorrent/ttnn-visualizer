@@ -114,6 +114,27 @@ operations by default and can narrow to a signpost range. Those are display choi
 agent handed them unannounced would reason confidently about a partial set. The tools read
 the report with host operations included, signpost markers kept, and no signpost range.
 
+A range is read only when you ask for one. `top_ops` and `diff_reports` take
+`start_signpost` and `end_signpost`, the bounds `tt-perf-report --start-signpost` and
+`--end-signpost` take, so a bring-up run measured over `PERF_DECODE` to `PERF_DECODE_END`
+can be checked against the same window. They are resolved the way tt-perf-report resolves
+them: a name means its earliest occurrence by host start time, and an end that names the
+start signpost too means its second occurrence. The window holds the rows strictly between
+the two, so the bounding signposts are left out and any signposts inside it are kept.
+tt-perf-report recomputes `total_percent` over the window, and the first operation's
+op-to-op gap is measured from inside it, so a ranged answer is not the whole-report answer
+cut down — it is what the signposted run reports.
+
+A range the report cannot honour is refused rather than answered from other rows: a name
+the report does not hold (the refusal lists the names it does), one name for both bounds
+when it occurs only once, or an end that falls before the start. A report with no
+signposts at all is read whole, because tt-perf-report then uses the whole file rather than
+some other window, and the response's `projection` says so with `signpost_range_ignored`.
+Every ranged response's `projection` names the range, so a windowed answer cannot be taken
+for a whole-report one. `diff_reports` applies one range to both reports, and refuses when
+only one of them holds signposts: a window compared against a whole report would show every
+row outside the window as a change.
+
 One filter is applied, deliberately: per-device rows are **merged**, so an operation that
 ran on eight devices is one row rather than eight. That is the unit an operation is
 reported in rather than a subset of the report — but it is a choice, so every response
@@ -254,6 +275,13 @@ the first row past the profiler capture in `first_past_profiler_capture_id`. Rea
 counts there rather than counting null ids among the ranked rows: the ranking leaves out
 any row with no value for its metric, which is every signpost, so `matched_rows` and the
 rows returned do not add up to the report.
+
+A signpost range narrows the ranked rows and nothing else. The link is matched against the
+whole report, since alignment is by order and a window would start it mid-run; a row's id is
+its CSV position in either read, so its `operation_id` is the one it has unranged. Its
+`operation_link` then carries `scope: whole_report`, because every count in it, and
+`operation_detail`'s `report_device_time_total` and shares, describe the whole report while
+`top_ops`'s own `op_count` and totals describe the window.
 
 The link is resolved once per handle, on the first `top_ops` or `operation_detail` that
 needs it, and reads every captured graph at the linked rank. On a handle with both
