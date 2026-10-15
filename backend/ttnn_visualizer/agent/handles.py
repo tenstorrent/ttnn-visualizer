@@ -43,11 +43,13 @@ class CacheVariant(str, Enum):
 
 
 # Snapshots narrowed by a scope -- a signpost range -- kept at once, across every
-# handle. Each is a full generated report, and an agent walking per-layer
-# signposts asks for many, so they are evicted least recently used rather than
-# pinned; an evicted range costs one regeneration. Two handles in `diff_reports`
-# with one range need two, so this leaves room for a few such pairs.
-MAX_SCOPED_REPORTS = 8
+# handle. Each is a generated report of up to a whole report's rows, and an agent
+# walking per-layer signposts asks for many, so they are evicted least recently
+# used rather than pinned; an evicted range costs one regeneration, which the
+# process-wide cache underneath may still answer. Two is one `diff_reports` pair:
+# these are references the registry holds past that cache's own eviction, so
+# more would keep alive memory `MAX_CACHED_PERFORMANCE_REPORTS` budgets against.
+MAX_SCOPED_REPORTS = 2
 
 
 class UnknownHandleError(ValueError):

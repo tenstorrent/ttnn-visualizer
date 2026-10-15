@@ -1050,14 +1050,7 @@ class OpsPerformanceReportQueries:
         # Resolved before generating, so a range tt-perf-report would answer from
         # other rows is refused without running it, and the `signposts` list below
         # offers only ranges this accepts.
-        try:
-            resolved_signposts = resolve_signposts(csv_file, options.tracing_mode)
-        # `EmptyDataError` and `ParserError` are both `ValueError`s: a ragged or
-        # truncated capture is the caller's data, answered as such rather than a 500.
-        except ValueError as error:
-            raise DataFormatError(
-                f"could not read the report's signposts: {error}"
-            ) from error
+        resolved_signposts = read_signposts(csv_file, options.tracing_mode)
         check_signpost_range(
             resolved_signposts, options.start_signpost, options.end_signpost
         )
@@ -1345,6 +1338,22 @@ def resolve_signposts(
             positions_by_name[str(name)].append(int(position))
 
     return ResolvedSignposts(dict(positions_by_name), sorted_by_host_time)
+
+
+def read_signposts(csv_file: IO[str], tracing_mode: bool = False) -> ResolvedSignposts:
+    """`resolve_signposts`, with an unreadable capture answered as the caller's data.
+
+    `EmptyDataError` and `ParserError` are both `ValueError`s: a ragged or
+    truncated capture is the caller's data, answered as such rather than a 500.
+    Shared by the report route and the agent tools, so a bad capture reads the
+    same through either.
+    """
+    try:
+        return resolve_signposts(csv_file, tracing_mode)
+    except ValueError as error:
+        raise DataFormatError(
+            f"could not read the report's signposts: {error}"
+        ) from error
 
 
 def signpost_range_ignored(

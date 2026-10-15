@@ -25,9 +25,9 @@ from ttnn_visualizer.csv_queries import (
     OpsPerformanceQueries,
     OpsPerformanceReportQueries,
     ResolvedSignposts,
-    resolve_signposts,
+    read_signposts,
+    signpost_range_ignored,
 )
-from ttnn_visualizer.exceptions import DataFormatError
 from ttnn_visualizer.models import Instance
 
 logger = logging.getLogger(__name__)
@@ -159,7 +159,7 @@ def canonical_report(
     once per name asked would cache an identical copy for each. A refused range
     raises `InvalidSignpostRange`, a `ValueError`, and is not cached.
     """
-    ignored = signposts is not None and not has_signposts(registry, handle)
+    ignored = range_ignored(registry, handle, signposts)
     scope = None if ignored else signposts
     overrides = scope.as_overrides() if scope is not None else {}
     report = registry.cached_report(
@@ -170,32 +170,30 @@ def canonical_report(
     return {**report, "signpost_range_ignored": True} if ignored else report
 
 
-def has_signposts(registry: ReportRegistry, handle: str) -> bool:
-    """Whether the handle's performance CSV holds a named signpost a range can use.
+def range_ignored(
+    registry: ReportRegistry, handle: str, signposts: Optional[SignpostRange]
+) -> bool:
+    """Whether tt-perf-report would read the whole file for this range.
 
-    Read once per handle, three columns, without generating a report -- the same
-    test `signpost_range_ignored` applies after generating one.
+    `signpost_range_ignored` itself, asked before generating rather than after:
+    the handle's signposts are read once, three columns, without a report.
     """
+    if signposts is None:
+        return False
     resolved = registry.cached_report(
         handle, _resolve_signposts, variant=CacheVariant.SIGNPOSTS
     )
-    return bool(resolved.positions_by_name)
+    return signpost_range_ignored(resolved, signposts.start, signposts.end)
 
 
 def _resolve_signposts(instance: Instance) -> ResolvedSignposts:
     path = OpsPerformanceQueries.get_local_ops_perf_file_path(instance)
-    try:
-        with open(path, newline="") as csv_file:
-            return resolve_signposts(csv_file)
-    # As `generate_report` answers it: a ragged capture is the caller's data.
-    except ValueError as error:
-        raise DataFormatError(
-            f"could not read the report's signposts: {error}"
-        ) from error
+    with open(path, newline="") as csv_file:
+        return read_signposts(csv_file)
 
 
 def projection(
-    signposts: Optional[SignpostRange], range_ignored: bool = False
+    signposts: Optional[SignpostRange], ignored: bool = False
 ) -> Dict[str, object]:
     """The projection a response read through, including any range it was asked.
 
@@ -210,7 +208,7 @@ def projection(
                 "start_signpost": signposts.start,
                 "end_signpost": signposts.end,
                 "boundary_signposts_included": False,
-                "signpost_range_ignored": range_ignored,
+                "signpost_range_ignored": ignored,
             }
         )
     return result
@@ -437,8 +435,8 @@ def diff_reports(
     field = SORTABLE_METRICS[by]
 
     signposts = SignpostRange.of(start_signpost, end_signpost)
-    ignored_a = signposts is not None and not has_signposts(registry, handle_a)
-    ignored_b = signposts is not None and not has_signposts(registry, handle_b)
+    ignored_a = range_ignored(registry, handle_a, signposts)
+    ignored_b = range_ignored(registry, handle_b, signposts)
     # Refused rather than caveated: a window compared against a whole report
     # reports every row outside the window as a change, and this is the response
     # most likely to be acted on. Both sides ignoring it compares like with like.
@@ -535,10 +533,10 @@ __all__ = [
     "canonical_report",
     "countable_device_time",
     "diff_reports",
-    "has_signposts",
     "partitioned_caveat",
     "project_row",
     "projection",
+    "range_ignored",
     "top_ops",
     "zone_timings",
 ]

@@ -50,6 +50,7 @@ from ttnn_visualizer.tests.smoke_capture import (
     SMOKE_CAPTURE_DIR,
     signpost,
     signposted_rows,
+    smoke_rows,
     write_ops_perf,
 )
 from ttnn_visualizer.tests.test_device_log_columns import (
@@ -116,7 +117,7 @@ def _row(**overrides):
 def _signposts_in(*handles):
     """Patch the signpost check: the named handles' CSVs hold a signpost, others none.
 
-    The mocked tests write no CSV for `has_signposts` to read.
+    The mocked tests write no CSV for `range_ignored` to read.
     """
 
     def resolve(instance):
@@ -720,6 +721,40 @@ class TestSignpostRangeEndToEnd:
             self._ranged(
                 registry, handle, start_signpost="PERF_END", end_signpost="PERF_START"
             )
+
+    def test_a_range_on_a_capture_without_signposts_is_read_whole(self, tmp_path):
+        """The real signpost read, not a patched one, agrees with tt-perf-report:
+        the unmodified smoke capture has no signposts, so a range reads it whole."""
+        registry = ReportRegistry()
+        handle = self._handle(registry, tmp_path, smoke_rows())
+
+        whole = tools.top_ops(registry, handle, limit=MAX_LIMIT)
+        ranged = tools.top_ops(
+            registry, handle, limit=MAX_LIMIT, start_signpost="PERF_START"
+        )
+
+        assert ranged["projection"]["signpost_range_ignored"] is True
+        assert ranged["op_count"] == whole["op_count"]
+        assert ranged["ops"] == whole["ops"]
+
+    def test_an_unreadable_capture_is_a_data_format_error_on_a_ranged_read(
+        self, tmp_path
+    ):
+        """The signpost read now runs before any report is generated, so it is
+        where a capture pandas cannot tokenise is first met. An unterminated quote
+        fails that read itself; a merely ragged row would not."""
+        directory = tmp_path / "unterminated"
+        directory.mkdir()
+        (directory / "ops_perf_results.csv").write_text(
+            'OP TYPE,OP CODE\nsignpost,"A\n'
+        )
+        registry = ReportRegistry()
+        handle = load_report(registry, performance_path=str(directory))["handle"]
+
+        with pytest.raises(
+            DataFormatError, match="could not read the report's signposts"
+        ):
+            tools.top_ops(registry, handle, start_signpost="A")
 
 
 class TestScopedSnapshots:
