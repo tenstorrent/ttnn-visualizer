@@ -68,6 +68,8 @@ import {
 } from './opGraphPerfOverlay';
 import { EMPTY_CRITICAL_PATH, findCriticalPath } from './opGraphCriticalPath';
 import {
+    NO_SIDE_INSET,
+    type PaneSideInset,
     REVEALED_NODE_CLASS,
     absolutePositionsOf,
     boundsOfNodes,
@@ -326,6 +328,8 @@ const CRITICAL_PATH_CLASS = 'op-graph-critical-path';
 const CRITICAL_PATH_NODE_CLASS = 'op-graph-node-critical-path';
 const CRITICAL_PATH_EDGE_CLASS = 'op-graph-edge-critical-path';
 const DIM_UNRELATED_EDGES_CLASS = 'op-graph-dim-unrelated-edges';
+// The details stretch the side column down the pane; the list alone only takes the height it needs. #2087
+const SIDE_WITH_DETAILS_CLASS = 'op-graph-side-with-details';
 
 interface OperationGraphReactFlowProps {
     operationList: OperationDescription[];
@@ -833,21 +837,34 @@ const OperationGraphInner = ({
 
     // The side column floats over the pane's right edge the same way, and a node the
     // slowest-operations list locates must not land behind the list that located it.
-    const paneSideInset = useCallback((pane: DOMRect): number => {
+    // `sideSpansPane` is for a pan made before the details open and stretch the column.
+    const paneSideInset = useCallback((pane: DOMRect, sideSpansPane = false): PaneSideInset => {
         const side = containerRef.current?.querySelector('.op-graph-side')?.getBoundingClientRect();
-        return side === undefined ? 0 : Math.max(0, pane.right - side.left);
+        if (side === undefined) {
+            return NO_SIDE_INSET;
+        }
+        return {
+            width: Math.max(0, pane.right - side.left),
+            bottom: sideSpansPane ? pane.height : Math.max(0, side.bottom - pane.top),
+        };
     }, []);
 
     // Pans, never zooms, and does nothing when the target is already on screen: the
     // viewport is the user's place in the graph, and only they may change its scale.
     const panIntoView = useCallback(
-        (bounds: { minX: number; minY: number; maxX: number; maxY: number } | null) => {
+        (bounds: { minX: number; minY: number; maxX: number; maxY: number } | null, sideSpansPane = false) => {
             const pane = containerRef.current?.getBoundingClientRect();
             if (bounds === null || pane === undefined) {
                 return;
             }
             const viewport = getViewport();
-            const { dx, dy } = revealPanShift(bounds, viewport, pane, paneChromeInset(pane), paneSideInset(pane));
+            const { dx, dy } = revealPanShift(
+                bounds,
+                viewport,
+                pane,
+                paneChromeInset(pane),
+                paneSideInset(pane, sideSpansPane),
+            );
             if (dx === 0 && dy === 0) {
                 return;
             }
@@ -868,9 +885,9 @@ const OperationGraphInner = ({
     );
 
     const focusOperation = useCallback(
-        (id: number) => {
+        (id: number, sideSpansPane = false) => {
             const node = pannableNodeAt(nodeIdByOperationId.get(id) ?? String(id));
-            panIntoView(node === undefined ? null : boundsOfNodes([node]));
+            panIntoView(node === undefined ? null : boundsOfNodes([node]), sideSpansPane);
         },
         [pannableNodeAt, nodeIdByOperationId, panIntoView],
     );
@@ -888,7 +905,7 @@ const OperationGraphInner = ({
                 return;
             }
             const viewport = getViewport();
-            const { dx, dy } = centerPanShift(bounds, viewport, pane, paneChromeInset(pane), paneSideInset(pane));
+            const { dx, dy } = centerPanShift(bounds, viewport, pane, paneChromeInset(pane), paneSideInset(pane).width);
             void setViewport({ ...viewport, x: viewport.x + dx, y: viewport.y + dy }, { duration: FOCUS_DURATION_MS });
         },
         [pannableNodeAt, nodeIdByOperationId, getViewport, setViewport, paneChromeInset, paneSideInset],
@@ -1260,7 +1277,8 @@ const OperationGraphInner = ({
     const selectOperation = useCallback(
         (id: number) => {
             setSelectedOperationId(id);
-            focusOperation(id);
+            // Measured before the details this opens stretch the side column down the pane.
+            focusOperation(id, true);
         },
         [focusOperation],
     );
@@ -1983,7 +2001,7 @@ const OperationGraphInner = ({
                 </div>
             ) : null}
             {isPanelOpen || isHotOpsVisible ? (
-                <div className='op-graph-side'>
+                <div className={isPanelOpen ? `op-graph-side ${SIDE_WITH_DETAILS_CLASS}` : 'op-graph-side'}>
                     {isHotOpsVisible ? (
                         <OpGraphHotOpsPanel
                             rows={hotOpRows}

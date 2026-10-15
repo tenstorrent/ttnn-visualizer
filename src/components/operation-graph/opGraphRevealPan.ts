@@ -11,9 +11,17 @@
 // is ever marked. #1944
 export const REVEALED_NODE_CLASS = 'op-graph-node-revealed';
 // Keeps a revealed node off the edge of the usable pane, where it reads as clipped.
-// `topInset` and `rightInset` extend that for chrome that floats over the pane rather
+// `topInset` and the side inset extend that for chrome that floats over the pane rather
 // than shrinking it, so a target never lands behind the toolbar or the side column. #2007
 const REVEAL_MARGIN_PX = 48;
+
+/** The side column, as far in from the pane's right edge and down from its top as it reaches. */
+export interface PaneSideInset {
+    width: number;
+    bottom: number;
+}
+
+export const NO_SIDE_INSET: PaneSideInset = { width: 0, bottom: 0 };
 
 /**
  * The smallest pan that brings `bounds` inside the pane, or no pan when it
@@ -29,7 +37,7 @@ export const revealPanShift = (
     viewport: { x: number; y: number; zoom: number },
     pane: { width: number; height: number },
     topInset = 0,
-    rightInset = 0,
+    side: PaneSideInset = NO_SIDE_INSET,
 ): { dx: number; dy: number } => {
     const left = bounds.minX * viewport.zoom + viewport.x;
     const top = bounds.minY * viewport.zoom + viewport.y;
@@ -52,10 +60,12 @@ export const revealPanShift = (
         return 0;
     };
 
-    return {
-        dx: axis(left, right, pane.width, 0, rightInset),
-        dy: axis(top, bottom, pane.height, topInset, 0),
-    };
+    const dy = axis(top, bottom, pane.height, topInset, 0);
+    // The column covers only the band it reaches down to, so a target the vertical
+    // pan leaves below it may use the pane's full width. #2087
+    const rightInset = top + dy >= side.bottom ? 0 : side.width;
+
+    return { dx: axis(left, right, pane.width, 0, rightInset), dy };
 };
 
 /**

@@ -113,6 +113,9 @@ const PANE = { width: 1000, height: 800 };
 const TOOLBAR_HEIGHT = 150;
 // Within the column's `clamp(280px, 26%, 360px)`.
 const SIDE_WIDTH = 300;
+// The list alone sizes the column to its rows; only the details stretch it down the pane. #2087
+const LIST_ONLY_SIDE_HEIGHT = 300;
+const SIDE_WITH_DETAILS_CLASS = 'op-graph-side-with-details';
 const stubRect = (width: number, height: number, left = 0) =>
     ({
         x: left,
@@ -546,7 +549,8 @@ beforeEach(() => {
             return stubRect(PANE.width, TOOLBAR_HEIGHT);
         }
         if (this.classList?.contains('op-graph-side')) {
-            return stubRect(SIDE_WIDTH, PANE.height, PANE.width - SIDE_WIDTH);
+            const height = this.classList.contains(SIDE_WITH_DETAILS_CLASS) ? PANE.height : LIST_ONLY_SIDE_HEIGHT;
+            return stubRect(SIDE_WIDTH, height, PANE.width - SIDE_WIDTH);
         }
         return stubRect(PANE.width, PANE.height);
     });
@@ -1097,7 +1101,8 @@ describe('OperationGraphReactFlow slowest operations list', () => {
 
     it('brings a located node out from behind the list', () => {
         // On screen at x 800–850, inside the column's band from 700: clear of the pane
-        // edge, so a reveal that ignored the column would not move at all.
+        // edge, so a reveal that ignored the column would not move at all. At y 400 it is
+        // below the list alone, but the details the click opens stretch the column past it.
         absolutePositionById.set('3', { x: 1600, y: 800 });
         renderGraph(OPERATION_LIST, PERF_ROWS);
         fireEvent.click(hotOpsSwitch());
@@ -1110,6 +1115,65 @@ describe('OperationGraphReactFlow slowest operations list', () => {
         const rightEdge = (1600 + STORE_NODE.width) * PANNED_ZOOM + viewport.x;
         expect(rightEdge).toBeLessThanOrEqual(PANE.width - SIDE_WIDTH);
         expect(viewport.y).toBe(0);
+    });
+
+    // The list alone no longer spans the pane, so the graph below it takes clicks and drags. #2087
+    describe('side column height', () => {
+        const sideColumn = () => document.querySelector('.op-graph-side');
+
+        it('stretches down the pane only while the details sit below the list', () => {
+            renderGraph(OPERATION_LIST, PERF_ROWS);
+            fireEvent.click(hotOpsSwitch());
+            expect(sideColumn()).not.toHaveClass(SIDE_WITH_DETAILS_CLASS);
+
+            fireEvent.click(rowFor('3 matmul_c'));
+            expect(sideColumn()).toHaveClass(SIDE_WITH_DETAILS_CLASS);
+
+            act(() => {
+                harness.onPaneClick?.();
+            });
+            expect(sideColumn()).not.toHaveClass(SIDE_WITH_DETAILS_CLASS);
+            expect(listHeading()).toBeInTheDocument();
+        });
+
+        it('stretches down the pane for the details alone', () => {
+            renderGraph(OPERATION_LIST, PERF_ROWS);
+
+            emitNodeChanges([{ type: 'select', id: '3', selected: true }]);
+
+            expect(listHeading()).toBeNull();
+            expect(sideColumn()).toHaveClass(SIDE_WITH_DETAILS_CLASS);
+        });
+
+        it('steps to a match below the list alone without panning around it', () => {
+            // x 800–850 is the column's band, but y 400 is below the 300 px the list takes.
+            absolutePositionById.set('3', { x: 1600, y: 800 });
+            renderGraph(OPERATION_LIST, PERF_ROWS);
+            fireEvent.click(hotOpsSwitch());
+            typeFilter('matmul_c');
+            setViewport.mockClear();
+
+            fireEvent.click(screen.getByLabelText('Next match'));
+
+            expect(setViewport).not.toHaveBeenCalled();
+        });
+
+        it('still steps a match out from behind the list alone', () => {
+            // y 200 is inside the band the list covers.
+            absolutePositionById.set('3', { x: 1600, y: 400 });
+            renderGraph(OPERATION_LIST, PERF_ROWS);
+            fireEvent.click(hotOpsSwitch());
+            typeFilter('matmul_c');
+            setViewport.mockClear();
+
+            fireEvent.click(screen.getByLabelText('Next match'));
+
+            expect(setViewport).toHaveBeenCalledTimes(1);
+            const [viewport] = setViewport.mock.calls[0] as unknown as [{ x: number; y: number }];
+            expect((1600 + STORE_NODE.width) * PANNED_ZOOM + viewport.x).toBeLessThanOrEqual(PANE.width - SIDE_WIDTH);
+            // Stepping matches only moves the viewport; the list keeps the column to itself.
+            expect(sideColumn()).not.toHaveClass(SIDE_WITH_DETAILS_CLASS);
+        });
     });
 
     it('colours each swatch as its node is drawn', () => {

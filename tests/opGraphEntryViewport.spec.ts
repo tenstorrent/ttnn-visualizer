@@ -221,21 +221,68 @@ describe('revealPanShift', () => {
         expect(revealPanShift(tall, viewport, PANE, TOOLBAR).dy).toBe(TOOLBAR + MARGIN);
     });
 
+    const SIDE_WIDTH = 300;
+    const SPANNING_SIDE = { width: SIDE_WIDTH, bottom: PANE.height };
+
     it('treats the band behind the side column as unusable', () => {
         // A row in the slowest-operations list must not locate a node behind the list. #1612
-        const SIDE = 300;
         const behindSide = boundsOf(PANE.width - 200, TOOLBAR + 100, 100, 60);
 
         expect(revealPanShift(behindSide, viewport, PANE, TOOLBAR).dx).toBe(0);
-        expect(revealPanShift(behindSide, viewport, PANE, TOOLBAR, SIDE).dx).toBe(
-            PANE.width - SIDE - MARGIN - (PANE.width - 100),
+        expect(revealPanShift(behindSide, viewport, PANE, TOOLBAR, SPANNING_SIDE).dx).toBe(
+            PANE.width - SIDE_WIDTH - MARGIN - (PANE.width - 100),
         );
     });
 
     it('leaves the vertical axis alone — the side column only eats the right', () => {
         const behindSide = boundsOf(PANE.width - 200, TOOLBAR + 100, 100, 60);
 
-        expect(revealPanShift(behindSide, viewport, PANE, TOOLBAR, 300).dy).toBe(0);
+        expect(revealPanShift(behindSide, viewport, PANE, TOOLBAR, SPANNING_SIDE).dy).toBe(0);
+    });
+
+    // The list alone sizes the column to its rows, so the pane below it is open again. #2087
+    describe('beside a side column that stops short of the bottom', () => {
+        const SHORT_SIDE = { width: SIDE_WIDTH, bottom: 400 };
+
+        it('leaves a target below the column where it is', () => {
+            const belowSide = boundsOf(PANE.width - 200, 500, 100, 60);
+
+            expect(revealPanShift(belowSide, viewport, PANE, TOOLBAR, SHORT_SIDE)).toEqual({ dx: 0, dy: 0 });
+        });
+
+        it('still moves a target out from behind the column', () => {
+            const behindSide = boundsOf(PANE.width - 200, TOOLBAR + 100, 100, 60);
+
+            expect(revealPanShift(behindSide, viewport, PANE, TOOLBAR, SHORT_SIDE).dx).toBe(
+                PANE.width - SIDE_WIDTH - MARGIN - (PANE.width - 100),
+            );
+        });
+
+        it('moves a target that straddles the column out from behind it', () => {
+            const straddling = boundsOf(PANE.width - 200, 380, 100, 60);
+
+            expect(revealPanShift(straddling, viewport, PANE, TOOLBAR, SHORT_SIDE).dx).toBeLessThan(0);
+        });
+
+        it('judges the column against where the vertical pan leaves the target', () => {
+            // Both start below the pane, clear of the column. The pan pulls the tall one
+            // up into the column's band and leaves the short one below it.
+            const tall = boundsOf(PANE.width - 200, PANE.height + 100, 100, 400);
+            const short = boundsOf(PANE.width - 200, PANE.height + 300, 100, 60);
+
+            expect(revealPanShift(tall, viewport, PANE, TOOLBAR, SHORT_SIDE).dx).toBe(
+                PANE.width - SIDE_WIDTH - MARGIN - (PANE.width - 100),
+            );
+            expect(revealPanShift(short, viewport, PANE, TOOLBAR, SHORT_SIDE).dx).toBe(0);
+        });
+
+        it('uses the full width to the pane edge for a target below the column', () => {
+            const offRightBelowSide = boundsOf(PANE.width + 200, 500, 100, 60);
+
+            expect(revealPanShift(offRightBelowSide, viewport, PANE, TOOLBAR, SHORT_SIDE).dx).toBe(
+                PANE.width - MARGIN - (PANE.width + 300),
+            );
+        });
     });
 });
 
