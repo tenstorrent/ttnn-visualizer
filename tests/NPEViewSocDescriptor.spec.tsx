@@ -7,6 +7,13 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import NPEView from '../src/components/npe/NPEViewComponent';
 import { NPEData } from '../src/model/NPEModel';
 import { ToastType } from '../src/definitions/ToastType';
+import {
+    NO_ETHERNET_OR_PCIE_EXPLANATION,
+    NO_ETHERNET_OR_PCIE_TAG,
+    SOC_DESCRIPTOR_GRID_MISMATCH_TITLE,
+    SOC_DESCRIPTOR_UNUSABLE_TITLE,
+    UNSUPPORTED_ARCHITECTURE_TITLE,
+} from '../src/definitions/NPEData';
 
 const { createToast, useNodeTypeMock, chipSizes } = vi.hoisted(() => ({
     createToast: vi.fn(),
@@ -103,12 +110,48 @@ describe('NPEView SoC descriptor presentation (#1847)', () => {
         render(<NPEView npeData={makeNpeData(2, 3)} />);
 
         expect(createToast).toHaveBeenCalledWith(
-            'SoC descriptor does not match this report',
+            SOC_DESCRIPTOR_GRID_MISMATCH_TITLE,
             expect.stringContaining("This report's grid is 2x3, but the built-in quasar descriptor is 11x8"),
             ToastType.WARNING,
         );
-        expect(createToast).not.toHaveBeenCalledWith('Unsupported architecture', expect.anything(), expect.anything());
+        expect(createToast).not.toHaveBeenCalledWith(
+            UNSUPPORTED_ARCHITECTURE_TITLE,
+            expect.anything(),
+            expect.anything(),
+        );
         expect(chipSizes.at(-1)).toEqual({ width: 2, height: 3 });
+    });
+
+    it('raises the mismatch warning once, not on every render', () => {
+        useNodeTypeMock.mockReturnValue(
+            resolved({
+                architecture: null,
+                grid: { x_size: 2, y_size: 3 },
+                gridMismatch: { baked: QUASAR_32_GRID, reported: { x_size: 2, y_size: 3 } },
+            }),
+        );
+        const npeData = makeNpeData(2, 3);
+
+        const { rerender } = render(<NPEView npeData={npeData} />);
+        rerender(<NPEView npeData={npeData} />);
+
+        expect(createToast).toHaveBeenCalledTimes(1);
+    });
+
+    it('reports an unusable descriptor ahead of a grid mismatch when both apply', () => {
+        useNodeTypeMock.mockReturnValue(
+            resolved({
+                architecture: null,
+                grid: { x_size: 2, y_size: 3 },
+                overrideProblems: ['`grid` must be an object with `x_size` and `y_size`'],
+                gridMismatch: { baked: QUASAR_32_GRID, reported: { x_size: 2, y_size: 3 } },
+            }),
+        );
+
+        render(<NPEView npeData={makeNpeData(2, 3)} />);
+
+        expect(createToast).toHaveBeenCalledTimes(1);
+        expect(createToast).toHaveBeenCalledWith(SOC_DESCRIPTOR_UNUSABLE_TITLE, expect.any(String), ToastType.ERROR);
     });
 
     it('notes a descriptor with no Ethernet or PCIe tiles while cores are annotated', () => {
@@ -116,11 +159,13 @@ describe('NPEView SoC descriptor presentation (#1847)', () => {
 
         render(<NPEView npeData={makeNpeData(11, 8)} />);
 
-        expect(screen.getByText('No Ethernet or PCIe')).toBeTruthy();
+        const tag = screen.getByText(NO_ETHERNET_OR_PCIE_TAG).closest('.bp6-tag');
+        // The tooltip is hover-only, so the explanation is also the tag's accessible description.
+        expect(tag?.getAttribute('aria-description')).toBe(NO_ETHERNET_OR_PCIE_EXPLANATION);
 
         fireEvent.click(screen.getByLabelText('Annotate cores'));
 
-        expect(screen.queryByText('No Ethernet or PCIe')).toBeNull();
+        expect(screen.queryByText(NO_ETHERNET_OR_PCIE_TAG)).toBeNull();
     });
 
     it.each([
@@ -132,7 +177,7 @@ describe('NPEView SoC descriptor presentation (#1847)', () => {
 
         render(<NPEView npeData={makeNpeData(11, 8)} />);
 
-        expect(screen.queryByText('No Ethernet or PCIe')).toBeNull();
+        expect(screen.queryByText(NO_ETHERNET_OR_PCIE_TAG)).toBeNull();
     });
 
     it('does not note an unresolved arch, which has no descriptor at all', () => {
@@ -142,6 +187,6 @@ describe('NPEView SoC descriptor presentation (#1847)', () => {
 
         render(<NPEView npeData={makeNpeData(11, 8)} />);
 
-        expect(screen.queryByText('No Ethernet or PCIe')).toBeNull();
+        expect(screen.queryByText(NO_ETHERNET_OR_PCIE_TAG)).toBeNull();
     });
 });

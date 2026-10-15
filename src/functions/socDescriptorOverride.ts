@@ -102,6 +102,10 @@ export const parseReportedGrid = (xSize: unknown, ySize: unknown): ChipDesign['g
         ? { x_size: xSize as number, y_size: ySize as number }
         : null;
 
+// One rule for every optional node list: only an absent list defaults to empty. A present
+// null is malformed, as the schema declares arrays; tt-npe omits a list rather than writing null.
+const optionalList = (value: unknown): unknown => (value === undefined ? [] : value);
+
 /** The extent to bounds-check against, or null when `grid` is unusable. */
 const gridExtent = (grid: unknown): GridExtent | null => {
     if (!isRecord(grid) || gridProblems(grid).length > 0) {
@@ -140,17 +144,16 @@ export const parseSocDescriptorOverride = (raw: unknown, reportedArch?: string):
         // `dram` is nested one level deeper than the rest: a bank per channel.
         // Optional on the same terms as `eth` / `pcie`, so `grid` and
         // `functional_workers` are the only two a producer must write.
-        ...(Array.isArray(raw.dram ?? [])
-            ? ((raw.dram ?? []) as unknown[]).flatMap((channel, index) =>
+        ...(Array.isArray(optionalList(raw.dram))
+            ? (optionalList(raw.dram) as unknown[]).flatMap((channel, index) =>
                   coordinateProblems(`dram[${index}]`, channel, extent),
               )
             : ['`dram` must be an array of channels']),
-        ...coordinateProblems('eth', raw.eth ?? [], extent),
-        ...coordinateProblems('pcie', raw.pcie ?? [], extent),
-        ...coordinateProblems('arc', raw.arc ?? [], extent),
-        ...coordinateProblems('router_only', raw.router_only ?? [], extent),
-        // Only an absent `dispatch` defaults: tt-npe omits it rather than writing null.
-        ...coordinateProblems('dispatch', raw.dispatch === undefined ? [] : raw.dispatch, extent),
+        ...coordinateProblems('eth', optionalList(raw.eth), extent),
+        ...coordinateProblems('pcie', optionalList(raw.pcie), extent),
+        ...coordinateProblems('arc', optionalList(raw.arc), extent),
+        ...coordinateProblems('router_only', optionalList(raw.router_only), extent),
+        ...coordinateProblems('dispatch', optionalList(raw.dispatch), extent),
     ];
 
     if (Array.isArray(raw.functional_workers) && raw.functional_workers.length === 0) {
@@ -174,12 +177,12 @@ export const parseSocDescriptorOverride = (raw: unknown, reportedArch?: string):
         design: {
             ...raw,
             arch_name: (raw.arch_name ?? reportedArch ?? 'unknown') as DeviceArchitecture,
-            arc: raw.arc ?? [],
-            dram: raw.dram ?? [],
-            eth: raw.eth ?? [],
-            pcie: raw.pcie ?? [],
-            router_only: raw.router_only ?? [],
-            dispatch: raw.dispatch ?? [],
+            arc: optionalList(raw.arc),
+            dram: optionalList(raw.dram),
+            eth: optionalList(raw.eth),
+            pcie: optionalList(raw.pcie),
+            router_only: optionalList(raw.router_only),
+            dispatch: optionalList(raw.dispatch),
         } as ChipDesign,
     };
 };

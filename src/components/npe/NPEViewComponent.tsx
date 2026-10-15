@@ -61,6 +61,13 @@ import createToastNotification from '../../functions/createToastNotification';
 import { formatGridSize } from '../../functions/formatting';
 import { ToastType } from '../../definitions/ToastType';
 import { TEST_IDS } from '../../definitions/TestIds';
+import {
+    NO_ETHERNET_OR_PCIE_EXPLANATION,
+    NO_ETHERNET_OR_PCIE_TAG,
+    SOC_DESCRIPTOR_GRID_MISMATCH_TITLE,
+    SOC_DESCRIPTOR_UNUSABLE_TITLE,
+    UNSUPPORTED_ARCHITECTURE_TITLE,
+} from '../../definitions/NPEData';
 
 interface NPEViewProps {
     npeData: NPEData;
@@ -331,12 +338,12 @@ const NPEView = ({
         // ERROR rather than a WARNING because the report asked to be rendered a
         // specific way and could not be.
         if (overrideProblems) {
-            createToastNotification('Unusable SoC descriptor in report', overrideProblems.join('; '), ToastType.ERROR);
+            createToastNotification(SOC_DESCRIPTOR_UNUSABLE_TITLE, overrideProblems.join('; '), ToastType.ERROR);
             return;
         }
         if (gridMismatch) {
             createToastNotification(
-                'SoC descriptor does not match this report',
+                SOC_DESCRIPTOR_GRID_MISMATCH_TITLE,
                 `This report's grid is ${formatGridSize(gridMismatch.reported)}, but the built-in ` +
                     `${npeData.common_info.arch} descriptor is ${formatGridSize(gridMismatch.baked)}, so its cores ` +
                     'are not labelled. Include the SoC descriptor in the report to label them.',
@@ -348,7 +355,7 @@ const NPEView = ({
         // on `ChipDesign` and only read as absent because the unresolved case used to return an
         // empty stand-in. Now the same predicate holds here as everywhere else. #1772
         if (architecture === null) {
-            createToastNotification(`Unsupported architecture`, npeData.common_info.arch, ToastType.WARNING);
+            createToastNotification(UNSUPPORTED_ARCHITECTURE_TITLE, npeData.common_info.arch, ToastType.WARNING);
         }
     }, [architecture, npeData.common_info.arch, overrideProblems, gridMismatch]);
 
@@ -568,8 +575,14 @@ const NPEView = ({
                             onChange={() => setIsAnnotatingCores(!isAnnotatingCores)}
                         />
                         {isAnnotatingCores && hasNoEthernetOrPcie && (
-                            <Tooltip content='This SoC descriptor lists no Ethernet or PCIe tiles, as on an emulation model.'>
-                                <Tag minimal>No Ethernet or PCIe</Tag>
+                            <Tooltip content={NO_ETHERNET_OR_PCIE_EXPLANATION}>
+                                {/* The tooltip is hover-only, so screen readers get the same text as a description. */}
+                                <Tag
+                                    minimal
+                                    aria-description={NO_ETHERNET_OR_PCIE_EXPLANATION}
+                                >
+                                    {NO_ETHERNET_OR_PCIE_TAG}
+                                </Tag>
                             </Tooltip>
                         )}
                         <ButtonGroup

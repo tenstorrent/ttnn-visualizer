@@ -13,6 +13,14 @@ export const NPE_TIMELINE_QUERY_KEY = 'get-npe-timeline';
 export const NPE_SUMMARY_QUERY_KEY = 'npe-summary';
 export const NPE_WINDOW_QUERY_KEY = 'npe-window';
 
+// What the NPE view says about the chip's SoC descriptor (#1776, #1847).
+export const SOC_DESCRIPTOR_UNUSABLE_TITLE = 'Unusable SoC descriptor in report';
+export const SOC_DESCRIPTOR_GRID_MISMATCH_TITLE = 'SoC descriptor does not match this report';
+export const UNSUPPORTED_ARCHITECTURE_TITLE = 'Unsupported architecture';
+export const NO_ETHERNET_OR_PCIE_TAG = 'No Ethernet or PCIe';
+export const NO_ETHERNET_OR_PCIE_EXPLANATION =
+    'This SoC descriptor lists no Ethernet or PCIe tiles, as on an emulation model.';
+
 export enum NPEValidationError {
     OK,
     DEFAULT,

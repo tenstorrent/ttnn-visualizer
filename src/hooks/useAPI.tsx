@@ -66,6 +66,7 @@ import {
 } from '../store/app';
 import { DeviceArchitecture } from '../definitions/DeviceArchitecture';
 import { getChipDesign } from '../functions/getChipDesign';
+import { stringToArchitecture } from '../functions/stringToArchitecture';
 import { parseReportedGrid, parseSocDescriptorOverride } from '../functions/socDescriptorOverride';
 import { formatGridSize } from '../functions/formatting';
 import { NPEData, NPEManifestEntry, NpeSummary, NpeWindow } from '../model/NPEModel';
@@ -1394,7 +1395,8 @@ export const useArchitecture = (
     reportedGrid?: Partial<ChipDesign['grid']>,
 ): ResolvedArchitecture => {
     const override = useMemo(() => parseSocDescriptorOverride(socDescriptor, arch), [socDescriptor, arch]);
-    const baked = getChipDesign(arch);
+    // Normalised, so `QUASAR` or `Wormhole_B0` from a producer still finds its descriptor.
+    const baked = getChipDesign(stringToArchitecture(arch));
     const reportedXSize = reportedGrid?.x_size;
     const reportedYSize = reportedGrid?.y_size;
     const reported = useMemo(() => parseReportedGrid(reportedXSize, reportedYSize), [reportedXSize, reportedYSize]);
@@ -1424,12 +1426,12 @@ export const useArchitecture = (
     // inline warn emits a line per frame for the length of the run. #1772
     useEffect(() => {
         if (overrideProblems) {
-            // eslint-disable-next-line no-console
+            // eslint-disable-next-line no-console -- the full problem list, which the toast truncates, is for whoever debugs the report.
             console.error(`Unusable SoC descriptor in report: ${overrideProblems.join('; ')}`);
             return;
         }
         if (gridMismatch) {
-            // eslint-disable-next-line no-console
+            // eslint-disable-next-line no-console -- the toast closes after a few seconds; this keeps the two sizes findable.
             console.error(
                 `Baked ${arch} SoC descriptor is ${formatGridSize(gridMismatch.baked)}, ` +
                     `but the report's grid is ${formatGridSize(gridMismatch.reported)}`,
@@ -1439,7 +1441,7 @@ export const useArchitecture = (
         if (design === null) {
             // Still worth surfacing: unlike Cluster, these callers have no degraded mode and
             // silently lose every core-type overlay when the arch doesn't resolve.
-            // eslint-disable-next-line no-console
+            // eslint-disable-next-line no-console -- see above.
             console.error(`Unsupported arch: ${arch}`);
         }
     }, [arch, design, overrideProblems, gridMismatch]);

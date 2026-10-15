@@ -88,6 +88,11 @@ const cases: { label: string; descriptor: unknown; accepted: boolean }[] = [
         accepted: false,
     },
     {
+        label: 'eth present but null',
+        descriptor: { grid: { x_size: 4, y_size: 4 }, functional_workers: ['1-1'], eth: null },
+        accepted: false,
+    },
+    {
         label: 'dispatch present but null',
         descriptor: { grid: { x_size: 4, y_size: 4 }, functional_workers: ['1-1'], dispatch: null },
         accepted: false,

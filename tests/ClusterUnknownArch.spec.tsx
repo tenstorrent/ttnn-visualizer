@@ -232,6 +232,18 @@ describe('Cluster with a heterogeneous arch', () => {
     });
 });
 
+// Quasar-32 resolves now, but lists no Ethernet or PCIe tiles: the same output as an unknown arch. #1847
+describe('Cluster with a Quasar chip', () => {
+    it('resolves it without labelling its ports or marking PCIe', () => {
+        clusterArch = { 0: 'quasar', 1: 'wormhole_b0' };
+        render(<ClusterRenderer />);
+
+        expect(portLabels().sort()).toEqual(['', '0-1-6-0']);
+        // Chip 0 is the mmio chip, and Quasar-32 has no PCIe tile to mark.
+        expect(document.querySelectorAll('.mmio')).toHaveLength(0);
+    });
+});
+
 // Distinct from an unrecognised arch: the arch resolves, but the descriptor reports a channel
 // the baked list is too short to cover. Since #1772 sources ports from the cluster descriptor
 // and labels from the arch one independently, the two can disagree per channel.

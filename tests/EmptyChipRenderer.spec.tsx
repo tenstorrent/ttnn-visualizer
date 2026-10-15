@@ -54,6 +54,30 @@ describe('EmptyChipRenderer dispatch engines (#1847)', () => {
         expect(container.querySelector('.node-type-d')?.textContent).toBe('d');
     });
 
+    it('labels a tile listed as both a core and a dispatch engine as the core', () => {
+        // First match wins; a report-supplied descriptor is not rejected for listing a tile twice.
+        const { container } = render(
+            <EmptyChipRenderer
+                id={0}
+                width={11}
+                height={8}
+                cores={[[1, 10]]}
+                dispatch={DISPATCH}
+                onEmptyCellClick={() => {}}
+                isAnnotatingCores
+                TENSIX_SIZE={10}
+                renderChipId={false}
+            />,
+        );
+        const overlap = [...container.querySelectorAll<HTMLElement>('.node-type-label')].find(
+            (label) => label.parentElement?.style.gridColumn === '11' && label.parentElement?.style.gridRow === '2',
+        );
+
+        expect(overlap?.className).toContain('node-type-c');
+        expect(overlap?.textContent).toBe('T');
+        expect(container.querySelectorAll('.node-type-dispatch')).toHaveLength(2);
+    });
+
     it('draws no labels while cores are not annotated', () => {
         const { container } = renderChip(false);
 

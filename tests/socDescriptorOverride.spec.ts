@@ -134,6 +134,21 @@ describe('parseSocDescriptorOverride', () => {
         expect(nulled.problems.join(' ')).toContain('`dispatch` must be an array');
     });
 
+    // One rule for every optional list: absent defaults to empty, present but null is malformed.
+    it.each(['dram', 'eth', 'pcie', 'arc', 'router_only', 'dispatch'])('rejects a present but null `%s`', (list) => {
+        const result = parseSocDescriptorOverride({
+            grid: { x_size: 4, y_size: 4 },
+            functional_workers: ['1-1'],
+            [list]: null,
+        });
+
+        expect(result.status).toBe('invalid');
+        if (result.status !== 'invalid') {
+            return;
+        }
+        expect(result.problems.join(' ')).toContain(`\`${list}\` must be an array`);
+    });
+
     it('needs only grid and functional_workers, defaulting every node list', () => {
         // The minimum a producer has to write. `dram` is optional on the same
         // terms as `eth` / `pcie` rather than uniquely required.

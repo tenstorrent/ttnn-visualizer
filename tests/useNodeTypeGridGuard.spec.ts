@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { useNodeType } from '../src/hooks/useAPI';
 import { DeviceArchitecture } from '../src/definitions/DeviceArchitecture';
+import npeDemoSingle from '../src/assets/data/npe-demo-single.json';
 
 // The 2x3 Quasar simulator's descriptor, as tt-npe embeds it: another grid reporting `quasar`.
 const quasar2x3Descriptor = {
@@ -104,6 +105,54 @@ describe('useNodeType grid guard (#1847)', () => {
 
         expect(result.current.gridMismatch).toBeNull();
         expect(result.current.grid).toEqual({ x_size: 11, y_size: 8 });
+    });
+
+    it('leaves a real single-chip Wormhole trace on its baked descriptor', () => {
+        const { arch, num_cols: columns, num_rows: rows } = npeDemoSingle.common_info;
+
+        const { result } = renderHook(() =>
+            useNodeType(arch as DeviceArchitecture, undefined, { x_size: columns, y_size: rows }),
+        );
+
+        expect(result.current.gridMismatch).toBeNull();
+        expect(result.current.cores?.length).toBeGreaterThan(0);
+    });
+
+    // Not only Quasar: baked labels on a grid of another size would be wrong for any arch.
+    it('withholds the Wormhole descriptor from a trace on a non-standard grid', () => {
+        vi.spyOn(console, 'error').mockImplementation(() => {});
+
+        const { result } = renderHook(() =>
+            useNodeType(DeviceArchitecture.WORMHOLE, undefined, { x_size: 8, y_size: 8 }),
+        );
+
+        expect(result.current.architecture).toBeNull();
+        expect(result.current.gridMismatch).toEqual({
+            baked: { x_size: 10, y_size: 12 },
+            reported: { x_size: 8, y_size: 8 },
+        });
+    });
+
+    it('finds the baked descriptor whatever the arch name casing', () => {
+        const { result } = renderHook(() =>
+            useNodeType('QUASAR' as DeviceArchitecture, undefined, { x_size: 11, y_size: 8 }),
+        );
+
+        expect(result.current.gridMismatch).toBeNull();
+        expect(result.current.cores).toHaveLength(32);
+    });
+
+    it('reports an unusable descriptor ahead of a grid mismatch when both apply', () => {
+        const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+        const { result } = renderHook(() =>
+            useNodeType(DeviceArchitecture.QUASAR, { grid: 'nonsense' }, { x_size: 2, y_size: 3 }),
+        );
+
+        expect(result.current.overrideProblems).not.toBeNull();
+        expect(result.current.architecture).toBeNull();
+        expect(consoleError).toHaveBeenCalledWith(expect.stringContaining('Unusable SoC descriptor in report'));
+        expect(consoleError).not.toHaveBeenCalledWith(expect.stringContaining('Baked quasar SoC descriptor'));
     });
 
     it('leaves Wormhole and Blackhole reports on their baked descriptors', () => {

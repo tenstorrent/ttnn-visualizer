@@ -15,6 +15,7 @@ describe('stringToArchitecture', () => {
         expect(stringToArchitecture('wormhole_b0')).toBe(DeviceArchitecture.WORMHOLE);
         expect(stringToArchitecture('blackhole')).toBe(DeviceArchitecture.BLACKHOLE);
         expect(stringToArchitecture('quasar')).toBe(DeviceArchitecture.QUASAR);
+        expect(stringToArchitecture('grayskull')).toBe(DeviceArchitecture.GRAYSKULL);
     });
 
     it('is case insensitive', () => {
