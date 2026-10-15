@@ -41,7 +41,7 @@ interface OpGraphHotOpsPanelProps {
     maxNs: number;
     selectedOperationId: number | null;
     onSelectOperation: (operationId: number) => void;
-    /** Set while the graph rebuilds: the list stays on screen but takes no input. */
+    /** Shuts the list to input and focus without unmounting it, so it keeps its scroll. */
     isInert: boolean;
 }
 
@@ -88,7 +88,7 @@ const OpGraphHotOpsPanel = ({
         }
     }, [selectedOperationId]);
 
-    // Set on the element because React 18 has no `inert` prop.
+    // React 18 has no `inert` prop; on React 19 this becomes `inert={isInert}`.
     useLayoutEffect(() => {
         sectionRef.current?.toggleAttribute('inert', isInert);
     }, [isInert]);

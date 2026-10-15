@@ -584,9 +584,9 @@ $minimap-width: 200px;
         color: $tt-grey-7;
         font-size: 12px;
 
-        // The details fill the pane below the list, which keeps its own height up to
-        // 45% so they stay in reach however long it is.
-        &.op-graph-side-with-details {
+        // Down the pane for the details below the list, and through a build that hides them.
+        // The list keeps its own height up to 45%, so the details stay in reach.
+        &.op-graph-side-stretched {
             bottom: 0;
 
             .op-graph-hot-ops {
@@ -864,7 +864,7 @@ $minimap-width: 200px;
         min-height: 0;
         border-bottom: 1px solid rgba($tt-white, 0.12);
 
-        // Greyed while the graph rebuilds, like the toolbar's disabled controls. #2088
+        // Greyed while the graph rebuilds, so the list reads as taking no input. #2088
         &[inert] {
             opacity: 0.6;
         }

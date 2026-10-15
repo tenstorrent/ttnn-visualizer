@@ -328,7 +328,7 @@ const CRITICAL_PATH_CLASS = 'op-graph-critical-path';
 const CRITICAL_PATH_NODE_CLASS = 'op-graph-node-critical-path';
 const CRITICAL_PATH_EDGE_CLASS = 'op-graph-edge-critical-path';
 const DIM_UNRELATED_EDGES_CLASS = 'op-graph-dim-unrelated-edges';
-const SIDE_WITH_DETAILS_CLASS = 'op-graph-side-with-details';
+const SIDE_STRETCHED_CLASS = 'op-graph-side-stretched';
 
 interface OperationGraphReactFlowProps {
     operationList: OperationDescription[];
@@ -703,6 +703,13 @@ const OperationGraphInner = ({
         }
         return namesById;
     }, [operationList]);
+    // The names the graph on screen was built from. The list names its rows by these, so a range
+    // narrowed mid-build doesn't blank the rows of ops the graph has yet to drop. #2088
+    const operationNamesByIdRef = useRef(operationNamesById);
+    useEffect(() => {
+        operationNamesByIdRef.current = operationNamesById;
+    }, [operationNamesById]);
+    const [drawnOperationNamesById, setDrawnOperationNamesById] = useState(operationNamesById);
 
     const onBuilt = useCallback(
         (graph: OpGraphBuiltGraph) => {
@@ -750,6 +757,7 @@ const OperationGraphInner = ({
             indexEntries.sort((left, right) => left.operationId - right.operationId);
             setNodeIndex(indexEntries);
             setNodeIdByOperationId(renderedByOpId);
+            setDrawnOperationNamesById(operationNamesByIdRef.current);
             // A new array with the same detections rebuilds `deviceSubgraphs`, and
             // `runBuild` then loops.
             pendingEmptyPaneCheckRef.current = true;
@@ -1600,8 +1608,8 @@ const OperationGraphInner = ({
     const perfRangeMaxNs = perfRange?.maxNs ?? perfOverlay.maxNs;
 
     const hotOpRows = useMemo(
-        () => (isHotOpsActive ? buildHotOpRows(perfOverlay, graphOperationIds, operationNamesById) : []),
-        [isHotOpsActive, perfOverlay, graphOperationIds, operationNamesById],
+        () => (isHotOpsActive ? buildHotOpRows(perfOverlay, graphOperationIds, drawnOperationNamesById) : []),
+        [isHotOpsActive, perfOverlay, graphOperationIds, drawnOperationNamesById],
     );
 
     const styledNodes = useMemo(() => {
@@ -2000,7 +2008,7 @@ const OperationGraphInner = ({
                 </div>
             ) : null}
             {isPanelOpen || isHotOpsActive ? (
-                <div className={isSideStretched ? `op-graph-side ${SIDE_WITH_DETAILS_CLASS}` : 'op-graph-side'}>
+                <div className={isSideStretched ? `op-graph-side ${SIDE_STRETCHED_CLASS}` : 'op-graph-side'}>
                     {/* Mounted through a build so a relayout keeps the list's scroll. #2088 */}
                     {isHotOpsActive ? (
                         <OpGraphHotOpsPanel

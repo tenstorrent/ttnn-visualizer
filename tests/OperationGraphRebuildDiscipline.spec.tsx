@@ -115,9 +115,9 @@ const PANE = { width: 1000, height: 800 };
 const TOOLBAR_HEIGHT = 150;
 // Within the column's `clamp(280px, 26%, 360px)`.
 const SIDE_WIDTH = 300;
-// The list alone sizes the column to its rows; only the details stretch it down the pane. #2087
+// The list alone sizes the column to its rows; a selection stretches it down the pane. #2087
 const LIST_ONLY_SIDE_HEIGHT = 300;
-const SIDE_WITH_DETAILS_CLASS = 'op-graph-side-with-details';
+const SIDE_STRETCHED_CLASS = 'op-graph-side-stretched';
 const stubRect = (width: number, height: number, left = 0, top = 0) =>
     ({
         x: left,
@@ -138,7 +138,7 @@ const measuredWithPaneAt = (paneTop: number) =>
             return stubRect(PANE.width, TOOLBAR_HEIGHT, 0, paneTop);
         }
         if (this.classList?.contains('op-graph-side')) {
-            const height = this.classList.contains(SIDE_WITH_DETAILS_CLASS) ? PANE.height : LIST_ONLY_SIDE_HEIGHT;
+            const height = this.classList.contains(SIDE_STRETCHED_CLASS) ? PANE.height : LIST_ONLY_SIDE_HEIGHT;
             return stubRect(SIDE_WIDTH, height, PANE.width - SIDE_WIDTH, paneTop);
         }
         return stubRect(PANE.width, PANE.height, 0, paneTop);
@@ -1135,18 +1135,18 @@ describe('OperationGraphReactFlow slowest operations list', () => {
     describe('side column height', () => {
         const sideColumn = () => document.querySelector('.op-graph-side');
 
-        it('stretches down the pane only while the details sit below the list', () => {
+        it('stretches down the pane only while an op is selected', () => {
             renderGraph(OPERATION_LIST, PERF_ROWS);
             fireEvent.click(hotOpsSwitch());
-            expect(sideColumn()).not.toHaveClass(SIDE_WITH_DETAILS_CLASS);
+            expect(sideColumn()).not.toHaveClass(SIDE_STRETCHED_CLASS);
 
             fireEvent.click(rowFor('3 matmul_c'));
-            expect(sideColumn()).toHaveClass(SIDE_WITH_DETAILS_CLASS);
+            expect(sideColumn()).toHaveClass(SIDE_STRETCHED_CLASS);
 
             act(() => {
                 harness.onPaneClick?.();
             });
-            expect(sideColumn()).not.toHaveClass(SIDE_WITH_DETAILS_CLASS);
+            expect(sideColumn()).not.toHaveClass(SIDE_STRETCHED_CLASS);
             expect(listHeading()).toBeInTheDocument();
         });
 
@@ -1156,7 +1156,7 @@ describe('OperationGraphReactFlow slowest operations list', () => {
             emitNodeChanges([{ type: 'select', id: '3', selected: true }]);
 
             expect(listHeading()).toBeNull();
-            expect(sideColumn()).toHaveClass(SIDE_WITH_DETAILS_CLASS);
+            expect(sideColumn()).toHaveClass(SIDE_STRETCHED_CLASS);
         });
 
         it('steps to a match below the list alone without panning around it', () => {
@@ -1201,7 +1201,7 @@ describe('OperationGraphReactFlow slowest operations list', () => {
             const [viewport] = setViewport.mock.calls[0] as unknown as [{ x: number; y: number }];
             expect((1600 + STORE_NODE.width) * PANNED_ZOOM + viewport.x).toBeLessThanOrEqual(PANE.width - SIDE_WIDTH);
             // Stepping matches only moves the viewport; the list keeps the column to itself.
-            expect(sideColumn()).not.toHaveClass(SIDE_WITH_DETAILS_CLASS);
+            expect(sideColumn()).not.toHaveClass(SIDE_STRETCHED_CLASS);
         });
 
         // Expanding op 3 keeps its corner where it was, which these tests put in the
@@ -1265,8 +1265,7 @@ describe('OperationGraphReactFlow slowest operations list', () => {
         );
     });
 
-    // A build slow enough to show the spinner used to unmount the list, which then
-    // came back rebuilt and scrolled to the top. #2088
+    // A build slow enough to show the spinner must not remount the list, or its scroll is lost. #2088
     describe('through a build', () => {
         const hotOpsSection = () => document.querySelector('.op-graph-hot-ops');
         const hotOpsList = () => document.querySelector('.op-graph-hot-ops-list');
@@ -1293,7 +1292,8 @@ describe('OperationGraphReactFlow slowest operations list', () => {
         it('keeps the same list on screen, so its scroll survives', () => {
             renderGraph(OPERATION_LIST, PERF_ROWS);
             fireEvent.click(hotOpsSwitch());
-            const list = hotOpsList();
+            const list = hotOpsList() as HTMLElement;
+            list.scrollTop = 120;
 
             startBuild();
             expect(hotOpsList()).toBe(list);
@@ -1301,6 +1301,93 @@ describe('OperationGraphReactFlow slowest operations list', () => {
 
             finishBuild();
             expect(hotOpsList()).toBe(list);
+            expect(list.scrollTop).toBe(120);
+        });
+
+        it('keeps naming the ops a narrower range is about to drop', () => {
+            const { rerender } = renderGraph(OPERATION_LIST, PERF_ROWS);
+            fireEvent.click(hotOpsSwitch());
+            startBuild();
+
+            rerender(
+                <MemoryRouter>
+                    <OperationGraphReactFlow
+                        operationList={OPERATION_LIST.slice(0, 3)}
+                        perfRows={PERF_ROWS}
+                        isPerfReportLoaded
+                    />
+                </MemoryRouter>,
+            );
+
+            // Ops 4 and 5 stay on screen, and in the list, until the narrower graph lands.
+            expect(rowFor('5 softmax_e')).toBeInTheDocument();
+            expect(rowFor('4 relu_d')).toBeInTheDocument();
+
+            finishBuild();
+            expect(listedIds()).toEqual([3, 2, 1]);
+        });
+
+        it('names the ops a wider range brings in once their graph lands', () => {
+            const { rerender } = renderGraph(OPERATION_LIST.slice(0, 3), PERF_ROWS);
+            fireEvent.click(hotOpsSwitch());
+
+            rerender(
+                <MemoryRouter>
+                    <OperationGraphReactFlow
+                        operationList={OPERATION_LIST}
+                        perfRows={PERF_ROWS}
+                        isPerfReportLoaded
+                    />
+                </MemoryRouter>,
+            );
+            finishBuild();
+
+            expect(rowFor('5 softmax_e')).toBeInTheDocument();
+        });
+
+        it('starts inert when it mounts while the graph builds', () => {
+            // Perf data becoming ready mid-build turns the list on; the toolbar switch can't.
+            renderGraph(OPERATION_LIST, PERF_ROWS);
+            startBuild();
+
+            act(() => {
+                getDefaultStore().set(isHotOpsEnabledAtom, true);
+            });
+
+            expect(hotOpsSection()).toHaveAttribute('inert');
+        });
+
+        it('leaves a list shown alone unstretched for the build', () => {
+            renderGraph(OPERATION_LIST, PERF_ROWS);
+            fireEvent.click(hotOpsSwitch());
+
+            startBuild();
+
+            expect(document.querySelector('.op-graph-side')).not.toHaveClass(SIDE_STRETCHED_CLASS);
+            expect(hotOpsSection()).toHaveAttribute('inert');
+        });
+
+        it('lets the column go when the build drops the selected op', () => {
+            renderGraph(OPERATION_LIST, PERF_ROWS);
+            fireEvent.click(hotOpsSwitch());
+            const list = hotOpsList();
+            act(() => {
+                harness.onNodeClick?.(null, nodeById(lastFlowRender().nodes, '1'));
+            });
+            startBuild();
+
+            // The rebuilt graph no longer holds op 1.
+            act(() => {
+                harness.setIsBuilding?.(false);
+                harness.onBuilt?.(
+                    buildOpGraph(sourceFor(OPERATION_LIST.slice(1)), { hideDeallocate: true, deviceSubgraphs: [] }),
+                );
+            });
+
+            expect(hotOpsList()).toBe(list);
+            expect(document.querySelector('.op-graph-side')).not.toHaveClass(SIDE_STRETCHED_CLASS);
+            expect(hotOpsSection()).not.toHaveAttribute('inert');
+            expect(document.querySelector('.op-graph-hot-ops [aria-current]')).toBeNull();
         });
 
         it('takes no input from the list until the build is done', () => {
@@ -1322,7 +1409,7 @@ describe('OperationGraphReactFlow slowest operations list', () => {
 
             startBuild();
             expect(screen.queryByRole('heading', { name: '3 matmul_c' })).toBeNull();
-            expect(document.querySelector('.op-graph-side')).toHaveClass(SIDE_WITH_DETAILS_CLASS);
+            expect(document.querySelector('.op-graph-side')).toHaveClass(SIDE_STRETCHED_CLASS);
 
             finishBuild();
             expect(screen.getByRole('heading', { name: '3 matmul_c' })).toBeInTheDocument();
