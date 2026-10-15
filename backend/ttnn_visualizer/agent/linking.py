@@ -625,6 +625,10 @@ TOP_OPS_LINK_NOTE = (
     "first_past_profiler_capture_id names the first row past the profiler capture."
 )
 
+# `operation_link.scope` on a ranged `top_ops`: the link's counts are the whole
+# report's, not the window's.
+WHOLE_REPORT_SCOPE = "whole_report"
+
 # What a signpost range does not narrow. The link is matched against the whole
 # report, because alignment is positional and a window would start it mid-run.
 RANGED_LINK_NOTE = (
@@ -664,8 +668,11 @@ def top_ops(
     # Only a handle with a profiler report has an operation_id worth explaining.
     if registry.get(handle).profiler_path:
         response["note"] = TOP_OPS_LINK_NOTE
-        if tools.SignpostRange.of(start_signpost, end_signpost) is not None:
-            response["scope"] = "whole_report"
+        # Read from the projection, which already names any range it read, so
+        # the note can never disagree with it.
+        projection = result.get("projection")
+        if isinstance(projection, dict) and "start_signpost" in projection:
+            response["scope"] = WHOLE_REPORT_SCOPE
             response["note"] = f"{TOP_OPS_LINK_NOTE} {RANGED_LINK_NOTE}"
     if link.status is LinkStatus.LINKED and link.unlinked is not None:
         response["unlinked_row_count"] = link.unlinked.total
@@ -742,7 +749,7 @@ def operation_detail(
         # Stated because this response's other duration is host seconds, and the two
         # invite being compared.
         result["device_time_unit"] = DEVICE_TIME_UNIT
-        result["projection"] = dict(tools.CANONICAL_PROJECTION)
+        result["projection"] = tools.projection(None)
         if rows:
             result.update(_device_time_summary(rows, link.report_device_time_total))
             result["report_device_time_total"] = round(link.report_device_time_total, 3)

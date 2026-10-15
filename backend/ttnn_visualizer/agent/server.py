@@ -65,12 +65,12 @@ _RANK_SCHEMA = {
         "per rank, so reading every rank at once collides them."
     ),
 }
-# The bounds `tt-perf-report --start-signpost/--end-signpost` take, resolved the
-# same way: the bring-up skills measure a signposted window, and figures read any
-# other way would disagree with theirs. #2122
+# The bounds `tt-perf-report --start-signpost/--end-signpost` take; see
+# `tools.SignpostRange`. #2122
 _SIGNPOST_SCHEMAS = {
     "start_signpost": {
         "type": "string",
+        "maxLength": tools.MAX_SIGNPOST_NAME_LENGTH,
         "description": (
             "Read only the rows after this signpost: its earliest occurrence by "
             "host start time, as tt-perf-report --start-signpost reads it."
@@ -78,6 +78,7 @@ _SIGNPOST_SCHEMAS = {
     },
     "end_signpost": {
         "type": "string",
+        "maxLength": tools.MAX_SIGNPOST_NAME_LENGTH,
         "description": (
             "Read only the rows before this signpost: its earliest occurrence, or "
             "its second when it also names the start."
@@ -138,7 +139,10 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
                 "signposts at all is read whole, with signpost_range_ignored true. "
                 "A range narrows the ranked rows only: operation_id and the counts in "
                 "operation_link stay the whole report's, and operation_link says so "
-                "with scope: whole_report. Each row's id numbers the performance "
+                "with scope: whole_report. The first ranged call on a handle that "
+                "also holds a profiler report generates two reports, the window and "
+                "the whole report the link is matched against; later calls reuse "
+                "both. Each row's id numbers the performance "
                 "CSV. When the handle also holds a profiler report, each row's "
                 "operation_id is the profiler database id for one rank, and "
                 "operation_link says whether the reports linked, at which rank, "

@@ -769,7 +769,7 @@ class TestTopOpsLink:
         ]
 
         assert "scope" not in whole
-        assert ranged["scope"] == "whole_report"
+        assert ranged["scope"] == linking.WHOLE_REPORT_SCOPE
         assert linking.RANGED_LINK_NOTE in ranged["note"]
         assert ranged["matched_rows"] == whole["matched_rows"]
         assert ranged["unlinked_by_reason"] == whole["unlinked_by_reason"]

@@ -106,6 +106,11 @@ def _rounded(value: Optional[float]) -> Optional[float]:
     return None if value is None else round(value, 3)
 
 
+# Longer than any signpost a model emits, and short enough that a refusal or a
+# projection echoing the name stays small.
+MAX_SIGNPOST_NAME_LENGTH = 256
+
+
 @dataclass(frozen=True)
 class SignpostRange:
     """A window of the report, bounded as `tt-perf-report --start-signpost` bounds it.
@@ -129,6 +134,12 @@ class SignpostRange:
         An empty name is no bound, as `check_signpost_range` reads it, so it must
         not key a second snapshot of the same whole report.
         """
+        for label, name in (("start_signpost", start), ("end_signpost", end)):
+            if name and len(name) > MAX_SIGNPOST_NAME_LENGTH:
+                raise ValueError(
+                    f"{label} is {len(name)} characters; a signpost name is at most "
+                    f"{MAX_SIGNPOST_NAME_LENGTH}"
+                )
         start, end = start or None, end or None
         if start is None and end is None:
             return None
@@ -148,18 +159,15 @@ def canonical_report(
     once per name asked would cache an identical copy for each. A refused range
     raises `InvalidSignpostRange`, a `ValueError`, and is not cached.
     """
-    if signposts is None:
-        return registry.cached_report(handle, _generate_canonical_report)
-    if not has_signposts(registry, handle):
-        whole = registry.cached_report(handle, _generate_canonical_report)
-        return {**whole, "signpost_range_ignored": True}
-    return registry.cached_report(
+    ignored = signposts is not None and not has_signposts(registry, handle)
+    scope = None if ignored else signposts
+    overrides = scope.as_overrides() if scope is not None else {}
+    report = registry.cached_report(
         handle,
-        lambda instance: _generate_canonical_report(
-            instance, **signposts.as_overrides()
-        ),
-        scope=signposts,
+        lambda instance: _generate_canonical_report(instance, **overrides),
+        scope=scope,
     )
+    return {**report, "signpost_range_ignored": True} if ignored else report
 
 
 def has_signposts(registry: ReportRegistry, handle: str) -> bool:
@@ -521,6 +529,7 @@ def _stderr_log() -> None:
 
 __all__ = [
     "CANONICAL_PROJECTION",
+    "MAX_SIGNPOST_NAME_LENGTH",
     "SORTABLE_METRICS",
     "SignpostRange",
     "canonical_report",

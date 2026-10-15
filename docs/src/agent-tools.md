@@ -112,7 +112,8 @@ server-side, so asking for more returns the cap rather than the report.
 **No rows are hidden from you.** The web application's performance view hides host
 operations by default and can narrow to a signpost range. Those are display choices, and an
 agent handed them unannounced would reason confidently about a partial set. The tools read
-the report with host operations included, signpost markers kept, and no signpost range.
+the report with host operations included, signpost markers kept, and, unless you pass one,
+no signpost range.
 
 A range is read only when you ask for one. `top_ops` and `diff_reports` take
 `start_signpost` and `end_signpost`, the bounds `tt-perf-report --start-signpost` and
@@ -127,9 +128,9 @@ cut down — it is what the signposted run reports.
 
 A range the report cannot honour is refused rather than answered from other rows: a name
 the report does not hold (the refusal lists the names it does), one name for both bounds
-when it occurs only once, or an end that falls before the start. A report with no
-signposts at all is read whole, because tt-perf-report then uses the whole file rather than
-some other window, and the response's `projection` says so with `signpost_range_ignored`.
+when it occurs only once, an end that falls before the start, or a name longer than 256
+characters. A report with no signposts at all is read whole, because tt-perf-report then
+uses the whole file rather than some other window, and the response's `projection` says so with `signpost_range_ignored`.
 Every ranged response's `projection` names the range, so a windowed answer cannot be taken
 for a whole-report one. `diff_reports` applies one range to both reports, and refuses when
 only one of them holds signposts: a window compared against a whole report would show every

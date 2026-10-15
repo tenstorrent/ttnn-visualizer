@@ -380,6 +380,17 @@ class TestTopOps:
         # tt-perf-report would read the whole file for it, so the whole is what runs.
         generate.assert_called_once_with(registry.get("report-1"))
 
+    def test_an_overlong_signpost_name_is_refused_before_anything_is_read(
+        self, tmp_path
+    ):
+        registry = self._registry(tmp_path)
+        name = "S" * (tools.MAX_SIGNPOST_NAME_LENGTH + 1)
+        with patch.object(tools, "_generate_canonical_report") as generate:
+            with pytest.raises(ValueError, match="start_signpost is 257 characters"):
+                tools.top_ops(registry, "report-1", start_signpost=name)
+
+        generate.assert_not_called()
+
     def test_ranges_on_a_report_without_signposts_share_the_whole_snapshot(
         self, tmp_path
     ):
