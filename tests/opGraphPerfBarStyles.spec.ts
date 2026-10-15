@@ -57,6 +57,21 @@ describe('perf overlay bar geometry', () => {
     });
 });
 
+describe('slowest-operations rank badge', () => {
+    const BADGE = '.op-graph-node-hot-rank {';
+
+    it('is taken out of the node flow, so marking cannot relayout the graph', () => {
+        expect(ruleBody(BADGE)).toMatch(/position:\s*absolute/);
+    });
+
+    it('divides its size by the live zoom, unscaled when none is published', () => {
+        // Marking publishes the zoom too, so the badges still read at overview zoom. #2085
+        expect(ruleBody(BADGE)).toMatch(
+            new RegExp(`font-size:.*calc\\(\\s*\\d+px\\s*/\\s*${varRef(PERF_BAR_ZOOM_VAR, '1')}\\s*\\)`),
+        );
+    });
+});
+
 describe('perf overlay bar zoom floor', () => {
     it('divides both dimensions by the live zoom so the bar holds its on-screen size', () => {
         // Fixed graph units go sub-pixel at the zoom a large report fits in,

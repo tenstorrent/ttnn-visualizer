@@ -24,6 +24,8 @@ export const parseHotOpsSettings = (stored: unknown): HotOpsSettings => {
         sort: isHotOpsSort(fields.sort) ? fields.sort : DEFAULT_HOT_OPS_SETTINGS.sort,
         hideUnlinked:
             typeof fields.hideUnlinked === 'boolean' ? fields.hideUnlinked : DEFAULT_HOT_OPS_SETTINGS.hideUnlinked,
+        markOnGraph:
+            typeof fields.markOnGraph === 'boolean' ? fields.markOnGraph : DEFAULT_HOT_OPS_SETTINGS.markOnGraph,
     };
 };
 

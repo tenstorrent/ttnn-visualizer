@@ -4,9 +4,15 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { buildHotOpRows, getVisibleHotOpRows } from '../src/components/operation-graph/opGraphHotOps';
+import {
+    buildHotOpRows,
+    getMarkedHotOpRanks,
+    getVisibleHotOpRows,
+    hotRankOf,
+} from '../src/components/operation-graph/opGraphHotOps';
 import { buildOpGraphPerfOverlay } from '../src/components/operation-graph/opGraphPerfOverlay';
 import { HotOpsSort } from '../src/definitions/HotOps';
+import { type OpGraphFlowNode, OpGraphNodeType } from '../src/components/operation-graph/opGraphTypes';
 import type { PerfOverlaySource } from '../src/functions/perfOverlay';
 
 // `device_time` is microseconds on the wire; the aggregator converts to ns.
@@ -112,5 +118,71 @@ describe('getVisibleHotOpRows', () => {
         getVisibleHotOpRows(all, { limit: null, sort: HotOpsSort.OPERATION_ID, hideUnlinked: false });
 
         expect(ids(all)).toEqual([2, 3, 1, 4, 5]);
+    });
+});
+
+// The graph badges exactly the ops the list shows, so the list's two filters decide it. #2085
+describe('getMarkedHotOpRanks', () => {
+    const all = buildHotOpRows(overlay, [1, 2, 3, 4, 5], NAMES);
+
+    it('ranks the ops the list keeps', () => {
+        expect(getMarkedHotOpRanks(all, { limit: 2, hideUnlinked: true })).toEqual(
+            new Map([
+                [2, 1],
+                [3, 2],
+            ]),
+        );
+    });
+
+    it('includes the ops without perf data, unranked, once the list shows them', () => {
+        expect(getMarkedHotOpRanks(all, { limit: null, hideUnlinked: false })).toEqual(
+            new Map([
+                [2, 1],
+                [3, 2],
+                [1, 3],
+                [4, null],
+                [5, null],
+            ]),
+        );
+    });
+});
+
+describe('hotRankOf', () => {
+    const ranks = new Map<number, number | null>([
+        [2, 1],
+        [3, 2],
+        [4, null],
+    ]);
+    const node = (type: OpGraphNodeType, operationId: number, memberOperationIds?: number[]) =>
+        ({ type, data: { operationId, memberOperationIds } }) as Pick<OpGraphFlowNode, 'type' | 'data'>;
+
+    it('gives an op its own rank, collapsed or showing its device operations', () => {
+        expect(hotRankOf(node(OpGraphNodeType.OP, 3), ranks)).toBe(2);
+        expect(hotRankOf(node(OpGraphNodeType.DEVICE_GROUP, 3), ranks)).toBe(2);
+    });
+
+    it('leaves out an op the list does not show', () => {
+        expect(hotRankOf(node(OpGraphNodeType.OP, 1), ranks)).toBeUndefined();
+    });
+
+    it('marks a listed op without perf data, unranked', () => {
+        expect(hotRankOf(node(OpGraphNodeType.OP, 4), ranks)).toBeNull();
+    });
+
+    it('leaves a device operation to the op it belongs to, whose id it carries', () => {
+        expect(hotRankOf(node(OpGraphNodeType.DEVICE_OP, 3), ranks)).toBeUndefined();
+    });
+
+    it("gives a folded block its slowest listed member's rank", () => {
+        expect(hotRankOf(node(OpGraphNodeType.BLOCK, 1, [1, 4, 3, 2]), ranks)).toBe(1);
+        expect(hotRankOf(node(OpGraphNodeType.BLOCK, 4, [4, 3]), ranks)).toBe(2);
+    });
+
+    it('marks a folded block whose listed members have no perf data, unranked', () => {
+        expect(hotRankOf(node(OpGraphNodeType.BLOCK, 4, [4, 5]), ranks)).toBeNull();
+    });
+
+    it('leaves out a folded block with no listed member', () => {
+        expect(hotRankOf(node(OpGraphNodeType.BLOCK, 1, [1, 5]), ranks)).toBeUndefined();
     });
 });

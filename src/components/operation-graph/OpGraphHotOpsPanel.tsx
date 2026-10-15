@@ -6,7 +6,7 @@ import { memo, useCallback, useId, useLayoutEffect, useMemo, useRef } from 'reac
 import { Checkbox, SegmentedControl, Size } from '@blueprintjs/core';
 import classNames from 'classnames';
 import { useAtom } from 'jotai';
-import { DEFAULT_HOT_OPS_SETTINGS, HOT_OPS_LIMITS, HotOpsSort } from '../../definitions/HotOps';
+import { DEFAULT_HOT_OPS_SETTINGS, HOT_OPS_LIMITS, HOT_OPS_NO_RANK_LABEL, HotOpsSort } from '../../definitions/HotOps';
 import { NO_PERF_DATA_LABEL } from '../../definitions/PerfOverlayStatus';
 import { formatDuration, formatShareOfTotal } from '../../functions/formatting';
 import { isHotOpsSort } from '../../functions/hotOpsSettings';
@@ -15,7 +15,6 @@ import { type HotOpRow, getVisibleHotOpRows } from './opGraphHotOps';
 import { getPerfColorForNs } from './opGraphPerfOverlay';
 
 const ALL_LIMIT = 'all';
-const NO_RANK_LABEL = '–';
 
 const LIMIT_OPTIONS = [
     ...HOT_OPS_LIMITS.map((limit) => ({ label: `Top ${limit}`, value: String(limit) })),
@@ -60,7 +59,7 @@ const OpGraphHotOpsPanel = ({
     const listRef = useRef<HTMLOListElement>(null);
     const clickedOperationIdRef = useRef<number | null>(null);
     const [settings, setSettings] = useAtom(hotOpsSettingsAtom);
-    const { limit, sort, hideUnlinked } = settings;
+    const { limit, sort, hideUnlinked, markOnGraph } = settings;
     const visibleRows = useMemo(() => getVisibleHotOpRows(rows, settings), [rows, settings]);
     const hasUnlinked = useMemo(() => rows.some((row) => row.rank === null), [rows]);
 
@@ -125,9 +124,15 @@ const OpGraphHotOpsPanel = ({
                         setSettings((current) => (isHotOpsSort(value) ? { ...current, sort: value } : current))
                     }
                 />
+                <Checkbox
+                    className='op-graph-hot-ops-checkbox'
+                    label='Mark on graph'
+                    checked={markOnGraph}
+                    onChange={() => setSettings((current) => ({ ...current, markOnGraph: !current.markOnGraph }))}
+                />
                 {hasUnlinked ? (
                     <Checkbox
-                        className='op-graph-hot-ops-hide-unlinked'
+                        className='op-graph-hot-ops-checkbox'
                         label='Hide ops without perf data'
                         checked={hideUnlinked}
                         onChange={() => setSettings((current) => ({ ...current, hideUnlinked: !current.hideUnlinked }))}
@@ -177,7 +182,7 @@ const HotOpRowButton = memo(({ row, totalNs, color, isSelected, onSelect }: HotO
             title={`${operationId} ${name}`}
             onClick={() => onSelect(operationId)}
         >
-            <span className='op-graph-hot-ops-rank'>{rank ?? NO_RANK_LABEL}</span>
+            <span className='op-graph-hot-ops-rank'>{rank ?? HOT_OPS_NO_RANK_LABEL}</span>
             <span
                 className='op-graph-hot-ops-swatch'
                 style={color === undefined ? undefined : { backgroundColor: color }}

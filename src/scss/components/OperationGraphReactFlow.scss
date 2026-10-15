@@ -352,6 +352,29 @@ $minimap-width: 200px;
         }
     }
 
+    // Straddles the top-left corner, clear of the label, and divides by the live zoom like
+    // the perf bar so it still reads at overview zoom. #2085
+    .op-graph-node-hot-rank {
+        position: absolute;
+        z-index: 1;
+        top: 0;
+        left: 0;
+        min-width: 1.8em;
+        padding: 0.15em 0.4em;
+        border: 0.15em solid var(--graph-hot-rank-ink);
+        border-radius: 999px;
+        background-color: var(--graph-hot-rank);
+        color: var(--graph-hot-rank-ink);
+        font-size: max(11px, calc(11px / var(--op-graph-perf-zoom, 1)));
+        font-variant-numeric: tabular-nums;
+        font-weight: 700;
+        line-height: 1.1;
+        text-align: center;
+        transform: translate(-45%, -45%);
+        pointer-events: none;
+        user-select: none;
+    }
+
     .op-graph-node-buried-badge {
         position: absolute;
         top: 3px;
@@ -893,7 +916,7 @@ $minimap-width: 200px;
         padding: 6px 12px;
     }
 
-    .op-graph-hot-ops-hide-unlinked {
+    .op-graph-hot-ops-checkbox {
         margin: 0;
     }
 

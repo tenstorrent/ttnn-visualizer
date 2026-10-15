@@ -5,6 +5,7 @@
 import { Handle, type NodeProps, Position } from '@xyflow/react';
 import { memo } from 'react';
 import OpGraphBlockExpander from './OpGraphBlockExpander';
+import OpGraphHotRankBadge from './OpGraphHotRankBadge';
 import type { OpGraphFlowNode } from './opGraphTypes';
 
 const OpGraphBlockNode = memo(({ data }: NodeProps<OpGraphFlowNode>) => {
@@ -45,6 +46,7 @@ const OpGraphBlockNode = memo(({ data }: NodeProps<OpGraphFlowNode>) => {
                     {`+${data.buriedMatchCount}`}
                 </span>
             ) : null}
+            {data.hotRank === undefined ? null : <OpGraphHotRankBadge rank={data.hotRank} />}
             <Handle
                 type='source'
                 position={Position.Bottom}

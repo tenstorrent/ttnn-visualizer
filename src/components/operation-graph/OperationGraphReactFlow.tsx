@@ -39,6 +39,7 @@ import {
     activePerformanceReportAtom,
     activeProfilerReportAtom,
     criticalPathScopeAtom,
+    hotOpsMarkingAtom,
     isHotOpsEnabledAtom,
 } from '../../store/app';
 import type { GraphOpFilterHandle } from '../GraphOpFilter';
@@ -52,7 +53,7 @@ import OpGraphDeviceOpNode from './OpGraphDeviceOpNode';
 import OpGraphEdge from './OpGraphEdge';
 import OpGraphHotOpsPanel from './OpGraphHotOpsPanel';
 import OpGraphInfoPanel from './OpGraphInfoPanel';
-import { buildHotOpRows } from './opGraphHotOps';
+import { buildHotOpRows, getMarkedHotOpRanks, hotRankOf } from './opGraphHotOps';
 import OpGraphNode from './OpGraphNode';
 import OpGraphToolbar from './OpGraphToolbar';
 import { buildDeviceOperationSubgraph, countDeviceOperations } from './opGraphDeviceSubgraph';
@@ -389,6 +390,7 @@ const OperationGraphInner = ({
     const [isPerfOverlayEnabled, setIsPerfOverlayEnabled] = useState(false);
     const [criticalPathScope, setCriticalPathScope] = useAtom(criticalPathScopeAtom);
     const [isHotOpsEnabled, setIsHotOpsEnabled] = useAtom(isHotOpsEnabledAtom);
+    const hotOpsMarking = useAtomValue(hotOpsMarkingAtom);
     const [perfHover, setPerfHover] = useState<PerfHover | null>(null);
     const [filterQuery, setFilterQuery] = useState('');
     const [appliedFilterQuery, setAppliedFilterQuery] = useState('');
@@ -1518,13 +1520,17 @@ const OperationGraphInner = ({
     // Derived, so perf data arriving or going away can't leave a stored flag
     // disagreeing with what the encoding can show.
     const isPerfOverlayActive = isPerfOverlayEnabled && perfOverlay.status === PerfOverlayStatus.READY;
+    const isHotOpsActive = isHotOpsEnabled && perfOverlay.status === PerfOverlayStatus.READY;
+    const isHotOpsMarkingActive = isHotOpsActive && hotOpsMarking !== null;
 
     // Zoom goes straight to the DOM: it changes every wheel frame, and through
     // state it would re-render the whole graph per frame to move one bar.
     // `OpGraphEdge` can afford `useStore` only because it selects a boolean.
+    // The rank badges read it too, to stay legible at overview zoom. #2085
+    const isPerfZoomPublished = isPerfOverlayActive || isHotOpsMarkingActive;
     useEffect(() => {
         const container = containerRef.current;
-        if (container === null || !isPerfOverlayActive) {
+        if (container === null || !isPerfZoomPublished) {
             return undefined;
         }
         let lastZoom: number | null = null;
@@ -1539,10 +1545,9 @@ const OperationGraphInner = ({
         // No selector support in the vanilla store, so every change calls back
         // and the guard above keeps it to one write per zoom bucket.
         return flowStore.subscribe((state) => writeZoom(state.transform[2]));
-    }, [isPerfOverlayActive, flowStore]);
+    }, [isPerfZoomPublished, flowStore]);
 
     const isCriticalPathActive = isCriticalPathEnabled && perfOverlay.status === PerfOverlayStatus.READY;
-    const isHotOpsActive = isHotOpsEnabled && perfOverlay.status === PerfOverlayStatus.READY;
 
     // The path runs over operations, so an edge rendering into an expanded node has
     // to be presented as reaching the node: `findCriticalPath` drops edges whose
@@ -1611,9 +1616,20 @@ const OperationGraphInner = ({
         () => (isHotOpsActive ? buildHotOpRows(perfOverlay, graphOperationIds, drawnOperationNamesById) : []),
         [isHotOpsActive, perfOverlay, graphOperationIds, drawnOperationNamesById],
     );
+    const hotRankByOperationId = useMemo(
+        () => (isHotOpsMarkingActive && hotOpsMarking !== null ? getMarkedHotOpRanks(hotOpRows, hotOpsMarking) : null),
+        [isHotOpsMarkingActive, hotOpsMarking, hotOpRows],
+    );
 
     const styledNodes = useMemo(() => {
-        if (!highlight && !matchedIds && !perfStyleByNodeId && !criticalPathNodeIds && !revealedNodeIds) {
+        if (
+            !highlight &&
+            !matchedIds &&
+            !perfStyleByNodeId &&
+            !criticalPathNodeIds &&
+            !revealedNodeIds &&
+            !hotRankByOperationId
+        ) {
             return nodes;
         }
         return nodes.map((node) => {
@@ -1660,10 +1676,14 @@ const OperationGraphInner = ({
             // highlight and the inherited filter dim instead of displacing any.
             const perfStyle = perfStyleByNodeId?.get(node.id);
             const buriedMatchCount = matches.buriedCountById.get(node.id) ?? 0;
-            const nextData =
-                buriedMatchCount > 0 && node.data.buriedMatchCount !== buriedMatchCount
-                    ? { ...node.data, buriedMatchCount }
-                    : node.data;
+            const hotRank = hotRankByOperationId === null ? undefined : hotRankOf(node, hotRankByOperationId);
+            let nextData = node.data;
+            if (buriedMatchCount > 0 && nextData.buriedMatchCount !== buriedMatchCount) {
+                nextData = { ...nextData, buriedMatchCount };
+            }
+            if (hotRank !== undefined && nextData.hotRank !== hotRank) {
+                nextData = { ...nextData, hotRank };
+            }
 
             if (className === undefined && perfStyle === undefined && nextData === node.data) {
                 return node;
@@ -1679,7 +1699,8 @@ const OperationGraphInner = ({
                 cached !== undefined &&
                 cached.className === className &&
                 cached.perfStyle === perfStyle &&
-                cached.styled.data.buriedMatchCount === nextData.buriedMatchCount
+                cached.styled.data.buriedMatchCount === nextData.buriedMatchCount &&
+                cached.styled.data.hotRank === nextData.hotRank
             ) {
                 return cached.styled;
             }
@@ -1708,6 +1729,7 @@ const OperationGraphInner = ({
         criticalPathNodeIds,
         styledNodeCache,
         revealedNodeIds,
+        hotRankByOperationId,
     ]);
 
     const styledEdges = useMemo(() => {
