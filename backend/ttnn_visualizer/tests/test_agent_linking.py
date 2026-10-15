@@ -31,6 +31,8 @@ from ttnn_visualizer.agent.linking import (
     NodeOrder,
     UnlinkedReason,
 )
+from ttnn_visualizer.csv_queries import ResolvedSignposts
+from ttnn_visualizer.tests.smoke_capture import SMOKE_CAPTURE_DIR
 from ttnn_visualizer.tests.test_device_log_columns import (
     MODERN_HEADER,
     write_device_log,
@@ -432,7 +434,7 @@ class TestLinkViewEndToEnd:
     `hide_host_ops` and drops nothing but host ops.
     """
 
-    SMOKE_CAPTURE = Path("scripts/fixtures/smoke-performance-report")
+    SMOKE_CAPTURE = SMOKE_CAPTURE_DIR
 
     def _capture_with_a_host_op(self, tmp_path) -> Path:
         source = self.SMOKE_CAPTURE / "ops_perf_results.csv"
@@ -693,6 +695,14 @@ def linked(tmp_path):
         )
         patches.append(patcher)
         generate = patcher.start()
+        # The CSV is never written here, so the signpost check reads this instead.
+        signposts = patch.object(
+            tools,
+            "_resolve_signposts",
+            return_value=ResolvedSignposts({"signpost-start": [0]}, True),
+        )
+        patches.append(signposts)
+        signposts.start()
         return registry, handle, generate
 
     yield _linked
@@ -732,16 +742,23 @@ class TestTopOpsLink:
 
     def test_a_ranged_row_keeps_the_operation_id_it_has_unranged(self, linked):
         """The link is matched against the whole report; a window only narrows
-        the ranked rows (#2122)."""
+        the ranked rows (#2122).
+
+        Ranged first, on a fresh registry: asked the other way round the whole
+        report's link is already cached, and a link built from the window would
+        pass unnoticed.
+        """
         registry, handle, _ = linked()
 
-        whole = linking.top_ops(registry, handle)
         ranged = linking.top_ops(registry, handle, start_signpost="signpost-start")
+        whole = linking.top_ops(registry, handle)
 
         whole_ids = {row["id"]: row["operation_id"] for row in whole["ops"]}
         ranged_ids = {row["id"]: row["operation_id"] for row in ranged["ops"]}
         assert ranged_ids == {"4": None, "5": 3}
         assert all(whole_ids[row_id] == ranged_ids[row_id] for row_id in ranged_ids)
+        # Both matched rows, though only one is in the window.
+        assert ranged["operation_link"]["matched_rows"] == 2
 
     def test_a_ranged_link_says_its_counts_are_the_whole_reports(self, linked):
         registry, handle, _ = linked()
@@ -756,6 +773,14 @@ class TestTopOpsLink:
         assert linking.RANGED_LINK_NOTE in ranged["note"]
         assert ranged["matched_rows"] == whole["matched_rows"]
         assert ranged["unlinked_by_reason"] == whole["unlinked_by_reason"]
+
+    def test_a_ranged_call_on_a_performance_only_handle_has_no_link_scope(self, linked):
+        """No profiler report, no operation_id to explain, so no scope either."""
+        registry, handle, _ = linked(profiler=False)
+
+        result = linking.top_ops(registry, handle, start_signpost="signpost-start")
+
+        assert "scope" not in result["operation_link"]
 
     def test_the_canonical_projection_still_keeps_host_ops(self, linked):
         registry, handle, _ = linked()

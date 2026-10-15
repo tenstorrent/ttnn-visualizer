@@ -19,11 +19,15 @@ from dataclasses import dataclass
 from typing import Dict, List, Optional
 
 from ttnn_visualizer.agent.bounds import bounded
-from ttnn_visualizer.agent.handles import ReportRegistry
+from ttnn_visualizer.agent.handles import CacheVariant, ReportRegistry
 from ttnn_visualizer.csv_queries import (
     DeviceLogProfilerQueries,
+    OpsPerformanceQueries,
     OpsPerformanceReportQueries,
+    ResolvedSignposts,
+    resolve_signposts,
 )
+from ttnn_visualizer.exceptions import DataFormatError
 from ttnn_visualizer.models import Instance
 
 logger = logging.getLogger(__name__)
@@ -139,11 +143,16 @@ def canonical_report(
 ) -> Dict:
     """One generated report per handle and range; see `ReportRegistry.cached_report`.
 
-    A refused range raises `InvalidSignpostRange`, a `ValueError`, and is not
-    cached.
+    A range on a report with no signposts is answered from the whole snapshot:
+    tt-perf-report would read the whole file for it anyway, and generating it
+    once per name asked would cache an identical copy for each. A refused range
+    raises `InvalidSignpostRange`, a `ValueError`, and is not cached.
     """
     if signposts is None:
         return registry.cached_report(handle, _generate_canonical_report)
+    if not has_signposts(registry, handle):
+        whole = registry.cached_report(handle, _generate_canonical_report)
+        return {**whole, "signpost_range_ignored": True}
     return registry.cached_report(
         handle,
         lambda instance: _generate_canonical_report(
@@ -151,6 +160,30 @@ def canonical_report(
         ),
         scope=signposts,
     )
+
+
+def has_signposts(registry: ReportRegistry, handle: str) -> bool:
+    """Whether the handle's performance CSV holds a named signpost a range can use.
+
+    Read once per handle, three columns, without generating a report -- the same
+    test `signpost_range_ignored` applies after generating one.
+    """
+    resolved = registry.cached_report(
+        handle, _resolve_signposts, variant=CacheVariant.SIGNPOSTS
+    )
+    return bool(resolved.positions_by_name)
+
+
+def _resolve_signposts(instance: Instance) -> ResolvedSignposts:
+    path = OpsPerformanceQueries.get_local_ops_perf_file_path(instance)
+    try:
+        with open(path, newline="") as csv_file:
+            return resolve_signposts(csv_file)
+    # As `generate_report` answers it: a ragged capture is the caller's data.
+    except ValueError as error:
+        raise DataFormatError(
+            f"could not read the report's signposts: {error}"
+        ) from error
 
 
 def projection(
@@ -396,13 +429,12 @@ def diff_reports(
     field = SORTABLE_METRICS[by]
 
     signposts = SignpostRange.of(start_signpost, end_signpost)
-    report_a = canonical_report(registry, handle_a, signposts)
-    report_b = canonical_report(registry, handle_b, signposts)
-    ignored_a = bool(report_a.get("signpost_range_ignored"))
-    ignored_b = bool(report_b.get("signpost_range_ignored"))
+    ignored_a = signposts is not None and not has_signposts(registry, handle_a)
+    ignored_b = signposts is not None and not has_signposts(registry, handle_b)
     # Refused rather than caveated: a window compared against a whole report
     # reports every row outside the window as a change, and this is the response
     # most likely to be acted on. Both sides ignoring it compares like with like.
+    # Checked before either report is generated, so a refusal costs two reads.
     if ignored_a != ignored_b:
         unsignposted = handle_a if ignored_a else handle_b
         raise ValueError(
@@ -411,6 +443,8 @@ def diff_reports(
             "window would show as a change. Diff without a range, or against a "
             "capture with the same signposts."
         )
+    report_a = canonical_report(registry, handle_a, signposts)
+    report_b = canonical_report(registry, handle_b, signposts)
 
     sub_devices: set = set()
 
@@ -492,6 +526,7 @@ __all__ = [
     "canonical_report",
     "countable_device_time",
     "diff_reports",
+    "has_signposts",
     "partitioned_caveat",
     "project_row",
     "projection",

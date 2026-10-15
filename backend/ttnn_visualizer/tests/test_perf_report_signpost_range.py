@@ -10,10 +10,8 @@ range when one did. An end before the start returns no rows. The perf report rou
 used to pass those straight through with a 200.
 """
 
-import csv
 from http import HTTPStatus
 from io import StringIO
-from pathlib import Path
 from unittest import mock
 
 import pandas as pd
@@ -28,15 +26,15 @@ from ttnn_visualizer.csv_queries import (
 from ttnn_visualizer.exceptions import InvalidSignpostRange
 from ttnn_visualizer.extensions import db
 from ttnn_visualizer.models import InstanceTable
+from ttnn_visualizer.tests.smoke_capture import (
+    SIGNPOSTED_WINDOW_IDS,
+    signpost,
+    signposted_rows,
+    smoke_rows,
+    write_ops_perf,
+)
 
 REPORT_ENDPOINT = "/api/performance/perf-results/report"
-SMOKE_CAPTURE = (
-    Path(__file__).resolve().parents[3]
-    / "scripts"
-    / "fixtures"
-    / "smoke-performance-report"
-    / "ops_perf_results.csv"
-)
 
 # Both names repeat, as per-iteration signposts do. Positions are data rows from 0:
 # A at 0 and 4, B at 2 and 6.
@@ -235,11 +233,7 @@ class TestSignpostListing:
 
 def _write_capture(app, tmp_path, rows, instance_id) -> str:
     performance_path = tmp_path / instance_id
-    performance_path.mkdir()
-    with (performance_path / "ops_perf_results.csv").open("w", newline="") as out:
-        writer = csv.DictWriter(out, fieldnames=list(rows[0].keys()))
-        writer.writeheader()
-        writer.writerows(rows)
+    write_ops_perf(performance_path, rows)
 
     with app.app_context():
         db.session.add(
@@ -254,34 +248,16 @@ def _write_capture(app, tmp_path, rows, instance_id) -> str:
     return instance_id
 
 
-def _smoke_rows():
-    if not SMOKE_CAPTURE.is_file():
-        pytest.skip(f"{SMOKE_CAPTURE} is not present")
-    return list(csv.DictReader(SMOKE_CAPTURE.open()))
-
-
-def _signpost(name, like, host_start=None):
-    row = {**like, "OP CODE": name, "OP TYPE": "signpost"}
-    if host_start is not None:
-        row["HOST START TS"] = str(host_start)
-    return row
-
-
 @pytest.fixture
 def unsignposted_instance(app, tmp_path):
     """The smoke capture as it is: no signposts at all."""
-    return _write_capture(app, tmp_path, _smoke_rows(), "pytest-signpost-none")
+    return _write_capture(app, tmp_path, smoke_rows(), "pytest-signpost-none")
 
 
 @pytest.fixture
 def signposted_instance(app, tmp_path):
-    """The smoke capture with two signposts inserted."""
-    rows = _smoke_rows()
-    # Data positions after insertion: START at 4, END at 13, so the window holds
-    # positions 5-12 -- ids 7-14.
-    rows.insert(4, _signpost("PERF_START", rows[4]))
-    rows.insert(13, _signpost("PERF_END", rows[13]))
-    return _write_capture(app, tmp_path, rows, "pytest-signpost-range")
+    """The smoke capture with two signposts bounding `SIGNPOSTED_WINDOW_IDS`."""
+    return _write_capture(app, tmp_path, signposted_rows(), "pytest-signpost-range")
 
 
 @pytest.fixture
@@ -291,11 +267,11 @@ def host_time_reversed_instance(app, tmp_path):
     Positions: PERF_START at 4, PERF_END at 13, PERF_START again at 15. Sorted by
     host time the start is position 15, after the end; in file order it is 4.
     """
-    rows = _smoke_rows()
+    rows = smoke_rows()
     host_starts = [int(row["HOST START TS"]) for row in rows]
-    rows.insert(4, _signpost("PERF_START", rows[4], max(host_starts) + 1000))
-    rows.insert(13, _signpost("PERF_END", rows[13]))
-    rows.insert(15, _signpost("PERF_START", rows[15], min(host_starts) - 1000))
+    rows.insert(4, signpost("PERF_START", rows[4], max(host_starts) + 1000))
+    rows.insert(13, signpost("PERF_END", rows[13]))
+    rows.insert(15, signpost("PERF_START", rows[15], min(host_starts) - 1000))
     return _write_capture(app, tmp_path, rows, "pytest-signpost-host-time")
 
 
@@ -322,7 +298,7 @@ class TestReportRoute:
         assert whole.status_code == ranged.status_code == HTTPStatus.OK
         ranged_ids = {int(row["id"]) for row in ranged.get_json()["report"]}
         whole_ids = {int(row["id"]) for row in whole.get_json()["report"]}
-        window = set(range(7, 15))
+        window = set(SIGNPOSTED_WINDOW_IDS)
         # Every row the whole report holds between the boundaries, and no other:
         # a window one row short or long at either end changes the set.
         assert ranged_ids == whole_ids & window
@@ -384,7 +360,7 @@ class TestReportRoute:
         assert unsorted.status_code == HTTPStatus.OK
         ranged_ids = {int(row["id"]) for row in unsorted.get_json()["report"]}
         assert ranged_ids
-        assert ranged_ids <= set(range(7, 15))
+        assert ranged_ids <= set(SIGNPOSTED_WINDOW_IDS)
 
     def test_the_listed_signposts_are_the_rows_a_bound_resolves_to(
         self, client, host_time_reversed_instance
