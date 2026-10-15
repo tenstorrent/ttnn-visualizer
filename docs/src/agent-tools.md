@@ -78,9 +78,9 @@ another rank's operation under the same id.
 | Tool | Answers |
 |---|---|
 | `load_report` | What this report contains, and which of the tools below apply to it. Returns a handle the others take. |
-| `top_ops` | The costliest operations by device time, op-to-op gap, total percentage, FLOPS, DRAM bandwidth or core count. Each row carries the profiler `operation_id` it links to, when the handle holds both reports — see below. |
+| `top_ops` | The costliest operations by device time, op-to-op gap, total percentage, FLOPS, DRAM bandwidth or core count, over the whole report or a signpost range. Each row carries the profiler `operation_id` it links to, when the handle holds both reports — see below. |
 | `zone_timings` | Per-zone, per-RISC totals from `profile_log_device.csv` — firmware and kernel phases, as measured on device. |
-| `diff_reports` | Per-operation-code deltas between two reports, largest movement first. |
+| `diff_reports` | Per-operation-code deltas between two reports, largest movement first, over the whole reports or one signpost range in both. |
 | `find_operations` | Operations matching a name substring or a call-stack substring, with the ids `operation_detail` takes. |
 | `operation_detail` | One operation: its input and output tensors with shape, dtype, layout and memory config, and what it had allocated. With a linked performance report, also the performance rows it launched, their device time and share of the report's, and the operation's total and slowest row. |
 | `memory_profile` | Memory footprint per operation, keyed by buffer type and ranked within each, with each type's largest footprint and the device's L1 geometry. A floor rather than the peak — see below. |
@@ -130,11 +130,11 @@ A range the report cannot honour is refused rather than answered from other rows
 the report does not hold (the refusal lists the names it does), one name for both bounds
 when it occurs only once, an end that falls before the start, or a name longer than 256
 characters. A report with no signposts at all is read whole, because tt-perf-report then
-uses the whole file rather than some other window, and the response's `projection` says so with `signpost_range_ignored`.
-Every ranged response's `projection` names the range, so a windowed answer cannot be taken
-for a whole-report one. `diff_reports` applies one range to both reports, and refuses when
-only one of them holds signposts: a window compared against a whole report would show every
-row outside the window as a change.
+uses the whole file rather than some other window, and the response's `projection` says so
+with `signpost_range_ignored`. Every ranged response's `projection` names the range, so a
+windowed answer cannot be taken for a whole-report one. `diff_reports` applies one range to
+both reports, and refuses when only one of them holds signposts: a window compared against
+a whole report would show every row outside the window as a change.
 
 One filter is applied, deliberately: per-device rows are **merged**, so an operation that
 ran on eight devices is one row rather than eight. That is the unit an operation is

@@ -774,6 +774,33 @@ class TestTopOpsLink:
         assert ranged["matched_rows"] == whole["matched_rows"]
         assert ranged["unlinked_by_reason"] == whole["unlinked_by_reason"]
 
+    def test_a_ranged_call_generates_the_window_and_the_whole_once_each(self, linked):
+        """What the top_ops description promises about cost on a linked handle."""
+        registry, handle, generate = linked()
+
+        linking.top_ops(registry, handle, start_signpost="signpost-start")
+        linking.top_ops(registry, handle, start_signpost="signpost-start")
+
+        assert generate.call_count == 2
+        assert {
+            bool(call.kwargs.get("start_signpost")) for call in generate.call_args_list
+        } == {True, False}
+
+    def test_an_ignored_range_on_a_linked_handle_is_still_whole_report_scoped(
+        self, linked
+    ):
+        """No signposts, so the read is whole -- and the link's counts are the
+        whole report's either way, which is all the scope says."""
+        registry, handle, _ = linked()
+
+        with patch.object(
+            tools, "_resolve_signposts", return_value=ResolvedSignposts({}, True)
+        ):
+            result = linking.top_ops(registry, handle, start_signpost="anything")
+
+        assert result["projection"]["signpost_range_ignored"] is True
+        assert result["operation_link"]["scope"] == linking.WHOLE_REPORT_SCOPE
+
     def test_a_ranged_call_on_a_performance_only_handle_has_no_link_scope(self, linked):
         """No profiler report, no operation_id to explain, so no scope either."""
         registry, handle, _ = linked(profiler=False)

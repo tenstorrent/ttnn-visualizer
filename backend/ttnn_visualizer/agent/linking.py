@@ -670,8 +670,7 @@ def top_ops(
         response["note"] = TOP_OPS_LINK_NOTE
         # Read from the projection, which already names any range it read, so
         # the note can never disagree with it.
-        projection = result.get("projection")
-        if isinstance(projection, dict) and "start_signpost" in projection:
+        if tools.is_ranged(result.get("projection")):
             response["scope"] = WHOLE_REPORT_SCOPE
             response["note"] = f"{TOP_OPS_LINK_NOTE} {RANGED_LINK_NOTE}"
     if link.status is LinkStatus.LINKED and link.unlinked is not None:

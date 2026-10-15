@@ -25,6 +25,7 @@ from ttnn_visualizer.csv_queries import (
     OpsPerformanceQueries,
     OpsPerformanceReportQueries,
     ResolvedSignposts,
+    check_signpost_range,
     read_signposts,
     signpost_range_ignored,
 )
@@ -157,9 +158,15 @@ def canonical_report(
     A range on a report with no signposts is answered from the whole snapshot:
     tt-perf-report would read the whole file for it anyway, and generating it
     once per name asked would cache an identical copy for each. A refused range
-    raises `InvalidSignpostRange`, a `ValueError`, and is not cached.
+    raises `InvalidSignpostRange`, a `ValueError`, and is not cached. It is
+    refused against the signposts already read for the handle, before the CSV is
+    read again: an agent guessing names would otherwise pay a full read per guess.
     """
     ignored = range_ignored(registry, handle, signposts)
+    if signposts is not None and not ignored:
+        check_signpost_range(
+            _signposts(registry, handle), signposts.start, signposts.end
+        )
     scope = None if ignored else signposts
     overrides = scope.as_overrides() if scope is not None else {}
     report = registry.cached_report(
@@ -180,16 +187,26 @@ def range_ignored(
     """
     if signposts is None:
         return False
-    resolved = registry.cached_report(
+    return signpost_range_ignored(
+        _signposts(registry, handle), signposts.start, signposts.end
+    )
+
+
+def _signposts(registry: ReportRegistry, handle: str) -> ResolvedSignposts:
+    """The handle's signposts, read once."""
+    return registry.cached_report(
         handle, _resolve_signposts, variant=CacheVariant.SIGNPOSTS
     )
-    return signpost_range_ignored(resolved, signposts.start, signposts.end)
 
 
 def _resolve_signposts(instance: Instance) -> ResolvedSignposts:
     path = OpsPerformanceQueries.get_local_ops_perf_file_path(instance)
     with open(path, newline="") as csv_file:
         return read_signposts(csv_file)
+
+
+# The projection key a range adds, and the one `is_ranged` reads it back by.
+_START_SIGNPOST_KEY = "start_signpost"
 
 
 def projection(
@@ -205,13 +222,21 @@ def projection(
     if signposts is not None:
         result.update(
             {
-                "start_signpost": signposts.start,
+                _START_SIGNPOST_KEY: signposts.start,
                 "end_signpost": signposts.end,
                 "boundary_signposts_included": False,
                 "signpost_range_ignored": ignored,
             }
         )
     return result
+
+
+def is_ranged(response_projection: object) -> bool:
+    """Whether a response's projection says it was read over a signpost range."""
+    return (
+        isinstance(response_projection, dict)
+        and _START_SIGNPOST_KEY in response_projection
+    )
 
 
 def _generate_canonical_report(instance: Instance, **overrides: object) -> Dict:
@@ -531,6 +556,7 @@ __all__ = [
     "SORTABLE_METRICS",
     "SignpostRange",
     "canonical_report",
+    "is_ranged",
     "countable_device_time",
     "diff_reports",
     "partitioned_caveat",

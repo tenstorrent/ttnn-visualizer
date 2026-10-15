@@ -114,14 +114,26 @@ def _row(**overrides):
     return row
 
 
+# The signposts a patched handle "holds", in file order. Every name the mocked
+# tests range over is here, since a name a report lacks is now refused against this
+# list before a report is generated.
+_PATCHED_SIGNPOSTS = ["PERF_DECODE", "PERF_DECODE_END", "A", "B", "C", "START", "END"]
+
+
 def _signposts_in(*handles):
-    """Patch the signpost check: the named handles' CSVs hold a signpost, others none.
+    """Patch the signpost read: the named handles' CSVs hold `_PATCHED_SIGNPOSTS`,
+    others none.
 
     The mocked tests write no CSV for `range_ignored` to read.
     """
 
     def resolve(instance):
-        names = {"PERF_DECODE": [0]} if instance.instance_id in handles else {}
+        held = instance.instance_id in handles
+        names = (
+            {name: [index] for index, name in enumerate(_PATCHED_SIGNPOSTS)}
+            if held
+            else {}
+        )
         return ResolvedSignposts(names, True)
 
     return patch.object(tools, "_resolve_signposts", side_effect=resolve)
@@ -248,7 +260,7 @@ class TestReportInventory:
 
 class TestTopOps:
     @pytest.fixture(autouse=True)
-    def _signposted(self):
+    def signposted(self):
         with _signposts_in("report-1"):
             yield
 
@@ -381,16 +393,54 @@ class TestTopOps:
         # tt-perf-report would read the whole file for it, so the whole is what runs.
         generate.assert_called_once_with(registry.get("report-1"))
 
+    @pytest.mark.parametrize("argument", ["start_signpost", "end_signpost"])
     def test_an_overlong_signpost_name_is_refused_before_anything_is_read(
-        self, tmp_path
+        self, tmp_path, argument
     ):
         registry = self._registry(tmp_path)
         name = "S" * (tools.MAX_SIGNPOST_NAME_LENGTH + 1)
         with patch.object(tools, "_generate_canonical_report") as generate:
-            with pytest.raises(ValueError, match="start_signpost is 257 characters"):
-                tools.top_ops(registry, "report-1", start_signpost=name)
+            with pytest.raises(ValueError, match=f"{argument} is 257 characters"):
+                tools.top_ops(registry, "report-1", **{argument: name})
 
         generate.assert_not_called()
+
+    def test_a_signpost_name_at_the_limit_is_accepted(self, tmp_path):
+        """Refused for its length is one thing; this one is refused for being
+        absent, which proves it got past the length check."""
+        registry = self._registry(tmp_path)
+        name = "S" * tools.MAX_SIGNPOST_NAME_LENGTH
+        with pytest.raises(ValueError, match="no signpost named"):
+            tools.top_ops(registry, "report-1", start_signpost=name)
+
+    def test_a_name_the_report_lacks_is_refused_without_generating(self, tmp_path):
+        """Refused against the signposts already read: an agent guessing names
+        pays no report generation and no second read of the CSV."""
+        registry = self._registry(tmp_path)
+        with (
+            _signposts_in("report-1") as resolve,
+            patch.object(tools, "_generate_canonical_report") as generate,
+        ):
+            for _ in range(3):
+                with pytest.raises(ValueError, match="no signpost named 'TYPO'"):
+                    tools.top_ops(registry, "report-1", start_signpost="TYPO")
+
+        generate.assert_not_called()
+        assert resolve.call_count == 1
+
+    def test_signposts_are_read_once_per_handle(self, tmp_path):
+        registry = self._registry(tmp_path)
+        with (
+            _signposts_in("report-1") as resolve,
+            patch.object(
+                tools, "_generate_canonical_report", return_value=_perf_report([_row()])
+            ),
+        ):
+            tools.top_ops(registry, "report-1", start_signpost="A")
+            tools.top_ops(registry, "report-1", start_signpost="B")
+            tools.top_ops(registry, "report-1", end_signpost="END")
+
+        assert resolve.call_count == 1
 
     def test_ranges_on_a_report_without_signposts_share_the_whole_snapshot(
         self, tmp_path
@@ -477,18 +527,20 @@ class TestTopOps:
         assert result["projection"] == tools.CANONICAL_PROJECTION
 
     def test_a_refused_range_is_raised_and_not_kept(self, tmp_path):
+        """One the pre-check passes but the generator refuses -- its own check
+        stays authoritative -- is not cached either."""
         registry = self._registry(tmp_path)
         with patch.object(
             tools,
             "_generate_canonical_report",
             side_effect=[
-                InvalidSignpostRange("no signpost named 'TYPO'"),
+                InvalidSignpostRange("signpost 'A' occurs once"),
                 _perf_report([_row()]),
             ],
         ) as generate:
-            with pytest.raises(ValueError, match="no signpost named 'TYPO'"):
-                tools.top_ops(registry, "report-1", start_signpost="TYPO")
-            tools.top_ops(registry, "report-1", start_signpost="TYPO")
+            with pytest.raises(ValueError, match="occurs once"):
+                tools.top_ops(registry, "report-1", start_signpost="A")
+            tools.top_ops(registry, "report-1", start_signpost="A")
 
         assert generate.call_count == 2
 
@@ -787,10 +839,23 @@ class TestScopedSnapshots:
 
         assert built == [1]
 
+    def test_clearing_the_registry_drops_ranged_snapshots_too(self, tmp_path):
+        registry = ReportRegistry()
+        write_device_log(tmp_path, MODERN_HEADER, [])
+        load_report(registry, performance_path=str(tmp_path))
+        built = []
+        registry.cached_report("report-1", built.append, scope="x")
+
+        registry.clear()
+        load_report(registry, performance_path=str(tmp_path))
+        registry.cached_report("report-1", built.append, scope="x")
+
+        assert len(built) == 2
+
 
 class TestDiffReports:
     @pytest.fixture(autouse=True)
-    def _signposted(self):
+    def signposted(self):
         with _signposts_in("report-1", "report-2"):
             yield
 
@@ -1258,11 +1323,7 @@ class TestTransport:
         load_report(registry, performance_path=str(tmp_path))
         with (
             _signposts_in("report-1"),
-            patch.object(
-                tools,
-                "_generate_canonical_report",
-                side_effect=InvalidSignpostRange("no signpost named 'TYPO'"),
-            ),
+            patch.object(tools, "_generate_canonical_report") as generate,
             patch.object(server, "record_event") as record,
         ):
             response = server.handle_message(
@@ -1281,6 +1342,8 @@ class TestTransport:
         assert response["result"]["isError"] is True
         assert "no signpost named 'TYPO'" in response["result"]["content"][0]["text"]
         assert record.call_args.kwargs["outcome"] is McpToolOutcome.REFUSED
+        # Refused from the argument the server passed through, not a stubbed raise.
+        generate.assert_not_called()
 
     @pytest.mark.parametrize("tool", ["top_ops", "diff_reports"])
     def test_the_signpost_arguments_are_advertised(self, tool):
