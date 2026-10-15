@@ -53,7 +53,7 @@ import OpGraphDeviceOpNode from './OpGraphDeviceOpNode';
 import OpGraphEdge from './OpGraphEdge';
 import OpGraphHotOpsPanel from './OpGraphHotOpsPanel';
 import OpGraphInfoPanel from './OpGraphInfoPanel';
-import { buildHotOpRows, getMarkedHotOpRanks, hotRankOf } from './opGraphHotOps';
+import { buildHotOpRows, buildHotRankByNodeId, getMarkedHotOpRanks } from './opGraphHotOps';
 import OpGraphNode from './OpGraphNode';
 import OpGraphToolbar from './OpGraphToolbar';
 import { buildDeviceOperationSubgraph, countDeviceOperations } from './opGraphDeviceSubgraph';
@@ -1524,9 +1524,8 @@ const OperationGraphInner = ({
     const isHotOpsMarkingActive = isHotOpsActive && hotOpsMarking !== null;
 
     // Zoom goes straight to the DOM: it changes every wheel frame, and through
-    // state it would re-render the whole graph per frame to move one bar.
+    // state it would re-render the whole graph per frame to move one bar or badge.
     // `OpGraphEdge` can afford `useStore` only because it selects a boolean.
-    // The rank badges read it too, to stay legible at overview zoom. #2085
     const isPerfZoomPublished = isPerfOverlayActive || isHotOpsMarkingActive;
     useEffect(() => {
         const container = containerRef.current;
@@ -1616,9 +1615,13 @@ const OperationGraphInner = ({
         () => (isHotOpsActive ? buildHotOpRows(perfOverlay, graphOperationIds, drawnOperationNamesById) : []),
         [isHotOpsActive, perfOverlay, graphOperationIds, drawnOperationNamesById],
     );
-    const hotRankByOperationId = useMemo(
-        () => (isHotOpsMarkingActive && hotOpsMarking !== null ? getMarkedHotOpRanks(hotOpRows, hotOpsMarking) : null),
-        [isHotOpsMarkingActive, hotOpsMarking, hotOpRows],
+    // Resolved per node here rather than in the styling pass, which reruns on every drag frame.
+    const hotRankByNodeId = useMemo(
+        () =>
+            isHotOpsMarkingActive
+                ? buildHotRankByNodeId(getMarkedHotOpRanks(hotOpRows, hotOpsMarking), nodeIndex)
+                : null,
+        [isHotOpsMarkingActive, hotOpsMarking, hotOpRows, nodeIndex],
     );
 
     const styledNodes = useMemo(() => {
@@ -1628,7 +1631,7 @@ const OperationGraphInner = ({
             !perfStyleByNodeId &&
             !criticalPathNodeIds &&
             !revealedNodeIds &&
-            !hotRankByOperationId
+            !hotRankByNodeId
         ) {
             return nodes;
         }
@@ -1676,7 +1679,7 @@ const OperationGraphInner = ({
             // highlight and the inherited filter dim instead of displacing any.
             const perfStyle = perfStyleByNodeId?.get(node.id);
             const buriedMatchCount = matches.buriedCountById.get(node.id) ?? 0;
-            const hotRank = hotRankByOperationId === null ? undefined : hotRankOf(node, hotRankByOperationId);
+            const hotRank = hotRankByNodeId?.get(node.id);
             let nextData = node.data;
             if (buriedMatchCount > 0 && nextData.buriedMatchCount !== buriedMatchCount) {
                 nextData = { ...nextData, buriedMatchCount };
@@ -1695,19 +1698,18 @@ const OperationGraphInner = ({
             // scores change — so an untouched node hits the cache and keeps the
             // object it was given.
             const cached = styledNodeCache.get(node);
-            if (
+            const hasSameChips =
                 cached !== undefined &&
-                cached.className === className &&
-                cached.perfStyle === perfStyle &&
                 cached.styled.data.buriedMatchCount === nextData.buriedMatchCount &&
-                cached.styled.data.hotRank === nextData.hotRank
-            ) {
+                cached.styled.data.hotRank === nextData.hotRank;
+            if (hasSameChips && cached.className === className && cached.perfStyle === perfStyle) {
                 return cached.styled;
             }
 
             const styled = {
                 ...node,
-                data: nextData,
+                // The cached data when only the class or the bar changed, so a restyle doesn't re-render the node.
+                data: hasSameChips ? cached.styled.data : nextData,
                 ...(perfStyle ? { style: { ...node.style, ...perfStyle } } : {}),
                 ...(className === undefined ? {} : { className }),
                 // Selection is mirrored into React Flow's own flag so its keyboard
@@ -1729,7 +1731,7 @@ const OperationGraphInner = ({
         criticalPathNodeIds,
         styledNodeCache,
         revealedNodeIds,
-        hotRankByOperationId,
+        hotRankByNodeId,
     ]);
 
     const styledEdges = useMemo(() => {

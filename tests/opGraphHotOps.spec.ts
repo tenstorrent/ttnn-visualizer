@@ -6,13 +6,13 @@ import { describe, expect, it } from 'vitest';
 
 import {
     buildHotOpRows,
+    buildHotRankByNodeId,
     getMarkedHotOpRanks,
     getVisibleHotOpRows,
-    hotRankOf,
 } from '../src/components/operation-graph/opGraphHotOps';
 import { buildOpGraphPerfOverlay } from '../src/components/operation-graph/opGraphPerfOverlay';
 import { HotOpsSort } from '../src/definitions/HotOps';
-import { type OpGraphFlowNode, OpGraphNodeType } from '../src/components/operation-graph/opGraphTypes';
+import type { OpGraphNodeIndexEntry } from '../src/components/operation-graph/opGraphTypes';
 import type { PerfOverlaySource } from '../src/functions/perfOverlay';
 
 // `device_time` is microseconds on the wire; the aggregator converts to ns.
@@ -147,42 +147,42 @@ describe('getMarkedHotOpRanks', () => {
     });
 });
 
-describe('hotRankOf', () => {
+describe('buildHotRankByNodeId', () => {
     const ranks = new Map<number, number | null>([
         [2, 1],
         [3, 2],
         [4, null],
     ]);
-    const node = (type: OpGraphNodeType, operationId: number, memberOperationIds?: number[]) =>
-        ({ type, data: { operationId, memberOperationIds } }) as Pick<OpGraphFlowNode, 'type' | 'data'>;
+    const entry = (id: string, operationId: number, memberOperationIds?: number[]): OpGraphNodeIndexEntry => ({
+        id,
+        operationId,
+        name: id,
+        memberOperationIds,
+    });
+    const rankOf = (node: OpGraphNodeIndexEntry) => buildHotRankByNodeId(ranks, [node]).get(node.id);
 
-    it('gives an op its own rank, collapsed or showing its device operations', () => {
-        expect(hotRankOf(node(OpGraphNodeType.OP, 3), ranks)).toBe(2);
-        expect(hotRankOf(node(OpGraphNodeType.DEVICE_GROUP, 3), ranks)).toBe(2);
+    it('gives an op node its own rank', () => {
+        expect(rankOf(entry('3', 3))).toBe(2);
     });
 
-    it('leaves out an op the list does not show', () => {
-        expect(hotRankOf(node(OpGraphNodeType.OP, 1), ranks)).toBeUndefined();
+    it('leaves out a node whose op the list does not show', () => {
+        expect(buildHotRankByNodeId(ranks, [entry('1', 1)]).has('1')).toBe(false);
     });
 
     it('marks a listed op without perf data, unranked', () => {
-        expect(hotRankOf(node(OpGraphNodeType.OP, 4), ranks)).toBeNull();
-    });
-
-    it('leaves a device operation to the op it belongs to, whose id it carries', () => {
-        expect(hotRankOf(node(OpGraphNodeType.DEVICE_OP, 3), ranks)).toBeUndefined();
+        expect(rankOf(entry('4', 4))).toBeNull();
     });
 
     it("gives a folded block its slowest listed member's rank", () => {
-        expect(hotRankOf(node(OpGraphNodeType.BLOCK, 1, [1, 4, 3, 2]), ranks)).toBe(1);
-        expect(hotRankOf(node(OpGraphNodeType.BLOCK, 4, [4, 3]), ranks)).toBe(2);
+        expect(rankOf(entry('block:1', 1, [1, 4, 3, 2]))).toBe(1);
+        expect(rankOf(entry('block:4', 4, [4, 3]))).toBe(2);
     });
 
     it('marks a folded block whose listed members have no perf data, unranked', () => {
-        expect(hotRankOf(node(OpGraphNodeType.BLOCK, 4, [4, 5]), ranks)).toBeNull();
+        expect(rankOf(entry('block:4', 4, [4, 5]))).toBeNull();
     });
 
     it('leaves out a folded block with no listed member', () => {
-        expect(hotRankOf(node(OpGraphNodeType.BLOCK, 1, [1, 5]), ranks)).toBeUndefined();
+        expect(buildHotRankByNodeId(ranks, [entry('block:1', 1, [1, 5])]).has('block:1')).toBe(false);
     });
 });

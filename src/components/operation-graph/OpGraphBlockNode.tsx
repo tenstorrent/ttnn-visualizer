@@ -46,7 +46,7 @@ const OpGraphBlockNode = memo(({ data }: NodeProps<OpGraphFlowNode>) => {
                     {`+${data.buriedMatchCount}`}
                 </span>
             ) : null}
-            {data.hotRank === undefined ? null : <OpGraphHotRankBadge rank={data.hotRank} />}
+            <OpGraphHotRankBadge rank={data.hotRank} />
             <Handle
                 type='source'
                 position={Position.Bottom}

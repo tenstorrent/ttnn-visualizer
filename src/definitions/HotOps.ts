@@ -20,7 +20,6 @@ export interface HotOpsSettings {
     limit: HotOpsLimit;
     sort: HotOpsSort;
     hideUnlinked: boolean;
-    /** Badge the ops the list shows on the graph. #2085 */
     markOnGraph: boolean;
 }
 

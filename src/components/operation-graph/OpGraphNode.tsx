@@ -23,7 +23,7 @@ const OpGraphNode = memo(({ data }: NodeProps<OpGraphFlowNode>) => (
                 isExpanded={false}
             />
         ) : null}
-        {data.hotRank === undefined ? null : <OpGraphHotRankBadge rank={data.hotRank} />}
+        <OpGraphHotRankBadge rank={data.hotRank} />
         <Handle
             type='source'
             position={Position.Bottom}

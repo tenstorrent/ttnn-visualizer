@@ -1407,6 +1407,52 @@ describe('OperationGraphReactFlow slowest operations list', () => {
             expect(badges()).toEqual([]);
         });
 
+        it('badges an expanded op on its box and leaves its device operations to it', () => {
+            renderGraph(BRANCHING_OPERATION_LIST, BRANCHING_PERF_ROWS);
+            fireEvent.click(hotOpsSwitch());
+            fireEvent.click(markSwitch());
+
+            // Device operations carry their op's id, so only the index keeps them unbadged.
+            rebuildWith(BRANCHING_OPERATION_LIST, [deviceSubgraphFor(3, 1)]);
+
+            expect(rankOf('3')).toBe(1);
+            expect(rankOf(getDeviceNodeId(3, 1))).toBeUndefined();
+            expect(rankOf(getDeviceNodeId(3, 2))).toBeUndefined();
+            // One badge per op, the expanded one's on its box.
+            expect(badges().sort()).toEqual(['1', '2', '3', '4']);
+        });
+
+        it('keeps marked nodes byte-for-byte across a drag frame', () => {
+            renderGraph(OPERATION_LIST, PERF_ROWS);
+            fireEvent.click(hotOpsSwitch());
+            fireEvent.click(markSwitch());
+            const before = lastFlowRender().nodes;
+            expect(rankOf('5')).toBe(1);
+
+            act(() => {
+                harness.setNodes?.((previous) =>
+                    previous.map((node) => (node.id === '1' ? { ...node, position: { x: 5, y: 5 } } : node)),
+                );
+            });
+
+            const after = lastFlowRender().nodes;
+            expect(after).not.toBe(before);
+            expect(nodeById(after, '5')).toBe(nodeById(before, '5'));
+        });
+
+        it("keeps a marked node's data through a restyle, so its component need not re-render", () => {
+            renderGraph(OPERATION_LIST, PERF_ROWS);
+            fireEvent.click(hotOpsSwitch());
+            fireEvent.click(markSwitch());
+            const { data } = nodeById(lastFlowRender().nodes, '5');
+
+            enableOverlay();
+
+            const restyled = nodeById(lastFlowRender().nodes, '5');
+            expect(perfScaleOf(restyled)).toBeDefined();
+            expect(restyled.data).toBe(data);
+        });
+
         it('stacks with the selection ring and the critical path', () => {
             renderGraph(BRANCHING_OPERATION_LIST, BRANCHING_PERF_ROWS);
             enableCriticalPath();
@@ -3484,6 +3530,56 @@ describe('OperationGraphReactFlow repeat blocks', () => {
             expect(rankOf('6')).toBe(1);
             expect(rankOf(SECOND_BLOCK_ID)).toBe(2);
             expect(rankOf(FIRST_BLOCK_ID)).toBe(4);
+            // Drawn on the blocks too, beside the two ops left unfolded.
+            const badges = Array.from(
+                document.querySelectorAll('.op-graph-node-hot-rank'),
+                (badge) => badge.textContent,
+            );
+            expect(badges.sort()).toEqual(['1', '2', '4', '6']);
+        });
+
+        it("keeps the filter's buried count beside the rank on a block (#2085)", () => {
+            // Members named apart from the label, so the filter finds them only inside the blocks.
+            const buriedOperations: OperationDescription[] = [
+                operation(1, 'prefix', [2]),
+                operation(2, 'layer_a', [3], 'attention.py:1'),
+                operation(3, 'layer_b', [4], 'mlp.py:1'),
+                operation(4, 'layer_a', [5], 'attention.py:2'),
+                operation(5, 'layer_b', [6], 'mlp.py:2'),
+                operation(6, 'suffix', []),
+            ];
+            renderGraph(buriedOperations, REPEAT_PERF_ROWS);
+            fireEvent.click(screen.getByRole('button', { name: 'Fold all repeats' }));
+            deliver(buriedOperations, { expandedBlockIds: [] });
+            fireEvent.click(screen.getByRole('checkbox', { name: /^Slowest operations/ }));
+            fireEvent.click(screen.getByRole('checkbox', { name: 'Mark on graph' }));
+
+            typeFilter('layer_a');
+
+            const block = nodeById(lastFlowRender().nodes, FIRST_BLOCK_ID);
+            expect(block.data.buriedMatchCount).toBe(1);
+            expect(block.data.hotRank).toBe(4);
+            expect(screen.getAllByText('+1')).toHaveLength(2);
+        });
+
+        it("badges a block '–' when its listed members have no perf data (#2085)", () => {
+            renderGraph(
+                REPEAT_OPERATION_LIST,
+                REPEAT_PERF_ROWS.filter((row) => row.id !== 2 && row.id !== 3),
+            );
+            fireEvent.click(screen.getByRole('button', { name: 'Fold all repeats' }));
+            deliver(REPEAT_OPERATION_LIST, { expandedBlockIds: [] });
+            fireEvent.click(screen.getByRole('checkbox', { name: /^Slowest operations/ }));
+            fireEvent.click(screen.getByRole('checkbox', { name: 'Mark on graph' }));
+
+            fireEvent.click(
+                within(screen.getByRole('region', { name: 'Slowest operations' })).getByText(
+                    'Hide ops without perf data',
+                ),
+            );
+
+            expect(nodeById(lastFlowRender().nodes, FIRST_BLOCK_ID).data.hotRank).toBeNull();
+            expect(screen.getAllByTitle('Slowest operations: no perf data').length).toBeGreaterThan(0);
         });
 
         it('keeps the list swatches the same whether or not the bars are drawn', () => {

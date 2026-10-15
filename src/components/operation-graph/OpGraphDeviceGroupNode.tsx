@@ -31,7 +31,7 @@ const OpGraphDeviceGroupNode = memo(({ data }: NodeProps<OpGraphFlowNode>) => (
                 isExpanded
             />
         </div>
-        {data.hotRank === undefined ? null : <OpGraphHotRankBadge rank={data.hotRank} />}
+        <OpGraphHotRankBadge rank={data.hotRank} />
         <Handle
             type='source'
             position={Position.Bottom}

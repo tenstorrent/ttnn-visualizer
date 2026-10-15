@@ -2,9 +2,10 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-import { type HotOpsMarking, type HotOpsSettings, HotOpsSort } from '../../definitions/HotOps';
+import { type HotOpsSettings, HotOpsSort } from '../../definitions/HotOps';
 import type { OpGraphPerfOverlay } from './opGraphPerfOverlay';
-import { type OpGraphFlowNode, OpGraphNodeType } from './opGraphTypes';
+import { memberOperationIdsOf } from './opGraphMemberTime';
+import type { OpGraphNodeIndexEntry } from './opGraphTypes';
 
 export interface HotOpRow {
     operationId: number;
@@ -45,13 +46,20 @@ export const buildHotOpRows = (
 
 const byOperationId = (a: HotOpRow, b: HotOpRow) => a.operationId - b.operationId;
 
+type HotOpsRowFilter = { limit: number | null; hideUnlinked: boolean };
+
+/** The rows the list keeps, slowest first: the limit takes the slowest of those not hidden. */
+const getKeptHotOpRows = (rows: readonly HotOpRow[], { limit, hideUnlinked }: HotOpsRowFilter): HotOpRow[] => {
+    const eligible = hideUnlinked ? rows.filter((row) => row.rank !== null) : rows;
+    return limit === null ? [...eligible] : eligible.slice(0, limit);
+};
+
 /** The rows to list: the limit takes the slowest, and the sort only orders what it kept. */
 export const getVisibleHotOpRows = (
     rows: readonly HotOpRow[],
-    { limit, sort, hideUnlinked }: Pick<HotOpsSettings, 'sort' | 'hideUnlinked'> & { limit: number | null },
+    { sort, ...filter }: HotOpsRowFilter & Pick<HotOpsSettings, 'sort'>,
 ): HotOpRow[] => {
-    const eligible = hideUnlinked ? rows.filter((row) => row.rank !== null) : rows;
-    const kept = limit === null ? [...eligible] : eligible.slice(0, limit);
+    const kept = getKeptHotOpRows(rows, filter);
     if (sort === HotOpsSort.DURATION) {
         return kept;
     }
@@ -63,34 +71,29 @@ export const getVisibleHotOpRows = (
 };
 
 /** The rank of each op the list shows, `null` for one without perf data: the set the graph badges. #2085 */
-export const getMarkedHotOpRanks = (
-    rows: readonly HotOpRow[],
-    marking: Pick<HotOpsMarking, 'hideUnlinked'> & { limit: number | null },
-): Map<number, number | null> =>
-    new Map(
-        getVisibleHotOpRows(rows, { ...marking, sort: HotOpsSort.DURATION }).map((row) => [row.operationId, row.rank]),
-    );
+export const getMarkedHotOpRanks = (rows: readonly HotOpRow[], filter: HotOpsRowFilter): Map<number, number | null> =>
+    new Map(getKeptHotOpRows(rows, filter).map((row) => [row.operationId, row.rank]));
 
 /**
- * The rank a node is badged with, or `undefined` when the list doesn't show it. A folded block wears its
- * slowest listed member's rank. A device operation carries its owner's id, so it is left to its owner.
+ * Each indexed node's badge rank: the slowest listed op among those it stands for, by the same rule as
+ * the perf bar and the critical path. A ranked op outranks an unranked one; an unlisted node is absent.
  */
-export const hotRankOf = (
-    node: Pick<OpGraphFlowNode, 'type' | 'data'>,
+export const buildHotRankByNodeId = (
     rankByOperationId: ReadonlyMap<number, number | null>,
-): number | null | undefined => {
-    if (node.type === OpGraphNodeType.BLOCK) {
+    nodeIndex: readonly OpGraphNodeIndexEntry[],
+): Map<string, number | null> => {
+    const rankByNodeId = new Map<string, number | null>();
+    for (const entry of nodeIndex) {
         let best: number | null | undefined;
-        for (const memberId of node.data.memberOperationIds ?? []) {
-            const rank = rankByOperationId.get(memberId);
+        for (const operationId of memberOperationIdsOf(entry)) {
+            const rank = rankByOperationId.get(operationId);
             if (rank !== undefined && (best === undefined || best === null || (rank !== null && rank < best))) {
                 best = rank;
             }
         }
-        return best;
+        if (best !== undefined) {
+            rankByNodeId.set(entry.id, best);
+        }
     }
-    if (node.type === OpGraphNodeType.OP || node.type === OpGraphNodeType.DEVICE_GROUP) {
-        return rankByOperationId.get(node.data.operationId);
-    }
-    return undefined;
+    return rankByNodeId;
 };

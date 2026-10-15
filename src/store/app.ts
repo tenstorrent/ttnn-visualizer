@@ -145,8 +145,7 @@ export const hotOpsMarkingAtom = selectAtom(
         previous === next ||
         (previous !== null &&
             next !== null &&
-            previous.limit === next.limit &&
-            previous.hideUnlinked === next.hideUnlinked),
+            (Object.keys(next) as (keyof HotOpsMarking)[]).every((key) => previous[key] === next[key])),
 );
 
 // Tensors route

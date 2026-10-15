@@ -64,6 +64,19 @@ describe('slowest-operations rank badge', () => {
         expect(ruleBody(BADGE)).toMatch(/position:\s*absolute/);
     });
 
+    it('sits above the box, so it covers neither the label nor the filter badge in its corner', () => {
+        expect(ruleBody(BADGE)).toMatch(/transform:\s*translate\([^,]+,\s*-100%\)/);
+    });
+
+    it('takes the pointer, so a click on it selects its node rather than the pane behind', () => {
+        expect(ruleBody(BADGE)).not.toMatch(/pointer-events:\s*none/);
+    });
+
+    it('stops growing before it can outgrow the gap to the row above', () => {
+        // The layout keeps ranks 80 graph px apart, and the tab is ~1.7 font sizes tall.
+        expect(ruleBody(BADGE)).toMatch(/font-size:\s*clamp\(\s*11px,.*,\s*40px\s*\)/);
+    });
+
     it('divides its size by the live zoom, unscaled when none is published', () => {
         // Marking publishes the zoom too, so the badges still read at overview zoom. #2085
         expect(ruleBody(BADGE)).toMatch(
