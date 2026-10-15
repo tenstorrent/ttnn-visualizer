@@ -57,6 +57,22 @@ describe('buildTimestepSkeleton', () => {
 describe('assembleWindowedNpeData', () => {
     const skeletonFor = (summary = makeSummary()) => buildTimestepSkeleton(summary);
 
+    // NPEView sizes and labels the chip from these, and local uploads take this path. #1776 #1847
+    it('carries the report grid and its SoC descriptor through to NPEView', () => {
+        const descriptor = { grid: { x_size: 11, y_size: 8 }, functional_workers: ['2-2'] };
+        const summary = makeSummary({
+            common_info: { version: '1.0.0', arch: 'quasar', num_cols: 11, num_rows: 8 } as CommonInfo,
+            soc_descriptor: descriptor,
+        });
+
+        const data = assembleWindowedNpeData(summary, makeWindow(1), skeletonFor(summary));
+
+        expect(data.common_info).toBe(summary.common_info);
+        expect(data.common_info.num_cols).toBe(11);
+        expect(data.common_info.num_rows).toBe(8);
+        expect(data.soc_descriptor).toBe(descriptor);
+    });
+
     it('patches the visited step with the window payload by default', () => {
         const summary = makeSummary();
         const data = assembleWindowedNpeData(summary, makeWindow(1), skeletonFor(summary));

@@ -9,6 +9,7 @@ import socDescriptorSchema from '../src/schemas/npe-soc-descriptor.schema.json';
 import { parseSocDescriptorOverride } from '../src/functions/socDescriptorOverride';
 import archWormhole from '../src/assets/data/arch-wormhole.json';
 import archBlackhole from '../src/assets/data/arch-blackhole.json';
+import archQuasar from '../src/assets/data/arch-quasar.json';
 
 const validate = new Ajv({ allErrors: true }).compile(socDescriptorSchema);
 
@@ -21,6 +22,7 @@ const validate = new Ajv({ allErrors: true }).compile(socDescriptorSchema);
 const cases: { label: string; descriptor: unknown; accepted: boolean }[] = [
     { label: 'baked wormhole', descriptor: archWormhole, accepted: true },
     { label: 'baked blackhole', descriptor: archBlackhole, accepted: true },
+    { label: 'baked quasar', descriptor: archQuasar, accepted: true },
     {
         label: 'minimum a producer must write',
         descriptor: { grid: { x_size: 4, y_size: 4 }, functional_workers: ['1-1'] },
@@ -81,6 +83,21 @@ const cases: { label: string; descriptor: unknown; accepted: boolean }[] = [
         accepted: false,
     },
     {
+        label: 'dispatch coordinate malformed',
+        descriptor: { grid: { x_size: 4, y_size: 4 }, functional_workers: ['1-1'], dispatch: ['10'] },
+        accepted: false,
+    },
+    {
+        label: 'eth present but null',
+        descriptor: { grid: { x_size: 4, y_size: 4 }, functional_workers: ['1-1'], eth: null },
+        accepted: false,
+    },
+    {
+        label: 'dispatch present but null',
+        descriptor: { grid: { x_size: 4, y_size: 4 }, functional_workers: ['1-1'], dispatch: null },
+        accepted: false,
+    },
+    {
         label: 'grid axis above the cap',
         descriptor: { grid: { x_size: 1000, y_size: 4 }, functional_workers: ['1-1'] },
         accepted: false,
@@ -101,6 +118,10 @@ const runtimeOnly: { label: string; descriptor: unknown }[] = [
     {
         label: 'dram bank outside the grid',
         descriptor: { grid: { x_size: 4, y_size: 4 }, functional_workers: ['1-1'], dram: [['0-40']] },
+    },
+    {
+        label: 'dispatch engine outside the grid',
+        descriptor: { grid: { x_size: 4, y_size: 4 }, functional_workers: ['1-1'], dispatch: ['10-1'] },
     },
     {
         label: 'cell count above the cap while both axes are under it',

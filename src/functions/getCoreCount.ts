@@ -4,12 +4,14 @@
 
 import { DeviceArchitecture } from '../definitions/DeviceArchitecture';
 import { TypedPerfTableRow } from '../model/PerfTable';
+import { stringToArchitecture } from './stringToArchitecture';
 
 // Core counts don't match documentation exactly because there are 1 or 2 rows of harvested cores, so they are not considered as working cores
 const CORE_COUNT: Record<Exclude<DeviceArchitecture, DeviceArchitecture.UNKNOWN>, number> = {
     [DeviceArchitecture.GRAYSKULL]: 108,
     [DeviceArchitecture.WORMHOLE]: 64,
     [DeviceArchitecture.BLACKHOLE]: 130, // Mohamed: 130 for BH p150 and 120 for BH p100. P150 is more popular so 130 is good
+    [DeviceArchitecture.QUASAR]: 32, // 32 workers (8 columns × 4 rows); 28 when dispatch runs on Tensix cores
 };
 
 // Wormhole default used when device metadata is unavailable (matches DeviceArchitecture.WORMHOLE).
@@ -49,7 +51,8 @@ function getCoreCount(architecture: DeviceArchitecture, data: TypedPerfTableRow[
 
 /** Resolve device capacity for utilisation heuristics and UI core count display. */
 export function resolveMaxCores(deviceMeta: DeviceMetaLike | null | undefined, rows: TypedPerfTableRow[]): number {
-    const architecture = deviceMeta?.architecture ?? DeviceArchitecture.WORMHOLE;
+    // The device log's raw `ARCH:` token: normalised, so an unrecognised one still honours the rows' core counts.
+    const architecture = stringToArchitecture(deviceMeta?.architecture ?? DeviceArchitecture.WORMHOLE);
     const maxCores = deviceMeta?.max_cores ?? getCoreCount(architecture, rows);
 
     return maxCores > 0 ? maxCores : DEFAULT_MAX_CORES;

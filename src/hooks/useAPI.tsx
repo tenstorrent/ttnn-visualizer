@@ -66,7 +66,9 @@ import {
 } from '../store/app';
 import { DeviceArchitecture } from '../definitions/DeviceArchitecture';
 import { getChipDesign } from '../functions/getChipDesign';
-import { parseSocDescriptorOverride } from '../functions/socDescriptorOverride';
+import { stringToArchitecture } from '../functions/stringToArchitecture';
+import { parseReportedGrid, parseSocDescriptorOverride } from '../functions/socDescriptorOverride';
+import { formatGridSize } from '../functions/formatting';
 import { NPEData, NPEManifestEntry, NpeSummary, NpeWindow } from '../model/NPEModel';
 import { GraphBundle } from '../model/MLIRJsonModel';
 import { ChipDesign, ClusterModel, ClusterTopology, MeshData, MeshDescriptorResponse } from '../model/ClusterModel';
@@ -1368,8 +1370,12 @@ export const useInstance = () => {
 
 export interface ResolvedArchitecture {
     design: ChipDesign | null;
+    /** The extent to draw: the design's, else the report's own grid when it states a drawable one. */
+    grid: ChipDesign['grid'] | null;
     /** Populated only when a report supplied a descriptor that failed validation. */
     overrideProblems: string[] | null;
+    /** Populated when the baked descriptor was withheld because the report's grid differs from it. */
+    gridMismatch: { baked: ChipDesign['grid']; reported: ChipDesign['grid'] } | null;
 }
 
 /**
@@ -1379,11 +1385,40 @@ export interface ResolvedArchitecture {
  * topology instead of toasting "Unsupported". A malformed one does *not* silently
  * fall back: it is reported, because a descriptor that was offered and rejected is
  * a different problem from one that was never there. See #1776.
+ *
+ * `reportedGrid` is the grid the report says it was captured on. The baked descriptor
+ * is withheld when it differs, since one arch name can cover several grids (#1847).
  */
-export const useArchitecture = (arch: DeviceArchitecture, socDescriptor?: unknown): ResolvedArchitecture => {
+export const useArchitecture = (
+    arch: DeviceArchitecture,
+    socDescriptor?: unknown,
+    reportedGrid?: Partial<ChipDesign['grid']>,
+): ResolvedArchitecture => {
     const override = useMemo(() => parseSocDescriptorOverride(socDescriptor, arch), [socDescriptor, arch]);
-    const baked = getChipDesign(arch);
-    const design = override.status === 'valid' ? override.design : baked;
+    // Normalised, so `QUASAR` or `Wormhole_B0` from a producer still finds its descriptor.
+    const baked = getChipDesign(stringToArchitecture(arch));
+    const reportedXSize = reportedGrid?.x_size;
+    const reportedYSize = reportedGrid?.y_size;
+    const reported = useMemo(() => parseReportedGrid(reportedXSize, reportedYSize), [reportedXSize, reportedYSize]);
+
+    // Quasar's 2x3 and qsr.s1 models also report `quasar`, and must not be drawn on Quasar-32.
+    const gridMismatch = useMemo(() => {
+        if (override.status === 'valid' || baked === null || reported === null) {
+            return null;
+        }
+        if (baked.grid.x_size === reported.x_size && baked.grid.y_size === reported.y_size) {
+            return null;
+        }
+        return { baked: baked.grid, reported };
+    }, [override.status, baked, reported]);
+
+    let design: ChipDesign | null = baked;
+    if (override.status === 'valid') {
+        design = override.design;
+    } else if (gridMismatch) {
+        design = null;
+    }
+    const grid = design?.grid ?? reported;
     const overrideProblems = override.status === 'invalid' ? override.problems : null;
 
     // Reported from an effect rather than the hook body, which runs on every render:
@@ -1391,19 +1426,27 @@ export const useArchitecture = (arch: DeviceArchitecture, socDescriptor?: unknow
     // inline warn emits a line per frame for the length of the run. #1772
     useEffect(() => {
         if (overrideProblems) {
-            // eslint-disable-next-line no-console
+            // eslint-disable-next-line no-console -- the full problem list, which the toast truncates, is for whoever debugs the report.
             console.error(`Unusable SoC descriptor in report: ${overrideProblems.join('; ')}`);
+            return;
+        }
+        if (gridMismatch) {
+            // eslint-disable-next-line no-console -- the toast closes after a few seconds; this keeps the two sizes findable.
+            console.error(
+                `Baked ${arch} SoC descriptor is ${formatGridSize(gridMismatch.baked)}, ` +
+                    `but the report's grid is ${formatGridSize(gridMismatch.reported)}`,
+            );
             return;
         }
         if (design === null) {
             // Still worth surfacing: unlike Cluster, these callers have no degraded mode and
             // silently lose every core-type overlay when the arch doesn't resolve.
-            // eslint-disable-next-line no-console
+            // eslint-disable-next-line no-console -- see above.
             console.error(`Unsupported arch: ${arch}`);
         }
-    }, [arch, design, overrideProblems]);
+    }, [arch, design, overrideProblems, gridMismatch]);
 
-    return { design, overrideProblems };
+    return { design, grid, overrideProblems, gridMismatch };
 };
 
 export const useGetTensorSizesById = (tensorIdList: number[]): { id: number; size: number }[] => {
@@ -1422,45 +1465,34 @@ export const useGetTensorSizesById = (tensorIdList: number[]): { id: number; siz
         })
         .filter((item) => item !== null) as { id: number; size: number }[];
 };
-export const useNodeType = (arch: DeviceArchitecture, socDescriptor?: unknown) => {
-    const { design: architecture, overrideProblems } = useArchitecture(arch, socDescriptor);
-    const cores = useMemo(() => {
-        return architecture?.functional_workers?.map((loc) => {
-            return loc
-                .split('-')
-                .reverse()
-                .map((l) => parseInt(l, 10));
-        });
-    }, [architecture]);
+// Descriptor "x-y" coordinates as the [y, x] pairs the grid renderer looks cells up by.
+const toGridLocations = (locations: string[] | undefined) =>
+    locations?.map((loc) =>
+        loc
+            .split('-')
+            .reverse()
+            .map((l) => parseInt(l, 10)),
+    );
 
-    const dram = useMemo(() => {
-        return architecture?.dram?.flat().map((loc) => {
-            return loc
-                .split('-')
-                .reverse()
-                .map((l) => parseInt(l, 10));
-        });
-    }, [architecture]);
+export const useNodeType = (
+    arch: DeviceArchitecture,
+    socDescriptor?: unknown,
+    reportedGrid?: Partial<ChipDesign['grid']>,
+) => {
+    const {
+        design: architecture,
+        grid,
+        overrideProblems,
+        gridMismatch,
+    } = useArchitecture(arch, socDescriptor, reportedGrid);
 
-    const eth = useMemo(() => {
-        return architecture?.eth?.flat().map((loc) => {
-            return loc
-                .split('-')
-                .reverse()
-                .map((l) => parseInt(l, 10));
-        });
-    }, [architecture]);
+    const cores = useMemo(() => toGridLocations(architecture?.functional_workers), [architecture]);
+    const dram = useMemo(() => toGridLocations(architecture?.dram?.flat()), [architecture]);
+    const eth = useMemo(() => toGridLocations(architecture?.eth?.flat()), [architecture]);
+    const pcie = useMemo(() => toGridLocations(architecture?.pcie), [architecture]);
+    const dispatch = useMemo(() => toGridLocations(architecture?.dispatch), [architecture]);
 
-    const pcie = useMemo(() => {
-        return architecture?.pcie?.map((loc) => {
-            return loc
-                .split('-')
-                .reverse()
-                .map((l) => parseInt(l, 10));
-        });
-    }, [architecture]);
-
-    return { architecture, cores, dram, eth, pcie, overrideProblems };
+    return { architecture, grid, cores, dram, eth, pcie, dispatch, overrideProblems, gridMismatch };
 };
 
 export const PROFILER_FOLDER_QUERY_KEY = 'fetch-profiler-folder-list';

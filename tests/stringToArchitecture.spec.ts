@@ -14,11 +14,15 @@ describe('stringToArchitecture', () => {
     it('resolves the revision-suffixed names descriptors carry', () => {
         expect(stringToArchitecture('wormhole_b0')).toBe(DeviceArchitecture.WORMHOLE);
         expect(stringToArchitecture('blackhole')).toBe(DeviceArchitecture.BLACKHOLE);
+        expect(stringToArchitecture('quasar')).toBe(DeviceArchitecture.QUASAR);
+        expect(stringToArchitecture('grayskull')).toBe(DeviceArchitecture.GRAYSKULL);
     });
 
     it('is case insensitive', () => {
         expect(stringToArchitecture('WORMHOLE_B0')).toBe(DeviceArchitecture.WORMHOLE);
         expect(stringToArchitecture('Blackhole')).toBe(DeviceArchitecture.BLACKHOLE);
+        // tt-metal's SoC descriptor YAML spells it `QUASAR`; UMD's arch string is `quasar`.
+        expect(stringToArchitecture('QUASAR')).toBe(DeviceArchitecture.QUASAR);
     });
 
     it('does not resolve a name that merely contains an arch', () => {
@@ -29,7 +33,8 @@ describe('stringToArchitecture', () => {
     });
 
     it('reports an unrecognised or absent arch as unknown', () => {
-        expect(stringToArchitecture('quasar')).toBe(DeviceArchitecture.UNKNOWN);
+        // Grendel has no arch value in UMD and no descriptor here yet (#2130).
+        expect(stringToArchitecture('grendel')).toBe(DeviceArchitecture.UNKNOWN);
         expect(stringToArchitecture('')).toBe(DeviceArchitecture.UNKNOWN);
     });
 
