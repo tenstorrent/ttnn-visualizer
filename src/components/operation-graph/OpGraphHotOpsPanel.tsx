@@ -41,6 +41,8 @@ interface OpGraphHotOpsPanelProps {
     maxNs: number;
     selectedOperationId: number | null;
     onSelectOperation: (operationId: number) => void;
+    /** Set while the graph rebuilds: the list stays on screen but takes no input. */
+    isInert: boolean;
 }
 
 const OpGraphHotOpsPanel = ({
@@ -51,8 +53,10 @@ const OpGraphHotOpsPanel = ({
     maxNs,
     selectedOperationId,
     onSelectOperation,
+    isInert,
 }: OpGraphHotOpsPanelProps) => {
     const titleId = useId();
+    const sectionRef = useRef<HTMLElement>(null);
     const listRef = useRef<HTMLOListElement>(null);
     const clickedOperationIdRef = useRef<number | null>(null);
     const [settings, setSettings] = useAtom(hotOpsSettingsAtom);
@@ -84,8 +88,14 @@ const OpGraphHotOpsPanel = ({
         }
     }, [selectedOperationId]);
 
+    // Set on the element because React 18 has no `inert` prop.
+    useLayoutEffect(() => {
+        sectionRef.current?.toggleAttribute('inert', isInert);
+    }, [isInert]);
+
     return (
         <section
+            ref={sectionRef}
             className='op-graph-hot-ops'
             aria-labelledby={titleId}
         >

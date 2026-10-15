@@ -1872,7 +1872,8 @@ const OperationGraphInner = ({
     // Closed mid-build so the panel can't describe an operation the graph being
     // laid out is about to drop.
     const isPanelOpen = selectedOperationId !== null && !isBuilding;
-    const isHotOpsVisible = isHotOpsActive && !isBuilding;
+    // Held through a build too, so the list keeps its height while the details are closed. #2088
+    const isSideStretched = selectedOperationId !== null;
 
     const containerClassName = [
         'operation-graph-react-flow',
@@ -1998,9 +1999,10 @@ const OperationGraphInner = ({
                     {perfHoverLabel}
                 </div>
             ) : null}
-            {isPanelOpen || isHotOpsVisible ? (
-                <div className={isPanelOpen ? `op-graph-side ${SIDE_WITH_DETAILS_CLASS}` : 'op-graph-side'}>
-                    {isHotOpsVisible ? (
+            {isPanelOpen || isHotOpsActive ? (
+                <div className={isSideStretched ? `op-graph-side ${SIDE_WITH_DETAILS_CLASS}` : 'op-graph-side'}>
+                    {/* Mounted through a build so a relayout keeps the list's scroll. #2088 */}
+                    {isHotOpsActive ? (
                         <OpGraphHotOpsPanel
                             rows={hotOpRows}
                             linkedOpCount={perfOverlay.linkedOpCount}
@@ -2009,6 +2011,7 @@ const OperationGraphInner = ({
                             maxNs={perfRangeMaxNs}
                             selectedOperationId={selectedOperationId}
                             onSelectOperation={selectOperation}
+                            isInert={isBuilding}
                         />
                     ) : null}
                     {isPanelOpen ? (

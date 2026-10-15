@@ -863,6 +863,11 @@ $minimap-width: 200px;
         // Shown alone, a long list shrinks to the column and scrolls rather than overflowing it.
         min-height: 0;
         border-bottom: 1px solid rgba($tt-white, 0.12);
+
+        // Greyed while the graph rebuilds, like the toolbar's disabled controls. #2088
+        &[inert] {
+            opacity: 0.6;
+        }
     }
 
     .op-graph-hot-ops-header {

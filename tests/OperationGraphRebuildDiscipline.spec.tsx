@@ -47,9 +47,11 @@ const harness: {
     // rather than a reimplementation, so a field the mapping stops carrying fails
     // here instead of silently changing what detection fingerprints on.
     sourceOperations: OpGraphSourceOperation[] | null;
+    setIsBuilding: ((isBuilding: boolean) => void) | null;
 } = {
     onBuilt: null,
     sourceOperations: null,
+    setIsBuilding: null,
     setNodes: null,
     setEdges: null,
     onNodeClick: null,
@@ -260,19 +262,25 @@ vi.mock('@xyflow/react', async () => {
     };
 });
 
-vi.mock('../src/components/operation-graph/useOpGraphLayoutWorker', () => ({
-    useOpGraphLayoutWorker: (operations: OpGraphSourceOperation[], onBuilt: (graph: OpGraphBuiltGraph) => void) => {
-        harness.sourceOperations = operations;
-        harness.onBuilt = (graph) => {
-            knownNodeIds.clear();
-            for (const node of graph.nodes) {
-                knownNodeIds.add(node.id);
-            }
-            onBuilt(graph);
-        };
-        return { runBuild, isBuilding: false };
-    },
-}));
+vi.mock('../src/components/operation-graph/useOpGraphLayoutWorker', async () => {
+    const { useState } = await import('react');
+    return {
+        useOpGraphLayoutWorker: (operations: OpGraphSourceOperation[], onBuilt: (graph: OpGraphBuiltGraph) => void) => {
+            // The real hook only reports a build once it has run past its spinner delay.
+            const [isBuilding, setIsBuilding] = useState(false);
+            harness.setIsBuilding = setIsBuilding;
+            harness.sourceOperations = operations;
+            harness.onBuilt = (graph) => {
+                knownNodeIds.clear();
+                for (const node of graph.nodes) {
+                    knownNodeIds.add(node.id);
+                }
+                onBuilt(graph);
+            };
+            return { runBuild, isBuilding };
+        },
+    };
+});
 
 // Wraps the real traversal instead of replacing it: the rendering assertions need
 // the true path, and one assertion needs to count how often it is computed.
@@ -552,6 +560,7 @@ beforeEach(() => {
     flowRenders.length = 0;
     harness.onBuilt = null;
     harness.sourceOperations = null;
+    harness.setIsBuilding = null;
     setCenter.mockClear();
     setViewport.mockClear();
     knownNodeIds.clear();
@@ -1254,6 +1263,79 @@ describe('OperationGraphReactFlow slowest operations list', () => {
         expect(swatch?.style.backgroundColor).toBe(
             asRenderedColor(String(perfColorOf(nodeById(lastFlowRender().nodes, '4')))),
         );
+    });
+
+    // A build slow enough to show the spinner used to unmount the list, which then
+    // came back rebuilt and scrolled to the top. #2088
+    describe('through a build', () => {
+        const hotOpsSection = () => document.querySelector('.op-graph-hot-ops');
+        const hotOpsList = () => document.querySelector('.op-graph-hot-ops-list');
+
+        const startBuild = () => {
+            act(() => {
+                harness.setIsBuilding?.(true);
+            });
+        };
+
+        // The worker's reply clears the flag and delivers the graph in one handler.
+        const finishBuild = () => {
+            act(() => {
+                harness.setIsBuilding?.(false);
+                harness.onBuilt?.(
+                    buildOpGraph(harness.sourceOperations ?? sourceFor(OPERATION_LIST), {
+                        hideDeallocate: true,
+                        deviceSubgraphs: [],
+                    }),
+                );
+            });
+        };
+
+        it('keeps the same list on screen, so its scroll survives', () => {
+            renderGraph(OPERATION_LIST, PERF_ROWS);
+            fireEvent.click(hotOpsSwitch());
+            const list = hotOpsList();
+
+            startBuild();
+            expect(hotOpsList()).toBe(list);
+            expect(listedIds()).toEqual([5, 4, 3, 2, 1]);
+
+            finishBuild();
+            expect(hotOpsList()).toBe(list);
+        });
+
+        it('takes no input from the list until the build is done', () => {
+            renderGraph(OPERATION_LIST, PERF_ROWS);
+            fireEvent.click(hotOpsSwitch());
+            expect(hotOpsSection()).not.toHaveAttribute('inert');
+
+            startBuild();
+            expect(hotOpsSection()).toHaveAttribute('inert');
+
+            finishBuild();
+            expect(hotOpsSection()).not.toHaveAttribute('inert');
+        });
+
+        it('holds the column down the pane while the details are closed for it', () => {
+            renderGraph(OPERATION_LIST, PERF_ROWS);
+            fireEvent.click(hotOpsSwitch());
+            fireEvent.click(rowFor('3 matmul_c'));
+
+            startBuild();
+            expect(screen.queryByRole('heading', { name: '3 matmul_c' })).toBeNull();
+            expect(document.querySelector('.op-graph-side')).toHaveClass(SIDE_WITH_DETAILS_CLASS);
+
+            finishBuild();
+            expect(screen.getByRole('heading', { name: '3 matmul_c' })).toBeInTheDocument();
+        });
+
+        it('still drops the details alone for a build, as before', () => {
+            renderGraph(OPERATION_LIST, PERF_ROWS);
+            emitNodeChanges([{ type: 'select', id: '3', selected: true }]);
+
+            startBuild();
+
+            expect(document.querySelector('.op-graph-side')).toBeNull();
+        });
     });
 });
 
