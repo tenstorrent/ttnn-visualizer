@@ -92,7 +92,7 @@ import {
     type OpGraphSourceOperation,
 } from './opGraphTypes';
 import { fusedActivationOf } from './opGraphFusedActivation';
-import { fanIdsCovering, weightFanMembersOf } from './opGraphWeightFans';
+import { fanIdOf, fanIdsCovering, weightFanMembersOf } from './opGraphWeightFans';
 import { OpGraphGrouping } from './opGraphTypes';
 import 'styles/components/OperationGraphReactFlow.scss';
 
@@ -1087,7 +1087,7 @@ const OperationGraphInner = ({
     );
 
     const toggleBlockExpansion = useCallback(
-        (instanceId: string) => {
+        (instanceId: string, revealOperationId?: number) => {
             // Both lists, because both reach this handler: the toolbar and a grouping
             // block's pill name a `detectedBlocks` entry, and a fan's container pill
             // and a double-click on a member name a fan. Looking in one of them left
@@ -1107,14 +1107,22 @@ const OperationGraphInner = ({
             // double-click on a member replaces the very node the user clicked, which
             // is the "I'm going to click op 49, where has it gone" report. #1944
             const isUnrolling = !isBlockExpanded(instanceId);
-            pendingRevealRef.current = {
-                nodeIds: new Set(
-                    isUnrolling && block !== undefined
-                        ? block.operationIds.map((memberId) => String(memberId))
-                        : [instanceId],
-                ),
-                reportScope,
-            };
+            let revealedIds = [instanceId];
+            if (isUnrolling && revealOperationId !== undefined) {
+                revealedIds = [String(revealOperationId)];
+            } else if (isUnrolling && block !== undefined) {
+                revealedIds = block.operationIds.map((memberId) => String(memberId));
+            }
+            pendingRevealRef.current = { nodeIds: new Set(revealedIds), reportScope };
+            // A folded block keeps its members out of fan detection, so the op's
+            // fan forms only after this unroll; a one-op decision opens it. #2086
+            const revealedFanId =
+                isUnrolling &&
+                revealOperationId !== undefined &&
+                collapseWeightLoads &&
+                detectedBlockIds.has(instanceId)
+                    ? fanIdOf([revealOperationId])
+                    : null;
             // Siblings rather than nested: a state updater must be pure, and
             // `isUnrolling` already decides the branch outside it.
             setExpandedBlockIds((previous) => {
@@ -1124,6 +1132,9 @@ const OperationGraphInner = ({
                 const next = new Set(previous ?? detectedBlocks.map((entry) => entry.instanceId));
                 if (isUnrolling) {
                     next.add(instanceId);
+                    if (revealedFanId !== null) {
+                        next.add(revealedFanId);
+                    }
                     return next;
                 }
                 next.delete(instanceId);
@@ -1159,7 +1170,15 @@ const OperationGraphInner = ({
                 setExpandedOperationIds((previous) => withoutBlockMembers(previous, [block]));
             }
         },
-        [armViewportAnchor, detectedBlocks, weightFans, isBlockExpanded, reportScope],
+        [
+            armViewportAnchor,
+            detectedBlocks,
+            detectedBlockIds,
+            weightFans,
+            isBlockExpanded,
+            collapseWeightLoads,
+            reportScope,
+        ],
     );
 
     const expandAllBlocks = useCallback(() => {
@@ -1265,8 +1284,8 @@ const OperationGraphInner = ({
         [focusOperation],
     );
 
-    // A list row for an op inside a folded owner opens that owner, as a URL naming the op does, and marks
-    // just that op: the row leads to the op's own node, and the reveal brings it into view once it lands. #2086
+    // A row for an op inside a folded owner unrolls toward the op, so the row, the
+    // details and the bar all describe its own node once the rebuild lands. #2086
     const selectListedOperation = useCallback(
         (id: number) => {
             const buried = ownersOf(id).find((owner) => !isBlockExpanded(owner.instanceId));
@@ -1274,11 +1293,10 @@ const OperationGraphInner = ({
                 selectOperation(id);
                 return;
             }
-            toggleBlockExpansion(buried.instanceId);
-            pendingRevealRef.current = { nodeIds: new Set([String(id)]), reportScope };
+            toggleBlockExpansion(buried.instanceId, id);
             setSelectedOperationId(id);
         },
-        [ownersOf, isBlockExpanded, selectOperation, toggleBlockExpansion, reportScope],
+        [ownersOf, isBlockExpanded, selectOperation, toggleBlockExpansion],
     );
 
     // Pressing Enter or Space on a focused node reaches React Flow's own handler,
