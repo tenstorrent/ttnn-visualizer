@@ -224,14 +224,14 @@ vi.mock('@xyflow/react', async () => {
                 null,
                 nodes.map((node) => {
                     const NodeComponent = node.type === undefined ? undefined : nodeTypes?.[node.type];
+                    // Wrapped as React Flow wraps it, so a spec can scope a query to one node.
                     return NodeComponent === undefined
                         ? null
-                        : createElement(NodeComponent, {
-                              key: node.id,
-                              id: node.id,
-                              data: node.data,
-                              type: node.type,
-                          });
+                        : createElement(
+                              'div',
+                              { key: node.id, className: 'react-flow__node', 'data-id': node.id },
+                              createElement(NodeComponent, { id: node.id, data: node.data, type: node.type }),
+                          );
                 }),
                 children ?? null,
             );
@@ -304,11 +304,8 @@ import {
 } from '../src/components/operation-graph/opGraphDeviceSubgraph';
 import OperationGraphReactFlow from '../src/components/operation-graph/OperationGraphReactFlow';
 import { SIDE_STRETCHED_CLASS } from '../src/components/operation-graph/opGraphRevealPan';
-import {
-    PERF_BAR_COLOR_VAR,
-    PERF_BAR_SCALE_VAR,
-    PERF_BAR_ZOOM_VAR,
-} from '../src/components/operation-graph/opGraphPerfOverlay';
+import { PERF_BAR_COLOR_VAR, PERF_BAR_SCALE_VAR } from '../src/components/operation-graph/opGraphPerfOverlay';
+import { NODE_ZOOM_VAR } from '../src/components/operation-graph/opGraphNodeZoom';
 import { NO_PERF_DATA_LABEL } from '../src/definitions/PerfOverlayStatus';
 import { formatDuration } from '../src/functions/formatting';
 import type { PerfOverlaySource } from '../src/functions/perfOverlay';
@@ -319,7 +316,11 @@ import {
     hotOpsSettingsAtom,
     isHotOpsEnabledAtom,
 } from '../src/store/app';
-import { DEFAULT_HOT_OPS_SETTINGS, HOT_OPS_ENABLED_STORAGE_KEY } from '../src/definitions/HotOps';
+import {
+    DEFAULT_HOT_OPS_SETTINGS,
+    HOT_OPS_ENABLED_STORAGE_KEY,
+    HOT_OPS_NO_RANK_LABEL,
+} from '../src/definitions/HotOps';
 import type { ReportFolder } from '../src/definitions/Reports';
 /* eslint-enable import/first */
 
@@ -547,6 +548,19 @@ const asRenderedColor = (color: string) => {
 const overlaySwitch = () => screen.getByRole('checkbox', { name: /^Perf overlay/ }) as HTMLInputElement;
 
 const enableOverlay = () => fireEvent.click(overlaySwitch());
+const hotOpsSwitch = () => screen.getByRole('checkbox', { name: /^Slowest operations/ }) as HTMLInputElement;
+const listControl = (label: string) =>
+    within(screen.getByRole('region', { name: 'Slowest operations' })).getByText(label);
+const markSwitch = () => screen.getByRole('checkbox', { name: 'Mark on graph' });
+// The list, then marking on it: how most of the marking tests open.
+const enableHotOpsMarking = () => {
+    fireEvent.click(hotOpsSwitch());
+    fireEvent.click(markSwitch());
+};
+const hotRankOf = (id: string) => nodeById(lastFlowRender().nodes, id).data.hotRank;
+// Found by accessible name, which is what reads a badge out; the digits are what it shows.
+const hotRankBadges = () => screen.queryAllByLabelText(/^Slowest operations: /).map((badge) => badge.textContent);
+const renderedNode = (id: string) => document.querySelector<HTMLElement>(`.react-flow__node[data-id="${id}"]`);
 
 const criticalPathSwitch = () => screen.getByRole('checkbox', { name: /^Highlight critical path/ }) as HTMLInputElement;
 
@@ -907,13 +921,34 @@ describe('OperationGraphReactFlow perf bar zoom compensation', () => {
     const graphRoot = (container: HTMLElement) =>
         container.querySelector<HTMLElement>('.operation-graph-react-flow') as HTMLElement;
 
-    const publishedZoom = (container: HTMLElement) => graphRoot(container).style.getPropertyValue(PERF_BAR_ZOOM_VAR);
+    const publishedZoom = (container: HTMLElement) => graphRoot(container).style.getPropertyValue(NODE_ZOOM_VAR);
 
     it('publishes the current zoom when the overlay turns on', () => {
         const { container } = renderGraph(OPERATION_LIST, PERF_ROWS);
         expect(publishedZoom(container)).toBe('');
 
         enableOverlay();
+
+        expect(publishedZoom(container)).toBe('1');
+    });
+
+    it('leaves it unpublished for a marking left on while the list is off', () => {
+        getDefaultStore().set(hotOpsSettingsAtom, { ...DEFAULT_HOT_OPS_SETTINGS, markOnGraph: true });
+        const { container } = renderGraph(OPERATION_LIST, PERF_ROWS);
+        expect(publishedZoom(container)).toBe('');
+
+        fireEvent.click(hotOpsSwitch());
+
+        expect(publishedZoom(container)).toBe('1');
+        expect(hotRankBadges()).not.toEqual([]);
+    });
+
+    it('publishes it for the slowest-operations badges without the overlay (#2085)', () => {
+        const { container } = renderGraph(OPERATION_LIST, PERF_ROWS);
+        fireEvent.click(hotOpsSwitch());
+        expect(publishedZoom(container)).toBe('');
+
+        fireEvent.click(markSwitch());
 
         expect(publishedZoom(container)).toBe('1');
     });
@@ -929,6 +964,28 @@ describe('OperationGraphReactFlow perf bar zoom compensation', () => {
         const published = Number(publishedZoom(container));
         expect(published).toBeGreaterThan(0.3 * 0.95);
         expect(published).toBeLessThan(0.3 * 1.05);
+    });
+
+    it('republishes for the badges alone when a gesture crosses a bucket', () => {
+        const { container } = renderGraph(OPERATION_LIST, PERF_ROWS);
+        enableHotOpsMarking();
+
+        setFlowZoom(0.3);
+
+        const published = Number(publishedZoom(container));
+        expect(published).toBeGreaterThan(0.3 * 0.95);
+        expect(published).toBeLessThan(0.3 * 1.05);
+    });
+
+    it('keeps publishing for the badges once the overlay is switched off', () => {
+        const { container } = renderGraph(OPERATION_LIST, PERF_ROWS);
+        enableOverlay();
+        enableHotOpsMarking();
+
+        fireEvent.click(overlaySwitch());
+        setFlowZoom(0.3);
+
+        expect(Number(publishedZoom(container))).toBeLessThan(0.3 * 1.05);
     });
 
     it('coalesces sub-bucket frames into a single write', () => {
@@ -951,7 +1008,7 @@ describe('OperationGraphReactFlow perf bar zoom compensation', () => {
     });
 
     it('never publishes a zero, which would invalidate the bar geometry', () => {
-        // The bar sizes with `calc(2px / var(--op-graph-perf-zoom))`: invalid at 0,
+        // The bar sizes with `calc(2px / var(--op-graph-node-zoom))`: invalid at 0,
         // so the declaration would drop and the bar vanish at MIN_ZOOM. Absolute
         // quantisation steps round the whole overview range to zero.
         const { container } = renderGraph(OPERATION_LIST, PERF_ROWS);
@@ -1013,7 +1070,6 @@ describe('OperationGraphReactFlow perf overlay panel wiring', () => {
 });
 
 describe('OperationGraphReactFlow slowest operations list', () => {
-    const hotOpsSwitch = () => screen.getByRole('checkbox', { name: /^Slowest operations/ }) as HTMLInputElement;
     const listHeading = () => screen.queryByRole('heading', { name: 'Slowest operations' });
     const listedIds = () =>
         Array.from(document.querySelectorAll('.op-graph-hot-ops-id'), (cell) => Number(cell.textContent));
@@ -1042,9 +1098,6 @@ describe('OperationGraphReactFlow slowest operations list', () => {
         expect(listHeading()).toBeInTheDocument();
         expect(runBuild).not.toHaveBeenCalled();
     });
-
-    const listControl = (label: string) =>
-        within(screen.getByRole('region', { name: 'Slowest operations' })).getByText(label);
 
     it.each<[string, () => void]>([
         ['how many rows it shows', () => fireEvent.click(listControl('Top 25'))],
@@ -1341,6 +1394,188 @@ describe('OperationGraphReactFlow slowest operations list', () => {
         expect(swatch?.style.backgroundColor).toBe(
             asRenderedColor(String(perfColorOf(nodeById(lastFlowRender().nodes, '4')))),
         );
+    });
+
+    // The list ranks the ops; marking shows where they sit on the graph. #2085
+    describe('marking the listed ops on the graph', () => {
+        it('badges nothing until asked', () => {
+            renderGraph(OPERATION_LIST, PERF_ROWS);
+            fireEvent.click(hotOpsSwitch());
+
+            expect(markSwitch()).not.toBeChecked();
+            expect(hotRankBadges()).toEqual([]);
+        });
+
+        it('badges each op the list shows with its rank', () => {
+            renderGraph(OPERATION_LIST, PERF_ROWS);
+            fireEvent.click(hotOpsSwitch());
+
+            fireEvent.click(markSwitch());
+
+            // Op N takes N × 10 µs, so op 5 is the slowest.
+            expect(['1', '2', '3', '4', '5'].map(hotRankOf)).toEqual([5, 4, 3, 2, 1]);
+            expect(hotRankBadges().sort()).toEqual(['1', '2', '3', '4', '5']);
+            const slowest = within(renderedNode('5') as HTMLElement).getByLabelText('Slowest operations: rank 1');
+            expect(slowest).toHaveTextContent('1');
+            expect(slowest).toHaveAttribute('title', 'Slowest operations: rank 1');
+        });
+
+        // Twelve ops, so Top 10 leaves out the two fastest.
+        const TWELVE_OPERATIONS = Array.from({ length: 12 }, (_, index) =>
+            operation(index + 1, `op_${index + 1}`, index < 11 ? [index + 2] : []),
+        );
+        const TWELVE_PERF_ROWS = TWELVE_OPERATIONS.map((op) => ({ id: op.id, device_time: op.id * 10 }));
+
+        it("follows the list's Top N", () => {
+            renderGraph(TWELVE_OPERATIONS, TWELVE_PERF_ROWS);
+            enableHotOpsMarking();
+            expect(hotRankOf('1')).toBeUndefined();
+            expect(hotRankOf('3')).toBe(10);
+
+            fireEvent.click(listControl('Top 25'));
+
+            expect(hotRankOf('1')).toBe(12);
+        });
+
+        it('drops a badge the list stops showing from a node the overlay restyles', () => {
+            // A restyled node is cached with its chips, so the shrink has to replace that data.
+            renderGraph(TWELVE_OPERATIONS, TWELVE_PERF_ROWS);
+            enableOverlay();
+            fireEvent.click(hotOpsSwitch());
+            fireEvent.click(listControl('Top 25'));
+            fireEvent.click(markSwitch());
+            expect(hotRankOf('1')).toBe(12);
+
+            fireEvent.click(listControl('Top 10'));
+
+            expect(hotRankOf('1')).toBeUndefined();
+            expect(hotRankBadges()).not.toContain('12');
+        });
+
+        it("follows 'Hide ops without perf data'", () => {
+            renderGraph(
+                OPERATION_LIST,
+                PERF_ROWS.filter((row) => row.id !== 5),
+            );
+            enableHotOpsMarking();
+            expect(hotRankOf('5')).toBeUndefined();
+
+            fireEvent.click(listControl('Hide ops without perf data'));
+
+            expect(hotRankOf('5')).toBeNull();
+            expect(hotRankBadges()).toContain(HOT_OPS_NO_RANK_LABEL);
+        });
+
+        it('does not relayout to mark or unmark', () => {
+            renderGraph(OPERATION_LIST, PERF_ROWS);
+            fireEvent.click(hotOpsSwitch());
+            runBuild.mockClear();
+
+            fireEvent.click(markSwitch());
+            fireEvent.click(markSwitch());
+
+            expect(runBuild).not.toHaveBeenCalled();
+            expect(hotRankBadges()).toEqual([]);
+        });
+
+        it('leaves the graph alone when the list is only re-sorted', () => {
+            renderGraph(OPERATION_LIST, PERF_ROWS);
+            enableHotOpsMarking();
+            const renders = flowRenders.length;
+
+            fireEvent.click(listControl('By ID'));
+
+            expect(flowRenders.length).toBe(renders);
+        });
+
+        it('re-ranks the badges when the perf rows change under the same graph', () => {
+            // Same nodes, new ranks: op 5 gains a row and pushes every other op down one.
+            const { rerender } = renderGraph(
+                OPERATION_LIST,
+                PERF_ROWS.filter((row) => row.id !== 5),
+            );
+            enableHotOpsMarking();
+            expect(hotRankOf('4')).toBe(1);
+
+            rerender(
+                <MemoryRouter>
+                    <OperationGraphReactFlow
+                        operationList={OPERATION_LIST}
+                        perfRows={PERF_ROWS}
+                        isPerfReportLoaded
+                    />
+                </MemoryRouter>,
+            );
+
+            expect(hotRankOf('5')).toBe(1);
+            expect(hotRankOf('4')).toBe(2);
+        });
+
+        it('takes the badges off with the list', () => {
+            renderGraph(OPERATION_LIST, PERF_ROWS);
+            enableHotOpsMarking();
+
+            fireEvent.click(hotOpsSwitch());
+
+            expect(hotRankOf('5')).toBeUndefined();
+            expect(hotRankBadges()).toEqual([]);
+        });
+
+        it('badges an expanded op on its box and leaves its device operations to it', () => {
+            renderGraph(BRANCHING_OPERATION_LIST, BRANCHING_PERF_ROWS);
+            enableHotOpsMarking();
+
+            // Device operations carry their op's id, so only the index keeps them unbadged.
+            rebuildWith(BRANCHING_OPERATION_LIST, [deviceSubgraphFor(3, 1)]);
+
+            expect(hotRankOf('3')).toBe(1);
+            expect(hotRankOf(getDeviceNodeId(3, 1))).toBeUndefined();
+            expect(hotRankOf(getDeviceNodeId(3, 2))).toBeUndefined();
+            // One badge per op, the expanded one's on its box.
+            expect(hotRankBadges().sort()).toEqual(['1', '2', '3', '4']);
+        });
+
+        it('keeps marked nodes byte-for-byte across a drag frame', () => {
+            renderGraph(OPERATION_LIST, PERF_ROWS);
+            enableHotOpsMarking();
+            const before = lastFlowRender().nodes;
+            expect(hotRankOf('5')).toBe(1);
+
+            act(() => {
+                harness.setNodes?.((previous) =>
+                    previous.map((node) => (node.id === '1' ? { ...node, position: { x: 5, y: 5 } } : node)),
+                );
+            });
+
+            const after = lastFlowRender().nodes;
+            expect(after).not.toBe(before);
+            expect(nodeById(after, '5')).toBe(nodeById(before, '5'));
+        });
+
+        it("keeps a marked node's data through a restyle, so its component need not re-render", () => {
+            renderGraph(OPERATION_LIST, PERF_ROWS);
+            enableHotOpsMarking();
+            const { data } = nodeById(lastFlowRender().nodes, '5');
+
+            enableOverlay();
+
+            const restyled = nodeById(lastFlowRender().nodes, '5');
+            expect(perfScaleOf(restyled)).toBeDefined();
+            expect(restyled.data).toBe(data);
+        });
+
+        it('stacks with the selection ring and the critical path', () => {
+            renderGraph(BRANCHING_OPERATION_LIST, BRANCHING_PERF_ROWS);
+            enableCriticalPath();
+            enableHotOpsMarking();
+
+            fireEvent.click(rowFor('3 slow_c'));
+
+            const node = nodeById(lastFlowRender().nodes, '3');
+            expect(hasClass(node, 'op-graph-node-selected')).toBe(true);
+            expect(hasClass(node, 'op-graph-node-critical-path')).toBe(true);
+            expect(node.data.hotRank).toBe(1);
+        });
     });
 
     // A build slow enough to show the spinner must not remount the list, or its scroll is lost. #2088
@@ -3391,7 +3626,7 @@ describe('OperationGraphReactFlow repeat blocks', () => {
         it('selects a folded member through its block, which stays folded (#2086)', () => {
             // Pins today's behaviour; #2086 decides whether the row should unfold the block instead.
             renderFoldedWithPerf();
-            fireEvent.click(screen.getByRole('checkbox', { name: /^Slowest operations/ }));
+            fireEvent.click(hotOpsSwitch());
             absolutePositionById.set(FIRST_BLOCK_ID, { x: 4000, y: 800 });
             runBuild.mockClear();
             setViewport.mockClear();
@@ -3407,9 +3642,65 @@ describe('OperationGraphReactFlow repeat blocks', () => {
             expect(runBuild).not.toHaveBeenCalled();
         });
 
+        it("badges a folded block with its slowest listed member's rank (#2085)", () => {
+            renderFoldedWithPerf();
+            fireEvent.click(hotOpsSwitch());
+
+            fireEvent.click(markSwitch());
+
+            // Op N takes N × 10 µs: op 6 ranks 1, and the blocks hold ops 2–3 and 4–5.
+            expect(hotRankOf('6')).toBe(1);
+            expect(hotRankOf(SECOND_BLOCK_ID)).toBe(2);
+            expect(hotRankOf(FIRST_BLOCK_ID)).toBe(4);
+            // Drawn on the blocks too, beside the two ops left unfolded.
+            expect(hotRankBadges().sort()).toEqual(['1', '2', '4', '6']);
+        });
+
+        it("keeps the filter's buried count beside the rank on a block (#2085)", () => {
+            // Members named apart from the label, so the filter finds them only inside the blocks.
+            const buriedOperations: OperationDescription[] = [
+                operation(1, 'prefix', [2]),
+                operation(2, 'layer_a', [3], 'attention.py:1'),
+                operation(3, 'layer_b', [4], 'mlp.py:1'),
+                operation(4, 'layer_a', [5], 'attention.py:2'),
+                operation(5, 'layer_b', [6], 'mlp.py:2'),
+                operation(6, 'suffix', []),
+            ];
+            renderGraph(buriedOperations, REPEAT_PERF_ROWS);
+            fireEvent.click(screen.getByRole('button', { name: 'Fold all repeats' }));
+            deliver(buriedOperations, { expandedBlockIds: [] });
+            enableHotOpsMarking();
+
+            typeFilter('layer_a');
+
+            const block = nodeById(lastFlowRender().nodes, FIRST_BLOCK_ID);
+            expect(block.data.buriedMatchCount).toBe(1);
+            expect(block.data.hotRank).toBe(4);
+            const drawn = within(renderedNode(FIRST_BLOCK_ID) as HTMLElement);
+            expect(drawn.getByText('+1')).toBeInTheDocument();
+            expect(drawn.getByLabelText('Slowest operations: rank 4')).toHaveTextContent('4');
+        });
+
+        it("badges a block '–' when its listed members have no perf data (#2085)", () => {
+            renderGraph(
+                REPEAT_OPERATION_LIST,
+                REPEAT_PERF_ROWS.filter((row) => row.id !== 2 && row.id !== 3),
+            );
+            fireEvent.click(screen.getByRole('button', { name: 'Fold all repeats' }));
+            deliver(REPEAT_OPERATION_LIST, { expandedBlockIds: [] });
+            enableHotOpsMarking();
+
+            fireEvent.click(listControl('Hide ops without perf data'));
+
+            expect(nodeById(lastFlowRender().nodes, FIRST_BLOCK_ID).data.hotRank).toBeNull();
+            expect(
+                within(renderedNode(FIRST_BLOCK_ID) as HTMLElement).getByLabelText('Slowest operations: No perf data'),
+            ).toHaveTextContent(HOT_OPS_NO_RANK_LABEL);
+        });
+
         it('keeps the list swatches the same whether or not the bars are drawn', () => {
             renderFoldedWithPerf();
-            fireEvent.click(screen.getByRole('checkbox', { name: /^Slowest operations/ }));
+            fireEvent.click(hotOpsSwitch());
             const withoutBars = listSwatch('6 suffix')?.style.backgroundColor;
 
             enableOverlay();

@@ -15,6 +15,7 @@ import {
     PerfOverlayStatus,
 } from '../../definitions/PerfOverlayStatus';
 import { OpGraphGrouping } from './opGraphTypes';
+import { HOT_OPS_TITLE } from '../../definitions/HotOps';
 import 'styles/components/OpGraphToolbar.scss';
 
 /**
@@ -377,7 +378,7 @@ const OpGraphToolbar = memo(
 
                 <PerfGatedSwitch
                     tooltipByStatus={HOT_OPS_TOOLTIP}
-                    label='Slowest operations'
+                    label={HOT_OPS_TITLE}
                     checked={isHotOpsActive}
                     onChange={onHotOpsChange}
                     perfOverlayStatus={perfOverlayStatus}

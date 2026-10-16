@@ -41,6 +41,11 @@
      * and from the green/amber input and output edges. */
     --graph-critical-path-edge: #ff4fd8;
 
+    /* Ink rather than a hue: every hue on a node already means something, and the
+     * slowest-operations badge only says the list shows it. #2085 */
+    --graph-hot-rank: #{$tt-black};
+    --graph-hot-rank-ink: #{$tt-white};
+
     /* MLIR node identity colours — shared by the SCSS, the minimap callback and
      * the colour legend (see GRAPH_COLORS). */
     --graph-op-node: #f5f5f5;
