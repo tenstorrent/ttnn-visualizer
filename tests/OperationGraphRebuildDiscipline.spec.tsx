@@ -113,8 +113,6 @@ const PANE = { width: 1000, height: 800 };
 const TOOLBAR_HEIGHT = 150;
 // Within the column's `clamp(280px, 26%, 360px)`.
 const SIDE_WIDTH = 300;
-// `opGraphRevealPan`'s margin: a minimal reveal stops exactly this far clear of the chrome.
-const REVEAL_MARGIN_PX = 48;
 const stubRect = (width: number, height: number, left = 0) =>
     ({
         x: left,
@@ -288,7 +286,12 @@ import {
 } from '../src/components/operation-graph/opGraphPerfOverlay';
 import { NO_PERF_DATA_LABEL } from '../src/definitions/PerfOverlayStatus';
 import { formatDuration } from '../src/functions/formatting';
-import { REVEALED_NODE_CLASS, absolutePositionsOf } from '../src/components/operation-graph/opGraphRevealPan';
+import {
+    REVEALED_NODE_CLASS,
+    REVEAL_MARGIN_PX,
+    absolutePositionsOf,
+} from '../src/components/operation-graph/opGraphRevealPan';
+import { weightFanIdCovers } from '../src/components/operation-graph/opGraphWeightFans';
 import type { PerfOverlaySource } from '../src/functions/perfOverlay';
 import {
     activePerformanceReportAtom,
@@ -380,6 +383,17 @@ const typeFilter = (query: string) => {
     act(() => {
         vi.advanceTimersByTime(FILTER_DEBOUNCE_MS);
     });
+};
+
+// Scoped to the list: the details heading carries the same title once an op is selected.
+const slowestRow = (title: string) =>
+    within(screen.getByRole('region', { name: 'Slowest operations' })).getByTitle(title);
+const lastAskedExpandedIds = () => (runBuild.mock.calls.at(-1)?.[0] as OpGraphBuildOptions).expandedBlockIds;
+// How far right a drawn node reaches on the pane at `viewport`, through any container it sits in. #2028
+const paneRightEdge = (nodeId: string, viewport: { x: number; zoom: number }) => {
+    const { nodes } = lastFlowRender();
+    const x = absolutePositionsOf(nodes).get(nodeId)?.x ?? Number.NaN;
+    return (x + (nodeById(nodes, nodeId).width ?? 0)) * viewport.zoom + viewport.x;
 };
 
 const emitNodeChanges = (changes: NodeChange<OpGraphFlowNode>[]) => {
@@ -1002,9 +1016,7 @@ describe('OperationGraphReactFlow slowest operations list', () => {
     const listHeading = () => screen.queryByRole('heading', { name: 'Slowest operations' });
     const listedIds = () =>
         Array.from(document.querySelectorAll('.op-graph-hot-ops-id'), (cell) => Number(cell.textContent));
-    // Scoped to the list: the details heading carries the same title once an op is selected.
-    const rowFor = (title: string) =>
-        within(screen.getByRole('region', { name: 'Slowest operations' })).getByTitle(title);
+    const rowFor = slowestRow;
 
     it('shows the list, slowest first, once its switch is on', () => {
         renderGraph(OPERATION_LIST, PERF_ROWS);
@@ -2079,11 +2091,9 @@ describe('OperationGraphReactFlow repeat blocks', () => {
             absolutePositionById.set('weights:1-2', { x: 1500, y: 600 });
             runBuild.mockClear();
 
-            fireEvent.click(
-                within(screen.getByRole('region', { name: 'Slowest operations' })).getByTitle('2 ttnn.to_device'),
-            );
+            fireEvent.click(slowestRow('2 ttnn.to_device'));
 
-            const asked = (runBuild.mock.calls.at(-1)?.[0] as OpGraphBuildOptions).expandedBlockIds;
+            const asked = lastAskedExpandedIds();
             expect(asked).toEqual(expect.arrayContaining(['weights:1-2']));
             setViewport.mockClear();
             deliver(FAN_CHAIN, { collapseWeightLoads: true, expandedBlockIds: asked });
@@ -2096,9 +2106,7 @@ describe('OperationGraphReactFlow repeat blocks', () => {
             // A member is positioned inside its container, so the pan has to resolve it to the pane. #2028
             expect(member.parentId).toBe('weights:1-2');
             const [viewport] = setViewport.mock.calls.at(-1) as unknown as [{ x: number; zoom: number }];
-            const memberX = absolutePositionsOf(nodes).get('2')?.x ?? Number.NaN;
-            const rightEdge = (memberX + (member.width ?? 0)) * viewport.zoom + viewport.x;
-            expect(rightEdge).toBeCloseTo(PANE.width - SIDE_WIDTH - REVEAL_MARGIN_PX);
+            expect(paneRightEdge('2', viewport)).toBeCloseTo(PANE.width - SIDE_WIDTH - REVEAL_MARGIN_PX);
         });
 
         it('opens a folded fan for a URL naming an operation inside it', () => {
@@ -2113,6 +2121,8 @@ describe('OperationGraphReactFlow repeat blocks', () => {
             const asked = (runBuild.mock.calls.at(-1)?.[0] as OpGraphBuildOptions).expandedBlockIds;
             expect(asked).toEqual(expect.arrayContaining(['weights:1-2']));
         });
+
+        it.todo('opens the fan a weight load joins once its folded block unrolls, for a URL naming it (#2145)');
 
         it('stays lit when a member matches the filter, and dims when none does', () => {
             // The container can never match on its own -- it is chrome, so it is not in
@@ -2273,12 +2283,12 @@ describe('OperationGraphReactFlow repeat blocks', () => {
             fireEvent.click(screen.getByRole('checkbox', { name: /^Slowest operations/ }));
             runBuild.mockClear();
 
-            fireEvent.click(
-                within(screen.getByRole('region', { name: 'Slowest operations' })).getByTitle('1 ttnn.to_device'),
-            );
+            fireEvent.click(slowestRow('1 ttnn.to_device'));
 
             expect(runBuild).toHaveBeenCalledTimes(1);
-            const asked = (runBuild.mock.calls.at(-1)?.[0] as OpGraphBuildOptions).expandedBlockIds;
+            const asked = lastAskedExpandedIds();
+            // The decision is about op 1's fan alone; the other block's fan stays the reader's to open.
+            expect(asked?.some((id) => weightFanIdCovers(id, [3, 4]))).toBe(false);
             deliver(FAN_AND_REPEATS, { collapseWeightLoads: true, expandedBlockIds: asked });
 
             const member = nodeById(lastFlowRender().nodes, '1');
@@ -2287,6 +2297,63 @@ describe('OperationGraphReactFlow repeat blocks', () => {
             expect(hasClass(member, REVEALED_NODE_CLASS)).toBe(true);
             expect(screen.getByRole('heading', { name: '1 ttnn.to_device' })).toBeInTheDocument();
             expect(screen.queryByLabelText('Selected block details')).toBeNull();
+        });
+
+        // Op 1's row with repeats folded: it opens `block:1` and the fan op 1 joins there.
+        const openRowIntoFoldedBlock = () => {
+            renderGraph(
+                FAN_AND_REPEATS,
+                FAN_AND_REPEATS.map((op) => ({ id: op.id, device_time: op.id * 10 })),
+            );
+            fireEvent.click(screen.getByRole('button', { name: 'Fold all repeats' }));
+            deliver(FAN_AND_REPEATS, { collapseWeightLoads: true, expandedBlockIds: [] });
+            fireEvent.click(screen.getByRole('checkbox', { name: /^Slowest operations/ }));
+            fireEvent.click(slowestRow('1 ttnn.to_device'));
+            deliver(FAN_AND_REPEATS, { collapseWeightLoads: true, expandedBlockIds: lastAskedExpandedIds() });
+        };
+
+        it('opens the block, not just the fan, for a row clicked right after the block folds', () => {
+            // Until the rebuild lands, op 1 still reads as folded into its fan and its block, and
+            // opening the fan alone left the block folded around it.
+            renderGraph(
+                FAN_AND_REPEATS,
+                FAN_AND_REPEATS.map((op) => ({ id: op.id, device_time: op.id * 10 })),
+            );
+            deliver(FAN_AND_REPEATS, { collapseWeightLoads: true });
+            fireEvent.click(screen.getByRole('checkbox', { name: /^Slowest operations/ }));
+            fireEvent.click(screen.getByRole('button', { name: 'Fold all repeats' }));
+
+            fireEvent.click(slowestRow('1 ttnn.to_device'));
+
+            expect(lastAskedExpandedIds()).toContain('block:1');
+        });
+
+        it('lets the reader fold the fan a row opened', () => {
+            openRowIntoFoldedBlock();
+            expect(nodeById(lastFlowRender().nodes, '1').parentId).toBe('weights:1-2');
+
+            act(() => {
+                harness.onNodeDoubleClick?.(null, nodeById(lastFlowRender().nodes, '1'));
+            });
+            const folded = lastAskedExpandedIds() ?? [];
+            expect(folded.some((id) => weightFanIdCovers(id, [1, 2]))).toBe(false);
+            deliver(FAN_AND_REPEATS, { collapseWeightLoads: true, expandedBlockIds: folded });
+
+            expect(lastFlowRender().nodes.some((node) => node.id === '1')).toBe(false);
+            expect(nodeById(lastFlowRender().nodes, 'weights:1-2')).toBeDefined();
+        });
+
+        it("reopens a row's fan with its block, as a decision the reader made", () => {
+            // Fan decisions outlive grouping folds, and the row's is one: the reader asked to see op 1.
+            openRowIntoFoldedBlock();
+            fireEvent.click(screen.getByRole('button', { name: 'Fold all repeats' }));
+            deliver(FAN_AND_REPEATS, { collapseWeightLoads: true, expandedBlockIds: lastAskedExpandedIds() });
+            expect(lastFlowRender().nodes.some((node) => node.id === '1')).toBe(false);
+
+            fireEvent.click(screen.getByRole('button', { name: 'Unroll all repeats' }));
+            deliver(FAN_AND_REPEATS, { collapseWeightLoads: true, expandedBlockIds: lastAskedExpandedIds() });
+
+            expect(nodeById(lastFlowRender().nodes, '1').parentId).toBe('weights:1-2');
         });
 
         it('records no fan decision for a row while weight loads are not collapsed', () => {
@@ -2301,11 +2368,9 @@ describe('OperationGraphReactFlow repeat blocks', () => {
             fireEvent.click(screen.getByRole('checkbox', { name: /^Slowest operations/ }));
             runBuild.mockClear();
 
-            fireEvent.click(
-                within(screen.getByRole('region', { name: 'Slowest operations' })).getByTitle('1 ttnn.to_device'),
-            );
+            fireEvent.click(slowestRow('1 ttnn.to_device'));
 
-            const asked = (runBuild.mock.calls.at(-1)?.[0] as OpGraphBuildOptions).expandedBlockIds ?? [];
+            const asked = lastAskedExpandedIds() ?? [];
             expect(asked).toContain('block:1');
             expect(asked.filter((id) => id.startsWith('weights:'))).toEqual([]);
         });
@@ -3057,8 +3122,7 @@ describe('OperationGraphReactFlow repeat blocks', () => {
         }));
         const drawnColor = (nodeId: string) =>
             asRenderedColor(String(perfColorOf(nodeById(lastFlowRender().nodes, nodeId))));
-        const listRow = (title: string) =>
-            within(screen.getByRole('region', { name: 'Slowest operations' })).getByTitle(title);
+        const listRow = slowestRow;
         const listSwatch = (title: string) => listRow(title).querySelector<HTMLElement>('.op-graph-hot-ops-swatch');
 
         const renderFoldedWithPerf = () => {
@@ -3088,9 +3152,10 @@ describe('OperationGraphReactFlow repeat blocks', () => {
 
             fireEvent.click(listRow('3 layer_b'));
 
-            const asked = (runBuild.mock.calls.at(-1)?.[0] as OpGraphBuildOptions).expandedBlockIds;
-            expect(asked).toContain(FIRST_BLOCK_ID);
-            expect(asked).not.toContain(SECOND_BLOCK_ID);
+            const asked = lastAskedExpandedIds();
+            // The one-op fan decision rides along for any op, and stays inert for one no fan can hold.
+            expect(asked).toEqual([FIRST_BLOCK_ID, 'weights:3']);
+            expect(listRow('3 layer_b')).toHaveAttribute('aria-current', 'true');
             deliver(REPEAT_OPERATION_LIST, { expandedBlockIds: asked });
 
             const node = nodeById(lastFlowRender().nodes, '3');
@@ -3114,17 +3179,33 @@ describe('OperationGraphReactFlow repeat blocks', () => {
             absolutePositionById.set(FIRST_BLOCK_ID, { x: 1500, y: 600 });
             setViewport.mockClear();
             fireEvent.click(listRow('3 layer_b'));
-            const asked = (runBuild.mock.calls.at(-1)?.[0] as OpGraphBuildOptions).expandedBlockIds;
 
-            deliver(REPEAT_OPERATION_LIST, { expandedBlockIds: asked });
+            deliver(REPEAT_OPERATION_LIST, { expandedBlockIds: lastAskedExpandedIds() });
 
             // Once, after the build: a pan at the click would aim at the layout being replaced.
             expect(setViewport).toHaveBeenCalledTimes(1);
             const [viewport] = setViewport.mock.calls[0] as unknown as [{ x: number; zoom: number }];
-            const node = nodeById(lastFlowRender().nodes, '3');
-            const rightEdge = (node.position.x + (node.width ?? 0)) * viewport.zoom + viewport.x;
             // Exactly on the margin, which only the anchor holding op 3 behind the column produces.
-            expect(rightEdge).toBeCloseTo(PANE.width - SIDE_WIDTH - REVEAL_MARGIN_PX);
+            expect(paneRightEdge('3', viewport)).toBeCloseTo(PANE.width - SIDE_WIDTH - REVEAL_MARGIN_PX);
+        });
+
+        it('leads to the latest of two rows clicked before the rebuild lands', () => {
+            // The first click's unroll makes op 2 read as drawn, but its node only arrives with the rebuild.
+            renderFoldedWithPerf();
+            fireEvent.click(screen.getByRole('checkbox', { name: /^Slowest operations/ }));
+            setViewport.mockClear();
+
+            fireEvent.click(listRow('3 layer_b'));
+            fireEvent.click(listRow('2 layer_a'));
+            expect(setViewport).not.toHaveBeenCalled();
+            deliver(REPEAT_OPERATION_LIST, { expandedBlockIds: lastAskedExpandedIds() });
+
+            const { nodes } = lastFlowRender();
+            expect(nodeById(nodes, '2').selected).toBe(true);
+            expect(hasClass(nodeById(nodes, '2'), REVEALED_NODE_CLASS)).toBe(true);
+            expect(hasClass(nodeById(nodes, '3'), REVEALED_NODE_CLASS)).toBe(false);
+            expect(screen.getByRole('heading', { name: '2 layer_a' })).toBeInTheDocument();
+            expect(setViewport).toHaveBeenCalledTimes(1);
         });
 
         it('selects a row whose op has a node of its own without unrolling anything', () => {
