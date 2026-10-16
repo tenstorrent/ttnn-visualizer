@@ -25,7 +25,11 @@ import {
     TopNAnnotationMode,
 } from '../../definitions/TopNAnnotations';
 import { perfColorScale } from '../../functions/perfOverlay';
-import { LATE_DEALLOC_RAIL_LABEL, LateDeallocationRunStart } from '../../definitions/LateDeallocation';
+import {
+    LATE_DEALLOC_RAIL_LABEL,
+    LateDeallocationCount,
+    LateDeallocationRunStart,
+} from '../../definitions/LateDeallocation';
 import { coalesceLateDeallocationRunStarts, getLateDeallocationSummary } from '../../functions/lateDeallocation';
 import { scrollVirtualizerToIndex } from '../../functions/scrollVirtualizerToIndex';
 import { NavigationRailItem, RAIL_MAX_DOTS } from '../../definitions/NavigationRail';
@@ -65,7 +69,7 @@ interface BufferSummaryVirtualizedListProps {
      * How many rows qualify, passed regardless of the toggle so the control can
      * advertise the feature before it is switched on.
      */
-    lateDeallocationRunCount?: number;
+    lateDeallocationRunCount?: LateDeallocationCount;
     getTensorDeallocationReport?: (operationId: number) => TensorDeallocationReport[];
     getOperationTooltipContent: (operation: BuffersByOperation) => string;
     renderOperationLink: (operation: BuffersByOperation) => React.ReactNode;
@@ -103,7 +107,7 @@ function BufferSummaryVirtualizedList({
     topNAnnotationsByOpId = EMPTY_ANNOTATIONS,
     topNAnnotationMode = TopNAnnotationMode.PERF_TIME,
     lateDeallocationRunStarts = EMPTY_RUN_STARTS,
-    lateDeallocationRunCount = 0,
+    lateDeallocationRunCount,
     getTensorDeallocationReport = DEFAULT_GET_TENSOR_DEALLOCATION_REPORT,
     getOperationTooltipContent,
     renderOperationLink,

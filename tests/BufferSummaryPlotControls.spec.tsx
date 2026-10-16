@@ -18,6 +18,8 @@ import {
 import { TAB_IDS } from '../src/definitions/BufferSummary';
 import { TopNAnnotationMode, TopNAnnotationStatus } from '../src/definitions/TopNAnnotations';
 import { TEST_IDS } from '../src/definitions/TestIds';
+import { LateDeallocationCount } from '../src/definitions/LateDeallocation';
+import { getRunStartLateDeallocationCount } from '../src/functions/lateDeallocation';
 import { AtomProvider, AtomProviderInitialValues } from './helpers/atomProvider';
 
 const availabilityMock = vi.fn();
@@ -43,7 +45,11 @@ vi.mock('@blueprintjs/core', async () => {
     };
 });
 
-const renderControls = (overrides: AtomProviderInitialValues = [], lateDeallocationRunCount?: number) =>
+// A bare number stands for a settled report, which is what most cases need.
+const renderControls = (
+    overrides: AtomProviderInitialValues = [],
+    lateDeallocationRunCount?: number | LateDeallocationCount,
+) =>
     render(
         <AtomProvider
             initialValues={[
@@ -54,7 +60,13 @@ const renderControls = (overrides: AtomProviderInitialValues = [], lateDeallocat
                 ...overrides,
             ]}
         >
-            <BufferSummaryPlotControls lateDeallocationRunCount={lateDeallocationRunCount} />
+            <BufferSummaryPlotControls
+                lateDeallocationRunCount={
+                    typeof lateDeallocationRunCount === 'number'
+                        ? getRunStartLateDeallocationCount(lateDeallocationRunCount, 'success')
+                        : lateDeallocationRunCount
+                }
+            />
         </AtomProvider>,
     );
 
@@ -399,6 +411,17 @@ describe('BufferSummaryPlotControls late deallocation count (#963)', () => {
         expect(tooltipHost?.getAttribute('data-content')).toMatch(
             /0 operations where a tensor starts being held past its last use/i,
         );
+    });
+
+    // A loading or failed report is empty, so beside a live switch a 0 would
+    // read as a confirmed all-clear. Operation Details shows a dash here too.
+    it.each(['pending', 'error'] as const)('shows a dash rather than 0 while the report is %s', (status) => {
+        renderControls([], getRunStartLateDeallocationCount(0, status));
+
+        const count = screen.getByTestId(TEST_IDS.LATE_DEALLOC_COUNT);
+        expect(count).toHaveTextContent('–');
+        expect(count).not.toHaveClass(Classes.INTENT_WARNING);
+        expect(count).not.toHaveAttribute('aria-label', expect.stringMatching(/^0 /));
     });
 
     it('hides the count on the DRAM tab, where the overlay toggle is not offered', () => {

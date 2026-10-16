@@ -4,6 +4,7 @@
 
 import React from 'react';
 import { renderHook } from '@testing-library/react';
+import { QueryStatus } from '@tanstack/react-query';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useLateDeallocationOverlay } from '../src/hooks/useLateDeallocationOverlay';
 import { useGetTensorDeallocationReportByOperation } from '../src/hooks/useAPI';
@@ -27,11 +28,14 @@ const renderOverlay = (showDeallocationReport: boolean) =>
         ),
     });
 
-const mockReports = (lateDeallocationsByOperation: Map<number, TensorDeallocationReport[]>) => {
+const mockReports = (
+    lateDeallocationsByOperation: Map<number, TensorDeallocationReport[]>,
+    status: QueryStatus = 'success',
+) => {
     vi.mocked(useGetTensorDeallocationReportByOperation).mockReturnValue({
         lateDeallocationsByOperation,
         nonDeallocatedTensorList: new Map(),
-        status: 'success',
+        status,
         operationRange: null,
     });
 };
@@ -60,8 +64,16 @@ describe('useLateDeallocationOverlay', () => {
     // The count is what tells the user the toggle is worth flipping, so it is
     // deliberately not gated on the toggle the way the drawn overlay is.
     it('counts the run starts whether or not the overlay is on', () => {
-        expect(renderOverlay(true).result.current.runStartCount).toBe(1);
-        expect(renderOverlay(false).result.current.runStartCount).toBe(1);
+        expect(renderOverlay(true).result.current.runStartCount.count).toBe(1);
+        expect(renderOverlay(false).result.current.runStartCount.count).toBe(1);
+    });
+
+    // The report is an empty map until it settles, so counting it would show a
+    // 0 that reads as an all-clear beside a live switch.
+    it.each(['pending', 'error'] as const)('withholds the count while the report is %s', (status) => {
+        mockReports(new Map(), status);
+
+        expect(renderOverlay(true).result.current.runStartCount.count).toBeNull();
     });
 
     it('reports an empty array for a row with nothing stale', () => {

@@ -26,7 +26,8 @@ import {
     TopNAnnotationStatus,
 } from '../../definitions/TopNAnnotations';
 import { useTopNAnnotationAvailability } from '../../hooks/useTopNAnnotations';
-import { getRunStartCountSummary } from '../../functions/lateDeallocation';
+import { getRunStartLateDeallocationCount } from '../../functions/lateDeallocation';
+import { LateDeallocationCount } from '../../definitions/LateDeallocation';
 import { TEST_IDS } from '../../definitions/TestIds';
 import 'styles/components/BufferSummaryControls.scss';
 
@@ -90,12 +91,17 @@ interface BufferSummaryPlotControlsProps {
      * whether or not the overlay is on, and whether or not it is zero — a
      * switch that reads "0" tells the user not to bother, which the switch
      * alone can't. The count is the only signal for zero: the switch is global,
-     * so it stays live and shows its real state (#2071).
+     * so it stays live and shows its real state (#2071). That makes an unknown
+     * count a dash rather than 0, or a loading report reads as an all-clear.
      */
-    lateDeallocationRunCount?: number;
+    lateDeallocationRunCount?: LateDeallocationCount;
 }
 
-const BufferSummaryPlotControls = ({ lateDeallocationRunCount = 0 }: BufferSummaryPlotControlsProps) => {
+const NO_LATE_DEALLOCATIONS = getRunStartLateDeallocationCount(0, 'success');
+
+const BufferSummaryPlotControls = ({
+    lateDeallocationRunCount = NO_LATE_DEALLOCATIONS,
+}: BufferSummaryPlotControlsProps) => {
     const [showDeallocationReport, setShowDeallocationReport] = useAtom(showDeallocationReportAtom);
     const [renderMemoryLayout, setRenderMemoryLayout] = useAtom(renderMemoryLayoutAtom);
     const [showHex, setShowHex] = useAtom(showHexAtom);
@@ -121,8 +127,6 @@ const BufferSummaryPlotControls = ({ lateDeallocationRunCount = 0 }: BufferSumma
     // still pick a different metric, so leave the select interactive.
     const isModeSelectDisabled = TOP_N_MODE_ORDER.every((mode) => statusByMode[mode] !== TopNAnnotationStatus.READY);
 
-    const lateDeallocationCountSummary = getRunStartCountSummary(lateDeallocationRunCount);
-
     return (
         <div className='buffer-summary-controls'>
             <Switch
@@ -133,8 +137,8 @@ const BufferSummaryPlotControls = ({ lateDeallocationRunCount = 0 }: BufferSumma
 
             {selectedTabId === TAB_IDS.L1 ? (
                 <LateDeallocationControl
-                    count={lateDeallocationRunCount}
-                    countSummary={lateDeallocationCountSummary}
+                    count={lateDeallocationRunCount.count}
+                    countSummary={lateDeallocationRunCount.summary}
                     checked={showDeallocationReport}
                     onChange={() => {
                         setShowDeallocationReport(!showDeallocationReport);
