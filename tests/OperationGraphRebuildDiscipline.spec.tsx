@@ -286,6 +286,7 @@ import {
 } from '../src/components/operation-graph/opGraphPerfOverlay';
 import { NO_PERF_DATA_LABEL } from '../src/definitions/PerfOverlayStatus';
 import { formatDuration } from '../src/functions/formatting';
+import { REVEALED_NODE_CLASS } from '../src/components/operation-graph/opGraphRevealPan';
 import type { PerfOverlaySource } from '../src/functions/perfOverlay';
 import {
     activePerformanceReportAtom,
@@ -2065,6 +2066,26 @@ describe('OperationGraphReactFlow repeat blocks', () => {
             expect(screen.getByRole('button', { name: 'Go to next operation 2' })).toBeTruthy();
         });
 
+        it('opens a folded fan for a slowest-operations row naming an operation inside it (#2086)', () => {
+            renderGraph(
+                FAN_CHAIN,
+                FAN_CHAIN.map((op) => ({ id: op.id, device_time: op.id * 10 })),
+            );
+            deliver(FAN_CHAIN, { collapseWeightLoads: true });
+            fireEvent.click(screen.getByRole('checkbox', { name: /^Slowest operations/ }));
+            runBuild.mockClear();
+
+            fireEvent.click(
+                within(screen.getByRole('region', { name: 'Slowest operations' })).getByTitle('2 ttnn.to_device'),
+            );
+
+            const asked = (runBuild.mock.calls.at(-1)?.[0] as OpGraphBuildOptions).expandedBlockIds;
+            expect(asked).toEqual(expect.arrayContaining(['weights:1-2']));
+            deliver(FAN_CHAIN, { collapseWeightLoads: true, expandedBlockIds: asked });
+            expect(nodeById(lastFlowRender().nodes, '2').selected).toBe(true);
+            expect(screen.getByRole('heading', { name: '2 ttnn.to_device' })).toBeInTheDocument();
+        });
+
         it('opens a folded fan for a URL naming an operation inside it', () => {
             // A folded fan buries an operation exactly as a folded grouping block
             // does, but the unroll asked only `detectedBlocks` -- and was gated on
@@ -2994,24 +3015,62 @@ describe('OperationGraphReactFlow repeat blocks', () => {
             expect(swatch?.style.backgroundColor).toBe(drawnColor('6'));
         });
 
-        it('selects a folded member through its block, which stays folded (#2086)', () => {
-            // Pins today's behaviour; #2086 decides whether the row should unfold the block instead.
+        // A row for an op folded into a block opens the block, as a URL naming the op does, so
+        // the row, the details and the bar all describe the op itself. #2086
+        it("unrolls the block a row's op is folded into, and leads to the op itself (#2086)", () => {
             renderFoldedWithPerf();
+            enableOverlay();
             fireEvent.click(screen.getByRole('checkbox', { name: /^Slowest operations/ }));
-            absolutePositionById.set(FIRST_BLOCK_ID, { x: 4000, y: 800 });
             runBuild.mockClear();
-            setViewport.mockClear();
 
             fireEvent.click(listRow('3 layer_b'));
 
-            // The member has no node of its own, so the pan brings in the block holding it.
+            const asked = (runBuild.mock.calls.at(-1)?.[0] as OpGraphBuildOptions).expandedBlockIds;
+            expect(asked).toEqual([FIRST_BLOCK_ID]);
+            deliver(REPEAT_OPERATION_LIST, { expandedBlockIds: asked });
+
+            const node = nodeById(lastFlowRender().nodes, '3');
+            expect(node.selected).toBe(true);
+            // Marked alone: the ring answers "which op did the row lead to", not "what did the unroll open".
+            expect(hasClass(node, REVEALED_NODE_CLASS)).toBe(true);
+            expect(hasClass(nodeById(lastFlowRender().nodes, '2'), REVEALED_NODE_CLASS)).toBe(false);
+            expect(screen.getByRole('heading', { name: '3 layer_b' })).toBeInTheDocument();
+            expect(screen.queryByLabelText('Selected block details')).toBeNull();
+            // Op 3 takes 30 µs, and the row's swatch is now its own node's bar.
+            expect(screen.getByText('Kernel duration').nextElementSibling).toHaveTextContent(formatDuration(30_000));
+            expect(listSwatch('3 layer_b')?.style.backgroundColor).toBe(drawnColor('3'));
+            // The second block stays folded.
+            expect(nodeById(lastFlowRender().nodes, SECOND_BLOCK_ID)).toBeDefined();
+        });
+
+        it('pans the op the unroll produces into view, clear of the side column', () => {
+            renderFoldedWithPerf();
+            fireEvent.click(screen.getByRole('checkbox', { name: /^Slowest operations/ }));
+            // The block sits at pane x 750, in the column's band from 700. The unroll keeps its
+            // first member there, so op 3 lands behind the column unless the reveal moves it.
+            absolutePositionById.set(FIRST_BLOCK_ID, { x: 1500, y: 600 });
+            fireEvent.click(listRow('3 layer_b'));
+            const asked = (runBuild.mock.calls.at(-1)?.[0] as OpGraphBuildOptions).expandedBlockIds;
+            setViewport.mockClear();
+
+            deliver(REPEAT_OPERATION_LIST, { expandedBlockIds: asked });
+
             expect(setViewport).toHaveBeenCalledTimes(1);
-            const [viewport] = setViewport.mock.calls[0] as unknown as [{ x: number }];
-            expect((4000 + STORE_NODE.width) * PANNED_ZOOM + viewport.x).toBeLessThanOrEqual(PANE.width - SIDE_WIDTH);
-            expect(listRow('3 layer_b')).toHaveAttribute('aria-current', 'true');
-            expect(screen.getByLabelText('Selected block details')).toHaveTextContent('layer_a + layer_b × 2');
-            expect(hasClass(nodeById(lastFlowRender().nodes, FIRST_BLOCK_ID), 'op-graph-node-selected')).toBe(true);
+            const [viewport] = setViewport.mock.calls[0] as unknown as [{ x: number; zoom: number }];
+            const node = nodeById(lastFlowRender().nodes, '3');
+            const rightEdge = (node.position.x + (node.width ?? 0)) * viewport.zoom + viewport.x;
+            expect(rightEdge).toBeLessThanOrEqual(PANE.width - SIDE_WIDTH);
+        });
+
+        it('selects a row whose op has a node of its own without unrolling anything', () => {
+            renderFoldedWithPerf();
+            fireEvent.click(screen.getByRole('checkbox', { name: /^Slowest operations/ }));
+            runBuild.mockClear();
+
+            fireEvent.click(listRow('6 suffix'));
+
             expect(runBuild).not.toHaveBeenCalled();
+            expect(nodeById(lastFlowRender().nodes, '6').selected).toBe(true);
         });
 
         it('keeps the list swatches the same whether or not the bars are drawn', () => {

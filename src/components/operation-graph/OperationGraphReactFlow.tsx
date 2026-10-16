@@ -1265,6 +1265,22 @@ const OperationGraphInner = ({
         [focusOperation],
     );
 
+    // A list row for an op inside a folded owner opens that owner, as a URL naming the op does, and marks
+    // just that op: the row leads to the op's own node, and the reveal brings it into view once it lands. #2086
+    const selectListedOperation = useCallback(
+        (id: number) => {
+            const buried = ownersOf(id).find((owner) => !isBlockExpanded(owner.instanceId));
+            if (buried === undefined) {
+                selectOperation(id);
+                return;
+            }
+            toggleBlockExpansion(buried.instanceId);
+            pendingRevealRef.current = { nodeIds: new Set([String(id)]), reportScope };
+            setSelectedOperationId(id);
+        },
+        [ownersOf, isBlockExpanded, selectOperation, toggleBlockExpansion, reportScope],
+    );
+
     // Pressing Enter or Space on a focused node reaches React Flow's own handler,
     // which emits a select change and never calls `onNodeClick` — so a keyboard
     // user could move the selection ring without the panel, the highlight or the
@@ -1992,7 +2008,7 @@ const OperationGraphInner = ({
                             minNs={perfRangeMinNs}
                             maxNs={perfRangeMaxNs}
                             selectedOperationId={selectedOperationId}
-                            onSelectOperation={selectOperation}
+                            onSelectOperation={selectListedOperation}
                         />
                     ) : null}
                     {isPanelOpen ? (
