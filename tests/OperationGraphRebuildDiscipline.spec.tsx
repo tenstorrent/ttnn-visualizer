@@ -115,7 +115,6 @@ const TOOLBAR_HEIGHT = 150;
 const SIDE_WIDTH = 300;
 // The list alone sizes the column to its rows; only the details stretch it down the pane. #2087
 const LIST_ONLY_SIDE_HEIGHT = 300;
-const SIDE_WITH_DETAILS_CLASS = 'op-graph-side-with-details';
 const stubRect = (width: number, height: number, left = 0, top = 0) =>
     ({
         x: left,
@@ -296,6 +295,7 @@ import {
     getDeviceNodeId,
 } from '../src/components/operation-graph/opGraphDeviceSubgraph';
 import OperationGraphReactFlow from '../src/components/operation-graph/OperationGraphReactFlow';
+import { SIDE_WITH_DETAILS_CLASS } from '../src/components/operation-graph/opGraphRevealPan';
 import {
     PERF_BAR_COLOR_VAR,
     PERF_BAR_SCALE_VAR,
@@ -1150,15 +1150,19 @@ describe('OperationGraphReactFlow slowest operations list', () => {
             expect(sideColumn()).toHaveClass(SIDE_WITH_DETAILS_CLASS);
         });
 
-        it('steps to a match below the list alone without panning around it', () => {
-            // x 800–850 is the column's band, but y 400 is below the 300 px the list takes.
-            absolutePositionById.set('3', { x: 1600, y: 800 });
+        // Op 3 is the filter's one match: its node goes at (x, y), and Next steps to it with the list alone.
+        const stepToMatchAt = (x: number, y: number) => {
+            absolutePositionById.set('3', { x, y });
             renderGraph(OPERATION_LIST, PERF_ROWS);
             fireEvent.click(hotOpsSwitch());
             typeFilter('matmul_c');
             setViewport.mockClear();
-
             fireEvent.click(screen.getByLabelText('Next match'));
+        };
+
+        it('steps to a match below the list alone without panning around it', () => {
+            // x 800–850 is the column's band, but y 400 is below the 300 px the list takes.
+            stepToMatchAt(1600, 800);
 
             expect(setViewport).not.toHaveBeenCalled();
         });
@@ -1167,32 +1171,58 @@ describe('OperationGraphReactFlow slowest operations list', () => {
             // The app's own padding puts the pane 15 px down. At y 305 the node is below the
             // list's 300 px only once those 15 px are taken off the column's window bottom.
             vi.mocked(Element.prototype.getBoundingClientRect).mockImplementation(measuredWithPaneAt(15));
-            absolutePositionById.set('3', { x: 1600, y: 610 });
-            renderGraph(OPERATION_LIST, PERF_ROWS);
-            fireEvent.click(hotOpsSwitch());
-            typeFilter('matmul_c');
-            setViewport.mockClear();
-
-            fireEvent.click(screen.getByLabelText('Next match'));
+            stepToMatchAt(1600, 610);
 
             expect(setViewport).not.toHaveBeenCalled();
         });
 
         it('still steps a match out from behind the list alone', () => {
             // y 200 is inside the band the list covers.
-            absolutePositionById.set('3', { x: 1600, y: 400 });
-            renderGraph(OPERATION_LIST, PERF_ROWS);
-            fireEvent.click(hotOpsSwitch());
-            typeFilter('matmul_c');
-            setViewport.mockClear();
-
-            fireEvent.click(screen.getByLabelText('Next match'));
+            stepToMatchAt(1600, 400);
 
             expect(setViewport).toHaveBeenCalledTimes(1);
             const [viewport] = setViewport.mock.calls[0] as unknown as [{ x: number; y: number }];
             expect((1600 + STORE_NODE.width) * PANNED_ZOOM + viewport.x).toBeLessThanOrEqual(PANE.width - SIDE_WIDTH);
             // Stepping matches only moves the viewport; the list keeps the column to itself.
             expect(sideColumn()).not.toHaveClass(SIDE_WITH_DETAILS_CLASS);
+        });
+
+        it('clears the column for a selection made on the graph, which stretches it too', () => {
+            // Below the list alone but in the column's band, like the row-click case above.
+            absolutePositionById.set('3', { x: 1600, y: 800 });
+            renderGraph(OPERATION_LIST, PERF_ROWS);
+            fireEvent.click(hotOpsSwitch());
+            setViewport.mockClear();
+
+            act(() => {
+                harness.onNodeClick?.(null, nodeById(lastFlowRender().nodes, '3'));
+            });
+
+            expect(setViewport).toHaveBeenCalledTimes(1);
+            const [viewport] = setViewport.mock.calls[0] as unknown as [{ x: number }];
+            expect((1600 + STORE_NODE.width) * PANNED_ZOOM + viewport.x).toBeLessThanOrEqual(PANE.width - SIDE_WIDTH);
+        });
+
+        it('keeps a clicked row in view once the details open and shorten the list', () => {
+            // The list ends 200 px down only once the details' class lands, and op 3's row sits
+            // 50 px past that, so the scroll has to read the commit that opens the details.
+            vi.mocked(Element.prototype.getBoundingClientRect).mockImplementation(function measured(this: Element) {
+                if (this.classList?.contains('op-graph-hot-ops-list')) {
+                    const isStretched = this.closest('.op-graph-side')?.classList.contains(SIDE_WITH_DETAILS_CLASS);
+                    return stubRect(SIDE_WIDTH, isStretched ? 200 : PANE.height, PANE.width - SIDE_WIDTH);
+                }
+                if (this.getAttribute?.('title') === '3 matmul_c') {
+                    return stubRect(SIDE_WIDTH, 20, PANE.width - SIDE_WIDTH, 230);
+                }
+                return measuredWithPaneAt(0).call(this);
+            });
+            renderGraph(OPERATION_LIST, PERF_ROWS);
+            fireEvent.click(hotOpsSwitch());
+            const list = document.querySelector<HTMLElement>('.op-graph-hot-ops-list');
+
+            fireEvent.click(rowFor('3 matmul_c'));
+
+            expect(list?.scrollTop).toBe(50);
         });
 
         // Expanding op 3 keeps its corner where it was, which these tests put in the

@@ -139,6 +139,17 @@ describe('OpGraphHotOpsPanel rows', () => {
             expect(list.scrollTop).toBe(0);
         });
 
+        it('leaves the list alone when the selection settles on a row other than the one clicked', () => {
+            const { select } = renderPanel();
+            const list = shortenUnder(5);
+            vi.spyOn(rowFor(7), 'getBoundingClientRect').mockReturnValue(box(260, 280));
+
+            fireEvent.click(rowFor(5));
+            select(7);
+
+            expect(list.scrollTop).toBe(0);
+        });
+
         it('leaves the list alone when the row clicked is still in view', () => {
             const { select } = renderPanel();
             const list = shortenUnder(5);
