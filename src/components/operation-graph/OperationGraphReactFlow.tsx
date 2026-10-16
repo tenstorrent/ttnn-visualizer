@@ -709,12 +709,14 @@ const OperationGraphInner = ({
         }
         return namesById;
     }, [operationList]);
-    // The names the graph on screen was built from. The list names its rows by these, so a range
-    // narrowed mid-build doesn't blank the rows of ops the graph has yet to drop. #2088
+    // The latest names, for `onBuilt` to take: a reply it accepts is for the latest source, since
+    // stale ones are dropped by request id.
     const operationNamesByIdRef = useRef(operationNamesById);
     useEffect(() => {
         operationNamesByIdRef.current = operationNamesById;
     }, [operationNamesById]);
+    // The names the graph on screen was built from, so a range narrowed mid-build doesn't blank
+    // the rows of ops the graph has yet to drop. #2088
     const [drawnOperationNamesById, setDrawnOperationNamesById] = useState(operationNamesById);
 
     const onBuilt = useCallback(
@@ -2036,7 +2038,7 @@ const OperationGraphInner = ({
                         <OpGraphInfoPanel
                             operationId={selectedOperationId}
                             operationById={operationById}
-                            operationNamesById={operationNamesById}
+                            operationNamesById={drawnOperationNamesById}
                             onLocateOperation={centerOperation}
                             isPerfOverlayActive={isPerfOverlayActive}
                             perfDeviceTimeNs={selectedPerfDeviceTimeNs}

@@ -179,8 +179,11 @@ describe('OpGraphHotOpsPanel rows', () => {
     it('goes inert while the graph rebuilds, on the same list', () => {
         const { setInert } = renderPanel();
         const section = screen.getByRole('region', { name: 'Slowest operations' });
-        const list = section.querySelector('.op-graph-hot-ops-list');
+        const list = section.querySelector<HTMLElement>('.op-graph-hot-ops-list');
         expect(section).not.toHaveAttribute('inert');
+        if (list) {
+            list.scrollTop = 40;
+        }
 
         setInert(true);
         expect(section).toHaveAttribute('inert');
@@ -188,7 +191,8 @@ describe('OpGraphHotOpsPanel rows', () => {
 
         setInert(false);
         expect(section).not.toHaveAttribute('inert');
-        expect(section).toBeInTheDocument();
+        expect(section.querySelector('.op-graph-hot-ops-list')).toBe(list);
+        expect(list?.scrollTop).toBe(40);
     });
 });
 
