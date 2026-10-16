@@ -6,6 +6,7 @@ import { cleanup, render, screen } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { MemoryLegendElement } from '../src/components/operation-details/MemoryLegendElement';
+import { isBufferFocusDismissal } from '../src/functions/bufferFocusDismissal';
 import { MemoryLegendGroup } from '../src/components/operation-details/MemoryLegendGroup';
 import { TEST_IDS } from '../src/definitions/TestIds';
 import { buildTensorDeallocationReport } from './helpers/lateDeallocationFixtures';
@@ -78,6 +79,17 @@ describe('MemoryLegendElement legend swatches', () => {
         expect(container.querySelector('.memory-color-block')).toBeInTheDocument();
         expect(container.querySelector('.legend-marker-swatch')).not.toBeInTheDocument();
         expect(container.querySelector('.legend-empty-swatch')).not.toBeInTheDocument();
+    });
+});
+
+describe('MemoryLegendElement and a focused buffer (#2042)', () => {
+    it.each<[string, RegExp, LegendProps['chunk']]>([
+        ['an empty gap', /Empty space/, { address: 0x2000, size: 512, empty: true }],
+        ['a marker', /L1 START/, { address: 0x1000, size: 0, markerType: MarkerType.L1_START }],
+    ])('keeps the focus through a click on %s, though the row is no button', (_, text, chunk) => {
+        renderLegendElement(chunk);
+
+        expect(isBufferFocusDismissal(screen.getByText(text).closest('.legend-item'))).toBe(false);
     });
 });
 
