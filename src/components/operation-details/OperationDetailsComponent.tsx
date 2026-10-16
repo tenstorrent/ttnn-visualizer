@@ -43,6 +43,7 @@ import OperationArguments from '../OperationArguments';
 import DeviceOperationsFullRender from './DeviceOperationsFullRender';
 import OperationAllocationFailureCallout from './OperationAllocationFailureCallout';
 import useBufferFocus from '../../hooks/useBufferFocus';
+import useClickAway from '../../hooks/useClickAway';
 import { StackTraceLanguage } from '../../definitions/StackTrace';
 import { L1_DEFAULT_MEMORY_SIZE } from '../../definitions/L1MemorySize';
 import MemoryPlotRenderer from './MemoryPlotRenderer';
@@ -93,10 +94,7 @@ const OperationDetailsComponent = ({ operationId }: OperationDetailsProps) => {
     const { data: previousOperationDetails, isLoading: isPrevLoading } =
         usePreviousOperationDetails(operationId).operationDetails;
     const { resetToasts, updateBufferFocus } = useBufferFocus();
-
-    const onClickOutside = () => {
-        resetToasts();
-    };
+    useClickAway(Boolean(selectedAddress) || isValidNumber(selectedTensorId), resetToasts);
 
     const operation = operations?.find((op) => op.id === operationId);
     const {
@@ -216,13 +214,6 @@ const OperationDetailsComponent = ({ operationId }: OperationDetailsProps) => {
             <OperationAllocationFailureCallout operation={operationDetails ?? null} />
 
             <div className='operation-details-component'>
-                {(selectedAddress || isValidNumber(selectedTensorId)) && (
-                    // eslint-disable-next-line jsx-a11y/click-events-have-key-events,jsx-a11y/no-static-element-interactions
-                    <div
-                        className='outside-click'
-                        onClick={onClickOutside}
-                    />
-                )}
                 {!isLoading && isValidNumber(operationDetails?.id) ? (
                     <>
                         {details.stack_trace && (
