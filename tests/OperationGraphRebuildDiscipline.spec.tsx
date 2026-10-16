@@ -406,6 +406,12 @@ const typeFilter = (query: string) => {
     });
 };
 
+// The viewport the first pan wrote, which most of the pan assertions below read.
+const firstPan = () => (setViewport.mock.calls[0] as unknown as [{ x: number; y: number; zoom: number }])[0];
+// How far right a store node at graph x `graphX` reaches on the pane after the first pan.
+const storeNodeRightEdge = (graphX: number) => (graphX + STORE_NODE.width) * PANNED_ZOOM + firstPan().x;
+const expectClearOfSide = (rightEdge: number) => expect(rightEdge).toBeLessThanOrEqual(PANE.width - SIDE_WIDTH);
+
 const emitNodeChanges = (changes: NodeChange<OpGraphFlowNode>[]) => {
     act(() => {
         harness.onNodesChange?.(changes);
@@ -1173,10 +1179,8 @@ describe('OperationGraphReactFlow slowest operations list', () => {
         fireEvent.click(rowFor('3 matmul_c'));
 
         expect(setViewport).toHaveBeenCalledTimes(1);
-        const [viewport] = setViewport.mock.calls[0] as unknown as [{ x: number; y: number }];
-        const rightEdge = (1600 + STORE_NODE.width) * PANNED_ZOOM + viewport.x;
-        expect(rightEdge).toBeLessThanOrEqual(PANE.width - SIDE_WIDTH);
-        expect(viewport.y).toBe(0);
+        expectClearOfSide(storeNodeRightEdge(1600));
+        expect(firstPan().y).toBe(0);
     });
 
     // The list alone no longer spans the pane, so the graph below it takes clicks and drags. #2087
@@ -1236,8 +1240,7 @@ describe('OperationGraphReactFlow slowest operations list', () => {
             stepToMatchAt(1600, 400);
 
             expect(setViewport).toHaveBeenCalledTimes(1);
-            const [viewport] = setViewport.mock.calls[0] as unknown as [{ x: number; y: number }];
-            expect((1600 + STORE_NODE.width) * PANNED_ZOOM + viewport.x).toBeLessThanOrEqual(PANE.width - SIDE_WIDTH);
+            expectClearOfSide(storeNodeRightEdge(1600));
             // Stepping matches only moves the viewport; the list keeps the column to itself.
             expect(sideColumn()).not.toHaveClass(SIDE_STRETCHED_CLASS);
         });
@@ -1254,8 +1257,61 @@ describe('OperationGraphReactFlow slowest operations list', () => {
             });
 
             expect(setViewport).toHaveBeenCalledTimes(1);
-            const [viewport] = setViewport.mock.calls[0] as unknown as [{ x: number }];
-            expect((1600 + STORE_NODE.width) * PANNED_ZOOM + viewport.x).toBeLessThanOrEqual(PANE.width - SIDE_WIDTH);
+            expectClearOfSide(storeNodeRightEdge(1600));
+        });
+
+        it('clears the column for a selection made from the keyboard or a box', () => {
+            // React Flow reports these as select changes, which reach the pan by another route than a click.
+            absolutePositionById.set('3', { x: 1600, y: 800 });
+            renderGraph(OPERATION_LIST, PERF_ROWS);
+            fireEvent.click(hotOpsSwitch());
+            setViewport.mockClear();
+
+            emitNodeChanges([{ type: 'select', id: '3', selected: true }]);
+
+            expect(sideColumn()).toHaveClass(SIDE_STRETCHED_CLASS);
+            expect(setViewport).toHaveBeenCalledTimes(1);
+            expectClearOfSide(storeNodeRightEdge(1600));
+        });
+
+        it('clears the column for a selection made mid-build, which stretches it with the details shut', () => {
+            // The list stays mounted through a build and the selection stretches it, though no details open. #2088
+            absolutePositionById.set('3', { x: 1600, y: 800 });
+            renderGraph(OPERATION_LIST, PERF_ROWS);
+            fireEvent.click(hotOpsSwitch());
+            act(() => {
+                harness.setIsBuilding?.(true);
+            });
+            setViewport.mockClear();
+
+            emitNodeChanges([{ type: 'select', id: '3', selected: true }]);
+
+            expect(sideColumn()).toHaveClass(SIDE_STRETCHED_CLASS);
+            expect(setViewport).toHaveBeenCalledTimes(1);
+            expectClearOfSide(storeNodeRightEdge(1600));
+        });
+
+        it('clears the column for an operation the URL names, whose details open as it renders', () => {
+            // The URL's pan reads the column's class, so it holds only while the details open in that render.
+            absolutePositionById.set('3', { x: 1600, y: 800 });
+            const { rerender } = renderGraph(OPERATION_LIST, PERF_ROWS);
+            fireEvent.click(hotOpsSwitch());
+            setViewport.mockClear();
+
+            rerender(
+                <MemoryRouter>
+                    <OperationGraphReactFlow
+                        operationList={OPERATION_LIST}
+                        perfRows={PERF_ROWS}
+                        isPerfReportLoaded
+                        operationId={3}
+                    />
+                </MemoryRouter>,
+            );
+
+            expect(sideColumn()).toHaveClass(SIDE_STRETCHED_CLASS);
+            expect(setViewport).toHaveBeenCalledTimes(1);
+            expectClearOfSide(storeNodeRightEdge(1600));
         });
 
         it('keeps a clicked row in view once the details open and shorten the list', () => {
@@ -1295,7 +1351,7 @@ describe('OperationGraphReactFlow slowest operations list', () => {
                 fireEvent.click(screen.getByRole('button', { name: 'Show 3 device operations' }));
                 rebuildWith(operations, subgraph === null ? [] : [subgraph]);
                 expect(setViewport).toHaveBeenCalledTimes(1);
-                return (setViewport.mock.calls[0] as unknown as [{ x: number; y: number }])[0];
+                return firstPan();
             };
 
             const boxWidth = () => {
@@ -1324,8 +1380,7 @@ describe('OperationGraphReactFlow slowest operations list', () => {
 
                 const viewport = expandAt(paneX, LIST_ONLY_SIDE_HEIGHT + 20);
 
-                const rightEdge = expandedBox().position.x * PANNED_ZOOM + viewport.x + boxWidth();
-                expect(rightEdge).toBeLessThanOrEqual(PANE.width - SIDE_WIDTH);
+                expectClearOfSide(expandedBox().position.x * PANNED_ZOOM + viewport.x + boxWidth());
             });
         });
     });
@@ -3580,8 +3635,7 @@ describe('OperationGraphReactFlow repeat blocks', () => {
 
             // The member has no node of its own, so the pan brings in the block holding it.
             expect(setViewport).toHaveBeenCalledTimes(1);
-            const [viewport] = setViewport.mock.calls[0] as unknown as [{ x: number }];
-            expect((4000 + STORE_NODE.width) * PANNED_ZOOM + viewport.x).toBeLessThanOrEqual(PANE.width - SIDE_WIDTH);
+            expectClearOfSide(storeNodeRightEdge(4000));
             expect(listRow('3 layer_b')).toHaveAttribute('aria-current', 'true');
             expect(screen.getByLabelText('Selected block details')).toHaveTextContent('layer_a + layer_b × 2');
             expect(hasClass(nodeById(lastFlowRender().nodes, FIRST_BLOCK_ID), 'op-graph-node-selected')).toBe(true);
