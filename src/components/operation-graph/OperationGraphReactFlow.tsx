@@ -1245,6 +1245,8 @@ const OperationGraphInner = ({
         (detectedBlocks.length > 0 || weightFans.length > 0)
     ) {
         setRevealedOperationId(operationId);
+        // Unlike a slowest-operations row, this leaves the fan a weight load joins on
+        // this unroll folded, so a link to one still lands on the fan. #2145
         const buried = ownersOf(operationId).find((owner) => !isBlockExpanded(owner.instanceId));
         if (buried !== undefined) {
             // `null` is "nothing has been folded", which renders every grouping block
