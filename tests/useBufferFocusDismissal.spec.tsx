@@ -4,7 +4,7 @@
 
 import '@testing-library/jest-dom/vitest';
 import { type ReactNode } from 'react';
-import { cleanup, fireEvent, renderHook } from '@testing-library/react';
+import { cleanup, fireEvent, render, renderHook, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import useBufferFocusDismissal from '../src/hooks/useBufferFocusDismissal';
 import { selectedAddressAtom, selectedTensorIdAtom } from '../src/store/app';
@@ -31,13 +31,6 @@ const renderFocused = (
         ),
     });
 
-const mount = (html: string): HTMLElement => {
-    const host = document.createElement('div');
-    host.innerHTML = html;
-    document.body.append(host);
-    return host;
-};
-
 afterEach(() => {
     cleanup();
     document.getSelection()?.removeAllRanges();
@@ -47,28 +40,33 @@ afterEach(() => {
 describe('useBufferFocusDismissal', () => {
     it('dismisses the focused buffer on a click pressed and released on content', () => {
         renderFocused();
-        const host = mount('<h3 id="heading">L1</h3>');
+        render(<h3>L1</h3>);
 
-        pressAndRelease(host.querySelector('#heading')!);
+        pressAndRelease(screen.getByRole('heading', { name: 'L1' }));
 
         expect(bufferFocus()).toHaveTextContent('dismissed');
     });
 
     it('keeps it through a click on a control', () => {
         renderFocused();
-        const host = mount('<button id="control">L1 Memory</button>');
+        render(<button type='button'>L1 Memory</button>);
 
-        pressAndRelease(host.querySelector('#control')!);
+        pressAndRelease(screen.getByRole('button', { name: 'L1 Memory' }));
 
         expect(bufferFocus()).toHaveTextContent('focused');
     });
 
     it('keeps it when a press on a control is released elsewhere', () => {
         renderFocused();
-        const host = mount('<button id="control">L1 Memory</button><h3 id="heading">L1</h3>');
+        render(
+            <>
+                <button type='button'>L1 Memory</button>
+                <h3>L1</h3>
+            </>,
+        );
 
-        fireEvent.pointerDown(host.querySelector('#control')!);
-        fireEvent.click(host.querySelector('#heading')!);
+        fireEvent.pointerDown(screen.getByRole('button', { name: 'L1 Memory' }));
+        fireEvent.click(screen.getByRole('heading', { name: 'L1' }));
 
         expect(bufferFocus()).toHaveTextContent('focused');
     });
@@ -76,9 +74,15 @@ describe('useBufferFocusDismissal', () => {
     it('keeps it when a press in a plot is released outside it', () => {
         // Plotly covers the page while a press is down, so a browser can deliver the release elsewhere.
         renderFocused();
-        const host = mount('<div class="js-plotly-plot"><svg><rect id="bar" /></svg></div>');
+        render(
+            <div className='js-plotly-plot'>
+                <svg>
+                    <rect data-testid='bar' />
+                </svg>
+            </div>,
+        );
 
-        fireEvent.pointerDown(host.querySelector('#bar')!);
+        fireEvent.pointerDown(screen.getByTestId('bar'));
         fireEvent.click(document.body);
 
         expect(bufferFocus()).toHaveTextContent('focused');
@@ -86,12 +90,13 @@ describe('useBufferFocusDismissal', () => {
 
     it('keeps it when the click ends a text selection in what it clicked', () => {
         renderFocused();
-        const host = mount('<p id="text">MemoryLayout BLOCK_SHARDED</p>');
+        render(<p>MemoryLayout BLOCK_SHARDED</p>);
+        const text = screen.getByText('MemoryLayout BLOCK_SHARDED');
         const range = document.createRange();
-        range.selectNodeContents(host.querySelector('#text')!);
+        range.selectNodeContents(text);
         document.getSelection()?.addRange(range);
 
-        pressAndRelease(host.querySelector('#text')!);
+        pressAndRelease(text);
 
         expect(bufferFocus()).toHaveTextContent('focused');
     });
@@ -99,29 +104,35 @@ describe('useBufferFocusDismissal', () => {
     it('forgets a press once its click is judged, so a later click with no press keeps it', () => {
         // A keyboard or a script clicks without pressing, and a stale press must not stand in.
         renderFocused();
-        const host = mount('<h3 id="heading">L1</h3><button id="control">L1 Memory</button>');
+        render(
+            <>
+                <h3>L1</h3>
+                <button type='button'>L1 Memory</button>
+            </>,
+        );
+        const heading = screen.getByRole('heading', { name: 'L1' });
 
-        fireEvent.pointerDown(host.querySelector('#heading')!);
-        fireEvent.click(host.querySelector('#control')!);
-        fireEvent.click(host.querySelector('#heading')!);
+        fireEvent.pointerDown(heading);
+        fireEvent.click(screen.getByRole('button', { name: 'L1 Memory' }));
+        fireEvent.click(heading);
 
         expect(bufferFocus()).toHaveTextContent('focused');
     });
 
     it('dismisses a focus on a tensor with no address', () => {
         renderFocused([[selectedTensorIdAtom, TENSOR_ID]]);
-        const host = mount('<h3 id="heading">Inputs</h3>');
+        render(<h3>Inputs</h3>);
 
-        pressAndRelease(host.querySelector('#heading')!);
+        pressAndRelease(screen.getByRole('heading', { name: 'Inputs' }));
 
         expect(bufferFocus()).toHaveTextContent('dismissed');
     });
 
     it('dismisses a focus on a buffer at address 0', () => {
         renderFocused([[selectedAddressAtom, 0]]);
-        const host = mount('<h3 id="heading">DRAM</h3>');
+        render(<h3>DRAM</h3>);
 
-        pressAndRelease(host.querySelector('#heading')!);
+        pressAndRelease(screen.getByRole('heading', { name: 'DRAM' }));
 
         expect(bufferFocus()).toHaveTextContent('dismissed');
     });
@@ -129,11 +140,17 @@ describe('useBufferFocusDismissal', () => {
     it('judges a press before the handler it lands on can re-render it', () => {
         // A button that swaps its icon on press would otherwise leave the pressed node in no button.
         renderFocused();
-        const host = mount('<button id="toggle"><svg id="icon"><path id="hit" /></svg></button>');
-        const toggle = host.querySelector('#toggle')!;
+        render(
+            <button type='button'>
+                <svg>
+                    <path data-testid='icon' />
+                </svg>
+            </button>,
+        );
+        const toggle = screen.getByRole('button');
         toggle.addEventListener('pointerdown', () => toggle.replaceChildren());
 
-        fireEvent.pointerDown(host.querySelector('#hit')!);
+        fireEvent.pointerDown(screen.getByTestId('icon'));
         fireEvent.click(document.body);
 
         expect(bufferFocus()).toHaveTextContent('focused');
