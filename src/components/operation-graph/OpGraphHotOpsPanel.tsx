@@ -41,6 +41,8 @@ interface OpGraphHotOpsPanelProps {
     maxNs: number;
     selectedOperationId: number | null;
     onSelectOperation: (operationId: number) => void;
+    /** Shuts the list to input and focus without unmounting it, so it keeps its scroll. */
+    isInert: boolean;
 }
 
 const OpGraphHotOpsPanel = ({
@@ -51,8 +53,10 @@ const OpGraphHotOpsPanel = ({
     maxNs,
     selectedOperationId,
     onSelectOperation,
+    isInert,
 }: OpGraphHotOpsPanelProps) => {
     const titleId = useId();
+    const sectionRef = useRef<HTMLElement>(null);
     const listRef = useRef<HTMLOListElement>(null);
     const clickedOperationIdRef = useRef<number | null>(null);
     const [settings, setSettings] = useAtom(hotOpsSettingsAtom);
@@ -87,8 +91,14 @@ const OpGraphHotOpsPanel = ({
         }
     }, [selectedOperationId]);
 
+    // React 18 has no `inert` prop; on React 19 this becomes `inert={isInert}`.
+    useLayoutEffect(() => {
+        sectionRef.current?.toggleAttribute('inert', isInert);
+    }, [isInert]);
+
     return (
         <section
+            ref={sectionRef}
             className='op-graph-hot-ops'
             aria-labelledby={titleId}
         >

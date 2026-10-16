@@ -34,7 +34,9 @@ const renderPanel = ({
     const names = new Map(graphOperationIds.map((id) => [id, `op_${id}`]));
     const rows = buildHotOpRows(overlay, graphOperationIds, names);
     const store = createStore();
-    const panel = (selected: number | null) => (
+    // The view owns the selection and the build, so a test hands the panel what it would.
+    const state = { selected: selectedOperationId, isInert: false };
+    const panel = () => (
         <Provider store={store}>
             <OpGraphHotOpsPanel
                 rows={rows}
@@ -42,14 +44,24 @@ const renderPanel = ({
                 totalNs={overlay.totalNs}
                 minNs={overlay.minNs}
                 maxNs={overlay.maxNs}
-                selectedOperationId={selected}
+                selectedOperationId={state.selected}
                 onSelectOperation={onSelectOperation}
+                isInert={state.isInert}
             />
         </Provider>
     );
-    const { rerender } = render(panel(selectedOperationId));
-    // The view owns the selection, so a test hands the panel the one it would.
-    return { overlay, select: (operationId: number | null) => rerender(panel(operationId)) };
+    const { rerender } = render(panel());
+    return {
+        overlay,
+        select: (operationId: number | null) => {
+            state.selected = operationId;
+            rerender(panel());
+        },
+        setInert: (isInert: boolean) => {
+            state.isInert = isInert;
+            rerender(panel());
+        },
+    };
 };
 
 const listedIds = () =>
@@ -172,6 +184,26 @@ describe('OpGraphHotOpsPanel rows', () => {
 
             expect(list.scrollTop).toBe(40);
         });
+    });
+
+    // The graph rebuilding: the list stays, scroll and all, but nothing in it may act. #2088
+    it('goes inert while the graph rebuilds, on the same list', () => {
+        const { setInert } = renderPanel();
+        const section = screen.getByRole('region', { name: 'Slowest operations' });
+        const list = section.querySelector<HTMLElement>('.op-graph-hot-ops-list');
+        expect(section).not.toHaveAttribute('inert');
+        if (list) {
+            list.scrollTop = 40;
+        }
+
+        setInert(true);
+        expect(section).toHaveAttribute('inert');
+        expect(section.querySelector('.op-graph-hot-ops-list')).toBe(list);
+
+        setInert(false);
+        expect(section).not.toHaveAttribute('inert');
+        expect(section.querySelector('.op-graph-hot-ops-list')).toBe(list);
+        expect(list?.scrollTop).toBe(40);
     });
 });
 
