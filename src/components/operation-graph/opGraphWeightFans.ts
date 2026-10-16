@@ -50,7 +50,7 @@ const FAN_ID_PATTERN = /^weights:\d+(?:-\d+)*$/;
  * 149 weight loads is a node id of roughly 700 characters. Legible ids were judged
  * worth that; a digest is the fallback if it stops being true.
  */
-const fanIdOf = (memberOperationIds: readonly number[]): string =>
+export const fanIdOf = (memberOperationIds: readonly number[]): string =>
     `${FAN_ID_PREFIX}${[...memberOperationIds].sort((left, right) => left - right).join('-')}`;
 
 /**
