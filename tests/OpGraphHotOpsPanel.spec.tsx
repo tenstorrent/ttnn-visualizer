@@ -151,6 +151,17 @@ describe('OpGraphHotOpsPanel rows', () => {
             expect(list.scrollTop).toBe(0);
         });
 
+        it('leaves the list alone when the selection settles on a row other than the one clicked', () => {
+            const { select } = renderPanel();
+            const list = shortenUnder(5);
+            vi.spyOn(rowFor(7), 'getBoundingClientRect').mockReturnValue(box(260, 280));
+
+            fireEvent.click(rowFor(5));
+            select(7);
+
+            expect(list.scrollTop).toBe(0);
+        });
+
         it('leaves the list alone when the row clicked is still in view', () => {
             const { select } = renderPanel();
             const list = shortenUnder(5);
@@ -168,8 +179,11 @@ describe('OpGraphHotOpsPanel rows', () => {
     it('goes inert while the graph rebuilds, on the same list', () => {
         const { setInert } = renderPanel();
         const section = screen.getByRole('region', { name: 'Slowest operations' });
-        const list = section.querySelector('.op-graph-hot-ops-list');
+        const list = section.querySelector<HTMLElement>('.op-graph-hot-ops-list');
         expect(section).not.toHaveAttribute('inert');
+        if (list) {
+            list.scrollTop = 40;
+        }
 
         setInert(true);
         expect(section).toHaveAttribute('inert');
@@ -177,7 +191,8 @@ describe('OpGraphHotOpsPanel rows', () => {
 
         setInert(false);
         expect(section).not.toHaveAttribute('inert');
-        expect(section).toBeInTheDocument();
+        expect(section.querySelector('.op-graph-hot-ops-list')).toBe(list);
+        expect(list?.scrollTop).toBe(40);
     });
 });
 

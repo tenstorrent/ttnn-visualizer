@@ -117,7 +117,6 @@ const TOOLBAR_HEIGHT = 150;
 const SIDE_WIDTH = 300;
 // The list alone sizes the column to its rows; a selection stretches it down the pane. #2087
 const LIST_ONLY_SIDE_HEIGHT = 300;
-const SIDE_STRETCHED_CLASS = 'op-graph-side-stretched';
 const stubRect = (width: number, height: number, left = 0, top = 0) =>
     ({
         x: left,
@@ -304,6 +303,7 @@ import {
     getDeviceNodeId,
 } from '../src/components/operation-graph/opGraphDeviceSubgraph';
 import OperationGraphReactFlow from '../src/components/operation-graph/OperationGraphReactFlow';
+import { SIDE_STRETCHED_CLASS } from '../src/components/operation-graph/opGraphRevealPan';
 import {
     PERF_BAR_COLOR_VAR,
     PERF_BAR_SCALE_VAR,
@@ -369,6 +369,14 @@ const sourceFor = (operations: OperationDescription[]) =>
         deviceOperationCount: countDeviceOperations(op),
     }));
 
+// The worker's reply: it clears the build flag and delivers the graph in one handler, so one `act`.
+const replyWith = (source: OpGraphSourceOperation[], deviceSubgraphs: OpGraphDeviceSubgraph[] = []) => {
+    act(() => {
+        harness.setIsBuilding?.(false);
+        harness.onBuilt?.(buildOpGraph(source, { hideDeallocate: true, deviceSubgraphs }));
+    });
+};
+
 const renderGraph = (operations = OPERATION_LIST, perfRows?: PerfOverlaySource[], operationId?: number) => {
     const view = render(
         <MemoryRouter>
@@ -382,14 +390,7 @@ const renderGraph = (operations = OPERATION_LIST, perfRows?: PerfOverlaySource[]
     );
     // The worker is stubbed, so the view only receives a graph when a test says
     // so; this is the reply the mount's own `runBuild` would have produced.
-    act(() => {
-        harness.onBuilt?.(
-            buildOpGraph(harness.sourceOperations ?? sourceFor(operations), {
-                hideDeallocate: true,
-                deviceSubgraphs: [],
-            }),
-        );
-    });
+    replyWith(harness.sourceOperations ?? sourceFor(operations));
     return view;
 };
 
@@ -480,14 +481,7 @@ const deviceSubgraphFor = (operationId: number, producerId: number): OpGraphDevi
 // What the worker replies with once a box is open. Overlay-invariant tests still
 // inject the graph this way so they don't depend on the click path.
 const rebuildWith = (operations: OperationDescription[], deviceSubgraphs: OpGraphDeviceSubgraph[]) => {
-    act(() => {
-        harness.onBuilt?.(
-            buildOpGraph(harness.sourceOperations ?? sourceFor(operations), {
-                hideDeallocate: true,
-                deviceSubgraphs,
-            }),
-        );
-    });
+    replyWith(harness.sourceOperations ?? sourceFor(operations), deviceSubgraphs);
 };
 
 const tensorNode = (tensorId: number): Node =>
@@ -1044,6 +1038,7 @@ describe('OperationGraphReactFlow slowest operations list', () => {
     // Scoped to the list: the details heading carries the same title once an op is selected.
     const rowFor = (title: string) =>
         within(screen.getByRole('region', { name: 'Slowest operations' })).getByTitle(title);
+    const sideColumn = () => document.querySelector('.op-graph-side');
 
     it('shows the list, slowest first, once its switch is on', () => {
         renderGraph(OPERATION_LIST, PERF_ROWS);
@@ -1157,8 +1152,6 @@ describe('OperationGraphReactFlow slowest operations list', () => {
 
     // The list alone no longer spans the pane, so the graph below it takes clicks and drags. #2087
     describe('side column height', () => {
-        const sideColumn = () => document.querySelector('.op-graph-side');
-
         it('stretches down the pane only while an op is selected', () => {
             renderGraph(OPERATION_LIST, PERF_ROWS);
             fireEvent.click(hotOpsSwitch());
@@ -1183,15 +1176,19 @@ describe('OperationGraphReactFlow slowest operations list', () => {
             expect(sideColumn()).toHaveClass(SIDE_STRETCHED_CLASS);
         });
 
-        it('steps to a match below the list alone without panning around it', () => {
-            // x 800–850 is the column's band, but y 400 is below the 300 px the list takes.
-            absolutePositionById.set('3', { x: 1600, y: 800 });
+        // Op 3 is the filter's one match: its node goes at (x, y), and Next steps to it with the list alone.
+        const stepToMatchAt = (x: number, y: number) => {
+            absolutePositionById.set('3', { x, y });
             renderGraph(OPERATION_LIST, PERF_ROWS);
             fireEvent.click(hotOpsSwitch());
             typeFilter('matmul_c');
             setViewport.mockClear();
-
             fireEvent.click(screen.getByLabelText('Next match'));
+        };
+
+        it('steps to a match below the list alone without panning around it', () => {
+            // x 800–850 is the column's band, but y 400 is below the 300 px the list takes.
+            stepToMatchAt(1600, 800);
 
             expect(setViewport).not.toHaveBeenCalled();
         });
@@ -1200,32 +1197,58 @@ describe('OperationGraphReactFlow slowest operations list', () => {
             // The app's own padding puts the pane 15 px down. At y 305 the node is below the
             // list's 300 px only once those 15 px are taken off the column's window bottom.
             vi.mocked(Element.prototype.getBoundingClientRect).mockImplementation(measuredWithPaneAt(15));
-            absolutePositionById.set('3', { x: 1600, y: 610 });
-            renderGraph(OPERATION_LIST, PERF_ROWS);
-            fireEvent.click(hotOpsSwitch());
-            typeFilter('matmul_c');
-            setViewport.mockClear();
-
-            fireEvent.click(screen.getByLabelText('Next match'));
+            stepToMatchAt(1600, 610);
 
             expect(setViewport).not.toHaveBeenCalled();
         });
 
         it('still steps a match out from behind the list alone', () => {
             // y 200 is inside the band the list covers.
-            absolutePositionById.set('3', { x: 1600, y: 400 });
-            renderGraph(OPERATION_LIST, PERF_ROWS);
-            fireEvent.click(hotOpsSwitch());
-            typeFilter('matmul_c');
-            setViewport.mockClear();
-
-            fireEvent.click(screen.getByLabelText('Next match'));
+            stepToMatchAt(1600, 400);
 
             expect(setViewport).toHaveBeenCalledTimes(1);
             const [viewport] = setViewport.mock.calls[0] as unknown as [{ x: number; y: number }];
             expect((1600 + STORE_NODE.width) * PANNED_ZOOM + viewport.x).toBeLessThanOrEqual(PANE.width - SIDE_WIDTH);
             // Stepping matches only moves the viewport; the list keeps the column to itself.
             expect(sideColumn()).not.toHaveClass(SIDE_STRETCHED_CLASS);
+        });
+
+        it('clears the column for a selection made on the graph, which stretches it too', () => {
+            // Below the list alone but in the column's band, like the row-click case above.
+            absolutePositionById.set('3', { x: 1600, y: 800 });
+            renderGraph(OPERATION_LIST, PERF_ROWS);
+            fireEvent.click(hotOpsSwitch());
+            setViewport.mockClear();
+
+            act(() => {
+                harness.onNodeClick?.(null, nodeById(lastFlowRender().nodes, '3'));
+            });
+
+            expect(setViewport).toHaveBeenCalledTimes(1);
+            const [viewport] = setViewport.mock.calls[0] as unknown as [{ x: number }];
+            expect((1600 + STORE_NODE.width) * PANNED_ZOOM + viewport.x).toBeLessThanOrEqual(PANE.width - SIDE_WIDTH);
+        });
+
+        it('keeps a clicked row in view once the details open and shorten the list', () => {
+            // The list ends 200 px down only once the details' class lands, and op 3's row sits
+            // 50 px past that, so the scroll has to read the commit that opens the details.
+            vi.mocked(Element.prototype.getBoundingClientRect).mockImplementation(function measured(this: Element) {
+                if (this.classList?.contains('op-graph-hot-ops-list')) {
+                    const isStretched = this.closest('.op-graph-side')?.classList.contains(SIDE_STRETCHED_CLASS);
+                    return stubRect(SIDE_WIDTH, isStretched ? 200 : PANE.height, PANE.width - SIDE_WIDTH);
+                }
+                if (this.getAttribute?.('title') === '3 matmul_c') {
+                    return stubRect(SIDE_WIDTH, 20, PANE.width - SIDE_WIDTH, 230);
+                }
+                return measuredWithPaneAt(0).call(this);
+            });
+            renderGraph(OPERATION_LIST, PERF_ROWS);
+            fireEvent.click(hotOpsSwitch());
+            const list = document.querySelector<HTMLElement>('.op-graph-hot-ops-list');
+
+            fireEvent.click(rowFor('3 matmul_c'));
+
+            expect(list?.scrollTop).toBe(50);
         });
 
         // Expanding op 3 keeps its corner where it was, which these tests put in the
@@ -1479,18 +1502,7 @@ describe('OperationGraphReactFlow slowest operations list', () => {
             });
         };
 
-        // The worker's reply clears the flag and delivers the graph in one handler.
-        const finishBuild = () => {
-            act(() => {
-                harness.setIsBuilding?.(false);
-                harness.onBuilt?.(
-                    buildOpGraph(harness.sourceOperations ?? sourceFor(OPERATION_LIST), {
-                        hideDeallocate: true,
-                        deviceSubgraphs: [],
-                    }),
-                );
-            });
-        };
+        const finishBuild = () => replyWith(harness.sourceOperations ?? sourceFor(OPERATION_LIST));
 
         it('keeps the same list on screen, so its scroll survives', () => {
             renderGraph(OPERATION_LIST, PERF_ROWS);
@@ -1530,6 +1542,31 @@ describe('OperationGraphReactFlow slowest operations list', () => {
             expect(listedIds()).toEqual([3, 2, 1]);
         });
 
+        it('names the rows from the latest range once two changes land as one build', () => {
+            // Only the newest reply is accepted, so the names it is shown with are the latest too.
+            const { rerender } = renderGraph(OPERATION_LIST, PERF_ROWS);
+            fireEvent.click(hotOpsSwitch());
+            startBuild();
+            const renderRange = (operations: OperationDescription[]) =>
+                rerender(
+                    <MemoryRouter>
+                        <OperationGraphReactFlow
+                            operationList={operations}
+                            perfRows={PERF_ROWS}
+                            isPerfReportLoaded
+                        />
+                    </MemoryRouter>,
+                );
+
+            renderRange(OPERATION_LIST.slice(0, 3));
+            // The second list renames op 4, so only the latest names can name its row.
+            renderRange(OPERATION_LIST.slice(0, 4).map((op) => (op.id === 4 ? { ...op, name: 'relu_v2' } : op)));
+            finishBuild();
+
+            expect(listedIds()).toEqual([4, 3, 2, 1]);
+            expect(rowFor('4 relu_v2')).toBeInTheDocument();
+        });
+
         it('names the ops a wider range brings in once their graph lands', () => {
             const { rerender } = renderGraph(OPERATION_LIST.slice(0, 3), PERF_ROWS);
             fireEvent.click(hotOpsSwitch());
@@ -1565,9 +1602,12 @@ describe('OperationGraphReactFlow slowest operations list', () => {
             fireEvent.click(hotOpsSwitch());
 
             startBuild();
-
-            expect(document.querySelector('.op-graph-side')).not.toHaveClass(SIDE_STRETCHED_CLASS);
+            expect(sideColumn()).not.toHaveClass(SIDE_STRETCHED_CLASS);
             expect(hotOpsSection()).toHaveAttribute('inert');
+
+            finishBuild();
+            expect(sideColumn()).not.toHaveClass(SIDE_STRETCHED_CLASS);
+            expect(hotOpsSection()).not.toHaveAttribute('inert');
         });
 
         it('lets the column go when the build drops the selected op', () => {
@@ -1580,15 +1620,10 @@ describe('OperationGraphReactFlow slowest operations list', () => {
             startBuild();
 
             // The rebuilt graph no longer holds op 1.
-            act(() => {
-                harness.setIsBuilding?.(false);
-                harness.onBuilt?.(
-                    buildOpGraph(sourceFor(OPERATION_LIST.slice(1)), { hideDeallocate: true, deviceSubgraphs: [] }),
-                );
-            });
+            replyWith(sourceFor(OPERATION_LIST.slice(1)));
 
             expect(hotOpsList()).toBe(list);
-            expect(document.querySelector('.op-graph-side')).not.toHaveClass(SIDE_STRETCHED_CLASS);
+            expect(sideColumn()).not.toHaveClass(SIDE_STRETCHED_CLASS);
             expect(hotOpsSection()).not.toHaveAttribute('inert');
             expect(document.querySelector('.op-graph-hot-ops [aria-current]')).toBeNull();
         });
@@ -1612,10 +1647,12 @@ describe('OperationGraphReactFlow slowest operations list', () => {
 
             startBuild();
             expect(screen.queryByRole('heading', { name: '3 matmul_c' })).toBeNull();
-            expect(document.querySelector('.op-graph-side')).toHaveClass(SIDE_STRETCHED_CLASS);
+            expect(sideColumn()).toHaveClass(SIDE_STRETCHED_CLASS);
 
             finishBuild();
             expect(screen.getByRole('heading', { name: '3 matmul_c' })).toBeInTheDocument();
+            expect(sideColumn()).toHaveClass(SIDE_STRETCHED_CLASS);
+            expect(rowFor('3 matmul_c')).toHaveAttribute('aria-current', 'true');
         });
 
         it('still drops the details alone for a build, as before', () => {
@@ -1624,7 +1661,7 @@ describe('OperationGraphReactFlow slowest operations list', () => {
 
             startBuild();
 
-            expect(document.querySelector('.op-graph-side')).toBeNull();
+            expect(sideColumn()).toBeNull();
         });
     });
 });
