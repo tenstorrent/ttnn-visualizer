@@ -15,6 +15,7 @@ import {
 // Entry is the only moment the view picks a zoom for the user, so the arithmetic that
 // picks it is worth pinning directly rather than through a rendered graph. #2007
 const PANE = { width: 1000, height: 800 };
+const SIDE_WIDTH = 300;
 const MARGIN = 48;
 
 const boundsOf = (minX: number, minY: number, width: number, height: number) => ({
@@ -170,11 +171,17 @@ describe('centerPanShift', () => {
         expect((offScreen.minY + offScreen.maxY) / 2 + dy).toBeCloseTo(TOOLBAR + (PANE.height - TOOLBAR) / 2, 5);
     });
 
-    const SIDE_WIDTH = 300;
-
     it('centres in the width the side column leaves', () => {
         const bounds = boundsOf(300, TOOLBAR + 100, 200, 60);
         const { dx } = centerPanShift(bounds, viewport, PANE, TOOLBAR, { width: SIDE_WIDTH, bottom: PANE.height });
+
+        expect((bounds.minX + bounds.maxX) / 2 + dx).toBeCloseTo((PANE.width - SIDE_WIDTH) / 2, 5);
+    });
+
+    it('centres in the width a column leaves when the target lands in the band it covers', () => {
+        // The column stops 600 px down, and the band's middle, where the target lands, is above that.
+        const bounds = boundsOf(300, TOOLBAR + 100, 200, 60);
+        const { dx } = centerPanShift(bounds, viewport, PANE, TOOLBAR, { width: SIDE_WIDTH, bottom: 600 });
 
         expect((bounds.minX + bounds.maxX) / 2 + dx).toBeCloseTo((PANE.width - SIDE_WIDTH) / 2, 5);
     });
@@ -230,7 +237,6 @@ describe('revealPanShift', () => {
         expect(revealPanShift(tall, viewport, PANE, TOOLBAR).dy).toBe(TOOLBAR + MARGIN);
     });
 
-    const SIDE_WIDTH = 300;
     const SPANNING_SIDE = { width: SIDE_WIDTH, bottom: PANE.height };
     // What brings a target whose right edge sits 100 px in from the pane's out to the column's margin.
     const CLEAR_OF_SIDE_DX = PANE.width - SIDE_WIDTH - MARGIN - (PANE.width - 100);

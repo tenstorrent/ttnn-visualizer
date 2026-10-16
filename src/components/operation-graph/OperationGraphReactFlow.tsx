@@ -72,6 +72,7 @@ import {
     NO_SIDE_INSET,
     type PaneSideInset,
     REVEALED_NODE_CLASS,
+    SIDE_CLASS,
     SIDE_STRETCHED_CLASS,
     absolutePositionsOf,
     boundsOfNodes,
@@ -330,6 +331,14 @@ const CRITICAL_PATH_CLASS = 'op-graph-critical-path';
 const CRITICAL_PATH_NODE_CLASS = 'op-graph-node-critical-path';
 const CRITICAL_PATH_EDGE_CLASS = 'op-graph-edge-critical-path';
 const DIM_UNRELATED_EDGES_CLASS = 'op-graph-dim-unrelated-edges';
+
+// Closed mid-build so the panel can't describe an operation the graph being laid out is about to drop.
+const isDetailsPanelOpen = (selectedOperationId: number | null, isBuilding: boolean): selectedOperationId is number =>
+    selectedOperationId !== null && !isBuilding;
+
+// Down the pane while an op is selected, held through a build so the list keeps its height while
+// the details are closed. Shared by the column's class and by the selection's pan. #2088
+const isSideStretchedFor = (selectedOperationId: number | null): boolean => selectedOperationId !== null;
 
 interface PanOptions {
     /** The side column is about to span the pane, though its class hasn't landed yet. */
@@ -853,7 +862,7 @@ const OperationGraphInner = ({
     // The side column floats over the pane's right edge the same way, so a node the list locates must not
     // land behind it. Its class says whether it spans the pane, unless a pan is measured before that lands.
     const paneSideInset = useCallback((pane: DOMRect, sideSpansPane?: boolean): Readonly<PaneSideInset> => {
-        const side = containerRef.current?.querySelector('.op-graph-side');
+        const side = containerRef.current?.querySelector(`.${SIDE_CLASS}`);
         if (!side) {
             return NO_SIDE_INSET;
         }
@@ -1296,9 +1305,9 @@ const OperationGraphInner = ({
     const selectOperation = useCallback(
         (id: number) => {
             setSelectedOperationId(id);
-            // Measured before the details this opens stretch the side column down the pane;
+            // Measured before the selection stretches the side column down the pane;
             // with no column mounted yet there is nothing to stretch (#2137).
-            focusOperation(id, { sideSpansPane: true });
+            focusOperation(id, { sideSpansPane: isSideStretchedFor(id) });
         },
         [focusOperation],
     );
@@ -1889,11 +1898,8 @@ const OperationGraphInner = ({
         return found ? totalNs : undefined;
     }, [isPerfOverlayActive, selectedBlock, selectedPerfAggregate, perfOverlay]);
 
-    // Closed mid-build so the panel can't describe an operation the graph being
-    // laid out is about to drop.
-    const isPanelOpen = selectedOperationId !== null && !isBuilding;
-    // Held through a build too, so the list keeps its height while the details are closed. #2088
-    const isSideStretched = selectedOperationId !== null;
+    const isPanelOpen = isDetailsPanelOpen(selectedOperationId, isBuilding);
+    const isSideStretched = isSideStretchedFor(selectedOperationId);
 
     const containerClassName = [
         'operation-graph-react-flow',
@@ -2020,7 +2026,7 @@ const OperationGraphInner = ({
                 </div>
             ) : null}
             {isPanelOpen || isHotOpsActive ? (
-                <div className={classNames('op-graph-side', { [SIDE_STRETCHED_CLASS]: isSideStretched })}>
+                <div className={classNames(SIDE_CLASS, { [SIDE_STRETCHED_CLASS]: isSideStretched })}>
                     {/* Mounted through a build so a relayout keeps the list's scroll. #2088 */}
                     {isHotOpsActive ? (
                         <OpGraphHotOpsPanel
