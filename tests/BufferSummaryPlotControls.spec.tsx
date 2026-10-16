@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import { Classes } from '@blueprintjs/core';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -18,6 +18,8 @@ import {
 import { TAB_IDS } from '../src/definitions/BufferSummary';
 import { TopNAnnotationMode, TopNAnnotationStatus } from '../src/definitions/TopNAnnotations';
 import { TEST_IDS } from '../src/definitions/TestIds';
+import { LateDeallocationCount } from '../src/definitions/LateDeallocation';
+import { getRunStartLateDeallocationCount } from '../src/functions/lateDeallocation';
 import { AtomProvider, AtomProviderInitialValues } from './helpers/atomProvider';
 
 const availabilityMock = vi.fn();
@@ -43,7 +45,11 @@ vi.mock('@blueprintjs/core', async () => {
     };
 });
 
-const renderControls = (overrides: AtomProviderInitialValues = [], lateDeallocationRunCount?: number) =>
+// A bare number stands for a settled report, which is what most cases need.
+const renderControls = (
+    overrides: AtomProviderInitialValues = [],
+    lateDeallocationRunCount?: number | LateDeallocationCount,
+) =>
     render(
         <AtomProvider
             initialValues={[
@@ -54,7 +60,13 @@ const renderControls = (overrides: AtomProviderInitialValues = [], lateDeallocat
                 ...overrides,
             ]}
         >
-            <BufferSummaryPlotControls lateDeallocationRunCount={lateDeallocationRunCount} />
+            <BufferSummaryPlotControls
+                lateDeallocationRunCount={
+                    typeof lateDeallocationRunCount === 'number'
+                        ? getRunStartLateDeallocationCount(lateDeallocationRunCount, 'success')
+                        : lateDeallocationRunCount
+                }
+            />
         </AtomProvider>,
     );
 
@@ -348,25 +360,40 @@ describe('BufferSummaryPlotControls late deallocation count (#963)', () => {
         );
     });
 
-    // Following the Tensor List's late-deallocation filter: the count is always
-    // there to be read, and emptiness is signalled by disabling the control
-    // rather than by removing the only thing that could say "nothing here".
-    it('shows a zero count and disables the toggle when nothing is flagged', () => {
+    // The count is always there to be read, and it alone says "nothing here":
+    // the switch is global, so disabling it would misreport it. #2071
+    it('shows a neutral zero count and leaves the toggle enabled when nothing is flagged', () => {
         renderControls([], 0);
 
         const count = screen.getByTestId(TEST_IDS.LATE_DEALLOC_COUNT);
         expect(count).toHaveTextContent('0');
         expect(count).not.toHaveClass(Classes.INTENT_WARNING);
-        expect(getLateDeallocationSwitch()).toBeDisabled();
+        expect(getLateDeallocationSwitch()).not.toBeDisabled();
     });
 
-    // The atom can stay true after a report with findings while the next report
-    // has none — checked must follow findings, not the atom alone.
-    it('keeps the switch unchecked when the atom is on but nothing is flagged', () => {
+    // The switch must read the same here as in Operation Details, which shows
+    // the atom as it is whatever the count. #2071
+    it('shows the switch on when the atom is on, even with nothing flagged', () => {
         renderControls([[showDeallocationReportAtom, true]], 0);
 
-        expect(getLateDeallocationSwitch()).toBeDisabled();
+        expect(getLateDeallocationSwitch()).not.toBeDisabled();
+        expect(getLateDeallocationSwitch()).toBeChecked();
+    });
+
+    it('turns the switch off from Buffer Summary when nothing is flagged', () => {
+        renderControls([[showDeallocationReportAtom, true]], 0);
+
+        fireEvent.click(getLateDeallocationSwitch());
+
         expect(getLateDeallocationSwitch()).not.toBeChecked();
+    });
+
+    it('turns the switch on from Buffer Summary when nothing is flagged', () => {
+        renderControls([[showDeallocationReportAtom, false]], 0);
+
+        fireEvent.click(getLateDeallocationSwitch());
+
+        expect(getLateDeallocationSwitch()).toBeChecked();
     });
 
     it('checks the switch when the atom is on and findings exist', () => {
@@ -376,7 +403,7 @@ describe('BufferSummaryPlotControls late deallocation count (#963)', () => {
         expect(getLateDeallocationSwitch()).not.toBeDisabled();
     });
 
-    it('explains the zero in the same tooltip, so the disabled switch is not unexplained', () => {
+    it('explains the zero in the same tooltip', () => {
         renderControls([], 0);
 
         const count = screen.getByTestId(TEST_IDS.LATE_DEALLOC_COUNT);
@@ -384,6 +411,17 @@ describe('BufferSummaryPlotControls late deallocation count (#963)', () => {
         expect(tooltipHost?.getAttribute('data-content')).toMatch(
             /0 operations where a tensor starts being held past its last use/i,
         );
+    });
+
+    // A loading or failed report is empty, so beside a live switch a 0 would
+    // read as a confirmed all-clear. Operation Details shows a dash here too.
+    it.each(['pending', 'error'] as const)('shows a dash rather than 0 while the report is %s', (status) => {
+        renderControls([], getRunStartLateDeallocationCount(0, status));
+
+        const count = screen.getByTestId(TEST_IDS.LATE_DEALLOC_COUNT);
+        expect(count).toHaveTextContent('–');
+        expect(count).not.toHaveClass(Classes.INTENT_WARNING);
+        expect(count).not.toHaveAttribute('aria-label', expect.stringMatching(/^0 /));
     });
 
     it('hides the count on the DRAM tab, where the overlay toggle is not offered', () => {

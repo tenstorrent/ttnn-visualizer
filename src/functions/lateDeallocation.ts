@@ -8,6 +8,7 @@ import { DEALLOCATE_OP_NAME_LIST } from '../definitions/Deallocate';
 import {
     LATE_DEALLOC_OPPORTUNITY_TEXT,
     LateDeallocationAvailability,
+    LateDeallocationCount,
     LateDeallocationRunStart,
 } from '../definitions/LateDeallocation';
 import { TensorDeallocationReport, TensorsByOperationByAddress } from '../model/BufferSummary';
@@ -363,10 +364,28 @@ export const getOperationLateDeallocationAvailability = ({
 export const getOperationLateDeallocationCount = (
     tensorCount: number,
     availability: LateDeallocationAvailability,
-): { count: number | null; summary: string } =>
+): LateDeallocationCount =>
     availability === LateDeallocationAvailability.READY
         ? { count: tensorCount, summary: getHeldTensorCountSummary(tensorCount) }
         : { count: null, summary: UNAVAILABLE_OPERATION_SUMMARIES[availability] };
+
+/**
+ * The count and tooltip for the Buffer Summary toggle. The report is empty
+ * while it loads and after it fails, so the count is `null` until it settles
+ * rather than a 0 that reads as an all-clear. The list it counts over is
+ * already limited to the report's range, so there is no out-of-range case.
+ */
+export const getRunStartLateDeallocationCount = (runStartCount: number, status: QueryStatus): LateDeallocationCount => {
+    if (status === 'error') {
+        return { count: null, summary: UNAVAILABLE_OPERATION_SUMMARIES[LateDeallocationAvailability.FAILED] };
+    }
+
+    if (status === 'pending') {
+        return { count: null, summary: UNAVAILABLE_OPERATION_SUMMARIES[LateDeallocationAvailability.LOADING] };
+    }
+
+    return { count: runStartCount, summary: getRunStartCountSummary(runStartCount) };
+};
 
 export interface CoalesceLateDeallocationRunStartsParams {
     runStarts: readonly LateDeallocationRunStart[];

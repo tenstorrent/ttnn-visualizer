@@ -10,6 +10,7 @@ import { BufferType } from '../src/model/BufferType';
 import { LateDeallocationRunStart } from '../src/definitions/LateDeallocation';
 import { TensorDeallocationReport } from '../src/model/BufferSummary';
 import { UseLateDeallocationOverlayResult } from '../src/hooks/useLateDeallocationOverlay';
+import { getRunStartLateDeallocationCount } from '../src/functions/lateDeallocation';
 import { TestProviders } from './helpers/TestProviders';
 import { buildLateDeallocationRunStart, buildTensorDeallocationReport } from './helpers/lateDeallocationFixtures';
 
@@ -61,7 +62,7 @@ function buildOverlayResult(overrides: Partial<UseLateDeallocationOverlayResult>
     return {
         getTensorDeallocationReport: () => EMPTY_REPORT,
         runStarts: [] as readonly LateDeallocationRunStart[],
-        runStartCount: 0,
+        runStartCount: getRunStartLateDeallocationCount(0, 'success'),
         ...overrides,
     };
 }
@@ -100,11 +101,12 @@ describe('BufferSummaryPlotRenderer late deallocation wiring (#963)', () => {
     it('forwards the run starts, the count and the per-row report to the list', () => {
         const runStarts = [buildLateDeallocationRunStart({ opId: 2, rowIndex: 1 })];
         const report = [buildTensorDeallocationReport({ id: 7 })];
+        const runStartCount = getRunStartLateDeallocationCount(4, 'success');
         lateDeallocationOverlayMock.mockReturnValue(
             buildOverlayResult({
                 getTensorDeallocationReport: () => report,
                 runStarts,
-                runStartCount: 4,
+                runStartCount,
             }),
         );
 
@@ -112,19 +114,20 @@ describe('BufferSummaryPlotRenderer late deallocation wiring (#963)', () => {
 
         const props = getListProps();
         expect(props.lateDeallocationRunStarts).toBe(runStarts);
-        expect(props.lateDeallocationRunCount).toBe(4);
+        expect(props.lateDeallocationRunCount).toBe(runStartCount);
         expect(props.getTensorDeallocationReport(1)).toBe(report);
     });
 
     // The count is what tells the user the toggle is worth flipping, so it has to
     // survive the seam even while the overlay itself is drawing nothing.
     it('forwards the count while the overlay is off and the run starts are empty', () => {
-        lateDeallocationOverlayMock.mockReturnValue(buildOverlayResult({ runStartCount: 4 }));
+        const runStartCount = getRunStartLateDeallocationCount(4, 'success');
+        lateDeallocationOverlayMock.mockReturnValue(buildOverlayResult({ runStartCount }));
 
         renderRenderer();
 
         const props = getListProps();
-        expect(props.lateDeallocationRunCount).toBe(4);
+        expect(props.lateDeallocationRunCount).toBe(runStartCount);
         expect(props.lateDeallocationRunStarts).toEqual([]);
     });
 });
