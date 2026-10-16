@@ -13,6 +13,7 @@ import 'styles/components/ProducerConsumersData.scss';
 import { MAX_NUM_CONSUMERS } from '../../definitions/ProducersConsumers';
 import { getTensorColor } from '../../functions/colorGenerator';
 import { Tensor } from '../../model/APIData';
+import { KEEPS_BUFFER_FOCUS_CLASS } from '../../functions/bufferFocusDismissal';
 
 const ITEM_HEIGHT = 16; // Height in px
 
@@ -33,7 +34,7 @@ function ProducerConsumersData({ selectedTensor, details, operationId }: Produce
     const { producers, consumers } = details.getTensorProducerConsumer(tensorId);
 
     return (
-        <aside className='plot-tensor-details'>
+        <aside className={classNames('plot-tensor-details', KEEPS_BUFFER_FOCUS_CLASS)}>
             <div className='producer-consumer-container'>
                 <div className='header'>
                     <div className='tensor-title'>

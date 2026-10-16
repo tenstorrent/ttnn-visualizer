@@ -22,6 +22,7 @@ const useBufferFocus = () => {
         setSelectedAddress(null);
         setSelectedBufferColour(null);
         setActiveToast(null);
+        // No id, so this closes every open toast rather than only the focused buffer's. #2149
         dismissToast();
     }, [setActiveToast, setSelectedAddress, setSelectedBufferColour, setSelectedTensorId]);
 

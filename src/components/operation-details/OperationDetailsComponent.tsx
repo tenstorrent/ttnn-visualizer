@@ -43,7 +43,7 @@ import OperationArguments from '../OperationArguments';
 import DeviceOperationsFullRender from './DeviceOperationsFullRender';
 import OperationAllocationFailureCallout from './OperationAllocationFailureCallout';
 import useBufferFocus from '../../hooks/useBufferFocus';
-import useClickAway from '../../hooks/useClickAway';
+import useBufferFocusDismissal from '../../hooks/useBufferFocusDismissal';
 import { StackTraceLanguage } from '../../definitions/StackTrace';
 import { L1_DEFAULT_MEMORY_SIZE } from '../../definitions/L1MemorySize';
 import MemoryPlotRenderer from './MemoryPlotRenderer';
@@ -93,8 +93,8 @@ const OperationDetailsComponent = ({ operationId }: OperationDetailsProps) => {
     } = useOperationDetails(operationId);
     const { data: previousOperationDetails, isLoading: isPrevLoading } =
         usePreviousOperationDetails(operationId).operationDetails;
-    const { resetToasts, updateBufferFocus } = useBufferFocus();
-    useClickAway(Boolean(selectedAddress) || isValidNumber(selectedTensorId), resetToasts);
+    const { updateBufferFocus } = useBufferFocus();
+    useBufferFocusDismissal();
 
     const operation = operations?.find((op) => op.id === operationId);
     const {
@@ -376,6 +376,7 @@ const OperationDetailsComponent = ({ operationId }: OperationDetailsProps) => {
                                         />
                                     )}
 
+                                    {/* A click on this label's text activates the reset button inside it. #2150 */}
                                     <Label
                                         className='memory-zoom-range-label'
                                         disabled={!zoomedInViewMainMemory}

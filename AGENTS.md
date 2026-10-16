@@ -200,6 +200,7 @@ Applies on touch to views that draw data-proportional visuals (NPE chip cluster 
 
 - Funnel error-string extraction through **`getResponseError(error, fallback?)`** (`src/functions/getResponseError.ts`). Don't reach into `error.response.data.error` ad-hoc — the helper handles AxiosError, Error, and string fallbacks consistently.
 - Emit toasts via **`createToastNotification(message, fileName, ToastType.X)`** (`src/functions/createToastNotification.tsx`; `ToastType` lives in `src/definitions/ToastType.ts`); the same module exports **`createToast`** and **`dismissToast`** for a custom body or a toast you must dismiss later. Only that module may import `toast` from `react-toastify` — `no-restricted-imports` enforces it. [Signatures and the `<ToastContainer>` rule](./CONVENTIONS.md#emit-toasts-via-createtoastnotification).
+- A focused buffer's toast goes with it: **`useBufferFocusDismissal`** (`src/hooks/useBufferFocusDismissal.ts`) dismisses both on a click pressed and released on nothing that handles it. On a page that calls it, a new clickable surface must be a semantic control or role, or carry **`KEEPS_BUFFER_FOCUS_CLASS`** (`src/functions/bufferFocusDismissal.ts`); otherwise every click on it dismisses the focus.
 
 ### Event logging (frontend)
 

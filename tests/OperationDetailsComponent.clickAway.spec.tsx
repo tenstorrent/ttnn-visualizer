@@ -3,14 +3,15 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import '@testing-library/jest-dom/vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { useAtomValue } from 'jotai';
+import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import OperationDetailsComponent from '../src/components/operation-details/OperationDetailsComponent';
 import { BufferType } from '../src/model/BufferType';
 import { selectedAddressAtom, selectedTensorIdAtom } from '../src/store/app';
 import { summariseOperationBuffers } from '../src/functions/summariseOperationBuffers';
 import { TestProviders } from './helpers/TestProviders';
+import { BufferFocusProbe } from './helpers/BufferFocusProbe';
+import { bufferFocus, pressAndRelease } from './helpers/bufferFocus';
 import {
     buildBufferData,
     buildOperationDescription,
@@ -74,12 +75,6 @@ vi.mock('../src/components/operation-details/TensorDetailsList', () => ({ defaul
 vi.mock('../src/components/OperationArguments', () => ({ default: () => null }));
 vi.mock('../src/components/OperationDetailsNavigation', () => ({ default: () => null }));
 
-const FocusProbe = () => {
-    const address = useAtomValue(selectedAddressAtom);
-    const tensorId = useAtomValue(selectedTensorIdAtom);
-    return <output aria-label='Focused buffer'>{`${address ?? 'none'}:${tensorId ?? 'none'}`}</output>;
-};
-
 const renderFocused = () =>
     render(
         <TestProviders
@@ -89,29 +84,35 @@ const renderFocused = () =>
             ]}
         >
             <OperationDetailsComponent operationId={OPERATION_ID} />
-            <FocusProbe />
+            <BufferFocusProbe />
         </TestProviders>,
     );
-
-const focus = () => screen.getByRole('status', { name: 'Focused buffer' });
 
 afterEach(cleanup);
 
 describe('OperationDetailsComponent dismissing a focused buffer (#2042)', () => {
     it('dismisses it on a click that lands on content', () => {
         renderFocused();
-        expect(focus()).toHaveTextContent(`${ADDRESS}:${TENSOR_ID}`);
+        expect(bufferFocus()).toHaveTextContent('focused');
 
-        fireEvent.click(screen.getByRole('heading', { name: `Tensor ${TENSOR_ID}` }));
+        pressAndRelease(screen.getByRole('heading', { name: 'L1 Memory' }));
 
-        expect(focus()).toHaveTextContent('none:none');
+        expect(bufferFocus()).toHaveTextContent('dismissed');
     });
 
     it('keeps it through a click on a control, which acts on its own', () => {
         renderFocused();
 
-        fireEvent.click(screen.getByRole('button', { name: 'DRAM' }));
+        pressAndRelease(screen.getByRole('button', { name: 'DRAM' }));
 
-        expect(focus()).toHaveTextContent(`${ADDRESS}:${TENSOR_ID}`);
+        expect(bufferFocus()).toHaveTextContent('focused');
+    });
+
+    it('keeps it through a click in the panel describing the focused tensor', () => {
+        renderFocused();
+
+        pressAndRelease(screen.getByRole('heading', { name: `Tensor ${TENSOR_ID}` }));
+
+        expect(bufferFocus()).toHaveTextContent('focused');
     });
 });
