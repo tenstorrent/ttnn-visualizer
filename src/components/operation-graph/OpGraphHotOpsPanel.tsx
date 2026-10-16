@@ -72,14 +72,17 @@ const OpGraphHotOpsPanel = ({
         [onSelectOperation],
     );
 
-    // The details that open below the list shorten it and can hide the row just clicked,
-    // so the list scrolls by the least that shows it again. #2087
+    // The details that open below the list shorten it and can hide the row just clicked. Scrolled by
+    // hand, because `scrollIntoView` can also scroll ancestors, `overflow: hidden` ones included. #2087
     useLayoutEffect(() => {
         const clickedId = clickedOperationIdRef.current;
         clickedOperationIdRef.current = null;
+        if (clickedId === null || clickedId !== selectedOperationId) {
+            return;
+        }
         const list = listRef.current;
         const row = list?.querySelector('[aria-current="true"]');
-        if (clickedId !== selectedOperationId || !list || !row) {
+        if (!list || !row) {
             return;
         }
         const overflow = row.getBoundingClientRect().bottom - list.getBoundingClientRect().bottom;
