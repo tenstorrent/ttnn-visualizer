@@ -3,14 +3,18 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import { useEffect } from 'react';
-import useBufferFocus from './useBufferFocus';
-import isValidNumber from '../functions/isValidNumber';
+import { useAtomValue } from 'jotai';
+import { useResetBufferFocus } from './useBufferFocus';
+import { isBufferFocusedAtom } from '../store/app';
 import { isBufferFocusDismissal, isEndOfTextSelection } from '../functions/bufferFocusDismissal';
 
-/** Dismisses the focused buffer on a click pressed and released on nothing that handles it. #2042 */
+/**
+ * Dismisses the focused buffer on a click pressed and released on nothing that handles it. A drag from
+ * content onto a control counts: the browser sends that click to their common ancestor. #2042
+ */
 export default function useBufferFocusDismissal(): void {
-    const { selectedAddress, selectedTensorId, resetToasts } = useBufferFocus();
-    const isBufferFocused = isValidNumber(selectedAddress) || isValidNumber(selectedTensorId);
+    const isBufferFocused = useAtomValue(isBufferFocusedAtom);
+    const resetBufferFocus = useResetBufferFocus();
 
     useEffect(() => {
         if (!isBufferFocused) {
@@ -27,7 +31,7 @@ export default function useBufferFocusDismissal(): void {
             const isDismissal = wasPressedAway && isBufferFocusDismissal(target) && !isEndOfTextSelection(target);
             wasPressedAway = false;
             if (isDismissal) {
-                resetToasts();
+                resetBufferFocus();
             }
         };
         // Captured, so each is judged before a handler can re-render what it landed on.
@@ -37,5 +41,5 @@ export default function useBufferFocusDismissal(): void {
             document.removeEventListener('pointerdown', handlePointerDown, true);
             document.removeEventListener('click', handleClick, true);
         };
-    }, [isBufferFocused, resetToasts]);
+    }, [isBufferFocused, resetBufferFocus]);
 }

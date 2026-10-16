@@ -13,7 +13,7 @@ import 'styles/components/ProducerConsumersData.scss';
 import { MAX_NUM_CONSUMERS } from '../../definitions/ProducersConsumers';
 import { getTensorColor } from '../../functions/colorGenerator';
 import { Tensor } from '../../model/APIData';
-import { KEEPS_BUFFER_FOCUS_CLASS } from '../../functions/bufferFocusDismissal';
+import { KEEPS_BUFFER_FOCUS_CLASS } from '../../definitions/BufferFocus';
 
 const ITEM_HEIGHT = 16; // Height in px
 

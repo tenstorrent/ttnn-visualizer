@@ -610,6 +610,33 @@ Defaults belong on the `<ToastContainer>` in `Layout.tsx`, which is mounted once
 
 **Don't.** Importing `toast` from `react-toastify` anywhere else creates two parallel toast pipelines and breaks the visual contract, and `no-restricted-imports` fails the build for it — the wrapper module carries the only override. Importing the *types* (`Id`, `ToastOptions`) at a call site is unrestricted; `activeToastAtom` is typed `Id | null`.
 
+### A click on nothing that handles it dismisses a focused buffer
+
+Operation Details and Buffer Summary call **`useBufferFocusDismissal()`** (`src/hooks/useBufferFocusDismissal.ts`). While `isBufferFocusedAtom` holds, a capture-phase listener on `document` clears the focus and its toast when a click was both **pressed and released on nothing that handles it**. A target handles its own click when it sits inside any of these:
+
+- a control: a button, a link with an `href`, a form control or label, an element with an interactive role, or anything tabbable;
+- a plot or canvas, where a click picks a buffer;
+- the toast, which dismisses itself;
+- a portalled Blueprint popup, a slider, or a surface marked **`KEEPS_BUFFER_FOCUS_CLASS`** (`src/definitions/BufferFocus.ts`).
+
+A click that ends a text selection in what it clicked is not a dismissal either. The list lives in `src/functions/bufferFocusDismissal.ts`.
+
+**Rationale.** It replaced a full-page overlay that caught clicks by stacking order rather than by what was clicked. The overlay covered table cells and headings, and swallowed the first click on navigation buttons rendered before it. It also could not cover the rail without disabling the rail's buttons. Judging the press as well as the click keeps a press on a control that slides off from counting, and keeps a release a browser retargets, such as plotly's drag cover, from counting. (#2042)
+
+**When to mark a surface.** A new clickable element on these pages should be a semantic control or carry an interactive role, which `jsx-a11y` already asks for. Mark it with `KEEPS_BUFFER_FOCUS_CLASS` when it is a surface a click shouldn't dismiss from but isn't a control. Today that means three things:
+
+- the panel describing the focused tensor;
+- the topology view that opens over the page;
+- the memory legend's rows.
+
+A chart or graph drawn without Plotly, or a popover rendered inline (`usePortal={false}`), needs the marker too, or every click on it dismisses the focus.
+
+```tsx
+<aside className={classNames('plot-tensor-details', KEEPS_BUFFER_FOCUS_CLASS)}>
+```
+
+**Don't.** Don't stop a click's propagation to keep the focus: the listener judges in the capture phase, before any handler runs. Don't add the focus check to `useBufferFocus` either. Every virtualised Buffer Summary row calls that hook, so each row would add its own document listener.
+
 ---
 
 ## Event logging (frontend)

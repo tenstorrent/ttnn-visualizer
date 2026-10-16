@@ -69,7 +69,7 @@ const OperationDetailsComponent = ({ operationId }: OperationDetailsProps) => {
     const [showMemoryRegions, setShowMemoryRegions] = useAtom(showMemoryRegionsAtom);
     const [showFullStackTrace, setShowFullStackTrace] = useAtom(isFullStackTraceAtom);
     const [showDeallocationReport, setShowDeallocationReport] = useAtom(showDeallocationReportAtom);
-    const { selectedTensorId, selectedAddress } = useBufferFocus();
+    const { selectedTensorId, selectedAddress, updateBufferFocus } = useBufferFocus();
 
     const [zoomedInViewMainMemory, setZoomedInViewMainMemory] = useState(false);
     const [showCircularBuffer, setShowCircularBuffer] = useState(false);
@@ -93,7 +93,6 @@ const OperationDetailsComponent = ({ operationId }: OperationDetailsProps) => {
     } = useOperationDetails(operationId);
     const { data: previousOperationDetails, isLoading: isPrevLoading } =
         usePreviousOperationDetails(operationId).operationDetails;
-    const { updateBufferFocus } = useBufferFocus();
     useBufferFocusDismissal();
 
     const operation = operations?.find((op) => op.id === operationId);

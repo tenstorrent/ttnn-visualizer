@@ -3,12 +3,10 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import { Classes } from '@blueprintjs/core';
-
-/** Marks an app surface whose clicks leave the focused buffer alone, such as the panel describing it. */
-export const KEEPS_BUFFER_FOCUS_CLASS = 'keeps-buffer-focus';
+import { KEEPS_BUFFER_FOCUS_CLASS } from '../definitions/BufferFocus';
 
 // Each handles its own click, so none doubles as a dismissal: controls, the plots and canvases a
-// click picks a buffer from, the toast that dismisses itself, popups, and the surfaces marked above.
+// click picks a buffer from, the toast that dismisses itself, popups, and surfaces marked to keep it.
 const KEEPS_BUFFER_FOCUS = [
     'button',
     'a[href]',

@@ -32,6 +32,7 @@ const renderFocused = (
     });
 
 afterEach(() => {
+    vi.restoreAllMocks();
     cleanup();
     document.getSelection()?.removeAllRanges();
     document.body.replaceChildren();
@@ -56,16 +57,39 @@ describe('useBufferFocusDismissal', () => {
         expect(bufferFocus()).toHaveTextContent('focused');
     });
 
-    it('keeps it when a press on a control is released elsewhere', () => {
-        renderFocused();
+    // Pressed on one and released on the other, a browser sends the click to their common ancestor.
+    const renderControlBesideContent = () =>
         render(
-            <>
+            <div data-testid='both'>
                 <button type='button'>L1 Memory</button>
                 <h3>L1</h3>
-            </>,
+            </div>,
         );
 
+    it('keeps it when a press on a control is released elsewhere', () => {
+        renderFocused();
+        renderControlBesideContent();
+
         fireEvent.pointerDown(screen.getByRole('button', { name: 'L1 Memory' }));
+        fireEvent.click(screen.getByTestId('both'));
+
+        expect(bufferFocus()).toHaveTextContent('focused');
+    });
+
+    it('dismisses it for a drag from content onto a control', () => {
+        renderFocused();
+        renderControlBesideContent();
+
+        fireEvent.pointerDown(screen.getByRole('heading', { name: 'L1' }));
+        fireEvent.click(screen.getByTestId('both'));
+
+        expect(bufferFocus()).toHaveTextContent('dismissed');
+    });
+
+    it('keeps it through a click with no press, as a keyboard or a script makes one', () => {
+        renderFocused();
+        render(<h3>L1</h3>);
+
         fireEvent.click(screen.getByRole('heading', { name: 'L1' }));
 
         expect(bufferFocus()).toHaveTextContent('focused');
@@ -102,19 +126,18 @@ describe('useBufferFocusDismissal', () => {
     });
 
     it('forgets a press once its click is judged, so a later click with no press keeps it', () => {
-        // A keyboard or a script clicks without pressing, and a stale press must not stand in.
+        // A drag-select's press is spent on its own click, which keeps the focus; a script's later
+        // click on the same text has no press of its own, and the spent one must not stand in.
         renderFocused();
-        render(
-            <>
-                <h3>L1</h3>
-                <button type='button'>L1 Memory</button>
-            </>,
-        );
-        const heading = screen.getByRole('heading', { name: 'L1' });
+        render(<p>MemoryLayout BLOCK_SHARDED</p>);
+        const text = screen.getByText('MemoryLayout BLOCK_SHARDED');
+        const range = document.createRange();
+        range.selectNodeContents(text);
+        document.getSelection()?.addRange(range);
+        pressAndRelease(text);
+        document.getSelection()?.removeAllRanges();
 
-        fireEvent.pointerDown(heading);
-        fireEvent.click(screen.getByRole('button', { name: 'L1 Memory' }));
-        fireEvent.click(heading);
+        fireEvent.click(text);
 
         expect(bufferFocus()).toHaveTextContent('focused');
     });
@@ -156,17 +179,20 @@ describe('useBufferFocusDismissal', () => {
         expect(bufferFocus()).toHaveTextContent('focused');
     });
 
-    it('listens only while a buffer is focused, and not after unmounting', () => {
+    it('listens in the capture phase only while a buffer is focused, and not after unmounting', () => {
         const addListener = vi.spyOn(document, 'addEventListener');
         const removeListener = vi.spyOn(document, 'removeEventListener');
-        const listensFor = (spy: typeof addListener) =>
-            spy.mock.calls.map(([type]) => type).filter((type) => type === 'click');
+        const captured = (spy: typeof addListener) =>
+            spy.mock.calls
+                .filter(([type, , options]) => (type === 'click' || type === 'pointerdown') && options === true)
+                .map(([type]) => type)
+                .sort();
 
         renderFocused([]).unmount();
-        expect(listensFor(addListener)).toEqual([]);
+        expect(captured(addListener)).toEqual([]);
 
         renderFocused().unmount();
-        expect(listensFor(addListener)).toEqual(['click']);
-        expect(listensFor(removeListener)).toEqual(['click']);
+        expect(captured(addListener)).toEqual(['click', 'pointerdown']);
+        expect(captured(removeListener)).toEqual(['click', 'pointerdown']);
     });
 });

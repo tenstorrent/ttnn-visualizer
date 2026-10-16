@@ -10,7 +10,7 @@ import { useNavigate } from 'react-router';
 import 'styles/components/ClusterView.scss';
 import { stringToArchitecture } from '../../functions/stringToArchitecture';
 import { useGetClusterTopology } from '../../hooks/useAPI';
-import { KEEPS_BUFFER_FOCUS_CLASS } from '../../functions/bufferFocusDismissal';
+import { KEEPS_BUFFER_FOCUS_CLASS } from '../../definitions/BufferFocus';
 import { getChipDesign } from '../../functions/getChipDesign';
 import {
     FALLBACK_PER_HOST_COLS,

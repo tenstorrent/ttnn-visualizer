@@ -9,6 +9,7 @@ import BufferSummary from '../src/routes/BufferSummary';
 import SideNavigation from '../src/components/SideNavigation';
 import { activeToastAtom, selectedAddressAtom } from '../src/store/app';
 import { TestProviders } from './helpers/TestProviders';
+import type { AtomProviderInitialValues } from './helpers/atomProvider';
 import { BufferFocusProbe } from './helpers/BufferFocusProbe';
 import { bufferFocus, pressAndRelease } from './helpers/bufferFocus';
 
@@ -20,14 +21,14 @@ vi.mock('../src/hooks/useAPI', () => ({ useGetClusterDescription: () => ({ data:
 const ADDRESS = 0x4000;
 
 // The rail sits beside the page, as in `Layout`, so a click on it is one the page has to judge.
-const renderFocused = () =>
+const renderFocused = (
+    focus: AtomProviderInitialValues = [
+        [activeToastAtom, 'buffer-toast'],
+        [selectedAddressAtom, ADDRESS],
+    ],
+) =>
     render(
-        <TestProviders
-            initialAtomValues={[
-                [activeToastAtom, 'buffer-toast'],
-                [selectedAddressAtom, ADDRESS],
-            ]}
-        >
+        <TestProviders initialAtomValues={focus}>
             <SideNavigation />
             <BufferSummary />
             <BufferFocusProbe />
@@ -39,6 +40,15 @@ afterEach(cleanup);
 describe('BufferSummary dismissing a focused buffer (#2042)', () => {
     it('dismisses it on a click that lands on content', () => {
         renderFocused();
+        expect(bufferFocus()).toHaveTextContent('focused');
+
+        pressAndRelease(screen.getByRole('heading', { name: 'Buffers by operation' }));
+
+        expect(bufferFocus()).toHaveTextContent('dismissed');
+    });
+
+    it('dismisses a toast with no buffer selection behind it, which the old overlay was gated on', () => {
+        renderFocused([[activeToastAtom, 'buffer-toast']]);
         expect(bufferFocus()).toHaveTextContent('focused');
 
         pressAndRelease(screen.getByRole('heading', { name: 'Buffers by operation' }));

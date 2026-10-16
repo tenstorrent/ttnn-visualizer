@@ -6,11 +6,8 @@ import { type ReactElement } from 'react';
 import { Classes } from '@blueprintjs/core';
 import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
-import {
-    KEEPS_BUFFER_FOCUS_CLASS,
-    isBufferFocusDismissal,
-    isEndOfTextSelection,
-} from '../src/functions/bufferFocusDismissal';
+import { isBufferFocusDismissal, isEndOfTextSelection } from '../src/functions/bufferFocusDismissal';
+import { KEEPS_BUFFER_FOCUS_CLASS } from '../src/definitions/BufferFocus';
 
 const select = (range: Range) => {
     document.getSelection()?.removeAllRanges();
@@ -273,6 +270,13 @@ describe('isEndOfTextSelection', () => {
 
         expect(isEndOfTextSelection(selected)).toBe(true);
         expect(isEndOfTextSelection(screen.getByRole('heading'))).toBe(false);
+    });
+
+    it('is false with nothing selected at all', () => {
+        render(<p>MemoryLayout BLOCK_SHARDED</p>);
+        document.getSelection()?.removeAllRanges();
+
+        expect(isEndOfTextSelection(screen.getByText('MemoryLayout BLOCK_SHARDED'))).toBe(false);
     });
 
     it('does not count the caret an ordinary click on text leaves', () => {

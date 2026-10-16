@@ -4,20 +4,21 @@
 
 import { Id } from 'react-toastify';
 import { useCallback } from 'react';
-import { useAtom } from 'jotai';
+import { useAtom, useSetAtom } from 'jotai';
 import { createToast, dismissToast } from '../functions/createToastNotification';
 import { getBufferColor, getTensorColor } from '../functions/colorGenerator';
 import isValidNumber from '../functions/isValidNumber';
 import ToastTensorMessage, { ToastDeselectButton } from '../components/operation-details/ToastTensorMessage';
 import { activeToastAtom, selectedAddressAtom, selectedBufferColourAtom, selectedTensorIdAtom } from '../store/app';
 
-const useBufferFocus = () => {
-    const [activeToast, setActiveToast] = useAtom(activeToastAtom);
-    const [selectedTensorId, setSelectedTensorId] = useAtom(selectedTensorIdAtom);
-    const [selectedAddress, setSelectedAddress] = useAtom(selectedAddressAtom);
-    const [selectedBufferColour, setSelectedBufferColour] = useAtom(selectedBufferColourAtom);
+/** Clears the buffer focus and its toast, through setters alone, so a caller needn't subscribe to it. */
+export const useResetBufferFocus = () => {
+    const setActiveToast = useSetAtom(activeToastAtom);
+    const setSelectedTensorId = useSetAtom(selectedTensorIdAtom);
+    const setSelectedAddress = useSetAtom(selectedAddressAtom);
+    const setSelectedBufferColour = useSetAtom(selectedBufferColourAtom);
 
-    const resetToasts = useCallback(() => {
+    return useCallback(() => {
         setSelectedTensorId(null);
         setSelectedAddress(null);
         setSelectedBufferColour(null);
@@ -25,6 +26,14 @@ const useBufferFocus = () => {
         // No id, so this closes every open toast rather than only the focused buffer's. #2149
         dismissToast();
     }, [setActiveToast, setSelectedAddress, setSelectedBufferColour, setSelectedTensorId]);
+};
+
+const useBufferFocus = () => {
+    const [activeToast, setActiveToast] = useAtom(activeToastAtom);
+    const [selectedTensorId, setSelectedTensorId] = useAtom(selectedTensorIdAtom);
+    const [selectedAddress, setSelectedAddress] = useAtom(selectedAddressAtom);
+    const [selectedBufferColour, setSelectedBufferColour] = useAtom(selectedBufferColourAtom);
+    const resetToasts = useResetBufferFocus();
 
     const updateBufferFocus = useCallback(
         (address?: number, tensorId?: number, colorVariance?: number): void => {
