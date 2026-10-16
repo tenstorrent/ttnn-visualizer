@@ -72,6 +72,7 @@ import {
     NO_SIDE_INSET,
     type PaneSideInset,
     REVEALED_NODE_CLASS,
+    SIDE_CLASS,
     SIDE_WITH_DETAILS_CLASS,
     absolutePositionsOf,
     boundsOfNodes,
@@ -330,6 +331,11 @@ const CRITICAL_PATH_CLASS = 'op-graph-critical-path';
 const CRITICAL_PATH_NODE_CLASS = 'op-graph-node-critical-path';
 const CRITICAL_PATH_EDGE_CLASS = 'op-graph-edge-critical-path';
 const DIM_UNRELATED_EDGES_CLASS = 'op-graph-dim-unrelated-edges';
+
+// Closed mid-build so the panel can't describe an operation the graph being laid out is
+// about to drop. Shared by the panel and by the selection's pan, which measures before it opens.
+const isDetailsPanelOpen = (selectedOperationId: number | null, isBuilding: boolean): selectedOperationId is number =>
+    selectedOperationId !== null && !isBuilding;
 
 interface PanOptions {
     /** The side column is about to span the pane, though its class hasn't landed yet. */
@@ -843,7 +849,7 @@ const OperationGraphInner = ({
     // The side column floats over the pane's right edge the same way, so a node the list locates must not
     // land behind it. Its class says whether it spans the pane, unless a pan is measured before that lands.
     const paneSideInset = useCallback((pane: DOMRect, sideSpansPane?: boolean): Readonly<PaneSideInset> => {
-        const side = containerRef.current?.querySelector('.op-graph-side');
+        const side = containerRef.current?.querySelector(`.${SIDE_CLASS}`);
         if (!side) {
             return NO_SIDE_INSET;
         }
@@ -1288,9 +1294,9 @@ const OperationGraphInner = ({
             setSelectedOperationId(id);
             // Measured before the details this opens stretch the side column down the pane;
             // with no column mounted yet there is nothing to stretch (#2137).
-            focusOperation(id, { sideSpansPane: true });
+            focusOperation(id, { sideSpansPane: isDetailsPanelOpen(id, isBuilding) });
         },
-        [focusOperation],
+        [focusOperation, isBuilding],
     );
 
     // Pressing Enter or Space on a focused node reaches React Flow's own handler,
@@ -1879,9 +1885,7 @@ const OperationGraphInner = ({
         return found ? totalNs : undefined;
     }, [isPerfOverlayActive, selectedBlock, selectedPerfAggregate, perfOverlay]);
 
-    // Closed mid-build so the panel can't describe an operation the graph being
-    // laid out is about to drop.
-    const isPanelOpen = selectedOperationId !== null && !isBuilding;
+    const isPanelOpen = isDetailsPanelOpen(selectedOperationId, isBuilding);
     const isHotOpsVisible = isHotOpsActive && !isBuilding;
 
     const containerClassName = [
@@ -2009,7 +2013,7 @@ const OperationGraphInner = ({
                 </div>
             ) : null}
             {isPanelOpen || isHotOpsVisible ? (
-                <div className={classNames('op-graph-side', { [SIDE_WITH_DETAILS_CLASS]: isPanelOpen })}>
+                <div className={classNames(SIDE_CLASS, { [SIDE_WITH_DETAILS_CLASS]: isPanelOpen })}>
                     {isHotOpsVisible ? (
                         <OpGraphHotOpsPanel
                             rows={hotOpRows}

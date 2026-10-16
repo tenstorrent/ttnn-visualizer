@@ -112,7 +112,7 @@ describe('OpGraphHotOpsPanel rows', () => {
     describe('when the selection shortens the list', () => {
         const box = (top: number, bottom: number) => ({ top, bottom }) as DOMRect;
 
-        // The list now ends 200 px down, and op 5's row sits 50 px past that.
+        // The list now ends 200 px down, and the given op's row sits 50 px past that.
         const shortenUnder = (operationId: number) => {
             const list = document.querySelector<HTMLElement>('.op-graph-hot-ops-list')!;
             vi.spyOn(list, 'getBoundingClientRect').mockReturnValue(box(0, 200));
@@ -125,6 +125,17 @@ describe('OpGraphHotOpsPanel rows', () => {
             const list = shortenUnder(5);
 
             fireEvent.click(rowFor(5));
+            select(5);
+
+            expect(list.scrollTop).toBe(50);
+        });
+
+        it('scrolls a row activated from the keyboard back into view too', () => {
+            // Enter on a focused button arrives as a click with no pointer detail.
+            const { select } = renderPanel();
+            const list = shortenUnder(5);
+
+            fireEvent.click(rowFor(5), { detail: 0 });
             select(5);
 
             expect(list.scrollTop).toBe(50);
