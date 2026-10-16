@@ -91,11 +91,11 @@ $minimap-width: 200px;
             // Dividing by live zoom holds the on-screen size, and the 100%
             // ceiling degrades to a full-node fill rather than vanishing — so at
             // overview zoom perf deliberately outranks the I/O highlight. #1610
-            min-width: max(3px, calc(2px / var(--op-graph-perf-zoom, 1)));
+            min-width: max(3px, calc(2px / var(--op-graph-node-zoom, 1)));
             width: calc(var(--op-graph-perf-scale, 0) * 100%);
 
             // The node's 4px bottom padding, before the bar clips descenders.
-            height: min(100%, max(4px, calc(4px / var(--op-graph-perf-zoom, 1))));
+            height: min(100%, max(4px, calc(4px / var(--op-graph-node-zoom, 1))));
 
             // No custom property means no perf row, so no bar — "no data" must
             // not read as "fastest op".
@@ -365,7 +365,7 @@ $minimap-width: 200px;
         border-radius: 999px;
         background-color: var(--graph-hot-rank);
         color: var(--graph-hot-rank-ink);
-        font-size: clamp(11px, calc(11px / var(--op-graph-perf-zoom, 1)), 40px);
+        font-size: clamp(11px, calc(11px / var(--op-graph-node-zoom, 1)), 40px);
         font-variant-numeric: tabular-nums;
         font-weight: 700;
         line-height: 1.1;

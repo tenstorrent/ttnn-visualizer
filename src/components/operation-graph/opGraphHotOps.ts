@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-import { type HotOpsSettings, HotOpsSort } from '../../definitions/HotOps';
+import { type HotOpsMarking, type HotOpsSettings, HotOpsSort } from '../../definitions/HotOps';
 import type { OpGraphPerfOverlay } from './opGraphPerfOverlay';
 import { memberOperationIdsOf } from './opGraphMemberTime';
 import type { OpGraphNodeIndexEntry } from './opGraphTypes';
@@ -46,19 +46,19 @@ export const buildHotOpRows = (
 
 const byOperationId = (a: HotOpRow, b: HotOpRow) => a.operationId - b.operationId;
 
-type HotOpsRowFilter = { limit: number | null; hideUnlinked: boolean };
+type HotOpsRowFilter = Omit<HotOpsMarking, 'limit'> & { limit: number | null };
 
 /** The rows the list keeps, slowest first: the limit takes the slowest of those not hidden. */
-const getKeptHotOpRows = (rows: readonly HotOpRow[], { limit, hideUnlinked }: HotOpsRowFilter): HotOpRow[] => {
+const getKeptHotOpRows = (rows: readonly HotOpRow[], { limit, hideUnlinked }: HotOpsRowFilter): readonly HotOpRow[] => {
     const eligible = hideUnlinked ? rows.filter((row) => row.rank !== null) : rows;
-    return limit === null ? [...eligible] : eligible.slice(0, limit);
+    return limit === null ? eligible : eligible.slice(0, limit);
 };
 
 /** The rows to list: the limit takes the slowest, and the sort only orders what it kept. */
 export const getVisibleHotOpRows = (
     rows: readonly HotOpRow[],
     { sort, ...filter }: HotOpsRowFilter & Pick<HotOpsSettings, 'sort'>,
-): HotOpRow[] => {
+): readonly HotOpRow[] => {
     const kept = getKeptHotOpRows(rows, filter);
     if (sort === HotOpsSort.DURATION) {
         return kept;
@@ -75,8 +75,8 @@ export const getMarkedHotOpRanks = (rows: readonly HotOpRow[], filter: HotOpsRow
     new Map(getKeptHotOpRows(rows, filter).map((row) => [row.operationId, row.rank]));
 
 /**
- * Each indexed node's badge rank: the slowest listed op among those it stands for, by the same rule as
- * the perf bar and the critical path. A ranked op outranks an unranked one; an unlisted node is absent.
+ * Each indexed node's badge rank: the best rank among the listed ops it stands for, read over the same
+ * members as the perf bar and the critical path. A ranked op outranks an unranked one; an unlisted node is absent.
  */
 export const buildHotRankByNodeId = (
     rankByOperationId: ReadonlyMap<number, number | null>,

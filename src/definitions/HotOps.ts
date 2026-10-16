@@ -10,6 +10,9 @@ export enum HotOpsSort {
 
 export const HOT_OPS_LIMITS = [10, 25, 100] as const;
 
+/** The feature's name on the toolbar switch, the list's heading and each rank badge. */
+export const HOT_OPS_TITLE = 'Slowest operations';
+
 /** Shown where a rank would be, for an op without perf data. */
 export const HOT_OPS_NO_RANK_LABEL = '–';
 

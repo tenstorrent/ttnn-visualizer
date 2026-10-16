@@ -6,11 +6,8 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-import {
-    PERF_BAR_COLOR_VAR,
-    PERF_BAR_SCALE_VAR,
-    PERF_BAR_ZOOM_VAR,
-} from '../src/components/operation-graph/opGraphPerfOverlay';
+import { PERF_BAR_COLOR_VAR, PERF_BAR_SCALE_VAR } from '../src/components/operation-graph/opGraphPerfOverlay';
+import { NODE_ZOOM_VAR } from '../src/components/operation-graph/opGraphNodeZoom';
 
 // jsdom doesn't compile SCSS, so a rendered node carries the class but none of
 // its declarations. Same approach as `opGraphNodeStyles.spec.ts`.
@@ -80,7 +77,7 @@ describe('slowest-operations rank badge', () => {
     it('divides its size by the live zoom, unscaled when none is published', () => {
         // Marking publishes the zoom too, so the badges still read at overview zoom. #2085
         expect(ruleBody(BADGE)).toMatch(
-            new RegExp(`font-size:.*calc\\(\\s*\\d+px\\s*/\\s*${varRef(PERF_BAR_ZOOM_VAR, '1')}\\s*\\)`),
+            new RegExp(`font-size:.*calc\\(\\s*\\d+px\\s*/\\s*${varRef(NODE_ZOOM_VAR, '1')}\\s*\\)`),
         );
     });
 });
@@ -91,10 +88,8 @@ describe('perf overlay bar zoom floor', () => {
         // losing the encoding exactly where a whole-graph scan needs it. #1610
         const body = ruleBody(PERF_BAR);
 
-        expect(body).toMatch(new RegExp(`height:.*calc\\(\\s*\\d+px\\s*/\\s*${varRef(PERF_BAR_ZOOM_VAR, '1')}\\s*\\)`));
-        expect(body).toMatch(
-            new RegExp(`min-width:.*calc\\(\\s*\\d+px\\s*/\\s*${varRef(PERF_BAR_ZOOM_VAR, '1')}\\s*\\)`),
-        );
+        expect(body).toMatch(new RegExp(`height:.*calc\\(\\s*\\d+px\\s*/\\s*${varRef(NODE_ZOOM_VAR, '1')}\\s*\\)`));
+        expect(body).toMatch(new RegExp(`min-width:.*calc\\(\\s*\\d+px\\s*/\\s*${varRef(NODE_ZOOM_VAR, '1')}\\s*\\)`));
     });
 
     it('falls back to an unscaled bar when the zoom is not published', () => {
@@ -102,8 +97,8 @@ describe('perf overlay bar zoom floor', () => {
         // fallback is the resting state: 1:1 size, not a collapse to zero.
         const body = ruleBody(PERF_BAR);
 
-        expect(body).not.toMatch(new RegExp(varRef(PERF_BAR_ZOOM_VAR)));
-        expect(body).toMatch(new RegExp(varRef(PERF_BAR_ZOOM_VAR, '1')));
+        expect(body).not.toMatch(new RegExp(varRef(NODE_ZOOM_VAR)));
+        expect(body).toMatch(new RegExp(varRef(NODE_ZOOM_VAR, '1')));
     });
 });
 

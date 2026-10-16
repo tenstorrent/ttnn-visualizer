@@ -30,7 +30,7 @@ const NAMES = new Map([
 // Ops 4 and 5 are on the graph with no perf row; 900 has a row but is not on the graph.
 const overlay = buildOpGraphPerfOverlay(rows([1, 10], [2, 30], [3, 20], [900, 99]), true, [1, 2, 3, 4, 5]);
 
-const ids = (list: { operationId: number }[]) => list.map((row) => row.operationId);
+const ids = (list: readonly { operationId: number }[]) => list.map((row) => row.operationId);
 
 describe('buildHotOpRows', () => {
     it('lists the linked ops slowest first, then the ops without perf data by id', () => {
@@ -176,6 +176,10 @@ describe('buildHotRankByNodeId', () => {
     it("gives a folded block its slowest listed member's rank", () => {
         expect(rankOf(entry('block:1', 1, [1, 4, 3, 2]))).toBe(1);
         expect(rankOf(entry('block:4', 4, [4, 3]))).toBe(2);
+    });
+
+    it('keeps a ranked member over an unranked one listed after it', () => {
+        expect(rankOf(entry('block:2', 2, [2, 4]))).toBe(1);
     });
 
     it('marks a folded block whose listed members have no perf data, unranked', () => {

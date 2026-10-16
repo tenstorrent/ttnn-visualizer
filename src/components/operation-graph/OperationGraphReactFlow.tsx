@@ -60,12 +60,10 @@ import OpGraphToolbar from './OpGraphToolbar';
 import { buildDeviceOperationSubgraph, countDeviceOperations } from './opGraphDeviceSubgraph';
 import { OpGraphBlockExpansionContext, OpGraphExpansionContext } from './opGraphExpansionContext';
 import {
-    PERF_BAR_ZOOM_VAR,
     buildOpGraphPerfOverlay,
     buildRenderedPerfStyling,
     getPerfColorForNs,
     getPerfHoverLabel,
-    getQuantisedPerfZoom,
     getRenderedPerfRange,
 } from './opGraphPerfOverlay';
 import { EMPTY_CRITICAL_PATH, findCriticalPath } from './opGraphCriticalPath';
@@ -97,6 +95,7 @@ import {
     type OpGraphSourceOperation,
 } from './opGraphTypes';
 import { fusedActivationOf } from './opGraphFusedActivation';
+import { NODE_ZOOM_VAR, getQuantisedNodeZoom } from './opGraphNodeZoom';
 import { fanIdsCovering, weightFanMembersOf } from './opGraphWeightFans';
 import { OpGraphGrouping } from './opGraphTypes';
 import 'styles/components/OperationGraphReactFlow.scss';
@@ -1538,25 +1537,25 @@ const OperationGraphInner = ({
     // Zoom goes straight to the DOM: it changes every wheel frame, and through
     // state it would re-render the whole graph per frame to move one bar or badge.
     // `OpGraphEdge` can afford `useStore` only because it selects a boolean.
-    const isPerfZoomPublished = isPerfOverlayActive || isHotOpsMarkingActive;
+    const isNodeZoomPublished = isPerfOverlayActive || isHotOpsMarkingActive;
     useEffect(() => {
         const container = containerRef.current;
-        if (container === null || !isPerfZoomPublished) {
+        if (container === null || !isNodeZoomPublished) {
             return undefined;
         }
         let lastZoom: number | null = null;
         const writeZoom = (zoom: number) => {
-            const quantised = getQuantisedPerfZoom(zoom);
+            const quantised = getQuantisedNodeZoom(zoom);
             if (quantised !== lastZoom) {
                 lastZoom = quantised;
-                container.style.setProperty(PERF_BAR_ZOOM_VAR, String(quantised));
+                container.style.setProperty(NODE_ZOOM_VAR, String(quantised));
             }
         };
         writeZoom(flowStore.getState().transform[2]);
         // No selector support in the vanilla store, so every change calls back
         // and the guard above keeps it to one write per zoom bucket.
         return flowStore.subscribe((state) => writeZoom(state.transform[2]));
-    }, [isPerfZoomPublished, flowStore]);
+    }, [isNodeZoomPublished, flowStore]);
 
     const isCriticalPathActive = isCriticalPathEnabled && perfOverlay.status === PerfOverlayStatus.READY;
 

@@ -6,7 +6,13 @@ import { memo, useCallback, useId, useLayoutEffect, useMemo, useRef } from 'reac
 import { Checkbox, SegmentedControl, Size } from '@blueprintjs/core';
 import classNames from 'classnames';
 import { useAtom } from 'jotai';
-import { DEFAULT_HOT_OPS_SETTINGS, HOT_OPS_LIMITS, HOT_OPS_NO_RANK_LABEL, HotOpsSort } from '../../definitions/HotOps';
+import {
+    DEFAULT_HOT_OPS_SETTINGS,
+    HOT_OPS_LIMITS,
+    HOT_OPS_NO_RANK_LABEL,
+    HOT_OPS_TITLE,
+    HotOpsSort,
+} from '../../definitions/HotOps';
 import { NO_PERF_DATA_LABEL } from '../../definitions/PerfOverlayStatus';
 import { formatDuration, formatShareOfTotal } from '../../functions/formatting';
 import { isHotOpsSort } from '../../functions/hotOpsSettings';
@@ -106,7 +112,7 @@ const OpGraphHotOpsPanel = ({
                     id={titleId}
                     className='op-graph-hot-ops-title'
                 >
-                    Slowest operations
+                    {HOT_OPS_TITLE}
                 </h2>
                 <span className='op-graph-panel-section-count'>{linkedOpCount}</span>
             </header>

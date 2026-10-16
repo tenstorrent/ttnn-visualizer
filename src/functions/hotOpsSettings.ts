@@ -16,16 +16,16 @@ export const isHotOpsLimit = (value: unknown): value is HotOpsLimit =>
 export const isHotOpsSort = (value: unknown): value is HotOpsSort =>
     Object.values(HotOpsSort).some((sort) => sort === value);
 
+const readBoolean = (value: unknown, fallback: boolean): boolean => (typeof value === 'boolean' ? value : fallback);
+
 /** Stored settings read field by field, so a shape from another build falls back to the defaults. */
 export const parseHotOpsSettings = (stored: unknown): HotOpsSettings => {
     const fields: Record<string, unknown> = typeof stored === 'object' && stored !== null ? { ...stored } : {};
     return {
         limit: isHotOpsLimit(fields.limit) ? fields.limit : DEFAULT_HOT_OPS_SETTINGS.limit,
         sort: isHotOpsSort(fields.sort) ? fields.sort : DEFAULT_HOT_OPS_SETTINGS.sort,
-        hideUnlinked:
-            typeof fields.hideUnlinked === 'boolean' ? fields.hideUnlinked : DEFAULT_HOT_OPS_SETTINGS.hideUnlinked,
-        markOnGraph:
-            typeof fields.markOnGraph === 'boolean' ? fields.markOnGraph : DEFAULT_HOT_OPS_SETTINGS.markOnGraph,
+        hideUnlinked: readBoolean(fields.hideUnlinked, DEFAULT_HOT_OPS_SETTINGS.hideUnlinked),
+        markOnGraph: readBoolean(fields.markOnGraph, DEFAULT_HOT_OPS_SETTINGS.markOnGraph),
     };
 };
 
