@@ -570,17 +570,30 @@ $minimap-width: 200px;
         z-index: variables.$z-index-2-interactive;
         top: 0;
         right: 0;
-        bottom: 0;
         display: flex;
         flex-direction: column;
 
         // Tracks the canvas so a narrow window keeps a usable graph; the floor is
         // the widest line the panel must hold, a tensor's `[shape] Tensor N`.
         width: clamp(280px, 26%, 360px);
+
+        // As tall as what it holds, so the graph below the list alone stays in reach. #2087
+        max-height: 100%;
         background-color: rgba($tt-grey-2, 0.95);
         border-left: 1px solid rgba($tt-white, 0.08);
         color: $tt-grey-7;
         font-size: 12px;
+
+        // The details fill the pane below the list, which keeps its own height up to
+        // 45% so they stay in reach however long it is.
+        &.op-graph-side-with-details {
+            bottom: 0;
+
+            .op-graph-hot-ops {
+                flex-shrink: 0;
+                max-height: 45%;
+            }
+        }
     }
 
     .op-graph-panel {
@@ -847,8 +860,8 @@ $minimap-width: 200px;
         flex: 0 1 auto;
         flex-direction: column;
 
-        // The details below stay in reach however long the list is.
-        max-height: 45%;
+        // Shown alone, a long list shrinks to the column and scrolls rather than overflowing it.
+        min-height: 0;
         border-bottom: 1px solid rgba($tt-white, 0.12);
     }
 

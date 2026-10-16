@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-import { memo, useId, useMemo } from 'react';
+import { memo, useCallback, useId, useLayoutEffect, useMemo, useRef } from 'react';
 import { Checkbox, SegmentedControl, Size } from '@blueprintjs/core';
 import classNames from 'classnames';
 import { useAtom } from 'jotai';
@@ -53,10 +53,39 @@ const OpGraphHotOpsPanel = ({
     onSelectOperation,
 }: OpGraphHotOpsPanelProps) => {
     const titleId = useId();
+    const listRef = useRef<HTMLOListElement>(null);
+    const clickedOperationIdRef = useRef<number | null>(null);
     const [settings, setSettings] = useAtom(hotOpsSettingsAtom);
     const { limit, sort, hideUnlinked } = settings;
     const visibleRows = useMemo(() => getVisibleHotOpRows(rows, settings), [rows, settings]);
     const hasUnlinked = useMemo(() => rows.some((row) => row.rank === null), [rows]);
+
+    const selectFromList = useCallback(
+        (operationId: number) => {
+            clickedOperationIdRef.current = operationId;
+            onSelectOperation(operationId);
+        },
+        [onSelectOperation],
+    );
+
+    // The details that open below the list shorten it and can hide the row just clicked. Scrolled by
+    // hand, because `scrollIntoView` can also scroll ancestors, `overflow: hidden` ones included. #2087
+    useLayoutEffect(() => {
+        const clickedId = clickedOperationIdRef.current;
+        clickedOperationIdRef.current = null;
+        if (clickedId === null || clickedId !== selectedOperationId) {
+            return;
+        }
+        const list = listRef.current;
+        const row = list?.querySelector('[aria-current="true"]');
+        if (!list || !row) {
+            return;
+        }
+        const overflow = row.getBoundingClientRect().bottom - list.getBoundingClientRect().bottom;
+        if (overflow > 0) {
+            list.scrollTop += overflow;
+        }
+    }, [selectedOperationId]);
 
     return (
         <section
@@ -98,7 +127,10 @@ const OpGraphHotOpsPanel = ({
                     />
                 ) : null}
             </div>
-            <ol className='op-graph-hot-ops-list'>
+            <ol
+                ref={listRef}
+                className='op-graph-hot-ops-list'
+            >
                 {visibleRows.map((row) => (
                     <li key={row.operationId}>
                         <HotOpRowButton
@@ -110,7 +142,7 @@ const OpGraphHotOpsPanel = ({
                                     : getPerfColorForNs(row.deviceTimeNs, minNs, maxNs)
                             }
                             isSelected={row.operationId === selectedOperationId}
-                            onSelect={onSelectOperation}
+                            onSelect={selectFromList}
                         />
                     </li>
                 ))}

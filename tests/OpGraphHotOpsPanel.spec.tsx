@@ -32,20 +32,24 @@ const renderPanel = ({
 }: RenderPanelOptions = {}) => {
     const overlay = buildOpGraphPerfOverlay(PERF_ROWS, true, graphOperationIds);
     const names = new Map(graphOperationIds.map((id) => [id, `op_${id}`]));
-    render(
-        <Provider store={createStore()}>
+    const rows = buildHotOpRows(overlay, graphOperationIds, names);
+    const store = createStore();
+    const panel = (selected: number | null) => (
+        <Provider store={store}>
             <OpGraphHotOpsPanel
-                rows={buildHotOpRows(overlay, graphOperationIds, names)}
+                rows={rows}
                 linkedOpCount={overlay.linkedOpCount}
                 totalNs={overlay.totalNs}
                 minNs={overlay.minNs}
                 maxNs={overlay.maxNs}
-                selectedOperationId={selectedOperationId}
+                selectedOperationId={selected}
                 onSelectOperation={onSelectOperation}
             />
-        </Provider>,
+        </Provider>
     );
-    return overlay;
+    const { rerender } = render(panel(selectedOperationId));
+    // The view owns the selection, so a test hands the panel the one it would.
+    return { overlay, select: (operationId: number | null) => rerender(panel(operationId)) };
 };
 
 const listedIds = () =>
@@ -80,7 +84,7 @@ describe('OpGraphHotOpsPanel rows', () => {
     });
 
     it('colours each swatch where its duration sits on the legend', () => {
-        const overlay = renderPanel();
+        const { overlay } = renderPanel();
 
         const swatch = rowFor(9).querySelector<HTMLElement>('.op-graph-hot-ops-swatch')!;
         const probe = document.createElement('div');
@@ -102,6 +106,72 @@ describe('OpGraphHotOpsPanel rows', () => {
 
         expect(rowFor(11)).toHaveAttribute('aria-current', 'true');
         expect(rowFor(12)).not.toHaveAttribute('aria-current');
+    });
+
+    // The details open below the list and shorten it, which can hide the row just clicked. #2087
+    describe('when the selection shortens the list', () => {
+        const box = (top: number, bottom: number) => ({ top, bottom }) as DOMRect;
+
+        // The list now ends 200 px down, and the given op's row sits 50 px past that.
+        const shortenUnder = (operationId: number) => {
+            const list = document.querySelector<HTMLElement>('.op-graph-hot-ops-list')!;
+            vi.spyOn(list, 'getBoundingClientRect').mockReturnValue(box(0, 200));
+            vi.spyOn(rowFor(operationId), 'getBoundingClientRect').mockReturnValue(box(230, 250));
+            return list;
+        };
+
+        it('scrolls the row just clicked back into view, and no further', () => {
+            const { select } = renderPanel();
+            const list = shortenUnder(5);
+
+            fireEvent.click(rowFor(5));
+            select(5);
+
+            expect(list.scrollTop).toBe(50);
+        });
+
+        it('scrolls a row activated from the keyboard back into view too', () => {
+            // Enter on a focused button arrives as a click with no pointer detail.
+            const { select } = renderPanel();
+            const list = shortenUnder(5);
+
+            fireEvent.click(rowFor(5), { detail: 0 });
+            select(5);
+
+            expect(list.scrollTop).toBe(50);
+        });
+
+        it('leaves the list alone for a selection made on the graph', () => {
+            const { select } = renderPanel();
+            const list = shortenUnder(5);
+
+            select(5);
+
+            expect(list.scrollTop).toBe(0);
+        });
+
+        it('leaves the list alone when the selection settles on a row other than the one clicked', () => {
+            const { select } = renderPanel();
+            const list = shortenUnder(5);
+            vi.spyOn(rowFor(7), 'getBoundingClientRect').mockReturnValue(box(260, 280));
+
+            fireEvent.click(rowFor(5));
+            select(7);
+
+            expect(list.scrollTop).toBe(0);
+        });
+
+        it('leaves the list alone when the row clicked is still in view', () => {
+            const { select } = renderPanel();
+            const list = shortenUnder(5);
+            list.scrollTop = 40;
+            vi.spyOn(rowFor(5), 'getBoundingClientRect').mockReturnValue(box(100, 120));
+
+            fireEvent.click(rowFor(5));
+            select(5);
+
+            expect(list.scrollTop).toBe(40);
+        });
     });
 });
 

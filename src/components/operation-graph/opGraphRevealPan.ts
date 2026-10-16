@@ -10,10 +10,37 @@
 // as long as they are open. The next toggle replaces the set, so exactly one group
 // is ever marked. #1944
 export const REVEALED_NODE_CLASS = 'op-graph-node-revealed';
+/** The column on the pane's right holding the slowest-operations list and the details. */
+export const SIDE_CLASS = 'op-graph-side';
+// Down the pane while the details sit below the list; the list alone takes only the height it needs. #2087
+export const SIDE_WITH_DETAILS_CLASS = 'op-graph-side-with-details';
 // Keeps a revealed node off the edge of the usable pane, where it reads as clipped.
-// `topInset` and `rightInset` extend that for chrome that floats over the pane rather
+// `topInset` and the side inset extend that for chrome that floats over the pane rather
 // than shrinking it, so a target never lands behind the toolbar or the side column. #2007
 const REVEAL_MARGIN_PX = 48;
+
+/** The side column, as far in from the pane's right edge and down from its top as it reaches. */
+export interface PaneSideInset {
+    width: number;
+    bottom: number;
+}
+
+export const NO_SIDE_INSET: Readonly<PaneSideInset> = Object.freeze({ width: 0, bottom: 0 });
+
+/** The column's width if the vertical move leaves the target's top in the band the column covers, else 0. */
+const sideInsetFor = (targetTop: number, side: Readonly<PaneSideInset>): number =>
+    targetTop >= side.bottom ? 0 : side.width;
+
+/** Graph-space `bounds` as the box they cover on the pane at `viewport`. */
+const toPaneBox = (
+    bounds: { minX: number; minY: number; maxX: number; maxY: number },
+    viewport: { x: number; y: number; zoom: number },
+): { left: number; top: number; right: number; bottom: number } => ({
+    left: bounds.minX * viewport.zoom + viewport.x,
+    top: bounds.minY * viewport.zoom + viewport.y,
+    right: bounds.maxX * viewport.zoom + viewport.x,
+    bottom: bounds.maxY * viewport.zoom + viewport.y,
+});
 
 /**
  * The smallest pan that brings `bounds` inside the pane, or no pan when it
@@ -29,12 +56,9 @@ export const revealPanShift = (
     viewport: { x: number; y: number; zoom: number },
     pane: { width: number; height: number },
     topInset = 0,
-    rightInset = 0,
+    side: Readonly<PaneSideInset> = NO_SIDE_INSET,
 ): { dx: number; dy: number } => {
-    const left = bounds.minX * viewport.zoom + viewport.x;
-    const top = bounds.minY * viewport.zoom + viewport.y;
-    const right = bounds.maxX * viewport.zoom + viewport.x;
-    const bottom = bounds.maxY * viewport.zoom + viewport.y;
+    const { left, top, right, bottom } = toPaneBox(bounds, viewport);
 
     const axis = (nearEdge: number, farEdge: number, extent: number, nearInset: number, farInset: number): number => {
         const lowLimit = nearInset + REVEAL_MARGIN_PX;
@@ -52,10 +76,10 @@ export const revealPanShift = (
         return 0;
     };
 
-    return {
-        dx: axis(left, right, pane.width, 0, rightInset),
-        dy: axis(top, bottom, pane.height, topInset, 0),
-    };
+    const dy = axis(top, bottom, pane.height, topInset, 0);
+    // The column covers only the band it reaches down to, so a target the vertical
+    // pan leaves below it may use the pane's full width. #2087
+    return { dx: axis(left, right, pane.width, 0, sideInsetFor(top + dy, side)), dy };
 };
 
 /**
@@ -72,17 +96,15 @@ export const centerPanShift = (
     viewport: { x: number; y: number; zoom: number },
     pane: { width: number; height: number },
     topInset = 0,
-    rightInset = 0,
+    side: Readonly<PaneSideInset> = NO_SIDE_INSET,
 ): { dx: number; dy: number } => {
-    const centerX = ((bounds.minX + bounds.maxX) / 2) * viewport.zoom + viewport.x;
-    const centerY = ((bounds.minY + bounds.maxY) / 2) * viewport.zoom + viewport.y;
+    const box = toPaneBox(bounds, viewport);
+    // Centred in the band the toolbar leaves, not the raw pane, so a recentred
+    // node sits where the eye is rather than tucked under the controls.
+    const dy = topInset + (pane.height - topInset) / 2 - (box.top + box.bottom) / 2;
+    const rightInset = sideInsetFor(box.top + dy, side);
 
-    return {
-        dx: (pane.width - rightInset) / 2 - centerX,
-        // Centred in the band the toolbar leaves, not the raw pane, so a recentred
-        // node sits where the eye is rather than tucked under the controls.
-        dy: topInset + (pane.height - topInset) / 2 - centerY,
-    };
+    return { dx: (pane.width - rightInset) / 2 - (box.left + box.right) / 2, dy };
 };
 
 interface PannableNode {
@@ -224,8 +246,7 @@ export const intersectsPane = (
     bounds: { minX: number; minY: number; maxX: number; maxY: number },
     viewport: { x: number; y: number; zoom: number },
     pane: { width: number; height: number },
-): boolean =>
-    bounds.maxX * viewport.zoom + viewport.x > 0 &&
-    bounds.minX * viewport.zoom + viewport.x < pane.width &&
-    bounds.maxY * viewport.zoom + viewport.y > 0 &&
-    bounds.minY * viewport.zoom + viewport.y < pane.height;
+): boolean => {
+    const box = toPaneBox(bounds, viewport);
+    return box.right > 0 && box.left < pane.width && box.bottom > 0 && box.top < pane.height;
+};
