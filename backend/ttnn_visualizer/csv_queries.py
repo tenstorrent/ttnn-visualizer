@@ -9,6 +9,7 @@ import os
 import tempfile
 import traceback
 from collections import defaultdict
+from contextlib import contextmanager
 from dataclasses import dataclass
 from functools import lru_cache
 from io import StringIO
@@ -55,6 +56,25 @@ def _close_figures_opened_since(open_before: Set[int]) -> None:
     """
     for figure_number in set(plt.get_fignums()) - open_before:
         plt.close(figure_number)
+
+
+@contextmanager
+def _stacked_report_plot_skipped():
+    """Stop tt-perf-report drawing the stacked-report PNG, which nothing reads.
+
+    A closed figure still holds its canvas and renderer in a reference cycle, so its
+    buffer (hundreds of MB on a large capture) lives until the cyclic GC runs; not
+    drawing at all also saves most of the generation time. tt-perf-report has no
+    option for this, so it clears the module's `HAS_MATPLOTLIB`, which only
+    `plot_stacked_report` reads (1.4.0); the stacked CSV is written before the plot.
+    The tests pin the flag, in case an upstream rename silently brings the plot back.
+    """
+    has_matplotlib = perf_report.HAS_MATPLOTLIB
+    perf_report.HAS_MATPLOTLIB = False
+    try:
+        yield
+    finally:
+        perf_report.HAS_MATPLOTLIB = has_matplotlib
 
 
 # Cell values after NaN sanitization; matches LocalCSVQueryRunner.execute_query.
@@ -1121,29 +1141,30 @@ class OpsPerformanceReportQueries:
 
             open_figures = set(plt.get_fignums())
             try:
-                perf_report.generate_perf_report(
-                    [csv_file],
-                    start_signpost,
-                    end_signpost,
-                    ignore_signposts,
-                    print_signposts,
-                    cls.DEFAULT_MIN_PERCENTAGE,
-                    cls.DEFAULT_ID_RANGE,
-                    cls.DEFAULT_ARCH,
-                    csv_output_file.name,
-                    cls.DEFAULT_NO_ADVICE,
-                    tracing_mode,
-                    cls.DEFAULT_RAW_OP_CODES,
-                    no_host_ops,
-                    cls.DEFAULT_NO_SUMMARY,
-                    group_by,
-                    cls.DEFAULT_CLASSIC_COLORS,
-                    csv_summary_file.name,
-                    no_stacked_report,
-                    cls.DEFAULT_NO_STACK_BY_IN0,
-                    cls.DEFAULT_STACKED_CSV_FILE,
-                    not merge_devices,
-                )
+                with _stacked_report_plot_skipped():
+                    perf_report.generate_perf_report(
+                        [csv_file],
+                        start_signpost,
+                        end_signpost,
+                        ignore_signposts,
+                        print_signposts,
+                        cls.DEFAULT_MIN_PERCENTAGE,
+                        cls.DEFAULT_ID_RANGE,
+                        cls.DEFAULT_ARCH,
+                        csv_output_file.name,
+                        cls.DEFAULT_NO_ADVICE,
+                        tracing_mode,
+                        cls.DEFAULT_RAW_OP_CODES,
+                        no_host_ops,
+                        cls.DEFAULT_NO_SUMMARY,
+                        group_by,
+                        cls.DEFAULT_CLASSIC_COLORS,
+                        csv_summary_file.name,
+                        no_stacked_report,
+                        cls.DEFAULT_NO_STACK_BY_IN0,
+                        cls.DEFAULT_STACKED_CSV_FILE,
+                        not merge_devices,
+                    )
             except Exception as e:
                 logger.error(f"Error loading report: {e}")
                 logger.error(f"Full traceback:\n{traceback.format_exc()}")
