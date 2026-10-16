@@ -59,16 +59,16 @@ describe('parseSocDescriptorOverride', () => {
     });
 
     it('labels an unnamed descriptor with the arch the report declared, never a baked one', () => {
-        // Reporting a Grendel override as `wormhole` would be a worse answer than
+        // Reporting a Horizon override as `wormhole` would be a worse answer than
         // an unrecognised name, since the label is displayed.
         const { arch_name: _dropped, ...unnamed } = tensixOnly;
-        const result = parseSocDescriptorOverride(unnamed, 'grendel');
+        const result = parseSocDescriptorOverride(unnamed, 'horizon');
 
         expect(result.status).toBe('valid');
         if (result.status !== 'valid') {
             return;
         }
-        expect(result.design.arch_name).toBe('grendel');
+        expect(result.design.arch_name).toBe('horizon');
     });
 
     it('fills the optional node lists so readers can treat them as present', () => {
