@@ -45,8 +45,9 @@ Answers link to the same thing in the web application, for the reader to open:
 
 - `load_report` returns an `app_link` to the report.
 - `operation_detail` and `operation_provenance` return an `app_link` to the operation.
-- `find_operations`, `top_ops`, `memory_profile` and `tensor_flow` return one
-  `app_link_template`, in which `{operation_id}` takes any operation id the answer lists.
+- `find_operations`, `top_ops`, `program_cache`, `memory_profile` and `tensor_flow`
+  return one `app_link_template`, in which `{operation_id}` takes any operation id the
+  answer lists.
 
 A link names the report by its directories, and the visualizer opens them when the link is
 followed, as `ttnn-visualizer --profiler-path` does: each followed link starts a new session
@@ -78,16 +79,17 @@ another rank's operation under the same id.
 | Tool | Answers |
 |---|---|
 | `load_report` | What this report contains, and which of the tools below apply to it. Returns a handle the others take. |
-| `top_ops` | The costliest operations by device time, op-to-op gap, total percentage, FLOPS, DRAM bandwidth or core count, over the whole report or a signpost range. Each row carries the profiler `operation_id` it links to, when the handle holds both reports — see below. |
+| `top_ops` | The costliest operations by device time, op-to-op gap, total percentage, FLOPS, DRAM bandwidth or core count, over the whole report or a signpost range. Each row carries the profiler `operation_id` it links to, when the handle holds both reports — see below. `include` adds the fields that say why an operation took its time. |
+| `program_cache` | Whether programs were built again rather than reused: per op code, its calls, distinct programs, and how many repeat calls hit or missed the program cache. |
 | `zone_timings` | Per-zone, per-RISC totals from `profile_log_device.csv` — firmware and kernel phases, as measured on device. |
 | `diff_reports` | Per-operation-code deltas between two reports, largest movement first, over the whole reports or one signpost range in both. |
 | `find_operations` | Operations matching a name substring or a call-stack substring, with the ids `operation_detail` takes. |
-| `operation_detail` | One operation: its input and output tensors with shape, dtype, layout and memory config, and what it had allocated. With a linked performance report, also the performance rows it launched, their device time and share of the report's, and the operation's total and slowest row. |
+| `operation_detail` | One operation: its input and output tensors with shape, dtype, layout and memory config, and what it had allocated. With a linked performance report, also the performance rows it launched, their device time and share of the report's, and the operation's total and slowest row, with the same `include` as `top_ops`. |
 | `memory_profile` | Memory footprint per operation, keyed by buffer type and ranked within each, with each type's largest footprint and the device's L1 geometry. A floor rather than the peak — see below. |
 | `tensor_flow` | Which operation produced a tensor and which ones consumed it. |
 | `operation_provenance` | What one operation was called with, and where in the model code it came from. |
 
-`top_ops`, `zone_timings` and `diff_reports` read the performance CSVs; the five
+`top_ops`, `program_cache`, `zone_timings` and `diff_reports` read the performance CSVs; the five
 operation tools — `find_operations`, `operation_detail`, `memory_profile`,
 `tensor_flow` and `operation_provenance` — read the profiler report's SQLite database;
 `load_report` opens both, since its whole job is saying which of the others apply. A capture can carry either, both, or — as far as these tools are concerned —
@@ -225,6 +227,75 @@ bound means the full model ran and neither DRAM nor FLOPs reached 65% of peak. R
 recently), so treat an unfamiliar value as a category, not an error. `Other` is time no
 category explains.
 
+**`include` adds the fields that say why an operation took its time.** A `top_ops` row and
+an `operation_detail` `perf_rows` entry name the operation and its metric unless asked for
+more. Asked for more, rows are capped at 25 rather than 100: with every group a row runs to
+about 3 KB, and 100 of them would pass a client's limit on one tool answer. `include` takes
+any of these groups:
+
+- `config`: math fidelity (LoFi, HiFi2, HiFi3 or HiFi4, from the CSV's `MATH FIDELITY`, and
+  null for an operation without one), input and output datatypes, input 0's memory, DRAM
+  sharding, and the matmul block sizes. How the operation was set up.
+- `utilisation`: DRAM bandwidth and FLOPs, each also as a percentage of peak, and the perf
+  model's ideal, compute and bandwidth times and FPU utilisation. How close the operation
+  came to what the hardware can do; DRAM and FLOPs follow `bound_analysis` above.
+- `noc`: NoC, multicast NoC, DRAM and Ethernet bandwidth utilisation, and the NPE
+  congestion impact.
+- `riscs`: kernel time per RISC, and how long the compute kernel waited at the front and
+  back of its circular buffers. Which stage limits the operation: the readers and writers
+  on BRISC and NCRISC, or unpack, math and pack on the three TRISCs.
+- `cores`: available cores, the time from the first core's kernel start to the last's,
+  and the per-core minimum, maximum and average kernel time. Launch skew and imbalance.
+- `dispatch`: the op-to-op gap, dispatch's command and GO-send wait times, and the metal
+  trace ids. Why the gap before an operation is large.
+- `cache`: the program hash, whether the program cache held it, and the global call count.
+- `kernels`: the compute and data-movement kernel sources and their hashes, as lists.
+- `advice`: tt-perf-report's advice for the operation, which today covers matmuls.
+
+Times in these groups are microseconds, like `device_time`, although the CSV records most
+of them in nanoseconds. They come from the same merged row as the rest of it: for an
+operation that ran on several devices, the slowest device's row, except for an
+all-gather, reduce-scatter or all-reduce, where tt-perf-report averages the device time
+and keeps the first device's row for everything else, so `kernel_us` there is one
+device's time rather than the average. The web application's rows carry the fields
+tt-perf-report generates; the ones read straight from the CSV — the math fidelity, the
+per-core spread and launch skew, the circular-buffer waits, the dispatch waits, the
+kernels, the perf model's compute and bandwidth times and FPU utilisation, and the `noc`
+group — reach only these tools.
+
+tt-metal's performance model leaves its ideal times at 1 ns for an operation it does not
+model, so a 1 ns ideal time reads as null rather than as a measured one, and so does an
+FPU utilisation derived from it. Read against the operation's real duration, that
+placeholder would claim a million-fold gap.
+
+Many of these fields are empty unless the capture asked for them. A field that no row of
+the whole report carries, whatever range was read, is left out of the rows and named in
+`empty_in_report` instead, with what would fill it: `--collect-noc-traces` for the `noc`
+group, `--profile-dispatch-cores` for the dispatch wait times, a captured metal trace for
+the trace ids, and a performance model that computes them for the ideal times. A field
+whose column the report does not have at all is named as such, since no capture option
+fills it on the tt-metal that wrote the report. A field empty on some rows only is usually
+one those operations do not have, such as a block size on an operation that is not a
+matmul; the `noc` fields are filled only for the operations tt-metal matched to its NoC
+traces.
+
+**`program_cache` says whether programs were built again.** A row is its program's first
+call when no earlier row in the report carries its program hash, and a repeat call
+otherwise, which is how the performance view counts its cache-hit percentage. A first call
+builds its program, so it misses the cache by design. A repeat call should hit it: a repeat
+miss built a program the run had already built, and the performance view flags it as a
+recompute candidate. The answer counts calls, distinct programs, repeat calls, and repeat
+hits and misses, with the most repeat misses first, per raw op code: one entry holds every
+shape of a matmul, where tt-perf-report's `op_code` would split it by shape. It reads the
+whole report and takes no signpost range, because a program first called before a window
+would read as a first call inside it. When every repeat call missed, the answer says that
+is what a run with the program cache disabled records, so check before reading each miss
+as a program built again. A capture without the `PROGRAM HASH` and `PROGRAM CACHE HIT`
+columns cannot answer, and `load_report` says so. Each op code's first repeat miss is
+named by its CSV row in `first_repeat_miss_perf_id`, and when the handle also holds a
+profiler report, by `first_repeat_miss_operation_id` too, for `operation_provenance` to
+turn into a call site.
+
 `zone_timings` carries a caveat of its own: cycles are summed across every core that ran
 the zone, so they measure occupancy rather than wall-clock duration. A core is counted per
 device — the captures we test against span 8 and 32 PCIe slots, and coordinates alone
@@ -308,7 +379,8 @@ line, function and source line.
 not belong here (`diff_reports` returns no id at all: it groups by op code): the two ids are small integers in overlapping
 ranges, so passing one where the other belongs answers about a different operation
 rather than refusing. Pass a `top_ops` row's `operation_id` instead, or search for the
-name with `find_operations`. Frames are recorded innermost first, so the call site is the `ttnn.<op>`
+name with `find_operations`. `program_cache`'s `first_repeat_miss_perf_id` is a CSV row in the
+same way, and `first_repeat_miss_operation_id` is the one to pass. Frames are recorded innermost first, so the call site is the `ttnn.<op>`
 call in the model code with no guessing about which frame is yours, and it is the same
 frame the operation details panel shows for that operation.
 

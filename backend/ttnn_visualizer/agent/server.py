@@ -18,8 +18,8 @@ import logging
 import sys
 from typing import Callable, Dict, List, Optional, TextIO
 
-from ttnn_visualizer.agent import app_links, linking, operations, tools
-from ttnn_visualizer.agent.bounds import MAX_LIMIT
+from ttnn_visualizer.agent import app_links, linking, operations, perf_detail, tools
+from ttnn_visualizer.agent.bounds import MAX_DETAILED_LIMIT, MAX_LIMIT
 from ttnn_visualizer.agent.handles import (
     ReportRegistry,
     UnknownHandleError,
@@ -90,6 +90,24 @@ _ADDITIVE_METRIC_SCHEMA = {
     "enum": sorted(tools.ADDITIVE_METRICS),
     "description": "Which metric to compare. Summable metrics only.",
 }
+_INCLUDE_SCHEMA = {
+    "type": "array",
+    "items": {
+        "type": "string",
+        "enum": [group.value for group in perf_detail.DetailGroup],
+    },
+    "description": (
+        "Field groups to add to each row, for asking why an op took its time: "
+        "config (fidelity, dtypes, input memory, block sizes), utilisation (DRAM and "
+        "FLOPs against peak, the perf model's ideal times), noc (NoC, DRAM and "
+        "Ethernet utilisation, NPE congestion), riscs (per-RISC kernel time, compute "
+        "CB waits), cores (available cores, launch skew, per-core spread), dispatch "
+        "(op-to-op gap, dispatch waits, trace ids), cache (program hash, cache hit), "
+        "kernels (kernel sources and hashes), advice (tt-perf-report's advice). "
+        f"With include, rows are capped at {MAX_DETAILED_LIMIT}, and a field no row "
+        "of the report carries is left out of them and named in empty_in_report."
+    ),
+}
 
 
 def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
@@ -145,9 +163,10 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
                 "A range narrows the ranked rows only: operation_id and the counts in "
                 "operation_link stay the whole report's, and operation_link says so "
                 "with scope: whole_report. The first ranged call on a handle that "
-                "also holds a profiler report generates two reports, the window and "
-                "the whole report the link is matched against; later calls reuse "
-                "both. A read that needs the CSV again after it was rewritten or "
+                "also holds a profiler report, or that passes include, generates two "
+                "reports, the window and the whole report the link and "
+                "empty_in_report read; later calls reuse both. A read that needs the "
+                "CSV again after it was rewritten or "
                 "superseded is refused: call load_report again for a fresh handle. "
                 "Each row's id numbers the performance "
                 "CSV. When the handle also holds a profiler report, each row's "
@@ -160,7 +179,10 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
                 "flops_only means DRAM and bound are never derived, and full with a "
                 "null bound means the trace lacked the inputs the model needs. Each "
                 "row also carries op_category: Other is time no category explains, "
-                "and later tt-perf-report releases can add categories."
+                "and later tt-perf-report releases can add categories. include adds "
+                "field groups to each row for asking why an op is slow; the "
+                "response's detail_note says where they come from and how to read a "
+                "null among them."
             ),
             "schema": {
                 "type": "object",
@@ -169,11 +191,31 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
                     "by": _METRIC_SCHEMA,
                     "limit": _LIMIT_SCHEMA,
                     **_SIGNPOST_SCHEMAS,
+                    "include": _INCLUDE_SCHEMA,
                 },
                 "required": ["handle"],
             },
             "handler": lambda arguments: app_links.with_linked_rows_link_template(
                 registry, linking.top_ops(registry, **arguments)
+            ),
+        },
+        McpToolName.PROGRAM_CACHE: {
+            "description": (
+                "Whether programs were built again rather than reused, per raw op "
+                "code, most repeat misses first: calls, distinct programs, repeat "
+                "calls, and how many of those hit or missed the program cache. The "
+                "response's note says how a call is counted. Reads the whole report, "
+                "with no signpost range. When the handle also holds a profiler "
+                "report, each op code's first repeat miss carries the operation_id "
+                "to pass to operation_provenance."
+            ),
+            "schema": {
+                "type": "object",
+                "properties": {"handle": {"type": "string"}, "limit": _LIMIT_SCHEMA},
+                "required": ["handle"],
+            },
+            "handler": lambda arguments: app_links.with_linked_rows_link_template(
+                registry, linking.program_cache(registry, **arguments)
             ),
         },
         McpToolName.ZONE_TIMINGS: {
@@ -268,7 +310,8 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
                 "device time. The first call on such a handle "
                 "generates the performance report and reads every captured graph, "
                 "which can take seconds on a large capture; later calls, and "
-                "top_ops, reuse both."
+                "top_ops, reuse both. include adds top_ops's field groups to each "
+                "perf_rows entry."
             ),
             "schema": {
                 "type": "object",
@@ -276,6 +319,7 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
                     "handle": {"type": "string"},
                     "operation_id": {"type": "integer"},
                     "rank": _RANK_SCHEMA,
+                    "include": _INCLUDE_SCHEMA,
                 },
                 "required": ["handle", "operation_id"],
             },

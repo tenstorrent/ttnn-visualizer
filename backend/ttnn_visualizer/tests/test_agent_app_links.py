@@ -312,6 +312,7 @@ class TestToolsCarryLinks:
             ("memory_profile", operations, "app_link_template"),
             ("tensor_flow", operations, "app_link_template"),
             ("top_ops", linking, "app_link_template"),
+            ("program_cache", linking, "app_link_template"),
         ],
     )
     def test_each_tool_answers_with_its_link(
@@ -339,6 +340,7 @@ class TestToolsCarryLinks:
             "memory_profile",
             "tensor_flow",
             "top_ops",
+            "program_cache",
         ],
     )
     def test_a_call_without_a_handle_is_still_refused(self, event_log_directory, tool):

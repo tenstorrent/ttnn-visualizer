@@ -156,6 +156,8 @@ class TestReportInventory:
         assert loaded["handle"] == "report-1"
         assert set(loaded["answerable"]) == {"top_ops", "zone_timings"}
         assert set(loaded["unanswerable"]) == {
+            # The CSV here has no PROGRAM HASH or PROGRAM CACHE HIT column.
+            "program_cache",
             "find_operations",
             "operation_detail",
             "memory_profile",
@@ -1352,6 +1354,7 @@ class TestTransport:
         assert advertised == {
             "load_report",
             "top_ops",
+            "program_cache",
             "zone_timings",
             "diff_reports",
             "find_operations",
