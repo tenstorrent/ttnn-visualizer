@@ -52,6 +52,18 @@ def _make_performance_report(root: Path, name: str) -> None:
             _make_performance_report,
             "BH_DEMO_bge_m3",
         ),
+        (
+            "/api/profiler",
+            "PROFILER_DIRECTORY_NAME",
+            _make_profiler_report,
+            "WH_DEMO_segformer_decoder_3119846618735255520",
+        ),
+        (
+            "/api/performance",
+            "PERFORMANCE_DIRECTORY_NAME",
+            _make_performance_report,
+            "WH_DEMO_N300-LLAMA",
+        ),
     ],
 )
 @pytest.mark.parametrize("server_mode", [True, False])
