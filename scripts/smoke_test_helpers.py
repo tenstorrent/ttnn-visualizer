@@ -28,9 +28,9 @@ BASE_URL = os.getenv("SMOKE_TEST_BASE_URL", "http://localhost:8000").rstrip("/")
 HOME_URL = re.compile(f"^{re.escape(BASE_URL)}/?$")
 
 DEMO_REPORT_ZIPS = (
-    "n300-llama.zip",
-    "segformer_decoder_3119846618735255520.zip",
-    "segformer_encoder_11911356357027855134.zip",
+    "bge_m3.zip",
+    "sentence_bert.zip",
+    "vgg_unet.zip",
 )
 
 MAIN_TAB_NAMES = ("Operations", "Tensors", "Buffers")

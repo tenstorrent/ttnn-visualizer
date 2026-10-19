@@ -4,18 +4,21 @@ The performance report `scripts/smoke_test.py` uploads to cover
 `POST /api/local/upload/performance` and the `/api/performance/*` routes (#1859).
 
 This is a **CI fixture, not a demo report.** The archives in `demo-reports/` are
-user-facing artifacts whose device logs run 3.5–36 MB; pushing one of those
+user-facing artifacts whose device logs run 1–25 MB; pushing one of those
 through a browser upload on five Python versions per run is far more than this
 coverage needs. This directory is ~55 KB.
 
 ## Provenance
 
-Distilled from `demo-reports/n300-llama.zip`
-(`local/performance-reports/DEMO_N300-LLAMA/`) by:
+Distilled from `n300-llama.zip` (`local/performance-reports/DEMO_N300-LLAMA/`),
+a demo report since removed from `demo-reports/`. None of the current demo
+reports carry `npe_viz/`, so regenerate from that archive, recovered from
+history:
 
 ```
+git show ab751940b:demo-reports/n300-llama.zip > /tmp/n300-llama.zip
 uv run python scripts/generate_smoke_perf_fixture.py \
-    --source demo-reports/n300-llama.zip \
+    --source /tmp/n300-llama.zip \
     --output scripts/fixtures/smoke-performance-report
 ```
 

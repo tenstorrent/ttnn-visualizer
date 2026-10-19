@@ -170,9 +170,10 @@ def test_thirteen_column_capture_is_not_relabelled(tmp_path):
 
 
 def test_demo_report_shape_still_parses(tmp_path):
-    """The shipped demo reports must keep working.
+    """Captures shaped like the old segformer demo reports must keep working.
 
-    `demo-reports/segformer_{encoder,decoder}*.zip` have no `meta data` column.
+    The segformer encoder/decoder archives, once shipped in `demo-reports/`, have
+    no `meta data` column.
     Gating on the union of every column seen in the wild answered 422 for them —
     still dead, just with a different status code than #1941 reported.
     """
