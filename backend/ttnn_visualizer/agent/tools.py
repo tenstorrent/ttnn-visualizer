@@ -168,7 +168,9 @@ def canonical_report(
     read again: an agent guessing names would otherwise pay a full read per guess.
 
     Every read that misses the cache first checks the capture is the one the
-    handle's first read came from; see `_require_same_source`.
+    handle's first read came from; see `_require_same_source`. Snapshots are kept
+    per capture rather than per handle, so handles loaded on the same unchanged
+    CSV share one. The rows are shared with them: copy a row before changing it.
     """
     ignored = range_ignored(registry, handle, signposts)
     if signposts is not None and not ignored:
@@ -180,8 +182,8 @@ def canonical_report(
         _require_same_source(registry, handle, instance)
         return _generate_canonical_report(instance, **overrides)
 
-    _pin_source(registry, handle)
-    report = registry.cached_report(handle, build, scope=scope)
+    source = _pin_source(registry, handle)
+    report = registry.cached_report(handle, build, scope=scope, share_key=source)
     return {**report, "signpost_range_ignored": True} if ignored else report
 
 

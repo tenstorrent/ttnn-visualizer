@@ -67,9 +67,9 @@ class ReportRegistry:
 
     def __init__(self) -> None:
         self._instances: Dict[str, Instance] = {}
-        self._reports: Dict[Tuple[str, CacheVariant], object] = {}
+        self._reports: Dict[Tuple[Hashable, CacheVariant], object] = {}
         self._scoped_reports: (
-            "OrderedDict[Tuple[str, CacheVariant, Hashable], object]"
+            "OrderedDict[Tuple[Hashable, CacheVariant, Hashable], object]"
         ) = OrderedDict()
         self._next_id = 1
 
@@ -98,6 +98,7 @@ class ReportRegistry:
         build: Callable[[Instance], Cached],
         variant: CacheVariant = CacheVariant.CANONICAL_REPORT,
         scope: Hashable = None,
+        share_key: Hashable = None,
     ) -> Cached:
         """Keep one report snapshot per handle, variant and scope.
 
@@ -117,15 +118,22 @@ class ReportRegistry:
         `tools.SignpostRange` -- apart from the whole one. Unlike the unscoped
         snapshots, scoped ones are not pinned: at most `MAX_SCOPED_REPORTS` are
         kept, least recently used first out.
+
+        `share_key` keeps one snapshot for every handle that names the same key
+        rather than one per handle. Handles are never released, so an agent that
+        calls `load_report` again on an unchanged capture would otherwise pin
+        another whole copy of its report each time. A key never equals a handle:
+        handles are strings and the keys passed are not.
         """
+        owner = handle if share_key is None else share_key
         if scope is None:
-            key = (handle, variant)
+            key = (owner, variant)
             if key not in self._reports:
                 self._reports[key] = build(self.get(handle))
             # Each variant has one builder, so the key fixes the type it stored.
             return cast(Cached, self._reports[key])
 
-        scoped_key = (handle, variant, scope)
+        scoped_key = (owner, variant, scope)
         if scoped_key in self._scoped_reports:
             self._scoped_reports.move_to_end(scoped_key)
         else:

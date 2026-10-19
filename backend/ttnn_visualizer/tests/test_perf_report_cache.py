@@ -11,6 +11,7 @@ import orjson
 import pytest
 from ttnn_visualizer.csv_queries import (
     MAX_CACHED_PERFORMANCE_REPORTS,
+    REPORT_ROW_ID_OFFSET,
     OpsPerformanceReportQueries,
 )
 from ttnn_visualizer.models import Instance
@@ -287,9 +288,10 @@ def _swallow_one_generation_failure(monkeypatch):
             raise failure
         return real_extract_signposts(csv_file, resolved)
 
-    def _write_empty_perf_report(*args):
-        # args[8] is the output CSV path tt-perf-report would fill.
-        Path(args[8]).write_text("")
+    def _write_one_row_perf_report(*args):
+        # args[8] is the output CSV path tt-perf-report would fill. A row, so the
+        # degraded report cannot match an empty one by accident.
+        Path(args[8]).write_text(f"ID,OP Code\n{REPORT_ROW_ID_OFFSET},Matmul\n")
 
     monkeypatch.setattr(
         OpsPerformanceReportQueries,
@@ -298,8 +300,18 @@ def _swallow_one_generation_failure(monkeypatch):
     )
     monkeypatch.setattr(
         "ttnn_visualizer.csv_queries.perf_report.generate_perf_report",
-        _write_empty_perf_report,
+        _write_one_row_perf_report,
     )
+
+
+def _as_degraded(healthy):
+    """`healthy` as the degraded run reads it: the swallowed failure leaves no raw
+    CSV rows, so nothing fills in each row's op type."""
+    assert len(healthy["report"]) == 1
+    return {
+        **healthy,
+        "report": [{**row, "op_type": None} for row in healthy["report"]],
+    }
 
 
 def test_a_swallowed_generation_failure_is_not_cached(tmp_path, monkeypatch):
@@ -312,7 +324,9 @@ def test_a_swallowed_generation_failure_is_not_cached(tmp_path, monkeypatch):
 
     assert first is not second
     assert second is third
-    assert orjson.loads(first)["report"] == orjson.loads(second)["report"]
+    healthy = orjson.loads(second)
+    assert healthy["report"][0]["op_type"] == "tt_dnn_device"
+    assert orjson.loads(first) == _as_degraded(healthy)
 
 
 def test_a_degraded_dict_report_is_returned_rather_than_raised(tmp_path, monkeypatch):
@@ -322,4 +336,5 @@ def test_a_degraded_dict_report_is_returned_rather_than_raised(tmp_path, monkeyp
     degraded = OpsPerformanceReportQueries.generate_report(instance)
     healthy = OpsPerformanceReportQueries.generate_report(instance)
 
-    assert degraded["report"] == healthy["report"]
+    assert healthy["report"][0]["op_type"] == "tt_dnn_device"
+    assert degraded == _as_degraded(healthy)

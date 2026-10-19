@@ -817,6 +817,45 @@ class TestSignpostRangeEndToEnd:
         with pytest.raises(ValueError, match="has changed since it was first read"):
             tools.top_ops(registry, handle)
 
+    def test_reloading_an_unchanged_capture_shares_its_snapshots(self, tmp_path):
+        """Handles are never released, so a reload must not pin another copy."""
+        registry = ReportRegistry()
+        first = self._handle(registry, tmp_path)
+        second = load_report(registry, performance_path=str(tmp_path / "signposted"))[
+            "handle"
+        ]
+        ranged = tools.SignpostRange("PERF_START", "PERF_END")
+
+        with patch.object(
+            tools,
+            "_generate_canonical_report",
+            wraps=tools._generate_canonical_report,
+        ) as generate:
+            whole = tools.canonical_report(registry, first)
+            window = tools.canonical_report(registry, first, ranged)
+
+            assert tools.canonical_report(registry, second) is whole
+            assert tools.canonical_report(registry, second, ranged) is window
+        assert generate.call_count == 2
+
+    def test_a_rewritten_capture_gets_its_own_snapshot(self, tmp_path):
+        registry = ReportRegistry()
+        first = self._handle(registry, tmp_path)
+
+        with patch.object(
+            tools,
+            "_generate_canonical_report",
+            wraps=tools._generate_canonical_report,
+        ) as generate:
+            before = tools.canonical_report(registry, first)
+            second = self._handle(registry, tmp_path, signposted_rows()[:-1])
+            after = tools.canonical_report(registry, second)
+
+        assert after is not before
+        assert generate.call_count == 2
+        # The first handle still answers from the capture it first read.
+        assert tools.canonical_report(registry, first) is before
+
     def test_a_range_on_a_capture_without_signposts_is_read_whole(self, tmp_path):
         """The real signpost read, not a patched one, agrees with tt-perf-report:
         the unmodified smoke capture has no signposts, so a range reads it whole."""
