@@ -3,6 +3,7 @@
 # SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import shlex
+import sqlite3
 import subprocess
 from http import HTTPStatus
 from pathlib import Path
@@ -24,7 +25,10 @@ from ttnn_visualizer.models import (
     folder_segment_from_remote_path,
     split_rank_suffix,
 )
-from ttnn_visualizer.report_fingerprint import performance_run_fingerprint
+from ttnn_visualizer.report_fingerprint import (
+    performance_run_fingerprint,
+    profiler_run_fingerprint,
+)
 from ttnn_visualizer.sftp_operations import (
     _MISSING_ROOT_EXIT_CODE,
     _NOT_A_DIRECTORY_EXIT_CODE,
@@ -596,17 +600,36 @@ def test_remote_sync_forbidden_when_server_mode(app, client):
     assert response.status_code == HTTPStatus.FORBIDDEN
 
 
+_UNTRUSTED_SYNCED_NAMES = {
+    "matching": {"syncedName": "bert"},
+    "another_folder": {"syncedName": "other"},
+    "outside_the_data_directory": {"syncedName": "../../../outside"},
+    "absolute": {"syncedName": "/outside"},
+    "omitted": {},
+}
+
+
+@pytest.mark.parametrize(
+    "synced_name_field",
+    _UNTRUSTED_SYNCED_NAMES.values(),
+    ids=_UNTRUSTED_SYNCED_NAMES.keys(),
+)
 def test_remote_sync_returns_the_fingerprint_of_the_copy_it_wrote(
-    app, client, tmp_path
+    app, client, tmp_path, synced_name_field
 ):
     app.config["SERVER_MODE"] = False
-    app.config["REMOTE_DATA_DIRECTORY"] = str(tmp_path)
-    synced_dir = (
+    app.config["REMOTE_DATA_DIRECTORY"] = str(tmp_path / "remote")
+    performance_root = (
         tmp_path
+        / "remote"
         / "remote.example.com"
         / app.config["PERFORMANCE_DIRECTORY_NAME"]
-        / "bert"
     )
+    synced_dir = performance_root / "bert"
+    # Decoys a client-supplied name could reach, each holding a different run.
+    _write_valid_performance_report(performance_root / "other", with_tracy=False)
+    (performance_root / "other" / "ops_perf_results_1.csv").write_text("older run")
+    _write_valid_performance_report(tmp_path / "outside")
 
     def _sync(*_args, **_kwargs):
         _write_valid_performance_report(synced_dir)
@@ -623,16 +646,103 @@ def test_remote_sync_returns_the_fingerprint_of_the_copy_it_wrote(
                     "reportName": "bert",
                     "remotePath": "/remote/performance/reports/bert",
                     "lastModified": 1,
+                    **synced_name_field,
+                },
+            },
+        )
+
+    assert response.status_code == HTTPStatus.OK, response.get_data(as_text=True)
+    body = response.get_json()
+    assert body["syncedName"] == "bert"
+    assert body["runFingerprint"] == performance_run_fingerprint(synced_dir)
+    assert body["runFingerprint"] is not None
+
+
+def test_remote_sync_fingerprints_the_profiler_copy_it_wrote(app, client, tmp_path):
+    app.config["SERVER_MODE"] = False
+    app.config["REMOTE_DATA_DIRECTORY"] = str(tmp_path)
+    profiler_root = (
+        tmp_path / "remote.example.com" / app.config["PROFILER_DIRECTORY_NAME"]
+    )
+    synced_dir = profiler_root / "bert"
+
+    def _write_profiler_report(report_dir: Path, operation_count: int) -> None:
+        report_dir.mkdir(parents=True)
+        connection = sqlite3.connect(report_dir / "db.sqlite")
+        connection.execute("CREATE TABLE operations (operation_id int)")
+        connection.executemany(
+            "INSERT INTO operations VALUES (?)",
+            [(i,) for i in range(operation_count)],
+        )
+        connection.commit()
+        connection.close()
+
+    _write_profiler_report(profiler_root / "other", operation_count=2)
+
+    def _sync(*_args, **_kwargs):
+        _write_profiler_report(synced_dir, operation_count=1)
+        return SyncMethod.SFTP
+
+    with patch("ttnn_visualizer.views.sync_remote_profiler_folders", side_effect=_sync):
+        response = client.post(
+            "/api/remote/sync",
+            json={
+                "connection": _remote_connection_payload(),
+                "profiler": {
+                    "reportName": "bert",
+                    "remotePath": "/remote/profiler/reports/bert",
+                    "lastModified": 1,
+                    "syncedName": "other",
+                },
+            },
+        )
+
+    assert response.status_code == HTTPStatus.OK, response.get_data(as_text=True)
+    body = response.get_json()
+    assert body["syncedName"] == "bert"
+    assert body["runFingerprint"] == profiler_run_fingerprint(synced_dir)
+    assert body["runFingerprint"] != profiler_run_fingerprint(profiler_root / "other")
+
+
+def test_remote_sync_fingerprints_the_rank_folder_it_wrote(app, client, tmp_path):
+    app.config["SERVER_MODE"] = False
+    app.config["REMOTE_DATA_DIRECTORY"] = str(tmp_path)
+    synced_dir = (
+        tmp_path
+        / "remote.example.com"
+        / app.config["PERFORMANCE_DIRECTORY_NAME"]
+        / "bert_rank1"
+    )
+
+    def _sync(*_args, **_kwargs):
+        _write_valid_performance_report(synced_dir)
+        return SyncMethod.SFTP
+
+    with patch(
+        "ttnn_visualizer.views.sync_remote_performance_folders", side_effect=_sync
+    ):
+        response = client.post(
+            "/api/remote/sync",
+            json={
+                "connection": {
+                    **_remote_connection_payload(),
+                    "multihostPerformance": True,
+                },
+                "performance": {
+                    "reportName": "bert",
+                    "remotePath": "/remote/ttrun/rank1/reports/bert",
+                    "lastModified": 1,
+                    # Stale from a listing made before multihost was switched on.
                     "syncedName": "bert",
                 },
             },
         )
 
     assert response.status_code == HTTPStatus.OK, response.get_data(as_text=True)
-    assert response.get_json()["runFingerprint"] == performance_run_fingerprint(
-        synced_dir
-    )
-    assert response.get_json()["runFingerprint"] is not None
+    body = response.get_json()
+    assert body["syncedName"] == "bert_rank1"
+    assert body["runFingerprint"] == performance_run_fingerprint(synced_dir)
+    assert body["runFingerprint"] is not None
 
 
 class TestMultihostPerformanceDiscovery:

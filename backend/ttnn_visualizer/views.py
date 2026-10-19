@@ -1733,6 +1733,22 @@ def _annotate_run_fingerprint(
     )
 
 
+def _annotate_synced_copy(
+    folder: RemoteReportFolder,
+    connection: RemoteConnection,
+    directory_config_key: str,
+    *,
+    qualify_rank: bool = False,
+) -> None:
+    """Describe the copy a sync just wrote. The payload's ``syncedName`` is not
+    trusted, as in ``_safe_report_folder_name``: it is recomputed from the remote
+    path the way the sync derived its destination, so it names that folder."""
+    folder.syncedName = folder_segment_from_remote_path(
+        folder.remotePath, qualify_rank=qualify_rank
+    )
+    _annotate_run_fingerprint(folder, connection.host, directory_config_key)
+
+
 def _annotate_last_synced(
     folders: List[RemoteReportFolder], host: str, directory_config_key: str
 ) -> None:
@@ -2449,8 +2465,11 @@ def sync_remote_folder():
             )
 
             performance_folder.lastSynced = int(time.time())
-            _annotate_run_fingerprint(
-                performance_folder, connection.host, "PERFORMANCE_DIRECTORY_NAME"
+            _annotate_synced_copy(
+                performance_folder,
+                connection,
+                "PERFORMANCE_DIRECTORY_NAME",
+                qualify_rank=bool(connection.multihostPerformance),
             )
 
             response_body = performance_folder.model_dump()
@@ -2477,8 +2496,8 @@ def sync_remote_folder():
         )
 
         remote_profiler_folder.lastSynced = int(time.time())
-        _annotate_run_fingerprint(
-            remote_profiler_folder, connection.host, "PROFILER_DIRECTORY_NAME"
+        _annotate_synced_copy(
+            remote_profiler_folder, connection, "PROFILER_DIRECTORY_NAME"
         )
 
         response_body = remote_profiler_folder.model_dump()
