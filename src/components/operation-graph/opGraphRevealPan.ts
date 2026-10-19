@@ -19,6 +19,14 @@ export const SIDE_WITH_DETAILS_CLASS = 'op-graph-side-with-details';
 // than shrinking it, so a target never lands behind the toolbar or the side column. #2007
 const REVEAL_MARGIN_PX = 48;
 
+/** A box in graph space. */
+export interface GraphBounds {
+    minX: number;
+    minY: number;
+    maxX: number;
+    maxY: number;
+}
+
 /** The side column, as far in from the pane's right edge and down from its top as it reaches. */
 export interface PaneSideInset {
     width: number;
@@ -33,7 +41,7 @@ const sideInsetFor = (targetTop: number, side: Readonly<PaneSideInset>): number 
 
 /** Graph-space `bounds` as the box they cover on the pane at `viewport`. */
 const toPaneBox = (
-    bounds: { minX: number; minY: number; maxX: number; maxY: number },
+    bounds: GraphBounds,
     viewport: { x: number; y: number; zoom: number },
 ): { left: number; top: number; right: number; bottom: number } => ({
     left: bounds.minX * viewport.zoom + viewport.x,
@@ -52,7 +60,7 @@ const toPaneBox = (
  * and where the user was looking.
  */
 export const revealPanShift = (
-    bounds: { minX: number; minY: number; maxX: number; maxY: number },
+    bounds: GraphBounds,
     viewport: { x: number; y: number; zoom: number },
     pane: { width: number; height: number },
     topInset = 0,
@@ -92,7 +100,7 @@ export const revealPanShift = (
  * what it did. Still pans only; the zoom stays the user's. #2007
  */
 export const centerPanShift = (
-    bounds: { minX: number; minY: number; maxX: number; maxY: number },
+    bounds: GraphBounds,
     viewport: { x: number; y: number; zoom: number },
     pane: { width: number; height: number },
     topInset = 0,
@@ -175,7 +183,7 @@ export const absolutePositionsOf = (nodes: readonly PannableNode[]): Map<string,
 export const boundsOfNodes = (
     nodes: readonly PannableNode[],
     positions?: ReadonlyMap<string, { x: number; y: number }>,
-): { minX: number; minY: number; maxX: number; maxY: number } | null => {
+): GraphBounds | null => {
     if (nodes.length === 0) {
         return null;
     }
@@ -210,8 +218,8 @@ const ENTRY_MAX_ZOOM = 1;
  * the first nodes underneath the controls.
  */
 export const entryViewport = (
-    graph: { minX: number; minY: number; maxX: number; maxY: number },
-    start: { minX: number; minY: number; maxX: number; maxY: number },
+    graph: GraphBounds,
+    start: GraphBounds,
     pane: { width: number; height: number },
     topInset = 0,
 ): { x: number; y: number; zoom: number } => {
@@ -243,7 +251,7 @@ export const entryViewport = (
  * whether the alternative to moving is an empty pane.
  */
 export const intersectsPane = (
-    bounds: { minX: number; minY: number; maxX: number; maxY: number },
+    bounds: GraphBounds,
     viewport: { x: number; y: number; zoom: number },
     pane: { width: number; height: number },
 ): boolean => {

@@ -120,22 +120,15 @@ describe('OpGraphHotOpsPanel rows', () => {
             return list;
         };
 
-        it('scrolls the row just clicked back into view, and no further', () => {
+        // Enter or Space on a focused button arrives as a click with no pointer detail.
+        it.each([
+            ['clicked', 1],
+            ['activated from the keyboard', 0],
+        ])('scrolls the row just %s back into view, and no further', (_, detail) => {
             const { select } = renderPanel();
             const list = shortenUnder(5);
 
-            fireEvent.click(rowFor(5));
-            select(5);
-
-            expect(list.scrollTop).toBe(50);
-        });
-
-        it('scrolls a row activated from the keyboard back into view too', () => {
-            // Enter on a focused button arrives as a click with no pointer detail.
-            const { select } = renderPanel();
-            const list = shortenUnder(5);
-
-            fireEvent.click(rowFor(5), { detail: 0 });
+            fireEvent.click(rowFor(5), { detail });
             select(5);
 
             expect(list.scrollTop).toBe(50);

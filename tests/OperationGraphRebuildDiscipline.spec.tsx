@@ -128,13 +128,14 @@ const stubRect = (width: number, height: number, left = 0, top = 0) =>
         toJSON: () => ({}),
     }) as DOMRect;
 
-// The view's chrome as measured with the pane `paneTop` px down the window.
+// The view's chrome as measured with the pane `paneTop` px down the window. The column's heights stand in
+// for `.op-graph-side` and `.op-graph-side-with-details` in `OperationGraphReactFlow.scss`, which jsdom can't lay out.
 const measuredWithPaneAt = (paneTop: number) =>
     function measured(this: Element) {
         if (this.classList?.contains('op-graph-toolbar')) {
             return stubRect(PANE.width, TOOLBAR_HEIGHT, 0, paneTop);
         }
-        if (this.classList?.contains('op-graph-side')) {
+        if (this.classList?.contains(SIDE_CLASS)) {
             const height = this.classList.contains(SIDE_WITH_DETAILS_CLASS) ? PANE.height : LIST_ONLY_SIDE_HEIGHT;
             return stubRect(SIDE_WIDTH, height, PANE.width - SIDE_WIDTH, paneTop);
         }
@@ -295,7 +296,7 @@ import {
     getDeviceNodeId,
 } from '../src/components/operation-graph/opGraphDeviceSubgraph';
 import OperationGraphReactFlow from '../src/components/operation-graph/OperationGraphReactFlow';
-import { SIDE_WITH_DETAILS_CLASS } from '../src/components/operation-graph/opGraphRevealPan';
+import { SIDE_CLASS, SIDE_WITH_DETAILS_CLASS } from '../src/components/operation-graph/opGraphRevealPan';
 import {
     PERF_BAR_COLOR_VAR,
     PERF_BAR_SCALE_VAR,
@@ -1128,7 +1129,7 @@ describe('OperationGraphReactFlow slowest operations list', () => {
 
     // The list alone no longer spans the pane, so the graph below it takes clicks and drags. #2087
     describe('side column height', () => {
-        const sideColumn = () => document.querySelector('.op-graph-side');
+        const sideColumn = () => document.querySelector(`.${SIDE_CLASS}`);
 
         it('stretches down the pane only while the details sit below the list', () => {
             renderGraph(OPERATION_LIST, PERF_ROWS);
@@ -1219,6 +1220,23 @@ describe('OperationGraphReactFlow slowest operations list', () => {
             expectClearOfSide(storeNodeRightEdge(1600));
         });
 
+        it('clears the column for an operation the toolbar steps to', () => {
+            // Op 2's details are open, so stepping on to op 3 has to clear the column they stretch.
+            absolutePositionById.set('3', { x: 1600, y: 800 });
+            renderGraph(OPERATION_LIST, PERF_ROWS);
+            fireEvent.click(hotOpsSwitch());
+            act(() => {
+                harness.onNodeClick?.(null, nodeById(lastFlowRender().nodes, '2'));
+            });
+            setViewport.mockClear();
+
+            fireEvent.click(screen.getByLabelText('Go to next operation 3'));
+
+            expect(sideColumn()).toHaveClass(SIDE_WITH_DETAILS_CLASS);
+            expect(setViewport).toHaveBeenCalledTimes(1);
+            expectClearOfSide(storeNodeRightEdge(1600));
+        });
+
         it('clears the column for an operation the URL names, whose details open as it renders', () => {
             // The URL's pan reads the column's class, so it holds only while the details open in that render.
             absolutePositionById.set('3', { x: 1600, y: 800 });
@@ -1247,7 +1265,7 @@ describe('OperationGraphReactFlow slowest operations list', () => {
             // 50 px past that, so the scroll has to read the commit that opens the details.
             vi.mocked(Element.prototype.getBoundingClientRect).mockImplementation(function measured(this: Element) {
                 if (this.classList?.contains('op-graph-hot-ops-list')) {
-                    const isStretched = this.closest('.op-graph-side')?.classList.contains(SIDE_WITH_DETAILS_CLASS);
+                    const isStretched = this.closest(`.${SIDE_CLASS}`)?.classList.contains(SIDE_WITH_DETAILS_CLASS);
                     return stubRect(SIDE_WIDTH, isStretched ? 200 : PANE.height, PANE.width - SIDE_WIDTH);
                 }
                 if (this.getAttribute?.('title') === '3 matmul_c') {
@@ -1936,7 +1954,7 @@ describe('OperationGraphReactFlow repeat blocks', () => {
         fireEvent.click(recenter);
 
         expect(setViewport).toHaveBeenCalledTimes(1);
-        const [viewport] = setViewport.mock.calls[0] as unknown as [{ x: number; y: number; zoom: number }];
+        const viewport = firstPan();
         // Pans only. Recenter is an explicit request to move, not a licence to
         // rescale: the zoom stays wherever the user left it.
         expect(viewport.zoom).toBe(PANNED_ZOOM);
@@ -2091,7 +2109,7 @@ describe('OperationGraphReactFlow repeat blocks', () => {
         });
 
         expect(setViewport).toHaveBeenCalledTimes(1);
-        const [viewport] = setViewport.mock.calls[0] as unknown as [{ zoom: number }];
+        const viewport = firstPan();
         // Pans, never rescales: this is not entry.
         expect(viewport.zoom).toBe(PANNED_ZOOM);
     });
@@ -2546,7 +2564,7 @@ describe('OperationGraphReactFlow repeat blocks', () => {
             setViewport.mockClear();
             fireEvent.click(screen.getByLabelText('Recenter on operation 1'));
 
-            const [viewport] = setViewport.mock.calls[0] as unknown as [{ x: number; y: number }];
+            const viewport = firstPan();
             // Centred on the absolute position: read relatively the node looks like it
             // sits at the origin and the pan lands a whole graph away.
             expect(viewport.x + (4000 + STORE_NODE.width / 2) * PANNED_ZOOM).toBeCloseTo(
