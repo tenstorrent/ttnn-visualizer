@@ -232,8 +232,11 @@ def _list_demo_directory_names(path: Path, demo_names: frozenset[str]) -> List[s
     """Names of the bundled demo report folders present directly under ``path``.
 
     Matches directory entries exactly rather than probing ``path / name``, which a
-    case-insensitive filesystem would resolve for a differently cased folder.
+    case-insensitive filesystem would resolve for a differently cased folder. A missing
+    ``path`` has no demos; hosted installs create the report directory lazily.
     """
+    if not path.is_dir():
+        return []
     return [
         entry.name
         for entry in path.iterdir()

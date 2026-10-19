@@ -108,6 +108,22 @@ def test_hosted_listing_hides_folders_that_only_look_like_demos(
     assert response.get_json() == []
 
 
+@pytest.mark.parametrize("kind", list(_LISTINGS))
+def test_hosted_listing_without_a_report_directory_is_empty(
+    app, client, make_report, kind
+):
+    # A fresh hosted install has no report directory until the first upload, and the
+    # performance listing does not create one.
+    app.config["SERVER_MODE"] = True
+    endpoint, root, _ = _listing(app, kind)
+    assert not root.exists()
+
+    response = client.get(endpoint, query_string={"instanceId": make_report()})
+
+    assert response.status_code == HTTPStatus.OK, response.get_data(as_text=True)
+    assert response.get_json() == []
+
+
 def test_hosted_upload_named_after_a_demo_cannot_replace_it(app, client, make_report):
     # Hosted uploads land under a `<timestamp>_` prefix, so reusing a demo's folder
     # name writes beside the demo rather than into it.
