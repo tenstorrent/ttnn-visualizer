@@ -186,6 +186,15 @@ describe('centerPanShift', () => {
         expect((bounds.minX + bounds.maxX) / 2 + dx).toBeCloseTo((PANE.width - SIDE_WIDTH) / 2, 5);
     });
 
+    it('centres in the full width when the target lands exactly where the column ends', () => {
+        // Touching, as in the reveal's case: the band the column covers ends where the target begins.
+        const bounds = boundsOf(300, TOOLBAR + 100, 200, 60);
+        const centredTop = TOOLBAR + (PANE.height - TOOLBAR) / 2 - 60 / 2;
+        const { dx } = centerPanShift(bounds, viewport, PANE, TOOLBAR, { width: SIDE_WIDTH, bottom: centredTop });
+
+        expect((bounds.minX + bounds.maxX) / 2 + dx).toBeCloseTo(PANE.width / 2, 5);
+    });
+
     it('centres in the full width when the target lands below a column that stops short', () => {
         // The column ends 300 px down; the band's middle, where the target lands, is below it.
         const bounds = boundsOf(300, TOOLBAR + 100, 200, 60);

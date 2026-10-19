@@ -68,6 +68,7 @@ import {
 } from './opGraphPerfOverlay';
 import { EMPTY_CRITICAL_PATH, findCriticalPath } from './opGraphCriticalPath';
 import {
+    type GraphBounds,
     NO_SIDE_INSET,
     type PaneSideInset,
     REVEALED_NODE_CLASS,
@@ -878,10 +879,7 @@ const OperationGraphInner = ({
     // Pans, never zooms, and does nothing when the target is already on screen: the
     // viewport is the user's place in the graph, and only they may change its scale.
     const panIntoView = useCallback(
-        (
-            bounds: { minX: number; minY: number; maxX: number; maxY: number } | null,
-            { sideSpansPane }: PanOptions = {},
-        ) => {
+        (bounds: GraphBounds | null, { sideSpansPane }: PanOptions = {}) => {
             const pane = containerRef.current?.getBoundingClientRect();
             if (bounds === null || pane === undefined) {
                 return;

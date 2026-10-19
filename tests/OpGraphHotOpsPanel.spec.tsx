@@ -132,22 +132,15 @@ describe('OpGraphHotOpsPanel rows', () => {
             return list;
         };
 
-        it('scrolls the row just clicked back into view, and no further', () => {
+        // Enter or Space on a focused button arrives as a click with no pointer detail.
+        it.each([
+            ['clicked', 1],
+            ['activated from the keyboard', 0],
+        ])('scrolls the row just %s back into view, and no further', (_, detail) => {
             const { select } = renderPanel();
             const list = shortenUnder(5);
 
-            fireEvent.click(rowFor(5));
-            select(5);
-
-            expect(list.scrollTop).toBe(50);
-        });
-
-        it('scrolls a row activated from the keyboard back into view too', () => {
-            // Enter on a focused button arrives as a click with no pointer detail.
-            const { select } = renderPanel();
-            const list = shortenUnder(5);
-
-            fireEvent.click(rowFor(5), { detail: 0 });
+            fireEvent.click(rowFor(5), { detail });
             select(5);
 
             expect(list.scrollTop).toBe(50);
@@ -190,20 +183,18 @@ describe('OpGraphHotOpsPanel rows', () => {
     it('goes inert while the graph rebuilds, on the same list', () => {
         const { setInert } = renderPanel();
         const section = screen.getByRole('region', { name: 'Slowest operations' });
-        const list = section.querySelector<HTMLElement>('.op-graph-hot-ops-list');
+        const list = within(section).getByRole('list');
         expect(section).not.toHaveAttribute('inert');
-        if (list) {
-            list.scrollTop = 40;
-        }
+        list.scrollTop = 40;
 
         setInert(true);
         expect(section).toHaveAttribute('inert');
-        expect(section.querySelector('.op-graph-hot-ops-list')).toBe(list);
+        expect(within(section).getByRole('list')).toBe(list);
 
         setInert(false);
         expect(section).not.toHaveAttribute('inert');
-        expect(section.querySelector('.op-graph-hot-ops-list')).toBe(list);
-        expect(list?.scrollTop).toBe(40);
+        expect(within(section).getByRole('list')).toBe(list);
+        expect(list.scrollTop).toBe(40);
     });
 });
 
