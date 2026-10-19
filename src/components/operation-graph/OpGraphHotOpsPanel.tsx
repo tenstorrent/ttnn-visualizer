@@ -64,7 +64,7 @@ const OpGraphHotOpsPanel = ({
     const visibleRows = useMemo(() => getVisibleHotOpRows(rows, settings), [rows, settings]);
     const hasUnlinked = useMemo(() => rows.some((row) => row.rank === null), [rows]);
 
-    const selectFromList = useCallback(
+    const handleRowSelect = useCallback(
         (operationId: number) => {
             clickedOperationIdRef.current = operationId;
             onSelectOperation(operationId);
@@ -152,7 +152,7 @@ const OpGraphHotOpsPanel = ({
                                     : getPerfColorForNs(row.deviceTimeNs, minNs, maxNs)
                             }
                             isSelected={row.operationId === selectedOperationId}
-                            onSelect={selectFromList}
+                            onSelect={handleRowSelect}
                         />
                     </li>
                 ))}
