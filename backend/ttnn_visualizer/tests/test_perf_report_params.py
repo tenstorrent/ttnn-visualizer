@@ -97,3 +97,14 @@ def test_an_omitted_param_keeps_the_view_default(
 
     assert response.status_code == 200
     assert captured_report_kwargs[param] is default
+
+
+def test_the_view_returns_the_generated_json_unchanged(
+    client, performance_instance, captured_report_kwargs
+):
+    response = client.get(
+        REPORT_ENDPOINT, query_string={"instanceId": performance_instance}
+    )
+
+    assert response.data == orjson.dumps({"report": []})
+    assert response.mimetype == "application/json"

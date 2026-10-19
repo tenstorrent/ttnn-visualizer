@@ -1066,9 +1066,8 @@ class OpsPerformanceReportQueries:
         caller that only serialises the report should use `generate_report_json`.
         """
         source = cls.report_source(instance)
-        raw_csv = Path(source.path).read_text()
         try:
-            return cls._generate_report_uncached(raw_csv, cls._report_options(**kwargs))
+            return _generate_performance_report(source, cls._report_options(**kwargs))
         except _DegradedPerformanceReport as degraded:
             return degraded.report
 
@@ -1510,16 +1509,20 @@ class _DegradedPerformanceReport(Exception):
         self.report = report
 
 
+def _generate_performance_report(
+    source: _PerformanceReportSource, options: _PerformanceReportOptions
+) -> Dict:
+    raw_csv = Path(source.path).read_text()
+    return OpsPerformanceReportQueries._generate_report_uncached(raw_csv, options)
+
+
 @lru_cache(maxsize=MAX_CACHED_PERFORMANCE_REPORTS)
 def _cached_generate_performance_report_json(
     source: _PerformanceReportSource, options: _PerformanceReportOptions
 ) -> bytes:
     # Bytes rather than the dicts: under half the memory, a hit skips
     # serialisation, and callers sharing an entry cannot modify it.
-    raw_csv = Path(source.path).read_text()
-    return orjson.dumps(
-        OpsPerformanceReportQueries._generate_report_uncached(raw_csv, options)
-    )
+    return orjson.dumps(_generate_performance_report(source, options))
 
 
 def clear_performance_report_cache() -> None:

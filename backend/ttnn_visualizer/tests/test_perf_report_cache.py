@@ -70,10 +70,20 @@ def test_the_dict_report_is_never_cached(tmp_path, monkeypatch):
     instance, _ = _performance_source(tmp_path)
     calls = _capture_uncached_generations(monkeypatch)
 
-    first = OpsPerformanceReportQueries.generate_report(instance)
-    second = OpsPerformanceReportQueries.generate_report(instance)
+    OpsPerformanceReportQueries.generate_report(instance)
+    OpsPerformanceReportQueries.generate_report(instance)
 
-    assert first is not second
+    assert len(calls) == 2
+
+
+def test_the_dict_report_does_not_fill_the_json_cache(tmp_path, monkeypatch):
+    instance, _ = _performance_source(tmp_path)
+    calls = _capture_uncached_generations(monkeypatch)
+
+    OpsPerformanceReportQueries.generate_report(instance)
+    OpsPerformanceReportQueries.generate_report_json(instance)
+    OpsPerformanceReportQueries.generate_report_json(instance)
+
     assert len(calls) == 2
 
 
@@ -266,8 +276,8 @@ def test_failed_generation_is_retried(tmp_path, monkeypatch):
     assert len(calls) == 2
 
 
-def test_a_swallowed_generation_failure_is_not_cached(tmp_path, monkeypatch):
-    instance, _ = _performance_source(tmp_path)
+def _swallow_one_generation_failure(monkeypatch):
+    """The next generation succeeds with an error swallowed, so it is degraded."""
     failures = iter([OSError(24, "Too many open files")])
     real_extract_signposts = OpsPerformanceReportQueries.extract_signposts
 
@@ -291,9 +301,25 @@ def test_a_swallowed_generation_failure_is_not_cached(tmp_path, monkeypatch):
         _write_empty_perf_report,
     )
 
+
+def test_a_swallowed_generation_failure_is_not_cached(tmp_path, monkeypatch):
+    instance, _ = _performance_source(tmp_path)
+    _swallow_one_generation_failure(monkeypatch)
+
     first = OpsPerformanceReportQueries.generate_report_json(instance)
     second = OpsPerformanceReportQueries.generate_report_json(instance)
     third = OpsPerformanceReportQueries.generate_report_json(instance)
 
     assert first is not second
     assert second is third
+    assert orjson.loads(first)["report"] == orjson.loads(second)["report"]
+
+
+def test_a_degraded_dict_report_is_returned_rather_than_raised(tmp_path, monkeypatch):
+    instance, _ = _performance_source(tmp_path)
+    _swallow_one_generation_failure(monkeypatch)
+
+    degraded = OpsPerformanceReportQueries.generate_report(instance)
+    healthy = OpsPerformanceReportQueries.generate_report(instance)
+
+    assert degraded["report"] == healthy["report"]
