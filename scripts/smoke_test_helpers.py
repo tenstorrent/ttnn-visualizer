@@ -29,6 +29,9 @@ HOME_URL = re.compile(f"^{re.escape(BASE_URL)}/?$")
 
 DEMO_REPORT_ZIPS = (
     "bge_m3.zip",
+    "n300-llama.zip",
+    "segformer_decoder.zip",
+    "segformer_encoder.zip",
     "sentence_bert.zip",
     "vgg_unet.zip",
 )

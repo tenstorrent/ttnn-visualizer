@@ -40,6 +40,18 @@ def _make_performance_report(root: Path, name: str) -> None:
             _make_performance_report,
             "DEMO_N300-LLAMA",
         ),
+        (
+            "/api/profiler",
+            "PROFILER_DIRECTORY_NAME",
+            _make_profiler_report,
+            "BH_DEMO_bge_m3_oct19_1625",
+        ),
+        (
+            "/api/performance",
+            "PERFORMANCE_DIRECTORY_NAME",
+            _make_performance_report,
+            "BH_DEMO_bge_m3",
+        ),
     ],
 )
 @pytest.mark.parametrize("server_mode", [True, False])
@@ -69,3 +81,25 @@ def test_listing_marks_demo_folders_only_under_server_mode(
         assert is_demo_by_path == {demo_name: True}
     else:
         assert is_demo_by_path == {demo_name: False, "my-report": False}
+
+
+@pytest.mark.parametrize(
+    ("endpoint", "directory_key", "make_report_dir"),
+    [
+        ("/api/profiler", "PROFILER_DIRECTORY_NAME", _make_profiler_report),
+        ("/api/performance", "PERFORMANCE_DIRECTORY_NAME", _make_performance_report),
+    ],
+)
+def test_hosted_listing_does_not_share_uploads_with_demo_inside_the_name(
+    app, client, make_report, endpoint, directory_key, make_report_dir
+):
+    # A demo match lists the folder to every hosted session, so only a known chip
+    # prefix may sit in front of `demo`; another session's upload must stay hidden.
+    app.config["SERVER_MODE"] = True
+    root = Path(app.config["LOCAL_DATA_DIRECTORY"]) / app.config[directory_key]
+    make_report_dir(root, "my_demo_report")
+
+    response = client.get(endpoint, query_string={"instanceId": make_report()})
+
+    assert response.status_code == HTTPStatus.OK, response.get_data(as_text=True)
+    assert response.get_json() == []

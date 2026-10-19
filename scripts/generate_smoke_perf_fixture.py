@@ -24,13 +24,10 @@ parses byte-for-byte:
   button when a manifest entry matches a report row, so generating the manifest
   from the rows keeps that join from silently rotting.
 
-The committed fixture came from `n300-llama.zip`, since removed from
-`demo-reports/`; see the fixture README for recovering it from history.
-
 Usage::
 
     python scripts/generate_smoke_perf_fixture.py \\
-        --source /tmp/n300-llama.zip \\
+        --source demo-reports/n300-llama.zip \\
         --output scripts/fixtures/smoke-performance-report
 """
 

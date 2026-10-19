@@ -203,8 +203,10 @@ _EVENT_LOG_EVENTS_FIELD = "events"
 
 
 # Hosted installs pre-install bundled demo reports beside session uploads; their folder
-# names mark them, e.g. `demo_n300-llama` and `DEMO_N300-LLAMA`.
-_DEMO_DIRECTORY_PATTERN = re.compile(r"^demo", re.IGNORECASE)
+# names mark them, e.g. `demo_n300-llama`, `DEMO_N300-LLAMA` and, with a chip prefix,
+# `BH_DEMO_bge_m3`. The prefix is pinned to known architectures because a match lists the
+# folder to every hosted session, uploads included.
+_DEMO_DIRECTORY_PATTERN = re.compile(r"^(?:(?:bh|wh)_)?demo", re.IGNORECASE)
 
 
 def _list_demo_directory_names(path: Path) -> List[str]:
