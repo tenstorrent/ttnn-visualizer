@@ -8,6 +8,7 @@ import { type FormEvent, type Ref, memo } from 'react';
 import classNames from 'classnames';
 import GraphOpFilter, { type GraphOpFilterHandle } from '../GraphOpFilter';
 import type { GraphFilterMode } from '../../definitions/GraphFilterMode';
+import { HOT_OPS_TITLE } from '../../definitions/HotOps';
 import {
     CRITICAL_PATH_TOOLTIP,
     HOT_OPS_TOOLTIP,
@@ -15,7 +16,6 @@ import {
     PerfOverlayStatus,
 } from '../../definitions/PerfOverlayStatus';
 import { OpGraphGrouping } from './opGraphTypes';
-import { HOT_OPS_TITLE } from '../../definitions/HotOps';
 import 'styles/components/OpGraphToolbar.scss';
 
 /**

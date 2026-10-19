@@ -26,8 +26,9 @@ export interface HotOpsSettings {
     markOnGraph: boolean;
 }
 
-/** Which ops the graph badges: the list's own, whatever order it puts them in. */
-export type HotOpsMarking = Pick<HotOpsSettings, 'limit' | 'hideUnlinked'>;
+/** The settings that decide which ops the graph badges: the list's own, whatever order it puts them in. */
+export const HOT_OPS_MARKING_KEYS = ['limit', 'hideUnlinked'] as const;
+export type HotOpsMarking = Pick<HotOpsSettings, (typeof HOT_OPS_MARKING_KEYS)[number]>;
 
 export const DEFAULT_HOT_OPS_SETTINGS: HotOpsSettings = {
     limit: HOT_OPS_LIMITS[0],

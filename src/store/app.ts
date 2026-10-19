@@ -25,6 +25,7 @@ import { DEFAULT_TOP_N_COUNT, TopNAnnotationMode } from '../definitions/TopNAnno
 import {
     DEFAULT_HOT_OPS_SETTINGS,
     HOT_OPS_ENABLED_STORAGE_KEY,
+    HOT_OPS_MARKING_KEYS,
     HOT_OPS_SETTINGS_STORAGE_KEY,
     HotOpsMarking,
     HotOpsSettings,
@@ -143,10 +144,7 @@ export const hotOpsMarkingAtom = selectAtom(
     ({ markOnGraph, limit, hideUnlinked }): HotOpsMarking | null => (markOnGraph ? { limit, hideUnlinked } : null),
     (previous, next) =>
         previous === next ||
-        (previous !== null &&
-            next !== null &&
-            previous.limit === next.limit &&
-            previous.hideUnlinked === next.hideUnlinked),
+        (previous !== null && next !== null && HOT_OPS_MARKING_KEYS.every((key) => previous[key] === next[key])),
 );
 
 // Tensors route

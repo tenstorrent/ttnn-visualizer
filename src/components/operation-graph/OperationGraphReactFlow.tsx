@@ -1537,8 +1537,9 @@ const OperationGraphInner = ({
 
     // Derived, so perf data arriving or going away can't leave a stored flag
     // disagreeing with what the encoding can show.
-    const isPerfOverlayActive = isPerfOverlayEnabled && perfOverlay.status === PerfOverlayStatus.READY;
-    const isHotOpsActive = isHotOpsEnabled && perfOverlay.status === PerfOverlayStatus.READY;
+    const isPerfReady = perfOverlay.status === PerfOverlayStatus.READY;
+    const isPerfOverlayActive = isPerfOverlayEnabled && isPerfReady;
+    const isHotOpsActive = isHotOpsEnabled && isPerfReady;
     const isHotOpsMarkingActive = isHotOpsActive && hotOpsMarking !== null;
 
     // Zoom goes straight to the DOM: it changes every wheel frame, and through
@@ -1564,7 +1565,7 @@ const OperationGraphInner = ({
         return flowStore.subscribe((state) => writeZoom(state.transform[2]));
     }, [isNodeZoomPublished, flowStore]);
 
-    const isCriticalPathActive = isCriticalPathEnabled && perfOverlay.status === PerfOverlayStatus.READY;
+    const isCriticalPathActive = isCriticalPathEnabled && isPerfReady;
 
     // The path runs over operations, so an edge rendering into an expanded node has
     // to be presented as reaching the node: `findCriticalPath` drops edges whose
@@ -1634,13 +1635,14 @@ const OperationGraphInner = ({
         [isHotOpsActive, perfOverlay, graphOperationIds, drawnOperationNamesById],
     );
     // Resolved per node here rather than in the styling pass, which reruns on every drag frame.
-    const hotRankByNodeId = useMemo(
-        () =>
-            isHotOpsMarkingActive
-                ? buildHotRankByNodeId(getMarkedHotOpRanks(hotOpRows, hotOpsMarking), nodeIndex)
-                : null,
-        [isHotOpsMarkingActive, hotOpsMarking, hotOpRows, nodeIndex],
-    );
+    const hotRankByNodeId = useMemo(() => {
+        if (!isHotOpsMarkingActive) {
+            return null;
+        }
+        const ranks = buildHotRankByNodeId(getMarkedHotOpRanks(hotOpRows, hotOpsMarking), nodeIndex);
+        // Empty is off too: `styledNodes` skips its pass only on null, and would map every node per drag frame.
+        return ranks.size > 0 ? ranks : null;
+    }, [isHotOpsMarkingActive, hotOpsMarking, hotOpRows, nodeIndex]);
 
     const styledNodes = useMemo(() => {
         if (

@@ -30,6 +30,10 @@ const PERF_BAR = '&::after';
 const varRef = (name: string, fallback?: string) =>
     `var\\(${name}${fallback === undefined ? '' : `,\\s*${fallback}`}\\)`;
 
+// `prop` set to a pixel size divided by the published zoom, unscaled when none is.
+const dividesByZoom = (prop: string) =>
+    new RegExp(`${prop}:.*calc\\(\\s*\\d+px\\s*/\\s*${varRef(NODE_ZOOM_VAR, '1')}\\s*\\)`);
+
 describe('perf overlay bar geometry', () => {
     it('is taken out of the node flow so toggling the overlay cannot relayout the graph', () => {
         // The node is a flex column, so an in-flow pseudo-element would become a
@@ -76,9 +80,7 @@ describe('slowest-operations rank badge', () => {
 
     it('divides its size by the live zoom, unscaled when none is published', () => {
         // Marking publishes the zoom too, so the badges still read at overview zoom. #2085
-        expect(ruleBody(BADGE)).toMatch(
-            new RegExp(`font-size:.*calc\\(\\s*\\d+px\\s*/\\s*${varRef(NODE_ZOOM_VAR, '1')}\\s*\\)`),
-        );
+        expect(ruleBody(BADGE)).toMatch(dividesByZoom('font-size'));
     });
 });
 
@@ -88,8 +90,8 @@ describe('perf overlay bar zoom floor', () => {
         // losing the encoding exactly where a whole-graph scan needs it. #1610
         const body = ruleBody(PERF_BAR);
 
-        expect(body).toMatch(new RegExp(`height:.*calc\\(\\s*\\d+px\\s*/\\s*${varRef(NODE_ZOOM_VAR, '1')}\\s*\\)`));
-        expect(body).toMatch(new RegExp(`min-width:.*calc\\(\\s*\\d+px\\s*/\\s*${varRef(NODE_ZOOM_VAR, '1')}\\s*\\)`));
+        expect(body).toMatch(dividesByZoom('height'));
+        expect(body).toMatch(dividesByZoom('min-width'));
     });
 
     it('falls back to an unscaled bar when the zoom is not published', () => {
