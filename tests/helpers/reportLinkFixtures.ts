@@ -31,4 +31,4 @@ export const createReportLink = (
 
 /** Badge maps for counterparts whose links recorded no run, so they match any folder run. */
 export const runsWithoutFingerprints = (...reportIds: string[]): ReportLinkRunsById =>
-    new Map(reportIds.map((reportId) => [reportId, [undefined]]));
+    new Map(reportIds.map((reportId) => [reportId, undefined]));

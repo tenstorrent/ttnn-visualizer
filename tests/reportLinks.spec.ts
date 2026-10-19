@@ -152,22 +152,18 @@ describe('getFolderLinkState', () => {
     });
 
     it('ignores a link recorded against another run in the same folder', () => {
-        const linkedRuns = new Map([['a', [RUN_A]]]);
+        const linkedRuns = new Map([['a', RUN_A]]);
 
         expect(getFolderLinkState('a', RUN_A, linkedRuns, none)).toBe(FolderLinkState.LINKED);
         expect(getFolderLinkState('a', RUN_B, linkedRuns, none)).toBe(FolderLinkState.UNKNOWN);
     });
 
     it('still badges a folder whose current run is unknown', () => {
-        expect(getFolderLinkState('a', null, new Map([['a', [RUN_A]]]), none)).toBe(FolderLinkState.LINKED);
-    });
-
-    it('matches when any of the runs recorded for the folder is its current run', () => {
-        expect(getFolderLinkState('a', RUN_B, new Map([['a', [RUN_A, RUN_B]]]), none)).toBe(FolderLinkState.LINKED);
+        expect(getFolderLinkState('a', null, new Map([['a', RUN_A]]), none)).toBe(FolderLinkState.LINKED);
     });
 
     it('falls back to unlinked when only the unlinked verdict is for the current run', () => {
-        expect(getFolderLinkState('a', RUN_B, new Map([['a', [RUN_A]]]), new Map([['a', [RUN_B]]]))).toBe(
+        expect(getFolderLinkState('a', RUN_B, new Map([['a', RUN_A]]), new Map([['a', RUN_B]]))).toBe(
             FolderLinkState.UNLINKED,
         );
     });
@@ -378,19 +374,24 @@ describe('reportLinks', () => {
             );
         });
 
-        it('collects each counterpart run its links recorded', () => {
+        it('maps each counterpart to the run its link recorded', () => {
             const links = [
                 createReportLink('mem-a', 'perf-a', { performanceRun: RUN_A }),
-                createReportLink('mem-a', 'perf-a', { performanceRun: RUN_B, profilerRun: RUN_A }),
+                createReportLink('mem-a', 'perf-b', { profilerRun: RUN_A }),
             ];
 
-            expect(linkedPerformanceRuns(links, 'mem-a')).toEqual(new Map([['perf-a', [RUN_A, RUN_B]]]));
+            expect(linkedPerformanceRuns(links, 'mem-a')).toEqual(
+                new Map([
+                    ['perf-a', RUN_A],
+                    ['perf-b', undefined],
+                ]),
+            );
         });
 
         it('checks the active performance run for profiler counterparts', () => {
             const links = [createReportLink('mem-a', 'perf-a', { performanceRun: RUN_A, profilerRun: RUN_B })];
 
-            expect(linkedProfilerRuns(links, 'perf-a', { activeRun: RUN_A })).toEqual(new Map([['mem-a', [RUN_B]]]));
+            expect(linkedProfilerRuns(links, 'perf-a', { activeRun: RUN_A })).toEqual(new Map([['mem-a', RUN_B]]));
             expect(linkedProfilerRuns(links, 'perf-a', { activeRun: RUN_B }).size).toBe(0);
         });
     });

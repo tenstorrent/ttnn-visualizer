@@ -164,7 +164,7 @@ const counterpartRunsById = (
     activeId: string | null | undefined,
     options?: LinkedReportIdOptions,
 ): ReportLinkRunsById => {
-    const runsById = new Map<string, Array<string | undefined>>();
+    const runsById = new Map<string, string | undefined>();
 
     if (!activeId) {
         return runsById;
@@ -176,12 +176,7 @@ const counterpartRunsById = (
         .filter((link) => link.status === status && getRoleId(link, activeRole) === activeId)
         .filter((link) => isSameRun(getRoleRun(link, activeRole), options?.activeRun))
         .filter((link) => matchesHostScope(getRoleAccess(link, counterpartRole), options?.remoteHost))
-        .forEach((link) => {
-            const counterpartId = getRoleId(link, counterpartRole);
-            const runs = runsById.get(counterpartId) ?? [];
-            runs.push(getRoleRun(link, counterpartRole));
-            runsById.set(counterpartId, runs);
-        });
+        .forEach((link) => runsById.set(getRoleId(link, counterpartRole), getRoleRun(link, counterpartRole)));
 
     return runsById;
 };

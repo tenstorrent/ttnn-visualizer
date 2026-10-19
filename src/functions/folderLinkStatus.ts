@@ -10,7 +10,7 @@ const hasLinkToRun = (
     runsById: ReportLinkRunsById | null | undefined,
     reportId: string,
     runFingerprint: string | null | undefined,
-): boolean => runsById?.get(reportId)?.some((run) => isSameRun(run, runFingerprint)) ?? false;
+): boolean => (runsById?.has(reportId) ?? false) && isSameRun(runsById?.get(reportId), runFingerprint);
 
 /**
  * A picker row's state from the links recorded for its folder. A link recorded against

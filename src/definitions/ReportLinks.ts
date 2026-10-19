@@ -36,11 +36,12 @@ export interface LinkedReportIdOptions {
 }
 
 /**
- * Counterpart report id → the run each of its links recorded for it, `undefined` where
- * a link predates run fingerprints (#2069) or the run was unknown. A picker row counts
- * a link only when one of these runs is the run its folder holds now.
+ * Counterpart report id → the run its link recorded for it, `undefined` where the link
+ * predates run fingerprints (#2069) or the run was unknown. One run per counterpart: a
+ * pair has a single link. A picker row counts the link only when that run is the run
+ * its folder holds now.
  */
-export type ReportLinkRunsById = ReadonlyMap<string, ReadonlyArray<string | undefined>>;
+export type ReportLinkRunsById = ReadonlyMap<string, string | undefined>;
 
 // Footer link-status tooltip copy; specs assert on what the user reads.
 export const REPORTS_LINKED_TOOLTIP = 'Data linked between memory and performance reports';

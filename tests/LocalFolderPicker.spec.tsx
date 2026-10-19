@@ -250,7 +250,7 @@ describe('LocalFolderPicker link badges', () => {
                     items={[{ path: 'reused-run', reportName: 'reused-run', runFingerprint }]}
                     value={null}
                     handleSelect={vi.fn()}
-                    linkedRuns={new Map([['reused-run', ['v1:linked']]])}
+                    linkedRuns={new Map([['reused-run', 'v1:linked']])}
                     unlinkedRuns={runsWithoutFingerprints()}
                 />
             </TestProviders>,
