@@ -7,20 +7,29 @@ import { type ReactNode } from 'react';
 import { cleanup, fireEvent, render, renderHook, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import useBufferFocusDismissal from '../src/hooks/useBufferFocusDismissal';
-import { selectedAddressAtom, selectedTensorIdAtom } from '../src/store/app';
+import { dismissToast } from '../src/functions/createToastNotification';
+import { selectedAddressAtom, selectedBufferColourAtom, selectedTensorIdAtom } from '../src/store/app';
 import { TestProviders } from './helpers/TestProviders';
 import { BufferFocusProbe } from './helpers/BufferFocusProbe';
-import { getBufferFocusProbe, pressAndRelease } from './helpers/bufferFocus';
+import { getBufferFocusProbe, pressAndRelease, selectContents } from './helpers/bufferFocus';
 import type { AtomProviderInitialValues } from './helpers/atomProvider';
+
+vi.mock('../src/functions/createToastNotification', async () => {
+    const { toastNotificationModuleMock } = await import('./helpers/mockToastNotification');
+
+    return toastNotificationModuleMock();
+});
 
 const ADDRESS = 0x4000;
 const TENSOR_ID = 10;
+const COLOUR = '#4e79a7';
 const DISMISSAL_EVENTS = ['click', 'pointercancel', 'pointerdown'];
 
 const renderFocused = (
     focus: AtomProviderInitialValues = [
         [selectedAddressAtom, ADDRESS],
         [selectedTensorIdAtom, TENSOR_ID],
+        [selectedBufferColourAtom, COLOUR],
     ],
 ) =>
     renderHook(() => useBufferFocusDismissal(), {
@@ -34,19 +43,21 @@ const renderFocused = (
 
 afterEach(() => {
     vi.restoreAllMocks();
+    vi.clearAllMocks();
     cleanup();
     document.getSelection()?.removeAllRanges();
     document.body.replaceChildren();
 });
 
 describe('useBufferFocusDismissal', () => {
-    it('dismisses the focused buffer on a click pressed and released on content', () => {
+    it('dismisses the focused buffer, its colour and its toast on a click pressed and released on content', () => {
         renderFocused();
         render(<h3>L1</h3>);
 
         pressAndRelease(screen.getByRole('heading', { name: 'L1' }));
 
         expect(getBufferFocusProbe()).toHaveTextContent('dismissed');
+        expect(dismissToast).toHaveBeenCalledExactlyOnceWith();
     });
 
     it('keeps it through a click on a control', () => {
@@ -117,9 +128,7 @@ describe('useBufferFocusDismissal', () => {
         renderFocused();
         render(<p>MemoryLayout BLOCK_SHARDED</p>);
         const text = screen.getByText('MemoryLayout BLOCK_SHARDED');
-        const range = document.createRange();
-        range.selectNodeContents(text);
-        document.getSelection()?.addRange(range);
+        selectContents(text);
 
         pressAndRelease(text);
 
@@ -132,9 +141,7 @@ describe('useBufferFocusDismissal', () => {
         renderFocused();
         render(<p>MemoryLayout BLOCK_SHARDED</p>);
         const text = screen.getByText('MemoryLayout BLOCK_SHARDED');
-        const range = document.createRange();
-        range.selectNodeContents(text);
-        document.getSelection()?.addRange(range);
+        selectContents(text);
         pressAndRelease(text);
         document.getSelection()?.removeAllRanges();
 

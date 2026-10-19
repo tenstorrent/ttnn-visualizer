@@ -12,3 +12,15 @@ export const pressAndRelease = (element: Element) => {
     fireEvent.pointerDown(element);
     fireEvent.click(element);
 };
+
+export const selectRange = (range: Range) => {
+    document.getSelection()?.removeAllRanges();
+    document.getSelection()?.addRange(range);
+};
+
+/** Selects all of `node`'s text, as a drag across it would. */
+export const selectContents = (node: Node) => {
+    const range = document.createRange();
+    range.selectNodeContents(node);
+    selectRange(range);
+};

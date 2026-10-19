@@ -8,11 +8,7 @@ import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { isBufferFocusDismissal, isEndOfTextSelection } from '../src/functions/bufferFocusDismissal';
 import { KEEPS_BUFFER_FOCUS_CLASS } from '../src/definitions/BufferFocus';
-
-const select = (range: Range) => {
-    document.getSelection()?.removeAllRanges();
-    document.getSelection()?.addRange(range);
-};
+import { selectContents, selectRange } from './helpers/bufferFocus';
 
 afterEach(() => {
     cleanup();
@@ -283,9 +279,7 @@ describe('isEndOfTextSelection', () => {
             </>,
         );
         const selected = screen.getByText('MemoryLayout BLOCK_SHARDED');
-        const range = document.createRange();
-        range.selectNodeContents(selected);
-        select(range);
+        selectContents(selected);
 
         expect(isEndOfTextSelection(selected)).toBe(true);
         expect(isEndOfTextSelection(screen.getByRole('heading'))).toBe(false);
@@ -303,7 +297,7 @@ describe('isEndOfTextSelection', () => {
         const text = screen.getByText('MemoryLayout BLOCK_SHARDED');
         const caret = document.createRange();
         caret.setStart(text.firstChild!, 4);
-        select(caret);
+        selectRange(caret);
 
         expect(isEndOfTextSelection(text)).toBe(false);
     });
