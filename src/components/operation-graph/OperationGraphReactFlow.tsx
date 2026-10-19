@@ -214,15 +214,6 @@ const foldDecisionToOption = (decision: ReadonlySet<string> | null): readonly st
 // set outright re-folded a fan the user had opened — the mirror of the bug
 // `expandAllBlocks` unions to avoid. Returns `previous` unchanged when there was
 // nothing of this detector's to drop, so an unchanged decision doesn't rebuild. #1980
-// `null` is "nothing has been folded", so the grouping blocks are materialised before one owner is
-// named, or naming it would fold every other block. Shared by the row and URL unrolls. #1977, #2086
-const withOwnerUnrolled = (
-    previous: ReadonlySet<string> | null,
-    groupingBlocks: readonly OpGraphBlockSummary[],
-    ownerId: string,
-    extraIds: readonly string[] = [],
-): Set<string> => new Set([...(previous ?? groupingBlocks.map((entry) => entry.instanceId)), ownerId, ...extraIds]);
-
 const withoutGroupingBlocks = (
     previous: ReadonlySet<string> | null,
     groupingBlockIds: ReadonlySet<string>,
@@ -238,6 +229,15 @@ const withoutGroupingBlocks = (
     }
     return next.size === previous.size ? previous : next;
 };
+
+// `null` is "nothing has been folded", so the grouping blocks are materialised before one owner is
+// named, or naming it would fold every other block. Shared by the row and URL unrolls. #1977, #2086
+const withOwnerUnrolled = (
+    previous: ReadonlySet<string> | null,
+    groupingBlocks: readonly OpGraphBlockSummary[],
+    ownerId: string,
+    extraIds: readonly string[] = [],
+): Set<string> => new Set([...(previous ?? groupingBlocks.map((entry) => entry.instanceId)), ownerId, ...extraIds]);
 
 const NO_BLOCKS: OpGraphBlockSummary[] = [];
 
@@ -672,10 +672,10 @@ const OperationGraphInner = ({
     // The owner to unroll for an op with no node of its own: the outermost folded one. Just after a
     // fold, before the rebuild lands, an op still reads as folded into a fan and the block around it. #2086
     const foldedOwnerToOpen = useCallback(
-        (memberId: number): OpGraphBlockSummary | undefined =>
+        (memberId: number): OpGraphBlockSummary | null =>
             ownersOf(memberId)
                 .filter((owner) => !isBlockExpanded(owner.instanceId))
-                .at(-1),
+                .at(-1) ?? null,
         [ownersOf, isBlockExpanded],
     );
 
@@ -1127,18 +1127,18 @@ const OperationGraphInner = ({
             // user clicked, which is the "I'm going to click op 49, where has it gone" report. #1944
             const isUnrolling = !isBlockExpanded(instanceId);
             let revealedIds = [instanceId];
+            let revealedFanId: string | null = null;
             if (isUnrolling && revealOperationId !== null) {
                 revealedIds = [String(revealOperationId)];
+                // A folded block keeps its members out of fan detection, so the op's
+                // fan forms only after this unroll; a one-op decision opens it. #2086
+                if (collapseWeightLoads && detectedBlockIds.has(instanceId)) {
+                    revealedFanId = fanIdOf([revealOperationId]);
+                }
             } else if (isUnrolling && block !== undefined) {
                 revealedIds = block.operationIds.map((memberId) => String(memberId));
             }
             pendingRevealRef.current = { nodeIds: new Set(revealedIds), reportScope };
-            // A folded block keeps its members out of fan detection, so the op's
-            // fan forms only after this unroll; a one-op decision opens it. #2086
-            const revealedFanId =
-                isUnrolling && revealOperationId !== null && collapseWeightLoads && detectedBlockIds.has(instanceId)
-                    ? fanIdOf([revealOperationId])
-                    : null;
             // Siblings rather than nested: a state updater must be pure, and
             // `isUnrolling` already decides the branch outside it.
             setExpandedBlockIds((previous) => {
@@ -1265,7 +1265,7 @@ const OperationGraphInner = ({
         // Unlike a slowest-operations row, this leaves the fan a weight load joins on
         // this unroll folded, so a link to one still lands on the fan. #2145
         const buried = foldedOwnerToOpen(operationId);
-        if (buried !== undefined) {
+        if (buried !== null) {
             // A fan is folded by default, so this can run with `null` still in place. #2028
             setExpandedBlockIds((previous) => withOwnerUnrolled(previous, detectedBlocks, buried.instanceId));
         }
@@ -1300,20 +1300,18 @@ const OperationGraphInner = ({
     const selectListedOperation = useCallback(
         (id: number) => {
             const buried = foldedOwnerToOpen(id);
-            if (buried !== undefined) {
-                toggleBlockExpansion(buried.instanceId, id);
-                setSelectedOperationId(id);
-                return;
-            }
-            // A row clicked before an unroll's rebuild lands leads there too: panning now would aim
-            // at the layout being replaced, and the earlier row's reveal would win once it lands.
             const pendingReveal = pendingRevealRef.current;
-            if (pendingReveal !== null) {
+            if (buried !== null) {
+                toggleBlockExpansion(buried.instanceId, id);
+            } else if (pendingReveal !== null) {
+                // Whichever toggle armed this rebuild, the row is the reader's latest ask, so its op takes the reveal.
                 pendingRevealRef.current = { ...pendingReveal, nodeIds: new Set([String(id)]) };
-                setSelectedOperationId(id);
+            } else {
+                selectOperation(id);
                 return;
             }
-            selectOperation(id);
+            // The rebuild's reveal pans to the op: panning now would aim at the layout being replaced.
+            setSelectedOperationId(id);
         },
         [foldedOwnerToOpen, selectOperation, toggleBlockExpansion],
     );
