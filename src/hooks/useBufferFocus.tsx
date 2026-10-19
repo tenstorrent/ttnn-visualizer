@@ -33,7 +33,7 @@ const useBufferFocus = () => {
     const [selectedTensorId, setSelectedTensorId] = useAtom(selectedTensorIdAtom);
     const [selectedAddress, setSelectedAddress] = useAtom(selectedAddressAtom);
     const [selectedBufferColour, setSelectedBufferColour] = useAtom(selectedBufferColourAtom);
-    const resetToasts = useResetBufferFocus();
+    const resetBufferFocus = useResetBufferFocus();
 
     const updateBufferFocus = useCallback(
         (address?: number, tensorId?: number, colorVariance?: number): void => {
@@ -59,11 +59,11 @@ const useBufferFocus = () => {
                 {
                     autoClose: false,
                     hideProgressBar: true,
-                    onClick: resetToasts,
+                    onClick: resetBufferFocus,
                     // Per toast rather than on the container in `Layout.tsx`: this is the
                     // only toast that owns state outside itself, so it is the only one
                     // whose dismissal has to mean something. The rest close themselves.
-                    closeButton: <ToastDeselectButton onDeselect={resetToasts} />,
+                    closeButton: <ToastDeselectButton onDeselect={resetBufferFocus} />,
                 },
             );
 
@@ -71,14 +71,21 @@ const useBufferFocus = () => {
             setSelectedAddress(address ?? null);
             setSelectedTensorId(tensorId ?? null);
         },
-        [activeToast, resetToasts, setActiveToast, setSelectedAddress, setSelectedBufferColour, setSelectedTensorId],
+        [
+            activeToast,
+            resetBufferFocus,
+            setActiveToast,
+            setSelectedAddress,
+            setSelectedBufferColour,
+            setSelectedTensorId,
+        ],
     );
 
     return {
         selectedTensorId,
         selectedAddress,
         activeToast,
-        resetToasts,
+        resetBufferFocus,
         setActiveToast,
         updateBufferFocus,
         selectedBufferColour,

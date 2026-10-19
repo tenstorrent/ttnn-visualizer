@@ -10,7 +10,7 @@ import useBufferFocusDismissal from '../src/hooks/useBufferFocusDismissal';
 import { selectedAddressAtom, selectedTensorIdAtom } from '../src/store/app';
 import { TestProviders } from './helpers/TestProviders';
 import { BufferFocusProbe } from './helpers/BufferFocusProbe';
-import { bufferFocus, pressAndRelease } from './helpers/bufferFocus';
+import { getBufferFocusProbe, pressAndRelease } from './helpers/bufferFocus';
 import type { AtomProviderInitialValues } from './helpers/atomProvider';
 
 const ADDRESS = 0x4000;
@@ -45,7 +45,7 @@ describe('useBufferFocusDismissal', () => {
 
         pressAndRelease(screen.getByRole('heading', { name: 'L1' }));
 
-        expect(bufferFocus()).toHaveTextContent('dismissed');
+        expect(getBufferFocusProbe()).toHaveTextContent('dismissed');
     });
 
     it('keeps it through a click on a control', () => {
@@ -54,7 +54,7 @@ describe('useBufferFocusDismissal', () => {
 
         pressAndRelease(screen.getByRole('button', { name: 'L1 Memory' }));
 
-        expect(bufferFocus()).toHaveTextContent('focused');
+        expect(getBufferFocusProbe()).toHaveTextContent('focused');
     });
 
     // Pressed on one and released on the other, a browser sends the click to their common ancestor.
@@ -73,7 +73,7 @@ describe('useBufferFocusDismissal', () => {
         fireEvent.pointerDown(screen.getByRole('button', { name: 'L1 Memory' }));
         fireEvent.click(screen.getByTestId('both'));
 
-        expect(bufferFocus()).toHaveTextContent('focused');
+        expect(getBufferFocusProbe()).toHaveTextContent('focused');
     });
 
     it('dismisses it for a drag from content onto a control', () => {
@@ -83,7 +83,7 @@ describe('useBufferFocusDismissal', () => {
         fireEvent.pointerDown(screen.getByRole('heading', { name: 'L1' }));
         fireEvent.click(screen.getByTestId('both'));
 
-        expect(bufferFocus()).toHaveTextContent('dismissed');
+        expect(getBufferFocusProbe()).toHaveTextContent('dismissed');
     });
 
     it('keeps it through a click with no press, as a keyboard or a script makes one', () => {
@@ -92,7 +92,7 @@ describe('useBufferFocusDismissal', () => {
 
         fireEvent.click(screen.getByRole('heading', { name: 'L1' }));
 
-        expect(bufferFocus()).toHaveTextContent('focused');
+        expect(getBufferFocusProbe()).toHaveTextContent('focused');
     });
 
     it('keeps it when a press in a plot is released outside it', () => {
@@ -109,7 +109,7 @@ describe('useBufferFocusDismissal', () => {
         fireEvent.pointerDown(screen.getByTestId('bar'));
         fireEvent.click(document.body);
 
-        expect(bufferFocus()).toHaveTextContent('focused');
+        expect(getBufferFocusProbe()).toHaveTextContent('focused');
     });
 
     it('keeps it when the click ends a text selection in what it clicked', () => {
@@ -122,7 +122,7 @@ describe('useBufferFocusDismissal', () => {
 
         pressAndRelease(text);
 
-        expect(bufferFocus()).toHaveTextContent('focused');
+        expect(getBufferFocusProbe()).toHaveTextContent('focused');
     });
 
     it('forgets a press once its click is judged, so a later click with no press keeps it', () => {
@@ -139,7 +139,7 @@ describe('useBufferFocusDismissal', () => {
 
         fireEvent.click(text);
 
-        expect(bufferFocus()).toHaveTextContent('focused');
+        expect(getBufferFocusProbe()).toHaveTextContent('focused');
     });
 
     it('dismisses a focus on a tensor with no address', () => {
@@ -148,7 +148,7 @@ describe('useBufferFocusDismissal', () => {
 
         pressAndRelease(screen.getByRole('heading', { name: 'Inputs' }));
 
-        expect(bufferFocus()).toHaveTextContent('dismissed');
+        expect(getBufferFocusProbe()).toHaveTextContent('dismissed');
     });
 
     it('dismisses a focus on a buffer at address 0', () => {
@@ -157,7 +157,7 @@ describe('useBufferFocusDismissal', () => {
 
         pressAndRelease(screen.getByRole('heading', { name: 'DRAM' }));
 
-        expect(bufferFocus()).toHaveTextContent('dismissed');
+        expect(getBufferFocusProbe()).toHaveTextContent('dismissed');
     });
 
     it('judges a press before the handler it lands on can re-render it', () => {
@@ -176,7 +176,7 @@ describe('useBufferFocusDismissal', () => {
         fireEvent.pointerDown(screen.getByTestId('icon'));
         fireEvent.click(document.body);
 
-        expect(bufferFocus()).toHaveTextContent('focused');
+        expect(getBufferFocusProbe()).toHaveTextContent('focused');
     });
 
     it('listens in the capture phase only while a buffer is focused, and not after unmounting', () => {

@@ -10,7 +10,7 @@ import useBufferFocusDismissal from '../src/hooks/useBufferFocusDismissal';
 import { selectedAddressAtom } from '../src/store/app';
 import { TestProviders } from './helpers/TestProviders';
 import { BufferFocusProbe } from './helpers/BufferFocusProbe';
-import { bufferFocus, pressAndRelease } from './helpers/bufferFocus';
+import { getBufferFocusProbe, pressAndRelease } from './helpers/bufferFocus';
 
 vi.mock('../src/hooks/useAPI', async (importOriginal) => ({
     ...(await importOriginal<typeof import('../src/hooks/useAPI')>()),
@@ -37,6 +37,6 @@ describe('ClusterRenderer over a page holding a focused buffer (#2042)', () => {
 
         pressAndRelease(screen.getByText('Loading...'));
 
-        expect(bufferFocus()).toHaveTextContent('focused');
+        expect(getBufferFocusProbe()).toHaveTextContent('focused');
     });
 });

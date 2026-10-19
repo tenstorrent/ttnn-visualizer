@@ -10,7 +10,7 @@ import { BufferType } from '../src/model/BufferType';
 import { summariseOperationBuffers } from '../src/functions/summariseOperationBuffers';
 import { TestProviders } from './helpers/TestProviders';
 import { BufferFocusProbe } from './helpers/BufferFocusProbe';
-import { bufferFocus, pressAndRelease } from './helpers/bufferFocus';
+import { getBufferFocusProbe, pressAndRelease } from './helpers/bufferFocus';
 import {
     buildBufferData,
     buildOperationDescription,
@@ -84,12 +84,12 @@ describe('OperationDetailsComponent focus starting and ending on the page (#2042
                 <BufferFocusProbe />
             </TestProviders>,
         );
-        expect(bufferFocus()).toHaveTextContent('dismissed');
+        expect(getBufferFocusProbe()).toHaveTextContent('dismissed');
 
         pressAndRelease(screen.getByRole('button', { name: new RegExp(`Tensor ID: ${TENSOR_ID}`) }));
-        expect(bufferFocus()).toHaveTextContent('focused');
+        expect(getBufferFocusProbe()).toHaveTextContent('focused');
 
         pressAndRelease(screen.getByRole('heading', { name: 'L1 Memory' }));
-        expect(bufferFocus()).toHaveTextContent('dismissed');
+        expect(getBufferFocusProbe()).toHaveTextContent('dismissed');
     });
 });

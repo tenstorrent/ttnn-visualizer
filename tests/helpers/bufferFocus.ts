@@ -5,7 +5,7 @@
 import { fireEvent, screen } from '@testing-library/react';
 
 /** What `BufferFocusProbe` reads. */
-export const bufferFocus = () => screen.getByRole('status', { name: 'Buffer focus' });
+export const getBufferFocusProbe = () => screen.getByRole('status', { name: 'Buffer focus' });
 
 /** A click as a pointer makes one, which is what dismissing judges: pressed, then released, on `element`. */
 export const pressAndRelease = (element: Element) => {

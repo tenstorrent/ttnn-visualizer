@@ -375,7 +375,6 @@ const OperationDetailsComponent = ({ operationId }: OperationDetailsProps) => {
                                         />
                                     )}
 
-                                    {/* A click on this label's text activates the reset button inside it. #2150 */}
                                     <Label
                                         className='memory-zoom-range-label'
                                         disabled={!zoomedInViewMainMemory}

@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import { type ReactElement } from 'react';
-import { Classes } from '@blueprintjs/core';
+import { Classes, Tooltip } from '@blueprintjs/core';
 import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { isBufferFocusDismissal, isEndOfTextSelection } from '../src/functions/bufferFocusDismissal';
@@ -247,6 +247,25 @@ describe('isBufferFocusDismissal', () => {
 
         expect(isBufferFocusDismissal(screen.getByText('name'))).toBe(true);
         expect(isBufferFocusDismissal(screen.getByTestId('region'))).toBe(true);
+    });
+
+    it('keeps it on tooltip text only by the tab stop Blueprint gives it to open on focus', () => {
+        render(
+            <>
+                <Tooltip content='Peak L1 usage'>
+                    <span>Peak</span>
+                </Tooltip>
+                <Tooltip
+                    content='Peak L1 usage'
+                    openOnTargetFocus={false}
+                >
+                    <span>Peak without focus</span>
+                </Tooltip>
+            </>,
+        );
+
+        expect(isBufferFocusDismissal(screen.getByText('Peak'))).toBe(false);
+        expect(isBufferFocusDismissal(screen.getByText('Peak without focus'))).toBe(true);
     });
 
     it('keeps it for a target that is not an element', () => {

@@ -601,7 +601,7 @@ Two named exports cover the cases the template doesn't. Reach for them only when
 `useBufferFocus` is the case they exist for: its toast persists until dismissed (`autoClose: false`), and its `Id` goes into `activeToastAtom` so selecting a different buffer can dismiss the previous one.
 
 ```tsx
-const toastInstance: Id = createToast(<ToastTensorMessage … />, { autoClose: false, onClick: resetToasts });
+const toastInstance: Id = createToast(<ToastTensorMessage … />, { autoClose: false, onClick: resetBufferFocus });
 
 setActiveToast(toastInstance);
 ```
@@ -623,7 +623,7 @@ A click that ends a text selection in what it clicked is not a dismissal either.
 
 **Rationale.** It replaced a full-page overlay that caught clicks by stacking order rather than by what was clicked. The overlay covered table cells and headings, and swallowed the first click on navigation buttons rendered before it. It also could not cover the rail without disabling the rail's buttons. Judging the press as well as the click keeps a press on a control that slides off from counting, and keeps a release a browser retargets, such as plotly's drag cover, from counting. (#2042)
 
-**When to mark a surface.** A new clickable element on these pages should be a semantic control or carry an interactive role, which `jsx-a11y` already asks for. Mark it with `KEEPS_BUFFER_FOCUS_CLASS` when it is a surface a click shouldn't dismiss from but isn't a control. Today that means three things:
+**When to mark a surface.** A new clickable element on these pages should be a semantic control or carry an interactive role, which `jsx-a11y` already asks for. Mark it with `KEEPS_BUFFER_FOCUS_CLASS` when it is a surface a click shouldn't dismiss from but isn't a control. Today that means:
 
 - the panel describing the focused tensor;
 - the topology view that opens over the page;

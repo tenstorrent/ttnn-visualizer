@@ -12,7 +12,7 @@ import { selectedAddressAtom, selectedTensorIdAtom } from '../src/store/app';
 import { summariseOperationBuffers } from '../src/functions/summariseOperationBuffers';
 import { TestProviders } from './helpers/TestProviders';
 import { BufferFocusProbe } from './helpers/BufferFocusProbe';
-import { bufferFocus, pressAndRelease } from './helpers/bufferFocus';
+import { getBufferFocusProbe, pressAndRelease } from './helpers/bufferFocus';
 import {
     buildBufferData,
     buildOperationDescription,
@@ -96,11 +96,11 @@ afterEach(cleanup);
 describe('OperationDetailsComponent dismissing a focused buffer (#2042)', () => {
     it('dismisses it on a click that lands on content', () => {
         renderFocused();
-        expect(bufferFocus()).toHaveTextContent('focused');
+        expect(getBufferFocusProbe()).toHaveTextContent('focused');
 
         pressAndRelease(screen.getByRole('heading', { name: 'L1 Memory' }));
 
-        expect(bufferFocus()).toHaveTextContent('dismissed');
+        expect(getBufferFocusProbe()).toHaveTextContent('dismissed');
     });
 
     it('keeps it through a click on a control, which acts on its own', () => {
@@ -108,7 +108,7 @@ describe('OperationDetailsComponent dismissing a focused buffer (#2042)', () => 
 
         pressAndRelease(screen.getByRole('button', { name: 'DRAM' }));
 
-        expect(bufferFocus()).toHaveTextContent('focused');
+        expect(getBufferFocusProbe()).toHaveTextContent('focused');
     });
 
     it('dismisses it from blank space in the navigation rail, which the overlay never covered', () => {
@@ -116,7 +116,7 @@ describe('OperationDetailsComponent dismissing a focused buffer (#2042)', () => 
 
         pressAndRelease(screen.getByRole('navigation', { name: 'Main navigation' }));
 
-        expect(bufferFocus()).toHaveTextContent('dismissed');
+        expect(getBufferFocusProbe()).toHaveTextContent('dismissed');
     });
 
     it('keeps it through a click in the panel describing the focused tensor', () => {
@@ -124,6 +124,6 @@ describe('OperationDetailsComponent dismissing a focused buffer (#2042)', () => 
 
         pressAndRelease(screen.getByRole('heading', { name: `Tensor ${TENSOR_ID}` }));
 
-        expect(bufferFocus()).toHaveTextContent('focused');
+        expect(getBufferFocusProbe()).toHaveTextContent('focused');
     });
 });

@@ -11,7 +11,7 @@ import { activeToastAtom, selectedAddressAtom } from '../src/store/app';
 import { TestProviders } from './helpers/TestProviders';
 import type { AtomProviderInitialValues } from './helpers/atomProvider';
 import { BufferFocusProbe } from './helpers/BufferFocusProbe';
-import { bufferFocus, pressAndRelease } from './helpers/bufferFocus';
+import { getBufferFocusProbe, pressAndRelease } from './helpers/bufferFocus';
 
 vi.mock('../src/components/buffer-summary/BufferSummaryTab', () => ({ default: () => null }));
 vi.mock('../src/components/buffer-summary/L1PeakComposition', () => ({ default: () => null }));
@@ -40,20 +40,20 @@ afterEach(cleanup);
 describe('BufferSummary dismissing a focused buffer (#2042)', () => {
     it('dismisses it on a click that lands on content', () => {
         renderFocused();
-        expect(bufferFocus()).toHaveTextContent('focused');
+        expect(getBufferFocusProbe()).toHaveTextContent('focused');
 
         pressAndRelease(screen.getByRole('heading', { name: 'Buffers by operation' }));
 
-        expect(bufferFocus()).toHaveTextContent('dismissed');
+        expect(getBufferFocusProbe()).toHaveTextContent('dismissed');
     });
 
     it('dismisses a toast with no buffer selection behind it, which the old overlay was gated on', () => {
         renderFocused([[activeToastAtom, 'buffer-toast']]);
-        expect(bufferFocus()).toHaveTextContent('focused');
+        expect(getBufferFocusProbe()).toHaveTextContent('focused');
 
         pressAndRelease(screen.getByRole('heading', { name: 'Buffers by operation' }));
 
-        expect(bufferFocus()).toHaveTextContent('dismissed');
+        expect(getBufferFocusProbe()).toHaveTextContent('dismissed');
     });
 
     it('keeps it through a tab switch', () => {
@@ -62,7 +62,7 @@ describe('BufferSummary dismissing a focused buffer (#2042)', () => {
         pressAndRelease(screen.getByRole('tab', { name: /Peak composition/ }));
 
         expect(screen.getByRole('tab', { name: /Peak composition/ })).toHaveAttribute('aria-selected', 'true');
-        expect(bufferFocus()).toHaveTextContent('focused');
+        expect(getBufferFocusProbe()).toHaveTextContent('focused');
     });
 
     it('dismisses it from blank space in the navigation rail', () => {
@@ -71,7 +71,7 @@ describe('BufferSummary dismissing a focused buffer (#2042)', () => {
 
         pressAndRelease(screen.getByRole('navigation', { name: 'Main navigation' }));
 
-        expect(bufferFocus()).toHaveTextContent('dismissed');
+        expect(getBufferFocusProbe()).toHaveTextContent('dismissed');
     });
 
     it('keeps it through a rail button, which still works', () => {
@@ -80,6 +80,6 @@ describe('BufferSummary dismissing a focused buffer (#2042)', () => {
         pressAndRelease(screen.getByRole('button', { name: 'Collapse navigation' }));
 
         expect(screen.getByRole('button', { name: 'Expand navigation' })).toHaveAttribute('aria-expanded', 'false');
-        expect(bufferFocus()).toHaveTextContent('focused');
+        expect(getBufferFocusProbe()).toHaveTextContent('focused');
     });
 });

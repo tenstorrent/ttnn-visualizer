@@ -5,9 +5,9 @@
 import { Classes } from '@blueprintjs/core';
 import { KEEPS_BUFFER_FOCUS_CLASS } from '../definitions/BufferFocus';
 
-// Each handles its own click, so none doubles as a dismissal: controls, the plots and canvases a
-// click picks a buffer from, the toast that dismisses itself, popups, and surfaces marked to keep it.
-const KEEPS_BUFFER_FOCUS = [
+// Each handles its own click: a control, a plot or canvas picking a buffer, the toast, a popup, a marked surface.
+// Tooltip text matches only by the tabIndex Blueprint gives a hover target; openOnTargetFocus={false} drops it.
+const KEEPS_BUFFER_FOCUS_SELECTOR = [
     'button',
     'a[href]',
     'input',
@@ -37,7 +37,7 @@ const KEEPS_BUFFER_FOCUS = [
 
 /** Whether a press or click on `target` lands on nothing that handles it, which dismisses the focused buffer. */
 export const isBufferFocusDismissal = (target: EventTarget | null): target is Element =>
-    target instanceof Element && target.closest(KEEPS_BUFFER_FOCUS) === null;
+    target instanceof Element && target.closest(KEEPS_BUFFER_FOCUS_SELECTOR) === null;
 
 /** Whether a click on `target` ends a text selection in it: reading what was selected is not dismissing. */
 export const isEndOfTextSelection = (target: Element): boolean => {
