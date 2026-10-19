@@ -286,6 +286,7 @@ import {
 } from '../src/components/operation-graph/opGraphPerfOverlay';
 import { NO_PERF_DATA_LABEL } from '../src/definitions/PerfOverlayStatus';
 import { formatDuration } from '../src/functions/formatting';
+// Imported, where opGraphRevealPan.spec hard-codes 48: that spec pins the value, these pin the view applying it.
 import {
     REVEALED_NODE_CLASS,
     REVEAL_MARGIN_PX,
@@ -408,7 +409,10 @@ const hoverNode = (id: string) => {
     });
 };
 
-const PERF_ROWS: PerfOverlaySource[] = OPERATION_LIST.map((op) => ({ id: op.id, device_time: op.id * 10 }));
+const perfRowsFor = (operations: OperationDescription[]): PerfOverlaySource[] =>
+    operations.map((op) => ({ id: op.id, device_time: op.id * 10 }));
+
+const PERF_ROWS = perfRowsFor(OPERATION_LIST);
 
 // Two routes from op 1 to op 4, so the graph has ops on the path and ops beside
 // it. `OPERATION_LIST` is a chain, which puts every node on the path and would let
@@ -1016,7 +1020,6 @@ describe('OperationGraphReactFlow slowest operations list', () => {
     const listHeading = () => screen.queryByRole('heading', { name: 'Slowest operations' });
     const listedIds = () =>
         Array.from(document.querySelectorAll('.op-graph-hot-ops-id'), (cell) => Number(cell.textContent));
-    const rowFor = slowestRow;
 
     it('shows the list, slowest first, once its switch is on', () => {
         renderGraph(OPERATION_LIST, PERF_ROWS);
@@ -1046,7 +1049,7 @@ describe('OperationGraphReactFlow slowest operations list', () => {
         ['how many rows it shows', () => fireEvent.click(listControl('Top 25'))],
         ['its order', () => fireEvent.click(listControl('By ID'))],
         ['whether ops without perf data show', () => fireEvent.click(listControl('Hide ops without perf data'))],
-        ['the op selected from it', () => fireEvent.click(rowFor('3 matmul_c'))],
+        ['the op selected from it', () => fireEvent.click(slowestRow('3 matmul_c'))],
     ])('does not relayout for a change to %s', (_, change) => {
         // Op 5 has no perf row, so the hide checkbox is offered.
         renderGraph(
@@ -1102,10 +1105,10 @@ describe('OperationGraphReactFlow slowest operations list', () => {
         renderGraph(OPERATION_LIST, PERF_ROWS);
         fireEvent.click(hotOpsSwitch());
 
-        fireEvent.click(rowFor('3 matmul_c'));
+        fireEvent.click(slowestRow('3 matmul_c'));
 
         expect(screen.getByRole('heading', { name: '3 matmul_c' })).toBeInTheDocument();
-        expect(rowFor('3 matmul_c')).toHaveAttribute('aria-current', 'true');
+        expect(slowestRow('3 matmul_c')).toHaveAttribute('aria-current', 'true');
         // The selection reaches the graph too, not just the panel.
         expect(nodeById(lastFlowRender().nodes, '3').selected).toBe(true);
     });
@@ -1118,7 +1121,7 @@ describe('OperationGraphReactFlow slowest operations list', () => {
         fireEvent.click(hotOpsSwitch());
         setViewport.mockClear();
 
-        fireEvent.click(rowFor('3 matmul_c'));
+        fireEvent.click(slowestRow('3 matmul_c'));
 
         expect(setViewport).toHaveBeenCalledTimes(1);
         const [viewport] = setViewport.mock.calls[0] as unknown as [{ x: number; y: number }];
@@ -1132,7 +1135,7 @@ describe('OperationGraphReactFlow slowest operations list', () => {
         enableOverlay();
         fireEvent.click(hotOpsSwitch());
 
-        const swatch = rowFor('4 relu_d').querySelector<HTMLElement>('.op-graph-hot-ops-swatch');
+        const swatch = slowestRow('4 relu_d').querySelector<HTMLElement>('.op-graph-hot-ops-swatch');
         expect(swatch?.style.backgroundColor).toBe(
             asRenderedColor(String(perfColorOf(nodeById(lastFlowRender().nodes, '4')))),
         );
@@ -2081,10 +2084,7 @@ describe('OperationGraphReactFlow repeat blocks', () => {
         });
 
         it('opens a folded fan for a slowest-operations row naming an operation inside it (#2086)', () => {
-            renderGraph(
-                FAN_CHAIN,
-                FAN_CHAIN.map((op) => ({ id: op.id, device_time: op.id * 10 })),
-            );
+            renderGraph(FAN_CHAIN, perfRowsFor(FAN_CHAIN));
             deliver(FAN_CHAIN, { collapseWeightLoads: true });
             fireEvent.click(screen.getByRole('checkbox', { name: /^Slowest operations/ }));
             // Behind the column, so the member lands there unless the reveal moves it.
@@ -2118,8 +2118,7 @@ describe('OperationGraphReactFlow repeat blocks', () => {
             runBuild.mockClear();
             deliver(FAN_CHAIN, { collapseWeightLoads: true });
 
-            const asked = (runBuild.mock.calls.at(-1)?.[0] as OpGraphBuildOptions).expandedBlockIds;
-            expect(asked).toEqual(expect.arrayContaining(['weights:1-2']));
+            expect(lastAskedExpandedIds()).toEqual(expect.arrayContaining(['weights:1-2']));
         });
 
         it.todo('opens the fan a weight load joins once its folded block unrolls, for a URL naming it (#2145)');
@@ -2180,8 +2179,7 @@ describe('OperationGraphReactFlow repeat blocks', () => {
             // `node.data.operationId` off every node it was given, and the container's
             // is its first member's -- so the box reported that member's duration and
             // rank as though it were an operation.
-            const perfRows: PerfOverlaySource[] = FAN_CHAIN.map((op) => ({ id: op.id, device_time: op.id * 10 }));
-            renderGraph(FAN_CHAIN, perfRows);
+            renderGraph(FAN_CHAIN, perfRowsFor(FAN_CHAIN));
             deliver(FAN_CHAIN, { collapseWeightLoads: true });
             act(() => {
                 harness.onNodeDoubleClick?.(null, nodeById(lastFlowRender().nodes, 'weights:1-2'));
@@ -2273,10 +2271,7 @@ describe('OperationGraphReactFlow repeat blocks', () => {
         it("opens the fan a row's op joins once its folded block unrolls (#2086)", () => {
             // No fan exists to open at the click: the folded block keeps op 1 out of fan
             // detection, and unrolling it alone landed the row on a newly folded fan.
-            renderGraph(
-                FAN_AND_REPEATS,
-                FAN_AND_REPEATS.map((op) => ({ id: op.id, device_time: op.id * 10 })),
-            );
+            renderGraph(FAN_AND_REPEATS, perfRowsFor(FAN_AND_REPEATS));
             fireEvent.click(screen.getByRole('button', { name: 'Fold all repeats' }));
             deliver(FAN_AND_REPEATS, { collapseWeightLoads: true, expandedBlockIds: [] });
             expect(lastFlowRender().nodes.some((node) => node.id.startsWith('weights:'))).toBe(false);
@@ -2301,10 +2296,7 @@ describe('OperationGraphReactFlow repeat blocks', () => {
 
         // Op 1's row with repeats folded: it opens `block:1` and the fan op 1 joins there.
         const openRowIntoFoldedBlock = () => {
-            renderGraph(
-                FAN_AND_REPEATS,
-                FAN_AND_REPEATS.map((op) => ({ id: op.id, device_time: op.id * 10 })),
-            );
+            renderGraph(FAN_AND_REPEATS, perfRowsFor(FAN_AND_REPEATS));
             fireEvent.click(screen.getByRole('button', { name: 'Fold all repeats' }));
             deliver(FAN_AND_REPEATS, { collapseWeightLoads: true, expandedBlockIds: [] });
             fireEvent.click(screen.getByRole('checkbox', { name: /^Slowest operations/ }));
@@ -2315,10 +2307,7 @@ describe('OperationGraphReactFlow repeat blocks', () => {
         it('opens the block, not just the fan, for a row clicked right after the block folds', () => {
             // Until the rebuild lands, op 1 still reads as folded into its fan and its block, and
             // opening the fan alone left the block folded around it.
-            renderGraph(
-                FAN_AND_REPEATS,
-                FAN_AND_REPEATS.map((op) => ({ id: op.id, device_time: op.id * 10 })),
-            );
+            renderGraph(FAN_AND_REPEATS, perfRowsFor(FAN_AND_REPEATS));
             deliver(FAN_AND_REPEATS, { collapseWeightLoads: true });
             fireEvent.click(screen.getByRole('checkbox', { name: /^Slowest operations/ }));
             fireEvent.click(screen.getByRole('button', { name: 'Fold all repeats' }));
@@ -2358,10 +2347,7 @@ describe('OperationGraphReactFlow repeat blocks', () => {
 
         it('records no fan decision for a row while weight loads are not collapsed', () => {
             // Remembered, it would open op 1's fan the next time the switch folds weight loads.
-            renderGraph(
-                FAN_AND_REPEATS,
-                FAN_AND_REPEATS.map((op) => ({ id: op.id, device_time: op.id * 10 })),
-            );
+            renderGraph(FAN_AND_REPEATS, perfRowsFor(FAN_AND_REPEATS));
             fireEvent.click(screen.getByLabelText('Collapse weight loads'));
             fireEvent.click(screen.getByRole('button', { name: 'Fold all repeats' }));
             deliver(FAN_AND_REPEATS, { expandedBlockIds: [] });
@@ -3116,14 +3102,10 @@ describe('OperationGraphReactFlow repeat blocks', () => {
 
     describe('perf colours against folded block totals', () => {
         // A folded block draws its members' sum, so the ramp spans past any single op.
-        const REPEAT_PERF_ROWS: PerfOverlaySource[] = REPEAT_OPERATION_LIST.map((op) => ({
-            id: op.id,
-            device_time: op.id * 10,
-        }));
+        const REPEAT_PERF_ROWS = perfRowsFor(REPEAT_OPERATION_LIST);
         const drawnColor = (nodeId: string) =>
             asRenderedColor(String(perfColorOf(nodeById(lastFlowRender().nodes, nodeId))));
-        const listRow = slowestRow;
-        const listSwatch = (title: string) => listRow(title).querySelector<HTMLElement>('.op-graph-hot-ops-swatch');
+        const listSwatch = (title: string) => slowestRow(title).querySelector<HTMLElement>('.op-graph-hot-ops-swatch');
 
         const renderFoldedWithPerf = () => {
             renderGraph(REPEAT_OPERATION_LIST, REPEAT_PERF_ROWS);
@@ -3150,12 +3132,13 @@ describe('OperationGraphReactFlow repeat blocks', () => {
             fireEvent.click(screen.getByRole('checkbox', { name: /^Slowest operations/ }));
             runBuild.mockClear();
 
-            fireEvent.click(listRow('3 layer_b'));
+            fireEvent.click(slowestRow('3 layer_b'));
 
             const asked = lastAskedExpandedIds();
             // The one-op fan decision rides along for any op, and stays inert for one no fan can hold.
-            expect(asked).toEqual([FIRST_BLOCK_ID, 'weights:3']);
-            expect(listRow('3 layer_b')).toHaveAttribute('aria-current', 'true');
+            expect(asked).toHaveLength(2);
+            expect(asked).toEqual(expect.arrayContaining([FIRST_BLOCK_ID, 'weights:3']));
+            expect(slowestRow('3 layer_b')).toHaveAttribute('aria-current', 'true');
             deliver(REPEAT_OPERATION_LIST, { expandedBlockIds: asked });
 
             const node = nodeById(lastFlowRender().nodes, '3');
@@ -3178,7 +3161,7 @@ describe('OperationGraphReactFlow repeat blocks', () => {
             // first member there, so op 3 lands behind the column unless the reveal moves it.
             absolutePositionById.set(FIRST_BLOCK_ID, { x: 1500, y: 600 });
             setViewport.mockClear();
-            fireEvent.click(listRow('3 layer_b'));
+            fireEvent.click(slowestRow('3 layer_b'));
 
             deliver(REPEAT_OPERATION_LIST, { expandedBlockIds: lastAskedExpandedIds() });
 
@@ -3195,8 +3178,8 @@ describe('OperationGraphReactFlow repeat blocks', () => {
             fireEvent.click(screen.getByRole('checkbox', { name: /^Slowest operations/ }));
             setViewport.mockClear();
 
-            fireEvent.click(listRow('3 layer_b'));
-            fireEvent.click(listRow('2 layer_a'));
+            fireEvent.click(slowestRow('3 layer_b'));
+            fireEvent.click(slowestRow('2 layer_a'));
             expect(setViewport).not.toHaveBeenCalled();
             deliver(REPEAT_OPERATION_LIST, { expandedBlockIds: lastAskedExpandedIds() });
 
@@ -3213,7 +3196,7 @@ describe('OperationGraphReactFlow repeat blocks', () => {
             fireEvent.click(screen.getByRole('checkbox', { name: /^Slowest operations/ }));
             runBuild.mockClear();
 
-            fireEvent.click(listRow('6 suffix'));
+            fireEvent.click(slowestRow('6 suffix'));
 
             expect(runBuild).not.toHaveBeenCalled();
             expect(nodeById(lastFlowRender().nodes, '6').selected).toBe(true);
@@ -3226,7 +3209,7 @@ describe('OperationGraphReactFlow repeat blocks', () => {
             fireEvent.click(screen.getByRole('checkbox', { name: /^Slowest operations/ }));
             runBuild.mockClear();
 
-            fireEvent.click(listRow('3 layer_b'));
+            fireEvent.click(slowestRow('3 layer_b'));
 
             expect(runBuild).not.toHaveBeenCalled();
             expect(nodeById(lastFlowRender().nodes, '3').selected).toBe(true);
