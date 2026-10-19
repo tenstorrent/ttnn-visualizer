@@ -15,6 +15,7 @@ import type { AtomProviderInitialValues } from './helpers/atomProvider';
 
 const ADDRESS = 0x4000;
 const TENSOR_ID = 10;
+const DISMISSAL_EVENTS = ['click', 'pointercancel', 'pointerdown'];
 
 const renderFocused = (
     focus: AtomProviderInitialValues = [
@@ -142,6 +143,18 @@ describe('useBufferFocusDismissal', () => {
         expect(getBufferFocusProbe()).toHaveTextContent('focused');
     });
 
+    it('forgets a press the browser cancels, so a later click with no press keeps it', () => {
+        renderFocused();
+        render(<h3>L1</h3>);
+        const heading = screen.getByRole('heading', { name: 'L1' });
+        fireEvent.pointerDown(heading);
+        fireEvent.pointerCancel(heading);
+
+        fireEvent.click(heading);
+
+        expect(getBufferFocusProbe()).toHaveTextContent('focused');
+    });
+
     it('dismisses a focus on a tensor with no address', () => {
         renderFocused([[selectedTensorIdAtom, TENSOR_ID]]);
         render(<h3>Inputs</h3>);
@@ -182,9 +195,11 @@ describe('useBufferFocusDismissal', () => {
     it('listens in the capture phase only while a buffer is focused, and not after unmounting', () => {
         const addListener = vi.spyOn(document, 'addEventListener');
         const removeListener = vi.spyOn(document, 'removeEventListener');
+        const isCapture = (options: boolean | EventListenerOptions | undefined) =>
+            options === true || (typeof options === 'object' && options.capture === true);
         const captured = (spy: typeof addListener) =>
             spy.mock.calls
-                .filter(([type, , options]) => (type === 'click' || type === 'pointerdown') && options === true)
+                .filter(([type, , options]) => DISMISSAL_EVENTS.includes(type) && isCapture(options))
                 .map(([type]) => type)
                 .sort();
 
@@ -192,7 +207,7 @@ describe('useBufferFocusDismissal', () => {
         expect(captured(addListener)).toEqual([]);
 
         renderFocused().unmount();
-        expect(captured(addListener)).toEqual(['click', 'pointerdown']);
-        expect(captured(removeListener)).toEqual(['click', 'pointerdown']);
+        expect(captured(addListener)).toEqual(DISMISSAL_EVENTS);
+        expect(captured(removeListener)).toEqual(DISMISSAL_EVENTS);
     });
 });

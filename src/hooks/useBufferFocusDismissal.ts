@@ -26,6 +26,9 @@ export default function useBufferFocusDismissal(): void {
         const handlePointerDown = (event: PointerEvent) => {
             wasPressedAway = isBufferFocusDismissal(event.target);
         };
+        const handlePointerCancel = () => {
+            wasPressedAway = false;
+        };
         const handleClick = (event: MouseEvent) => {
             const { target } = event;
             const isDismissal = wasPressedAway && isBufferFocusDismissal(target) && !isEndOfTextSelection(target);
@@ -36,9 +39,11 @@ export default function useBufferFocusDismissal(): void {
         };
         // Captured, so each is judged before a handler can re-render what it landed on.
         document.addEventListener('pointerdown', handlePointerDown, true);
+        document.addEventListener('pointercancel', handlePointerCancel, true);
         document.addEventListener('click', handleClick, true);
         return () => {
             document.removeEventListener('pointerdown', handlePointerDown, true);
+            document.removeEventListener('pointercancel', handlePointerCancel, true);
             document.removeEventListener('click', handleClick, true);
         };
     }, [isBufferFocused, resetBufferFocus]);
