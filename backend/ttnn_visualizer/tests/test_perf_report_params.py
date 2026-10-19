@@ -11,6 +11,7 @@ same request show them. The app's own client sends axios booleans, so nothing in
 notices; these tests are what a scripted caller has instead.
 """
 
+import orjson
 import pytest
 from ttnn_visualizer.csv_queries import OpsPerformanceReportQueries
 from ttnn_visualizer.extensions import db
@@ -56,14 +57,14 @@ def captured_report_kwargs(monkeypatch):
     """
     captured = {}
 
-    def _fake_generate_report(instance, **kwargs):
+    def _fake_generate_report_json(instance, **kwargs):
         captured.update(kwargs)
-        return {"report": []}
+        return orjson.dumps({"report": []})
 
     monkeypatch.setattr(
         OpsPerformanceReportQueries,
-        "generate_report",
-        staticmethod(_fake_generate_report),
+        "generate_report_json",
+        staticmethod(_fake_generate_report_json),
     )
 
     return captured
