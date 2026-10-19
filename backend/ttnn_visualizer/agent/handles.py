@@ -232,6 +232,26 @@ def _csv_columns(path: Path) -> frozenset:
         return frozenset()
 
 
+def _perf_csv(instance: Instance) -> Optional[Path]:
+    """The ops perf CSV the tools read, or None when the handle has none."""
+    # The selector the tools actually read through, not a second glob. Picking
+    # the lexicographically first file here while `get_local_ops_perf_file_path`
+    # picks the newest meant `load_report` could name one capture and `top_ops`
+    # analyse another in a directory holding two.
+    if not instance.performance_path:
+        return None
+    try:
+        return Path(OpsPerformanceQueries.get_local_ops_perf_file_path(instance))
+    except Exception:
+        return None
+
+
+def perf_csv_columns(instance: Instance) -> frozenset:
+    """The header of the ops perf CSV the tools read, or nothing without one."""
+    perf_csv = _perf_csv(instance)
+    return frozenset() if perf_csv is None else _csv_columns(perf_csv)
+
+
 def _inventory(instance: Instance) -> Dict[str, object]:
     """What this report can actually answer.
 
@@ -245,18 +265,7 @@ def _inventory(instance: Instance) -> Dict[str, object]:
     def record(name: str, present: bool) -> None:
         (available if present else missing).append(name)
 
-    # The selector the tools actually read through, not a second glob. Picking
-    # the lexicographically first file here while `get_local_ops_perf_file_path`
-    # picks the newest meant `load_report` could name one capture and `top_ops`
-    # analyse another in a directory holding two.
-    perf_csv = None
-    if instance.performance_path:
-        try:
-            perf_csv = Path(
-                OpsPerformanceQueries.get_local_ops_perf_file_path(instance)
-            )
-        except Exception:
-            perf_csv = None
+    perf_csv = _perf_csv(instance)
     record("top_ops", perf_csv is not None)
     # Older captures carry neither column, and every count would then be zero.
     record(

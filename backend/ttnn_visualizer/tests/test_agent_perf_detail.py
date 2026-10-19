@@ -412,6 +412,26 @@ class TestEmptyInReport:
 
         assert "inner_dim_block_size" not in named
 
+    @pytest.mark.parametrize(
+        ("header", "reason"),
+        [
+            ({PROGRAM_HASH_COLUMN, PROGRAM_CACHE_HIT_COLUMN}, "empty on every row"),
+            (set(), "not among this report's columns"),
+        ],
+    )
+    def test_the_header_tells_an_empty_program_column_from_a_missing_one(
+        self, header, reason
+    ):
+        """The generator reads both a blank program cell and a missing column as None."""
+        rows = [{"hash": None, "cache_hit": None}]
+
+        named = perf_detail.empty_in_report(
+            perf_detail.empty_fields(rows, header), [DetailGroup.CACHE]
+        )
+
+        assert reason in named["program_hash"]
+        assert reason in named["program_cache_hit"]
+
     def test_only_the_included_groups_are_named(self):
         named = perf_detail.empty_in_report(
             perf_detail.empty_fields([{}]), [DetailGroup.NOC]
@@ -574,6 +594,7 @@ class TestProgramCache:
                 "repeat_calls": 2,
                 "repeat_hits": 1,
                 "repeat_misses": 1,
+                "repeat_unrecorded": 0,
                 "first_repeat_miss_perf_id": "4",
             }
         ]
@@ -620,13 +641,44 @@ class TestProgramCache:
             entry["repeat_calls"],
             entry["repeat_hits"],
             entry["repeat_misses"],
-        ) == (
-            2,
-            0,
-            0,
-        )
+            entry["repeat_unrecorded"],
+        ) == (2, 0, 0, 2)
+        assert result["repeat_unrecorded"] == 2
+        # A 0% would read as every repeat missing.
+        assert result["repeat_hit_percent"] is None
+        assert "2 of 2 repeat calls recorded no cache result" in result["caveat"]
         # Nothing says these missed, so nothing says the cache was off.
-        assert "caveat" not in result
+        assert "program cache disabled" not in result["caveat"]
+
+    def test_the_hit_rate_is_out_of_the_repeats_that_recorded_a_result(
+        self, handle_with
+    ):
+        rows = [
+            _cached(2, "a", False),
+            _cached(3, "a", True),
+            _cached(4, "a", None),
+            _cached(5, "a", False),
+        ]
+        registry, handle, _ = handle_with(rows)
+
+        result = tools.program_cache(registry, handle)
+
+        assert (result["repeat_hits"], result["repeat_misses"]) == (1, 1)
+        assert result["repeat_unrecorded"] == 1
+        assert result["repeat_hit_percent"] == 50.0
+        assert "1 of 3 repeat calls recorded no cache result" in result["caveat"]
+
+    def test_every_recorded_repeat_missing_still_says_the_cache_may_have_been_off(
+        self, handle_with
+    ):
+        rows = [_cached(2, "a", False), _cached(3, "a", None), _cached(4, "a", False)]
+        registry, handle, _ = handle_with(rows)
+
+        result = tools.program_cache(registry, handle)
+
+        assert result["repeat_hit_percent"] == 0.0
+        assert "1 of 2 repeat calls recorded no cache result" in result["caveat"]
+        assert "program cache disabled" in result["caveat"]
 
     def test_rows_without_a_program_hash_are_not_counted(self, handle_with):
         rows = [
@@ -838,6 +890,24 @@ class TestEndToEnd:
             in result["empty_in_report"]["dispatch_cq_cmd_op_us"]
         )
         assert "op_to_op_gap_us" not in result["empty_in_report"]
+
+    @pytest.mark.parametrize(
+        ("columns", "reason"),
+        [
+            ([PROGRAM_HASH_COLUMN, PROGRAM_CACHE_HIT_COLUMN], "empty on every row"),
+            ([], "not among this report's columns"),
+        ],
+    )
+    def test_an_empty_program_column_is_told_from_a_missing_one(
+        self, tmp_path, columns, reason
+    ):
+        rows = [{**row, **{column: "" for column in columns}} for row in smoke_rows()]
+        registry, handle = self._handle(tmp_path, rows)
+
+        result = tools.top_ops(registry, handle, include=["cache"])
+
+        assert reason in result["empty_in_report"]["program_hash"]
+        assert reason in result["empty_in_report"]["program_cache_hit"]
 
     def test_program_cache_counts_what_the_capture_recorded(self, tmp_path):
         rows = smoke_rows()

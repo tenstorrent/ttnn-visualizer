@@ -20,7 +20,11 @@ from typing import Dict, List, Optional, Sequence, Set
 
 from ttnn_visualizer.agent import perf_detail
 from ttnn_visualizer.agent.bounds import MAX_DETAILED_LIMIT, MAX_LIMIT, bounded
-from ttnn_visualizer.agent.handles import CacheVariant, ReportRegistry
+from ttnn_visualizer.agent.handles import (
+    CacheVariant,
+    ReportRegistry,
+    perf_csv_columns,
+)
 from ttnn_visualizer.csv_queries import (
     DeviceLogProfilerQueries,
     OpsPerformanceQueries,
@@ -383,8 +387,10 @@ def empty_detail_fields(
     if not groups:
         return {}
 
-    def build(_: Instance) -> perf_detail.EmptyFields:
-        return perf_detail.empty_fields(canonical_report(registry, handle)["report"])
+    def build(instance: Instance) -> perf_detail.EmptyFields:
+        return perf_detail.empty_fields(
+            canonical_report(registry, handle)["report"], perf_csv_columns(instance)
+        )
 
     return registry.cached_report(
         handle, build, variant=CacheVariant.EMPTY_DETAIL_FIELDS
@@ -475,6 +481,7 @@ class _ProgramCalls:
     repeat_calls: int = 0
     repeat_hits: int = 0
     repeat_misses: int = 0
+    repeat_unrecorded: int = 0
     first_repeat_miss_perf_id: Optional[str] = None
 
 
@@ -511,10 +518,16 @@ def program_cache(
             entry.repeat_misses += 1
             if entry.first_repeat_miss_perf_id is None:
                 entry.first_repeat_miss_perf_id = row.get("id")
+        else:
+            entry.repeat_unrecorded += 1
 
     entries = list(by_op_code.values())
     repeat_calls = sum(entry.repeat_calls for entry in entries)
     repeat_hits = sum(entry.repeat_hits for entry in entries)
+    repeat_misses = sum(entry.repeat_misses for entry in entries)
+    repeat_unrecorded = sum(entry.repeat_unrecorded for entry in entries)
+    # Out of the repeats that recorded a result: an unrecorded one is neither.
+    recorded = repeat_hits + repeat_misses
     ranked = sorted(
         entries,
         key=lambda entry: (-entry.repeat_misses, -entry.repeat_calls, entry.op_code),
@@ -525,9 +538,10 @@ def program_cache(
         "programs": sum(entry.programs for entry in entries),
         "repeat_calls": repeat_calls,
         "repeat_hits": repeat_hits,
-        "repeat_misses": sum(entry.repeat_misses for entry in entries),
+        "repeat_misses": repeat_misses,
+        "repeat_unrecorded": repeat_unrecorded,
         "repeat_hit_percent": (
-            round(repeat_hits / repeat_calls * 100, 3) if repeat_calls else None
+            round(repeat_hits / recorded * 100, 3) if recorded else None
         ),
         "op_code_count": len(entries),
         "returned": len(ranked),
@@ -536,18 +550,31 @@ def program_cache(
         "projection": projection(None),
         "note": PROGRAM_CACHE_NOTE,
     }
+    caveats = []
     if not entries:
-        result["caveat"] = (
+        caveats.append(
             "No row carries a program hash, so there is nothing to count: the capture "
             "has no PROGRAM HASH column, leaves it empty, or holds no device "
             "operations."
         )
-    elif repeat_calls and result["repeat_misses"] == repeat_calls:
-        result["caveat"] = (
-            "Every repeat call missed the program cache, which is what a run with the "
-            "program cache disabled records. Check whether it was before reading "
-            "each repeat miss as a program built again."
+    if repeat_unrecorded:
+        caveats.append(
+            f"{repeat_unrecorded} of {repeat_calls} repeat calls recorded no cache "
+            "result. They count as neither hits nor misses, and "
+            + (
+                "the hit percentage is out of the rest."
+                if recorded
+                else "there is no hit percentage."
+            )
         )
+    if recorded and repeat_misses == recorded:
+        caveats.append(
+            "Every repeat call that recorded a result missed the program cache, which "
+            "is what a run with the program cache disabled records. Check whether it "
+            "was before reading each repeat miss as a program built again."
+        )
+    if caveats:
+        result["caveat"] = " ".join(caveats)
     return result
 
 

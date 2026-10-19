@@ -288,9 +288,11 @@ recompute candidate. The answer counts calls, distinct programs, repeat calls, a
 hits and misses, with the most repeat misses first, per raw op code: one entry holds every
 shape of a matmul, where tt-perf-report's `op_code` would split it by shape. It reads the
 whole report and takes no signpost range, because a program first called before a window
-would read as a first call inside it. When every repeat call missed, the answer says that
-is what a run with the program cache disabled records, so check before reading each miss
-as a program built again. A capture without the `PROGRAM HASH` and `PROGRAM CACHE HIT`
+would read as a first call inside it. A repeat call that recorded no cache result is
+neither a hit nor a miss: `repeat_unrecorded` counts them, the hit percentage is out of the
+rest, and a caveat says so. When every repeat call that recorded a result missed, the
+answer says that is what a run with the program cache disabled records, so check before
+reading each miss as a program built again. A capture without the `PROGRAM HASH` and `PROGRAM CACHE HIT`
 columns cannot answer, and `load_report` says so. Each op code's first repeat miss is
 named by its CSV row in `first_repeat_miss_perf_id`, and when the handle also holds a
 profiler report, by `first_repeat_miss_operation_id` too, for `operation_provenance` to

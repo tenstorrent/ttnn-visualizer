@@ -12,7 +12,19 @@ fields it asks about and no others.
 import math
 import re
 from enum import Enum
-from typing import Callable, Dict, Iterable, List, NamedTuple, Optional, Sequence, Tuple
+from typing import (
+    AbstractSet,
+    Callable,
+    Dict,
+    Iterable,
+    List,
+    NamedTuple,
+    Optional,
+    Sequence,
+    Tuple,
+)
+
+from ttnn_visualizer.csv_queries import PROGRAM_CACHE_HIT_COLUMN, PROGRAM_HASH_COLUMN
 
 
 class DetailGroup(str, Enum):
@@ -259,6 +271,12 @@ def _fields_of(groups: Iterable[DetailGroup]) -> Iterable[_Field]:
         yield from _FIELDS[group]
 
 
+# The generator reads a blank cell in these as None, as it does a missing column.
+_HEADER_COLUMNS = {
+    "program_hash": PROGRAM_HASH_COLUMN,
+    "program_cache_hit": PROGRAM_CACHE_HIT_COLUMN,
+}
+
 # Field name to whether its column is missing from every row, for the fields no row
 # carries a value in: a missing column is the report's, an empty one the capture's.
 EmptyFields = Dict[str, bool]
@@ -275,10 +293,15 @@ def detail_fields(
     }
 
 
-def empty_fields(rows: Iterable[Dict]) -> EmptyFields:
-    """Every detail field that no row carries a value for, across all groups."""
+def empty_fields(
+    rows: Iterable[Dict], header: AbstractSet[str] = frozenset()
+) -> EmptyFields:
+    """Every detail field that no row carries a value for, across all groups.
+
+    `header` is the source CSV's, for the fields whose rows can't show a column is there.
+    """
     pending = {field.name: field for field in _fields_of(DetailGroup)}
-    columned = set()
+    columned = {name for name, column in _HEADER_COLUMNS.items() if column in header}
     for row in rows:
         for name, field in list(pending.items()):
             if row.get(field.column) is not None:
