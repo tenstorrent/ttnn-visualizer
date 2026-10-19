@@ -44,7 +44,7 @@ import {
     useReportMetadata,
 } from '../../hooks/useAPI';
 import { useActivatingReport } from '../../hooks/useActivatingReport';
-import { useReportLinkBadgeIds } from '../../hooks/useReportLinkBadgeIds';
+import { useReportLinkBadgeRuns } from '../../hooks/useReportLinkBadgeRuns';
 import { getFolderReportId, removeReportLinksFor } from '../../functions/reportLinks';
 import { ReportLinkRole } from '../../definitions/ReportLinks';
 import LocalFolderPicker from './LocalFolderPicker';
@@ -177,8 +177,8 @@ const LocalFolderOptions = () => {
         [activePerformanceReport, perfFolderList, isPerformanceLocal],
     );
 
-    const { linkedPerfIds, unlinkedPerfIds, linkedProfilerReportIds, unlinkedProfilerReportIds } =
-        useReportLinkBadgeIds();
+    const { linkedPerfRuns, unlinkedPerfRuns, linkedProfilerReportRuns, unlinkedProfilerReportRuns } =
+        useReportLinkBadgeRuns();
 
     const activateLocalReport = async (
         kind: ReportKind,
@@ -404,8 +404,8 @@ const LocalFolderOptions = () => {
                     handleSelect={handleSelectProfiler}
                     handleDelete={handleDeleteProfiler}
                     loading={isActivatingReport}
-                    linkedIds={linkedProfilerReportIds}
-                    unlinkedIds={unlinkedProfilerReportIds}
+                    linkedRuns={linkedProfilerReportRuns}
+                    unlinkedRuns={unlinkedProfilerReportRuns}
                     showReportName
                 />
             </FormGroup>
@@ -455,8 +455,8 @@ const LocalFolderOptions = () => {
                     handleSelect={handleSelectPerformance}
                     handleDelete={handleDeletePerformance}
                     loading={isActivatingReport}
-                    linkedIds={linkedPerfIds}
-                    unlinkedIds={unlinkedPerfIds}
+                    linkedRuns={linkedPerfRuns}
+                    unlinkedRuns={unlinkedPerfRuns}
                 />
             </FormGroup>
 

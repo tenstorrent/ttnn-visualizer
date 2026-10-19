@@ -11,6 +11,7 @@ import {
     isSettledLinkMatch,
     upsertReportLink,
 } from '../functions/reportLinks';
+import { useActiveReportFingerprints } from './useAPI';
 import useRemoteConnection from './useRemote';
 import { useReportLinkMatch } from './useReportLinkMatch';
 import {
@@ -25,7 +26,8 @@ import {
  * Persist LINKED / UNLINKED once the live comparison settles so pickers can badge
  * known counterparts (including failed pairs). Mounted once, by `ReportLinkRecorder` in
  * `Layout`, rather than from the footer's link icon, so moving or hiding that icon cannot
- * stop recording.
+ * stop recording. Each side records the run its folder held, so a later run written into
+ * the same folder does not inherit the verdict (#2069).
  */
 export default function usePersistReportLinks(): void {
     const matchResult = useReportLinkMatch();
@@ -34,6 +36,7 @@ export default function usePersistReportLinks(): void {
     const profilerLocation = useAtomValue(profilerReportLocationAtom);
     const performanceLocation = useAtomValue(performanceReportLocationAtom);
     const setReportLinks = useSetAtom(reportLinksAtom);
+    const { data: activeRuns, isPending: isPendingActiveRuns } = useActiveReportFingerprints();
     const { persistentState } = useRemoteConnection();
     const selectedHost = persistentState.selectedConnection?.host ?? null;
 
@@ -50,7 +53,9 @@ export default function usePersistReportLinks(): void {
             return;
         }
 
-        if (!isSettledLinkMatch(matchResult)) {
+        // Waits for the runs, or the pair would be stored as matching any run. A failed
+        // lookup is not waited on: the pair is then stored without runs, as before #2069.
+        if (!isSettledLinkMatch(matchResult) || isPendingActiveRuns) {
             return;
         }
 
@@ -78,10 +83,14 @@ export default function usePersistReportLinks(): void {
                     activePerformanceReport.path,
                     remoteHost,
                 ),
+                profilerRun: activeRuns?.profiler ?? undefined,
+                performanceRun: activeRuns?.performance ?? undefined,
             }),
         );
     }, [
         matchResult,
+        activeRuns,
+        isPendingActiveRuns,
         activeProfilerReport,
         activePerformanceReport,
         profilerLocation,

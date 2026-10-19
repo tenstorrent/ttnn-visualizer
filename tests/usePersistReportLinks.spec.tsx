@@ -8,6 +8,7 @@ import { useSetAtom } from 'jotai';
 import ReportLinkRecorder from '../src/components/ReportLinkRecorder';
 import { ReportFolder, ReportLocation } from '../src/definitions/Reports';
 import { ReportLinkMatchResult, ReportPairLinkStatus } from '../src/definitions/ReportLinks';
+import type { ActiveReportFingerprints } from '../src/model/ReportLinks';
 import {
     activePerformanceReportAtom,
     activeProfilerReportAtom,
@@ -33,6 +34,18 @@ const remoteState = vi.hoisted(() => ({
 
 vi.mock('../src/hooks/useReportLinkMatch', () => ({
     useReportLinkMatch: () => matchState.result,
+}));
+
+const NO_ACTIVE_RUNS: ActiveReportFingerprints = { profiler: null, performance: null };
+
+const activeRunsState = vi.hoisted(() => ({
+    data: undefined as ActiveReportFingerprints | undefined,
+    isPending: false,
+}));
+
+vi.mock('../src/hooks/useAPI', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('../src/hooks/useAPI')>()),
+    useActiveReportFingerprints: () => ({ data: activeRunsState.data, isPending: activeRunsState.isPending }),
 }));
 
 vi.mock('../src/hooks/useRemote', () => ({
@@ -113,6 +126,8 @@ describe('usePersistReportLinks', () => {
         window.localStorage.clear();
         matchState.result = ReportLinkMatchResult.PENDING;
         remoteState.host = DEFAULT_REMOTE_HOST;
+        activeRunsState.data = NO_ACTIVE_RUNS;
+        activeRunsState.isPending = false;
     });
 
     afterEach(() => {
@@ -255,5 +270,39 @@ describe('usePersistReportLinks', () => {
         renderWithReports({ tracingMode: true });
 
         expect(getProbedReportLinks()).toMatchObject([{ status: ReportPairLinkStatus.UNLINKED }]);
+    });
+
+    it('records the run each active folder holds', () => {
+        matchState.result = ReportLinkMatchResult.LINKED;
+        activeRunsState.data = { profiler: 'v1:mem', performance: 'v1:perf' };
+        renderWithReports();
+
+        expect(getProbedReportLinks()).toMatchObject([{ profilerRun: 'v1:mem', performanceRun: 'v1:perf' }]);
+    });
+
+    // Recording before the runs arrive would store a pair that matches any later run.
+    it('waits for the active runs before recording', () => {
+        matchState.result = ReportLinkMatchResult.LINKED;
+        activeRunsState.data = undefined;
+        activeRunsState.isPending = true;
+        const { rerender } = renderWithReports();
+        expect(getProbedReportLinks()).toEqual([]);
+
+        activeRunsState.data = { profiler: 'v1:mem', performance: 'v1:perf' };
+        activeRunsState.isPending = false;
+        rerender(reportsTree());
+
+        expect(getProbedReportLinks()).toMatchObject([{ profilerRun: 'v1:mem', performanceRun: 'v1:perf' }]);
+    });
+
+    it('records without runs when they cannot be read', () => {
+        matchState.result = ReportLinkMatchResult.LINKED;
+        activeRunsState.data = undefined;
+        renderWithReports();
+
+        const [stored] = getProbedReportLinks();
+        expect(stored).toMatchObject({ status: ReportPairLinkStatus.LINKED });
+        expect(stored).not.toHaveProperty('profilerRun');
+        expect(stored).not.toHaveProperty('performanceRun');
     });
 });

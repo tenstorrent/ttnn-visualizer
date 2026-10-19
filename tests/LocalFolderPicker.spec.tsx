@@ -13,6 +13,7 @@ import { TEST_IDS } from '../src/definitions/TestIds';
 import { getDeleteActionLabel } from '../src/functions/managedEntityLabels';
 import testForPortal from './helpers/testForPortal';
 import { TestProviders } from './helpers/TestProviders';
+import { runsWithoutFingerprints } from './helpers/reportLinkFixtures';
 
 const getServerConfigMock = vi.hoisted(() => vi.fn((): Partial<ServerConfig> => ({ SERVER_MODE: false })));
 
@@ -50,8 +51,8 @@ describe('LocalFolderPicker link badges', () => {
                     items={folders}
                     value={null}
                     handleSelect={vi.fn()}
-                    linkedIds={new Set(['linked-run'])}
-                    unlinkedIds={new Set(['unlinked-run'])}
+                    linkedRuns={runsWithoutFingerprints('linked-run')}
+                    unlinkedRuns={runsWithoutFingerprints('unlinked-run')}
                 />
             </TestProviders>,
         );
@@ -225,8 +226,8 @@ describe('LocalFolderPicker link badges', () => {
                     items={[{ path: 'unlinked-run', reportName: 'unlinked-run' }]}
                     value={null}
                     handleSelect={vi.fn()}
-                    linkedIds={new Set()}
-                    unlinkedIds={new Set(['unlinked-run'])}
+                    linkedRuns={runsWithoutFingerprints()}
+                    unlinkedRuns={runsWithoutFingerprints('unlinked-run')}
                 />
             </TestProviders>,
         );
@@ -236,5 +237,33 @@ describe('LocalFolderPicker link badges', () => {
 
         const unlinkIcon = document.querySelector('.folder-picker-menu-item .bp6-icon-unlink.bp6-intent-warning');
         expect(unlinkIcon).not.toBeNull();
+    });
+
+    // A re-run written into the folder must not inherit the old run's verdict (#2069).
+    it.each([
+        ['the run it was linked with', 'v1:linked', 1, 0],
+        ['a later run', 'v1:later', 0, 1],
+    ])('badges a folder holding %s accordingly', async (_case, runFingerprint, linkedCount, unknownCount) => {
+        render(
+            <TestProviders>
+                <LocalFolderPicker
+                    items={[{ path: 'reused-run', reportName: 'reused-run', runFingerprint }]}
+                    value={null}
+                    handleSelect={vi.fn()}
+                    linkedRuns={new Map([['reused-run', ['v1:linked']]])}
+                    unlinkedRuns={runsWithoutFingerprints()}
+                />
+            </TestProviders>,
+        );
+
+        fireEvent.click(screen.getByText('Select a report...'));
+        await waitFor(testForPortal, WAIT_FOR_OPTIONS);
+
+        expect(document.querySelectorAll('.folder-picker-menu-item .bp6-icon-link.bp6-intent-success')).toHaveLength(
+            linkedCount,
+        );
+        expect(document.querySelectorAll('.folder-picker-menu-item .folder-link-status-unknown')).toHaveLength(
+            unknownCount,
+        );
     });
 });

@@ -8,6 +8,7 @@ import { type ItemPredicate, ItemRenderer, Select } from '@blueprintjs/select';
 import { type ReactNode } from 'react';
 import 'styles/components/FolderPicker.scss';
 import { getFolderLinkState, shouldShowFolderLinkStatus } from '../../functions/folderLinkStatus';
+import { ReportLinkRunsById } from '../../definitions/ReportLinks';
 import { RemoteConnection, RemoteFolder } from '../../model/RemoteConnection';
 import { TEST_IDS } from '../../definitions/TestIds';
 import { getReportId } from '../../functions/reportLinks';
@@ -24,8 +25,8 @@ interface RemoteFolderRendererOptions {
     connection?: RemoteConnection;
     showReportName?: boolean;
     showLinkStatus?: boolean;
-    linkedIds?: Set<string> | null;
-    unlinkedIds?: Set<string> | null;
+    linkedRuns?: ReportLinkRunsById | null;
+    unlinkedRuns?: ReportLinkRunsById | null;
 }
 
 const remoteFolderRenderer =
@@ -35,8 +36,8 @@ const remoteFolderRenderer =
         connection,
         showReportName,
         showLinkStatus,
-        linkedIds,
-        unlinkedIds,
+        linkedRuns,
+        unlinkedRuns,
     }: RemoteFolderRendererOptions): ItemRenderer<RemoteFolder> =>
     (folder, { handleClick, modifiers, query }) => {
         if (!modifiers.matchesPredicate) {
@@ -67,7 +68,14 @@ const remoteFolderRenderer =
                     icon={selectedFolder?.remotePath === remotePath ? IconNames.SAVED : IconNames.DOCUMENT}
                     labelElement={
                         showLinkStatus ? (
-                            <FolderLinkStatusIcon linkState={getFolderLinkState(folderId, linkedIds, unlinkedIds)} />
+                            <FolderLinkStatusIcon
+                                linkState={getFolderLinkState(
+                                    folderId,
+                                    folder.runFingerprint,
+                                    linkedRuns,
+                                    unlinkedRuns,
+                                )}
+                            />
                         ) : undefined
                     }
                 />
@@ -86,8 +94,8 @@ interface RemoteFolderSelectorProps {
     onSelectFolder: (folder: RemoteFolder) => void;
     type: RemoteFolderType;
     showReportName?: boolean;
-    linkedIds?: Set<string> | null;
-    unlinkedIds?: Set<string> | null;
+    linkedRuns?: ReportLinkRunsById | null;
+    unlinkedRuns?: ReportLinkRunsById | null;
     children?: ReactNode;
 }
 
@@ -102,12 +110,12 @@ const RemoteFolderSelector = ({
     icon = IconNames.DOCUMENT_OPEN,
     type,
     showReportName,
-    linkedIds,
-    unlinkedIds,
+    linkedRuns,
+    unlinkedRuns,
 }: RemoteFolderSelectorProps) => {
     const { persistentState } = useRemoteConnection();
     const remoteConnection = persistentState.selectedConnection;
-    const showLinkStatus = shouldShowFolderLinkStatus(linkedIds, unlinkedIds);
+    const showLinkStatus = shouldShowFolderLinkStatus(linkedRuns, unlinkedRuns);
 
     const isDisabled = loading || remoteFolderList?.length === 0 || disabled;
 
@@ -122,8 +130,8 @@ const RemoteFolderSelector = ({
                     connection: remoteConnection,
                     showReportName,
                     showLinkStatus,
-                    linkedIds,
-                    unlinkedIds,
+                    linkedRuns,
+                    unlinkedRuns,
                 })}
                 filterable
                 itemPredicate={filterFolders(type, remoteConnection)}

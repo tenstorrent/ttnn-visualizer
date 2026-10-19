@@ -37,6 +37,7 @@ from ttnn_visualizer.exceptions import (
     PerformanceReportNotLoadedException,
 )
 from ttnn_visualizer.models import Instance
+from ttnn_visualizer.utils import newest_ops_perf_file
 
 logger = logging.getLogger(__name__)
 
@@ -771,19 +772,11 @@ class OpsPerformanceQueries:
             raise PerformanceReportNotLoadedException()
         performance_path = Path(instance.performance_path)
 
-        # Find the latest file with the correct prefix
-        perf_files = list(
-            performance_path.glob(f"{OpsPerformanceQueries.PERF_RESULTS_PREFIX}.csv")
-        ) + list(
-            performance_path.glob(f"{OpsPerformanceQueries.PERF_RESULTS_PREFIX}_*.csv")
-        )
-        if not perf_files:
+        latest_file = newest_ops_perf_file(performance_path)
+        if latest_file is None:
             raise FileNotFoundError(
                 f"No performance results file found at {performance_path}"
             )
-
-        # Use the latest file
-        latest_file = max(perf_files, key=os.path.getctime)
         return str(latest_file)
 
     @staticmethod

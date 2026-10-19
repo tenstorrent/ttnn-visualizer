@@ -29,8 +29,21 @@ export interface ReportLink {
     profilerAccess?: ReportLinkAccess;
     performanceAccess?: ReportLinkAccess;
     /**
+     * Run fingerprint of each side when the pair was compared, so a later run written
+     * into the same folder does not inherit the verdict (#2069). Absent on links stored
+     * before fingerprints existed, or when the run was unknown; absent matches any run.
+     */
+    profilerRun?: string;
+    performanceRun?: string;
+    /**
      * Epoch ms when the pair was last stored or moved to the end. Kept as is when the pair
      * is seen again already last and unchanged. Informational; capping uses array order.
      */
     recordedAt: number;
+}
+
+/** Which run each active report's folder holds, from `GET /api/report-fingerprints`. */
+export interface ActiveReportFingerprints {
+    profiler: string | null;
+    performance: string | null;
 }

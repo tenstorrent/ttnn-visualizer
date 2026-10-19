@@ -11,6 +11,7 @@ from ttnn_visualizer.local_remote_reports import (
     local_synced_report_path,
 )
 from ttnn_visualizer.models import RemoteConnection
+from ttnn_visualizer.report_fingerprint import performance_run_fingerprint
 from ttnn_visualizer.utils import update_last_synced
 
 
@@ -402,3 +403,18 @@ class TestOfflineListingReportsTheSyncedName:
         assert folders[0].reportName == f"{self.TIMESTAMP}_rank2"
         assert folders[0].syncedName == f"{self.TIMESTAMP}_rank2"
         assert folders[0].rank is None
+
+
+def test_list_local_synced_folders_fingerprint_the_synced_copy(tmp_path: Path):
+    host = "bh-lb-01"
+    _write_valid_performance_report(tmp_path / host / "performance-reports" / "run")
+
+    folders = list_local_synced_performance_folders(
+        _connection(host), tmp_path, "performance-reports"
+    )
+
+    assert len(folders) == 1
+    assert folders[0].runFingerprint == performance_run_fingerprint(
+        tmp_path / host / "performance-reports" / "run"
+    )
+    assert folders[0].runFingerprint is not None

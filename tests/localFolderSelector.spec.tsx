@@ -97,6 +97,8 @@ vi.mock('../src/hooks/useAPI', async () => {
         usePerfFolderList: () => ({ data: mockPerfFolderList }),
         useInstance: () => ({ data: mockInstanceEmpty }),
         useReportFolderList: () => ({ data: mockProfilerFolders }),
+        // Settled with no runs, so the recorder records straight away, as before #2069.
+        useActiveReportFingerprints: () => ({ data: { profiler: null, performance: null }, isPending: false }),
         updateInstance: (...args: unknown[]) => mockUpdateInstance(...args),
         deleteProfiler: (...args: unknown[]) => mockDeleteProfiler(...args),
         deletePerformance: (...args: unknown[]) => mockDeletePerformance(...args),

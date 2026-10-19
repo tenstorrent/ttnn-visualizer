@@ -10,7 +10,7 @@ from typing import Optional
 from unittest.mock import patch
 
 import pytest
-from ttnn_visualizer.enums import ConnectionTestStates, HostKeyIssue
+from ttnn_visualizer.enums import ConnectionTestStates, HostKeyIssue, SyncMethod
 from ttnn_visualizer.exceptions import (
     AuthenticationFailedException,
     HostKeyVerificationFailedException,
@@ -24,6 +24,7 @@ from ttnn_visualizer.models import (
     folder_segment_from_remote_path,
     split_rank_suffix,
 )
+from ttnn_visualizer.report_fingerprint import performance_run_fingerprint
 from ttnn_visualizer.sftp_operations import (
     _MISSING_ROOT_EXIT_CODE,
     _NOT_A_DIRECTORY_EXIT_CODE,
@@ -203,6 +204,44 @@ def test_remote_performance_returns_json_when_reports_exist(app, client):
     assert data[0]["lastModified"] == 200
     assert data[0]["lastSynced"] == 456
     read_last_synced.assert_called_once_with(expected_local_path)
+
+
+def test_remote_listing_fingerprints_only_rows_synced_locally(app, client, tmp_path):
+    app.config["SERVER_MODE"] = False
+    app.config["REMOTE_DATA_DIRECTORY"] = str(tmp_path)
+    synced_dir = (
+        tmp_path
+        / "remote.example.com"
+        / app.config["PERFORMANCE_DIRECTORY_NAME"]
+        / "synced"
+    )
+    _write_valid_performance_report(synced_dir)
+    folders = [
+        RemoteReportFolder(
+            reportName=name,
+            remotePath=f"/remote/performance/reports/{name}",
+            lastModified=200,
+            syncedName=name,
+        )
+        for name in ("synced", "never-synced")
+    ]
+
+    with patch(
+        "ttnn_visualizer.views.get_remote_performance_folders", return_value=folders
+    ):
+        response = client.post(
+            "/api/remote/performance-reports", json=_remote_connection_payload()
+        )
+
+    assert response.status_code == HTTPStatus.OK
+    run_fingerprint_by_name = {
+        folder["reportName"]: folder["runFingerprint"] for folder in response.get_json()
+    }
+    assert run_fingerprint_by_name == {
+        "synced": performance_run_fingerprint(synced_dir),
+        "never-synced": None,
+    }
+    assert run_fingerprint_by_name["synced"] is not None
 
 
 def test_remote_use_returns_404_when_profiler_not_synced_locally(app, client, tmp_path):
@@ -555,6 +594,45 @@ def test_remote_sync_forbidden_when_server_mode(app, client):
     )
 
     assert response.status_code == HTTPStatus.FORBIDDEN
+
+
+def test_remote_sync_returns_the_fingerprint_of_the_copy_it_wrote(
+    app, client, tmp_path
+):
+    app.config["SERVER_MODE"] = False
+    app.config["REMOTE_DATA_DIRECTORY"] = str(tmp_path)
+    synced_dir = (
+        tmp_path
+        / "remote.example.com"
+        / app.config["PERFORMANCE_DIRECTORY_NAME"]
+        / "bert"
+    )
+
+    def _sync(*_args, **_kwargs):
+        _write_valid_performance_report(synced_dir)
+        return SyncMethod.SFTP
+
+    with patch(
+        "ttnn_visualizer.views.sync_remote_performance_folders", side_effect=_sync
+    ):
+        response = client.post(
+            "/api/remote/sync",
+            json={
+                "connection": _remote_connection_payload(),
+                "performance": {
+                    "reportName": "bert",
+                    "remotePath": "/remote/performance/reports/bert",
+                    "lastModified": 1,
+                    "syncedName": "bert",
+                },
+            },
+        )
+
+    assert response.status_code == HTTPStatus.OK, response.get_data(as_text=True)
+    assert response.get_json()["runFingerprint"] == performance_run_fingerprint(
+        synced_dir
+    )
+    assert response.get_json()["runFingerprint"] is not None
 
 
 class TestMultihostPerformanceDiscovery:

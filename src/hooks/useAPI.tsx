@@ -82,6 +82,7 @@ import npeManifestSchema from '../schemas/npe-manifest.schema.json';
 import { getErroredReportFolderLabel, normaliseReportFolder } from '../functions/validateReportFolder';
 import { Signpost } from '../model/Signpost';
 import { TensorsByOperationByAddress } from '../model/BufferSummary';
+import { ActiveReportFingerprints } from '../model/ReportLinks';
 import { L1_DEFAULT_MEMORY_SIZE } from '../definitions/L1MemorySize';
 import {
     NPE_QUERY_KEY,
@@ -1028,6 +1029,32 @@ export const useReportMetadata = () => {
         queryKey: ['get-report-metadata', activeProfilerReport?.path],
         queryFn: fetchReportMetadata,
         enabled: activeProfilerReport !== null,
+        retry: false,
+        staleTime: Infinity,
+    });
+};
+
+const REPORT_FINGERPRINTS_QUERY_KEY = 'fetch-report-fingerprints';
+
+const fetchReportFingerprints = async (): Promise<ActiveReportFingerprints> => {
+    const { data } = await axiosInstance.get<ActiveReportFingerprints>(Endpoints.REPORT_FINGERPRINTS);
+    return data;
+};
+
+/**
+ * Which runs the active reports hold, so a recorded link names the run it was compared
+ * against (#2069). No invalidation of its own: every report switch runs
+ * `clearReportCaches`, which drops this with the report data the verdict is drawn from.
+ * Refreshing it alone could stamp a verdict on old data with a newer run.
+ */
+export const useActiveReportFingerprints = () => {
+    const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
+    const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
+
+    return useQuery<ActiveReportFingerprints, AxiosError>({
+        queryKey: [REPORT_FINGERPRINTS_QUERY_KEY, activeProfilerReport?.path, activePerformanceReport?.path],
+        queryFn: fetchReportFingerprints,
+        enabled: activeProfilerReport !== null || activePerformanceReport !== null,
         retry: false,
         staleTime: Infinity,
     });

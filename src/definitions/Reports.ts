@@ -24,4 +24,8 @@ export interface ReportFolder {
     syncedName?: string;
     // Set by the server's report listings: true for a bundled demo report under SERVER_MODE.
     isDemo?: boolean;
+    // Set by the server's report listings: which run the folder holds now, null when
+    // unreadable. Not to be read off an active report, which a remote pick or a reload
+    // sets without it; useActiveReportFingerprints asks the instance instead.
+    runFingerprint?: string | null;
 }

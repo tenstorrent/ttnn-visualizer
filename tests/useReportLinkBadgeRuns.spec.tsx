@@ -4,14 +4,25 @@
 
 import { renderHook } from '@testing-library/react';
 import type { ReactNode } from 'react';
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ReportPairLinkStatus } from '../src/definitions/ReportLinks';
 import { ReportLocation } from '../src/definitions/Reports';
-import { useReportLinkBadgeIds } from '../src/hooks/useReportLinkBadgeIds';
-import type { ReportLink } from '../src/model/ReportLinks';
+import { useReportLinkBadgeRuns } from '../src/hooks/useReportLinkBadgeRuns';
+import type { ActiveReportFingerprints, ReportLink } from '../src/model/ReportLinks';
 import { activePerformanceReportAtom, activeProfilerReportAtom, reportLinksAtom } from '../src/store/app';
 import { AtomProvider, type AtomProviderInitialValues } from './helpers/atomProvider';
 import { PERFORMANCE_REPORT, PROFILER_REPORT, createReportLink } from './helpers/reportLinkFixtures';
+
+const activeRunsState = vi.hoisted(() => ({
+    data: undefined as ActiveReportFingerprints | undefined,
+}));
+
+vi.mock('../src/hooks/useAPI', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('../src/hooks/useAPI')>()),
+    useActiveReportFingerprints: () => ({ data: activeRunsState.data }),
+}));
+
+const idsOf = (runsById: ReadonlyMap<string, unknown>): Set<string> => new Set(runsById.keys());
 
 // Defaults to the active pair, so each case overrides only the side it is about.
 const link = (overrides: Partial<ReportLink>): ReportLink => createReportLink('mem-run', 'perf-run', overrides);
@@ -23,24 +34,28 @@ function renderBadgeIds(links: ReportLink[], remoteHost?: string | null) {
         [activePerformanceReportAtom, PERFORMANCE_REPORT],
     ] as AtomProviderInitialValues;
 
-    return renderHook(() => useReportLinkBadgeIds(remoteHost === undefined ? undefined : { remoteHost }), {
+    return renderHook(() => useReportLinkBadgeRuns(remoteHost === undefined ? undefined : { remoteHost }), {
         wrapper: ({ children }: { children: ReactNode }) => (
             <AtomProvider initialValues={initialValues}>{children}</AtomProvider>
         ),
     }).result;
 }
 
-describe('useReportLinkBadgeIds', () => {
-    it('returns empty sets rather than null when nothing is linked', () => {
+describe('useReportLinkBadgeRuns', () => {
+    beforeEach(() => {
+        activeRunsState.data = undefined;
+    });
+
+    it('returns empty maps rather than null when nothing is linked', () => {
         // Not null: the hook previously returned null throughout while report linking was
         // gated off, and a picker treating "no badges yet" as "badges unavailable" would
         // hide them permanently.
         const result = renderBadgeIds([]);
 
-        expect(result.current.linkedPerfIds).toEqual(new Set());
-        expect(result.current.unlinkedPerfIds).toEqual(new Set());
-        expect(result.current.linkedProfilerReportIds).toEqual(new Set());
-        expect(result.current.unlinkedProfilerReportIds).toEqual(new Set());
+        expect(result.current.linkedPerfRuns.size).toBe(0);
+        expect(result.current.unlinkedPerfRuns.size).toBe(0);
+        expect(result.current.linkedProfilerReportRuns.size).toBe(0);
+        expect(result.current.unlinkedProfilerReportRuns.size).toBe(0);
     });
 
     it('separates linked from unlinked counterparts of the active reports', () => {
@@ -51,8 +66,8 @@ describe('useReportLinkBadgeIds', () => {
             link({ profilerId: 'other-run', performanceId: 'perf-elsewhere' }),
         ]);
 
-        expect(result.current.linkedPerfIds).toEqual(new Set(['perf-linked']));
-        expect(result.current.unlinkedPerfIds).toEqual(new Set(['perf-unlinked']));
+        expect(idsOf(result.current.linkedPerfRuns)).toEqual(new Set(['perf-linked']));
+        expect(idsOf(result.current.unlinkedPerfRuns)).toEqual(new Set(['perf-unlinked']));
     });
 
     it('resolves counterparts of the active performance report as well', () => {
@@ -61,8 +76,8 @@ describe('useReportLinkBadgeIds', () => {
             link({ profilerId: 'mem-unlinked', status: ReportPairLinkStatus.UNLINKED }),
         ]);
 
-        expect(result.current.linkedProfilerReportIds).toEqual(new Set(['mem-linked']));
-        expect(result.current.unlinkedProfilerReportIds).toEqual(new Set(['mem-unlinked']));
+        expect(idsOf(result.current.linkedProfilerReportRuns)).toEqual(new Set(['mem-linked']));
+        expect(idsOf(result.current.unlinkedProfilerReportRuns)).toEqual(new Set(['mem-unlinked']));
     });
 
     it('scopes out counterparts recorded against another remote host', () => {
@@ -83,10 +98,33 @@ describe('useReportLinkBadgeIds', () => {
             }),
         ];
 
-        expect(renderBadgeIds(links, 'n150').current.linkedPerfIds).toEqual(new Set(['perf-here', 'perf-local']));
+        expect(idsOf(renderBadgeIds(links, 'n150').current.linkedPerfRuns)).toEqual(
+            new Set(['perf-here', 'perf-local']),
+        );
         // No host scope (the local picker) keeps every counterpart.
-        expect(renderBadgeIds(links).current.linkedPerfIds).toEqual(
+        expect(idsOf(renderBadgeIds(links).current.linkedPerfRuns)).toEqual(
             new Set(['perf-here', 'perf-elsewhere', 'perf-local']),
         );
+    });
+
+    it('drops links recorded against another run of the active folder', () => {
+        activeRunsState.data = { profiler: 'v1:mem-new', performance: null };
+
+        const result = renderBadgeIds([
+            link({ performanceId: 'perf-old', profilerRun: 'v1:mem-old' }),
+            link({ performanceId: 'perf-new', profilerRun: 'v1:mem-new' }),
+            link({ performanceId: 'perf-legacy' }),
+        ]);
+
+        expect(idsOf(result.current.linkedPerfRuns)).toEqual(new Set(['perf-new', 'perf-legacy']));
+    });
+
+    it('keeps every link until the active runs load', () => {
+        const result = renderBadgeIds([
+            link({ performanceId: 'perf-old', profilerRun: 'v1:mem-old' }),
+            link({ performanceId: 'perf-new', profilerRun: 'v1:mem-new' }),
+        ]);
+
+        expect(idsOf(result.current.linkedPerfRuns)).toEqual(new Set(['perf-old', 'perf-new']));
     });
 });

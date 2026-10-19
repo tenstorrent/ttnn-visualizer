@@ -28,7 +28,19 @@ export interface LinkedReportIdOptions {
      * different remote host. Local / unknown-host links still match for mix-and-match.
      */
     remoteHost?: string | null;
+    /**
+     * Run fingerprint of the report whose counterparts are looked up. Links recorded
+     * against another run in the same folder are dropped; null or omitted keeps them all.
+     */
+    activeRun?: string | null;
 }
+
+/**
+ * Counterpart report id → the run each of its links recorded for it, `undefined` where
+ * a link predates run fingerprints (#2069) or the run was unknown. A picker row counts
+ * a link only when one of these runs is the run its folder holds now.
+ */
+export type ReportLinkRunsById = ReadonlyMap<string, ReadonlyArray<string | undefined>>;
 
 // Footer link-status tooltip copy; specs assert on what the user reads.
 export const REPORTS_LINKED_TOOLTIP = 'Data linked between memory and performance reports';

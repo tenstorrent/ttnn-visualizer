@@ -36,6 +36,7 @@ vi.mock('../src/hooks/useAPI.tsx', () => ({
     useReportFolderList: () => ({ data: mockProfilerFolderList }),
     useGetNPEManifest: () => ({ data: null }),
     useReportMetadata: () => ({ data: undefined, error: undefined }),
+    useActiveReportFingerprints: () => ({ data: undefined, isPending: true }),
 }));
 
 vi.mock('../src/functions/getServerConfig.ts', () => ({

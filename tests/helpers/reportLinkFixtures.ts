@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import { screen } from '@testing-library/react';
-import { ReportPairLinkStatus } from '../../src/definitions/ReportLinks';
+import { ReportLinkRunsById, ReportPairLinkStatus } from '../../src/definitions/ReportLinks';
 import { ReportLink } from '../../src/model/ReportLinks';
 
 export const REPORT_LINKS_PROBE_TEST_ID = 'report-links-probe';
@@ -28,3 +28,7 @@ export const createReportLink = (
     recordedAt: 1,
     ...overrides,
 });
+
+/** Badge maps for counterparts whose links recorded no run, so they match any folder run. */
+export const runsWithoutFingerprints = (...reportIds: string[]): ReportLinkRunsById =>
+    new Map(reportIds.map((reportId) => [reportId, [undefined]]));
