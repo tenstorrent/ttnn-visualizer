@@ -2268,6 +2268,25 @@ describe('OperationGraphReactFlow repeat blocks', () => {
             expect(asked.filter((id) => !id.startsWith('weights:')).length).toBeGreaterThan(0);
         });
 
+        it('opens the block, not just the fan, for a URL naming an op right after the block folds', () => {
+            // Until the rebuild lands, op 1 still reads as folded into its fan and its block. #2086
+            const { rerender } = renderGraph(FAN_AND_REPEATS);
+            deliver(FAN_AND_REPEATS, { collapseWeightLoads: true });
+            fireEvent.click(screen.getByRole('button', { name: 'Fold all repeats' }));
+
+            rerender(
+                <MemoryRouter>
+                    <OperationGraphReactFlow
+                        operationList={FAN_AND_REPEATS}
+                        isPerfReportLoaded={false}
+                        operationId={1}
+                    />
+                </MemoryRouter>,
+            );
+
+            expect(lastAskedExpandedIds()).toContain('block:1');
+        });
+
         it("opens the fan a row's op joins once its folded block unrolls (#2086)", () => {
             // No fan exists to open at the click: the folded block keeps op 1 out of fan
             // detection, and unrolling it alone landed the row on a newly folded fan.
@@ -2314,7 +2333,30 @@ describe('OperationGraphReactFlow repeat blocks', () => {
 
             fireEvent.click(slowestRow('1 ttnn.to_device'));
 
-            expect(lastAskedExpandedIds()).toContain('block:1');
+            const asked = lastAskedExpandedIds() ?? [];
+            expect(asked).toContain('block:1');
+            // The block alone would land the row on the fan op 1 joins there, still folded: #2086 as reported.
+            expect(asked.some((id) => weightFanIdCovers(id, [1]))).toBe(true);
+            deliver(FAN_AND_REPEATS, { collapseWeightLoads: true, expandedBlockIds: asked });
+
+            const member = nodeById(lastFlowRender().nodes, '1');
+            expect(member.parentId).toBe('weights:1-2');
+            expect(member.selected).toBe(true);
+            expect(hasClass(member, REVEALED_NODE_CLASS)).toBe(true);
+        });
+
+        it('keeps every grouping block unrolled when a row opens a fan before anything was folded', () => {
+            // `null` renders every block unrolled, so a set naming only the fan would fold all of them. #1977
+            renderGraph(FAN_AND_REPEATS, perfRowsFor(FAN_AND_REPEATS));
+            deliver(FAN_AND_REPEATS, { collapseWeightLoads: true });
+            fireEvent.click(screen.getByRole('checkbox', { name: /^Slowest operations/ }));
+            runBuild.mockClear();
+
+            fireEvent.click(slowestRow('1 ttnn.to_device'));
+
+            expect(lastAskedExpandedIds()).toEqual(
+                expect.arrayContaining(['block:1', 'block:3', 'block:11', 'block:21', 'weights:1-2']),
+            );
         });
 
         it('lets the reader fold the fan a row opened', () => {
@@ -3188,6 +3230,46 @@ describe('OperationGraphReactFlow repeat blocks', () => {
             expect(hasClass(nodeById(nodes, '2'), REVEALED_NODE_CLASS)).toBe(true);
             expect(hasClass(nodeById(nodes, '3'), REVEALED_NODE_CLASS)).toBe(false);
             expect(screen.getByRole('heading', { name: '2 layer_a' })).toBeInTheDocument();
+            expect(setViewport).toHaveBeenCalledTimes(1);
+        });
+
+        it('unrolls both blocks for rows in two of them clicked before the rebuild lands', () => {
+            renderFoldedWithPerf();
+            fireEvent.click(screen.getByRole('checkbox', { name: /^Slowest operations/ }));
+            setViewport.mockClear();
+
+            fireEvent.click(slowestRow('3 layer_b'));
+            fireEvent.click(slowestRow('5 layer_b'));
+            const asked = lastAskedExpandedIds();
+            expect(asked).toEqual(expect.arrayContaining([FIRST_BLOCK_ID, SECOND_BLOCK_ID]));
+            deliver(REPEAT_OPERATION_LIST, { expandedBlockIds: asked });
+
+            const { nodes } = lastFlowRender();
+            expect(nodes.filter((node) => node.selected).map((node) => node.id)).toEqual(['5']);
+            expect(hasClass(nodeById(nodes, '5'), REVEALED_NODE_CLASS)).toBe(true);
+            expect(hasClass(nodeById(nodes, '3'), REVEALED_NODE_CLASS)).toBe(false);
+            expect(screen.getByRole('heading', { name: '5 layer_b' })).toBeInTheDocument();
+            expect(setViewport).toHaveBeenCalledTimes(1);
+        });
+
+        it('leads to a row clicked while a pill unroll is pending, not to what the unroll opens', () => {
+            // The pill armed its own reveal first, and the reader's latest ask wins, as between two rows.
+            renderFoldedWithPerf();
+            fireEvent.click(screen.getByRole('checkbox', { name: /^Slowest operations/ }));
+            setViewport.mockClear();
+
+            fireEvent.click(screen.getAllByRole('button', { name: 'Unroll 2 operations' })[1]);
+            expect(lastAskedExpandedIds()).toEqual([SECOND_BLOCK_ID]);
+            fireEvent.click(slowestRow('6 suffix'));
+            expect(setViewport).not.toHaveBeenCalled();
+            deliver(REPEAT_OPERATION_LIST, { expandedBlockIds: lastAskedExpandedIds() });
+
+            const { nodes } = lastFlowRender();
+            expect(nodeById(nodes, '6').selected).toBe(true);
+            expect(hasClass(nodeById(nodes, '6'), REVEALED_NODE_CLASS)).toBe(true);
+            expect(hasClass(nodeById(nodes, '4'), REVEALED_NODE_CLASS)).toBe(false);
+            expect(hasClass(nodeById(nodes, '5'), REVEALED_NODE_CLASS)).toBe(false);
+            expect(screen.getByRole('heading', { name: '6 suffix' })).toBeInTheDocument();
             expect(setViewport).toHaveBeenCalledTimes(1);
         });
 
