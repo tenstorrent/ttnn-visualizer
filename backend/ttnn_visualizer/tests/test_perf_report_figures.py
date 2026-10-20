@@ -38,6 +38,7 @@ def _options(**overrides) -> _PerformanceReportOptions:
         tracing_mode=queries.DEFAULT_TRACING_MODE,
         group_by=queries.DEFAULT_GROUP_BY,
         no_stacked_report=queries.DEFAULT_NO_STACKED_REPORT,
+        detail_columns=queries.DEFAULT_DETAIL_COLUMNS,
     )
     return _PerformanceReportOptions(**{**defaults, **overrides})
 

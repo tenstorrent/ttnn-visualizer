@@ -103,6 +103,7 @@ def test_explicit_defaults_share_the_omitted_defaults_entry(tmp_path, monkeypatc
         tracing_mode=False,
         group_by=None,
         no_stacked_report=False,
+        detail_columns=False,
     )
 
     assert len(calls) == 1
@@ -119,6 +120,7 @@ def test_explicit_defaults_share_the_omitted_defaults_entry(tmp_path, monkeypatc
         ("tracing_mode", True),
         ("group_by", "memory"),
         ("no_stacked_report", True),
+        ("detail_columns", True),
     ],
 )
 def test_every_generation_option_participates_in_the_key(

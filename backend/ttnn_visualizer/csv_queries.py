@@ -6,6 +6,7 @@ import csv
 import json
 import logging
 import os
+import sys
 import tempfile
 import traceback
 from collections import defaultdict
@@ -105,6 +106,10 @@ _OP_TYPE_COLUMN = "OP TYPE"
 _OP_CODE_COLUMN = "OP CODE"
 _HOST_START_COLUMN = "HOST START TS"
 
+# A row's program and whether the program cache held it. Older captures lack both.
+PROGRAM_HASH_COLUMN = "PROGRAM HASH"
+PROGRAM_CACHE_HIT_COLUMN = "PROGRAM CACHE HIT"
+
 # Signpost names a refusal lists. A capture can emit one per layer or iteration;
 # the list is there to show a typo its neighbours, not to inventory the report.
 MAX_LISTED_SIGNPOSTS = 20
@@ -151,6 +156,7 @@ class _PerformanceReportOptions:
     tracing_mode: bool
     group_by: Optional[str]
     no_stacked_report: bool
+    detail_columns: bool
 
 
 class LocalCSVQueryRunner:
@@ -852,6 +858,14 @@ class OpsPerformanceQueries:
             raise RuntimeError(f"Error accessing directory: {e}")
 
 
+def _intern_detail_cells(row: Dict) -> None:
+    """Share one copy of each repeated cell: kernel paths repeat across a run's rows."""
+    for key in OpsPerformanceReportQueries.DETAIL_COLUMNS:
+        value = row.get(key)
+        if isinstance(value, str):
+            row[key] = sys.intern(value)
+
+
 class OpsPerformanceReportQueries:
     REPORT_COLUMN_HEADERS = {
         "id": "ID",
@@ -926,6 +940,33 @@ class OpsPerformanceReportQueries:
         "metal_trace_replay_session_id": "METAL TRACE REPLAY SESSION ID",
     }
 
+    # Raw columns the app does not show, copied only when `detail_columns` asks, so the
+    # app's rows keep their size (#2159). The agent tools read them (#2153).
+    DETAIL_COLUMNS = {
+        "raw_math_fidelity": "MATH FIDELITY",
+        "device_kernel_duration_per_core_min": "DEVICE KERNEL DURATION PER CORE MIN [ns]",
+        "device_kernel_duration_per_core_max": "DEVICE KERNEL DURATION PER CORE MAX [ns]",
+        "device_kernel_duration_per_core_avg": "DEVICE KERNEL DURATION PER CORE AVG [ns]",
+        "device_kernel_first_to_last_start": "DEVICE KERNEL FIRST TO LAST START [ns]",
+        "device_compute_cb_wait_front": "DEVICE COMPUTE CB WAIT FRONT [ns]",
+        "device_compute_cb_reserve_back": "DEVICE COMPUTE CB RESERVE BACK [ns]",
+        "dispatch_total_cq_cmd_op_time": "DISPATCH TOTAL CQ CMD OP TIME [ns]",
+        "dispatch_go_send_wait_time": "DISPATCH GO SEND WAIT TIME [ns]",
+        "compute_kernel_source": "COMPUTE KERNEL SOURCE",
+        "compute_kernel_hash": "COMPUTE KERNEL HASH",
+        "data_movement_kernel_source": "DATA MOVEMENT KERNEL SOURCE",
+        "data_movement_kernel_hash": "DATA MOVEMENT KERNEL HASH",
+        "pm_compute_ns": "PM COMPUTE [ns]",
+        "pm_bandwidth_ns": "PM BANDWIDTH [ns]",
+        "pm_fpu_util": "PM FPU UTIL (%)",
+        "noc_util": "NOC UTIL (%)",
+        "multicast_noc_util": "MULTICAST NOC UTIL (%)",
+        "dram_bw_util": "DRAM BW UTIL (%)",
+        "dram_bw_util_per_ctrl": "DRAM BW UTIL PER CTRL (%)",
+        "eth_bw_util": "ETH BW UTIL (%)",
+        "npe_cong_impact": "NPE CONG IMPACT (%)",
+    }
+
     DEFAULT_START_SIGNPOST = None
     DEFAULT_END_SIGNPOST = None
     DEFAULT_IGNORE_SIGNPOSTS = True
@@ -938,6 +979,7 @@ class OpsPerformanceReportQueries:
     DEFAULT_RAW_OP_CODES = True
     DEFAULT_NO_HOST_OPS = False
     DEFAULT_NO_STACKED_REPORT = False
+    DEFAULT_DETAIL_COLUMNS = False
     DEFAULT_NO_STACK_BY_IN0 = True
     DEFAULT_MERGE_DEVICES = True
     DEFAULT_STACKED_CSV_FILE = None  # Stacked report CSV output file
@@ -1016,10 +1058,10 @@ class OpsPerformanceReportQueries:
     @staticmethod
     def set_hash_from_results(processed_row, idx, ops_perf_results):
         if 0 <= idx < len(ops_perf_results):
-            hash_value = ops_perf_results[idx].get("PROGRAM HASH")
+            hash_value = ops_perf_results[idx].get(PROGRAM_HASH_COLUMN)
             processed_row["hash"] = hash_value if hash_value else None
 
-            cache_hit_value = ops_perf_results[idx].get("PROGRAM CACHE HIT")
+            cache_hit_value = ops_perf_results[idx].get(PROGRAM_CACHE_HIT_COLUMN)
             if cache_hit_value == "True":
                 processed_row["cache_hit"] = True
             elif cache_hit_value == "False":
@@ -1097,6 +1139,7 @@ class OpsPerformanceReportQueries:
             no_stacked_report=kwargs.get(
                 "no_stacked_report", cls.DEFAULT_NO_STACKED_REPORT
             ),
+            detail_columns=kwargs.get("detail_columns", cls.DEFAULT_DETAIL_COLUMNS),
         )
 
     @classmethod
@@ -1221,6 +1264,11 @@ class OpsPerformanceReportQueries:
                                     header
                                 )
                                 id_index = column_indexes.get("id")
+                                passthrough_columns = (
+                                    {**cls.PASSTHROUGH_COLUMNS, **cls.DETAIL_COLUMNS}
+                                    if options.detail_columns
+                                    else cls.PASSTHROUGH_COLUMNS
+                                )
                                 for row in reader:
                                     try:
                                         if id_index is None or id_index >= len(row):
@@ -1248,13 +1296,15 @@ class OpsPerformanceReportQueries:
                                         for (
                                             key,
                                             value,
-                                        ) in cls.PASSTHROUGH_COLUMNS.items():
+                                        ) in passthrough_columns.items():
                                             if 0 <= idx < len(ops_perf_results):
                                                 processed_row[key] = ops_perf_results[
                                                     idx
                                                 ].get(value)
                                             else:
                                                 processed_row[key] = None
+                                        if options.detail_columns:
+                                            _intern_detail_cells(processed_row)
 
                                         # Get the op type from the raw file for this row as it is not returned from tt-perf-report
                                         cls.set_op_type_from_results(

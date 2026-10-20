@@ -34,7 +34,7 @@ from enum import Enum
 from typing import Dict, List, NamedTuple, Optional, Sequence, Set, Tuple
 
 from tt_perf_report.perf_report import HOST_OP_MARKER
-from ttnn_visualizer.agent import operations, tools
+from ttnn_visualizer.agent import operations, perf_detail, tools
 from ttnn_visualizer.agent.bounds import MAX_LIMIT
 from ttnn_visualizer.agent.handles import CacheVariant, ReportRegistry
 from ttnn_visualizer.csv_queries import SIGNPOST_OP_TYPE
@@ -646,6 +646,7 @@ def top_ops(
     limit: Optional[int] = None,
     start_signpost: Optional[str] = None,
     end_signpost: Optional[str] = None,
+    include: Optional[List[str]] = None,
 ) -> Dict[str, object]:
     """`tools.top_ops`, with each row's profiler operation id where one is known.
 
@@ -659,6 +660,7 @@ def top_ops(
         limit=limit,
         start_signpost=start_signpost,
         end_signpost=end_signpost,
+        include=include,
     )
     link = operation_link(registry, handle)
     ops = result.get("ops")
@@ -715,8 +717,10 @@ def operation_detail(
     handle: str,
     operation_id: int,
     rank: Optional[int] = None,
+    include: Optional[List[str]] = None,
 ) -> Dict[str, object]:
     """`operations.operation_detail`, with the performance rows it launched."""
+    groups = perf_detail.parse_include(include)
     result = operations.operation_detail(
         registry, handle, operation_id=operation_id, rank=rank
     )
@@ -735,20 +739,23 @@ def operation_detail(
         return result
     if link.status is LinkStatus.LINKED:
         rows = link.perf_rows_by_operation.get(int(operation_id), [])
+        empty = tools.empty_detail_fields(registry, handle, groups)
         result["perf_rows"] = [
             {
                 **tools.project_row(row),
                 "device_time_share_percent": _share_percent(
                     tools.countable_device_time(row), link.report_device_time_total
                 ),
+                **perf_detail.detail_fields(row, groups, empty),
             }
-            for row in rows[:MAX_LIMIT]
+            for row in rows[: tools.row_limit(MAX_LIMIT, groups)]
         ]
         result["perf_row_count"] = len(rows)
         # Stated because this response's other duration is host seconds, and the two
         # invite being compared.
         result["device_time_unit"] = DEVICE_TIME_UNIT
         result["projection"] = tools.projection(None)
+        result.update(perf_detail.summary(groups, empty))
         if rows:
             result.update(_device_time_summary(rows, link.report_device_time_total))
             result["report_device_time_total"] = round(link.report_device_time_total, 3)
@@ -760,9 +767,37 @@ def operation_detail(
     return result
 
 
+PROGRAM_CACHE_LINK_NOTE = (
+    "first_repeat_miss_operation_id is the profiler database id of the operation that "
+    "launched the op code's first repeat miss, to pass to operation_provenance for its "
+    "call site. It is null when the reports did not link, or for a row with no "
+    "profiler operation."
+)
+
+
+def program_cache(
+    registry: ReportRegistry, handle: str, limit: Optional[int] = None
+) -> Dict[str, object]:
+    """`tools.program_cache`, with the operation behind each op code's first repeat miss."""
+    result = tools.program_cache(registry, handle, limit=limit)
+    link = operation_link(registry, handle)
+    entries = result.get("op_codes")
+    for entry in entries if isinstance(entries, list) else []:
+        miss = entry.get("first_repeat_miss_perf_id")
+        entry["first_repeat_miss_operation_id"] = (
+            None if miss is None else link.operation_by_perf_id.get(str(miss))
+        )
+    response = link.as_response()
+    if registry.get(handle).profiler_path:
+        response["note"] = PROGRAM_CACHE_LINK_NOTE
+    result["operation_link"] = response
+    return result
+
+
 __all__ = [
     "DEVICE_TIME_UNIT",
     "MAX_CAPTURED_GRAPH_CHARS",
+    "PROGRAM_CACHE_LINK_NOTE",
     "TOP_OPS_LINK_NOTE",
     "DeviceOperation",
     "LinkStatus",
@@ -778,6 +813,7 @@ __all__ = [
     "match_device_operations",
     "operation_detail",
     "operation_link",
+    "program_cache",
     "top_ops",
     "unlinked_rows",
 ]

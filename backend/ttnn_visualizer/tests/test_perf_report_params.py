@@ -108,3 +108,16 @@ def test_the_view_returns_the_generated_json_unchanged(
 
     assert response.data == orjson.dumps({"report": []})
     assert response.mimetype == "application/json"
+
+
+def test_the_view_never_asks_for_the_agent_only_columns(
+    client, performance_instance, captured_report_kwargs
+):
+    """Only the agent tools read them; the app's rows would roughly double (#2159)."""
+    response = client.get(
+        REPORT_ENDPOINT,
+        query_string={"instanceId": performance_instance, "detail_columns": "true"},
+    )
+
+    assert response.status_code == 200
+    assert "detail_columns" not in captured_report_kwargs
