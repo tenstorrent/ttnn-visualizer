@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
-import { atomWithStorage, createJSONStorage } from 'jotai/utils';
+import { atomWithStorage, createJSONStorage, selectAtom } from 'jotai/utils';
 import { SetStateAction, atom } from 'jotai';
 import { NumberRange, TabId } from '@blueprintjs/core';
 import { Id } from 'react-toastify';
@@ -26,7 +26,9 @@ import isValidNumber from '../functions/isValidNumber';
 import {
     DEFAULT_HOT_OPS_SETTINGS,
     HOT_OPS_ENABLED_STORAGE_KEY,
+    HOT_OPS_MARKING_KEYS,
     HOT_OPS_SETTINGS_STORAGE_KEY,
+    HotOpsMarking,
     HotOpsSettings,
 } from '../definitions/HotOps';
 import { parseHotOpsEnabled, parseHotOpsSettings } from '../functions/hotOpsSettings';
@@ -142,6 +144,15 @@ export const hotOpsSettingsAtom = atomWithStorage<HotOpsSettings>(
     HOT_OPS_SETTINGS_STORAGE_KEY,
     DEFAULT_HOT_OPS_SETTINGS,
     parsedSessionStorage(parseHotOpsSettings),
+);
+// What the graph reads to badge the listed ops: null while marking is off, and unchanged
+// by a re-sort, so neither re-renders the graph. #2085
+export const hotOpsMarkingAtom = selectAtom(
+    hotOpsSettingsAtom,
+    ({ markOnGraph, limit, hideUnlinked }): HotOpsMarking | null => (markOnGraph ? { limit, hideUnlinked } : null),
+    (previous, next) =>
+        previous === next ||
+        (previous !== null && next !== null && HOT_OPS_MARKING_KEYS.every((key) => previous[key] === next[key])),
 );
 
 // Tensors route

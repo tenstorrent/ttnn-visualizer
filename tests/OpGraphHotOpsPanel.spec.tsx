@@ -265,6 +265,32 @@ describe('OpGraphHotOpsPanel controls', () => {
         expect(listedIds()).toEqual([12, 11, 10, 9, 8, 7, 6, 5, 4, 3]);
     });
 
+    it('offers to mark the listed ops on the graph, off until asked (#2085)', () => {
+        renderPanel();
+        const mark = screen.getByRole('checkbox', { name: 'Mark on graph' });
+        expect(mark).not.toBeChecked();
+
+        fireEvent.click(mark);
+
+        expect(mark).toBeChecked();
+        expect(JSON.parse(sessionStorage.getItem(HOT_OPS_SETTINGS_STORAGE_KEY) ?? '{}')).toMatchObject({
+            markOnGraph: true,
+        });
+    });
+
+    it('turns marking back off, and keeps that for the session', () => {
+        renderPanel();
+        const mark = screen.getByRole('checkbox', { name: 'Mark on graph' });
+
+        fireEvent.click(mark);
+        fireEvent.click(mark);
+
+        expect(mark).not.toBeChecked();
+        expect(JSON.parse(sessionStorage.getItem(HOT_OPS_SETTINGS_STORAGE_KEY) ?? '{}')).toMatchObject({
+            markOnGraph: false,
+        });
+    });
+
     it('keeps its settings for the browser session', () => {
         renderPanel();
 

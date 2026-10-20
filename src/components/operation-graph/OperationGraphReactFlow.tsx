@@ -40,6 +40,7 @@ import {
     activePerformanceReportAtom,
     activeProfilerReportAtom,
     criticalPathScopeAtom,
+    hotOpsMarkingAtom,
     isHotOpsEnabledAtom,
 } from '../../store/app';
 import type { GraphOpFilterHandle } from '../GraphOpFilter';
@@ -53,18 +54,16 @@ import OpGraphDeviceOpNode from './OpGraphDeviceOpNode';
 import OpGraphEdge from './OpGraphEdge';
 import OpGraphHotOpsPanel from './OpGraphHotOpsPanel';
 import OpGraphInfoPanel from './OpGraphInfoPanel';
-import { buildHotOpRows } from './opGraphHotOps';
+import { buildHotOpRows, buildHotRankByNodeId, getMarkedHotOpRanks } from './opGraphHotOps';
 import OpGraphNode from './OpGraphNode';
 import OpGraphToolbar from './OpGraphToolbar';
 import { buildDeviceOperationSubgraph, countDeviceOperations } from './opGraphDeviceSubgraph';
 import { OpGraphBlockExpansionContext, OpGraphExpansionContext } from './opGraphExpansionContext';
 import {
-    PERF_BAR_ZOOM_VAR,
     buildOpGraphPerfOverlay,
     buildRenderedPerfStyling,
     getPerfColorForNs,
     getPerfHoverLabel,
-    getQuantisedPerfZoom,
     getRenderedPerfRange,
 } from './opGraphPerfOverlay';
 import { EMPTY_CRITICAL_PATH, findCriticalPath } from './opGraphCriticalPath';
@@ -98,6 +97,7 @@ import {
     type OpGraphSourceOperation,
 } from './opGraphTypes';
 import { fusedActivationOf } from './opGraphFusedActivation';
+import { NODE_ZOOM_VAR, getQuantisedNodeZoom } from './opGraphNodeZoom';
 import { fanIdsCovering, weightFanMembersOf } from './opGraphWeightFans';
 import { OpGraphGrouping } from './opGraphTypes';
 import 'styles/components/OperationGraphReactFlow.scss';
@@ -405,6 +405,7 @@ const OperationGraphInner = ({
     const [isPerfOverlayEnabled, setIsPerfOverlayEnabled] = useState(false);
     const [criticalPathScope, setCriticalPathScope] = useAtom(criticalPathScopeAtom);
     const [isHotOpsEnabled, setIsHotOpsEnabled] = useAtom(isHotOpsEnabledAtom);
+    const hotOpsMarking = useAtomValue(hotOpsMarkingAtom);
     const [perfHover, setPerfHover] = useState<PerfHover | null>(null);
     const [filterQuery, setFilterQuery] = useState('');
     const [appliedFilterQuery, setAppliedFilterQuery] = useState('');
@@ -1536,32 +1537,35 @@ const OperationGraphInner = ({
 
     // Derived, so perf data arriving or going away can't leave a stored flag
     // disagreeing with what the encoding can show.
-    const isPerfOverlayActive = isPerfOverlayEnabled && perfOverlay.status === PerfOverlayStatus.READY;
+    const isPerfReady = perfOverlay.status === PerfOverlayStatus.READY;
+    const isPerfOverlayActive = isPerfOverlayEnabled && isPerfReady;
+    const isHotOpsActive = isHotOpsEnabled && isPerfReady;
+    const isHotOpsMarkingActive = isHotOpsActive && hotOpsMarking !== null;
 
     // Zoom goes straight to the DOM: it changes every wheel frame, and through
-    // state it would re-render the whole graph per frame to move one bar.
+    // state it would re-render the whole graph per frame to move one bar or badge.
     // `OpGraphEdge` can afford `useStore` only because it selects a boolean.
+    const isNodeZoomPublished = isPerfOverlayActive || isHotOpsMarkingActive;
     useEffect(() => {
         const container = containerRef.current;
-        if (container === null || !isPerfOverlayActive) {
+        if (container === null || !isNodeZoomPublished) {
             return undefined;
         }
         let lastZoom: number | null = null;
         const writeZoom = (zoom: number) => {
-            const quantised = getQuantisedPerfZoom(zoom);
+            const quantised = getQuantisedNodeZoom(zoom);
             if (quantised !== lastZoom) {
                 lastZoom = quantised;
-                container.style.setProperty(PERF_BAR_ZOOM_VAR, String(quantised));
+                container.style.setProperty(NODE_ZOOM_VAR, String(quantised));
             }
         };
         writeZoom(flowStore.getState().transform[2]);
         // No selector support in the vanilla store, so every change calls back
         // and the guard above keeps it to one write per zoom bucket.
         return flowStore.subscribe((state) => writeZoom(state.transform[2]));
-    }, [isPerfOverlayActive, flowStore]);
+    }, [isNodeZoomPublished, flowStore]);
 
-    const isCriticalPathActive = isCriticalPathEnabled && perfOverlay.status === PerfOverlayStatus.READY;
-    const isHotOpsActive = isHotOpsEnabled && perfOverlay.status === PerfOverlayStatus.READY;
+    const isCriticalPathActive = isCriticalPathEnabled && isPerfReady;
 
     // The path runs over operations, so an edge rendering into an expanded node has
     // to be presented as reaching the node: `findCriticalPath` drops edges whose
@@ -1630,9 +1634,25 @@ const OperationGraphInner = ({
         () => (isHotOpsActive ? buildHotOpRows(perfOverlay, graphOperationIds, drawnOperationNamesById) : []),
         [isHotOpsActive, perfOverlay, graphOperationIds, drawnOperationNamesById],
     );
+    // Resolved per node here rather than in the styling pass, which reruns on every drag frame.
+    const hotRankByNodeId = useMemo(() => {
+        if (!isHotOpsMarkingActive) {
+            return null;
+        }
+        const ranks = buildHotRankByNodeId(getMarkedHotOpRanks(hotOpRows, hotOpsMarking), nodeIndex);
+        // Empty is off too: `styledNodes` skips its pass only on null, and would map every node per drag frame.
+        return ranks.size > 0 ? ranks : null;
+    }, [isHotOpsMarkingActive, hotOpsMarking, hotOpRows, nodeIndex]);
 
     const styledNodes = useMemo(() => {
-        if (!highlight && !matchedIds && !perfStyleByNodeId && !criticalPathNodeIds && !revealedNodeIds) {
+        if (
+            !highlight &&
+            !matchedIds &&
+            !perfStyleByNodeId &&
+            !criticalPathNodeIds &&
+            !revealedNodeIds &&
+            !hotRankByNodeId
+        ) {
             return nodes;
         }
         return nodes.map((node) => {
@@ -1679,10 +1699,14 @@ const OperationGraphInner = ({
             // highlight and the inherited filter dim instead of displacing any.
             const perfStyle = perfStyleByNodeId?.get(node.id);
             const buriedMatchCount = matches.buriedCountById.get(node.id) ?? 0;
-            const nextData =
-                buriedMatchCount > 0 && node.data.buriedMatchCount !== buriedMatchCount
-                    ? { ...node.data, buriedMatchCount }
-                    : node.data;
+            const hotRank = hotRankByNodeId?.get(node.id);
+            let nextData = node.data;
+            if (buriedMatchCount > 0 && nextData.buriedMatchCount !== buriedMatchCount) {
+                nextData = { ...nextData, buriedMatchCount };
+            }
+            if (hotRank !== undefined && nextData.hotRank !== hotRank) {
+                nextData = { ...nextData, hotRank };
+            }
 
             if (className === undefined && perfStyle === undefined && nextData === node.data) {
                 return node;
@@ -1694,18 +1718,18 @@ const OperationGraphInner = ({
             // scores change — so an untouched node hits the cache and keeps the
             // object it was given.
             const cached = styledNodeCache.get(node);
-            if (
+            const hasSameChips =
                 cached !== undefined &&
-                cached.className === className &&
-                cached.perfStyle === perfStyle &&
-                cached.styled.data.buriedMatchCount === nextData.buriedMatchCount
-            ) {
+                cached.styled.data.buriedMatchCount === nextData.buriedMatchCount &&
+                cached.styled.data.hotRank === nextData.hotRank;
+            if (hasSameChips && cached.className === className && cached.perfStyle === perfStyle) {
                 return cached.styled;
             }
 
             const styled = {
                 ...node,
-                data: nextData,
+                // The cached data when only the class or the bar changed, so a restyle doesn't re-render the node.
+                data: hasSameChips ? cached.styled.data : nextData,
                 ...(perfStyle ? { style: { ...node.style, ...perfStyle } } : {}),
                 ...(className === undefined ? {} : { className }),
                 // Selection is mirrored into React Flow's own flag so its keyboard
@@ -1727,6 +1751,7 @@ const OperationGraphInner = ({
         criticalPathNodeIds,
         styledNodeCache,
         revealedNodeIds,
+        hotRankByNodeId,
     ]);
 
     const styledEdges = useMemo(() => {
