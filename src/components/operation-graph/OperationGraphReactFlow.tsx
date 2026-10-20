@@ -16,6 +16,7 @@ import {
     useStoreApi,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
+import classNames from 'classnames';
 import { useAtom, useAtomValue } from 'jotai';
 import {
     type CSSProperties,
@@ -68,7 +69,12 @@ import {
 } from './opGraphPerfOverlay';
 import { EMPTY_CRITICAL_PATH, findCriticalPath } from './opGraphCriticalPath';
 import {
+    type GraphBounds,
+    NO_SIDE_INSET,
+    type PaneSideInset,
     REVEALED_NODE_CLASS,
+    SIDE_CLASS,
+    SIDE_WITH_DETAILS_CLASS,
     absolutePositionsOf,
     boundsOfNodes,
     centerPanShift,
@@ -326,6 +332,16 @@ const CRITICAL_PATH_CLASS = 'op-graph-critical-path';
 const CRITICAL_PATH_NODE_CLASS = 'op-graph-node-critical-path';
 const CRITICAL_PATH_EDGE_CLASS = 'op-graph-edge-critical-path';
 const DIM_UNRELATED_EDGES_CLASS = 'op-graph-dim-unrelated-edges';
+
+// Closed mid-build so the panel can't describe an operation the graph being laid out is
+// about to drop. Shared by the panel and by the selection's pan, which measures before it opens.
+const isDetailsPanelOpen = (selectedOperationId: number | null, isBuilding: boolean): selectedOperationId is number =>
+    selectedOperationId !== null && !isBuilding;
+
+interface PanOptions {
+    /** The side column is about to span the pane, though its class hasn't landed yet. */
+    sideSpansPane?: boolean;
+}
 
 interface OperationGraphReactFlowProps {
     operationList: OperationDescription[];
@@ -831,23 +847,37 @@ const OperationGraphInner = ({
         return toolbar === undefined ? 0 : Math.max(0, toolbar.bottom - pane.top);
     }, []);
 
-    // The side column floats over the pane's right edge the same way, and a node the
-    // slowest-operations list locates must not land behind the list that located it.
-    const paneSideInset = useCallback((pane: DOMRect): number => {
-        const side = containerRef.current?.querySelector('.op-graph-side')?.getBoundingClientRect();
-        return side === undefined ? 0 : Math.max(0, pane.right - side.left);
+    // The side column floats over the pane's right edge the same way, so a node the list locates must not
+    // land behind it. Its class says whether it spans the pane, unless a pan is measured before that lands.
+    const paneSideInset = useCallback((pane: DOMRect, sideSpansPane?: boolean): Readonly<PaneSideInset> => {
+        const side = containerRef.current?.querySelector(`.${SIDE_CLASS}`);
+        if (!side) {
+            return NO_SIDE_INSET;
+        }
+        const rect = side.getBoundingClientRect();
+        const spansPane = sideSpansPane ?? side.classList.contains(SIDE_WITH_DETAILS_CLASS);
+        return {
+            width: Math.max(0, pane.right - rect.left),
+            bottom: spansPane ? pane.height : Math.max(0, rect.bottom - pane.top),
+        };
     }, []);
 
     // Pans, never zooms, and does nothing when the target is already on screen: the
     // viewport is the user's place in the graph, and only they may change its scale.
     const panIntoView = useCallback(
-        (bounds: { minX: number; minY: number; maxX: number; maxY: number } | null) => {
+        (bounds: GraphBounds | null, { sideSpansPane }: PanOptions = {}) => {
             const pane = containerRef.current?.getBoundingClientRect();
             if (bounds === null || pane === undefined) {
                 return;
             }
             const viewport = getViewport();
-            const { dx, dy } = revealPanShift(bounds, viewport, pane, paneChromeInset(pane), paneSideInset(pane));
+            const { dx, dy } = revealPanShift(
+                bounds,
+                viewport,
+                pane,
+                paneChromeInset(pane),
+                paneSideInset(pane, sideSpansPane),
+            );
             if (dx === 0 && dy === 0) {
                 return;
             }
@@ -868,9 +898,9 @@ const OperationGraphInner = ({
     );
 
     const focusOperation = useCallback(
-        (id: number) => {
+        (id: number, options?: PanOptions) => {
             const node = pannableNodeAt(nodeIdByOperationId.get(id) ?? String(id));
-            panIntoView(node === undefined ? null : boundsOfNodes([node]));
+            panIntoView(node === undefined ? null : boundsOfNodes([node]), options);
         },
         [pannableNodeAt, nodeIdByOperationId, panIntoView],
     );
@@ -1260,9 +1290,11 @@ const OperationGraphInner = ({
     const selectOperation = useCallback(
         (id: number) => {
             setSelectedOperationId(id);
-            focusOperation(id);
+            // Measured before the details this opens stretch the side column down the pane;
+            // with no column mounted yet there is nothing to stretch (#2137).
+            focusOperation(id, { sideSpansPane: isDetailsPanelOpen(id, isBuilding) });
         },
-        [focusOperation],
+        [focusOperation, isBuilding],
     );
 
     // Pressing Enter or Space on a focused node reaches React Flow's own handler,
@@ -1595,13 +1627,13 @@ const OperationGraphInner = ({
             // Seeded from the built node so the block-kind class survives a restyle: this
             // memo replaces `className` outright, and starting empty would drop the
             // colour the moment anything was selected or filtered. #1982
-            const classNames: string[] = node.className === undefined ? [] : [node.className];
+            const nodeClasses: string[] = node.className === undefined ? [] : [node.className];
             if (isSelected) {
-                classNames.push(SELECTED_NODE_CLASS);
+                nodeClasses.push(SELECTED_NODE_CLASS);
             } else if (highlight) {
                 const relation = highlight.relationByNodeId.get(node.id);
                 if (relation) {
-                    classNames.push(NODE_CLASS_BY_RELATION[relation]);
+                    nodeClasses.push(NODE_CLASS_BY_RELATION[relation]);
                 }
             }
             // Selection outranks the filter: the anchor stays lit even while a
@@ -1621,15 +1653,15 @@ const OperationGraphInner = ({
                     (node.type === OpGraphNodeType.DEVICE_OP && matchedIds.has(String(node.data.operationId))) ||
                     (node.type === OpGraphNodeType.WEIGHT_GROUP && fanContainerEnclosesMatch(node.id, matchedIds)))
             ) {
-                classNames.push(MATCHED_NODE_CLASS);
+                nodeClasses.push(MATCHED_NODE_CLASS);
             }
             if (criticalPathNodeIds?.has(node.id)) {
-                classNames.push(CRITICAL_PATH_NODE_CLASS);
+                nodeClasses.push(CRITICAL_PATH_NODE_CLASS);
             }
             if (revealedNodeIds?.has(node.id)) {
-                classNames.push(REVEALED_NODE_CLASS);
+                nodeClasses.push(REVEALED_NODE_CLASS);
             }
-            const className = classNames.length > 0 ? classNames.join(' ') : undefined;
+            const className = nodeClasses.length > 0 ? nodeClasses.join(' ') : undefined;
             // Custom properties only, so perf stacks with selection, the
             // highlight and the inherited filter dim instead of displacing any.
             const perfStyle = perfStyleByNodeId?.get(node.id);
@@ -1690,19 +1722,19 @@ const OperationGraphInner = ({
         }
         return edges.map((edge) => {
             const relation = highlight?.relationByEdgeId.get(edge.id);
-            const classNames: string[] = [];
+            const edgeClasses: string[] = [];
             if (relation) {
-                classNames.push(EDGE_CLASS_BY_RELATION[relation]);
+                edgeClasses.push(EDGE_CLASS_BY_RELATION[relation]);
             }
             if (criticalPathEdgeIds?.has(edge.id)) {
-                classNames.push(CRITICAL_PATH_EDGE_CLASS);
+                edgeClasses.push(CRITICAL_PATH_EDGE_CLASS);
             }
             // An edge between two matches stays lit so the matched subset is
             // traceable; a selection edge outranks the filter either way.
             if (matchedIds && (relation || bothEndsMatched(edge, matchedIds, nodeIdByOperationId))) {
-                classNames.push(MATCHED_EDGE_CLASS);
+                edgeClasses.push(MATCHED_EDGE_CLASS);
             }
-            return classNames.length > 0 ? { ...edge, className: classNames.join(' ') } : edge;
+            return edgeClasses.length > 0 ? { ...edge, className: edgeClasses.join(' ') } : edge;
         });
     }, [edges, highlight, matchedIds, criticalPathEdgeIds, nodeIdByOperationId]);
 
@@ -1851,9 +1883,7 @@ const OperationGraphInner = ({
         return found ? totalNs : undefined;
     }, [isPerfOverlayActive, selectedBlock, selectedPerfAggregate, perfOverlay]);
 
-    // Closed mid-build so the panel can't describe an operation the graph being
-    // laid out is about to drop.
-    const isPanelOpen = selectedOperationId !== null && !isBuilding;
+    const isPanelOpen = isDetailsPanelOpen(selectedOperationId, isBuilding);
     const isHotOpsVisible = isHotOpsActive && !isBuilding;
 
     const containerClassName = [
@@ -1942,10 +1972,8 @@ const OperationGraphInner = ({
                     >
                         <Background />
                         <Controls />
-                        {/* Docked left rather than in React Flow's default corner: the
-                        panel is a full-height right column, and `onBuilt` always
-                        resolves a selection, so a right-docked minimap would be
-                        hidden in every state the user lands in. */}
+                        {/* Docked left rather than in React Flow's default corner, which the
+                        side column covers whenever the details or a long list are open. */}
                         <MiniMap
                             pannable
                             position='bottom-left'
@@ -1983,7 +2011,7 @@ const OperationGraphInner = ({
                 </div>
             ) : null}
             {isPanelOpen || isHotOpsVisible ? (
-                <div className='op-graph-side'>
+                <div className={classNames(SIDE_CLASS, { [SIDE_WITH_DETAILS_CLASS]: isPanelOpen })}>
                     {isHotOpsVisible ? (
                         <OpGraphHotOpsPanel
                             rows={hotOpRows}
