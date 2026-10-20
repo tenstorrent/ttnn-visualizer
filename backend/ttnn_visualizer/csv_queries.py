@@ -29,6 +29,7 @@ from typing import (
 
 import matplotlib
 import matplotlib.pyplot as plt
+import orjson
 import pandas as pd
 import zstd
 from tt_perf_report import perf_report
@@ -127,11 +128,11 @@ CSV_CHUNK_SIZE = 50_000
 # than kept, so the total reports what it could pair and says what it dropped.
 MAX_OPEN_ZONE_STARTS = 200_000
 
-# Generated reports kept per process. The cache is shared by every user, instance
+# Serialised reports kept per process. The cache is shared by every user, instance
 # and comparison report the worker serves, so four entries only cover one session's
 # toggle-back path (a linked report, the current view and two recent filter shapes)
 # when little else is being served. The bound is on count, not bytes: a 20k-row
-# report holds about 54 MB, so a worker can keep roughly 220 MB alive for its
+# report is about 22 MB of JSON, so a worker can keep roughly 90 MB alive for its
 # lifetime. Each `group_by` value is its own entry with a full copy of the rows.
 MAX_CACHED_PERFORMANCE_REPORTS = 4
 
@@ -1093,14 +1094,41 @@ class OpsPerformanceReportQueries:
         )
 
     @classmethod
-    def generate_report(cls, instance, **kwargs):
-        """Build the performance report, reusing a cached one when nothing changed.
+    def generate_report(cls, instance, **kwargs) -> Dict:
+        """Build the performance report afresh; the caller owns the dicts it gets.
 
-        A cache hit hands every caller the same dict and row dicts, across users,
-        so treat the result as read-only: copy before sorting or annotating it.
+        Never cached: holding dicts costs over twice the memory of their JSON. A
+        caller that only serialises the report should use `generate_report_json`.
+        """
+        try:
+            return cls.generate_report_strict(instance, **kwargs)
+        except DegradedPerformanceReport as degraded:
+            return degraded.report
+
+    @classmethod
+    def generate_report_strict(cls, instance, **kwargs) -> Dict:
+        """`generate_report`, but a report built with swallowed errors is raised.
+
+        `DegradedPerformanceReport` carries it, so a caller that keeps reports
+        beyond one request can keep a partial one apart from a healthy one.
         """
         source = cls.report_source(instance)
-        options = _PerformanceReportOptions(
+        return _generate_performance_report(source, cls._report_options(**kwargs))
+
+    @classmethod
+    def generate_report_json(cls, instance, **kwargs) -> bytes:
+        """The performance report as JSON, reusing a cached one when nothing changed."""
+        source = cls.report_source(instance)
+        try:
+            return _cached_generate_performance_report_json(
+                source, cls._report_options(**kwargs)
+            )
+        except DegradedPerformanceReport as degraded:
+            return orjson.dumps(degraded.report)
+
+    @classmethod
+    def _report_options(cls, **kwargs) -> _PerformanceReportOptions:
+        return _PerformanceReportOptions(
             start_signpost=kwargs.get("start_signpost", cls.DEFAULT_START_SIGNPOST),
             end_signpost=kwargs.get("end_signpost", cls.DEFAULT_END_SIGNPOST),
             print_signposts=kwargs.get("print_signposts", cls.DEFAULT_PRINT_SIGNPOSTS),
@@ -1113,10 +1141,6 @@ class OpsPerformanceReportQueries:
             ),
             detail_columns=kwargs.get("detail_columns", cls.DEFAULT_DETAIL_COLUMNS),
         )
-        try:
-            return _cached_generate_performance_report(source, options)
-        except _DegradedPerformanceReport as degraded:
-            return degraded.report
 
     @classmethod
     def _generate_report_uncached(
@@ -1366,7 +1390,7 @@ class OpsPerformanceReportQueries:
                 ),
             }
             if degraded:
-                raise _DegradedPerformanceReport(result)
+                raise DegradedPerformanceReport(result)
             return result
 
         finally:
@@ -1529,21 +1553,33 @@ def check_signpost_range(
         )
 
 
-class _DegradedPerformanceReport(Exception):
-    """Carries a partial report past `lru_cache`, which only skips raised results."""
+class DegradedPerformanceReport(Exception):
+    """A report generated with swallowed errors, raised so no cache keeps it.
+
+    `lru_cache` only skips raised results, so the partial report rides on the
+    exception; the agent's registry likewise keeps it per handle, not shared.
+    """
 
     def __init__(self, report: Dict):
         super().__init__("performance report generated with swallowed errors")
         self.report = report
 
 
-@lru_cache(maxsize=MAX_CACHED_PERFORMANCE_REPORTS)
-def _cached_generate_performance_report(
+def _generate_performance_report(
     source: _PerformanceReportSource, options: _PerformanceReportOptions
-):
+) -> Dict:
     raw_csv = Path(source.path).read_text()
     return OpsPerformanceReportQueries._generate_report_uncached(raw_csv, options)
 
 
+@lru_cache(maxsize=MAX_CACHED_PERFORMANCE_REPORTS)
+def _cached_generate_performance_report_json(
+    source: _PerformanceReportSource, options: _PerformanceReportOptions
+) -> bytes:
+    # Bytes rather than the dicts: under half the memory, a hit skips
+    # serialisation, and callers sharing an entry cannot modify it.
+    return orjson.dumps(_generate_performance_report(source, options))
+
+
 def clear_performance_report_cache() -> None:
-    _cached_generate_performance_report.cache_clear()
+    _cached_generate_performance_report_json.cache_clear()

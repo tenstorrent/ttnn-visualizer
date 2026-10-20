@@ -29,7 +29,11 @@ from ttnn_visualizer.agent.handles import (
     UnknownHandleError,
     load_report,
 )
-from ttnn_visualizer.csv_queries import DeviceLogProfilerQueries, ResolvedSignposts
+from ttnn_visualizer.csv_queries import (
+    DegradedPerformanceReport,
+    DeviceLogProfilerQueries,
+    ResolvedSignposts,
+)
 from ttnn_visualizer.event_logging import (
     EVENT_FIELD,
     EVENT_LOG_FILENAME,
@@ -835,6 +839,79 @@ class TestSignpostRangeEndToEnd:
 
         with pytest.raises(ValueError, match="has changed since it was first read"):
             tools.top_ops(registry, handle)
+
+    def test_reloading_an_unchanged_capture_shares_its_snapshots(self, tmp_path):
+        """Handles are never released, so a reload must not pin another copy."""
+        registry = ReportRegistry()
+        first = self._handle(registry, tmp_path)
+        second = load_report(registry, performance_path=str(tmp_path / "signposted"))[
+            "handle"
+        ]
+        ranged = tools.SignpostRange("PERF_START", "PERF_END")
+
+        with patch.object(
+            tools,
+            "_generate_canonical_report",
+            wraps=tools._generate_canonical_report,
+        ) as generate:
+            whole = tools.canonical_report(registry, first)
+            window = tools.canonical_report(registry, first, ranged)
+
+            assert tools.canonical_report(registry, second) is whole
+            assert tools.canonical_report(registry, second, ranged) is window
+        assert generate.call_count == 2
+
+    @pytest.mark.parametrize(
+        "signposts", [None, tools.SignpostRange("PERF_START", "PERF_END")]
+    )
+    def test_a_degraded_snapshot_is_not_shared_with_a_reload(self, tmp_path, signposts):
+        """A swallowed failure (an EMFILE, a full temp dir) leaves rows without an
+        op type. Kept under the capture, every reload would read them too."""
+        registry = ReportRegistry()
+        first = self._handle(registry, tmp_path)
+        real = tools._generate_canonical_report
+        failures = iter([True])
+
+        def degraded_once(instance, **overrides):
+            report = real(instance, **overrides)
+            if next(failures, False):
+                rows = [{**row, "op_type": None} for row in report["report"]]
+                raise DegradedPerformanceReport({**report, "report": rows})
+            return report
+
+        with patch.object(
+            tools, "_generate_canonical_report", side_effect=degraded_once
+        ) as generate:
+            degraded = tools.canonical_report(registry, first, signposts)
+            second = load_report(
+                registry, performance_path=str(tmp_path / "signposted")
+            )["handle"]
+            healthy = tools.canonical_report(registry, second, signposts)
+
+            # The first handle keeps what it read rather than generating again.
+            assert tools.canonical_report(registry, first, signposts) is degraded
+            assert tools.canonical_report(registry, second, signposts) is healthy
+        assert generate.call_count == 2
+        assert all(row["op_type"] is None for row in degraded["report"])
+        assert all(row["op_type"] is not None for row in healthy["report"])
+
+    def test_a_rewritten_capture_gets_its_own_snapshot(self, tmp_path):
+        registry = ReportRegistry()
+        first = self._handle(registry, tmp_path)
+
+        with patch.object(
+            tools,
+            "_generate_canonical_report",
+            wraps=tools._generate_canonical_report,
+        ) as generate:
+            before = tools.canonical_report(registry, first)
+            second = self._handle(registry, tmp_path, signposted_rows()[:-1])
+            after = tools.canonical_report(registry, second)
+
+        assert after is not before
+        assert generate.call_count == 2
+        # The first handle still answers from the capture it first read.
+        assert tools.canonical_report(registry, first) is before
 
     def test_a_range_on_a_capture_without_signposts_is_read_whole(self, tmp_path):
         """The real signpost read, not a patched one, agrees with tt-perf-report:

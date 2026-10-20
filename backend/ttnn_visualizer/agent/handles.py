@@ -53,16 +53,28 @@ class CacheVariant(str, Enum):
 # Snapshots narrowed by a scope -- a signpost range -- kept at once, across every
 # handle. Each is a generated report of up to a whole report's rows, and an agent
 # walking per-layer signposts asks for many, so they are evicted least recently
-# used rather than pinned; an evicted range costs one regeneration, which the
-# process-wide cache underneath may still answer. Two is one `diff_reports` pair:
-# these are references the registry holds past that cache's own eviction, so
-# more would keep alive memory `MAX_CACHED_PERFORMANCE_REPORTS` budgets against.
+# used rather than pinned; an evicted range costs a full regeneration, since
+# nothing underneath keeps generated dicts. Two is one `diff_reports` pair, and
+# each one more holds another report's rows for the life of the process.
 # The detail columns add about 3% to each, since their repeated cells are interned.
 MAX_SCOPED_REPORTS = 2
 
 
 class UnknownHandleError(ValueError):
     """Raised when a tool is called with a handle that was never loaded."""
+
+
+class UnsharedSnapshot(Exception):
+    """Raised by a builder whose snapshot only the asking handle may keep.
+
+    A report generated with swallowed errors is one: kept under a `share_key`,
+    every later handle on that capture would read it, so loading the report again
+    would no longer regenerate it.
+    """
+
+    def __init__(self, snapshot: object):
+        super().__init__("snapshot kept by its handle alone")
+        self.snapshot = snapshot
 
 
 class ReportRegistry:
@@ -74,9 +86,9 @@ class ReportRegistry:
 
     def __init__(self) -> None:
         self._instances: Dict[str, Instance] = {}
-        self._reports: Dict[Tuple[str, CacheVariant], object] = {}
+        self._reports: Dict[Tuple[Hashable, CacheVariant], object] = {}
         self._scoped_reports: (
-            "OrderedDict[Tuple[str, CacheVariant, Hashable], object]"
+            "OrderedDict[Tuple[Hashable, CacheVariant, Hashable], object]"
         ) = OrderedDict()
         self._next_id = 1
 
@@ -105,6 +117,7 @@ class ReportRegistry:
         build: Callable[[Instance], Cached],
         variant: CacheVariant = CacheVariant.CANONICAL_REPORT,
         scope: Hashable = None,
+        share_key: Hashable = None,
     ) -> Cached:
         """Keep one report snapshot per handle, variant and scope.
 
@@ -113,9 +126,8 @@ class ReportRegistry:
         should pay for that once. This cache pins one snapshot per handle for the
         registry's lifetime: a loaded handle keeps answering from it even if the
         source changes, and a fresh registry starts empty by construction. The
-        process-wide generation cache underneath only lets loading the same
-        unchanged file again skip regeneration; the MCP server runs in its own
-        process, so nothing here is shared with the HTTP app.
+        MCP server runs in its own process, so nothing here is shared with the
+        HTTP app.
 
         `variant` keeps what is derived from the report apart from the report
         itself: the operation link reads every captured graph, so it is resolved
@@ -125,22 +137,50 @@ class ReportRegistry:
         `tools.SignpostRange` -- apart from the whole one. Unlike the unscoped
         snapshots, scoped ones are not pinned: at most `MAX_SCOPED_REPORTS` are
         kept, least recently used first out.
-        """
-        if scope is None:
-            key = (handle, variant)
-            if key not in self._reports:
-                self._reports[key] = build(self.get(handle))
-            # Each variant has one builder, so the key fixes the type it stored.
-            return cast(Cached, self._reports[key])
 
-        scoped_key = (handle, variant, scope)
-        if scoped_key in self._scoped_reports:
-            self._scoped_reports.move_to_end(scoped_key)
-        else:
-            self._scoped_reports[scoped_key] = build(self.get(handle))
-            while len(self._scoped_reports) > MAX_SCOPED_REPORTS:
-                self._scoped_reports.popitem(last=False)
-        return cast(Cached, self._scoped_reports[scoped_key])
+        `share_key` keeps one snapshot for every handle that names the same key
+        rather than one per handle. Handles are never released, so an agent that
+        calls `load_report` again on an unchanged capture would otherwise pin
+        another whole copy of its report each time. A key never equals a handle:
+        handles are strings and the keys passed are not. A builder that raises
+        `UnsharedSnapshot` has its snapshot kept under the handle instead, and
+        that copy answers the handle before the shared one is asked.
+        """
+        owners = [handle] if share_key is None else [handle, share_key]
+        for owner in owners:
+            found, snapshot = self._lookup(owner, variant, scope)
+            if found:
+                # Each variant has one builder, so the key fixes the type it stored.
+                return cast(Cached, snapshot)
+
+        try:
+            snapshot, owner = build(self.get(handle)), owners[-1]
+        except UnsharedSnapshot as unshared:
+            snapshot, owner = unshared.snapshot, handle
+        self._store(owner, variant, scope, snapshot)
+        return cast(Cached, snapshot)
+
+    def _lookup(
+        self, owner: Hashable, variant: CacheVariant, scope: Hashable
+    ) -> Tuple[bool, object]:
+        if scope is None:
+            key = (owner, variant)
+            return key in self._reports, self._reports.get(key)
+        scoped_key = (owner, variant, scope)
+        if scoped_key not in self._scoped_reports:
+            return False, None
+        self._scoped_reports.move_to_end(scoped_key)
+        return True, self._scoped_reports[scoped_key]
+
+    def _store(
+        self, owner: Hashable, variant: CacheVariant, scope: Hashable, snapshot: object
+    ) -> None:
+        if scope is None:
+            self._reports[(owner, variant)] = snapshot
+            return
+        self._scoped_reports[(owner, variant, scope)] = snapshot
+        while len(self._scoped_reports) > MAX_SCOPED_REPORTS:
+            self._scoped_reports.popitem(last=False)
 
     def clear(self) -> None:
         self._instances.clear()
