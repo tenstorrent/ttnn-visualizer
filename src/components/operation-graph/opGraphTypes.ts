@@ -99,6 +99,8 @@ export type OpGraphNodeData = {
     /** A block's stats line. Its sums live on `OpGraphBlockSummary`. */
     metaLine?: string;
     buriedMatchCount?: number;
+    /** The slowest-operations rank the node is badged with; `null` for a listed op without perf data. #2085 */
+    hotRank?: number | null;
 };
 
 export type OpGraphEdgeData = {

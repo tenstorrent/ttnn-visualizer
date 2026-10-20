@@ -724,6 +724,9 @@ class RemoteReportFolder(SerializeableModel):
     # folder; the client reads them back rather than re-deriving the rule.
     syncedName: Optional[str] = None
     rank: Optional[int] = None
+    # Which run the local synced copy holds (see report_fingerprint); None until
+    # synced. Always serialised, so a fresh listing clears a cached value.
+    runFingerprint: Optional[str] = None
 
     @field_validator("remotePath", mode="before")
     @classmethod

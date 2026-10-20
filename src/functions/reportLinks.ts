@@ -7,6 +7,7 @@ import {
     MAX_REPORT_LINKS,
     ReportLinkMatchResult,
     ReportLinkRole,
+    ReportLinkRunsById,
     ReportPairLinkStatus,
 } from '../definitions/ReportLinks';
 import { ReportFolder, ReportLocation } from '../definitions/Reports';
@@ -57,14 +58,22 @@ const isSamePair = (a: ReportLink, b: ReportLink): boolean =>
 const isSameAccess = (a: ReportLinkAccess | undefined, b: ReportLinkAccess | undefined): boolean =>
     a?.location === b?.location && a?.path === b?.path && (a?.host ?? null) === (b?.host ?? null);
 
+/**
+ * Whether a link's recorded run still describes a folder. A side with no recorded or
+ * no current fingerprint cannot be told apart, so it matches, as before #2069.
+ */
+export const isSameRun = (storedRun: string | undefined, currentRun: string | null | undefined): boolean =>
+    !storedRun || !currentRun || storedRun === currentRun;
+
 export const capReportLinks = (links: ReportLink[]): ReportLink[] =>
     links.length <= MAX_REPORT_LINKS ? links : links.slice(links.length - MAX_REPORT_LINKS);
 
 /**
- * Insert or replace a pair (identity ignores status, access and `recordedAt`), moving it
- * to the end so capping evicts the least recently compared pairs first. Returns the same
- * array reference only when the pair is already last with the same status and access,
- * which spares `useReportLinkBadgeIds` subscribers a re-render.
+ * Insert or replace a pair (identity ignores status, access, runs and `recordedAt`),
+ * moving it to the end so capping evicts the least recently compared pairs first. A new
+ * run in either folder therefore replaces the old run's entry for the same pair. Returns
+ * the same array reference only when the pair is already last with the same status,
+ * access and runs, which spares `useReportLinkBadgeRuns` subscribers a re-render.
  */
 export const upsertReportLink = (links: ReportLink[], next: ReportLink): ReportLink[] => {
     const last = links[links.length - 1];
@@ -73,6 +82,8 @@ export const upsertReportLink = (links: ReportLink[], next: ReportLink): ReportL
         last &&
         isSamePair(last, next) &&
         last.status === next.status &&
+        last.profilerRun === next.profilerRun &&
+        last.performanceRun === next.performanceRun &&
         isSameAccess(last.profilerAccess, next.profilerAccess) &&
         isSameAccess(last.performanceAccess, next.performanceAccess)
     ) {
@@ -85,6 +96,9 @@ export const upsertReportLink = (links: ReportLink[], next: ReportLink): ReportL
 
 const getRoleId = (link: ReportLink, role: ReportLinkRole): string =>
     role === ReportLinkRole.PROFILER ? link.profilerId : link.performanceId;
+
+const getRoleRun = (link: ReportLink, role: ReportLinkRole): string | undefined =>
+    role === ReportLinkRole.PROFILER ? link.profilerRun : link.performanceRun;
 
 const getRoleAccess = (link: ReportLink, role: ReportLinkRole): ReportLinkAccess | undefined =>
     role === ReportLinkRole.PROFILER ? link.profilerAccess : link.performanceAccess;
@@ -139,52 +153,58 @@ const matchesHostScope = (access: ReportLinkAccess | undefined, remoteHost?: str
 };
 
 /**
- * Ids on the opposite side of every `status` pair whose `activeRole` side is `activeId`.
+ * Counterparts of every `status` pair whose `activeRole` side is `activeId` and was
+ * recorded against the run that folder holds now, each with the runs recorded for it.
  * Host scoping checks the counterpart's access, since that is the report being badged.
  */
-const counterpartIds = (
+const counterpartRunsById = (
     links: ReportLink[],
     status: ReportPairLinkStatus,
     activeRole: ReportLinkRole,
     activeId: string | null | undefined,
     options?: LinkedReportIdOptions,
-): Set<string> => {
+): ReportLinkRunsById => {
+    const runsById = new Map<string, string | undefined>();
+
     if (!activeId) {
-        return new Set();
+        return runsById;
     }
 
     const counterpartRole = getOppositeRole(activeRole);
 
-    return new Set(
-        links
-            .filter((link) => link.status === status && getRoleId(link, activeRole) === activeId)
-            .filter((link) => matchesHostScope(getRoleAccess(link, counterpartRole), options?.remoteHost))
-            .map((link) => getRoleId(link, counterpartRole)),
-    );
+    links
+        .filter((link) => link.status === status && getRoleId(link, activeRole) === activeId)
+        .filter((link) => isSameRun(getRoleRun(link, activeRole), options?.activeRun))
+        .filter((link) => matchesHostScope(getRoleAccess(link, counterpartRole), options?.remoteHost))
+        .forEach((link) => runsById.set(getRoleId(link, counterpartRole), getRoleRun(link, counterpartRole)));
+
+    return runsById;
 };
 
-export const linkedPerformanceIds = (
+export const linkedPerformanceRuns = (
     links: ReportLink[],
     profilerId: string | null | undefined,
     options?: LinkedReportIdOptions,
-): Set<string> => counterpartIds(links, ReportPairLinkStatus.LINKED, ReportLinkRole.PROFILER, profilerId, options);
+): ReportLinkRunsById =>
+    counterpartRunsById(links, ReportPairLinkStatus.LINKED, ReportLinkRole.PROFILER, profilerId, options);
 
-export const unlinkedPerformanceIds = (
+export const unlinkedPerformanceRuns = (
     links: ReportLink[],
     profilerId: string | null | undefined,
     options?: LinkedReportIdOptions,
-): Set<string> => counterpartIds(links, ReportPairLinkStatus.UNLINKED, ReportLinkRole.PROFILER, profilerId, options);
+): ReportLinkRunsById =>
+    counterpartRunsById(links, ReportPairLinkStatus.UNLINKED, ReportLinkRole.PROFILER, profilerId, options);
 
-export const linkedProfilerIds = (
+export const linkedProfilerRuns = (
     links: ReportLink[],
     performanceId: string | null | undefined,
     options?: LinkedReportIdOptions,
-): Set<string> =>
-    counterpartIds(links, ReportPairLinkStatus.LINKED, ReportLinkRole.PERFORMANCE, performanceId, options);
+): ReportLinkRunsById =>
+    counterpartRunsById(links, ReportPairLinkStatus.LINKED, ReportLinkRole.PERFORMANCE, performanceId, options);
 
-export const unlinkedProfilerIds = (
+export const unlinkedProfilerRuns = (
     links: ReportLink[],
     performanceId: string | null | undefined,
     options?: LinkedReportIdOptions,
-): Set<string> =>
-    counterpartIds(links, ReportPairLinkStatus.UNLINKED, ReportLinkRole.PERFORMANCE, performanceId, options);
+): ReportLinkRunsById =>
+    counterpartRunsById(links, ReportPairLinkStatus.UNLINKED, ReportLinkRole.PERFORMANCE, performanceId, options);

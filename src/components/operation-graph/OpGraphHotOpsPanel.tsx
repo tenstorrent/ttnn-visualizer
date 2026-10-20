@@ -2,11 +2,17 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-import { memo, useId, useMemo } from 'react';
+import { memo, useCallback, useId, useLayoutEffect, useMemo, useRef } from 'react';
 import { Checkbox, SegmentedControl, Size } from '@blueprintjs/core';
 import classNames from 'classnames';
 import { useAtom } from 'jotai';
-import { DEFAULT_HOT_OPS_SETTINGS, HOT_OPS_LIMITS, HotOpsSort } from '../../definitions/HotOps';
+import {
+    DEFAULT_HOT_OPS_SETTINGS,
+    HOT_OPS_LIMITS,
+    HOT_OPS_NO_RANK_LABEL,
+    HOT_OPS_TITLE,
+    HotOpsSort,
+} from '../../definitions/HotOps';
 import { NO_PERF_DATA_LABEL } from '../../definitions/PerfOverlayStatus';
 import { formatDuration, formatShareOfTotal } from '../../functions/formatting';
 import { isHotOpsSort } from '../../functions/hotOpsSettings';
@@ -15,7 +21,6 @@ import { type HotOpRow, getVisibleHotOpRows } from './opGraphHotOps';
 import { getPerfColorForNs } from './opGraphPerfOverlay';
 
 const ALL_LIMIT = 'all';
-const NO_RANK_LABEL = '–';
 
 const LIMIT_OPTIONS = [
     ...HOT_OPS_LIMITS.map((limit) => ({ label: `Top ${limit}`, value: String(limit) })),
@@ -41,6 +46,8 @@ interface OpGraphHotOpsPanelProps {
     maxNs: number;
     selectedOperationId: number | null;
     onSelectOperation: (operationId: number) => void;
+    /** Shuts the list to input and focus without unmounting it, so it keeps its scroll. */
+    isInert: boolean;
 }
 
 const OpGraphHotOpsPanel = ({
@@ -51,15 +58,52 @@ const OpGraphHotOpsPanel = ({
     maxNs,
     selectedOperationId,
     onSelectOperation,
+    isInert,
 }: OpGraphHotOpsPanelProps) => {
     const titleId = useId();
+    const sectionRef = useRef<HTMLElement>(null);
+    const listRef = useRef<HTMLOListElement>(null);
+    const clickedOperationIdRef = useRef<number | null>(null);
     const [settings, setSettings] = useAtom(hotOpsSettingsAtom);
-    const { limit, sort, hideUnlinked } = settings;
+    const { limit, sort, hideUnlinked, markOnGraph } = settings;
     const visibleRows = useMemo(() => getVisibleHotOpRows(rows, settings), [rows, settings]);
     const hasUnlinked = useMemo(() => rows.some((row) => row.rank === null), [rows]);
 
+    const handleRowSelect = useCallback(
+        (operationId: number) => {
+            clickedOperationIdRef.current = operationId;
+            onSelectOperation(operationId);
+        },
+        [onSelectOperation],
+    );
+
+    // The details that open below the list shorten it and can hide the row just clicked. Scrolled by
+    // hand, because `scrollIntoView` can also scroll ancestors, `overflow: hidden` ones included. #2087
+    useLayoutEffect(() => {
+        const clickedId = clickedOperationIdRef.current;
+        clickedOperationIdRef.current = null;
+        if (clickedId === null || clickedId !== selectedOperationId) {
+            return;
+        }
+        const list = listRef.current;
+        const row = list?.querySelector('[aria-current="true"]');
+        if (!list || !row) {
+            return;
+        }
+        const overflow = row.getBoundingClientRect().bottom - list.getBoundingClientRect().bottom;
+        if (overflow > 0) {
+            list.scrollTop += overflow;
+        }
+    }, [selectedOperationId]);
+
+    // React 18 has no `inert` prop; on React 19 this becomes `inert={isInert}`.
+    useLayoutEffect(() => {
+        sectionRef.current?.toggleAttribute('inert', isInert);
+    }, [isInert]);
+
     return (
         <section
+            ref={sectionRef}
             className='op-graph-hot-ops'
             aria-labelledby={titleId}
         >
@@ -68,7 +112,7 @@ const OpGraphHotOpsPanel = ({
                     id={titleId}
                     className='op-graph-hot-ops-title'
                 >
-                    Slowest operations
+                    {HOT_OPS_TITLE}
                 </h2>
                 <span className='op-graph-panel-section-count'>{linkedOpCount}</span>
             </header>
@@ -89,16 +133,25 @@ const OpGraphHotOpsPanel = ({
                         setSettings((current) => (isHotOpsSort(value) ? { ...current, sort: value } : current))
                     }
                 />
+                <Checkbox
+                    className='op-graph-hot-ops-checkbox'
+                    label='Mark on graph'
+                    checked={markOnGraph}
+                    onChange={() => setSettings((current) => ({ ...current, markOnGraph: !current.markOnGraph }))}
+                />
                 {hasUnlinked ? (
                     <Checkbox
-                        className='op-graph-hot-ops-hide-unlinked'
+                        className='op-graph-hot-ops-checkbox'
                         label='Hide ops without perf data'
                         checked={hideUnlinked}
                         onChange={() => setSettings((current) => ({ ...current, hideUnlinked: !current.hideUnlinked }))}
                     />
                 ) : null}
             </div>
-            <ol className='op-graph-hot-ops-list'>
+            <ol
+                ref={listRef}
+                className='op-graph-hot-ops-list'
+            >
                 {visibleRows.map((row) => (
                     <li key={row.operationId}>
                         <HotOpRowButton
@@ -110,7 +163,7 @@ const OpGraphHotOpsPanel = ({
                                     : getPerfColorForNs(row.deviceTimeNs, minNs, maxNs)
                             }
                             isSelected={row.operationId === selectedOperationId}
-                            onSelect={onSelectOperation}
+                            onSelect={handleRowSelect}
                         />
                     </li>
                 ))}
@@ -138,7 +191,7 @@ const HotOpRowButton = memo(({ row, totalNs, color, isSelected, onSelect }: HotO
             title={`${operationId} ${name}`}
             onClick={() => onSelect(operationId)}
         >
-            <span className='op-graph-hot-ops-rank'>{rank ?? NO_RANK_LABEL}</span>
+            <span className='op-graph-hot-ops-rank'>{rank ?? HOT_OPS_NO_RANK_LABEL}</span>
             <span
                 className='op-graph-hot-ops-swatch'
                 style={color === undefined ? undefined : { backgroundColor: color }}

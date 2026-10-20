@@ -112,6 +112,10 @@ from ttnn_visualizer.models import (
 )
 from ttnn_visualizer.npe_index import ensure_index, read_summary, read_window
 from ttnn_visualizer.queries import DatabaseQueries
+from ttnn_visualizer.report_fingerprint import (
+    performance_run_fingerprint,
+    profiler_run_fingerprint,
+)
 from ttnn_visualizer.report_source_file import (
     read_report_source_file,
     report_source_file_available,
@@ -202,17 +206,45 @@ MAX_EVENT_LOG_REQUEST_BYTES = 16 * 1024
 _EVENT_LOG_EVENTS_FIELD = "events"
 
 
-# Hosted installs pre-install bundled demo reports beside session uploads; their folder
-# names mark them, e.g. `demo_n300-llama` and `DEMO_N300-LLAMA`.
-_DEMO_DIRECTORY_PATTERN = re.compile(r"^demo", re.IGNORECASE)
+# Hosted installs pre-install the bundled demo reports from `demo-reports/` beside session
+# uploads, and every hosted session sees them. Only these exact folders qualify, so no
+# other folder name can be listed to every session. Keep them in step with the archives;
+# `test_demo_report_archives.py` checks that they match.
+DEMO_PROFILER_DIRECTORY_NAMES = frozenset(
+    {
+        "BH_DEMO_bge_m3_oct19_1625",
+        "BH_DEMO_sentence_bert_oct19_1634",
+        "BH_DEMO_vgg_unet_oct19_1646",
+        "WH_DEMO_n300-llama",
+        "WH_DEMO_segformer_decoder_3119846618735255520",
+        "WH_DEMO_segformer_encoder_11911356357027855134",
+    }
+)
+DEMO_PERFORMANCE_DIRECTORY_NAMES = frozenset(
+    {
+        "BH_DEMO_SENTENCE_BERT",
+        "BH_DEMO_VGG_UNET",
+        "BH_DEMO_bge_m3",
+        "WH_DEMO_N300-LLAMA",
+        "WH_DEMO_SEG_DECODER_2025_02_16_18_07_01",
+        "WH_DEMO_SEG_ENCODER_2025_02_16_18_11_10",
+    }
+)
 
 
-def _list_demo_directory_names(path: Path) -> List[str]:
-    """Names of the bundled demo report folders directly under ``path``."""
+def _list_demo_directory_names(path: Path, demo_names: frozenset[str]) -> List[str]:
+    """Names of the bundled demo report folders present directly under ``path``.
+
+    Matches directory entries exactly rather than probing ``path / name``, which a
+    case-insensitive filesystem would resolve for a differently cased folder. A missing
+    ``path`` has no demos; hosted installs create the report directory lazily.
+    """
+    if not path.is_dir():
+        return []
     return [
-        report.name
-        for report in path.glob("*")
-        if _DEMO_DIRECTORY_PATTERN.match(report.name)
+        entry.name
+        for entry in path.iterdir()
+        if entry.name in demo_names and entry.is_dir()
     ]
 
 
@@ -737,6 +769,46 @@ def report_metadata(instance: Instance):
         )
 
 
+@api.route("/report-fingerprints", methods=["GET"])
+@with_instance
+@timer
+def report_fingerprints(instance: Instance):
+    """Which runs this instance's active reports hold, for recording report links.
+
+    Each run comes with the active folder name it was read from. The client caches a
+    run under the report it asked about, and a later pick can land on the instance
+    before this request is handled, so it checks the name before caching the run.
+    """
+    active_report = instance.active_report
+    profiler_fingerprint = (
+        profiler_run_fingerprint(Path(instance.profiler_path).parent)
+        if instance.profiler_path
+        else None
+    )
+    performance_fingerprint = (
+        performance_run_fingerprint(Path(instance.performance_path))
+        if instance.performance_path
+        else None
+    )
+    return Response(
+        orjson.dumps(
+            {
+                "profiler": {
+                    "folder": active_report.profiler_name if active_report else None,
+                    "run": profiler_fingerprint,
+                },
+                "performance": {
+                    "folder": (
+                        active_report.performance_name if active_report else None
+                    ),
+                    "run": performance_fingerprint,
+                },
+            }
+        ),
+        mimetype="application/json",
+    )
+
+
 @api.route("/config", methods=["GET"])
 @with_instance
 @timer
@@ -1044,7 +1116,9 @@ def get_profiler_data_list(instance: Instance):
         session_directory_names = [
             str(Path(session_path).parent.name) for session_path in session_paths
         ]
-        demo_directory_names = _list_demo_directory_names(path)
+        demo_directory_names = _list_demo_directory_names(
+            path, DEMO_PROFILER_DIRECTORY_NAMES
+        )
         directory_names = list(
             set(db_directory_names + session_directory_names + demo_directory_names)
         )
@@ -1076,6 +1150,7 @@ def get_profiler_data_list(instance: Instance):
                 "path": dir_path.name,
                 "reportName": report_name,
                 "isDemo": dir_name in demo_directory_names,
+                "runFingerprint": profiler_run_fingerprint(dir_path),
             }
         )
 
@@ -1153,7 +1228,9 @@ def get_performance_data_list(instance: Instance):
         session_directory_names = [
             str(Path(session_path).name) for session_path in session_paths
         ]
-        demo_directory_names = _list_demo_directory_names(path)
+        demo_directory_names = _list_demo_directory_names(
+            path, DEMO_PERFORMANCE_DIRECTORY_NAMES
+        )
         directory_names = list(
             set(db_directory_names + session_directory_names + demo_directory_names)
         )
@@ -1186,6 +1263,7 @@ def get_performance_data_list(instance: Instance):
                 "path": dir_path.name,
                 "reportName": dir_path.name,
                 "isDemo": dir_name in demo_directory_names,
+                "runFingerprint": performance_run_fingerprint(dir_path),
             }
         )
 
@@ -1671,25 +1749,67 @@ def list_local_remote_reports_performance():
     )
 
 
+_RUN_FINGERPRINT_BY_DIRECTORY_KEY: Dict[str, Callable[[Path], Optional[str]]] = {
+    "PROFILER_DIRECTORY_NAME": profiler_run_fingerprint,
+    "PERFORMANCE_DIRECTORY_NAME": performance_run_fingerprint,
+}
+
+
+def _synced_report_path(
+    folder: RemoteReportFolder, host: str, directory_config_key: str
+) -> Optional[Path]:
+    # The listing already carries the segment sync writes. Re-deriving it here
+    # would let a rank's row describe whichever rank was downloaded into that folder.
+    if not folder.syncedName:
+        return None
+    return local_synced_report_path(
+        Path(current_app.config["REMOTE_DATA_DIRECTORY"]),
+        host,
+        current_app.config[directory_config_key],
+        folder.syncedName,
+    )
+
+
+def _annotate_run_fingerprint(
+    folder: RemoteReportFolder, host: str, directory_config_key: str
+) -> None:
+    """Fingerprint the local synced copy, the run a picker row would open."""
+    local_path = _synced_report_path(folder, host, directory_config_key)
+    folder.runFingerprint = (
+        _RUN_FINGERPRINT_BY_DIRECTORY_KEY[directory_config_key](local_path)
+        if local_path is not None and local_path.is_dir()
+        else None
+    )
+
+
+def _annotate_synced_copy(
+    folder: RemoteReportFolder,
+    connection: RemoteConnection,
+    directory_config_key: str,
+    *,
+    qualify_rank: bool = False,
+) -> None:
+    """Describe the copy a sync just wrote. The payload's ``syncedName`` is not
+    trusted, as in ``_safe_report_folder_name``: it is recomputed from the remote
+    path the way the sync derived its destination, so it names that folder."""
+    folder.syncedName = folder_segment_from_remote_path(
+        folder.remotePath, qualify_rank=qualify_rank
+    )
+    _annotate_run_fingerprint(folder, connection.host, directory_config_key)
+
+
 def _annotate_last_synced(
     folders: List[RemoteReportFolder], host: str, directory_config_key: str
 ) -> None:
-    remote_data = Path(current_app.config["REMOTE_DATA_DIRECTORY"])
-    dir_name = current_app.config[directory_config_key]
     for rf in folders:
-        # The listing already carries the segment sync writes. Re-deriving it
-        # here would let a rank's badge report the sync state of whichever rank
-        # was downloaded into that folder.
-        directory_name = rf.syncedName
-        if not directory_name:
+        local_path = _synced_report_path(rf, host, directory_config_key)
+        if local_path is None:
             continue
-        local_path = local_synced_report_path(
-            remote_data, host, dir_name, directory_name
-        )
-        logger.debug("Checking last synced for %s", directory_name)
+        logger.debug("Checking last synced for %s", rf.syncedName)
         rf.lastSynced = read_last_synced_file(str(local_path))
         if not rf.lastSynced:
-            logger.debug("%s not yet synced", directory_name)
+            logger.debug("%s not yet synced", rf.syncedName)
+        _annotate_run_fingerprint(rf, host, directory_config_key)
 
 
 def _validated_remote_connection(connection_data: Any) -> RemoteConnection:
@@ -2394,6 +2514,12 @@ def sync_remote_folder():
             )
 
             performance_folder.lastSynced = int(time.time())
+            _annotate_synced_copy(
+                performance_folder,
+                connection,
+                "PERFORMANCE_DIRECTORY_NAME",
+                qualify_rank=bool(connection.multihostPerformance),
+            )
 
             response_body = performance_folder.model_dump()
             response_body["syncMethod"] = sync_method.value
@@ -2419,6 +2545,9 @@ def sync_remote_folder():
         )
 
         remote_profiler_folder.lastSynced = int(time.time())
+        _annotate_synced_copy(
+            remote_profiler_folder, connection, "PROFILER_DIRECTORY_NAME"
+        )
 
         response_body = remote_profiler_folder.model_dump()
         response_body["syncMethod"] = sync_method.value

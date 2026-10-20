@@ -5,6 +5,7 @@
 import { Handle, type NodeProps, Position } from '@xyflow/react';
 import { memo } from 'react';
 import OpGraphDeviceOpExpander from './OpGraphDeviceOpExpander';
+import OpGraphHotRankBadge from './OpGraphHotRankBadge';
 import type { OpGraphFlowNode } from './opGraphTypes';
 
 /**
@@ -30,6 +31,7 @@ const OpGraphDeviceGroupNode = memo(({ data }: NodeProps<OpGraphFlowNode>) => (
                 isExpanded
             />
         </div>
+        <OpGraphHotRankBadge rank={data.hotRank} />
         <Handle
             type='source'
             position={Position.Bottom}

@@ -15,6 +15,10 @@ from ttnn_visualizer.models import (
     RemoteReportFolder,
     split_rank_suffix,
 )
+from ttnn_visualizer.report_fingerprint import (
+    performance_run_fingerprint,
+    profiler_run_fingerprint,
+)
 from ttnn_visualizer.utils import (
     is_valid_performance_report_dir,
     is_valid_profiler_report_dir,
@@ -42,6 +46,7 @@ def list_local_synced_report_folders(
     report_directory_name: str,
     configured_remote_path: Optional[str],
     is_valid_report_dir: Callable[[Path], bool],
+    run_fingerprint: Callable[[Path], Optional[str]],
     qualify_rank: bool = False,
 ) -> List[RemoteReportFolder]:
     """
@@ -102,6 +107,7 @@ def list_local_synced_report_folders(
                 lastSynced=effective_last_synced,
                 syncedName=entry.name,
                 rank=rank,
+                runFingerprint=run_fingerprint(entry),
             )
         )
 
@@ -122,6 +128,7 @@ def list_local_synced_profiler_folders(
         report_directory_name=profiler_directory_name,
         configured_remote_path=connection.profilerPath,
         is_valid_report_dir=is_valid_profiler_report_dir,
+        run_fingerprint=profiler_run_fingerprint,
     )
 
 
@@ -138,5 +145,6 @@ def list_local_synced_performance_folders(
         report_directory_name=performance_directory_name,
         configured_remote_path=connection.performancePath,
         is_valid_report_dir=is_valid_performance_report_dir,
+        run_fingerprint=performance_run_fingerprint,
         qualify_rank=bool(connection.multihostPerformance),
     )

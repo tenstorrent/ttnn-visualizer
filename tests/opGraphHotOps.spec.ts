@@ -4,9 +4,15 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { buildHotOpRows, getVisibleHotOpRows } from '../src/components/operation-graph/opGraphHotOps';
+import {
+    buildHotOpRows,
+    buildHotRankByNodeId,
+    getMarkedHotOpRanks,
+    getVisibleHotOpRows,
+} from '../src/components/operation-graph/opGraphHotOps';
 import { buildOpGraphPerfOverlay } from '../src/components/operation-graph/opGraphPerfOverlay';
 import { HotOpsSort } from '../src/definitions/HotOps';
+import type { OpGraphNodeIndexEntry } from '../src/components/operation-graph/opGraphTypes';
 import type { PerfOverlaySource } from '../src/functions/perfOverlay';
 
 // `device_time` is microseconds on the wire; the aggregator converts to ns.
@@ -24,7 +30,7 @@ const NAMES = new Map([
 // Ops 4 and 5 are on the graph with no perf row; 900 has a row but is not on the graph.
 const overlay = buildOpGraphPerfOverlay(rows([1, 10], [2, 30], [3, 20], [900, 99]), true, [1, 2, 3, 4, 5]);
 
-const ids = (list: { operationId: number }[]) => list.map((row) => row.operationId);
+const ids = (list: readonly { operationId: number }[]) => list.map((row) => row.operationId);
 
 describe('buildHotOpRows', () => {
     it('lists the linked ops slowest first, then the ops without perf data by id', () => {
@@ -112,5 +118,75 @@ describe('getVisibleHotOpRows', () => {
         getVisibleHotOpRows(all, { limit: null, sort: HotOpsSort.OPERATION_ID, hideUnlinked: false });
 
         expect(ids(all)).toEqual([2, 3, 1, 4, 5]);
+    });
+});
+
+// The graph badges exactly the ops the list shows, so the list's two filters decide it. #2085
+describe('getMarkedHotOpRanks', () => {
+    const all = buildHotOpRows(overlay, [1, 2, 3, 4, 5], NAMES);
+
+    it('ranks the ops the list keeps', () => {
+        expect(getMarkedHotOpRanks(all, { limit: 2, hideUnlinked: true })).toEqual(
+            new Map([
+                [2, 1],
+                [3, 2],
+            ]),
+        );
+    });
+
+    it('includes the ops without perf data, unranked, once the list shows them', () => {
+        expect(getMarkedHotOpRanks(all, { limit: null, hideUnlinked: false })).toEqual(
+            new Map([
+                [2, 1],
+                [3, 2],
+                [1, 3],
+                [4, null],
+                [5, null],
+            ]),
+        );
+    });
+});
+
+describe('buildHotRankByNodeId', () => {
+    const ranks = new Map<number, number | null>([
+        [2, 1],
+        [3, 2],
+        [4, null],
+    ]);
+    const entry = (id: string, operationId: number, memberOperationIds?: number[]): OpGraphNodeIndexEntry => ({
+        id,
+        operationId,
+        name: id,
+        memberOperationIds,
+    });
+    const rankOf = (node: OpGraphNodeIndexEntry) => buildHotRankByNodeId(ranks, [node]).get(node.id);
+
+    it('gives an op node its own rank', () => {
+        expect(rankOf(entry('3', 3))).toBe(2);
+    });
+
+    it('leaves out a node whose op the list does not show', () => {
+        expect(buildHotRankByNodeId(ranks, [entry('1', 1)]).has('1')).toBe(false);
+    });
+
+    it('marks a listed op without perf data, unranked', () => {
+        expect(rankOf(entry('4', 4))).toBeNull();
+    });
+
+    it("gives a folded block its slowest listed member's rank", () => {
+        expect(rankOf(entry('block:1', 1, [1, 4, 3, 2]))).toBe(1);
+        expect(rankOf(entry('block:4', 4, [4, 3]))).toBe(2);
+    });
+
+    it('keeps a ranked member over an unranked one listed after it', () => {
+        expect(rankOf(entry('block:2', 2, [2, 4]))).toBe(1);
+    });
+
+    it('marks a folded block whose listed members have no perf data, unranked', () => {
+        expect(rankOf(entry('block:4', 4, [4, 5]))).toBeNull();
+    });
+
+    it('leaves out a folded block with no listed member', () => {
+        expect(buildHotRankByNodeId(ranks, [entry('block:1', 1, [1, 5])]).has('block:1')).toBe(false);
     });
 });

@@ -99,7 +99,7 @@ Recorded after a report is loaded successfully.
   - `upload`: a report uploaded from the browser. Under `SERVER_MODE`, this also counts every reselection of one of the session's earlier uploads from the report list, so hosted `upload` counts are loads, not uploads.
   - `remote_sync`: a report synced from a remote host.
   - `local_tt_metal`: a report selected from the local installation's report folders. Without `TT_METAL_HOME`, uploads are saved into those same folders, so this includes reselecting an earlier upload on a local installation. Never recorded under `SERVER_MODE`.
-  - `demo`: a bundled demo report. That is any NPE demo, and, under `SERVER_MODE`, any profiler or performance report whose folder name starts with `demo`, in any case.
+  - `demo`: a bundled demo report. That is any NPE demo, and, under `SERVER_MODE`, any profiler or performance report in one of the folders unpacked from `demo-reports/`, such as `WH_DEMO_N300-LLAMA` or `BH_DEMO_bge_m3`. The exact folder names are listed in `DEMO_PROFILER_DIRECTORY_NAMES` and `DEMO_PERFORMANCE_DIRECTORY_NAMES` in `views.py`.
 
 Because reselected uploads count as `upload` when hosted but as `local_tt_metal` locally, do not compare upload share between hosted and local logs.
 

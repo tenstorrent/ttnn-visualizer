@@ -30,6 +30,7 @@ enum Endpoints {
     REMOTE_LOCAL_PROFILER_REPORTS = '/api/remote/local-profiler-reports',
     REMOTE_LOCAL_PERFORMANCE_REPORTS = '/api/remote/local-performance-reports',
     REMOTE_SSH_CONFIG_HOSTS = '/api/remote/ssh-config-hosts',
+    REPORT_FINGERPRINTS = '/api/report-fingerprints',
     REPORT_METADATA = '/api/report-metadata',
     SYSTEM_CAPABILITIES = '/api/system-capabilities', // Currently unused
     TENSOR_LIST = '/api/tensors',

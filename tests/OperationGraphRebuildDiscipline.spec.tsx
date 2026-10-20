@@ -47,9 +47,11 @@ const harness: {
     // rather than a reimplementation, so a field the mapping stops carrying fails
     // here instead of silently changing what detection fingerprints on.
     sourceOperations: OpGraphSourceOperation[] | null;
+    setIsBuilding: ((isBuilding: boolean) => void) | null;
 } = {
     onBuilt: null,
     sourceOperations: null,
+    setIsBuilding: null,
     setNodes: null,
     setEdges: null,
     onNodeClick: null,
@@ -113,18 +115,34 @@ const PANE = { width: 1000, height: 800 };
 const TOOLBAR_HEIGHT = 150;
 // Within the column's `clamp(280px, 26%, 360px)`.
 const SIDE_WIDTH = 300;
-const stubRect = (width: number, height: number, left = 0) =>
+// The list alone sizes the column to its rows; a selection stretches it down the pane. #2087
+const LIST_ONLY_SIDE_HEIGHT = 300;
+const stubRect = (width: number, height: number, left = 0, top = 0) =>
     ({
         x: left,
-        y: 0,
-        top: 0,
+        y: top,
+        top,
         left,
         right: left + width,
-        bottom: height,
+        bottom: top + height,
         width,
         height,
         toJSON: () => ({}),
     }) as DOMRect;
+
+// The view's chrome as measured with the pane `paneTop` px down the window. The column's heights stand in
+// for `.op-graph-side` and `.op-graph-side-stretched` in `OperationGraphReactFlow.scss`, which jsdom can't lay out.
+const measuredWithPaneAt = (paneTop: number) =>
+    function measured(this: Element) {
+        if (this.classList?.contains('op-graph-toolbar')) {
+            return stubRect(PANE.width, TOOLBAR_HEIGHT, 0, paneTop);
+        }
+        if (this.classList?.contains(SIDE_CLASS)) {
+            const height = this.classList.contains(SIDE_STRETCHED_CLASS) ? PANE.height : LIST_ONLY_SIDE_HEIGHT;
+            return stubRect(SIDE_WIDTH, height, PANE.width - SIDE_WIDTH, paneTop);
+        }
+        return stubRect(PANE.width, PANE.height, 0, paneTop);
+    };
 
 vi.mock('@xyflow/react', async () => {
     const { useState, createElement, Fragment } = await import('react');
@@ -207,14 +225,14 @@ vi.mock('@xyflow/react', async () => {
                 null,
                 nodes.map((node) => {
                     const NodeComponent = node.type === undefined ? undefined : nodeTypes?.[node.type];
+                    // Wrapped as React Flow wraps it, so a spec can scope a query to one node.
                     return NodeComponent === undefined
                         ? null
-                        : createElement(NodeComponent, {
-                              key: node.id,
-                              id: node.id,
-                              data: node.data,
-                              type: node.type,
-                          });
+                        : createElement(
+                              'div',
+                              { key: node.id, className: 'react-flow__node', 'data-id': node.id },
+                              createElement(NodeComponent, { id: node.id, data: node.data, type: node.type }),
+                          );
                 }),
                 children ?? null,
             );
@@ -244,19 +262,25 @@ vi.mock('@xyflow/react', async () => {
     };
 });
 
-vi.mock('../src/components/operation-graph/useOpGraphLayoutWorker', () => ({
-    useOpGraphLayoutWorker: (operations: OpGraphSourceOperation[], onBuilt: (graph: OpGraphBuiltGraph) => void) => {
-        harness.sourceOperations = operations;
-        harness.onBuilt = (graph) => {
-            knownNodeIds.clear();
-            for (const node of graph.nodes) {
-                knownNodeIds.add(node.id);
-            }
-            onBuilt(graph);
-        };
-        return { runBuild, isBuilding: false };
-    },
-}));
+vi.mock('../src/components/operation-graph/useOpGraphLayoutWorker', async () => {
+    const { useState } = await import('react');
+    return {
+        useOpGraphLayoutWorker: (operations: OpGraphSourceOperation[], onBuilt: (graph: OpGraphBuiltGraph) => void) => {
+            // The real hook only reports a build once it has run past its spinner delay.
+            const [isBuilding, setIsBuilding] = useState(false);
+            harness.setIsBuilding = setIsBuilding;
+            harness.sourceOperations = operations;
+            harness.onBuilt = (graph) => {
+                knownNodeIds.clear();
+                for (const node of graph.nodes) {
+                    knownNodeIds.add(node.id);
+                }
+                onBuilt(graph);
+            };
+            return { runBuild, isBuilding };
+        },
+    };
+});
 
 // Wraps the real traversal instead of replacing it: the rendering assertions need
 // the true path, and one assertion needs to count how often it is computed.
@@ -274,18 +298,25 @@ vi.mock('../src/components/operation-graph/opGraphCriticalPath', async () => {
 import { buildOpGraph } from '../src/components/operation-graph/opGraphBuilder';
 import { findCriticalPath } from '../src/components/operation-graph/opGraphCriticalPath';
 import {
+    buildDeviceOperationSubgraph,
     countDeviceOperations,
     getDeviceEdgeId,
     getDeviceNodeId,
 } from '../src/components/operation-graph/opGraphDeviceSubgraph';
 import OperationGraphReactFlow from '../src/components/operation-graph/OperationGraphReactFlow';
-import {
-    PERF_BAR_COLOR_VAR,
-    PERF_BAR_SCALE_VAR,
-    PERF_BAR_ZOOM_VAR,
-} from '../src/components/operation-graph/opGraphPerfOverlay';
+import { PERF_BAR_COLOR_VAR, PERF_BAR_SCALE_VAR } from '../src/components/operation-graph/opGraphPerfOverlay';
+import { NODE_ZOOM_VAR } from '../src/components/operation-graph/opGraphNodeZoom';
 import { NO_PERF_DATA_LABEL } from '../src/definitions/PerfOverlayStatus';
 import { formatDuration } from '../src/functions/formatting';
+// Imported, where opGraphRevealPan.spec hard-codes 48: that spec pins the value, these pin the view applying it.
+import {
+    REVEALED_NODE_CLASS,
+    REVEAL_MARGIN_PX,
+    SIDE_CLASS,
+    SIDE_STRETCHED_CLASS,
+    absolutePositionsOf,
+} from '../src/components/operation-graph/opGraphRevealPan';
+import { weightFanIdCovers } from '../src/components/operation-graph/opGraphWeightFans';
 import type { PerfOverlaySource } from '../src/functions/perfOverlay';
 import {
     activePerformanceReportAtom,
@@ -294,7 +325,12 @@ import {
     hotOpsSettingsAtom,
     isHotOpsEnabledAtom,
 } from '../src/store/app';
-import { DEFAULT_HOT_OPS_SETTINGS, HOT_OPS_ENABLED_STORAGE_KEY } from '../src/definitions/HotOps';
+import {
+    DEFAULT_HOT_OPS_SETTINGS,
+    HOT_OPS_ENABLED_STORAGE_KEY,
+    HOT_OPS_NO_RANK_LABEL,
+    HOT_OPS_TITLE,
+} from '../src/definitions/HotOps';
 import type { ReportFolder } from '../src/definitions/Reports';
 /* eslint-enable import/first */
 
@@ -340,27 +376,37 @@ const sourceFor = (operations: OperationDescription[]) =>
         deviceOperationCount: countDeviceOperations(op),
     }));
 
+// The worker's reply: it clears the build flag and delivers the graph in one handler, so one `act`.
+const replyWith = (source: OpGraphSourceOperation[], deviceSubgraphs: OpGraphDeviceSubgraph[] = []) => {
+    act(() => {
+        harness.setIsBuilding?.(false);
+        harness.onBuilt?.(buildOpGraph(source, { hideDeallocate: true, deviceSubgraphs }));
+    });
+};
+
+// The worker's spinner delay running out: from here the view treats the graph as rebuilding.
+const startBuild = () => {
+    act(() => {
+        harness.setIsBuilding?.(true);
+    });
+};
+
+const graphElement = (operations = OPERATION_LIST, perfRows?: PerfOverlaySource[], operationId?: number) => (
+    <MemoryRouter>
+        <OperationGraphReactFlow
+            operationList={operations}
+            perfRows={perfRows}
+            isPerfReportLoaded={perfRows !== undefined}
+            operationId={operationId}
+        />
+    </MemoryRouter>
+);
+
 const renderGraph = (operations = OPERATION_LIST, perfRows?: PerfOverlaySource[], operationId?: number) => {
-    const view = render(
-        <MemoryRouter>
-            <OperationGraphReactFlow
-                operationList={operations}
-                perfRows={perfRows}
-                isPerfReportLoaded={perfRows !== undefined}
-                operationId={operationId}
-            />
-        </MemoryRouter>,
-    );
+    const view = render(graphElement(operations, perfRows, operationId));
     // The worker is stubbed, so the view only receives a graph when a test says
     // so; this is the reply the mount's own `runBuild` would have produced.
-    act(() => {
-        harness.onBuilt?.(
-            buildOpGraph(harness.sourceOperations ?? sourceFor(operations), {
-                hideDeallocate: true,
-                deviceSubgraphs: [],
-            }),
-        );
-    });
+    replyWith(harness.sourceOperations ?? sourceFor(operations));
     return view;
 };
 
@@ -379,6 +425,22 @@ const typeFilter = (query: string) => {
     });
 };
 
+// Scoped to the list: the details heading carries the same title once an op is selected.
+const slowestRow = (title: string) =>
+    within(screen.getByRole('region', { name: 'Slowest operations' })).getByTitle(title);
+const lastAskedExpandedIds = () => (runBuild.mock.calls.at(-1)?.[0] as OpGraphBuildOptions).expandedBlockIds;
+// How far right a drawn node reaches on the pane at `viewport`, through any container it sits in. #2028
+const paneRightEdge = (nodeId: string, viewport: { x: number; zoom: number }) => {
+    const { nodes } = lastFlowRender();
+    const x = absolutePositionsOf(nodes).get(nodeId)?.x ?? Number.NaN;
+    return (x + (nodeById(nodes, nodeId).width ?? 0)) * viewport.zoom + viewport.x;
+};
+// The viewport the first pan wrote, which most of the pan assertions below read.
+const firstPan = () => (setViewport.mock.calls[0] as unknown as [{ x: number; y: number; zoom: number }])[0];
+// How far right a store node at graph x `graphX` reaches on the pane after the first pan.
+const storeNodeRightEdge = (graphX: number) => (graphX + STORE_NODE.width) * PANNED_ZOOM + firstPan().x;
+const expectClearOfSide = (rightEdge: number) => expect(rightEdge).toBeLessThanOrEqual(PANE.width - SIDE_WIDTH);
+
 const emitNodeChanges = (changes: NodeChange<OpGraphFlowNode>[]) => {
     act(() => {
         harness.onNodesChange?.(changes);
@@ -391,7 +453,10 @@ const hoverNode = (id: string) => {
     });
 };
 
-const PERF_ROWS: PerfOverlaySource[] = OPERATION_LIST.map((op) => ({ id: op.id, device_time: op.id * 10 }));
+const perfRowsFor = (operations: OperationDescription[]): PerfOverlaySource[] =>
+    operations.map((op) => ({ id: op.id, device_time: op.id * 10 }));
+
+const PERF_ROWS = perfRowsFor(OPERATION_LIST);
 
 // Two routes from op 1 to op 4, so the graph has ops on the path and ops beside
 // it. `OPERATION_LIST` is a chain, which puts every node on the path and would let
@@ -451,14 +516,7 @@ const deviceSubgraphFor = (operationId: number, producerId: number): OpGraphDevi
 // What the worker replies with once a box is open. Overlay-invariant tests still
 // inject the graph this way so they don't depend on the click path.
 const rebuildWith = (operations: OperationDescription[], deviceSubgraphs: OpGraphDeviceSubgraph[]) => {
-    act(() => {
-        harness.onBuilt?.(
-            buildOpGraph(harness.sourceOperations ?? sourceFor(operations), {
-                hideDeallocate: true,
-                deviceSubgraphs,
-            }),
-        );
-    });
+    replyWith(harness.sourceOperations ?? sourceFor(operations), deviceSubgraphs);
 };
 
 const tensorNode = (tensorId: number): Node =>
@@ -522,6 +580,20 @@ const asRenderedColor = (color: string) => {
 const overlaySwitch = () => screen.getByRole('checkbox', { name: /^Perf overlay/ }) as HTMLInputElement;
 
 const enableOverlay = () => fireEvent.click(overlaySwitch());
+const hotOpsSwitch = () => screen.getByRole('checkbox', { name: /^Slowest operations/ }) as HTMLInputElement;
+const listControl = (label: string) =>
+    within(screen.getByRole('region', { name: 'Slowest operations' })).getByText(label);
+const markSwitch = () => screen.getByRole('checkbox', { name: 'Mark on graph' });
+// The list, then marking on it: how most of the marking tests open.
+const enableHotOpsMarking = () => {
+    fireEvent.click(hotOpsSwitch());
+    fireEvent.click(markSwitch());
+};
+const hotRankOf = (id: string) => nodeById(lastFlowRender().nodes, id).data.hotRank;
+// Found by accessible name, which is what reads a badge out; the digits are what it shows.
+const hotRankBadges = () =>
+    screen.queryAllByLabelText(new RegExp(`^${HOT_OPS_TITLE}: `)).map((badge) => badge.textContent);
+const renderedNode = (id: string) => document.querySelector<HTMLElement>(`.react-flow__node[data-id="${id}"]`);
 
 const criticalPathSwitch = () => screen.getByRole('checkbox', { name: /^Highlight critical path/ }) as HTMLInputElement;
 
@@ -535,21 +607,14 @@ beforeEach(() => {
     flowRenders.length = 0;
     harness.onBuilt = null;
     harness.sourceOperations = null;
+    harness.setIsBuilding = null;
     setCenter.mockClear();
     setViewport.mockClear();
     knownNodeIds.clear();
     flowStoreLag.isBlind = false;
     absolutePositionById.clear();
     viewportState.current = { x: 0, y: 0, zoom: PANNED_ZOOM };
-    vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function measured(this: Element) {
-        if (this.classList?.contains('op-graph-toolbar')) {
-            return stubRect(PANE.width, TOOLBAR_HEIGHT);
-        }
-        if (this.classList?.contains('op-graph-side')) {
-            return stubRect(SIDE_WIDTH, PANE.height, PANE.width - SIDE_WIDTH);
-        }
-        return stubRect(PANE.width, PANE.height);
-    });
+    vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(measuredWithPaneAt(0));
     harness.setNodes = null;
     harness.setEdges = null;
     harness.onNodeClick = null;
@@ -648,11 +713,7 @@ describe('OperationGraphReactFlow rebuild triggers', () => {
         const { rerender } = renderGraph();
         runBuild.mockClear();
 
-        rerender(
-            <MemoryRouter>
-                <OperationGraphReactFlow operationList={[operation(9, 'conv_x', [10]), operation(10, 'add_y', [])]} />
-            </MemoryRouter>,
-        );
+        rerender(graphElement([operation(9, 'conv_x', [10]), operation(10, 'add_y', [])]));
 
         expect(runBuild).toHaveBeenCalledTimes(1);
     });
@@ -794,13 +855,10 @@ describe('OperationGraphReactFlow perf overlay identity', () => {
         const before = lastFlowRender().nodes;
 
         rerender(
-            <MemoryRouter>
-                <OperationGraphReactFlow
-                    operationList={OPERATION_LIST}
-                    perfRows={PERF_ROWS.map((row) => ({ ...row, device_time: (row.device_time ?? 0) * 100 }))}
-                    isPerfReportLoaded
-                />
-            </MemoryRouter>,
+            graphElement(
+                OPERATION_LIST,
+                PERF_ROWS.map((row) => ({ ...row, device_time: (row.device_time ?? 0) * 100 })),
+            ),
         );
 
         // The cache is keyed on the patch identity, so a new ramp has to reach
@@ -882,20 +940,41 @@ describe('OperationGraphReactFlow perf overlay report scope', () => {
     });
 });
 
-// The SCSS divides the bar's floor by this property to hold an on-screen size at
-// overview zoom. `opGraphPerfBarStyles.spec.ts` asserts the stylesheet reads it;
+// The SCSS divides the perf bar's floor and the rank badge's size by this property to hold an
+// on-screen size at overview zoom. `opGraphPerfBarStyles.spec.ts` asserts the stylesheet reads it;
 // these assert something writes it, so the compensation cannot go dead silently.
-describe('OperationGraphReactFlow perf bar zoom compensation', () => {
+describe('OperationGraphReactFlow node zoom compensation', () => {
     const graphRoot = (container: HTMLElement) =>
         container.querySelector<HTMLElement>('.operation-graph-react-flow') as HTMLElement;
 
-    const publishedZoom = (container: HTMLElement) => graphRoot(container).style.getPropertyValue(PERF_BAR_ZOOM_VAR);
+    const publishedZoom = (container: HTMLElement) => graphRoot(container).style.getPropertyValue(NODE_ZOOM_VAR);
 
     it('publishes the current zoom when the overlay turns on', () => {
         const { container } = renderGraph(OPERATION_LIST, PERF_ROWS);
         expect(publishedZoom(container)).toBe('');
 
         enableOverlay();
+
+        expect(publishedZoom(container)).toBe('1');
+    });
+
+    it('leaves it unpublished for a marking left on while the list is off', () => {
+        getDefaultStore().set(hotOpsSettingsAtom, { ...DEFAULT_HOT_OPS_SETTINGS, markOnGraph: true });
+        const { container } = renderGraph(OPERATION_LIST, PERF_ROWS);
+        expect(publishedZoom(container)).toBe('');
+
+        fireEvent.click(hotOpsSwitch());
+
+        expect(publishedZoom(container)).toBe('1');
+        expect(hotRankBadges()).not.toEqual([]);
+    });
+
+    it('publishes it for the slowest-operations badges without the overlay (#2085)', () => {
+        const { container } = renderGraph(OPERATION_LIST, PERF_ROWS);
+        fireEvent.click(hotOpsSwitch());
+        expect(publishedZoom(container)).toBe('');
+
+        fireEvent.click(markSwitch());
 
         expect(publishedZoom(container)).toBe('1');
     });
@@ -911,6 +990,32 @@ describe('OperationGraphReactFlow perf bar zoom compensation', () => {
         const published = Number(publishedZoom(container));
         expect(published).toBeGreaterThan(0.3 * 0.95);
         expect(published).toBeLessThan(0.3 * 1.05);
+    });
+
+    it('republishes for the badges alone when a gesture crosses a bucket', () => {
+        const { container } = renderGraph(OPERATION_LIST, PERF_ROWS);
+        enableHotOpsMarking();
+
+        setFlowZoom(0.3);
+
+        const published = Number(publishedZoom(container));
+        expect(published).toBeGreaterThan(0.3 * 0.95);
+        expect(published).toBeLessThan(0.3 * 1.05);
+    });
+
+    it('keeps publishing for the badges once the overlay is switched off', () => {
+        const { container } = renderGraph(OPERATION_LIST, PERF_ROWS);
+        enableOverlay();
+        enableHotOpsMarking();
+
+        fireEvent.click(overlaySwitch());
+        setFlowZoom(0.3);
+
+        const published = Number(publishedZoom(container));
+        expect(published).toBeGreaterThan(0.3 * 0.95);
+        expect(published).toBeLessThan(0.3 * 1.05);
+        // The input that kept it changed, so it must neither drop nor double the subscription.
+        expect(flowStoreListeners.size).toBe(1);
     });
 
     it('coalesces sub-bucket frames into a single write', () => {
@@ -933,7 +1038,7 @@ describe('OperationGraphReactFlow perf bar zoom compensation', () => {
     });
 
     it('never publishes a zero, which would invalidate the bar geometry', () => {
-        // The bar sizes with `calc(2px / var(--op-graph-perf-zoom))`: invalid at 0,
+        // The bar sizes with `calc(2px / var(--op-graph-node-zoom))`: invalid at 0,
         // so the declaration would drop and the bar vanish at MIN_ZOOM. Absolute
         // quantisation steps round the whole overview range to zero.
         const { container } = renderGraph(OPERATION_LIST, PERF_ROWS);
@@ -957,6 +1062,33 @@ describe('OperationGraphReactFlow perf bar zoom compensation', () => {
 
         expect(flowStoreListeners.size).toBe(0);
         expect(publishedZoom(container)).toBe(lastPublished);
+    });
+
+    it.each<[string, () => void]>([
+        ['marking is unticked with the overlay off', () => fireEvent.click(markSwitch())],
+        ['the list goes off with marking on', () => fireEvent.click(hotOpsSwitch())],
+    ])('unsubscribes when %s', (_, turnOff) => {
+        const { container } = renderGraph(OPERATION_LIST, PERF_ROWS);
+        enableHotOpsMarking();
+        setFlowZoom(2);
+        const lastPublished = publishedZoom(container);
+
+        turnOff();
+        setFlowZoom(0.5);
+
+        expect(flowStoreListeners.size).toBe(0);
+        expect(publishedZoom(container)).toBe(lastPublished);
+    });
+
+    it('drops the badges and the subscription when the perf data goes', () => {
+        const { rerender } = renderGraph(OPERATION_LIST, PERF_ROWS);
+        enableHotOpsMarking();
+        expect(hotRankBadges()).not.toEqual([]);
+
+        rerender(graphElement(OPERATION_LIST));
+
+        expect(hotRankBadges()).toEqual([]);
+        expect(flowStoreListeners.size).toBe(0);
     });
 });
 
@@ -995,13 +1127,10 @@ describe('OperationGraphReactFlow perf overlay panel wiring', () => {
 });
 
 describe('OperationGraphReactFlow slowest operations list', () => {
-    const hotOpsSwitch = () => screen.getByRole('checkbox', { name: /^Slowest operations/ }) as HTMLInputElement;
     const listHeading = () => screen.queryByRole('heading', { name: 'Slowest operations' });
     const listedIds = () =>
         Array.from(document.querySelectorAll('.op-graph-hot-ops-id'), (cell) => Number(cell.textContent));
-    // Scoped to the list: the details heading carries the same title once an op is selected.
-    const rowFor = (title: string) =>
-        within(screen.getByRole('region', { name: 'Slowest operations' })).getByTitle(title);
+    const sideColumn = () => document.querySelector(`.${SIDE_CLASS}`);
 
     it('shows the list, slowest first, once its switch is on', () => {
         renderGraph(OPERATION_LIST, PERF_ROWS);
@@ -1024,14 +1153,11 @@ describe('OperationGraphReactFlow slowest operations list', () => {
         expect(runBuild).not.toHaveBeenCalled();
     });
 
-    const listControl = (label: string) =>
-        within(screen.getByRole('region', { name: 'Slowest operations' })).getByText(label);
-
     it.each<[string, () => void]>([
         ['how many rows it shows', () => fireEvent.click(listControl('Top 25'))],
         ['its order', () => fireEvent.click(listControl('By ID'))],
         ['whether ops without perf data show', () => fireEvent.click(listControl('Hide ops without perf data'))],
-        ['the op selected from it', () => fireEvent.click(rowFor('3 matmul_c'))],
+        ['the op selected from it', () => fireEvent.click(slowestRow('3 matmul_c'))],
     ])('does not relayout for a change to %s', (_, change) => {
         // Op 5 has no perf row, so the hide checkbox is offered.
         renderGraph(
@@ -1087,29 +1213,236 @@ describe('OperationGraphReactFlow slowest operations list', () => {
         renderGraph(OPERATION_LIST, PERF_ROWS);
         fireEvent.click(hotOpsSwitch());
 
-        fireEvent.click(rowFor('3 matmul_c'));
+        fireEvent.click(slowestRow('3 matmul_c'));
 
         expect(screen.getByRole('heading', { name: '3 matmul_c' })).toBeInTheDocument();
-        expect(rowFor('3 matmul_c')).toHaveAttribute('aria-current', 'true');
+        expect(slowestRow('3 matmul_c')).toHaveAttribute('aria-current', 'true');
         // The selection reaches the graph too, not just the panel.
         expect(nodeById(lastFlowRender().nodes, '3').selected).toBe(true);
     });
 
     it('brings a located node out from behind the list', () => {
         // On screen at x 800–850, inside the column's band from 700: clear of the pane
-        // edge, so a reveal that ignored the column would not move at all.
+        // edge, so a reveal that ignored the column would not move at all. At y 400 it is
+        // below the list alone, but the selection the click makes stretches the column past it.
         absolutePositionById.set('3', { x: 1600, y: 800 });
         renderGraph(OPERATION_LIST, PERF_ROWS);
         fireEvent.click(hotOpsSwitch());
         setViewport.mockClear();
 
-        fireEvent.click(rowFor('3 matmul_c'));
+        fireEvent.click(slowestRow('3 matmul_c'));
 
         expect(setViewport).toHaveBeenCalledTimes(1);
-        const [viewport] = setViewport.mock.calls[0] as unknown as [{ x: number; y: number }];
-        const rightEdge = (1600 + STORE_NODE.width) * PANNED_ZOOM + viewport.x;
-        expect(rightEdge).toBeLessThanOrEqual(PANE.width - SIDE_WIDTH);
-        expect(viewport.y).toBe(0);
+        expectClearOfSide(storeNodeRightEdge(1600));
+        expect(firstPan().y).toBe(0);
+    });
+
+    // The list alone no longer spans the pane, so the graph below it takes clicks and drags. #2087
+    describe('side column height', () => {
+        it('stretches down the pane only while an op is selected', () => {
+            renderGraph(OPERATION_LIST, PERF_ROWS);
+            fireEvent.click(hotOpsSwitch());
+            expect(sideColumn()).not.toHaveClass(SIDE_STRETCHED_CLASS);
+
+            fireEvent.click(slowestRow('3 matmul_c'));
+            expect(sideColumn()).toHaveClass(SIDE_STRETCHED_CLASS);
+
+            act(() => {
+                harness.onPaneClick?.();
+            });
+            expect(sideColumn()).not.toHaveClass(SIDE_STRETCHED_CLASS);
+            expect(listHeading()).toBeInTheDocument();
+        });
+
+        it('stretches down the pane for the details alone', () => {
+            renderGraph(OPERATION_LIST, PERF_ROWS);
+
+            emitNodeChanges([{ type: 'select', id: '3', selected: true }]);
+
+            expect(listHeading()).toBeNull();
+            expect(sideColumn()).toHaveClass(SIDE_STRETCHED_CLASS);
+        });
+
+        // Op 3 is the filter's one match: its node goes at (x, y), and Next steps to it with the list alone.
+        const stepToMatchAt = (x: number, y: number) => {
+            absolutePositionById.set('3', { x, y });
+            renderGraph(OPERATION_LIST, PERF_ROWS);
+            fireEvent.click(hotOpsSwitch());
+            typeFilter('matmul_c');
+            setViewport.mockClear();
+            fireEvent.click(screen.getByLabelText('Next match'));
+        };
+
+        it('steps to a match below the list alone without panning around it', () => {
+            // x 800–850 is the column's band, but y 400 is below the 300 px the list takes.
+            stepToMatchAt(1600, 800);
+
+            expect(setViewport).not.toHaveBeenCalled();
+        });
+
+        it("measures the list's reach from the pane, which sits below the window's top", () => {
+            // The app's own padding puts the pane 15 px down. At y 305 the node is below the
+            // list's 300 px only once those 15 px are taken off the column's window bottom.
+            vi.mocked(Element.prototype.getBoundingClientRect).mockImplementation(measuredWithPaneAt(15));
+            stepToMatchAt(1600, 610);
+
+            expect(setViewport).not.toHaveBeenCalled();
+        });
+
+        it('still steps a match out from behind the list alone', () => {
+            // y 200 is inside the band the list covers.
+            stepToMatchAt(1600, 400);
+
+            expect(setViewport).toHaveBeenCalledTimes(1);
+            expectClearOfSide(storeNodeRightEdge(1600));
+            // Stepping matches only moves the viewport; the list keeps the column to itself.
+            expect(sideColumn()).not.toHaveClass(SIDE_STRETCHED_CLASS);
+        });
+
+        it('clears the column for a selection made on the graph, which stretches it too', () => {
+            // Below the list alone but in the column's band, like the row-click case above.
+            absolutePositionById.set('3', { x: 1600, y: 800 });
+            renderGraph(OPERATION_LIST, PERF_ROWS);
+            fireEvent.click(hotOpsSwitch());
+            setViewport.mockClear();
+
+            act(() => {
+                harness.onNodeClick?.(null, nodeById(lastFlowRender().nodes, '3'));
+            });
+
+            expect(setViewport).toHaveBeenCalledTimes(1);
+            expectClearOfSide(storeNodeRightEdge(1600));
+        });
+
+        it('clears the column for a selection made from the keyboard or a box', () => {
+            // React Flow reports these as select changes, which reach the pan by another route than a click.
+            absolutePositionById.set('3', { x: 1600, y: 800 });
+            renderGraph(OPERATION_LIST, PERF_ROWS);
+            fireEvent.click(hotOpsSwitch());
+            setViewport.mockClear();
+
+            emitNodeChanges([{ type: 'select', id: '3', selected: true }]);
+
+            expect(sideColumn()).toHaveClass(SIDE_STRETCHED_CLASS);
+            expect(setViewport).toHaveBeenCalledTimes(1);
+            expectClearOfSide(storeNodeRightEdge(1600));
+        });
+
+        it('clears the column for a selection made mid-build, which stretches it with the details shut', () => {
+            // The list stays mounted through a build and the selection stretches it, though no details open. #2088
+            absolutePositionById.set('3', { x: 1600, y: 800 });
+            renderGraph(OPERATION_LIST, PERF_ROWS);
+            fireEvent.click(hotOpsSwitch());
+            startBuild();
+            setViewport.mockClear();
+
+            emitNodeChanges([{ type: 'select', id: '3', selected: true }]);
+
+            expect(sideColumn()).toHaveClass(SIDE_STRETCHED_CLASS);
+            expect(setViewport).toHaveBeenCalledTimes(1);
+            expectClearOfSide(storeNodeRightEdge(1600));
+        });
+
+        it('clears the column for an operation the toolbar steps to', () => {
+            // Op 2 is selected, so stepping on to op 3 has to clear the column the selection stretches.
+            absolutePositionById.set('3', { x: 1600, y: 800 });
+            renderGraph(OPERATION_LIST, PERF_ROWS);
+            fireEvent.click(hotOpsSwitch());
+            act(() => {
+                harness.onNodeClick?.(null, nodeById(lastFlowRender().nodes, '2'));
+            });
+            setViewport.mockClear();
+
+            fireEvent.click(screen.getByLabelText('Go to next operation 3'));
+
+            expect(sideColumn()).toHaveClass(SIDE_STRETCHED_CLASS);
+            expect(setViewport).toHaveBeenCalledTimes(1);
+            expectClearOfSide(storeNodeRightEdge(1600));
+        });
+
+        it('clears the column for an operation the URL names, whose details open as it renders', () => {
+            // The URL's pan reads the column's class, so it holds only while the details open in that render.
+            absolutePositionById.set('3', { x: 1600, y: 800 });
+            const { rerender } = renderGraph(OPERATION_LIST, PERF_ROWS);
+            fireEvent.click(hotOpsSwitch());
+            setViewport.mockClear();
+
+            rerender(graphElement(OPERATION_LIST, PERF_ROWS, 3));
+
+            expect(sideColumn()).toHaveClass(SIDE_STRETCHED_CLASS);
+            expect(setViewport).toHaveBeenCalledTimes(1);
+            expectClearOfSide(storeNodeRightEdge(1600));
+        });
+
+        it('keeps a clicked row in view once the details open and shorten the list', () => {
+            // The list ends 200 px down only once the details' class lands, and op 3's row sits
+            // 50 px past that, so the scroll has to read the commit that opens the details.
+            vi.mocked(Element.prototype.getBoundingClientRect).mockImplementation(function measured(this: Element) {
+                if (this.classList?.contains('op-graph-hot-ops-list')) {
+                    const isStretched = this.closest(`.${SIDE_CLASS}`)?.classList.contains(SIDE_STRETCHED_CLASS);
+                    return stubRect(SIDE_WIDTH, isStretched ? 200 : PANE.height, PANE.width - SIDE_WIDTH);
+                }
+                if (this.getAttribute?.('title') === '3 matmul_c') {
+                    return stubRect(SIDE_WIDTH, 20, PANE.width - SIDE_WIDTH, 230);
+                }
+                return measuredWithPaneAt(0).call(this);
+            });
+            renderGraph(OPERATION_LIST, PERF_ROWS);
+            fireEvent.click(hotOpsSwitch());
+            const list = document.querySelector<HTMLElement>('.op-graph-hot-ops-list');
+
+            fireEvent.click(slowestRow('3 matmul_c'));
+
+            expect(list?.scrollTop).toBe(50);
+        });
+
+        // Expanding op 3 keeps its corner where it was, which these tests put in the
+        // column's band but below the list alone, with the open box clear of the pane edge.
+        describe('revealing an expanded operation', () => {
+            const operations = OPERATION_LIST.map((op) =>
+                op.id === 3 ? withDeviceOperations(op, ['head()', 'body()', 'tail()']) : op,
+            );
+            const subgraph = buildDeviceOperationSubgraph(operations[2]);
+            const expandedBox = () => nodeById(lastFlowRender().nodes, '3');
+
+            const expandAt = (paneX: number, paneY: number) => {
+                absolutePositionById.set('3', { x: paneX / PANNED_ZOOM, y: paneY / PANNED_ZOOM });
+                setViewport.mockClear();
+                fireEvent.click(screen.getByRole('button', { name: 'Show 3 device operations' }));
+                rebuildWith(operations, subgraph === null ? [] : [subgraph]);
+                expect(setViewport).toHaveBeenCalledTimes(1);
+                return firstPan();
+            };
+
+            const boxWidth = () => {
+                const graph = buildOpGraph(sourceFor(operations), {
+                    hideDeallocate: true,
+                    deviceSubgraphs: subgraph === null ? [] : [subgraph],
+                });
+                return (nodeById(graph.nodes, '3').width ?? 0) * PANNED_ZOOM;
+            };
+
+            it('leaves it where it opened when that is below the list alone', () => {
+                renderGraph(operations, PERF_ROWS);
+                fireEvent.click(hotOpsSwitch());
+                const paneX = PANE.width - 60 - boxWidth();
+
+                const viewport = expandAt(paneX, LIST_ONLY_SIDE_HEIGHT + 20);
+
+                expect(expandedBox().position.x * PANNED_ZOOM + viewport.x).toBeCloseTo(paneX, 5);
+            });
+
+            it('moves it out from under a column the selection stretches past it', () => {
+                renderGraph(operations, PERF_ROWS);
+                fireEvent.click(hotOpsSwitch());
+                fireEvent.click(slowestRow('1 matmul_a'));
+                const paneX = PANE.width - 60 - boxWidth();
+
+                const viewport = expandAt(paneX, LIST_ONLY_SIDE_HEIGHT + 20);
+
+                expectClearOfSide(expandedBox().position.x * PANNED_ZOOM + viewport.x + boxWidth());
+            });
+        });
     });
 
     it('colours each swatch as its node is drawn', () => {
@@ -1117,10 +1450,371 @@ describe('OperationGraphReactFlow slowest operations list', () => {
         enableOverlay();
         fireEvent.click(hotOpsSwitch());
 
-        const swatch = rowFor('4 relu_d').querySelector<HTMLElement>('.op-graph-hot-ops-swatch');
+        const swatch = slowestRow('4 relu_d').querySelector<HTMLElement>('.op-graph-hot-ops-swatch');
         expect(swatch?.style.backgroundColor).toBe(
             asRenderedColor(String(perfColorOf(nodeById(lastFlowRender().nodes, '4')))),
         );
+    });
+
+    // The list ranks the ops; marking shows where they sit on the graph. #2085
+    describe('marking the listed ops on the graph', () => {
+        it('badges nothing until asked', () => {
+            renderGraph(OPERATION_LIST, PERF_ROWS);
+            fireEvent.click(hotOpsSwitch());
+
+            expect(markSwitch()).not.toBeChecked();
+            expect(hotRankBadges()).toEqual([]);
+        });
+
+        it('badges each op the list shows with its rank', () => {
+            renderGraph(OPERATION_LIST, PERF_ROWS);
+            fireEvent.click(hotOpsSwitch());
+
+            fireEvent.click(markSwitch());
+
+            // Op N takes N × 10 µs, so op 5 is the slowest.
+            expect(['1', '2', '3', '4', '5'].map(hotRankOf)).toEqual([5, 4, 3, 2, 1]);
+            expect(hotRankBadges().sort()).toEqual(['1', '2', '3', '4', '5']);
+            const slowest = within(renderedNode('5') as HTMLElement).getByRole('img', {
+                name: `${HOT_OPS_TITLE}: rank 1`,
+            });
+            expect(slowest).toHaveTextContent('1');
+            expect(slowest).toHaveAttribute('title', `${HOT_OPS_TITLE}: rank 1`);
+        });
+
+        // Twelve ops, so Top 10 leaves out the two fastest.
+        const TWELVE_OPERATIONS = Array.from({ length: 12 }, (_, index) =>
+            operation(index + 1, `op_${index + 1}`, index < 11 ? [index + 2] : []),
+        );
+        const TWELVE_PERF_ROWS = TWELVE_OPERATIONS.map((op) => ({ id: op.id, device_time: op.id * 10 }));
+
+        it("follows the list's Top N", () => {
+            renderGraph(TWELVE_OPERATIONS, TWELVE_PERF_ROWS);
+            enableHotOpsMarking();
+            expect(hotRankOf('1')).toBeUndefined();
+            expect(hotRankOf('3')).toBe(10);
+
+            fireEvent.click(listControl('Top 25'));
+
+            expect(hotRankOf('1')).toBe(12);
+        });
+
+        it('drops a badge the list stops showing from a node the overlay restyles', () => {
+            // A restyled node is cached with its chips, so the shrink has to replace that data.
+            renderGraph(TWELVE_OPERATIONS, TWELVE_PERF_ROWS);
+            enableOverlay();
+            fireEvent.click(hotOpsSwitch());
+            fireEvent.click(listControl('Top 25'));
+            fireEvent.click(markSwitch());
+            expect(hotRankOf('1')).toBe(12);
+
+            fireEvent.click(listControl('Top 10'));
+
+            expect(hotRankOf('1')).toBeUndefined();
+            expect(hotRankBadges()).not.toContain('12');
+        });
+
+        it("follows 'Hide ops without perf data'", () => {
+            renderGraph(
+                OPERATION_LIST,
+                PERF_ROWS.filter((row) => row.id !== 5),
+            );
+            enableHotOpsMarking();
+            expect(hotRankOf('5')).toBeUndefined();
+
+            fireEvent.click(listControl('Hide ops without perf data'));
+
+            expect(hotRankOf('5')).toBeNull();
+            expect(hotRankBadges()).toContain(HOT_OPS_NO_RANK_LABEL);
+        });
+
+        it('does not relayout to mark or unmark', () => {
+            renderGraph(OPERATION_LIST, PERF_ROWS);
+            fireEvent.click(hotOpsSwitch());
+            runBuild.mockClear();
+
+            fireEvent.click(markSwitch());
+            fireEvent.click(markSwitch());
+
+            expect(runBuild).not.toHaveBeenCalled();
+            expect(hotRankBadges()).toEqual([]);
+        });
+
+        it('leaves the graph alone when the list is only re-sorted', () => {
+            renderGraph(OPERATION_LIST, PERF_ROWS);
+            enableHotOpsMarking();
+            const renders = flowRenders.length;
+
+            fireEvent.click(listControl('By ID'));
+
+            expect(flowRenders.length).toBe(renders);
+        });
+
+        it.each<[string, () => void]>([
+            ['how many rows it shows', () => fireEvent.click(listControl('Top 25'))],
+            ['whether ops without perf data show', () => fireEvent.click(listControl('Hide ops without perf data'))],
+            ['its order', () => fireEvent.click(listControl('By ID'))],
+        ])('leaves the graph alone for a change to %s while marking is off', (_, change) => {
+            // Op 5 has no perf row, so the hide checkbox is offered.
+            renderGraph(
+                OPERATION_LIST,
+                PERF_ROWS.filter((row) => row.id !== 5),
+            );
+            fireEvent.click(hotOpsSwitch());
+            const renders = flowRenders.length;
+
+            change();
+
+            expect(flowRenders.length).toBe(renders);
+        });
+
+        it('re-ranks the badges when the perf rows change under the same graph', () => {
+            // Same nodes, new ranks: op 5 gains a row and pushes every other op down one.
+            const { rerender } = renderGraph(
+                OPERATION_LIST,
+                PERF_ROWS.filter((row) => row.id !== 5),
+            );
+            enableHotOpsMarking();
+            expect(hotRankOf('4')).toBe(1);
+            const before = nodeById(lastFlowRender().nodes, '4');
+
+            rerender(graphElement(OPERATION_LIST, PERF_ROWS));
+
+            expect(hotRankOf('5')).toBe(1);
+            expect(hotRankOf('4')).toBe(2);
+            // A new object, or React Flow's memoised node would keep drawing the old rank.
+            expect(nodeById(lastFlowRender().nodes, '4')).not.toBe(before);
+        });
+
+        it('takes the badges off with the list', () => {
+            renderGraph(OPERATION_LIST, PERF_ROWS);
+            enableHotOpsMarking();
+
+            fireEvent.click(hotOpsSwitch());
+
+            expect(hotRankOf('5')).toBeUndefined();
+            expect(hotRankBadges()).toEqual([]);
+        });
+
+        it('badges an expanded op on its box and leaves its device operations to it', () => {
+            renderGraph(BRANCHING_OPERATION_LIST, BRANCHING_PERF_ROWS);
+            enableHotOpsMarking();
+
+            // Device operations carry their op's id, so only the index keeps them unbadged.
+            rebuildWith(BRANCHING_OPERATION_LIST, [deviceSubgraphFor(3, 1)]);
+
+            expect(hotRankOf('3')).toBe(1);
+            expect(hotRankOf(getDeviceNodeId(3, 1))).toBeUndefined();
+            expect(hotRankOf(getDeviceNodeId(3, 2))).toBeUndefined();
+            // One badge per op, the expanded one's on its box.
+            expect(hotRankBadges().sort()).toEqual(['1', '2', '3', '4']);
+        });
+
+        it('keeps marked nodes byte-for-byte across a drag frame', () => {
+            renderGraph(OPERATION_LIST, PERF_ROWS);
+            enableHotOpsMarking();
+            const before = lastFlowRender().nodes;
+            expect(hotRankOf('5')).toBe(1);
+
+            act(() => {
+                harness.setNodes?.((previous) =>
+                    previous.map((node) => (node.id === '1' ? { ...node, position: { x: 5, y: 5 } } : node)),
+                );
+            });
+
+            const after = lastFlowRender().nodes;
+            expect(after).not.toBe(before);
+            expect(nodeById(after, '5')).toBe(nodeById(before, '5'));
+        });
+
+        it("keeps a marked node's data through a restyle, so its component need not re-render", () => {
+            renderGraph(OPERATION_LIST, PERF_ROWS);
+            enableHotOpsMarking();
+            const { data } = nodeById(lastFlowRender().nodes, '5');
+
+            enableOverlay();
+
+            const restyled = nodeById(lastFlowRender().nodes, '5');
+            expect(perfScaleOf(restyled)).toBeDefined();
+            expect(restyled.data).toBe(data);
+        });
+
+        it('stacks with the selection ring and the critical path', () => {
+            renderGraph(BRANCHING_OPERATION_LIST, BRANCHING_PERF_ROWS);
+            enableCriticalPath();
+            enableHotOpsMarking();
+
+            fireEvent.click(slowestRow('3 slow_c'));
+
+            const node = nodeById(lastFlowRender().nodes, '3');
+            expect(hasClass(node, 'op-graph-node-selected')).toBe(true);
+            expect(hasClass(node, 'op-graph-node-critical-path')).toBe(true);
+            expect(node.data.hotRank).toBe(1);
+        });
+    });
+
+    // A build slow enough to show the spinner must not remount the list, or its scroll is lost. #2088
+    describe('through a build', () => {
+        const hotOpsSection = () => screen.getByRole('region', { name: 'Slowest operations' });
+        const hotOpsList = () => document.querySelector('.op-graph-hot-ops-list');
+
+        const finishBuild = () => replyWith(harness.sourceOperations ?? sourceFor(OPERATION_LIST));
+
+        it('keeps the same list on screen, so its scroll survives', () => {
+            renderGraph(OPERATION_LIST, PERF_ROWS);
+            fireEvent.click(hotOpsSwitch());
+            const list = hotOpsList() as HTMLElement;
+            list.scrollTop = 120;
+
+            startBuild();
+            expect(hotOpsList()).toBe(list);
+            expect(listedIds()).toEqual([5, 4, 3, 2, 1]);
+
+            finishBuild();
+            expect(hotOpsList()).toBe(list);
+            expect(list.scrollTop).toBe(120);
+        });
+
+        it('keeps naming the ops a narrower range is about to drop', () => {
+            const { rerender } = renderGraph(OPERATION_LIST, PERF_ROWS);
+            fireEvent.click(hotOpsSwitch());
+            startBuild();
+
+            rerender(graphElement(OPERATION_LIST.slice(0, 3), PERF_ROWS));
+
+            // Ops 4 and 5 stay on screen, and in the list, until the narrower graph lands.
+            expect(slowestRow('5 softmax_e')).toBeInTheDocument();
+            expect(slowestRow('4 relu_d')).toBeInTheDocument();
+
+            finishBuild();
+            expect(listedIds()).toEqual([3, 2, 1]);
+        });
+
+        it('names the rows from the latest range once two changes land as one build', () => {
+            // Only the newest reply is accepted, so the names it is shown with are the latest too.
+            const { rerender } = renderGraph(OPERATION_LIST, PERF_ROWS);
+            fireEvent.click(hotOpsSwitch());
+            startBuild();
+            const renderRange = (operations: OperationDescription[]) => rerender(graphElement(operations, PERF_ROWS));
+
+            renderRange(OPERATION_LIST.slice(0, 3));
+            // The second list renames op 4, so only the latest names can name its row.
+            renderRange(OPERATION_LIST.slice(0, 4).map((op) => (op.id === 4 ? { ...op, name: 'relu_v2' } : op)));
+            finishBuild();
+
+            expect(listedIds()).toEqual([4, 3, 2, 1]);
+            expect(slowestRow('4 relu_v2')).toBeInTheDocument();
+        });
+
+        it('names the open details from the drawn graph until the rebuild lands', () => {
+            // The details stay open for the spinner's delay, while the live names have already changed.
+            const { rerender } = renderGraph(OPERATION_LIST, PERF_ROWS);
+            act(() => {
+                harness.onNodeClick?.(null, nodeById(lastFlowRender().nodes, '3'));
+            });
+            const relationLabels = () =>
+                Array.from(document.querySelectorAll('.op-graph-panel-group-label'), (label) => label.textContent);
+            expect(relationLabels()).toContain('4 relu_d');
+
+            rerender(
+                graphElement(
+                    OPERATION_LIST.map((op) => (op.id === 4 ? { ...op, name: 'relu_v2' } : op)),
+                    PERF_ROWS,
+                ),
+            );
+            expect(relationLabels()).toContain('4 relu_d');
+
+            finishBuild();
+            expect(relationLabels()).toContain('4 relu_v2');
+        });
+
+        it('names the ops a wider range brings in once their graph lands', () => {
+            const { rerender } = renderGraph(OPERATION_LIST.slice(0, 3), PERF_ROWS);
+            fireEvent.click(hotOpsSwitch());
+
+            rerender(graphElement(OPERATION_LIST, PERF_ROWS));
+            expect(listedIds()).not.toContain(5);
+            finishBuild();
+
+            expect(slowestRow('5 softmax_e')).toBeInTheDocument();
+        });
+
+        it('starts inert when it mounts while the graph builds', () => {
+            // Perf data becoming ready mid-build turns the list on; the toolbar switch can't.
+            renderGraph(OPERATION_LIST, PERF_ROWS);
+            startBuild();
+
+            act(() => {
+                getDefaultStore().set(isHotOpsEnabledAtom, true);
+            });
+
+            expect(hotOpsSection()).toHaveAttribute('inert');
+        });
+
+        it('leaves a list shown alone unstretched for the build', () => {
+            renderGraph(OPERATION_LIST, PERF_ROWS);
+            fireEvent.click(hotOpsSwitch());
+
+            startBuild();
+            expect(sideColumn()).not.toHaveClass(SIDE_STRETCHED_CLASS);
+
+            finishBuild();
+            expect(sideColumn()).not.toHaveClass(SIDE_STRETCHED_CLASS);
+        });
+
+        it('lets the column go when the build drops the selected op', () => {
+            renderGraph(OPERATION_LIST, PERF_ROWS);
+            fireEvent.click(hotOpsSwitch());
+            const list = hotOpsList();
+            act(() => {
+                harness.onNodeClick?.(null, nodeById(lastFlowRender().nodes, '1'));
+            });
+            startBuild();
+
+            // The rebuilt graph no longer holds op 1.
+            replyWith(sourceFor(OPERATION_LIST.slice(1)));
+
+            expect(hotOpsList()).toBe(list);
+            expect(sideColumn()).not.toHaveClass(SIDE_STRETCHED_CLASS);
+            expect(hotOpsSection()).not.toHaveAttribute('inert');
+            expect(document.querySelector('.op-graph-hot-ops [aria-current]')).toBeNull();
+        });
+
+        it('marks the list inert until the build is done', () => {
+            renderGraph(OPERATION_LIST, PERF_ROWS);
+            fireEvent.click(hotOpsSwitch());
+            expect(hotOpsSection()).not.toHaveAttribute('inert');
+
+            startBuild();
+            expect(hotOpsSection()).toHaveAttribute('inert');
+
+            finishBuild();
+            expect(hotOpsSection()).not.toHaveAttribute('inert');
+        });
+
+        it('holds the column down the pane while the details are closed for it', () => {
+            renderGraph(OPERATION_LIST, PERF_ROWS);
+            fireEvent.click(hotOpsSwitch());
+            fireEvent.click(slowestRow('3 matmul_c'));
+
+            startBuild();
+            expect(screen.queryByRole('heading', { name: '3 matmul_c' })).toBeNull();
+            expect(sideColumn()).toHaveClass(SIDE_STRETCHED_CLASS);
+
+            finishBuild();
+            expect(screen.getByRole('heading', { name: '3 matmul_c' })).toBeInTheDocument();
+            expect(sideColumn()).toHaveClass(SIDE_STRETCHED_CLASS);
+            expect(slowestRow('3 matmul_c')).toHaveAttribute('aria-current', 'true');
+        });
+
+        it('still drops the details alone for a build, as before', () => {
+            renderGraph(OPERATION_LIST, PERF_ROWS);
+            emitNodeChanges([{ type: 'select', id: '3', selected: true }]);
+
+            startBuild();
+
+            expect(sideColumn()).toBeNull();
+        });
     });
 });
 
@@ -1682,15 +2376,7 @@ describe('OperationGraphReactFlow repeat blocks', () => {
         // The latch held the old id when the segment went away, so returning to the same
         // op in one mount looked already handled and never moved. #2008
         const { rerender } = renderGraph(OPERATION_LIST, undefined, 3);
-        const atNamed = (id?: number) => (
-            <MemoryRouter>
-                <OperationGraphReactFlow
-                    operationList={OPERATION_LIST}
-                    isPerfReportLoaded={false}
-                    operationId={id}
-                />
-            </MemoryRouter>
-        );
+        const atNamed = (id?: number) => graphElement(OPERATION_LIST, undefined, id);
 
         rerender(atNamed(undefined));
         setViewport.mockClear();
@@ -1704,15 +2390,7 @@ describe('OperationGraphReactFlow repeat blocks', () => {
         const { rerender } = renderGraph(OPERATION_LIST, undefined, 1);
         setViewport.mockClear();
 
-        rerender(
-            <MemoryRouter>
-                <OperationGraphReactFlow
-                    operationList={OPERATION_LIST}
-                    isPerfReportLoaded={false}
-                    operationId={5}
-                />
-            </MemoryRouter>,
-        );
+        rerender(graphElement(OPERATION_LIST, undefined, 5));
 
         expect(setViewport).toHaveBeenCalled();
         for (const [viewport] of setViewport.mock.calls as unknown as [{ zoom: number }][]) {
@@ -1735,7 +2413,7 @@ describe('OperationGraphReactFlow repeat blocks', () => {
         fireEvent.click(recenter);
 
         expect(setViewport).toHaveBeenCalledTimes(1);
-        const [viewport] = setViewport.mock.calls[0] as unknown as [{ x: number; y: number; zoom: number }];
+        const viewport = firstPan();
         // Pans only. Recenter is an explicit request to move, not a licence to
         // rescale: the zoom stays wherever the user left it.
         expect(viewport.zoom).toBe(PANNED_ZOOM);
@@ -1890,7 +2568,7 @@ describe('OperationGraphReactFlow repeat blocks', () => {
         });
 
         expect(setViewport).toHaveBeenCalledTimes(1);
-        const [viewport] = setViewport.mock.calls[0] as unknown as [{ zoom: number }];
+        const viewport = firstPan();
         // Pans, never rescales: this is not entry.
         expect(viewport.zoom).toBe(PANNED_ZOOM);
     });
@@ -2065,6 +2743,32 @@ describe('OperationGraphReactFlow repeat blocks', () => {
             expect(screen.getByRole('button', { name: 'Go to next operation 2' })).toBeTruthy();
         });
 
+        it('opens a folded fan for a slowest-operations row naming an operation inside it (#2086)', () => {
+            renderGraph(FAN_CHAIN, perfRowsFor(FAN_CHAIN));
+            deliver(FAN_CHAIN, { collapseWeightLoads: true });
+            fireEvent.click(hotOpsSwitch());
+            // Behind the column, so the member lands there unless the reveal moves it.
+            absolutePositionById.set('weights:1-2', { x: 1500, y: 600 });
+            runBuild.mockClear();
+
+            fireEvent.click(slowestRow('2 ttnn.to_device'));
+
+            const asked = lastAskedExpandedIds();
+            expect(asked).toEqual(expect.arrayContaining(['weights:1-2']));
+            setViewport.mockClear();
+            deliver(FAN_CHAIN, { collapseWeightLoads: true, expandedBlockIds: asked });
+
+            const { nodes } = lastFlowRender();
+            const member = nodeById(nodes, '2');
+            expect(member.selected).toBe(true);
+            expect(hasClass(member, REVEALED_NODE_CLASS)).toBe(true);
+            expect(screen.getByRole('heading', { name: '2 ttnn.to_device' })).toBeInTheDocument();
+            // A member is positioned inside its container, so the pan has to resolve it to the pane. #2028
+            expect(member.parentId).toBe('weights:1-2');
+            const [viewport] = setViewport.mock.calls.at(-1) as unknown as [{ x: number; zoom: number }];
+            expect(paneRightEdge('2', viewport)).toBeCloseTo(PANE.width - SIDE_WIDTH - REVEAL_MARGIN_PX);
+        });
+
         it('opens a folded fan for a URL naming an operation inside it', () => {
             // A folded fan buries an operation exactly as a folded grouping block
             // does, but the unroll asked only `detectedBlocks` -- and was gated on
@@ -2074,9 +2778,10 @@ describe('OperationGraphReactFlow repeat blocks', () => {
             runBuild.mockClear();
             deliver(FAN_CHAIN, { collapseWeightLoads: true });
 
-            const asked = (runBuild.mock.calls.at(-1)?.[0] as OpGraphBuildOptions).expandedBlockIds;
-            expect(asked).toEqual(expect.arrayContaining(['weights:1-2']));
+            expect(lastAskedExpandedIds()).toEqual(expect.arrayContaining(['weights:1-2']));
         });
+
+        it.todo('opens the fan a weight load joins once its folded block unrolls, for a URL naming it (#2145)');
 
         it('stays lit when a member matches the filter, and dims when none does', () => {
             // The container can never match on its own -- it is chrome, so it is not in
@@ -2134,8 +2839,7 @@ describe('OperationGraphReactFlow repeat blocks', () => {
             // `node.data.operationId` off every node it was given, and the container's
             // is its first member's -- so the box reported that member's duration and
             // rank as though it were an operation.
-            const perfRows: PerfOverlaySource[] = FAN_CHAIN.map((op) => ({ id: op.id, device_time: op.id * 10 }));
-            renderGraph(FAN_CHAIN, perfRows);
+            renderGraph(FAN_CHAIN, perfRowsFor(FAN_CHAIN));
             deliver(FAN_CHAIN, { collapseWeightLoads: true });
             act(() => {
                 harness.onNodeDoubleClick?.(null, nodeById(lastFlowRender().nodes, 'weights:1-2'));
@@ -2204,15 +2908,7 @@ describe('OperationGraphReactFlow repeat blocks', () => {
             // `renderGraph`'s own mount build leaves `collapseWeightLoads` off, and
             // with grouping blocks present that is enough to open the gate and spend
             // the once-only latch before any fan exists.
-            render(
-                <MemoryRouter>
-                    <OperationGraphReactFlow
-                        operationList={FAN_AND_REPEATS}
-                        isPerfReportLoaded={false}
-                        operationId={1}
-                    />
-                </MemoryRouter>,
-            );
+            render(graphElement(FAN_AND_REPEATS, undefined, 1));
             runBuild.mockClear();
             deliver(FAN_AND_REPEATS, { collapseWeightLoads: true });
 
@@ -2222,6 +2918,141 @@ describe('OperationGraphReactFlow repeat blocks', () => {
             // The grouping blocks carried in beside it. `previous ?? []` asks for the
             // fan alone, and a set naming one instance folds every block not in it.
             expect(asked.filter((id) => !id.startsWith('weights:')).length).toBeGreaterThan(0);
+        });
+
+        it('opens the block, not just the fan, for a URL naming an op right after the block folds', () => {
+            // Until the rebuild lands, op 1 still reads as folded into its fan and its block. #2086
+            const { rerender } = renderGraph(FAN_AND_REPEATS);
+            deliver(FAN_AND_REPEATS, { collapseWeightLoads: true });
+            fireEvent.click(screen.getByRole('button', { name: 'Fold all repeats' }));
+
+            rerender(
+                <MemoryRouter>
+                    <OperationGraphReactFlow
+                        operationList={FAN_AND_REPEATS}
+                        isPerfReportLoaded={false}
+                        operationId={1}
+                    />
+                </MemoryRouter>,
+            );
+
+            expect(lastAskedExpandedIds()).toContain('block:1');
+        });
+
+        it("opens the fan a row's op joins once its folded block unrolls (#2086)", () => {
+            // No fan exists to open at the click: the folded block keeps op 1 out of fan
+            // detection, and unrolling it alone landed the row on a newly folded fan.
+            renderGraph(FAN_AND_REPEATS, perfRowsFor(FAN_AND_REPEATS));
+            fireEvent.click(screen.getByRole('button', { name: 'Fold all repeats' }));
+            deliver(FAN_AND_REPEATS, { collapseWeightLoads: true, expandedBlockIds: [] });
+            expect(lastFlowRender().nodes.some((node) => node.id.startsWith('weights:'))).toBe(false);
+            fireEvent.click(hotOpsSwitch());
+            runBuild.mockClear();
+
+            fireEvent.click(slowestRow('1 ttnn.to_device'));
+
+            expect(runBuild).toHaveBeenCalledTimes(1);
+            const asked = lastAskedExpandedIds();
+            // The decision is about op 1's fan alone; the other block's fan stays the reader's to open.
+            expect(asked?.some((id) => weightFanIdCovers(id, [3, 4]))).toBe(false);
+            deliver(FAN_AND_REPEATS, { collapseWeightLoads: true, expandedBlockIds: asked });
+
+            const member = nodeById(lastFlowRender().nodes, '1');
+            expect(member.parentId).toBe('weights:1-2');
+            expect(member.selected).toBe(true);
+            expect(hasClass(member, REVEALED_NODE_CLASS)).toBe(true);
+            expect(screen.getByRole('heading', { name: '1 ttnn.to_device' })).toBeInTheDocument();
+            expect(screen.queryByLabelText('Selected block details')).toBeNull();
+        });
+
+        // Op 1's row with repeats folded: it opens `block:1` and the fan op 1 joins there.
+        const openRowIntoFoldedBlock = () => {
+            renderGraph(FAN_AND_REPEATS, perfRowsFor(FAN_AND_REPEATS));
+            fireEvent.click(screen.getByRole('button', { name: 'Fold all repeats' }));
+            deliver(FAN_AND_REPEATS, { collapseWeightLoads: true, expandedBlockIds: [] });
+            fireEvent.click(hotOpsSwitch());
+            fireEvent.click(slowestRow('1 ttnn.to_device'));
+            deliver(FAN_AND_REPEATS, { collapseWeightLoads: true, expandedBlockIds: lastAskedExpandedIds() });
+        };
+
+        it('opens the block, not just the fan, for a row clicked right after the block folds', () => {
+            // Until the rebuild lands, op 1 still reads as folded into its fan and its block, and
+            // opening the fan alone left the block folded around it.
+            renderGraph(FAN_AND_REPEATS, perfRowsFor(FAN_AND_REPEATS));
+            deliver(FAN_AND_REPEATS, { collapseWeightLoads: true });
+            fireEvent.click(hotOpsSwitch());
+            fireEvent.click(screen.getByRole('button', { name: 'Fold all repeats' }));
+
+            fireEvent.click(slowestRow('1 ttnn.to_device'));
+
+            const asked = lastAskedExpandedIds() ?? [];
+            expect(asked).toContain('block:1');
+            // The block alone would land the row on the fan op 1 joins there, still folded: #2086 as reported.
+            expect(asked.some((id) => weightFanIdCovers(id, [1]))).toBe(true);
+            deliver(FAN_AND_REPEATS, { collapseWeightLoads: true, expandedBlockIds: asked });
+
+            const member = nodeById(lastFlowRender().nodes, '1');
+            expect(member.parentId).toBe('weights:1-2');
+            expect(member.selected).toBe(true);
+            expect(hasClass(member, REVEALED_NODE_CLASS)).toBe(true);
+        });
+
+        it('keeps every grouping block unrolled when a row opens a fan before anything was folded', () => {
+            // `null` renders every block unrolled, so a set naming only the fan would fold all of them. #1977
+            renderGraph(FAN_AND_REPEATS, perfRowsFor(FAN_AND_REPEATS));
+            deliver(FAN_AND_REPEATS, { collapseWeightLoads: true });
+            fireEvent.click(hotOpsSwitch());
+            runBuild.mockClear();
+
+            fireEvent.click(slowestRow('1 ttnn.to_device'));
+
+            expect(lastAskedExpandedIds()).toEqual(
+                expect.arrayContaining(['block:1', 'block:3', 'block:11', 'block:21', 'weights:1-2']),
+            );
+        });
+
+        it('lets the reader fold the fan a row opened', () => {
+            openRowIntoFoldedBlock();
+            expect(nodeById(lastFlowRender().nodes, '1').parentId).toBe('weights:1-2');
+
+            act(() => {
+                harness.onNodeDoubleClick?.(null, nodeById(lastFlowRender().nodes, '1'));
+            });
+            const folded = lastAskedExpandedIds() ?? [];
+            expect(folded.some((id) => weightFanIdCovers(id, [1, 2]))).toBe(false);
+            deliver(FAN_AND_REPEATS, { collapseWeightLoads: true, expandedBlockIds: folded });
+
+            expect(lastFlowRender().nodes.some((node) => node.id === '1')).toBe(false);
+            expect(nodeById(lastFlowRender().nodes, 'weights:1-2')).toBeDefined();
+        });
+
+        it("reopens a row's fan with its block, as a decision the reader made", () => {
+            // Fan decisions outlive grouping folds, and the row's is one: the reader asked to see op 1.
+            openRowIntoFoldedBlock();
+            fireEvent.click(screen.getByRole('button', { name: 'Fold all repeats' }));
+            deliver(FAN_AND_REPEATS, { collapseWeightLoads: true, expandedBlockIds: lastAskedExpandedIds() });
+            expect(lastFlowRender().nodes.some((node) => node.id === '1')).toBe(false);
+
+            fireEvent.click(screen.getByRole('button', { name: 'Unroll all repeats' }));
+            deliver(FAN_AND_REPEATS, { collapseWeightLoads: true, expandedBlockIds: lastAskedExpandedIds() });
+
+            expect(nodeById(lastFlowRender().nodes, '1').parentId).toBe('weights:1-2');
+        });
+
+        it('records no fan decision for a row while weight loads are not collapsed', () => {
+            // Remembered, it would open op 1's fan the next time the switch folds weight loads.
+            renderGraph(FAN_AND_REPEATS, perfRowsFor(FAN_AND_REPEATS));
+            fireEvent.click(screen.getByLabelText('Collapse weight loads'));
+            fireEvent.click(screen.getByRole('button', { name: 'Fold all repeats' }));
+            deliver(FAN_AND_REPEATS, { expandedBlockIds: [] });
+            fireEvent.click(hotOpsSwitch());
+            runBuild.mockClear();
+
+            fireEvent.click(slowestRow('1 ttnn.to_device'));
+
+            const asked = lastAskedExpandedIds() ?? [];
+            expect(asked).toContain('block:1');
+            expect(asked.filter((id) => id.startsWith('weights:'))).toEqual([]);
         });
 
         it('folds the fan a shared member sits in, not the block around it', () => {
@@ -2345,7 +3176,7 @@ describe('OperationGraphReactFlow repeat blocks', () => {
             setViewport.mockClear();
             fireEvent.click(screen.getByLabelText('Recenter on operation 1'));
 
-            const [viewport] = setViewport.mock.calls[0] as unknown as [{ x: number; y: number }];
+            const viewport = firstPan();
             // Centred on the absolute position: read relatively the node looks like it
             // sits at the origin and the pan lands a whole graph away.
             expect(viewport.x + (4000 + STORE_NODE.width / 2) * PANNED_ZOOM).toBeCloseTo(
@@ -2670,14 +3501,7 @@ describe('OperationGraphReactFlow repeat blocks', () => {
         const { rerender } = renderFolded();
         runBuild.mockClear();
 
-        rerender(
-            <MemoryRouter>
-                <OperationGraphReactFlow
-                    operationList={REPEAT_OPERATION_LIST}
-                    operationId={3}
-                />
-            </MemoryRouter>,
-        );
+        rerender(graphElement(REPEAT_OPERATION_LIST, undefined, 3));
 
         expect(runBuild.mock.calls.at(-1)?.[0]).toEqual(
             expect.objectContaining({ expandedBlockIds: [FIRST_BLOCK_ID] }),
@@ -2801,14 +3625,7 @@ describe('OperationGraphReactFlow repeat blocks', () => {
         runBuild.mockClear();
 
         const narrowed = REPEAT_OPERATION_LIST.slice(0, 5);
-        rerender(
-            <MemoryRouter>
-                <OperationGraphReactFlow
-                    operationList={narrowed}
-                    isPerfReportLoaded={false}
-                />
-            </MemoryRouter>,
-        );
+        rerender(graphElement(narrowed));
         // The narrowed graph, delivered, so detection really re-runs against it.
         deliver(narrowed, { expandedBlockIds: [] });
 
@@ -2965,15 +3782,10 @@ describe('OperationGraphReactFlow repeat blocks', () => {
 
     describe('perf colours against folded block totals', () => {
         // A folded block draws its members' sum, so the ramp spans past any single op.
-        const REPEAT_PERF_ROWS: PerfOverlaySource[] = REPEAT_OPERATION_LIST.map((op) => ({
-            id: op.id,
-            device_time: op.id * 10,
-        }));
+        const REPEAT_PERF_ROWS = perfRowsFor(REPEAT_OPERATION_LIST);
         const drawnColor = (nodeId: string) =>
             asRenderedColor(String(perfColorOf(nodeById(lastFlowRender().nodes, nodeId))));
-        const listRow = (title: string) =>
-            within(screen.getByRole('region', { name: 'Slowest operations' })).getByTitle(title);
-        const listSwatch = (title: string) => listRow(title).querySelector<HTMLElement>('.op-graph-hot-ops-swatch');
+        const listSwatch = (title: string) => slowestRow(title).querySelector<HTMLElement>('.op-graph-hot-ops-swatch');
 
         const renderFoldedWithPerf = () => {
             renderGraph(REPEAT_OPERATION_LIST, REPEAT_PERF_ROWS);
@@ -2994,29 +3806,194 @@ describe('OperationGraphReactFlow repeat blocks', () => {
             expect(swatch?.style.backgroundColor).toBe(drawnColor('6'));
         });
 
-        it('selects a folded member through its block, which stays folded (#2086)', () => {
-            // Pins today's behaviour; #2086 decides whether the row should unfold the block instead.
+        it("unrolls the block a row's op is folded into, and leads to the op itself (#2086)", () => {
             renderFoldedWithPerf();
-            fireEvent.click(screen.getByRole('checkbox', { name: /^Slowest operations/ }));
-            absolutePositionById.set(FIRST_BLOCK_ID, { x: 4000, y: 800 });
+            enableOverlay();
+            fireEvent.click(hotOpsSwitch());
             runBuild.mockClear();
+
+            fireEvent.click(slowestRow('3 layer_b'));
+
+            const asked = lastAskedExpandedIds();
+            // The one-op fan decision rides along for any op, and stays inert for one no fan can hold.
+            expect(asked).toHaveLength(2);
+            expect(asked).toEqual(expect.arrayContaining([FIRST_BLOCK_ID, 'weights:3']));
+            expect(slowestRow('3 layer_b')).toHaveAttribute('aria-current', 'true');
+            deliver(REPEAT_OPERATION_LIST, { expandedBlockIds: asked });
+
+            const node = nodeById(lastFlowRender().nodes, '3');
+            expect(node.selected).toBe(true);
+            // Marked alone: the ring answers "which op did the row lead to", not "what did the unroll open".
+            expect(hasClass(node, REVEALED_NODE_CLASS)).toBe(true);
+            expect(hasClass(nodeById(lastFlowRender().nodes, '2'), REVEALED_NODE_CLASS)).toBe(false);
+            expect(screen.getByRole('heading', { name: '3 layer_b' })).toBeInTheDocument();
+            expect(screen.queryByLabelText('Selected block details')).toBeNull();
+            // Op 3's own 30 µs rather than its block's sum, and the row's swatch is its own node's bar.
+            expect(screen.getByText('Kernel duration').nextElementSibling).toHaveTextContent(formatDuration(30_000));
+            expect(listSwatch('3 layer_b')?.style.backgroundColor).toBe(drawnColor('3'));
+            expect(nodeById(lastFlowRender().nodes, SECOND_BLOCK_ID)).toBeDefined();
+        });
+
+        it('pans the op the unroll produces into view, clear of the side column', () => {
+            renderFoldedWithPerf();
+            fireEvent.click(hotOpsSwitch());
+            // The block sits at pane x 750, in the column's band from 700. The unroll keeps its
+            // first member there, so op 3 lands behind the column unless the reveal moves it.
+            absolutePositionById.set(FIRST_BLOCK_ID, { x: 1500, y: 600 });
+            setViewport.mockClear();
+            fireEvent.click(slowestRow('3 layer_b'));
+
+            deliver(REPEAT_OPERATION_LIST, { expandedBlockIds: lastAskedExpandedIds() });
+
+            // Once, after the build: a pan at the click would aim at the layout being replaced.
+            expect(setViewport).toHaveBeenCalledTimes(1);
+            const [viewport] = setViewport.mock.calls[0] as unknown as [{ x: number; zoom: number }];
+            // Exactly on the margin, which only the anchor holding op 3 behind the column produces.
+            expect(paneRightEdge('3', viewport)).toBeCloseTo(PANE.width - SIDE_WIDTH - REVEAL_MARGIN_PX);
+        });
+
+        it('leads to the latest of two rows clicked before the rebuild lands', () => {
+            // The first click's unroll makes op 2 read as drawn, but its node only arrives with the rebuild.
+            renderFoldedWithPerf();
+            fireEvent.click(hotOpsSwitch());
             setViewport.mockClear();
 
-            fireEvent.click(listRow('3 layer_b'));
+            fireEvent.click(slowestRow('3 layer_b'));
+            fireEvent.click(slowestRow('2 layer_a'));
+            expect(setViewport).not.toHaveBeenCalled();
+            deliver(REPEAT_OPERATION_LIST, { expandedBlockIds: lastAskedExpandedIds() });
 
-            // The member has no node of its own, so the pan brings in the block holding it.
+            const { nodes } = lastFlowRender();
+            expect(nodeById(nodes, '2').selected).toBe(true);
+            expect(hasClass(nodeById(nodes, '2'), REVEALED_NODE_CLASS)).toBe(true);
+            expect(hasClass(nodeById(nodes, '3'), REVEALED_NODE_CLASS)).toBe(false);
+            expect(screen.getByRole('heading', { name: '2 layer_a' })).toBeInTheDocument();
             expect(setViewport).toHaveBeenCalledTimes(1);
-            const [viewport] = setViewport.mock.calls[0] as unknown as [{ x: number }];
-            expect((4000 + STORE_NODE.width) * PANNED_ZOOM + viewport.x).toBeLessThanOrEqual(PANE.width - SIDE_WIDTH);
-            expect(listRow('3 layer_b')).toHaveAttribute('aria-current', 'true');
-            expect(screen.getByLabelText('Selected block details')).toHaveTextContent('layer_a + layer_b × 2');
-            expect(hasClass(nodeById(lastFlowRender().nodes, FIRST_BLOCK_ID), 'op-graph-node-selected')).toBe(true);
+        });
+
+        it('unrolls both blocks for rows in two of them clicked before the rebuild lands', () => {
+            renderFoldedWithPerf();
+            fireEvent.click(hotOpsSwitch());
+            setViewport.mockClear();
+
+            fireEvent.click(slowestRow('3 layer_b'));
+            fireEvent.click(slowestRow('5 layer_b'));
+            const asked = lastAskedExpandedIds();
+            expect(asked).toEqual(expect.arrayContaining([FIRST_BLOCK_ID, SECOND_BLOCK_ID]));
+            deliver(REPEAT_OPERATION_LIST, { expandedBlockIds: asked });
+
+            const { nodes } = lastFlowRender();
+            expect(nodes.filter((node) => node.selected).map((node) => node.id)).toEqual(['5']);
+            expect(hasClass(nodeById(nodes, '5'), REVEALED_NODE_CLASS)).toBe(true);
+            expect(hasClass(nodeById(nodes, '3'), REVEALED_NODE_CLASS)).toBe(false);
+            expect(screen.getByRole('heading', { name: '5 layer_b' })).toBeInTheDocument();
+            expect(setViewport).toHaveBeenCalledTimes(1);
+        });
+
+        it('leads to a row clicked while a pill unroll is pending, not to what the unroll opens', () => {
+            // The pill armed its own reveal first, and the reader's latest ask wins, as between two rows.
+            renderFoldedWithPerf();
+            fireEvent.click(hotOpsSwitch());
+            setViewport.mockClear();
+
+            fireEvent.click(screen.getAllByRole('button', { name: 'Unroll 2 operations' })[1]);
+            expect(lastAskedExpandedIds()).toEqual([SECOND_BLOCK_ID]);
+            fireEvent.click(slowestRow('6 suffix'));
+            expect(setViewport).not.toHaveBeenCalled();
+            deliver(REPEAT_OPERATION_LIST, { expandedBlockIds: lastAskedExpandedIds() });
+
+            const { nodes } = lastFlowRender();
+            expect(nodeById(nodes, '6').selected).toBe(true);
+            expect(hasClass(nodeById(nodes, '6'), REVEALED_NODE_CLASS)).toBe(true);
+            expect(hasClass(nodeById(nodes, '4'), REVEALED_NODE_CLASS)).toBe(false);
+            expect(hasClass(nodeById(nodes, '5'), REVEALED_NODE_CLASS)).toBe(false);
+            expect(screen.getByRole('heading', { name: '6 suffix' })).toBeInTheDocument();
+            expect(setViewport).toHaveBeenCalledTimes(1);
+        });
+
+        it('selects a row whose op has a node of its own without unrolling anything', () => {
+            renderFoldedWithPerf();
+            fireEvent.click(hotOpsSwitch());
+            runBuild.mockClear();
+
+            fireEvent.click(slowestRow('6 suffix'));
+
             expect(runBuild).not.toHaveBeenCalled();
+            expect(nodeById(lastFlowRender().nodes, '6').selected).toBe(true);
+        });
+
+        it('selects a row whose op sits in an unrolled block without folding it', () => {
+            // Only a folded owner is opened: toggling whichever owner it found would fold the
+            // block around the very op the row names.
+            renderGraph(REPEAT_OPERATION_LIST, REPEAT_PERF_ROWS);
+            fireEvent.click(hotOpsSwitch());
+            runBuild.mockClear();
+
+            fireEvent.click(slowestRow('3 layer_b'));
+
+            expect(runBuild).not.toHaveBeenCalled();
+            expect(nodeById(lastFlowRender().nodes, '3').selected).toBe(true);
+        });
+
+        it("badges a folded block with its slowest listed member's rank (#2085)", () => {
+            renderFoldedWithPerf();
+            fireEvent.click(hotOpsSwitch());
+
+            fireEvent.click(markSwitch());
+
+            // Op N takes N × 10 µs: op 6 ranks 1, and the blocks hold ops 2–3 and 4–5.
+            expect(hotRankOf('6')).toBe(1);
+            expect(hotRankOf(SECOND_BLOCK_ID)).toBe(2);
+            expect(hotRankOf(FIRST_BLOCK_ID)).toBe(4);
+            // Drawn on the blocks too, beside the two ops left unfolded.
+            expect(hotRankBadges().sort()).toEqual(['1', '2', '4', '6']);
+        });
+
+        it("keeps the filter's buried count beside the rank on a block (#2085)", () => {
+            // Members named apart from the label, so the filter finds them only inside the blocks.
+            const buriedOperations: OperationDescription[] = [
+                operation(1, 'prefix', [2]),
+                operation(2, 'layer_a', [3], 'attention.py:1'),
+                operation(3, 'layer_b', [4], 'mlp.py:1'),
+                operation(4, 'layer_a', [5], 'attention.py:2'),
+                operation(5, 'layer_b', [6], 'mlp.py:2'),
+                operation(6, 'suffix', []),
+            ];
+            renderGraph(buriedOperations, REPEAT_PERF_ROWS);
+            fireEvent.click(screen.getByRole('button', { name: 'Fold all repeats' }));
+            deliver(buriedOperations, { expandedBlockIds: [] });
+            enableHotOpsMarking();
+
+            typeFilter('layer_a');
+
+            const block = nodeById(lastFlowRender().nodes, FIRST_BLOCK_ID);
+            expect(block.data.buriedMatchCount).toBe(1);
+            expect(block.data.hotRank).toBe(4);
+            const drawn = within(renderedNode(FIRST_BLOCK_ID) as HTMLElement);
+            expect(drawn.getByText('+1')).toBeInTheDocument();
+            expect(drawn.getByLabelText(`${HOT_OPS_TITLE}: rank 4`)).toHaveTextContent('4');
+        });
+
+        it("badges a block '–' when its listed members have no perf data (#2085)", () => {
+            renderGraph(
+                REPEAT_OPERATION_LIST,
+                REPEAT_PERF_ROWS.filter((row) => row.id !== 2 && row.id !== 3),
+            );
+            fireEvent.click(screen.getByRole('button', { name: 'Fold all repeats' }));
+            deliver(REPEAT_OPERATION_LIST, { expandedBlockIds: [] });
+            enableHotOpsMarking();
+
+            fireEvent.click(listControl('Hide ops without perf data'));
+
+            expect(nodeById(lastFlowRender().nodes, FIRST_BLOCK_ID).data.hotRank).toBeNull();
+            expect(
+                within(renderedNode(FIRST_BLOCK_ID) as HTMLElement).getByLabelText('Slowest operations: No perf data'),
+            ).toHaveTextContent(HOT_OPS_NO_RANK_LABEL);
         });
 
         it('keeps the list swatches the same whether or not the bars are drawn', () => {
             renderFoldedWithPerf();
-            fireEvent.click(screen.getByRole('checkbox', { name: /^Slowest operations/ }));
+            fireEvent.click(hotOpsSwitch());
             const withoutBars = listSwatch('6 suffix')?.style.backgroundColor;
 
             enableOverlay();
