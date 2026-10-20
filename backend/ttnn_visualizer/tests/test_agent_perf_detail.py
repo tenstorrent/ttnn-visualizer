@@ -9,11 +9,12 @@ The failure that matters most is a null an agent cannot place: a field the captu
 recorded must not read as one the operation lacks, which is what `empty_in_report` is for.
 """
 
+import json
 from unittest.mock import patch
 
 import pytest
 from ttnn_visualizer.agent import perf_detail, server, tools
-from ttnn_visualizer.agent.bounds import MAX_DETAILED_LIMIT, MAX_LIMIT
+from ttnn_visualizer.agent.bounds import MAX_DETAILED_LIMIT, MAX_LIMIT, bounded
 from ttnn_visualizer.agent.handles import ReportRegistry, load_report
 from ttnn_visualizer.agent.perf_detail import DetailGroup
 from ttnn_visualizer.csv_queries import (
@@ -24,6 +25,7 @@ from ttnn_visualizer.csv_queries import (
     ResolvedSignposts,
 )
 from ttnn_visualizer.tests.smoke_capture import smoke_rows, write_ops_perf
+from ttnn_visualizer.tests.test_agent_linking import _graph, _write_profiler
 from ttnn_visualizer.tests.test_agent_tools import _perf_report
 from ttnn_visualizer.tests.test_device_log_columns import (
     MODERN_HEADER,
@@ -452,6 +454,21 @@ class TestEmptyInReport:
         assert set(named) == set(FIELD_NAMES[DetailGroup.NOC])
 
 
+class TestBounded:
+    @pytest.mark.parametrize(
+        ("limit", "maximum", "expected"),
+        [(None, 25, 10), (None, 5, 5), (0, 25, 1), (1000, 25, 25)],
+    )
+    def test_a_limit_defaults_and_is_clamped_within_the_maximum(
+        self, limit, maximum, expected
+    ):
+        assert bounded(limit, maximum) == expected
+
+    def test_a_non_numeric_limit_is_refused_by_name(self):
+        with pytest.raises(ValueError, match="limit must be a whole number, not 'x'"):
+            bounded("x", 25)
+
+
 class TestTopOpsInclude:
     def test_without_include_a_row_keeps_its_shape(self, handle_with):
         registry, handle, _ = handle_with([_row(1, raw_math_fidelity="HiFi4")])
@@ -511,6 +528,15 @@ class TestTopOpsInclude:
         assert result["ops"][0]["math_fidelity"] == "HiFi4"
         assert "output_subblock_h" not in result["ops"][0]
         assert "output_subblock_h" in result["empty_in_report"]
+
+    def test_an_empty_include_is_the_plain_answer(self, handle_with):
+        rows = [_row(index, device_time=str(index)) for index in range(MAX_LIMIT + 5)]
+        registry, handle, _ = handle_with(rows)
+
+        result = tools.top_ops(registry, handle, limit=MAX_LIMIT + 5, include=[])
+
+        assert result["returned"] == MAX_LIMIT
+        assert not {"included", "empty_in_report", "detail_note"} & set(result)
 
     def test_include_caps_the_rows_lower_than_the_plain_answer(self, handle_with):
         rows = [_row(index, device_time=str(index)) for index in range(40)]
@@ -725,6 +751,34 @@ class TestProgramCache:
             "Relu",
         ]
 
+    def test_op_codes_tied_on_misses_and_repeats_are_in_name_order(self, handle_with):
+        rows = [
+            _cached(2, "z", False, op_code="Zeta"),
+            _cached(3, "z", False, op_code="Zeta"),
+            _cached(4, "a", False, op_code="Alpha"),
+            _cached(5, "a", False, op_code="Alpha"),
+        ]
+        registry, handle, _ = handle_with(rows)
+
+        result = tools.program_cache(registry, handle)
+
+        assert [entry["op_code"] for entry in result["op_codes"]] == ["Alpha", "Zeta"]
+
+    def test_a_hashed_row_with_no_op_code_is_counted_under_an_empty_one(
+        self, handle_with
+    ):
+        rows = [
+            _cached(2, "a", False, op_code=None),
+            _cached(3, "a", True, op_code=None),
+        ]
+        registry, handle, _ = handle_with(rows)
+
+        result = tools.program_cache(registry, handle)
+
+        assert [(entry["op_code"], entry["calls"]) for entry in result["op_codes"]] == [
+            ("", 2)
+        ]
+
     def test_a_limit_is_capped_and_the_totals_cover_every_op_code(self, handle_with):
         rows = [
             _cached(index, str(index), False, op_code=f"Op{index}")
@@ -772,6 +826,13 @@ class TestProgramCache:
         assert PROGRAM_HASH_COLUMN in result["caveat"]
 
 
+# Both program columns, and a Latin-1 cell where UTF-8 is expected.
+_NOT_UTF_8 = (
+    f"OP CODE,{PROGRAM_HASH_COLUMN},{PROGRAM_CACHE_HIT_COLUMN}\n"
+    "Matmul \u00b5s,a,True\n"
+).encode("latin-1")
+
+
 class TestProgramCacheInventory:
     @pytest.mark.parametrize(
         ("columns", "answerable"),
@@ -790,6 +851,53 @@ class TestProgramCacheInventory:
         loaded = load_report(ReportRegistry(), performance_path=str(tmp_path))
 
         assert ("program_cache" in loaded["answerable"]) is answerable
+
+    @pytest.mark.parametrize(
+        "content",
+        [b"", _NOT_UTF_8],
+        ids=["empty", "not-utf-8"],
+    )
+    def test_a_header_that_cannot_be_read_leaves_it_unanswerable(
+        self, tmp_path, content
+    ):
+        (tmp_path / "ops_perf_results.csv").write_bytes(content)
+
+        loaded = load_report(ReportRegistry(), performance_path=str(tmp_path))
+
+        assert "program_cache" not in loaded["answerable"]
+
+    @pytest.mark.parametrize(
+        "content",
+        [b"", _NOT_UTF_8],
+        ids=["empty", "not-utf-8"],
+    )
+    def test_a_header_that_cannot_be_read_has_no_program_columns(
+        self, tmp_path, content
+    ):
+        """The generator reads a blank program cell as None, so only the header
+        could tell an empty column from a missing one."""
+        (tmp_path / "ops_perf_results.csv").write_bytes(content)
+        registry = ReportRegistry()
+        handle = load_report(registry, performance_path=str(tmp_path))["handle"]
+
+        with patch.object(
+            tools,
+            "_generate_canonical_report",
+            return_value=_perf_report([_row(2, hash=None, cache_hit=None)]),
+        ):
+            result = tools.top_ops(registry, handle, include=["cache"])
+
+        for name in ("program_hash", "program_cache_hit"):
+            assert "not among this report's columns" in result["empty_in_report"][name]
+
+    def test_a_csv_that_is_not_utf_8_is_refused_by_the_generator(self, tmp_path):
+        """tt-perf-report's input is decoded whole, so no tool reads past the header."""
+        (tmp_path / "ops_perf_results.csv").write_bytes(_NOT_UTF_8)
+        registry = ReportRegistry()
+        handle = load_report(registry, performance_path=str(tmp_path))["handle"]
+
+        with pytest.raises(UnicodeDecodeError):
+            tools.program_cache(registry, handle)
 
 
 class TestTransport:
@@ -884,6 +992,16 @@ class TestEndToEnd:
             raw = raw_by_id[op["id"]]["MATH FIDELITY"] or None
             assert op.get("math_fidelity") == raw
 
+    def test_no_advice_is_an_empty_list_and_never_an_empty_field(self, tmp_path):
+        """[] is tt-perf-report's answer that it has no advice, not a missing column."""
+        registry, handle = self._handle(tmp_path, smoke_rows())
+
+        result = tools.top_ops(registry, handle, include=["advice"])
+
+        assert result["ops"]
+        assert all(op["advice"] == [] for op in result["ops"])
+        assert "advice" not in result["empty_in_report"]
+
     def test_repeated_detail_cells_share_one_string(self, tmp_path):
         """A run repeats its kernel paths on every call; each is held once."""
         registry, handle = self._handle(tmp_path, smoke_rows())
@@ -944,3 +1062,99 @@ class TestEndToEnd:
         assert result["programs"] == len({row["OP CODE"] for row in rows})
         assert result["repeat_misses"] == 0
         assert result["repeat_hits"] == result["repeat_calls"] > 0
+
+
+# Claude Code cuts an MCP answer off at 25k tokens: about 75 KB of this JSON at 3 bytes a token.
+ANSWER_BUDGET_BYTES = 75_000
+
+ALL_GROUPS = [group.value for group in DetailGroup]
+
+
+class TestAnswerSize:
+    """Unmocked `tools/call`s on a linked capture: the detailed-row cap is for these."""
+
+    @pytest.fixture(autouse=True)
+    def _never_touch_the_real_event_log(self, event_log_directory):
+        """Any tools/call reaches the recorder; none may write outside tmp_path."""
+
+    @pytest.fixture
+    def table(self, tmp_path):
+        """Five smoke runs, one profiler operation launching all of them, and one
+        repeat call that missed the program cache."""
+        rows = [dict(row) for _ in range(5) for row in smoke_rows()]
+        seen = set()
+        for row in rows:
+            row[PROGRAM_HASH_COLUMN] = row["OP CODE"]
+            row[PROGRAM_CACHE_HIT_COLUMN] = (
+                "True" if row["OP CODE"] in seen else "False"
+            )
+            seen.add(row["OP CODE"])
+        first_repeat = len(rows) // 5
+        for row in rows[first_repeat : first_repeat + 2]:
+            row[PROGRAM_CACHE_HIT_COLUMN] = "False"
+        write_ops_perf(tmp_path / "perf", rows)
+
+        performance_only = ReportRegistry()
+        handle = load_report(performance_only, performance_path=str(tmp_path / "perf"))
+        launched = [
+            row["raw_op_code"]
+            for row in tools.canonical_report(performance_only, handle["handle"])[
+                "report"
+            ]
+        ]
+        profiler_path = _write_profiler(
+            tmp_path / "profiler",
+            {1: _graph("ttnn.model", *launched, nested=False)},
+            operations=[(1, "ttnn.model")],
+        )
+
+        registry = ReportRegistry()
+        load_report(
+            registry,
+            performance_path=str(tmp_path / "perf"),
+            profiler_path=profiler_path,
+        )
+        return server._tool_table(registry)
+
+    def _call(self, table, name, arguments):
+        response = server.handle_message(
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "tools/call",
+                "params": {
+                    "name": name,
+                    "arguments": {"handle": "report-1", **arguments},
+                },
+            },
+            table,
+        )
+        assert response is not None and not response["result"].get("isError")
+        text = response["result"]["content"][0]["text"]
+        assert len(text.encode()) < ANSWER_BUDGET_BYTES
+        payload = json.loads(text)
+        json.dumps(payload, allow_nan=False)
+        return payload
+
+    def test_top_ops_with_every_group_fits_the_budget(self, table):
+        result = self._call(
+            table, "top_ops", {"limit": MAX_LIMIT, "include": ALL_GROUPS}
+        )
+
+        assert result["returned"] == MAX_DETAILED_LIMIT
+        assert result["operation_link"]["status"] == "linked"
+
+    def test_operation_detail_with_every_group_fits_the_budget(self, table):
+        result = self._call(
+            table, "operation_detail", {"operation_id": 1, "include": ALL_GROUPS}
+        )
+
+        assert len(result["perf_rows"]) == MAX_DETAILED_LIMIT
+        assert result["perf_row_count"] > MAX_DETAILED_LIMIT
+
+    def test_program_cache_fits_the_budget_and_names_the_missing_operation(self, table):
+        result = self._call(table, "program_cache", {"limit": MAX_LIMIT})
+
+        (missed,) = [entry for entry in result["op_codes"] if entry["repeat_misses"]]
+        assert missed["first_repeat_miss_operation_id"] == 1
+        assert result["operation_link"]["status"] == "linked"
