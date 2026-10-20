@@ -12,8 +12,9 @@
 export const REVEALED_NODE_CLASS = 'op-graph-node-revealed';
 /** The column on the pane's right holding the slowest-operations list and the details. */
 export const SIDE_CLASS = 'op-graph-side';
-// Down the pane while the details sit below the list; the list alone takes only the height it needs. #2087
-export const SIDE_WITH_DETAILS_CLASS = 'op-graph-side-with-details';
+// Down the pane while an op is selected, through a build that hides its details too; the list
+// alone takes only the height it needs. #2087, #2088
+export const SIDE_STRETCHED_CLASS = 'op-graph-side-stretched';
 // Keeps a revealed node off the edge of the usable pane, where it reads as clipped.
 // `topInset` and the side inset extend that for chrome that floats over the pane rather
 // than shrinking it, so a target never lands behind the toolbar or the side column. #2007

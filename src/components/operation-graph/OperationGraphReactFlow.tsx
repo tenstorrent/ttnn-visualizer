@@ -74,7 +74,7 @@ import {
     type PaneSideInset,
     REVEALED_NODE_CLASS,
     SIDE_CLASS,
-    SIDE_WITH_DETAILS_CLASS,
+    SIDE_STRETCHED_CLASS,
     absolutePositionsOf,
     boundsOfNodes,
     centerPanShift,
@@ -333,10 +333,13 @@ const CRITICAL_PATH_NODE_CLASS = 'op-graph-node-critical-path';
 const CRITICAL_PATH_EDGE_CLASS = 'op-graph-edge-critical-path';
 const DIM_UNRELATED_EDGES_CLASS = 'op-graph-dim-unrelated-edges';
 
-// Closed mid-build so the panel can't describe an operation the graph being laid out is
-// about to drop. Shared by the panel and by the selection's pan, which measures before it opens.
+// Closed mid-build so the panel can't describe an operation the graph being laid out is about to drop.
 const isDetailsPanelOpen = (selectedOperationId: number | null, isBuilding: boolean): selectedOperationId is number =>
     selectedOperationId !== null && !isBuilding;
+
+// Down the pane while an op is selected, held through a build so the list keeps its height while
+// the details are closed. Shared by the column's class and by the selection's pan. #2088
+const isSideStretchedFor = (selectedOperationId: number | null): boolean => selectedOperationId !== null;
 
 interface PanOptions {
     /** The side column is about to span the pane, though its class hasn't landed yet. */
@@ -716,6 +719,15 @@ const OperationGraphInner = ({
         }
         return namesById;
     }, [operationList]);
+    // The latest names, for `onBuilt` to take: a reply it accepts is for the latest source, since
+    // stale ones are dropped by request id.
+    const operationNamesByIdRef = useRef(operationNamesById);
+    useEffect(() => {
+        operationNamesByIdRef.current = operationNamesById;
+    }, [operationNamesById]);
+    // The names the graph on screen was built from, so a range narrowed mid-build doesn't blank
+    // the rows of ops the graph has yet to drop. #2088
+    const [drawnOperationNamesById, setDrawnOperationNamesById] = useState(operationNamesById);
 
     const onBuilt = useCallback(
         (graph: OpGraphBuiltGraph) => {
@@ -763,6 +775,7 @@ const OperationGraphInner = ({
             indexEntries.sort((left, right) => left.operationId - right.operationId);
             setNodeIndex(indexEntries);
             setNodeIdByOperationId(renderedByOpId);
+            setDrawnOperationNamesById(operationNamesByIdRef.current);
             // A new array with the same detections rebuilds `deviceSubgraphs`, and
             // `runBuild` then loops.
             pendingEmptyPaneCheckRef.current = true;
@@ -855,7 +868,7 @@ const OperationGraphInner = ({
             return NO_SIDE_INSET;
         }
         const rect = side.getBoundingClientRect();
-        const spansPane = sideSpansPane ?? side.classList.contains(SIDE_WITH_DETAILS_CLASS);
+        const spansPane = sideSpansPane ?? side.classList.contains(SIDE_STRETCHED_CLASS);
         return {
             width: Math.max(0, pane.right - rect.left),
             bottom: spansPane ? pane.height : Math.max(0, rect.bottom - pane.top),
@@ -1290,11 +1303,11 @@ const OperationGraphInner = ({
     const selectOperation = useCallback(
         (id: number) => {
             setSelectedOperationId(id);
-            // Measured before the details this opens stretch the side column down the pane;
+            // Measured before the selection stretches the side column down the pane;
             // with no column mounted yet there is nothing to stretch (#2137).
-            focusOperation(id, { sideSpansPane: isDetailsPanelOpen(id, isBuilding) });
+            focusOperation(id, { sideSpansPane: isSideStretchedFor(id) });
         },
-        [focusOperation, isBuilding],
+        [focusOperation],
     );
 
     // Pressing Enter or Space on a focused node reaches React Flow's own handler,
@@ -1614,8 +1627,8 @@ const OperationGraphInner = ({
     const perfRangeMaxNs = perfRange?.maxNs ?? perfOverlay.maxNs;
 
     const hotOpRows = useMemo(
-        () => (isHotOpsActive ? buildHotOpRows(perfOverlay, graphOperationIds, operationNamesById) : []),
-        [isHotOpsActive, perfOverlay, graphOperationIds, operationNamesById],
+        () => (isHotOpsActive ? buildHotOpRows(perfOverlay, graphOperationIds, drawnOperationNamesById) : []),
+        [isHotOpsActive, perfOverlay, graphOperationIds, drawnOperationNamesById],
     );
 
     const styledNodes = useMemo(() => {
@@ -1884,7 +1897,7 @@ const OperationGraphInner = ({
     }, [isPerfOverlayActive, selectedBlock, selectedPerfAggregate, perfOverlay]);
 
     const isPanelOpen = isDetailsPanelOpen(selectedOperationId, isBuilding);
-    const isHotOpsVisible = isHotOpsActive && !isBuilding;
+    const isSideStretched = isSideStretchedFor(selectedOperationId);
 
     const containerClassName = [
         'operation-graph-react-flow',
@@ -2010,9 +2023,10 @@ const OperationGraphInner = ({
                     {perfHoverLabel}
                 </div>
             ) : null}
-            {isPanelOpen || isHotOpsVisible ? (
-                <div className={classNames(SIDE_CLASS, { [SIDE_WITH_DETAILS_CLASS]: isPanelOpen })}>
-                    {isHotOpsVisible ? (
+            {isPanelOpen || isHotOpsActive ? (
+                <div className={classNames(SIDE_CLASS, { [SIDE_STRETCHED_CLASS]: isSideStretched })}>
+                    {/* Mounted through a build so a relayout keeps the list's scroll. #2088 */}
+                    {isHotOpsActive ? (
                         <OpGraphHotOpsPanel
                             rows={hotOpRows}
                             linkedOpCount={perfOverlay.linkedOpCount}
@@ -2021,13 +2035,14 @@ const OperationGraphInner = ({
                             maxNs={perfRangeMaxNs}
                             selectedOperationId={selectedOperationId}
                             onSelectOperation={selectOperation}
+                            isInert={isBuilding}
                         />
                     ) : null}
                     {isPanelOpen ? (
                         <OpGraphInfoPanel
                             operationId={selectedOperationId}
                             operationById={operationById}
-                            operationNamesById={operationNamesById}
+                            operationNamesById={drawnOperationNamesById}
                             onLocateOperation={centerOperation}
                             isPerfOverlayActive={isPerfOverlayActive}
                             perfDeviceTimeNs={selectedPerfDeviceTimeNs}
