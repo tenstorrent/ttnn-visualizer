@@ -463,9 +463,9 @@ def _read_profiler_side(
 class _UncachedLink(Exception):
     """A link built from a read that failed and might not fail again.
 
-    Raised out of the cache so the next call retries, as the canonical report already
-    does -- a link cached from a passing failure would contradict a `top_ops` that
-    later read the same report fine.
+    Raised out of the cache so the next call retries, as a canonical report that
+    failed outright is -- a link cached from a passing failure would contradict a
+    `top_ops` that later read the same report fine.
     """
 
     def __init__(self, link: OperationLink):

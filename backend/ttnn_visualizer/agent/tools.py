@@ -19,8 +19,13 @@ from dataclasses import dataclass
 from typing import Dict, List, Optional
 
 from ttnn_visualizer.agent.bounds import bounded
-from ttnn_visualizer.agent.handles import CacheVariant, ReportRegistry
+from ttnn_visualizer.agent.handles import (
+    CacheVariant,
+    ReportRegistry,
+    UnsharedSnapshot,
+)
 from ttnn_visualizer.csv_queries import (
+    DegradedPerformanceReport,
     DeviceLogProfilerQueries,
     OpsPerformanceQueries,
     OpsPerformanceReportQueries,
@@ -171,6 +176,8 @@ def canonical_report(
     handle's first read came from; see `_require_same_source`. Snapshots are kept
     per capture rather than per handle, so handles loaded on the same unchanged
     CSV share one. The rows are shared with them: copy a row before changing it.
+    A report generated with swallowed errors is the exception: it is kept by the
+    handle that read it alone, so loading the report again regenerates it.
     """
     ignored = range_ignored(registry, handle, signposts)
     if signposts is not None and not ignored:
@@ -180,7 +187,10 @@ def canonical_report(
 
     def build(instance: Instance) -> Dict:
         _require_same_source(registry, handle, instance)
-        return _generate_canonical_report(instance, **overrides)
+        try:
+            return _generate_canonical_report(instance, **overrides)
+        except DegradedPerformanceReport as degraded:
+            raise UnsharedSnapshot(degraded.report) from None
 
     source = _pin_source(registry, handle)
     report = registry.cached_report(handle, build, scope=scope, share_key=source)
@@ -311,7 +321,8 @@ _GENERATION_OPTIONS: Dict[str, object] = {"no_stacked_report": True}
 
 
 def _generate_canonical_report(instance: Instance, **overrides: object) -> Dict:
-    """Run the report with stdout captured.
+    """Run the report with stdout captured, raising `DegradedPerformanceReport`
+    for one generated with swallowed errors.
 
     `tt_perf_report` prints its progress and the temp paths it writes to. On a
     stdio transport that lands in the middle of a JSON-RPC frame and corrupts
@@ -319,13 +330,15 @@ def _generate_canonical_report(instance: Instance, **overrides: object) -> Dict:
     called in-process should not write to stdout either.
     """
     captured = io.StringIO()
-    with contextlib.redirect_stdout(captured):
-        report = OpsPerformanceReportQueries.generate_report(
-            instance, **{**CANONICAL_PROJECTION, **_GENERATION_OPTIONS, **overrides}
-        )
-    if captured.getvalue().strip():
-        logger.debug("tt-perf-report output: %s", captured.getvalue().strip())
-    return report
+    try:
+        with contextlib.redirect_stdout(captured):
+            return OpsPerformanceReportQueries.generate_report_strict(
+                instance, **{**CANONICAL_PROJECTION, **_GENERATION_OPTIONS, **overrides}
+            )
+    finally:
+        # Logged on a raise too: a degraded run's output is the one worth reading.
+        if captured.getvalue().strip():
+            logger.debug("tt-perf-report output: %s", captured.getvalue().strip())
 
 
 def partitioned_caveat(rows: List[Dict]) -> Optional[str]:

@@ -1058,11 +1058,20 @@ class OpsPerformanceReportQueries:
         Never cached: holding dicts costs over twice the memory of their JSON. A
         caller that only serialises the report should use `generate_report_json`.
         """
-        source = cls.report_source(instance)
         try:
-            return _generate_performance_report(source, cls._report_options(**kwargs))
-        except _DegradedPerformanceReport as degraded:
+            return cls.generate_report_strict(instance, **kwargs)
+        except DegradedPerformanceReport as degraded:
             return degraded.report
+
+    @classmethod
+    def generate_report_strict(cls, instance, **kwargs) -> Dict:
+        """`generate_report`, but a report built with swallowed errors is raised.
+
+        `DegradedPerformanceReport` carries it, so a caller that keeps reports
+        beyond one request can keep a partial one apart from a healthy one.
+        """
+        source = cls.report_source(instance)
+        return _generate_performance_report(source, cls._report_options(**kwargs))
 
     @classmethod
     def generate_report_json(cls, instance, **kwargs) -> bytes:
@@ -1072,7 +1081,7 @@ class OpsPerformanceReportQueries:
             return _cached_generate_performance_report_json(
                 source, cls._report_options(**kwargs)
             )
-        except _DegradedPerformanceReport as degraded:
+        except DegradedPerformanceReport as degraded:
             return orjson.dumps(degraded.report)
 
     @classmethod
@@ -1331,7 +1340,7 @@ class OpsPerformanceReportQueries:
                 ),
             }
             if degraded:
-                raise _DegradedPerformanceReport(result)
+                raise DegradedPerformanceReport(result)
             return result
 
         finally:
@@ -1494,8 +1503,12 @@ def check_signpost_range(
         )
 
 
-class _DegradedPerformanceReport(Exception):
-    """Carries a partial report past `lru_cache`, which only skips raised results."""
+class DegradedPerformanceReport(Exception):
+    """A report generated with swallowed errors, raised so no cache keeps it.
+
+    `lru_cache` only skips raised results, so the partial report rides on the
+    exception; the agent's registry likewise keeps it per handle, not shared.
+    """
 
     def __init__(self, report: Dict):
         super().__init__("performance report generated with swallowed errors")

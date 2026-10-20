@@ -58,6 +58,19 @@ class UnknownHandleError(ValueError):
     """Raised when a tool is called with a handle that was never loaded."""
 
 
+class UnsharedSnapshot(Exception):
+    """Raised by a builder whose snapshot only the asking handle may keep.
+
+    A report generated with swallowed errors is one: kept under a `share_key`,
+    every later handle on that capture would read it, so loading the report again
+    would no longer regenerate it.
+    """
+
+    def __init__(self, snapshot: object):
+        super().__init__("snapshot kept by its handle alone")
+        self.snapshot = snapshot
+
+
 class ReportRegistry:
     """Process-local handle → `Instance` map.
 
@@ -123,24 +136,45 @@ class ReportRegistry:
         rather than one per handle. Handles are never released, so an agent that
         calls `load_report` again on an unchanged capture would otherwise pin
         another whole copy of its report each time. A key never equals a handle:
-        handles are strings and the keys passed are not.
+        handles are strings and the keys passed are not. A builder that raises
+        `UnsharedSnapshot` has its snapshot kept under the handle instead, and
+        that copy answers the handle before the shared one is asked.
         """
-        owner = handle if share_key is None else share_key
+        owners = [handle] if share_key is None else [handle, share_key]
+        for owner in owners:
+            found, snapshot = self._lookup(owner, variant, scope)
+            if found:
+                # Each variant has one builder, so the key fixes the type it stored.
+                return cast(Cached, snapshot)
+
+        try:
+            snapshot, owner = build(self.get(handle)), owners[-1]
+        except UnsharedSnapshot as unshared:
+            snapshot, owner = unshared.snapshot, handle
+        self._store(owner, variant, scope, snapshot)
+        return cast(Cached, snapshot)
+
+    def _lookup(
+        self, owner: Hashable, variant: CacheVariant, scope: Hashable
+    ) -> Tuple[bool, object]:
         if scope is None:
             key = (owner, variant)
-            if key not in self._reports:
-                self._reports[key] = build(self.get(handle))
-            # Each variant has one builder, so the key fixes the type it stored.
-            return cast(Cached, self._reports[key])
-
+            return key in self._reports, self._reports.get(key)
         scoped_key = (owner, variant, scope)
-        if scoped_key in self._scoped_reports:
-            self._scoped_reports.move_to_end(scoped_key)
-        else:
-            self._scoped_reports[scoped_key] = build(self.get(handle))
-            while len(self._scoped_reports) > MAX_SCOPED_REPORTS:
-                self._scoped_reports.popitem(last=False)
-        return cast(Cached, self._scoped_reports[scoped_key])
+        if scoped_key not in self._scoped_reports:
+            return False, None
+        self._scoped_reports.move_to_end(scoped_key)
+        return True, self._scoped_reports[scoped_key]
+
+    def _store(
+        self, owner: Hashable, variant: CacheVariant, scope: Hashable, snapshot: object
+    ) -> None:
+        if scope is None:
+            self._reports[(owner, variant)] = snapshot
+            return
+        self._scoped_reports[(owner, variant, scope)] = snapshot
+        while len(self._scoped_reports) > MAX_SCOPED_REPORTS:
+            self._scoped_reports.popitem(last=False)
 
     def clear(self) -> None:
         self._instances.clear()
