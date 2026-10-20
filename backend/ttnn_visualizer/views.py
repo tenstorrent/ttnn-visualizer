@@ -206,17 +206,45 @@ MAX_EVENT_LOG_REQUEST_BYTES = 16 * 1024
 _EVENT_LOG_EVENTS_FIELD = "events"
 
 
-# Hosted installs pre-install bundled demo reports beside session uploads; their folder
-# names mark them, e.g. `demo_n300-llama` and `DEMO_N300-LLAMA`.
-_DEMO_DIRECTORY_PATTERN = re.compile(r"^demo", re.IGNORECASE)
+# Hosted installs pre-install the bundled demo reports from `demo-reports/` beside session
+# uploads, and every hosted session sees them. Only these exact folders qualify, so no
+# other folder name can be listed to every session. Keep them in step with the archives;
+# `test_demo_report_archives.py` checks that they match.
+DEMO_PROFILER_DIRECTORY_NAMES = frozenset(
+    {
+        "BH_DEMO_bge_m3_oct19_1625",
+        "BH_DEMO_sentence_bert_oct19_1634",
+        "BH_DEMO_vgg_unet_oct19_1646",
+        "WH_DEMO_n300-llama",
+        "WH_DEMO_segformer_decoder_3119846618735255520",
+        "WH_DEMO_segformer_encoder_11911356357027855134",
+    }
+)
+DEMO_PERFORMANCE_DIRECTORY_NAMES = frozenset(
+    {
+        "BH_DEMO_SENTENCE_BERT",
+        "BH_DEMO_VGG_UNET",
+        "BH_DEMO_bge_m3",
+        "WH_DEMO_N300-LLAMA",
+        "WH_DEMO_SEG_DECODER_2025_02_16_18_07_01",
+        "WH_DEMO_SEG_ENCODER_2025_02_16_18_11_10",
+    }
+)
 
 
-def _list_demo_directory_names(path: Path) -> List[str]:
-    """Names of the bundled demo report folders directly under ``path``."""
+def _list_demo_directory_names(path: Path, demo_names: frozenset[str]) -> List[str]:
+    """Names of the bundled demo report folders present directly under ``path``.
+
+    Matches directory entries exactly rather than probing ``path / name``, which a
+    case-insensitive filesystem would resolve for a differently cased folder. A missing
+    ``path`` has no demos; hosted installs create the report directory lazily.
+    """
+    if not path.is_dir():
+        return []
     return [
-        report.name
-        for report in path.glob("*")
-        if _DEMO_DIRECTORY_PATTERN.match(report.name)
+        entry.name
+        for entry in path.iterdir()
+        if entry.name in demo_names and entry.is_dir()
     ]
 
 
@@ -1088,7 +1116,9 @@ def get_profiler_data_list(instance: Instance):
         session_directory_names = [
             str(Path(session_path).parent.name) for session_path in session_paths
         ]
-        demo_directory_names = _list_demo_directory_names(path)
+        demo_directory_names = _list_demo_directory_names(
+            path, DEMO_PROFILER_DIRECTORY_NAMES
+        )
         directory_names = list(
             set(db_directory_names + session_directory_names + demo_directory_names)
         )
@@ -1198,7 +1228,9 @@ def get_performance_data_list(instance: Instance):
         session_directory_names = [
             str(Path(session_path).name) for session_path in session_paths
         ]
-        demo_directory_names = _list_demo_directory_names(path)
+        demo_directory_names = _list_demo_directory_names(
+            path, DEMO_PERFORMANCE_DIRECTORY_NAMES
+        )
         directory_names = list(
             set(db_directory_names + session_directory_names + demo_directory_names)
         )

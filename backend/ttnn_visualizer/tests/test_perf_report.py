@@ -16,7 +16,7 @@ from ttnn_visualizer.csv_queries import OpsPerformanceReportQueries
 from ttnn_visualizer.models import Instance
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
-DEMO_REPORT = REPO_ROOT / "demo-reports" / "n300-llama.zip"
+DEMO_REPORT = REPO_ROOT / "demo-reports" / "sentence_bert.zip"
 
 KERNEL_DURATION_KEYS = [
     "device_kernel_duration",
@@ -63,7 +63,7 @@ def _performance_instance(raw_csv):
         yield Instance(instance_id="test", performance_path=directory)
 
 
-@unittest.skipUnless(DEMO_REPORT.exists(), "n300-llama demo report not available")
+@unittest.skipUnless(DEMO_REPORT.exists(), "sentence_bert demo report not available")
 class TestPerfReportKernelDurations(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -75,7 +75,7 @@ class TestPerfReportKernelDurations(unittest.TestCase):
         perf_csv = next(Path(cls._tmp.name).rglob("ops_perf_results*.csv"), None)
         if perf_csv is None:
             raise unittest.SkipTest(
-                "ops_perf_results*.csv not found in n300-llama demo report; "
+                "ops_perf_results*.csv not found in sentence_bert demo report; "
                 "demo-report packaging may have changed"
             )
         instance = Instance(instance_id="test", performance_path=str(perf_csv.parent))
@@ -330,7 +330,7 @@ class TestPerfReportSignpostOpType(unittest.TestCase):
     perf rows (#1943), so this spelling is a contract rather than an incidental
     detail. `TestPerfReportKernelDurations.test_signpost_rows_have_no_kernel_durations`
     cannot stand in for it: it filters for the value and loops the result, and
-    the n300-llama fixture contains no signpost rows at all, so it holds
+    the sentence_bert fixture contains no signpost rows at all, so it holds
     vacuously. Driven from a synthetic CSV so it does not depend on a fixture
     happening to carry one.
     """

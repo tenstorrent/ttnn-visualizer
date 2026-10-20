@@ -18,7 +18,7 @@ export const SIDE_STRETCHED_CLASS = 'op-graph-side-stretched';
 // Keeps a revealed node off the edge of the usable pane, where it reads as clipped.
 // `topInset` and the side inset extend that for chrome that floats over the pane rather
 // than shrinking it, so a target never lands behind the toolbar or the side column. #2007
-const REVEAL_MARGIN_PX = 48;
+export const REVEAL_MARGIN_PX = 48;
 
 /** A box in graph space. */
 export interface GraphBounds {
