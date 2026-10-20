@@ -2,9 +2,9 @@
 #
 # SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-"""The one result cap the tool surface enforces.
+"""The result caps the tool surface enforces.
 
-Shared rather than declared per module: `server` quotes this number to an agent
+Shared rather than declared per module: `server` quotes these numbers to an agent
 in every limit schema, so a second copy would eventually promise one cap and
 enforce another. #2012
 """
@@ -13,22 +13,25 @@ from typing import Optional
 
 DEFAULT_LIMIT = 10
 MAX_LIMIT = 100
+# Rows with every `include` group run to about 3 KB each, so 100 of them would pass
+# a client's MCP output cap; 25 stay under Claude Code's 25k tokens.
+MAX_DETAILED_LIMIT = 25
 
 
-def bounded(limit: Optional[int]) -> int:
-    """Clamp a caller's limit into [1, MAX_LIMIT], defaulting when unset.
+def bounded(limit: Optional[int], maximum: int = MAX_LIMIT) -> int:
+    """Clamp a caller's limit into [1, maximum], defaulting when unset.
 
     A non-numeric limit is refused by name: a bare `int()` failure reaches the
     agent as `invalid literal for int() with base 10: 'abc'`, which does not say
     which argument it is about.
     """
     if limit is None:
-        return DEFAULT_LIMIT
+        return min(DEFAULT_LIMIT, maximum)
     try:
         requested = int(limit)
     except (TypeError, ValueError):
         raise ValueError(f"limit must be a whole number, not {limit!r}") from None
-    return max(1, min(requested, MAX_LIMIT))
+    return max(1, min(requested, maximum))
 
 
-__all__ = ["DEFAULT_LIMIT", "MAX_LIMIT", "bounded"]
+__all__ = ["DEFAULT_LIMIT", "MAX_DETAILED_LIMIT", "MAX_LIMIT", "bounded"]

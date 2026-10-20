@@ -13,6 +13,7 @@ and that a zone pairing survives the chunk boundary it is invisible across.
 See #1995.
 """
 
+import json
 import os
 import sqlite3
 import time
@@ -156,6 +157,8 @@ class TestReportInventory:
         assert loaded["handle"] == "report-1"
         assert set(loaded["answerable"]) == {"top_ops", "zone_timings"}
         assert set(loaded["unanswerable"]) == {
+            # The CSV here has no PROGRAM HASH or PROGRAM CACHE HIT column.
+            "program_cache",
             "find_operations",
             "operation_detail",
             "memory_profile",
@@ -314,6 +317,22 @@ class TestTopOps:
 
         assert result["returned"] == MAX_LIMIT
         assert result["op_count"] == 500
+
+    @pytest.mark.parametrize("cell", ["nan", "inf", "-inf"])
+    def test_a_non_finite_metric_is_left_out_of_the_ranking_and_the_total(
+        self, tmp_path, cell
+    ):
+        """Either would reach the client as invalid JSON."""
+        registry = self._registry(tmp_path)
+        rows = [_row(id="a", device_time=cell), _row(id="b", device_time="5.0")]
+        with patch.object(
+            tools, "_generate_canonical_report", return_value=_perf_report(rows)
+        ):
+            result = tools.top_ops(registry, "report-1")
+
+        assert [op["id"] for op in result["ops"]] == ["b"]
+        assert result["device_time_total"] == 5.0
+        json.dumps(result, allow_nan=False)
 
     def test_it_ranks_by_the_requested_metric(self, tmp_path):
         registry = self._registry(tmp_path)
@@ -1352,6 +1371,7 @@ class TestTransport:
         assert advertised == {
             "load_report",
             "top_ops",
+            "program_cache",
             "zone_timings",
             "diff_reports",
             "find_operations",
@@ -1718,6 +1738,13 @@ class TestProjectRow:
         assert projected["bound"] is None
         assert projected["bound_analysis"] == "none"
         assert projected["op_category"] == "Other"
+
+    @pytest.mark.parametrize("cell", ["nan", "inf", "-inf"])
+    def test_a_non_finite_cell_is_null(self, cell):
+        projected = tools.project_row(_row(device_time=cell, cores=cell))
+
+        assert projected["device_time"] is None
+        assert projected["cores"] is None
 
     def test_a_row_without_the_columns_reports_them_as_null(self):
         projected = tools.project_row(_row())

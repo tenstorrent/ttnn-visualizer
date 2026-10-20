@@ -184,8 +184,8 @@ def with_operation_link_template(
 def with_linked_rows_link_template(
     registry: ReportRegistry, result: Dict[str, object]
 ) -> Dict[str, object]:
-    """`top_ops`'s `result`, plus an `app_link_template` when its rows carry operation
-    ids: the reports linked, at a rank the app shows."""
+    """`top_ops`'s or `program_cache`'s `result`, plus an `app_link_template` when it
+    carries operation ids: the reports linked, at a rank the app shows."""
     operation_link = result.get("operation_link")
     if not (
         isinstance(operation_link, dict)

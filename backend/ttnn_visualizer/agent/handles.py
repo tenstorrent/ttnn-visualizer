@@ -12,6 +12,7 @@ path. (The report's own SQLite file is read, to answer what a report can
 answer; that is the capture, not the app's session.) #1995
 """
 
+import csv
 import sqlite3
 from collections import OrderedDict
 from enum import Enum
@@ -19,6 +20,8 @@ from pathlib import Path
 from typing import Callable, Dict, Hashable, List, Optional, Tuple, TypeVar, cast
 
 from ttnn_visualizer.csv_queries import (
+    PROGRAM_CACHE_HIT_COLUMN,
+    PROGRAM_HASH_COLUMN,
     DeviceLogProfilerQueries,
     OpsPerformanceQueries,
 )
@@ -43,6 +46,8 @@ class CacheVariant(str, Enum):
     # The performance CSV the handle's first read came from, so a later read can
     # tell whether it is still reading the same capture.
     SOURCE = "source"
+    # The detail fields no row of the whole report carries, read once per handle.
+    EMPTY_DETAIL_FIELDS = "empty_detail_fields"
 
 
 # Snapshots narrowed by a scope -- a signpost range -- kept at once, across every
@@ -52,6 +57,7 @@ class CacheVariant(str, Enum):
 # process-wide cache underneath may still answer. Two is one `diff_reports` pair:
 # these are references the registry holds past that cache's own eviction, so
 # more would keep alive memory `MAX_CACHED_PERFORMANCE_REPORTS` budgets against.
+# The detail columns add about 3% to each, since their repeated cells are interned.
 MAX_SCOPED_REPORTS = 2
 
 
@@ -217,6 +223,35 @@ def _readable_tables(profiler_path: Optional[str]) -> frozenset:
         connection.close()
 
 
+def _csv_columns(path: Path) -> frozenset:
+    """The CSV's header names, or nothing when it cannot be read."""
+    try:
+        with path.open(newline="") as source:
+            return frozenset(next(csv.reader(source), []))
+    except (OSError, UnicodeDecodeError, csv.Error):
+        return frozenset()
+
+
+def _perf_csv(instance: Instance) -> Optional[Path]:
+    """The ops perf CSV the tools read, or None when the handle has none."""
+    # The selector the tools actually read through, not a second glob. Picking
+    # the lexicographically first file here while `get_local_ops_perf_file_path`
+    # picks the newest meant `load_report` could name one capture and `top_ops`
+    # analyse another in a directory holding two.
+    if not instance.performance_path:
+        return None
+    try:
+        return Path(OpsPerformanceQueries.get_local_ops_perf_file_path(instance))
+    except Exception:
+        return None
+
+
+def perf_csv_columns(instance: Instance) -> frozenset:
+    """The header of the ops perf CSV the tools read, or nothing without one."""
+    perf_csv = _perf_csv(instance)
+    return frozenset() if perf_csv is None else _csv_columns(perf_csv)
+
+
 def _inventory(instance: Instance) -> Dict[str, object]:
     """What this report can actually answer.
 
@@ -230,19 +265,14 @@ def _inventory(instance: Instance) -> Dict[str, object]:
     def record(name: str, present: bool) -> None:
         (available if present else missing).append(name)
 
-    # The selector the tools actually read through, not a second glob. Picking
-    # the lexicographically first file here while `get_local_ops_perf_file_path`
-    # picks the newest meant `load_report` could name one capture and `top_ops`
-    # analyse another in a directory holding two.
-    perf_csv = None
-    if instance.performance_path:
-        try:
-            perf_csv = Path(
-                OpsPerformanceQueries.get_local_ops_perf_file_path(instance)
-            )
-        except Exception:
-            perf_csv = None
+    perf_csv = _perf_csv(instance)
     record("top_ops", perf_csv is not None)
+    # Older captures carry neither column, and every count would then be zero.
+    record(
+        "program_cache",
+        perf_csv is not None
+        and {PROGRAM_HASH_COLUMN, PROGRAM_CACHE_HIT_COLUMN} <= _csv_columns(perf_csv),
+    )
 
     performance_path = instance.performance_path
     profiler_path = instance.profiler_path
@@ -310,4 +340,5 @@ __all__ = [
     "ReportRegistry",
     "UnknownHandleError",
     "load_report",
+    "perf_csv_columns",
 ]

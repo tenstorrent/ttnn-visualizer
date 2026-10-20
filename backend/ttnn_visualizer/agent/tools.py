@@ -12,14 +12,19 @@ server-side windowing on the NPE view. #1995
 import contextlib
 import io
 import logging
-import math
 import sys
 from collections import defaultdict
-from dataclasses import dataclass
-from typing import Dict, List, Optional
+from dataclasses import asdict, dataclass
+from typing import Dict, List, Optional, Sequence, Set
 
-from ttnn_visualizer.agent.bounds import bounded
-from ttnn_visualizer.agent.handles import CacheVariant, ReportRegistry
+from ttnn_visualizer.agent import perf_detail
+from ttnn_visualizer.agent.bounds import MAX_DETAILED_LIMIT, MAX_LIMIT, bounded
+from ttnn_visualizer.agent.cells import finite_number
+from ttnn_visualizer.agent.handles import (
+    CacheVariant,
+    ReportRegistry,
+    perf_csv_columns,
+)
 from ttnn_visualizer.csv_queries import (
     DeviceLogProfilerQueries,
     OpsPerformanceQueries,
@@ -82,28 +87,14 @@ SORTABLE_METRICS: Dict[str, str] = {
 ADDITIVE_METRICS = frozenset({"device_time", "op_to_op_gap", "total_percent"})
 
 
-def _as_number(value: object) -> Optional[float]:
-    """Report cells arrive as strings, including the numeric ones."""
-    if isinstance(value, bool) or value is None or value == "":
-        return None
-    if isinstance(value, (int, float)):
-        return float(value)
-    if isinstance(value, str):
-        try:
-            return float(value)
-        except ValueError:
-            return None
-    return None
-
-
 def countable_device_time(row: Dict) -> Optional[float]:
     """A row's device time, or None where it is blank, non-finite or not positive.
 
     `isCountableDeviceTime` in `src/functions/durationBuckets.ts`, which the app
     counts a share's device time with; mirror a change there.
     """
-    value = _as_number(row.get("device_time"))
-    return value if value is not None and math.isfinite(value) and value > 0 else None
+    value = finite_number(row.get("device_time"))
+    return value if value is not None and value > 0 else None
 
 
 def _rounded(value: Optional[float]) -> Optional[float]:
@@ -302,10 +293,11 @@ def is_ranged(response_projection: object) -> bool:
 
 
 # How a report is generated rather than what it reads, so not part of the
-# projection. No tool reads the stacked report, and tt-perf-report draws it as a
-# 300-dpi pyplot figure it never closes: kept on, every generation -- one per
-# range asked for -- would leave a figure open for the life of the server.
-_GENERATION_OPTIONS: Dict[str, object] = {"no_stacked_report": True}
+# projection: no tool reads the stacked report, and `include` reads the detail columns.
+_GENERATION_OPTIONS: Dict[str, object] = {
+    "no_stacked_report": True,
+    "detail_columns": True,
+}
 
 
 def _generate_canonical_report(instance: Instance, **overrides: object) -> Dict:
@@ -365,13 +357,34 @@ def project_row(row: Dict, metric: str = "device_time") -> Dict[str, object]:
     return {
         "id": row.get("id"),
         "op_code": row.get("op_code") or row.get("raw_op_code"),
-        metric: _rounded(_as_number(row.get(SORTABLE_METRICS[metric]))),
-        "cores": _as_number(row.get("cores")),
+        metric: _rounded(finite_number(row.get(SORTABLE_METRICS[metric]))),
+        "cores": finite_number(row.get("cores")),
         "bound": row.get("bound") or None,
         # Without it a null bound reads as "fine" when the op was never modelled (#2064).
         "bound_analysis": row.get("bound_analysis") or None,
         "op_category": row.get("op_category") or None,
     }
+
+
+def empty_detail_fields(
+    registry: ReportRegistry, handle: str, groups: Sequence[perf_detail.DetailGroup]
+) -> perf_detail.EmptyFields:
+    """The detail fields no row of the whole report carries, read once per handle."""
+    if not groups:
+        return {}
+
+    def build(instance: Instance) -> perf_detail.EmptyFields:
+        return perf_detail.empty_fields(
+            canonical_report(registry, handle)["report"], perf_csv_columns(instance)
+        )
+
+    return registry.cached_report(
+        handle, build, variant=CacheVariant.EMPTY_DETAIL_FIELDS
+    )
+
+
+def row_limit(limit: Optional[int], groups: Sequence[perf_detail.DetailGroup]) -> int:
+    return bounded(limit, MAX_DETAILED_LIMIT if groups else MAX_LIMIT)
 
 
 def top_ops(
@@ -381,12 +394,15 @@ def top_ops(
     limit: Optional[int] = None,
     start_signpost: Optional[str] = None,
     end_signpost: Optional[str] = None,
+    include: Optional[List[str]] = None,
 ) -> Dict[str, object]:
     """The costliest ops by one metric, with the projection that produced them."""
     if by not in SORTABLE_METRICS:
         raise ValueError(
             f"unknown metric {by!r}; expected one of {', '.join(sorted(SORTABLE_METRICS))}"
         )
+    groups = perf_detail.parse_include(include)
+    count = row_limit(limit, groups)
 
     signposts = SignpostRange.of(start_signpost, end_signpost)
     report = canonical_report(registry, handle, signposts)
@@ -394,12 +410,13 @@ def top_ops(
     field = SORTABLE_METRICS[by]
 
     ranked = sorted(
-        (row for row in rows if _as_number(row.get(field)) is not None),
-        key=lambda row: _as_number(row.get(field)) or 0.0,
+        (row for row in rows if finite_number(row.get(field)) is not None),
+        key=lambda row: finite_number(row.get(field)) or 0.0,
         reverse=True,
-    )[: bounded(limit)]
+    )[:count]
 
-    total: float = sum(_as_number(row.get(field)) or 0.0 for row in rows)
+    total: float = sum(finite_number(row.get(field)) or 0.0 for row in rows)
+    empty = empty_detail_fields(registry, handle, groups)
     ops = [
         {
             **project_row(row, by),
@@ -408,6 +425,7 @@ def top_ops(
             # The projection keeps signpost rows deliberately, so the field that
             # tells a marker from an operation has to survive into the response.
             "op_type": row.get("op_type") or None,
+            **perf_detail.detail_fields(row, groups, empty),
         }
         for row in ranked
     ]
@@ -419,6 +437,7 @@ def top_ops(
         "returned": len(ops),
         "ops": ops,
         "projection": projection(signposts, bool(report.get("signpost_range_ignored"))),
+        **perf_detail.summary(groups, empty),
     }
     if by in ADDITIVE_METRICS:
         result[f"{by}_total"] = round(total, 3)
@@ -428,13 +447,131 @@ def top_ops(
     return result
 
 
+PROGRAM_CACHE_NOTE = (
+    "A row is its program's first call when no earlier row in the report has its "
+    "program hash, and a repeat call otherwise, as the performance view counts them. "
+    "A first call builds its program, so it misses the cache by design. A repeat call "
+    "should hit it: a repeat miss built a program the run had already built, which the "
+    "performance view flags as a recompute candidate. Calls are grouped by the raw op "
+    "code, so one entry holds every shape of an op. first_repeat_miss_perf_id numbers "
+    "a row of the performance CSV, not an operation. Rows are merged across devices, so "
+    "each carries the cache result of the device its row was taken from."
+)
+
+
+@dataclass
+class _ProgramCalls:
+    op_code: str
+    calls: int = 0
+    programs: int = 0
+    repeat_calls: int = 0
+    repeat_hits: int = 0
+    repeat_misses: int = 0
+    repeat_unrecorded: int = 0
+    first_repeat_miss_perf_id: Optional[str] = None
+
+
+def program_cache(
+    registry: ReportRegistry, handle: str, limit: Optional[int] = None
+) -> Dict[str, object]:
+    """How often each op code built a program again rather than reusing it.
+
+    The performance view's rule, by hand: a hash's first row in report order is a first
+    call (`enrichPerfRowData.ts`), and a later row that missed is a recompute candidate
+    (`computePerfHeuristicFlags.ts`); mirror a change there. The whole report, since a
+    program first called before a window would read as a first call inside it.
+    """
+    count = bounded(limit)
+    rows = canonical_report(registry, handle).get("report", [])
+    seen: Set[str] = set()
+    calls_by_op_code: Dict[str, _ProgramCalls] = {}
+    for row in rows:
+        program = row.get("hash") or None
+        if program is None:
+            continue
+        # The raw code: tt-perf-report adds a matmul's shape to `op_code`.
+        op_code = str(row.get("raw_op_code") or row.get("op_code") or "").strip()
+        entry = calls_by_op_code.setdefault(op_code, _ProgramCalls(op_code))
+        entry.calls += 1
+        if program not in seen:
+            seen.add(program)
+            entry.programs += 1
+            continue
+        entry.repeat_calls += 1
+        if row.get("cache_hit") is True:
+            entry.repeat_hits += 1
+        elif row.get("cache_hit") is False:
+            entry.repeat_misses += 1
+            if entry.first_repeat_miss_perf_id is None:
+                entry.first_repeat_miss_perf_id = row.get("id")
+        else:
+            entry.repeat_unrecorded += 1
+
+    entries = list(calls_by_op_code.values())
+    repeat_calls = sum(entry.repeat_calls for entry in entries)
+    repeat_hits = sum(entry.repeat_hits for entry in entries)
+    repeat_misses = sum(entry.repeat_misses for entry in entries)
+    repeat_unrecorded = sum(entry.repeat_unrecorded for entry in entries)
+    # Out of the repeats that recorded a result: an unrecorded one is neither.
+    recorded = repeat_hits + repeat_misses
+    ranked = sorted(
+        entries,
+        key=lambda entry: (-entry.repeat_misses, -entry.repeat_calls, entry.op_code),
+    )[:count]
+    result: Dict[str, object] = {
+        "handle": handle,
+        "calls": sum(entry.calls for entry in entries),
+        "programs": sum(entry.programs for entry in entries),
+        "repeat_calls": repeat_calls,
+        "repeat_hits": repeat_hits,
+        "repeat_misses": repeat_misses,
+        "repeat_unrecorded": repeat_unrecorded,
+        "repeat_hit_percent": (
+            round(repeat_hits / recorded * 100, 3) if recorded else None
+        ),
+        "op_code_count": len(entries),
+        "returned": len(ranked),
+        "grouped_by": "raw_op_code",
+        "op_codes": [asdict(entry) for entry in ranked],
+        "projection": projection(None),
+        "note": PROGRAM_CACHE_NOTE,
+    }
+    caveats = []
+    if not entries:
+        caveats.append(
+            "No row carries a program hash, so there is nothing to count: the capture "
+            "has no PROGRAM HASH column, leaves it empty, or holds no device "
+            "operations."
+        )
+    if repeat_unrecorded:
+        caveats.append(
+            f"{repeat_unrecorded} of {repeat_calls} repeat calls recorded no cache "
+            "result. They count as neither hits nor misses, and "
+            + (
+                "the hit percentage is out of the rest."
+                if recorded
+                else "there is no hit percentage."
+            )
+            + " The performance view counts them as misses instead."
+        )
+    if recorded and repeat_misses == recorded:
+        caveats.append(
+            "Every repeat call that recorded a result missed the program cache, which "
+            "is what a run with the program cache disabled records. Check whether it "
+            "was before reading each repeat miss as a program built again."
+        )
+    if caveats:
+        result["caveat"] = " ".join(caveats)
+    return result
+
+
 def zone_timings(
     registry: ReportRegistry, handle: str, limit: Optional[int] = None
 ) -> Dict[str, object]:
     """Per-zone, per-RISC totals from the device profiler log."""
     instance = registry.get(handle)
     metadata = DeviceLogProfilerQueries.read_capture_metadata(instance)
-    clock_mhz = _as_number(metadata.get("CHIP_FREQ[MHz]"))
+    clock_mhz = finite_number(metadata.get("CHIP_FREQ[MHz]"))
 
     with DeviceLogProfilerQueries(instance, stream=True) as queries:
         summary, pairing = queries.query_zone_summary(limit=bounded(limit))
@@ -559,7 +696,7 @@ def diff_reports(
             lambda: {"total": 0.0, "count": 0.0}
         )
         for row in rows:
-            value = _as_number(row.get(field))
+            value = finite_number(row.get(field))
             if value is None:
                 continue
             op_code = str(row.get("op_code") or row.get("raw_op_code") or "").strip()
@@ -589,7 +726,7 @@ def diff_reports(
 
     # Largest movement in either direction: a regression matters as much as a win.
     changes.sort(
-        key=lambda change: abs(_as_number(change["delta"]) or 0.0), reverse=True
+        key=lambda change: abs(finite_number(change["delta"]) or 0.0), reverse=True
     )
 
     result: Dict[str, object] = {
@@ -626,6 +763,7 @@ def _stderr_log() -> None:
 __all__ = [
     "CANONICAL_PROJECTION",
     "MAX_SIGNPOST_NAME_LENGTH",
+    "PROGRAM_CACHE_NOTE",
     "SORTABLE_METRICS",
     "SignpostRange",
     "canonical_report",
@@ -633,10 +771,13 @@ __all__ = [
     "is_ranged",
     "countable_device_time",
     "diff_reports",
+    "empty_detail_fields",
     "partitioned_caveat",
+    "program_cache",
     "project_row",
     "projection",
     "range_ignored",
+    "row_limit",
     "top_ops",
     "zone_timings",
 ]
