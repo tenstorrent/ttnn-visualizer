@@ -82,6 +82,9 @@ import npeManifestSchema from '../schemas/npe-manifest.schema.json';
 import { getErroredReportFolderLabel, normaliseReportFolder } from '../functions/validateReportFolder';
 import { Signpost } from '../model/Signpost';
 import { TensorsByOperationByAddress } from '../model/BufferSummary';
+import { ActiveReportFingerprints, ActiveReportRuns } from '../model/ReportLinks';
+import { getFolderReportId, getReportId } from '../functions/reportLinks';
+import { ReportLinkRole } from '../definitions/ReportLinks';
 import { L1_DEFAULT_MEMORY_SIZE } from '../definitions/L1MemorySize';
 import {
     NPE_QUERY_KEY,
@@ -1031,6 +1034,67 @@ export const useReportMetadata = () => {
         retry: false,
         staleTime: Infinity,
     });
+};
+
+const REPORT_FINGERPRINTS_QUERY_KEY = 'fetch-report-fingerprints';
+
+/**
+ * The run one side's active folder holds. The instance answers for whichever reports
+ * are active when it handles the request, which can already be a later pick, so an
+ * answer about another folder is thrown away rather than cached under this one.
+ */
+const fetchActiveReportRun = async (role: ReportLinkRole, reportId: string | null): Promise<string | null> => {
+    const { data } = await axiosInstance.get<ActiveReportRuns>(Endpoints.REPORT_FINGERPRINTS);
+    const { folder, run } = data[role];
+
+    if (getReportId(folder) !== reportId) {
+        throw new Error(`Active ${role} report changed while its run was read`);
+    }
+
+    return run;
+};
+
+/**
+ * One side's run, keyed like that side's report data: by its own path alone. A key
+ * spanning both paths would refetch the unchanged side whenever the other is picked,
+ * and a local pick does not clear the cache, so the unchanged side's verdict data
+ * would stay on the old run while this moved to the newer one.
+ */
+const useActiveReportFingerprint = (role: ReportLinkRole, report: ReportFolder | null) => {
+    const reportId = getFolderReportId(report);
+
+    return useQuery<string | null, AxiosError>({
+        queryKey: [REPORT_FINGERPRINTS_QUERY_KEY, role, report?.path, reportId],
+        queryFn: () => fetchActiveReportRun(role, reportId),
+        enabled: report !== null,
+        retry: false,
+        staleTime: Infinity,
+    });
+};
+
+/**
+ * Which runs the active reports hold, so a recorded link names the run it was compared
+ * against (#2069). `isPending` covers only the sides with an active report.
+ */
+export const useActiveReportFingerprints = () => {
+    const activeProfilerReport = useAtomValue(activeProfilerReportAtom);
+    const activePerformanceReport = useAtomValue(activePerformanceReportAtom);
+    const profiler = useActiveReportFingerprint(ReportLinkRole.PROFILER, activeProfilerReport);
+    const performance = useActiveReportFingerprint(ReportLinkRole.PERFORMANCE, activePerformanceReport);
+
+    const profilerRun = profiler.data ?? null;
+    const performanceRun = performance.data ?? null;
+    const data = useMemo<ActiveReportFingerprints>(
+        () => ({ profiler: profilerRun, performance: performanceRun }),
+        [profilerRun, performanceRun],
+    );
+
+    return {
+        data,
+        isPending:
+            (activeProfilerReport !== null && profiler.isPending) ||
+            (activePerformanceReport !== null && performance.isPending),
+    };
 };
 
 export const useBufferChunks = (operationId: number, address?: number | string, bufferType?: BufferType) => {
