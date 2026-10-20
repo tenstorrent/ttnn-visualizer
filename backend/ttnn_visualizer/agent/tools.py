@@ -12,7 +12,6 @@ server-side windowing on the NPE view. #1995
 import contextlib
 import io
 import logging
-import math
 import sys
 from collections import defaultdict
 from dataclasses import asdict, dataclass
@@ -20,6 +19,7 @@ from typing import Dict, List, Optional, Sequence, Set
 
 from ttnn_visualizer.agent import perf_detail
 from ttnn_visualizer.agent.bounds import MAX_DETAILED_LIMIT, MAX_LIMIT, bounded
+from ttnn_visualizer.agent.cells import finite_number
 from ttnn_visualizer.agent.handles import (
     CacheVariant,
     ReportRegistry,
@@ -87,28 +87,14 @@ SORTABLE_METRICS: Dict[str, str] = {
 ADDITIVE_METRICS = frozenset({"device_time", "op_to_op_gap", "total_percent"})
 
 
-def _as_number(value: object) -> Optional[float]:
-    """Report cells arrive as strings, including the numeric ones."""
-    if isinstance(value, bool) or value is None or value == "":
-        return None
-    if isinstance(value, (int, float)):
-        return float(value)
-    if isinstance(value, str):
-        try:
-            return float(value)
-        except ValueError:
-            return None
-    return None
-
-
 def countable_device_time(row: Dict) -> Optional[float]:
     """A row's device time, or None where it is blank, non-finite or not positive.
 
     `isCountableDeviceTime` in `src/functions/durationBuckets.ts`, which the app
     counts a share's device time with; mirror a change there.
     """
-    value = _as_number(row.get("device_time"))
-    return value if value is not None and math.isfinite(value) and value > 0 else None
+    value = finite_number(row.get("device_time"))
+    return value if value is not None and value > 0 else None
 
 
 def _rounded(value: Optional[float]) -> Optional[float]:
@@ -371,8 +357,8 @@ def project_row(row: Dict, metric: str = "device_time") -> Dict[str, object]:
     return {
         "id": row.get("id"),
         "op_code": row.get("op_code") or row.get("raw_op_code"),
-        metric: _rounded(_as_number(row.get(SORTABLE_METRICS[metric]))),
-        "cores": _as_number(row.get("cores")),
+        metric: _rounded(finite_number(row.get(SORTABLE_METRICS[metric]))),
+        "cores": finite_number(row.get("cores")),
         "bound": row.get("bound") or None,
         # Without it a null bound reads as "fine" when the op was never modelled (#2064).
         "bound_analysis": row.get("bound_analysis") or None,
@@ -424,12 +410,12 @@ def top_ops(
     field = SORTABLE_METRICS[by]
 
     ranked = sorted(
-        (row for row in rows if _as_number(row.get(field)) is not None),
-        key=lambda row: _as_number(row.get(field)) or 0.0,
+        (row for row in rows if finite_number(row.get(field)) is not None),
+        key=lambda row: finite_number(row.get(field)) or 0.0,
         reverse=True,
     )[:count]
 
-    total: float = sum(_as_number(row.get(field)) or 0.0 for row in rows)
+    total: float = sum(finite_number(row.get(field)) or 0.0 for row in rows)
     empty = empty_detail_fields(registry, handle, groups)
     ops = [
         {
@@ -584,7 +570,7 @@ def zone_timings(
     """Per-zone, per-RISC totals from the device profiler log."""
     instance = registry.get(handle)
     metadata = DeviceLogProfilerQueries.read_capture_metadata(instance)
-    clock_mhz = _as_number(metadata.get("CHIP_FREQ[MHz]"))
+    clock_mhz = finite_number(metadata.get("CHIP_FREQ[MHz]"))
 
     with DeviceLogProfilerQueries(instance, stream=True) as queries:
         summary, pairing = queries.query_zone_summary(limit=bounded(limit))
@@ -709,7 +695,7 @@ def diff_reports(
             lambda: {"total": 0.0, "count": 0.0}
         )
         for row in rows:
-            value = _as_number(row.get(field))
+            value = finite_number(row.get(field))
             if value is None:
                 continue
             op_code = str(row.get("op_code") or row.get("raw_op_code") or "").strip()
@@ -739,7 +725,7 @@ def diff_reports(
 
     # Largest movement in either direction: a regression matters as much as a win.
     changes.sort(
-        key=lambda change: abs(_as_number(change["delta"]) or 0.0), reverse=True
+        key=lambda change: abs(finite_number(change["delta"]) or 0.0), reverse=True
     )
 
     result: Dict[str, object] = {

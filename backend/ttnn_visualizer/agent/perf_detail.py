@@ -9,7 +9,6 @@ generated report already carries, so a caller asking why an op is slow pays for 
 fields it asks about and no others.
 """
 
-import math
 import re
 from enum import Enum
 from typing import (
@@ -24,6 +23,7 @@ from typing import (
     Tuple,
 )
 
+from ttnn_visualizer.agent.cells import finite_number
 from ttnn_visualizer.csv_queries import PROGRAM_CACHE_HIT_COLUMN, PROGRAM_HASH_COLUMN
 
 
@@ -51,14 +51,8 @@ def _text(value: object) -> Optional[str]:
 
 
 def _number(value: object) -> Optional[float]:
-    """A finite number or None: a NaN would reach the client as invalid JSON."""
-    if isinstance(value, bool) or value is None:
-        return None
-    try:
-        number = float(str(value))
-    except ValueError:
-        return None
-    return round(number, 3) if math.isfinite(number) else None
+    number = finite_number(value)
+    return None if number is None else round(number, 3)
 
 
 def _microseconds(nanoseconds: object) -> Optional[float]:

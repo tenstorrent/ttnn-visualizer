@@ -18,6 +18,7 @@ This file covers only what a person changing the code needs.
 | `operations.py` | The profiler-database tools, including provenance (arguments and call site). Opens its own read-only connection: `LocalQueryRunner` reads `Instance.profiler_path` as the SQLite file, while a handle holds the directory the caller named. |
 | `linking.py` | The join from a performance row to the profiler operation that launched it: a port of the app's positional match (`src/functions/deviceOperationMatching.ts`). `TestMatcherParity` restates the app's cases, so it catches drift in the port only: **a change to the app's matcher, `isDeviceOperation` or the order lists in `useAPI.tsx` fails nothing here and must be mirrored in `linking.py` by hand** — as must a change to `isCountableDeviceTime`, which `tools.countable_device_time` restates for `operation_detail`'s device-time shares, and a change to the first-call rule in `enrichPerfRowData.ts` or the recompute-candidate flag in `computePerfHeuristicFlags.ts`, which `tools.program_cache` restates. The only module reading both halves, so `tools` and `operations` never import each other; `server` routes `top_ops`, `program_cache` and `operation_detail` through it. |
 | `app_links.py` | Links from an answer into the web application (#2047), at `TTNN_VISUALIZER_URL`, else `http://localhost:8000`. A link carries the report's directories, which the app opens through `POST /api/instance/local-paths`, so the server itself makes no request. The query parameters must match `src/libs/openReportFromLink.ts`; `test_agent_app_links_frontend_parity.py` holds them together. |
+| `cells.py` | Reading a report cell as a number, for `tools` and `perf_detail` alike. |
 | `bounds.py` | The one result cap, shared because `server` quotes it to an agent in every limit schema. |
 | `server.py` | Newline-delimited JSON-RPC on stdio. Nothing above it imports from here. |
 
@@ -54,7 +55,8 @@ captures `tt_perf_report`'s own printing — it prints progress and temp paths, 
 land mid-frame and corrupt the stream.
 
 **Report cells are strings.** `device_time` arrives as `"16.478"` and `cores` as `"110"`,
-so everything numeric goes through `_as_number` rather than being compared directly.
+so everything numeric goes through `cells.finite_number` rather than being compared
+directly; it also drops a NaN or an infinity, which would reach the client as invalid JSON.
 
 **The call-site parse has a second implementation.** `_parse_frames` must agree with
 `src/functions/stackTraceSource.ts`, which takes the first `File "..."` and the first
