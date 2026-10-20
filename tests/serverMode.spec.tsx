@@ -31,6 +31,7 @@ vi.mock('../src/hooks/useAPI.tsx', () => ({
     usePerformanceRange: () => null,
     useInstance: () => ({ data: mockInstance }),
     useOpToPerfIdFiltered: () => [],
+    useOpToPerfIdForPerfTable: () => [],
     useL1PressureByOperation: () => ({ status: 'unavailable', data: null }),
     useOperationsList: () => ({ data: [] }),
     useReportFolderList: () => ({ data: mockProfilerFolderList }),

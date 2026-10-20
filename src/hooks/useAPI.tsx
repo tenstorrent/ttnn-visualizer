@@ -35,10 +35,12 @@ import getServerConfig from '../functions/getServerConfig';
 import { PerfTableRow } from '../model/PerfTable';
 import { DeviceOperationMapping, DeviceOperationOrderCandidates } from '../model/DeviceOperationMapping';
 import { matchDeviceOperationOrdersToPerf } from '../functions/deviceOperationMatching';
+import { getSiblingOpIds, groupDeviceRowsLikeMerge } from '../functions/deviceRowGroups';
 import memoiseLatest from '../functions/memoiseLatest';
 import {
     PerformanceReportParams,
     getLinkedPerformanceReportParams,
+    getLinkedUnmergedPerformanceReportParams,
     getPerformanceComparisonReportQueryKey,
     getPerformanceReportQueryKey,
 } from '../functions/performanceReportQueryKey';
@@ -972,9 +974,11 @@ export const useGetDeviceOperationListPerfByOpId = (): Map<number, DeviceOperati
  *
  * The perf ids come from the link-pinned report (`useLinkedPerformanceReport`),
  * not from the rows the performance tab is displaying. A row id survives host-op
- * and signpost filtering, so consumers can still join against those views; ids
- * do not survive `mergeDevices: false`, where an operation's per-device rows
- * each carry their own id and only the merged representative joins.
+ * and signpost filtering, so consumers can still join against those views. Only
+ * merged rows' ids appear: with `mergeDevices: false` an operation's per-device
+ * rows each carry their own id, and only the one the merge kept is here. Join
+ * the performance table through `useOpToPerfIdForPerfTable`, which carries the
+ * op onto the rest.
  */
 export const useOpToPerfIdFiltered = () => getOpToPerfIds(useGetDeviceOperationListPerf());
 
@@ -1313,6 +1317,9 @@ const useViewPerformanceReportParams = (): PerformanceReportParams => {
 // scope for a stable identity; the query key is hashed structurally, so this is for
 // readers rather than for React Query.
 const LINKED_PERFORMANCE_REPORT_PARAMS: PerformanceReportParams = Object.freeze(getLinkedPerformanceReportParams());
+const LINKED_UNMERGED_PERFORMANCE_REPORT_PARAMS: PerformanceReportParams = Object.freeze(
+    getLinkedUnmergedPerformanceReportParams(),
+);
 
 const usePerformanceReportQuery = (name: string | null, params: PerformanceReportParams) => {
     const location = useAtomValue(performanceReportLocationAtom);
@@ -1353,6 +1360,46 @@ export const useLinkedPerformanceReport = () => {
     const name = useAtomValue(activePerformanceReportFolderNameAtom);
 
     return usePerformanceReportQuery(name, LINKED_PERFORMANCE_REPORT_PARAMS);
+};
+
+/**
+ * @description `useOpToPerfIdFiltered` extended onto unmerged rows, for joining
+ * the performance table. With devices unmerged, every per-device row of a linked
+ * operation gets an entry, not only the one the merge kept (#2084). With devices
+ * merged, or until the unmerged report arrives, this is `useOpToPerfIdFiltered`
+ * unchanged, and no unmerged report is requested while merged.
+ */
+export const useOpToPerfIdForPerfTable = () => {
+    const name = useAtomValue(activePerformanceReportFolderNameAtom);
+    const mergeDevices = useAtomValue(mergeDevicesAtom);
+    const opIdsMap = useOpToPerfIdFiltered();
+    const { data: unmerged } = usePerformanceReportQuery(
+        mergeDevices ? null : name,
+        LINKED_UNMERGED_PERFORMANCE_REPORT_PARAMS,
+    );
+    const unmergedRows = mergeDevices ? null : unmerged?.report;
+
+    return useMemo(() => {
+        if (!unmergedRows?.length) {
+            return opIdsMap;
+        }
+
+        const opIdByPerfId = new Map<string, number>();
+
+        for (const { perfId, opId } of opIdsMap) {
+            if (perfId !== undefined) {
+                opIdByPerfId.set(perfId, opId);
+            }
+        }
+
+        const siblingOpIds = getSiblingOpIds(groupDeviceRowsLikeMerge(unmergedRows), opIdByPerfId);
+
+        if (siblingOpIds.size === 0) {
+            return opIdsMap;
+        }
+
+        return [...opIdsMap, ...[...siblingOpIds].map(([perfId, opId]) => ({ opId, perfId }))];
+    }, [opIdsMap, unmergedRows]);
 };
 
 interface ComparisonReportResult {

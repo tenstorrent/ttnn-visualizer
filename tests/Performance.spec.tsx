@@ -11,6 +11,7 @@ import Performance from '../src/routes/Performance';
 import {
     useL1PressureByOperation,
     useOpToPerfIdFiltered,
+    useOpToPerfIdForPerfTable,
     usePerfFolderList,
     usePerfMeta,
     usePerfMetas,
@@ -56,6 +57,7 @@ const perfReportProps = vi.hoisted(() => vi.fn());
 vi.mock('../src/hooks/useAPI.tsx', () => ({
     useL1PressureByOperation: vi.fn(),
     useOpToPerfIdFiltered: vi.fn(),
+    useOpToPerfIdForPerfTable: vi.fn(),
     usePerfFolderList: vi.fn(),
     usePerfMeta: vi.fn(),
     usePerfMetas: vi.fn(),
@@ -137,6 +139,8 @@ beforeEach(() => {
     (usePerfFolderList as Mock).mockReturnValue({ data: undefined });
     (usePerformanceRange as Mock).mockReturnValue(null);
     (useOpToPerfIdFiltered as Mock).mockReturnValue([]);
+    // Devices are merged unless a test says otherwise, where the table's lookup is the linked one.
+    (useOpToPerfIdForPerfTable as Mock).mockImplementation(() => (useOpToPerfIdFiltered as Mock)());
     (useL1PressureByOperation as Mock).mockReturnValue({ status: L1PressureStatus.Unavailable, data: null });
     (usePerfMeta as Mock).mockReturnValue({ data: undefined, isLoading: false });
     (usePerfMetas as Mock).mockReturnValue([]);
@@ -565,6 +569,63 @@ describe('Performance route', () => {
         expect(comparisonRow?.op).toBe(7);
         expect(comparisonRow?.dram_fallback).toBeNull();
         expect(comparisonRow?.heuristicFlags).not.toContain(PerfHeuristicFlag.DRAM_FALLBACK);
+    });
+
+    // #2084: with devices unmerged, each device's row of a linked operation carries the same
+    // op-joined data. The comparison report keeps the merged lookup.
+    it('joins every per-device row of an unmerged operation through the table lookup', () => {
+        const failure = makeAllocationFailure({ operationId: 7 });
+        const l1Pressure = { fullnessPercent: 87.5, freeSegments: 3, largestFreeBytes: 1024, largestFreePercent: 12.5 };
+        const deviceRows = [DRAM_PERF_ROW, { ...DRAM_PERF_ROW, id: '2', device: '1' }];
+
+        (useAllocationFailures as Mock).mockReturnValue({
+            listings: [],
+            allocationFailureByOpId: new Map([[7, failure]]),
+        });
+        (useL1PressureByOperation as Mock).mockReturnValue({
+            status: L1PressureStatus.Ready,
+            data: new Map([[7, l1Pressure]]),
+        });
+        (useOpToPerfIdFiltered as Mock).mockReturnValue([{ perfId: '1', opId: 7 }]);
+        (useOpToPerfIdForPerfTable as Mock).mockReturnValue([
+            { perfId: '1', opId: 7 },
+            { perfId: '2', opId: 7 },
+        ]);
+        (usePerformanceReport as Mock).mockReturnValue({
+            data: { report: deviceRows, stacked_report: [], signposts: [] },
+            isLoading: false,
+            error: null,
+        });
+        (usePerformanceComparisonReport as Mock).mockReturnValue({
+            data: [{ report: deviceRows, stacked_report: [] }],
+        });
+        (usePerformanceRange as Mock).mockReturnValue([1, 2]);
+        (usePerfMetas as Mock).mockReturnValue([{ max_cores: 130, architecture: null, frequency: null }]);
+
+        render(
+            <TestProviders
+                initialAtomValues={[
+                    [activePerformanceReportAtom, REPORT_A],
+                    [selectedPerformanceRangeAtom, [1, 2]],
+                ]}
+            >
+                <Performance />
+            </TestProviders>,
+        );
+
+        const lastProps = perfReportProps.mock.calls.at(-1)?.[0];
+        const activeRows = lastProps?.data ?? [];
+
+        expect(activeRows).toHaveLength(2);
+
+        for (const activeRow of activeRows) {
+            expect(activeRow.op).toBe(7);
+            expect(activeRow.allocation_failure).toBe(failure);
+            expect(activeRow.l1_fullness_percent).toBe(l1Pressure.fullnessPercent);
+            expect(activeRow.heuristicFlags).toContain(PerfHeuristicFlag.ALLOCATION_FAILURE);
+        }
+
+        expect(lastProps?.comparisonData?.[0]?.map((row: { op?: number }) => row.op)).toEqual([7, undefined]);
     });
 
     // Both hooks are mocked, so only this ties the retry signal to the failures the route parsed.

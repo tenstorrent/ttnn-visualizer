@@ -71,6 +71,22 @@ export const getLinkedPerformanceReportParams = (): PerformanceReportParams => (
     ...LINKED_PERFORMANCE_REPORT_FILTERS,
 });
 
+/**
+ * @description The linked parameter set with devices left unmerged, for
+ * reproducing which per-device rows each merged row stands for (#2084). The
+ * grouping is positional over the whole run in host-start order, so a signpost
+ * window or tracing mode would shift it; every other filter stays pinned for
+ * that reason. Row ids are CSV positions and survive every filter, so the result
+ * joins onto whichever view the performance tab is showing.
+ *
+ * With the tab unmerged and every other control at its default this is the
+ * tab's own key, so the two share one request.
+ */
+export const getLinkedUnmergedPerformanceReportParams = (): PerformanceReportParams => ({
+    ...LINKED_PERFORMANCE_REPORT_FILTERS,
+    mergeDevices: false,
+});
+
 const getSignpostKey = (label: string, signpost: Signpost | null) =>
     `${label}:${signpost ? `${signpost.id}:${signpost.op_code}` : null}`;
 

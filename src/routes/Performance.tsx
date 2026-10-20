@@ -12,6 +12,7 @@ import getResponseError from '../functions/getResponseError';
 import {
     useL1PressureByOperation,
     useOpToPerfIdFiltered,
+    useOpToPerfIdForPerfTable,
     usePerfFolderList,
     usePerfMeta,
     usePerfMetas,
@@ -87,6 +88,7 @@ export default function Performance() {
     const { data: folderList } = usePerfFolderList();
     const perfRange = usePerformanceRange();
     const opIdsMap = useOpToPerfIdFiltered();
+    const perfTableOpIdsMap = useOpToPerfIdForPerfTable();
     const l1Pressure = useL1PressureByOperation();
     const l1PressureMap = l1Pressure.data;
     const { listings: allocationFailureListings, allocationFailureByOpId } = useAllocationFailures();
@@ -192,12 +194,12 @@ export default function Performance() {
 
     const typedRows = useMemo(
         () =>
-            enrichRowData(rangedData, opIdsMap, {
+            enrichRowData(rangedData, perfTableOpIdsMap, {
                 l1PressureByOpId: l1PressureMap,
                 allocationFailureByOpId,
                 dramFallbackByOpId,
             }),
-        [rangedData, opIdsMap, l1PressureMap, allocationFailureByOpId, dramFallbackByOpId],
+        [rangedData, perfTableOpIdsMap, l1PressureMap, allocationFailureByOpId, dramFallbackByOpId],
     );
 
     const maxCores = useMemo(() => resolveMaxCores(deviceMeta, typedRows), [deviceMeta, typedRows]);
