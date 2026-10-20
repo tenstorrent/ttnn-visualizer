@@ -207,7 +207,10 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
                 "response's note says how a call is counted. Reads the whole report, "
                 "with no signpost range. When the handle also holds a profiler "
                 "report, each op code's first repeat miss carries the operation_id "
-                "to pass to operation_provenance."
+                "to pass to operation_provenance, and the first call on such a "
+                "handle reads every captured graph to find it, which can take "
+                "seconds on a large capture; later calls, top_ops and "
+                "operation_detail reuse the link."
             ),
             "schema": {
                 "type": "object",

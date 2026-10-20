@@ -18,6 +18,7 @@ from typing import Dict, Set
 
 import pytest
 from ttnn_visualizer.agent import server, tools
+from ttnn_visualizer.agent.bounds import MAX_DETAILED_LIMIT, MAX_LIMIT
 from ttnn_visualizer.agent.handles import ReportRegistry
 from ttnn_visualizer.agent.perf_detail import DetailGroup
 from ttnn_visualizer.tests.docs_parity import reject_duplicates
@@ -137,6 +138,13 @@ def test_the_page_carries_the_program_cache_caveats():
 
     assert "misses the cache by design" in page
     assert "program cache disabled" in page
+
+
+def test_the_detailed_row_cap_the_page_states_is_the_enforced_one():
+    """The page states both caps as numbers, so nothing else ties them to the code."""
+    page = " ".join(_read(_AGENT_DOCS).split())
+
+    assert f"capped at {MAX_DETAILED_LIMIT} rather than {MAX_LIMIT}" in page
 
 
 def test_the_signpost_name_limit_the_page_states_is_the_enforced_one():

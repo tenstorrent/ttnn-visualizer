@@ -290,7 +290,7 @@ shape of a matmul, where tt-perf-report's `op_code` would split it by shape. It 
 whole report and takes no signpost range, because a program first called before a window
 would read as a first call inside it. A repeat call that recorded no cache result is
 neither a hit nor a miss: `repeat_unrecorded` counts them, the hit percentage is out of the
-rest, and a caveat says so. When every repeat call that recorded a result missed, the
+rest (the performance view's counts them as misses), and a caveat says so. When every repeat call that recorded a result missed, the
 answer says that is what a run with the program cache disabled records, so check before
 reading each miss as a program built again. A capture without the `PROGRAM HASH` and `PROGRAM CACHE HIT`
 columns cannot answer, and `load_report` says so. Each op code's first repeat miss is
@@ -361,8 +361,8 @@ its CSV position in either read, so its `operation_id` is the one it has unrange
 `operation_detail`'s `report_device_time_total` and shares, describe the whole report while
 `top_ops`'s own `op_count` and totals describe the window.
 
-The link is resolved once per handle, on the first `top_ops` or `operation_detail` that
-needs it, and reads every captured graph at the linked rank. On a handle with both reports,
+The link is resolved once per handle, on the first `top_ops`, `program_cache` or
+`operation_detail` that needs it, and reads every captured graph at the linked rank. On a handle with both reports,
 the first `operation_detail` therefore also generates the performance report, which can
 take seconds on a large capture; every later call reuses both. A link that failed on a read
 that might pass next time — a locked database, a temp-file error in tt-perf-report — is not
