@@ -315,11 +315,17 @@ def empty_fields(
     pending = {field.name: field for field in _fields_of(DetailGroup)}
     columned = {name for name, column in _HEADER_COLUMNS.items() if column in header}
     for row in rows:
-        for name, field in list(pending.items()):
-            if row.get(field.column) is not None:
-                columned.add(name)
-            if field.value(row) is not None:
-                del pending[name]
+        filled = []
+        for name, field in pending.items():
+            cell = row.get(field.column)
+            if cell is None:
+                continue
+            columned.add(name)
+            # Every reader takes a blank cell as no value; most cells here are blank.
+            if cell != "" and field.value(row) is not None:
+                filled.append(name)
+        for name in filled:
+            del pending[name]
         if not pending:
             break
     return {name: name not in columned for name in pending}
