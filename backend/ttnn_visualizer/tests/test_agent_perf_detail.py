@@ -93,6 +93,19 @@ FIELD_NAMES = {
     DetailGroup.ADVICE: ["advice"],
 }
 
+# What `empty_in_report` says fills a field whose column is there; the rest are empty.
+FILLED_BY = {
+    "--collect-noc-traces": FIELD_NAMES[DetailGroup.NOC],
+    "--profile-dispatch-cores": ["dispatch_cq_cmd_op_us", "dispatch_go_send_wait_us"],
+    "captured metal trace": ["metal_trace_id", "metal_trace_replay_session_id"],
+    "performance model": [
+        "ideal_us",
+        "ideal_compute_us",
+        "ideal_bandwidth_us",
+        "fpu_util_percent",
+    ],
+}
+
 
 def _report(rows):
     return {
@@ -352,14 +365,20 @@ class TestFieldContract:
                     in_nanoseconds or field.column == "op_to_op_gap"
                 ), field.name
 
-    def test_every_fill_hint_names_a_field(self):
-        names = {
-            field.name for fields in perf_detail._FIELDS.values() for field in fields
-        }
+    def test_every_field_says_what_fills_it(self):
+        """A `noc` field added without its option would read as empty on every row."""
+        names = [name for group in DetailGroup for name in FIELD_NAMES[group]]
 
-        assert set(perf_detail._FILLED_BY) <= names, sorted(
-            set(perf_detail._FILLED_BY) - names
+        named = perf_detail.empty_in_report(
+            {name: False for name in names}, list(DetailGroup)
         )
+
+        for name in names:
+            hint = next(
+                (hint for hint, fields in FILLED_BY.items() if name in fields),
+                "empty on every row of the report",
+            )
+            assert hint in named[name], name
 
     def test_no_detail_field_overwrites_a_field_the_row_already_has(self, handle_with):
         """They are spread over the row last, so a shared name would win silently."""

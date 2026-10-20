@@ -113,17 +113,32 @@ def _advice(value: object) -> Optional[List[str]]:
     return [str(item).strip() for item in value if str(item).strip()]
 
 
+_NOC_TRACES = "filled when the capture ran with --collect-noc-traces"
+_DISPATCH_CORES = "filled when the capture ran with --profile-dispatch-cores"
+_TRACED = "filled for operations run inside a captured metal trace"
+_MODELLED = "set only by an op whose performance model computes it"
+_EMPTY_ON_EVERY_ROW = "empty on every row of the report"
+
+
 class _Field(NamedTuple):
     name: str
     column: str
     read: Callable[[object], object]
     # The perf-model time this figure comes from; null while it is the placeholder.
     model_column: Optional[str] = None
+    # What a capture must ask for to fill it; unset, every capture with the column does.
+    filled_by: Optional[str] = None
 
     def value(self, row: Dict) -> object:
         if self.model_column and _is_unmodelled(row.get(self.model_column)):
             return None
         return self.read(row.get(self.column))
+
+    @property
+    def fill_hint(self) -> str:
+        if self.model_column:
+            return _MODELLED
+        return self.filled_by or _EMPTY_ON_EVERY_ROW
 
 
 _FIELDS: Dict[DetailGroup, Tuple[_Field, ...]] = {
@@ -153,12 +168,27 @@ _FIELDS: Dict[DetailGroup, Tuple[_Field, ...]] = {
         _Field("fpu_util_percent", "pm_fpu_util", _number, "pm_compute_ns"),
     ),
     DetailGroup.NOC: (
-        _Field("noc_util_percent", "noc_util", _number),
-        _Field("multicast_noc_util_percent", "multicast_noc_util", _number),
-        _Field("dram_bw_util_percent", "dram_bw_util", _number),
-        _Field("dram_bw_util_per_controller", "dram_bw_util_per_ctrl", _text),
-        _Field("eth_bw_util_per_core", "eth_bw_util", _text),
-        _Field("npe_congestion_impact_percent", "npe_cong_impact", _number),
+        _Field("noc_util_percent", "noc_util", _number, filled_by=_NOC_TRACES),
+        _Field(
+            "multicast_noc_util_percent",
+            "multicast_noc_util",
+            _number,
+            filled_by=_NOC_TRACES,
+        ),
+        _Field("dram_bw_util_percent", "dram_bw_util", _number, filled_by=_NOC_TRACES),
+        _Field(
+            "dram_bw_util_per_controller",
+            "dram_bw_util_per_ctrl",
+            _text,
+            filled_by=_NOC_TRACES,
+        ),
+        _Field("eth_bw_util_per_core", "eth_bw_util", _text, filled_by=_NOC_TRACES),
+        _Field(
+            "npe_congestion_impact_percent",
+            "npe_cong_impact",
+            _number,
+            filled_by=_NOC_TRACES,
+        ),
     ),
     DetailGroup.RISCS: (
         _Field("kernel_us", "device_kernel_duration", _microseconds),
@@ -188,11 +218,24 @@ _FIELDS: Dict[DetailGroup, Tuple[_Field, ...]] = {
     ),
     DetailGroup.DISPATCH: (
         _Field("op_to_op_gap_us", "op_to_op_gap", _number),
-        _Field("dispatch_cq_cmd_op_us", "dispatch_total_cq_cmd_op_time", _microseconds),
-        _Field("dispatch_go_send_wait_us", "dispatch_go_send_wait_time", _microseconds),
-        _Field("metal_trace_id", "metal_trace_id", _count),
         _Field(
-            "metal_trace_replay_session_id", "metal_trace_replay_session_id", _count
+            "dispatch_cq_cmd_op_us",
+            "dispatch_total_cq_cmd_op_time",
+            _microseconds,
+            filled_by=_DISPATCH_CORES,
+        ),
+        _Field(
+            "dispatch_go_send_wait_us",
+            "dispatch_go_send_wait_time",
+            _microseconds,
+            filled_by=_DISPATCH_CORES,
+        ),
+        _Field("metal_trace_id", "metal_trace_id", _count, filled_by=_TRACED),
+        _Field(
+            "metal_trace_replay_session_id",
+            "metal_trace_replay_session_id",
+            _count,
+            filled_by=_TRACED,
         ),
     ),
     DetailGroup.CACHE: (
@@ -209,31 +252,6 @@ _FIELDS: Dict[DetailGroup, Tuple[_Field, ...]] = {
     DetailGroup.ADVICE: (_Field("advice", "advice", _advice),),
 }
 
-_NOC_TRACES = "filled when the capture ran with --collect-noc-traces"
-_DISPATCH_CORES = "filled when the capture ran with --profile-dispatch-cores"
-_TRACED = "filled for operations run inside a captured metal trace"
-_MODELLED = "set only by an op whose performance model computes it"
-
-# Fields a capture fills only when asked to, and what asks; the rest are filled by
-# every capture whose CSV carries the column, wherever an op has a value.
-_FILLED_BY: Dict[str, str] = {
-    "ideal_us": _MODELLED,
-    "ideal_compute_us": _MODELLED,
-    "ideal_bandwidth_us": _MODELLED,
-    "fpu_util_percent": _MODELLED,
-    "noc_util_percent": _NOC_TRACES,
-    "multicast_noc_util_percent": _NOC_TRACES,
-    "dram_bw_util_percent": _NOC_TRACES,
-    "dram_bw_util_per_controller": _NOC_TRACES,
-    "eth_bw_util_per_core": _NOC_TRACES,
-    "npe_congestion_impact_percent": _NOC_TRACES,
-    "dispatch_cq_cmd_op_us": _DISPATCH_CORES,
-    "dispatch_go_send_wait_us": _DISPATCH_CORES,
-    "metal_trace_id": _TRACED,
-    "metal_trace_replay_session_id": _TRACED,
-}
-
-_EMPTY_ON_EVERY_ROW = "empty on every row of the report"
 _NOT_A_COLUMN = "not among this report's columns, so no capture option fills it here"
 
 DETAIL_NOTE = (
@@ -318,11 +336,7 @@ def empty_in_report(
 ) -> Dict[str, str]:
     """The included fields `empty_fields` found, each with what would fill it."""
     return {
-        field.name: (
-            _NOT_A_COLUMN
-            if empty[field.name]
-            else _FILLED_BY.get(field.name, _EMPTY_ON_EVERY_ROW)
-        )
+        field.name: _NOT_A_COLUMN if empty[field.name] else field.fill_hint
         for field in _fields_of(groups)
         if field.name in empty
     }
