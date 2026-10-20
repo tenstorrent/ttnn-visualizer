@@ -3,15 +3,14 @@
 // SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 
 import { useEffect } from 'react';
-import useBufferFocus from './useBufferFocus';
+import { useResetBufferFocus } from './useBufferFocus';
 
 function useClearSelectedBuffer() {
-    const { resetToasts } = useBufferFocus();
+    const resetBufferFocus = useResetBufferFocus();
 
     useEffect(() => {
-        resetToasts();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
+        resetBufferFocus();
+    }, [resetBufferFocus]);
 }
 
 export default useClearSelectedBuffer;

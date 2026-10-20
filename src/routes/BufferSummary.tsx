@@ -6,7 +6,7 @@ import { Helmet } from 'react-helmet-async';
 import { AnchorButton, ButtonGroup, ButtonVariant, Intent, Size, Tab, Tabs } from '@blueprintjs/core';
 import { IconNames } from '@blueprintjs/icons';
 import { useAtom } from 'jotai';
-import useBufferFocus from '../hooks/useBufferFocus';
+import useBufferFocusDismissal from '../hooks/useBufferFocusDismissal';
 import { useActiveSection } from '../hooks/useActiveSection';
 import ROUTES from '../definitions/Routes';
 import BufferSummaryTab from '../components/buffer-summary/BufferSummaryTab';
@@ -16,7 +16,7 @@ import { selectedBufferSummaryTabAtom } from '../store/app';
 import L1PeakComposition from '../components/buffer-summary/L1PeakComposition';
 
 function BufferSummary() {
-    const { activeToast, resetToasts } = useBufferFocus();
+    useBufferFocusDismissal();
 
     const activeSection = useActiveSection([SECTION_IDS.PLOT, SECTION_IDS.TABLE]);
     const [selectedTabId, setSelectedTabId] = useAtom(selectedBufferSummaryTabAtom);
@@ -49,14 +49,6 @@ function BufferSummary() {
                         Table view
                     </AnchorButton>
                 </ButtonGroup>
-            )}
-
-            {activeToast && (
-                // eslint-disable-next-line jsx-a11y/click-events-have-key-events,jsx-a11y/no-static-element-interactions
-                <div
-                    className='outside-click'
-                    onClick={resetToasts}
-                />
             )}
 
             <Tabs

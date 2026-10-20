@@ -16,6 +16,7 @@ import {
     getOperationLateDeallocationAvailability,
     getOperationLateDeallocationCount,
     getRunStartCountSummary,
+    getRunStartLateDeallocationCount,
     selectLateDeallocationRunStarts,
 } from '../src/functions/lateDeallocation';
 import { LATE_DEALLOC_OPPORTUNITY_TEXT, LateDeallocationAvailability } from '../src/definitions/LateDeallocation';
@@ -580,5 +581,26 @@ describe('getOperationLateDeallocationCount', () => {
 
         expect(count).toBeNull();
         expect(summary).not.toMatch(/^0 /);
+    });
+});
+
+describe('getRunStartLateDeallocationCount', () => {
+    it('passes the count through once the report has loaded', () => {
+        expect(getRunStartLateDeallocationCount(0, 'success')).toEqual({
+            count: 0,
+            summary: '0 operations where a tensor starts being held past its last use',
+        });
+    });
+
+    // The report is empty until it settles, so a 0 here would read as an
+    // all-clear beside a live switch.
+    it.each([
+        ['pending', /still loading/],
+        ['error', /could not be loaded/],
+    ] as const)('withholds the count while %s', (status, summary) => {
+        const lateDeallocationCount = getRunStartLateDeallocationCount(0, status);
+
+        expect(lateDeallocationCount.count).toBeNull();
+        expect(lateDeallocationCount.summary).toMatch(summary);
     });
 });

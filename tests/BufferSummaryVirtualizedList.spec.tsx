@@ -14,6 +14,7 @@ import { RankedAnnotation, TopNAnnotationMode } from '../src/definitions/TopNAnn
 import {
     LATE_DEALLOC_OPPORTUNITY_TEXT,
     LATE_DEALLOC_RAIL_LABEL,
+    LateDeallocationCount,
     LateDeallocationRunStart,
 } from '../src/definitions/LateDeallocation';
 import { RAIL_MAX_DOTS } from '../src/definitions/NavigationRail';
@@ -108,7 +109,7 @@ function renderVirtualizedList(
         topNAnnotationsByOpId?: Map<number, RankedAnnotation>;
         topNAnnotationMode?: TopNAnnotationMode;
         lateDeallocationRunStarts?: readonly LateDeallocationRunStart[];
-        lateDeallocationRunCount?: number;
+        lateDeallocationRunCount?: LateDeallocationCount;
         getTensorDeallocationReport?: (operationId: number) => TensorDeallocationReport[];
     } = {},
 ) {
@@ -514,9 +515,10 @@ describe('BufferSummaryVirtualizedList', () => {
 
     describe('late deallocation rail (#963)', () => {
         it('forwards the run count to the controls so the toggle can advertise it', () => {
-            renderVirtualizedList(false, { lateDeallocationRunCount: 4 });
+            const lateDeallocationRunCount = { count: 4, summary: 'summary' };
+            renderVirtualizedList(false, { lateDeallocationRunCount });
 
-            expect(plotControlsMock).toHaveBeenCalledWith(expect.objectContaining({ lateDeallocationRunCount: 4 }));
+            expect(plotControlsMock).toHaveBeenCalledWith(expect.objectContaining({ lateDeallocationRunCount }));
         });
 
         // The badge is a bare glyph, so every tensor it stands for has to be named

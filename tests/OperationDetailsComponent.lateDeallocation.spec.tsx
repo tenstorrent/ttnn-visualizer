@@ -15,9 +15,9 @@ import { TestProviders } from './helpers/TestProviders';
 import { buildTensorDeallocationReport } from './helpers/lateDeallocationFixtures';
 import { buildOperationDetailsData } from './helpers/operationDetailsFixtures';
 
-// The control's own spec proves it stays enabled when `disabled` is omitted; it
-// can't see whether this view omits it, which report the view looks up, or
-// which wording it passes. Those three decisions live here. #1862
+// The control's own spec proves the switch stays enabled at a zero count; it
+// can't see which report this view looks up or which wording it passes. Those
+// two decisions live here. #1862
 const apiMock = vi.hoisted(() => ({
     lateDeallocationsByOperation: new Map<number, TensorDeallocationReport[]>(),
     status: 'success' as QueryStatus,

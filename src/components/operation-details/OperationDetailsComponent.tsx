@@ -43,6 +43,7 @@ import OperationArguments from '../OperationArguments';
 import DeviceOperationsFullRender from './DeviceOperationsFullRender';
 import OperationAllocationFailureCallout from './OperationAllocationFailureCallout';
 import useBufferFocus from '../../hooks/useBufferFocus';
+import useBufferFocusDismissal from '../../hooks/useBufferFocusDismissal';
 import { StackTraceLanguage } from '../../definitions/StackTrace';
 import { L1_DEFAULT_MEMORY_SIZE } from '../../definitions/L1MemorySize';
 import MemoryPlotRenderer from './MemoryPlotRenderer';
@@ -68,7 +69,7 @@ const OperationDetailsComponent = ({ operationId }: OperationDetailsProps) => {
     const [showMemoryRegions, setShowMemoryRegions] = useAtom(showMemoryRegionsAtom);
     const [showFullStackTrace, setShowFullStackTrace] = useAtom(isFullStackTraceAtom);
     const [showDeallocationReport, setShowDeallocationReport] = useAtom(showDeallocationReportAtom);
-    const { selectedTensorId, selectedAddress } = useBufferFocus();
+    const { selectedTensorId, selectedAddress, updateBufferFocus } = useBufferFocus();
 
     const [zoomedInViewMainMemory, setZoomedInViewMainMemory] = useState(false);
     const [showCircularBuffer, setShowCircularBuffer] = useState(false);
@@ -92,11 +93,7 @@ const OperationDetailsComponent = ({ operationId }: OperationDetailsProps) => {
     } = useOperationDetails(operationId);
     const { data: previousOperationDetails, isLoading: isPrevLoading } =
         usePreviousOperationDetails(operationId).operationDetails;
-    const { resetToasts, updateBufferFocus } = useBufferFocus();
-
-    const onClickOutside = () => {
-        resetToasts();
-    };
+    useBufferFocusDismissal();
 
     const operation = operations?.find((op) => op.id === operationId);
     const {
@@ -216,13 +213,6 @@ const OperationDetailsComponent = ({ operationId }: OperationDetailsProps) => {
             <OperationAllocationFailureCallout operation={operationDetails ?? null} />
 
             <div className='operation-details-component'>
-                {(selectedAddress || isValidNumber(selectedTensorId)) && (
-                    // eslint-disable-next-line jsx-a11y/click-events-have-key-events,jsx-a11y/no-static-element-interactions
-                    <div
-                        className='outside-click'
-                        onClick={onClickOutside}
-                    />
-                )}
                 {!isLoading && isValidNumber(operationDetails?.id) ? (
                     <>
                         {details.stack_trace && (
@@ -273,9 +263,6 @@ const OperationDetailsComponent = ({ operationId }: OperationDetailsProps) => {
                                     setShowCircularBuffer(!showCircularBuffer);
                                 }}
                             />
-                            {/* Never disabled, unlike Buffer Summary's: the switch is global and
-                                this view shows one operation, so a clean operation would leave it
-                                reading "off" and untoggleable while it is on everywhere else. */}
                             <LateDeallocationControl
                                 count={lateDeallocation.count}
                                 countSummary={lateDeallocation.summary}
