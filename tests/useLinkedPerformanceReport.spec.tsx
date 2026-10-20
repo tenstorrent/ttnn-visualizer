@@ -594,4 +594,81 @@ describe('report matching under a filtered performance tab', () => {
         expect(result.current[0]).toBe(result.current[1]);
         expect(getReportRequests().every((params) => params.merge_devices)).toBe(true);
     });
+
+    it('asks for no unmerged report when no operation is linked', async () => {
+        const { result } = renderWithView(
+            () => [useOpToPerfIdForPerfTable(), useLinkedPerformanceReport()] as const,
+            [[mergeDevicesAtom, false]],
+        );
+
+        await waitFor(() => expect(result.current[1].isSuccess).toBe(true));
+
+        expect(result.current[0]).toEqual([]);
+        expect(getReportRequests().every((params) => params.merge_devices)).toBe(true);
+    });
+
+    it('falls back to the merged lookup when the unmerged report fails', async () => {
+        const serveReports = vi.mocked(axiosInstance.get).getMockImplementation()!;
+
+        vi.mocked(axiosInstance.get).mockImplementation((url: string, config?: unknown) =>
+            url.includes(Endpoints.PERFORMANCE_RESULTS_REPORT) &&
+            !(config as { params: RequestParams }).params.merge_devices
+                ? Promise.reject(new Error('unmerged report failed'))
+                : serveReports(url, config as Parameters<typeof serveReports>[1]),
+        );
+
+        const { result } = renderWithView(
+            () => [useOpToPerfIdForPerfTable(), useOpToPerfIdFiltered()] as const,
+            [
+                [activeProfilerReportAtom, ACTIVE_REPORT],
+                [mergeDevicesAtom, false],
+            ],
+        );
+
+        await waitFor(() => {
+            expect(result.current[1]).toHaveLength(DEVICE_OP_NAMES.length);
+            expect(getReportRequests().some((params) => !params.merge_devices)).toBe(true);
+        });
+
+        expect(result.current[0]).toBe(result.current[1]);
+    });
+
+    it('shares the tab’s own request when only devices are unmerged', async () => {
+        const { result } = renderWithView(() => {
+            const name = useAtomValue(activePerformanceReportFolderNameAtom);
+
+            return [usePerformanceReport(name), useOpToPerfIdForPerfTable()] as const;
+        }, [
+            [activeProfilerReportAtom, ACTIVE_REPORT],
+            [mergeDevicesAtom, false],
+        ]);
+
+        await waitFor(() => expect(result.current[1]).toHaveLength(unmergedRows.length));
+
+        expect(getReportRequests().filter((params) => !params.merge_devices)).toHaveLength(1);
+    });
+
+    it('keeps its result across re-renders, and drops the unmerged rows once devices are merged again', async () => {
+        const store = createStore();
+
+        store.set(activeProfilerReportAtom, ACTIVE_REPORT);
+        store.set(mergeDevicesAtom, false);
+
+        const { result, rerender } = renderWithStore(
+            () => [useOpToPerfIdForPerfTable(), useOpToPerfIdFiltered()] as const,
+            store,
+        );
+
+        await waitFor(() => expect(result.current[0]).toHaveLength(unmergedRows.length));
+
+        const beforeRerender = result.current[0];
+        rerender();
+
+        expect(result.current[0]).toBe(beforeRerender);
+
+        act(() => store.set(mergeDevicesAtom, true));
+
+        expect(result.current[0]).toBe(result.current[1]);
+        expect(result.current[0]).toHaveLength(DEVICE_OP_NAMES.length);
+    });
 });

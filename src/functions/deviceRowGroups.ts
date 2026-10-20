@@ -85,7 +85,7 @@ export const groupDeviceRowsLikeMerge = (rows: PerfTableRow[]): PerfTableRow[][]
  * them to the wrong operation.
  */
 export const getSiblingOpIds = (groups: PerfTableRow[][], opIdByPerfId: Map<string, number>): Map<string, number> => {
-    const siblingOpIds = new Map<string, number>();
+    const siblingOpIdByPerfId = new Map<string, number>();
 
     for (const group of groups) {
         const linkedOpIds = group.flatMap((row) => {
@@ -96,11 +96,11 @@ export const getSiblingOpIds = (groups: PerfTableRow[][], opIdByPerfId: Map<stri
         if (linkedOpIds.length === 1) {
             for (const row of group) {
                 if (!opIdByPerfId.has(row.id)) {
-                    siblingOpIds.set(row.id, linkedOpIds[0]);
+                    siblingOpIdByPerfId.set(row.id, linkedOpIds[0]);
                 }
             }
         }
     }
 
-    return siblingOpIds;
+    return siblingOpIdByPerfId;
 };

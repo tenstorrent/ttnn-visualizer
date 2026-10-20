@@ -12,6 +12,7 @@ import { makeRawPerfRow } from './helpers/perfRowFixtures';
 // `OpsPerformanceReportQueries.generate_report` on
 // `scripts/fixtures/smoke-performance-report` with `merge_devices` True and False,
 // keeping these fields, whenever the pinned tt-perf-report version moves.
+// `test_frontend_device_rows_fixture_matches_the_report` fails when it drifts.
 import smokeDeviceRows from './data/smokePerfReportDeviceRows.json';
 
 const row = (id: number, device: number, rawOpCode: string, overrides: Partial<PerfTableRow> = {}) =>
@@ -38,17 +39,34 @@ describe('groupDeviceRowsLikeMerge', () => {
         ]);
     });
 
-    it('takes devices in ascending order, whichever reaches the row first', () => {
-        const rows = [row(2, 1, 'AllGather'), row(3, 0, 'AllGather')];
+    // The expected groups in this block were checked against `merge_device_rows` in the
+    // pinned tt-perf-report, run on the same rows: it kept the ids each case names.
+
+    it('takes devices in ascending numeric order, whichever reaches the row first', () => {
+        // Sorted as text, device 10 would lead. The merge keeps device 2's row (id 3) for a
+        // collective, which only holds if device 2 heads the group.
+        const rows = [row(2, 10, 'AllGather'), row(3, 2, 'AllGather')];
 
         expect(ids(groupDeviceRowsLikeMerge(rows))).toEqual([['3', '2']]);
     });
 
     it('holds back a device whose next op differs, retrying it next round', () => {
-        // Device 1 never ran the first Softmax, so its Matmul waits for device 0's.
+        // Device 1 never ran the first Softmax, so its Matmul waits for device 0's. The merge
+        // keeps ids 2 and 4, one per group.
         const rows = [row(2, 0, 'Softmax'), row(3, 0, 'Matmul'), row(4, 1, 'Matmul')];
 
         expect(ids(groupDeviceRowsLikeMerge(rows))).toEqual([['2'], ['3', '4']]);
+    });
+
+    it('leaves the longer device’s trailing rows in groups of their own', () => {
+        // The merge keeps ids 3, 5 and 6: id 6 has no partner on device 1.
+        const rows = [row(2, 0, 'A'), row(3, 1, 'A'), row(4, 0, 'B'), row(5, 1, 'B'), row(6, 0, 'C')];
+
+        expect(ids(groupDeviceRowsLikeMerge(rows))).toEqual([['2', '3'], ['4', '5'], ['6']]);
+    });
+
+    it('returns no groups for no rows', () => {
+        expect(groupDeviceRowsLikeMerge([])).toEqual([]);
     });
 
     it('leaves host ops, signposts and rows with no device out of every group', () => {
@@ -57,10 +75,11 @@ describe('groupDeviceRowsLikeMerge', () => {
             row(3, 0, 'HostOp', { op_type: OpType.PYTHON_OP }),
             row(4, 0, 'BEGIN', { op_type: OpType.SIGNPOST }),
             row(5, 0, 'Matmul', { device: '' }),
-            row(6, 1, 'Matmul'),
+            row(6, 0, 'Matmul', { device: 'N/A' }),
+            row(7, 1, 'Matmul'),
         ];
 
-        expect(ids(groupDeviceRowsLikeMerge(rows))).toEqual([['2', '6']]);
+        expect(ids(groupDeviceRowsLikeMerge(rows))).toEqual([['2', '7']]);
     });
 });
 
@@ -69,6 +88,17 @@ describe('getSiblingOpIds', () => {
         const groups = [[row(2, 0, 'Matmul'), row(3, 1, 'Matmul')]];
 
         expect(getSiblingOpIds(groups, new Map([['3', 7]]))).toEqual(new Map([['2', 7]]));
+    });
+
+    it('never re-emits or overwrites the member that is already linked', () => {
+        const groups = [[row(2, 0, 'Matmul'), row(3, 1, 'Matmul'), row(4, 2, 'Matmul')]];
+
+        expect(getSiblingOpIds(groups, new Map([['3', 7]]))).toEqual(
+            new Map([
+                ['2', 7],
+                ['4', 7],
+            ]),
+        );
     });
 
     it('leaves a group with no linked member unlinked', () => {
@@ -108,10 +138,18 @@ describe('parity with tt-perf-report on the smoke fixture', () => {
         }
     });
 
-    it('links every unmerged row once each merged row is linked', () => {
+    it('links every unmerged row to the op of the merged row in its group', () => {
         const opIdByPerfId = new Map(merged.map(({ id }, index) => [id, index]));
-        const siblingOpIds = getSiblingOpIds(groups, opIdByPerfId);
+        const siblingOpIdByPerfId = getSiblingOpIds(groups, opIdByPerfId);
 
-        expect(siblingOpIds.size + opIdByPerfId.size).toBe(unmerged.length);
+        for (const group of groups) {
+            const mergedOpId = opIdByPerfId.get(group.find(({ id }) => mergedIds.has(id))!.id);
+
+            for (const { id } of group) {
+                expect(opIdByPerfId.get(id) ?? siblingOpIdByPerfId.get(id)).toBe(mergedOpId);
+            }
+        }
+
+        expect(new Set(groups.flat().map(({ id }) => id))).toEqual(new Set(unmerged.map(({ id }) => id)));
     });
 });

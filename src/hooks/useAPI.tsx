@@ -36,6 +36,7 @@ import { PerfTableRow } from '../model/PerfTable';
 import { DeviceOperationMapping, DeviceOperationOrderCandidates } from '../model/DeviceOperationMapping';
 import { matchDeviceOperationOrdersToPerf } from '../functions/deviceOperationMatching';
 import { getSiblingOpIds, groupDeviceRowsLikeMerge } from '../functions/deviceRowGroups';
+import { getOpIdByPerfId } from '../functions/enrichPerfRowData';
 import memoiseLatest from '../functions/memoiseLatest';
 import {
     PerformanceReportParams,
@@ -1367,16 +1368,20 @@ export const useLinkedPerformanceReport = () => {
  * the performance table. With devices unmerged, every per-device row of a linked
  * operation gets an entry, not only the one the merge kept (#2084). With devices
  * merged, or until the unmerged report arrives, this is `useOpToPerfIdFiltered`
- * unchanged, and no unmerged report is requested while merged.
+ * unchanged. No unmerged report is requested while merged, or while no operation
+ * is linked.
  */
 export const useOpToPerfIdForPerfTable = () => {
     const name = useAtomValue(activePerformanceReportFolderNameAtom);
     const mergeDevices = useAtomValue(mergeDevicesAtom);
     const opIdsMap = useOpToPerfIdFiltered();
+    // With no linked operations there is nothing to extend, so a performance-only
+    // session never fetches the whole-run unmerged report.
     const { data: unmerged } = usePerformanceReportQuery(
-        mergeDevices ? null : name,
+        mergeDevices || opIdsMap.length === 0 ? null : name,
         LINKED_UNMERGED_PERFORMANCE_REPORT_PARAMS,
     );
+    // A disabled query still serves its cached data, so re-merging must drop it here too.
     const unmergedRows = mergeDevices ? null : unmerged?.report;
 
     return useMemo(() => {
@@ -1384,21 +1389,13 @@ export const useOpToPerfIdForPerfTable = () => {
             return opIdsMap;
         }
 
-        const opIdByPerfId = new Map<string, number>();
+        const siblingOpIdByPerfId = getSiblingOpIds(groupDeviceRowsLikeMerge(unmergedRows), getOpIdByPerfId(opIdsMap));
 
-        for (const { perfId, opId } of opIdsMap) {
-            if (perfId !== undefined) {
-                opIdByPerfId.set(perfId, opId);
-            }
-        }
-
-        const siblingOpIds = getSiblingOpIds(groupDeviceRowsLikeMerge(unmergedRows), opIdByPerfId);
-
-        if (siblingOpIds.size === 0) {
+        if (siblingOpIdByPerfId.size === 0) {
             return opIdsMap;
         }
 
-        return [...opIdsMap, ...[...siblingOpIds].map(([perfId, opId]) => ({ opId, perfId }))];
+        return [...opIdsMap, ...[...siblingOpIdByPerfId].map(([perfId, opId]) => ({ opId, perfId }))];
     }, [opIdsMap, unmergedRows]);
 };
 
