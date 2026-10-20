@@ -53,7 +53,7 @@ const BufferSummaryRow = ({
 
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
     const tooltipCacheKeyRef = useRef<string | null>(null);
-    const { selectedTensorId, selectedAddress, resetToasts, updateBufferFocus } = useBufferFocus();
+    const { selectedTensorId, selectedAddress, resetBufferFocus, updateBufferFocus } = useBufferFocus();
 
     const computedMemorySize = memoryEnd - memoryStart;
     const computedPadding = (memoryPadding / computedMemorySize) * SCALE;
@@ -118,7 +118,7 @@ const BufferSummaryRow = ({
     };
 
     const clearFocusedBuffer = () => {
-        resetToasts();
+        resetBufferFocus();
     };
 
     const setFocusedBuffer = (buffer: Buffer, tensor?: Tensor) => {

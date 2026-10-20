@@ -20,6 +20,7 @@ import { isAddressRangeOutOfL1Zoom } from '../../functions/isAddressRangeVisible
 import { TensorDeallocationReport } from '../../model/BufferSummary';
 import { getLateDeallocationSummary } from '../../functions/lateDeallocation';
 import { TEST_IDS } from '../../definitions/TestIds';
+import { KEEPS_BUFFER_FOCUS_CLASS } from '../../definitions/BufferFocus';
 import LateDeallocationGlyph from '../LateDeallocationGlyph';
 
 const LEGEND_AXIS_MARKER_COLORS: Partial<Record<MarkerType, string>> = {
@@ -169,6 +170,8 @@ export const MemoryLegendElement = ({
             key={chunk.address}
             className={classNames(
                 'legend-item',
+                // Plain rows too: the legend is where a focus is picked, so a click on it is no click away. #2042
+                KEEPS_BUFFER_FOCUS_CLASS,
                 {
                     button: !chunk.empty && !isLegendMarker,
                     active: selectedTensorAddress === chunk.address && isMatchingBufferColour,

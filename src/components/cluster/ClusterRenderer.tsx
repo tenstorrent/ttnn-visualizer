@@ -10,6 +10,7 @@ import { useNavigate } from 'react-router';
 import 'styles/components/ClusterView.scss';
 import { stringToArchitecture } from '../../functions/stringToArchitecture';
 import { useGetClusterTopology } from '../../hooks/useAPI';
+import { KEEPS_BUFFER_FOCUS_CLASS } from '../../definitions/BufferFocus';
 import { getChipDesign } from '../../functions/getChipDesign';
 import {
     FALLBACK_PER_HOST_COLS,
@@ -42,6 +43,9 @@ import {
 const CLUSTER_CHIP_SIZE_LARGE = 350;
 const CLUSTER_CHIP_SIZE_MEDIUM = 250;
 const CLUSTER_CHIP_SIZE_SMALL = 150;
+
+// Opens over a page that can hold a focused buffer, which a click in here should leave alone.
+const RENDERER_CLASSES = classNames('cluster-view-renderer', KEEPS_BUFFER_FOCUS_CLASS);
 
 // Condensed layout: each host tiled vertically as a `FALLBACK_PER_HOST_COLS`
 // wide grid (sourced from `clusterTopology` so the host-ordering heuristic
@@ -767,7 +771,7 @@ function ClusterRenderer() {
 
     if (!topology) {
         return (
-            <div className='cluster-view-renderer'>
+            <div className={RENDERER_CLASSES}>
                 {closeButton}
                 <div className='cluster-view-wrap'>
                     <p>Loading...</p>
@@ -778,7 +782,7 @@ function ClusterRenderer() {
 
     if (renderResult?.status === 'unsupported') {
         return (
-            <div className='cluster-view-renderer'>
+            <div className={RENDERER_CLASSES}>
                 {closeButton}
                 <div className='cluster-view-wrap'>
                     <p>
@@ -792,7 +796,7 @@ function ClusterRenderer() {
 
     if (renderResult?.status !== 'ready') {
         return (
-            <div className='cluster-view-renderer'>
+            <div className={RENDERER_CLASSES}>
                 {closeButton}
                 <div className='cluster-view-wrap'>
                     <p>Loading...</p>
@@ -904,7 +908,7 @@ function ClusterRenderer() {
     const dimmed = hoveredChip !== null;
 
     return (
-        <div className='cluster-view-renderer'>
+        <div className={RENDERER_CLASSES}>
             {header}
 
             <div className='cluster-legend'>

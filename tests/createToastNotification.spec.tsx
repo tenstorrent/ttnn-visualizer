@@ -164,7 +164,7 @@ describe('useBufferFocus', () => {
     it('dismisses every toast when the selection is reset', () => {
         const result = focusBuffer();
 
-        act(() => result.current.resetToasts());
+        act(() => result.current.resetBufferFocus());
 
         expect(dismiss).toHaveBeenLastCalledWith(undefined);
         expect(result.current.activeToast).toBeNull();
