@@ -484,14 +484,14 @@ def program_cache(
     count = bounded(limit)
     rows = canonical_report(registry, handle).get("report", [])
     seen: Set[str] = set()
-    by_op_code: Dict[str, _ProgramCalls] = {}
+    calls_by_op_code: Dict[str, _ProgramCalls] = {}
     for row in rows:
         program = row.get("hash") or None
         if program is None:
             continue
         # The raw code: tt-perf-report adds a matmul's shape to `op_code`.
         op_code = str(row.get("raw_op_code") or row.get("op_code") or "").strip()
-        entry = by_op_code.setdefault(op_code, _ProgramCalls(op_code))
+        entry = calls_by_op_code.setdefault(op_code, _ProgramCalls(op_code))
         entry.calls += 1
         if program not in seen:
             seen.add(program)
@@ -507,7 +507,7 @@ def program_cache(
         else:
             entry.repeat_unrecorded += 1
 
-    entries = list(by_op_code.values())
+    entries = list(calls_by_op_code.values())
     repeat_calls = sum(entry.repeat_calls for entry in entries)
     repeat_hits = sum(entry.repeat_hits for entry in entries)
     repeat_misses = sum(entry.repeat_misses for entry in entries)

@@ -340,4 +340,5 @@ __all__ = [
     "ReportRegistry",
     "UnknownHandleError",
     "load_report",
+    "perf_csv_columns",
 ]

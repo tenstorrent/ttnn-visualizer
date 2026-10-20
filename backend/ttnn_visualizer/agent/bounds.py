@@ -2,9 +2,9 @@
 #
 # SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-"""The one result cap the tool surface enforces.
+"""The result caps the tool surface enforces.
 
-Shared rather than declared per module: `server` quotes this number to an agent
+Shared rather than declared per module: `server` quotes these numbers to an agent
 in every limit schema, so a second copy would eventually promise one cap and
 enforce another. #2012
 """

@@ -19,10 +19,12 @@ from ttnn_visualizer.agent.perf_detail import DetailGroup
 from ttnn_visualizer.csv_queries import (
     PROGRAM_CACHE_HIT_COLUMN,
     PROGRAM_HASH_COLUMN,
+    REPORT_ROW_ID_OFFSET,
     OpsPerformanceReportQueries,
     ResolvedSignposts,
 )
 from ttnn_visualizer.tests.smoke_capture import smoke_rows, write_ops_perf
+from ttnn_visualizer.tests.test_agent_tools import _perf_report
 from ttnn_visualizer.tests.test_device_log_columns import (
     MODERN_HEADER,
     write_device_log,
@@ -107,15 +109,6 @@ FILLED_BY = {
 }
 
 
-def _report(rows):
-    return {
-        "report": rows,
-        "stacked_report": [],
-        "signposts": [],
-        "signpost_range_ignored": False,
-    }
-
-
 def _row(row_id, **fields):
     return {
         "id": str(row_id),
@@ -136,7 +129,7 @@ def handle_with(tmp_path):
         write_device_log(tmp_path, MODERN_HEADER, [])
         handle = load_report(registry, performance_path=str(tmp_path))["handle"]
         patcher = patch.object(
-            tools, "_generate_canonical_report", return_value=_report(rows)
+            tools, "_generate_canonical_report", return_value=_perf_report(rows)
         )
         patches.append(patcher)
         return registry, handle, patcher.start()
@@ -547,7 +540,7 @@ class TestTopOpsInclude:
         ]
 
         def generate(instance, **overrides):
-            return _report(rows[2:] if overrides.get("start_signpost") else rows)
+            return _perf_report(rows[2:] if overrides.get("start_signpost") else rows)
 
         registry = ReportRegistry()
         write_device_log(tmp_path, MODERN_HEADER, [])
@@ -838,7 +831,9 @@ class TestEndToEnd:
 
         result = tools.top_ops(registry, handle, include=["cores", "kernels"])
 
-        raw_by_id = {str(index + 2): row for index, row in enumerate(rows)}
+        raw_by_id = {
+            str(index + REPORT_ROW_ID_OFFSET): row for index, row in enumerate(rows)
+        }
         for op in result["ops"]:
             raw = raw_by_id[op["id"]]
             expected = float(raw["DEVICE KERNEL DURATION PER CORE MIN [ns]"]) / 1000
@@ -869,7 +864,7 @@ class TestEndToEnd:
         collectives = [op for op in ops if "AllGather" in op["op_code"]]
         assert collectives and len(collectives) < len(ops)
         for op in ops:
-            raw = rows[int(op["id"]) - 2]
+            raw = rows[int(op["id"]) - REPORT_ROW_ID_OFFSET]
             assert raw["DEVICE ID"] == ("0" if op in collectives else "1")
             expected = float(raw["DEVICE KERNEL FIRST TO LAST START [ns]"]) / 1000
             assert op["first_to_last_start_us"] == round(expected, 3)
@@ -880,7 +875,9 @@ class TestEndToEnd:
 
         result = tools.top_ops(registry, handle, include=["config"])
 
-        raw_by_id = {str(index + 2): row for index, row in enumerate(rows)}
+        raw_by_id = {
+            str(index + REPORT_ROW_ID_OFFSET): row for index, row in enumerate(rows)
+        }
         assert result["ops"]
         for op in result["ops"]:
             raw = raw_by_id[op["id"]]["MATH FIDELITY"] or None
