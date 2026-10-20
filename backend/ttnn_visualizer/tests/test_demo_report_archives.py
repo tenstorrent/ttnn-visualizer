@@ -54,3 +54,12 @@ def test_archive_unpacks_straight_into_local(archive_path):
     with zipfile.ZipFile(archive_path) as archive:
         roots = {PurePosixPath(name).parts[0] for name in archive.namelist()}
     assert roots == {"local"}
+
+
+@pytest.mark.parametrize("archive_path", DEMO_REPORT_ARCHIVES, ids=lambda p: p.name)
+def test_archive_ships_no_tracy_capture(archive_path):
+    # Tracy host captures are compressed, so a re-pack's username scrub misses the
+    # source paths and `User:` line inside them. The app never reads them.
+    with zipfile.ZipFile(archive_path) as archive:
+        captures = [name for name in archive.namelist() if name.endswith(".tracy")]
+    assert captures == []
