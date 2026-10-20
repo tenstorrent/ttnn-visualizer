@@ -6,11 +6,8 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-import {
-    PERF_BAR_COLOR_VAR,
-    PERF_BAR_SCALE_VAR,
-    PERF_BAR_ZOOM_VAR,
-} from '../src/components/operation-graph/opGraphPerfOverlay';
+import { PERF_BAR_COLOR_VAR, PERF_BAR_SCALE_VAR } from '../src/components/operation-graph/opGraphPerfOverlay';
+import { NODE_ZOOM_VAR } from '../src/components/operation-graph/opGraphNodeZoom';
 
 // jsdom doesn't compile SCSS, so a rendered node carries the class but none of
 // its declarations. Same approach as `opGraphNodeStyles.spec.ts`.
@@ -32,6 +29,10 @@ const PERF_BAR = '&::after';
 // while every assertion below still matches the SCSS the TS no longer writes.
 const varRef = (name: string, fallback?: string) =>
     `var\\(${name}${fallback === undefined ? '' : `,\\s*${fallback}`}\\)`;
+
+// `prop` set to a pixel size divided by the published zoom, unscaled when none is.
+const dividesByZoom = (prop: string) =>
+    new RegExp(`${prop}:.*calc\\(\\s*\\d+px\\s*/\\s*${varRef(NODE_ZOOM_VAR, '1')}\\s*\\)`);
 
 describe('perf overlay bar geometry', () => {
     it('is taken out of the node flow so toggling the overlay cannot relayout the graph', () => {
@@ -57,16 +58,40 @@ describe('perf overlay bar geometry', () => {
     });
 });
 
+describe('slowest-operations rank badge', () => {
+    const BADGE = '.op-graph-node-hot-rank {';
+
+    it('is taken out of the node flow, so marking cannot relayout the graph', () => {
+        expect(ruleBody(BADGE)).toMatch(/position:\s*absolute/);
+    });
+
+    it('sits above the box, so it covers neither the label nor the filter badge in its corner', () => {
+        expect(ruleBody(BADGE)).toMatch(/transform:\s*translate\([^,]+,\s*-100%\)/);
+    });
+
+    it('takes the pointer, so a click on it selects its node rather than the pane behind', () => {
+        expect(ruleBody(BADGE)).not.toMatch(/pointer-events:\s*none/);
+    });
+
+    it('stops growing before it can outgrow the gap to the row above', () => {
+        // The layout keeps ranks 80 graph px apart, and the tab is ~1.7 font sizes tall.
+        expect(ruleBody(BADGE)).toMatch(/font-size:\s*clamp\(\s*11px,.*,\s*40px\s*\)/);
+    });
+
+    it('divides its size by the live zoom, unscaled when none is published', () => {
+        // Marking publishes the zoom too, so the badges still read at overview zoom. #2085
+        expect(ruleBody(BADGE)).toMatch(dividesByZoom('font-size'));
+    });
+});
+
 describe('perf overlay bar zoom floor', () => {
     it('divides both dimensions by the live zoom so the bar holds its on-screen size', () => {
         // Fixed graph units go sub-pixel at the zoom a large report fits in,
         // losing the encoding exactly where a whole-graph scan needs it. #1610
         const body = ruleBody(PERF_BAR);
 
-        expect(body).toMatch(new RegExp(`height:.*calc\\(\\s*\\d+px\\s*/\\s*${varRef(PERF_BAR_ZOOM_VAR, '1')}\\s*\\)`));
-        expect(body).toMatch(
-            new RegExp(`min-width:.*calc\\(\\s*\\d+px\\s*/\\s*${varRef(PERF_BAR_ZOOM_VAR, '1')}\\s*\\)`),
-        );
+        expect(body).toMatch(dividesByZoom('height'));
+        expect(body).toMatch(dividesByZoom('min-width'));
     });
 
     it('falls back to an unscaled bar when the zoom is not published', () => {
@@ -74,8 +99,8 @@ describe('perf overlay bar zoom floor', () => {
         // fallback is the resting state: 1:1 size, not a collapse to zero.
         const body = ruleBody(PERF_BAR);
 
-        expect(body).not.toMatch(new RegExp(varRef(PERF_BAR_ZOOM_VAR)));
-        expect(body).toMatch(new RegExp(varRef(PERF_BAR_ZOOM_VAR, '1')));
+        expect(body).not.toMatch(new RegExp(varRef(NODE_ZOOM_VAR)));
+        expect(body).toMatch(new RegExp(varRef(NODE_ZOOM_VAR, '1')));
     });
 });
 

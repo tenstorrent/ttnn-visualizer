@@ -8,6 +8,7 @@ import { type FormEvent, type Ref, memo } from 'react';
 import classNames from 'classnames';
 import GraphOpFilter, { type GraphOpFilterHandle } from '../GraphOpFilter';
 import type { GraphFilterMode } from '../../definitions/GraphFilterMode';
+import { HOT_OPS_TITLE } from '../../definitions/HotOps';
 import {
     CRITICAL_PATH_TOOLTIP,
     HOT_OPS_TOOLTIP,
@@ -377,7 +378,7 @@ const OpGraphToolbar = memo(
 
                 <PerfGatedSwitch
                     tooltipByStatus={HOT_OPS_TOOLTIP}
-                    label='Slowest operations'
+                    label={HOT_OPS_TITLE}
                     checked={isHotOpsActive}
                     onChange={onHotOpsChange}
                     perfOverlayStatus={perfOverlayStatus}
