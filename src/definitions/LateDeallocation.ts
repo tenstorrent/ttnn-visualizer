@@ -44,3 +44,10 @@ export enum LateDeallocationAvailability {
     FAILED = 'failed',
     OUT_OF_RANGE = 'outOfRange',
 }
+
+/** A count for the late-deallocation toggle and the tooltip that words it. */
+export interface LateDeallocationCount {
+    /** `null` when the count isn't known, so it can't read as an all-clear. */
+    count: number | null;
+    summary: string;
+}

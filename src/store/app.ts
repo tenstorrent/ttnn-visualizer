@@ -22,6 +22,7 @@ import { BufferType } from '../model/BufferType';
 import { StackedGroupBy } from '../definitions/StackedPerfTable';
 import { SortingOptions } from '../definitions/SortingOptions';
 import { DEFAULT_TOP_N_COUNT, TopNAnnotationMode } from '../definitions/TopNAnnotations';
+import isValidNumber from '../functions/isValidNumber';
 import {
     DEFAULT_HOT_OPS_SETTINGS,
     HOT_OPS_ENABLED_STORAGE_KEY,
@@ -39,6 +40,13 @@ import { aggregateFileTransferProgress, fileTransferRegistryAtom } from './fileT
 export const activeToastAtom = atom<Id | null>(null);
 export const selectedAddressAtom = atom<number | null>(null);
 export const selectedTensorIdAtom = atom<number | null>(null);
+// Any part of a buffer focus being set: its toast, an address (0 included) or a tensor. #2042
+export const isBufferFocusedAtom = atom(
+    (get) =>
+        get(activeToastAtom) !== null ||
+        isValidNumber(get(selectedAddressAtom)) ||
+        isValidNumber(get(selectedTensorIdAtom)),
+);
 export const listStatesAtom = atom<ListStates | null>(null);
 export const selectedBufferColourAtom = atom<string | null>(null);
 // File transfer registry atoms — defined in store/fileTransferRegistry.ts (see comment there);

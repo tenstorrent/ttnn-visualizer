@@ -85,13 +85,13 @@ describe('useNodeType grid guard (#1847)', () => {
         const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
 
         const { result } = renderHook(() =>
-            useNodeType('grendel_xyz' as DeviceArchitecture, undefined, { x_size: 10, y_size: 12 }),
+            useNodeType('horizon_xyz' as DeviceArchitecture, undefined, { x_size: 10, y_size: 12 }),
         );
 
         expect(result.current.architecture).toBeNull();
         expect(result.current.gridMismatch).toBeNull();
         expect(result.current.grid).toEqual({ x_size: 10, y_size: 12 });
-        expect(consoleError).toHaveBeenCalledWith('Unsupported arch: grendel_xyz');
+        expect(consoleError).toHaveBeenCalledWith('Unsupported arch: horizon_xyz');
     });
 
     it.each([
@@ -182,5 +182,47 @@ describe('useNodeType grid guard (#1847)', () => {
 
         expect(result.current.gridMismatch).toBe(gridMismatch);
         expect(result.current.grid).toBe(grid);
+    });
+});
+
+describe('useNodeType with the derived Grendel descriptor (#2130)', () => {
+    it('draws a Grendel report on its baked descriptor', () => {
+        const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+        const { result } = renderHook(() =>
+            useNodeType(DeviceArchitecture.GRENDEL, undefined, { x_size: 12, y_size: 8 }),
+        );
+
+        expect(result.current.gridMismatch).toBeNull();
+        expect(result.current.cores).toHaveLength(32);
+        expect(result.current.dram).toHaveLength(8);
+        expect(result.current.dispatch).toHaveLength(3);
+        expect(result.current.eth).toEqual([]);
+        expect(result.current.pcie).toEqual([]);
+        expect(consoleError).not.toHaveBeenCalled();
+    });
+
+    it('withholds the Grendel descriptor from a report on another grid', () => {
+        vi.spyOn(console, 'error').mockImplementation(() => {});
+
+        const { result } = renderHook(() =>
+            useNodeType(DeviceArchitecture.GRENDEL, undefined, { x_size: 11, y_size: 8 }),
+        );
+
+        expect(result.current.architecture).toBeNull();
+        expect(result.current.gridMismatch?.baked).toEqual({ x_size: 12, y_size: 8 });
+    });
+
+    // UMD reads `quasar` without an `ip_variant` as Grendel (tt-umd#3587); this deliberately doesn't, since no
+    // report carries that variant yet and tt-sim's Quasar-32 lays out its DRAM differently. #2130
+    it('does not pick the Grendel descriptor for a quasar report on its grid', () => {
+        vi.spyOn(console, 'error').mockImplementation(() => {});
+
+        const { result } = renderHook(() =>
+            useNodeType(DeviceArchitecture.QUASAR, undefined, { x_size: 12, y_size: 8 }),
+        );
+
+        expect(result.current.architecture).toBeNull();
+        expect(result.current.gridMismatch?.baked).toEqual({ x_size: 11, y_size: 8 });
     });
 });

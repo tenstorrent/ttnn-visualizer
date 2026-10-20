@@ -6,8 +6,8 @@ import { useCallback, useMemo } from 'react';
 import { useAtomValue } from 'jotai';
 import { showDeallocationReportAtom } from '../store/app';
 import { TensorDeallocationReport } from '../model/BufferSummary';
-import { LateDeallocationRunStart } from '../definitions/LateDeallocation';
-import { selectLateDeallocationRunStarts } from '../functions/lateDeallocation';
+import { LateDeallocationCount, LateDeallocationRunStart } from '../definitions/LateDeallocation';
+import { getRunStartLateDeallocationCount, selectLateDeallocationRunStarts } from '../functions/lateDeallocation';
 import { useGetTensorDeallocationReportByOperation } from './useAPI';
 
 const EMPTY_TENSOR_DEALLOCATION_REPORT: TensorDeallocationReport[] = [];
@@ -29,9 +29,10 @@ export interface UseLateDeallocationOverlayResult {
     runStarts: readonly LateDeallocationRunStart[];
     /**
      * How many rows qualify, counted whether or not the overlay is on — the
-     * count is what tells the user the toggle is worth flipping.
+     * count is what tells the user the toggle is worth flipping. Its `count` is `null` until
+     * the report settles, so a loading or failed report never shows as 0.
      */
-    runStartCount: number;
+    runStartCount: LateDeallocationCount;
 }
 
 /**
@@ -50,7 +51,7 @@ export const useLateDeallocationOverlay = ({
     operations,
 }: UseLateDeallocationOverlayParams): UseLateDeallocationOverlayResult => {
     const showDeallocationReport = useAtomValue(showDeallocationReportAtom);
-    const { lateDeallocationsByOperation } = useGetTensorDeallocationReportByOperation();
+    const { lateDeallocationsByOperation, status } = useGetTensorDeallocationReportByOperation();
 
     const runStarts = useMemo(
         () => selectLateDeallocationRunStarts({ operations, reportsByOpId: lateDeallocationsByOperation }),
@@ -65,9 +66,14 @@ export const useLateDeallocationOverlay = ({
         [showDeallocationReport, lateDeallocationsByOperation],
     );
 
+    const runStartCount = useMemo(
+        () => getRunStartLateDeallocationCount(runStarts.length, status),
+        [runStarts.length, status],
+    );
+
     return {
         getTensorDeallocationReport,
         runStarts: showDeallocationReport ? runStarts : EMPTY_RUN_STARTS,
-        runStartCount: runStarts.length,
+        runStartCount,
     };
 };

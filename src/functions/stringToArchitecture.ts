@@ -24,6 +24,9 @@ export const stringToArchitecture = (arch: unknown): DeviceArchitecture => {
     if (name.startsWith('quasar')) {
         return DeviceArchitecture.QUASAR;
     }
+    if (name.startsWith('grendel')) {
+        return DeviceArchitecture.GRENDEL;
+    }
     if (name.startsWith('grayskull')) {
         return DeviceArchitecture.GRAYSKULL;
     }
