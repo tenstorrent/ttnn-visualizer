@@ -2,16 +2,21 @@
 #
 # SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
+import sqlite3
 from http import HTTPStatus
 from pathlib import Path
 
+import pytest
 from ttnn_visualizer.local_remote_reports import (
     list_local_synced_performance_folders,
     list_local_synced_profiler_folders,
     local_synced_report_path,
 )
 from ttnn_visualizer.models import RemoteConnection
-from ttnn_visualizer.report_fingerprint import performance_run_fingerprint
+from ttnn_visualizer.report_fingerprint import (
+    performance_run_fingerprint,
+    profiler_run_fingerprint,
+)
 from ttnn_visualizer.utils import update_last_synced
 
 
@@ -405,16 +410,41 @@ class TestOfflineListingReportsTheSyncedName:
         assert folders[0].rank is None
 
 
-def test_list_local_synced_folders_fingerprint_the_synced_copy(tmp_path: Path):
-    host = "bh-lb-01"
-    _write_valid_performance_report(tmp_path / host / "performance-reports" / "run")
+def _write_readable_profiler_report(report_dir: Path) -> None:
+    report_dir.mkdir(parents=True)
+    connection = sqlite3.connect(report_dir / "db.sqlite")
+    connection.execute("CREATE TABLE operations (operation_id int)")
+    connection.close()
 
-    folders = list_local_synced_performance_folders(
-        _connection(host), tmp_path, "performance-reports"
-    )
+
+@pytest.mark.parametrize(
+    ("list_folders", "directory_name", "write_report", "run_fingerprint"),
+    [
+        (
+            list_local_synced_profiler_folders,
+            "profiler-reports",
+            _write_readable_profiler_report,
+            profiler_run_fingerprint,
+        ),
+        (
+            list_local_synced_performance_folders,
+            "performance-reports",
+            _write_valid_performance_report,
+            performance_run_fingerprint,
+        ),
+    ],
+    ids=["profiler", "performance"],
+)
+def test_list_local_synced_folders_fingerprint_the_synced_copy(
+    tmp_path: Path, list_folders, directory_name, write_report, run_fingerprint
+):
+    host = "bh-lb-01"
+    write_report(tmp_path / host / directory_name / "run")
+
+    folders = list_folders(_connection(host), tmp_path, directory_name)
 
     assert len(folders) == 1
-    assert folders[0].runFingerprint == performance_run_fingerprint(
-        tmp_path / host / "performance-reports" / "run"
+    assert folders[0].runFingerprint == run_fingerprint(
+        tmp_path / host / directory_name / "run"
     )
     assert folders[0].runFingerprint is not None

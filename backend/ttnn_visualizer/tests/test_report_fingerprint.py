@@ -10,6 +10,7 @@ import time
 from pathlib import Path
 from typing import Optional
 
+import pytest
 from ttnn_visualizer.report_fingerprint import (
     performance_run_fingerprint,
     profiler_run_fingerprint,
@@ -178,6 +179,25 @@ def test_performance_fingerprint_describes_the_file_a_load_reads(tmp_path):
     assert newest_ops_perf_file(report_dir) == newer
     fingerprint = performance_run_fingerprint(report_dir)
     assert fingerprint is not None and newer.name in fingerprint
+
+
+@pytest.mark.parametrize(
+    "rewritten_file",
+    ["ops_perf_results_2026_01_01_00_00_00.csv", "profile_log_device.csv"],
+    ids=["perf_csv", "device_log"],
+)
+def test_performance_fingerprint_tells_runs_with_one_csv_name_apart(
+    tmp_path, rewritten_file
+):
+    # A capture written without a timestamped CSV name reuses the previous run's
+    # name, so the file sizes are all that separate the two runs.
+    _make_performance_report(tmp_path / "first")
+    _make_performance_report(tmp_path / "second")
+    (tmp_path / "second" / rewritten_file).write_text("a longer, later run\n")
+
+    assert performance_run_fingerprint(
+        tmp_path / "first"
+    ) != performance_run_fingerprint(tmp_path / "second")
 
 
 def test_performance_fingerprint_is_none_without_a_device_log(tmp_path):

@@ -210,39 +210,66 @@ def test_remote_performance_returns_json_when_reports_exist(app, client):
     read_last_synced.assert_called_once_with(expected_local_path)
 
 
-def test_remote_listing_fingerprints_only_rows_synced_locally(app, client, tmp_path):
+def _write_readable_profiler_report(report_dir: Path) -> None:
+    report_dir.mkdir(parents=True)
+    connection = sqlite3.connect(report_dir / "db.sqlite")
+    connection.execute("CREATE TABLE operations (operation_id int)")
+    connection.close()
+
+
+@pytest.mark.parametrize(
+    ("endpoint", "lister", "directory_key", "write_report", "run_fingerprint"),
+    [
+        (
+            "/api/remote/profiler-reports",
+            "get_remote_profiler_folders",
+            "PROFILER_DIRECTORY_NAME",
+            _write_readable_profiler_report,
+            profiler_run_fingerprint,
+        ),
+        (
+            "/api/remote/performance-reports",
+            "get_remote_performance_folders",
+            "PERFORMANCE_DIRECTORY_NAME",
+            _write_valid_performance_report,
+            performance_run_fingerprint,
+        ),
+    ],
+    ids=["profiler", "performance"],
+)
+def test_remote_listing_fingerprints_only_rows_synced_locally(
+    app,
+    client,
+    tmp_path,
+    endpoint,
+    lister,
+    directory_key,
+    write_report,
+    run_fingerprint,
+):
     app.config["SERVER_MODE"] = False
     app.config["REMOTE_DATA_DIRECTORY"] = str(tmp_path)
-    synced_dir = (
-        tmp_path
-        / "remote.example.com"
-        / app.config["PERFORMANCE_DIRECTORY_NAME"]
-        / "synced"
-    )
-    _write_valid_performance_report(synced_dir)
+    synced_dir = tmp_path / "remote.example.com" / app.config[directory_key] / "synced"
+    write_report(synced_dir)
     folders = [
         RemoteReportFolder(
             reportName=name,
-            remotePath=f"/remote/performance/reports/{name}",
+            remotePath=f"/remote/reports/{name}",
             lastModified=200,
             syncedName=name,
         )
         for name in ("synced", "never-synced")
     ]
 
-    with patch(
-        "ttnn_visualizer.views.get_remote_performance_folders", return_value=folders
-    ):
-        response = client.post(
-            "/api/remote/performance-reports", json=_remote_connection_payload()
-        )
+    with patch(f"ttnn_visualizer.views.{lister}", return_value=folders):
+        response = client.post(endpoint, json=_remote_connection_payload())
 
     assert response.status_code == HTTPStatus.OK
     run_fingerprint_by_name = {
         folder["reportName"]: folder["runFingerprint"] for folder in response.get_json()
     }
     assert run_fingerprint_by_name == {
-        "synced": performance_run_fingerprint(synced_dir),
+        "synced": run_fingerprint(synced_dir),
         "never-synced": None,
     }
     assert run_fingerprint_by_name["synced"] is not None
