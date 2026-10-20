@@ -745,7 +745,13 @@ def report_metadata(instance: Instance):
 @with_instance
 @timer
 def report_fingerprints(instance: Instance):
-    """Which runs this instance's active reports hold, for recording report links."""
+    """Which runs this instance's active reports hold, for recording report links.
+
+    Each run comes with the active folder name it was read from. The client caches a
+    run under the report it asked about, and a later pick can land on the instance
+    before this request is handled, so it checks the name before caching the run.
+    """
+    active_report = instance.active_report
     profiler_fingerprint = (
         profiler_run_fingerprint(Path(instance.profiler_path).parent)
         if instance.profiler_path
@@ -758,7 +764,18 @@ def report_fingerprints(instance: Instance):
     )
     return Response(
         orjson.dumps(
-            {"profiler": profiler_fingerprint, "performance": performance_fingerprint}
+            {
+                "profiler": {
+                    "folder": active_report.profiler_name if active_report else None,
+                    "run": profiler_fingerprint,
+                },
+                "performance": {
+                    "folder": (
+                        active_report.performance_name if active_report else None
+                    ),
+                    "run": performance_fingerprint,
+                },
+            }
         ),
         mimetype="application/json",
     )

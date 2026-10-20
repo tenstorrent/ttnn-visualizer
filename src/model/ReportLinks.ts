@@ -42,8 +42,16 @@ export interface ReportLink {
     recordedAt: number;
 }
 
-/** Which run each active report's folder holds, from `GET /api/report-fingerprints`. */
+/** Which run each active report's folder holds. */
 export interface ActiveReportFingerprints {
     profiler: string | null;
     performance: string | null;
 }
+
+/** One side of `GET /api/report-fingerprints`: the run, and the active folder it was read from. */
+export interface ActiveReportRun {
+    folder: string | null;
+    run: string | null;
+}
+
+export type ActiveReportRuns = Record<keyof ActiveReportFingerprints, ActiveReportRun>;

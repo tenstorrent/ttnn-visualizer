@@ -128,7 +128,12 @@ def test_report_fingerprints_describe_the_active_reports(app, client, tmp_path):
         db.session.add(
             InstanceTable(
                 instance_id="fingerprints",
-                active_report={},
+                active_report={
+                    "profiler_name": "memory",
+                    "profiler_location": "local",
+                    "performance_name": "performance",
+                    "performance_location": "local",
+                },
                 profiler_path=str(profiler_dir / "db.sqlite"),
                 performance_path=str(performance_dir),
             )
@@ -140,11 +145,19 @@ def test_report_fingerprints_describe_the_active_reports(app, client, tmp_path):
     )
 
     assert response.status_code == HTTPStatus.OK
+    # Each run names the active folder it was read from, so the client can tell an
+    # answer about a later pick from one about the report it asked after.
     assert response.get_json() == {
-        "profiler": profiler_run_fingerprint(profiler_dir),
-        "performance": performance_run_fingerprint(performance_dir),
+        "profiler": {
+            "folder": "memory",
+            "run": profiler_run_fingerprint(profiler_dir),
+        },
+        "performance": {
+            "folder": "performance",
+            "run": performance_run_fingerprint(performance_dir),
+        },
     }
-    assert None not in response.get_json().values()
+    assert all(side["run"] is not None for side in response.get_json().values())
 
 
 def test_report_fingerprints_are_null_without_active_reports(app, client):
@@ -157,4 +170,7 @@ def test_report_fingerprints_are_null_without_active_reports(app, client):
     )
 
     assert response.status_code == HTTPStatus.OK
-    assert response.get_json() == {"profiler": None, "performance": None}
+    assert response.get_json() == {
+        "profiler": {"folder": None, "run": None},
+        "performance": {"folder": None, "run": None},
+    }
