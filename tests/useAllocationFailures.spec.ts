@@ -12,6 +12,7 @@ import { mockLinkedReports, resetLinkedReportMocks } from './helpers/linkedRepor
 vi.mock('../src/hooks/useAPI', () => ({
     useOperationsList: vi.fn(),
     useOpToPerfIdFiltered: vi.fn(),
+    useOpToPerfIdForPerfTable: vi.fn(),
 }));
 
 const OUT_OF_MEMORY =
@@ -59,10 +60,28 @@ describe('useAllocationFailures', () => {
         expect(result.current.listings[0]).toMatchObject({
             failure: { operationId: 2, operationName: 'ttnn.conv2d', kind: AllocationFailureKind.BANK_OUT_OF_MEMORY },
             failedDeviceOperations: ['Conv2d'],
+            ranDeviceOperationCount: 1,
             linkedRowCount: 1,
         });
         expect(result.current.allocationFailureByOpId.get(2)?.operationId).toBe(2);
         expect(result.current.allocationFailureByOpId.has(1)).toBe(false);
+    });
+
+    // #2084: the Op failed flag lands on every device's row once devices are unmerged, so the
+    // listing counts those rows while still counting each device op that ran once.
+    it('counts every device row of the earlier device ops when devices are unmerged', () => {
+        mockLinkedReports(
+            [operation(1), failedOperation(2)],
+            [{ opId: 2, perfId: '2' }],
+            [
+                { opId: 2, perfId: '2' },
+                { opId: 2, perfId: '3' },
+            ],
+        );
+
+        const { result } = renderHook(() => useAllocationFailures());
+
+        expect(result.current.listings[0]).toMatchObject({ ranDeviceOperationCount: 1, linkedRowCount: 2 });
     });
 
     it('lists nothing when the reports are not linked, so an unrelated run is never blamed', () => {

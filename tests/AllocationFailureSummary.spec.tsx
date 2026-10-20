@@ -15,6 +15,7 @@ import { makeAllocationFailure } from './helpers/allocationFailure';
 const listing = (overrides: Partial<AllocationFailureListing> = {}): AllocationFailureListing => ({
     failure: makeAllocationFailure(),
     failedDeviceOperations: ['Conv2d'],
+    ranDeviceOperationCount: 0,
     linkedRowCount: 0,
     ...overrides,
 });
@@ -68,6 +69,7 @@ describe('AllocationFailureSummary', () => {
             listing({
                 failure: makeAllocationFailure({ operationId: 300 }),
                 failedDeviceOperations: [],
+                ranDeviceOperationCount: 2,
                 linkedRowCount: 2,
             }),
         ]);
@@ -92,10 +94,19 @@ describe('AllocationFailureSummary', () => {
     });
 
     it('uses the singular for one earlier device op', () => {
-        renderSummary([listing({ linkedRowCount: 1 })]);
+        renderSummary([listing({ ranDeviceOperationCount: 1, linkedRowCount: 1 })]);
 
         expect(
             screen.getByText('Failed in Conv2d; 1 earlier device op ran, so it has 1 row in this report.'),
+        ).toBeInTheDocument();
+    });
+
+    // #2084: unmerged, each device op that ran has a row per device.
+    it('counts rows apart from device ops once devices are unmerged', () => {
+        renderSummary([listing({ ranDeviceOperationCount: 1, linkedRowCount: 2 })]);
+
+        expect(
+            screen.getByText('Failed in Conv2d; 1 earlier device op ran, so it has 2 rows in this report.'),
         ).toBeInTheDocument();
     });
 

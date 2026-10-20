@@ -488,7 +488,9 @@ describe('Performance route', () => {
 
     it('marks active rows with their linked failure, lists it, and leaves comparison rows unmarked', () => {
         const failure = makeAllocationFailure({ operationId: 7 });
-        const listings = [{ failure, failedDeviceOperations: ['Conv2d'], linkedRowCount: 1 }];
+        const listings = [
+            { failure, failedDeviceOperations: ['Conv2d'], ranDeviceOperationCount: 1, linkedRowCount: 1 },
+        ];
 
         (useAllocationFailures as Mock).mockReturnValue({
             listings,

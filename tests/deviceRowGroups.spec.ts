@@ -14,6 +14,7 @@ import { makeRawPerfRow } from './helpers/perfRowFixtures';
 // keeping these fields, whenever the pinned tt-perf-report version moves.
 // `test_frontend_device_rows_fixture_matches_the_report` fails when it drifts.
 import smokeDeviceRows from './data/smokePerfReportDeviceRows.json';
+import mergeDeviceRowCases from './data/mergeDeviceRowCases.json';
 
 const row = (id: number, device: number, rawOpCode: string, overrides: Partial<PerfTableRow> = {}) =>
     makeRawPerfRow({ id: String(id), device: String(device), raw_op_code: rawOpCode, ...overrides });
@@ -39,30 +40,12 @@ describe('groupDeviceRowsLikeMerge', () => {
         ]);
     });
 
-    // The expected groups in this block were checked against `merge_device_rows` in the
-    // pinned tt-perf-report, run on the same rows: it kept the ids each case names.
+    // Shared with `test_merge_device_row_cases.py`, which runs each case through the real
+    // `merge_device_rows` and checks that it keeps exactly one row of each group listed here.
+    it.each(mergeDeviceRowCases)('$name', ({ rows, groups }) => {
+        const perfRows = rows.map(({ id, device, op }) => row(id, device, op));
 
-    it('takes devices in ascending numeric order, whichever reaches the row first', () => {
-        // Sorted as text, device 10 would lead. The merge keeps device 2's row (id 3) for a
-        // collective, which only holds if device 2 heads the group.
-        const rows = [row(2, 10, 'AllGather'), row(3, 2, 'AllGather')];
-
-        expect(ids(groupDeviceRowsLikeMerge(rows))).toEqual([['3', '2']]);
-    });
-
-    it('holds back a device whose next op differs, retrying it next round', () => {
-        // Device 1 never ran the first Softmax, so its Matmul waits for device 0's. The merge
-        // keeps ids 2 and 4, one per group.
-        const rows = [row(2, 0, 'Softmax'), row(3, 0, 'Matmul'), row(4, 1, 'Matmul')];
-
-        expect(ids(groupDeviceRowsLikeMerge(rows))).toEqual([['2'], ['3', '4']]);
-    });
-
-    it('leaves the longer device’s trailing rows in groups of their own', () => {
-        // The merge keeps ids 3, 5 and 6: id 6 has no partner on device 1.
-        const rows = [row(2, 0, 'A'), row(3, 1, 'A'), row(4, 0, 'B'), row(5, 1, 'B'), row(6, 0, 'C')];
-
-        expect(ids(groupDeviceRowsLikeMerge(rows))).toEqual([['2', '3'], ['4', '5'], ['6']]);
+        expect(ids(groupDeviceRowsLikeMerge(perfRows))).toEqual(groups.map((group) => group.map(String)));
     });
 
     it('returns no groups for no rows', () => {

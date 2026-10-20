@@ -499,6 +499,7 @@ describe('report matching under a filtered performance tab', () => {
             expect(result.current.listings[0]).toMatchObject({
                 failure: { operationId: 1, operationName: 'ttnn.matmul' },
                 failedDeviceOperations: ['Matmul'],
+                ranDeviceOperationCount: 0,
                 linkedRowCount: 0,
             });
         });
