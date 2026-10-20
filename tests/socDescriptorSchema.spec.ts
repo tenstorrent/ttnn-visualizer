@@ -10,6 +10,7 @@ import { parseSocDescriptorOverride } from '../src/functions/socDescriptorOverri
 import archWormhole from '../src/assets/data/arch-wormhole.json';
 import archBlackhole from '../src/assets/data/arch-blackhole.json';
 import archQuasar from '../src/assets/data/arch-quasar.json';
+import archGrendel from '../src/assets/data/arch-grendel.json';
 
 const validate = new Ajv({ allErrors: true }).compile(socDescriptorSchema);
 
@@ -23,6 +24,7 @@ const cases: { label: string; descriptor: unknown; accepted: boolean }[] = [
     { label: 'baked wormhole', descriptor: archWormhole, accepted: true },
     { label: 'baked blackhole', descriptor: archBlackhole, accepted: true },
     { label: 'baked quasar', descriptor: archQuasar, accepted: true },
+    { label: 'baked grendel', descriptor: archGrendel, accepted: true },
     {
         label: 'minimum a producer must write',
         descriptor: { grid: { x_size: 4, y_size: 4 }, functional_workers: ['1-1'] },

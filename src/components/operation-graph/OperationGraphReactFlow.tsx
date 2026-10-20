@@ -16,6 +16,7 @@ import {
     useStoreApi,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
+import classNames from 'classnames';
 import { useAtom, useAtomValue } from 'jotai';
 import {
     type CSSProperties,
@@ -39,6 +40,7 @@ import {
     activePerformanceReportAtom,
     activeProfilerReportAtom,
     criticalPathScopeAtom,
+    hotOpsMarkingAtom,
     isHotOpsEnabledAtom,
 } from '../../store/app';
 import type { GraphOpFilterHandle } from '../GraphOpFilter';
@@ -52,23 +54,26 @@ import OpGraphDeviceOpNode from './OpGraphDeviceOpNode';
 import OpGraphEdge from './OpGraphEdge';
 import OpGraphHotOpsPanel from './OpGraphHotOpsPanel';
 import OpGraphInfoPanel from './OpGraphInfoPanel';
-import { buildHotOpRows } from './opGraphHotOps';
+import { buildHotOpRows, buildHotRankByNodeId, getMarkedHotOpRanks } from './opGraphHotOps';
 import OpGraphNode from './OpGraphNode';
 import OpGraphToolbar from './OpGraphToolbar';
 import { buildDeviceOperationSubgraph, countDeviceOperations } from './opGraphDeviceSubgraph';
 import { OpGraphBlockExpansionContext, OpGraphExpansionContext } from './opGraphExpansionContext';
 import {
-    PERF_BAR_ZOOM_VAR,
     buildOpGraphPerfOverlay,
     buildRenderedPerfStyling,
     getPerfColorForNs,
     getPerfHoverLabel,
-    getQuantisedPerfZoom,
     getRenderedPerfRange,
 } from './opGraphPerfOverlay';
 import { EMPTY_CRITICAL_PATH, findCriticalPath } from './opGraphCriticalPath';
 import {
+    type GraphBounds,
+    NO_SIDE_INSET,
+    type PaneSideInset,
     REVEALED_NODE_CLASS,
+    SIDE_CLASS,
+    SIDE_STRETCHED_CLASS,
     absolutePositionsOf,
     boundsOfNodes,
     centerPanShift,
@@ -92,6 +97,7 @@ import {
     type OpGraphSourceOperation,
 } from './opGraphTypes';
 import { fusedActivationOf } from './opGraphFusedActivation';
+import { NODE_ZOOM_VAR, getQuantisedNodeZoom } from './opGraphNodeZoom';
 import { fanIdOf, fanIdsCovering, weightFanMembersOf } from './opGraphWeightFans';
 import { OpGraphGrouping } from './opGraphTypes';
 import 'styles/components/OperationGraphReactFlow.scss';
@@ -336,6 +342,19 @@ const CRITICAL_PATH_NODE_CLASS = 'op-graph-node-critical-path';
 const CRITICAL_PATH_EDGE_CLASS = 'op-graph-edge-critical-path';
 const DIM_UNRELATED_EDGES_CLASS = 'op-graph-dim-unrelated-edges';
 
+// Closed mid-build so the panel can't describe an operation the graph being laid out is about to drop.
+const isDetailsPanelOpen = (selectedOperationId: number | null, isBuilding: boolean): selectedOperationId is number =>
+    selectedOperationId !== null && !isBuilding;
+
+// Down the pane while an op is selected, held through a build so the list keeps its height while
+// the details are closed. Shared by the column's class and by the selection's pan. #2088
+const isSideStretchedFor = (selectedOperationId: number | null): boolean => selectedOperationId !== null;
+
+interface PanOptions {
+    /** The side column is about to span the pane, though its class hasn't landed yet. */
+    sideSpansPane?: boolean;
+}
+
 interface OperationGraphReactFlowProps {
     operationList: OperationDescription[];
     operationId?: number;
@@ -395,6 +414,7 @@ const OperationGraphInner = ({
     const [isPerfOverlayEnabled, setIsPerfOverlayEnabled] = useState(false);
     const [criticalPathScope, setCriticalPathScope] = useAtom(criticalPathScopeAtom);
     const [isHotOpsEnabled, setIsHotOpsEnabled] = useAtom(isHotOpsEnabledAtom);
+    const hotOpsMarking = useAtomValue(hotOpsMarkingAtom);
     const [perfHover, setPerfHover] = useState<PerfHover | null>(null);
     const [filterQuery, setFilterQuery] = useState('');
     const [appliedFilterQuery, setAppliedFilterQuery] = useState('');
@@ -719,6 +739,15 @@ const OperationGraphInner = ({
         }
         return namesById;
     }, [operationList]);
+    // The latest names, for `onBuilt` to take: a reply it accepts is for the latest source, since
+    // stale ones are dropped by request id.
+    const operationNamesByIdRef = useRef(operationNamesById);
+    useEffect(() => {
+        operationNamesByIdRef.current = operationNamesById;
+    }, [operationNamesById]);
+    // The names the graph on screen was built from, so a range narrowed mid-build doesn't blank
+    // the rows of ops the graph has yet to drop. #2088
+    const [drawnOperationNamesById, setDrawnOperationNamesById] = useState(operationNamesById);
 
     const onBuilt = useCallback(
         (graph: OpGraphBuiltGraph) => {
@@ -766,6 +795,7 @@ const OperationGraphInner = ({
             indexEntries.sort((left, right) => left.operationId - right.operationId);
             setNodeIndex(indexEntries);
             setNodeIdByOperationId(renderedByOpId);
+            setDrawnOperationNamesById(operationNamesByIdRef.current);
             // A new array with the same detections rebuilds `deviceSubgraphs`, and
             // `runBuild` then loops.
             pendingEmptyPaneCheckRef.current = true;
@@ -850,23 +880,37 @@ const OperationGraphInner = ({
         return toolbar === undefined ? 0 : Math.max(0, toolbar.bottom - pane.top);
     }, []);
 
-    // The side column floats over the pane's right edge the same way, and a node the
-    // slowest-operations list locates must not land behind the list that located it.
-    const paneSideInset = useCallback((pane: DOMRect): number => {
-        const side = containerRef.current?.querySelector('.op-graph-side')?.getBoundingClientRect();
-        return side === undefined ? 0 : Math.max(0, pane.right - side.left);
+    // The side column floats over the pane's right edge the same way, so a node the list locates must not
+    // land behind it. Its class says whether it spans the pane, unless a pan is measured before that lands.
+    const paneSideInset = useCallback((pane: DOMRect, sideSpansPane?: boolean): Readonly<PaneSideInset> => {
+        const side = containerRef.current?.querySelector(`.${SIDE_CLASS}`);
+        if (!side) {
+            return NO_SIDE_INSET;
+        }
+        const rect = side.getBoundingClientRect();
+        const spansPane = sideSpansPane ?? side.classList.contains(SIDE_STRETCHED_CLASS);
+        return {
+            width: Math.max(0, pane.right - rect.left),
+            bottom: spansPane ? pane.height : Math.max(0, rect.bottom - pane.top),
+        };
     }, []);
 
     // Pans, never zooms, and does nothing when the target is already on screen: the
     // viewport is the user's place in the graph, and only they may change its scale.
     const panIntoView = useCallback(
-        (bounds: { minX: number; minY: number; maxX: number; maxY: number } | null) => {
+        (bounds: GraphBounds | null, { sideSpansPane }: PanOptions = {}) => {
             const pane = containerRef.current?.getBoundingClientRect();
             if (bounds === null || pane === undefined) {
                 return;
             }
             const viewport = getViewport();
-            const { dx, dy } = revealPanShift(bounds, viewport, pane, paneChromeInset(pane), paneSideInset(pane));
+            const { dx, dy } = revealPanShift(
+                bounds,
+                viewport,
+                pane,
+                paneChromeInset(pane),
+                paneSideInset(pane, sideSpansPane),
+            );
             if (dx === 0 && dy === 0) {
                 return;
             }
@@ -887,9 +931,9 @@ const OperationGraphInner = ({
     );
 
     const focusOperation = useCallback(
-        (id: number) => {
+        (id: number, options?: PanOptions) => {
             const node = pannableNodeAt(nodeIdByOperationId.get(id) ?? String(id));
-            panIntoView(node === undefined ? null : boundsOfNodes([node]));
+            panIntoView(node === undefined ? null : boundsOfNodes([node]), options);
         },
         [pannableNodeAt, nodeIdByOperationId, panIntoView],
     );
@@ -1290,7 +1334,9 @@ const OperationGraphInner = ({
     const selectOperation = useCallback(
         (id: number) => {
             setSelectedOperationId(id);
-            focusOperation(id);
+            // Measured before the selection stretches the side column down the pane;
+            // with no column mounted yet there is nothing to stretch (#2137).
+            focusOperation(id, { sideSpansPane: isSideStretchedFor(id) });
         },
         [focusOperation],
     );
@@ -1542,32 +1588,35 @@ const OperationGraphInner = ({
 
     // Derived, so perf data arriving or going away can't leave a stored flag
     // disagreeing with what the encoding can show.
-    const isPerfOverlayActive = isPerfOverlayEnabled && perfOverlay.status === PerfOverlayStatus.READY;
+    const isPerfReady = perfOverlay.status === PerfOverlayStatus.READY;
+    const isPerfOverlayActive = isPerfOverlayEnabled && isPerfReady;
+    const isHotOpsActive = isHotOpsEnabled && isPerfReady;
+    const isHotOpsMarkingActive = isHotOpsActive && hotOpsMarking !== null;
 
     // Zoom goes straight to the DOM: it changes every wheel frame, and through
-    // state it would re-render the whole graph per frame to move one bar.
+    // state it would re-render the whole graph per frame to move one bar or badge.
     // `OpGraphEdge` can afford `useStore` only because it selects a boolean.
+    const isNodeZoomPublished = isPerfOverlayActive || isHotOpsMarkingActive;
     useEffect(() => {
         const container = containerRef.current;
-        if (container === null || !isPerfOverlayActive) {
+        if (container === null || !isNodeZoomPublished) {
             return undefined;
         }
         let lastZoom: number | null = null;
         const writeZoom = (zoom: number) => {
-            const quantised = getQuantisedPerfZoom(zoom);
+            const quantised = getQuantisedNodeZoom(zoom);
             if (quantised !== lastZoom) {
                 lastZoom = quantised;
-                container.style.setProperty(PERF_BAR_ZOOM_VAR, String(quantised));
+                container.style.setProperty(NODE_ZOOM_VAR, String(quantised));
             }
         };
         writeZoom(flowStore.getState().transform[2]);
         // No selector support in the vanilla store, so every change calls back
         // and the guard above keeps it to one write per zoom bucket.
         return flowStore.subscribe((state) => writeZoom(state.transform[2]));
-    }, [isPerfOverlayActive, flowStore]);
+    }, [isNodeZoomPublished, flowStore]);
 
-    const isCriticalPathActive = isCriticalPathEnabled && perfOverlay.status === PerfOverlayStatus.READY;
-    const isHotOpsActive = isHotOpsEnabled && perfOverlay.status === PerfOverlayStatus.READY;
+    const isCriticalPathActive = isCriticalPathEnabled && isPerfReady;
 
     // The path runs over operations, so an edge rendering into an expanded node has
     // to be presented as reaching the node: `findCriticalPath` drops edges whose
@@ -1633,12 +1682,28 @@ const OperationGraphInner = ({
     const perfRangeMaxNs = perfRange?.maxNs ?? perfOverlay.maxNs;
 
     const hotOpRows = useMemo(
-        () => (isHotOpsActive ? buildHotOpRows(perfOverlay, graphOperationIds, operationNamesById) : []),
-        [isHotOpsActive, perfOverlay, graphOperationIds, operationNamesById],
+        () => (isHotOpsActive ? buildHotOpRows(perfOverlay, graphOperationIds, drawnOperationNamesById) : []),
+        [isHotOpsActive, perfOverlay, graphOperationIds, drawnOperationNamesById],
     );
+    // Resolved per node here rather than in the styling pass, which reruns on every drag frame.
+    const hotRankByNodeId = useMemo(() => {
+        if (!isHotOpsMarkingActive) {
+            return null;
+        }
+        const ranks = buildHotRankByNodeId(getMarkedHotOpRanks(hotOpRows, hotOpsMarking), nodeIndex);
+        // Empty is off too: `styledNodes` skips its pass only on null, and would map every node per drag frame.
+        return ranks.size > 0 ? ranks : null;
+    }, [isHotOpsMarkingActive, hotOpsMarking, hotOpRows, nodeIndex]);
 
     const styledNodes = useMemo(() => {
-        if (!highlight && !matchedIds && !perfStyleByNodeId && !criticalPathNodeIds && !revealedNodeIds) {
+        if (
+            !highlight &&
+            !matchedIds &&
+            !perfStyleByNodeId &&
+            !criticalPathNodeIds &&
+            !revealedNodeIds &&
+            !hotRankByNodeId
+        ) {
             return nodes;
         }
         return nodes.map((node) => {
@@ -1646,13 +1711,13 @@ const OperationGraphInner = ({
             // Seeded from the built node so the block-kind class survives a restyle: this
             // memo replaces `className` outright, and starting empty would drop the
             // colour the moment anything was selected or filtered. #1982
-            const classNames: string[] = node.className === undefined ? [] : [node.className];
+            const nodeClasses: string[] = node.className === undefined ? [] : [node.className];
             if (isSelected) {
-                classNames.push(SELECTED_NODE_CLASS);
+                nodeClasses.push(SELECTED_NODE_CLASS);
             } else if (highlight) {
                 const relation = highlight.relationByNodeId.get(node.id);
                 if (relation) {
-                    classNames.push(NODE_CLASS_BY_RELATION[relation]);
+                    nodeClasses.push(NODE_CLASS_BY_RELATION[relation]);
                 }
             }
             // Selection outranks the filter: the anchor stays lit even while a
@@ -1672,23 +1737,27 @@ const OperationGraphInner = ({
                     (node.type === OpGraphNodeType.DEVICE_OP && matchedIds.has(String(node.data.operationId))) ||
                     (node.type === OpGraphNodeType.WEIGHT_GROUP && fanContainerEnclosesMatch(node.id, matchedIds)))
             ) {
-                classNames.push(MATCHED_NODE_CLASS);
+                nodeClasses.push(MATCHED_NODE_CLASS);
             }
             if (criticalPathNodeIds?.has(node.id)) {
-                classNames.push(CRITICAL_PATH_NODE_CLASS);
+                nodeClasses.push(CRITICAL_PATH_NODE_CLASS);
             }
             if (revealedNodeIds?.has(node.id)) {
-                classNames.push(REVEALED_NODE_CLASS);
+                nodeClasses.push(REVEALED_NODE_CLASS);
             }
-            const className = classNames.length > 0 ? classNames.join(' ') : undefined;
+            const className = nodeClasses.length > 0 ? nodeClasses.join(' ') : undefined;
             // Custom properties only, so perf stacks with selection, the
             // highlight and the inherited filter dim instead of displacing any.
             const perfStyle = perfStyleByNodeId?.get(node.id);
             const buriedMatchCount = matches.buriedCountById.get(node.id) ?? 0;
-            const nextData =
-                buriedMatchCount > 0 && node.data.buriedMatchCount !== buriedMatchCount
-                    ? { ...node.data, buriedMatchCount }
-                    : node.data;
+            const hotRank = hotRankByNodeId?.get(node.id);
+            let nextData = node.data;
+            if (buriedMatchCount > 0 && nextData.buriedMatchCount !== buriedMatchCount) {
+                nextData = { ...nextData, buriedMatchCount };
+            }
+            if (hotRank !== undefined && nextData.hotRank !== hotRank) {
+                nextData = { ...nextData, hotRank };
+            }
 
             if (className === undefined && perfStyle === undefined && nextData === node.data) {
                 return node;
@@ -1700,18 +1769,18 @@ const OperationGraphInner = ({
             // scores change — so an untouched node hits the cache and keeps the
             // object it was given.
             const cached = styledNodeCache.get(node);
-            if (
+            const hasSameChips =
                 cached !== undefined &&
-                cached.className === className &&
-                cached.perfStyle === perfStyle &&
-                cached.styled.data.buriedMatchCount === nextData.buriedMatchCount
-            ) {
+                cached.styled.data.buriedMatchCount === nextData.buriedMatchCount &&
+                cached.styled.data.hotRank === nextData.hotRank;
+            if (hasSameChips && cached.className === className && cached.perfStyle === perfStyle) {
                 return cached.styled;
             }
 
             const styled = {
                 ...node,
-                data: nextData,
+                // The cached data when only the class or the bar changed, so a restyle doesn't re-render the node.
+                data: hasSameChips ? cached.styled.data : nextData,
                 ...(perfStyle ? { style: { ...node.style, ...perfStyle } } : {}),
                 ...(className === undefined ? {} : { className }),
                 // Selection is mirrored into React Flow's own flag so its keyboard
@@ -1733,6 +1802,7 @@ const OperationGraphInner = ({
         criticalPathNodeIds,
         styledNodeCache,
         revealedNodeIds,
+        hotRankByNodeId,
     ]);
 
     const styledEdges = useMemo(() => {
@@ -1741,19 +1811,19 @@ const OperationGraphInner = ({
         }
         return edges.map((edge) => {
             const relation = highlight?.relationByEdgeId.get(edge.id);
-            const classNames: string[] = [];
+            const edgeClasses: string[] = [];
             if (relation) {
-                classNames.push(EDGE_CLASS_BY_RELATION[relation]);
+                edgeClasses.push(EDGE_CLASS_BY_RELATION[relation]);
             }
             if (criticalPathEdgeIds?.has(edge.id)) {
-                classNames.push(CRITICAL_PATH_EDGE_CLASS);
+                edgeClasses.push(CRITICAL_PATH_EDGE_CLASS);
             }
             // An edge between two matches stays lit so the matched subset is
             // traceable; a selection edge outranks the filter either way.
             if (matchedIds && (relation || bothEndsMatched(edge, matchedIds, nodeIdByOperationId))) {
-                classNames.push(MATCHED_EDGE_CLASS);
+                edgeClasses.push(MATCHED_EDGE_CLASS);
             }
-            return classNames.length > 0 ? { ...edge, className: classNames.join(' ') } : edge;
+            return edgeClasses.length > 0 ? { ...edge, className: edgeClasses.join(' ') } : edge;
         });
     }, [edges, highlight, matchedIds, criticalPathEdgeIds, nodeIdByOperationId]);
 
@@ -1902,10 +1972,8 @@ const OperationGraphInner = ({
         return found ? totalNs : undefined;
     }, [isPerfOverlayActive, selectedBlock, selectedPerfAggregate, perfOverlay]);
 
-    // Closed mid-build so the panel can't describe an operation the graph being
-    // laid out is about to drop.
-    const isPanelOpen = selectedOperationId !== null && !isBuilding;
-    const isHotOpsVisible = isHotOpsActive && !isBuilding;
+    const isPanelOpen = isDetailsPanelOpen(selectedOperationId, isBuilding);
+    const isSideStretched = isSideStretchedFor(selectedOperationId);
 
     const containerClassName = [
         'operation-graph-react-flow',
@@ -1993,10 +2061,8 @@ const OperationGraphInner = ({
                     >
                         <Background />
                         <Controls />
-                        {/* Docked left rather than in React Flow's default corner: the
-                        panel is a full-height right column, and `onBuilt` always
-                        resolves a selection, so a right-docked minimap would be
-                        hidden in every state the user lands in. */}
+                        {/* Docked left rather than in React Flow's default corner, which the
+                        side column covers whenever the details or a long list are open. */}
                         <MiniMap
                             pannable
                             position='bottom-left'
@@ -2033,9 +2099,10 @@ const OperationGraphInner = ({
                     {perfHoverLabel}
                 </div>
             ) : null}
-            {isPanelOpen || isHotOpsVisible ? (
-                <div className='op-graph-side'>
-                    {isHotOpsVisible ? (
+            {isPanelOpen || isHotOpsActive ? (
+                <div className={classNames(SIDE_CLASS, { [SIDE_STRETCHED_CLASS]: isSideStretched })}>
+                    {/* Mounted through a build so a relayout keeps the list's scroll. #2088 */}
+                    {isHotOpsActive ? (
                         <OpGraphHotOpsPanel
                             rows={hotOpRows}
                             linkedOpCount={perfOverlay.linkedOpCount}
@@ -2044,13 +2111,14 @@ const OperationGraphInner = ({
                             maxNs={perfRangeMaxNs}
                             selectedOperationId={selectedOperationId}
                             onSelectOperation={selectListedOperation}
+                            isInert={isBuilding}
                         />
                     ) : null}
                     {isPanelOpen ? (
                         <OpGraphInfoPanel
                             operationId={selectedOperationId}
                             operationById={operationById}
-                            operationNamesById={operationNamesById}
+                            operationNamesById={drawnOperationNamesById}
                             onLocateOperation={centerOperation}
                             isPerfOverlayActive={isPerfOverlayActive}
                             perfDeviceTimeNs={selectedPerfDeviceTimeNs}

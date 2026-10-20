@@ -9,6 +9,7 @@ import os
 import tempfile
 import traceback
 from collections import defaultdict
+from contextlib import contextmanager
 from dataclasses import dataclass
 from functools import lru_cache
 from io import StringIO
@@ -19,11 +20,14 @@ from typing import (
     List,
     Literal,
     Optional,
+    Set,
     Tuple,
     Union,
     overload,
 )
 
+import matplotlib
+import matplotlib.pyplot as plt
 import pandas as pd
 import zstd
 from tt_perf_report import perf_report
@@ -35,6 +39,43 @@ from ttnn_visualizer.exceptions import (
 from ttnn_visualizer.models import Instance
 
 logger = logging.getLogger(__name__)
+
+# The server only ever draws figures to files, and the default can resolve to an
+# interactive GUI backend (macosx), which has no business in a web worker. Forced,
+# so a user's MPLBACKEND can't change it.
+matplotlib.use("Agg")
+
+
+def _close_figures_opened_since(open_before: Set[int]) -> None:
+    """Close the figures tt-perf-report opened and never closed (#2135).
+
+    pyplot keeps every figure alive until it is closed. Closing only the new ones,
+    rather than `plt.close("all")`, leaves figures that already existed alone. The
+    figure registry is process-global, so a threaded worker could still see another
+    request's figure here; the default gevent worker doesn't yield mid-generation.
+    """
+    for figure_number in set(plt.get_fignums()) - open_before:
+        plt.close(figure_number)
+
+
+@contextmanager
+def _stacked_report_plot_skipped():
+    """Stop tt-perf-report drawing the stacked-report PNG, which nothing reads.
+
+    A closed figure still holds its canvas and renderer in a reference cycle, so its
+    buffer (hundreds of MB on a large capture) lives until the cyclic GC runs; not
+    drawing at all also saves most of the generation time. tt-perf-report has no
+    option for this, so it clears the module's `HAS_MATPLOTLIB`, which only
+    `plot_stacked_report` reads (1.4.0); the stacked CSV is written before the plot.
+    The tests pin the flag, in case an upstream rename silently brings the plot back.
+    """
+    has_matplotlib = perf_report.HAS_MATPLOTLIB
+    perf_report.HAS_MATPLOTLIB = False
+    try:
+        yield
+    finally:
+        perf_report.HAS_MATPLOTLIB = has_matplotlib
+
 
 # Cell values after NaN sanitization; matches LocalCSVQueryRunner.execute_query.
 CSVCell = Optional[Union[str, float, int]]
@@ -1098,34 +1139,38 @@ class OpsPerformanceReportQueries:
             else:
                 ignore_signposts = cls.DEFAULT_IGNORE_SIGNPOSTS
 
+            open_figures = set(plt.get_fignums())
             try:
-                perf_report.generate_perf_report(
-                    [csv_file],
-                    start_signpost,
-                    end_signpost,
-                    ignore_signposts,
-                    print_signposts,
-                    cls.DEFAULT_MIN_PERCENTAGE,
-                    cls.DEFAULT_ID_RANGE,
-                    cls.DEFAULT_ARCH,
-                    csv_output_file.name,
-                    cls.DEFAULT_NO_ADVICE,
-                    tracing_mode,
-                    cls.DEFAULT_RAW_OP_CODES,
-                    no_host_ops,
-                    cls.DEFAULT_NO_SUMMARY,
-                    group_by,
-                    cls.DEFAULT_CLASSIC_COLORS,
-                    csv_summary_file.name,
-                    no_stacked_report,
-                    cls.DEFAULT_NO_STACK_BY_IN0,
-                    cls.DEFAULT_STACKED_CSV_FILE,
-                    not merge_devices,
-                )
+                with _stacked_report_plot_skipped():
+                    perf_report.generate_perf_report(
+                        [csv_file],
+                        start_signpost,
+                        end_signpost,
+                        ignore_signposts,
+                        print_signposts,
+                        cls.DEFAULT_MIN_PERCENTAGE,
+                        cls.DEFAULT_ID_RANGE,
+                        cls.DEFAULT_ARCH,
+                        csv_output_file.name,
+                        cls.DEFAULT_NO_ADVICE,
+                        tracing_mode,
+                        cls.DEFAULT_RAW_OP_CODES,
+                        no_host_ops,
+                        cls.DEFAULT_NO_SUMMARY,
+                        group_by,
+                        cls.DEFAULT_CLASSIC_COLORS,
+                        csv_summary_file.name,
+                        no_stacked_report,
+                        cls.DEFAULT_NO_STACK_BY_IN0,
+                        cls.DEFAULT_STACKED_CSV_FILE,
+                        not merge_devices,
+                    )
             except Exception as e:
                 logger.error(f"Error loading report: {e}")
                 logger.error(f"Full traceback:\n{traceback.format_exc()}")
                 raise DataFormatError(e)
+            finally:
+                _close_figures_opened_since(open_figures)
 
             try:
                 ops_perf_results, signposts = cls.extract_signposts(

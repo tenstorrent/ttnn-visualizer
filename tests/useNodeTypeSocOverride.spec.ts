@@ -9,13 +9,13 @@ import { useNodeType } from '../src/hooks/useAPI';
 import { DeviceArchitecture } from '../src/definitions/DeviceArchitecture';
 
 // The arch an unknown part reports: no baked descriptor exists for it, which is
-// the case #1776 is about (Grendel and the licensee Quasar-IP parts).
-const UNKNOWN_ARCH = 'grendel_xyz' as DeviceArchitecture;
+// the case #1776 is about (licensee Quasar-IP parts such as Horizon).
+const UNKNOWN_ARCH = 'horizon_xyz' as DeviceArchitecture;
 
 // Shape of the fixture built from `report_with_zones`: a complete descriptor
 // carried by the report itself.
 const suppliedDescriptor = {
-    arch_name: 'GRENDEL_XYZ',
+    arch_name: 'HORIZON_XYZ',
     grid: { x_size: 10, y_size: 8 },
     functional_workers: ['2-2', '3-2', '4-2'],
     dram: [['2-7'], ['4-0']],

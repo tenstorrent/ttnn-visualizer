@@ -5,6 +5,7 @@
 import { describe, expect, it } from 'vitest';
 import { DeviceArchitecture } from '../src/definitions/DeviceArchitecture';
 import { getChipDesign } from '../src/functions/getChipDesign';
+import { resolveMaxCores } from '../src/functions/getCoreCount';
 import { parseSocDescriptorOverride } from '../src/functions/socDescriptorOverride';
 import { ChipDesign } from '../src/model/ClusterModel';
 
@@ -25,7 +26,12 @@ const tilesOf = (design: ChipDesign): { list: string; tile: string }[] =>
 describe('baked chip designs', () => {
     it('covers every arch the app bakes', () => {
         expect(baked.map(({ arch }) => arch).sort()).toEqual(
-            [DeviceArchitecture.BLACKHOLE, DeviceArchitecture.QUASAR, DeviceArchitecture.WORMHOLE].sort(),
+            [
+                DeviceArchitecture.BLACKHOLE,
+                DeviceArchitecture.GRENDEL,
+                DeviceArchitecture.QUASAR,
+                DeviceArchitecture.WORMHOLE,
+            ].sort(),
         );
     });
 
@@ -55,4 +61,12 @@ describe('baked chip designs', () => {
     it.each(baked)('$arch: passes the validator a report-supplied descriptor must pass', ({ design }) => {
         expect(parseSocDescriptorOverride(design).status).toBe('valid');
     });
+
+    // The perf default restates the mesh size by hand; keep the two in step until it reads the descriptor.
+    it.each([DeviceArchitecture.QUASAR, DeviceArchitecture.GRENDEL])(
+        '%s: the core-count default is its worker count',
+        (arch) => {
+            expect(resolveMaxCores({ architecture: arch }, [])).toBe(getChipDesign(arch)?.functional_workers.length);
+        },
+    );
 });
