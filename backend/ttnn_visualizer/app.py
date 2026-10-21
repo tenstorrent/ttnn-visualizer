@@ -16,7 +16,7 @@ import webbrowser
 from http import HTTPStatus
 from os import environ
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Mapping, Optional
 from urllib.error import URLError
 from urllib.request import urlopen
 
@@ -57,8 +57,10 @@ from ttnn_visualizer.startup_requirements import enforce
 from ttnn_visualizer.startup_requirements import report as report_startup_requirements
 from ttnn_visualizer.usage_collection import (
     get_collection_config_path,
+    load_usage_collection_config,
     prepare_usage_collection_config,
 )
+from ttnn_visualizer.usage_metrics import UsageMetricsExporter
 from ttnn_visualizer.utils import (
     find_gunicorn_path,
     is_flag_enabled,
@@ -539,6 +541,20 @@ def display_mode_info_without_db(config):
         print(f"   Remote directory: {config.REMOTE_DATA_DIRECTORY}")
 
 
+def _start_usage_export(config) -> Optional[UsageMetricsExporter]:
+    """Start pushing usage counters when a local install has opted in with an endpoint.
+
+    Under ``--daemon`` gunicorn detaches and the launcher exits at once, so only the
+    pushes at start and stop are made.
+    """
+    if is_flag_enabled(config.SERVER_MODE):
+        return None
+    collection_config = load_usage_collection_config()
+    if not collection_config.enabled or not collection_config.remote_write_endpoint:
+        return None
+    return UsageMetricsExporter().start()
+
+
 def _record_launch(config):
     """Record a local launch or report hosted recording status.
 
@@ -557,6 +573,11 @@ def _record_launch(config):
         if collection_config.enabled and disabled_reason is not None:
             print(
                 "📈 Aggregate usage collection is DISABLED: event logging is disabled."
+            )
+        elif collection_config.enabled and not collection_config.remote_write_endpoint:
+            print(
+                "📈 Aggregate usage collection is DISABLED: no remote_write_endpoint "
+                f"is set in {get_collection_config_path()}."
             )
         elif collection_config.enabled:
             print(
@@ -791,6 +812,7 @@ def main():
     # use) ends a launch that never served a request, and counting those would
     # inflate the figure with exactly the sessions where nobody used the tool.
     _record_launch(config)
+    exporter = _start_usage_export(config)
 
     try:
         result = subprocess.run(gunicorn_args)
@@ -798,6 +820,9 @@ def main():
             sys.exit(result.returncode)
     except KeyboardInterrupt:
         print("\nServer stopped by user (Ctrl+C)")
+    finally:
+        if exporter is not None:
+            exporter.stop()
 
 
 if __name__ == "__main__":
