@@ -231,10 +231,12 @@ TOOL_TABLES: Dict[str, frozenset] = {
     "operation_provenance": frozenset({"operations", "operation_arguments"}),
     # The errors table is optional: a report that predates it is answered with a caveat.
     "errors": frozenset({"operations"}),
+    # `buffers` because `query_tensors` joins it for a size on a `tensors` without one.
     "dram_fallbacks": frozenset(
         {
             "operations",
             "operation_arguments",
+            "buffers",
             "tensors",
             "input_tensors",
             "output_tensors",

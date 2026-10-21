@@ -30,7 +30,7 @@ from ttnn_visualizer.agent import allocation_failures
 from ttnn_visualizer.agent import dram_fallbacks as fallback_rules
 from ttnn_visualizer.agent import l1_peak as peak_replay
 from ttnn_visualizer.agent.bounds import bounded, ensure_graph_readable
-from ttnn_visualizer.agent.handles import CacheVariant, ReportRegistry
+from ttnn_visualizer.agent.handles import TOOL_TABLES, CacheVariant, ReportRegistry
 from ttnn_visualizer.agent.operations import (
     BUFFER_SIZE_UNIT,
     RankScope,
@@ -42,6 +42,7 @@ from ttnn_visualizer.agent.operations import (
     scoped,
 )
 from ttnn_visualizer.agent.scope_outcomes import failed_device_operation_names
+from ttnn_visualizer.agent.tool_names import McpToolName
 from ttnn_visualizer.models import (
     L1_BUFFER_TYPES,
     ErrorRecord,
@@ -70,10 +71,12 @@ MAX_PEAK_CONTRIBUTORS = 20
 # Repeats of one composition listed; one capture repeats a composition 9,679 times.
 MAX_REPEAT_OPERATION_IDS = 20
 # The tables behind each answer's figures, so its rank refusal covers every one.
+# `query_tensors` joins `device_tensors` by id alone where it has no `rank`.
 _ERROR_TABLES = ("errors", "captured_graph")
 _FALLBACK_TABLES = (
     "operation_arguments",
     "tensors",
+    "device_tensors",
     "input_tensors",
     "output_tensors",
     "errors",
@@ -730,9 +733,9 @@ def operation_failure_fields(
         if error is not None:
             graphs = _graphs_checked(queries, scope, [operation.operation_id])
             fields["error"] = _error_entry(error, _graph_for(graphs, operation))
-    if queries.has_table("operation_arguments") and _attributable(
-        queries, scope, _FALLBACK_TABLES, withheld, "dram_fallback"
-    ):
+    if all(
+        queries.has_table(table) for table in TOOL_TABLES[McpToolName.DRAM_FALLBACKS]
+    ) and _attributable(queries, scope, _FALLBACK_TABLES, withheld, "dram_fallback"):
         report = _cached_dram_fallbacks(registry, handle, queries, scope)
         fallback = report.by_operation_id.get(operation.operation_id)
         if fallback is not None:

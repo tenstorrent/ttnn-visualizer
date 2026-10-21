@@ -75,13 +75,19 @@ def _report(
     devices: Sequence[Tuple[int, int, int]] = ((0, 1499136, 64),),
     errors_table: bool = True,
     arguments_table: bool = True,
+    buffers_table: bool = True,
 ) -> Tuple[ReportRegistry, str]:
     directory = tmp_path / "profiler"
     directory.mkdir()
+    schema = (
+        _SCHEMA
+        if buffers_table
+        else re.sub(r"CREATE TABLE buffers \([^;]*\);", "", _SCHEMA)
+    )
     connection = sqlite3.connect(directory / "db.sqlite")
     try:
         connection.executescript(
-            _SCHEMA
+            schema
             + (_ERRORS if errors_table else "")
             + (_ARGUMENTS if arguments_table else "")
         )
@@ -104,7 +110,10 @@ def _report(
         )
         connection.executemany("INSERT INTO input_tensors VALUES (?, ?, ?)", inputs)
         connection.executemany("INSERT INTO output_tensors VALUES (?, ?, ?)", outputs)
-        connection.executemany("INSERT INTO buffers VALUES (?, 0, ?, ?, ?, 0)", buffers)
+        if buffers_table:
+            connection.executemany(
+                "INSERT INTO buffers VALUES (?, 0, ?, ?, ?, 0)", buffers
+            )
         connection.executemany("INSERT INTO devices VALUES (?, ?, ?)", devices)
         connection.commit()
     finally:
@@ -225,6 +234,21 @@ def _tensor_row(tensor_id: int, address: int, buffer_type: int) -> Tuple:
         address,
         buffer_type,
     )
+
+
+def _retry_rows(rank: int) -> Dict[str, Sequence[Tuple]]:
+    """One rank's `ttnn.conv2d` failing to allocate L1 and retried into DRAM. Its
+    output's `device_tensors` address differs per rank."""
+    return {
+        "operations": [(1, "ttnn.conv2d", 1.0), (2, "ttnn.conv2d", 1.0)],
+        "errors": [(1, "ttnn.conv2d", "TT_THROW", _OUT_OF_MEMORY, "", "")],
+        "tensors": [_tensor_row(20, 5000, 0)],
+        "device_tensors": [(20, 0, 5000 + rank)],
+        "output_tensors": [(2, 0, 20)],
+        "buffers": [(2, 0, 5000, 1024, 0, 0)],
+        "devices": [(0, 1499136, 64)],
+        "captured_graph": [(2, json.dumps([_circular_buffer(6000, 300)]))],
+    }
 
 
 def _start(name: str) -> Dict:
@@ -812,6 +836,60 @@ class TestHowTheDatabaseIsRead:
         result = failures.dram_fallbacks(registry, handle, rank=1)
 
         assert [entry["operation_id"] for entry in result["fallbacks"]] == [1]
+
+    def test_every_rank_answers_where_every_table_carries_rank(self, tmp_path):
+        registry, handle = _ranked_report(
+            tmp_path, {rank: _retry_rows(rank) for rank in (0, 1)}
+        )
+
+        listed = failures.dram_fallbacks(registry, handle, rank=1)["fallbacks"]
+        detail = linking.operation_detail(registry, handle, operation_id=2, rank=1)
+
+        assert [entry["operation_id"] for entry in listed] == [2]
+        assert detail["dram_fallback"]["signal"] == "retry_after_failure"
+
+    @pytest.mark.parametrize("table", ["device_tensors", "operation_arguments"])
+    def test_fallbacks_are_refused_where_a_table_they_read_spans_ranks(
+        self, tmp_path, table
+    ):
+        """Without `rank` on `device_tensors`, `query_tensors` joins it by tensor id
+        alone, so another rank's address can enter `device_addresses`, which the
+        view check prefers over the tensor's own."""
+        registry, handle = _ranked_report(
+            tmp_path, {rank: _retry_rows(rank) for rank in (0, 1)}, unranked=[table]
+        )
+
+        with pytest.raises(ValueError, match="cannot be attributed to rank 1"):
+            failures.dram_fallbacks(registry, handle, rank=1)
+        detail = linking.operation_detail(registry, handle, operation_id=2, rank=1)
+
+        assert "dram_fallback" not in detail
+        assert "dram_fallback is withheld" in detail["caveat"]
+
+    def test_the_peak_reads_no_device_addresses_so_answers_without_their_rank(
+        self, tmp_path
+    ):
+        registry, handle = _ranked_report(
+            tmp_path,
+            {rank: _retry_rows(rank) for rank in (0, 1)},
+            unranked=["device_tensors"],
+        )
+
+        assert failures.l1_peak(registry, handle, rank=1)["peak"]["total_bytes"] == 300
+
+    def test_fallbacks_need_the_buffers_table(self, tmp_path):
+        """`query_tensors` joins `buffers` for a size where `tensors` has none, as
+        most captures' does, so without it the tool cannot answer."""
+        registry, handle = _report(
+            tmp_path, operations=[(1, "ttnn.add")], buffers_table=False
+        )
+
+        loaded = load_report(
+            ReportRegistry(), profiler_path=registry.get(handle).profiler_path
+        )
+
+        assert "dram_fallbacks" in loaded["unanswerable"]
+        assert "errors" in loaded["answerable"]
 
     def test_a_captured_graph_past_the_bound_is_not_read(self, tmp_path):
         """Each tool loads every graph it matches at once, so each asks the size first."""
