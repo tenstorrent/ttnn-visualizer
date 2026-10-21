@@ -967,6 +967,33 @@ class TestOperationDetail:
         with pytest.raises(ValueError, match="no operation 99"):
             agent_operations.operation_detail(registry, handle, 99)
 
+    def test_it_reports_l1_pressure_and_fragmentation_per_operation(self, loaded):
+        """Mirrors `src/functions/l1Pressure.ts` (`computeL1Pressure`) so an agent
+        can inspect L1 fullness, largest contiguous free block, high-water mark,
+        and fragmentation without reimplementing interval merging. #2172"""
+        sql = _REPORT_SQL + """
+        INSERT INTO operations VALUES (4, 'ttnn.fragmented_op', 1.0);
+        INSERT INTO buffers VALUES
+            (4, 0, 100000, 50000, 'L1', 0),
+            (4, 0, 500000, 50000, 'L1', 0);
+        """
+        registry, handle = loaded(sql, name="l1-pressure")
+
+        op2 = agent_operations.operation_detail(registry, handle, 2)
+        assert op2["l1_pressure"] == {
+            "fullness_pct": 0.3,
+            "largest_free_block": 1499136 - 4296,
+            "allocated_bytes": 4096,
+            "usable_bytes": 1499136,
+            "high_water_bytes": 4296,
+            "is_fragmented": False,
+        }
+
+        op4 = agent_operations.operation_detail(registry, handle, 4)
+        assert op4["l1_pressure"]["allocated_bytes"] == 100000
+        assert op4["l1_pressure"]["high_water_bytes"] == 550000
+        assert op4["l1_pressure"]["is_fragmented"] is True
+
 
 class TestOperationProvenance:
     def test_it_answers_what_the_operation_was_called_with(self, loaded):

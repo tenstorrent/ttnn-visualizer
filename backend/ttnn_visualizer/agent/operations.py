@@ -218,6 +218,97 @@ def _buffer_type_name(value: object) -> str:
     return str(name if name is not None else value)
 
 
+FRAGMENTATION_GAP_RATIO = 0.1
+
+
+def _compute_l1_start_addr(devices: List[object]) -> int:
+    """Mirror `computeL1StartAddr` in `src/functions/l1Pressure.ts`. #2172"""
+    for device in devices:
+        bank_addr = getattr(device, "address_at_first_l1_bank", 0) or 0
+        cb_addr = getattr(device, "address_at_first_l1_cb_buffer", 0) or 0
+        if bank_addr > 0 and cb_addr > 0:
+            return min(bank_addr, cb_addr)
+    return 0
+
+
+def _compute_l1_pressure(
+    buffers: List[object], devices: List[object]
+) -> Optional[Dict[str, object]]:
+    """Mirror `computeL1Pressure` in `src/functions/l1Pressure.ts` for one operation. #2172"""
+    device = next(
+        (d for d in devices if (getattr(d, "worker_l1_size", 0) or 0) > 0), None
+    )
+    if device is None:
+        return None
+    worker_l1_size = int(getattr(device, "worker_l1_size", 0) or 0)
+    l1_start_addr = _compute_l1_start_addr(devices)
+    usable_size = worker_l1_size - l1_start_addr
+    if usable_size <= 0:
+        return None
+
+    target_device_id = getattr(device, "device_id", None)
+    l1_buffers = [
+        b
+        for b in buffers
+        if _buffer_type_name(getattr(b, "buffer_type", None)) == "L1"
+        and (getattr(b, "max_size_per_bank", 0) or 0) > 0
+        and (
+            target_device_id is None
+            or getattr(b, "device_id", None) == target_device_id
+        )
+    ]
+
+    if not l1_buffers:
+        return {
+            "fullness_pct": 0.0,
+            "largest_free_block": usable_size,
+            "allocated_bytes": 0,
+            "usable_bytes": usable_size,
+            "high_water_bytes": 0,
+            "is_fragmented": False,
+        }
+
+    sorted_buffers = sorted(
+        l1_buffers, key=lambda b: int(getattr(b, "address", 0) or 0)
+    )
+    merged: List[List[int]] = []
+    for buf in sorted_buffers:
+        start = int(getattr(buf, "address", 0) or 0)
+        end = start + int(getattr(buf, "max_size_per_bank", 0) or 0)
+        if merged and start <= merged[-1][1]:
+            merged[-1][1] = max(merged[-1][1], end)
+        else:
+            merged.append([start, end])
+
+    allocated_bytes = sum(end - start for start, end in merged)
+    high_water = max(end for _, end in merged)
+    fullness_pct = round(min(100.0, (allocated_bytes / usable_size) * 100.0), 1)
+
+    largest_free_block = 0
+    cursor = l1_start_addr
+    for start, end in merged:
+        clamped_start = max(start, l1_start_addr)
+        clamped_end = min(end, worker_l1_size)
+        if clamped_start > cursor:
+            largest_free_block = max(largest_free_block, clamped_start - cursor)
+        cursor = max(cursor, clamped_end)
+    if worker_l1_size > cursor:
+        largest_free_block = max(largest_free_block, worker_l1_size - cursor)
+
+    high_water_bytes = max(0, min(high_water, worker_l1_size) - l1_start_addr)
+    unallocated_in_span = high_water_bytes - allocated_bytes
+    is_fragmented = unallocated_in_span > usable_size * FRAGMENTATION_GAP_RATIO
+
+    return {
+        "fullness_pct": fullness_pct,
+        "largest_free_block": largest_free_block,
+        "allocated_bytes": allocated_bytes,
+        "usable_bytes": usable_size,
+        "high_water_bytes": high_water_bytes,
+        "is_fragmented": is_fragmented,
+    }
+
+
 def _device_capacity(queries: DatabaseQueries, scope: RankScope) -> Dict[str, object]:
     """L1 geometry, so a per-bank figure can be read against something.
 
@@ -592,6 +683,7 @@ def operation_detail(
                 filters=scoped(queries, "buffers", scope, operation_id=wanted_operation)
             )
         )
+        devices = list(queries.query_devices(filters=scoped(queries, "devices", scope)))
 
         # Only the tensors this operation refers to. Reading the report's whole
         # tensor table to describe a handful parses every other tensor's memory
@@ -666,6 +758,7 @@ def operation_detail(
         "input_count": len(inputs),
         "output_count": len(outputs),
         "allocations": dict(sorted(allocations.items())),
+        "l1_pressure": _compute_l1_pressure(buffers, devices),
         # Reported rather than asserted: these two are in different units on a
         # report that carries `tensors.size`, and in the *same* unit on one that
         # does not, where the tensor figure is the per-bank allocation itself.
