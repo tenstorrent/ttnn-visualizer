@@ -11,13 +11,15 @@
 
 import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider, useIsFetching } from '@tanstack/react-query';
 import { Provider, createStore, useAtomValue } from 'jotai';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
     useGetDeviceOperationListPerf,
     useGetDeviceOperationListPerfByOpId,
     useLinkedPerformanceReport,
+    useOpToPerfIdFiltered,
+    useOpToPerfIdForPerfTable,
     useOperationsList,
     usePerformanceReport,
 } from '../src/hooks/useAPI';
@@ -32,6 +34,7 @@ import {
     tracingModeAtom,
 } from '../src/store/app';
 import { StackedGroupBy } from '../src/definitions/StackedPerfTable';
+import { OpType } from '../src/definitions/Performance';
 import { useAllocationFailures } from '../src/hooks/useAllocationFailures';
 import { AtomProvider, type AtomProviderInitialValues } from './helpers/atomProvider';
 import axiosInstance from '../src/libs/axiosInstance';
@@ -229,11 +232,17 @@ describe('useLinkedPerformanceReport', () => {
 const DEVICE_OP_NAMES = ['Matmul', 'Softmax'];
 const NUM_DEVICES = 2;
 
-const perfRow = (id: number, rawOpCode: string) => ({ id: String(id), raw_op_code: rawOpCode, device_time: '100' });
+const perfRow = (id: number, rawOpCode: string, device = 0) => ({
+    id: String(id),
+    raw_op_code: rawOpCode,
+    device: String(device),
+    op_type: OpType.DEVICE_OP,
+    device_time: '100',
+});
 
 /** The same run with devices unmerged: each operation appears once per device. */
 const unmergedRows = DEVICE_OP_NAMES.flatMap((name, index) =>
-    Array.from({ length: NUM_DEVICES }, (_, device) => perfRow(index * NUM_DEVICES + device + 2, name)),
+    Array.from({ length: NUM_DEVICES }, (_, device) => perfRow(index * NUM_DEVICES + device + 2, name, device)),
 );
 
 /**
@@ -481,7 +490,7 @@ describe('report matching under a filtered performance tab', () => {
             mockRun(FAILED_SHAPES.aborted, ['Matmul', 'Softmax']);
 
             const { result } = renderWithView(
-                () => useAllocationFailures(),
+                () => useAllocationFailures(useOpToPerfIdForPerfTable()),
                 [[activeProfilerReportAtom, ACTIVE_REPORT]],
             );
 
@@ -490,6 +499,7 @@ describe('report matching under a filtered performance tab', () => {
             expect(result.current.listings[0]).toMatchObject({
                 failure: { operationId: 1, operationName: 'ttnn.matmul' },
                 failedDeviceOperations: ['Matmul'],
+                ranDeviceOperationCount: 0,
                 linkedRowCount: 0,
             });
         });
@@ -499,7 +509,7 @@ describe('report matching under a filtered performance tab', () => {
 
             const { result } = renderWithView(
                 () => ({
-                    failures: useAllocationFailures(),
+                    failures: useAllocationFailures(useOpToPerfIdForPerfTable()),
                     match: useGetDeviceOperationListPerf(),
                     operations: useOperationsList().data,
                     report: useLinkedPerformanceReport().data,
@@ -536,5 +546,159 @@ describe('report matching under a filtered performance tab', () => {
         rerender();
 
         expect(result.current[0]).toBe(beforeRerender);
+    });
+
+    // #2084: only the row the merge kept is in the linked report, so without this the
+    // other device's row of each operation has no op link.
+    it('links every per-device row of an operation when devices are unmerged', async () => {
+        const { result } = renderWithView(
+            () => useOpToPerfIdForPerfTable(),
+            [
+                [activeProfilerReportAtom, ACTIVE_REPORT],
+                [mergeDevicesAtom, false],
+            ],
+        );
+
+        await waitFor(() => expect(result.current).toHaveLength(unmergedRows.length));
+
+        const opIdByPerfId = new Map(result.current.map(({ perfId, opId }) => [perfId, opId]));
+
+        expect(Object.fromEntries(opIdByPerfId)).toEqual({ '2': 1, '3': 1, '4': 2, '5': 2 });
+        expect(getReportRequests()).toContainEqual(
+            expect.objectContaining({ merge_devices: false, hide_host_ops: true, tracing_mode: false }),
+        );
+    });
+
+    it('groups from the whole run, whatever else the tab is filtering', async () => {
+        const { result } = renderWithView(
+            () => useOpToPerfIdForPerfTable(),
+            [[activeProfilerReportAtom, ACTIVE_REPORT], ...FILTERED_VIEW],
+        );
+
+        await waitFor(() => expect(result.current).toHaveLength(unmergedRows.length));
+
+        const unmergedRequests = getReportRequests().filter((params) => !params.merge_devices);
+
+        expect(unmergedRequests).toHaveLength(1);
+        expect(unmergedRequests[0]).toMatchObject({ hide_host_ops: true, tracing_mode: false });
+        expect(unmergedRequests[0]?.start_signpost).toBeUndefined();
+    });
+
+    it('leaves the merged lookup untouched, and asks for no unmerged report, while devices are merged', async () => {
+        const { result } = renderWithView(
+            () => [useOpToPerfIdForPerfTable(), useOpToPerfIdFiltered()] as const,
+            [[activeProfilerReportAtom, ACTIVE_REPORT]],
+        );
+
+        await waitFor(() => expect(result.current[1]).toHaveLength(DEVICE_OP_NAMES.length));
+
+        expect(result.current[0]).toBe(result.current[1]);
+        expect(getReportRequests().every((params) => params.merge_devices)).toBe(true);
+    });
+
+    it('asks for no unmerged report when no operation is linked', async () => {
+        const { result } = renderWithView(
+            () => [useOpToPerfIdForPerfTable(), useLinkedPerformanceReport()] as const,
+            [[mergeDevicesAtom, false]],
+        );
+
+        await waitFor(() => expect(result.current[1].isSuccess).toBe(true));
+
+        expect(result.current[0]).toEqual([]);
+        expect(getReportRequests().every((params) => params.merge_devices)).toBe(true);
+    });
+
+    it('falls back to the merged lookup when the unmerged report fails', async () => {
+        const serveReports = vi.mocked(axiosInstance.get).getMockImplementation()!;
+
+        vi.mocked(axiosInstance.get).mockImplementation((url: string, config?: unknown) =>
+            url.includes(Endpoints.PERFORMANCE_RESULTS_REPORT) &&
+            !(config as { params: RequestParams }).params.merge_devices
+                ? Promise.reject(new Error('unmerged report failed'))
+                : serveReports(url, config as Parameters<typeof serveReports>[1]),
+        );
+
+        const { result } = renderWithView(
+            () => [useOpToPerfIdForPerfTable(), useOpToPerfIdFiltered()] as const,
+            [
+                [activeProfilerReportAtom, ACTIVE_REPORT],
+                [mergeDevicesAtom, false],
+            ],
+        );
+
+        await waitFor(() => {
+            expect(result.current[1]).toHaveLength(DEVICE_OP_NAMES.length);
+            expect(getReportRequests().some((params) => !params.merge_devices)).toBe(true);
+        });
+
+        expect(result.current[0]).toBe(result.current[1]);
+    });
+
+    // A single-device run has no siblings, so consumers memoised on the lookup keep their result.
+    it('hands back the merged lookup itself when the unmerged rows have no siblings', async () => {
+        const serveReports = vi.mocked(axiosInstance.get).getMockImplementation()!;
+
+        vi.mocked(axiosInstance.get).mockImplementation((url: string, config?: unknown) =>
+            url.includes(Endpoints.PERFORMANCE_RESULTS_REPORT) &&
+            !(config as { params: RequestParams }).params.merge_devices
+                ? Promise.resolve({ data: { report: [...mergedRows], stacked_report: [], signposts: [] } })
+                : serveReports(url, config as Parameters<typeof serveReports>[1]),
+        );
+
+        const { result } = renderWithView(
+            () => [useOpToPerfIdForPerfTable(), useOpToPerfIdFiltered(), useIsFetching()] as const,
+            [
+                [activeProfilerReportAtom, ACTIVE_REPORT],
+                [mergeDevicesAtom, false],
+            ],
+        );
+
+        // Settled, so the unmerged rows have reached the hook rather than being still in flight.
+        await waitFor(() => {
+            expect(result.current[1]).toHaveLength(DEVICE_OP_NAMES.length);
+            expect(getReportRequests().some((params) => !params.merge_devices)).toBe(true);
+            expect(result.current[2]).toBe(0);
+        });
+
+        expect(result.current[0]).toBe(result.current[1]);
+    });
+
+    it('shares the tab’s own request when only devices are unmerged', async () => {
+        const { result } = renderWithView(() => {
+            const name = useAtomValue(activePerformanceReportFolderNameAtom);
+
+            return [usePerformanceReport(name), useOpToPerfIdForPerfTable()] as const;
+        }, [
+            [activeProfilerReportAtom, ACTIVE_REPORT],
+            [mergeDevicesAtom, false],
+        ]);
+
+        await waitFor(() => expect(result.current[1]).toHaveLength(unmergedRows.length));
+
+        expect(getReportRequests().filter((params) => !params.merge_devices)).toHaveLength(1);
+    });
+
+    it('keeps its result across re-renders, and drops the unmerged rows once devices are merged again', async () => {
+        const store = createStore();
+
+        store.set(activeProfilerReportAtom, ACTIVE_REPORT);
+        store.set(mergeDevicesAtom, false);
+
+        const { result, rerender } = renderWithStore(
+            () => [useOpToPerfIdForPerfTable(), useOpToPerfIdFiltered()] as const,
+            store,
+        );
+
+        await waitFor(() => expect(result.current[0]).toHaveLength(unmergedRows.length));
+
+        const beforeRerender = result.current[0];
+        rerender();
+
+        expect(result.current[0]).toBe(beforeRerender);
+
+        act(() => store.set(mergeDevicesAtom, true));
+
+        expect(result.current[0]).toBe(result.current[1]);
+        expect(result.current[0]).toHaveLength(DEVICE_OP_NAMES.length);
     });
 });
