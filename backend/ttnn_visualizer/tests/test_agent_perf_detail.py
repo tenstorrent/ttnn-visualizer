@@ -856,43 +856,50 @@ class TestProgramCacheInventory:
         assert ("program_cache" in loaded["answerable"]) is answerable
 
     @pytest.mark.parametrize(
-        "content",
+        ("content", "problem"),
         [
-            b"",
-            b" \n",
-            b",\n",
-            _NOT_UTF_8,
-            f"OP CODE,OP TYPE,DEVICE ID,{PROGRAM_HASH_COLUMN},{PROGRAM_CACHE_HIT_COLUMN}\n".encode(
-                "utf-8"
+            pytest.param(b"", "empty", id="empty"),
+            pytest.param(b" \n", "empty", id="whitespace-only"),
+            pytest.param(b",\n", "empty", id="comma-only"),
+            # The encoding named is the locale's, which `top_ops` reads with too.
+            pytest.param(_NOT_UTF_8, "not ", id="not-utf-8"),
+            pytest.param(
+                f"OP CODE,OP TYPE,DEVICE ID,{PROGRAM_HASH_COLUMN},{PROGRAM_CACHE_HIT_COLUMN}\n".encode(
+                    "utf-8"
+                ),
+                "no data rows",
+                id="header-only",
             ),
-            f"OP CODE,OP TYPE,GLOBAL CALL COUNT,{PROGRAM_HASH_COLUMN},{PROGRAM_CACHE_HIT_COLUMN}\nMatmul,tt_dnn_device,1,a,True\n".encode(
-                "utf-8"
+            pytest.param(
+                f"OP CODE,OP TYPE,GLOBAL CALL COUNT,{PROGRAM_HASH_COLUMN},{PROGRAM_CACHE_HIT_COLUMN}\nMatmul,tt_dnn_device,1,a,True\n".encode(
+                    "utf-8"
+                ),
+                "missing columns: DEVICE ID",
+                id="missing-device-id",
             ),
-            (
-                f"OP CODE,OP TYPE,DEVICE ID,{PROGRAM_HASH_COLUMN},{PROGRAM_CACHE_HIT_COLUMN}\n"
-                + ("Matmul,tt_dnn_device,0,a,True\n" * 400)
-            ).encode("utf-8")
-            + b"Matmul \xb5s,tt_dnn_device,0,a,True\n",
-        ],
-        ids=[
-            "empty",
-            "whitespace-only",
-            "comma-only",
-            "not-utf-8",
-            "header-only",
-            "missing-device-id",
-            "non-utf-8-past-8k",
+            pytest.param(
+                (
+                    f"OP CODE,OP TYPE,DEVICE ID,{PROGRAM_HASH_COLUMN},{PROGRAM_CACHE_HIT_COLUMN}\n"
+                    + ("Matmul,tt_dnn_device,0,a,True\n" * 400)
+                ).encode("utf-8")
+                + b"Matmul \xb5s,tt_dnn_device,0,a,True\n",
+                "not ",
+                id="non-utf-8-past-8k",
+            ),
         ],
     )
     def test_a_header_that_cannot_be_read_leaves_it_unanswerable(
-        self, tmp_path, content
+        self, tmp_path, content, problem
     ):
+        """#2170: and says why, so an agent can tell an empty capture from a
+        corrupt one without calling `top_ops` to find out."""
         (tmp_path / "ops_perf_results.csv").write_bytes(content)
 
         loaded = load_report(ReportRegistry(), performance_path=str(tmp_path))
 
         assert "top_ops" not in loaded["answerable"]
         assert "program_cache" not in loaded["answerable"]
+        assert loaded["performance_csv_problem"].startswith(problem)
 
     @pytest.mark.parametrize(
         "content",

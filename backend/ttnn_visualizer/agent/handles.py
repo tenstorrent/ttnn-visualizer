@@ -278,14 +278,37 @@ def _csv_columns(path: Optional[Path]) -> frozenset:
         return frozenset()
 
 
-def _has_perf_data_row(path: Optional[Path]) -> bool:
-    """Whether the CSV decodes cleanly and has at least one row after the header."""
+def _perf_csv_problem(path: Optional[Path]) -> Optional[str]:
+    """Why tt-perf-report cannot report on this CSV, or None when it can.
+
+    None too when there is no CSV, which `performance_csv` being null already says.
+    """
     if path is None:
-        return False
+        return None
     try:
-        return len(path.read_text().strip().split("\n")) >= 2
-    except (OSError, UnicodeDecodeError):
-        return False
+        with path.open(newline="") as source:
+            header = next(csv.reader(source), [])
+            # Read to the end rather than stopping at the first row: `top_ops`
+            # decodes the whole file, so a bad byte anywhere has to be found here.
+            # Line by line, so a large capture is never held in memory.
+            has_data_row = False
+            for line in source:
+                has_data_row = has_data_row or bool(line.strip())
+    except OSError as error:
+        return f"unreadable: {error.strerror or error}"
+    except UnicodeDecodeError as error:
+        return f"not {error.encoding} text (byte {error.start} cannot be decoded)"
+    except csv.Error as error:
+        return f"malformed header: {error}"
+
+    if not any(cell.strip() for cell in header):
+        return "empty"
+    absent = TOP_OPS_REQUIRED_COLUMNS - set(header)
+    if absent:
+        return f"missing columns: {', '.join(sorted(absent))}"
+    if not has_data_row:
+        return "no data rows"
+    return None
 
 
 def _perf_csv(instance: Instance) -> Optional[Path]:
@@ -323,9 +346,8 @@ def _inventory(instance: Instance) -> Dict[str, object]:
     perf_csv = _perf_csv(instance)
     perf_columns = _csv_columns(perf_csv)
     # Both tools run tt-perf-report, which needs its key columns and a data row.
-    perf_ready = TOP_OPS_REQUIRED_COLUMNS <= perf_columns and _has_perf_data_row(
-        perf_csv
-    )
+    perf_csv_problem = _perf_csv_problem(perf_csv)
+    perf_ready = perf_csv is not None and perf_csv_problem is None
     record("top_ops", perf_ready)
     # Older captures carry neither column, and every count would then be zero.
     record(
@@ -355,6 +377,9 @@ def _inventory(instance: Instance) -> Dict[str, object]:
         "answerable": available,
         "unanswerable": missing,
         "performance_csv": perf_csv.name if perf_csv else None,
+        # Why `top_ops` and `program_cache` are unanswerable when a CSV is present,
+        # so an agent can tell an empty capture from a corrupt one.
+        "performance_csv_problem": perf_csv_problem,
         # Kept as a key, and now empty: the database questions have tools. What
         # stays unexposed is page-level (`buffer_pages`), which is millions of rows
         # on an ordinary capture and needs a different shape than a tool response.

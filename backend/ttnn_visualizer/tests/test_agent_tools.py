@@ -173,6 +173,7 @@ class TestReportInventory:
         }
         assert loaded["capture"]["ARCH"] == "wormhole_b0"
         assert loaded["performance_csv"] == "ops_perf_results_x.csv"
+        assert loaded["performance_csv_problem"] is None
 
     def test_it_never_names_a_tool_that_is_not_registered(self, tmp_path):
         """`operations` was listed whenever a `db.sqlite` was present, but no such
@@ -251,6 +252,7 @@ class TestReportInventory:
         assert loaded["performance_csv"] == "ops_perf_results_new.csv"
         assert "top_ops" not in loaded["answerable"]
         assert "top_ops" in loaded["unanswerable"]
+        assert loaded["performance_csv_problem"] == "empty"
 
     def test_a_missing_directory_is_refused_with_the_path(self, tmp_path):
         with pytest.raises(ValueError, match="performance_path is not a directory"):
