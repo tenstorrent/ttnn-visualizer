@@ -3,14 +3,19 @@
 # SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
 import json
+import logging
+import os
 import re
+import shutil
 import stat
+import subprocess
+import threading
 import uuid
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-import yaml
 from ttnn_visualizer import event_logging, usage_collection, usage_metrics
 from ttnn_visualizer.event_logging import (
     _DETAIL_FIELD_ENUMS,
@@ -28,11 +33,14 @@ from ttnn_visualizer.event_logging import (
     record_event,
 )
 from ttnn_visualizer.usage_metrics import (
-    PROMETHEUS_CONTENT_TYPE,
-    render_usage_metrics,
+    OTLP_CONTENT_TYPE,
+    UsageMetricsExporter,
+    build_otlp_payload,
+    collect_usage_metrics,
+    push_usage_metrics,
 )
 
-_GOLDEN_METRICS_PATH = Path(__file__).parent / "data" / "usage_metrics.prom"
+_ENDPOINT = "https://metrics.example/api/v1/otlp/v1/metrics"
 
 
 @pytest.fixture(autouse=True)
@@ -47,36 +55,44 @@ def _write_config(path: Path, **values):
     path.write_text(json.dumps(values), encoding="utf-8")
 
 
+def _flatten(payload) -> str:
+    """The payload as ``name{attributes} value`` lines, the series a receiver stores."""
+    lines = []
+    for resource_metrics in payload["resourceMetrics"]:
+        for scope_metrics in resource_metrics["scopeMetrics"]:
+            for metric in scope_metrics["metrics"]:
+                data = metric.get("sum") or metric["gauge"]
+                for point in data["dataPoints"]:
+                    labels = ",".join(
+                        f'{attribute["key"]}="{attribute["value"]["stringValue"]}"'
+                        for attribute in point["attributes"]
+                    )
+                    lines.append(f'{metric["name"]}{{{labels}}} {point["asInt"]}')
+    return "\n".join(lines) + "\n"
+
+
+def _exported_series(config=None, *, log_path=None) -> str:
+    resolved = config or usage_collection.load_usage_collection_config()
+    snapshot = collect_usage_metrics(resolved, log_path=log_path)
+    if snapshot is None:
+        return ""
+    assert resolved.machine_id is not None
+    return _flatten(build_otlp_payload(snapshot, resolved.machine_id, time_ns=2))
+
+
+def _health_value(metrics: str, suffix: str) -> int:
+    match = re.search(
+        rf"^ttnn_visualizer_usage_collector_{suffix}{{[^}}]*}} (\d+)$",
+        metrics,
+        re.M,
+    )
+    assert match, f"no {suffix} health metric"
+    return int(match.group(1))
+
+
 def test_missing_config_disables_collection(usage_collection_config_path):
     assert usage_collection.load_usage_collection_config().enabled is False
     assert not usage_collection_config_path.exists()
-
-
-def test_initialising_a_missing_config_enables_local_collection(
-    usage_collection_config_path,
-):
-    config = usage_collection.initialise_usage_collection_config()
-
-    assert config.enabled is True
-    assert config.remote_write_endpoint is None
-    assert config.machine_id is not None
-    assert json.loads(usage_collection_config_path.read_text(encoding="utf-8")) == {
-        "enabled": True,
-        "machine_id": config.machine_id,
-    }
-
-
-def test_initialising_preserves_an_existing_disabled_config(
-    usage_collection_config_path,
-):
-    _write_config(usage_collection_config_path, enabled=False)
-
-    config = usage_collection.initialise_usage_collection_config()
-
-    assert config.enabled is False
-    assert json.loads(usage_collection_config_path.read_text(encoding="utf-8")) == {
-        "enabled": False
-    }
 
 
 def test_default_config_path_is_fixed_beside_the_recording_opt_out(
@@ -93,13 +109,6 @@ def test_default_config_path_is_fixed_beside_the_recording_opt_out(
         usage_collection.get_collection_config_path().parent
         == event_logging.get_disabled_marker_path().parent
     )
-
-
-def test_exported_metric_pattern_matches_every_rendered_metric_name():
-    for suffix in ("view_opened_total", "usage_collector_files_found"):
-        assert re.fullmatch(
-            usage_collection.EXPORTED_METRIC_PATTERN, usage_metrics._metric_name(suffix)
-        )
 
 
 def test_config_path_follows_the_event_log_root(monkeypatch, tmp_path):
@@ -159,18 +168,18 @@ def test_enabling_collection_creates_a_stable_random_identity(
     assert stat.S_IMODE(usage_collection_config_path.stat().st_mode) == 0o600
 
 
-def test_preparing_keeps_the_bearer_token(usage_collection_config_path):
+def test_preparing_keeps_the_auth_token(usage_collection_config_path):
     _write_config(
         usage_collection_config_path,
         enabled=True,
         remote_write_endpoint="https://metrics.example/write",
-        remote_write_bearer_token="secret-token",
+        remote_write_auth_token="secret-token",
     )
 
     config = usage_collection.prepare_usage_collection_config()
 
     persisted = json.loads(usage_collection_config_path.read_text(encoding="utf-8"))
-    assert persisted["remote_write_bearer_token"] == "secret-token"
+    assert persisted["remote_write_auth_token"] == "secret-token"
     assert persisted["machine_id"] == config.machine_id
     assert stat.S_IMODE(usage_collection_config_path.stat().st_mode) == 0o600
 
@@ -190,7 +199,7 @@ def test_loading_an_unprepared_config_does_not_modify_it(
     assert stat.S_IMODE(usage_collection_config_path.stat().st_mode) == 0o644
 
 
-def test_unprepared_config_renders_no_metrics(usage_collection_config_path, tmp_path):
+def test_unprepared_config_exports_no_metrics(usage_collection_config_path, tmp_path):
     _write_config(usage_collection_config_path, enabled=True)
     log_path = tmp_path / "events.log"
     log_path.write_text(
@@ -199,7 +208,7 @@ def test_unprepared_config_renders_no_metrics(usage_collection_config_path, tmp_
         encoding="utf-8",
     )
 
-    assert render_usage_metrics(log_path=log_path) == ""
+    assert _exported_series(log_path=log_path) == ""
 
 
 def test_preparing_normalises_a_hyphenated_machine_id(usage_collection_config_path):
@@ -253,26 +262,46 @@ def test_preparing_normalises_a_hyphenated_machine_id(usage_collection_config_pa
             "remote_write_endpoint": "https://metrics.example/write",
             "machine_id": "not-a-uuid",
         },
-        {"enabled": True, "remote_write_bearer_token": "secret"},
+        {"enabled": True, "remote_write_auth_token": "secret"},
         {
             "enabled": True,
-            "remote_write_endpoint": "https://metrics.example/write",
-            "remote_write_bearer_token": "",
+            "remote_write_endpoint": "https://metrics.example/api/v1/write",
+        },
+        {
+            "enabled": True,
+            "remote_write_endpoint": "https://metrics.example/api/v1/write/",
+        },
+        {
+            "enabled": True,
+            "remote_write_endpoint": "https://metrics.example/prometheus/api/v1/push",
+        },
+        {
+            "enabled": True,
+            "remote_write_endpoint": 'https://metrics.example/w\nurl = "http://x"',
+        },
+        {
+            "enabled": True,
+            "remote_write_endpoint": "https://metrics.example/w\tx",
         },
         {
             "enabled": True,
             "remote_write_endpoint": "https://metrics.example/write",
-            "remote_write_bearer_token": 123,
+            "remote_write_auth_token": "",
         },
         {
             "enabled": True,
             "remote_write_endpoint": "https://metrics.example/write",
-            "remote_write_bearer_token": "secret\n",
+            "remote_write_auth_token": 123,
         },
         {
             "enabled": True,
             "remote_write_endpoint": "https://metrics.example/write",
-            "remote_write_bearer_token": "two words",
+            "remote_write_auth_token": "secret\n",
+        },
+        {
+            "enabled": True,
+            "remote_write_endpoint": "https://metrics.example/write",
+            "remote_write_auth_token": "two words",
         },
     ],
 )
@@ -285,12 +314,44 @@ def test_invalid_config_fails_closed(usage_collection_config_path, values):
     assert config.error
 
 
-def test_invalid_bearer_token_is_not_reported(usage_collection_config_path):
+def test_a_remote_write_endpoint_is_named_in_the_error(usage_collection_config_path):
+    # A v0.105 to v0.107 config without a token: valid then, and still loading as
+    # enabled would leave every push failing.
+    _write_config(
+        usage_collection_config_path,
+        enabled=True,
+        remote_write_endpoint="https://metrics.example/api/v1/write",
+    )
+
+    config = usage_collection.load_usage_collection_config()
+
+    assert config.enabled is False
+    assert config.error is not None
+    assert "OTLP" in config.error
+
+
+def test_the_renamed_token_field_is_named_in_the_error(usage_collection_config_path):
+    _write_config(
+        usage_collection_config_path,
+        enabled=True,
+        remote_write_endpoint=_ENDPOINT,
+        remote_write_bearer_token="secret-token",
+    )
+
+    config = usage_collection.load_usage_collection_config()
+
+    assert config.enabled is False
+    assert config.error is not None
+    assert "remote_write_auth_token" in config.error
+    assert "secret-token" not in config.error
+
+
+def test_invalid_auth_token_is_not_reported(usage_collection_config_path):
     _write_config(
         usage_collection_config_path,
         enabled=True,
         remote_write_endpoint="https://metrics.example/write",
-        remote_write_bearer_token="top secret",
+        remote_write_auth_token="top secret",
     )
 
     config = usage_collection.load_usage_collection_config()
@@ -299,17 +360,17 @@ def test_invalid_bearer_token_is_not_reported(usage_collection_config_path):
     assert "secret" not in config.error
 
 
-def test_bearer_token_is_loaded_but_not_shown(usage_collection_config_path):
+def test_auth_token_is_loaded_but_not_shown(usage_collection_config_path):
     _write_config(
         usage_collection_config_path,
         enabled=True,
         remote_write_endpoint="https://metrics.example/write",
-        remote_write_bearer_token="secret-token",
+        remote_write_auth_token="secret-token",
     )
 
     config = usage_collection.load_usage_collection_config()
 
-    assert config.remote_write_bearer_token == "secret-token"
+    assert config.remote_write_auth_token == "secret-token"
     assert "secret-token" not in repr(config)
 
 
@@ -353,355 +414,10 @@ def test_loopback_http_endpoint_is_allowed(usage_collection_config_path):
     _write_config(
         usage_collection_config_path,
         enabled=True,
-        remote_write_endpoint="http://127.0.0.1:9090/api/v1/write",
+        remote_write_endpoint="http://127.0.0.1:9090/api/v1/otlp/v1/metrics",
     )
 
     assert usage_collection.load_usage_collection_config().enabled is True
-
-
-def test_enabled_config_without_an_endpoint_collects_locally(
-    usage_collection_config_path,
-):
-    _write_config(usage_collection_config_path, enabled=True)
-
-    config = usage_collection.prepare_usage_collection_config()
-    rendered = usage_collection.build_prometheus_config(config)
-
-    assert config.enabled is True
-    assert config.remote_write_endpoint is None
-    assert config.machine_id is not None
-    assert "remote_write" not in rendered
-    assert rendered["global"]["external_labels"] == {"machine_id": config.machine_id}
-
-
-def test_prometheus_config_wires_target_identity_and_remote_write(
-    usage_collection_config_path,
-):
-    machine_id = uuid.uuid4().hex
-    config = usage_collection.UsageCollectionConfig(
-        enabled=True,
-        remote_write_endpoint="https://metrics.example/write",
-        machine_id=machine_id,
-    )
-
-    rendered = usage_collection.build_prometheus_config(
-        config, app_target="host.docker.internal:8123"
-    )
-
-    assert rendered["global"]["external_labels"] == {"machine_id": machine_id}
-    assert rendered["scrape_configs"][0]["static_configs"] == [
-        {"targets": ["host.docker.internal:8123"]}
-    ]
-    assert rendered["remote_write"] == [
-        {
-            "url": "https://metrics.example/write",
-            "write_relabel_configs": [
-                {
-                    "source_labels": ["__name__"],
-                    "regex": "ttnn_visualizer_.*",
-                    "action": "keep",
-                },
-                {"regex": "job|instance", "action": "labeldrop"},
-            ],
-        }
-    ]
-
-
-def test_prometheus_config_references_the_bearer_token_file():
-    config = usage_collection.UsageCollectionConfig(
-        enabled=True,
-        remote_write_endpoint="https://metrics.example/write",
-        remote_write_bearer_token="secret-token",
-        machine_id=uuid.uuid4().hex,
-    )
-
-    rendered = usage_collection.build_prometheus_config(config)
-
-    assert rendered["remote_write"][0]["authorization"] == {
-        "type": "Bearer",
-        "credentials_file": "/etc/prometheus/remote-write.token",
-    }
-    assert "secret-token" not in yaml.safe_dump(rendered)
-
-
-def test_disabled_prometheus_config_omits_remote_write_and_identity():
-    rendered = usage_collection.build_prometheus_config(
-        usage_collection.UsageCollectionConfig(enabled=False)
-    )
-
-    assert "external_labels" not in rendered["global"]
-    assert "remote_write" not in rendered
-
-
-@pytest.mark.parametrize(
-    "app_target",
-    [
-        "host:bad",
-        "http://host:8000",
-        ":8000",
-        "host",
-        "host:70000",
-    ],
-)
-def test_prometheus_config_rejects_invalid_app_targets(app_target):
-    with pytest.raises(ValueError):
-        usage_collection.build_prometheus_config(
-            usage_collection.UsageCollectionConfig(enabled=False),
-            app_target=app_target,
-        )
-
-
-def test_prometheus_config_uses_the_application_base_path():
-    rendered = usage_collection.build_prometheus_config(
-        usage_collection.UsageCollectionConfig(enabled=False),
-        base_path="/visualizer/",
-    )
-
-    assert rendered["scrape_configs"][0]["metrics_path"] == "/visualizer/api/metrics"
-
-
-def test_prometheus_config_matches_a_base_path_without_a_trailing_slash():
-    rendered = usage_collection.build_prometheus_config(
-        usage_collection.UsageCollectionConfig(enabled=False),
-        base_path="/visualizer",
-    )
-
-    assert rendered["scrape_configs"][0]["metrics_path"] == "/visualizerapi/metrics"
-
-
-@pytest.mark.parametrize("base_path", ["/", "/visualizer/", "/visualizer"])
-def test_the_renderer_scrapes_the_path_the_metrics_route_is_mounted_at(
-    tmp_path, base_path
-):
-    """The scrape path is composed by hand, so only the route itself can pin it.
-
-    The unit tests above compare the renderer with string literals, which a renamed or
-    remounted route would leave green while the generated config scraped a 404.
-    """
-    from ttnn_visualizer.app import create_app
-    from ttnn_visualizer.tests.fixture_settings import base_test_settings
-
-    app = create_app(
-        settings_override=base_test_settings(str(tmp_path), BASE_PATH=base_path)
-    )
-    mounted = {
-        rule.rule
-        for rule in app.url_map.iter_rules()
-        if rule.endpoint == "api.usage_metrics"
-    }
-    rendered = usage_collection.build_prometheus_config(
-        usage_collection.UsageCollectionConfig(enabled=False),
-        base_path=base_path,
-    )
-
-    assert mounted == {rendered["scrape_configs"][0]["metrics_path"]}
-
-
-@pytest.mark.parametrize("base_path", ["", "visualizer/", "/bad path/", "/path?x=1"])
-def test_prometheus_config_rejects_invalid_base_paths(base_path):
-    with pytest.raises(ValueError):
-        usage_collection.build_prometheus_config(
-            usage_collection.UsageCollectionConfig(enabled=False),
-            base_path=base_path,
-        )
-
-
-def test_renderer_writes_valid_yaml(usage_collection_config_path, tmp_path):
-    _write_config(
-        usage_collection_config_path,
-        enabled=True,
-        remote_write_endpoint="https://metrics.example/write",
-    )
-    output = tmp_path / "prometheus.yml"
-
-    usage_collection.render_prometheus_config(output)
-
-    parsed = yaml.safe_load(output.read_text(encoding="utf-8"))
-    assert parsed["scrape_configs"][0]["metrics_path"] == "/api/metrics"
-    assert parsed["remote_write"][0]["url"] == "https://metrics.example/write"
-    assert parsed["remote_write"][0]["write_relabel_configs"] == [
-        {
-            "source_labels": ["__name__"],
-            "regex": "ttnn_visualizer_.*",
-            "action": "keep",
-        },
-        {"regex": "job|instance", "action": "labeldrop"},
-    ]
-    assert "authorization" not in parsed["remote_write"][0]
-    assert stat.S_IMODE(output.stat().st_mode) == 0o644
-    token_path = tmp_path / usage_collection.REMOTE_WRITE_TOKEN_FILENAME
-    assert token_path.read_text(encoding="utf-8") == ""
-
-
-def test_renderer_writes_the_bearer_token_beside_the_config(
-    usage_collection_config_path, tmp_path
-):
-    _write_config(
-        usage_collection_config_path,
-        enabled=True,
-        remote_write_endpoint="https://metrics.example/write",
-        remote_write_bearer_token="secret-token",
-    )
-    output = tmp_path / "prometheus.yml"
-    token_path = tmp_path / usage_collection.REMOTE_WRITE_TOKEN_FILENAME
-
-    usage_collection.render_prometheus_config(output)
-
-    assert "secret-token" not in output.read_text(encoding="utf-8")
-    assert token_path.read_text(encoding="utf-8") == "secret-token"
-    assert stat.S_IMODE(token_path.stat().st_mode) == 0o644
-
-    _write_config(
-        usage_collection_config_path,
-        enabled=True,
-        remote_write_endpoint="https://metrics.example/write",
-    )
-    usage_collection.render_prometheus_config(output)
-
-    assert token_path.read_text(encoding="utf-8") == ""
-
-
-def test_renderer_preserves_existing_config_when_atomic_replace_fails(
-    usage_collection_config_path, tmp_path, monkeypatch
-):
-    _write_config(usage_collection_config_path, enabled=False)
-    output = tmp_path / "prometheus.yml"
-    output.write_text("existing configuration\n", encoding="utf-8")
-
-    def _raise_os_error(*_args):
-        raise OSError("replace failed")
-
-    monkeypatch.setattr(usage_collection.os, "replace", _raise_os_error)
-
-    with pytest.raises(OSError, match="replace failed"):
-        usage_collection.render_prometheus_config(output)
-
-    assert output.read_text(encoding="utf-8") == "existing configuration\n"
-    assert not (tmp_path / usage_collection.REMOTE_WRITE_TOKEN_FILENAME).exists()
-    assert list(tmp_path.glob(".*")) == []
-
-
-def test_renderer_replaces_the_token_before_the_config(
-    usage_collection_config_path, tmp_path, monkeypatch
-):
-    _write_config(
-        usage_collection_config_path,
-        enabled=True,
-        remote_write_endpoint="https://metrics.example/write",
-        remote_write_bearer_token="secret-token",
-        # Already prepared, so the only renames are the renderer's own.
-        machine_id=uuid.uuid4().hex,
-    )
-    output = tmp_path / "prometheus.yml"
-    output.write_text("existing configuration\n", encoding="utf-8")
-    replace = usage_collection.os.replace
-    replaced = []
-
-    def _fail_second_replace(source, destination):
-        if replaced:
-            raise OSError("replace failed")
-        replaced.append(destination)
-        replace(source, destination)
-
-    monkeypatch.setattr(usage_collection.os, "replace", _fail_second_replace)
-
-    with pytest.raises(OSError, match="replace failed"):
-        usage_collection.render_prometheus_config(output)
-
-    token_path = tmp_path / usage_collection.REMOTE_WRITE_TOKEN_FILENAME
-    assert replaced == [token_path]
-    assert token_path.read_text(encoding="utf-8") == "secret-token"
-    assert output.read_text(encoding="utf-8") == "existing configuration\n"
-    assert list(tmp_path.glob(".*")) == []
-
-
-def test_compose_mounts_the_token_where_the_config_reads_it():
-    compose_path = (
-        Path(__file__).parents[3] / "docker" / "prometheus" / "docker-compose.yml"
-    )
-    compose = yaml.safe_load(compose_path.read_text(encoding="utf-8"))
-    (token_mount,) = [
-        volume
-        for volume in compose["services"]["prometheus"]["volumes"]
-        if isinstance(volume, dict) and volume.get("type") == "bind"
-    ]
-
-    assert token_mount["target"] == usage_collection.CONTAINER_REMOTE_WRITE_TOKEN_PATH
-    assert token_mount["source"].endswith(
-        f"/{usage_collection.REMOTE_WRITE_TOKEN_FILENAME}"
-    )
-
-
-def test_renderer_with_invalid_arguments_does_not_opt_in(
-    usage_collection_config_path, tmp_path
-):
-    output = tmp_path / "prometheus.yml"
-
-    with pytest.raises(SystemExit) as exit_info:
-        usage_collection.main(["--app-target", "host", "--output", str(output)])
-
-    assert exit_info.value.code == 2
-    assert not output.exists()
-    assert not usage_collection_config_path.exists()
-
-
-@pytest.mark.parametrize(
-    "contents",
-    [
-        "{not json",
-        '{"enabled": true, "extra": "value"}',
-        '{"enabled": true, "remote_write_endpoint": "http://"}',
-    ],
-)
-def test_renderer_refuses_an_invalid_config(
-    usage_collection_config_path, tmp_path, capsys, contents
-):
-    # A rejected config loads as disabled, so rendering it would exit 0 with a valid
-    # file that collects nothing.
-    usage_collection_config_path.parent.mkdir(parents=True)
-    usage_collection_config_path.write_text(contents, encoding="utf-8")
-    output = tmp_path / "prometheus.yml"
-
-    with pytest.raises(SystemExit) as exit_info:
-        usage_collection.main(["--output", str(output)])
-
-    assert exit_info.value.code == 2
-    assert "collection config is invalid" in capsys.readouterr().err
-    assert not output.exists()
-    assert usage_collection_config_path.read_text(encoding="utf-8") == contents
-
-
-def test_renderer_reports_an_unwritable_output_as_a_failure(
-    usage_collection_config_path, tmp_path, monkeypatch, capsys
-):
-    _write_config(usage_collection_config_path, enabled=False)
-
-    def _raise_os_error(*_args):
-        raise OSError("replace failed")
-
-    monkeypatch.setattr(usage_collection.os, "replace", _raise_os_error)
-
-    with pytest.raises(SystemExit) as exit_info:
-        usage_collection.main(["--output", str(tmp_path / "prometheus.yml")])
-
-    assert exit_info.value.code == 1
-    assert "replace failed" in capsys.readouterr().err
-
-
-def test_example_prometheus_config_matches_the_builder():
-    example_path = (
-        Path(__file__).parents[3] / "docker" / "prometheus" / "prometheus.example.yml"
-    )
-    config = usage_collection.UsageCollectionConfig(
-        enabled=True,
-        remote_write_endpoint="https://prometheus.example/api/v1/write",
-        remote_write_bearer_token="token",
-        machine_id="0" * 32,
-    )
-
-    assert yaml.safe_load(
-        example_path.read_text(encoding="utf-8")
-    ) == usage_collection.build_prometheus_config(config)
 
 
 def test_metrics_preserve_compacted_counts_and_drop_private_fields(tmp_path):
@@ -715,7 +431,7 @@ def test_metrics_preserve_compacted_counts_and_drop_private_fields(tmp_path):
         encoding="utf-8",
     )
 
-    metrics = render_usage_metrics(
+    metrics = _exported_series(
         usage_collection.UsageCollectionConfig(
             enabled=True,
             remote_write_endpoint="https://metrics.example/write",
@@ -744,7 +460,7 @@ def test_metrics_skip_malformed_unknown_and_free_form_lines(tmp_path):
         encoding="utf-8",
     )
 
-    metrics = render_usage_metrics(
+    metrics = _exported_series(
         usage_collection.UsageCollectionConfig(
             enabled=True,
             remote_write_endpoint="https://metrics.example/write",
@@ -755,7 +471,7 @@ def test_metrics_skip_malformed_unknown_and_free_form_lines(tmp_path):
 
     assert "leaked" not in metrics
     assert "secret" not in metrics
-    assert "ttnn_visualizer_usage_collector_parse_errors_total 4" in metrics
+    assert _health_value(metrics, "parse_errors_total") == 4
 
 
 @pytest.mark.parametrize(
@@ -783,7 +499,7 @@ def test_metrics_refuse_values_outside_the_event_schema(tmp_path, line, private_
     log_path = tmp_path / "events.log"
     log_path.write_text(line, encoding="utf-8")
 
-    metrics = render_usage_metrics(
+    metrics = _exported_series(
         usage_collection.UsageCollectionConfig(
             enabled=True,
             remote_write_endpoint="https://metrics.example/write",
@@ -793,7 +509,7 @@ def test_metrics_refuse_values_outside_the_event_schema(tmp_path, line, private_
     )
 
     assert private_value not in metrics
-    assert "ttnn_visualizer_usage_collector_parse_errors_total 1" in metrics
+    assert _health_value(metrics, "parse_errors_total") == 1
 
 
 @pytest.mark.parametrize(
@@ -814,7 +530,7 @@ def test_metrics_reject_lines_outside_the_stored_schema(tmp_path, line):
     log_path = tmp_path / "events.log"
     log_path.write_text(f"{line}\n", encoding="utf-8")
 
-    metrics = render_usage_metrics(
+    metrics = _exported_series(
         usage_collection.UsageCollectionConfig(
             enabled=True,
             machine_id=uuid.uuid4().hex,
@@ -822,8 +538,8 @@ def test_metrics_reject_lines_outside_the_stored_schema(tmp_path, line):
         log_path=log_path,
     )
 
-    assert "_total{" not in metrics
-    assert "ttnn_visualizer_usage_collector_parse_errors_total 1" in metrics
+    assert not re.search(r"^ttnn_visualizer_(?!usage_collector_)", metrics, re.M)
+    assert _health_value(metrics, "parse_errors_total") == 1
 
 
 def _record_every_event() -> None:
@@ -846,7 +562,7 @@ def _record_every_event() -> None:
 def test_every_recorded_event_is_projected(event_log_directory):
     _record_every_event()
 
-    metrics = render_usage_metrics(
+    metrics = _exported_series(
         usage_collection.UsageCollectionConfig(
             enabled=True,
             machine_id=uuid.uuid4().hex,
@@ -856,7 +572,7 @@ def test_every_recorded_event_is_projected(event_log_directory):
 
     for event in EventLogEvent:
         assert f"ttnn_visualizer_{event.value}_total{{" in metrics
-    assert "ttnn_visualizer_usage_collector_parse_errors_total 0" in metrics
+    assert _health_value(metrics, "parse_errors_total") == 0
 
 
 def test_compaction_preserves_projected_totals(event_log_directory):
@@ -871,46 +587,16 @@ def test_compaction_preserves_projected_totals(event_log_directory):
             view=EventLogView.OPERATIONS.value,
         )
     log_path = get_event_log_path()
-    before = render_usage_metrics(config, log_path=log_path)
+    before = _exported_series(config, log_path=log_path)
     lines_before = len(log_path.read_text(encoding="utf-8").splitlines())
 
     _compact(log_path)
-    after = render_usage_metrics(config, log_path=log_path)
+    after = _exported_series(config, log_path=log_path)
 
     assert len(log_path.read_text(encoding="utf-8").splitlines()) < lines_before
     assert after == before
     assert 'view="operations"} 6' in after
-    assert "ttnn_visualizer_usage_collector_parse_errors_total 0" in after
-
-
-def test_metrics_match_the_privacy_reviewed_golden_output(tmp_path):
-    log_path = tmp_path / "events.log"
-    log_path.write_text(
-        "ts=2026-09-28T10:00:00Z event=report_loaded schema_version=1 "
-        "run_id=aaaaaaaa kind=profiler source=upload count=2\n"
-        "ts=2026-09-28T10:01:00Z event=view_opened schema_version=1 "
-        "run_id=bbbbbbbb view=operations\n",
-        encoding="utf-8",
-    )
-
-    metrics = render_usage_metrics(
-        usage_collection.UsageCollectionConfig(
-            enabled=True,
-            remote_write_endpoint="https://metrics.example/write",
-            machine_id="00000000000000000000000000000001",
-        ),
-        log_path=log_path,
-    )
-    golden_lines = _GOLDEN_METRICS_PATH.read_text(encoding="utf-8").splitlines()
-
-    assert metrics == "\n".join(golden_lines[2:]) + "\n"
-
-
-def test_disabled_metrics_are_an_empty_exposition():
-    assert (
-        render_usage_metrics(usage_collection.UsageCollectionConfig(enabled=False))
-        == ""
-    )
+    assert _health_value(after, "parse_errors_total") == 0
 
 
 def _enable_recording_opt_out(opt_out, monkeypatch):
@@ -922,25 +608,8 @@ def _enable_recording_opt_out(opt_out, monkeypatch):
         marker.touch()
 
 
-@pytest.mark.parametrize("opt_out", ["environment", "marker"])
-def test_metrics_endpoint_is_disabled_by_the_recording_opt_out(
-    client, app, usage_collection_config_path, monkeypatch, opt_out
-):
-    app.config["SERVER_MODE"] = False
-    _write_config(usage_collection_config_path, enabled=True)
-    usage_collection.prepare_usage_collection_config()
-    record_event(EventLogEvent.VIEW_OPENED, view=EventLogView.OPERATIONS)
-    assert b"ttnn_visualizer_view_opened_total" in client.get("/api/metrics").data
-
-    _enable_recording_opt_out(opt_out, monkeypatch)
-    response = client.get("/api/metrics")
-
-    assert response.status_code == 404
-    assert b"ttnn_visualizer_view_opened_total" not in response.data
-
-
 def test_missing_log_is_distinct_from_a_read_failure(tmp_path):
-    metrics = render_usage_metrics(
+    metrics = _exported_series(
         usage_collection.UsageCollectionConfig(
             enabled=True,
             remote_write_endpoint="https://metrics.example/write",
@@ -949,8 +618,8 @@ def test_missing_log_is_distinct_from_a_read_failure(tmp_path):
         log_path=tmp_path / "absent.log",
     )
 
-    assert "ttnn_visualizer_usage_collector_files_found 0" in metrics
-    assert "ttnn_visualizer_usage_collector_scan_errors 0" in metrics
+    assert _health_value(metrics, "files_found") == 0
+    assert _health_value(metrics, "scan_errors") == 0
 
 
 def test_read_failure_sets_the_scan_error(tmp_path, monkeypatch):
@@ -961,7 +630,7 @@ def test_read_failure_sets_the_scan_error(tmp_path, monkeypatch):
         raise PermissionError("refused")
 
     monkeypatch.setattr(Path, "open", _raise_permission_error)
-    metrics = render_usage_metrics(
+    metrics = _exported_series(
         usage_collection.UsageCollectionConfig(
             enabled=True,
             remote_write_endpoint="https://metrics.example/write",
@@ -970,8 +639,8 @@ def test_read_failure_sets_the_scan_error(tmp_path, monkeypatch):
         log_path=log_path,
     )
 
-    assert "ttnn_visualizer_usage_collector_files_found 1" in metrics
-    assert "ttnn_visualizer_usage_collector_scan_errors 1" in metrics
+    assert _health_value(metrics, "files_found") == 1
+    assert _health_value(metrics, "scan_errors") == 1
 
 
 def test_read_failure_preserves_cached_counters(tmp_path, monkeypatch):
@@ -986,17 +655,17 @@ def test_read_failure_preserves_cached_counters(tmp_path, monkeypatch):
         "view=operations\n",
         encoding="utf-8",
     )
-    first_metrics = render_usage_metrics(config, log_path=log_path)
+    first_metrics = _exported_series(config, log_path=log_path)
 
     def _raise_permission_error(*_args, **_kwargs):
         raise PermissionError("refused")
 
     monkeypatch.setattr(Path, "open", _raise_permission_error)
-    failed_metrics = render_usage_metrics(config, log_path=log_path)
+    failed_metrics = _exported_series(config, log_path=log_path)
 
     assert 'view="operations"} 1' in first_metrics
     assert 'view="operations"} 1' in failed_metrics
-    assert "ttnn_visualizer_usage_collector_scan_errors 1" in failed_metrics
+    assert _health_value(failed_metrics, "scan_errors") == 1
 
 
 def test_metrics_increment_from_appended_bytes_without_double_counting(tmp_path):
@@ -1013,11 +682,11 @@ def test_metrics_increment_from_appended_bytes_without_double_counting(tmp_path)
     )
     log_path.write_text(first_line, encoding="utf-8")
 
-    first_metrics = render_usage_metrics(config, log_path=log_path)
-    unchanged_metrics = render_usage_metrics(config, log_path=log_path)
+    first_metrics = _exported_series(config, log_path=log_path)
+    unchanged_metrics = _exported_series(config, log_path=log_path)
     with log_path.open("a", encoding="utf-8") as log_file:
         log_file.write(first_line)
-    appended_metrics = render_usage_metrics(config, log_path=log_path)
+    appended_metrics = _exported_series(config, log_path=log_path)
 
     assert first_metrics == unchanged_metrics
     assert 'view="operations"} 1' in first_metrics
@@ -1037,10 +706,10 @@ def test_metrics_hold_a_partial_line_until_it_is_complete(tmp_path):
         encoding="utf-8",
     )
 
-    partial_metrics = render_usage_metrics(config, log_path=log_path)
+    partial_metrics = _exported_series(config, log_path=log_path)
     with log_path.open("a", encoding="utf-8") as log_file:
         log_file.write("\n")
-    complete_metrics = render_usage_metrics(config, log_path=log_path)
+    complete_metrics = _exported_series(config, log_path=log_path)
 
     assert "ttnn_visualizer_view_opened_total" not in partial_metrics
     assert 'view="operations"} 1' in complete_metrics
@@ -1054,10 +723,10 @@ def test_metrics_bound_an_overlong_unterminated_line(tmp_path):
     log_path = tmp_path / "events.log"
     log_path.write_bytes(b"x" * MAX_LOG_BYTES)
 
-    malformed_metrics = render_usage_metrics(config, log_path=log_path)
-    unchanged_metrics = render_usage_metrics(config, log_path=log_path)
+    malformed_metrics = _exported_series(config, log_path=log_path)
+    unchanged_metrics = _exported_series(config, log_path=log_path)
 
-    assert "ttnn_visualizer_usage_collector_parse_errors_total 1" in malformed_metrics
+    assert _health_value(malformed_metrics, "parse_errors_total") == 1
     assert unchanged_metrics == malformed_metrics
     assert len(usage_metrics._metrics_state.pending) <= (
         usage_metrics.MAX_EVENT_LOG_LINE_BYTES
@@ -1068,10 +737,10 @@ def test_metrics_bound_an_overlong_unterminated_line(tmp_path):
             b"\nts=2026-09-28T10:00:00Z event=view_opened schema_version=1 "
             b"view=operations\n"
         )
-    recovered_metrics = render_usage_metrics(config, log_path=log_path)
+    recovered_metrics = _exported_series(config, log_path=log_path)
 
     assert 'view="operations"} 1' in recovered_metrics
-    assert "ttnn_visualizer_usage_collector_parse_errors_total 1" in recovered_metrics
+    assert _health_value(recovered_metrics, "parse_errors_total") == 1
 
 
 def test_metrics_reset_when_the_log_path_changes(tmp_path):
@@ -1091,8 +760,8 @@ def test_metrics_reset_when_the_log_path_changes(tmp_path):
         encoding="utf-8",
     )
 
-    render_usage_metrics(config, log_path=operations_path)
-    tensors_metrics = render_usage_metrics(config, log_path=tensors_path)
+    _exported_series(config, log_path=operations_path)
+    tensors_metrics = _exported_series(config, log_path=tensors_path)
 
     assert 'view="operations"' not in tensors_metrics
     assert 'view="tensors"} 1' in tensors_metrics
@@ -1108,14 +777,14 @@ def test_metrics_reset_when_the_machine_identity_changes(tmp_path):
     first_machine_id = uuid.uuid4().hex
     second_machine_id = uuid.uuid4().hex
 
-    render_usage_metrics(
+    _exported_series(
         usage_collection.UsageCollectionConfig(
             enabled=True,
             machine_id=first_machine_id,
         ),
         log_path=log_path,
     )
-    second_metrics = render_usage_metrics(
+    second_metrics = _exported_series(
         usage_collection.UsageCollectionConfig(
             enabled=True,
             machine_id=second_machine_id,
@@ -1141,7 +810,7 @@ def test_metrics_restart_from_a_replaced_log(tmp_path):
         "view=operations\n",
         encoding="utf-8",
     )
-    render_usage_metrics(config, log_path=log_path)
+    _exported_series(config, log_path=log_path)
 
     replacement_path = tmp_path / "replacement.log"
     replacement_path.write_text(
@@ -1149,7 +818,7 @@ def test_metrics_restart_from_a_replaced_log(tmp_path):
         encoding="utf-8",
     )
     replacement_path.replace(log_path)
-    metrics = render_usage_metrics(config, log_path=log_path)
+    metrics = _exported_series(config, log_path=log_path)
 
     assert 'view="operations"' not in metrics
     assert 'view="tensors"} 1' in metrics
@@ -1168,10 +837,10 @@ def test_metrics_restart_after_an_in_place_truncation(tmp_path):
         "view=operations\n"
     )
     log_path.write_text(line * 2, encoding="utf-8")
-    first_metrics = render_usage_metrics(config, log_path=log_path)
+    first_metrics = _exported_series(config, log_path=log_path)
 
     log_path.write_text(line, encoding="utf-8")
-    truncated_metrics = render_usage_metrics(config, log_path=log_path)
+    truncated_metrics = _exported_series(config, log_path=log_path)
 
     assert 'view="operations"} 2' in first_metrics
     assert 'view="operations"} 1' in truncated_metrics
@@ -1192,47 +861,714 @@ def test_metrics_process_more_than_one_read_chunk_exactly_once(tmp_path):
     line_count = 2_000
     log_path.write_text(line * line_count, encoding="utf-8")
 
-    metrics = render_usage_metrics(config, log_path=log_path)
-    unchanged_metrics = render_usage_metrics(config, log_path=log_path)
+    metrics = _exported_series(config, log_path=log_path)
+    unchanged_metrics = _exported_series(config, log_path=log_path)
 
     assert f'view="operations"}} {line_count}' in metrics
     assert unchanged_metrics == metrics
 
 
-def test_local_metrics_endpoint_exports_recorded_events(
-    client, app, event_log_directory, usage_collection_config_path
-):
-    app.config["SERVER_MODE"] = False
-    _write_config(
-        usage_collection_config_path,
-        enabled=True,
-        remote_write_endpoint="https://metrics.example/write",
+def test_payload_matches_the_privacy_reviewed_golden_output(tmp_path):
+    log_path = tmp_path / "events.log"
+    log_path.write_text(
+        "ts=2026-09-28T10:00:00Z event=report_loaded schema_version=1 "
+        "run_id=aaaaaaaa kind=profiler source=upload count=2\n"
+        "ts=2026-09-28T10:01:00Z event=view_opened schema_version=1 "
+        "run_id=bbbbbbbb view=operations\n",
+        encoding="utf-8",
     )
-    usage_collection.prepare_usage_collection_config()
+    machine_id = "00000000000000000000000000000001"
+    snapshot = collect_usage_metrics(
+        usage_collection.UsageCollectionConfig(enabled=True, machine_id=machine_id),
+        log_path=log_path,
+    )
+    assert snapshot is not None
+
+    def point(value, **labels):
+        return {
+            "attributes": [
+                {"key": key, "value": {"stringValue": label}}
+                for key, label in labels.items()
+            ],
+            "timeUnixNano": "2000",
+            "asInt": str(value),
+        }
+
+    def counter(name, description, *points):
+        return {
+            "name": name,
+            "description": description,
+            "sum": {
+                "aggregationTemporality": 2,
+                "isMonotonic": True,
+                "dataPoints": list(points),
+            },
+        }
+
+    def gauge(name, description, value):
+        return {
+            "name": name,
+            "description": description,
+            "gauge": {"dataPoints": [point(value, machine_id=machine_id)]},
+        }
+
+    assert build_otlp_payload(snapshot, machine_id, time_ns=2000) == {
+        "resourceMetrics": [
+            {
+                "resource": {
+                    "attributes": [
+                        {
+                            "key": "service.name",
+                            "value": {"stringValue": "ttnn-visualizer"},
+                        }
+                    ]
+                },
+                "scopeMetrics": [
+                    {
+                        "scope": {"name": "ttnn_visualizer.usage_metrics"},
+                        "metrics": [
+                            counter(
+                                "ttnn_visualizer_report_loaded_total",
+                                "Cumulative report_loaded events in the local usage log.",
+                                point(
+                                    2,
+                                    kind="profiler",
+                                    machine_id=machine_id,
+                                    source="upload",
+                                ),
+                            ),
+                            counter(
+                                "ttnn_visualizer_view_opened_total",
+                                "Cumulative view_opened events in the local usage log.",
+                                point(1, machine_id=machine_id, view="operations"),
+                            ),
+                            gauge(
+                                "ttnn_visualizer_usage_collector_files_found",
+                                "Whether the local usage event log exists.",
+                                1,
+                            ),
+                            counter(
+                                "ttnn_visualizer_usage_collector_parse_errors_total",
+                                "Cumulative malformed or unsupported lines in the "
+                                "local usage event log.",
+                                point(0, machine_id=machine_id),
+                            ),
+                            gauge(
+                                "ttnn_visualizer_usage_collector_scan_errors",
+                                "Whether reading the local usage event log failed.",
+                                0,
+                            ),
+                        ],
+                    }
+                ],
+            }
+        ]
+    }
+
+
+def test_disabled_collection_has_no_snapshot():
+    assert (
+        collect_usage_metrics(usage_collection.UsageCollectionConfig(enabled=False))
+        is None
+    )
+
+
+# Skipped without curl only off CI, so a runner that loses it fails rather than
+# silently dropping every end-to-end push test.
+_requires_curl = pytest.mark.skipif(
+    shutil.which("curl") is None and not os.environ.get("CI"),
+    reason="curl is not installed",
+)
+
+
+class _OtlpServer:
+    """A loopback receiver that records each request and answers with ``status``."""
+
+    def __init__(self, status=200, headers=None):
+        self.requests = []
+        received = self.requests
+
+        class _Handler(BaseHTTPRequestHandler):
+            def do_POST(self):
+                length = int(self.headers.get("Content-Length", "0"))
+                received.append(
+                    (self.path, dict(self.headers), self.rfile.read(length))
+                )
+                self.send_response(status)
+                for name, value in (headers or {}).items():
+                    self.send_header(name, value)
+                self.send_header("Content-Length", "0")
+                self.end_headers()
+
+            def log_message(self, *_args):
+                pass
+
+        self._server = ThreadingHTTPServer(("127.0.0.1", 0), _Handler)
+        self.endpoint = f"http://127.0.0.1:{self._server.server_port}/v1/metrics"
+        threading.Thread(target=self._server.serve_forever, daemon=True).start()
+
+    def close(self):
+        self._server.shutdown()
+        self._server.server_close()
+
+
+@pytest.fixture
+def otlp_server():
+    server = _OtlpServer()
+    yield server
+    server.close()
+
+
+@pytest.fixture
+def curl_calls(monkeypatch):
+    """Records curl invocations without running them, for pushes that must not send."""
+    calls = []
+
+    def _run(command, **kwargs):
+        calls.append((command, kwargs))
+        return subprocess.CompletedProcess(command, 0, stdout="200", stderr="")
+
+    monkeypatch.setattr(usage_metrics.subprocess, "run", _run)
+    return calls
+
+
+def _opt_in(config_path, **values):
+    _write_config(config_path, enabled=True, **values)
+    return usage_collection.prepare_usage_collection_config()
+
+
+def _curl_options(config_text: str) -> list[tuple[str, str]]:
+    """Parse the ``name = "value"`` lines curl reads, undoing their escaping."""
+    options = []
+    for line in config_text.splitlines():
+        name, separator, quoted = line.partition(" = ")
+        if not separator:
+            options.append((name, ""))
+            continue
+        assert quoted.startswith('"') and quoted.endswith('"')
+        options.append((name, re.sub(r"\\(.)", r"\1", quoted[1:-1])))
+    return options
+
+
+@_requires_curl
+def test_push_sends_the_counters_with_the_auth_token(
+    event_log_directory, usage_collection_config_path, otlp_server
+):
+    config = _opt_in(
+        usage_collection_config_path,
+        remote_write_endpoint=otlp_server.endpoint,
+        remote_write_auth_token="secret-token",
+    )
     record_event(EventLogEvent.VIEW_OPENED, view=EventLogView.OPERATIONS)
 
-    response = client.get("/api/metrics")
+    assert push_usage_metrics() is True
 
-    assert response.status_code == 200
-    assert response.content_type == PROMETHEUS_CONTENT_TYPE
-    assert b"ttnn_visualizer_view_opened_total" in response.data
+    ((path, headers, body),) = otlp_server.requests
+    assert path == "/v1/metrics"
+    assert headers["Content-Type"] == OTLP_CONTENT_TYPE
+    assert headers["Authorization"] == "Bearer secret-token"
+    sent = _flatten(json.loads(body))
+    assert (
+        f'ttnn_visualizer_view_opened_total{{machine_id="{config.machine_id}",'
+        'view="operations"} 1'
+    ) in sent
+    assert b"secret-token" not in body
 
 
-def test_metrics_endpoint_is_empty_when_collection_is_disabled(
-    client, app, usage_collection_config_path
+@_requires_curl
+def test_push_without_a_token_is_unauthenticated(
+    event_log_directory, usage_collection_config_path, otlp_server
 ):
-    app.config["SERVER_MODE"] = False
+    _opt_in(usage_collection_config_path, remote_write_endpoint=otlp_server.endpoint)
 
-    response = client.get("/api/metrics")
+    assert push_usage_metrics() is True
 
-    assert response.status_code == 200
-    assert response.data == b""
+    ((_path, headers, _body),) = otlp_server.requests
+    assert "Authorization" not in headers
 
 
-def test_metrics_endpoint_is_forbidden_in_server_mode(client):
-    response = client.get("/api/metrics")
+def test_push_keeps_the_token_and_body_off_the_command_line(
+    event_log_directory, usage_collection_config_path, curl_calls
+):
+    _opt_in(
+        usage_collection_config_path,
+        remote_write_endpoint=_ENDPOINT,
+        remote_write_auth_token="secret-token",
+    )
 
-    assert response.status_code == 403
+    assert push_usage_metrics() is True
+
+    ((command, kwargs),) = curl_calls
+    # ``-q`` first, or curl reads ``~/.curlrc`` before anything else.
+    assert command == ["curl", "-q", "--config", "-"]
+    assert "secret-token" not in " ".join(command)
+    options = _curl_options(kwargs["input"])
+    assert ("url", _ENDPOINT) in options
+    assert ("header", "Authorization: Bearer secret-token") in options
+    assert ("proto", "=http,https") in options
+    assert ("max-redirs", "0") in options
+    assert not any(name.startswith("location") for name, _value in options)
+    (body,) = [value for name, value in options if name == "data-binary"]
+    assert "resourceMetrics" in json.loads(body)
+
+
+@pytest.mark.parametrize(
+    "values",
+    [
+        {},
+        {"remote_write_endpoint": "ftp://metrics.example/write"},
+    ],
+)
+def test_push_needs_a_valid_endpoint(
+    event_log_directory, usage_collection_config_path, curl_calls, values
+):
+    _opt_in(usage_collection_config_path, **values)
+
+    assert push_usage_metrics() is False
+    assert curl_calls == []
+
+
+def test_push_waits_for_a_prepared_identity(
+    event_log_directory, usage_collection_config_path, curl_calls
+):
+    _write_config(
+        usage_collection_config_path, enabled=True, remote_write_endpoint=_ENDPOINT
+    )
+
+    assert push_usage_metrics() is False
+    assert curl_calls == []
+
+
+def test_push_stops_once_the_config_is_disabled(
+    event_log_directory, usage_collection_config_path, curl_calls
+):
+    _opt_in(usage_collection_config_path, remote_write_endpoint=_ENDPOINT)
+    _write_config(
+        usage_collection_config_path, enabled=False, remote_write_endpoint=_ENDPOINT
+    )
+
+    assert push_usage_metrics() is False
+    assert curl_calls == []
+
+
+@pytest.mark.parametrize("opt_out", ["environment", "marker"])
+def test_push_stops_at_the_recording_opt_out(
+    event_log_directory, usage_collection_config_path, curl_calls, monkeypatch, opt_out
+):
+    _opt_in(usage_collection_config_path, remote_write_endpoint=_ENDPOINT)
+    record_event(EventLogEvent.VIEW_OPENED, view=EventLogView.OPERATIONS)
+    _enable_recording_opt_out(opt_out, monkeypatch)
+
+    assert push_usage_metrics() is False
+    assert curl_calls == []
+
+
+@_requires_curl
+@pytest.mark.parametrize(
+    "status, headers",
+    [
+        (400, {}),
+        # Not followed, so the token is never resent to the host it names.
+        (307, {"Location": "/elsewhere"}),
+    ],
+)
+def test_push_raises_on_a_response_other_than_success(
+    event_log_directory, usage_collection_config_path, status, headers
+):
+    server = _OtlpServer(status, headers)
+    try:
+        _opt_in(
+            usage_collection_config_path,
+            remote_write_endpoint=server.endpoint,
+            remote_write_auth_token="secret-token",
+        )
+
+        with pytest.raises(OSError, match=f"HTTP {status}") as error_info:
+            push_usage_metrics()
+    finally:
+        server.close()
+
+    assert [path for path, _headers, _body in server.requests] == ["/v1/metrics"]
+    # A client error is most often a receiver that does not speak OTLP.
+    assert ("OTLP" in str(error_info.value)) is (400 <= status < 500)
+
+
+@_requires_curl
+def test_push_sends_braces_and_brackets_in_the_endpoint_literally(
+    event_log_directory, usage_collection_config_path, otlp_server
+):
+    # Without ``globoff`` curl would expand these into two requests, each carrying
+    # the token.
+    _opt_in(
+        usage_collection_config_path,
+        remote_write_endpoint=otlp_server.endpoint + "/{a,b}[1-2]",
+        remote_write_auth_token="secret-token",
+    )
+
+    assert push_usage_metrics() is True
+
+    assert [path for path, _headers, _body in otlp_server.requests] == [
+        "/v1/metrics/{a,b}[1-2]"
+    ]
+
+
+@pytest.mark.parametrize("status", ["200400", "2000", "20", ""])
+def test_push_needs_exactly_one_success_status(
+    event_log_directory, usage_collection_config_path, monkeypatch, status
+):
+    _opt_in(usage_collection_config_path, remote_write_endpoint=_ENDPOINT)
+    monkeypatch.setattr(
+        usage_metrics.subprocess,
+        "run",
+        lambda command, **_kwargs: subprocess.CompletedProcess(
+            command, 0, stdout=status, stderr=""
+        ),
+    )
+
+    with pytest.raises(OSError, match="endpoint answered HTTP"):
+        push_usage_metrics()
+
+
+@_requires_curl
+def test_relaunching_continues_the_totals_without_a_start_time(
+    event_log_directory, usage_collection_config_path, otlp_server
+):
+    """A second launch's total must read as following the first, not as a reset."""
+    _opt_in(usage_collection_config_path, remote_write_endpoint=otlp_server.endpoint)
+    record_event(EventLogEvent.VIEW_OPENED, view=EventLogView.OPERATIONS)
+
+    first = UsageMetricsExporter(interval_seconds=3600)
+    first._push()
+    # A fresh launcher process starts with no cached aggregate.
+    usage_metrics._metrics_state = usage_metrics._MetricsState()
+    record_event(EventLogEvent.VIEW_OPENED, view=EventLogView.OPERATIONS)
+    second = UsageMetricsExporter(interval_seconds=3600)
+    second._push()
+
+    def _view_points(body):
+        metrics = json.loads(body)["resourceMetrics"][0]["scopeMetrics"][0]["metrics"]
+        (metric,) = [
+            metric
+            for metric in metrics
+            if metric["name"] == "ttnn_visualizer_view_opened_total"
+        ]
+        return metric["sum"]["dataPoints"]
+
+    (first_point,), (second_point,) = [
+        _view_points(body) for _path, _headers, body in otlp_server.requests
+    ]
+    assert (first_point["asInt"], second_point["asInt"]) == ("1", "2")
+    assert "startTimeUnixNano" not in first_point
+    assert "startTimeUnixNano" not in second_point
+
+
+@_requires_curl
+def test_push_sends_a_token_with_quotes_and_backslashes_verbatim(
+    event_log_directory, usage_collection_config_path, otlp_server
+):
+    _opt_in(
+        usage_collection_config_path,
+        remote_write_endpoint=otlp_server.endpoint,
+        remote_write_auth_token='a"b\\c',
+    )
+
+    assert push_usage_metrics() is True
+
+    ((_path, headers, _body),) = otlp_server.requests
+    assert headers["Authorization"] == 'Bearer a"b\\c'
+
+
+@_requires_curl
+def test_a_loopback_push_bypasses_the_proxy(
+    event_log_directory, usage_collection_config_path, otlp_server, monkeypatch
+):
+    proxy = _OtlpServer()
+    try:
+        proxy_url = proxy.endpoint.removesuffix("/v1/metrics")
+        for variable in ("http_proxy", "HTTPS_PROXY", "ALL_PROXY", "all_proxy"):
+            monkeypatch.setenv(variable, proxy_url)
+        for variable in ("no_proxy", "NO_PROXY"):
+            monkeypatch.delenv(variable, raising=False)
+        _opt_in(
+            usage_collection_config_path,
+            remote_write_endpoint=otlp_server.endpoint,
+            remote_write_auth_token="secret-token",
+        )
+
+        assert push_usage_metrics() is True
+    finally:
+        proxy.close()
+
+    assert proxy.requests == []
+    ((_path, headers, _body),) = otlp_server.requests
+    assert headers["Authorization"] == "Bearer secret-token"
+
+
+def test_a_remote_push_may_use_the_proxy(
+    event_log_directory, usage_collection_config_path, curl_calls
+):
+    _opt_in(usage_collection_config_path, remote_write_endpoint=_ENDPOINT)
+
+    assert push_usage_metrics() is True
+
+    ((_command, kwargs),) = curl_calls
+    assert not any(name == "noproxy" for name, _value in _curl_options(kwargs["input"]))
+
+
+@_requires_curl
+def test_push_ignores_the_users_curlrc(
+    event_log_directory,
+    usage_collection_config_path,
+    otlp_server,
+    monkeypatch,
+    tmp_path,
+):
+    curl_home = tmp_path / "curl-home"
+    curl_home.mkdir()
+    (curl_home / ".curlrc").write_text('header = "X-From-Curlrc: yes"\n')
+    monkeypatch.setenv("CURL_HOME", str(curl_home))
+    _opt_in(usage_collection_config_path, remote_write_endpoint=otlp_server.endpoint)
+
+    assert push_usage_metrics() is True
+
+    ((_path, headers, _body),) = otlp_server.requests
+    assert "X-From-Curlrc" not in headers
+
+
+def test_push_uses_the_requested_timeout(
+    event_log_directory, usage_collection_config_path, curl_calls
+):
+    _opt_in(usage_collection_config_path, remote_write_endpoint=_ENDPOINT)
+
+    assert push_usage_metrics(timeout_seconds=2.5) is True
+
+    ((_command, kwargs),) = curl_calls
+    options = _curl_options(kwargs["input"])
+    assert ("max-time", "2.5") in options
+    assert ("connect-timeout", "2.5") in options
+
+
+def test_push_raises_when_curl_times_out(
+    event_log_directory, usage_collection_config_path, monkeypatch
+):
+    _opt_in(usage_collection_config_path, remote_write_endpoint=_ENDPOINT)
+
+    def _time_out(command, **kwargs):
+        raise subprocess.TimeoutExpired(command, kwargs["timeout"])
+
+    monkeypatch.setattr(usage_metrics.subprocess, "run", _time_out)
+
+    with pytest.raises(TimeoutError):
+        push_usage_metrics()
+
+
+def test_push_reports_only_curls_first_error_line(
+    event_log_directory, usage_collection_config_path, monkeypatch
+):
+    _opt_in(
+        usage_collection_config_path,
+        remote_write_endpoint=_ENDPOINT,
+        remote_write_auth_token="secret-token",
+    )
+    monkeypatch.setattr(
+        usage_metrics.subprocess,
+        "run",
+        lambda command, **_kwargs: subprocess.CompletedProcess(
+            command,
+            7,
+            stdout="",
+            stderr="curl: (7) Failed to connect\n> Authorization: Bearer secret-token\n",
+        ),
+    )
+
+    with pytest.raises(OSError, match=r"curl exited with 7: curl: \(7\)") as error_info:
+        push_usage_metrics()
+
+    assert "secret-token" not in str(error_info.value)
+
+
+@pytest.mark.parametrize("value", ["a\nb", "a\rb"])
+def test_curl_config_values_refuse_line_breaks(value):
+    with pytest.raises(ValueError):
+        usage_metrics._quote_curl_config(value)
+
+
+def test_push_raises_when_curl_is_missing(
+    event_log_directory, usage_collection_config_path, monkeypatch
+):
+    _opt_in(usage_collection_config_path, remote_write_endpoint=_ENDPOINT)
+    monkeypatch.setattr(usage_metrics, "CURL_COMMAND", "ttnn-visualizer-no-such-curl")
+
+    with pytest.raises(OSError):
+        push_usage_metrics()
+
+
+def test_exporter_pushes_at_start_and_stop(monkeypatch):
+    pushes = []
+    monkeypatch.setattr(
+        usage_metrics,
+        "push_usage_metrics",
+        lambda *, timeout_seconds: pushes.append(timeout_seconds) or True,
+    )
+
+    exporter = UsageMetricsExporter(interval_seconds=3600).start()
+    exporter.stop()
+
+    assert pushes == [
+        usage_metrics.EXPORT_TIMEOUT_SECONDS,
+        usage_metrics.FINAL_PUSH_TIMEOUT_SECONDS,
+    ]
+
+
+def test_exporter_pushes_every_interval(monkeypatch):
+    pushes = []
+    third_push = threading.Event()
+
+    def _push(*, timeout_seconds):
+        pushes.append(timeout_seconds)
+        if len(pushes) == 3:
+            third_push.set()
+        return True
+
+    monkeypatch.setattr(usage_metrics, "push_usage_metrics", _push)
+
+    exporter = UsageMetricsExporter(interval_seconds=0.01).start()
+    assert third_push.wait(timeout=5)
+    exporter.stop()
+
+    assert len(pushes) >= 4
+
+
+def test_exporter_stop_skips_the_final_push_while_one_is_in_flight(monkeypatch):
+    release = threading.Event()
+    in_flight = threading.Event()
+    pushes = []
+
+    def _push(*, timeout_seconds):
+        pushes.append(timeout_seconds)
+        in_flight.set()
+        release.wait(timeout=10)
+        return True
+
+    monkeypatch.setattr(usage_metrics, "push_usage_metrics", _push)
+    monkeypatch.setattr(usage_metrics, "STOP_JOIN_TIMEOUT_SECONDS", 0.05)
+
+    exporter = UsageMetricsExporter(interval_seconds=3600).start()
+    assert in_flight.wait(timeout=5)
+    exporter.stop()
+    release.set()
+
+    assert pushes == [usage_metrics.EXPORT_TIMEOUT_SECONDS]
+
+
+def test_exporter_logs_a_run_of_failures_once(monkeypatch, caplog):
+    outcomes = [OSError("down"), OSError("still down"), True, OSError("down again")]
+
+    def _push(*, timeout_seconds):
+        outcome = outcomes.pop(0)
+        if isinstance(outcome, Exception):
+            raise outcome
+        return outcome
+
+    monkeypatch.setattr(usage_metrics, "push_usage_metrics", _push)
+    exporter = UsageMetricsExporter()
+
+    with caplog.at_level(logging.WARNING, logger=usage_metrics.__name__):
+        for _ in range(4):
+            exporter._push()
+
+    assert [record.getMessage() for record in caplog.records] == [
+        "Unable to export usage metrics: down",
+        "Unable to export usage metrics: down again",
+    ]
+
+
+class _FakeExporter:
+    def __init__(self):
+        self.events = []
+
+    def start(self):
+        self.events.append("start")
+        return self
+
+    def stop(self):
+        self.events.append("stop")
+
+
+@pytest.mark.parametrize(
+    "server_mode, values, starts",
+    [
+        (False, {"enabled": True, "remote_write_endpoint": _ENDPOINT}, True),
+        (True, {"enabled": True, "remote_write_endpoint": _ENDPOINT}, False),
+        (False, {"enabled": True}, False),
+        (False, {"enabled": False, "remote_write_endpoint": _ENDPOINT}, False),
+        (False, None, False),
+    ],
+)
+@pytest.mark.parametrize("opt_out", [None, "environment", "marker"])
+def test_launch_starts_the_exporter_only_for_an_opted_in_endpoint(
+    event_log_directory,
+    usage_collection_config_path,
+    monkeypatch,
+    server_mode,
+    values,
+    starts,
+    opt_out,
+):
+    from ttnn_visualizer import app as app_module
+
+    monkeypatch.setattr(app_module, "UsageMetricsExporter", _FakeExporter)
+    monkeypatch.setenv(RUN_ID_ENV_VAR, "")
+    if values is not None:
+        _write_config(usage_collection_config_path, **values)
+    if opt_out is not None:
+        # The banner reports collection as disabled under either opt-out, so no
+        # exporter may start, even one that would idle until the opt-out lifts.
+        _enable_recording_opt_out(opt_out, monkeypatch)
+        starts = False
+
+    # The same pairing ``main()`` uses: the launch prepares the identity the
+    # exporter's pushes need, then hands that config over.
+    collection_config = app_module._record_launch(
+        SimpleNamespace(SERVER_MODE=server_mode, TT_METAL_HOME=None)
+    )
+    exporter = app_module._start_usage_export(collection_config)
+
+    assert (exporter is not None) is starts
+    if starts:
+        assert collection_config is not None
+        assert collection_config.machine_id is not None
+
+
+@pytest.mark.parametrize(
+    "outcome, expected_exit",
+    [
+        (subprocess.CompletedProcess([], 0), None),
+        (subprocess.CompletedProcess([], 1), 1),
+        (KeyboardInterrupt(), None),
+    ],
+)
+def test_serving_stops_the_exporter_however_gunicorn_ends(
+    monkeypatch, outcome, expected_exit
+):
+    from ttnn_visualizer import app as app_module
+
+    def _run(_args):
+        if isinstance(outcome, BaseException):
+            raise outcome
+        return outcome
+
+    monkeypatch.setattr(app_module.subprocess, "run", _run)
+    exporter = _FakeExporter()
+
+    if expected_exit is None:
+        app_module._serve(["gunicorn"], exporter)
+    else:
+        with pytest.raises(SystemExit) as exit_info:
+            app_module._serve(["gunicorn"], exporter)
+        assert exit_info.value.code == expected_exit
+
+    assert exporter.events == ["stop"]
 
 
 def _record_launch_output(monkeypatch, capsys, server_mode=False) -> str:
@@ -1270,6 +1606,10 @@ def test_launch_reports_collection_without_printing_the_endpoint(
     "contents, expected",
     [
         (None, "Aggregate usage collection is DISABLED.\n   Opt in through"),
+        (
+            '{"enabled": true}',
+            "Aggregate usage collection is DISABLED: no remote_write_endpoint is set",
+        ),
         ('{"enabled": false}', "Aggregate usage collection is DISABLED.\n   Opt in"),
         (
             '{"enabled": true, "remote_write_endpoint": "ftp://private.example/write"}',

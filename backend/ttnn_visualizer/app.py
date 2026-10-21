@@ -16,7 +16,7 @@ import webbrowser
 from http import HTTPStatus
 from os import environ
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Mapping, Optional
 from urllib.error import URLError
 from urllib.request import urlopen
 
@@ -56,9 +56,11 @@ from ttnn_visualizer.settings import (
 from ttnn_visualizer.startup_requirements import enforce
 from ttnn_visualizer.startup_requirements import report as report_startup_requirements
 from ttnn_visualizer.usage_collection import (
+    UsageCollectionConfig,
     get_collection_config_path,
     prepare_usage_collection_config,
 )
+from ttnn_visualizer.usage_metrics import UsageMetricsExporter
 from ttnn_visualizer.utils import (
     find_gunicorn_path,
     is_flag_enabled,
@@ -539,8 +541,43 @@ def display_mode_info_without_db(config):
         print(f"   Remote directory: {config.REMOTE_DATA_DIRECTORY}")
 
 
-def _record_launch(config):
+def _start_usage_export(
+    collection_config: Optional[UsageCollectionConfig],
+) -> Optional[UsageMetricsExporter]:
+    """Start pushing usage counters when a local install has opted in with an endpoint.
+
+    Takes the config ``_record_launch`` prepared, so the exporter starts exactly when
+    the launch banner says collection is enabled. ``None`` means a hosted launch or a
+    recording opt-out.
+    """
+    if collection_config is None or not collection_config.can_export:
+        return None
+    return UsageMetricsExporter().start()
+
+
+def _serve(gunicorn_args: list[str], exporter: Optional[UsageMetricsExporter]) -> None:
+    """Run gunicorn to completion, stopping the exporter however it ends.
+
+    Split out of ``main()`` so the stop on a failed or interrupted server is testable.
+    Under ``--daemon`` gunicorn detaches and this returns at once, so the exporter's
+    final push happens at launch too.
+    """
+    try:
+        result = subprocess.run(gunicorn_args)
+        if result.returncode != 0:
+            sys.exit(result.returncode)
+    except KeyboardInterrupt:
+        print("\nServer stopped by user (Ctrl+C)")
+    finally:
+        if exporter is not None:
+            exporter.stop()
+
+
+def _record_launch(config) -> Optional[UsageCollectionConfig]:
     """Record a local launch or report hosted recording status.
+
+    Returns the prepared collection config for a local launch, or ``None`` when nothing
+    may be exported: a hosted launch, or one under a recording opt-out.
 
     Split out of ``main()`` because ``main()`` binds a socket and spawns gunicorn and
     so cannot be called from a test, which would leave the wiring — the part that
@@ -552,11 +589,17 @@ def _record_launch(config):
 
     server_mode = is_flag_enabled(config.SERVER_MODE)
     disabled_reason = get_recording_disabled_reason(server_mode)
+    collection_config: Optional[UsageCollectionConfig] = None
     if not server_mode:
         collection_config = prepare_usage_collection_config()
         if collection_config.enabled and disabled_reason is not None:
             print(
                 "📈 Aggregate usage collection is DISABLED: event logging is disabled."
+            )
+        elif collection_config.enabled and not collection_config.can_export:
+            print(
+                "📈 Aggregate usage collection is DISABLED: no remote_write_endpoint "
+                f"is set in {get_collection_config_path()}."
             )
         elif collection_config.enabled:
             print(
@@ -582,7 +625,9 @@ def _record_launch(config):
             )
 
         print(f"📊 Event logging is DISABLED: {disabled_reason}.")
-        return
+        # No exporter while opted out, matching the banner. Lifting the opt-out
+        # mid-session does not start one; that takes the next launch.
+        return None
 
     if server_mode:
         print(
@@ -591,7 +636,7 @@ def _record_launch(config):
             f"   Session identifiers remain in file paths and are not exported.\n"
             f"   {describe_opt_out(server_mode=True)}"
         )
-        return
+        return collection_config
 
     compact_if_needed()
     record_app_start(config, server_mode=server_mode)
@@ -604,6 +649,7 @@ def _record_launch(config):
         f"   The application itself does not transmit raw events.\n"
         f"   {describe_opt_out()}"
     )
+    return collection_config
 
 
 def _apply_cli_env_overrides(args: argparse.Namespace) -> None:
@@ -790,14 +836,8 @@ def main():
     # Deliberately last: every exit above (an invalid report path, a port already in
     # use) ends a launch that never served a request, and counting those would
     # inflate the figure with exactly the sessions where nobody used the tool.
-    _record_launch(config)
-
-    try:
-        result = subprocess.run(gunicorn_args)
-        if result.returncode != 0:
-            sys.exit(result.returncode)
-    except KeyboardInterrupt:
-        print("\nServer stopped by user (Ctrl+C)")
+    exporter = _start_usage_export(_record_launch(config))
+    _serve(gunicorn_args, exporter)
 
 
 if __name__ == "__main__":
