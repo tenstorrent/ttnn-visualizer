@@ -180,3 +180,34 @@ test('buildL1PressureResult returns loading while inputs are still fetching', ()
         }),
     ).toEqual({ status: L1PressureStatus.Loading, data: null });
 });
+
+test('computeL1PressureForOperation bounds each device by address_at_first_l1_cb_buffer and l1_bank_size when devices are provided', () => {
+    const devices = [
+        {
+            device_id: 0,
+            address_at_first_l1_bank: 103712,
+            address_at_first_l1_cb_buffer: 103712,
+            l1_bank_size: 1370848,
+            worker_l1_size: 1499136,
+            l1_num_banks: 64,
+            num_banks_per_storage_core: 1,
+            num_compute_cores: 64,
+            num_x_compute_cores: 8,
+            num_x_cores: 8,
+            num_y_compute_cores: 8,
+            num_y_cores: 8,
+            total_l1_for_interleaved_buffers: 0,
+            total_l1_for_sharded_buffers: 0,
+            total_l1_for_tensors: 0,
+            total_l1_memory: 0,
+            cb_limit: 0,
+        },
+    ];
+
+    const result = computeL1PressureForOperation([makeBuffer(103712, 137084, 0)], 103712, 1499136, devices);
+
+    expect(result.freeSegments).toBe(1);
+    expect(result.largestFreeBytes).toBe(1370848 - 137084);
+    expect(result.fullnessPercent).toBeCloseTo(10, 5);
+    expect(result.largestFreePercent).toBeCloseTo(90, 5);
+});

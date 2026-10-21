@@ -2,7 +2,7 @@
 //
 // SPDX-FileCopyrightText: © 2026 Tenstorrent AI ULC
 
-import { Buffer } from '../model/APIData';
+import { Buffer, DeviceInfo } from '../model/APIData';
 import { L1PressureBuildParams, L1PressureMetrics, L1PressureResult, L1PressureStatus } from '../model/L1Pressure';
 
 export function buildL1PressureResult({
@@ -32,14 +32,19 @@ export function buildL1PressureResult({
         return { status: L1PressureStatus.Loading, data: null };
     }
 
-    if (l1End <= l1Start) {
+    const deviceWindows = resolveDeviceL1Windows(devices);
+
+    if (deviceWindows.size === 0 && l1End <= l1Start) {
         return { status: L1PressureStatus.Unavailable, data: null };
     }
 
     const pressureByOperation = new Map<number, L1PressureMetrics>();
 
     for (const operation of buffersByOperation) {
-        pressureByOperation.set(operation.id, computeL1PressureForOperation(operation.buffers, l1Start, l1End));
+        pressureByOperation.set(
+            operation.id,
+            computeL1PressureForOperation(operation.buffers, l1Start, l1End, devices),
+        );
     }
 
     return { status: L1PressureStatus.Ready, data: pressureByOperation };
@@ -50,12 +55,45 @@ interface MemoryChunk {
     size: number;
 }
 
+interface L1Window {
+    start: number;
+    end: number;
+}
+
+function resolveDeviceL1Windows(devices: DeviceInfo[] | undefined): Map<number, L1Window> {
+    const windows = new Map<number, L1Window>();
+
+    if (!devices) {
+        return windows;
+    }
+
+    for (const device of devices) {
+        const bankSize = device.l1_bank_size ?? 0;
+        const workerSize = device.worker_l1_size ?? 0;
+        if (bankSize > 0 && workerSize > 0) {
+            const start = Math.max(0, device.address_at_first_l1_cb_buffer ?? 0);
+            const end = Math.min(workerSize, start + bankSize);
+            if (end > start) {
+                windows.set(device.device_id, { start, end });
+            }
+        }
+    }
+
+    return windows;
+}
+
 // Perf-table v1 uses DB buffers from useBuffers(BufferType.L1) only — not captured-graph CBs
 // or buffer_allocate nodes that OperationDetails.memoryData() also considers.
-export function computeL1PressureForOperation(buffers: Buffer[], l1Start: number, l1End: number): L1PressureMetrics {
-    const usableSize = l1End - l1Start;
+export function computeL1PressureForOperation(
+    buffers: Buffer[],
+    l1Start: number,
+    l1End: number,
+    devices?: DeviceInfo[],
+): L1PressureMetrics {
+    const deviceWindows = resolveDeviceL1Windows(devices);
+    const defaultUsableSize = l1End - l1Start;
 
-    if (usableSize <= 0) {
+    if (deviceWindows.size === 0 && defaultUsableSize <= 0) {
         return {
             fullnessPercent: 0,
             freeSegments: 0,
@@ -66,9 +104,9 @@ export function computeL1PressureForOperation(buffers: Buffer[], l1Start: number
 
     // Each device has its own physical L1 sharing the same address layout, so buffers must be
     // grouped by device_id before deduping/merging — otherwise same-offset buffers on different
-    // devices collide and the merged layout is meaningless. We surface the worst-case (most full)
-    // device, since that is the binding L1 constraint for the operation, and keep its fragmentation
-    // figures internally consistent (segments + largest-free come from that same device).
+    // devices collide and the merged layout is meaningless. When device geometry is present, each
+    // device is bounded by [address_at_first_l1_cb_buffer, address_at_first_l1_cb_buffer + l1_bank_size)
+    // so reserved L1 Small space is not counted as free L1 (#2172).
     const buffersByDevice = new Map<number, Buffer[]>();
 
     for (const buffer of buffers) {
@@ -81,14 +119,31 @@ export function computeL1PressureForOperation(buffers: Buffer[], l1Start: number
         }
     }
 
+    if (deviceWindows.size > 0) {
+        const metricsPerDevice: L1PressureMetrics[] = [];
+        for (const [deviceId, window] of deviceWindows.entries()) {
+            const deviceBuffers = buffersByDevice.get(deviceId) ?? [];
+            metricsPerDevice.push(
+                computeMetricsForDevice(deviceBuffers, window.start, window.end, window.end - window.start),
+            );
+        }
+
+        return metricsPerDevice.reduce((worst, metrics) =>
+            metrics.largestFreeBytes < worst.largestFreeBytes ||
+            (metrics.largestFreeBytes === worst.largestFreeBytes && metrics.fullnessPercent > worst.fullnessPercent)
+                ? metrics
+                : worst,
+        );
+    }
+
     const deviceGroups = [...buffersByDevice.values()];
 
     if (deviceGroups.length === 0) {
-        return computeMetricsForDevice([], l1Start, l1End, usableSize);
+        return computeMetricsForDevice([], l1Start, l1End, defaultUsableSize);
     }
 
     return deviceGroups
-        .map((deviceBuffers) => computeMetricsForDevice(deviceBuffers, l1Start, l1End, usableSize))
+        .map((deviceBuffers) => computeMetricsForDevice(deviceBuffers, l1Start, l1End, defaultUsableSize))
         .reduce((worst, metrics) => (metrics.fullnessPercent > worst.fullnessPercent ? metrics : worst));
 }
 
