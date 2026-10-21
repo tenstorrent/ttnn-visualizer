@@ -23,6 +23,7 @@ COLLECTION_CONFIG_FILENAME = "collection.json"
 MACHINE_ID_LABEL = "machine_id"
 PRIVATE_FILE_MODE = 0o600
 METRIC_PREFIX = "ttnn_visualizer_"
+_RENAMED_TOKEN_FIELD = "remote_write_bearer_token"
 
 # Tests replace this so they never inspect or modify the developer's real config.
 COLLECTION_CONFIG_PATH: Optional[Path] = None
@@ -36,6 +37,19 @@ class UsageCollectionConfig:
     remote_write_auth_token: Optional[str] = field(default=None, repr=False)
     machine_id: Optional[str] = None
     error: Optional[str] = None
+
+    @property
+    def can_export(self) -> bool:
+        """Whether there is an endpoint to push to and an identity to push under.
+
+        The one definition the launch banner, the exporter's start and every push use,
+        so they cannot disagree about whether collection is on.
+        """
+        return (
+            self.enabled
+            and self.remote_write_endpoint is not None
+            and self.machine_id is not None
+        )
 
 
 def get_collection_config_path() -> Path:
@@ -63,6 +77,13 @@ def _validate_remote_write_endpoint(value: Any) -> str:
         raise ValueError("remote_write_endpoint must be a non-empty URL")
 
     endpoint = value.strip()
+    # Checked before parsing, because ``urlsplit`` silently drops tabs and line breaks
+    # and would pass a URL that still carries them. A line break would end the option
+    # in curl's line-based config and let the rest of the value set others.
+    if not endpoint.isprintable() or any(character.isspace() for character in endpoint):
+        raise ValueError(
+            "remote_write_endpoint must not contain whitespace or control characters"
+        )
     parsed = urlsplit(endpoint)
     if parsed.scheme not in {"http", "https"} or not parsed.hostname:
         raise ValueError("remote_write_endpoint must be an HTTP(S) URL")
@@ -118,6 +139,13 @@ def _read_object(path: Path) -> Dict[str, Any]:
         "remote_write_auth_token",
         "machine_id",
     }
+    # Named because the old field once shipped, and a bare "unknown fields" would leave
+    # an opted-in user guessing why collection stopped.
+    if _RENAMED_TOKEN_FIELD in unknown:
+        raise ValueError(
+            f"collection config field {_RENAMED_TOKEN_FIELD} is now "
+            "remote_write_auth_token"
+        )
     if unknown:
         raise ValueError("collection config contains unknown fields")
     return raw

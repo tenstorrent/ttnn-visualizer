@@ -36,6 +36,10 @@ SERVICE_NAME = "ttnn-visualizer"
 SCOPE_NAME = "ttnn_visualizer.usage_metrics"
 EXPORT_INTERVAL_SECONDS = 60.0
 EXPORT_TIMEOUT_SECONDS = 10.0
+CONNECT_TIMEOUT_SECONDS = 3.0
+# Short, because the launcher waits on these before it exits.
+STOP_JOIN_TIMEOUT_SECONDS = 2.0
+FINAL_PUSH_TIMEOUT_SECONDS = 3.0
 CURL_COMMAND = "curl"
 # ``AGGREGATION_TEMPORALITY_CUMULATIVE`` in the OTLP metrics protocol.
 _CUMULATIVE_TEMPORALITY = 2
@@ -287,16 +291,24 @@ def build_otlp_payload(
 
 
 def _quote_curl_config(value: str) -> str:
+    # curl's config is line-based, so a line break would end the option and start
+    # another. The config validators already refuse these; this is the backstop.
+    if any(character in value for character in "\r\n"):
+        raise ValueError("curl config values must not contain line breaks")
     escaped = value.replace("\\", "\\\\").replace('"', '\\"')
     return f'"{escaped}"'
 
 
-def _post_with_curl(endpoint: str, body: str, auth_token: Optional[str]) -> None:
+def _post_with_curl(
+    endpoint: str, body: str, auth_token: Optional[str], timeout_seconds: float
+) -> None:
     """POST through the system ``curl``, which trusts the OS certificate store.
 
     Every option, including the token and the body, goes in a config read from stdin,
-    so neither appears in the process list. Redirects are not followed, so the token
-    is never resent to another host, and anything but a 2xx is an error.
+    so neither appears in the process list. ``-q`` must come first: it stops curl
+    reading ``~/.curlrc``, where ``location-trusted`` or ``insecure`` would undo the
+    options below. Redirects are refused, so the token is never resent to another
+    host, and anything but a 2xx is an error.
     """
     options = {
         "url": endpoint,
@@ -305,7 +317,9 @@ def _post_with_curl(endpoint: str, body: str, auth_token: Optional[str]) -> None
         "data-binary": body,
         "output": os.devnull,
         "write-out": "%{http_code}",
-        "max-time": str(int(EXPORT_TIMEOUT_SECONDS)),
+        "connect-timeout": str(min(CONNECT_TIMEOUT_SECONDS, timeout_seconds)),
+        "max-time": str(timeout_seconds),
+        "max-redirs": "0",
         "proto": "=http,https",
     }
     lines = [f"{name} = {_quote_curl_config(value)}" for name, value in options.items()]
@@ -317,24 +331,32 @@ def _post_with_curl(endpoint: str, body: str, auth_token: Optional[str]) -> None
 
     try:
         result = subprocess.run(
-            [CURL_COMMAND, "--config", "-"],
+            [CURL_COMMAND, "-q", "--config", "-"],
             input="\n".join(lines) + "\n",
             capture_output=True,
             text=True,
             # Beyond curl's own ``max-time``, so curl reports the timeout itself.
-            timeout=EXPORT_TIMEOUT_SECONDS + 5,
+            timeout=timeout_seconds + 5,
             check=False,
         )
     except subprocess.TimeoutExpired as error:
         raise TimeoutError("curl did not finish") from error
     if result.returncode != 0:
-        raise OSError(f"curl exited with {result.returncode}: {result.stderr.strip()}")
+        # Only the first line: under ``show-error`` that is curl's one-line reason, and
+        # nothing later can carry request headers into the log.
+        reason = next(iter(result.stderr.strip().splitlines()), "")
+        raise OSError(f"curl exited with {result.returncode}: {reason}")
     status = result.stdout.strip()
     if not status.startswith("2"):
         raise OSError(f"endpoint answered HTTP {status}")
 
 
-def push_usage_metrics(*, start_time_ns: int, log_path: Optional[Path] = None) -> bool:
+def push_usage_metrics(
+    *,
+    start_time_ns: int,
+    log_path: Optional[Path] = None,
+    timeout_seconds: float = EXPORT_TIMEOUT_SECONDS,
+) -> bool:
     """Send the current counters to the configured endpoint.
 
     Returns whether anything was sent. Rereads the opt-outs and the config on every
@@ -345,7 +367,9 @@ def push_usage_metrics(*, start_time_ns: int, log_path: Optional[Path] = None) -
     if not is_recording_enabled():
         return False
     config = load_usage_collection_config()
-    if config.remote_write_endpoint is None or config.machine_id is None:
+    # ``can_export`` decides; the locals only narrow the types for mypy.
+    endpoint, machine_id = config.remote_write_endpoint, config.machine_id
+    if not config.can_export or endpoint is None or machine_id is None:
         return False
     snapshot = collect_usage_metrics(config, log_path=log_path)
     if snapshot is None:
@@ -353,14 +377,15 @@ def push_usage_metrics(*, start_time_ns: int, log_path: Optional[Path] = None) -
 
     payload = build_otlp_payload(
         snapshot,
-        config.machine_id,
+        machine_id,
         start_time_ns=start_time_ns,
         time_ns=time.time_ns(),
     )
     _post_with_curl(
-        config.remote_write_endpoint,
+        endpoint,
         json.dumps(payload),
         config.remote_write_auth_token,
+        timeout_seconds,
     )
     return True
 
@@ -369,7 +394,9 @@ class UsageMetricsExporter:
     """Pushes the counters once at start, then every interval, then once on stop.
 
     Runs in the launcher process rather than in gunicorn, so one exporter serves
-    however many workers there are.
+    however many workers there are. The launcher stops it when gunicorn returns, so
+    under ``--daemon``, where gunicorn detaches at once, both pushes happen at launch
+    and a daemon session's usage is only sent by the next launch.
     """
 
     def __init__(self, interval_seconds: float = EXPORT_INTERVAL_SECONDS) -> None:
@@ -386,20 +413,27 @@ class UsageMetricsExporter:
         return self
 
     def stop(self) -> None:
+        """Make the final push, bounded so a slow endpoint cannot hold up exit."""
         self._stopping.set()
-        self._thread.join(timeout=EXPORT_TIMEOUT_SECONDS)
+        self._thread.join(timeout=STOP_JOIN_TIMEOUT_SECONDS)
+        # A push still in flight carries the counters already, and a second alongside
+        # it would only race it, so the final push is skipped rather than overlapped.
+        if self._thread.is_alive():
+            return
         # Final push, so a session shorter than one interval is still counted.
-        self._push()
+        self._push(timeout_seconds=FINAL_PUSH_TIMEOUT_SECONDS)
 
     def _run(self) -> None:
         self._push()
         while not self._stopping.wait(self._interval_seconds):
             self._push()
 
-    def _push(self) -> None:
+    def _push(self, timeout_seconds: float = EXPORT_TIMEOUT_SECONDS) -> None:
         try:
-            push_usage_metrics(start_time_ns=self._start_time_ns)
-        except OSError as error:
+            push_usage_metrics(
+                start_time_ns=self._start_time_ns, timeout_seconds=timeout_seconds
+            )
+        except (OSError, ValueError) as error:
             # Logged once per run of failures rather than every interval.
             if not self._failing:
                 logger.warning("Unable to export usage metrics: %s", error)

@@ -57,3 +57,7 @@ build
 # Sphinx documentation build
 docs/output
 .pnpm-store
+
+# Bearer tokens written by the removed `pnpm prometheus:config` renderer. Still ignored
+# so a checkout that ran it cannot commit one; delete any left behind.
+prometheus.remote-write.token
