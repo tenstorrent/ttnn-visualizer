@@ -13,7 +13,7 @@ import { BufferType, isL1BufferType } from '../model/BufferType';
 import { activeProfilerReportAtom } from '../store/app';
 import { useBuffers, useDevices, useOperationsList } from './useAPI';
 
-interface AddressLifetimes {
+export interface AddressLifetimes {
     lastUseByAddress: Map<number, number>;
     unattributableStaleAddressCount: number;
 }
@@ -27,9 +27,9 @@ interface AddressLifetimes {
  * side: the maximum silently reclassifies genuinely stale residents as persistent, masking
  * 478 operation-slots on resnet50 against the 9 it reports. Leaving a shared address
  * unclassified makes the stale figure a floor instead, which is a claim the data supports.
- * #2029
+ * #2029 Mirrored as `resolve_address_lifetimes` in `backend/ttnn_visualizer/agent/l1_peak.py`.
  */
-const resolveAddressLifetimes = (operations: readonly OperationDescription[]): AddressLifetimes => {
+export const resolveAddressLifetimes = (operations: readonly OperationDescription[]): AddressLifetimes => {
     const operationNamesById = new Map<number, string>(operations.map((operation) => [operation.id, operation.name]));
     const lastUseByTensorId = new Map<number, { address: number; lastUse: number }>();
 
