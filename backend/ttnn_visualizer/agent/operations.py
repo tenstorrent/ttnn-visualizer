@@ -19,11 +19,11 @@ import sqlite3
 from collections import defaultdict
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Dict, Iterator, List, NamedTuple, Optional, Set, Tuple
+from typing import Callable, Dict, Iterator, List, NamedTuple, Optional, Set, Tuple
 
 from ttnn_visualizer.agent.bounds import MAX_LIMIT, bounded
 from ttnn_visualizer.agent.handles import PROFILER_DB_FILE, ReportRegistry
-from ttnn_visualizer.models import Buffer, BufferType, Instance
+from ttnn_visualizer.models import Buffer, BufferType, Instance, Operation
 from ttnn_visualizer.queries import DatabaseQueries
 
 # Every allocation figure derived from `buffers` is in these units, and the
@@ -531,11 +531,19 @@ def find_operations(
     return result
 
 
+# Fields a caller adds to an operation's detail, read on the detail's connection, and
+# the caveat for any it withheld.
+DetailFields = Callable[
+    [DatabaseQueries, RankScope, Operation], Tuple[Dict[str, object], Optional[str]]
+]
+
+
 def operation_detail(
     registry: ReportRegistry,
     handle: str,
     operation_id: int,
     rank: Optional[int] = None,
+    detail_fields: Optional[DetailFields] = None,
 ) -> Dict[str, object]:
     """One operation: its tensors, and what it had allocated at that point."""
     instance = registry.get(handle)
@@ -606,6 +614,9 @@ def operation_detail(
             if wanted_ids
             else {}
         )
+        added, withheld = (
+            detail_fields(queries, scope, operation) if detail_fields else ({}, None)
+        )
 
     def described(tensor_id: int, index: int) -> Dict[str, object]:
         tensor = tensors.get(tensor_id)
@@ -640,7 +651,7 @@ def operation_detail(
     # An operation's arity is small, so this cap is a guard against a malformed
     # report rather than a slice an agent should expect to hit -- which is why
     # the untruncated counts are returned beside the lists.
-    return {
+    result: Dict[str, object] = {
         "handle": handle,
         "operation_id": operation.operation_id,
         "name": operation.name,
@@ -663,6 +674,10 @@ def operation_detail(
         **scope.as_response(),
         **_caveats(scope, {buffer.device_id for buffer in buffers}),
     }
+    result.update(added)
+    if withheld:
+        result["caveat"] = joined_caveat(result.get("caveat"), withheld)
+    return result
 
 
 def memory_profile(
@@ -942,6 +957,7 @@ def _caveats(scope: RankScope, devices: Optional[Set[int]] = None) -> Dict[str, 
 __all__ = [
     "BUFFER_SIZE_UNIT",
     "BUFFER_TYPE_NAMES",
+    "DetailFields",
     "MAX_ARGUMENT_VALUE_CHARS",
     "RankScope",
     "TENSOR_SIZE_UNIT",

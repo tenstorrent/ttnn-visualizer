@@ -35,7 +35,6 @@ from ttnn_visualizer.agent.operations import (
     BUFFER_SIZE_UNIT,
     RankScope,
     UnattributableRankError,
-    joined_caveat,
     profiler_db,
     rank_caveat,
     rank_scope,
@@ -118,11 +117,17 @@ def _truncated(field: str, text: Optional[str]) -> Dict[str, object]:
     }
 
 
-def _error_records(queries: DatabaseQueries, scope: RankScope) -> List[ErrorRecord]:
+def _error_records(
+    queries: DatabaseQueries, scope: RankScope, operation_id: Optional[int] = None
+) -> List[ErrorRecord]:
     # Reports written before the errors table existed have none to show.
     if not queries.has_table("errors"):
         return []
-    return list(queries.query_error_records(scoped(queries, "errors", scope)))
+    return list(
+        queries.query_error_records(
+            scoped(queries, "errors", scope, operation_id=operation_id)
+        )
+    )
 
 
 def _operations(queries: DatabaseQueries, scope: RankScope) -> List[Operation]:
@@ -699,7 +704,8 @@ def operation_failure_fields(
     scope: RankScope,
     operation: Operation,
 ) -> Tuple[Dict[str, object], Optional[str]]:
-    """The error and likely DRAM fallback `operation_detail` adds for one operation.
+    """The error and likely DRAM fallback `operation_detail` adds for one operation,
+    as its `detail_fields`.
 
     Both are optional, unlike in `errors` and `dram_fallbacks`: the rest of the detail
     answers without them. So where their rows cannot be attributed to the rank, they
@@ -709,7 +715,9 @@ def operation_failure_fields(
     fields: Dict[str, object] = {}
     withheld: List[str] = []
     if _attributable(queries, scope, _ERROR_TABLES, withheld, "error"):
-        error = select_error_for_operation(_error_records(queries, scope), operation)
+        error = select_error_for_operation(
+            _error_records(queries, scope, operation.operation_id), operation
+        )
         if error is not None:
             graphs = _graphs_checked(queries, scope, [operation.operation_id])
             fields["error"] = _error_entry(error, _graph_for(graphs, operation))
@@ -739,36 +747,6 @@ def _attributable(
     return True
 
 
-def with_operation_failures(
-    registry: ReportRegistry, handle: str, result: Dict[str, object]
-) -> Dict[str, object]:
-    """`result`, an `operation_detail` answer, with the operation's error and fallback."""
-    with profiler_db(registry.get(handle)) as queries:
-        rank = result.get("rank")
-        scope = rank_scope(queries, rank if isinstance(rank, int) else None)
-        operation = next(
-            iter(
-                queries.query_operations(
-                    scoped(
-                        queries,
-                        "operations",
-                        scope,
-                        operation_id=result["operation_id"],
-                    )
-                )
-            ),
-            None,
-        )
-        if operation is not None:
-            fields, withheld = operation_failure_fields(
-                registry, handle, queries, scope, operation
-            )
-            result.update(fields)
-            if withheld:
-                result["caveat"] = joined_caveat(result.get("caveat"), withheld)
-    return result
-
-
 __all__ = [
     "DRAM_FALLBACKS_NOTE",
     "ERRORS_NOTE",
@@ -783,5 +761,4 @@ __all__ = [
     "operation_failure_fields",
     "report_dram_fallbacks",
     "report_l1_peak",
-    "with_operation_failures",
 ]

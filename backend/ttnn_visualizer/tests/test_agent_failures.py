@@ -16,8 +16,9 @@ from typing import Dict, List, Optional, Sequence, Tuple
 from unittest.mock import patch
 
 import pytest
-from ttnn_visualizer.agent import bounds, failures, linking, server
+from ttnn_visualizer.agent import bounds, failures, linking, operations, server
 from ttnn_visualizer.agent.handles import ReportRegistry, load_report
+from ttnn_visualizer.queries import DatabaseQueries
 
 _SCHEMA = """
 CREATE TABLE operations (operation_id int UNIQUE, name text, duration float);
@@ -744,6 +745,36 @@ class TestOperationDetail:
 
         assert retry["dram_fallback"]["failed_operation_id"] == 1
         assert "dram_fallback" not in later
+
+    def test_its_failure_is_read_on_the_detail_s_connection(self, tmp_path):
+        """And only that operation's error rows: the table holds every error's stack
+        trace in the run. The fallbacks read them all, once per handle."""
+        registry, handle = _report(
+            tmp_path,
+            operations=[(1, "ttnn.conv2d"), (2, "ttnn.add")],
+            errors=[
+                (1, "ttnn.conv2d", "TT_THROW", _OUT_OF_MEMORY),
+                (2, "ttnn.add", "TT_THROW", "another error"),
+            ],
+        )
+        failures.dram_fallbacks(registry, handle)
+
+        with (
+            patch.object(
+                operations.sqlite3, "connect", wraps=sqlite3.connect
+            ) as connect,
+            patch.object(
+                DatabaseQueries,
+                "query_error_records",
+                autospec=True,
+                side_effect=DatabaseQueries.query_error_records,
+            ) as read,
+        ):
+            detail = linking.operation_detail(registry, handle, operation_id=1)
+
+        assert detail["error"]["diagnosis"]["reason"] == "not_enough_free_space"
+        assert connect.call_count == 1
+        assert [call.args[1] for call in read.call_args_list] == [{"operation_id": 1}]
 
     def test_the_fallbacks_are_read_once_per_handle(self, tmp_path):
         """Each answer needs every operation's tensors, which a walk would read again."""

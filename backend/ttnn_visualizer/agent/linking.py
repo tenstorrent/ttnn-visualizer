@@ -31,6 +31,7 @@ import tempfile
 from collections import Counter
 from dataclasses import dataclass, field
 from enum import Enum
+from functools import partial
 from typing import Dict, List, NamedTuple, Optional, Sequence, Set, Tuple
 
 from tt_perf_report.perf_report import HOST_OP_MARKER
@@ -689,12 +690,12 @@ def operation_detail(
 ) -> Dict[str, object]:
     """`operations.operation_detail`, with the performance rows it launched."""
     groups = perf_detail.parse_include(include)
-    result = failures.with_operation_failures(
+    result = operations.operation_detail(
         registry,
         handle,
-        operations.operation_detail(
-            registry, handle, operation_id=operation_id, rank=rank
-        ),
+        operation_id=operation_id,
+        rank=rank,
+        detail_fields=partial(failures.operation_failure_fields, registry, handle),
     )
     link = operation_link(registry, handle)
     if link.status is LinkStatus.LINKED and result.get("rank") != link.rank:
