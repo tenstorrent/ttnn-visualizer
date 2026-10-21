@@ -150,9 +150,9 @@ TT-NN Visualizer does not record:
 - raw counts that could identify a specific workload;
 - client-supplied free-form event details. Client detail fields use closed enums; server-generated version fields are validated before they are written.
 
-## Aggregate collection
+## Local Prometheus collection
 
-The TT-NN Visualizer backend never forwards raw events. When a local install opts in, the launcher projects the local log into cumulative counters and pushes them to a configured endpoint as OTLP/HTTP JSON: once at launch, then every minute, then once when the server stops. Collection is disabled by default and is unavailable under `SERVER_MODE`. Either recording opt-out stops the next push without a restart.
+The TT-NN Visualizer backend never forwards raw events. A local-only `GET /api/metrics` endpoint can project the local log into cumulative Prometheus counters, and a separately running local Prometheus can scrape those counters and forward them with `remote_write`. Collection is disabled by default and is unavailable under `SERVER_MODE`. Either recording opt-out also disables the endpoint.
 
 The opt-in file is:
 
@@ -160,25 +160,17 @@ The opt-in file is:
 ~/.ttnn-visualizer/usage/collection.json
 ```
 
-```json
-{
-  "enabled": true,
-  "remote_write_endpoint": "https://metrics.example/api/v1/otlp/v1/metrics",
-  "remote_write_auth_token": "<token>"
-}
-```
+It contains the explicit `enabled` flag, an optional Prometheus remote-write endpoint, an optional `remote_write_bearer_token` for that endpoint, and a random persistent `machine_id`. The ID is generated when collection is first enabled; it is not derived from a hostname, username, path, or IP address. Omitting the endpoint keeps collection local to the Docker Prometheus. Deleting the config disables collection and causes a new identity to be generated if collection is enabled again. A malformed config fails closed without preventing TT-NN Visualizer from starting.
 
-It contains the explicit `enabled` flag, the OTLP metrics endpoint, an optional `remote_write_auth_token` for that endpoint, and a random persistent `machine_id`. Nothing is collected without an endpoint. The ID is generated at the first launch with collection enabled; it is not derived from a hostname, username, path, or IP address. Deleting the config disables collection and causes a new identity to be generated if collection is enabled again. The exporter rereads the config before every push, so editing or deleting it takes effect within a minute. A malformed config fails closed without preventing TT-NN Visualizer from starting.
+The bearer token is sent as an `Authorization: Bearer` header on remote-write requests. It requires an endpoint and must not contain whitespace or control characters; a token that breaks either rule fails the whole config closed. The Prometheus config renderer writes it to `prometheus.remote-write.token` beside the generated config, which only references the file, and the Docker Compose file mounts it read-only. Both files are mode `0644` so the unprivileged Prometheus container can read them, which leaves the token readable by other users on the machine; `collection.json` stays `0600`. To render somewhere other than `docker/prometheus/`, set `PROMETHEUS_GENERATED_DIR` to that directory for Compose, and keep the default `prometheus.generated.yml` output name. Compose refuses to start without the token file, so rerender after upgrading. Without a token, remote-write requests are unauthenticated.
 
-The endpoint must use HTTPS unless it is a loopback address, and must not contain credentials, query parameters, or a fragment. The token is sent as an `Authorization: Bearer` header; it requires an endpoint and must not contain whitespace or control characters, and a token that breaks either rule fails the whole config closed. `collection.json` is kept at mode `0600`. Pushes are sent with the system `curl`, which must be on `PATH`; it verifies TLS against the operating system's trust store, so an endpoint signed by an internal CA installed on the machine is trusted. The token and payload are passed to `curl` on standard input, never on its command line. Redirects are not followed, so the token is never resent to another host. Without a token, pushes are unauthenticated. A failed push is logged once until a later push succeeds; the counters are cumulative, so the next successful push carries everything missed.
+The metrics projection exports one `_total` counter per event name with only that event's documented fields as labels. It honours compacted `count` values. It never exports timestamps, `run_id`, hosted session directory names, raw event rows, usernames, hostnames, paths, or unknown fields. Collector health metrics distinguish a missing log, malformed lines, and a read failure. Deleting the event log resets the projected counters; compaction preserves them.
 
-The projection exports one `_total` counter per event name with only that event's documented fields and `machine_id` as attributes, under the resource attribute `service.name="ttnn-visualizer"`. It honours compacted `count` values. It never exports timestamps of events, `run_id`, hosted session directory names, raw event rows, usernames, hostnames, paths, or unknown fields. Collector health metrics distinguish a missing log, malformed lines, and a read failure. Deleting the event log resets the projected counters; compaction preserves them.
-
-The pushes come from the `ttnn-visualizer` launcher, not the gunicorn workers, so one exporter serves any number of workers. Under `--daemon` the launcher exits as soon as gunicorn detaches, so only the pushes at launch and stop are made. Any local process can append to the event log and so inflate the counts. Treat per-machine counts as indicative rather than trustworthy.
+The endpoint is unauthenticated, like every local-only endpoint. `@local_only` disables it under `SERVER_MODE`; it does not restrict the source network address. With the default loopback binding, other processes on the machine can read the counts or inflate them by posting events. If a local install binds to a non-loopback address, including `0.0.0.0`, network clients that can reach the backend may do the same. Protect such bindings with an external access-control boundary. Treat per-machine counts as indicative rather than trustworthy.
 
 ## Hosted collection
 
-The hosted app has no collection beyond the event log itself: aggregate collection is unavailable under `SERVER_MODE`, and the application exports nothing from the session logs. Hosted retention and compaction are the deployment's responsibility; the application neither enumerates session logs at startup nor compacts them on a request path. Anything a deployment builds to read those logs must not export timestamps, `run_id`, hosted session directory names, per-event rows, or per-user series.
+The hosted app has no collection beyond the event log itself: Local Prometheus collection is unavailable under `SERVER_MODE`, and the application exports nothing from the session logs. Hosted retention and compaction are the deployment's responsibility; the application neither enumerates session logs at startup nor compacts them on a request path. Anything a deployment builds to read those logs must not export timestamps, `run_id`, hosted session directory names, per-event rows, or per-user series.
 
 ## Documentation-site analytics
 
