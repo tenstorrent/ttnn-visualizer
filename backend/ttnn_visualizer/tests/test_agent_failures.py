@@ -16,7 +16,14 @@ from typing import Dict, List, Optional, Sequence, Tuple
 from unittest.mock import patch
 
 import pytest
-from ttnn_visualizer.agent import bounds, failures, linking, operations, server
+from ttnn_visualizer.agent import (
+    allocation_failures,
+    bounds,
+    failures,
+    linking,
+    operations,
+    server,
+)
 from ttnn_visualizer.agent.handles import ReportRegistry, load_report
 from ttnn_visualizer.queries import DatabaseQueries
 
@@ -314,6 +321,67 @@ class TestErrors:
         assert len(error["error_message"]) == failures.MAX_ERROR_TEXT_CHARS
         assert error["error_message_full_length"] == len(message)
 
+    def test_a_message_is_read_for_a_failure_only_up_to_the_bound(self, tmp_path):
+        """The patterns cost the square of a crafted message's length. The port reads
+        the whole message, as the app does; the tool reads a prefix."""
+        padded = "x" * failures.MAX_PARSED_MESSAGE_CHARS + _OUT_OF_MEMORY
+        registry, handle = _report(
+            tmp_path,
+            operations=[(1, "ttnn.conv2d"), (2, "ttnn.conv2d")],
+            errors=[
+                (1, "ttnn.conv2d", "TT_THROW", padded),
+                (2, "ttnn.conv2d", "TT_THROW", _OUT_OF_MEMORY),
+            ],
+        )
+
+        cut, whole = failures.errors(registry, handle)["errors"]
+
+        assert "allocation_failure" not in cut
+        assert whole["allocation_failure"]["kind"] == "bank_out_of_memory"
+        assert allocation_failures.parse_allocation_failure(padded) is not None
+
+    def test_a_long_core_range_is_cut_like_a_message(self, tmp_path):
+        core_range = "{(x=0,y=0) - (x=7,y=7)}" * 100
+        message = (
+            f"Statically allocated circular buffers on core range {core_range} grow to "
+            "1600000 B which is beyond max L1 size of 1499136 B"
+        )
+        registry, handle = _report(
+            tmp_path,
+            operations=[(1, "ttnn.conv2d")],
+            errors=[(1, "ttnn.conv2d", "TT_THROW", message)],
+        )
+
+        error = failures.errors(registry, handle)["errors"][0]
+
+        failure = error["allocation_failure"]
+        assert failure["core_range"] == core_range[: failures.MAX_ERROR_TEXT_CHARS]
+        assert failure["core_range_full_length"] == len(core_range)
+        assert error["diagnosis"]["reason"] == "beyond_end_of_l1"
+
+    def test_failed_device_operations_are_capped_and_counted(self, tmp_path):
+        """A graph left with every scope open would name each one, in every answer
+        that carries the error."""
+        names = [
+            f"Op{index}" for index in range(failures.MAX_FAILED_DEVICE_OPERATIONS + 5)
+        ]
+        registry, handle = _report(
+            tmp_path,
+            operations=[(1, "ttnn.conv2d")],
+            errors=[(1, "ttnn.conv2d", "TT_THROW", _OUT_OF_MEMORY)],
+            graphs=[(1, [_start(name) for name in names])],
+        )
+
+        listed = failures.errors(registry, handle, limit=1)["errors"][0]
+        carried = linking.operation_detail(registry, handle, operation_id=1)["error"]
+
+        for error in (listed, carried):
+            assert (
+                error["failed_device_operations"]
+                == names[: failures.MAX_FAILED_DEVICE_OPERATIONS]
+            )
+            assert error["failed_device_operation_count"] == len(names)
+
     def test_a_limit_shortens_the_list_but_not_the_count(self, tmp_path):
         registry, handle = _report(
             tmp_path,
@@ -447,6 +515,28 @@ class TestL1Peak:
             (1, [2]),
             (3, []),
         ]
+
+    def test_repeats_of_a_composition_are_capped_and_counted(self, tmp_path):
+        """`limit` caps the compositions; one composition can repeat thousands of times."""
+        repeats = failures.MAX_REPEAT_OPERATION_IDS + 5
+        registry, handle = _report(
+            tmp_path,
+            operations=[
+                (operation_id, "ttnn.add") for operation_id in range(1, repeats + 2)
+            ],
+            graphs=[
+                (operation_id, [_circular_buffer(5000, 300)])
+                for operation_id in range(1, repeats + 2)
+            ],
+        )
+
+        top = failures.l1_peak(registry, handle, limit=1)["top_operations"]
+
+        assert len(top) == 1
+        assert top[0]["also_at"] == list(
+            range(2, failures.MAX_REPEAT_OPERATION_IDS + 2)
+        )
+        assert top[0]["also_at_count"] == repeats
 
     def test_a_peak_has_its_largest_residents_and_a_count_of_all(self, tmp_path):
         nodes = [

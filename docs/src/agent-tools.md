@@ -307,15 +307,17 @@ report's `errors` table, as the web application shows them. An `incomplete_opera
 is an operation that started and never completed, so the run most likely crashed inside it.
 An error the report could not place on an operation of that id and name has `attached`
 false; the application shows those at report level. `failed_device_operations` names the
-device operations in the operation's captured graph whose launch did not complete. When the
-message is one of tt-metal's four allocation failures — out of memory, out of memory after
-considering dependencies, circular buffers beyond L1, circular buffers clashing with an L1
-buffer — `allocation_failure` carries its figures and `diagnosis` says why it did not fit,
-with the reasons [Allocation failures](allocation-failures.md) describes. `requested_bytes`
-is the whole request across `num_banks`; the other bank figures are per bank. An unattached
-error's `operation_id` can name an unrelated operation, so it is not one to open with
-`app_link_template`. A report that predates the `errors` table says so in its caveat rather
-than reporting no errors.
+device operations in the operation's captured graph whose launch did not complete, up to 20,
+and `failed_device_operation_count` counts them all. When the message is one of tt-metal's
+four allocation failures — out of memory, out of memory after considering dependencies,
+circular buffers beyond L1, circular buffers clashing with an L1 buffer —
+`allocation_failure` carries its figures and `diagnosis` says why it did not fit, with the
+reasons [Allocation failures](allocation-failures.md) describes. Only a message's first
+32,768 characters are read for one, several times the longest real message, and its
+`core_range` is cut like a message. `requested_bytes` is the whole request across
+`num_banks`; the other bank figures are per bank. An unattached error's `operation_id` can
+name an unrelated operation, so it is not one to open with `app_link_template`. A report
+that predates the `errors` table says so in its caveat rather than reporting no errors.
 
 **`dram_fallbacks` is inferred.** tt-metal records nothing when an operation falls back
 from L1 to DRAM. An operation counts when its memory config arguments all ask for L1 while
@@ -331,11 +333,13 @@ operation. The peak is in bytes per bank, split into circular buffers, intermedi
 persistent and stale tensors. Stale tensors are still allocated after their last real
 consumer, the only part freeing earlier would help. `top_operations` keeps one entry per
 distinct composition, with `also_at` naming the operations that repeat it, since a model
-that runs one layer stack several times reaches the same figure at each. `precision` is
-`upper-bound` wherever more than one resident is summed, since a capture does not say which
-cores each occupies. When the replay exceeds the device's L1 its figures are withheld and
-`reason` says why, as the web application's L1 peak panel does. Each call reads every
-captured graph, which can take seconds on a large capture.
+that runs one layer stack several times reaches the same figure at each. `also_at` names at
+most 20 of them, and `also_at_count` counts them all: one local capture repeats a
+composition 9,679 times. `precision` is `upper-bound` wherever more than one resident is
+summed, since a capture does not say which cores each occupies. When the replay exceeds the
+device's L1 its figures are withheld and `reason` says why, as the web application's L1 peak
+panel does. The first call on a handle reads every captured graph, which can take seconds on
+a large capture; later calls reuse it.
 
 `zone_timings` carries a caveat of its own: cycles are summed across every core that ran
 the zone, so they measure occupancy rather than wall-clock duration. A core is counted per

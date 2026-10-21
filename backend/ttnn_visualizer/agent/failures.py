@@ -60,8 +60,15 @@ from ttnn_visualizer.serializers import (
 
 # A message carries tt-metal's header and backtrace; the part a diagnosis reads is first.
 MAX_ERROR_TEXT_CHARS = 1000
+# The failure patterns are unanchored and lazy, so a crafted message costs the square of
+# its length; the longest real one across 141 local captures is 14,248 characters.
+MAX_PARSED_MESSAGE_CHARS = 32_768
+# A crash leaves one or two launches open; a graph left with every scope open names all.
+MAX_FAILED_DEVICE_OPERATIONS = 20
 # The peak's largest residents; the rest are counted.
 MAX_PEAK_CONTRIBUTORS = 20
+# Repeats of one composition listed; one capture repeats a composition 9,679 times.
+MAX_REPEAT_OPERATION_IDS = 20
 # The tables behind each answer's figures, so its rank refusal covers every one.
 _ERROR_TABLES = ("errors", "captured_graph")
 _FALLBACK_TABLES = (
@@ -78,7 +85,8 @@ ERRORS_NOTE = (
     "attached is false for an error the report could not place on an operation of that "
     "id and name; the app shows those at report level. failed_device_operations are "
     "the device operations in the operation's captured graph whose launch did not "
-    "complete. allocation_failure is read out of the message when it is one of "
+    f"complete, at most {MAX_FAILED_DEVICE_OPERATIONS}; failed_device_operation_count "
+    "counts them all. allocation_failure is read out of the message when it is one of "
     "tt-metal's four allocation failures, and diagnosis says from its figures why it "
     "did not fit. requested_bytes is the whole request across num_banks; "
     "bytes_per_bank, bank_size_bytes and the allocator's figures are per bank. An "
@@ -102,7 +110,9 @@ L1_PEAK_NOTE = (
     "capture does not say which cores each occupies; exact means one resident. Stale "
     "tensors are still allocated after their last real consumer, the only class "
     "freeing earlier would help; intermediates are allocated and freed inside the "
-    "operation. Circular buffers stop occupying L1 when their program ends."
+    "operation. Circular buffers stop occupying L1 when their program ends. also_at "
+    f"lists at most {MAX_REPEAT_OPERATION_IDS} of the operations that repeat a "
+    "composition, and also_at_count counts them all."
 )
 
 
@@ -175,24 +185,37 @@ def _graph_for(
     return nodes if isinstance(nodes, list) else []
 
 
+def _allocation_failure(message: Optional[str]) -> Optional[Dict[str, object]]:
+    """`parse_allocation_failure` on the part of a message a real failure fits in."""
+    return allocation_failures.parse_allocation_failure(
+        message[:MAX_PARSED_MESSAGE_CHARS] if isinstance(message, str) else message
+    )
+
+
 def _allocation_fields(message: Optional[str]) -> Dict[str, object]:
-    failure = allocation_failures.parse_allocation_failure(message)
+    failure = _allocation_failure(message)
     if failure is None:
         return {}
+    shown = dict(failure)
+    core_range = failure.get("core_range")
+    if isinstance(core_range, str):
+        shown.update(_truncated("core_range", core_range))
     return {
-        "allocation_failure": failure,
+        "allocation_failure": shown,
         "diagnosis": allocation_failures.diagnose(failure),
     }
 
 
 def _error_entry(error: ErrorRecord, graph: List[object]) -> Dict[str, object]:
     """One error as `errors` lists it and `operation_detail` carries it."""
+    failed = failed_device_operation_names(graph)
     return {
         "error_type": error.error_type,
         "timestamp": error.timestamp,
         **_truncated("error_message", error.error_message),
         **_truncated("stack_trace", error.stack_trace),
-        "failed_device_operations": failed_device_operation_names(graph),
+        "failed_device_operations": failed[:MAX_FAILED_DEVICE_OPERATIONS],
+        "failed_device_operation_count": len(failed),
         **_allocation_fields(error.error_message),
     }
 
@@ -352,9 +375,7 @@ def _failure_by_operation_id(
     failures: Dict[int, Dict] = {}
     for operation in operations:
         error = attached.get(error_key(operation))
-        failure = allocation_failures.parse_allocation_failure(
-            error.error_message if error else None
-        )
+        failure = _allocation_failure(error.error_message if error else None)
         if failure is not None:
             failures[operation.operation_id] = failure
     return failures
@@ -474,7 +495,8 @@ def _top_operations(
         {
             **_decomposition(entry, contributors=False),
             "operation_name": names.get(entry.operation_id),
-            "also_at": also_at,
+            "also_at": also_at[:MAX_REPEAT_OPERATION_IDS],
+            "also_at_count": len(also_at),
         }
         for entry, also_at in peak_replay.top_compositions(
             by_operation_id.values(), count
@@ -739,7 +761,10 @@ __all__ = [
     "ERRORS_NOTE",
     "L1_PEAK_NOTE",
     "MAX_ERROR_TEXT_CHARS",
+    "MAX_FAILED_DEVICE_OPERATIONS",
+    "MAX_PARSED_MESSAGE_CHARS",
     "MAX_PEAK_CONTRIBUTORS",
+    "MAX_REPEAT_OPERATION_IDS",
     "DramFallbackReport",
     "L1PeakReport",
     "dram_fallbacks",
