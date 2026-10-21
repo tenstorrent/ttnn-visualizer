@@ -330,8 +330,7 @@ def _inventory(instance: Instance) -> Dict[str, object]:
     # Older captures carry neither column, and every count would then be zero.
     record(
         "program_cache",
-        perf_ready
-        and {PROGRAM_HASH_COLUMN, PROGRAM_CACHE_HIT_COLUMN} <= perf_columns,
+        perf_ready and {PROGRAM_HASH_COLUMN, PROGRAM_CACHE_HIT_COLUMN} <= perf_columns,
     )
 
     performance_path = instance.performance_path
