@@ -12,6 +12,7 @@ import json
 import math
 from collections import defaultdict
 from dataclasses import dataclass
+from functools import partial
 from typing import (
     Callable,
     Dict,
@@ -23,7 +24,6 @@ from typing import (
     Tuple,
     TypeVar,
     Union,
-    overload,
 )
 
 from ttnn_visualizer.agent import allocation_failures
@@ -282,18 +282,22 @@ class _ReportOperations:
 
 
 def _report_operations(
-    queries: DatabaseQueries, scope: RankScope, with_consumers: bool = False
+    queries: DatabaseQueries,
+    scope: RankScope,
+    with_arguments: bool = False,
+    with_consumers: bool = False,
 ) -> _ReportOperations:
     operations = _operations(queries, scope)
     arguments_by_operation_id: Dict[int, List[Tuple[str, Optional[str]]]] = defaultdict(
         list
     )
-    for argument in queries.query_operation_arguments(
-        scoped(queries, "operation_arguments", scope)
-    ):
-        arguments_by_operation_id[argument.operation_id].append(
-            (argument.name, argument.value)
-        )
+    if with_arguments:
+        for argument in queries.query_operation_arguments(
+            scoped(queries, "operation_arguments", scope)
+        ):
+            arguments_by_operation_id[argument.operation_id].append(
+                (argument.name, argument.value)
+            )
 
     input_rows = list(
         queries.query_input_tensors(scoped(queries, "input_tensors", scope))
@@ -367,7 +371,7 @@ def report_dram_fallbacks(
     queries: DatabaseQueries, scope: RankScope
 ) -> DramFallbackReport:
     """The likely fallbacks at the rank, read from every operation there."""
-    report = _report_operations(queries, scope)
+    report = _report_operations(queries, scope, with_arguments=True)
     fallback_by_operation_id = fallback_rules.dram_fallbacks(
         [
             fallback_rules.FallbackOperation(
@@ -478,33 +482,6 @@ def _top_operations(
     ]
 
 
-class _ParsedGraphs(Sequence[Tuple[int, List[object]]]):
-    """Each operation's graph, parsed when read, so only one is held parsed at a time."""
-
-    def __init__(
-        self, graphs: Dict[Tuple[int, int], str], operations: List[Operation]
-    ) -> None:
-        self._graphs = graphs
-        self._operations = operations
-
-    def __len__(self) -> int:
-        return len(self._operations)
-
-    @overload
-    def __getitem__(self, index: int) -> Tuple[int, List[object]]: ...
-
-    @overload
-    def __getitem__(self, index: slice) -> List[Tuple[int, List[object]]]: ...
-
-    def __getitem__(
-        self, index: Union[int, slice]
-    ) -> Union[Tuple[int, List[object]], List[Tuple[int, List[object]]]]:
-        if isinstance(index, slice):
-            return [self[position] for position in range(*index.indices(len(self)))]
-        operation = self._operations[index]
-        return operation.operation_id, _graph_for(self._graphs, operation)
-
-
 @dataclass
 class L1PeakReport:
     result: peak_replay.L1PeakResult
@@ -532,6 +509,14 @@ def report_l1_peak(queries: DatabaseQueries, scope: RankScope) -> L1PeakReport:
     )
     report = _report_operations(queries, scope, with_consumers=True)
     names = {operation.operation_id: operation.name for operation in report.operations}
+    # Every row of a tensor attaches the same one, with the same consumers, so one per
+    # id spares finding its last consumer again for each operation that read it.
+    tensor_by_id = {
+        tensor.tensor_id: tensor
+        for side in (report.inputs_by_operation_id, report.outputs_by_operation_id)
+        for operation in report.operations
+        for tensor in side.get(operation.operation_id, [])
+    }
     lifetimes = peak_replay.resolve_address_lifetimes(
         (
             (
@@ -540,9 +525,7 @@ def report_l1_peak(queries: DatabaseQueries, scope: RankScope) -> L1PeakReport:
                 tensor.buffer_type,
                 report.consumers_by_tensor_id.get(tensor.tensor_id, []),
             )
-            for side in (report.inputs_by_operation_id, report.outputs_by_operation_id)
-            for operation in report.operations
-            for tensor in side.get(operation.operation_id, [])
+            for tensor in tensor_by_id.values()
         ),
         names,
     )
@@ -554,8 +537,12 @@ def report_l1_peak(queries: DatabaseQueries, scope: RankScope) -> L1PeakReport:
             scoped(queries, "buffers", scope, buffer_type=buffer_type.value)
         ):
             snapshot.setdefault(buffer.operation_id, []).append(buffer)
+    graphs = _graphs(queries, scope)
     result = peak_replay.build_l1_peak(
-        _ParsedGraphs(_graphs(queries, scope), report.operations),
+        [
+            (operation.operation_id, partial(_graph_for, graphs, operation))
+            for operation in report.operations
+        ],
         snapshot,
         lifetimes.last_use_by_address,
         bank_count=device.l1_num_banks,

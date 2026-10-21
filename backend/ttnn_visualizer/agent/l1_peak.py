@@ -13,7 +13,17 @@ import math
 import re
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Dict, Iterable, List, Mapping, Optional, Sequence, Set, Tuple
+from typing import (
+    Callable,
+    Dict,
+    Iterable,
+    List,
+    Mapping,
+    Optional,
+    Sequence,
+    Set,
+    Tuple,
+)
 
 from ttnn_visualizer.models import L1_BUFFER_TYPES, Buffer, BufferType
 
@@ -331,7 +341,7 @@ class L1PeakResult:
 
 
 def build_l1_peak(
-    operations: Sequence[Tuple[int, Sequence[object]]],
+    operations: Sequence[Tuple[int, Callable[[], Sequence[object]]]],
     snapshot_by_operation_id: Mapping[int, List[Buffer]],
     last_use_by_address: Mapping[float, int],
     bank_count: Optional[int] = None,
@@ -340,20 +350,34 @@ def build_l1_peak(
 ) -> L1PeakResult:
     """Replay each operation's graph, in execution order, keeping its tightest instant.
 
-    Reads `operations` twice, so a caller can hand it graphs parsed on access.
+    Each operation comes with a callable that reads its graph, so a caller can parse
+    one at a time. Each graph is read once, unless an operation id repeats: then every
+    graph is read first for its intermediates, which `findIntermediates` keys by id
+    across every operation.
 
     Only the peak keeps its `contributors` unless `keep_contributors`: the tool reads
     no other operation's, and every operation's runs to hundreds of thousands of
     residents on a large capture. The app keeps them all, so the parity test asks to.
     """
     banks = bank_count if bank_count is not None else DEFAULT_BANK_COUNT
-    intermediates = _intermediates(operations)
+    operation_ids = [operation_id for operation_id, _ in operations]
+    shared_intermediates = (
+        _intermediates((operation_id, read()) for operation_id, read in operations)
+        if len(set(operation_ids)) < len(operation_ids)
+        else None
+    )
     state = _State()
     by_operation_id: Dict[int, Decomposition] = {}
     reconciled_away = 0
     peak: Optional[Decomposition] = None
 
-    for operation_id, nodes in operations:
+    for operation_id, read in operations:
+        nodes = read()
+        intermediates = (
+            shared_intermediates
+            if shared_intermediates is not None
+            else _intermediates([(operation_id, nodes)])
+        )
         state.allocations_seen.clear()
         # Seeded from the state carried in, so a first node that frees is measured too.
         tightest = _measure(state, operation_id, last_use_by_address)

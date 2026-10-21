@@ -62,6 +62,7 @@ def _report(
     graphs: Sequence[Tuple[int, List[Dict]]] = (),
     arguments: Sequence[Tuple[int, str, str]] = (),
     tensors: Sequence[Tuple] = (),
+    inputs: Sequence[Tuple[int, int, int]] = (),
     outputs: Sequence[Tuple[int, int, int]] = (),
     buffers: Sequence[Tuple] = (),
     devices: Sequence[Tuple[int, int, int]] = ((0, 1499136, 64),),
@@ -94,6 +95,7 @@ def _report(
             "INSERT INTO tensors VALUES (?, 'Shape([1, 32])', 'BFLOAT16', 'TILE', ?, 0, ?, ?)",
             tensors,
         )
+        connection.executemany("INSERT INTO input_tensors VALUES (?, ?, ?)", inputs)
         connection.executemany("INSERT INTO output_tensors VALUES (?, ?, ?)", outputs)
         connection.executemany("INSERT INTO buffers VALUES (?, 0, ?, ?, ?, 0)", buffers)
         connection.executemany("INSERT INTO devices VALUES (?, ?, ?)", devices)
@@ -501,6 +503,63 @@ class TestL1Peak:
         )
 
         assert "covers 2 devices" in failures.l1_peak(registry, handle)["caveat"]
+
+    def test_a_tensor_past_its_last_consumer_is_stale_and_read_once(self, tmp_path):
+        """Every operation that reads a tensor carries the same row of it, so its last
+        consumer is found once rather than once per reader."""
+        registry, handle = _report(
+            tmp_path,
+            operations=[(operation_id, "ttnn.add") for operation_id in range(1, 6)],
+            graphs=[(1, [_allocate(100, 1000)]), (5, [_circular_buffer(5000, 300)])],
+            tensors=[(10, None, 100, 1)],
+            inputs=[(operation_id, 0, 10) for operation_id in (2, 3, 4)],
+            outputs=[(1, 0, 10)],
+            buffers=[(operation_id, 100, 1000, 1) for operation_id in range(1, 6)],
+        )
+
+        with patch.object(
+            failures.peak_replay,
+            "last_valid_consumer",
+            wraps=failures.peak_replay.last_valid_consumer,
+        ) as found:
+            peak = failures.l1_peak(registry, handle)["peak"]
+
+        assert (peak["operation_id"], peak["stale_tensor_bytes"]) == (5, 1000)
+        assert [
+            entry["last_used_by_operation_id"] for entry in peak["contributors"]
+        ] == [
+            4,
+            None,
+        ]
+        found.assert_called_once()
+
+    def test_each_captured_graph_is_parsed_once(self, tmp_path):
+        """Intermediates come from the graph the replay parsed, ids being unique."""
+        registry, handle = _report(
+            tmp_path,
+            operations=[(1, "ttnn.add"), (2, "ttnn.add")],
+            graphs=[
+                (1, [_allocate(100, 1000), _free(100)]),
+                (2, [_circular_buffer(5000, 300)]),
+            ],
+        )
+
+        with patch.object(failures.json, "loads", wraps=json.loads) as parse:
+            peak = failures.l1_peak(registry, handle)["peak"]
+
+        assert parse.call_count == 2
+        assert (peak["operation_id"], peak["intermediate_tensor_bytes"]) == (1, 1000)
+
+    def test_it_answers_without_the_arguments_table(self, tmp_path):
+        """The replay reads no operation's arguments, so it needs no such table."""
+        registry, handle = _report(
+            tmp_path,
+            operations=[(1, "ttnn.add")],
+            graphs=[(1, [_circular_buffer(5000, 300)])],
+            arguments_table=False,
+        )
+
+        assert failures.l1_peak(registry, handle)["peak"]["total_bytes"] == 300
 
     def test_a_report_without_a_device_is_refused(self, tmp_path):
         registry, handle = _report(tmp_path, operations=[(1, "ttnn.add")], devices=[])

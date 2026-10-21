@@ -18,9 +18,10 @@ import math
 import os
 import random
 import re
+from functools import partial
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Dict, List, Optional
+from typing import Callable, Dict, List, Optional, Tuple
 
 from ttnn_visualizer.agent import allocation_failures, dram_fallbacks, l1_peak
 from ttnn_visualizer.agent.scope_outcomes import failed_device_operation_names
@@ -591,6 +592,16 @@ def _app_decomposition(entry: l1_peak.Decomposition) -> Dict:
     }
 
 
+def _graph_readers(
+    operations: List[Dict],
+) -> List[Tuple[int, Callable[[], List[Dict]]]]:
+    """`build_l1_peak`'s input: each operation's id, and a callable reading its graph."""
+    return [
+        (operation["id"], partial(list, operation["device_operations"]))
+        for operation in operations
+    ]
+
+
 def _l1_peak_case(
     operations: List[Dict],
     snapshot: Dict[int, List[Dict]],
@@ -599,7 +610,7 @@ def _l1_peak_case(
     capacity: Optional[int],
 ) -> Dict:
     result = l1_peak.build_l1_peak(
-        [(operation["id"], operation["device_operations"]) for operation in operations],
+        _graph_readers(operations),
         _snapshot_buffers(snapshot),
         last_use,
         bank_count=bank_count,
@@ -847,7 +858,7 @@ def test_the_tool_s_replay_differs_only_in_the_residents_it_keeps():
     rng = random.Random(_SEED)
     for case in _l1_peak_cases(rng):
         args = (
-            [(entry["id"], entry["device_operations"]) for entry in case["operations"]],
+            _graph_readers(case["operations"]),
             _snapshot_buffers(dict(case["snapshot"])),
             dict(case["lastUseByAddress"]),
         )
