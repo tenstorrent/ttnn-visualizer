@@ -13,23 +13,29 @@ import { AllocationFailureListing } from '../../model/AllocationFailure';
 
 // Speaks of the report, not the table: the callout also shows in the stacked view, which
 // has no Flags column, and filters, the range or the column picker can hide the rows.
-const getRunStatus = ({ failedDeviceOperations, linkedRowCount }: AllocationFailureListing): string => {
+const getRunStatus = ({
+    failedDeviceOperations,
+    ranDeviceOperationCount,
+    linkedRowCount,
+}: AllocationFailureListing): string => {
     const hasFailedDeviceOperations = failedDeviceOperations.length > 0;
     const failedAt = hasFailedDeviceOperations ? ` in ${failedDeviceOperations.join(', ')}` : '';
 
     // A capture can stop before the failing operation's graph, so without a recorded
     // device op there is nothing to say whether any of it reached the device.
-    if (linkedRowCount === 0 && !hasFailedDeviceOperations) {
+    if (ranDeviceOperationCount === 0 && !hasFailedDeviceOperations) {
         return 'The memory report recorded no device ops for it, so no row in this report is linked to it.';
     }
 
-    if (linkedRowCount === 0) {
+    if (ranDeviceOperationCount === 0) {
         return `Failed${failedAt} before reaching the device, so it has no row in this report.`;
     }
 
-    const isSingle = linkedRowCount === 1;
+    // Counted apart: with devices unmerged each device op that ran has a row per device.
+    const opsLabel = ranDeviceOperationCount === 1 ? 'op' : 'ops';
+    const rowsLabel = linkedRowCount === 1 ? 'row' : 'rows';
 
-    return `Failed${failedAt}; ${linkedRowCount} earlier device op${isSingle ? '' : 's'} ran, so it has ${linkedRowCount} row${isSingle ? '' : 's'} in this report.`;
+    return `Failed${failedAt}; ${ranDeviceOperationCount} earlier device ${opsLabel} ran, so it has ${linkedRowCount} ${rowsLabel} in this report.`;
 };
 
 interface AllocationFailureSummaryProps {

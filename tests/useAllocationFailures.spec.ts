@@ -41,43 +41,75 @@ const failedOperation = (id: number, message = OUT_OF_MEMORY): OperationDescript
         ],
     });
 
+// The table's lookup with devices unmerged: op 2's device op ran on two devices.
+const UNMERGED_OP_IDS_MAP = [
+    { opId: 2, perfId: '2' },
+    { opId: 2, perfId: '3' },
+];
+
 beforeEach(resetLinkedReportMocks);
 
 describe('useAllocationFailures', () => {
     it('lists each allocation failure with the device op that failed and the rows that ran', () => {
-        mockLinkedReports(
-            [operation(1), failedOperation(2)],
-            [
-                { opId: 1, perfId: '1' },
-                { opId: 2, perfId: '2' },
-            ],
-        );
+        const opIdsMap = [
+            { opId: 1, perfId: '1' },
+            { opId: 2, perfId: '2' },
+        ];
+        mockLinkedReports([operation(1), failedOperation(2)], opIdsMap);
 
-        const { result } = renderHook(() => useAllocationFailures());
+        const { result } = renderHook(() => useAllocationFailures(opIdsMap));
 
         expect(result.current.listings).toHaveLength(1);
         expect(result.current.listings[0]).toMatchObject({
             failure: { operationId: 2, operationName: 'ttnn.conv2d', kind: AllocationFailureKind.BANK_OUT_OF_MEMORY },
             failedDeviceOperations: ['Conv2d'],
+            ranDeviceOperationCount: 1,
             linkedRowCount: 1,
         });
         expect(result.current.allocationFailureByOpId.get(2)?.operationId).toBe(2);
         expect(result.current.allocationFailureByOpId.has(1)).toBe(false);
     });
 
+    // #2084: the Op failed flag lands on every device's row once devices are unmerged, so the
+    // listing counts those rows while still counting each device op that ran once.
+    it('counts every device row of the earlier device ops when devices are unmerged', () => {
+        mockLinkedReports([operation(1), failedOperation(2)], [{ opId: 2, perfId: '2' }]);
+
+        const { result } = renderHook(() => useAllocationFailures(UNMERGED_OP_IDS_MAP));
+
+        expect(result.current.listings[0]).toMatchObject({ ranDeviceOperationCount: 1, linkedRowCount: 2 });
+    });
+
+    // `useDramFallbacks` memoises on the failure map, so a merge toggle must not rebuild it.
+    it('keeps the failure map when only the table lookup changes', () => {
+        const opIdsMap = [{ opId: 2, perfId: '2' }];
+        mockLinkedReports([operation(1), failedOperation(2)], opIdsMap);
+
+        const { result, rerender } = renderHook(({ perfTableOpIdsMap }) => useAllocationFailures(perfTableOpIdsMap), {
+            initialProps: { perfTableOpIdsMap: opIdsMap },
+        });
+        const merged = result.current;
+
+        rerender({ perfTableOpIdsMap: UNMERGED_OP_IDS_MAP });
+
+        expect(result.current.listings[0]?.linkedRowCount).toBe(2);
+        expect(result.current.allocationFailureByOpId).toBe(merged.allocationFailureByOpId);
+    });
+
     it('lists nothing when the reports are not linked, so an unrelated run is never blamed', () => {
         mockLinkedReports([failedOperation(2)], []);
 
-        const { result } = renderHook(() => useAllocationFailures());
+        const { result } = renderHook(() => useAllocationFailures([]));
 
         expect(result.current.listings).toEqual([]);
         expect(result.current.allocationFailureByOpId.size).toBe(0);
     });
 
     it('ignores errors that are not allocation failures', () => {
-        mockLinkedReports([failedOperation(2, 'TypeError: bad argument')], [{ opId: 1, perfId: '1' }]);
+        const opIdsMap = [{ opId: 1, perfId: '1' }];
+        mockLinkedReports([failedOperation(2, 'TypeError: bad argument')], opIdsMap);
 
-        const { result } = renderHook(() => useAllocationFailures());
+        const { result } = renderHook(() => useAllocationFailures(opIdsMap));
 
         expect(result.current.listings).toEqual([]);
     });

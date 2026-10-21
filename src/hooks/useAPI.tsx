@@ -35,10 +35,13 @@ import getServerConfig from '../functions/getServerConfig';
 import { PerfTableRow } from '../model/PerfTable';
 import { DeviceOperationMapping, DeviceOperationOrderCandidates } from '../model/DeviceOperationMapping';
 import { matchDeviceOperationOrdersToPerf } from '../functions/deviceOperationMatching';
+import { getSiblingOpIds, groupDeviceRowsLikeMerge } from '../functions/deviceRowGroups';
+import { getOpIdByPerfId } from '../functions/enrichPerfRowData';
 import memoiseLatest from '../functions/memoiseLatest';
 import {
     PerformanceReportParams,
     getLinkedPerformanceReportParams,
+    getLinkedUnmergedPerformanceReportParams,
     getPerformanceComparisonReportQueryKey,
     getPerformanceReportQueryKey,
 } from '../functions/performanceReportQueryKey';
@@ -972,9 +975,11 @@ export const useGetDeviceOperationListPerfByOpId = (): Map<number, DeviceOperati
  *
  * The perf ids come from the link-pinned report (`useLinkedPerformanceReport`),
  * not from the rows the performance tab is displaying. A row id survives host-op
- * and signpost filtering, so consumers can still join against those views; ids
- * do not survive `mergeDevices: false`, where an operation's per-device rows
- * each carry their own id and only the merged representative joins.
+ * and signpost filtering, so consumers can still join against those views. Only
+ * merged rows' ids appear: with `mergeDevices: false` an operation's per-device
+ * rows each carry their own id, and only the one the merge kept is here. Join
+ * the performance table through `useOpToPerfIdForPerfTable`, which carries the
+ * op onto the rest.
  */
 export const useOpToPerfIdFiltered = () => getOpToPerfIds(useGetDeviceOperationListPerf());
 
@@ -1313,6 +1318,9 @@ const useViewPerformanceReportParams = (): PerformanceReportParams => {
 // scope for a stable identity; the query key is hashed structurally, so this is for
 // readers rather than for React Query.
 const LINKED_PERFORMANCE_REPORT_PARAMS: PerformanceReportParams = Object.freeze(getLinkedPerformanceReportParams());
+const LINKED_UNMERGED_PERFORMANCE_REPORT_PARAMS: PerformanceReportParams = Object.freeze(
+    getLinkedUnmergedPerformanceReportParams(),
+);
 
 const usePerformanceReportQuery = (name: string | null, params: PerformanceReportParams) => {
     const location = useAtomValue(performanceReportLocationAtom);
@@ -1353,6 +1361,43 @@ export const useLinkedPerformanceReport = () => {
     const name = useAtomValue(activePerformanceReportFolderNameAtom);
 
     return usePerformanceReportQuery(name, LINKED_PERFORMANCE_REPORT_PARAMS);
+};
+
+/**
+ * @description `useOpToPerfIdFiltered` extended onto unmerged rows, for joining
+ * the performance table. With devices unmerged, every per-device row of a linked
+ * operation gets an entry, not only the one the merge kept (#2084). With devices
+ * merged, or until the unmerged report arrives, this is `useOpToPerfIdFiltered`
+ * unchanged. No unmerged report is requested while merged, or while no operation
+ * is linked.
+ */
+export const useOpToPerfIdForPerfTable = () => {
+    const name = useAtomValue(activePerformanceReportFolderNameAtom);
+    const mergeDevices = useAtomValue(mergeDevicesAtom);
+    const opIdsMap = useOpToPerfIdFiltered();
+    // With no linked operations there is nothing to extend, so a performance-only
+    // session never fetches the whole-run unmerged report.
+    const { data: unmerged } = usePerformanceReportQuery(
+        mergeDevices || opIdsMap.length === 0 ? null : name,
+        LINKED_UNMERGED_PERFORMANCE_REPORT_PARAMS,
+    );
+    // Re-merging disables the query by nulling `name`, which moves it to a key that never
+    // held data, so `unmerged` is already empty then.
+    const unmergedRows = unmerged?.report;
+
+    return useMemo(() => {
+        if (!unmergedRows?.length) {
+            return opIdsMap;
+        }
+
+        const siblingOpIdByPerfId = getSiblingOpIds(groupDeviceRowsLikeMerge(unmergedRows), getOpIdByPerfId(opIdsMap));
+
+        if (siblingOpIdByPerfId.size === 0) {
+            return opIdsMap;
+        }
+
+        return [...opIdsMap, ...[...siblingOpIdByPerfId].map(([perfId, opId]) => ({ opId, perfId }))];
+    }, [opIdsMap, unmergedRows]);
 };
 
 interface ComparisonReportResult {

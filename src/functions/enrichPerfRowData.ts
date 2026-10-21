@@ -46,6 +46,19 @@ export const getRowAttributes = (row: PerfTableRow): RowAttributes => {
 const getLinkedValue = <T>(valueByOpId: Map<number, T> | null | undefined, op: number | undefined): T | null =>
     (op !== undefined ? valueByOpId?.get(op) : undefined) ?? null;
 
+// Operations that matched no perf row carry no `perfId`, and have nothing to join on.
+export const getOpIdByPerfId = (opIdsMap: { perfId?: string; opId: number }[]): Map<string, number> => {
+    const opIdByPerfId = new Map<string, number>();
+
+    for (const { perfId, opId } of opIdsMap) {
+        if (perfId !== undefined) {
+            opIdByPerfId.set(perfId, opId);
+        }
+    }
+
+    return opIdByPerfId;
+};
+
 // Converts the raw string-based rows produced by tt-perf-report (via the backend CSV parse) into
 // the typed numeric rows the performance table renders. Keep the parsing here aligned with the
 // columns tt-perf-report emits so the table reflects the same data.
@@ -56,12 +69,7 @@ export const enrichRowData = (
 ): TypedPerfTableRow[] => {
     // Build the perf-id -> op-id lookup once so enrichment stays O(N) instead of O(N·M) — the
     // previous `.find()` per row scaled with both row count and the active report's op count.
-    const opIdByPerfId = new Map<string, number>();
-    for (const { perfId, opId } of opIdsMap) {
-        if (perfId !== undefined) {
-            opIdByPerfId.set(perfId, opId);
-        }
-    }
+    const opIdByPerfId = getOpIdByPerfId(opIdsMap);
 
     const typedRows = rows.map((row) => {
         const op = opIdByPerfId.get(row.id);

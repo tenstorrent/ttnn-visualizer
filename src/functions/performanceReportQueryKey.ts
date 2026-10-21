@@ -44,7 +44,11 @@ export interface PerformanceReportParams {
  * Expect that on the first toggle of any of those controls, not as a rare case:
  * `RangeSlider` is mounted app-wide and subscribes to both queries, so once they
  * diverge the app holds two live report queries for the rest of the session, each
- * retaining a full `PerfTableRow[]` under `staleTime: Infinity`. Backend memoisation
+ * retaining a full `PerfTableRow[]` under `staleTime: Infinity`. With devices
+ * unmerged there can be a third: the unmerged link report
+ * (`getLinkedUnmergedPerformanceReportParams`), the largest of the three. It
+ * shares the tab's key only while every other control is at its default, so
+ * unmerging plus any one other change keeps three resident. Backend memoisation
  * amortises repeated requests for each exact filter shape (#1886); splitting the
  * stacked report would be a separate way to stop grouping alone forking this query.
  */
@@ -69,6 +73,22 @@ export const LINKED_PERFORMANCE_REPORT_FILTERS = {
  */
 export const getLinkedPerformanceReportParams = (): PerformanceReportParams => ({
     ...LINKED_PERFORMANCE_REPORT_FILTERS,
+});
+
+/**
+ * @description The linked parameter set with devices left unmerged, for
+ * reproducing which per-device rows each merged row stands for (#2084). The
+ * grouping is positional over the whole run in host-start order, so a signpost
+ * window or tracing mode would shift it; every other filter stays pinned for
+ * that reason. Row ids are CSV positions and survive every filter, so the result
+ * joins onto whichever view the performance tab is showing.
+ *
+ * With the tab unmerged and every other control at its default this is the
+ * tab's own key, so the two share one request.
+ */
+export const getLinkedUnmergedPerformanceReportParams = (): PerformanceReportParams => ({
+    ...LINKED_PERFORMANCE_REPORT_FILTERS,
+    mergeDevices: false,
 });
 
 const getSignpostKey = (label: string, signpost: Signpost | null) =>

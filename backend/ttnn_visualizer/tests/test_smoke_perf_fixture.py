@@ -194,3 +194,32 @@ def test_npe_manifest_is_readable_through_the_query_layer():
     )
 
     assert NPEQueries.get_npe_manifest(instance)
+
+
+DEVICE_ROWS_FIXTURE = REPO_ROOT / "tests" / "data" / "smokePerfReportDeviceRows.json"
+
+
+@pytest.mark.parametrize("merge_devices", [True, False])
+def test_frontend_device_rows_fixture_matches_the_report(merge_devices):
+    """`tests/deviceRowGroups.spec.ts` checks its mirror of `merge_device_rows`
+    against a snapshot of this report, merged and unmerged (#2084).
+
+    The snapshot is taken with the link-pinned filters (host ops hidden, no
+    signposts, tracing off). A `tt-perf-report` bump that changes how devices
+    are grouped would leave that spec passing on stale rows, so this fails
+    instead: regenerate the JSON from this report, then re-check the mirror.
+    """
+    expected = json.loads(DEVICE_ROWS_FIXTURE.read_text(encoding="utf-8"))[
+        "merged" if merge_devices else "unmerged"
+    ]
+    fields = expected[0].keys()
+    instance = Instance(
+        instance_id="pytest-smoke-fixture-device-rows",
+        performance_path=str(FIXTURE_DIR),
+    )
+
+    report = OpsPerformanceReportQueries.generate_report(
+        instance, hide_host_ops=True, merge_devices=merge_devices, tracing_mode=False
+    )["report"]
+
+    assert [{field: row.get(field) for field in fields} for row in report] == expected
