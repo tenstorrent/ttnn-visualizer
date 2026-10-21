@@ -316,6 +316,10 @@ class DatabaseQueries:
         query += " GROUP BY operation_id, buffer_type, device_id"
         return self.query_runner.execute_query(query, params)
 
+    def has_table(self, table_name: str) -> bool:
+        """True if the report holds ``table_name``, which older captures may not."""
+        return self._check_table_exists(table_name)
+
     def table_has_rank_column(self, table_name: str) -> bool:
         """
         True if ``table_name`` carries ``rank``, so a rank filter can reach it.

@@ -15,7 +15,9 @@ from dataclasses import dataclass
 from typing import (
     Callable,
     Dict,
+    Iterable,
     List,
+    NamedTuple,
     Optional,
     Sequence,
     Tuple,
@@ -41,10 +43,18 @@ from ttnn_visualizer.agent.operations import (
     scoped,
 )
 from ttnn_visualizer.agent.scope_outcomes import failed_device_operation_names
-from ttnn_visualizer.models import L1_BUFFER_TYPES, ErrorRecord, Operation, Tensor
+from ttnn_visualizer.models import (
+    L1_BUFFER_TYPES,
+    ErrorRecord,
+    InputTensor,
+    Operation,
+    OutputTensor,
+    Tensor,
+)
 from ttnn_visualizer.queries import DatabaseQueries
 from ttnn_visualizer.serializers import (
     error_key,
+    rank_or_zero,
     select_error_for_operation,
     select_errors_by_operation,
 )
@@ -110,7 +120,7 @@ def _truncated(field: str, text: Optional[str]) -> Dict[str, object]:
 
 def _error_records(queries: DatabaseQueries, scope: RankScope) -> List[ErrorRecord]:
     # Reports written before the errors table existed have none to show.
-    if not queries._check_table_exists("errors"):
+    if not queries.has_table("errors"):
         return []
     return list(queries.query_error_records(scoped(queries, "errors", scope)))
 
@@ -150,9 +160,7 @@ def _graphs_checked(
 def _graph_for(
     graphs: Dict[Tuple[int, int], str], operation: Operation
 ) -> List[object]:
-    raw = graphs.get((operation.operation_id, operation.rank))
-    if raw is None:
-        raw = graphs.get((operation.operation_id, 0))
+    raw = rank_or_zero(graphs, operation.operation_id, operation.rank)
     if not raw:
         return []
     try:
@@ -196,7 +204,7 @@ def errors(
     with profiler_db(instance) as queries:
         scope = rank_scope(queries, rank)
         refuse_unattributable(queries, scope, *_ERROR_TABLES)
-        has_table = queries._check_table_exists("errors")
+        has_errors_table = queries.has_table("errors")
         records = _error_records(queries, scope)
         operations = (
             list(
@@ -246,15 +254,14 @@ def errors(
         "note": ERRORS_NOTE,
         **scope.as_response(),
     }
-    caveat = rank_caveat(scope)
-    if not has_table:
-        caveat = joined_caveat(
-            caveat,
+    caveats: List[str] = [caveat] if (caveat := rank_caveat(scope)) else []
+    if not has_errors_table:
+        caveats.append(
             "This report predates the errors table, so it cannot say whether the run "
-            "recorded an error.",
+            "recorded an error."
         )
-    if caveat:
-        response["caveat"] = caveat
+    if caveats:
+        response["caveat"] = " ".join(caveats)
     return response
 
 
@@ -263,21 +270,25 @@ class _ReportOperations:
     """Operations in id order, with what `/api/operations` attaches to each."""
 
     operations: List[Operation]
-    arguments: Dict[int, List[Tuple[str, Optional[str]]]]
-    inputs: Dict[int, List[Tensor]]
-    outputs: Dict[int, List[Tensor]]
-    consumers: Dict[int, List[int]]
+    arguments_by_operation_id: Dict[int, List[Tuple[str, Optional[str]]]]
+    inputs_by_operation_id: Dict[int, List[Tensor]]
+    outputs_by_operation_id: Dict[int, List[Tensor]]
+    consumers_by_tensor_id: Dict[int, List[int]]
 
 
 def _report_operations(
     queries: DatabaseQueries, scope: RankScope, with_consumers: bool = False
 ) -> _ReportOperations:
     operations = _operations(queries, scope)
-    arguments: Dict[int, List[Tuple[str, Optional[str]]]] = defaultdict(list)
+    arguments_by_operation_id: Dict[int, List[Tuple[str, Optional[str]]]] = defaultdict(
+        list
+    )
     for argument in queries.query_operation_arguments(
         scoped(queries, "operation_arguments", scope)
     ):
-        arguments[argument.operation_id].append((argument.name, argument.value))
+        arguments_by_operation_id[argument.operation_id].append(
+            (argument.name, argument.value)
+        )
 
     input_rows = list(
         queries.query_input_tensors(scoped(queries, "input_tensors", scope))
@@ -289,7 +300,7 @@ def _report_operations(
         (tensor.tensor_id, tensor.rank): tensor
         for tensor in queries.query_tensors(scoped(queries, "tensors", scope))
     }
-    consumers: Dict[int, List[int]] = {}
+    consumers_by_tensor_id: Dict[int, List[int]] = {}
     links = (
         {
             (link.tensor_id, link.rank): link
@@ -299,24 +310,27 @@ def _report_operations(
         else {}
     )
 
-    def attach(rows) -> Dict[int, List[Tensor]]:
-        # As `serialize_inputs_outputs`: rank 0 is the fallback, and a row without its
-        # tensor is skipped.
-        by_operation: Dict[int, List[Tensor]] = defaultdict(list)
+    def attach(
+        rows: Iterable[Union[InputTensor, OutputTensor]],
+    ) -> Dict[int, List[Tensor]]:
+        # As `serialize_inputs_outputs`: a row without its tensor is skipped.
+        tensors_by_operation_id: Dict[int, List[Tensor]] = defaultdict(list)
         for row in rows:
-            tensor = tensors.get((row.tensor_id, row.rank)) or tensors.get(
-                (row.tensor_id, 0)
-            )
+            tensor = rank_or_zero(tensors, row.tensor_id, row.rank)
             if tensor is None:
                 continue
-            link = links.get((row.tensor_id, row.rank)) or links.get((row.tensor_id, 0))
-            consumers[tensor.tensor_id] = link.consumers if link else []
-            by_operation[row.operation_id].append(tensor)
-        return by_operation
+            link = rank_or_zero(links, row.tensor_id, row.rank)
+            consumers_by_tensor_id[tensor.tensor_id] = link.consumers if link else []
+            tensors_by_operation_id[row.operation_id].append(tensor)
+        return tensors_by_operation_id
 
-    inputs = attach(input_rows)
-    outputs = attach(output_rows)
-    return _ReportOperations(operations, arguments, inputs, outputs, consumers)
+    return _ReportOperations(
+        operations,
+        arguments_by_operation_id,
+        inputs_by_operation_id=attach(input_rows),
+        outputs_by_operation_id=attach(output_rows),
+        consumers_by_tensor_id=consumers_by_tensor_id,
+    )
 
 
 def _failure_by_operation_id(
@@ -337,27 +351,39 @@ def _failure_by_operation_id(
     return failures
 
 
-_Fallbacks = Tuple[Dict[int, Dict[str, object]], Dict[int, str]]
-
-
-def report_dram_fallbacks(queries: DatabaseQueries, scope: RankScope) -> _Fallbacks:
+class DramFallbackReport(NamedTuple):
     """Every likely fallback by operation id, and each operation's name."""
+
+    by_operation_id: Dict[int, Dict[str, object]]
+    names: Dict[int, str]
+
+
+def report_dram_fallbacks(
+    queries: DatabaseQueries, scope: RankScope
+) -> DramFallbackReport:
+    """The likely fallbacks at the rank, read from every operation there."""
     report = _report_operations(queries, scope)
-    fallbacks = fallback_rules.dram_fallbacks(
+    fallback_by_operation_id = fallback_rules.dram_fallbacks(
         [
             fallback_rules.FallbackOperation(
                 id=operation.operation_id,
                 name=operation.name,
-                arguments=report.arguments.get(operation.operation_id, []),
-                inputs=report.inputs.get(operation.operation_id, []),
-                outputs=report.outputs.get(operation.operation_id, []),
+                arguments=report.arguments_by_operation_id.get(
+                    operation.operation_id, []
+                ),
+                inputs=report.inputs_by_operation_id.get(operation.operation_id, []),
+                outputs=report.outputs_by_operation_id.get(operation.operation_id, []),
             )
             for operation in report.operations
         ],
         _failure_by_operation_id(queries, scope, report.operations),
     )
-    names = {operation.operation_id: operation.name for operation in report.operations}
-    return fallbacks, names
+    return DramFallbackReport(
+        by_operation_id=fallback_by_operation_id,
+        names={
+            operation.operation_id: operation.name for operation in report.operations
+        },
+    )
 
 
 def dram_fallbacks(
@@ -372,21 +398,24 @@ def dram_fallbacks(
     with profiler_db(instance) as queries:
         scope = rank_scope(queries, rank)
         refuse_unattributable(queries, scope, *_FALLBACK_TABLES)
-        fallbacks, names = _cached_dram_fallbacks(registry, handle, queries, scope)
+        report = _cached_dram_fallbacks(registry, handle, queries, scope)
 
     listed = [
-        {"operation_name": names.get(operation_id), **fallback}
-        for operation_id, fallback in sorted(fallbacks.items())
+        {"operation_name": report.names.get(operation_id), **fallback}
+        for operation_id, fallback in sorted(report.by_operation_id.items())
     ][:count]
-    return {
+    response: Dict[str, object] = {
         "handle": handle,
-        "fallback_count": len(fallbacks),
+        "fallback_count": len(report.by_operation_id),
         "returned": len(listed),
         "fallbacks": listed,
         "note": DRAM_FALLBACKS_NOTE,
         **scope.as_response(),
-        **({"caveat": caveat} if (caveat := rank_caveat(scope)) else {}),
     }
+    caveats: List[str] = [caveat] if (caveat := rank_caveat(scope)) else []
+    if caveats:
+        response["caveat"] = " ".join(caveats)
+    return response
 
 
 def _whole(value: object) -> object:
@@ -504,9 +533,9 @@ def report_l1_peak(queries: DatabaseQueries, scope: RankScope) -> L1PeakReport:
                 tensor.tensor_id,
                 tensor.address,
                 tensor.buffer_type,
-                report.consumers.get(tensor.tensor_id, []),
+                report.consumers_by_tensor_id.get(tensor.tensor_id, []),
             )
-            for side in (report.inputs, report.outputs)
+            for side in (report.inputs_by_operation_id, report.outputs_by_operation_id)
             for operation in report.operations
             for tensor in side.get(operation.operation_id, [])
         ),
@@ -651,7 +680,7 @@ def _cached_per_rank(
 
 def _cached_dram_fallbacks(
     registry: ReportRegistry, handle: str, queries: DatabaseQueries, scope: RankScope
-) -> _Fallbacks:
+) -> DramFallbackReport:
     """Read once per handle and rank: one operation's needs every operation's tensors."""
     return _cached_per_rank(
         registry,
@@ -684,11 +713,11 @@ def operation_failure_fields(
         if error is not None:
             graphs = _graphs_checked(queries, scope, [operation.operation_id])
             fields["error"] = _error_entry(error, _graph_for(graphs, operation))
-    if queries._check_table_exists("operation_arguments") and _attributable(
+    if queries.has_table("operation_arguments") and _attributable(
         queries, scope, _FALLBACK_TABLES, withheld, "dram_fallback"
     ):
-        fallbacks, _ = _cached_dram_fallbacks(registry, handle, queries, scope)
-        fallback = fallbacks.get(operation.operation_id)
+        report = _cached_dram_fallbacks(registry, handle, queries, scope)
+        fallback = report.by_operation_id.get(operation.operation_id)
         if fallback is not None:
             fields["dram_fallback"] = fallback
     return fields, " ".join(withheld) or None
@@ -746,6 +775,7 @@ __all__ = [
     "L1_PEAK_NOTE",
     "MAX_ERROR_TEXT_CHARS",
     "MAX_PEAK_CONTRIBUTORS",
+    "DramFallbackReport",
     "L1PeakReport",
     "dram_fallbacks",
     "errors",

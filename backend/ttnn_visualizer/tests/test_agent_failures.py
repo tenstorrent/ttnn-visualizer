@@ -9,6 +9,7 @@ from the database around them, and what each answer says.
 """
 
 import json
+import re
 import sqlite3
 from pathlib import Path
 from typing import Dict, List, Optional, Sequence, Tuple
@@ -165,6 +166,55 @@ def _two_rank_report(
         connection.close()
     registry = ReportRegistry()
     return registry, str(load_report(registry, profiler_path=str(directory))["handle"])
+
+
+def _ranked_report(
+    tmp_path: Path,
+    rows_by_rank: Dict[int, Dict[str, Sequence[Tuple]]],
+    unranked: Sequence[str] = (),
+) -> Tuple[ReportRegistry, str]:
+    """Every table `_report` writes, with `rank` on each but `unranked`.
+
+    `rows_by_rank` holds each rank's whole rows per table, without the rank. An
+    unranked table holds every rank's rows with nothing to tell them apart.
+    """
+    directory = tmp_path / "profiler"
+    directory.mkdir()
+    schema = (_SCHEMA + _ERRORS + _ARGUMENTS).replace(" UNIQUE", "")
+    for table in re.findall(r"CREATE TABLE (\w+) \(", schema):
+        if table not in unranked:
+            schema = schema.replace(
+                f"CREATE TABLE {table} (", f"CREATE TABLE {table} (rank int, "
+            )
+    connection = sqlite3.connect(directory / "db.sqlite")
+    try:
+        connection.executescript(schema)
+        for rank, rows_by_table in rows_by_rank.items():
+            for table, rows in rows_by_table.items():
+                for row in rows:
+                    values = tuple(row) if table in unranked else (rank, *row)
+                    placeholders = ", ".join("?" * len(values))
+                    connection.execute(
+                        f"INSERT INTO {table} VALUES ({placeholders})", values
+                    )
+        connection.commit()
+    finally:
+        connection.close()
+    registry = ReportRegistry()
+    return registry, str(load_report(registry, profiler_path=str(directory))["handle"])
+
+
+def _tensor_row(tensor_id: int, address: int, buffer_type: int) -> Tuple:
+    return (
+        tensor_id,
+        "Shape([1, 32])",
+        "BFLOAT16",
+        "TILE",
+        None,
+        0,
+        address,
+        buffer_type,
+    )
 
 
 def _start(name: str) -> Dict:
@@ -592,6 +642,26 @@ class TestHowTheDatabaseIsRead:
                 "multi-host report read at rank 1"
                 in tool(registry, handle, rank=1)["caveat"]
             )
+
+    def test_a_tensor_written_without_a_rank_is_read_at_any_rank(self, tmp_path):
+        """As `serialize_inputs_outputs` reads it: a table without `rank` holds rank 0
+        for every rank, so rank 1's output row finds its tensor there."""
+        registry, handle = _ranked_report(
+            tmp_path,
+            {
+                1: {
+                    "operations": [(1, "ttnn.matmul", 1.0)],
+                    "operation_arguments": [(1, "memory_config", _L1_CONFIG)],
+                    "tensors": [_tensor_row(20, 5000, 0)],
+                    "output_tensors": [(1, 0, 20)],
+                }
+            },
+            unranked=["tensors"],
+        )
+
+        result = failures.dram_fallbacks(registry, handle, rank=1)
+
+        assert [entry["operation_id"] for entry in result["fallbacks"]] == [1]
 
     def test_a_captured_graph_past_the_bound_is_not_read(self, tmp_path):
         """Each tool loads every graph it matches at once, so each asks the size first."""

@@ -4,7 +4,7 @@
 
 import dataclasses
 from collections import defaultdict
-from typing import DefaultDict, Dict, Iterable, List, Optional, Tuple
+from typing import DefaultDict, Dict, Iterable, List, Mapping, Optional, Tuple, TypeVar
 
 import orjson
 from ttnn_visualizer.models import (
@@ -15,6 +15,19 @@ from ttnn_visualizer.models import (
 )
 
 _EMPTY_DEVICE_OPERATIONS = orjson.Fragment(b"[]")
+
+_Row = TypeVar("_Row")
+
+
+def rank_or_zero(
+    rows_by_key: Mapping[Tuple[int, int], _Row], row_id: int, rank: int
+) -> Optional[_Row]:
+    """The row at `(row_id, rank)`, else at `(row_id, 0)`.
+
+    Rank 0 stands for every rank in a table written before it had a `rank` column.
+    """
+    row = rows_by_key.get((row_id, rank))
+    return row if row is not None else rows_by_key.get((row_id, 0))
 
 
 def _captured_graph_fragment(captured_graph):
@@ -195,15 +208,11 @@ def serialize_inputs_outputs(
     def attach_tensor_data(values):
         values_dict = defaultdict(list)
         for value in values:
-            tensor = tensors_dict.get((value.tensor_id, value.rank))
-            if tensor is None:
-                tensor = tensors_dict.get((value.tensor_id, 0))
+            tensor = rank_or_zero(tensors_dict, value.tensor_id, value.rank)
             if tensor is None:
                 continue
             tensor_dict = tensor.to_dict()
-            pc = producers_consumers_dict.get((value.tensor_id, value.rank))
-            if pc is None:
-                pc = producers_consumers_dict.get((value.tensor_id, 0))
+            pc = rank_or_zero(producers_consumers_dict, value.tensor_id, value.rank)
             value_dict = dataclasses.asdict(value)
             value_dict.pop("tensor_id", None)
             value_dict.update(
@@ -434,9 +443,7 @@ def serialize_tensors(
     for tensor in tensors:
         tensor_data = tensor.to_dict()
         tensor_id = tensor_data.pop("tensor_id")
-        pc = producers_consumers_dict.get((tensor_id, tensor.rank))
-        if pc is None:
-            pc = producers_consumers_dict.get((tensor_id, 0))
+        pc = rank_or_zero(producers_consumers_dict, tensor_id, tensor.rank)
         tensor_data.update(
             {
                 "id": tensor_id,

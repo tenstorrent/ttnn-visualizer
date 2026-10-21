@@ -36,7 +36,6 @@ from typing import Dict, List, NamedTuple, Optional, Sequence, Set, Tuple
 from tt_perf_report.perf_report import HOST_OP_MARKER
 from ttnn_visualizer.agent import failures, operations, perf_detail, tools
 from ttnn_visualizer.agent.bounds import (
-    MAX_CAPTURED_GRAPH_CHARS,
     MAX_LIMIT,
     GraphTooLargeError,
     ensure_graph_readable,
@@ -769,7 +768,6 @@ def program_cache(
 
 __all__ = [
     "DEVICE_TIME_UNIT",
-    "MAX_CAPTURED_GRAPH_CHARS",
     "PROGRAM_CACHE_LINK_NOTE",
     "TOP_OPS_LINK_NOTE",
     "DeviceOperation",
@@ -781,7 +779,6 @@ __all__ = [
     "UnlinkedRows",
     "collapse_multidevice_operations",
     "device_operation_orders",
-    "is_device_operation",
     "is_host_op_row",
     "match_device_operations",
     "operation_detail",

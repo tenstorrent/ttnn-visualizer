@@ -72,6 +72,15 @@ _RANK_SCHEMA = {
         "per rank, so reading every rank at once collides them."
     ),
 }
+_HANDLE_LIMIT_RANK_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "handle": {"type": "string"},
+        "limit": _LIMIT_SCHEMA,
+        "rank": _RANK_SCHEMA,
+    },
+    "required": ["handle"],
+}
 # The bounds `tt-perf-report --start-signpost/--end-signpost` take; see
 # `tools.SignpostRange`. #2122
 _SIGNPOST_SCHEMAS = {
@@ -441,15 +450,7 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
                 "past the end of L1 or overlapping an L1 buffer. Start here for a "
                 "crash or an out-of-memory question, then read l1_peak."
             ),
-            "schema": {
-                "type": "object",
-                "properties": {
-                    "handle": {"type": "string"},
-                    "limit": _LIMIT_SCHEMA,
-                    "rank": _RANK_SCHEMA,
-                },
-                "required": ["handle"],
-            },
+            "schema": _HANDLE_LIMIT_RANK_SCHEMA,
             "handler": lambda arguments: app_links.with_operation_link_template(
                 registry,
                 failures.errors(registry, **arguments),
@@ -463,15 +464,7 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
                 "landed in DRAM, or it ran just after a same-named operation failed "
                 "to allocate L1. Reads every operation's arguments and tensors."
             ),
-            "schema": {
-                "type": "object",
-                "properties": {
-                    "handle": {"type": "string"},
-                    "limit": _LIMIT_SCHEMA,
-                    "rank": _RANK_SCHEMA,
-                },
-                "required": ["handle"],
-            },
+            "schema": _HANDLE_LIMIT_RANK_SCHEMA,
             "handler": lambda arguments: app_links.with_operation_link_template(
                 registry,
                 failures.dram_fallbacks(registry, **arguments),
@@ -490,15 +483,7 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
                 "a large capture; later calls, at any limit, reuse it. Withheld, "
                 "with the reason, when the replay exceeds the device's L1."
             ),
-            "schema": {
-                "type": "object",
-                "properties": {
-                    "handle": {"type": "string"},
-                    "limit": _LIMIT_SCHEMA,
-                    "rank": _RANK_SCHEMA,
-                },
-                "required": ["handle"],
-            },
+            "schema": _HANDLE_LIMIT_RANK_SCHEMA,
             "handler": lambda arguments: app_links.with_operation_link_template(
                 registry,
                 failures.l1_peak(registry, **arguments),
