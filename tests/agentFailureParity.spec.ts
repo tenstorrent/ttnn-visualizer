@@ -6,8 +6,11 @@ import { describe, expect, it } from 'vitest';
 import { getAllocationFailureDiagnosis, parseAllocationFailure } from '../src/functions/parseAllocationFailure';
 import { getFailedDeviceOperationNames } from '../src/functions/scopeOutcomes';
 import { getDramFallbacks } from '../src/functions/getDramFallbacks';
-import { buildL1PeakDecomposition, getTopL1PeakOperations } from '../src/functions/l1PeakDecomposition';
-import { resolveAddressLifetimes } from '../src/hooks/useL1PeakDecomposition';
+import {
+    buildL1PeakDecomposition,
+    getTopL1PeakOperations,
+    resolveAddressLifetimes,
+} from '../src/functions/l1PeakDecomposition';
 import { AllocationFailure } from '../src/model/AllocationFailure';
 import { Buffer, Node, Operation, OperationDescription } from '../src/model/APIData';
 import { L1PeakDecomposition } from '../src/model/L1PeakDecomposition';
@@ -17,6 +20,7 @@ import golden from './data/agentFailureParity.json';
 // the app to it fails a change on either side. Regenerate with `pnpm run agent:parity-golden`.
 
 const byKey = <V>(entries: [number, V][]) => [...entries].sort(([left], [right]) => left - right);
+const indexedCases = <T>(cases: T[]) => cases.map((entry, index) => [index, entry] as const);
 
 it('the golden covers every function the agent restates', () => {
     expect(golden.allocationFailures.length).toBeGreaterThan(0);
@@ -28,18 +32,15 @@ it('the golden covers every function the agent restates', () => {
 });
 
 describe('parseAllocationFailure and its diagnosis', () => {
-    it.each(golden.allocationFailures.map((entry, index) => [index, entry] as const))(
+    it.each(indexedCases(golden.allocationFailures))(
         'case %i matches the agent',
         (_, { message, failure, reason, phrases }) => {
             const parsed = parseAllocationFailure({ id: 1, name: 'op', error: { error_message: message } } as Pick<
                 Operation,
                 'id' | 'name' | 'error'
             >);
-            const { operationId, operationName, ...fields } = parsed ?? ({} as AllocationFailure);
 
-            expect(parsed === null ? null : fields).toEqual(failure);
-            expect(parsed && operationId).toBe(parsed && 1);
-            expect(parsed && operationName).toBe(parsed && 'op');
+            expect(parsed).toEqual(failure === null ? null : { ...failure, operationId: 1, operationName: 'op' });
             const diagnosis = parsed ? getAllocationFailureDiagnosis(parsed) : null;
             expect(diagnosis?.reason ?? null).toBe(reason);
             expect(
@@ -50,38 +51,32 @@ describe('parseAllocationFailure and its diagnosis', () => {
 });
 
 describe('getFailedDeviceOperationNames', () => {
-    it.each(golden.failedDeviceOperations.map((entry, index) => [index, entry] as const))(
-        'case %i matches the agent',
-        (_, { nodes, failed }) => {
-            expect(getFailedDeviceOperationNames(nodes as unknown as Node[])).toEqual(failed);
-        },
-    );
+    it.each(indexedCases(golden.failedDeviceOperations))('case %i matches the agent', (_, { nodes, failed }) => {
+        expect(getFailedDeviceOperationNames(nodes as unknown as Node[])).toEqual(failed);
+    });
 });
 
 describe('getDramFallbacks', () => {
-    it.each(golden.dramFallbacks.map((entry, index) => [index, entry] as const))(
-        'case %i matches the agent',
-        (_, { operations, fallbacks }) => {
-            const typed = operations as unknown as (Operation & { arguments: { name: string; value: string }[] })[];
-            const failures = new Map<number, AllocationFailure>();
+    it.each(indexedCases(golden.dramFallbacks))('case %i matches the agent', (_, { operations, fallbacks }) => {
+        const typed = operations as unknown as (Operation & { arguments: { name: string; value: string }[] })[];
+        const failures = new Map<number, AllocationFailure>();
 
-            typed.forEach((operation) => {
-                const failure = parseAllocationFailure(operation);
+        typed.forEach((operation) => {
+            const failure = parseAllocationFailure(operation);
 
-                if (failure) {
-                    failures.set(operation.id, failure);
-                }
-            });
+            if (failure) {
+                failures.set(operation.id, failure);
+            }
+        });
 
-            expect(byKey([...getDramFallbacks(typed, failures).entries()])).toEqual(
-                byKey(fallbacks as [number, unknown][]),
-            );
-        },
-    );
+        expect(byKey([...getDramFallbacks(typed, failures).entries()])).toEqual(
+            byKey(fallbacks as [number, unknown][]),
+        );
+    });
 });
 
 describe('resolveAddressLifetimes', () => {
-    it.each(golden.addressLifetimes.map((entry, index) => [index, entry] as const))(
+    it.each(indexedCases(golden.addressLifetimes))(
         'case %i matches the agent',
         (_, { operations, lastUseByAddress, unattributableStaleAddressCount }) => {
             const lifetimes = resolveAddressLifetimes(operations as unknown as OperationDescription[]);
@@ -93,7 +88,7 @@ describe('resolveAddressLifetimes', () => {
 });
 
 describe('buildL1PeakDecomposition', () => {
-    it.each(golden.l1Peak.map((entry, index) => [index, entry] as const))(
+    it.each(indexedCases(golden.l1Peak))(
         'case %i matches the agent',
         (_, { operations, snapshot, lastUseByAddress, bankCount, capacityBytes, result }) => {
             const built = buildL1PeakDecomposition({
@@ -114,33 +109,30 @@ describe('buildL1PeakDecomposition', () => {
 });
 
 describe('getTopL1PeakOperations', () => {
-    it.each(golden.topOperations.map((entry, index) => [index, entry] as const))(
-        'case %i matches the agent',
-        (_, { entries, count, top }) => {
-            // The golden carries NaN and Infinity as the strings `Number()` reads.
-            const decompositions = (entries as (number | string)[][]).map((fields) => {
-                const [
-                    operationId,
-                    totalBytes,
-                    circularBufferBytes,
-                    intermediateTensorBytes,
-                    persistentTensorBytes,
-                    staleTensorBytes,
-                ] = fields.map(Number);
+    it.each(indexedCases(golden.topOperations))('case %i matches the agent', (_, { entries, count, top }) => {
+        // The golden carries NaN and Infinity as the strings `Number()` reads.
+        const decompositions = (entries as (number | string)[][]).map((fields) => {
+            const [
+                operationId,
+                totalBytes,
+                circularBufferBytes,
+                intermediateTensorBytes,
+                persistentTensorBytes,
+                staleTensorBytes,
+            ] = fields.map(Number);
 
-                return {
-                    operationId,
-                    totalBytes,
-                    circularBufferBytes,
-                    intermediateTensorBytes,
-                    persistentTensorBytes,
-                    staleTensorBytes,
-                } as L1PeakDecomposition;
-            });
+            return {
+                operationId,
+                totalBytes,
+                circularBufferBytes,
+                intermediateTensorBytes,
+                persistentTensorBytes,
+                staleTensorBytes,
+            } as L1PeakDecomposition;
+        });
 
-            expect(
-                getTopL1PeakOperations(decompositions, count).map(({ entry, alsoAt }) => [entry.operationId, alsoAt]),
-            ).toEqual(top);
-        },
-    );
+        expect(
+            getTopL1PeakOperations(decompositions, count).map(({ entry, alsoAt }) => [entry.operationId, alsoAt]),
+        ).toEqual(top);
+    });
 });

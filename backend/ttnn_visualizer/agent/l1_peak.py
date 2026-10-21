@@ -4,9 +4,9 @@
 
 """The L1 peak per operation, with circular buffers and intra-op tensors. #2154
 
-A port of `src/functions/l1PeakDecomposition.ts` and of `resolveAddressLifetimes` in
-`src/hooks/useL1PeakDecomposition.ts`; mirror a change there. `buffers` records only
-tensors that survive an operation, so the peak comes from replaying the captured graph.
+A port of `src/functions/l1PeakDecomposition.ts`, `resolveAddressLifetimes` included;
+mirror a change there. `buffers` records only tensors that survive an operation, so the
+peak comes from replaying the captured graph.
 """
 
 import math
