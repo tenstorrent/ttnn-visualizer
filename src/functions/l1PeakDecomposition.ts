@@ -364,3 +364,63 @@ export function buildL1PeakDecomposition({
         exceedsCapacity: capacityBytes !== undefined && peak !== null && peak.totalBytes > capacityBytes,
     };
 }
+
+/** Larger first. NaN orders against nothing, so it is put last rather than left to the sort. */
+const compareTotalsDescending = (left: number, right: number): number => {
+    if (Number.isNaN(left) || Number.isNaN(right)) {
+        return Number(Number.isNaN(left)) - Number(Number.isNaN(right));
+    }
+
+    // Compared rather than subtracted: `Infinity - Infinity` is NaN.
+    if (left === right) {
+        return 0;
+    }
+
+    return left > right ? -1 : 1;
+};
+
+export interface L1PeakTopOperation<T extends L1PeakDecomposition> {
+    entry: T;
+    /** The later operations with the same composition, in the order they rank. */
+    alsoAt: number[];
+}
+
+/**
+ * The largest operations, one per distinct composition, ties broken by lower id.
+ *
+ * resnet50 runs the same layer stack three times, so an undeduped ranking spends every row
+ * on one loop body — operations 130 and 229 are byte-identical. The first occurrence of each
+ * composition is kept, with where it repeats.
+ * Mirrored as `top_compositions` in `backend/ttnn_visualizer/agent/l1_peak.py`.
+ */
+export function getTopL1PeakOperations<T extends L1PeakDecomposition>(
+    entries: Iterable<T>,
+    count: number,
+): L1PeakTopOperation<T>[] {
+    const byComposition = new Map<string, L1PeakTopOperation<T>>();
+
+    [...entries]
+        .sort(
+            (left, right) =>
+                compareTotalsDescending(left.totalBytes, right.totalBytes) || left.operationId - right.operationId,
+        )
+        .forEach((entry) => {
+            // Joined, so every NaN is one key and -0 is 0.
+            const key = [
+                entry.totalBytes,
+                entry.circularBufferBytes,
+                entry.intermediateTensorBytes,
+                entry.persistentTensorBytes,
+                entry.staleTensorBytes,
+            ].join(':');
+            const seen = byComposition.get(key);
+
+            if (seen) {
+                seen.alsoAt.push(entry.operationId);
+            } else {
+                byComposition.set(key, { entry, alsoAt: [] });
+            }
+        });
+
+    return [...byComposition.values()].slice(0, count);
+}

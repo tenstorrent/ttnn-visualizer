@@ -9,7 +9,10 @@ in every limit schema, so a second copy would eventually promise one cap and
 enforce another. #2012
 """
 
-from typing import Optional
+from typing import TYPE_CHECKING, Any, Dict, Optional
+
+if TYPE_CHECKING:
+    from ttnn_visualizer.queries import DatabaseQueries
 
 DEFAULT_LIMIT = 10
 MAX_LIMIT = 100
@@ -21,6 +24,27 @@ MAX_DETAILED_LIMIT = 25
 # The captured graph a tool will read in one go. The largest real total across 85 local
 # captures is 55.6 MB, so this refuses a pathological file, never a real one.
 MAX_CAPTURED_GRAPH_CHARS = 1 << 30
+
+
+class GraphTooLargeError(ValueError):
+    """More captured graph than a tool will hold in memory to read."""
+
+
+def ensure_graph_readable(
+    queries: "DatabaseQueries", filters: Optional[Dict[str, Any]], reader: str
+) -> None:
+    """Refuse a read of more captured graph than `MAX_CAPTURED_GRAPH_CHARS`.
+
+    `filters` must be the ones the read will use: `query_device_operations` loads
+    every graph they match at once. `reader` names what would read it, for the
+    refusal.
+    """
+    graph_size = queries.query_captured_graph_size(filters=filters)
+    if graph_size > MAX_CAPTURED_GRAPH_CHARS:
+        raise GraphTooLargeError(
+            f"this capture holds {graph_size:,} characters of captured graph, past "
+            f"the {MAX_CAPTURED_GRAPH_CHARS:,} {reader} will read"
+        )
 
 
 def bounded(limit: Optional[int], maximum: int = MAX_LIMIT) -> int:
@@ -41,8 +65,10 @@ def bounded(limit: Optional[int], maximum: int = MAX_LIMIT) -> int:
 
 __all__ = [
     "DEFAULT_LIMIT",
+    "GraphTooLargeError",
     "MAX_CAPTURED_GRAPH_CHARS",
     "MAX_DETAILED_LIMIT",
     "MAX_LIMIT",
     "bounded",
+    "ensure_graph_readable",
 ]

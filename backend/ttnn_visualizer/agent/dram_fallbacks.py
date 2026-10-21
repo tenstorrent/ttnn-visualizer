@@ -18,7 +18,7 @@ from ttnn_visualizer.agent.allocation_failures import (
     BANK_KINDS,
     is_l1_buffer_type,
 )
-from ttnn_visualizer.models import BufferType, Tensor
+from ttnn_visualizer.models import L1_BUFFER_TYPES, BufferType, Tensor
 from ttnn_visualizer.utils import (
     MEMORY_CONFIG_PATTERN,
     parse_memory_config_buffer_type,
@@ -38,7 +38,6 @@ RETRY_WINDOW_OPERATIONS = 3
 _IGNORED_ARGUMENT = re.compile(r"intermediate")
 # `\Z` and ASCII digits, as JavaScript reads `$` and `\d`.
 _SHAPE = re.compile(r"^(?:Shape|torch\.Size)\(\[([0-9,\s]*)\]\)\Z")
-_L1_TYPES = (BufferType.L1, BufferType.L1_SMALL)
 
 
 @dataclass
@@ -98,7 +97,7 @@ def _may_alias(output: Tensor, source: Tensor) -> bool:
 
 def _fallback_outputs(operation: FallbackOperation) -> Optional[Dict[str, int]]:
     """The DRAM outputs the op allocated itself, unless it kept one in L1."""
-    if any(output.buffer_type in _L1_TYPES for output in operation.outputs):
+    if any(output.buffer_type in L1_BUFFER_TYPES for output in operation.outputs):
         return None
     dram_inputs = [
         source for source in operation.inputs if source.buffer_type is BufferType.DRAM
@@ -137,7 +136,7 @@ def _requested_buffer_types(operation: FallbackOperation) -> List[Optional[Buffe
 def _l1_request(operation: FallbackOperation) -> Optional[BufferType]:
     """The L1 type the op's memory configs ask for, unless any asks for something else."""
     requested = _requested_buffer_types(operation)
-    if requested and all(entry in _L1_TYPES for entry in requested):
+    if requested and all(entry in L1_BUFFER_TYPES for entry in requested):
         return requested[0]
     return None
 

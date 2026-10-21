@@ -35,7 +35,12 @@ from typing import Dict, List, NamedTuple, Optional, Sequence, Set, Tuple
 
 from tt_perf_report.perf_report import HOST_OP_MARKER
 from ttnn_visualizer.agent import failures, operations, perf_detail, tools
-from ttnn_visualizer.agent.bounds import MAX_CAPTURED_GRAPH_CHARS, MAX_LIMIT
+from ttnn_visualizer.agent.bounds import (
+    MAX_CAPTURED_GRAPH_CHARS,
+    MAX_LIMIT,
+    GraphTooLargeError,
+    ensure_graph_readable,
+)
 from ttnn_visualizer.agent.handles import CacheVariant, ReportRegistry
 from ttnn_visualizer.agent.scope_outcomes import is_device_operation, scope_pairing
 from ttnn_visualizer.csv_queries import SIGNPOST_OP_TYPE
@@ -238,10 +243,6 @@ class UnreadableGraphError(ValueError):
     """A captured graph that is not a JSON list of nodes."""
 
 
-class GraphTooLargeError(ValueError):
-    """More captured graph than the link will hold in memory to read."""
-
-
 def _redacted(error: Exception) -> str:
     """An error's text with the system temp directory masked.
 
@@ -392,12 +393,7 @@ def _read_profiler_side(
         # the device count would sum the ranks.
         operations.refuse_unattributable(queries, scope, "captured_graph", "devices")
         graph_filters = operations.scoped(queries, "captured_graph", scope)
-        graph_size = queries.query_captured_graph_size(filters=graph_filters)
-        if graph_size > MAX_CAPTURED_GRAPH_CHARS:
-            raise GraphTooLargeError(
-                f"this capture holds {graph_size:,} characters of captured graph, "
-                f"past the {MAX_CAPTURED_GRAPH_CHARS:,} the link will read"
-            )
+        ensure_graph_readable(queries, graph_filters, "the link")
         operation_ids = {
             operation.operation_id
             for operation in queries.query_operations(

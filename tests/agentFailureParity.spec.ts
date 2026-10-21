@@ -6,10 +6,11 @@ import { describe, expect, it } from 'vitest';
 import { getAllocationFailureDiagnosis, parseAllocationFailure } from '../src/functions/parseAllocationFailure';
 import { getFailedDeviceOperationNames } from '../src/functions/scopeOutcomes';
 import { getDramFallbacks } from '../src/functions/getDramFallbacks';
-import { buildL1PeakDecomposition } from '../src/functions/l1PeakDecomposition';
+import { buildL1PeakDecomposition, getTopL1PeakOperations } from '../src/functions/l1PeakDecomposition';
 import { resolveAddressLifetimes } from '../src/hooks/useL1PeakDecomposition';
 import { AllocationFailure } from '../src/model/AllocationFailure';
 import { Buffer, Node, Operation, OperationDescription } from '../src/model/APIData';
+import { L1PeakDecomposition } from '../src/model/L1PeakDecomposition';
 import golden from './data/agentFailureParity.json';
 
 // The agent's Python ports (#2154) wrote this golden, from test_agent_failure_parity.py; holding
@@ -23,6 +24,7 @@ it('the golden covers every function the agent restates', () => {
     expect(golden.dramFallbacks.length).toBeGreaterThan(0);
     expect(golden.addressLifetimes.length).toBeGreaterThan(0);
     expect(golden.l1Peak.length).toBeGreaterThan(0);
+    expect(golden.topOperations.length).toBeGreaterThan(0);
 });
 
 describe('parseAllocationFailure and its diagnosis', () => {
@@ -107,6 +109,38 @@ describe('buildL1PeakDecomposition', () => {
             expect(built.reconciledAwayCount).toBe(result.reconciledAwayCount);
             expect(built.capacityBytes).toBe(result.capacityBytes);
             expect(built.exceedsCapacity).toBe(result.exceedsCapacity);
+        },
+    );
+});
+
+describe('getTopL1PeakOperations', () => {
+    it.each(golden.topOperations.map((entry, index) => [index, entry] as const))(
+        'case %i matches the agent',
+        (_, { entries, count, top }) => {
+            // The golden carries NaN and Infinity as the strings `Number()` reads.
+            const decompositions = (entries as (number | string)[][]).map((fields) => {
+                const [
+                    operationId,
+                    totalBytes,
+                    circularBufferBytes,
+                    intermediateTensorBytes,
+                    persistentTensorBytes,
+                    staleTensorBytes,
+                ] = fields.map(Number);
+
+                return {
+                    operationId,
+                    totalBytes,
+                    circularBufferBytes,
+                    intermediateTensorBytes,
+                    persistentTensorBytes,
+                    staleTensorBytes,
+                } as L1PeakDecomposition;
+            });
+
+            expect(
+                getTopL1PeakOperations(decompositions, count).map(({ entry, alsoAt }) => [entry.operationId, alsoAt]),
+            ).toEqual(top);
         },
     );
 });

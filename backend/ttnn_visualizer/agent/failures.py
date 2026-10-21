@@ -17,11 +17,12 @@ from typing import Dict, List, Optional, Sequence, Tuple, Union, overload
 from ttnn_visualizer.agent import allocation_failures
 from ttnn_visualizer.agent import dram_fallbacks as fallback_rules
 from ttnn_visualizer.agent import l1_peak as peak_replay
-from ttnn_visualizer.agent.bounds import MAX_CAPTURED_GRAPH_CHARS, bounded
+from ttnn_visualizer.agent.bounds import bounded, ensure_graph_readable
 from ttnn_visualizer.agent.handles import CacheVariant, ReportRegistry
 from ttnn_visualizer.agent.operations import (
     BUFFER_SIZE_UNIT,
     RankScope,
+    UnattributableRankError,
     joined_caveat,
     profiler_db,
     rank_caveat,
@@ -30,14 +31,27 @@ from ttnn_visualizer.agent.operations import (
     scoped,
 )
 from ttnn_visualizer.agent.scope_outcomes import failed_device_operation_names
-from ttnn_visualizer.models import BufferType, ErrorRecord, Operation, Tensor
+from ttnn_visualizer.models import L1_BUFFER_TYPES, ErrorRecord, Operation, Tensor
 from ttnn_visualizer.queries import DatabaseQueries
-from ttnn_visualizer.serializers import select_errors_by_operation
+from ttnn_visualizer.serializers import (
+    error_key,
+    select_error_for_operation,
+    select_errors_by_operation,
+)
 
 # A message carries tt-metal's header and backtrace; the part a diagnosis reads is first.
 MAX_ERROR_TEXT_CHARS = 1000
 # The peak's largest residents; the rest are counted.
 MAX_PEAK_CONTRIBUTORS = 20
+# The tables behind each answer's figures, so its rank refusal covers every one.
+_ERROR_TABLES = ("errors", "captured_graph")
+_FALLBACK_TABLES = (
+    "operation_arguments",
+    "tensors",
+    "input_tensors",
+    "output_tensors",
+    "errors",
+)
 
 ERRORS_NOTE = (
     "Rows of the report's errors table. error_type incomplete_operation means the "
@@ -114,6 +128,15 @@ def _graphs(
     }
 
 
+def _graphs_checked(
+    queries: DatabaseQueries, scope: RankScope, operation_ids: List[int]
+) -> Dict[Tuple[int, int], str]:
+    """`_graphs` for these operations, refused past `MAX_CAPTURED_GRAPH_CHARS`."""
+    filters = scoped(queries, "captured_graph", scope, operation_id=operation_ids)
+    ensure_graph_readable(queries, filters, "an error lookup")
+    return _graphs(queries, scope, operation_ids)
+
+
 def _graph_for(
     graphs: Dict[Tuple[int, int], str], operation: Operation
 ) -> List[object]:
@@ -139,6 +162,18 @@ def _allocation_fields(message: Optional[str]) -> Dict[str, object]:
     }
 
 
+def _error_entry(error: ErrorRecord, graph: List[object]) -> Dict[str, object]:
+    """One error as `errors` lists it and `operation_detail` carries it."""
+    return {
+        "error_type": error.error_type,
+        "timestamp": error.timestamp,
+        **_truncated("error_message", error.error_message),
+        **_truncated("stack_trace", error.stack_trace),
+        "failed_device_operations": failed_device_operation_names(graph),
+        **_allocation_fields(error.error_message),
+    }
+
+
 def errors(
     registry: ReportRegistry,
     handle: str,
@@ -150,7 +185,7 @@ def errors(
     instance = registry.get(handle)
     with profiler_db(instance) as queries:
         scope = rank_scope(queries, rank)
-        refuse_unattributable(queries, scope, "errors", "captured_graph")
+        refuse_unattributable(queries, scope, *_ERROR_TABLES)
         has_table = queries._check_table_exists("errors")
         records = _error_records(queries, scope)
         operations = (
@@ -166,8 +201,7 @@ def errors(
         operation_by_error = {
             id(attached[key]): operation
             for operation in operations
-            if (key := (operation.operation_id, operation.rank, operation.name))
-            in attached
+            if (key := error_key(operation)) in attached
         }
         shown = records[:count]
         shown_ids = sorted(
@@ -177,27 +211,22 @@ def errors(
                 if id(error) in operation_by_error
             }
         )
-        graphs = _graphs(queries, scope, shown_ids) if shown_ids else {}
+        graphs = _graphs_checked(queries, scope, shown_ids) if shown_ids else {}
 
     listed = []
     for error in shown:
         operation = operation_by_error.get(id(error))
-        entry: Dict[str, object] = {
-            "operation_id": error.operation_id,
-            "operation_name": error.operation_name,
-            "error_type": error.error_type,
-            "timestamp": error.timestamp,
-            "attached": operation is not None,
-            **_truncated("error_message", error.error_message),
-            **_truncated("stack_trace", error.stack_trace),
-            "failed_device_operations": (
-                failed_device_operation_names(_graph_for(graphs, operation))
-                if operation is not None
-                else []
-            ),
-            **_allocation_fields(error.error_message),
-        }
-        listed.append(entry)
+        listed.append(
+            {
+                "operation_id": error.operation_id,
+                "operation_name": error.operation_name,
+                "attached": operation is not None,
+                **_error_entry(
+                    error,
+                    _graph_for(graphs, operation) if operation is not None else [],
+                ),
+            }
+        )
 
     response: Dict[str, object] = {
         "handle": handle,
@@ -289,7 +318,7 @@ def _failure_by_operation_id(
     attached = select_errors_by_operation(records, operations)
     failures: Dict[int, Dict] = {}
     for operation in operations:
-        error = attached.get((operation.operation_id, operation.rank, operation.name))
+        error = attached.get(error_key(operation))
         failure = allocation_failures.parse_allocation_failure(
             error.error_message if error else None
         )
@@ -332,15 +361,7 @@ def dram_fallbacks(
     instance = registry.get(handle)
     with profiler_db(instance) as queries:
         scope = rank_scope(queries, rank)
-        refuse_unattributable(
-            queries,
-            scope,
-            "operation_arguments",
-            "tensors",
-            "input_tensors",
-            "output_tensors",
-            "errors",
-        )
+        refuse_unattributable(queries, scope, *_FALLBACK_TABLES)
         fallbacks, names = _cached_dram_fallbacks(registry, handle, queries, scope)
 
     listed = [
@@ -401,28 +422,16 @@ def _top_operations(
     count: int,
 ) -> List[Dict[str, object]]:
     """Largest first, one entry per distinct composition: repeated layers are identical."""
-    ordered = sorted(by_operation_id.values(), key=lambda entry: entry.operation_id)
-    ordered.sort(key=lambda entry: -entry.total_bytes)
-    by_composition: Dict[Tuple[float, ...], Dict[str, object]] = {}
-    also_at: Dict[Tuple[float, ...], List[int]] = {}
-    for entry in ordered:
-        key = (
-            entry.total_bytes,
-            entry.circular_buffer_bytes,
-            entry.intermediate_tensor_bytes,
-            entry.persistent_tensor_bytes,
-            entry.stale_tensor_bytes,
-        )
-        if key in by_composition:
-            also_at[key].append(entry.operation_id)
-            continue
-        also_at[key] = []
-        by_composition[key] = {
+    return [
+        {
             **_decomposition(entry, contributors=False),
             "operation_name": names.get(entry.operation_id),
-            "also_at": also_at[key],
+            "also_at": also_at,
         }
-    return list(by_composition.values())[:count]
+        for entry, also_at in peak_replay.top_compositions(
+            by_operation_id.values(), count
+        )
+    ]
 
 
 class _ParsedGraphs(Sequence[Tuple[int, List[object]]]):
@@ -474,14 +483,9 @@ def report_l1_peak(queries: DatabaseQueries, scope: RankScope) -> L1PeakReport:
     # As `fetchDevices`: the first id keeps its place, and a later row of it wins.
     devices = list({entry.device_id: entry for entry in devices}.values())
     device = devices[0]
-    graph_size = queries.query_captured_graph_size(
-        filters=scoped(queries, "captured_graph", scope)
+    ensure_graph_readable(
+        queries, scoped(queries, "captured_graph", scope), "the replay"
     )
-    if graph_size > MAX_CAPTURED_GRAPH_CHARS:
-        raise ValueError(
-            f"this capture holds {graph_size:,} characters of captured graph, past the "
-            f"{MAX_CAPTURED_GRAPH_CHARS:,} the replay will read"
-        )
     report = _report_operations(queries, scope, with_consumers=True)
     names = {operation.operation_id: operation.name for operation in report.operations}
     lifetimes = peak_replay.resolve_address_lifetimes(
@@ -501,7 +505,7 @@ def report_l1_peak(queries: DatabaseQueries, scope: RankScope) -> L1PeakReport:
     snapshot: Dict[int, List] = {
         operation.operation_id: [] for operation in report.operations
     }
-    for buffer_type in (BufferType.L1, BufferType.L1_SMALL):
+    for buffer_type in sorted(L1_BUFFER_TYPES, key=lambda entry: entry.value):
         for buffer in queries.query_buffers(
             scoped(queries, "buffers", scope, buffer_type=buffer_type.value)
         ):
@@ -629,33 +633,45 @@ def operation_failure_fields(
     queries: DatabaseQueries,
     scope: RankScope,
     operation: Operation,
-) -> Dict[str, object]:
-    """The error and likely DRAM fallback `operation_detail` adds for one operation."""
+) -> Tuple[Dict[str, object], Optional[str]]:
+    """The error and likely DRAM fallback `operation_detail` adds for one operation.
+
+    Both are optional, unlike in `errors` and `dram_fallbacks`: the rest of the detail
+    answers without them. So where their rows cannot be attributed to the rank, they
+    are left out, and the caveat returned says why, rather than refusing the whole
+    detail.
+    """
     fields: Dict[str, object] = {}
-    records = _error_records(queries, scope)
-    error = (
-        select_errors_by_operation(records, [operation]).get(
-            (operation.operation_id, operation.rank, operation.name)
-        )
-        if records
-        else None
-    )
-    if error is not None:
-        graph = _graph_for(_graphs(queries, scope, [operation.operation_id]), operation)
-        fields["error"] = {
-            "error_type": error.error_type,
-            "timestamp": error.timestamp,
-            **_truncated("error_message", error.error_message),
-            "failed_device_operations": failed_device_operation_names(graph),
-            **_allocation_fields(error.error_message),
-        }
-    # Optional here, unlike for `dram_fallbacks`: the rest of the detail answers without it.
-    if queries._check_table_exists("operation_arguments"):
+    withheld: List[str] = []
+    if _attributable(queries, scope, _ERROR_TABLES, withheld, "error"):
+        error = select_error_for_operation(_error_records(queries, scope), operation)
+        if error is not None:
+            graphs = _graphs_checked(queries, scope, [operation.operation_id])
+            fields["error"] = _error_entry(error, _graph_for(graphs, operation))
+    if queries._check_table_exists("operation_arguments") and _attributable(
+        queries, scope, _FALLBACK_TABLES, withheld, "dram_fallback"
+    ):
         fallbacks, _ = _cached_dram_fallbacks(registry, handle, queries, scope)
         fallback = fallbacks.get(operation.operation_id)
         if fallback is not None:
             fields["dram_fallback"] = fallback
-    return fields
+    return fields, " ".join(withheld) or None
+
+
+def _attributable(
+    queries: DatabaseQueries,
+    scope: RankScope,
+    tables: Sequence[str],
+    withheld: List[str],
+    field: str,
+) -> bool:
+    """Whether `field` can be read for the rank; if not, `withheld` says why."""
+    try:
+        refuse_unattributable(queries, scope, *tables)
+    except UnattributableRankError as error:
+        withheld.append(f"{field} is withheld: {error}")
+        return False
+    return True
 
 
 def with_operation_failures(
@@ -679,9 +695,12 @@ def with_operation_failures(
             None,
         )
         if operation is not None:
-            result.update(
-                operation_failure_fields(registry, handle, queries, scope, operation)
+            fields, withheld = operation_failure_fields(
+                registry, handle, queries, scope, operation
             )
+            result.update(fields)
+            if withheld:
+                result["caveat"] = joined_caveat(result.get("caveat"), withheld)
     return result
 
 

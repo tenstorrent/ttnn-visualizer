@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Dict, Iterable, List, Mapping, Optional, Sequence, Set, Tuple
 
-from ttnn_visualizer.models import Buffer, BufferType
+from ttnn_visualizer.models import L1_BUFFER_TYPES, Buffer, BufferType
 
 # `L1_NUM_CORES`: the bank count a node without `max_size_per_bank` falls back to.
 DEFAULT_BANK_COUNT = 64
@@ -23,7 +23,6 @@ NO_CONSUMER_OPERATION_ID = -1
 # `DEALLOCATE_OP_NAME_LIST` in `src/definitions/Deallocate.ts`.
 DEALLOCATE_OPERATION_NAMES = frozenset({"ttnn.deallocate", "ttnn::deallocate"})
 
-_L1_TYPES = (BufferType.L1, BufferType.L1_SMALL)
 _CPP_ENUM_PREFIX = "BufferType::"
 
 
@@ -103,7 +102,7 @@ def _buffer_type(value: object) -> Optional[BufferType]:
 
 def _is_l1_node(params: Dict) -> bool:
     # Keyed on `type`, which every capture emits; some omit `buffer_type`.
-    return _buffer_type(params.get("type")) in _L1_TYPES
+    return _buffer_type(params.get("type")) in L1_BUFFER_TYPES
 
 
 def _param(params: Dict, key: str) -> float:
@@ -340,7 +339,7 @@ def build_l1_peak(
             survivors = {
                 buffer.address: buffer
                 for buffer in snapshot
-                if buffer.buffer_type in _L1_TYPES
+                if buffer.buffer_type in L1_BUFFER_TYPES
             }
             for address in list(state.tensors):
                 if address not in survivors:
@@ -414,7 +413,7 @@ def resolve_address_lifetimes(
     """
     last_use_by_tensor: Dict[int, Tuple[int, int]] = {}
     for tensor_id, tensor_address, buffer_type, consumers in tensors:
-        if tensor_address is None or buffer_type not in _L1_TYPES:
+        if tensor_address is None or buffer_type not in L1_BUFFER_TYPES:
             continue
         last_use_by_tensor[tensor_id] = (
             tensor_address,
@@ -437,6 +436,46 @@ def resolve_address_lifetimes(
     return AddressLifetimes(last_use_by_address, unattributable)
 
 
+def _ranked(entry: Decomposition) -> Tuple[bool, float, int]:
+    """`compareTotalsDescending`, then lower id: NaN last, since it orders against nothing."""
+    total = entry.total_bytes
+    if math.isnan(total):
+        return (True, 0.0, entry.operation_id)
+    return (False, -total, entry.operation_id)
+
+
+def _composition(entry: Decomposition) -> Tuple[object, ...]:
+    # As the app's joined string key: every NaN is one key, and -0 already equals 0.
+    return tuple(
+        "NaN" if math.isnan(value) else value
+        for value in (
+            entry.total_bytes,
+            entry.circular_buffer_bytes,
+            entry.intermediate_tensor_bytes,
+            entry.persistent_tensor_bytes,
+            entry.stale_tensor_bytes,
+        )
+    )
+
+
+def top_compositions(
+    entries: Iterable[Decomposition], count: int
+) -> List[Tuple[Decomposition, List[int]]]:
+    """`getTopL1PeakOperations`: the largest, one per distinct composition.
+
+    Repeated layers are byte-identical, so each composition is kept once, with the
+    later operations that repeat it.
+    """
+    by_composition: Dict[Tuple[object, ...], Tuple[Decomposition, List[int]]] = {}
+    for entry in sorted(entries, key=_ranked):
+        key = _composition(entry)
+        if key in by_composition:
+            by_composition[key][1].append(entry.operation_id)
+        else:
+            by_composition[key] = (entry, [])
+    return list(by_composition.values())[:count]
+
+
 __all__ = [
     "DEFAULT_BANK_COUNT",
     "AddressLifetimes",
@@ -448,4 +487,5 @@ __all__ = [
     "build_l1_peak",
     "last_valid_consumer",
     "resolve_address_lifetimes",
+    "top_compositions",
 ]

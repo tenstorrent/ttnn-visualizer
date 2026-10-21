@@ -23,6 +23,7 @@ from unittest.mock import patch
 import pytest
 from ttnn_visualizer.agent import (
     app_links,
+    bounds,
     linking,
     operations,
     perf_detail,
@@ -1511,7 +1512,7 @@ class TestLinkBounds:
     def test_a_captured_graph_past_the_bound_is_not_read(self, linked):
         registry, handle, _ = linked()
 
-        with patch.object(linking, "MAX_CAPTURED_GRAPH_CHARS", 10):
+        with patch.object(bounds, "MAX_CAPTURED_GRAPH_CHARS", 10):
             link = linking.operation_link(registry, handle)
 
         assert link.status is LinkStatus.UNAVAILABLE
@@ -1533,7 +1534,7 @@ class TestLinkBounds:
             connection.close()
         registry, handle, _ = linked(profiler_path=path)
 
-        with patch.object(linking, "MAX_CAPTURED_GRAPH_CHARS", rank_zero_size):
+        with patch.object(bounds, "MAX_CAPTURED_GRAPH_CHARS", rank_zero_size):
             link = linking.operation_link(registry, handle)
 
         assert link.status is LinkStatus.LINKED

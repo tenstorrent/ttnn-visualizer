@@ -15,7 +15,7 @@ from typing import Dict, List, Optional, Sequence, Tuple
 from unittest.mock import patch
 
 import pytest
-from ttnn_visualizer.agent import failures, linking, server
+from ttnn_visualizer.agent import bounds, failures, linking, server
 from ttnn_visualizer.agent.handles import ReportRegistry, load_report
 
 _SCHEMA = """
@@ -95,6 +95,71 @@ def _report(
         connection.executemany("INSERT INTO output_tensors VALUES (?, ?, ?)", outputs)
         connection.executemany("INSERT INTO buffers VALUES (?, 0, ?, ?, ?, 0)", buffers)
         connection.executemany("INSERT INTO devices VALUES (?, ?, ?)", devices)
+        connection.commit()
+    finally:
+        connection.close()
+    registry = ReportRegistry()
+    return registry, str(load_report(registry, profiler_path=str(directory))["handle"])
+
+
+def _two_rank_report(
+    tmp_path: Path, errors_ranked: bool, graphs: Dict[int, List[Dict]]
+) -> Tuple[ReportRegistry, str]:
+    """`ttnn.conv2d` failing on each rank, with `rank` on every table but `errors`
+    unless `errors_ranked`, and each rank's graph for it from `graphs`.
+
+    Without the column the one error row stands for both ranks, as an older errors
+    table's does.
+    """
+    directory = tmp_path / "profiler"
+    directory.mkdir()
+    schema = (
+        _SCHEMA
+        + _ARGUMENTS
+        + (
+            _ERRORS.replace("timestamp text", "timestamp text, rank int")
+            if errors_ranked
+            else _ERRORS
+        )
+    )
+    for table in (
+        "operations",
+        "buffers",
+        "tensors",
+        "device_tensors",
+        "input_tensors",
+        "output_tensors",
+        "devices",
+        "captured_graph",
+        "operation_arguments",
+    ):
+        schema = schema.replace(
+            f"CREATE TABLE {table} (", f"CREATE TABLE {table} (rank int, "
+        )
+    schema = schema.replace("operation_id int UNIQUE", "operation_id int")
+    connection = sqlite3.connect(directory / "db.sqlite")
+    try:
+        connection.executescript(schema)
+        for rank in (0, 1):
+            connection.execute(
+                "INSERT INTO operations VALUES (?, 1, 'ttnn.conv2d', 1.0)", (rank,)
+            )
+            connection.execute(
+                "INSERT INTO devices VALUES (?, 0, 1499136, 64)", (rank,)
+            )
+            connection.execute(
+                "INSERT INTO captured_graph VALUES (?, 1, ?)",
+                (rank, json.dumps(graphs[rank])),
+            )
+        connection.executemany(
+            "INSERT INTO errors VALUES (1, 'ttnn.conv2d', 'TT_THROW', ?, '', ''"
+            + (", ?)" if errors_ranked else ")"),
+            (
+                [(_OUT_OF_MEMORY, 0), (_OUT_OF_MEMORY, 1)]
+                if errors_ranked
+                else [(_OUT_OF_MEMORY,)]
+            ),
+        )
         connection.commit()
     finally:
         connection.close()
@@ -479,6 +544,46 @@ class TestHowTheDatabaseIsRead:
                 in tool(registry, handle, rank=1)["caveat"]
             )
 
+    def test_a_captured_graph_past_the_bound_is_not_read(self, tmp_path):
+        """Each tool loads every graph it matches at once, so each asks the size first."""
+        registry, handle = _report(
+            tmp_path,
+            operations=[(1, "ttnn.conv2d")],
+            errors=[(1, "ttnn.conv2d", "TT_THROW", _OUT_OF_MEMORY)],
+            graphs=[(1, [_start("Conv2d")])],
+        )
+
+        with patch.object(bounds, "MAX_CAPTURED_GRAPH_CHARS", 10):
+            with pytest.raises(
+                bounds.GraphTooLargeError, match="past the 10 the replay"
+            ):
+                failures.l1_peak(registry, handle)
+            with pytest.raises(
+                bounds.GraphTooLargeError, match="past the 10 an error lookup"
+            ):
+                failures.errors(registry, handle)
+            with pytest.raises(
+                bounds.GraphTooLargeError, match="past the 10 an error lookup"
+            ):
+                linking.operation_detail(registry, handle, operation_id=1)
+
+    def test_the_bound_counts_only_the_rank_the_tool_reads(self, tmp_path):
+        """The graph read is rank-filtered in SQL, so a bound of exactly rank 0's size
+        is exceeded by the two ranks together and met by the rank actually read."""
+        rank_zero = [_start("Conv2d")]
+        registry, handle = _two_rank_report(
+            tmp_path, errors_ranked=True, graphs={0: rank_zero, 1: rank_zero * 4}
+        )
+
+        with patch.object(
+            bounds, "MAX_CAPTURED_GRAPH_CHARS", len(json.dumps(rank_zero))
+        ):
+            result = failures.errors(registry, handle, rank=0)
+            with pytest.raises(bounds.GraphTooLargeError):
+                failures.errors(registry, handle, rank=1)
+
+        assert result["errors"][0]["failed_device_operations"] == ["Conv2d"]
+
 
 class TestOperationDetail:
     def test_it_carries_the_operation_s_error_and_likely_fallback(self, tmp_path):
@@ -535,6 +640,43 @@ class TestOperationDetail:
             failures.dram_fallbacks(registry, handle)
 
         read.assert_called_once()
+
+    def test_its_error_is_withheld_where_the_errors_rows_span_ranks(self, tmp_path):
+        """With `rank` on `operations` and not on `errors`, the rank-0 fallback would
+        attach rank 0's error to rank 1's operation. `errors` and `dram_fallbacks`
+        refuse that; the detail answers without the fields it cannot attribute."""
+        graph = [_start("Conv2d")]
+        registry, handle = _two_rank_report(
+            tmp_path, errors_ranked=False, graphs={0: graph, 1: graph}
+        )
+
+        detail = linking.operation_detail(registry, handle, operation_id=1, rank=1)
+
+        assert detail["name"] == "ttnn.conv2d"
+        assert "error" not in detail
+        assert "dram_fallback" not in detail
+        assert "error is withheld" in detail["caveat"]
+        assert "dram_fallback is withheld" in detail["caveat"]
+        for tool in (failures.errors, failures.dram_fallbacks):
+            with pytest.raises(ValueError, match="cannot be attributed to rank"):
+                tool(registry, handle, rank=1)
+
+    def test_it_carries_the_error_as_the_errors_tool_lists_it(self, tmp_path):
+        registry, handle = _report(
+            tmp_path,
+            operations=[(1, "ttnn.conv2d")],
+            errors=[(1, "ttnn.conv2d", "TT_THROW", _OUT_OF_MEMORY)],
+            graphs=[(1, [_start("Conv2d")])],
+        )
+
+        listed = failures.errors(registry, handle)["errors"][0]
+        carried = linking.operation_detail(registry, handle, operation_id=1)["error"]
+
+        assert carried == {
+            key: value
+            for key, value in listed.items()
+            if key not in ("operation_id", "operation_name", "attached")
+        }
 
     def test_it_answers_without_the_arguments_table(self, tmp_path):
         registry, handle = _report(

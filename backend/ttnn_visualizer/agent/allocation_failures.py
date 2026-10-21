@@ -11,7 +11,7 @@ import re
 from enum import Enum
 from typing import Dict, Optional
 
-from ttnn_visualizer.models import BufferType
+from ttnn_visualizer.models import L1_BUFFER_TYPES, BufferType
 
 
 class AllocationFailureKind(str, Enum):
@@ -62,8 +62,6 @@ _CIRCULAR_BUFFERS_CLASH = re.compile(
     r"core range (.+?)\. L1 buffer allocated at (\d+) and static circular buffer "
     r"region ends at (\d+)"
 )
-
-_L1_BUFFER_TYPES = frozenset({BufferType.L1.name, BufferType.L1_SMALL.name})
 
 
 def _count(value: Optional[str]) -> Optional[int]:
@@ -240,7 +238,7 @@ def diagnose(failure: Dict) -> Optional[Dict[str, str]]:
 
 
 def is_l1_buffer_type(name: Optional[str]) -> bool:
-    return name in _L1_BUFFER_TYPES
+    return BufferType.__members__.get(name or "") in L1_BUFFER_TYPES
 
 
 __all__ = [

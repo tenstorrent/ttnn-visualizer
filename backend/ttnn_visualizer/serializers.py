@@ -42,7 +42,8 @@ def _stack_trace_source_file_id_for_operation(
     return stack_trace_source_file_ids_by_key.get((operation.operation_id, 0))
 
 
-def _error_key(operation: Operation) -> Tuple[int, int, str]:
+def error_key(operation: Operation) -> Tuple[int, int, str]:
+    """What `select_errors_by_operation` keys an operation's error by."""
     return (operation.operation_id, operation.rank, operation.name)
 
 
@@ -74,7 +75,7 @@ def select_errors_by_operation(
             (e for e in candidates if e.operation_name == operation.name), None
         )
         if match is not None:
-            selected[_error_key(operation)] = match
+            selected[error_key(operation)] = match
     return selected
 
 
@@ -82,7 +83,7 @@ def select_error_for_operation(
     error_records: Iterable[ErrorRecord], operation: Operation
 ) -> Optional[ErrorRecord]:
     return select_errors_by_operation(error_records, [operation]).get(
-        _error_key(operation)
+        error_key(operation)
     )
 
 
@@ -159,7 +160,7 @@ def serialize_operations(
         )
         id = operation_data.pop("operation_id", None)
 
-        error = errors_by_operation.get(_error_key(operation))
+        error = errors_by_operation.get(error_key(operation))
         error_data = error.to_nested_dict() if error else None
 
         results.append(

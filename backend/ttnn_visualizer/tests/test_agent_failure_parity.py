@@ -14,6 +14,7 @@ change on either side then fails a test instead of drifting.
 """
 
 import json
+import math
 import os
 import random
 import re
@@ -24,6 +25,7 @@ from typing import Dict, List, Optional
 from ttnn_visualizer.agent import allocation_failures, dram_fallbacks, l1_peak
 from ttnn_visualizer.agent.scope_outcomes import failed_device_operation_names
 from ttnn_visualizer.models import Buffer, BufferType
+from ttnn_visualizer.utils import str_to_bool
 
 GOLDEN_PATH = (
     Path(__file__).resolve().parents[3] / "tests" / "data" / "agentFailureParity.json"
@@ -679,7 +681,75 @@ def _l1_peak_cases(rng: random.Random) -> List[Dict]:
     return cases
 
 
-def generate() -> Dict:
+def _json_number(value: float) -> object:
+    # JSON holds no NaN or Infinity, so those travel as the strings `Number()` reads.
+    if math.isfinite(value):
+        return value
+    return "NaN" if math.isnan(value) else ("Infinity" if value > 0 else "-Infinity")
+
+
+def _top_operation_case(entries: List[List[float]], count: int) -> Dict:
+    decompositions = [
+        l1_peak.Decomposition(
+            operation_id=int(fields[0]),
+            total_bytes=fields[1],
+            circular_buffer_bytes=fields[2],
+            intermediate_tensor_bytes=fields[3],
+            persistent_tensor_bytes=fields[4],
+            stale_tensor_bytes=fields[5],
+            precision=l1_peak.Precision.EXACT,
+            contributors=[],
+        )
+        for fields in entries
+    ]
+    return {
+        "entries": [[_json_number(value) for value in fields] for fields in entries],
+        "count": count,
+        "top": [
+            [entry.operation_id, also_at]
+            for entry, also_at in l1_peak.top_compositions(decompositions, count)
+        ],
+    }
+
+
+def _top_operation_cases(rng: random.Random) -> List[Dict]:
+    nan, inf = math.nan, math.inf
+    # A tie broken by id, a repeat, the count cutting a list, and the non-finite
+    # totals a device with no banks reaches -- each once, since a random list
+    # rarely holds all of them.
+    cases = [
+        _top_operation_case(
+            [
+                [3, 4096, 4096, 0, 0, 0],
+                [1, 4096, 0, 4096, 0, 0],
+                [2, 4096, 4096, 0, 0, 0],
+                [4, 1024, 1024, 0, 0, 0],
+            ],
+            2,
+        ),
+        _top_operation_case(
+            [
+                [1, nan, nan, 0, 0, 0],
+                [2, inf, inf, 0, 0, 0],
+                [3, nan, nan, 0, 0, 0],
+                [4, inf, inf, 0, 0, 0],
+                [5, -0.0, 0, 0, 0, -0.0],
+                [6, 0, 0, 0, 0, 0],
+            ],
+            10,
+        ),
+    ]
+    sizes = [0, 512, 1024, inf, nan]
+    for _ in range(20):
+        entries = []
+        for operation_id in rng.sample(range(1, 30), rng.randint(0, 12)):
+            parts = [rng.choice(sizes) for _ in range(4)]
+            entries.append([operation_id, sum(parts), *parts])
+        cases.append(_top_operation_case(entries, rng.randint(1, 10)))
+    return cases
+
+
+def _generate_golden() -> Dict:
     rng = random.Random(_SEED)
     return {
         "_comment": (
@@ -692,6 +762,7 @@ def generate() -> Dict:
         "dramFallbacks": _dram_fallback_cases(rng),
         "addressLifetimes": _address_lifetime_cases(rng),
         "l1Peak": _l1_peak_cases(rng),
+        "topOperations": _top_operation_cases(rng),
     }
 
 
@@ -700,9 +771,9 @@ def _round_trip(value: object) -> object:
 
 
 def test_the_ports_reproduce_the_golden():
-    generated = _round_trip(generate())
+    generated = _round_trip(_generate_golden())
 
-    if os.environ.get("UPDATE_AGENT_PARITY_GOLDEN"):
+    if str_to_bool(os.environ.get("UPDATE_AGENT_PARITY_GOLDEN", "false")):
         GOLDEN_PATH.write_text(json.dumps(generated, separators=(",", ":")) + "\n")
 
     assert GOLDEN_PATH.exists(), (
@@ -718,7 +789,7 @@ def test_the_ports_reproduce_the_golden():
 
 def test_the_golden_exercises_every_branch():
     """A matrix that never reached a branch would leave it unchecked on both sides."""
-    golden = generate()
+    golden = _generate_golden()
     kinds = {
         case["failure"]["kind"]
         for case in golden["allocationFailures"]
@@ -759,6 +830,12 @@ def test_the_golden_exercises_every_branch():
         entry["reconciledAwayCount"]
         for case in golden["l1Peak"]
         for _, entry in case["result"]["byOperationId"]
+    )
+    assert any(
+        also_at for case in golden["topOperations"] for _, also_at in case["top"]
+    )
+    assert any(
+        len(case["top"]) < len(case["entries"]) for case in golden["topOperations"]
     )
 
 
