@@ -16,6 +16,7 @@ from dataclasses import dataclass, field
 from itertools import groupby
 from pathlib import Path
 from typing import Any, DefaultDict, Dict, Iterable, Optional, Tuple
+from urllib.parse import urlsplit
 
 from ttnn_visualizer.event_logging import (
     get_event_log_path,
@@ -27,6 +28,7 @@ from ttnn_visualizer.usage_collection import (
     MACHINE_ID_LABEL,
     METRIC_PREFIX,
     UsageCollectionConfig,
+    is_loopback_host,
     load_usage_collection_config,
 )
 
@@ -325,6 +327,11 @@ def _post_with_curl(
         "max-redirs": "0",
         "proto": "=http,https",
     }
+    # curl applies ``http_proxy`` and ``ALL_PROXY`` to loopback hosts too, and the
+    # only plain-HTTP endpoints allowed are loopback ones, so without this the token
+    # would cross the proxy in clear. Remote endpoints still use a configured proxy.
+    if is_loopback_host(urlsplit(endpoint).hostname):
+        options["noproxy"] = "*"
     lines = [f"{name} = {_quote_curl_config(value)}" for name, value in options.items()]
     if auth_token:
         lines.append(
@@ -354,7 +361,12 @@ def _post_with_curl(
     # Exact, so codes from more than one transfer run together cannot pass as a 2xx.
     status = result.stdout.strip()
     if not re.fullmatch(r"2\d\d", status):
-        raise OSError(f"endpoint answered HTTP {status}")
+        hint = (
+            "; the endpoint must accept OTLP/HTTP JSON metrics"
+            if status.startswith("4")
+            else ""
+        )
+        raise OSError(f"endpoint answered HTTP {status}{hint}")
 
 
 def push_usage_metrics(

@@ -24,6 +24,8 @@ MACHINE_ID_LABEL = "machine_id"
 PRIVATE_FILE_MODE = 0o600
 METRIC_PREFIX = "ttnn_visualizer_"
 _RENAMED_TOKEN_FIELD = "remote_write_bearer_token"
+# Prometheus and Mimir remote-write receivers.
+_REMOTE_WRITE_PATHS = ("/api/v1/write", "/api/v1/push")
 
 # Tests replace this so they never inspect or modify the developer's real config.
 COLLECTION_CONFIG_PATH: Optional[Path] = None
@@ -61,7 +63,7 @@ def get_collection_config_path() -> Path:
     return get_event_log_root() / COLLECTION_CONFIG_FILENAME
 
 
-def _is_loopback_host(hostname: Optional[str]) -> bool:
+def is_loopback_host(hostname: Optional[str]) -> bool:
     if hostname is None:
         return False
     if hostname.lower() == "localhost":
@@ -100,8 +102,16 @@ def _validate_remote_write_endpoint(value: Any) -> str:
         raise ValueError("remote_write_endpoint must not contain query parameters")
     if parsed.fragment:
         raise ValueError("remote_write_endpoint must not contain a fragment")
-    if parsed.scheme != "https" and not _is_loopback_host(parsed.hostname):
+    if parsed.scheme != "https" and not is_loopback_host(parsed.hostname):
         raise ValueError("remote_write_endpoint must use HTTPS outside loopback")
+    # Refused here rather than left to fail every push: v0.105 to v0.107 forwarded
+    # through a local Prometheus, so a config from then names a remote-write path,
+    # which cannot take the OTLP the launcher now sends.
+    if parsed.path.rstrip("/").endswith(_REMOTE_WRITE_PATHS):
+        raise ValueError(
+            "remote_write_endpoint must accept OTLP/HTTP JSON metrics, such as "
+            "/api/v1/otlp/v1/metrics, not a Prometheus remote-write path"
+        )
 
     return endpoint
 

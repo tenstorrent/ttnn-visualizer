@@ -547,7 +547,8 @@ def _start_usage_export(
     """Start pushing usage counters when a local install has opted in with an endpoint.
 
     Takes the config ``_record_launch`` prepared, so the exporter starts exactly when
-    the launch banner says collection is enabled. ``None`` means a hosted launch.
+    the launch banner says collection is enabled. ``None`` means a hosted launch or a
+    recording opt-out.
     """
     if collection_config is None or not collection_config.can_export:
         return None
@@ -575,8 +576,8 @@ def _serve(gunicorn_args: list[str], exporter: Optional[UsageMetricsExporter]) -
 def _record_launch(config) -> Optional[UsageCollectionConfig]:
     """Record a local launch or report hosted recording status.
 
-    Returns the prepared collection config for a local launch, or ``None`` for a hosted
-    one, which never collects.
+    Returns the prepared collection config for a local launch, or ``None`` when nothing
+    may be exported: a hosted launch, or one under a recording opt-out.
 
     Split out of ``main()`` because ``main()`` binds a socket and spawns gunicorn and
     so cannot be called from a test, which would leave the wiring — the part that
@@ -624,7 +625,9 @@ def _record_launch(config) -> Optional[UsageCollectionConfig]:
             )
 
         print(f"📊 Event logging is DISABLED: {disabled_reason}.")
-        return collection_config
+        # No exporter while opted out, matching the banner. Lifting the opt-out
+        # mid-session does not start one; that takes the next launch.
+        return None
 
     if server_mode:
         print(

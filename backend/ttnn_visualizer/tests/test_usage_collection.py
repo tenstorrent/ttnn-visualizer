@@ -265,6 +265,18 @@ def test_preparing_normalises_a_hyphenated_machine_id(usage_collection_config_pa
         {"enabled": True, "remote_write_auth_token": "secret"},
         {
             "enabled": True,
+            "remote_write_endpoint": "https://metrics.example/api/v1/write",
+        },
+        {
+            "enabled": True,
+            "remote_write_endpoint": "https://metrics.example/api/v1/write/",
+        },
+        {
+            "enabled": True,
+            "remote_write_endpoint": "https://metrics.example/prometheus/api/v1/push",
+        },
+        {
+            "enabled": True,
             "remote_write_endpoint": 'https://metrics.example/w\nurl = "http://x"',
         },
         {
@@ -300,6 +312,22 @@ def test_invalid_config_fails_closed(usage_collection_config_path, values):
 
     assert config.enabled is False
     assert config.error
+
+
+def test_a_remote_write_endpoint_is_named_in_the_error(usage_collection_config_path):
+    # A v0.105 to v0.107 config without a token: valid then, and still loading as
+    # enabled would leave every push failing.
+    _write_config(
+        usage_collection_config_path,
+        enabled=True,
+        remote_write_endpoint="https://metrics.example/api/v1/write",
+    )
+
+    config = usage_collection.load_usage_collection_config()
+
+    assert config.enabled is False
+    assert config.error is not None
+    assert "OTLP" in config.error
 
 
 def test_the_renamed_token_field_is_named_in_the_error(usage_collection_config_path):
@@ -386,7 +414,7 @@ def test_loopback_http_endpoint_is_allowed(usage_collection_config_path):
     _write_config(
         usage_collection_config_path,
         enabled=True,
-        remote_write_endpoint="http://127.0.0.1:9090/api/v1/write",
+        remote_write_endpoint="http://127.0.0.1:9090/api/v1/otlp/v1/metrics",
     )
 
     assert usage_collection.load_usage_collection_config().enabled is True
@@ -1155,12 +1183,14 @@ def test_push_raises_on_a_response_other_than_success(
             remote_write_auth_token="secret-token",
         )
 
-        with pytest.raises(OSError, match=f"HTTP {status}"):
+        with pytest.raises(OSError, match=f"HTTP {status}") as error_info:
             push_usage_metrics()
     finally:
         server.close()
 
     assert [path for path, _headers, _body in server.requests] == ["/v1/metrics"]
+    # A client error is most often a receiver that does not speak OTLP.
+    assert ("OTLP" in str(error_info.value)) is (400 <= status < 500)
 
 
 @_requires_curl
@@ -1246,6 +1276,43 @@ def test_push_sends_a_token_with_quotes_and_backslashes_verbatim(
 
     ((_path, headers, _body),) = otlp_server.requests
     assert headers["Authorization"] == 'Bearer a"b\\c'
+
+
+@_requires_curl
+def test_a_loopback_push_bypasses_the_proxy(
+    event_log_directory, usage_collection_config_path, otlp_server, monkeypatch
+):
+    proxy = _OtlpServer()
+    try:
+        proxy_url = proxy.endpoint.removesuffix("/v1/metrics")
+        for variable in ("http_proxy", "HTTPS_PROXY", "ALL_PROXY", "all_proxy"):
+            monkeypatch.setenv(variable, proxy_url)
+        for variable in ("no_proxy", "NO_PROXY"):
+            monkeypatch.delenv(variable, raising=False)
+        _opt_in(
+            usage_collection_config_path,
+            remote_write_endpoint=otlp_server.endpoint,
+            remote_write_auth_token="secret-token",
+        )
+
+        assert push_usage_metrics() is True
+    finally:
+        proxy.close()
+
+    assert proxy.requests == []
+    ((_path, headers, _body),) = otlp_server.requests
+    assert headers["Authorization"] == "Bearer secret-token"
+
+
+def test_a_remote_push_may_use_the_proxy(
+    event_log_directory, usage_collection_config_path, curl_calls
+):
+    _opt_in(usage_collection_config_path, remote_write_endpoint=_ENDPOINT)
+
+    assert push_usage_metrics() is True
+
+    ((_command, kwargs),) = curl_calls
+    assert not any(name == "noproxy" for name, _value in _curl_options(kwargs["input"]))
 
 
 @_requires_curl
@@ -1438,6 +1505,7 @@ class _FakeExporter:
         (False, None, False),
     ],
 )
+@pytest.mark.parametrize("opt_out", [None, "environment", "marker"])
 def test_launch_starts_the_exporter_only_for_an_opted_in_endpoint(
     event_log_directory,
     usage_collection_config_path,
@@ -1445,6 +1513,7 @@ def test_launch_starts_the_exporter_only_for_an_opted_in_endpoint(
     server_mode,
     values,
     starts,
+    opt_out,
 ):
     from ttnn_visualizer import app as app_module
 
@@ -1452,6 +1521,11 @@ def test_launch_starts_the_exporter_only_for_an_opted_in_endpoint(
     monkeypatch.setenv(RUN_ID_ENV_VAR, "")
     if values is not None:
         _write_config(usage_collection_config_path, **values)
+    if opt_out is not None:
+        # The banner reports collection as disabled under either opt-out, so no
+        # exporter may start, even one that would idle until the opt-out lifts.
+        _enable_recording_opt_out(opt_out, monkeypatch)
+        starts = False
 
     # The same pairing ``main()`` uses: the launch prepares the identity the
     # exporter's pushes need, then hands that config over.
