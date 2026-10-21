@@ -577,6 +577,7 @@ describe('Performance route', () => {
     // op-joined data. The comparison report keeps the merged lookup.
     it('joins every per-device row of an unmerged operation through the table lookup', () => {
         const failure = makeAllocationFailure({ operationId: 7 });
+        const fallback = makeDramFallback({ operationId: 7 });
         const l1Pressure = { fullnessPercent: 87.5, freeSegments: 3, largestFreeBytes: 1024, largestFreePercent: 12.5 };
         const deviceRows = [DRAM_PERF_ROW, { ...DRAM_PERF_ROW, id: '2', device: '1' }];
 
@@ -584,6 +585,7 @@ describe('Performance route', () => {
             listings: [],
             allocationFailureByOpId: new Map([[7, failure]]),
         });
+        (useDramFallbacks as Mock).mockReturnValue(new Map([[7, fallback]]));
         (useL1PressureByOperation as Mock).mockReturnValue({
             status: L1PressureStatus.Ready,
             data: new Map([[7, l1Pressure]]),
@@ -623,11 +625,36 @@ describe('Performance route', () => {
         for (const activeRow of activeRows) {
             expect(activeRow.op).toBe(7);
             expect(activeRow.allocation_failure).toBe(failure);
+            expect(activeRow.dram_fallback).toBe(fallback);
             expect(activeRow.l1_fullness_percent).toBe(l1Pressure.fullnessPercent);
+            expect(activeRow.l1_free_segments).toBe(l1Pressure.freeSegments);
+            expect(activeRow.l1_largest_free).toBe(l1Pressure.largestFreeBytes);
+            expect(activeRow.l1_largest_free_percent).toBe(l1Pressure.largestFreePercent);
             expect(activeRow.heuristicFlags).toContain(PerfHeuristicFlag.ALLOCATION_FAILURE);
+            expect(activeRow.heuristicFlags).toContain(PerfHeuristicFlag.DRAM_FALLBACK);
         }
 
         expect(lastProps?.comparisonData?.[0]?.map((row: { op?: number }) => row.op)).toEqual([7, undefined]);
+    });
+
+    // #2084: the hook is mocked, so only this ties the failure row count to the table's lookup
+    // rather than the merged one.
+    it('counts allocation-failure rows through the table lookup', () => {
+        const perfTableOpIdsMap = [
+            { perfId: '1', opId: 7 },
+            { perfId: '2', opId: 7 },
+        ];
+
+        (useOpToPerfIdFiltered as Mock).mockReturnValue([{ perfId: '1', opId: 7 }]);
+        (useOpToPerfIdForPerfTable as Mock).mockReturnValue(perfTableOpIdsMap);
+
+        render(
+            <TestProviders>
+                <Performance />
+            </TestProviders>,
+        );
+
+        expect(useAllocationFailures).toHaveBeenCalledWith(perfTableOpIdsMap);
     });
 
     // Both hooks are mocked, so only this ties the retry signal to the failures the route parsed.

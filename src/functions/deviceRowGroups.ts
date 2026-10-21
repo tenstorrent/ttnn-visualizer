@@ -21,6 +21,8 @@ import { OpType } from '../definitions/Performance';
  * The rows must be in the order the merge saw them: the whole run, sorted by
  * host start time. An unmerged report fetched with signposts unset and tracing
  * mode off is emitted in exactly that order.
+ *
+ * TODO(#2178): drop this mirror once tt-perf-report emits a merge-group column.
  */
 export const groupDeviceRowsLikeMerge = (rows: PerfTableRow[]): PerfTableRow[][] => {
     const queueByDevice = new Map<number, PerfTableRow[]>();
