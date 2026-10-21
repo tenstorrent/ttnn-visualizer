@@ -604,6 +604,8 @@ def _l1_peak_case(
         last_use,
         bank_count=bank_count,
         capacity_bytes=capacity,
+        # The app keeps every operation's residents; the tool keeps only the peak's.
+        keep_contributors=True,
     )
     return {
         "operations": operations,
@@ -837,6 +839,39 @@ def test_the_golden_exercises_every_branch():
     assert any(
         len(case["top"]) < len(case["entries"]) for case in golden["topOperations"]
     )
+
+
+def test_the_tool_s_replay_differs_only_in_the_residents_it_keeps():
+    """The tool drops every operation's residents but the peak's, and skips building
+    them for an instant it only compares; neither may change a figure."""
+    rng = random.Random(_SEED)
+    for case in _l1_peak_cases(rng):
+        args = (
+            [(entry["id"], entry["device_operations"]) for entry in case["operations"]],
+            _snapshot_buffers(dict(case["snapshot"])),
+            dict(case["lastUseByAddress"]),
+        )
+        kwargs = {
+            "bank_count": case["bankCount"],
+            "capacity_bytes": case["capacityBytes"],
+        }
+        full = l1_peak.build_l1_peak(*args, **kwargs, keep_contributors=True)
+        trimmed = l1_peak.build_l1_peak(*args, **kwargs)
+
+        for operation_id, entry in full.by_operation_id.items():
+            kept = trimmed.by_operation_id[operation_id]
+            expected = (
+                entry.contributors
+                if full.peak is not None and kept is trimmed.peak
+                else []
+            )
+            assert kept.contributors == expected
+            assert _round_trip(
+                {**_app_decomposition(kept), "contributors": []}
+            ) == _round_trip({**_app_decomposition(entry), "contributors": []})
+        assert (trimmed.peak and trimmed.peak.operation_id) == (
+            full.peak and full.peak.operation_id
+        )
 
 
 def test_the_ts_spec_reads_this_golden():

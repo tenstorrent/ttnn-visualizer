@@ -485,8 +485,9 @@ def _tool_table(registry: ReportRegistry) -> Dict[str, Dict]:
                 "consumer -- the only part freeing earlier would help. Names the "
                 "operation holding it, its largest residents, and the operations "
                 "closest to it, one per distinct composition. This is the figure for "
-                "an out-of-memory question; memory_profile is a floor. Replays every "
-                "captured graph, which can take seconds on a large capture. Withheld, "
+                "an out-of-memory question; memory_profile is a floor. The first call "
+                "on a handle replays every captured graph, which can take seconds on "
+                "a large capture; later calls, at any limit, reuse it. Withheld, "
                 "with the reason, when the replay exceeds the device's L1."
             ),
             "schema": {

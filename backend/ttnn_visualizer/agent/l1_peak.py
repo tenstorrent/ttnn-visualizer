@@ -247,6 +247,47 @@ class Decomposition:
     reconciled_away_count: int = 0
 
 
+def _kind(tensor: _Tensor, last_use: Optional[int], operation_id: int) -> ResidentKind:
+    # Intermediate first: the graph shows this occurrence freed here, while the last
+    # use is inferred from whichever tensor once sat at this address.
+    if tensor.intermediate:
+        return ResidentKind.INTERMEDIATE_TENSOR
+    if (
+        last_use is not None
+        and last_use > NO_CONSUMER_OPERATION_ID
+        and last_use < operation_id
+    ):
+        return ResidentKind.STALE_TENSOR
+    return ResidentKind.PERSISTENT_TENSOR
+
+
+def _total(totals: Mapping[ResidentKind, float]) -> float:
+    # Added in the app's order: from Python 3.12, `sum()` can differ in the last bit.
+    return (
+        totals[ResidentKind.CIRCULAR_BUFFER]
+        + totals[ResidentKind.INTERMEDIATE_TENSOR]
+        + totals[ResidentKind.PERSISTENT_TENSOR]
+        + totals[ResidentKind.STALE_TENSOR]
+    )
+
+
+def _total_bytes(
+    state: _State, operation_id: int, last_use_by_address: Mapping[float, int]
+) -> float:
+    """`_measure`'s `total_bytes`, without building a resident per entry.
+
+    Summed in the same order, so the figure matches bit for bit: most instants are
+    measured only to be beaten, and this is what they are compared on.
+    """
+    totals = {kind: 0.0 for kind in ResidentKind}
+    for size in state.circular_buffers.values():
+        totals[ResidentKind.CIRCULAR_BUFFER] += size
+    for address, tensor in state.tensors.items():
+        kind = _kind(tensor, last_use_by_address.get(address), operation_id)
+        totals[kind] += tensor.bytes
+    return _total(totals)
+
+
 def _measure(
     state: _State, operation_id: int, last_use_by_address: Mapping[float, int]
 ) -> Decomposition:
@@ -259,28 +300,13 @@ def _measure(
 
     for address, tensor in state.tensors.items():
         last_use = last_use_by_address.get(address)
-        # Intermediate first: the graph shows this occurrence freed here, while the last
-        # use is inferred from whichever tensor once sat at this address.
-        if tensor.intermediate:
-            kind = ResidentKind.INTERMEDIATE_TENSOR
-        elif (
-            last_use is not None
-            and last_use > NO_CONSUMER_OPERATION_ID
-            and last_use < operation_id
-        ):
-            kind = ResidentKind.STALE_TENSOR
-        else:
-            kind = ResidentKind.PERSISTENT_TENSOR
+        kind = _kind(tensor, last_use, operation_id)
         totals[kind] += tensor.bytes
         contributors.append(Resident(address, tensor.bytes, kind, last_use))
 
     return Decomposition(
         operation_id=operation_id,
-        # Added in the app's order: from Python 3.12, `sum()` can differ in the last bit.
-        total_bytes=totals[ResidentKind.CIRCULAR_BUFFER]
-        + totals[ResidentKind.INTERMEDIATE_TENSOR]
-        + totals[ResidentKind.PERSISTENT_TENSOR]
-        + totals[ResidentKind.STALE_TENSOR],
+        total_bytes=_total(totals),
         circular_buffer_bytes=totals[ResidentKind.CIRCULAR_BUFFER],
         intermediate_tensor_bytes=totals[ResidentKind.INTERMEDIATE_TENSOR],
         persistent_tensor_bytes=totals[ResidentKind.PERSISTENT_TENSOR],
@@ -310,10 +336,15 @@ def build_l1_peak(
     last_use_by_address: Mapping[float, int],
     bank_count: Optional[int] = None,
     capacity_bytes: Optional[int] = None,
+    keep_contributors: bool = False,
 ) -> L1PeakResult:
     """Replay each operation's graph, in execution order, keeping its tightest instant.
 
     Reads `operations` twice, so a caller can hand it graphs parsed on access.
+
+    Only the peak keeps its `contributors` unless `keep_contributors`: the tool reads
+    no other operation's, and every operation's runs to hundreds of thousands of
+    residents on a large capture. The app keeps them all, so the parity test asks to.
     """
     banks = bank_count if bank_count is not None else DEFAULT_BANK_COUNT
     intermediates = _intermediates(operations)
@@ -327,10 +358,11 @@ def build_l1_peak(
         # Seeded from the state carried in, so a first node that frees is measured too.
         tightest = _measure(state, operation_id, last_use_by_address)
         for node in nodes:
-            if _apply(node, state, operation_id, banks, intermediates):
-                candidate = _measure(state, operation_id, last_use_by_address)
-                if candidate.total_bytes > tightest.total_bytes:
-                    tightest = candidate
+            if _apply(node, state, operation_id, banks, intermediates) and (
+                _total_bytes(state, operation_id, last_use_by_address)
+                > tightest.total_bytes
+            ):
+                tightest = _measure(state, operation_id, last_use_by_address)
 
         # The snapshot is what survived: the graph under-reports frees (#2025).
         snapshot = snapshot_by_operation_id.get(operation_id)
@@ -356,14 +388,20 @@ def build_l1_peak(
         state.circular_buffers.clear()
 
         best = after if after.total_bytes > tightest.total_bytes else tightest
-        best.contributors.sort(key=lambda resident: -resident.bytes)
         best.reconciled_away_count = reconciled_here
         by_operation_id[operation_id] = best
         # Strictly greater, so the peak names the first operation to reach it.
-        if best.total_bytes > 0 and (
+        is_peak = best.total_bytes > 0 and (
             peak is None or best.total_bytes > peak.total_bytes
-        ):
+        )
+        if is_peak:
+            if peak is not None and not keep_contributors:
+                peak.contributors = []
             peak = best
+        if is_peak or keep_contributors:
+            best.contributors.sort(key=lambda resident: -resident.bytes)
+        else:
+            best.contributors = []
 
     return L1PeakResult(
         by_operation_id=by_operation_id,

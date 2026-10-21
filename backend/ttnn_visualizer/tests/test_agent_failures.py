@@ -457,6 +457,55 @@ class TestL1Peak:
         with pytest.raises(ValueError, match="no devices row"):
             failures.l1_peak(registry, handle)
 
+    def test_the_replay_is_read_once_per_handle_and_rank(self, tmp_path):
+        """It reads every operation and replays every graph, and the errors tool sends
+        an agent here on every out-of-memory question."""
+        registry, handle = _report(
+            tmp_path,
+            operations=[(1, "ttnn.add"), (2, "ttnn.add")],
+            graphs=[(1, [_circular_buffer(100, 4096)]), (2, [_allocate(200, 1024)])],
+        )
+
+        with patch.object(
+            failures, "report_l1_peak", wraps=failures.report_l1_peak
+        ) as read:
+            first = failures.l1_peak(registry, handle)
+            again = failures.l1_peak(registry, handle, limit=1)
+
+        read.assert_called_once()
+        assert again["peak"] == first["peak"]
+        assert len(again["top_operations"]) == 1
+
+    def test_only_the_peak_keeps_its_residents(self, tmp_path):
+        """The cached replay would otherwise pin every operation's residents."""
+        registry, handle = _report(
+            tmp_path,
+            operations=[(1, "ttnn.add"), (2, "ttnn.add")],
+            graphs=[(1, [_circular_buffer(100, 4096)]), (2, [_allocate(200, 1024)])],
+        )
+
+        failures.l1_peak(registry, handle)
+        report = registry.cached_report(
+            handle, lambda _: {}, variant=failures.CacheVariant.L1_PEAK
+        )[None]
+
+        assert report.result.peak.operation_id == 1
+        assert [
+            len(entry.contributors) for entry in report.result.by_operation_id.values()
+        ] == [1, 0]
+
+    def test_a_refused_replay_is_not_kept(self, tmp_path):
+        registry, handle = _report(tmp_path, operations=[(1, "ttnn.add")], devices=[])
+
+        with patch.object(
+            failures, "report_l1_peak", wraps=failures.report_l1_peak
+        ) as read:
+            for _ in range(2):
+                with pytest.raises(ValueError, match="no devices row"):
+                    failures.l1_peak(registry, handle)
+
+        assert read.call_count == 2
+
 
 class TestHowTheDatabaseIsRead:
     def test_an_l1_small_buffer_survives_the_operation_boundary(self, tmp_path):

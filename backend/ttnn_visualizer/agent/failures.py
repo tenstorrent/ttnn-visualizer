@@ -12,7 +12,17 @@ import json
 import math
 from collections import defaultdict
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Sequence, Tuple, Union, overload
+from typing import (
+    Callable,
+    Dict,
+    List,
+    Optional,
+    Sequence,
+    Tuple,
+    TypeVar,
+    Union,
+    overload,
+)
 
 from ttnn_visualizer.agent import allocation_failures
 from ttnn_visualizer.agent import dram_fallbacks as fallback_rules
@@ -548,7 +558,11 @@ def l1_peak(
             "output_tensors",
             "devices",
         )
-        report = report_l1_peak(queries, scope)
+        # Cached once only the peak keeps its residents: every operation's would pin
+        # about 100 MB on the largest local capture.
+        report = _cached_per_rank(
+            registry, handle, CacheVariant.L1_PEAK, queries, scope, report_l1_peak
+        )
 
     result, lifetimes = report.result, report.lifetimes
     caveats: List[str] = [caveat] if (caveat := rank_caveat(scope)) else []
@@ -614,17 +628,39 @@ def l1_peak(
     return response
 
 
+_PerRank = TypeVar("_PerRank")
+
+
+def _cached_per_rank(
+    registry: ReportRegistry,
+    handle: str,
+    variant: CacheVariant,
+    queries: DatabaseQueries,
+    scope: RankScope,
+    build: Callable[[DatabaseQueries, RankScope], _PerRank],
+) -> _PerRank:
+    """`build` once per handle and rank. A build that raises is not kept."""
+    # One pinned entry holding every rank, so a rank read cannot evict a scoped report.
+    by_rank: Dict[Optional[int], _PerRank] = registry.cached_report(
+        handle, lambda _: {}, variant=variant
+    )
+    if scope.rank not in by_rank:
+        by_rank[scope.rank] = build(queries, scope)
+    return by_rank[scope.rank]
+
+
 def _cached_dram_fallbacks(
     registry: ReportRegistry, handle: str, queries: DatabaseQueries, scope: RankScope
 ) -> _Fallbacks:
     """Read once per handle and rank: one operation's needs every operation's tensors."""
-    # One pinned entry holding every rank, so a rank read cannot evict a scoped report.
-    by_rank: Dict[Optional[int], _Fallbacks] = registry.cached_report(
-        handle, lambda _: {}, variant=CacheVariant.DRAM_FALLBACKS
+    return _cached_per_rank(
+        registry,
+        handle,
+        CacheVariant.DRAM_FALLBACKS,
+        queries,
+        scope,
+        report_dram_fallbacks,
     )
-    if scope.rank not in by_rank:
-        by_rank[scope.rank] = report_dram_fallbacks(queries, scope)
-    return by_rank[scope.rank]
 
 
 def operation_failure_fields(

@@ -50,6 +50,8 @@ class CacheVariant(str, Enum):
     EMPTY_DETAIL_FIELDS = "empty_detail_fields"
     # Likely DRAM fallbacks by rank, which every `operation_detail` call reads.
     DRAM_FALLBACKS = "dram_fallbacks"
+    # The L1 peak replay by rank, which reads every operation and captured graph.
+    L1_PEAK = "l1_peak"
 
 
 # Snapshots narrowed by a scope -- a signpost range -- kept at once, across every
